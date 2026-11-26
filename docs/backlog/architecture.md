@@ -910,11 +910,9 @@ change a CONNECTION rather than the file, so nothing refuses them and nothing ro
 temporary table and an `ATTACH` have no site in this tree (searched 2026-09-23). The two
 connection-scoped pragmas that run on a request path, both `pragma defer_foreign_keys = on`, are
 each issued INSIDE a running transaction body, which is exactly where the routing sends a statement
-to the writer: `apps/server/src/configuration-transfer.ts`'s import issues it inside the
-provisioning transaction's body, and `writeAndRemoveDecoyAction`
-(`packages/identity/src/account-action.ts`) inside `issueRecovery`'s `withTransaction` body
-(`apps/server/src/management-api.ts`); the others are test setup issued outside any body, where the
-reader would serve them if a body happened to be running, and none of those suites runs one.
+to the writer: `importConfigurationTables` (`packages/provisioning/src/configuration-transfer.ts`)
+runs in the provisioning transaction, and `queueAccountRecovery` (`packages/identity/src/account-action.ts`)
+runs in the password-reset route's `withTransaction` body (`apps/server/src/management-account-routes.ts`).
 **Next action:** none needed while that holds; a temporary table, an attachment or a connection
 pragma issued from OUTSIDE a running body has to be put on the writer deliberately, and a guard for
 that does not exist. Also left by #493's review: the case pinning the adapter half of the window fix

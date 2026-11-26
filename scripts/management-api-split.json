@@ -1,0 +1,187 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/management-api.ts",
+      "keep": ["MountedManagementApi", "mountManagementApi"],
+      "lift": {
+        "mount": "mountManagementApi",
+        "groups": {
+          "mountManagementGoogleRoutes": {
+            "first": "get /management-api/google/config",
+            "last": "get /management-api/google/callback",
+            "parameters": {
+              "app": "Hono",
+              "deps": "ManagementApiDeps",
+              "log": "Logger",
+              "credentialKeyRing": "KeyRing",
+              "passkeySite": "(c: Context) => ReturnType<typeof managementSite>",
+              "secureCookie": "(c: Context) => boolean",
+              "googleRedirect": "(c: Context) => string",
+              "googleCodeExchange": "typeof exchangeGoogleCode",
+              "googleFlowCookie": "string",
+              "withCredentialChange": "ReturnType<typeof ownPasswordChanges>",
+              "bindGoogleFlow": "(c: Context, state: string) => void"
+            }
+          },
+          "mountManagementAccountRoutes": {
+            "first": "get /management-api/staff-roster",
+            "last": "delete /management-api/session",
+            "parameters": {
+              "app": "Hono",
+              "deps": "ManagementApiDeps",
+              "log": "Logger",
+              "recoveries": "Set<Promise<void>>",
+              "credentialKeyRing": "KeyRing",
+              "passkeySite": "(c: Context) => ReturnType<typeof managementSite>",
+              "secureCookie": "(c: Context) => boolean",
+              "passwordThrottle": "PasswordThrottle",
+              "acceptPasswordReset": "(email: string) => boolean",
+              "passwordResetRateLimiter": "AccountActionRateLimiter",
+              "completionRateLimiter": "AccountActionRateLimiter"
+            }
+          },
+          "mountManagementMembershipRoutes": {
+            "first": "get /management-api/membership",
+            "last": "get /management-api/membership",
+            "parameters": {
+              "app": "Hono",
+              "deps": "ManagementApiDeps",
+              "log": "Logger",
+              "credentialKeyRing": "KeyRing"
+            }
+          },
+          "mountManagementStaffRoutes": {
+            "first": "get /management-api/access-roles",
+            "last": "post /management-api/staff/:id/reactivate",
+            "parameters": {
+              "app": "Hono",
+              "deps": "ManagementApiDeps",
+              "log": "Logger",
+              "passkeySite": "(c: Context) => ReturnType<typeof managementSite>",
+              "acceptInvitation": "(personId: string) => boolean"
+            }
+          },
+          "mountManagementDeviceProfileRoutes": {
+            "first": "get /management-api/device-profiles",
+            "last": "delete /management-api/device-profiles/:id",
+            "parameters": {
+              "app": "Hono",
+              "deps": "ManagementApiDeps",
+              "log": "Logger"
+            }
+          },
+          "mountManagementFloorRoutes": {
+            "first": "get /management-api/zones",
+            "last": "get /management-api/tables",
+            "parameters": {
+              "app": "Hono",
+              "deps": "ManagementApiDeps",
+              "log": "Logger"
+            }
+          },
+          "mountManagementStationRoutes": {
+            "first": "post /management-api/stations",
+            "last": "post /management-api/stations/:id/default",
+            "parameters": {
+              "app": "Hono",
+              "deps": "ManagementApiDeps",
+              "log": "Logger"
+            }
+          },
+          "mountManagementCourseRoutes": {
+            "first": "post /management-api/courses",
+            "last": "put /management-api/products/:id/course",
+            "parameters": {
+              "app": "Hono",
+              "deps": "ManagementApiDeps",
+              "log": "Logger"
+            }
+          },
+          "mountManagementPasskeyRoutes": {
+            "first": "post /management-api/passkey/register/options",
+            "last": "post /management-api/passkey/auth/verify",
+            "parameters": {
+              "app": "Hono",
+              "deps": "ManagementApiDeps",
+              "log": "Logger",
+              "credentialKeyRing": "KeyRing",
+              "passkeySite": "(c: Context) => ReturnType<typeof managementSite>",
+              "passkeyOrigins": "ReturnType<typeof venuePasskeyOrigins>",
+              "secureCookie": "(c: Context) => boolean",
+              "withCredentialChange": "ReturnType<typeof ownPasswordChanges>"
+            }
+          }
+        }
+      },
+      "targets": {
+        "apps/server/src/management-api-deps.ts": ["ManagementApiDeps"],
+        "apps/server/src/management-api-errors.ts": [
+          "STATUS",
+          "run",
+          "runBodyIds",
+          "runBodyPrinters",
+          "runProductCourse",
+          "runFloorPlanSave"
+        ],
+        "apps/server/src/management-request-fields.ts": [
+          "requireStationId",
+          "requireProductId",
+          "requireVenueCfg",
+          "withVenueAuth",
+          "withVenueReadAuth",
+          "parseDisplayOrder"
+        ],
+        "apps/server/src/management-google-routes.ts": ["mountManagementGoogleRoutes"],
+        "apps/server/src/management-account-routes.ts": ["mountManagementAccountRoutes"],
+        "apps/server/src/management-membership-routes.ts": ["mountManagementMembershipRoutes"],
+        "apps/server/src/management-staff-routes.ts": [
+          "queueInvitationAnswer",
+          "requirePersonId",
+          "mountManagementStaffRoutes"
+        ],
+        "apps/server/src/management-device-profiles-routes.ts": [
+          "requireDeviceProfileId",
+          "parseInactivityTimeoutSeconds",
+          "parseIdLists",
+          "PRINTER_DEFAULT_FIELDS",
+          "parsePrinterLists",
+          "parseProfileSettings",
+          "ProfileBody",
+          "ProfileScope",
+          "parseProfileScope",
+          "parseProfileAdmission",
+          "withProfileAccess",
+          "requireListedPrinters",
+          "mountManagementDeviceProfileRoutes"
+        ],
+        "apps/server/src/management-floor-routes.ts": [
+          "requireZoneId",
+          "requireSetId",
+          "requireLiveZone",
+          "isRecord",
+          "stringUnlessNullish",
+          "parseZonePlanSave",
+          "mountManagementFloorRoutes"
+        ],
+        "apps/server/src/management-stations-routes.ts": [
+          "parseStationColour",
+          "parseTicketGrouping",
+          "parseBumpMode",
+          "parseChangesAfterSending",
+          "parseStationPrinterIds",
+          "authorizeStationPrinters",
+          "mountManagementStationRoutes"
+        ],
+        "apps/server/src/management-courses-routes.ts": [
+          "requireCourseId",
+          "mountManagementCourseRoutes"
+        ],
+        "apps/server/src/management-passkey-routes.ts": [
+          "parsePasskeyVerifyBody",
+          "mountManagementPasskeyRoutes"
+        ]
+      }
+    }
+  ]
+}

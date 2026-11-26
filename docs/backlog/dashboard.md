@@ -16,7 +16,7 @@ their full text.
     (`packages/identity/src/pin-throttle.ts`) still refuses every new person for 60 seconds while
     one of its slots is full, fed by paired tills and signed-in routes rather than strangers.
   - Password-reset timing (A147, #942; A159, #986): the reset route answers before it looks the
-    address up (`apps/server/src/management-api.ts`), then queues mail. A known address queues one
+    address up (`apps/server/src/management-account-routes.ts`), then queues mail. A known address queues one
     mail; an unknown one queues a mail for a person nobody has and deletes it
     (`queueAccountRecovery`, `packages/identity/src/account-action.ts`), which "writes and then
     removes one reset row" in `account-action.test.ts` checks. The mail worker's later send, which

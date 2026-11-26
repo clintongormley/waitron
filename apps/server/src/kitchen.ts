@@ -25,7 +25,7 @@ import { assertStationTiming } from "./kitchen-timing.js";
 import type { StationTimingPatch } from "./kitchen-timing.js";
 
 // Nothing here authorizes. The write verbs are called only from the kitchen routes, gated by
-// `venue.configure` (`withVenueAuth` in management-api.ts) and, where a station's printers are
+// `venue.configure` (`withVenueAuth` in management-request-fields.ts) and, where a station's printers are
 // sent, `hardware.manage` too (`authorizeStationPrinters`), and from the product editor's save,
 // gated by `MENU_WRITE_PERMISSION` (menu-api.ts). The reads have other callers, not all
 // gated.
