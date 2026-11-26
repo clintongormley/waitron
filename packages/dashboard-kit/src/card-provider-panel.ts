@@ -33,7 +33,7 @@ export interface CardProviderPanel {
    * fires once the reader is saved; `onClose` when the operator dismisses the dialog. */
   renderAddReader(ctx: {
     request: DashboardRequest;
-    onAdded: () => void;
+    onAdded: (reader: { id: string; name: string }) => void;
     onClose: () => void;
   }): TemplateResult;
 }

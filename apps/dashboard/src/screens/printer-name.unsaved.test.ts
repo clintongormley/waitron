@@ -75,7 +75,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       listPagePrinters: async () => [],
       startPrinterDiscovery: async () => {},
       renewPrinterDiscovery: async () => {},
-      createPrinter: async () => ({ id: "p1" }),
+      createPrinter: async () => ({ id: "p1", outcome: "created" }),
       ...overrides,
     } as DashboardApi,
   });
@@ -179,7 +179,7 @@ it("a refused registration keeps the disabled-while-writing name dirty", async (
 });
 for (const route of ["cancel", "escape"] as const) {
   it(`registration in flight retains its existing ${route} and completed result`, async () => {
-    let finish!: (value: { id: string }) => void;
+    let finish!: (value: { id: string; outcome: "created" }) => void;
     const { app, screen } = await mount({
       createPrinter: () =>
         new Promise((resolve) => {
@@ -196,7 +196,7 @@ for (const route of ["cancel", "escape"] as const) {
     await expect.poll(() => modal(screen)).toBeNull();
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     expect(unload()).toBe(false);
-    finish({ id: "p1" });
+    finish({ id: "p1", outcome: "created" });
     await expect.poll(() => q(screen, "[data-test=edit-printer-modal]")).not.toBeNull();
   });
 }
@@ -212,7 +212,7 @@ it("registration commits the submitted name before a refused refresh without ask
     },
     createPrinter: async (body) => {
       received = body;
-      return { id: "p1" };
+      return { id: "p1", outcome: "created" };
     },
   });
   change(screen, "  Saved kitchen  ");
@@ -228,7 +228,7 @@ it("registration commits the submitted name before a refused refresh without ask
   );
 });
 it("newer delivered input stays dirty against registered name without repeating registration", async () => {
-  let finish!: (value: { id: string }) => void;
+  let finish!: (value: { id: string; outcome: "created" }) => void;
   let calls = 0;
   const { screen } = await mount({
     createPrinter: () => {
@@ -242,7 +242,7 @@ it("newer delivered input stays dirty against registered name without repeating 
   q(screen, "[data-test=confirm-add-printer]")!.click();
   await screen.updateComplete;
   change(screen, "Newer kitchen");
-  finish({ id: "p1" });
+  finish({ id: "p1", outcome: "created" });
   await expect.poll(() => input(screen)?.disabled).toBe(false);
   expect(modal(screen)!.open).toBe(true);
   expect(input(screen).value).toBe("Newer kitchen");
@@ -270,7 +270,7 @@ it("changing the named printer invalidates the old decision", async () => {
 for (const result of ["success", "refusal"] as const) {
   it(`a disconnected registration ${result} cannot reopen or mark a departed screen`, async () => {
     let reads = 0;
-    let finish!: (value: { id: string }) => void;
+    let finish!: (value: { id: string; outcome: "created" }) => void;
     let refuse!: (reason: unknown) => void;
     const { app, screen } = await mount({
       listPrinters: async () => {
@@ -289,7 +289,7 @@ for (const result of ["success", "refusal"] as const) {
     await screen.updateComplete;
     screen.remove();
     expect(unload()).toBe(false);
-    if (result === "success") finish({ id: "p1" });
+    if (result === "success") finish({ id: "p1", outcome: "created" });
     else refuse({ code: "connection.failed" });
     await expect.poll(() => input(screen).disabled).toBe(false);
     expect(q(screen, "[data-test=edit-printer-modal]")).toBeNull();

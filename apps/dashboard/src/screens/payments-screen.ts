@@ -68,6 +68,8 @@ import "./payments-settings-panel.js";
 import { holderText } from "../i18n/equipment.js";
 import { HardwareDeleteDialog } from "../widgets/hardware-delete-dialog.js";
 import { readerDeleteCopy } from "../widgets/reader-delete-copy.js";
+import "../widgets/equipment-profile-picker.js";
+import type { EquipmentProfileAssignment } from "../widgets/equipment-profile-picker.js";
 
 export const readerSettingFields = [
   { name: "reader-name", labelKey: "payments.reader_col_name" },
@@ -426,7 +428,9 @@ export class PaymentsScreen extends LitElement {
     () => this.api.liveData,
     () => {},
   );
-  #pairSucceeded = false;
+  #pairOpening = 0;
+  #pairedReaders: { id: string; name: string }[] = [];
+  @state() private profileAssignment: EquipmentProfileAssignment | null = null;
   #statusesDue = true;
   #statusIds: string | undefined;
   @state() private errorKey: string | null = null;
@@ -687,7 +691,9 @@ export class PaymentsScreen extends LitElement {
     this.#disposeDiscoveryDrafts();
     this.#discoveryVersion++;
     this.editor = null;
-    this.discoveringId = null;
+    this.discoveringId = this.addingId = null;
+    this.#pairedReaders = [];
+    this.profileAssignment = null;
     this.busy = false;
   }
 
@@ -861,12 +867,29 @@ export class PaymentsScreen extends LitElement {
     await this.updateComplete;
     if (!this.isConnected || this.discoveringId !== null || this.#discoveryVersion !== version + 1)
       return;
-    this.#pairSucceeded = false;
+    this.#pairOpening++;
+    this.#pairedReaders = [];
     this.addingId = id;
   }
 
   #nameInvalid(providerRef: string): boolean {
     return this.attemptedNames.has(providerRef) && !(this.drafts[providerRef] ?? "").trim();
+  }
+
+  #assignReader(reader: { id: string; name: string }, selectEligible: boolean): void {
+    this.profileAssignment = {
+      kind: "reader",
+      name: reader.name,
+      selectEligible,
+      load: () => this.api.listReaderProfileChoices(),
+      save: (ids) => this.api.assignReaderProfiles(reader.id, ids),
+    };
+  }
+
+  #showNextPairedReader(): void {
+    const reader = this.#pairedReaders.shift();
+    if (reader) this.#assignReader(reader, true);
+    else this.profileAssignment = null;
   }
 
   async #adopt(reader: AvailableReader): Promise<void> {
@@ -884,7 +907,7 @@ export class PaymentsScreen extends LitElement {
     this.#readerOperation = operation;
     this.busy = true;
     try {
-      await this.api.adoptReader({
+      const result = await this.api.adoptReader({
         providerId: this.discoveringId!,
         providerRef: reader.providerRef,
         name,
@@ -896,6 +919,11 @@ export class PaymentsScreen extends LitElement {
       else if (!scope?.isDirty())
         this.available = this.available?.map((row) =>
           row.providerRef === reader.providerRef ? { ...row, name, status: "added" } : row,
+        );
+      if (result?.outcome === "created" || result?.outcome === "restored")
+        this.#assignReader(
+          { id: result.id, name: result.outcome === "restored" ? reader.name : name },
+          result.outcome === "created",
         );
       await this.#load();
     } catch (error) {
@@ -2045,16 +2073,20 @@ export class PaymentsScreen extends LitElement {
     const id = this.addingId;
     const panel = id === null ? undefined : this.#panelFor(id);
     if (!panel) return nothing;
+    const opening = this.#pairOpening;
+    const current = () => this.isConnected && this.addingId === id && this.#pairOpening === opening;
     return html`<div class="panel-slot" data-test="add-reader-dialog-${id}">
       ${panel.renderAddReader({
         request: this.request,
-        onAdded: () => {
-          this.#pairSucceeded = true;
-          void this.#load();
+        onAdded: (reader) => {
+          if (current()) this.#pairedReaders.push(reader);
+          if (this.isConnected) void this.#load();
         },
         onClose: () => {
+          if (!current()) return;
           this.addingId = null;
-          if (!this.#pairSucceeded) void this.#onAddReader(id!);
+          if (this.#pairedReaders.length > 0) this.#showNextPairedReader();
+          else void this.#onAddReader(id!);
         },
       })}
     </div>`;
@@ -2548,6 +2580,17 @@ export class PaymentsScreen extends LitElement {
       ></dashboard-payments-settings>
       ${this.#renderProviderChoice()} ${this.#renderPairReader()}
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
+      ${
+        this.profileAssignment === null
+          ? nothing
+          : keyed(
+              this.profileAssignment,
+              html`<dashboard-equipment-profile-picker
+                .assignment=${this.profileAssignment}
+                @equipment-profiles-closed=${() => this.#showNextPairedReader()}
+              ></dashboard-equipment-profile-picker>`,
+            )
+      }
       ${keyed(this.editor, this.#renderEditor())}
       ${this.#deleteDialog.render(
         "delete-reader-dialog",

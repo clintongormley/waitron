@@ -629,6 +629,9 @@ and adopting a reader adds it to the list of every profile that takes reader pay
 profile's default (default 16). The seed is provisioning data; before go-live an existing venue is
 reset rather than migrated (`CLAUDE.md` §3). Nothing in payment handling changes.
 
+**2026-11-26 (A1576).** [Choose device profiles after adding equipment](../plans/2026-11-26-a1576-equipment-profiles.md)
+replaces the automatic join. Save the ticked profiles to assign the reader.
+
 **Permissions.** The person needs `sale.take_payment` (`bill-payments-api.ts:224`; STAFF have it,
 `packages/identity/src/permissions.ts:45`). The device's profile needs the action for the method, as
 the route-to-action map at the top of `apps/server/src/till-api.profile-actions.test.ts` records:

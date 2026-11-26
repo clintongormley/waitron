@@ -256,7 +256,7 @@ describe("sumup-add-reader", () => {
       expect(request.statusCalls()).toBe(2);
 
       await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS); // third poll → paired
-      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(onAdded).toHaveBeenCalledExactlyOnceWith({ id: "r1", name: "Front counter" });
       expect(onClose).toHaveBeenCalledTimes(1);
       expect(request.unpairCalls()).toBe(0); // paired, so nothing to clean up
     } finally {
@@ -392,7 +392,7 @@ describe("sumup-add-reader", () => {
       });
 
       await fillAndPair(el);
-      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(onAdded).toHaveBeenCalledExactlyOnceWith({ id: "r1", name: "Front counter" });
       expect(onClose).toHaveBeenCalledTimes(1);
       expect(request.statusCalls()).toBe(0); // no polling needed
     } finally {

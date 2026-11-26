@@ -4,7 +4,9 @@
 
 En **Impresoras**, abre la pestaña **Impresoras** y elige **Añadir impresora**. Waitron busca
 impresoras de red, USB y Bluetooth. Elige **Añadir** junto a una impresora, cambia el nombre si
-quieres y vuelve a elegir **Añadir**. Si es una impresora de recibos, después se abre la calibración.
+quieres y vuelve a elegir **Añadir**. Si se te pide, marca los perfiles de dispositivo que deben
+usarla y elige **Guardar perfiles**, o elige **Dejar sin asignar**. Si es una impresora de recibos nueva,
+después se abre la calibración.
 
 Una impresora Bluetooth debe estar antes en modo de emparejamiento. Elige **Emparejar y añadir**
 junto a ella, introduce su PIN y vuelve a elegir **Emparejar y añadir**. Si es una impresora nueva, se
@@ -143,6 +145,8 @@ Si rechazas una solicitud, el agente puede volver a aparecer debajo de las demá
 Para añadir un lector, abre **Pagos con tarjeta** en Hardware y elige **Añadir lector** encima de la tabla.
 Elige el proveedor si se te pide y añade un lector de su lista o vincula uno nuevo.
 Si no hay ningún proveedor conectado, elige **Configurar proveedores de tarjeta** para configurar uno primero.
+Deja marcados los perfiles que deben usar el lector nuevo y elige **Guardar perfiles**, o elige
+**Dejar sin asignar**.
 
 Antes de cobrar, abre **Hardware → Dispositivos**, selecciona tu dispositivo y elige **Editar** para asignarle un lector de tarjetas. Si no aparece el porcentaje de batería de un lector, comprueba su carga en el propio lector.
 
@@ -152,6 +156,6 @@ basta acercar el teléfono.
 
 En **Pagos con tarjeta**, busca el lector en **Lectores de tarjetas** y elige **Eliminar** en su menú. La confirmación indica las asignaciones que se eliminan. Si hay un cobro en curso, deja que termine primero.
 
-Cuando vuelvas a añadir un lector eliminado, si se reconoce el registro, verás el nombre y los ajustes de impresión guardados: elige **Añadir** y vuelve a asignarlo a dispositivos y perfiles. En caso contrario, vincúlalo siguiendo los pasos del proveedor.
+Cuando vuelvas a añadir un lector eliminado, si se reconoce el registro, verás el nombre y los ajustes de impresión guardados: elige **Añadir**. Marca los perfiles que deben usarlo y elige **Guardar perfiles**. En caso contrario, vincúlalo siguiendo los pasos del proveedor.
 
 Elige **Desvincular de …** para quitar solo su registro en el proveedor y conservarlo en la lista de Waitron. Tendrás que añadirlo o vincularlo de nuevo antes de usarlo.

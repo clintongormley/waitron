@@ -284,28 +284,25 @@ async function requireDeviceProfile(tx: Transaction, profileId: string): Promise
   if (profile === undefined) throw new AppError("device_profile.not_found", {});
 }
 
-/** A newly created reader joins every live profile that takes reader payments, never as default. */
-async function joinReaderTakingProfiles(tx: Transaction, readerId: string): Promise<void> {
+async function readerProfileChoices(tx: Transaction) {
   const profiles = await tx
     .select({
       id: deviceProfiles.id,
+      name: deviceProfiles.name,
       formFactor: deviceProfiles.formFactor,
       capabilities: deviceProfiles.capabilities,
     })
     .from(deviceProfiles)
-    .where(isNull(deviceProfiles.retiredAt));
-  await appendReaderToProfiles(
-    tx,
-    readerId,
-    profiles
-      .filter((profile) =>
-        profileAllows(
-          { formFactor: profile.formFactor, capabilities: profile.capabilities as string[] },
-          "integrated-card-payment",
-        ),
-      )
-      .map((profile) => profile.id),
-  );
+    .where(isNull(deviceProfiles.retiredAt))
+    .orderBy(deviceProfiles.name, deviceProfiles.id);
+  return profiles.map(({ id, name, formFactor, capabilities }) => ({
+    id,
+    name,
+    eligible: profileAllows(
+      { formFactor, capabilities: capabilities as string[] },
+      "integrated-card-payment",
+    ),
+  }));
 }
 
 function parseAttestation<O extends string>(
@@ -654,16 +651,18 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
               .update(cardReaders)
               .set({ deletedAt: null, disabledAt: null, unpairedAt: null })
               .where(readerWhere(existing.id));
-            return { id: existing.id };
+            return {
+              id: existing.id,
+              outcome: existing.deletedAt === null ? "enabled" : "restored",
+            } as const;
           }
           const [saved] = await tx
             .insert(cardReaders)
             .values({ provider: providerId, providerRef, name })
             .returning({ id: cardReaders.id });
-          await joinReaderTakingProfiles(tx, saved!.id);
-          return saved!;
+          return { id: saved!.id, outcome: "created" } as const;
         });
-        return c.json({ id: row.id, status: "paired" }, 201);
+        return c.json({ ...row, status: "paired" }, 201);
       } finally {
         adopting.delete(adopt);
       }
@@ -1153,7 +1152,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             name,
           })
           .returning({ id: cardReaders.id });
-        await joinReaderTakingProfiles(tx, row!.id);
         return row;
       });
       if (inserted === undefined) {
@@ -1162,6 +1160,38 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         throw new AppError("reader.provider_disconnected", { providerId });
       }
       return c.json({ id: inserted.id, status: result.status }, 201);
+    }),
+  );
+
+  app.get("/management-api/payments/reader-profile-choices", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      return c.json(await gated(sessionId, readerProfileChoices));
+    }),
+  );
+
+  app.put("/management-api/payments/readers/:id/profiles", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const readerId = requireUuidParam(c.req.param("id"), "CardReaderId");
+      const { profileIds } = await readJsonBody<{ profileIds?: unknown }>(c);
+      if (!Array.isArray(profileIds))
+        throw new AppError("management.request_invalid", { field: "profileIds" });
+      const ids = profileIds.map((id) => requireBodyUuid(id, "profileIds"));
+      await gated(sessionId, async (tx) => {
+        await requirePaymentsEnabled(tx);
+        refuseWhileUnpairing(readerId);
+        const reader = await requireReader(tx, readerId);
+        if (reader.disabledAt !== null) throw new AppError("reader.not_found", { id: readerId });
+        const profiles = await readerProfileChoices(tx);
+        const eligible = new Set(
+          profiles.filter((profile) => profile.eligible).map(({ id }) => id),
+        );
+        if (ids.some((id) => !eligible.has(id)))
+          throw new AppError("management.request_invalid", { field: "profileIds" });
+        await appendReaderToProfiles(tx, readerId, ids);
+      });
+      return c.body(null, 204);
     }),
   );
 

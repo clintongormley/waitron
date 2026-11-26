@@ -328,8 +328,13 @@ export class PrintingApi extends BackupApi {
   listPrinterStationNames(): Promise<PrinterStationName[]> {
     return this.#request<PrinterStationName[]>("/management-api/printer-stations", "GET");
   }
-  createPrinter(input: PrinterInput): Promise<{ id: string }> {
-    return this.#request<{ id: string }>("/management-api/printers", "POST", input);
+  createPrinter(
+    input: PrinterInput,
+  ): Promise<{ id: string; outcome: "created" | "restored" | "enabled" }> {
+    return this.#request("/management-api/printers", "POST", input);
+  }
+  assignPrinterProfiles(id: string, profileIds: string[]): Promise<void> {
+    return this.#request(`/management-api/printers/${id}/profiles`, "PUT", { profileIds });
   }
   startPrinterDiscovery(): Promise<{ discoveryUntil: number }> {
     return this.#request<{ discoveryUntil: number }>(

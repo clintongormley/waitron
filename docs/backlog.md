@@ -783,7 +783,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 ### Payments and card readers
 
-- **A1576. Adding a card reader or a printer asks which device profiles can use it** (owner, 2026-11-25; important, size S, drawn first). [Detail](backlog/payments.md#a1576-adding-a-card-reader-or-a-printer-asks-which-device-profiles-can-use-it)
 
 _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlog/payments.md](backlog/payments.md).
 See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1332-owner-kept-every-default-2026-10-07) for how a default reader reaches a till.

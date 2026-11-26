@@ -43,6 +43,10 @@ import {
   type OfficeRow,
 } from "./discovered-printers.js";
 import "../widgets/page-printer-add.js";
+import {
+  printerProfileAssignment,
+  type EquipmentProfileAssignment,
+} from "../widgets/equipment-profile-picker.js";
 import { PageTestPages, pageFailureReason } from "../widgets/page-test-pages.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
 import {
@@ -935,6 +939,8 @@ export class PrintersScreen extends LitElement {
   /** `#pagePrinterReads` when the live query last delivered, so a one-off read begun earlier is dropped. */
   #pagePrinterLiveAt = 0;
   #pagePrinterReads = 0;
+  @state() private profileAssignment: (EquipmentProfileAssignment & { next?: () => void }) | null =
+    null;
   @state() private addingPagePrinter: {
     entry: PagePrinterEntry;
     description: string;
@@ -1390,6 +1396,7 @@ export class PrintersScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    this.profileAssignment = null;
     this.#deleteDialog.close();
     this.#closeEveryStation();
     this.#disposeDetailDrafts();
@@ -1985,21 +1992,16 @@ export class PrintersScreen extends LitElement {
     this.errorKey = null;
     try {
       const disabled = this.#disabledPrinter(device);
-      let createdId: string;
-      if (device.transport === "network_tcp") {
-        ({ id: createdId } = await this.api.createPrinter({
-          name,
-          transport: device.transport,
-          host: device.host ?? undefined,
-          port: device.port ?? 9100,
-        }));
-      } else {
-        ({ id: createdId } = await this.api.createPrinter({
-          name,
-          transport: device.transport,
-          localKey: device.localKey,
-        }));
-      }
+      const { id: createdId, outcome } = await this.api.createPrinter(
+        device.transport === "network_tcp"
+          ? {
+              name,
+              transport: device.transport,
+              host: device.host ?? undefined,
+              port: device.port ?? 9100,
+            }
+          : { name, transport: device.transport, localKey: device.localKey },
+      );
       if (!this.isConnected) return;
       if (addOpening === this.#addPrinterOpening && registersAddress) addressScope?.commit(address);
       if (active()) scope?.commit(name);
@@ -2044,30 +2046,40 @@ export class PrintersScreen extends LitElement {
         await this.#closeModal("name-printer-modal");
         await this.#closeModal("new-printer-modal");
       }
-      if (disabled || device.retainedName !== undefined) {
-        await this.#load();
-        return;
-      }
-      this.#openPrinter({
-        id: createdId,
-        name,
-        transport: device.transport,
-        host: device.host ?? null,
-        port: device.port ?? (device.transport === "network_tcp" ? 9100 : null),
-        localKey: device.localKey ?? null,
-        pollId: null,
-        paperWidth: "80mm",
-        resolution: "180dpi",
-        hasCashDrawer: false,
-        portable: false,
-        pickupRoles: ["receipt", "payment_slip"],
-        holder: null,
-        pendingJobs: 0,
-        lastPrintAt: null,
-        lastPrintAgentId: null,
-        active: true,
-      });
-      this.#calibrationOpenedByAdd = true;
+      const calibrate =
+        outcome === "enabled" ||
+        outcome === "restored" ||
+        disabled ||
+        device.retainedName !== undefined
+          ? undefined
+          : () => {
+              this.#openPrinter({
+                id: createdId,
+                name,
+                transport: device.transport,
+                host: device.host ?? null,
+                port: device.port ?? (device.transport === "network_tcp" ? 9100 : null),
+                localKey: device.localKey ?? null,
+                pollId: null,
+                paperWidth: "80mm",
+                resolution: "180dpi",
+                hasCashDrawer: false,
+                portable: false,
+                pickupRoles: ["receipt", "payment_slip"],
+                holder: null,
+                pendingJobs: 0,
+                lastPrintAt: null,
+                lastPrintAgentId: null,
+                active: true,
+              });
+              this.#calibrationOpenedByAdd = true;
+            };
+      if (this.canManageStationPrinters && (outcome === "created" || outcome === "restored")) {
+        this.profileAssignment = {
+          ...printerProfileAssignment(this.api, createdId, device.retainedName ?? name, "receipt"),
+          ...(calibrate ? { next: calibrate } : {}),
+        };
+      } else calibrate?.();
       await this.#load();
     } catch (error) {
       if (active()) {
@@ -5236,6 +5248,17 @@ export class PrintersScreen extends LitElement {
       @page-printer-added=${async (
         event: CustomEvent<{ id: string; name: string; outcome: string }>,
       ) => {
+        if (
+          this.addingPagePrinter === adding &&
+          this.canManageStationPrinters &&
+          event.detail.outcome === "created"
+        )
+          this.profileAssignment = printerProfileAssignment(
+            this.api,
+            event.detail.id,
+            event.detail.name,
+            "office",
+          );
         await this.#refreshPagePrinters();
         this.addedPrinterName =
           this.pagePrinters.find((row) => row.id === event.detail.id)?.name ??
@@ -5682,6 +5705,18 @@ export class PrintersScreen extends LitElement {
             ${this.#renderRefreshError()}`
       }
       ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#deleteDialog.render("delete-printer-dialog", printerDeleteCopy(this.#deleteIsPage, this.#deleteIsBluetooth))}${this.#renderEveryStationDialog()}${this.#renderReprint()}
+      ${
+        this.profileAssignment && this.addingPagePrinter === null
+          ? html`<dashboard-equipment-profile-picker
+              .assignment=${this.profileAssignment}
+              @equipment-profiles-closed=${() => {
+                const next = this.profileAssignment?.next;
+                this.profileAssignment = null;
+                next?.();
+              }}
+            ></dashboard-equipment-profile-picker>`
+          : nothing
+      }
       <dashboard-print-job-preview
         .preview=${this.preview}
         .open=${this.previewOpen}

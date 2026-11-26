@@ -10,7 +10,13 @@ import {
   receiptRollColumns,
 } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
-import { setPrinterPortable } from "@waitron/layouts";
+import {
+  isSharedDisplay,
+  listDeviceProfiles,
+  readProfilePrinterLists,
+  setPrinterPortable,
+  setProfilePrinterLists,
+} from "@waitron/layouts";
 import { readReceiptLanguage } from "@waitron/menu";
 import { cardReaders } from "@waitron/payments";
 import { isBluetoothAddress } from "@waitron/print-agent";
@@ -34,7 +40,7 @@ import {
   requireBodyUuid,
 } from "@waitron/server-kit";
 import { AppError, steadyNow } from "@waitron/shared";
-import { sql, and, eq, isNull } from "drizzle-orm";
+import { sql, and, eq, inArray, isNull } from "drizzle-orm";
 import type { Hono } from "hono";
 import { readPrinterHolders } from "./device-equipment.js";
 import { formatEquipmentLabel } from "./equipment-label.js";
@@ -132,6 +138,58 @@ export function mountPrintPrintersRoutes(
         return createPrinter(tx, input);
       });
       return c.json(created, 201);
+    }),
+  );
+
+  app.put("/management-api/printers/:id/profiles", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const id = requireUuidParam(c.req.param("id"), "PrinterId");
+      const { profileIds } = await readJsonBody<{ profileIds?: unknown }>(c);
+      if (!Array.isArray(profileIds))
+        throw new AppError("management.request_invalid", { field: "profileIds" });
+      const ids = [
+        ...new Set(profileIds.map((profileId) => requireBodyUuid(profileId, "profileIds"))),
+      ];
+      await gated(sessionId, async (tx) => {
+        await authorizeManager(tx, {
+          managementSessionId: sessionId,
+          permission: "venue.configure",
+        });
+        // Both printer kinds are assigned here, each to its own lists.
+        const [printer] = await tx
+          .select({ kind: printers.kind })
+          .from(printers)
+          .where(
+            and(
+              eq(printers.id, id),
+              inArray(printers.kind, ["receipt", "a4"]),
+              eq(printers.active, true),
+              isNull(printers.deletedAt),
+            ),
+          );
+        if (!printer) throw new AppError("printer.not_found", { id });
+        const profiles = await listDeviceProfiles(tx);
+        const eligible = new Set(
+          profiles
+            .filter((profile) => !isSharedDisplay(profile.formFactor))
+            .map((profile) => profile.id),
+        );
+        if (ids.some((profileId) => !eligible.has(profileId)))
+          throw new AppError("management.request_invalid", { field: "profileIds" });
+        const keys =
+          printer.kind === "a4"
+            ? (["invoicePrinterIds"] as const)
+            : (["receiptPrinterIds", "paymentSlipPrinterIds"] as const);
+        for (const profileId of ids) {
+          const lists = await readProfilePrinterLists(tx, profileId);
+          const missing = keys.filter((key) => !lists[key].includes(id));
+          if (missing.length === 0) continue;
+          for (const key of missing) lists[key].push(id);
+          await setProfilePrinterLists(tx, profileId, lists);
+        }
+      });
+      return c.body(null, 204);
     }),
   );
 

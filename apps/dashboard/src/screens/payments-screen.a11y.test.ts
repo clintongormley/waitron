@@ -27,7 +27,10 @@ const fakePanel = (providerId: string, nameKey: string): CardProviderPanel => ({
       connect
     </button>`,
   renderAddReader: (ctx) =>
-    html`<button data-test="fake-add-reader-${providerId}" @click=${() => ctx.onAdded()}>
+    html`<button
+      data-test="fake-add-reader-${providerId}"
+      @click=${() => ctx.onAdded({ id: "r-2", name: "Garden terminal" })}
+    >
       add
     </button>`,
 });

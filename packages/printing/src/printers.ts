@@ -61,7 +61,7 @@ const REQUIRED_FIELDS: Record<PrintTransport, readonly (keyof CreatePrinterInput
 export async function createPrinter(
   tx: Transaction,
   input: CreatePrinterInput,
-): Promise<{ id: string }> {
+): Promise<{ id: string; outcome: "created" | "restored" | "enabled" }> {
   const missing = REQUIRED_FIELDS[input.transport].find((field) => input[field] === undefined);
   if (missing !== undefined) {
     throw new AppError("printer.invalid_config", {
@@ -93,7 +93,7 @@ export async function createPrinter(
       .update(printers)
       .set({ active: true, deletedAt: null })
       .where(and(isReceiptPrinter(), eq(printers.id, retained.id)));
-    return { id: retained.id };
+    return { id: retained.id, outcome: retained.deletedAt === null ? "enabled" : "restored" };
   }
 
   try {
@@ -115,7 +115,7 @@ export async function createPrinter(
         ...pickupFlags(input.pickupRoles),
       })
       .returning({ id: printers.id });
-    return { id: row!.id };
+    return { id: row!.id, outcome: "created" };
   } catch (error) {
     return translatePrinterWriteError(error, input.localKey);
   }

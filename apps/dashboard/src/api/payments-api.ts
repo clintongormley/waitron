@@ -197,12 +197,14 @@ export class PaymentsApi extends ServersApi {
     providerId: string;
     providerRef: string;
     name: string;
-  }): Promise<{ id: string; status: "paired" }> {
-    return this.#request<{ id: string; status: "paired" }>(
-      "/management-api/payments/readers/adopt",
-      "POST",
-      input,
-    );
+  }): Promise<{ id: string; status: "paired"; outcome: "created" | "restored" | "enabled" }> {
+    return this.#request("/management-api/payments/readers/adopt", "POST", input);
+  }
+  listReaderProfileChoices(): Promise<{ id: string; name: string; eligible: boolean }[]> {
+    return this.#request("/management-api/payments/reader-profile-choices", "GET");
+  }
+  assignReaderProfiles(id: string, profileIds: string[]): Promise<void> {
+    return this.#request(`/management-api/payments/readers/${id}/profiles`, "PUT", { profileIds });
   }
   saveReader(
     id: string,

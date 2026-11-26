@@ -128,7 +128,7 @@ describe("stripe-add-reader", () => {
       name: "Bar terminal",
       reference: "tmr_ABC123",
     });
-    expect(onAdded).toHaveBeenCalledTimes(1);
+    expect(onAdded).toHaveBeenCalledExactlyOnceWith({ id: "row-1", name: "Bar terminal" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 

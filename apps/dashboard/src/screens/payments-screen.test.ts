@@ -41,7 +41,12 @@ const fakePanel = (providerId: string, nameKey: string): CardProviderPanel => ({
     </button>`,
   renderAddReader: (ctx) =>
     html`<div data-test="fake-add-reader-${providerId}">
-      <button data-test="fake-added-${providerId}" @click=${() => ctx.onAdded()}>added</button>
+      <button
+        data-test="fake-added-${providerId}"
+        @click=${() => ctx.onAdded({ id: "r-2", name: "Garden terminal" })}
+      >
+        added
+      </button>
       <button data-test="fake-close-${providerId}" @click=${() => ctx.onClose()}>close</button>
     </div>`,
 });
@@ -195,6 +200,11 @@ function liveApi(overrides: Partial<DashboardApi> = {}): DashboardApi & { liveDa
 
 const q = (el: PaymentsScreen, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector);
+
+const qProfile = (el: PaymentsScreen, selector: string) =>
+  el
+    .shadowRoot!.querySelector("dashboard-equipment-profile-picker")
+    ?.shadowRoot?.querySelector<HTMLElement>(selector) ?? null;
 
 // The readers data-table renders its cells (row menu, status span) inside its OWN shadow root, so
 // a cell selector reaches through the `<wt-data-table>` element the screen hosts.
@@ -373,14 +383,23 @@ describe("payments-screen", () => {
         html`<button
           data-test="pair-success-and-close"
           @click=${() => {
-            ctx.onAdded();
+            ctx.onAdded({ id: "r-2", name: "Garden terminal" });
             ctx.onClose();
           }}
         >
           Done
         </button>`,
     };
-    const { el, api } = await mount(stubApi(), { panels: [panel] });
+    const { el, api } = await mount(
+      stubApi({
+        listReaderProfileChoices: vi.fn().mockResolvedValue([
+          { id: "till", name: "Till", eligible: true },
+          { id: "kitchen", name: "Kitchen", eligible: false },
+        ]),
+        assignReaderProfiles: vi.fn().mockResolvedValue(undefined),
+      }),
+      { panels: [panel] },
+    );
     q(el, "[data-test=add-reader]")!.click();
     await flush(el);
     q(el, "[data-test=pair-new-reader]")!.click();
@@ -389,6 +408,72 @@ describe("payments-screen", () => {
     await flush(el);
     expect(q(el, "[data-test=reader-discovery]")).toBeNull();
     expect(api.availableReaders).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() =>
+      expect(qProfile(el, "[data-test=equipment-profile-till]")).not.toBeNull(),
+    );
+    expect((qProfile(el, "[data-test=equipment-profile-till]") as HTMLInputElement).checked).toBe(
+      true,
+    );
+    expect(
+      (qProfile(el, "[data-test=equipment-profile-kitchen]") as HTMLInputElement).disabled,
+    ).toBe(true);
+    qProfile(el, "[data-test=save-equipment-profiles]")!.click();
+    await vi.waitFor(() =>
+      expect(api.assignReaderProfiles).toHaveBeenCalledExactlyOnceWith("r-2", ["till"]),
+    );
+  });
+
+  it("offers profiles for each reader from the current provider dialog", async () => {
+    let pair!: Parameters<CardProviderPanel["renderAddReader"]>[0];
+    const panel: CardProviderPanel = {
+      ...PANELS[0]!,
+      renderAddReader: (ctx) => {
+        pair = ctx;
+        return html``;
+      },
+    };
+    const assignReaderProfiles = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mount(
+      stubApi({
+        listReaderProfileChoices: vi
+          .fn()
+          .mockResolvedValue([{ id: "till", name: "Till", eligible: true }]),
+        assignReaderProfiles,
+      }),
+      { panels: [panel] },
+    );
+    const startPair = async () => {
+      q(el, "[data-test=pair-new-reader]")!.click();
+      await flush(el);
+    };
+    await openAdd(el);
+    await startPair();
+    const departed = pair;
+    departed.onClose();
+    await flush(el);
+    await startPair();
+    departed.onAdded({ id: "late", name: "Late terminal" });
+    pair.onAdded({ id: "first", name: "First terminal" });
+    pair.onAdded({ id: "second", name: "Second terminal" });
+    expect(qProfile(el, "[data-test=equipment-profile-picker]")).toBeNull();
+    pair.onClose();
+    for (const [id, name] of [
+      ["first", "First terminal"],
+      ["second", "Second terminal"],
+    ]) {
+      await vi.waitFor(() => {
+        const dialog = qProfile(el, "[data-test=equipment-profile-picker]");
+        expect(dialog?.textContent).toContain(name);
+        expect(dialog?.shadowRoot?.querySelector("dialog")?.open).toBe(true);
+      });
+      await vi.waitFor(() =>
+        expect(qProfile(el, "[data-test=equipment-profile-till]")).not.toBeNull(),
+      );
+      qProfile(el, "[data-test=save-equipment-profiles]")!.click();
+      await vi.waitFor(() => expect(assignReaderProfiles).toHaveBeenCalledWith(id, ["till"]));
+    }
+    await vi.waitFor(() => expect(qProfile(el, "[data-test=equipment-profile-picker]")).toBeNull());
+    expect(assignReaderProfiles).toHaveBeenCalledTimes(2);
   });
 
   it.each(["success", "failure"])("ignores a superseded status read's late %s", async (outcome) => {
@@ -595,6 +680,31 @@ describe("reader discovery and status", () => {
       name: "Garden",
     });
     expect(q(el, "[data-test=reader-discovery]")).toBeNull();
+  });
+
+  it("offers a restored reader with clear ticks", async () => {
+    const { el, api } = await mount(
+      stubApi({
+        availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS),
+        adoptReader: vi
+          .fn()
+          .mockResolvedValue({ id: "r-2", status: "paired", outcome: "restored" }),
+        listReaderProfileChoices: vi
+          .fn()
+          .mockResolvedValue([{ id: "till", name: "Till", eligible: true }]),
+      }),
+    );
+    await openAdd(el);
+    q(el, "[data-test=adopt-v-2]")!.click();
+    await vi.waitFor(() =>
+      expect(qProfile(el, "[data-test=equipment-profile-till]")).not.toBeNull(),
+    );
+    expect((qProfile(el, "[data-test=equipment-profile-till]") as HTMLInputElement).checked).toBe(
+      false,
+    );
+    qProfile(el, "[data-test=leave-equipment-unassigned]")!.click();
+    await vi.waitFor(() => expect(qProfile(el, "[data-test=equipment-profile-picker]")).toBeNull());
+    expect(api.adoptReader).toHaveBeenCalledTimes(1);
   });
 
   it("shows an empty-name field error and the bottom message before adoption", async () => {

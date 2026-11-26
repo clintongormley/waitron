@@ -1,5 +1,5 @@
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { removeBuiltInPermissionForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
 import { readSettings, BUSINESS_DAY_SETTINGS } from "@waitron/db";
 import {
   holdPrinterForTest,
@@ -32,13 +32,24 @@ import {
 } from "@waitron/db";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedCashSale, seedDevice, seedPerson, seedVenue } from "@waitron/db/testing/seed.js";
+import {
+  seedCashSale,
+  seedDevice,
+  seedDeviceProfiles,
+  seedPerson,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
 import {
   hashSessionToken,
   persons,
   resolveManagementSession,
   startManagementSession,
 } from "@waitron/identity";
+import {
+  emptyPrinterLists,
+  readProfilePrinterLists,
+  setProfilePrinterLists,
+} from "@waitron/layouts";
 import { MAX_DELIVERY_ATTEMPTS, enqueuePrintJob, esc } from "@waitron/printing";
 import {
   BLUETOOTH_UNAVAILABLE_REASONS,
@@ -307,6 +318,59 @@ async function createNetworkPrinter(
   expect(res.status).toBe(201);
   return ((await res.json()) as { id: string }).id;
 }
+
+it("adds receipt and office printers to the selected profile lists without replacing defaults", async () => {
+  const [till, kitchen] = await seedDeviceProfiles(suite.db, [
+    { name: "Counter", formFactor: "till" },
+    { name: "Kitchen", formFactor: "kds" },
+  ]);
+  const app = mountApp();
+  const original = await createUsbPrinter(app, "existing-receipt");
+  await withTransaction(suite.db, (tx) =>
+    setProfilePrinterLists(tx, till!.id, {
+      ...emptyPrinterLists(),
+      receiptPrinterIds: [original],
+      receiptPrinterDefaultId: original,
+    }),
+  );
+  const registered = await send(app, "POST", "/management-api/printers", {
+    cookie: managerCookie,
+    body: { name: "New receipt printer", transport: "usb", localKey: "new-receipt" },
+  });
+  expect(registered.status).toBe(201);
+  const { id: receipt, outcome } = (await registered.json()) as { id: string; outcome: string };
+  const office = await insertA4Printer(suite.db);
+  const lists = () => withTransaction(suite.db, (tx) => readProfilePrinterLists(tx, till!.id));
+  const save = (id: string, profileIds: string[], cookie = managerCookie) =>
+    send(app, "PUT", `/management-api/printers/${id}/profiles`, { cookie, body: { profileIds } });
+  const refused = await save(receipt, [till!.id, kitchen!.id]);
+  expect(refused.status).toBe(400);
+  expect(await refused.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+  expect((await lists()).receiptPrinterIds).toEqual([original]);
+  expect((await save(receipt, [till!.id], staffCookie)).status).toBe(403);
+  expect((await save(receipt, [till!.id])).status).toBe(204);
+  expect((await save(receipt, [till!.id])).status).toBe(204);
+  expect((await save(office, [till!.id])).status).toBe(204);
+  expect(await lists()).toEqual({
+    receiptPrinterIds: [original, receipt],
+    paymentSlipPrinterIds: [receipt],
+    invoicePrinterIds: [office],
+    cashDrawerPrinterIds: [],
+    receiptPrinterDefaultId: original,
+    paymentSlipPrinterDefaultId: null,
+    invoicePrinterDefaultId: null,
+    cashDrawerPrinterDefaultId: null,
+  });
+  await withTransaction(suite.db, (tx) =>
+    removeBuiltInPermissionForTest(tx, "manager", "venue.configure"),
+  );
+  const denied = await save(office, [till!.id]);
+  expect(denied.status).toBe(403);
+  expect(await denied.json()).toMatchObject({
+    error: { code: "authorization.not_permitted", params: { permission: "venue.configure" } },
+  });
+  expect(outcome).toBe("created");
+});
 
 interface PullJob {
   id: string;

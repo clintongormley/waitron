@@ -23,7 +23,7 @@ type Phase = "form" | "pairing" | "expired" | "failed";
 interface PairingAttempt {
   opening: object;
   client: SumUpPaymentsClient;
-  added(): void;
+  added(id: string): void;
   id: string;
   until: number;
   inFlight: boolean;
@@ -54,7 +54,8 @@ export class SumUpAddReader extends LitElement {
   ];
 
   @property({ attribute: false }) request!: DashboardRequest;
-  @property({ attribute: false }) onAdded: () => void = () => {};
+  @property({ attribute: false }) onAdded: (reader: { id: string; name: string }) => void =
+    () => {};
   @property({ attribute: false }) onClose: () => void = () => {};
 
   @state() private name = "";
@@ -161,10 +162,11 @@ export class SumUpAddReader extends LitElement {
     }
     const submitted = this.#value();
     const scope = this.#scope;
+    const onAdded = this.onAdded;
     const attempt: PairingAttempt = {
       opening,
       client: new SumUpPaymentsClient(this.request),
-      added: this.onAdded,
+      added: (id) => onAdded({ id, name: submitted.name }),
       id: "",
       until: 0,
       inFlight: false,
@@ -190,8 +192,8 @@ export class SumUpAddReader extends LitElement {
     }
     if (this.#current(opening)) scope?.commit(submitted);
     if (result.status === "paired") {
-      if (!this.#current(opening)) attempt.added();
-      else this.#finish(attempt);
+      if (!this.#current(opening)) attempt.added(result.id);
+      else this.#finish(attempt, result.id);
       return;
     }
     attempt.id = result.id;
@@ -224,17 +226,17 @@ export class SumUpAddReader extends LitElement {
     if (!this.#current(attempt.opening)) return;
     this.pollTimedOut = false;
     if (status.pairingStatus === "paired") {
-      this.#finish(attempt);
+      this.#finish(attempt, attempt.id);
       return;
     }
     this.remaining = Math.max(0, Math.ceil((attempt.until - Date.now()) / 1000));
     if (Date.now() >= attempt.until) this.#abandon("expired");
   }
 
-  #finish(attempt: PairingAttempt): void {
+  #finish(attempt: PairingAttempt, id: string): void {
     attempt.id = "";
     this.#endPoll(attempt);
-    attempt.added();
+    attempt.added(id);
     if (this.#current(attempt.opening)) {
       this.shadowRoot!.querySelector("wt-dialog")!.closeAfter("saved");
       this.#close();
@@ -276,7 +278,7 @@ export class SumUpAddReader extends LitElement {
         // Unknown pairing status still takes the cleanup path.
       }
       if (status?.pairingStatus === "paired") {
-        attempt.added();
+        attempt.added(id);
         return;
       }
     }
