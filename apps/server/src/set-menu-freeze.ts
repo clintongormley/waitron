@@ -68,7 +68,10 @@ export async function reducedLineIds(
         ),
         gt(adjustmentLines.reduction, 0),
         isNull(adjustmentEndingLines.id),
-        notInArray(adjustmentLines.adjustmentId, [...ended]),
+        notInArray(
+          adjustmentLines.adjustmentId,
+          sql`(select value from json_each(${JSON.stringify(ended)}))`,
+        ),
       ),
     );
   return new Set(reduced.map(({ lineId }) => lineId));

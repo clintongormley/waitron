@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import {
   newId,
   insertInChunks,
@@ -272,14 +272,12 @@ async function takeOffCopies(
     );
   };
   const stopped = unserved.filter(({ lineId }) => !started.has(lineId));
+  const copyIds = stopped.map(({ lineId }) => opened.lineCopies.get(lineId)!);
   const copies = await tx
     .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
     .from(workingOrderLines)
     .where(
-      inArray(
-        workingOrderLines.id,
-        stopped.map(({ lineId }) => opened.lineCopies.get(lineId)!),
-      ),
+      inArray(workingOrderLines.id, sql`(select value from json_each(${JSON.stringify(copyIds)}))`),
     );
   await endDiscountsCancelledWith(
     tx,

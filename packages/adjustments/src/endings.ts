@@ -1,4 +1,4 @@
-import { and, eq, gt, inArray, isNull, notInArray } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import {
   adjustmentEndingLines,
   adjustmentEndings,
@@ -74,7 +74,10 @@ async function standingOn(
     .leftJoin(adjustmentEndingLines, eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id))
     .where(
       and(
-        inArray(adjustmentLines.adjustmentId, [...query.adjustmentIds]),
+        inArray(
+          adjustmentLines.adjustmentId,
+          sql`(select value from json_each(${JSON.stringify(query.adjustmentIds)}))`,
+        ),
         eq(workingOrderLines.workingOrderId, query.workingOrderId),
         gt(adjustmentLines.reduction, 0),
         isNull(adjustmentEndingLines.id),
@@ -95,8 +98,14 @@ async function reducedBesides(
     .leftJoin(adjustmentEndingLines, eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id))
     .where(
       and(
-        inArray(adjustmentLines.lineId, [...lineIds]),
-        notInArray(adjustmentLines.adjustmentId, [...ending]),
+        inArray(
+          adjustmentLines.lineId,
+          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+        ),
+        notInArray(
+          adjustmentLines.adjustmentId,
+          sql`(select value from json_each(${JSON.stringify(ending)}))`,
+        ),
         gt(adjustmentLines.reduction, 0),
         isNull(adjustmentEndingLines.id),
       ),

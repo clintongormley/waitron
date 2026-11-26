@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   adjustments,
   endAdjustment,
@@ -60,7 +60,7 @@ async function heldBySetMenu(tx: Transaction, ask: AdjustmentAsk): Promise<Held[
       reduction: adjustments.reduction,
     })
     .from(adjustments)
-    .where(inArray(adjustments.id, ids));
+    .where(inArray(adjustments.id, sql`(select value from json_each(${JSON.stringify(ids)}))`));
   return ids.map((id) => {
     const { action, percentBp, reduction } = held.find((row) => row.id === id)!;
     return {
