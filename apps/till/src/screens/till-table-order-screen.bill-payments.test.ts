@@ -1,5 +1,6 @@
 import { openSentDish } from "./till-table-order-screen.sent.test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -623,6 +624,36 @@ describe("till-table-order-screen: a bill paid elsewhere or paid too much", () =
       `Give back ${money("15.00")}`,
     );
     expect(el.shadowRoot!.querySelector("[data-keep-as-tip]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+  });
+
+  it.each([false, true])("closes after a full refund (handheld: %s)", async (handheld) => {
+    const viewport = [innerWidth, innerHeight] as const;
+    try {
+      await page.viewport(handheld ? 390 : 1280, 900);
+      const el = await mountScreen({
+        handheld,
+        takesCash: !handheld,
+        bills: [{ ...untouched, hasPayments: true, total: "0.00", outstanding: "0.00" }],
+        lines: [line({ name: "Cake", unitPriceGross: "0.00" })],
+        billBalance: balance({ total: "0.00", outstanding: "0.00", received: "0.00" }),
+      });
+      const requested = capture(el, "pay-tab");
+      const tender = el.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay");
+      expect(tender).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).toBeNull();
+      tender!.shadowRoot!.querySelector<HTMLElement>(handheld ? ".pay-card" : ".pay")!.click();
+      await tender!.updateComplete;
+      tender!.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+
+      expect(requested).toEqual([
+        handheld
+          ? { method: "card", amount: "0.00", guestCount: 3, externalProvider: "other" }
+          : { method: "cash", amount: "0", guestCount: 3 },
+      ]);
+    } finally {
+      await page.viewport(...viewport);
+    }
   });
 
   it("someone who may not take payments is offered Give back but not Keep as tip", async () => {

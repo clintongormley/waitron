@@ -10,6 +10,7 @@ import type { PartyBill } from "../api/floor-api.js";
 import type { BillBalance } from "../api/payments-api.js";
 import { fill, t } from "../i18n/t.js";
 import { moneyPlus, type RefundAsk } from "./bill-payment.js";
+import { paymentsHoldMoney } from "./deferred-close.js";
 
 /** What an open or placed bill was paid over its total, or null when nothing is over. */
 export function overpaidOf(balance: Pick<BillBalance, "overpaid"> | null): string | null {
@@ -135,6 +136,27 @@ export function amountToPay(outstanding: string): string {
  */
 export function paidInPart(bill: { status?: PartyBill["status"]; hasPayments: boolean }): boolean {
   return bill.hasPayments && (bill.status === undefined || bill.status === "open");
+}
+
+/** The zero-total close can reuse the bill's history once all its money has gone back. */
+export function canCloseRefundedZeroBill(bill: PartyBill, balance: BillBalance | null): boolean {
+  if (
+    bill.status !== "open" ||
+    !bill.hasPayments ||
+    !isZeroDecimal(decimal(bill.total)) ||
+    !isZeroDecimal(decimal(bill.outstanding))
+  )
+    return false;
+  if (balance?.workingOrderId !== bill.workingOrderId) return bill.holdsMoney !== true;
+  return (
+    balance.status === "open" &&
+    isZeroDecimal(decimal(balance.total)) &&
+    isZeroDecimal(decimal(balance.outstanding)) &&
+    !paymentsHoldMoney(balance.payments) &&
+    !balance.payments.some((payment) =>
+      payment.refunds.some((refund) => refund.state === "pending"),
+    )
+  );
 }
 
 /**

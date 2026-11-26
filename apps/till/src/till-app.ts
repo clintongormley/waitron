@@ -396,6 +396,7 @@ import {
   billName,
   billNumberLabel,
   billToShow,
+  canCloseRefundedZeroBill,
   givesBackOverpaid,
   overpaidOf,
   owing,
@@ -1641,6 +1642,7 @@ interface WholePayment {
   tender: Tender;
   guestCount?: number | null;
   expectedEdit: BillEditExpected | null;
+  closeZeroOnReader?: true;
 }
 
 interface PendingBillPayment extends Submission {
@@ -9748,6 +9750,12 @@ export class TillApp extends LitElement {
   }
 
   #sendWholePayment(api: TillApi, billId: string, payment: WholePayment): Promise<TillSaleResult> {
+    if (payment.closeZeroOnReader)
+      return api.closeZeroBillOnReader(billId, {
+        expectedEdit: payment.expectedEdit,
+        dining: payment.dining ?? this.#tableBillDining(billId),
+        guestCount: payment.guestCount,
+      });
     if (!payment.presented)
       return api.recordSale(
         [],
@@ -21926,7 +21934,16 @@ export class TillApp extends LitElement {
     const bill = this.partyBills.find((row) => row.workingOrderId === id);
     const key = id;
     const unanswered = this.#unansweredWholePayments.get(key);
-    if (unanswered === undefined && bill !== undefined && paidInPart(bill)) {
+    const closingRefundedBill =
+      bill !== undefined &&
+      canCloseRefundedZeroBill(bill, this.billBalance) &&
+      compareDecimal(decimal(detail.amount), decimal("0")) === 0;
+    if (
+      unanswered === undefined &&
+      bill !== undefined &&
+      paidInPart(bill) &&
+      !closingRefundedBill
+    ) {
       this.#sayBillPayments(bill.outstanding);
       return false;
     }
@@ -21958,12 +21975,19 @@ export class TillApp extends LitElement {
       if (payment === undefined) {
         const expectedEdit = this.#draftSync?.expectedEditFor(id);
         if (expectedEdit == null) throw { code: "draft.out_of_date" };
+        const closeZeroOnReader =
+          closingRefundedBill &&
+          tender.method === "card" &&
+          this.handheldMode &&
+          !this.capabilities.includes("hand-keyed-card-payment") &&
+          this.capabilities.includes("integrated-card-payment");
         payment = structuredClone({
           presented,
           dining: this.#tableBillDining(id),
           tender,
           guestCount,
           expectedEdit,
+          ...(closeZeroOnReader ? { closeZeroOnReader: true as const } : {}),
           invoiced: bill?.receiptAvailable === true,
           outstanding: bill?.outstanding ?? tender.amount,
           bill: null,
