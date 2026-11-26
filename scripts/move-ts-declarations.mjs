@@ -94,10 +94,13 @@ function lineSpan(source, node) {
   return { start: lineStart, length: end - lineStart };
 }
 
-function routeAnchor(statements, anchor, fileName) {
-  const matches = statements.filter((node) => nameOf(node) === `app.${anchor.replace(" ", ":")}`);
+function mountAnchor(statements, anchor, fileName) {
+  const [kind, name] = anchor.startsWith("local ")
+    ? ["local", anchor.slice("local ".length)]
+    : ["route", `app.${anchor.replace(" ", ":")}`];
+  const matches = statements.filter((node) => nameOf(node) === name);
   if (matches.length !== 1) {
-    throw new Error(`${fileName}: expected one route anchor ${anchor}, found ${matches.length}`);
+    throw new Error(`${fileName}: expected one ${kind} anchor ${anchor}, found ${matches.length}`);
   }
   return matches[0];
 }
@@ -111,8 +114,8 @@ function liftRoutes(source, { mount, groups }) {
   const edits = [];
   const functions = [];
   for (const [name, { first, last, parameters, hoist }] of Object.entries(groups)) {
-    const from = routeAnchor(statements, first, source.fileName);
-    const to = routeAnchor(statements, last, source.fileName);
+    const from = mountAnchor(statements, first, source.fileName);
+    const to = mountAnchor(statements, last, source.fileName);
     const { start } = lineSpan(source, from);
     const { end } = span(source, to);
     const previous = edits.at(-1)?.span;
@@ -327,6 +330,20 @@ function markTypeImports(project, modules) {
       }
     }
     if (edits.length) project.set(file, replace(source.text, edits));
+  }
+}
+
+function restoreRuntimeImports(project, file) {
+  const service = project.service;
+  for (;;) {
+    // Move to File can choose a type import when a later `typeof` use follows a value use.
+    const diagnostic = service.getSemanticDiagnostics(file).find(({ code }) => code === 1361);
+    if (!diagnostic) return;
+    const { code, start, length } = diagnostic;
+    const [fix] = service.getCodeFixesAtPosition(file, start, start + length, [code], {}, {});
+    for (const { fileName, textChanges } of fix.changes) {
+      project.set(fileName, replace(project.readFile(fileName), textChanges));
+    }
   }
 }
 
@@ -725,7 +742,10 @@ export async function main([mapFile], root) {
       project.set(file, groupForTypeScript(original, targets));
     }
     for (const operation of operations) moveDeclarations(project, ...operation);
-    if (routeTargets.size) markTypeImports(project, routeTargets);
+    if (routeTargets.size) {
+      markTypeImports(project, routeTargets);
+      for (const file of routeTargets) restoreRuntimeImports(project, file);
+    }
     for (const { file, destinations } of clients) {
       redirectInlineImports(project, file, destinations);
       markTypeImports(project, new Set(Object.keys(destinations)));

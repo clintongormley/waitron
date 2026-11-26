@@ -1,7 +1,7 @@
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 
-// LOCAL copies of the route shapes in `apps/server/src/payments-api.ts`: a browser bundle must not
-// import server code.
+// The browser keeps local copies of the route shapes mounted by `mountPaymentsApi`
+// so the bundle can load without server code.
 
 export interface ConnectResult {
   merchantName: string;
