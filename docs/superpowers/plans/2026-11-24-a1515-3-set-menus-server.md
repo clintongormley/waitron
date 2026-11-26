@@ -1475,7 +1475,9 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
 - **D58. The split: 3b1 (set menus, resets venues), then 3b2 (dishes and the notice), then 3c.**
   3b1 comes first because it holds the schema both need and the refund fix the watcher put there
   (00:20). Between 3b1 and 3b2 a set menu's discount can come off with no notice in any answer;
-  the till draws none until A1515-4 either way. Alternative: one pull request of about 7 hours.
+  the till draws none until A1515-4 either way. Between 3b1 and 3b2 the adjustments report also
+  counts a discount that came off, so it can show more taken off than the bill lost (D55).
+  Alternative: one pull request of about 7 hours.
 - **D59. A preview works an ending out without writing it.** Both previews that can end a discount
   run in a transaction that saves what it writes (`previewPayForItems`, `pay-for-items.ts:564-573`,
   through `readPicks`, which Pay for items' apply runs too; `previewAdjustment`,
