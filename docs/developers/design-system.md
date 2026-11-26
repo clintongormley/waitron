@@ -4295,7 +4295,9 @@ first page text are about 32 px apart. The last page text and next heading text 
 Unheaded staff pages and folded panel pages use the regular row padding.
 
 Overview and Bookings sit at the top as direct rows with their own icons and use the section label
-colour and weight when idle. Leave `--wt-space-3` between the last row and the divider beneath it.
+colour and weight when idle. When the browser forces its own colours, idle top-level labels use
+regular weight so the bold current page stays distinct. Leave `--wt-space-3` between the last row
+and the divider beneath it.
 Each headed section combines its core and module pages in ascending order of their declared
 `order`. A headed group is its own disclosure toggle except while a search term is typed
 (below). Its header is a
@@ -4419,7 +4421,8 @@ open. The shared icon tooltip appears beside each button. The section holding th
 has a `--wt-color-primary` leading edge and a `--wt-color-surface-lifted` fill. A section with one page opens it. A
 section with more opens a panel beside its icon, listing the section's name and its pages. The current
 page in the panel uses the same band, leading edge and bold text as in the full sidebar. The section's
-icon button keeps the hover fill while the panel is open. Place the panel before its first paint and lift it to
+icon button keeps the hover fill while its panel is open. The icon for the current section keeps
+its lifted fill. Place the panel before its first paint and lift it to
 stay inside the layout when the icon is low. Picking a page
 opens it and closes the panel, and the strip stays folded. Escape closes the panel and returns focus
 to its icon. A click outside it, focus leaving it, another section's icon, unfolding the sidebar, a

@@ -22,6 +22,12 @@ const SECTION_ICONS = {
   configuration: "section-system",
 } as const;
 
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    emulateForcedColors: (forcedColors: "active" | "none" | null) => Promise<void>;
+  }
+}
+
 beforeEach(() => registerIcons(DASHBOARD_ICONS));
 
 const initialUrl = location.href;
@@ -180,6 +186,23 @@ it.each(["light", "dark"] as const)(
     });
   },
 );
+
+it("keeps the current top-level page bolder than idle pages in forced colours", async () => {
+  await atSize(1280, 800, async () => {
+    await commands.emulateForcedColors("active");
+    try {
+      const { el } = await mountApp();
+      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+      const overview = sidebar(el).querySelector("[data-test=nav-overview]")!;
+      const bookings = sidebar(el).querySelector("[data-test=nav-bookings]")!;
+      expect(overview.getAttribute("aria-current")).toBe("page");
+      expect(getComputedStyle(overview).fontWeight).toBe("600");
+      expect(getComputedStyle(bookings).fontWeight).toBe("400");
+    } finally {
+      await commands.emulateForcedColors(null);
+    }
+  });
+});
 
 it("leaves 12px between Bookings and the visible divider", async () => {
   await atSize(1280, 800, async () => {
@@ -690,6 +713,7 @@ describe("a section with several pages opens a panel beside its icon", () => {
       const { el, host } = await mountFoldedReading("reports");
       host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
       host.style.setProperty("--wt-color-primary", "rgb(7, 8, 9)");
+      host.style.setProperty("--wt-color-surface-raised", "rgb(10, 11, 12)");
       host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
       await userEvent.click(stripButton(el, "reports"));
       await el.updateComplete;
@@ -706,6 +730,7 @@ describe("a section with several pages opens a panel beside its icon", () => {
       expect(current!.getAttribute("aria-current")).toBe("page");
       expect(getComputedStyle(current!).borderInlineStartColor).toBe("rgb(7, 8, 9)");
       expect(getComputedStyle(current!).color).toBe("rgb(4, 5, 6)");
+      expect(getComputedStyle(current!).backgroundColor).toBe("rgb(10, 11, 12)");
       expect(other!.hasAttribute("aria-current")).toBe(false);
     });
   });

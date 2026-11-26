@@ -708,6 +708,12 @@ export class DashboardApp extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      @media (forced-colors: active) {
+        .nav-pinned > .nav-item:not([aria-current="page"]) {
+          font-weight: var(--wt-font-weight-normal);
+        }
+      }
+
       .nav-group-pages > .nav-item {
         padding-inline-start: calc(2 * var(--wt-space-3) + var(--wt-font-size-lg));
       }
