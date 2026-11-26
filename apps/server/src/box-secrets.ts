@@ -9,7 +9,7 @@ import {
 } from "@waitron/store";
 import { chmod, lstat, open, readFile, type FileHandle } from "node:fs/promises";
 import { constants, existsSync } from "node:fs";
-import { X509Certificate, createPrivateKey, type KeyObject } from "node:crypto";
+import { type X509Certificate, createPrivateKey } from "node:crypto";
 import { join } from "node:path";
 import { generateKeyRing, readDurableHostJson, type GeneratedKeyRing } from "@waitron/provisioning";
 import { keyRingEnv, type EncodedKeyRing } from "@waitron/credentials";
@@ -19,6 +19,9 @@ import "./errors.js";
 import { listBoxIpv4 } from "./box-reach.js";
 import { fileExists } from "./box-tls-install.js";
 import {
+  boxCertCurrent,
+  boxLeafChain,
+  boxRoot,
   issueClientCert,
   leafIpv4s,
   mintSelfSignedServerCert,
@@ -212,20 +215,22 @@ export async function ensureLeaf(deps: {
 }): Promise<"kept" | "reissued"> {
   const files = boxTlsPaths(deps.stateDir);
   if (mintedBoxLeaf(deps.stateDir) === undefined) return "kept";
-  const leaf = new X509Certificate(await readFile(files.certFile, "utf8"));
-  const authority = new X509Certificate(await readFile(files.caCertFile, "utf8"));
-  const key = createPrivateKey(await readFile(files.keyFile, "utf8"));
+  const pem = await readFile(files.certFile, "utf8");
+  const authority = boxRoot(await readFile(files.caCertFile, "utf8"));
+  if (authority === null) throw new AppError("setup.not_ready", {});
+  const chain = boxLeafChain(pem, authority, "server");
+  const now = deps.now();
   const fits =
-    leaf.verify(authority.publicKey) &&
-    leaf.checkPrivateKey(key) &&
-    deps.hostnames.every((host) => leaf.checkHost(host) === host) &&
-    leafIpv4s(deps.listIpv4).every((ip) => leaf.checkIP(ip) === ip);
+    chain !== null &&
+    boxCertCurrent(chain.signer, now) &&
+    boxCertCurrent(chain.leaf, now) &&
+    chain.leaf.checkPrivateKey(createPrivateKey(pem)) &&
+    deps.hostnames.every((host) => chain.leaf.checkHost(host) === host) &&
+    leafIpv4s(deps.listIpv4).every((ip) => chain.leaf.checkIP(ip) === ip);
   if (!fits) await reissueBoxLeaf(deps);
   await ensureClientCert(deps.stateDir, deps.hostnames[0]!, authority, deps.now);
   return fits ? "kept" : "reissued";
 }
-
-const CLIENT_AUTH_USAGE = "1.3.6.1.5.5.7.3.2";
 
 /** Whether `certPem` and `keyPem` are a pair under `authority`, for a client, naming `name`, and
  * valid at `at`; false for material that does not parse. */
@@ -236,22 +241,19 @@ function clientPairFits(
   authority: X509Certificate,
   at: Date,
 ): boolean {
-  let cert: X509Certificate;
-  let key: KeyObject;
   try {
-    cert = new X509Certificate(certPem);
-    key = createPrivateKey(keyPem);
+    const chain = boxLeafChain(certPem, authority, "client");
+    if (chain === null) return false;
+    const { leaf, signer } = chain;
+    return (
+      leaf.checkPrivateKey(createPrivateKey(keyPem)) &&
+      leaf.checkHost(name, { subject: "never", wildcards: false }) === name &&
+      boxCertCurrent(signer, at) &&
+      boxCertCurrent(leaf, at)
+    );
   } catch {
     return false;
   }
-  return (
-    cert.verify(authority.publicKey) &&
-    cert.checkPrivateKey(key) &&
-    cert.checkHost(name, { subject: "never", wildcards: false }) === name &&
-    (cert.keyUsage?.includes(CLIENT_AUTH_USAGE) ?? false) &&
-    cert.validFromDate <= at &&
-    at < cert.validToDate
-  );
 }
 
 async function ensureClientCert(

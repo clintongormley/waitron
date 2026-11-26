@@ -1,14 +1,14 @@
-import { randomBytes } from "node:crypto";
+import { createPrivateKey, randomBytes, X509Certificate } from "node:crypto";
 import { AppError } from "@waitron/shared";
 import { certificate, type CertExtension } from "@waitron/server-kit/certificate.js";
 import forge from "node-forge";
 import "./errors.js";
 
-/** A private CA and the leaf server certificate it signs, all PEM-encoded. */
+/** The public root, retained signer and serving identity, all PEM-encoded. */
 export interface SelfSignedMaterial {
   /** A setup client trusts THIS to accept the leaf. */
   caCertPem: string;
-  /** Kept for {@link reissueServerLeaf}. */
+  /** The intermediate certificate followed by its private key. */
   caKeyPem: string;
   serverCertPem: string;
   serverKeyPem: string;
@@ -20,16 +20,10 @@ export interface MintOptions {
   /** iPAddress SANs on the leaf. May be empty. */
   ipAddresses: string[];
   now: Date;
-  /** Lets a test reuse one keypair instead of paying RSA-2048 generation twice per mint. */
+  /** Lets a test reuse generated keys across mints. */
   keypair?: () => forge.pki.rsa.KeyPair;
 }
 
-/**
- * The CA's permitted name space: `waitron.local`, `localhost`, loopback and the three RFC1918
- * ranges. OpenSSL, the macOS system checker and Chrome 152 on macOS refused the root for an outside
- * name; Chrome on the one Android phone measured accepted one under the user-installed root
- * (2026-09-08, recorded in commits fb47efd68 and 75f17f9e3; built in #290).
- */
 const PERMITTED_DNS = ["waitron.local", "localhost"];
 const PERMITTED_IPV4_CIDRS: Array<[string, number]> = [
   ["127.0.0.0", 8],
@@ -120,26 +114,104 @@ function nameConstraintsExtension(): CertExtension {
   };
 }
 
-export function hasBoxCaConstraints(pem: string): boolean {
-  const ca = forge.pki.certificateFromPem(pem);
-  const constraints = ca.getExtension("nameConstraints") as {
-    critical?: boolean;
-    value?: string;
-  } | null;
-  const usage = ca.getExtension("keyUsage") as { keyCertSign?: boolean } | null;
+function caRole(pem: string, name: string, pathLength: number): boolean {
+  const cert = forge.pki.certificateFromPem(pem);
+  const basic = cert.getExtension("basicConstraints") as CertExtension | null;
+  const usage = cert.getExtension("keyUsage") as CertExtension | null;
   return (
-    ca.subject.getField("CN")?.value === CA_COMMON_NAME &&
-    constraints?.critical === true &&
-    constraints.value === nameConstraintsExtension().value &&
-    usage?.keyCertSign === true
+    cert.subject.getField("CN")?.value === name &&
+    basic?.cA === true &&
+    basic.pathLenConstraint === pathLength &&
+    usage?.keyCertSign === true &&
+    cert.getExtension("extKeyUsage") === null
   );
+}
+
+function pemBlocks(pem: string) {
+  try {
+    return forge.pem.decode(pem);
+  } catch {
+    return [];
+  }
+}
+
+export function boxCertCurrent(cert: X509Certificate, now: Date): boolean {
+  return cert.validFromDate <= now && now < cert.validToDate;
+}
+
+export function boxRoot(pem: string): X509Certificate | null {
+  const blocks = pemBlocks(pem);
+  if (blocks.length !== 1 || blocks[0]?.type !== "CERTIFICATE") return null;
+  const root = new X509Certificate(pem);
+  return root.checkIssued(root) && root.verify(root.publicKey) && caRole(pem, CA_COMMON_NAME, 1)
+    ? root
+    : null;
+}
+
+function signerCertificate(block: forge.pem.ObjectPEM, root: X509Certificate) {
+  if (block.type !== "CERTIFICATE") return null;
+  const pem = forge.pem.encode(block);
+  const cert = new X509Certificate(pem);
+  const constraints = forge.pki
+    .certificateFromPem(pem)
+    .getExtension("nameConstraints") as CertExtension | null;
+  if (
+    !cert.checkIssued(root) ||
+    !cert.verify(root.publicKey) ||
+    cert.publicKey.equals(root.publicKey) ||
+    !caRole(pem, SIGNER_COMMON_NAME, 0) ||
+    constraints?.critical !== true ||
+    constraints.value !== nameConstraintsExtension().value
+  )
+    return null;
+  return { cert, pem };
+}
+
+export function boxSigner(pem: string, root: X509Certificate) {
+  const [certBlock, keyBlock, extra] = pemBlocks(pem);
+  if (!certBlock || !keyBlock || extra || !/^(RSA )?PRIVATE KEY$/.test(keyBlock.type)) return null;
+  const signer = signerCertificate(certBlock, root);
+  const keyPem = forge.pem.encode(keyBlock);
+  return signer?.cert.checkPrivateKey(createPrivateKey(keyPem)) ? { ...signer, keyPem } : null;
+}
+
+export function boxLeafChain(pem: string, root: X509Certificate, role: "server" | "client") {
+  const [leafBlock, signerBlock, ...rest] = pemBlocks(pem);
+  if (leafBlock?.type !== "CERTIFICATE" || !signerBlock || rest.length > 1) return null;
+  if (rest.length === 1 && !/^(RSA )?PRIVATE KEY$/.test(rest[0]!.type)) return null;
+  const signer = signerCertificate(signerBlock, root);
+  if (!signer) return null;
+  const leaf = new X509Certificate(forge.pem.encode(leafBlock));
+  const usage = role === "server" ? "1.3.6.1.5.5.7.3.1" : "1.3.6.1.5.5.7.3.2";
+  return !leaf.ca &&
+    leaf.checkIssued(signer.cert) &&
+    leaf.verify(signer.cert.publicKey) &&
+    leaf.keyUsage?.includes(usage)
+    ? { leaf, signer: signer.cert }
+    : null;
+}
+
+function signerFor(rootPem: string, signerPem: string, now: Date) {
+  const root = boxRoot(rootPem);
+  const signer = root && boxSigner(signerPem, root);
+  if (!root || !signer || !boxCertCurrent(root, now) || !boxCertCurrent(signer.cert, now)) {
+    throw new Error("Invalid box TLS signer");
+  }
+  return {
+    pem: signer.pem,
+    key: forge.pki.privateKeyFromPem(signer.keyPem),
+    validity: validityFrom(
+      now,
+      Math.min(root.validToDate.getTime(), signer.cert.validToDate.getTime()),
+    ),
+  };
 }
 
 const DAY_MS = 86_400_000;
 /** The box is a long-lived appliance; a short leaf would strand a running venue. */
 const VALIDITY_DAYS = 3650;
-/** The CA's subject CN, reused as the leaf's issuer CN so `ca.verify(leaf)` chains. */
 const CA_COMMON_NAME = "waitron-setup-ca";
+const SIGNER_COMMON_NAME = "waitron-box-signer";
 
 /**
  * Random rather than fixed: the same CA signs again on every re-issue, and X.509 serials must be
@@ -185,7 +257,7 @@ function signLeaf(
   return certificate(
     hostnames[0],
     serverKeys,
-    { cn: CA_COMMON_NAME, key: caKey },
+    { cn: SIGNER_COMMON_NAME, key: caKey },
     randomSerial(),
     validity,
     [
@@ -197,36 +269,31 @@ function signLeaf(
   );
 }
 
-/**
- * Mint a private CA and a leaf server certificate signed by it. The leaf's CN is `hostnames[0]`.
- * Throws `setup.cert_hostnames_empty` when `hostnames` is empty.
- */
 export function mintSelfSignedServerCert(opts: MintOptions): SelfSignedMaterial {
   const { hostnames, ipAddresses, now } = opts;
   const makeKeypair = keypairFor(hostnames, opts.keypair);
   const validity = validityFrom(now);
-
-  const caKeys = makeKeypair();
-  const caCert = certificate(
-    CA_COMMON_NAME,
-    caKeys,
-    { cn: CA_COMMON_NAME, key: caKeys.privateKey },
-    randomSerial(),
-    validity,
-    [
-      { name: "basicConstraints", cA: true, pathLenConstraint: 0 },
-      { name: "keyUsage", keyCertSign: true, cRLSign: true, digitalSignature: true },
-      nameConstraintsExtension(),
-    ],
-  );
-
+  const rootKeys = makeKeypair();
+  const rootIssuer = { cn: CA_COMMON_NAME, key: rootKeys.privateKey };
+  const caUsage = { name: "keyUsage", keyCertSign: true, cRLSign: true, digitalSignature: true };
+  const root = certificate(CA_COMMON_NAME, rootKeys, rootIssuer, randomSerial(), validity, [
+    { name: "basicConstraints", cA: true, pathLenConstraint: 1 },
+    caUsage,
+  ]);
+  const signerKeys = makeKeypair();
+  const signer = certificate(SIGNER_COMMON_NAME, signerKeys, rootIssuer, randomSerial(), validity, [
+    { name: "basicConstraints", cA: true, pathLenConstraint: 0 },
+    caUsage,
+    nameConstraintsExtension(),
+  ]);
+  const signerPem = forge.pki.certificateToPem(signer);
   const serverKeys = makeKeypair();
-  const serverCert = signLeaf(caKeys.privateKey, serverKeys, hostnames, ipAddresses, validity);
+  const serverCert = signLeaf(signerKeys.privateKey, serverKeys, hostnames, ipAddresses, validity);
 
   return {
-    caCertPem: forge.pki.certificateToPem(caCert),
-    caKeyPem: forge.pki.privateKeyToPem(caKeys.privateKey),
-    serverCertPem: forge.pki.certificateToPem(serverCert),
+    caCertPem: forge.pki.certificateToPem(root),
+    caKeyPem: signerPem + forge.pki.privateKeyToPem(signerKeys.privateKey),
+    serverCertPem: forge.pki.certificateToPem(serverCert) + signerPem,
     serverKeyPem: forge.pki.privateKeyToPem(serverKeys.privateKey),
   };
 }
@@ -244,18 +311,11 @@ export function reissueServerLeaf(opts: {
   keypair?: () => forge.pki.rsa.KeyPair;
 }): { serverCertPem: string; serverKeyPem: string } {
   const makeKeypair = keypairFor(opts.hostnames, opts.keypair);
-  const caCert = forge.pki.certificateFromPem(opts.caCertPem);
-  const caKey = forge.pki.privateKeyFromPem(opts.caKeyPem) as forge.pki.rsa.PrivateKey;
+  const signer = signerFor(opts.caCertPem, opts.caKeyPem, opts.now);
   const serverKeys = makeKeypair();
-  const leaf = signLeaf(
-    caKey,
-    serverKeys,
-    opts.hostnames,
-    opts.ipAddresses,
-    validityFrom(opts.now, caCert.validity.notAfter.getTime()),
-  );
+  const leaf = signLeaf(signer.key, serverKeys, opts.hostnames, opts.ipAddresses, signer.validity);
   return {
-    serverCertPem: forge.pki.certificateToPem(leaf),
+    serverCertPem: forge.pki.certificateToPem(leaf) + signer.pem,
     serverKeyPem: forge.pki.privateKeyToPem(serverKeys.privateKey),
   };
 }
@@ -273,15 +333,14 @@ export function issueClientCert(opts: {
   keypair?: () => forge.pki.rsa.KeyPair;
 }): { clientCertPem: string; clientKeyPem: string } {
   const makeKeypair = keypairFor([opts.hostname], opts.keypair);
-  const caCert = forge.pki.certificateFromPem(opts.caCertPem);
-  const caKey = forge.pki.privateKeyFromPem(opts.caKeyPem) as forge.pki.rsa.PrivateKey;
+  const signer = signerFor(opts.caCertPem, opts.caKeyPem, opts.now);
   const keys = makeKeypair();
   const cert = certificate(
     opts.hostname,
     keys,
-    { cn: CA_COMMON_NAME, key: caKey },
+    { cn: SIGNER_COMMON_NAME, key: signer.key },
     randomSerial(),
-    validityFrom(opts.now, caCert.validity.notAfter.getTime()),
+    signer.validity,
     [
       { name: "basicConstraints", cA: false },
       { name: "keyUsage", digitalSignature: true, keyEncipherment: true },
@@ -290,7 +349,7 @@ export function issueClientCert(opts: {
     ],
   );
   return {
-    clientCertPem: forge.pki.certificateToPem(cert),
+    clientCertPem: forge.pki.certificateToPem(cert) + signer.pem,
     clientKeyPem: forge.pki.privateKeyToPem(keys.privateKey),
   };
 }

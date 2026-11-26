@@ -1,3 +1,4 @@
+import { certChain } from "./testing/box-tls.js";
 import { saveVenueFields } from "@waitron/db";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
 import { createHook } from "node:async_hooks";
@@ -193,7 +194,10 @@ describe("completeRebuild", () => {
       expect(leaf.subjectAltName).not.toContain(OLD_ADDRESS);
       const ca = await readFile(join(stateDir, "tls", "ca.crt"), "utf8");
       expect(ca).toBe(caBefore);
-      expect(leaf.verify(new X509Certificate(ca).publicKey)).toBe(true);
+      const served = await readFile(join(stateDir, "tls", "server.pem"), "utf8");
+      const signer = new X509Certificate(certChain(served)[1]!);
+      expect(signer.verify(new X509Certificate(ca).publicKey)).toBe(true);
+      expect(leaf.verify(signer.publicKey)).toBe(true);
       const key = await readFile(join(stateDir, "tls", "server.pem"), "utf8");
       expect(leaf.checkPrivateKey(createPrivateKey(key))).toBe(true);
       expect((await stat(join(stateDir, "tls", "server.pem"))).mode & 0o777).toBe(0o600);

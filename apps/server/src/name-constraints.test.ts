@@ -1,87 +1,109 @@
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import forge from "node-forge";
 import { describe, expect, it } from "vitest";
-import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { mintSelfSignedServerCert, reissueServerLeaf } from "./self-signed-cert.js";
+import { certChain, fixtureBoxKeys } from "./testing/box-tls.js";
 
-/**
- * Runs openssl to check the CA's nameConstraints CONSTRAIN: an `example.com` leaf signed by the same CA
- * is REFUSED, a `waitron.local` leaf accepted. Skips where openssl is absent.
- */
-function haveOpenssl(): boolean {
-  try {
-    execFileSync("openssl", ["version"], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-describe.runIf(haveOpenssl())("CA name constraints (openssl proof)", () => {
-  it("refuses a control leaf outside the permitted subtree, accepts a permitted one", () => {
-    const m = mintSelfSignedServerCert({
-      hostnames: ["waitron.local"],
-      ipAddresses: ["192.168.1.50"],
-      now: new Date("2026-09-09T00:00:00Z"),
-    });
-    // Forge a control leaf for example.com signed by the SAME CA key.
-    const caKey = forge.pki.privateKeyFromPem(m.caKeyPem);
-    const caCert = forge.pki.certificateFromPem(m.caCertPem);
-    const leafKeys = forge.pki.rsa.generateKeyPair(2048);
-    const control = forge.pki.createCertificate();
-    control.publicKey = leafKeys.publicKey;
-    control.serialNumber = "02";
-    control.validity.notBefore = new Date("2026-09-08T00:00:00Z");
-    control.validity.notAfter = new Date("2027-09-08T00:00:00Z");
-    control.setSubject([{ name: "commonName", value: "example.com" }]);
-    control.setIssuer(caCert.subject.attributes);
-    control.setExtensions([
-      { name: "basicConstraints", cA: false },
-      { name: "keyUsage", digitalSignature: true, keyEncipherment: true },
-      { name: "extKeyUsage", serverAuth: true },
-      { name: "subjectAltName", altNames: [{ type: 2, value: "example.com" }] },
-    ]);
-    control.sign(caKey, forge.md.sha256.create());
-
-    const dir = mkdtempSync(join(tmpdir(), "waitron-nc-"));
-    try {
-      writeFileSync(join(dir, "ca.pem"), m.caCertPem);
-      writeFileSync(join(dir, "leaf-a.pem"), m.serverCertPem);
-      writeFileSync(join(dir, "leaf-b.pem"), forge.pki.certificateToPem(control));
-      // Leaf A (waitron.local) verifies.
-      const okA = () =>
-        execFileSync(
-          "openssl",
-          ["verify", "-CAfile", join(dir, "ca.pem"), join(dir, "leaf-a.pem")],
-          {
-            encoding: "utf8",
-          },
-        );
-      expect(okA()).toMatch(/OK/);
-      // Leaf B (example.com) is refused for a permitted-subtree violation.
-      let failed = false;
-      let msg = "";
-      try {
-        execFileSync(
-          "openssl",
-          ["verify", "-CAfile", join(dir, "ca.pem"), join(dir, "leaf-b.pem")],
-          {
-            encoding: "utf8",
-            stdio: ["ignore", "pipe", "pipe"],
-          },
-        );
-      } catch (e) {
-        failed = true;
-        msg =
-          String((e as { stdout?: string; stderr?: string }).stdout ?? "") +
-          String((e as { stdout?: string; stderr?: string }).stderr ?? "");
-      }
-      expect(failed).toBe(true);
-      expect(msg).toMatch(/permitted subtree/i);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+it("keeps an intermediate signing key distinct from the downloaded root", () => {
+  const material = mintSelfSignedServerCert({
+    hostnames: ["waitron.local"],
+    ipAddresses: ["192.168.1.50"],
+    now: new Date("2026-11-26T00:00:00Z"),
   });
+  const root = forge.pki.certificateFromPem(material.caCertPem);
+  const [signerBlock, keyBlock] = forge.pem.decode(material.caKeyPem);
+  expect(signerBlock?.type).toBe("CERTIFICATE");
+  expect(keyBlock?.type).toBe("RSA PRIVATE KEY");
+  const signer = forge.pki.certificateFromPem(forge.pem.encode(signerBlock!));
+  const key = forge.pki.privateKeyFromPem(forge.pem.encode(keyBlock!));
+  const rootKey = root.publicKey as forge.pki.rsa.PublicKey;
+  const signerKey = signer.publicKey as forge.pki.rsa.PublicKey;
+  expect(key.n.equals(rootKey.n)).toBe(false);
+  expect(key.n.equals(signerKey.n)).toBe(true);
+  expect(root.verify(signer)).toBe(true);
+  expect(forge.pem.decode(material.caCertPem)).toHaveLength(1);
+  expect(forge.pem.decode(material.serverCertPem).map((block) => block.body)).toEqual([
+    expect.any(String),
+    signerBlock!.body,
+  ]);
 });
+
+describe.runIf(spawnSync("openssl", ["version"]).status === 0)(
+  "box signer name constraints",
+  () => {
+    it("accepts box names and private IPs and refuses names and IPs outside the permitted subtrees", () => {
+      const now = new Date();
+      const keys = fixtureBoxKeys();
+      const rootKeys = keys();
+      const signerKeys = keys();
+      const leafKeys = keys();
+      const mintKeys = [rootKeys, signerKeys, leafKeys].values();
+      const material = mintSelfSignedServerCert({
+        hostnames: ["waitron.local"],
+        ipAddresses: ["192.168.1.50"],
+        now,
+        keypair: () => mintKeys.next().value!,
+      });
+      const [signerPem] = certChain(material.caKeyPem);
+      const control = forge.pki.certificateFromPem(signerPem!);
+      control.setExtensions(control.extensions.filter((entry) => entry.id !== "2.5.29.30"));
+      control.sign(rootKeys.privateKey, forge.md.sha256.create());
+
+      const dir = mkdtempSync(join(tmpdir(), "waitron-nc-"));
+      const verify = (leaf: string, intermediate: string, flag: string, name: string) => {
+        writeFileSync(join(dir, "leaf.pem"), leaf);
+        writeFileSync(join(dir, "intermediate.pem"), intermediate);
+        return spawnSync(
+          "openssl",
+          [
+            "verify",
+            "-purpose",
+            "sslserver",
+            "-CAfile",
+            "ca.pem",
+            "-untrusted",
+            "intermediate.pem",
+            flag,
+            name,
+            "leaf.pem",
+          ],
+          { cwd: dir, encoding: "utf8" },
+        );
+      };
+      try {
+        writeFileSync(join(dir, "ca.pem"), material.caCertPem);
+        const [allowedLeaf] = certChain(material.serverCertPem);
+        expect(verify(allowedLeaf!, signerPem!, "-verify_hostname", "waitron.local").status).toBe(
+          0,
+        );
+        expect(verify(allowedLeaf!, signerPem!, "-verify_ip", "192.168.1.50").status).toBe(0);
+        for (const [input, flag, name] of [
+          [{ hostnames: ["outside.test"], ipAddresses: [] }, "-verify_hostname", "outside.test"],
+          [
+            { hostnames: ["waitron.local"], ipAddresses: ["192.0.2.15"] },
+            "-verify_ip",
+            "192.0.2.15",
+          ],
+        ] as const) {
+          const leaf = reissueServerLeaf({
+            ...material,
+            now,
+            keypair: () => leafKeys,
+            hostnames: [...input.hostnames],
+            ipAddresses: [...input.ipAddresses],
+          });
+          const [leafPem] = certChain(leaf.serverCertPem);
+          const refused = verify(leafPem!, signerPem!, flag, name);
+          expect(refused.status).not.toBe(0);
+          expect(refused.stderr).toMatch(/permitted subtree/i);
+          expect(verify(leafPem!, forge.pki.certificateToPem(control), flag, name).status).toBe(0);
+        }
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  },
+);

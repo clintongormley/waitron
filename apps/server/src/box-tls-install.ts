@@ -1,5 +1,4 @@
 import { TLS_DIR, TLS_INSTALL_FILE, TLS_JOINED_FILE } from "@waitron/store";
-import { X509Certificate, createPrivateKey } from "node:crypto";
 import { access, realpath, rename, rm } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readDurableHostJson } from "@waitron/provisioning";
@@ -12,7 +11,13 @@ import {
   writeFileDurable,
 } from "./fs-atomic.js";
 import { withRecoveryLock } from "./recovery-lock.js";
-import { leafIpv4s, reissueServerLeaf } from "./self-signed-cert.js";
+import {
+  boxCertCurrent,
+  boxRoot,
+  boxSigner,
+  leafIpv4s,
+  reissueServerLeaf,
+} from "./self-signed-cert.js";
 import "./errors.js";
 
 /** Every file an install may list. */
@@ -93,25 +98,31 @@ export interface InstallVenueAuthorityDeps {
   now: () => Date;
 }
 
-/** Refuses, with `mirror.bundle_fetch_failed`, an authority certificate whose key is not `keyPem`. */
-export function assertAuthorityKeyMatches(certPem: string, keyPem: string): void {
-  if (!keyBelongsTo(certPem, keyPem)) throw new AppError("mirror.bundle_fetch_failed", {});
+export function assertVenueAuthority(certPem: string, keyPem: string, now: Date): void {
+  try {
+    const root = boxRoot(certPem);
+    const signer = root && boxSigner(keyPem, root);
+    if (root && signer && boxCertCurrent(root, now) && boxCertCurrent(signer.cert, now)) return;
+  } catch {
+    // A malformed certificate or key is the same refusal as an invalid chain.
+  }
+  throw new AppError("mirror.bundle_fetch_failed", {});
 }
 
 /**
  * Makes `authority`, and a leaf it signs for `hostnames`, this box's own `tls/` set, through
- * {@link stageTlsInstall}. Refuses, through {@link assertAuthorityKeyMatches} and before it writes
- * anything, an authority certificate whose key is not the one given.
+ * {@link stageTlsInstall}. Validate the authority before staging any files.
  */
 export async function installVenueAuthority(deps: InstallVenueAuthorityDeps): Promise<void> {
   const { certPem, keyPem } = deps.authority;
-  assertAuthorityKeyMatches(certPem, keyPem);
+  const now = deps.now();
+  assertVenueAuthority(certPem, keyPem, now);
   const leaf = reissueServerLeaf({
     caCertPem: certPem,
     caKeyPem: keyPem,
     hostnames: deps.hostnames,
     ipAddresses: leafIpv4s(deps.listIpv4),
-    now: deps.now(),
+    now,
   });
   const files = [
     { name: "ca.key", pem: keyPem },
@@ -127,14 +138,6 @@ export async function installVenueAuthority(deps: InstallVenueAuthorityDeps): Pr
     }
     await closeTlsInstall(deps.stateDir);
   });
-}
-
-function keyBelongsTo(certPem: string, keyPem: string): boolean {
-  try {
-    return new X509Certificate(certPem).checkPrivateKey(createPrivateKey(keyPem));
-  } catch {
-    return false;
-  }
 }
 
 async function anyExists(paths: readonly string[]): Promise<boolean> {

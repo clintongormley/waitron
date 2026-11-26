@@ -1,3 +1,4 @@
+import { createPrivateKey, X509Certificate } from "node:crypto";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -194,6 +195,12 @@ describe("assembleMirrorBundle (primary side)", () => {
     });
     expect(bundle.boxCaKeyPem).toBe(caKeyPem);
     expect(bundle.boxCaPem).toBe(caPem);
+    const root = new X509Certificate(bundle.boxCaPem);
+    const signer = new X509Certificate(bundle.boxCaKeyPem);
+    const retainedKey = createPrivateKey(bundle.boxCaKeyPem);
+    expect(root.checkPrivateKey(retainedKey)).toBe(false);
+    expect(signer.checkPrivateKey(retainedKey)).toBe(true);
+    expect(signer.verify(root.publicKey)).toBe(true);
     expect(bundle.primaryPublicKey).toBe((await readMembershipTrustSet(db))[designated.nodeId]);
     expect(verifyEndorsement(bundle.reservedIdentity.endorsement, bundle.primaryPublicKey)).toBe(
       true,

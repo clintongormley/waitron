@@ -6,10 +6,12 @@ import { join } from "node:path";
 import { createSecureContext } from "node:tls";
 import { AppError } from "@waitron/shared";
 import { readDurableHostJson, writeDurableHostJson } from "@waitron/provisioning";
-import forge from "node-forge";
 import { withRecoveryLock } from "./recovery-lock.js";
 import {
-  hasBoxCaConstraints,
+  boxCertCurrent,
+  boxLeafChain,
+  boxRoot,
+  boxSigner,
   leafIpv4s,
   mintSelfSignedServerCert,
   reissueServerLeaf,
@@ -51,9 +53,6 @@ const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "E
 const tlsDir = (deps: BoxTlsRepairDeps) => join(deps.stateDir, TLS_DIR);
 const flowDir = (deps: BoxTlsRepairDeps) => join(deps.stateDir, TLS_REPAIR_FLOW_DIR);
 const pendingPath = (deps: BoxTlsRepairDeps) => join(flowDir(deps), "record.json");
-function current(cert: X509Certificate, now: Date) {
-  return Date.parse(cert.validFrom) <= now.getTime() && Date.parse(cert.validTo) > now.getTime();
-}
 async function regularDirectory(path: string) {
   const info = await fs.lstat(path);
   if (!info.isDirectory() || info.isSymbolicLink()) throw refused();
@@ -102,42 +101,26 @@ async function pending(deps: BoxTlsRepairDeps): Promise<Pending | null> {
 }
 function caPublic(bytes: Buffer | null, now: Date): X509Certificate | null {
   try {
-    if (bytes === null) return null;
-    const ca = new X509Certificate(bytes);
-    return ca.ca &&
-      current(ca, now) &&
-      ca.verify(ca.publicKey) &&
-      hasBoxCaConstraints(bytes.toString("utf8"))
-      ? ca
-      : null;
+    const ca = bytes && boxRoot(bytes.toString("utf8"));
+    return ca && boxCertCurrent(ca, now) ? ca : null;
   } catch {
     return null;
   }
 }
-async function readServedCa(
-  stateDir: string,
-  now: Date,
-): Promise<{ ca: X509Certificate; pem: string } | null> {
-  const pem = await fs.readFile(join(stateDir, TLS_DIR, "ca.crt"), "utf8");
-  const ca = caPublic(Buffer.from(pem), now);
-  return ca === null ? null : { ca, pem };
-}
+
 export async function readBoxPublicCa(stateDir: string, now = new Date()): Promise<string | null> {
-  const served = await readServedCa(stateDir, now);
-  // A parsed certificate is public; the rest of its source file may contain private material.
-  return served === null
-    ? null
-    : served.ca
-        .toString()
-        .replaceAll("\n", served.pem.includes("-----BEGIN CERTIFICATE-----\r\n") ? "\r\n" : "\n");
+  const pem = await fs.readFile(join(stateDir, TLS_DIR, "ca.crt"), "utf8");
+  const publicPem = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/)?.[0];
+  if (!publicPem) return null;
+  const ca = caPublic(Buffer.from(publicPem), now);
+  return ca?.toString().replaceAll("\n", pem.includes("\r\n") ? "\r\n" : "\n") ?? null;
 }
 
 function signingAuthority(s: Snapshot, now: Date): boolean {
   try {
-    return (
-      s["ca.key"] !== null &&
-      caPublic(s["ca.crt"], now)?.checkPrivateKey(createPrivateKey(s["ca.key"])) === true
-    );
+    const ca = caPublic(s["ca.crt"], now);
+    const signer = ca && s["ca.key"] && boxSigner(s["ca.key"].toString("utf8"), ca);
+    return signer !== null && boxCertCurrent(signer.cert, now);
   } catch {
     return false;
   }
@@ -149,14 +132,15 @@ function healthy(
   checkLeafTime = true,
 ): boolean {
   try {
-    const ca = caPublic(s["ca.crt"], deps.now());
+    const now = deps.now();
+    const ca = caPublic(s["ca.crt"], now);
     if (ca === null || s["server.pem"] === null) return false;
-    const leaf = new X509Certificate(s["server.pem"]);
+    const chain = boxLeafChain(s["server.pem"].toString("utf8"), ca, "server");
+    if (chain === null) return false;
+    const { leaf, signer } = chain;
     if (
-      leaf.ca ||
-      (checkLeafTime && !current(leaf, deps.now())) ||
-      !leaf.checkIssued(ca) ||
-      !leaf.verify(ca.publicKey) ||
+      !boxCertCurrent(signer, now) ||
+      (checkLeafTime && !boxCertCurrent(leaf, now)) ||
       !leaf.checkPrivateKey(createPrivateKey(s["server.pem"]))
     )
       return false;
@@ -165,10 +149,6 @@ function healthy(
       (checkAddresses && leafIpv4s(deps.listIpv4).some((ip) => leaf.checkIP(ip) !== ip))
     )
       return false;
-    const usage = forge.pki
-      .certificateFromPem(s["server.pem"].toString("utf8"))
-      .getExtension("extKeyUsage") as { serverAuth?: boolean } | null;
-    if (usage?.serverAuth !== true) return false;
     createSecureContext({ cert: s["server.pem"], key: s["server.pem"] });
     return true;
   } catch {

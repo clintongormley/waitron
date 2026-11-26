@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { X509Certificate, createPrivateKey } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import forge from "node-forge";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ensureLeaf } from "./box-secrets.js";
 import {
@@ -10,7 +11,7 @@ import {
   reissueServerLeaf,
   type SelfSignedMaterial,
 } from "./self-signed-cert.js";
-import { handshake, tlsFile, writeTlsSet } from "./testing/box-tls.js";
+import { certChain, handshake, tlsFile, writeTlsSet } from "./testing/box-tls.js";
 
 const OWN_NAME = "box-7f3a.waitron.local";
 const HOSTNAMES = [OWN_NAME, "waitron.local", "localhost"];
@@ -20,6 +21,16 @@ const CLIENT_AUTH = "1.3.6.1.5.5.7.3.2";
 let own: SelfSignedMaterial;
 let other: SelfSignedMaterial;
 const dirs: string[] = [];
+
+function verifiedClient(pem: string): X509Certificate {
+  const [leafPem, signerPem] = certChain(pem);
+  const root = new X509Certificate(own.caCertPem);
+  const signer = new X509Certificate(signerPem!);
+  const leaf = new X509Certificate(leafPem!);
+  expect(signer.verify(root.publicKey)).toBe(true);
+  expect(leaf.verify(signer.publicKey)).toBe(true);
+  return leaf;
+}
 
 beforeAll(() => {
   const now = new Date();
@@ -154,8 +165,7 @@ describe("ensureLeaf", () => {
 
     await ensure(stateDir);
 
-    const cert = new X509Certificate(await tlsFile(stateDir, "client.crt"));
-    expect(cert.verify(new X509Certificate(own.caCertPem).publicKey)).toBe(true);
+    const cert = verifiedClient(await tlsFile(stateDir, "client.crt"));
     expect(cert.checkPrivateKey(createPrivateKey(await tlsFile(stateDir, "client.key")))).toBe(
       true,
     );
@@ -177,16 +187,13 @@ describe("ensureLeaf", () => {
 
     await ensure(stateDir);
 
-    const reissued = new X509Certificate(await tlsFile(stateDir, "client.crt"));
-    expect(reissued.verify(new X509Certificate(own.caCertPem).publicKey)).toBe(true);
+    const reissued = verifiedClient(await tlsFile(stateDir, "client.crt"));
     expect(reissued.checkPrivateKey(createPrivateKey(await tlsFile(stateDir, "client.key")))).toBe(
       true,
     );
   });
 
   describe("issues the client certificate again when the one on disk", () => {
-    const authority = () => new X509Certificate(own.caCertPem).publicKey;
-
     /** A box whose stored client pair is `cert` and `key`; returns the box once `ensureLeaf` ran. */
     async function ensuredWith(cert: string, key: string): Promise<string> {
       const stateDir = await box(leafFrom(own, HOSTNAMES, ["127.0.0.1", ADDRESS]));
@@ -199,8 +206,7 @@ describe("ensureLeaf", () => {
     async function expectCurrentClientPair(stateDir: string, replaced: string) {
       const pem = await tlsFile(stateDir, "client.crt");
       expect(pem).not.toBe(replaced);
-      const cert = new X509Certificate(pem);
-      expect(cert.verify(authority())).toBe(true);
+      const cert = verifiedClient(pem);
       expect(cert.checkPrivateKey(createPrivateKey(await tlsFile(stateDir, "client.key")))).toBe(
         true,
       );
@@ -219,12 +225,15 @@ describe("ensureLeaf", () => {
       });
 
     it("has expired", async () => {
-      const expired = issuedAt(new Date("2000-01-01T00:00:00Z"));
-      expect(new X509Certificate(expired.clientCertPem).validToDate.getTime()).toBeLessThan(
-        Date.now(),
-      );
-      const stateDir = await ensuredWith(expired.clientCertPem, expired.clientKeyPem);
-      await expectCurrentClientPair(stateDir, expired.clientCertPem);
+      const current = issuedAt(new Date());
+      const expired = forge.pki.certificateFromPem(current.clientCertPem);
+      expired.validity.notAfter = new Date(Date.now() - 3600000);
+      const [signer, key] = forge.pem.decode(own.caKeyPem);
+      expired.sign(forge.pki.privateKeyFromPem(forge.pem.encode(key!)), forge.md.sha256.create());
+      const expiredPem = forge.pki.certificateToPem(expired) + forge.pem.encode(signer!);
+      expect(verifiedClient(expiredPem).validToDate.getTime()).toBeLessThan(Date.now());
+      const stateDir = await ensuredWith(expiredPem, current.clientKeyPem);
+      await expectCurrentClientPair(stateDir, expiredPem);
     });
 
     it("is not valid yet, minted before the clock was set back", async () => {

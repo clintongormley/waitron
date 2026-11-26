@@ -231,6 +231,12 @@ Once a box has joined as a spare, its plain-HTTP listener answers only the box i
 server runs (the recovery page's listener still answers the network); from another device, use the
 spare's `https://` address.
 
+If an older preproduction box opens **Set up secure connection** after the certificate change, finish
+repair and follow the guide on each device to remove the old certificate and install the new one.
+For a preproduction pair made with the old certificates, reset and rejoin the spare after the main
+box has its new certificate. Take a new backup from the updated box so backup verification can
+check the new certificate chain.
+
 On a box that already has a checkout of this repository, run the checkout's own script instead of
 downloading it. Because the folder above that copy holds the checkout's `.git`, `install` uses it as
 it is rather than fetching the ref's `waitron.sh`:
@@ -708,8 +714,8 @@ Both forms stop the staff tunnel companion and remove its control and key volume
 re-pairs with Cloud and makes a new WireGuard key. Both forms clear the venue databases and wizard settings, logs, local backups, the captured mail inbox and print-agent settings. Plain `reset` keeps two folders inside the box's
 `state` volume:
 
-- `tls/`, which holds the certificate authority the box's devices already trust and the box's own
-  certificate and private key together in `server.pem`. A certificate repair keeps its latest old
+- `tls/`, which holds the public root your devices already trust in `ca.crt`, the limited signing
+  certificate and key in `ca.key`, and the box's serving chain and private key in `server.pem`. A certificate repair keeps its latest old
   files in `tls/repair/` until the next start stays healthy for two minutes. Because that folder survives, a device that has already been told to
   trust this box does not need to trust it again after a plain `reset`. The exception is a box that
   joined another server as a spare (its `tls/` holds `joined.json`): joining replaced this box's

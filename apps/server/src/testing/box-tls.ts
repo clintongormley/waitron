@@ -1,8 +1,9 @@
-import { X509Certificate, createPrivateKey, createPublicKey } from "node:crypto";
+import { X509Certificate, createPrivateKey } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { connect, createServer } from "node:tls";
+import forge from "node-forge";
 
 export const tlsFile = (stateDir: string, name: string): Promise<string> =>
   readFile(join(stateDir, "tls", name), "utf8");
@@ -19,17 +20,34 @@ export async function writeTlsSet(
   await writeFile(join(tls, "server.pem"), set.serverCertPem + set.serverKeyPem, { mode: 0o600 });
 }
 
-/** Whether `tls/`'s files belong together: the authority's key is its certificate's, the
- * leaf is signed by the authority, and the leaf's key is the leaf's. */
+export function certChain(pem: string): string[] {
+  return (pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) ?? []).map(
+    (block) => block + "\n",
+  );
+}
+
+let fixtureKeys: forge.pki.rsa.KeyPair[] | undefined;
+export function fixtureBoxKeys(): () => forge.pki.rsa.KeyPair {
+  fixtureKeys ??= Array.from({ length: 3 }, () => forge.pki.rsa.generateKeyPair(2048));
+  const keys = fixtureKeys.values();
+  return () => keys.next().value!;
+}
+
 export async function tlsSetMatches(stateDir: string): Promise<boolean> {
-  const ca = new X509Certificate(await tlsFile(stateDir, "ca.crt"));
-  const caKey = createPrivateKey(await tlsFile(stateDir, "ca.key"));
-  const leaf = new X509Certificate(await tlsFile(stateDir, "server.pem"));
-  const leafKey = createPrivateKey(await tlsFile(stateDir, "server.pem"));
+  const root = new X509Certificate(await tlsFile(stateDir, "ca.crt"));
+  const signerPem = await tlsFile(stateDir, "ca.key");
+  const key = createPrivateKey(signerPem);
+  const signer = new X509Certificate(signerPem);
+  const serverPem = await tlsFile(stateDir, "server.pem");
+  const [leafPem, chainPem] = certChain(serverPem);
+  const leaf = new X509Certificate(leafPem!);
   return (
-    ca.publicKey.equals(createPublicKey(caKey)) &&
-    leaf.verify(ca.publicKey) &&
-    leaf.checkPrivateKey(leafKey)
+    !root.checkPrivateKey(key) &&
+    signer.checkPrivateKey(key) &&
+    signer.verify(root.publicKey) &&
+    new X509Certificate(chainPem!).fingerprint256 === signer.fingerprint256 &&
+    leaf.verify(signer.publicKey) &&
+    leaf.checkPrivateKey(createPrivateKey(serverPem))
   );
 }
 

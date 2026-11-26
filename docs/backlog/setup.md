@@ -338,27 +338,11 @@ that operation's reader. Do not remove exact-content checks to make a large file
 When Italy's country pack is built, seed Antipasti, Primi piatti, Secondi piatti and Dolci.
 Ask the owner then which fire immediately and which wait. Left open by A1458.
 
-## A1573. A box certificate that cannot vouch for other websites on Android
-
-Owner, 2026-11-25: "yes" to queueing this for building. A phone that installs the box's certificate
-trusts the box's signing key. The key's certificate is limited to `waitron.local`, `localhost` and
-private addresses, and Android does not apply that limit to the certificate a person installs
-([the run](#androidios-on-device-install-and-trust-rows)), so whoever stole the key could pass as
-another website to that phone. On an Oppo Find X10 (Chrome 158.0.8127.42), the same limit on a second
-certificate, signed by the installed one, was applied.
-
-To plan: the installed certificate signs one limited second certificate and its key is then
-destroyed; the box keeps only the second key, signs its own certificate with it, and serves both.
-Trace every place that reads, checks, repairs, copies or restores `tls/ca.key` and `tls/ca.crt`
-(`self-signed-cert.ts`, `box-secrets.ts`, `box-tls-repair.ts`, `box-tls-install.ts`,
-`backup-verification-secrets.ts`, `packages/store/src/state-layout.ts`,
-`packages/handover/src/manifest.ts`), and every box-to-box check that trusts the venue's authority,
-including client certificates. Repeat the phone check on a second Android phone and an iPhone before
-it lands. Before go-live: afterwards every device would have to install a new certificate. Whether
-staff may use their own Android phones was waiting on this
-(B3 design §7.5 holds the same question for the preboot recovery name).
-
 ## Decisions and deliberate limits
+
+### A1573. A box certificate that cannot vouch for other websites on Android
+
+The owner said “yes” to queueing the change on 25 November 2026 after [the Oppo run](#androidios-on-device-install-and-trust-rows). Devices install the public root. The box keeps only the signing key for the intermediate certificate whose name limits cover `waitron.local`, `localhost` and private IPv4 addresses. The B3 preboot certificate is covered by the separate [box image constraint](box.md#box-image-constraints-b3).
 
 - **A stopped join is reset with no sign-in, since A1558 PR 9 (2026-11-22).** This is the join-by-code plan's decision, cleared by the watcher on 2026-11-21; the owner landed #4003 on 2026-11-22, whose question named it. `POST /setup-api/reset-incomplete-adopt` still refuses unless the setup record is a join that stopped partway. The plan's reason: anyone on the network can make such a box start over, but "the next start's checks (`reset-request.ts:79-94`) still refuse to wipe a box that has a `trading.env`, holds a tenant, or holds an operational venue."
 

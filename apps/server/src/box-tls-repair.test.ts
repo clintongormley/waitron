@@ -6,6 +6,7 @@ import { createSecureContext } from "node:tls";
 import forge from "node-forge";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
+import { certChain, tlsSetMatches } from "./testing/box-tls.js";
 import { syncsAndRenames } from "./testing/durable-writes.js";
 import * as tlsRepair from "./box-tls-repair.js";
 import { inspectBoxTls, repairBoxTls } from "./box-tls-repair.js";
@@ -25,16 +26,18 @@ const pemNames = ["ca.crt", "ca.key", "server.pem"] as const;
 const dirs: string[] = [];
 let keys: forge.pki.rsa.KeyPair;
 let otherKeys: forge.pki.rsa.KeyPair;
+let leafKeys: forge.pki.rsa.KeyPair;
 let material: SelfSignedMaterial;
 beforeAll(() => {
   keys = forge.pki.rsa.generateKeyPair(2048);
   otherKeys = forge.pki.rsa.generateKeyPair(2048);
-  let generated = 0;
+  leafKeys = forge.pki.rsa.generateKeyPair(2048);
+  const generated = [keys, otherKeys, leafKeys].values();
   material = mintSelfSignedServerCert({
     hostnames: names,
     ipAddresses: ["127.0.0.1", "192.168.1.50"],
     now,
-    keypair: () => (generated++ === 0 ? keys : otherKeys),
+    keypair: () => generated.next().value!,
   });
 });
 afterEach(async () => {
@@ -79,7 +82,10 @@ async function validInstalled(stateDir: string, ca = material.caCertPem) {
   const leafPem = await readFile(join(stateDir, "tls", "server.pem"));
   const keyPem = await readFile(join(stateDir, "tls", "server.pem"));
   const leaf = new X509Certificate(leafPem);
-  expect(leaf.verify(new X509Certificate(ca).publicKey)).toBe(true);
+  const issuer = new X509Certificate(certChain(leafPem.toString("utf8"))[1]!);
+  expect(issuer.verify(new X509Certificate(ca).publicKey)).toBe(true);
+  expect(leaf.checkIssued(issuer)).toBe(true);
+  expect(leaf.verify(issuer.publicKey)).toBe(true);
   expect(leaf.checkPrivateKey(createPrivateKey(keyPem))).toBe(true);
   expect(leaf.checkHost("waitron.local")).toBe("waitron.local");
   expect(leaf.checkHost("localhost")).toBe("localhost");
@@ -133,9 +139,16 @@ it.each(["missing-cert", "malformed", "expired", "mismatched", "wrong-host", "wr
         ...material,
         hostnames: damage === "wrong-host" ? ["localhost"] : names,
         ipAddresses: damage === "wrong-ip" ? [] : ["127.0.0.1", "192.168.1.50"],
-        now: damage === "expired" ? new Date("2010-01-01T00:00:00Z") : now,
-        keypair: () => otherKeys,
+        now,
+        keypair: () => leafKeys,
       });
+      if (damage === "expired") {
+        const expired = forge.pki.certificateFromPem(leaf.serverCertPem);
+        expired.validity.notAfter = new Date(now.getTime() - 1000);
+        expired.sign(otherKeys.privateKey, forge.md.sha256.create());
+        leaf.serverCertPem =
+          forge.pki.certificateToPem(expired) + certChain(leaf.serverCertPem)[1]!;
+      }
       await writeFile(
         join(f.stateDir, "tls", "server.pem"),
         leaf.serverCertPem + leaf.serverKeyPem,
@@ -168,7 +181,7 @@ it.each([
   if (damage === "mismatched")
     await writeFile(
       join(f.stateDir, "tls", "ca.key"),
-      forge.pki.privateKeyToPem(otherKeys.privateKey),
+      certChain(material.caKeyPem)[0]! + forge.pki.privateKeyToPem(keys.privateKey),
     );
   if (damage === "not-ca")
     await writeFile(join(f.stateDir, "tls", "ca.crt"), material.serverCertPem);
@@ -202,13 +215,39 @@ it.each([
   });
   const ca = await readFile(join(f.stateDir, "tls", "ca.crt"), "utf8");
   expect(ca).not.toBe(material.caCertPem);
-  expect(
-    new X509Certificate(await readFile(join(f.stateDir, "tls", "server.pem"))).verify(
-      new X509Certificate(material.caCertPem).publicKey,
-    ),
-  ).toBe(false);
+  const newLeaf = await readFile(join(f.stateDir, "tls", "server.pem"), "utf8");
+  const newSigner = new X509Certificate(certChain(newLeaf)[1]!);
+  expect(newSigner.verify(new X509Certificate(material.caCertPem).publicKey)).toBe(false);
   await validInstalled(f.stateDir, ca);
   expect((await archive(f.stateDir)).manifest.absent).toContain("server.pem");
+});
+
+it("replaces the old certificate set and retains no key for the new root", async () => {
+  const root = forge.pki.certificateFromPem(material.caCertPem);
+  const signer = forge.pki.certificateFromPem(material.caKeyPem);
+  root.setExtensions(signer.extensions);
+  root.sign(keys.privateKey, forge.md.sha256.create());
+  const leaf = forge.pki.certificateFromPem(material.serverCertPem);
+  leaf.setIssuer(root.subject.attributes);
+  leaf.sign(keys.privateKey, forge.md.sha256.create());
+  const f = await fixture({
+    caCertPem: forge.pki.certificateToPem(root),
+    caKeyPem: forge.pki.privateKeyToPem(keys.privateKey),
+    serverCertPem: forge.pki.certificateToPem(leaf),
+    serverKeyPem: material.serverKeyPem,
+  });
+  expect(await inspectBoxTls(f)).toMatchObject({ state: "repair-required", trust: "new-required" });
+  expect(await repairBoxTls(f)).toMatchObject({ state: "healthy", trust: "new-required" });
+  expect(await tlsSetMatches(f.stateDir)).toBe(true);
+  const candidate = JSON.parse(
+    await readFile(join(f.stateDir, "flows/tls-repair/candidate.json"), "utf8"),
+  ) as SelfSignedMaterial;
+  const newRoot = new X509Certificate(candidate.caCertPem);
+  expect(newRoot.checkPrivateKey(createPrivateKey(candidate.caKeyPem))).toBe(false);
+  expect(newRoot.checkPrivateKey(createPrivateKey(candidate.serverKeyPem))).toBe(false);
+  expect(
+    newRoot.checkPrivateKey(createPrivateKey(forge.pki.privateKeyToPem(keys.privateKey))),
+  ).toBe(false);
 });
 
 it("keeps healthy TLS byte-identical even without the CA signing key", async () => {
@@ -357,7 +396,7 @@ it.each(["nameConstraints", "keyUsage"])(
   async (extension) => {
     const f = await fixture();
     await rm(join(f.stateDir, "tls", "server.pem"));
-    const ca = forge.pki.certificateFromPem(material.caCertPem);
+    const ca = forge.pki.certificateFromPem(material.caKeyPem);
     ca.setExtensions(
       ca.extensions.filter(
         (entry) =>
@@ -366,7 +405,10 @@ it.each(["nameConstraints", "keyUsage"])(
       ),
     );
     ca.sign(keys.privateKey, forge.md.sha256.create());
-    await writeFile(join(f.stateDir, "tls", "ca.crt"), forge.pki.certificateToPem(ca));
+    await writeFile(
+      join(f.stateDir, "tls", "ca.key"),
+      forge.pki.certificateToPem(ca) + forge.pki.privateKeyToPem(otherKeys.privateKey),
+    );
     expect(await inspectBoxTls(f)).toMatchObject({
       state: "repair-required",
       trust: "new-required",
@@ -386,10 +428,7 @@ it("requires new trust when the retained CA cannot be the issuer used by the box
   await writeFile(join(f.stateDir, "tls", "ca.crt"), forge.pki.certificateToPem(ca));
   expect(await inspectBoxTls(f)).toMatchObject({ state: "repair-required", trust: "new-required" });
   expect(await repairBoxTls(f)).toMatchObject({ state: "healthy", trust: "new-required" });
-  const installedCa = new X509Certificate(await readFile(join(f.stateDir, "tls", "ca.crt")));
-  const leaf = new X509Certificate(await readFile(join(f.stateDir, "tls", "server.pem")));
-  expect(leaf.checkIssued(installedCa)).toBe(true);
-  expect(leaf.verify(installedCa.publicKey)).toBe(true);
+  await validInstalled(f.stateDir, await readFile(join(f.stateDir, "tls", "ca.crt"), "utf8"));
 });
 
 it.each(["ca.crt", "ca.key", "secrets.env", "repair"])(
@@ -432,9 +471,10 @@ it("an ordinary leaf reissue refuses to overtake an interrupted guided replaceme
 it("serializes simultaneous first initialization without mixed secrets or TLS files", async () => {
   const f = await fixture(null);
   await rm(join(f.stateDir, "secrets.env"));
-  const mint = vi.fn((options: Parameters<typeof mintSelfSignedServerCert>[0]) =>
-    mintSelfSignedServerCert({ ...options, keypair: () => keys }),
-  );
+  const mint = vi.fn((options: Parameters<typeof mintSelfSignedServerCert>[0]) => {
+    const generated = [keys, otherKeys, leafKeys].values();
+    return mintSelfSignedServerCert({ ...options, keypair: () => generated.next().value! });
+  });
   const makeKeyRing = vi.fn(() => ({ key: "A".repeat(43) + "=", version: 1 }));
   const results = await Promise.allSettled([
     ensureBoxSecrets({ ...f, mint, makeKeyRing }),
@@ -531,8 +571,9 @@ it.each(["address", "leaf-expiry"])(
     if (change === "leaf-expiry") {
       const leaf = forge.pki.certificateFromPem(saved.serverCertPem);
       leaf.validity.notAfter = new Date(now.getTime() + 86400000);
-      leaf.sign(forge.pki.privateKeyFromPem(saved.caKeyPem), forge.md.sha256.create());
-      saved.serverCertPem = forge.pki.certificateToPem(leaf);
+      const [signer, key] = forge.pem.decode(saved.caKeyPem);
+      leaf.sign(forge.pki.privateKeyFromPem(forge.pem.encode(key!)), forge.md.sha256.create());
+      saved.serverCertPem = forge.pki.certificateToPem(leaf) + forge.pem.encode(signer!);
       await writeFile(join(f.stateDir, "flows/tls-repair/candidate.json"), JSON.stringify(saved));
     }
     const resumed = {
@@ -544,7 +585,7 @@ it.each(["address", "leaf-expiry"])(
     expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(saved.caCertPem);
     expect(await readFile(join(f.stateDir, "tls/ca.key"), "utf8")).toBe(saved.caKeyPem);
     const leaf = new X509Certificate(await readFile(join(f.stateDir, "tls/server.pem")));
-    expect(leaf.verify(new X509Certificate(saved.caCertPem).publicKey)).toBe(true);
+    expect(await tlsSetMatches(f.stateDir)).toBe(true);
     if (change === "address") expect(leaf.checkIP("192.168.1.99")).toBe("192.168.1.99");
     else expect(Date.parse(leaf.validTo)).toBeGreaterThan(resumed.now().getTime());
     expect(await readdir(join(f.stateDir, "tls/repair"))).toEqual(["manifest.json"]);

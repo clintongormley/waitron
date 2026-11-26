@@ -215,13 +215,10 @@ unconfirmed (watcher, 2026-11-16 12:48, Lane J questions).
 
 - **A setup box's `/health` returns 503 by design** (no duty loop); a liveness probe must gate on
   `/setup-api/status` (200), or it restart-loops an unprovisioned box.
-- **Android ignores the box authority's name limit.** Measured on one phone on 2026-09-08 (receipt
-  `75f17f9e36125af3a620266a584507420e7197de`) and on an Oppo Find X10 (Chrome 158.0.8127.42) on
-  2026-11-25; the desktop receipt (`fb47efd683fa8aa2cf919fa012f66e580b9c4f28`)
-  records Chrome 152 and macOS SecTrust refusals. A1573 is the fix.
-  [B3 §7.5](../superpowers/specs/2026-10-21-b3-usb-installer-design.md)'s rows still need the real
-  recovery leaf, and an iOS device remains unmeasured.
-  [The run](setup.md#androidios-on-device-install-and-trust-rows)
+- **Prove the B3 preboot recovery certificate on phones.** The recovery name and redirect
+  certificate in [B3 §7.5](../superpowers/specs/2026-10-21-b3-usb-installer-design.md) need the
+  intermediate's limits and separate key from [A1573](setup.md#a1573-a-box-certificate-that-cannot-vouch-for-other-websites-on-android).
+  Check the actual preboot issuer, redirect chain and key reuse on Android and iOS.
 - **The box image carries the WireGuard link.**
 - **The box image keeps its clock synchronised, with no terminal** (A798). The server reads
   the time service through the box's host service (`apps/server/src/box-host-client.ts`) and
