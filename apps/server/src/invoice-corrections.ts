@@ -152,8 +152,8 @@ async function checkCorrectionOpenable(
   return { ...preview, moneyRefundable };
 }
 
-/** Correct invoice's refusals that do not pass by waiting: a refused or held filing, another
- * refund pending and the clock are not among them. */
+/** Correct invoice's refusals that do not pass by waiting: a filing refused with a fix offered, a
+ * held filing, another refund pending and the clock are not among them. */
 const LASTING_REFUSALS: ReadonlySet<string> = new Set([
   "invoice_correction.not_settled",
   "advance.taken_off_final_invoice",

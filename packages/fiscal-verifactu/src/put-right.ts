@@ -22,7 +22,8 @@ const NOT_YET: PutRight = { kind: "none", why: "not-yet" };
 
 /**
  * Whether a full invoice (F1) AEAT refused for a future date can be replaced with an R4 "S". The
- * server's remedy policy follows this too (`record-remedy-routes.ts`). Off until AEAT's test service
+ * server's remedy policy (`record-remedy-routes.ts`) and correction admission
+ * (`correction-admission.ts`, through `putRightFor`'s default) follow this too. Off until AEAT's test service
  * has accepted such an R4 (docs/backlog.md).
  */
 export const FULL_INVOICE_REPLACEMENT_ON: boolean = false;

@@ -1557,7 +1557,7 @@ describe("File now and Close", () => {
     ).resolves.toMatchObject({ correction: { state: "open" } });
   });
 
-  it("closes keeping the refunds when the filing was refused with no fix offered", async () => {
+  it("closes keeping the refunds when admission answers refused_no_fix", async () => {
     const saleId = await soldForCash("Set menu", ["40.00"]);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
     await cash(correction.id, "15.00");
