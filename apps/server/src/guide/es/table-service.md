@@ -8,7 +8,7 @@ registrar un cobro.
 
 ## Invitar o aplicar un descuento {#comps-and-discounts}
 
-Elige un motivo en **Descuento** al dejar un artículo gratis o reducir su precio. Con **Aplicar invitaciones**,
+Elige un motivo en **Descuento…** al dejar un artículo gratis o reducir su precio. Con **Aplicar invitaciones**,
 puedes aplicarlo hasta los límites del motivo y de la cuenta. Si necesitas autorización, elige a
 alguien con **Autorizar invitaciones** y pídele que introduzca su PIN. Puede superar esos límites
 y aplicar sus propias invitaciones sin el PIN de otra persona. Por defecto, el personal puede aplicar

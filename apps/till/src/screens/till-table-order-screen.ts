@@ -309,7 +309,9 @@ function flagged(line: OrderLine): boolean {
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
 type TableVerb = "move" | "join" | "move-bill";
 type ActionVerb = TableVerb | "merge" | "move-dishes";
-type PayControl = "tender" | "sheet";
+/** The pay section's controls by what a tap on one starts: the tender's Cash and Card, the
+ * bill-payment ways and Pay the rest, or the handheld's Pay. */
+type PayControl = "tender" | "bill-pay" | "sheet";
 
 interface ActionDraft {
   tableId: string | null;
@@ -5146,23 +5148,14 @@ export class TillTableOrderScreen extends LitElement {
 
   /** An overpaid bill offers its excess back, or as a tip, rather than Pay. */
   #payOffered(): boolean {
-    return this.canSettle && this.#chargeable() && overpaidOf(this.#overpaidBalance()) === null;
-  }
-
-  #overpaidBalance(): Pick<BillBalance, "overpaid" | "total"> | null {
-    const shown = this.#shownBill;
-    return (
-      this.#balanceShown() ??
-      (shown?.status === "open" && compareDecimal(decimal(shown.total), decimal("0")) === 0
-        ? shown
-        : null)
-    );
+    return this.canSettle && this.#chargeable() && overpaidOf(this.#balanceShown()) === null;
   }
 
   #billMoneyNotices(): TemplateResult {
-    return html`${beingPaidNotice(this.#balanceShown())}
+    const balance = this.#balanceShown();
+    return html`${beingPaidNotice(balance)}
     ${overpaidNotice({
-      balance: this.#overpaidBalance(),
+      balance,
       // The server's keep-as-tip route needs `payment.take` (bill-payments-api.ts).
       tipsEnabled: this.tipsEnabled && this.takesPayment,
       busy: this.overpaidBusy,
@@ -5181,7 +5174,7 @@ export class TillTableOrderScreen extends LitElement {
    * (`#paysOnSheet`), whose locked sheet it reopens. */
   #recovers(control: PayControl): boolean {
     if (control === "tender") return false;
-    return this.billPaymentHeld || this.paymentConfirmation !== undefined;
+    return this.billPaymentHeld || (control === "sheet" && this.paymentConfirmation !== undefined);
   }
 
   #payQuiet(control: PayControl): boolean {
@@ -5267,7 +5260,23 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`<p data-bill-received>${t("bill_pay.received")}: ${this.#money(received)}</p>`
       }
-      ${this.#paySheetButton(shown)} ${this.#billChoices(shown)} ${this.#payUnsent()}
+      ${
+        sheet
+          ? html`${this.#paySheetButton(shown)} ${this.#billChoices(shown)}`
+          : html`<wt-button
+                variant=${this.#payQuiet("bill-pay") ? "secondary" : "primary"}
+                data-pay-rest
+                .disabled=${this.busy}
+                @click=${() => {
+                  if (!this.#payQuietTap("bill-pay"))
+                    this.#payPart("contribution", partlyPaid.outstanding);
+                }}
+              >
+                ${t("bill.pay_with_bill_payments")}
+              </wt-button>
+              ${this.#billChoices(shown)}`
+      }
+      ${this.#payUnsent()}
     </section>`;
   }
 
@@ -5299,7 +5308,7 @@ export class TillTableOrderScreen extends LitElement {
         // A printed bill takes part payments; the presented sheet takes the whole amount only.
         if (shown?.status === "placed" && shown.invoiceNumber === undefined)
           this.#dispatch("pay-presented", { workingOrderId: shown.workingOrderId });
-        else this.#payWhole();
+        else this.#payPart("whole");
       }}
       >${t("action.pay")}</wt-button
     >`;
@@ -5352,10 +5361,11 @@ export class TillTableOrderScreen extends LitElement {
     return balance !== null && balance.workingOrderId === this.orderId ? balance : null;
   }
 
-  #payWhole(): void {
+  #payPart(way: PayWay, amount?: string): void {
     const detail: BillPayDetail = {
-      way: "whole",
+      way,
       lines: payLines(this.lines, (line) => this.#nameForLine(line), this.#setMenus),
+      ...(amount === undefined ? {} : { amount }),
     };
     this.#dispatch("bill-pay", detail);
   }

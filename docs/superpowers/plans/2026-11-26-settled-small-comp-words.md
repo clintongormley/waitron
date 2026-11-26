@@ -12,4 +12,4 @@ Task 15 stays open for the watcher. Counter's separate **Take the rest** button 
 
 Estimate 4 changed product lines and 8–14 test lines, plus the guide sentence edits and backlog edits.
 
-The watcher cleared the wording plan on 26 November at 08:55 and asked to fix the zero-total button here if the change stayed small. Staff with a zero-total open bill that still holds a payment can use the existing Give back action as soon as the bill list shows the excess. Remove the old contribution button and use the shared Pay window for part-paid bills that can still be paid. Keep Task 15's wording decision open.
+The watcher cleared the wording plan on 26 November at 08:55. The branch review found that a zero-total bill still needs a way to close after its last payment is refunded. At 09:42 the watcher queued that work as A1602 and cleared this branch to land the four wording changes.
