@@ -227,6 +227,7 @@ export const en = {
   "give_back.done_card": "{amount} is back on card {card}.",
   "give_back.done_terminal": "{amount} given back on the separate card terminal is recorded.",
   "give_back.print_later": "Its corrective receipt can be printed from Find a bill.",
+  "give_back.print_later_invoice": "Its corrective invoice can be printed from Find a bill.",
   "give_back.pending": "{amount} is waiting for the card company's answer.",
   "give_back.rest": "{amount} has not gone back yet: it follows when the card company answers.",
   "give_back.check_again": "Check again",
@@ -2688,6 +2689,8 @@ export const es: Record<StringKey, string> = {
   "give_back.done_card": "Se han devuelto {amount} a la tarjeta {card}.",
   "give_back.done_terminal": "Se han registrado los {amount} devueltos en el datáfono aparte.",
   "give_back.print_later": "Su ticket rectificativo se puede imprimir desde Buscar cuenta.",
+  "give_back.print_later_invoice":
+    "Su factura rectificativa se puede imprimir desde Buscar cuenta.",
   "give_back.pending": "{amount} esperan la respuesta de la compañía de la tarjeta.",
   "give_back.rest":
     "{amount} aún no se han devuelto: se devuelven cuando responda la compañía de la tarjeta.",

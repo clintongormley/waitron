@@ -1438,6 +1438,17 @@ describe("sending", () => {
     expect(outcomeText(inCash)).not.toContain(t("give_back.print_later"));
   });
 
+  it("says a full invoice's card correction prints from Find a bill as its corrective invoice", async () => {
+    const api = fakeGiveBackApi();
+    answering(api, { parts: [{ kind: "correction", amount: "5.00", way: "card-1", lineIds: [] }] });
+    const el = await press(api, "card-1");
+    await vi.waitFor(() => expect(outcomeText(el)).toContain(t("give_back.print_later")));
+    el.fullInvoice = true;
+    await el.updateComplete;
+    expect(outcomeText(el)).toContain("Its corrective invoice can be printed from Find a bill.");
+    expect(outcomeText(el)).not.toContain(t("give_back.print_later"));
+  });
+
   it("asks for an approver holding every right the preview needs, then sends the PIN", async () => {
     const api = fakeGiveBackApi();
     answering(api, { needs: ["sale.refund", "sale.rectify"] });

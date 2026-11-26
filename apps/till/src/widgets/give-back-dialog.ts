@@ -46,6 +46,7 @@ import {
   usable,
   type Draft,
   type Field,
+  type GiveBackFill,
 } from "./give-back-draft.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, moneyPlus, refusalOf, typedMoney } from "../state/bill-payment.js";
@@ -93,15 +94,7 @@ import {
 type Refusal = ReturnType<typeof refusalOf>;
 export type GiveBackApi = GiveBackUnderWayApi &
   Pick<TillApi, "readGiveBack" | "previewGiveBack" | "listAdjustmentReasons" | "listApprovers">;
-export type { GiveBackAsk };
-
-/** What Cancel and refund or Finish table hands on: the window opens on A dish with the dishes
- * still owed on a cancel ticked, and sends the cancel ids so the cancel's approval covers them
- * (D9). */
-export interface GiveBackFill {
-  cancellationIds: string[];
-  reasonId: string;
-}
+export type { GiveBackAsk, GiveBackFill };
 
 @customElement("till-give-back-dialog")
 export class TillGiveBackDialog extends LitElement {
@@ -116,6 +109,7 @@ export class TillGiveBackDialog extends LitElement {
   @property() saleId = "";
   @property() invoiceNumber = "";
   @property() namesLocale = "";
+  @property({ type: Boolean }) fullInvoice = false;
   @property({ attribute: false }) fill: GiveBackFill | null = null;
   @state() private view: GiveBackView | null = null;
   @state() private loadRefusal: Refusal | null = null;
@@ -901,6 +895,7 @@ export class TillGiveBackDialog extends LitElement {
       this.sending,
       { close, checkAgain: () => void this.#checkAgain(step) },
       underWay === null ? undefined : this.#underWay(underWay),
+      this.fullInvoice,
     );
   }
   /** The correction a give-back left open, unless a card refund it waits for comes first. */

@@ -428,8 +428,8 @@ When a card refund waits for the card company, choose **Check again** to ask it 
 and **Give back the rest** when the window offers it. If you cannot give money back yourself, a
 supervisor or manager approves asking with their PIN. If the window says the box did not answer,
 choose **Send again**. **Check again** and **Send again** never give the same money back twice. A
-corrective receipt that does not print by itself can be printed from **Find a bill**, on the
-**Transactions** tab.
+corrective receipt or invoice that does not print by itself can be printed from **Find a bill**, on
+the **Transactions** tab.
 
 If you close the window before all the money is back, look for the receipt in **Find a bill** under
 **Money back under way**. If it is not there, the money back is waiting on this till: open **Give
@@ -731,8 +731,7 @@ Send or take off any dishes not yet sent first. If dishes on the bill are not ma
 nothing prints yet: the till lists them under **Not served yet:**. If the guests have had them,
 choose **Mark served** where it shows, then **Print the bill** again. Otherwise choose **Print
 anyway**: a dish that then never comes is refunded after payment with
-[Give money back](table-service.md#give-money-back). The till cannot correct a full invoice naming
-a customer, so on one of those take off any dish that may not come before you print.
+[Give money back](table-service.md#give-money-back).
 
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.
 

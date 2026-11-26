@@ -312,6 +312,7 @@ describe("a correction that can no longer be filed ends unrecorded", () => {
           saleId,
           moneyBack: "10.00",
           refusal: "sale.correction_not_admitted",
+          fullInvoice: true,
         },
       },
     ]);
@@ -327,5 +328,32 @@ describe("a correction that can no longer be filed ends unrecorded", () => {
     expect(finished.json).toMatchObject({ state: "closed", correctiveSaleId: null });
     expect(correctivesOf(saleId)).toEqual([]);
     expect(refundStates(saleId)).toEqual([{ applied: 1000, state: "completed" }]);
+  });
+});
+
+describe("the payment check's alerts on a full invoice", () => {
+  it("marks the unfinished alert of an open give-back on a full invoice as a full invoice's", async () => {
+    const saleId = await fullInvoice({ cash: "20.00" }, { card: "17.00" });
+    const { correctionId } = await giveBack(saleId, goodwill("25.00"));
+    const later = new Date(venue.clock.now().instant.getTime() + 2 * 3_600_000);
+    await sweepInvoiceCorrections(refundDeps(), later);
+
+    expect(
+      await venue.db
+        .select({ code: incidents.code, params: incidents.params })
+        .from(incidents)
+        .where(eq(incidents.saleId, saleId)),
+    ).toEqual([
+      {
+        code: "invoice_correction.unfinished",
+        params: {
+          correctionId,
+          saleId,
+          moneyBack: "20.00",
+          completedSince: expect.any(String),
+          fullInvoice: true,
+        },
+      },
+    ]);
   });
 });

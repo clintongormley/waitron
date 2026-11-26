@@ -9510,6 +9510,7 @@ export class TillApp extends LitElement {
       .api=${this.api}
       .saleId=${open.saleId}
       .invoiceNumber=${this.result?.invoiceNumber ?? ""}
+      .fullInvoice=${this.result?.invoiceType === "F1" || this.result?.invoiceType === "R4"}
       .namesLocale=${this.result?.namesLocale ?? this.result?.locale ?? ""}
       .session=${open.session}
       .corrections=${open.corrections}

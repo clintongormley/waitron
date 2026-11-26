@@ -10,6 +10,13 @@ export type Draft = {
   note: string;
 };
 export type Field = "amount" | "reason" | "note";
+/** What Cancel and refund or Finish table hands on: the window opens on A dish with the dishes
+ * still owed on a cancel ticked, and sends the cancel ids so the cancel's approval covers them
+ * (D9). */
+export interface GiveBackFill {
+  cancellationIds: string[];
+  reasonId: string;
+}
 export const blank = (): Draft => ({
   lineIds: [],
   amount: "",

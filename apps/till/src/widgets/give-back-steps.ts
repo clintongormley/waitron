@@ -193,6 +193,7 @@ function outcomeLines(
   way: GiveBackWay | undefined,
   notice: string | null,
   underWay: boolean,
+  fullInvoice: boolean,
 ) {
   const amounts = (state: string, kinds: readonly string[]) =>
     sumOf(
@@ -217,7 +218,7 @@ function outcomeLines(
     way?.way !== "cash" &&
     outcome.parts.some((part) => part.kind === "correction" && part.state === "completed")
   )
-    lines.push(t("give_back.print_later"));
+    lines.push(t(fullInvoice ? "give_back.print_later_invoice" : "give_back.print_later"));
   if (positive(pending))
     lines.push(t("give_back.pending").replace("{amount}", () => money(pending)));
   if (outcome.rest !== null && outcome.refusal === null)
@@ -297,11 +298,12 @@ export function doneStep(
   sending: boolean,
   on: { close: () => void; checkAgain: () => void },
   underWay?: TemplateResult,
+  fullInvoice = false,
 ) {
   if (underWay !== undefined)
-    return html`${outcomeLines(step.outcome, way, step.notice, true)}${underWay}`;
+    return html`${outcomeLines(step.outcome, way, step.notice, true, fullInvoice)}${underWay}`;
   const waits = waitsForCard(step.outcome);
-  return html`${outcomeLines(step.outcome, way, step.notice, false)}
+  return html`${outcomeLines(step.outcome, way, step.notice, false, fullInvoice)}
     <wt-form-actions
       >${recoveryLinkOf(step.outcome.refusal)}<wt-button
         slot="cancel"

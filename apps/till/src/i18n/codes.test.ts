@@ -1,7 +1,12 @@
 import { en, es } from "./strings.js";
 import { afterEach, expect, it } from "vitest";
 import { setLocale } from "./t.js";
-import { codeMessage, freeItemAtFinishMessage, giveBackReasonMessage } from "./codes.js";
+import {
+  codeMessage,
+  freeItemAtFinishMessage,
+  giveBackFilingMessage,
+  giveBackReasonMessage,
+} from "./codes.js";
 import { formatMoney } from "@waitron/shared";
 
 it("explains an empty order in English and Spanish", () => {
@@ -1121,11 +1126,47 @@ it.each([
 
 it("words sale.correction_unsupported for every flow that meets it, the whole-order cancel included", () => {
   expect(codeMessage("sale.correction_unsupported", "en")).toBe(
-    "This is a full invoice naming a customer, and the till cannot credit it.",
+    "The till cannot credit or correct this invoice this way. On a full invoice naming a customer, use Give money back.",
   );
   expect(codeMessage("sale.correction_unsupported", "es")).toBe(
-    "Es una factura completa a nombre de un cliente y la caja no puede abonarla.",
+    "La caja no puede abonar ni rectificar esta factura de esta forma. En una factura completa a nombre de un cliente, usa Devolver dinero.",
   );
+});
+
+it("words a full invoice made from receipts, and one the tax agency refused with no fix, in both places", () => {
+  const notSimplified = { reason: "not_simplified" };
+  const noFix = { reason: "refused_no_fix" };
+  const pins: [string, Record<string, string>, string, string][] = [
+    [
+      "codeMessage",
+      notSimplified,
+      "A full invoice made from receipts cannot be corrected here.",
+      "Aquí no se puede rectificar una factura completa que sustituye tickets.",
+    ],
+    [
+      "giveBackFilingMessage",
+      notSimplified,
+      "This is a full invoice made from receipts, so the money given back cannot be recorded on it here.",
+      "Es una factura completa que sustituye tickets, así que aquí no se puede registrar en ella el dinero devuelto.",
+    ],
+    [
+      "codeMessage",
+      noFix,
+      "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes on your accountant's list.",
+      "La Agencia Tributaria rechazó esta factura completa y Waitron no puede corregirlo, así que el dinero devuelto por ella va a la lista para tu gestor.",
+    ],
+    [
+      "giveBackFilingMessage",
+      noFix,
+      "The tax agency refused this full invoice and Waitron cannot fix that, so once you finish, the money given back is on your accountant's list.",
+      "La Agencia Tributaria rechazó esta factura completa y Waitron no puede corregirlo, así que al terminar, el dinero devuelto queda en la lista para tu gestor.",
+    ],
+  ];
+  const words = { codeMessage, giveBackFilingMessage };
+  for (const [fn, params, en, es] of pins) {
+    expect(words[fn as keyof typeof words]("sale.correction_not_admitted", "en", params)).toBe(en);
+    expect(words[fn as keyof typeof words]("sale.correction_not_admitted", "es", params)).toBe(es);
+  }
 });
 
 it("leaves Refund a payment out of the correction refusals other flows share", () => {
@@ -1565,8 +1606,8 @@ it("words the table refusals Print the bill shows in their own words, in both la
     ],
     [
       "fiscal.taxpayer_domicile_missing",
-      "The business's registered address is missing. Add it in the dashboard, under Venue settings › Venue details, before issuing a full invoice",
-      "Falta el domicilio fiscal del negocio. Añádelo en el panel, en Ajustes del local › Datos del local, antes de emitir una factura completa",
+      "The business's registered address is missing. Add it in the dashboard, under Venue settings › Venue details, before issuing or correcting a full invoice",
+      "Falta el domicilio fiscal del negocio. Añádelo en el panel, en Ajustes del local › Datos del local, antes de emitir o rectificar una factura completa",
     ],
     [
       "session.required",

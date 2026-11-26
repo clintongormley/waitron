@@ -449,8 +449,8 @@ Cuando una devolución a tarjeta espera a la compañía de la tarjeta, elige **C
 para preguntarle por esa devolución, y **Devolver el resto** cuando la ventana lo ofrezca. Si no
 puedes devolver dinero, un responsable o encargado aprueba la consulta con su PIN. Si la ventana dice
 que el servidor no respondió, elige **Enviar de nuevo**. **Comprobar de nuevo** y **Enviar de nuevo**
-nunca devuelven el mismo dinero dos veces. Un ticket rectificativo que no se imprime solo se puede
-imprimir desde **Buscar cuenta**, en la pestaña **Transacciones**.
+nunca devuelven el mismo dinero dos veces. Un ticket o una factura rectificativa que no se imprime
+solo se puede imprimir desde **Buscar cuenta**, en la pestaña **Transacciones**.
 
 Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **Buscar cuenta**, en
 **Devoluciones en curso**. Si no está, la devolución espera en esta caja: vuelve a abrir **Devolver
@@ -774,8 +774,7 @@ Primero envía o quita los platos que aún no se han enviado. Si hay platos de l
 como servidos, todavía no se imprime nada: la caja los muestra bajo **Aún sin servir:**. Si los
 clientes ya los han tomado, elige **Marcar como servidos** donde aparezca y vuelve a elegir
 **Imprimir la cuenta**. Si no, elige **Imprimir igualmente**: un plato que al final no llegue se devuelve después
-del cobro con [Devolver dinero](table-service.md#give-money-back). La caja no puede rectificar una factura completa a nombre de
-un cliente, así que en esas cuentas quita antes de imprimir los platos que puedan no llegar.
+del cobro con [Devolver dinero](table-service.md#give-money-back).
 
 Una cuenta impresa no admite más platos. Si los clientes piden algo más, ponlo en **+ Cuenta
 nueva**.

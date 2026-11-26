@@ -5,6 +5,7 @@ import {
   invoiceCorrectionRefunds,
   invoiceCorrections,
   refunds,
+  sales,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
@@ -44,9 +45,14 @@ function openAlert(db: Transaction, code: string, saleId: string | SQLWrapper) {
     );
 }
 
+// A correction opened on an invoice naming a customer is a full invoice's: a receipt's correction
+// refuses one (`requireSupportedCorrection`).
+const fullInvoiceMark = (customer: string | null) =>
+  customer === null ? {} : { fullInvoice: true as const };
+
 /** Open corrections whose earliest completed refund is before `cutoff` and whose ticket has no
  * unhandled unfinished alert yet, each with the money its completed refunds gave back, as raw
- * cents text, and that earliest completion. */
+ * cents text, that earliest completion, and the customer the ticket names. */
 function dueCorrections(db: Transaction, cutoff: string) {
   const completedSince = sql<string>`min(${refunds.completedAt})`;
   return db
@@ -54,8 +60,10 @@ function dueCorrections(db: Transaction, cutoff: string) {
       correction: invoiceCorrections,
       back: sql<string>`cast(sum(${refunds.appliedAmount}) as text)`,
       completedSince,
+      customer: sales.counterpartyTaxId,
     })
     .from(invoiceCorrections)
+    .innerJoin(sales, eq(sales.id, invoiceCorrections.originalSaleId))
     .innerJoin(
       invoiceCorrectionRefunds,
       eq(invoiceCorrectionRefunds.invoiceCorrectionId, invoiceCorrections.id),
@@ -125,6 +133,7 @@ async function raiseUnfinished(deps: TenderRefundDeps, now: Date): Promise<void>
         rawCentsToDecimal(due.back),
         due.completedSince,
         now,
+        due.customer,
       );
   });
 }
@@ -136,6 +145,7 @@ export function raiseCorrectionUnfinished(
   moneyBack: Decimal,
   completedSince: string,
   now: Date,
+  customer: string | null,
 ): Promise<boolean> {
   return recordIncidentOnce(tx, {
     origin: ORIGIN,
@@ -145,6 +155,7 @@ export function raiseCorrectionUnfinished(
       saleId: row.originalSaleId,
       moneyBack,
       completedSince,
+      ...fullInvoiceMark(customer),
     }),
     severity: "warning",
     detectedAt: now,
@@ -199,6 +210,10 @@ export async function fileCorrectionAutomatically(
   )
     return;
   const refused = refusal;
+  const [original] = await deps.db
+    .select({ customer: sales.counterpartyTaxId })
+    .from(sales)
+    .where(eq(sales.id, row.originalSaleId));
   await withTransaction(deps.db, (tx) =>
     recordIncidentOnce(tx, {
       origin: ORIGIN,
@@ -208,6 +223,7 @@ export async function fileCorrectionAutomatically(
         saleId: row.originalSaleId,
         moneyBack: centsToDecimal(completed),
         refusal: refused.code,
+        ...fullInvoiceMark(original!.customer),
       }),
       severity: "error",
       detectedAt: deps.clock.now().instant,

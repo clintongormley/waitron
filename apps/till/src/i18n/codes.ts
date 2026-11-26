@@ -434,8 +434,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este dispositivo no tiene ninguna impresora de tickets activada. Elige una en Equipo o imprime la copia desde otro dispositivo.",
   },
   "fiscal.taxpayer_domicile_missing": {
-    en: "The business's registered address is missing. Add it in the dashboard, under Venue settings › Venue details, before issuing a full invoice",
-    es: "Falta el domicilio fiscal del negocio. Añádelo en el panel, en Ajustes del local › Datos del local, antes de emitir una factura completa",
+    en: "The business's registered address is missing. Add it in the dashboard, under Venue settings › Venue details, before issuing or correcting a full invoice",
+    es: "Falta el domicilio fiscal del negocio. Añádelo en el panel, en Ajustes del local › Datos del local, antes de emitir o rectificar una factura completa",
   },
   "invoice.recipient_invalid": {
     en: "Check the customer's invoice details and try again",
@@ -570,8 +570,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta factura ya se ha rectificado, así que no se puede abonar por completo",
   },
   "sale.correction_unsupported": {
-    en: "This is a full invoice naming a customer, and the till cannot credit it.",
-    es: "Es una factura completa a nombre de un cliente y la caja no puede abonarla.",
+    en: "The till cannot credit or correct this invoice this way. On a full invoice naming a customer, use Give money back.",
+    es: "La caja no puede abonar ni rectificar esta factura de esta forma. En una factura completa a nombre de un cliente, usa Devolver dinero.",
   },
   "bill.presented": {
     en: "This bill is ready for payment, so it cannot be changed.",
@@ -1132,8 +1132,12 @@ const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
     es: "Esta factura se anuló, así que no queda nada por rectificar.",
   },
   not_simplified: {
-    en: "Only a simplified invoice can be corrected here.",
-    es: "Aquí solo se puede rectificar una factura simplificada.",
+    en: "A full invoice made from receipts cannot be corrected here.",
+    es: "Aquí no se puede rectificar una factura completa que sustituye tickets.",
+  },
+  refused_no_fix: {
+    en: "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes on your accountant's list.",
+    es: "La Agencia Tributaria rechazó esta factura completa y Waitron no puede corregirlo, así que el dinero devuelto por ella va a la lista para tu gestor.",
   },
   filing_refused: {
     en: "The tax agency refused this receipt. Fix it in Fiscal filing, on the dashboard, then try again.",
@@ -1473,9 +1477,8 @@ export function giveBackReasonMessage(
     : codeMessage(code, locale, params);
 }
 
-/** Why Money back under way cannot record the money given back, by the refusal's reason: the first
- * four never change and let Finish end it unrecorded; a refused filing lasts until the receipt is
- * fixed. */
+/** Why Money back under way cannot record the money given back, by the refusal's reason: all but
+ * `filing_refused` let Finish end it unrecorded, and that one lasts until the receipt is fixed. */
 const GIVE_BACK_NEVER_RECORDED: Record<string, { en: string; es: string }> = {
   replaced: {
     en: "This receipt was replaced by a full invoice, so the money given back cannot be recorded on it.",
@@ -1490,8 +1493,12 @@ const GIVE_BACK_NEVER_RECORDED: Record<string, { en: string; es: string }> = {
     es: "Otro servidor emitió este ticket, así que este servidor no puede registrar en él el dinero devuelto.",
   },
   not_simplified: {
-    en: "This is a full invoice, so the money given back cannot be recorded on it here.",
-    es: "Es una factura completa, así que aquí no se puede registrar en ella el dinero devuelto.",
+    en: "This is a full invoice made from receipts, so the money given back cannot be recorded on it here.",
+    es: "Es una factura completa que sustituye tickets, así que aquí no se puede registrar en ella el dinero devuelto.",
+  },
+  refused_no_fix: {
+    en: "The tax agency refused this full invoice and Waitron cannot fix that, so once you finish, the money given back is on your accountant's list.",
+    es: "La Agencia Tributaria rechazó esta factura completa y Waitron no puede corregirlo, así que al terminar, el dinero devuelto queda en la lista para tu gestor.",
   },
   filing_refused: {
     en: "The tax agency refused this receipt, so the money given back cannot be recorded on it until the receipt is fixed in Fiscal filing, on the dashboard. Then press Check again.",
