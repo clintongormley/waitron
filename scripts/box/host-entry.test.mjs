@@ -3,9 +3,11 @@ import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSy
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const BOX = dirname(fileURLToPath(import.meta.url));
+const SPAWN_TIMEOUT_MS = 20_000;
+vi.setConfig({ testTimeout: SPAWN_TIMEOUT_MS + 10_000 });
 
 // The USB drive module's set sits behind a link, box/storage, that build.sh makes and waitron.sh's
 // install_storage_modules renames over to switch sets. A module whose entry check compares the
@@ -25,7 +27,7 @@ describe("a host module run through a linked folder", () => {
     spawnSync(process.execPath, [join(linked, module)], {
       input,
       encoding: "utf8",
-      timeout: 20_000,
+      timeout: SPAWN_TIMEOUT_MS,
     });
 
   it.each(["storage-host.mjs", "network-host.mjs", "name-tag-host.mjs"])(
