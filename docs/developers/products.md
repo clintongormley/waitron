@@ -520,12 +520,9 @@ has no colour of its own and no coloured category nearer to it, and the default 
 product with no colour of its own and no coloured category above it, a product in no category
 included.
 
-You set a product's own colour through the pencil-marked thumbnail beside Name. Its panel holds
-Choose image, then the colour controls;
-its first choice, "Use category colour", shows the colour the product would take from its category
-(following a category you change in the editor before saving). When no category above the product has a colour and the venue has a default, that choice
-reads "Use default colour" and shows the default (`renderColor`,
-`apps/dashboard/src/widgets/product-editor.ts`). Choosing it saves no colour of the product's own.
+Open the pencil-marked thumbnail beside Name to choose a product's colour. **Inherit** shows the
+colour it would take from its current category or the venue default. Choose a palette swatch to
+give the product its own colour. The category picker also shows the inherited colour in **Inherit**.
 A colour is lowercase `#rrggbb`, or null for none. A save refuses anything else, an empty string
 included, as `product.invalid` with `field: "color"`; a default colour is refused as
 `category.invalid` with `field: "color"` (`saveMenuDefaultColor`,
@@ -936,13 +933,12 @@ Cancel and Save follow.
 Details' closed line shows only what is set: one row per group with something set, each cut after
 two lines with a hanging indent, which can hide a later value in that row, so opening the section
 is what shows every value. Allergens always has a row: its list, "None" once reviewed with none, or
-"Not yet reviewed" in the warning colour. On a variant's page, the course, description, allergens
-and diet labels the variant inherits show the parent's value there, and the course and
-description show it as their field's placeholder too. The diet labels implied by a chosen one
-follow the chosen labels.
+"Not yet reviewed" in the warning colour. On a variant's page, inherited allergens, diet and takeaway VAT
+stay visible in muted ink. Open Details to see the inherited course or description. Diet labels
+implied by a chosen one follow the chosen labels.
 
 In Allergens and diet you choose “Contains none of the 14” to record a reviewed empty allergen set.
-A variant's “Same as {parent}” keeps its allergens inherited and shows its parent's choices as
+A variant's **Inherit** choice keeps its allergens inherited and shows its parent's choices as
 muted, read-only chips; an own set replaces them. Gluten and Nuts ask for their specific kinds.
 Selecting a diet label starts the variant's own diet, replacing the inherited preview. Labels
 implied by another own choice are shown as quiet, read-only ticked chips without adding them to

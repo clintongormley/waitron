@@ -134,10 +134,9 @@ When you delete a category, choose whether to keep its contents or delete them t
 the contents will move if you keep them. Products you ticked yourself are deleted with either
 choice.
 
-While you add or rename a category, the square beside its name shows its own colour, or the colour
-it inherits from the nearest coloured category above it, then the venue's default. A dashed border
-marks an inherited colour. Choose the square to set a colour of its own; **No colour** keeps
-inheritance, so renaming alone does not change where the colour comes from.
+While you add or rename a category, choose the square beside its name to set its colour.
+Pick **Inherit** to follow the colour shown in that choice. Pick a swatch to fix the colour here,
+even if it matches the inherited colour.
 
 Where the dish is made is set in the routing grid, on the **Routes** tab of **Prep
 stations**. The product's own row decides first, then its category's row and each parent
@@ -200,8 +199,10 @@ variant under its product. So name a variant by what sets it apart: Large, not L
 
 The product keeps its own price field. Once the product has an Active variant, the field's label
 starts **Base price**, because a variant you leave without a price of its own sells at it. That
-variant's empty price shows the base price greyed out as a hint, in its window and in its row of the
-table. The unit link in the variants' Price heading opens the same unit dialog
+variant's empty price shows the base price with an arrow in its window and in muted text in the
+table. Type a price to fix it. On the variant's page, choose **Inherit** for Course or VAT when
+taken away to follow its product, or choose a value to fix it. The unit link in the variants'
+Price heading opens the same unit dialog
 as the unit link in the price field.
 
 Drag a row by the handle at its start to reorder it, or focus the handle and use the up and down
@@ -274,8 +275,7 @@ Under **Dietary**, choose any of **Vegan**, **Vegetarian**, **Halal**, **Kosher*
 fish; a tick that follows from another of your choices cannot be changed by itself.
 
 Each product states its own allergens and diet labels. A variant uses its product's until you choose
-its own on the variant's page. **Same as** followed by the product's name goes back to the product's
-allergens, and removing the variant's last diet label goes back to the product's labels. An extra
+its own on the variant's page. Choose **Inherit** to use the product's allergens, and removing the variant's last diet label goes back to the product's labels. An extra
 you can add to a dish is itself a product, so it brings its own declarations with it. A choice on an
 options list does not: an option such as _rare_ or _well done_ carries no allergens and no dietary
 suitability of its own, because it is a way of asking for the same dish rather than something extra

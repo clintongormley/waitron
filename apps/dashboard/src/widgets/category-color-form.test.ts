@@ -68,6 +68,21 @@ it("sends a palette colour, or none, as soon as it is chosen", async () => {
   expect(outside).toHaveBeenCalledTimes(2);
 });
 
+it("offers the parent's colour both as Inherit and as a fixed colour", async () => {
+  const el = await colorForm({ color: "#256bb1", inheritedColor: "#b12525" });
+  const sent = listen(el);
+  const inherit = swatch(el, "");
+  expect(inherit.querySelector("#category-color-none-label")?.textContent?.trim()).toBe(
+    t("inherit.label"),
+  );
+  expect(getComputedStyle(inherit.querySelector(".chip")!).backgroundColor).toBe(
+    "rgb(177, 37, 37)",
+  );
+  swatch(el, "#b12525").click();
+  inherit.click();
+  expect(sent).toEqual([{ color: "#b12525" }, { color: null }]);
+});
+
 it("sends a custom colour once the picker settles on it, not while it is picked", async () => {
   const el = await colorForm({ color: null });
   const sent = listen(el);

@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
+import { inheritedValue } from "./form-fields.js";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
@@ -416,7 +417,7 @@ export class UnitForm extends LitElement {
               data-test=${`name-${locale}`}
               name=${`name-${locale}`}
               label=${`${t("units.name")} (${locale.toUpperCase()})`}
-              placeholder=${this.#placeholder(locale).name}
+              .inherited=${inheritedValue(this.#fallback(locale).name)}
               error=${errors[`name-${locale}`] ?? (index === 0 ? (errors.name ?? "") : "")}
               .value=${this.names[locale] ?? ""}
               @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeName(locale, event)}
@@ -426,7 +427,7 @@ export class UnitForm extends LitElement {
               data-test=${`abbreviation-${locale}`}
               name=${`abbreviation-${locale}`}
               label=${`${t("units.abbreviation")} (${locale.toUpperCase()})`}
-              placeholder=${this.#placeholder(locale).abbreviation}
+              .inherited=${inheritedValue(this.#fallback(locale).abbreviation)}
               error=${
                 errors[`abbreviation-${locale}`] ?? (index === 0 ? (errors.abbreviation ?? "") : "")
               }
@@ -519,7 +520,7 @@ export class UnitForm extends LitElement {
     `;
   }
 
-  #placeholder(language: string): { name: string; abbreviation: string } {
+  #fallback(language: string): { name: string; abbreviation: string } {
     return unitPresentation(
       {
         name: this.names,

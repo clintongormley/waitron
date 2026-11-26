@@ -144,10 +144,6 @@ export const colorFieldStyles = css`
 export interface ColorFieldOptions {
   /** A hex colour, or null for none. */
   color: string | null;
-  /** Given, the no-colour choice inherits it; a stored colour also supplies a chip and description. */
-  categoryColor?: string | null;
-  /** Where `categoryColor` comes from; "default" names the choice "Use default colour". */
-  inheritedFrom?: "category" | "default";
   busy: boolean;
   error: string;
   /** The custom colour input's `name`. */
@@ -160,7 +156,7 @@ export interface ColorFieldOptions {
   /** Replaces "Colour" as the legend and the radio group's name. */
   legend?: string;
   /** Replaces the no-colour choice's label and chip; choosing it still reports null. */
-  noneChoice?: { label: string; chip: string };
+  noneChoice?: { label: string; chip: string | null; describeChip?: boolean };
   /** A text field beside the custom input holding the colour as typed. */
   code?: {
     name: string;
@@ -178,37 +174,12 @@ export interface ColorFieldOptions {
  */
 export function colorField(options: ColorFieldOptions): TemplateResult {
   const { color, busy, error, name, errorId, change, customEvent = "input" } = options;
-  // Checked, because the chip paints it into a style attribute; anything else reads as no colour.
-  const inherited =
-    options.categoryColor === undefined || isStoredColor(options.categoryColor)
-      ? options.categoryColor
-      : null;
-  const labelId = `${name}-none-label`;
   const { noneChoice, code } = options;
+  const chip = isStoredColor(noneChoice?.chip) ? noneChoice.chip : null;
+  const describeChip = chip !== null && noneChoice?.describeChip;
+  const labelId = `${name}-none-label`;
+  const descriptionId = `${name}-none-value`;
   const legend = options.legend ?? t("editor.color");
-  const fallback = noneChoice
-    ? {
-        id: undefined,
-        before: isStoredColor(noneChoice.chip)
-          ? html`<span
-              class="chip"
-              aria-hidden="true"
-              style=${`background:${noneChoice.chip}`}
-            ></span>`
-          : nothing,
-        after: nothing,
-      }
-    : inherited === undefined || inherited === null
-      ? null
-      : {
-          id: `${name}-none-value`,
-          before: html`<span
-            class="chip"
-            aria-hidden="true"
-            style=${`background:${inherited}`}
-          ></span>`,
-          after: html`<span id=${`${name}-none-value`} hidden>${inherited}</span>`,
-        };
   const swatch = (value: string) =>
     html`<button
       type="button"
@@ -259,7 +230,7 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
         role="radio"
         aria-checked=${color === null}
         aria-labelledby=${labelId}
-        aria-describedby=${fallback?.id ?? nothing}
+        aria-describedby=${describeChip ? descriptionId : nothing}
         data-color=""
         .disabled=${busy}
         @click=${(event: Event) => {
@@ -267,17 +238,9 @@ export function colorField(options: ColorFieldOptions): TemplateResult {
           change(null);
         }}
       >
-        ${fallback?.before ?? nothing}<span id=${labelId}
-          >${
-            noneChoice
-              ? noneChoice.label
-              : inherited === undefined
-                ? t("editor.color_none")
-                : options.inheritedFrom === "default"
-                  ? t("editor.color_use_default")
-                  : t("editor.color_use_category")
-          }</span
-        >${fallback?.after ?? nothing}
+        ${chip ? html`<span class="chip" aria-hidden="true" style=${`background:${chip}`}></span>` : nothing}
+        <span id=${labelId}>${noneChoice?.label ?? t("editor.color_none")}</span>
+        ${describeChip ? html`<span id=${descriptionId} hidden>${chip}</span>` : nothing}
       </button>
       <div class="swatches">
         ${PALETTE_GROUPS.map(

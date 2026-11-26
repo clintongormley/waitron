@@ -96,7 +96,7 @@ it("opens an option with its name, its other names and its availability", async 
   expect(field(el, "label-customer-name-en").value).toBe("");
   expect(field(el, "label-customer-name-es").value).toBe("Poco hecho");
   expect(field(el, "label-kitchen-name").value).toBe("R");
-  expect(field(el, "label-kitchen-name").placeholder).toBe("Rare");
+  expect(field(el, "label-kitchen-name").inherited?.value).toBe("Rare");
   expect(field<HTMLElementTagNameMap["wt-switch"]>(el, "label-available").checked).toBe(true);
 });
 
@@ -104,7 +104,7 @@ it("hints each blank name with what it falls back to, following the fields it co
   const { el } = await mount({ value: { ...rare, customerName: {}, kitchenName: "" } });
   const hints = () =>
     ["label-kitchen-name", "label-customer-name-en", "label-customer-name-es"].map(
-      (name) => field(el, name).placeholder,
+      (name) => field(el, name).inherited?.value,
     );
 
   expect(hints()).toEqual(["Rare", "Rare", "Rare"]);
@@ -119,7 +119,9 @@ it("hints each blank name with what it falls back to, following the fields it co
 it("never hints a customer-facing name with the kitchen name, which keeps its own text", async () => {
   const { el } = await mount({ value: { ...rare, customerName: {} } });
   const hints = () =>
-    ["label-customer-name-en", "label-customer-name-es"].map((name) => field(el, name).placeholder);
+    ["label-customer-name-en", "label-customer-name-es"].map(
+      (name) => field(el, name).inherited?.value,
+    );
 
   expect(field(el, "label-kitchen-name").value).toBe("R");
   expect(hints()).toEqual(["Rare", "Rare"]);

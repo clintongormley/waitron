@@ -300,8 +300,14 @@ it("hints an inherited price with the product's own and submits it as null", asy
   await addItem(el, "Bacon");
 
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-price").value).toBe("");
-  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-price").placeholder).toBe("0.80");
-  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-price").placeholder).toBe("1.50");
+  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").inherited).toEqual({
+    value: "0.80",
+    inTable: true,
+    suffix: t("inherit.suffix"),
+  });
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-price").inherited?.value).toBe(
+    "1.50",
+  );
 
   await click(el, "save");
   expect(submitted[0]!.items.map((item) => item.price)).toEqual([null, null]);
@@ -517,7 +523,7 @@ it("names a product it was given no row for rather than rendering an empty cell"
 
   expect(text(el, "item-0-product")).toBe("Bacon");
   expect(text(el, "item-1-product")).toBe(t("extras.unknown_product"));
-  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-price").placeholder).toBe("");
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-price").inherited).toBeUndefined();
 });
 
 it("offers every product it was given to an empty list, and adds nothing until one is chosen", async () => {
@@ -936,10 +942,7 @@ it("folds the customer-facing names into a closed section that lists them", asyn
   for (const name of ["customer-name-en", "customer-name-es"])
     expect(field(el, name).closest("wt-disclosure"), name).toBe(section);
   expect(field(el, "name").closest("wt-disclosure")).toBeNull();
-  expect(section.summaryFields).toEqual([
-    { label: "EN", value: "Add-ons", placeholder: true },
-    { label: "ES", value: "Añádele algo" },
-  ]);
+  expect(section.summaryFields).toEqual([{ label: "ES", value: "Añádele algo" }]);
 
   await type(el, "customer-name-en", "Make it yours");
   expect(section.summaryFields).toEqual([
@@ -989,7 +992,7 @@ it("hints each blank name with what it falls back to, following the fields it co
   const { el } = await mount({ value: { ...addons, customerName: {}, kitchenName: null } });
   const hints = () =>
     ["kitchen-name", "customer-name-en", "customer-name-es"].map(
-      (name) => field<HTMLElementTagNameMap["wt-input"]>(el, name).placeholder,
+      (name) => field<HTMLElementTagNameMap["wt-input"]>(el, name).inherited?.value,
     );
 
   expect(hints()).toEqual(["Add-ons", "Add-ons", "Add-ons"]);
@@ -1005,7 +1008,7 @@ it("never hints a customer-facing name with the kitchen name, which keeps its ow
   const { el } = await mount({ value: { ...addons, customerName: {} } });
   const input = (name: string) => field<HTMLElementTagNameMap["wt-input"]>(el, name);
   const hints = () =>
-    ["customer-name-en", "customer-name-es"].map((name) => input(name).placeholder);
+    ["customer-name-en", "customer-name-es"].map((name) => input(name).inherited?.value);
 
   expect(input("kitchen-name").value).toBe("ADD");
   expect(hints()).toEqual(["Add-ons", "Add-ons"]);
@@ -1039,40 +1042,29 @@ it("draws each language's code in the line's own weight with a colon, before its
   expect(codes.map((code) => getComputedStyle(code).fontWeight)).toEqual([weight, weight]);
 });
 
-/** The closed line beside what each blank field hints: the two must name the same fallback. */
 function namesShown(el: ExtraListForm) {
   const input = (locale: string) =>
     field<HTMLElementTagNameMap["wt-input"]>(el, `customer-name-${locale}`);
   return {
     line: disclosure(el).summaryFields,
     hints: el.languages.languages.map((locale) =>
-      input(locale).value ? "" : input(locale).placeholder,
+      input(locale).value ? "" : (input(locale).inherited?.value ?? ""),
     ),
   };
 }
 
-it("shows the staff name for every language on the closed line while each customer-facing name is blank", async () => {
+it("keeps inherited names in the fields and leaves the closed line empty", async () => {
   const { el, host } = await mount({ value: { ...addons, customerName: null } });
   const submitted = record(host);
 
   expect(namesShown(el)).toEqual({
-    line: [
-      { label: "EN", value: "Add-ons", placeholder: true },
-      { label: "ES", value: "Add-ons", placeholder: true },
-    ],
+    line: [],
     hints: ["Add-ons", "Add-ons"],
   });
-  const section = disclosure(el);
-  await section.updateComplete;
-  const placeholders = [...section.shadowRoot!.querySelectorAll(".summary-placeholder")];
-  expect(placeholders.map((part) => part.textContent)).toEqual(["Add-ons", "Add-ons"]);
 
   await type(el, "name", "Toppings");
   expect(namesShown(el)).toEqual({
-    line: [
-      { label: "EN", value: "Toppings", placeholder: true },
-      { label: "ES", value: "Toppings", placeholder: true },
-    ],
+    line: [],
     hints: ["Toppings", "Toppings"],
   });
   for (const locale of ["en", "es"])
@@ -1082,15 +1074,12 @@ it("shows the staff name for every language on the closed line while each custom
   expect(submitted[0]!.customerName).toBeNull();
 });
 
-it("falls every blank language back to the default language's name on the closed line, and back to the staff name when it is cleared", async () => {
+it("shows only a fixed name on the closed line while blank fields follow the default language, then the staff name", async () => {
   const { el, host } = await mount({ value: { ...addons, customerName: { en: "Make it yours" } } });
   const submitted = record(host);
 
   expect(namesShown(el)).toEqual({
-    line: [
-      { label: "EN", value: "Make it yours" },
-      { label: "ES", value: "Make it yours", placeholder: true },
-    ],
+    line: [{ label: "EN", value: "Make it yours" }],
     hints: ["", "Make it yours"],
   });
   expectSaveQuiet(el);
@@ -1100,10 +1089,7 @@ it("falls every blank language back to the default language's name on the closed
 
   await type(el, "customer-name-en", "");
   expect(namesShown(el)).toEqual({
-    line: [
-      { label: "EN", value: "Add-ons", placeholder: true },
-      { label: "ES", value: "Add-ons", placeholder: true },
-    ],
+    line: [],
     hints: ["Add-ons", "Add-ons"],
   });
 });
@@ -1119,10 +1105,7 @@ it("keeps disabled regional names out of the main fields and preserves them when
     ),
   ).toEqual(["", ""]);
   expect(namesShown(el)).toEqual({
-    line: [
-      { label: "EN", value: "Add-ons", placeholder: true },
-      { label: "ES", value: "Add-ons", placeholder: true },
-    ],
+    line: [],
     hints: ["Add-ons", "Add-ons"],
   });
   expectSaveQuiet(el);
@@ -1135,10 +1118,7 @@ it("ignores a regional-only name when the main and default names are blank", asy
   const { el } = await mount({ value: { ...addons, customerName: { "en-GB": "Make it yours" } } });
 
   expect(namesShown(el)).toEqual({
-    line: [
-      { label: "EN", value: "Add-ons", placeholder: true },
-      { label: "ES", value: "Add-ons", placeholder: true },
-    ],
+    line: [],
     hints: ["Add-ons", "Add-ons"],
   });
 });
@@ -1158,15 +1138,12 @@ it("saves an edited main name while keeping its separately stored regional names
   });
 });
 
-it("never falls a blank default language back to another language's name on the closed line", async () => {
+it("never fills a blank default-language field from another language", async () => {
   const { el, host } = await mount({ value: { ...addons, customerName: { es: "Añádele algo" } } });
   const submitted = record(host);
 
   expect(namesShown(el)).toEqual({
-    line: [
-      { label: "EN", value: "Add-ons", placeholder: true },
-      { label: "ES", value: "Añádele algo" },
-    ],
+    line: [{ label: "ES", value: "Añádele algo" }],
     hints: ["Add-ons", ""],
   });
   expectSaveQuiet(el);
@@ -1175,26 +1152,20 @@ it("never falls a blank default language back to another language's name on the 
   expect(submitted[0]!.customerName).toEqual({ es: "Añádele algo" });
 });
 
-it("follows a change of default or content languages on the closed line, in the languages' order", async () => {
+it("updates field fallbacks and shows only enabled languages on the closed line", async () => {
   const { el } = await mount({ value: { ...addons, customerName: { es: "Añádele algo" } } });
 
   el.languages = { defaultLanguage: "es", languages: ["es", "en"] };
   await el.updateComplete;
   expect(namesShown(el)).toEqual({
-    line: [
-      { label: "ES", value: "Añádele algo" },
-      { label: "EN", value: "Añádele algo", placeholder: true },
-    ],
+    line: [{ label: "ES", value: "Añádele algo" }],
     hints: ["", "Añádele algo"],
   });
 
   el.languages = { defaultLanguage: "en", languages: ["en", "ca"] };
   await el.updateComplete;
   expect(namesShown(el)).toEqual({
-    line: [
-      { label: "EN", value: "Add-ons", placeholder: true },
-      { label: "CA", value: "Add-ons", placeholder: true },
-    ],
+    line: [],
     hints: ["Add-ons", "Add-ons"],
   });
 });
@@ -1206,10 +1177,7 @@ it("leaves a language out of the closed line while nothing at all names the list
   await type(el, "customer-name-es", "Añádele algo");
   expect(disclosure(el).summaryFields).toEqual([{ label: "ES", value: "Añádele algo" }]);
   await type(el, "name", "Add-ons");
-  expect(disclosure(el).summaryFields).toEqual([
-    { label: "EN", value: "Add-ons", placeholder: true },
-    { label: "ES", value: "Añádele algo" },
-  ]);
+  expect(disclosure(el).summaryFields).toEqual([{ label: "ES", value: "Añádele algo" }]);
 });
 
 it("shows a kitchen-name refusal under the kitchen field without marking the names section", async () => {
@@ -1714,13 +1682,15 @@ it("requires a weighed extra portion and hints the price for that portion", asyn
 
   const portion = field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-portion");
   expect(portion).not.toBeNull();
-  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").placeholder).toBe("");
+  expect(
+    field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").inherited,
+  ).toBeUndefined();
   await click(el, "save");
   expect(submitted).toHaveLength(0);
   expect(portion.error).toBe(t("extras.portion_required"));
 
   await type(el, "item-0-portion", "0.050");
-  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").placeholder).toBe(
+  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").inherited?.value).toBe(
     "5.00",
   );
   await click(el, "save");
@@ -2597,7 +2567,7 @@ it("shows a saved unit-sold item's portion as a plain 1, and saves one unit when
   expect(portionCell(el, 1).textContent!.trim()).toBe("1");
   expect(field(el, "item-1-portion")).toBeNull();
   expect(portionCell(el, 1).querySelector("wt-input, input, .required")).toBeNull();
-  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-1-price").placeholder).toBe(
+  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-1-price").inherited?.value).toBe(
     "0.80",
   );
 
@@ -2616,7 +2586,7 @@ it("neither multiplies the inherited price by a stale saved portion nor sends it
   const submitted = record(host);
 
   expect(portionCell(el, 0).textContent!.trim()).toBe("1");
-  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").placeholder).toBe(
+  expect(field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price").inherited?.value).toBe(
     "0.80",
   );
   expectSaveQuiet(el);

@@ -19,9 +19,7 @@ import { t } from "../i18n/t.js";
 class ColorFieldHost extends LitElement {
   static override styles = [baseStyles, colorFieldStyles];
   @property({ attribute: false }) color: string | null = null;
-  @property({ attribute: false }) categoryColor: string | null | undefined = undefined;
   @property({ attribute: false }) customEvent: "input" | "change" | undefined = undefined;
-  @property({ attribute: false }) inheritedFrom: "category" | "default" | undefined = undefined;
   @property({ attribute: false }) legend: string | undefined = undefined;
   @property({ attribute: false }) noneChoice: ColorFieldOptions["noneChoice"] = undefined;
   @property({ attribute: false }) code: ColorFieldOptions["code"] = undefined;
@@ -30,8 +28,6 @@ class ColorFieldHost extends LitElement {
       ...(this.legend === undefined ? {} : { legend: this.legend }),
       ...(this.noneChoice === undefined ? {} : { noneChoice: this.noneChoice }),
       ...(this.code === undefined ? {} : { code: this.code }),
-      ...(this.inheritedFrom === undefined ? {} : { inheritedFrom: this.inheritedFrom }),
-      ...(this.categoryColor === undefined ? {} : { categoryColor: this.categoryColor }),
       ...(this.customEvent === undefined ? {} : { customEvent: this.customEvent }),
       color: this.color,
       busy: false,
@@ -55,12 +51,7 @@ afterEach(cleanupWidgets);
 const mount = (
   color: string | null,
   theme?: "light" | "dark",
-  extra: Partial<
-    Pick<
-      ColorFieldHost,
-      "categoryColor" | "customEvent" | "inheritedFrom" | "legend" | "noneChoice" | "code"
-    >
-  > = {},
+  extra: Partial<Pick<ColorFieldHost, "customEvent" | "legend" | "noneChoice" | "code">> = {},
 ) => mountWidget<ColorFieldHost>("test-color-field-host", { color, ...extra }, theme);
 
 const noneButton = (el: ColorFieldHost) =>
@@ -283,11 +274,11 @@ it.each(["light", "dark"] as const)(
 );
 
 it("names the no-colour choice by its label and describes it by the colour it then takes, drawn in a chip", async () => {
-  const { el } = await mount(null, undefined, { categoryColor: "#25b125" });
+  const { el } = await mount(null, undefined, {
+    noneChoice: { label: "Inherit", chip: "#25b125", describeChip: true },
+  });
   const none = noneButton(el);
-  await expect
-    .element(page.elementLocator(none))
-    .toHaveAccessibleName(t("editor.color_use_category"));
+  await expect.element(page.elementLocator(none)).toHaveAccessibleName("Inherit");
   await expect.element(page.elementLocator(none)).toHaveAccessibleDescription("#25b125");
   const chip = none.querySelector<HTMLElement>(".chip")!;
   expect(chip.getAttribute("aria-hidden")).toBe("true");
@@ -296,34 +287,22 @@ it("names the no-colour choice by its label and describes it by the colour it th
   await expect.element(page.elementLocator(swatch)).toHaveAccessibleName("#b12525");
 });
 
-it("names the no-colour choice Use default colour when the colour it takes is the venue default", async () => {
-  const { el } = await mount(null, undefined, {
-    categoryColor: "#25b125",
-    inheritedFrom: "default",
-  });
-  const none = noneButton(el);
-  await expect
-    .element(page.elementLocator(none))
-    .toHaveAccessibleName(t("editor.color_use_default"));
-  await expect.element(page.elementLocator(none)).toHaveAccessibleDescription("#25b125");
-});
-
 it("keeps the category inheritance choice on one line when the category has no colour", async () => {
   const plain = await mount(null);
   const plainLines = fieldLines(plain.el);
   cleanupWidgets();
-  const { el } = await mount(null, undefined, { categoryColor: null });
+  const { el } = await mount(null, undefined, { noneChoice: { label: "Inherit", chip: null } });
   const none = noneButton(el);
-  await expect
-    .element(page.elementLocator(none))
-    .toHaveAccessibleName(t("editor.color_use_category"));
+  await expect.element(page.elementLocator(none)).toHaveAccessibleName("Inherit");
   await expect.element(page.elementLocator(none)).toHaveAccessibleDescription("");
   expect(none.querySelector(".note, .chip")).toBeNull();
   expect(fieldLines(el)).toEqual(plainLines);
 });
 
 it("does not paint or describe an invalid inherited colour", async () => {
-  const { el } = await mount(null, undefined, { categoryColor: "#256bb1;position:fixed;inset:0" });
+  const { el } = await mount(null, undefined, {
+    noneChoice: { label: "Inherit", chip: "#256bb1;position:fixed;inset:0", describeChip: true },
+  });
   const none = noneButton(el);
   expect(none.querySelector(".chip")).toBeNull();
   expect(none.querySelector(".note")).toBeNull();
@@ -331,7 +310,7 @@ it("does not paint or describe an invalid inherited colour", async () => {
 });
 
 it("keeps the inheritance choice's label clear of its border", async () => {
-  const { el } = await mount(null, undefined, { categoryColor: null });
+  const { el } = await mount(null, undefined, { noneChoice: { label: "Inherit", chip: null } });
   const none = noneButton(el).getBoundingClientRect();
   const label = el.shadowRoot!.querySelector("#test-color-none-label")!.getBoundingClientRect();
   expect(label.top - none.top).toBeGreaterThanOrEqual(3);
@@ -347,11 +326,9 @@ it("draws today's No colour choice when given neither setting", async () => {
 });
 
 it("A498 keeps category inheritance selectable without an empty-colour note", async () => {
-  const { el } = await mount(null, undefined, { categoryColor: null });
+  const { el } = await mount(null, undefined, { noneChoice: { label: "Inherit", chip: null } });
   const none = noneButton(el);
-  await expect
-    .element(page.elementLocator(none))
-    .toHaveAccessibleName(t("editor.color_use_category"));
+  await expect.element(page.elementLocator(none)).toHaveAccessibleName("Inherit");
   expect(none.querySelector(".note")).toBeNull();
   expect(none.hasAttribute("aria-describedby")).toBe(false);
   await click(el, "#b12525");

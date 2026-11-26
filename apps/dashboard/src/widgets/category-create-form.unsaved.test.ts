@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./category-create-form.js";
@@ -85,4 +86,25 @@ it("Cancel discards an edited name without asking", async () => {
   await expect.poll(() => el.cancel.mock.calls.length).toBe(1);
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect(el.leave.coordinator.isDirty()).toBe(false);
+});
+
+it("previews the selected parent's colour and submits inheritance as null", async () => {
+  const { el, form, root, add } = await open();
+  form.defaultColor = "#b12525";
+  form.categories = [{ id: "drinks", name: "Drinks", parentId: null, color: "#256bb1" }];
+  await form.updateComplete;
+  const inherit = root.querySelector('[data-color=""]')!;
+  const background = () => {
+    const chip = inherit.querySelector(".chip");
+    return chip ? getComputedStyle(chip).backgroundColor : null;
+  };
+  expect(background()).toBe("rgb(177, 37, 37)");
+  await chooseOption(root.querySelector('wt-combobox[name="parentId"]')!, "drinks");
+  await form.updateComplete;
+  expect(background()).toBe("rgb(37, 107, 177)");
+  expect(inherit.getAttribute("aria-checked")).toBe("true");
+  await userEvent.click(add);
+  expect(el.submit.mock.calls.map(([event]) => event.detail.value)).toEqual([
+    { name: "Hot dishes", parentId: "drinks", color: null },
+  ]);
 });

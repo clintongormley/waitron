@@ -137,12 +137,15 @@ it("requires explicit cereal and nut kinds, keeps them separate and clears remov
 });
 
 it("previews inherited kinds read-only and replaces the parent's entire set on an own choice", async () => {
+  setLocale("en");
   const { el, changes } = await mount(
     { allergens: null, dietaryDeclarations: null },
     { inherited },
   );
-  expect(chip(el, "same-as").textContent).toContain("Bread $& <large>");
-  expect(chip(el, "same-as").getAttribute("aria-pressed")).toBe("true");
+  expect(el.shadowRoot!.querySelector(".choices button > span:last-child")?.textContent).toBe(
+    "Inherit",
+  );
+  expect(chip(el, "inherit").getAttribute("aria-pressed")).toBe("true");
   expect(chip(el, "allergen-gluten").disabled).toBe(true);
   el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
   expect(getComputedStyle(chip(el, "allergen-gluten")).color).toBe("rgb(7, 8, 9)");
@@ -152,7 +155,7 @@ it("previews inherited kinds read-only and replaces the parent's entire set on a
   expect(changes).toEqual([]);
   await click(el, "allergen-eggs");
   expect(el.value).toEqual({ allergens: { eggs: {} }, dietaryDeclarations: null });
-  await click(el, "same-as");
+  await click(el, "inherit");
   expect(el.value.allergens).toBeNull();
   await click(el, "none");
   expect(el.value.allergens).toEqual({});
@@ -173,7 +176,7 @@ it("shows inherited None and unreviewed status distinctly", async () => {
   el.inherited = { ...inherited, allergens: {} };
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector('[data-test="inherited-status"]')!.textContent).toBe("None");
-  expect(chip(el, "same-as").getAttribute("aria-pressed")).toBe("true");
+  expect(chip(el, "inherit").getAttribute("aria-pressed")).toBe("true");
   expect(chip(el, "none").getAttribute("aria-pressed")).toBe("false");
 });
 

@@ -144,11 +144,9 @@ Al eliminar una categoría, elige si quieres conservar su contenido o eliminarlo
 Comprueba adónde se moverá el contenido si lo conservas. Los productos que hayas marcado se
 eliminan con cualquiera de las dos opciones.
 
-Mientras añades una categoría o le cambias el nombre, el cuadrado junto al nombre muestra su propio
-color, o el que hereda de la categoría superior más cercana que tenga color y, después, el
-predeterminado del local. Un borde discontinuo marca un color heredado. Elige el cuadrado para darle
-un color propio; **Sin color** mantiene la herencia, así que cambiar solo el nombre no cambia de
-dónde viene el color.
+Mientras añades una categoría o le cambias el nombre, elige el cuadrado junto al nombre para fijar su
+color. Elige **Heredar** para usar el color que aparece en esa opción. Elige una muestra para fijar
+un color propio, aunque coincida con el heredado.
 
 Dónde se prepara el plato se decide en la cuadrícula de rutas, en la pestaña **Rutas** de **Estaciones
 de preparación**. Decide primero la fila del propio producto, después la fila de su categoría y la de
@@ -215,8 +213,10 @@ Así que nombra una variante por lo que la distingue: Grande, no Café grande.
 
 El producto conserva su propio campo de precio. En cuanto el producto tiene una
 variante activa, la etiqueta del campo empieza por **Precio base**, porque una variante que dejas sin
-precio propio se vende a ese precio. El precio vacío de esa variante muestra el precio base en gris
-como pista, en su ventana y en su fila de la tabla. El enlace de la unidad en
+precio propio se vende a ese precio. Si dejas el precio en blanco, verás el precio base con una
+flecha en la ventana y en texto atenuado en la tabla. Escribe un precio para fijarlo. En la página
+de la variante, elige **Heredar** en Orden de plato o IVA para llevar para seguir al producto, o elige
+un valor para fijarlo. El enlace de la unidad en
 el encabezado Precio de las variantes abre la misma ventana de unidades que el enlace de la unidad del
 campo de precio.
 
@@ -295,8 +295,8 @@ y **Sin pescado**. Vegano marca también Vegetariano, Sin carne y Sin pescado, y
 carne y Sin pescado; una marca que se deriva de otra de tus opciones no se puede cambiar por sí sola.
 
 Cada producto indica sus propios alérgenos y etiquetas dietéticas. Una variante usa los de su producto
-hasta que eliges los suyos en la página de la variante. **Igual que** seguido del nombre del producto
-vuelve a los alérgenos del producto, y quitar la última etiqueta dietética de la variante vuelve a las
+hasta que eliges los suyos en la página de la variante. Elige **Heredar** para usar los alérgenos del
+producto. Quitar la última etiqueta dietética de la variante vuelve a las
 etiquetas del producto. Un extra que puedes añadir a un plato es en sí un producto, así que trae
 consigo sus propias declaraciones. Una opción de una lista de opciones no: una opción como _poco hecho_
 o _muy hecho_ no lleva alérgenos ni aptitud dietética propios, porque es una forma de pedir el mismo

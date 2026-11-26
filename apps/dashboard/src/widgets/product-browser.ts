@@ -1,3 +1,4 @@
+import { categoryColor } from "@waitron/shared";
 import type { ProductItemsChange } from "@waitron/menu";
 import {
   routingPreviewTable,
@@ -1045,6 +1046,20 @@ export class ProductBrowser extends LitElement {
     return !this.#emptyProducts || (this.view === "tree" && this.categories.length > 0);
   }
 
+  #chooserInheritedColor(renamed: CategorySummary | undefined): string | null | undefined {
+    const target = this.colorTarget;
+    if (!target || target.kind === "default") return undefined;
+    const categories = new Map(this.categories.map((category) => [category.id, category]));
+    const draft = this.nameDraft;
+    const parent =
+      target.kind === "row"
+        ? (categories.get(target.category.id) ?? target.category).parentId
+        : draft?.kind === "create"
+          ? draft.parentId
+          : (renamed?.parentId ?? null);
+    return categoryColor(parent, categories, this.defaultColor);
+  }
+
   override render() {
     const renamed = this.#renamed(this.nameDraft);
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
@@ -1197,6 +1212,7 @@ export class ProductBrowser extends LitElement {
               ? this.defaultColor
               : boxColor
         }
+        .inheritedColor=${this.#chooserInheritedColor(renamed)}
         .errors=${this.colorErrors}
         @wt-choose=${(event: CustomEvent<{ color: string | null }>) => {
           event.stopPropagation();

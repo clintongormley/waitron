@@ -60,9 +60,9 @@ blanco, su campo muestra en su lugar el nombre al que recurre.
 En una lista de opciones y en la ventana de cada opción ves **Nombre**, después **Nombre de estación de preparación**
 y después el encabezado **Nombres para el cliente**, con todos los campos de idioma ya visibles.
 Puedes comparar y editar los nombres sin abrir una sección. Una lista de extras conserva sus
-nombres para el cliente en una sección plegada: abre **Nombres para el cliente** para editarlos.
-Su línea cerrada muestra el nombre de cada idioma, o el nombre que usa cuando ese campo está vacío; la sección
-se abre cuando hay que corregir un nombre. Consulta [idiomas de
+nombres para el cliente en una sección plegada. Abre **Nombres para el cliente** para ver el valor
+que usa un campo vacío, marcado con una flecha, o para escribir un nombre. La línea cerrada muestra
+solo los nombres que has escrito. Consulta [idiomas de
 contenido](content-and-images.md).
 
 Cada lista tiene un interruptor **Activa**, y la columna **Estado** de la lista pone **Activa** o

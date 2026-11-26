@@ -497,6 +497,7 @@ export class ProductEditorDialog implements ReactiveController {
         .busy=${this.#child.busy}
         .seed=${this.#categorySeed}
         .parentId=${this.#categoryParent}
+        .defaultColor=${choices.menuSettings?.defaultColor ?? null}
         .categories=${categories}
         .fieldErrors=${refusals.category}
         @wt-submit=${this.#submitCategory}

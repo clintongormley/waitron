@@ -28,7 +28,8 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import {
-  effectiveNamesLine,
+  inheritedValue,
+  namesLine,
   optionalTextFields,
   textField,
   translations,
@@ -740,6 +741,7 @@ export class ExtraListForm extends LitElement {
 
   #fields(errors: Record<string, string>): FieldContext {
     return {
+      fallbackAsInherited: true,
       busy: this.busy,
       locales: this.languages.languages,
       error: (key) => errors[key] ?? "",
@@ -752,12 +754,7 @@ export class ExtraListForm extends LitElement {
     return html`<wt-disclosure
       data-test="names-section"
       heading=${t("extras.customer_names")}
-      .summaryFields=${effectiveNamesLine(
-        locales,
-        this.customerName,
-        this.languages.defaultLanguage,
-        this.name,
-      )}
+      .summaryFields=${namesLine(locales, this.customerName)}
       .hasError=${hasError}
     >
       <div class="names">
@@ -870,7 +867,7 @@ export class ExtraListForm extends LitElement {
           fixed-unit
           unit=${this.#unitLabel(item.productId)}
           locale=${currentLocale()}
-          placeholder=${this.#inheritedPrice(item)}
+          .inherited=${inheritedValue(this.#inheritedPrice(item), true)}
           .disabled=${this.busy}
           .value=${item.price}
           .error=${errors[`item-${index}-price`] ?? ""}

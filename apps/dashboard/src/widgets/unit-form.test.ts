@@ -534,6 +534,10 @@ describe("unit-form", () => {
     change(el, "abbreviation-es", "cj");
     el.locales = ["es", "en", "fr"];
     await el.updateComplete;
+    const translations = ["name-en", "abbreviation-en"].map((testId) =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[data-test=${testId}]`),
+    );
+    expect(translations.map((field) => field?.inherited?.value)).toEqual(["caja", "cj"]);
     const submit = vi.fn();
     el.addEventListener("wt-submit", submit);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();

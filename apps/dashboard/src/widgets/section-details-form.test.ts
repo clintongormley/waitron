@@ -445,6 +445,10 @@ it("hints each blank customer-facing name with the default language's name, then
   };
   const hints = () => ["names-en", "names-es"].map((name) => input(name).placeholder);
 
+  expect(["names-en", "names-es"].map((name) => input(name).inherited)).toEqual([
+    undefined,
+    undefined,
+  ]);
   expect(hints()).toEqual(["Starters", "Starters"]);
   await type("names-en", "To begin");
   expect(hints()).toEqual(["Starters", "To begin"]);

@@ -838,8 +838,8 @@ See [device equipment defaults](backlog/till.md#device-equipment-defaults-w100-1
 ### Users, sign-in and the dashboard shell
 
 - **A1570. Inherited values shown quietly** (owner, 2026-11-24). Use the shared inheritance cues in
-  the dashboard product and menu screens. Add the wording guard after those screens change.
-  Queued (lane K).
+  the dashboard menu screens after the menu editor redesign lands. Add the wording guard with that
+  slice.
   [Design](superpowers/specs/2026-11-24-inherited-values-design.md).
 
 - **A1089: account-access recovery needs an authenticated decision when no offered sign-in works.**

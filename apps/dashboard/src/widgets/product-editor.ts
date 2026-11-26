@@ -57,6 +57,7 @@ import { colorField, colorFieldStyles } from "./color-field.js";
 import {
   defaultLanguageHint,
   languageText,
+  inheritedValue,
   namesLine,
   nonBlankNames,
   optionalTextFields,
@@ -103,6 +104,15 @@ export const EACH_CHOICE = "__each__";
  * can be mistaken for an attachment, whose value always carries a colon. */
 const CREATE_EXTRA_LIST = "create-extras";
 const CREATE_OPTION_LIST = "create-options";
+
+function inheritedOption(valueLabel: string): ComboboxOption {
+  return {
+    value: "",
+    label: fill("inherit.value", { value: valueLabel }),
+    valueLabel,
+    inherited: true,
+  };
+}
 
 const EDIT_COURSES = "edit-courses";
 
@@ -752,7 +762,12 @@ export class ProductEditor extends LitElement {
     price?.focusUnit();
   }
   private fields(): FieldContext {
-    return { busy: this.busy, locales: this.locales, error: (key) => this.error(key) };
+    return {
+      busy: this.busy,
+      fallbackAsInherited: true,
+      locales: this.locales,
+      error: (key) => this.error(key),
+    };
   }
   private change<K extends keyof ProductEditorDraft>(key: K, value: ProductEditorDraft[K]) {
     const errorKey = DRAFT_ERROR_KEYS[key];
@@ -1034,27 +1049,16 @@ export class ProductEditor extends LitElement {
     void this.returnVariantFocus();
   }
 
-  /** A field's entry on a closed line: its own value, else on a variant the value it inherits as
-   * a placeholder, else nothing. An empty value counts as unset. */
-  private foldedValue(label: string, own: string, inherited: () => string): SummaryField[] {
-    if (own) return [{ label, value: own }];
-    const value = this.inherited === null ? "" : inherited();
-    return value ? [{ label, value, placeholder: true }] : [];
-  }
-
   private kitchenSummary(): SummaryField[] {
     const { courseId } = this.draft;
-    // A variant's blank kitchen name falls back to its own Name, never the parent's.
     const kitchenName = this.draft.kitchenName?.trim();
+    const course =
+      courseId === null
+        ? ""
+        : (this.courses.find(({ id }) => id === courseId)?.name ?? t("editor.missing_choice"));
     return [
       ...(kitchenName ? [{ label: t("editor.kitchen_name"), value: kitchenName }] : []),
-      ...this.foldedValue(
-        t("editor.summary_course"),
-        courseId === null
-          ? ""
-          : (this.courses.find(({ id }) => id === courseId)?.name ?? t("editor.missing_choice")),
-        () => this.blankChoice("", this.courses, this.inherited?.courseId),
-      ),
+      ...(course ? [{ label: t("editor.summary_course"), value: course }] : []),
     ];
   }
 
@@ -1074,17 +1078,6 @@ export class ProductEditor extends LitElement {
     </fieldset>`;
   }
 
-  /** What a routing dropdown's empty choice means: none, on a product of its own; the parent's
-   * choice, on a variant. */
-  private blankChoice(
-    none: string,
-    choices: ProductRoutingChoice[],
-    parentId: string | null | undefined,
-  ): string {
-    if (this.inherited === null || !parentId) return none;
-    return choices.find(({ id }) => id === parentId)?.name ?? t("editor.missing_choice");
-  }
-
   private help(part: string, key: StringKey, guide?: GuideLink) {
     return html`<wt-help-tooltip
       slot="help"
@@ -1097,11 +1090,16 @@ export class ProductEditor extends LitElement {
   }
 
   private renderCourse() {
-    const noneLabel = this.blankChoice(
-      t("modifiers.none_specified"),
-      this.courses,
-      this.inherited?.courseId,
-    );
+    const noneLabel = t("modifiers.none_specified");
+    const parentCourse = this.inherited?.courseId;
+    const emptyOption = this.inherited
+      ? inheritedOption(
+          parentCourse
+            ? (this.courses.find(({ id }) => id === parentCourse)?.name ??
+                t("editor.missing_choice"))
+            : t("inherit.none"),
+        )
+      : { value: "", label: noneLabel };
     return html`<wt-combobox
       ?preserve-order=${true /* Preserve configured course position. */}
       name="product-course"
@@ -1109,10 +1107,11 @@ export class ProductEditor extends LitElement {
       search="auto"
       searchPlaceholder=${t("categories.combobox_search")}
       noResultsLabel=${t("categories.combobox_no_results")}
-      placeholder=${noneLabel}
+      placeholder=${this.inherited ? "" : noneLabel}
+      inherited-suffix=${t("inherit.suffix")}
       ?show-empty-option=${this.inherited === null}
       .options=${[
-        { value: "", label: noneLabel },
+        emptyOption,
         ...this.courses.map((choice) => ({ value: choice.id, label: choice.name })),
         { value: EDIT_COURSES, label: t("editor.edit_courses"), action: true, primary: true },
       ]}
@@ -1205,8 +1204,11 @@ export class ProductEditor extends LitElement {
         color: this.draft.color,
         name: "product-color",
         errorId: "product-color-error",
-        categoryColor: fromCategory ?? this.defaultColor,
-        inheritedFrom: fromCategory === null && this.defaultColor !== null ? "default" : "category",
+        noneChoice: {
+          label: t("inherit.label"),
+          chip: fromCategory ?? this.defaultColor,
+          describeChip: true,
+        },
         error: this.error("product-color"),
         busy: this.suspended,
         change: (color) => this.change("color", color),
@@ -1216,15 +1218,10 @@ export class ProductEditor extends LitElement {
 
   private descriptorsSummary(): SummaryField[] {
     const customerName = this.languagesLine(this.draft.customerName);
-    // Text in any language, shown or not, is the variant's own and stops the parent's applying.
-    const described = Object.keys(nonBlankNames(this.draft.description ?? {})).length > 0;
+    const description = this.languagesLine(this.draft.description);
     return [
       ...(customerName ? [{ label: t("editor.customer_name"), value: customerName }] : []),
-      ...this.foldedValue(
-        t("editor.description"),
-        this.languagesLine(this.draft.description),
-        () => (described ? "" : this.languagesLine(this.inherited!.description)),
-      ),
+      ...(description ? [{ label: t("editor.description"), value: description }] : []),
     ];
   }
 
@@ -1257,7 +1254,7 @@ export class ProductEditor extends LitElement {
         return html`<wt-textarea
           name=${`description-${locale}`}
           label=${`${t("editor.description")} (${locale})`}
-          placeholder=${descriptionHint(locale)}
+          .inherited=${inheritedValue(descriptionHint(locale))}
           .value=${languageText(this.draft.description ?? {}, locale)}
           .disabled=${this.busy}
           error=${this.error(`description-${locale}`)}
@@ -1409,12 +1406,6 @@ export class ProductEditor extends LitElement {
    * packages/menu/src/takeaway-vat-rates.ts). */
   private renderTakeawayTax() {
     const parent = this.inherited;
-    const same = parent
-      ? fill("editor.takeaway_vat_same", {
-          product: parent.name,
-          rate: vatRateNumber(parent.takeawayVatRate),
-        })
-      : null;
     const rates = this.vatRates.map((rate) => ({ value: rate, label: vatRateText(rate) }));
     return html`<wt-combobox
       name="takeaway-tax"
@@ -1423,8 +1414,9 @@ export class ProductEditor extends LitElement {
       search="auto"
       searchPlaceholder=${t("categories.combobox_search")}
       noResultsLabel=${t("categories.combobox_no_results")}
-      placeholder=${same ?? t("editor.choose")}
-      .options=${same === null ? rates : [{ value: "", label: same }, ...rates]}
+      placeholder=${parent ? "" : t("editor.choose")}
+      inherited-suffix=${t("inherit.suffix")}
+      .options=${parent ? [inheritedOption(vatRateText(parent.takeawayVatRate)), ...rates] : rates}
       ?disabled=${this.suspended}
       .value=${this.draft.takeawayVatRate ?? ""}
       error=${this.error("takeaway-tax")}
@@ -1556,7 +1548,7 @@ export class ProductEditor extends LitElement {
         ?fixed-unit=${parent !== null}
         unit-haspopup="dialog"
         locale=${currentLocale()}
-        placeholder=${parent?.unitPrice ?? ""}
+        .inherited=${inheritedValue(parent?.unitPrice ?? "")}
         ?required=${parent === null}
         ?disabled=${this.suspended}
         .value=${amount}

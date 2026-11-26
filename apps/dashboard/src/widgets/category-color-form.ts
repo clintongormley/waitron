@@ -31,6 +31,7 @@ export class CategoryColorForm extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property() heading = "";
   @property({ attribute: false }) color: string | null = null;
+  @property({ attribute: false }) inheritedColor: string | null | undefined = undefined;
   /** Refusals keyed `color`, or any other key for one shown above the buttons. */
   @property({ attribute: false }) errors: Record<string, string> = {};
   /** What the person last chose, shown while it saves and after a refusal. */
@@ -72,6 +73,9 @@ export class CategoryColorForm extends LitElement {
       <div ?inert=${this.busy} class="fields">
         ${colorField({
           color: this.chosen,
+          ...(this.inheritedColor === undefined
+            ? {}
+            : { noneChoice: { label: t("inherit.label"), chip: this.inheritedColor } }),
           busy: this.busy,
           error: errors.color ?? "",
           name: "category-color",

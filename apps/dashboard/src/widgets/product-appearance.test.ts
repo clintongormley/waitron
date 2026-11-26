@@ -114,12 +114,10 @@ it("an inherited variant follows its parent's replacement while its own picture 
     ),
   );
   expect(ownImg.getAttribute("src")).toBe(`/media/renditions/v1/${own}/square/7500-2500-200.webp`);
-  expect(inherited.el.shadowRoot!.querySelector(".thumb")!.classList.contains("inherited")).toBe(
-    true,
-  );
-  expect(explicit.el.shadowRoot!.querySelector(".thumb")!.classList.contains("inherited")).toBe(
-    false,
-  );
+  const inheritedStyle = getComputedStyle(inherited.el.shadowRoot!.querySelector(".thumb")!);
+  const explicitStyle = getComputedStyle(explicit.el.shadowRoot!.querySelector(".thumb")!);
+  expect(inheritedStyle.borderTopStyle).toBe("solid");
+  expect(inheritedStyle.borderTopColor).toBe(explicitStyle.borderTopColor);
 });
 
 it("reads the refusal before an inherited-photo hint and restores the hint when cleared", async () => {

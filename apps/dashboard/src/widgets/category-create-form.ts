@@ -10,6 +10,7 @@ import {
   type LeaveCoordinator,
   type LeaveReason,
 } from "@waitron/ui";
+import { categoryColor } from "@waitron/shared";
 import type { CategoryInput, CategorySummary } from "../api/catalog-api.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -48,6 +49,7 @@ export class CategoryCreateForm extends LitElement {
   @property() seed = "";
   @property({ attribute: false }) parentId: string | null = null;
   @property({ attribute: false }) categories: readonly CategorySummary[] = [];
+  @property({ attribute: false }) defaultColor: string | null = null;
   @property({ attribute: false }) draftParent?: object;
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
   @state() private draft: CategoryDraft = { name: "", parentId: null, color: null };
@@ -142,6 +144,11 @@ export class CategoryCreateForm extends LitElement {
     const errors = this.#feedback.remaining(this.fieldErrors);
     const marked = new Set(fieldKeys.filter((key) => errors[key]));
     const action = this.#action();
+    const inheritedColor = categoryColor(
+      this.draft.parentId,
+      new Map(this.categories.map((category) => [category.id, category])),
+      this.defaultColor,
+    );
     return html`<wt-modal
       size="compact"
       heading=${t("folders.add_category")}
@@ -189,6 +196,7 @@ export class CategoryCreateForm extends LitElement {
         ></wt-combobox>
         ${colorField({
           color: this.draft.color,
+          noneChoice: { label: t("inherit.label"), chip: inheritedColor },
           busy: this.busy,
           error: errors.color ?? "",
           name: "color",

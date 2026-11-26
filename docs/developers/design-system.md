@@ -2312,12 +2312,11 @@ square, an empty outline when there is none; on a product row, the product's pho
 colour ring, or a filled colour square when it has no photo. Both use the product's own colour,
 falling back to its category's inherited colour, then to the venue's default; without any of them
 the frame is empty. A category with no colour of its own shows the colour it inherits the same way:
-from the nearest coloured category above it, else the venue's default, else an empty outline. An
-inherited colour is marked, not by colour alone (owner, 2026-10-08, A423): its square keeps its size
-but takes a dashed 1px `--wt-color-text-muted` outline with a `--wt-space-1` gap before the fill, and
-`--wt-radius-md` corners, which a product's square always has (an `inherited` part beside `color-swatch`), and a photo's coloured ring is dashed. Its accessible name says
-where it comes from (`folders.edit_color_inherited`, `product.edit_named_inherited`), naming the
-category or All products. Opening an inheriting category's colour picker starts on No colour. Clicking
+from the nearest coloured category above it, else the venue's default, else an empty outline.
+Both inherited and own colours use a solid ring or a square filled to its edge. The accessible name
+gives the source of an inherited colour (`folders.edit_color_inherited`,
+`product.edit_named_inherited`), naming the category or All products. The picker shows **Inherit**
+with the colour it would use. Clicking
 the product slot opens the product's Edit dialog with its photo field focused. Category squares and
 All products' square open their colour picker directly. On a category being added or renamed the slot holds the name box's colour square (below). No row draws a folder icon, though the picture that follows the pointer while you drag
 a category keeps one. Then come `--wt-space-3` and the name. So on those rows names step in by the
@@ -2339,8 +2338,7 @@ with the counts above the field. It can use the category row's empty Price and A
 as far as the pinned Actions column. In the narrow Tree, Select stacks each grip below its checkbox
 in the leading column.
 The square shows the category's own colour, else the nearest coloured category above it or the
-venue's default. An inherited colour keeps its dashed border while the name is typed. The chooser
-starts on No colour when the category has no colour of its own. Tab moves on from the name field.
+venue's default. The chooser starts on **Inherit** when the category has no colour of its own. Tab moves on from the name field.
 
 Use `wt-modal` for an add or edit form. Its fields stop at `--wt-form-max-width` (see "Structure"
 above). Give it a `size` chosen by its content:
@@ -4045,22 +4043,11 @@ leaves additional suggestions waiting. Use fix stages a freshly checked correcti
 The language-row warning wraps, and the Actions column stays pinned at the end.
 
 
-Some fields store a value only to override one they would otherwise take from somewhere else — a
-variant's takeaway VAT or photo from its parent product, an extra's price from its product's. Such a field is
-**empty while it falls back**, and shows the value it falls back to as a placeholder hint, so the operator sees
-what will apply without a copy being stored. Leaving it empty keeps the fallback; typing or choosing
-a value overrides it; clearing it returns to the fallback and saves `null`. Never mark such a field
-required. A translated field inherited as ONE value across its languages (a variant's description)
-shows the parent's text as its placeholder hints only while every language is blank; once any
-language has text, the record's own value applies: a blank language other than the default shows
-the record's own default-language text where there is some, as a product's does, and no hint while
-the default language is blank (owner decision 2026-10-03, A220b, below).
-A blank description in a language other than the venue's default shows the
-default language's description as its placeholder — a product's or a variant's own, as it is typed,
-or, on a variant still blank in every language, the parent's where the parent has none in that
-language (`defaultLanguageHint`, `apps/dashboard/src/widgets/form-fields.ts`). That hint is the owner's
-decision (A220); no reader fills a missing language with it, and nothing outside the product editor
-shows a product description today (the reader check in A220, below).
+In the product editor, an empty text or price field that follows another value shows it through
+the shared `inherited` property. Type a value to fix it here, even when it matches the inherited
+one. For an extra's price set `inTable: true` to leave out the arrow. A variant description follows
+the parent's description only while it is blank in every language. If the variant has a description,
+a blank language can show the variant's default-language text, as in a product's editor.
 
 A220's reader check and the owner's decisions behind these hints (#1069, #1073), moved here from
 `docs/backlog.md`:
@@ -4096,28 +4083,14 @@ blank language other than the default shows the variant's own default-language d
 hint, where there is one, as a product's does; the parent's description is a hint only while the
 variant describes itself in no language.
 
-- **Text and price fields** (`wt-input`, `wt-price-input`, `wt-textarea`): the fallback value is the
-  field's `placeholder`. All three primitives paint it `--wt-color-text-muted`, because Chromium's
-  default grey measured 3.70:1 on `wt-input` against the dark theme's field (2026-09-24), under the
-  4.5:1 text needs. axe does not check placeholder contrast, so an a11y test for a new placeholder-hinted field measures the ratio itself
-  (`packages/ui-core/src/components/wt-input.a11y.test.ts`). A price field that holds its own value
-  can say so with `wt-price-input`'s `overriding` state (see its row in the component table), which a
-  menu's Price overrides tab uses.
-- **A single-choice `wt-combobox`** (the product editor's course): its
-  first option has an empty value and reads as the fallback value itself, with no "Same as" before
-  it (owner, 2026-10-02: "we just want to show the value"); where the parent
-  names nothing it reads as what will be used instead, `modifiers.none_specified` ("None specified") for the course; and
-  where the parent names a course the loaded
-  list lacks, it reads `editor.missing_choice` ("Unavailable selection"). Its placeholder
-  reads the same, in the combobox's muted ink, and is what it shows while the stored value is
-  null; it has no separate hint line. A choice that means "none" on a record of its own
-  (`modifiers.none_specified` for the course) is left out where the empty value already means "fall
-  back": offering both would read as one thing and save as another. A variant's unit is not such a
-  field: it is always its product's, and its page shows it beside the price as fixed text (A222).
+- **Course and takeaway VAT** on a variant start with an **Inherit** row. The closed field shows the
+  inherited value with an arrow. An ordinary row for the same value fixes it. Inherit shows
+  **None** for an unset parent course and **Unavailable selection** for a course missing from the
+  list. The variant's unit always follows the product and appears beside the price.
 - **Allergens and diet**, in the product editor's Details, shows allergen and diet chips directly. “Contains none
   of the 14” records a reviewed empty allergen set; leaving every allergen unticked without that
-  choice remains unreviewed. Gluten and Nuts open indented kind chips. A variant's “Same as
-  {parent}” keeps its allergens inherited, with the parent's choices muted and read-only;
+  choice remains unreviewed. Gluten and Nuts open indented kind chips. A variant's **Inherit**
+  choice keeps its allergens inherited, with the parent's choices muted and read-only;
   an own choice replaces that set. Diet edits and allergen edits retain the other field's own value.
   The parent's diet labels are shown in muted ink: selecting one starts the variant's own diet.
   A diet label implied by another own choice is ticked and quiet, with “· from {label}”; it cannot
@@ -4129,9 +4102,8 @@ variant describes itself in no language.
   the variant's own, disabled, with the accessible description “Uses the main product's photo”
   (`image.remove_inherited_hint`). The widget sets `wt-button.ariaDescription`; the inner button
   receives `aria-description`. With no photo at all, own or inherited, there is no Remove. In the
-  product editor, where the photo is a thumbnail beside Name, it has a dashed border, and “The
-  main product's photo” (`editor.inherited_image_alt`), hidden from sight, describes the photo
-  button to a screen reader.
+  product editor, the inherited photo uses the ordinary thumbnail border beside Name. The button's
+  accessible description is “The main product's photo” (`editor.inherited_image_alt`).
 
 A name is not hinted from a parent this way: a variant's names are its own. In the editors of
 products, variants, options lists, options and extras lists, a blank prep station name, and a blank
@@ -4190,17 +4162,12 @@ Description: EN: … · ES: …". Allergens and diet always has a row: the aller
 separated by commas, "None" once someone has said the dish contains none of them, or "Not yet
 reviewed" marked `warning`; then the chosen diet labels followed by the labels they imply. VAT's row
 names VAT when taken away while the product has a rate the form offers, and Ordering's names
-Standalone ordering by unless it is Anyone. On a variant's page, a field the variant leaves blank
-to take its parent's value (the course, the description, the allergens, the diet labels, the VAT
-when taken away) shows the parent's value marked `placeholder`. A variant's blank prep station and
-customer-facing names fall back to its own Name, not the parent's, so they are left off its line as
-on a product.
+Standalone ordering by unless it is Anyone. On a variant's page, inherited allergens, diet labels
+and takeaway VAT stay visible in muted ink. Course and description appear on the closed line when
+set on the variant.
 
-A names section (the Extras editor's "Customer-facing names") puts each language's customer-facing
-name after its upper-case code — "ES: ¿Cómo la quiere hecha? · EN: How would you like it cooked?" —
-and a blank one shows the same fallback as its open field: the default language's name,
-then the list's staff name. A language with nothing to fall back to is left out. It is built by
-`effectiveNamesLine` (`apps/dashboard/src/widgets/form-fields.ts`) and passed as `summaryFields`.
+The Extras editor's closed **Customer-facing names** line shows each entered name after its
+upper-case language code. Open the section to see which name a blank field follows.
 The Extras editor keeps the prep station name out of the section, as a field of its own directly
 under Name. The options list and single option editors show Name, Prep station name, then a plain
 Customer-facing names heading with every language's field visible. They have no names fold.

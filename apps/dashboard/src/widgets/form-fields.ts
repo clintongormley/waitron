@@ -1,5 +1,5 @@
 import { html } from "lit";
-import { currentContentLanguages, type SummaryField } from "@waitron/ui";
+import { currentContentLanguages } from "@waitron/ui";
 import { contentLanguageCode, contentLanguageTag, formatMoney } from "@waitron/shared";
 import { MAX_MODIFIER_INTEGER, isProductPrice } from "@waitron/menu/src/modifier-limits.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -9,6 +9,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 
 export interface FieldContext {
   busy: boolean;
+  fallbackAsInherited?: boolean;
   /** The content languages a translated name is entered in. */
   locales: readonly string[];
   /** The message for a field key, or "" when it is valid. */
@@ -65,21 +66,10 @@ export function namesLine(
   });
 }
 
-/** Each language's text after its upper-case code; a blank one shows, marked as a placeholder,
- * what {@link optionalTextFields} hints for it — the default language's text, then `staffName`. A
- * language with nothing to show is left out. */
-export function effectiveNamesLine(
-  locales: readonly string[],
-  text: Record<string, string>,
-  defaultLanguage: string,
-  staffName: string,
-): SummaryField[] {
-  return locales.flatMap((locale) => {
-    const own = languageText(text, locale).trim();
-    if (own) return [{ label: locale.toUpperCase(), value: own }];
-    const inherited = defaultLanguageHint(text, locale, defaultLanguage) || staffName.trim();
-    return inherited ? [{ label: locale.toUpperCase(), value: inherited, placeholder: true }] : [];
-  });
+export function inheritedValue(value: string, inTable = false) {
+  return value
+    ? { value, suffix: t("inherit.suffix"), ...(inTable ? { inTable } : {}) }
+    : undefined;
 }
 
 export const nonBlankNames = (value: Record<string, string>) =>
@@ -105,7 +95,8 @@ export function textField(
   return html`<wt-input
     name=${key}
     label=${label}
-    placeholder=${placeholder}
+    placeholder=${context.fallbackAsInherited ? "" : placeholder}
+    .inherited=${context.fallbackAsInherited ? inheritedValue(placeholder) : undefined}
     hint=${hint}
     .value=${value}
     .required=${required}
@@ -136,7 +127,8 @@ export function priceField(
     label=${label}
     fixed-unit
     locale=${currentLocale()}
-    placeholder=${placeholder}
+    placeholder=${context.fallbackAsInherited ? "" : placeholder}
+    .inherited=${context.fallbackAsInherited ? inheritedValue(placeholder) : undefined}
     hint=${hint}
     .value=${value}
     .required=${required}

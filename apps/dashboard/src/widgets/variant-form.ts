@@ -154,6 +154,7 @@ export class VariantForm extends LitElement {
 
   #fields(errors: Record<string, string>): FieldContext {
     return {
+      fallbackAsInherited: true,
       busy: this.busy,
       locales: this.locales,
       error: (key) => errors[key] ?? "",

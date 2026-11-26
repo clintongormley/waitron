@@ -5276,7 +5276,7 @@ describe("a category row's leading slot", () => {
         expect(at.b!.outline.width).toBeGreaterThan(0);
         expect(at.b!.outline.style).not.toBe("none");
         expect(at.b!.outline.color).not.toBe("rgba(0, 0, 0, 0)");
-        expect(at.b!.outline.style).toBe("dashed");
+        expect(at.b!.outline).toEqual(at.d!.outline);
         expect(
           root.querySelector('[data-test="color-b"] [part~="color-swatch"]')!.getAttribute("part"),
         ).toBe("color-swatch inherited");
@@ -5594,24 +5594,15 @@ describe("a colour a row inherits", () => {
     t("product.edit_named_inherited")
       .replace("{name}", () => name)
       .replace("{from}", () => from);
-  /** The muted text colour as the swatch's own tree resolves it, to compare an outline against. */
-  function mutedText(beside: HTMLElement): string {
-    const probe = document.createElement("span");
-    probe.style.color = "var(--wt-color-text-muted)";
-    beside.after(probe);
-    onTestFinished(() => probe.remove());
-    return getComputedStyle(probe).color;
-  }
   function expectMarkedInherited(element: HTMLElement, fill: string) {
     expect(partsOf(element)).toContain("inherited");
     expect(partsOf(element)).not.toContain("empty");
     const style = getComputedStyle(element);
     expect(style.backgroundColor).toBe(fill);
-    expect(style.borderTopStyle).toBe("dashed");
+    expect(style.borderTopStyle).toBe("solid");
     expect(style.borderTopWidth).toBe("1px");
-    expect(style.borderTopColor).toBe(mutedText(element));
-    expect(style.backgroundClip).toBe("content-box");
-    expect(parseFloat(style.paddingTop)).toBeGreaterThan(0);
+    expect(style.backgroundClip).toBe("border-box");
+    expect(style.paddingTop).toBe("0px");
   }
   function expectOwn(element: HTMLElement, fill: string) {
     expect(partsOf(element)).not.toContain("inherited");
@@ -5627,9 +5618,11 @@ describe("a colour a row inherits", () => {
     });
     await openRow(el, "folder:d");
     expectMarkedInherited(chipOf(root, "b"), "rgb(177, 37, 37)");
-    // Rounded as an inheriting product's square is, so its inset fill keeps rounded corners too.
     const chipStyle = getComputedStyle(chipOf(root, "b"));
-    expect(chipStyle.borderTopLeftRadius).toBe(chipStyle.getPropertyValue("--wt-radius-md").trim());
+    expect(chipStyle.borderTopLeftRadius).toBe(
+      getComputedStyle(chipOf(root, "d")).borderTopLeftRadius,
+    );
+    expect(chipStyle.borderTopColor).toBe(getComputedStyle(chipOf(root, "d")).borderTopColor);
     expect(swatchButton(root, "b").getAttribute("aria-label")).toBe(
       categoryInheritedName("Beer", "Drinks"),
     );
@@ -5750,7 +5743,7 @@ describe("a colour a row inherits", () => {
     );
   });
 
-  it("dashes the coloured ring around an inheriting product's photo, keeping its colour and width", async () => {
+  it("paints the same solid ring around a photo whose colour is inherited", async () => {
     const { el, root } = await mountTree({
       categories: [{ ...drinks, color: "#256bb1" }, beer, food],
       products: [
@@ -5769,7 +5762,7 @@ describe("a colour a row inherits", () => {
       root.querySelector<HTMLElement>(`[data-test="color-${id}"] [data-test="thumb"]`)!;
     expect(partsOf(ring("cola"))).toContain("inherited");
     const inherited = getComputedStyle(ring("cola"));
-    expect(inherited.borderTopStyle).toBe("dashed");
+    expect(inherited.borderTopStyle).toBe("solid");
     expect(inherited.borderTopColor).toBe("rgb(37, 107, 177)");
     expect(inherited.borderTopWidth).toBe(getComputedStyle(ring("own")).borderTopWidth);
     expect(parseFloat(inherited.paddingTop)).toBe(0);
