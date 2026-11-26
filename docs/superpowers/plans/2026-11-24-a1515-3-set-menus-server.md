@@ -1341,7 +1341,8 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   say it took. An ending belongs to the bill the adjustment's rows are on when it ends, which after a
   whole set menu moved (D51) is not the bill it was given on: a comp's record stays on the bill it
   was given on while its rows move (`apps/server/src/set-menu-freeze.ts:49-51`), and
-  `readBillAdjustments` reads by that bill (`packages/adjustments/src/record.ts:162`). _2026-11-26,
+  `readBillAdjustments` reads by that bill (`packages/adjustments/src/record.ts:162`; until the
+  2026-11-26 note below). _2026-11-26,
   after review:_ what an ending gave back is kept per row, in a second append-only table,
   `adjustment_ending_lines` (the ending, and the `adjustment_lines` row it gave back, each such row
   at most once), because a move keeps a line's id: keyed by the bill alone, a discount ended on one
@@ -1370,7 +1371,8 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   each discount that still takes something off a row now on the bill being printed, and one given
   on that bill only while none of its rows has left or been given back. So a set menu moved whole
   prints its discount once, on its new bill and not on the old one, and a discount ended on one
-  bill still prints on another whose rows still carry it.
+  bill is still read for another whose rows still carry it (a package test only; no path in this
+  branch reaches it).
 - **D48. A cancel that breaks a discounted set menu ends the discount first, then is worked out and
   recorded from there (D24).** In the comp window's apply the ending runs before the cancel is
   planned (`planAdjustment`, `adjustments-apply.ts:1097`), so the cancelled row's own price and the
@@ -1423,7 +1425,7 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   bill's dishes, and its comp's record stays on the bill it was given on (D47). Any other set menu
   is worked out again on both bills as today, and one frozen by a kept-charge cancel still refuses
   its dish alone (D18). **For A1515-4 (the till):** `setMenusThatGo` keeps a set menu that is below
-  its list price when all its dishes are chosen; it must count it as going with its last dish, as
+  its list price, or holding a dish that is, when all its dishes are chosen; it must count it as going with its last dish, as
   the server now does, and say before saving that choosing only some of its dishes takes its
   discount off (D50). The server needs no set-menu row from the till. Alternative: only a chosen row
   moves a set menu (today's `resolveMoveLines`), and the till sends the row's id when every dish is
@@ -1854,8 +1856,8 @@ append-only table travels in its set's migration descriptor and the manifest):
 **Files:** `apps/server/src/set-menu-freeze.ts` (`reducedLineIds`, `:45-65`: leaves out a row whose
 adjustment has an ending on the bill its line is on now; `frozenLineIdSources`, `:16`, takes
 `ending?` and leaves those adjustments' rows out as well); `packages/adjustments/src/record.ts`
-(`readReasonStanding`, `:98`, the same rule; `readBillAdjustments`, `:145`, leaves out an
-adjustment with an ending on its bill); `apps/server/src/free-items.ts` (`listFreeItems`, `:119`:
+(`readReasonStanding`, `:98`, the same rule; `readBillAdjustments`, `:145`, see D47's
+2026-11-26 note); `apps/server/src/free-items.ts` (`listFreeItems`, `:119`:
 its reduced rows, `:149-182`, the same rule); `apps/server/src/adjustment-rows.ts` (`readRows`,
 `:71`, takes `ending?` and lays `endingRestores`' rows over what it reads);
 `apps/server/src/set-menu-regroup.ts` (`totalAfterAdjusting`, `:341`, and `regroupDropAfter`,
