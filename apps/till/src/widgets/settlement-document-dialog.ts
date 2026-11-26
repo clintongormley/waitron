@@ -20,8 +20,6 @@ export class TillSettlementDocumentDialog extends TillTicketView {
     `,
   ];
 
-  @property({ type: Boolean }) useDeviceInvoicePrinter = false;
-
   protected override get autoRefreshDelivery(): boolean {
     return this.result.invoiceType === "F1";
   }

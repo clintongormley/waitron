@@ -501,6 +501,7 @@ it.each(["en-GB", "es-ES"])(
     expect(api.retryTransactionReceipt).toHaveBeenCalledWith("sale-history");
     expect(api.getTransactionReceiptPrint).toHaveBeenCalledTimes(reads + 1);
     getTransactionDeliveries.mockResolvedValue(a4Waiting);
+    expect(part(el, "refresh-receipt")).not.toBeNull();
     emit(ticket(el), "refresh-receipt");
     await flush(el);
     expect(part(el, "receipt-instead").textContent).toContain("Retained belt");

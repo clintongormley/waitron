@@ -881,6 +881,11 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     el.requestUpdate();
     await el.updateComplete;
     expect(button(el, "print-invoice")!.hasAttribute("disabled")).toBe(true);
+    el.invoicePrinterBlocked = false;
+    el.useDeviceInvoicePrinter = true;
+    el.invoiceEquipment = roleOf("invoice", equipmentItem("bar", "Bar", { kind: "receipt" }), []);
+    await el.updateComplete;
+    expect(button(el, "print-invoice")!.hasAttribute("disabled")).toBe(true);
   });
 
   it.each([
@@ -910,6 +915,9 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
   ] as const)("words the current attempt %j in English and Spanish", async (over, en, es) => {
     const { el } = await mountF1({ deliveries: statusOf(attempt(over)) });
     expect(line(el)).toBe(en);
+    expect(button(el, "original-delivery")!.hasAttribute("data-warning")).toBe(
+      over.status === "failed" || over.status === "unknown",
+    );
     setLocale("es-ES");
     el.requestUpdate();
     await el.updateComplete;
@@ -1209,6 +1217,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       const section = button(el, "original-delivery")!.textContent!;
       expect(section).toContain("Full invoice not delivered");
       expect(section).not.toContain("Printing failed");
+      expect(button(el, "original-delivery")!.hasAttribute("data-warning")).toBe(false);
       expect(button(el, "retry-receipt")).toBeNull();
       expect(button(el, "print-receipt")).toBeNull();
       expect(button(el, "receipt-instead") !== null).toBe("receiptInstead" in actions);

@@ -14,7 +14,7 @@ import { TillApp } from "./till-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
-import { billOptions, listPage, transactionRow } from "../test/find-bill-fixtures.js";
+import { billOptions, billRow, listPage, transactionRow } from "../test/find-bill-fixtures.js";
 import {
   emit,
   flush,
@@ -187,6 +187,154 @@ function uncertainA4(selected: EquipmentItem | null): InvoiceDeliveryStatus {
     },
   };
 }
+
+async function findFullInvoice(
+  source: "bills" | "transactions",
+  overrides: Record<string, unknown>,
+) {
+  const result = { ...invoiceOf("12.00"), invoiceType: "F1" };
+  const bill = billRow({
+    orderStatus: "settled",
+    state: "paid-not-handed-over",
+    paid: "25.10",
+    stillOwed: "0.00",
+  });
+  const api = stubApi({
+    getTill: vi.fn().mockResolvedValue({ ...till, deviceId: "dev-1" }),
+    readLiveEvents: liveReadFixture().read,
+    findBillOptions: vi.fn().mockResolvedValue(billOptions),
+    listInvoiceCorrections: vi.fn().mockResolvedValue([]),
+    listBills: vi.fn().mockResolvedValue(listPage([bill])),
+    listTransactions: vi.fn().mockResolvedValue(listPage([])),
+    getFindBill: vi.fn().mockResolvedValue(bill),
+    getFiledTicket: vi.fn().mockResolvedValue(result),
+    getTransactionReceipt: vi.fn().mockResolvedValue(result),
+    getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    getDeviceEquipment: vi.fn().mockResolvedValue(equipment(null)),
+    requestPrintDelivery: vi.fn().mockResolvedValue({}),
+    ...overrides,
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flush(el);
+  emit(lock(el), "logged-in", { personId: "staff", displayName: "Staff", permissions: [] });
+  await flush(el);
+  emit(shell(el), "find-bill");
+  await flush(el);
+  const view = el.shadowRoot!.querySelector("till-find-bill-screen")!;
+  if (source === "bills") emit(view, "find-bill-open", { row: bill });
+  else emit(view, "find-transaction-open", { row: transactionRow({ workingOrderId: "bill-1" }) });
+  await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+  await flush(el);
+  return { el, api };
+}
+
+it("retries the bill's office print from Transactions and follows its outcome offline", async () => {
+  const before = uncertainA4(null);
+  const reads = vi.fn().mockRejectedValueOnce(new Error("read failed")).mockResolvedValue(before);
+  fastDeliveryRereads();
+  const { el, api } = await findFullInvoice("transactions", {
+    getInvoiceDeliveries: reads,
+    requestPrintDelivery: vi.fn(async () => {
+      const current = { ...endedA4, id: "retry", status: "queued", failureCode: null };
+      reads.mockResolvedValue({
+        ...before,
+        current,
+        history: [current, endedA4],
+        actions: { ...before.actions, retryA4: undefined, retryOriginal: null },
+      });
+      return {};
+    }),
+  });
+  await vi.waitFor(() =>
+    expect(part(el, "delivery-status")?.textContent ?? "").toContain("Office stopped answering"),
+  );
+  expect(part(el, "invoice-printer-toggle")?.textContent).toContain("Office · A4");
+  const statusBox = part(el, "original-delivery")!;
+  const warningBorder = getComputedStyle(statusBox).borderTopColor;
+  expect(statusBox.getBoundingClientRect().top).toBeGreaterThan(
+    part(el, "invoice-printer-toggle")!.getBoundingClientRect().bottom,
+  );
+  const print = part(el, "print-invoice")!;
+  expect(print.textContent?.trim()).toBe("Print it again");
+  await userEvent.click(print);
+  expect(api.requestPrintDelivery).toHaveBeenCalledExactlyOnceWith(
+    "bill-1",
+    "office",
+    expect.any(String),
+  );
+  await vi.waitFor(() => {
+    expect(part(el, "delivery-status")?.textContent).toBe("Waiting for the office printer.");
+    expect(part(el, "invoice-printer-toggle")?.textContent).toContain("Office · A4");
+  });
+  reads.mockResolvedValue({
+    ...before,
+    current: printedA4,
+    originalCompleted: true,
+    history: [printedA4, endedA4],
+    actions: { ...before.actions, retryA4: undefined, retryOriginal: null },
+  });
+  await vi.waitFor(() => {
+    expect(part(el, "original-delivery")?.textContent).toContain("Full invoice delivered");
+    expect(part(el, "print-invoice")).toBeNull();
+  });
+  expect(getComputedStyle(part(el, "original-delivery")!).borderTopColor).not.toBe(warningBorder);
+  expect(part(el, "refresh-receipt")).toBeNull();
+  await userEvent.click(part(el, "document-print-toggle")!);
+  await userEvent.click(part(el, "document-invoice")!);
+  expect(part(el, "invoice-printer-toggle")?.textContent).toMatch(/Invoice printer:\s*None/);
+  expect(part(el, "print-invoice")).toBeNull();
+});
+
+it("keeps one invoice print action across the document and printer choices in Bills", async () => {
+  let selected: EquipmentItem | null = null;
+  const confirmation = pending<InvoiceDeliveryStatus>();
+  const reads = vi.fn().mockResolvedValue(uncertainA4(null));
+  const { el, api } = await findFullInvoice("bills", {
+    getDeviceEquipment: vi.fn(async () => equipment(selected)),
+    getInvoiceDeliveries: reads,
+    setDeviceEquipment: vi.fn(async () => {
+      selected = bar;
+      reads
+        .mockRejectedValueOnce(new Error("offer read failed"))
+        .mockReturnValue(confirmation.promise);
+      return equipment(bar);
+    }),
+  });
+  const count = (name: string) =>
+    ticket(el).shadowRoot!.querySelectorAll(`[data-test=${name}]`).length;
+  expect(part(el, "print-invoice")?.textContent?.trim()).toBe("Print it again");
+  await userEvent.click(part(el, "document-print-toggle")!);
+  await userEvent.click(part(el, "document-receipt")!);
+  expect(part(el, "delivery-status")?.textContent ?? "").toContain("Office stopped answering");
+  expect(part(el, "print-invoice")).toBeNull();
+  const equipmentReads = vi.mocked(api.getDeviceEquipment).mock.calls.length;
+  await userEvent.click(part(el, "document-print-toggle")!);
+  expect(api.getDeviceEquipment).toHaveBeenCalledTimes(equipmentReads + 1);
+  expect(part(el, "invoice-printer-toggle")?.textContent).toContain("Office · A4");
+  expect(part(el, "print-invoice")?.textContent?.trim()).toBe("Print it again");
+  await userEvent.click(part(el, "document-print-toggle")!);
+  await userEvent.click(part(el, "document-invoice")!);
+  expect(count("invoice-printer-toggle")).toBe(1);
+  expect(count("print-invoice")).toBe(1);
+  expect(ticket(el).shadowRoot!.querySelector("wt-combobox")).not.toBeNull();
+  await userEvent.click(part(el, "document-back")!);
+  expect(ticket(el).shadowRoot!.querySelector("wt-combobox")).toBeNull();
+  await choose(el, bar.id);
+  expect(part(el, "print-invoice")?.hasAttribute("disabled") ?? true).toBe(true);
+  await userEvent.click(part(el, "document-receipt")!);
+  await userEvent.click(part(el, "document-print-toggle")!);
+  expect(part(el, "print-invoice")?.hasAttribute("disabled") ?? true).toBe(true);
+  confirmation.resolve(uncertainA4(bar));
+  await vi.waitFor(() =>
+    expect(part(el, "print-invoice")?.textContent?.trim()).toBe("Print on Bar"),
+  );
+  await userEvent.click(part(el, "print-invoice")!);
+  expect(api.requestPrintDelivery).toHaveBeenCalledExactlyOnceWith(
+    "bill-1",
+    "bar",
+    expect.any(String),
+  );
+});
 
 it.each([null, bar])("uses the invoice's A4 printer with equipment %j", async (selected) => {
   const before = uncertainA4(selected);

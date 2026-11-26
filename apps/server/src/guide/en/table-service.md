@@ -194,6 +194,10 @@ the language it was issued in. For a paper copy, choose **Print/Reprint**. For a
 version or **Invoice** for the invoice layout. A simplified invoice goes straight to its receipt
 printers. Both versions of a full invoice keep the recorded customer details.
 
+If a full invoice linked to a bill may have printed, open it from **Bills** or **Transactions**
+and check the named office printer first. If it did not print, choose **Print it again**. The
+window shows what happens next. Choose **Invoice printer** to send it to another printer.
+
 On a till with permission to print receipts, check **Last email address** before you resend a full
 invoice.
 

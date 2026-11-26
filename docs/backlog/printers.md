@@ -196,6 +196,8 @@ venue at commit `30c1c1c564` with 250 bills a day and seed 1.
   read falls back to today's rule. Also open: whether kitchen tickets, payment slips and reports
   need an A4 page, or A4 printers stay out for them.
 
+- A billed full invoice opened from a refund’s original or an open correction cannot load its delivery status. The till opens it without the bill ID and the transaction route refuses billed sales.
+
 ## Share printed logo dots per library photo (A1308 dv16 M3)
 
 - Keep the cached dots when printing. On the Intel Core i5-6400T test box, drawing both paper sizes

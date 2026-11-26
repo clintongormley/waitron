@@ -162,6 +162,11 @@ export class TillTicketView extends LitElement {
       :host {
         display: block;
       }
+      @media (max-width: 480px) {
+        :host([auto-refresh-bill-delivery]) {
+          padding-inline: max(var(--wt-space-4), (100% - var(--wt-till-ticket-column-width)) / 2);
+        }
+      }
 
       .ticket {
         max-width: var(--wt-till-ticket-column-width);
@@ -290,8 +295,6 @@ export class TillTicketView extends LitElement {
         margin: 0 auto;
       }
 
-      /* The receipt-hardware actions (reprint the paper, kick the drawer) — a row above New sale, each
-         a full-width secondary button on the same 22rem column as the ticket + New sale. */
       .receipt-actions {
         display: flex;
         flex-wrap: wrap;
@@ -306,17 +309,20 @@ export class TillTicketView extends LitElement {
       }
 
       .original-delivery {
-        max-width: var(--wt-modal-compact-width);
-        box-sizing: border-box;
-        margin: 0 auto var(--wt-space-3);
+        inline-size: min(100%, var(--wt-modal-compact-width));
+        margin: var(--wt-space-2) auto var(--wt-space-3);
         padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-warning);
+        border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);
         color: var(--wt-color-text);
         overflow-wrap: anywhere;
         display: flex;
         flex-wrap: wrap;
         gap: var(--wt-space-2);
+      }
+
+      .original-delivery[data-warning] {
+        border-color: var(--wt-color-warning);
       }
 
       .original-delivery p {
@@ -356,6 +362,9 @@ export class TillTicketView extends LitElement {
   @property({ type: Boolean }) simulatedCardPayment = false;
   @property({ type: Boolean }) historical = false;
   @property({ type: Boolean }) historicalDelivery = false;
+  @property({ type: Boolean, attribute: "auto-refresh-bill-delivery", reflect: true })
+  autoRefreshBillDelivery = false;
+  @property({ type: Boolean }) useDeviceInvoicePrinter = false;
   @property({ type: Boolean }) receiptCopiesOnly = false;
   @property({ type: Boolean }) refundable = false;
   /** True only while the issuance-time original action remains available on this completion screen. */
@@ -398,6 +407,13 @@ export class TillTicketView extends LitElement {
   #documentChoice(document: "receipt" | "invoice"): void {
     this.printDocument = document;
     this.invoicePrinterOpen = true;
+    this.readInvoicePrinters();
+  }
+
+  #leaveDocumentChoice(): void {
+    this.printDocument = null;
+    if (!this.autoRefreshBillDelivery) return;
+    this.invoicePrinterOpen = false;
     this.readInvoicePrinters();
   }
 
@@ -454,7 +470,7 @@ export class TillTicketView extends LitElement {
           if (this.documentPrinterOpen) {
             this.printDocument = null;
             if (this.result.invoiceType !== "F1") this.#documentChoice("receipt");
-          }
+          } else this.#leaveDocumentChoice();
         }}
         >${t("document.print")}</wt-button
       >
@@ -477,7 +493,7 @@ export class TillTicketView extends LitElement {
                       ${this.result.invoiceType === "F1" ? html`<wt-button data-test="document-invoice" variant="secondary" @click=${() => this.#documentChoice("invoice")}>${t("document.invoice")}</wt-button>` : nothing}
                     `
                   : html`
-                      ${this.renderInvoicePrinter()}
+                      ${receipt || !this.#showBillA4Printer ? this.renderInvoicePrinter() : nothing}
                       ${
                         receipt
                           ? designation === null
@@ -492,7 +508,9 @@ export class TillTicketView extends LitElement {
                                 >
                                 ${this.renderReceiptPrinterNote(designation)}
                               `
-                          : this.renderInvoicePrint()
+                          : this.#showBillA4Printer
+                            ? nothing
+                            : this.renderInvoicePrint()
                       }
                     `
               }
@@ -500,9 +518,9 @@ export class TillTicketView extends LitElement {
                 data-test="document-back"
                 variant="secondary"
                 @click=${() => {
-                  if (this.printDocument !== null && this.result.invoiceType === "F1")
-                    this.printDocument = null;
-                  else this.documentPrinterOpen = false;
+                  if (this.printDocument === null || this.result.invoiceType !== "F1")
+                    this.documentPrinterOpen = false;
+                  this.#leaveDocumentChoice();
                 }}
                 >${t("action.back")}</wt-button
               >
@@ -548,12 +566,25 @@ export class TillTicketView extends LitElement {
     </p>`;
   }
 
+  get #showBillA4Printer(): boolean {
+    const canPrint = this.invoicePrintersEnabled && this.canPrintReceipt;
+    if (!this.autoRefreshBillDelivery || !canPrint || this.printDocument === "receipt")
+      return false;
+    const attempt = this.deliveries?.current;
+    return (
+      this.deliveries?.actions.retryA4 !== undefined ||
+      (attempt?.medium === "a4" &&
+        attempt.designation === "original" &&
+        (attempt.status === "queued" || attempt.status === "sending"))
+    );
+  }
+
   protected get autoRefreshDelivery(): boolean {
-    return false;
+    return this.autoRefreshBillDelivery;
   }
 
   protected get prefersInvoiceDeliveryPrinter(): boolean {
-    return false;
+    return this.#showBillA4Printer && !this.useDeviceInvoicePrinter;
   }
 
   protected get savedA4Retry() {
@@ -567,6 +598,7 @@ export class TillTicketView extends LitElement {
       ? invoicePrintDestination(status, saved !== undefined)
       : undefined;
     if (!printer) return nothing;
+    const chosen = this.useDeviceInvoicePrinter ? this.invoiceEquipment?.resolved?.id : undefined;
     const label = saved
       ? t("invoice.print_it_again")
       : fill(
@@ -583,7 +615,7 @@ export class TillTicketView extends LitElement {
     return html`<wt-button
       variant="secondary"
       data-test="print-invoice"
-      ?disabled=${this.deliveryBusy || this.originalReceiptBusy || this.invoicePrinterBlocked}
+      ?disabled=${this.deliveryBusy || this.originalReceiptBusy || this.invoicePrinterBlocked || (chosen !== undefined && printer.id !== chosen)}
       @click=${() => this.dispatchEvent(new CustomEvent("print-invoice", { bubbles: true, composed: true }))}
       >${label}</wt-button
     >`;
@@ -873,7 +905,7 @@ export class TillTicketView extends LitElement {
             </p>`
           : nothing
       }
-      ${this.invoicePrintersEnabled && this.savedA4Retry === undefined ? nothing : this.renderInvoicePrint()}
+      ${this.invoicePrintersEnabled && this.savedA4Retry === undefined && !this.#showBillA4Printer ? nothing : this.renderInvoicePrint()}
       ${
         emailAgainId
           ? html`<wt-button
@@ -965,11 +997,24 @@ export class TillTicketView extends LitElement {
         attempt.medium !== "receipt" &&
         (attempt.status === "queued" || attempt.status === "sending"));
     const receiptBusy = this.originalReceiptBusy || this.deliveryBusy;
+    const delivered =
+      (notQueued && this.deliveries?.originalCompleted === true) || failedButDelivered;
     const uncertain =
       this.#mayHaveArrived ||
       (this.autoRefreshDelivery &&
         attempt?.designation === "original" &&
         attempt.status === "unknown");
+    const warning =
+      !delivered &&
+      !this.#handoverConfirmed &&
+      (this.#mayHaveArrived ||
+        (failedReceipt && !failedButSuperseded) ||
+        attempt?.status === "failed" ||
+        attempt?.status === "unknown" ||
+        attempt?.printerHold != null ||
+        this.originalReceiptReadFailed ||
+        this.deliveriesReadFailed ||
+        this.deliveryRefusal !== undefined);
     const closingPrints =
       notQueued && !this.originalReceiptReadFailed && this.closingQueuesOriginal();
     if (closingPrints && this.result.invoiceType !== "F1") return this.renderDelivery();
@@ -982,12 +1027,16 @@ export class TillTicketView extends LitElement {
             this.deliveriesReadFailed ||
             this.originalReceiptReadFailed ||
             (this.originalReceiptPrint !== undefined && !notQueued)))
-          ? html`<section class="original-delivery" data-test="original-delivery">
+          ? html`<section
+              class="original-delivery"
+              data-test="original-delivery"
+              ?data-warning=${warning}
+            >
               ${
                 this.result.invoiceType === "F1"
                   ? html`<p role="status">
                       <strong
-                        >${t(this.#handoverConfirmed ? "invoice.handover_confirmed" : (notQueued && this.deliveries?.originalCompleted) || failedButDelivered ? "invoice.delivered" : uncertain ? "invoice.may_not_be_delivered" : "invoice.not_delivered")}</strong
+                        >${t(this.#handoverConfirmed ? "invoice.handover_confirmed" : delivered ? "invoice.delivered" : uncertain ? "invoice.may_not_be_delivered" : "invoice.not_delivered")}</strong
                       >
                     </p>`
                   : nothing
@@ -1074,6 +1123,13 @@ export class TillTicketView extends LitElement {
         }
       </section>
 
+      ${
+        this.#showBillA4Printer
+          ? html`<section class="invoice-printer" aria-label=${t("equipment.invoice")}>
+              ${this.renderInvoicePrinter()}
+            </section>`
+          : nothing
+      }
       ${this.renderOriginalDelivery()}
       ${
         this.emailOpen && this.canPrintReceipt

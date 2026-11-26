@@ -49,9 +49,23 @@ export function readTicketInvoiceDelivery(
 export function invoicePrintDestination(
   status: InvoiceDeliveryStatus | null | undefined,
   preferSavedA4: boolean,
+  chosenPrinterId?: string,
 ) {
+  const printer =
+    (preferSavedA4 ? status?.actions.retryA4 : undefined) ?? status?.actions.print?.printers[0];
+  return chosenPrinterId === undefined || printer?.id === chosenPrinterId ? printer : undefined;
+}
+
+export function shouldRereadDelivery(
+  delivery: InvoiceDeliveryStatus | null | undefined,
+  billFullInvoice: boolean,
+  live: boolean | undefined,
+  stale: boolean,
+): boolean {
+  const status = delivery?.current?.status;
+  if (status === "queued" || status === "sending") return true;
   return (
-    (preferSavedA4 ? status?.actions.retryA4 : undefined) ?? status?.actions.print?.printers[0]
+    billFullInvoice && (status === "unknown" || stale || (!live && !delivery?.originalCompleted))
   );
 }
 
