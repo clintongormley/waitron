@@ -919,6 +919,8 @@ export class WtFloorMap extends LitElement {
   }
 
   #panTo(box: PlanRect): void {
+    // A key can arrive before ResizeObserver delivers the new floor height.
+    if (this.compact) this.#size = { width: this.clientWidth, height: this.clientHeight };
     const view = this.#view!;
     const size = this.#size!;
     const left = view.x + box.x * view.scale;
