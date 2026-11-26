@@ -14,10 +14,13 @@ import type {
   WtMasterKeyInput,
 } from "./wt-master-key-input.js";
 import "./wt-master-key-input.js";
+import { WtQrScanner } from "./wt-qr-scanner.js";
 import { cameraFilming } from "../../test/qr-camera.js";
 import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 
 const KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
+/** A second whole key, so a key that replaced another shows which one won. */
+const OTHER_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(7));
 const KEY_NAME = "2026-11-23 · QZJV";
 const LIMIT = 16;
 const EN: MasterKeyInputCopy = {
@@ -585,6 +588,8 @@ test("paints the field, its button and its messages from tokens", async () => {
   await type(el, `${KEY}2`);
   const choose = getComputedStyle(el.shadowRoot!.querySelector(".choose")!);
   expect(choose.marginTop).toBe("7px");
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".controls")!).columnGap).toBe("7px");
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".scan")!).marginTop).toBe("7px");
   expect(getComputedStyle(inner(el)).minWidth).toBe("51px");
   expect(getComputedStyle(inner(el).shadowRoot!.querySelector("[data-error]")!).color).toBe(
     "rgb(16, 17, 18)",
@@ -1257,12 +1262,35 @@ test("a scanned key replaces a PDF still being read", async () => {
   await scan(el);
   await vi.waitFor(() => expect(seen.at(-1)).toEqual({ masterKey: KEY }), { timeout: 10_000 });
   const count = seen.length;
-  answer(reading({ masterKeyName: "2026-01-02 · AAAA" }));
+  answer(reading({ masterKey: OTHER_KEY }));
   await el.pdfRead;
   await el.updateComplete;
   expect(seen).toHaveLength(count);
   expect(message(el)).toBeUndefined();
   expect(native(el).value).toBe(KEY);
+  expect(announced(el)).toBe(EN.loaded);
+});
+
+test("a PDF that fills the field while it scans stops the camera, so no later code replaces it", async () => {
+  const stream = film("https://cloud.waitron.example/start/abc");
+  let answer!: (reading: RecoveryPackReading) => void;
+  const { el, seen } = await field({
+    readPack: async () => () => new Promise((resolve) => (answer = resolve)),
+  });
+  await choose(el);
+  await scan(el);
+  await vi.waitFor(() => expect(scannerLine(el)).toBe(EN.notKeyCode), { timeout: 10_000 });
+
+  answer(reading({ masterKey: OTHER_KEY }));
+  await el.pdfRead;
+  await el.updateComplete;
+
+  expect(seen.at(-1)).toEqual({ masterKey: OTHER_KEY });
+  expect(native(el).value).toBe(OTHER_KEY);
+  expect(ended(stream)).toBe(true);
+  expect(scanner(el)).toBeNull();
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+  expect(announced(el)).toBe(EN.loaded);
 });
 
 test("the scan control and its lines in Spanish", async () => {
@@ -1325,7 +1353,7 @@ const announced = (el: WtMasterKeyInput) =>
 test("the camera stops when a chosen PDF fills the field, and a key seen later changes nothing", async () => {
   const stream = film(KEY);
   const { el, seen } = await field({
-    readPack: async () => async () => reading({ masterKey: "8DP7 4BAY PVBR RM5X FV2W PQYB 5M5A" }),
+    readPack: async () => async () => reading({ masterKey: OTHER_KEY }),
   });
   await scan(el);
   await expect.poll(() => live(stream)).toBe(true);
@@ -1334,9 +1362,12 @@ test("the camera stops when a chosen PDF fills the field, and a key seen later c
   await el.updateComplete;
   expect(scanner(el)).toBeNull();
   expect(ended(stream)).toBe(true);
+  expect(seen.at(-1)).toEqual({ masterKey: OTHER_KEY });
+  expect(native(el).value).toBe(OTHER_KEY);
   const count = seen.length;
   await new Promise((resolve) => setTimeout(resolve, 600));
   expect(seen).toHaveLength(count);
+  expect(native(el).value).toBe(OTHER_KEY);
 });
 
 test.each([
@@ -1390,4 +1421,104 @@ test("a camera that does not start is said through the field's hidden status lin
   const visible = el.shadowRoot!.querySelector("[data-camera-failed]")!;
   expect(visible.textContent!.trim()).toBe(EN.cameraFailed);
   expect(visible.getAttribute("role")).toBeNull();
+});
+
+const failedLine = (el: WtMasterKeyInput) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-camera-failed]")?.textContent?.trim();
+
+test("a camera whose picture will not play shows the camera-failed line and offers Scan again", async () => {
+  const stream = film("hello");
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(
+    new DOMException("The picture would not play", "NotAllowedError"),
+  );
+  const { el } = await field();
+  await scan(el);
+
+  await vi.waitFor(() => expect(failedLine(el)).toBe(EN.cameraFailed));
+  expect(ended(stream)).toBe(true);
+  expect(scanner(el)).toBeNull();
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+  expect(buttonNamed(el, EN.stopScan)).toBeUndefined();
+});
+
+test("a camera that stops by itself while scanning shows the camera-failed line and offers Scan again", async () => {
+  const stream = film("https://cloud.waitron.example/start/abc");
+  const { el } = await field();
+  await scan(el);
+  await vi.waitFor(() => expect(scannerLine(el)).toBe(EN.notKeyCode), { timeout: 10_000 });
+
+  stream.getVideoTracks()[0]!.dispatchEvent(new Event("ended"));
+
+  await vi.waitFor(() => expect(failedLine(el)).toBe(EN.cameraFailed));
+  expect(ended(stream)).toBe(true);
+  expect(scanner(el)).toBeNull();
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+  expect(announced(el)).toBe(EN.cameraFailed);
+});
+
+test("a kept key is stopped through the scanner's own stop() while it is still on the page", async () => {
+  film(KEY);
+  const stop = WtQrScanner.prototype.stop;
+  const onPage: boolean[] = [];
+  vi.spyOn(WtQrScanner.prototype, "stop").mockImplementation(function (this: WtQrScanner) {
+    onPage.push(this.isConnected);
+    stop.call(this);
+  });
+  const { el, seen } = await field();
+  await scan(el);
+  await vi.waitFor(() => expect(seen.at(-1)).toEqual({ masterKey: KEY }), { timeout: 10_000 });
+  expect(onPage[0]).toBe(true);
+});
+
+test.each([
+  ["a line separator", "\u2028", true],
+  ["a paragraph separator", "\u2029", true],
+  ["a space", " ", true],
+  ["a no-break space", "\u00a0", false],
+])("typing and scanning agree on a key split by %s", async (_name, separator, whole) => {
+  const text = KEY.replaceAll(" ", "").replace(/(.{4})(?!$)/g, `$1${separator}`);
+  const typed = await field();
+  await type(typed.el, text);
+  expect(typed.seen.at(-1)).toEqual(whole ? { masterKey: KEY } : {});
+  cleanup();
+
+  film("hello");
+  const scanned = await field();
+  await scan(scanned.el);
+  scanner(scanned.el)!.dispatchEvent(
+    new CustomEvent("wt-qr-read", { detail: { text }, bubbles: true, composed: true }),
+  );
+  await scanned.el.updateComplete;
+  expect(scanned.seen.at(-1)).toEqual(whole ? { masterKey: KEY } : undefined);
+});
+
+test.each([EN.scan, EN.stopScan])("a click on %s stays inside the field", async (name) => {
+  film("hello");
+  const { el } = await field();
+  if (name === EN.stopScan) await scan(el);
+  const clicks = vi.fn();
+  host.addEventListener("click", clicks);
+  await userEvent.click(buttonNamed(el, name)!);
+  expect(clicks).not.toHaveBeenCalled();
+});
+
+test("the camera and its failed line paint from tokens", async () => {
+  film("hello");
+  const { el } = await field();
+  host.style.setProperty("--wt-space-2", "7px");
+  host.style.setProperty("--wt-color-text", "rgb(40, 50, 60)");
+  await scan(el);
+  expect(getComputedStyle(scanner(el)!).marginTop).toBe("7px");
+  scanner(el)!.dispatchEvent(
+    new CustomEvent("wt-qr-unavailable", {
+      detail: { reason: "failed" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  const failed = getComputedStyle(el.shadowRoot!.querySelector("[data-camera-failed]")!);
+  expect(failed.marginTop).toBe("7px");
+  expect(failed.marginBottom).toBe("0px");
+  expect(failed.color).toBe("rgb(40, 50, 60)");
 });
