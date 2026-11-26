@@ -647,7 +647,8 @@ export class DashboardApp extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      .nav-group:is(:hover, [data-current]) .group-icon,
+      button.nav-group:hover .group-icon,
+      .nav-group[data-current] .group-icon,
       .nav-pinned .nav-item:is(:hover, [aria-current="page"]) .pinned-icon {
         color: var(--wt-color-text);
       }

@@ -129,6 +129,7 @@ it("places 18px icons 12px before the full sidebar labels", async () => {
       const header = el.shadowRoot!.querySelector(`[data-test=nav-group-${id}]`)!;
       const icon = header.querySelector<HTMLElement>(".group-icon")!.getBoundingClientRect();
       const label = header.querySelector<HTMLElement>(".nav-group-label")!.getBoundingClientRect();
+      expect.soft(getComputedStyle(header).marginBlockStart, id).toBe("8px");
       expect.soft(icon.width, id).toBe(18);
       expect.soft(label.left - icon.right, id).toBe(12);
       expect((icon.top + icon.bottom) / 2, id).toBeCloseTo((label.top + label.bottom) / 2, 0);
@@ -168,15 +169,19 @@ it("brightens icons on hover or for the current section, even when it is closed"
     await el.updateComplete;
     expect(current.getAttribute("aria-expanded")).toBe("false");
     expect(getComputedStyle(current.querySelector("wt-icon")!).color).toBe("rgb(1, 2, 3)");
-    el.shadowRoot!.querySelector("[data-test=nav-search]")!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "Printers" } }),
-    );
+    const search = el.shadowRoot!.querySelector("[data-test=nav-search]")!;
+    search.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Printers" } }));
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=nav-devices]")).toBeNull();
     const searchHeadingIcon = el.shadowRoot!.querySelector(
       "[data-test=nav-group-hardware] wt-icon",
     )!;
     expect(getComputedStyle(searchHeadingIcon).color).toBe("rgb(1, 2, 3)");
+    search.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Products" } }));
+    await el.updateComplete;
+    const searchHeading = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!;
+    await userEvent.hover(searchHeading);
+    expect(getComputedStyle(searchHeading.querySelector("wt-icon")!).color).toBe("rgb(4, 5, 6)");
   });
 });
 

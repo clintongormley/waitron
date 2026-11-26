@@ -4372,9 +4372,9 @@ language's labels, and signing out empties the box.
 
 Section headings, Overview and Bookings each use an 18 px Material Symbols Outlined icon inside
 the row, with `--wt-space-3` between the icon and the label. The folded strip uses 20 px icons in
-44 px buttons. These icons use `--wt-color-text-muted` at rest and `--wt-color-text` on hover or
-when their section contains the current page. This revises the icon placement and resting colour
-from [A654](../backlog/dashboard.md#decisions-and-deliberate-limits).
+44 px buttons. These icons use `--wt-color-text-muted` at rest and `--wt-color-text` when their
+section contains the current page or their button is hovered. This revises the icon placement and
+resting colour from [A654](../backlog/dashboard.md#decisions-and-deliberate-limits).
 
 The disclosure chevron is always visible in `--wt-color-text-muted`. It uses `--wt-space-4` (16 px)
 and centres on the label's first line, with `--wt-space-1` between the label box and the chevron.
