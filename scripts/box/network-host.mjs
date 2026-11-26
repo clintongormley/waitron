@@ -1,7 +1,6 @@
 import { Buffer } from "node:buffer";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { isIP } from "node:net";
-import { resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -157,6 +156,6 @@ export async function handleNetworkRead(
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   process.stdout.write(await handleNetworkRequest(readFileSync(0, "utf8")));
 }

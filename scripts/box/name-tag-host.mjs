@@ -1,8 +1,7 @@
 import { Buffer } from "node:buffer";
 import { performance } from "node:perf_hooks";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { inspectEncryptedHostState } from "./disk-start.mjs";
 import { planNameTagWrite, NAME_TAG_METADATA_MAX_BYTES } from "./name-tag.mjs";
@@ -65,7 +64,7 @@ export async function handleTagWrite(
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     process.stdout.write(await handleTagWrite(readFileSync(0, "utf8")));
   } catch {
