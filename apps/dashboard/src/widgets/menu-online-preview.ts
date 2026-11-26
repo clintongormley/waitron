@@ -27,6 +27,7 @@ export class MenuOnlinePreview extends LitElement {
       :host {
         display: block;
         padding-block: var(--wt-space-4);
+        container-type: inline-size;
       }
       p {
         margin: 0 0 var(--wt-space-3);
@@ -42,8 +43,11 @@ export class MenuOnlinePreview extends LitElement {
       wt-combobox {
         inline-size: min(100%, 16ch);
       }
-      .canvas {
-        overflow: auto;
+      @container (width < 720px) {
+        .canvas:has(.computer) {
+          overflow: auto;
+          max-block-size: calc(100cqb - var(--wt-space-4));
+        }
       }
       .canvas:focus-visible {
         outline: var(--wt-focus-ring);

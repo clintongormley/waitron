@@ -5,6 +5,10 @@ calls put to them. Decisions marked **owner** were made in that session, quoted 
 choices, for the owner to check. Statements about today's code come from reading it, except the two
 printed layouts and the pop-up, which were looked at on the demo.
 
+On 26 November the owner kept the allergen key and removed the page-wide note above it from the
+customer page, preview and print. The separate filter message still tells customers to ask staff.
+An empty search says “No dishes match your search.”
+
 It follows the [menu editor](2026-11-24-menu-editor-redesign-design.md) and
 [device home page](2026-11-24-device-home-page-design.md) designs. It replaces the three A670 documents
 ([proposal](2026-11-12-a670-guest-menu-design.md), [online](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/specs/2026-11-13-a670-online-go-live-study.md),

@@ -38,11 +38,13 @@ kosher|Kosher|Kosher|Kosher|Kosher
 no_meat|No meat|Sin carne|Sense carn|Sen carne
 no_fish|No fish|Sin pescado|Sense peix|Sen peixe
 languages|Languages|Idiomas|Idiomes|Idiomas
+searchDishes|Search dishes|Buscar platos|Cerca plats|Buscar pratos
+noDishes|No dishes match your search.|Ningún plato coincide con tu búsqueda.|Cap plat coincideix amb la teva cerca.|Ningún prato coincide coa túa busca.
+menuSections|Menu sections|Secciones de la carta|Seccions de la carta|Seccións da carta
 unavailable|Menu unavailable|Carta no disponible|Carta no disponible|Carta non dispoñible
 keyLanguage|Key in English|Leyenda en español|Llegenda en català|Lenda en galego
 key|Allergen key|Leyenda de alérgenos|Llegenda d’al·lèrgens|Lenda de alérxenos
 diet|Dietary declarations|Declaraciones dietéticas|Declaracions dietètiques|Declaracións dietéticas
-note|Icons show declared allergens. No icon does not mean allergen-free. Ask staff about allergens.|Los iconos muestran los alérgenos declarados. La ausencia de iconos no significa que no haya alérgenos. Pregunta al personal por los alérgenos.|Les icones mostren els al·lèrgens declarats. L’absència d’icones no vol dir que no hi hagi al·lèrgens. Pregunta al personal pels al·lèrgens.|As iconas mostran os alérxenos declarados. A ausencia de iconas non significa que non haxa alérxenos. Pregunta ao persoal polos alérxenos.
 `
   .trim()
   .split("\n")

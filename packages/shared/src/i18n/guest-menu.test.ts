@@ -34,10 +34,10 @@ it("uses the first phone language with a registered wording bundle", () => {
 });
 
 it.each([
-  ["en", "Ask staff about allergens."],
-  ["es", "Pregunta al personal por los alérgenos."],
-  ["ca", "Pregunta al personal pels al·lèrgens."],
-  ["gl", "Pregunta ao persoal polos alérxenos."],
-])("asks customers to check allergens with staff in %s", (language, advice) => {
-  expect(guestMenuWords(language, "en").text.note).toContain(advice);
+  ["en", "No dishes match your search."],
+  ["es", "Ningún plato coincide con tu búsqueda."],
+  ["ca", "Cap plat coincideix amb la teva cerca."],
+  ["gl", "Ningún prato coincide coa túa busca."],
+])("gives a one-sentence empty search status in %s", (language, status) => {
+  expect(guestMenuWords(language, "en").text.noDishes).toBe(status);
 });
