@@ -343,7 +343,8 @@ hands it the figures. Each server keeps its own tamper-evident chain of working-
 - **P1. May a restaurant keep allergy notes after the meal as evidence?** If so, blocked, relying on GDPR
   article 9(2)(f) before any claim exists? For how long: one, three or five years? Does a food safety
   claim count as a liability under LOPDGDD article 32.2? Staff must answer an allergy question for
-  every table before the first send, and the "who" field often holds a guest's name.
+  every table before the first send. The "who" field is free text of up to 40 characters; we expect a
+  seat, a description or a first name, rarely a full name, but have not measured what staff type.
 
 ### Confirmations
 
@@ -382,7 +383,11 @@ tell customers which allergens a dish contains.
   one in most cases that meet two or more criteria. One restaurant clearly meets one, health data. A
   second, systematic monitoring, is arguable for the record of staff actions in P9. The AEPD's exemption for
   small businesses' staff records stops at customer data, «pero nunca relativos a los datos de los
-  clientes», and a decision not to do one «ha de estar suficientemente fundamentada».
+  clientes», and a decision not to do one «ha de estar suficientemente fundamentada». One fact for that
+  reasoning: a guest's allergy entry holds the allergens, a short note and a "who" field we expect to
+  hold a seat, a description or a first name, rarely a full name (not measured). A seated booking can
+  still lead to the guest, which P3 proposes to cut after the meal, and so can a full invoice on the
+  same bill.
 - **P6. A former employee's details.** Their email is kept one year after they leave, on legitimate
   interest with a short written balance, to cover the one-year claim period and sending documents. It is
   then blocked (set aside) rather than cleared. Their PIN, password and passkeys are deleted when they
@@ -417,7 +422,9 @@ tell customers which allergens a dish contains.
   ([text and sources](research/2026-11-06-adviser-privacy.md#record-exemption-2026-11-25)).
   - **The restaurant.** Once it is in force we think a single restaurant needs no record for staff,
     invoices and bookings, and that your answer to P5 also settles its allergy notes: no DPIA needed
-    means no record needed. Is that right?
+    means no record needed. We would rest that on the same facts as P5: a "who" field we expect to hold a
+    seat, a description or a first name, rarely a full name (not measured), and P3 cutting the link to
+    a booking after the meal. Is that right?
   - **Waitron Cloud.** A restaurant that runs its own box without Cloud's hosting or backups keeps its
     allergy notes itself, and Waitron holds none. If Cloud hosts many restaurants, or keeps backups it
     can unlock, does that make it a processor whose core activity is large-scale processing of health

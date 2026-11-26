@@ -176,7 +176,9 @@ RGPD for breaches [S22].
   table. It does not only record what a guest volunteers.
 - The kitchen guide says «An assigned dish carries the guest's name» and uses "Alex" as its example
   (`apps/server/src/guide/en/kitchen-service.md`). The field's label is "Who". The owner chose no hint
-  steering staff away from names (A980 O6).
+  steering staff away from names (A980 O6). 2026-11-26: the owner expects staff to type a seat, a
+  description or a first name, rarely a full name; no usage data measures it, and the questions file
+  says so (P1, P5, P11).
 - `seatBooking` links the party's tab to the booking (`packages/bookings/src/bookings.ts`).
 - `party_allergy`, `party_allergy_guests`, `ticket_item_allergies` and `kitchen_notices` are all
   classified `state`, not append-only (`packages/venue-service/src/classification.ts`). They can be
