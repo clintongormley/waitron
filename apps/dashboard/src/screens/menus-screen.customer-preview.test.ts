@@ -269,17 +269,20 @@ describe("the customer menu Online preview", () => {
   });
 
   it.each([
-    [390, "Phone", false],
-    [390, "Computer", true],
-    [1200, "Computer", false],
+    [390, "Phone", "dashboard"],
+    [390, "Computer", "canvas"],
+    [1200, "Computer", "dashboard"],
+    [1200, "Computer", "document"],
   ] as const)(
-    "jumps to sections and tracks scrolling at %i px in %s",
-    async (width, size, scrollsInsidePreview) => {
+    "jumps to sections and tracks scrolling at %i px in %s using the %s scroll area",
+    async (width, size, surface) => {
       const viewport = [innerWidth, innerHeight] as const;
       try {
         await page.viewport(width, 800);
         const { el, host } = await open(() => Response.json(publishedSections()));
-        host.style.cssText += "height: 700px; container-type: size; overflow-y: auto;";
+        if (surface !== "document") {
+          host.style.cssText += "height: 700px; container-type: size; overflow-y: auto;";
+        }
         const choice = page.getByRole("radio", { name: size });
         await expect.element(choice).toBeVisible();
         if (choice.element().getAttribute("aria-checked") !== "true") await choice.click();
@@ -288,23 +291,26 @@ describe("the customer menu Online preview", () => {
         const last = page.getByRole("link", { name: "Desserts and coffee" });
         const customer = customerPage(el)!;
         const canvas = customer.parentElement!;
-        const scroller = scrollsInsidePreview ? canvas : host;
+        const doc = document.scrollingElement!;
+        const scroller = { canvas, dashboard: host, document: doc }[surface];
         const strip = first.element().closest("nav")!;
         const second = page.getByRole("link", { name: "From the oven", exact: true }).nth(1);
         const heading = page.getByRole("heading", { name: "From the oven", exact: true }).nth(1);
         second.element().focus();
         const outerTop = host.scrollTop;
+        const docTop = doc.scrollTop;
         await userEvent.keyboard("{Enter}");
         expect(customer.shadowRoot!.activeElement).toBe(heading.element());
         expect(scroller.scrollTop).toBeGreaterThan(0);
-        if (scrollsInsidePreview) expect(host.scrollTop).toBe(outerTop);
-        else expect(canvas.scrollTop).toBe(0);
+        if (surface !== "dashboard") expect(host.scrollTop).toBe(outerTop);
+        if (surface !== "canvas") expect(canvas.scrollTop).toBe(0);
+        if (surface !== "document") expect(doc.scrollTop).toBe(docTop);
         expect(location.pathname + location.hash).toBe(address);
-        expect
-          .soft(
-            heading.element().getBoundingClientRect().top - strip.getBoundingClientRect().bottom,
-          )
-          .toBeGreaterThanOrEqual(15);
+        const gap =
+          heading.element().getBoundingClientRect().top - strip.getBoundingClientRect().bottom;
+        expect(
+          Math.abs(gap - parseFloat(getComputedStyle(strip).marginBlockEnd)),
+        ).toBeLessThanOrEqual(1);
         await expect.element(second, { timeout: 1000 }).toHaveAttribute("aria-current", "location");
 
         scroller.scrollTop = scroller.scrollHeight;
@@ -374,16 +380,6 @@ describe("the customer menu Online preview", () => {
     } finally {
       await page.viewport(...viewport);
     }
-  });
-
-  it("tracks sections when the browser page itself scrolls", async () => {
-    await open(() => Response.json(publishedSections()));
-    const last = page.getByRole("link", { name: "Desserts and coffee" });
-    await expect.element(last).toBeVisible();
-    const doc = document.scrollingElement!;
-    doc.scrollTop = doc.scrollHeight;
-    expect(doc.scrollTop).toBeGreaterThan(0);
-    await expect.element(last).toHaveAttribute("aria-current", "location");
   });
 
   it("keeps the last chosen language when the previous request arrives late", async () => {
