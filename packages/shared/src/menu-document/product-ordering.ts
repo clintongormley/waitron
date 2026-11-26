@@ -1,6 +1,6 @@
 /**
- * Who may order a product on its own (`products.ordering`). A dish can still be offered as an
- * extra under every setting.
+ * Who may order a product on its own (`products.ordering`). `not_sold_separately` refuses a
+ * standalone line. An extras list can offer the product under every setting.
  *
  * A browser-safe leaf: the dashboard and the till import it.
  */

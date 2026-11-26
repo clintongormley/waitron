@@ -200,7 +200,9 @@ describe("the customer menu Online preview", () => {
     const nuts = page.getByRole("img", { name: "Nuts (Almonds)" });
     await expect.element(nuts).toBeVisible();
     const extra = nuts.element().closest("li")!;
-    expect(extra.textContent?.replace(/\s+/g, " ")).toContain("Almond dressing · 0.2 kg €1.00");
+    expect(extra.textContent?.replace(/\s+/g, " ").trim()).toBe(
+      "Almond dressing · 0.2 kg €1.00 Almonds",
+    );
     await expect.element(page.getByRole("img", { name: "Vegetarian" }).first()).toBeVisible();
     const pepper = page.getByText("Roast pepper", { exact: true }).element();
     const bread = page.getByText("House bread", { exact: true }).element();
@@ -274,16 +276,14 @@ describe("the customer menu Online preview", () => {
 
   it("updates the open preview when a menu gets its first or next published edition", async () => {
     let edition: MenuStatus = { state: "unpublished", clashes: 0 };
-    const { el } = await open(
-      () =>
-        Response.json(
-          edition.state === "unpublished"
-            ? { state: "unpublished" }
-            : published("en", `Published lunch ${edition.version}`),
-        ),
-      "light",
-      () => edition,
+    const readPreview = vi.fn(() =>
+      Response.json(
+        edition.state === "unpublished"
+          ? { state: "unpublished" }
+          : published("en", `Published lunch ${edition.version}`),
+      ),
     );
+    const { el } = await open(readPreview, "light", () => edition);
     await expect.element(page.getByText("This menu has never been published.")).toBeVisible();
     await expect.element(page.getByText("Unpublished", { exact: true })).toBeVisible();
     for (const version of [1, 2]) {
@@ -301,6 +301,10 @@ describe("the customer menu Online preview", () => {
         .element(page.getByText("This preview shows the published menu."))
         .not.toBeInTheDocument();
     }
+    edition = { ...status, state: "changed", version: 2 };
+    el.api.liveData.invalidate([{ type: "menus" }]);
+    await expect.element(page.getByText("This preview shows the published menu.")).toBeVisible();
+    expect(readPreview).toHaveBeenCalledTimes(3);
   });
 
   it.each(["light", "dark"] as const)(
