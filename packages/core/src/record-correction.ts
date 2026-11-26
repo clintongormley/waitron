@@ -30,7 +30,6 @@ import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
 import {
   requireFullInvoiceCorrection,
   requireFullInvoiceOriginal,
-  requireStoredCustomerAddress,
   requireSupportedCorrection,
   requireTaxpayerDomicile,
 } from "./correction-eligibility.js";
@@ -96,7 +95,7 @@ export interface RecordCorrectionInput {
    * Files a full invoice's corrective: it names the customer the invoice names, as stored, and the
    * business's registered address as it is now. Refused with `sale.correction_unsupported` when
    * the invoice names nobody, is itself a correction other than a replacement, is a full invoice
-   * made from receipts, stores no customer address, or beside `wholeInvoice`, and with
+   * made from receipts, or beside `wholeInvoice`, and with
    * `fiscal.taxpayer_domicile_missing` when the business has no registered address. Without it, an
    * invoice naming a customer is refused with `sale.correction_unsupported`. The write does not
    * itself ask the regime whether the invoice is a full invoice: the caller first runs the preview
@@ -238,7 +237,6 @@ export async function recordCorrection(
   if (fullInvoice) {
     requireFullInvoiceCorrection(original.counterpartyTaxId, correctsSaleId);
     await requireFullInvoiceOriginal(tx, original, correctsSaleId);
-    requireStoredCustomerAddress(original.counterpartyAddress, correctsSaleId);
     taxpayerDomicile = await requireTaxpayerDomicile(tx);
   } else {
     requireSupportedCorrection(original.counterpartyTaxId, correctsSaleId);

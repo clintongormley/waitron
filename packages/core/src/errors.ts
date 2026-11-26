@@ -64,8 +64,8 @@ declare module "@waitron/shared" {
     "sale.series_retired": { seriesId: string; retiredAt: string };
     "fiscal.taxpayer_domicile_missing": Record<string, never>;
     /** The invoice cannot take the correction asked for. Without `fullInvoice`, the invoice names
-     * a customer. With `fullInvoice`, the invoice names nobody, stores no address for its
-     * customer, is not a full invoice, or a whole-invoice credit was asked. */
+     * a customer. With `fullInvoice`, the invoice names nobody, is not an F1 or the replacement
+     * of one, or a whole-invoice credit was asked. */
     "sale.correction_unsupported": { saleId: string };
     /** Thrown by `recordReplacement` when a corrective already names the invoice: a replacement
      * carries the whole invoice, so it must be the first corrective of it. Refused before a number

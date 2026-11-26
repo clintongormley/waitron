@@ -189,11 +189,12 @@ none}: F1 and R4 "S" with a customer file R1 "I" with the **stored** customer (e
 pair is `fiscal.correction_unsupported`, nothing written. Changes `backend.test.ts:1009`; `:493` stays refused.
 
 **Task 3, core.** `fullInvoice: true` on `previewCorrectionAmounts`, `readCorrectableLines` and
-`recordCorrection`. Without it, any answer saying `fullInvoice` is refused `not_simplified`, so no caller
-changes. With it: the `full_corrective` series; the customer's name, tax number, identifier and address and
+`recordCorrection`. Without it, any answer saying `fullInvoice` is refused `not_simplified`, except
+`wrong_node`, which keeps its reason, so no caller changes. With it: the `full_corrective` series; the customer's name, tax number, identifier and address and
 the business's current registered address copied to the corrective; no registered address refuses
 `fiscal.taxpayer_domicile_missing` in all three, before a number is taken; an invoice naming nobody, or
-`wholeInvoice` beside it, refuses `sale.correction_unsupported`. **Owns what is copied.** Failing first in
+`wholeInvoice` beside it, refuses `sale.correction_unsupported`, as do an F3 and an earlier corrective by
+differences, before a number is taken. **Owns what is copied.** Failing first in
 `correction-history.test.ts` (`:547` kept) and `record-correction.test.ts` (`:689` kept).
 
 **Task 4, readers** (section 3, rows 1 to 4). Failing first: `receipt-issuer.test.ts` (R1 full layout, R4

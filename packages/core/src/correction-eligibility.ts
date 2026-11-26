@@ -40,14 +40,7 @@ export async function requireFullInvoiceOriginal(
   }
 }
 
-/** A full invoice made from receipts may store its customer with no address. */
-export function requireStoredCustomerAddress(address: string | null, saleId: SaleId): void {
-  if (!address?.trim()) {
-    throw new AppError("sale.correction_unsupported", { saleId });
-  }
-}
-
-/** The business's registered address as it is now, which a full invoice's corrective names. */
+/** The business's registered address as it is now, which every full invoice core writes names. */
 export async function requireTaxpayerDomicile(tx: Transaction): Promise<string> {
   const [row] = await tx.select({ domicile: taxpayer.taxpayerDomicile }).from(taxpayer);
   if (!row?.domicile?.trim()) throw new AppError("fiscal.taxpayer_domicile_missing", {});

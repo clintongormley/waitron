@@ -1848,29 +1848,6 @@ describe("recordCorrection — a full invoice's corrective, asked for with fullI
     });
   });
 
-  it("refuses an invoice naming a customer without their address", async () => {
-    const backend = new FakeFiscalBackend(suite.db);
-    const { saleId: ticketId } = await sell(backend);
-    const { saleId: originalId } = await sellFull(backend);
-    const [{ seriesId: fullSeriesId }] = await suite.db
-      .select({ seriesId: sales.seriesId })
-      .from(sales)
-      .where(eq(sales.id, originalId));
-    const { saleId: substitutionId } = await withTransaction(suite.db, (tx) =>
-      recordSubstitution(tx, backend, {
-        ...saleInput(),
-        seriesId: brandSeriesId(fullSeriesId),
-        substitutedSaleIds: [ticketId],
-        counterparty: SPANISH,
-      }),
-    );
-
-    await expectRefused(backend, substitutionId, full(), {
-      code: "sale.correction_unsupported",
-      params: { saleId: substitutionId },
-    });
-  });
-
   it("refuses a whole-invoice credit beside it", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sellFull(backend);
