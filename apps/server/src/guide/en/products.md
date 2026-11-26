@@ -225,6 +225,7 @@ has unsaved changes, because leaving the product would lose them: save the produ
 
 Choose **Delete** on a saved variant to mark it **Deleted when saved**. Choose **Keep** to
 undo the choice before saving. **Remove** drops a variant you have yet to save.
+Check any extras lists named before you save. Saving removes the variant from those lists.
 
 If a live or scheduled menu includes the variant, the save is refused and names the menus.
 Take the variant out of those menus and publish before deleting it. You cannot add an Active

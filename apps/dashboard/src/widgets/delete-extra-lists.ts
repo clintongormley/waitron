@@ -16,10 +16,18 @@ export function deleteExtraListWarning(
       if (variant.active && (selected.has(product.id) || selected.has(variant.id)))
         removed.add(variant.id);
   }
+  return deleteExtraListWarningForIds(removed, lists);
+}
+
+export function deleteExtraListWarningForIds(
+  removed: ReadonlySet<string>,
+  lists: readonly (Pick<ExtraList, "name"> & Partial<Pick<ExtraList, "items">>)[],
+) {
+  if (removed.size === 0) return nothing;
   const names = [
     ...new Set(
       lists
-        .filter((list) => list.items.some((item) => removed.has(item.productId)))
+        .filter((list) => list.items?.some((item) => removed.has(item.productId)))
         .map((list) => list.name),
     ),
   ];

@@ -67,7 +67,8 @@ import {
   withLanguageText,
   type FieldContext,
 } from "./form-fields.js";
-import type { DashboardApi } from "../api/client.js";
+import type { DashboardApi, ExtraList } from "../api/client.js";
+import { deleteExtraListWarningForIds } from "./delete-extra-lists.js";
 import type { CategorySummary } from "../api/catalog-api.js";
 import type { ProductModifierRef } from "@waitron/shared";
 import type { ExtraOfferUsage } from "@waitron/menu/src/extra-usage.js";
@@ -312,6 +313,9 @@ export class ProductEditor extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
       }
+      .delete-extra-lists {
+        overflow-wrap: anywhere;
+      }
       .error {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
@@ -412,7 +416,8 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) units: UnitChoice[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) defaultColor: string | null = null;
-  @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
+  @property({ attribute: false }) extraLists: (ModifierListChoice &
+    Partial<Pick<ExtraList, "items">>)[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property({ attribute: false }) courses: ProductRoutingChoice[] = [];
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
@@ -1600,6 +1605,14 @@ export class ProductEditor extends LitElement {
         { ...this.value, allergens: nutritionAllergensForComparison(this.value.allergens) },
       );
     const { variants } = this.draft;
+    const savedActiveIds = new Set(
+      this.value?.variants.filter((variant) => variant.active).map((variant) => variant.id),
+    );
+    const deletedIds = new Set(
+      variants.flatMap(({ id, active }) =>
+        id !== undefined && !active && savedActiveIds.has(id) ? [id] : [],
+      ),
+    );
     return keyed(
       this.generation,
       html`<fieldset class="group" data-group="variants">
@@ -1675,14 +1688,17 @@ export class ProductEditor extends LitElement {
               ></dashboard-variant-table>`
             : nothing
         }
-        <div class="row">
-          <wt-button
-            variant="secondary"
-            data-test="add-variant"
-            ?disabled=${this.suspended}
-            @click=${this.addVariant}
-            >${t("editor.add_variant")}</wt-button
-          >
+        <div>
+          <div class="row">
+            <wt-button
+              variant="secondary"
+              data-test="add-variant"
+              ?disabled=${this.suspended}
+              @click=${this.addVariant}
+              >${t("editor.add_variant")}</wt-button
+            >
+          </div>
+          <div role="status">${deleteExtraListWarningForIds(deletedIds, this.extraLists)}</div>
         </div>
       </fieldset>`,
     );

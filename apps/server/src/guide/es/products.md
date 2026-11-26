@@ -243,6 +243,7 @@ cambios sin guardar, porque salir del producto los perdería: guarda primero el 
 Elige **Eliminar** en una variante guardada para marcarla como **Se elimina al guardar**.
 Elige **Conservar** para deshacer la elección antes de guardar. En una variante sin guardar,
 **Eliminar** la quita de la lista directamente.
+Revisa las listas de extras que se indican antes de guardar. Al guardar, la variante se quita de esas listas.
 
 Si una carta publicada o programada incluye la variante, el guardado se rechaza y nombra las cartas.
 Quita la variante de esas cartas y publica antes de eliminarla. No puedes añadir una variante activa a
