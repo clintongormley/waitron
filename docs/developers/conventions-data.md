@@ -5841,9 +5841,10 @@ admission. Keep snapshots unavailable until the joint release checks pass. The
 [verifier release procedure](../operations/backup-verifier-release.md) records the protocol vectors,
 local checks and joint release gates. Preproduction setup sends version 2 with the running build's
 verification target. It computes the target lazily and keeps the first successful result for that
-setup server. A saved version 1 session cannot resume in version 2 setup. The post-start report
-and replacement retry use the saved protocol version. Version 2 checks the running build's target
-before it sends a proof, and recognised version 1 keeps its existing proof.
+setup server. Use a bundle carrying its build identity and migrations. Version 2 setup requires
+a request saved by the same build. The post-start report and replacement retry use the saved
+protocol version. Each version 2 report computes the running build's target once and checks it
+before sending proofs. Recognised version 1 keeps its existing proof.
 The [local setup trial](../operations/backup-verifier-release.md#local-setup-trial-26-november-2026)
 records the tested source, image, target and Cloud acknowledgment.
 

@@ -91,9 +91,13 @@ export async function reportSavedCloudRestore(
   options: Pick<CloudRecoveryOptions, "stateDir" | "origin" | "environment" | "fetch">,
 ): Promise<void> {
   const state = await readCloudRecoveryState(options.stateDir);
+  let target: BackupVerificationTarget | undefined;
   const protocol =
     state?.version === 2
-      ? { snapshotProtocol: 2 as const, target: currentBackupVerificationTarget }
+      ? {
+          snapshotProtocol: 2 as const,
+          target: () => (target ??= currentBackupVerificationTarget()),
+        }
       : {};
   await createCloudRecoveryClient({ ...options, ...protocol }).reportRestored();
 }

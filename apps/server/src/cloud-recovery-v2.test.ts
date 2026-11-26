@@ -249,13 +249,17 @@ describe("target-bound snapshot recovery v2", () => {
       snapshotVerification: verification(),
     });
     await client.markRestored({ requestId: String(saved.requestId), pointId: point.id });
-    vi.spyOn(verificationRuntime, "currentBackupVerificationTarget").mockReturnValue(target());
+    const readTarget = vi
+      .spyOn(verificationRuntime, "currentBackupVerificationTarget")
+      .mockClear()
+      .mockReturnValue(target());
     await reportSavedCloudRestore({
       stateDir: f.stateDir,
       origin,
       environment: "preproduction",
       fetch: f.options.fetch,
     });
+    expect(readTarget).toHaveBeenCalledOnce();
     for (const call of f.calls.slice(1)) {
       const early = call.action === "status";
       expect(call.body).toEqual({

@@ -285,10 +285,8 @@ describe("runEntry", () => {
     const d = deps({ baseEnv: { WAITRON_CLOUD_ORIGIN: "https://cloud.example.test" } });
     const report = vi
       .spyOn(cloudRecovery, "reportSavedCloudRestore")
-      .mockImplementation(async () => {
-        expect(d.startServer).toHaveBeenCalledOnce();
-        throw new Error("Cloud offline");
-      });
+      .mockClear()
+      .mockRejectedValue(new Error("Cloud offline"));
     try {
       await runEntry(d);
       expect(report).toHaveBeenCalledWith({
@@ -296,6 +294,7 @@ describe("runEntry", () => {
         origin: "https://cloud.example.test",
         environment: "preproduction",
       });
+      expect(d.startServer).toHaveBeenCalledBefore(report);
       expect(d.installShutdownHandlers).toHaveBeenCalledOnce();
     } finally {
       report.mockRestore();
