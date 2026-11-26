@@ -154,17 +154,6 @@ update resealing, kiosk and physical box/stick/Android qualification remain rele
 This unsigned development image carries no theft-protection or release-readiness claim.
 Protected encryption before go-live remains required.
 
-After retaining the small results, remove your rehearsal resources. Do not remove
-shared images, volumes or build caches. Export the image first with `docker cp`
-if you need it; otherwise deleting this container also deletes the built image.
-
-```sh
-docker stop waitron-b3-rehearsal
-docker rm waitron-b3-rehearsal
-docker image rm waitron-b3-tools:rehearsal "$app" waitron-b3-agent:rehearsal
-rm -rf "$inputs"
-```
-
 ## Read a USB drive
 
 Run `--case installed-usb-drive` in the same tool container after building the recipe:
@@ -185,6 +174,17 @@ exFAT drive marked readable. User 10001 in the app container then reads the file
 match. The rig then asks the host to release the drives and requires at least one released and the
 file gone from the container. `usb-drive.json` holds the answers. The image needs about 4.5 GB of
 free space in the tool container; it goes when the container does.
+
+After retaining the small results, remove your rehearsal resources. Do not remove
+shared images, volumes or build caches. Export the image first with `docker cp`
+if you need it; otherwise deleting this container also deletes the built image.
+
+```sh
+docker stop waitron-b3-rehearsal
+docker rm waitron-b3-rehearsal
+docker image rm waitron-b3-tools:rehearsal "$app" waitron-b3-agent:rehearsal
+rm -rf "$inputs"
+```
 
 ## Check a manual upgrade and interrupted recovery
 

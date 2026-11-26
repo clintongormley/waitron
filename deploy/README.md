@@ -211,8 +211,8 @@ writes no `waitron-box` line.
 
 The box has no secret it needs before it boots: the venue's databases are files in the `state`
 volume that open with no password, and every other setting has a default in the image that suits a
-box reached at `waitron.local`. So `.env` holds only lines `install` writes: the AppArmor line and
-the clock service's line above, and, for a branch or a commit, the image tags it built there. A
+box reached at `waitron.local`. So `.env` holds only lines `install` writes: the AppArmor line,
+the clock service's line and the USB drives line above, and, for a branch or a commit, the image tags it built there. A
 plain `install` on a box with neither AppArmor nor systemd writes no `deploy/.env` at all. So `install` is non-interactive
 and idempotent, and running it again later to update the box does nothing destructive, apart from deleting the
 images it ran before (see Updating and operating).
@@ -339,7 +339,7 @@ If a final stopped-copy check fails, the box stays stopped. Read `sudo bash wait
 to start the candidate despite the failed checks. Keep refuses an upgrade to a numbered release
 that has a change of software producer to make, and still uses the ordinary boot guards.
 Restore puts back the copied data, Compose configuration and old images; the host clock
-service, AppArmor policy and retained upgrade runtime stay updated. An interrupted restore
+service, the host's USB drive module, AppArmor policy and retained upgrade runtime stay updated. An interrupted restore
 starts again from its intact copy. Install and reset refuse while
 an attempt is held. On an unfinished setup, Keep continues setup; choose Restore before
 using `--reset install` instead.

@@ -4965,6 +4965,10 @@ _2026-11-12, B3:_ the installed recipe also forwards `tag.write` (up to 4096 cha
 for a line within the shell's existing limit. The clock wire described below keeps its syntax
 and 700-character limit. See the [host-read cut](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-b3-19-network-status.md).
 
+_2026-11-26, A1603:_ it also forwards `storage.list` and `storage.release` to
+`/opt/waitron-host/box/storage/storage-host.mjs`, one at a time under `storage.lock`, when that
+module and a Node.js it can run are there; otherwise they answer `unknown_request`.
+
 **The host service** (`deploy/box/`). `waitron-box.socket` listens on `/run/waitron-box/box.sock`
 (`Accept=yes`, owner `root`, group `waitron-box`, mode `0660`, at most four connections at once) and
 starts one `waitron-box@.service` per connection. That runs `waitron-box.sh` as root, its error
@@ -5046,10 +5050,10 @@ systemd v257's `src/timesync/timesyncd-manager.c`, read, not measured, they go o
 `PollIntervalMaxSec=`, 34 min 8 s by default), and a restart synchronised it in under half a
 second, twice. It logs `time_service.restarted` at the first
 restart and every tenth, and `time_service.restart_failed` once per distinct failure.
-The same file's `boxHostRequests()` asks B3's seven host requests and answers the same way, with
+The same file's `boxHostRequests()` asks the host's B3 requests and `storage.list`/`storage.release` and answers the same way, with
 two more answers, `unsupported` (the host does not take that request) and `invalid` (nothing sent),
 and one difference: a whole reply line that arrived before the connection broke is read as the
-reply, not `lost`; the routes in `apps/server/src/box-host-api.ts` call it for every request but `tag.write`, behind `system.manage` ([B3 PR 9's plan](../superpowers/plans/2026-11-06-b3-9-host-routes.md)). Both
+reply, not `lost`; the routes in `apps/server/src/box-host-api.ts` call it for every request but `tag.write`, `storage.list` and `storage.release`, behind `system.manage` ([B3 PR 9's plan](../superpowers/plans/2026-11-06-b3-9-host-routes.md)). Both
 clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
 
 **Who may set it** (`apps/server/src/clock-correction.ts`, one correction per server, built in
