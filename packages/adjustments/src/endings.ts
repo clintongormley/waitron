@@ -57,10 +57,14 @@ interface Taken {
   list: number | null;
 }
 
-async function standingOn(
-  tx: Transaction,
-  query: { workingOrderId: string; adjustmentIds: readonly string[] },
-): Promise<Taken[]> {
+/** Which bill, which comps or discounts, and, when named, which of the bill's rows alone. */
+interface EndingQuery {
+  workingOrderId: string;
+  adjustmentIds: readonly string[];
+  lineIds?: readonly string[];
+}
+
+async function standingOn(tx: Transaction, query: EndingQuery): Promise<Taken[]> {
   if (query.adjustmentIds.length === 0) return [];
   return tx
     .select({
@@ -84,6 +88,12 @@ async function standingOn(
           sql`(select value from json_each(${JSON.stringify(query.adjustmentIds)}))`,
         ),
         eq(workingOrderLines.workingOrderId, query.workingOrderId),
+        query.lineIds === undefined
+          ? undefined
+          : inArray(
+              workingOrderLines.id,
+              sql`(select value from json_each(${JSON.stringify(query.lineIds)}))`,
+            ),
         gt(adjustmentLines.reduction, 0),
         isNull(adjustmentEndingLines.id),
       ),
@@ -190,12 +200,12 @@ async function restoresOf(
 }
 
 /**
- * What each row now on `workingOrderId` that `adjustmentIds` took something off, and has not given
- * back, would cost once they give it back. Writes nothing.
+ * What each row now on `workingOrderId` (of `lineIds` alone, when named) that `adjustmentIds` took
+ * something off, and has not given back, would cost once they give it back. Writes nothing.
  */
 export async function endingRestores(
   tx: Transaction,
-  query: { workingOrderId: string; adjustmentIds: readonly string[] },
+  query: EndingQuery,
 ): Promise<EndingRestore[]> {
   return restoresOf(tx, await standingOn(tx, query), query.adjustmentIds);
 }
@@ -204,7 +214,8 @@ export async function endingRestores(
  * Ends `adjustmentId` on `workingOrderId`: records the ending and each row it gives back, then
  * writes exactly what {@link endingRestores} answers. A row is given back once, wherever it moves
  * after; an ending that would give nothing back is refused `adjustment.not_standing`. `lineId` is
- * the line a notice offers it again on.
+ * the line a notice offers it again on; `lineIds`, when named, are the only rows it gives back, so
+ * the rest of the bill keeps its share.
  */
 export async function endAdjustment(
   tx: Transaction,
@@ -214,10 +225,15 @@ export async function endAdjustment(
     why: AdjustmentEndingWhy;
     dishName: string;
     lineId?: string;
+    lineIds?: readonly string[];
   },
 ): Promise<void> {
-  const { adjustmentId, workingOrderId } = ending;
-  const taken = await standingOn(tx, { workingOrderId, adjustmentIds: [adjustmentId] });
+  const { adjustmentId, workingOrderId, lineIds } = ending;
+  const taken = await standingOn(tx, {
+    workingOrderId,
+    adjustmentIds: [adjustmentId],
+    ...(lineIds === undefined ? {} : { lineIds }),
+  });
   if (taken.length === 0) {
     throw new AppError("adjustment.not_standing", { adjustmentId, workingOrderId });
   }

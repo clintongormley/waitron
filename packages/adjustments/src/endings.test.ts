@@ -356,6 +356,61 @@ describe("ending a comp or discount", () => {
   });
 });
 
+describe("ending a comp or discount on some of its rows", () => {
+  it("gives back only the named Hake, leaving the other Hake's share standing until a later ending names it", async () => {
+    const order = await seedWorkingOrder(db);
+    const edited = await discountedHakes(order, "1");
+    const other = await discountedHakes(order, "1");
+    const adjustmentId = await tenPercentOff(order, edited, "1");
+    await db
+      .insert(adjustmentLines)
+      .values({ adjustmentId, lineId: other, reduction: 160, quantity: stringToThousandths("1") });
+    const endOn = (lineId: string) =>
+      withTransaction(db, (tx) =>
+        endAdjustment(tx, {
+          adjustmentId,
+          workingOrderId: order,
+          why: "extras_changed",
+          dishName: "Hake",
+          lineId,
+          lineIds: [lineId],
+        }),
+      );
+
+    expect(
+      await withTransaction(db, (tx) =>
+        endingRestores(tx, {
+          workingOrderId: order,
+          adjustmentIds: [adjustmentId],
+          lineIds: [edited],
+        }),
+      ),
+    ).toEqual([
+      { lineId: edited, unitPriceGross: 1600, lineTotal: 1600, listUnitPriceGross: null },
+    ]);
+    await endOn(edited);
+    expect(await priceOf(edited)).toEqual({
+      unitPriceGross: 1600,
+      lineTotal: 1600,
+      listUnitPriceGross: null,
+    });
+    expect(await priceOf(other)).toEqual({
+      unitPriceGross: 1440,
+      lineTotal: 1440,
+      listUnitPriceGross: 1600,
+    });
+
+    await endOn(other);
+    expect(await priceOf(other)).toEqual({
+      unitPriceGross: 1600,
+      lineTotal: 1600,
+      listUnitPriceGross: null,
+    });
+    expect((await endingsOf(adjustmentId)).map(({ lineId }) => lineId)).toEqual([edited, other]);
+    await expect(endOn(other)).rejects.toMatchObject({ code: "adjustment.not_standing" });
+  });
+});
+
 describe("the notices a bill answers", () => {
   it("answers an ending a change caused on its own bill, not a replacement, and not once a comp or discount on that bill gives it again", async () => {
     const order = await seedWorkingOrder(db);

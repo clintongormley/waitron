@@ -589,3 +589,121 @@ it("takes only the cancelled Sea bass's share of a row's 5.00 off", async () => 
     { id: kept2!.id, lineTotal: kept2!.lineTotal },
   ]);
 });
+
+/** Two Soups (6.00 each) as two portion rows, 6.00 off given over both: 3.00 off each. */
+async function sixOffTwoSoups() {
+  const { tabId } = await billOf([{ menuItemId: ordinary.Soup, quantity: "2" }]);
+  const soups = (await rows(tabId)).filter((row) => specDishOf(spec, row) === "Soup");
+  expect(soups).toHaveLength(2);
+  const given = await give(
+    tabId,
+    soups[0]!.id,
+    { action: "discount_amount", amount: "6.00" },
+    soups.map(({ id }) => id),
+  );
+  expect(await priced(tabId)).toEqual([
+    { what: "Soup", price: 300 },
+    { what: "Soup", price: 300 },
+  ]);
+  return { tabId, given, first: soups[0]!, second: soups[1]! };
+}
+
+/** Each row's price by id, with its name. */
+async function pricesById(billId: string) {
+  return Object.fromEntries(
+    (await rows(billId)).map((row) => [
+      row.id,
+      {
+        what: specDishOf(spec, row) ?? row.name,
+        unit: row.unitPriceGross,
+        total: row.lineTotal,
+        list: row.listUnitPriceGross,
+      },
+    ]),
+  );
+}
+
+it("takes only the edited Soup's 3.00 share of 6.00 off two Soups when it is given Bread", async () => {
+  const { tabId, given, first, second } = await sixOffTwoSoups();
+
+  await editLine(tabId, first.lineNo, { extras: [spec.bread] });
+
+  expect(await endingsOn(tabId)).toEqual([
+    { adjustmentId: given, why: "extras_changed", dishName: "Soup", lineId: first.id },
+  ]);
+  const prices = await pricesById(tabId);
+  expect(prices[first.id]).toEqual({ what: "Soup", unit: 600, total: 600, list: null });
+  expect(prices[second.id]).toEqual({ what: "Soup", unit: 300, total: 300, list: 600 });
+  expect(Object.values(prices).filter(({ what }) => what === "Bread")).toEqual([
+    { what: "Bread", unit: 150, total: 150, list: null },
+  ]);
+  expect(await total(tabId)).toBe(1050);
+});
+
+it("gives both Soups' shares back in one ending when one edit gives both Bread", async () => {
+  const { tabId, given, first, second } = await sixOffTwoSoups();
+
+  await inTx(venue, async (tx) =>
+    updateOrderLine(
+      tx,
+      venue.cfg,
+      tabId,
+      first.lineNo,
+      { portionLineNos: [second.lineNo], extras: [spec.bread] },
+      await readOrderRevision(tx, tabId),
+      {
+        admission: testTradingAdmission(),
+        operatorId: venue.operator.personId,
+        expectedEdit: await readBillEditState(tx, tabId),
+      },
+    ),
+  );
+
+  expect(await endingsOn(tabId)).toEqual([
+    { adjustmentId: given, why: "extras_changed", dishName: "Soup", lineId: first.id },
+  ]);
+  const prices = await pricesById(tabId);
+  expect(prices[first.id]).toEqual({ what: "Soup", unit: 600, total: 600, list: null });
+  expect(prices[second.id]).toEqual({ what: "Soup", unit: 600, total: 600, list: null });
+  expect(await total(tabId)).toBe(1500);
+});
+
+it("ends the second Soup's share at a second edit once the first edit ended the first's", async () => {
+  const { tabId, given, first, second } = await sixOffTwoSoups();
+  await editLine(tabId, first.lineNo, { extras: [spec.bread] });
+
+  await editLine(tabId, second.lineNo, { extras: [spec.bread] });
+
+  expect(await endingsOn(tabId)).toEqual([
+    { adjustmentId: given, why: "extras_changed", dishName: "Soup", lineId: first.id },
+    { adjustmentId: given, why: "extras_changed", dishName: "Soup", lineId: second.id },
+  ]);
+  const prices = await pricesById(tabId);
+  expect(prices[first.id]).toEqual({ what: "Soup", unit: 600, total: 600, list: null });
+  expect(prices[second.id]).toEqual({ what: "Soup", unit: 600, total: 600, list: null });
+  expect(await total(tabId)).toBe(1500);
+});
+
+it("takes only the swapped glass's share of 4.50 off two glasses when a basket save changes its size", async () => {
+  const { tabId } = await billOf([{ ...glassOf(wine.small), quantity: "2" }]);
+  const [kept, swapped] = (await rows(tabId)).filter(({ name }) => name === "Wine");
+  const given = await give(tabId, kept!.id, { action: "discount_amount", amount: "4.50" }, [
+    kept!.id,
+    swapped!.id,
+  ]);
+  expect(await total(tabId)).toBe(450);
+
+  await saveBasket(tabId, [
+    { workingOrderLineId: kept!.id, ...glassOf(wine.small) },
+    { workingOrderLineId: swapped!.id, ...glassOf(wine.large) },
+  ]);
+
+  const large = (await rows(tabId)).find(({ productId }) => productId === wine.large)!;
+  expect(await endingsOn(tabId)).toEqual([
+    { adjustmentId: given, why: "variant_changed", dishName: "Wine", lineId: large.id },
+  ]);
+  const prices = await pricesById(tabId);
+  expect(prices[kept!.id]).toEqual({ what: "Wine", unit: 225, total: 225, list: 450 });
+  expect(prices[large.id]).toEqual({ what: "Wine", unit: 550, total: 550, list: null });
+  expect(await total(tabId)).toBe(775);
+});

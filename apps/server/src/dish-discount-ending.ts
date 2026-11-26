@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gt, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   adjustmentEndingLines,
@@ -7,6 +7,7 @@ import {
   endAdjustment,
 } from "@waitron/adjustments";
 import { workingOrderLines, type Transaction } from "@waitron/db";
+import { inIds } from "./in-ids.js";
 import { endSetMenuDiscounts, setMenuDiscountsLeftBy } from "./set-menu-discount-ending.js";
 
 /** A stored dish a basket save replaces with a new line of the same menu item at another
@@ -26,16 +27,22 @@ const dish = alias(workingOrderLines, "dish");
 /**
  * The comps and discounts that still take something off one of `dishIds` or an extra of one, given
  * on a dish row rather than on an extra, a set-menu row or the whole bill (D56), each with the
- * first of `dishIds` it takes something off.
+ * first of `dishIds` it takes something off and every row among those dishes and their extras it
+ * takes something off: the only rows its ending gives back, so another portion keeps its share.
  */
 async function ownDishDiscounts(
   tx: Transaction,
   billId: string,
   dishIds: readonly string[],
-): Promise<{ adjustmentId: string; dishId: string; dishName: string }[]> {
+): Promise<{ adjustmentId: string; dishId: string; dishName: string; lineIds: string[] }[]> {
   if (dishIds.length === 0) return [];
   const found = await tx
-    .select({ adjustmentId: adjustments.id, dishId: dish.id, dishName: dish.name })
+    .select({
+      adjustmentId: adjustments.id,
+      dishId: dish.id,
+      dishName: dish.name,
+      lineId: taken.id,
+    })
     .from(adjustmentLines)
     .innerJoin(adjustments, eq(adjustments.id, adjustmentLines.adjustmentId))
     .innerJoin(taken, eq(taken.id, adjustmentLines.lineId))
@@ -44,7 +51,7 @@ async function ownDishDiscounts(
     .leftJoin(adjustmentEndingLines, eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id))
     .where(
       and(
-        inArray(dish.id, sql`(select value from json_each(${JSON.stringify(dishIds)}))`),
+        inIds(dish.id, dishIds),
         eq(taken.workingOrderId, billId),
         gt(adjustmentLines.reduction, 0),
         isNull(adjustmentEndingLines.id),
@@ -56,8 +63,16 @@ async function ownDishDiscounts(
       ),
     )
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id), asc(dish.lineNo));
-  const seen = new Set<string>();
-  return found.filter(({ adjustmentId }) => !seen.has(adjustmentId) && seen.add(adjustmentId));
+  const byAdjustment = new Map<
+    string,
+    { adjustmentId: string; dishId: string; dishName: string; lineIds: string[] }
+  >();
+  for (const { lineId, ...first } of found) {
+    const held = byAdjustment.get(first.adjustmentId);
+    if (held === undefined) byAdjustment.set(first.adjustmentId, { ...first, lineIds: [lineId] });
+    else held.lineIds.push(lineId);
+  }
+  return [...byAdjustment.values()];
 }
 
 /**
@@ -72,7 +87,7 @@ export async function endRepricedDishDiscounts(
   extrasChanged: readonly string[],
   swaps: readonly { fromId: string; toId: string }[],
 ): Promise<void> {
-  for (const { adjustmentId, dishId, dishName } of await ownDishDiscounts(
+  for (const { adjustmentId, dishId, dishName, lineIds } of await ownDishDiscounts(
     tx,
     billId,
     extrasChanged,
@@ -83,11 +98,12 @@ export async function endRepricedDishDiscounts(
       why: "extras_changed",
       dishName,
       lineId: dishId,
+      lineIds,
     });
   }
   if (swaps.length === 0) return;
   const toOf = new Map(swaps.map(({ fromId, toId }) => [fromId, toId]));
-  for (const { adjustmentId, dishId, dishName } of await ownDishDiscounts(tx, billId, [
+  for (const { adjustmentId, dishId, dishName, lineIds } of await ownDishDiscounts(tx, billId, [
     ...toOf.keys(),
   ])) {
     await endAdjustment(tx, {
@@ -96,6 +112,7 @@ export async function endRepricedDishDiscounts(
       why: "variant_changed",
       dishName,
       lineId: toOf.get(dishId)!,
+      lineIds,
     });
   }
   const { broken, whole } = await setMenuDiscountsLeftBy(tx, billId, [...toOf.keys()]);
