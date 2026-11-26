@@ -325,18 +325,17 @@ it("refuses moving alone a dish whose cancel kept its charge (D18)", async () =>
   expect(await grouping(target.tabId)).toEqual({ rows: [], total: 0 });
 });
 
-it("moves a dish with no comp of its own out of a comped Daily, which stays on its bill (D18)", async () => {
+it("moves a dish with no comp of its own out of a comped Daily, the comp coming off: the source keeps the Soup at 6.00 (D18, D50)", async () => {
   const source = await seated();
   await send(source, ["Soup", "Hake"]);
   await comp(source.tabId, await idOf(source.tabId, "Daily menu"));
-  const before = await grouping(source.tabId);
   const target = await partyBill(source);
 
   await move(source, target, [await idOf(source.tabId, "Hake")]);
 
   expect(await grouping(source.tabId)).toEqual({
-    rows: before.rows.filter(({ what }) => what !== "Hake"),
-    total: before.total,
+    rows: [{ what: "Soup", price: 600, in: null }],
+    total: 600,
   });
   expect(await grouping(target.tabId)).toEqual(HAKE_DAILY);
 });

@@ -261,6 +261,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "adjustment.action_not_allowed": 409,
   "adjustment.weighed_partial": 409,
   "adjustment.no_reduction": 409,
+  "adjustment.not_standing": 409,
   "adjustment.free_not_allowed": 409,
   "adjustment.note_required": 400,
   "adjustment.quantity_invalid": 400,

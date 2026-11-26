@@ -1,4 +1,4 @@
-import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
   centsToDecimal,
@@ -10,7 +10,14 @@ import {
 } from "@waitron/shared";
 import { isFullComp } from "./full-comp.js";
 import type { AdjustmentAction, AdjustmentPolicySnapshot } from "@waitron/shared";
-import { adjustments, type AdjustmentSplit, type AdjustmentStage } from "@waitron/db";
+import {
+  adjustmentEndingLines,
+  adjustmentLines,
+  adjustments,
+  workingOrderLines,
+  type AdjustmentSplit,
+  type AdjustmentStage,
+} from "@waitron/db";
 
 /** An adjustment to record. `line` is null for a discount on the whole bill. */
 export interface NewAdjustment {
@@ -92,14 +99,14 @@ export interface ReasonStandingRow {
   quantityNow: Decimal;
 }
 
-/** What the reason's comps and discounts, recorded on any bill, took off each line now on this
- * bill. Only comps and discounts write rows today; a cancel's would be left out all the same, since
- * a reason changed from Void to Comp keeps its id. */
+/** What the reason's comps and discounts, recorded on any bill, took off each line now on this bill
+ * and have not given back, leaving out `ended` as well. Only comps and discounts write rows today; a
+ * cancel's would be left out all the same, since a reason changed from Void to Comp keeps its id. */
 export async function readReasonStanding(
   tx: Transaction,
-  query: { workingOrderId: string; reasonId: string },
+  query: { workingOrderId: string; reasonId: string; ended?: readonly string[] },
 ): Promise<ReasonStandingRow[]> {
-  const { workingOrderId, reasonId } = query;
+  const { workingOrderId, reasonId, ended = [] } = query;
   const rows = await tx.execute<{
     reduction: string;
     quantityThen: string;
@@ -111,8 +118,10 @@ export async function readReasonStanding(
     from adjustment_lines taken
     join adjustments record on record.id = taken.adjustment_id
     join working_order_lines line on line.id = taken.line_id
+    left join adjustment_ending_lines given on given.adjustment_line_id = taken.id
     where record.reason_id = ${reasonId} and record.action <> 'cancel'
-      and line.working_order_id = ${workingOrderId}`);
+      and line.working_order_id = ${workingOrderId} and given.id is null
+      and taken.adjustment_id not in (select value from json_each(${JSON.stringify(ended)}))`);
   return rows.rows.map((row) => ({
     reduction: rawCentsToDecimal(row.reduction),
     quantityThen: rawThousandthsToDecimal(row.quantityThen),
@@ -141,7 +150,13 @@ export interface BillAdjustment {
   full: boolean;
 }
 
-/** This bill's comps and discounts, oldest first; its cancellations are not read. */
+/**
+ * The comps and discounts this bill's receipt shows, oldest first: each that still takes something
+ * off a row now on this bill, wherever it was given, and each given on this bill that never took
+ * anything off a row now elsewhere and has given nothing back. A record stays on the bill it was
+ * given on while its rows move (a set menu moved whole keeps its discount), so the rows decide.
+ * Cancellations are not read.
+ */
 export async function readBillAdjustments(
   tx: Transaction,
   workingOrderId: string,
@@ -159,7 +174,56 @@ export async function readBillAdjustments(
       afterAmount: adjustments.afterAmount,
     })
     .from(adjustments)
-    .where(and(eq(adjustments.workingOrderId, workingOrderId), ne(adjustments.action, "cancel")))
+    .where(
+      and(
+        ne(adjustments.action, "cancel"),
+        or(
+          inArray(
+            adjustments.id,
+            tx
+              .select({ id: adjustmentLines.adjustmentId })
+              .from(workingOrderLines)
+              .innerJoin(adjustmentLines, eq(adjustmentLines.lineId, workingOrderLines.id))
+              .leftJoin(
+                adjustmentEndingLines,
+                eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id),
+              )
+              .where(
+                and(
+                  eq(workingOrderLines.workingOrderId, workingOrderId),
+                  gt(adjustmentLines.reduction, 0),
+                  isNull(adjustmentEndingLines.id),
+                ),
+              ),
+          ),
+          and(
+            eq(adjustments.workingOrderId, workingOrderId),
+            notExists(
+              tx
+                .select({ id: adjustmentLines.id })
+                .from(adjustmentLines)
+                .leftJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
+                .leftJoin(
+                  adjustmentEndingLines,
+                  eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id),
+                )
+                .where(
+                  and(
+                    eq(adjustmentLines.adjustmentId, adjustments.id),
+                    or(
+                      isNotNull(adjustmentEndingLines.id),
+                      and(
+                        gt(adjustmentLines.reduction, 0),
+                        ne(workingOrderLines.workingOrderId, workingOrderId),
+                      ),
+                    ),
+                  ),
+                ),
+            ),
+          ),
+        ),
+      ),
+    )
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
   return rows.map(
     ({ quantity, lineQuantity, reduction, action, beforeAmount, afterAmount, ...row }) => {

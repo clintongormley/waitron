@@ -1,4 +1,4 @@
-import { and, asc, eq, ne } from "drizzle-orm";
+import { and, asc, eq, isNull, ne } from "drizzle-orm";
 import {
   listAdjustmentEntries,
   MAX_ENTRY_PAGE_SIZE,
@@ -7,6 +7,7 @@ import {
   type EntryCursor,
 } from "@waitron/adjustments";
 import {
+  adjustmentEndingLines,
   adjustmentLines,
   departments,
   invoiceSeries,
@@ -114,7 +115,7 @@ export function estimatedCost(
  * The period's free dishes and bills, oldest first: the Adjustments report's entries on the bills
  * opened over the period's first to last business day (D10) that are not cancels and left their
  * subject at zero, told by the rows each took money off that are still on a bill, one row per bill
- * those rows are on (earliest opened first), and left out when none is (D3).
+ * those rows are on (earliest opened first) unless it ended there, and left out when none is (D3).
  */
 export async function listFreeItems(
   tx: Transaction,
@@ -170,6 +171,7 @@ export async function listFreeItems(
     .from(adjustmentLines)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .leftJoin(adjustmentEndingLines, eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id))
     .where(
       and(
         inIds(
@@ -177,6 +179,7 @@ export async function listFreeItems(
           entries.map((entry) => entry.id),
         ),
         ne(workingOrders.status, "abandoned"),
+        isNull(adjustmentEndingLines.id),
       ),
     )
     .orderBy(asc(workingOrderLines.lineNo));
@@ -256,7 +259,12 @@ export async function listFreeItems(
           a.bill.openedAt.localeCompare(b.bill.openedAt) || a.bill.id.localeCompare(b.bill.id),
       );
     for (const { bill, lines } of groups) {
-      const dishes = lines.filter((line) => line.parentLineId === null);
+      // A set menu's comp or discount also takes its dishes' supplements off, but the set menu is
+      // the one thing given.
+      const ids = new Set<string | null>(lines.map(({ lineId }) => lineId));
+      const dishes = lines.filter(
+        ({ parentLineId, setMenuLineId }) => parentLineId === null && !ids.has(setMenuLineId),
+      );
       const counted = dishes.length > 0 ? dishes : lines;
       const departmentId =
         entry.lineId === null

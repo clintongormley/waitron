@@ -586,6 +586,10 @@ are free. To comp or discount a set menu, choose **Comp…** on it in the summar
 or discount leaves its set menu and is charged à la carte, less what you take off. A set menu
 cannot be cancelled: cancel or move its dishes instead.
 
+A comp or discount on a set menu covers its price and its supplements, not paid extras. If some
+of its dishes are cancelled, moved or paid for on their own, the discount comes off; moving or
+paying for all of them takes it along.
+
 To move a set menu to another bill, open **Move dishes…** and select the set menu. Its dishes move
 with it.
 

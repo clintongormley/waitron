@@ -858,6 +858,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That takes nothing off. Check whether it is already free, or enter a larger comp",
     es: "Así no se descuenta nada. Comprueba si ya es gratis o introduce un descuento mayor",
   },
+  "adjustment.not_standing": {
+    en: "A comp or discount on these dishes has already come off this bill. Reload the bill and try again",
+    es: "Un descuento de estos platos ya se ha quitado de esta cuenta. Vuelve a cargar la cuenta e inténtalo de nuevo",
+  },
   "adjustment_reason.not_found": {
     en: "That reason no longer exists. Reload and choose another",
     es: "Ese motivo ya no existe. Vuelve a cargar y elige otro",

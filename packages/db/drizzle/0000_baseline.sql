@@ -2396,11 +2396,13 @@ CREATE TABLE `adjustments` (
 	`preparation_started` integer,
 	`refund_handoff` integer DEFAULT false NOT NULL,
 	`refund_value` integer,
+	`reapplies_adjustment_id` text,
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`approved_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`credited_to`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`reapplies_adjustment_id`) REFERENCES `adjustments`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "adjustments_action_ck" CHECK("adjustments"."action" in ('cancel', 'comp', 'discount_percent', 'discount_amount')),
 	CONSTRAINT "adjustments_stage_ck" CHECK("adjustments"."stage" in ('unsent', 'held', 'fired', 'served')),
 	CONSTRAINT "adjustments_reason_name_ck" CHECK(length(trim("adjustments"."reason_name")) > 0),
@@ -2445,6 +2447,31 @@ CREATE TABLE `adjustment_lines` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `adjustment_lines_adjustment_line_key` ON `adjustment_lines` (`adjustment_id`,`line_id`);--> statement-breakpoint
 CREATE INDEX `adjustment_lines_line_idx` ON `adjustment_lines` (`line_id`);--> statement-breakpoint
+CREATE TABLE `adjustment_ending_lines` (
+	`id` text PRIMARY KEY NOT NULL,
+	`ending_id` text NOT NULL,
+	`adjustment_line_id` text NOT NULL,
+	FOREIGN KEY (`ending_id`) REFERENCES `adjustment_endings`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`adjustment_line_id`) REFERENCES `adjustment_lines`(`id`) ON UPDATE no action ON DELETE restrict
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `adjustment_ending_lines_line_key` ON `adjustment_ending_lines` (`adjustment_line_id`);--> statement-breakpoint
+CREATE INDEX `adjustment_ending_lines_ending_idx` ON `adjustment_ending_lines` (`ending_id`);--> statement-breakpoint
+CREATE TABLE `adjustment_endings` (
+	`id` text PRIMARY KEY NOT NULL,
+	`adjustment_id` text NOT NULL,
+	`working_order_id` text NOT NULL,
+	`why` text NOT NULL,
+	`dish_name` text NOT NULL,
+	`line_id` text,
+	`ended_at` text NOT NULL,
+	FOREIGN KEY (`adjustment_id`) REFERENCES `adjustments`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
+	CONSTRAINT "adjustment_endings_why_ck" CHECK("adjustment_endings"."why" in ('extras_changed', 'variant_changed', 'dish_cancelled', 'dish_moved', 'dish_paid_alone', 'replaced', 'set_menu_cancelled')),
+	CONSTRAINT "adjustment_endings_line_ck" CHECK("adjustment_endings"."line_id" is null or "adjustment_endings"."why" in ('extras_changed', 'variant_changed'))
+);
+--> statement-breakpoint
+CREATE INDEX `adjustment_endings_adjustment_idx` ON `adjustment_endings` (`adjustment_id`,`working_order_id`);--> statement-breakpoint
 CREATE TABLE `departments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,

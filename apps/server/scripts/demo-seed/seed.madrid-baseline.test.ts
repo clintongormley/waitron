@@ -489,6 +489,8 @@ const ADDED_TABLES = [
   "returned_invoice_records",
   "outgoing_mail",
   "adjustment_lines",
+  "adjustment_endings",
+  "adjustment_ending_lines",
   "device_invoice_save_operations",
   "document_delivery_requests",
   "document_delivery_sequences",
@@ -2021,6 +2023,13 @@ for (const locale of ["en", "es"] as const) {
           table.foreignKeys.filter((key) => key.id === capturedId).map((key) => ({ ...key, id })),
         );
       }
+      const adjustmentRows = expected[phase].tables.adjustments!;
+      adjustmentRows.columns.splice(
+        adjustmentRows.columns.findIndex((column) => column.name === "created_at"),
+        0,
+        { name: "reapplies_adjustment_id", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(adjustmentRows.rows)) row.reapplies_adjustment_id = null;
       const draftLines = expected[phase].tables.order_draft_lines!;
       draftLines.columns.splice(
         draftLines.columns.findIndex((column) => column.name === "draft_id") + 1,
@@ -3429,6 +3438,20 @@ for (const locale of ["en", "es"] as const) {
           ...table.foreignKeys.map((key) => ({ ...key, id: key.id + columns.length })),
         ];
       }
+      const adjustmentKeys = expected[phase].tables.adjustments!;
+      adjustmentKeys.foreignKeys = [
+        {
+          id: 0,
+          seq: 0,
+          table: "adjustments",
+          from: "reapplies_adjustment_id",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "RESTRICT",
+          match: "NONE",
+        },
+        ...adjustmentKeys.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
+      ];
 
       expect(phases[phase]!.refunds).toBe(0);
       expect(phases[phase]!.bill_payment_refunds).toBe(0);

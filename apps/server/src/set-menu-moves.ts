@@ -5,6 +5,7 @@ import {
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
+import type { Ending } from "@waitron/adjustments";
 import { AppError } from "@waitron/shared";
 import { belowListPrice } from "@waitron/orders-sales/set-menu-grouping-plan.js";
 import { frozenLineIdSources } from "./set-menu-freeze.js";
@@ -14,11 +15,12 @@ import "./errors.js";
  * Refuses moving these set-menu dishes away from their set menu when that would unfreeze them
  * (D18): `set_menu.moves_with_set_menu` for a dish whose cancel kept its charge or whose service
  * was cancelled, and `set_menu.move_adjusted` for one a comp or discount lowered, or one held
- * through an extra (D30, D34).
+ * through an extra (D30, D34). `ending`'s comps or discounts are read as ended (D59).
  */
 export async function refuseMovingFrozenDishes(
   tx: Transaction,
   lineIds: readonly string[],
+  ending?: Ending,
 ): Promise<void> {
   if (lineIds.length === 0) return;
   const ids = sql`(select value from json_each(${JSON.stringify(lineIds)}))`;
@@ -53,11 +55,14 @@ export async function refuseMovingFrozenDishes(
   const { reduced, held } = await frozenLineIdSources(
     tx,
     rows.map(({ id }) => id),
+    ending,
   );
+  const restored = new Map(ending?.restores.map((restore) => [restore.lineId, restore]));
   const frozen = new Set(
     rows.flatMap((row) => {
       if (held.has(row.id)) return [row.parentLineId ?? row.id];
-      return reduced.has(row.id) || belowListPrice(row) ? [row.id] : [];
+      const priced = { ...row, ...restored.get(row.id) };
+      return reduced.has(row.id) || belowListPrice(priced) ? [row.id] : [];
     }),
   );
   const adjusted = dishes.filter(({ id }) => frozen.has(id));

@@ -4,6 +4,7 @@ import { cancelItemHttp } from "./testing/cancel-line.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
+import { STATUS } from "./till-api-errors.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -1274,6 +1275,10 @@ describe("the route's own rules", () => {
     const again = await post(billId, await comp());
 
     expect([again.status, again.json.code]).toEqual([409, "adjustment.no_reduction"]);
+  });
+
+  it("maps a comp or discount that has already come off to 409", () => {
+    expect(STATUS["adjustment.not_standing"]).toBe(409);
   });
 
   it("screens the body field by field", async () => {

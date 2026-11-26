@@ -57,6 +57,7 @@ import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueHoldCorrections } from "./kitchen-ticket-corrections.js";
 import { isStarted } from "./kitchen-ticket-state.js";
 import { bumpPartyRevision, partyRevision, runServiceCommand } from "./parties.js";
+import { endDiscountsCancelledWith } from "./set-menu-discount-ending.js";
 import { removeFromLine, removePortions, quantityOfLine } from "./working-order-removal.js";
 import { refusePaymentInFlight, bumpRevision } from "./working-order-edit-state.js";
 import { assertTabOpen } from "./stored-order-lines.js";
@@ -313,6 +314,11 @@ export async function cancelItem(
                   recorder: attendance.recorder,
                   at: attendance.clock.now().instant.toISOString(),
                 };
+          await endDiscountsCancelledWith(
+            tx,
+            bill!.id,
+            taken.flatMap(({ dish, off }) => (off === dish.quantity ? [dish.id] : [])),
+          );
           if (members === null)
             await removeFromLine(
               tx,
@@ -615,7 +621,9 @@ async function freeItemsComingBack(
     if (free.some(({ line }) => off.has(line.id))) throw freeItemRefusal("free_item");
     if (isLastPaidDish(paid, off)) {
       expected = freeItemsLeft(free);
-      if (expected.some(({ line }) => line.servedQuantity > 0)) throw freeItemRefusal("served");
+      // A set-menu row is stored served; its dishes' own service counts.
+      if (expected.some(({ line }) => line.setMenuRole !== "set_menu" && line.servedQuantity > 0))
+        throw freeItemRefusal("served");
     }
   }
   if (

@@ -400,6 +400,16 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "which bill lines a comp or discount covered; nothing may change or remove it",
   ),
+  appendOnly(
+    "adjustment_endings",
+    "ledger",
+    "which comps and discounts came off a bill, and why; nothing may change or remove it",
+  ),
+  appendOnly(
+    "adjustment_ending_lines",
+    "ledger",
+    "which rows each comp or discount that came off gave back; nothing may change or remove it",
+  ),
 ];
 
 /**

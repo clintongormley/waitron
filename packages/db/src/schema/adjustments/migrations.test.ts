@@ -258,6 +258,7 @@ describe("the adjustments table", () => {
       preparation_started: 0,
       refund_handoff: 1,
       refund_value: 0,
+      reapplies_adjustment_id: 0,
       created_at: 1,
     });
   });

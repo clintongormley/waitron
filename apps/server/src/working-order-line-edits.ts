@@ -64,6 +64,7 @@ import {
   cancelPortions,
 } from "./order-portions.js";
 import { RETAINED_COURSE } from "./retained-course.js";
+import { endDiscountsCancelledWith } from "./set-menu-discount-ending.js";
 import { regroupBills } from "./set-menu-regroup.js";
 import { linkSetMenusFor } from "./set-menu-links.js";
 import { setMenuOfferLookup } from "./set-menu-offers.js";
@@ -1156,6 +1157,7 @@ export async function applyLineEdits(
   );
   if (plan.removed.length > 0) {
     const removedIds = plan.removed.map((parent) => parent.id);
+    await endDiscountsCancelledWith(tx, orderId, removedIds);
     await cancelPortions(tx, orderId, removedIds, operatorId ?? null);
     await tx
       .delete(workingOrderLines)

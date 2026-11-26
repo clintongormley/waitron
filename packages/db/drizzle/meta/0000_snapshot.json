@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "a6ae78ce-e590-4b8a-a657-d60151313b6f",
+  "id": "8b226e48-79c3-4d04-8812-6003b2917a27",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -15780,6 +15780,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "reapplies_adjustment_id": {
+          "name": "reapplies_adjustment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "text",
@@ -15858,6 +15865,19 @@
           "tableTo": "persons",
           "columnsFrom": [
             "credited_to"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "adjustments_reapplies_fk": {
+          "name": "adjustments_reapplies_fk",
+          "tableFrom": "adjustments",
+          "tableTo": "adjustments",
+          "columnsFrom": [
+            "reapplies_adjustment_id"
           ],
           "columnsTo": [
             "id"
@@ -16066,6 +16086,183 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {}
+    },
+    "adjustment_ending_lines": {
+      "name": "adjustment_ending_lines",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ending_id": {
+          "name": "ending_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "adjustment_line_id": {
+          "name": "adjustment_line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "adjustment_ending_lines_line_key": {
+          "name": "adjustment_ending_lines_line_key",
+          "columns": [
+            "adjustment_line_id"
+          ],
+          "isUnique": true
+        },
+        "adjustment_ending_lines_ending_idx": {
+          "name": "adjustment_ending_lines_ending_idx",
+          "columns": [
+            "ending_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "adjustment_ending_lines_ending_fk": {
+          "name": "adjustment_ending_lines_ending_fk",
+          "tableFrom": "adjustment_ending_lines",
+          "tableTo": "adjustment_endings",
+          "columnsFrom": [
+            "ending_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "adjustment_ending_lines_line_fk": {
+          "name": "adjustment_ending_lines_line_fk",
+          "tableFrom": "adjustment_ending_lines",
+          "tableTo": "adjustment_lines",
+          "columnsFrom": [
+            "adjustment_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "adjustment_endings": {
+      "name": "adjustment_endings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "adjustment_id": {
+          "name": "adjustment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "working_order_id": {
+          "name": "working_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "why": {
+          "name": "why",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "dish_name": {
+          "name": "dish_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "line_id": {
+          "name": "line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "adjustment_endings_adjustment_idx": {
+          "name": "adjustment_endings_adjustment_idx",
+          "columns": [
+            "adjustment_id",
+            "working_order_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "adjustment_endings_adjustment_fk": {
+          "name": "adjustment_endings_adjustment_fk",
+          "tableFrom": "adjustment_endings",
+          "tableTo": "adjustments",
+          "columnsFrom": [
+            "adjustment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "adjustment_endings_working_order_fk": {
+          "name": "adjustment_endings_working_order_fk",
+          "tableFrom": "adjustment_endings",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "working_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "adjustment_endings_why_ck": {
+          "name": "adjustment_endings_why_ck",
+          "value": "\"adjustment_endings\".\"why\" in ('extras_changed', 'variant_changed', 'dish_cancelled', 'dish_moved', 'dish_paid_alone', 'replaced', 'set_menu_cancelled')"
+        },
+        "adjustment_endings_line_ck": {
+          "name": "adjustment_endings_line_ck",
+          "value": "\"adjustment_endings\".\"line_id\" is null or \"adjustment_endings\".\"why\" in ('extras_changed', 'variant_changed')"
+        }
+      }
     },
     "departments": {
       "name": "departments",

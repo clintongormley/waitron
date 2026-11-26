@@ -6,6 +6,7 @@ import {
   nowIso,
   ticketItems,
 } from "@waitron/db";
+import type { Ending } from "@waitron/adjustments";
 import { assertQuantityPrecision, MAX_UNIT_PRECISION } from "@waitron/menu";
 import {
   decimalToThousandths,
@@ -408,7 +409,7 @@ function dishLeft(
 }
 /**
  * What {@link removeFromLine} would answer for `removed` of one target, or {@link removePortions}
- * for whole targets (`removed` null), writing nothing: by how much, in cents, working the bill's set
+ * for whole targets (`removed` null), writing nothing, `ending` read as ended: by how much, in cents, working the bill's set
  * menus out again would lower its total beyond the removed part's own charge.
  */
 export async function regroupDropOfRemoval(
@@ -416,19 +417,25 @@ export async function regroupDropOfRemoval(
   tabId: string,
   targets: readonly { id: string; quantity: number; unitPriceGross: number }[],
   removed: number | null,
+  ending?: Ending,
 ): Promise<number> {
   if (removed === null) {
     const deleted = new Set(targets.map(({ id }) => id));
-    return regroupDropAfter(tx, tabId, { deleted, resized: new Map() });
+    return regroupDropAfter(tx, tabId, { deleted, resized: new Map() }, ending);
   }
   const target = targets[0]!;
   const left = dishLeft(target, removed);
   const kept = keptExtrasOf(await readExtras(tx, target.id), target.quantity);
   const resized = [left, ...extrasAt(kept, left.remaining)];
-  return regroupDropAfter(tx, tabId, {
-    deleted: new Set(),
-    resized: new Map(resized.map(({ id, quantity, lineTotal }) => [id, { quantity, lineTotal }])),
-  });
+  return regroupDropAfter(
+    tx,
+    tabId,
+    {
+      deleted: new Set(),
+      resized: new Map(resized.map(({ id, quantity, lineTotal }) => [id, { quantity, lineTotal }])),
+    },
+    ending,
+  );
 }
 /**
  * Take `removed` thousandths off a dish line: its quantity and total at its stored gross price, its

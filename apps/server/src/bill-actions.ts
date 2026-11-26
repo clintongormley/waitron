@@ -1,5 +1,5 @@
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { newId, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { frozenLinesOf } from "@waitron/orders-sales/set-menu-grouping-plan.js";
@@ -22,6 +22,7 @@ import {
 import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { guardParty, refuseMovedParty, requireBillOfParty } from "./parties.js";
+import { setMenuDiscountsLeftBy } from "./set-menu-discount-ending.js";
 import { frozenLineIdSources } from "./set-menu-freeze.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
@@ -203,7 +204,8 @@ export async function mergeCheckedBills(
 }
 
 /**
- * The ids travel as one JSON value, so they take one bound value however many are named.
+ * The ids travel as one JSON value, so they take one bound value however many are named. A set
+ * menu a comp or discount reduced goes too once every one of its dishes is named (D51).
  */
 export async function resolveMoveLines(
   tx: Transaction,
@@ -238,6 +240,13 @@ export async function resolveMoveLines(
   });
   assertDistinctTransferLines(billId, transfers);
   const menuIds = rows.filter((row) => row.setMenuRole === "set_menu").map((row) => row.id);
+  const { whole } = await setMenuDiscountsLeftBy(
+    tx,
+    billId,
+    rows.filter((row) => row.setMenuRole === "dish").map((row) => row.id),
+  );
+  const wholeIds = whole.map(({ setMenuLineId }) => setMenuLineId);
+  menuIds.push(...wholeIds);
   if (menuIds.length > 0) {
     const named = new Set(transfers.map(({ lineNo }) => lineNo));
     const dishes = await tx
@@ -246,9 +255,15 @@ export async function resolveMoveLines(
       .where(
         and(
           eq(workingOrderLines.workingOrderId, billId),
-          inArray(
-            workingOrderLines.setMenuLineId,
-            sql`(select value from json_each(${JSON.stringify(menuIds)}))`,
+          or(
+            inArray(
+              workingOrderLines.setMenuLineId,
+              sql`(select value from json_each(${JSON.stringify(menuIds)}))`,
+            ),
+            inArray(
+              workingOrderLines.id,
+              sql`(select value from json_each(${JSON.stringify(wholeIds)}))`,
+            ),
           ),
         ),
       );
@@ -320,7 +335,8 @@ async function checkMoveInvoice(
  * paid: it keeps at least what it has received, unless `sourceMayBeOverpaid` (Pay for items, which
  * settles a source left holding more than it owes). An existing destination may hold payments, and
  * the move may not raise what it holds over what it owes ({@link moveOrderLines}).
- * `tellKitchen: false` leaves out the MOVED slips and station notices.
+ * `tellKitchen: false` leaves out the MOVED slips and station notices; `paidAlone` says the dishes
+ * leave to be paid for ({@link moveOrderLines}).
  */
 export async function moveDishes(
   tx: Transaction,
@@ -333,7 +349,7 @@ export async function moveDishes(
     admission: TradingAdmission;
     invoiceChoice?: unknown;
   },
-  options: { sourceMayBeOverpaid?: boolean; tellKitchen?: boolean } = {},
+  options: { sourceMayBeOverpaid?: boolean; tellKitchen?: boolean; paidAlone?: boolean } = {},
 ): Promise<{ billId: string }> {
   await requireEconomicWrite(tx, cfg, command.admission);
   if (lineIds.length === 0) throw new AppError("sale.empty_basket", {});
@@ -399,6 +415,7 @@ export async function moveDishes(
   const before = await readSentWork(tx, fromBillId);
   await moveCheckedDishes(tx, cfg, fromBillId, destinationId, transfers, {
     actorId: command.operatorId,
+    paidAlone: options.paidAlone,
   });
   if (options.sourceMayBeOverpaid !== true) await assertBillInvariant(tx, [fromBillId]);
   if (options.tellKitchen !== false) await enqueueMovedSlips(tx, cfg, before, destinationId);
@@ -416,7 +433,7 @@ export async function moveCheckedDishes(
   fromBillId: string,
   toBillId: string,
   transfers: Transfers,
-  options: { actorId: string; deferTarget?: boolean },
+  options: { actorId: string; deferTarget?: boolean; paidAlone?: boolean },
 ): Promise<void> {
   await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, options);
   await bumpRevision(tx, [fromBillId, toBillId]);

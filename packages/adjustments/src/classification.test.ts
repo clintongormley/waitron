@@ -16,6 +16,8 @@ describe("ADJUSTMENTS_CLASSIFICATION", () => {
       ["adjustments", "ledger", true],
       ["adjustment_refunds", "ledger", true],
       ["adjustment_lines", "ledger", true],
+      ["adjustment_endings", "ledger", true],
+      ["adjustment_ending_lines", "ledger", true],
     ]);
     expect(ADJUSTMENTS_CLASSIFICATION.every((entry) => entry.reason.trim().length > 0)).toBe(true);
   });
@@ -25,7 +27,13 @@ describe("ADJUSTMENTS_CLASSIFICATION", () => {
       CORE_MIGRATIONS.appendOnlyTables.filter((table) =>
         (ADJUSTMENTS_TABLES as readonly string[]).includes(table),
       ),
-    ).toEqual(["adjustments", "adjustment_refunds", "adjustment_lines"]);
+    ).toEqual([
+      "adjustments",
+      "adjustment_refunds",
+      "adjustment_lines",
+      "adjustment_endings",
+      "adjustment_ending_lines",
+    ]);
   });
 
   it("feeds a change for each classified table, under the table's own name", () => {
@@ -34,6 +42,8 @@ describe("ADJUSTMENTS_CLASSIFICATION", () => {
       { table: "adjustments", type: "adjustments" },
       { table: "adjustment_refunds", type: "adjustment_refunds" },
       { table: "adjustment_lines", type: "adjustment_lines" },
+      { table: "adjustment_endings", type: "adjustment_endings" },
+      { table: "adjustment_ending_lines", type: "adjustment_ending_lines" },
     ]);
   });
 });

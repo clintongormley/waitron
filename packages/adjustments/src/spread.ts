@@ -150,14 +150,16 @@ export function nearestWeighedUnitPrice(
   grossUnit: Decimal,
   quantity: string,
   targetGross: Decimal,
+  priceQuantity = "1",
 ): Decimal {
   const ceiling = unitCents(grossUnit);
   const count = thousandths(quantity);
+  const per = thousandths(priceQuantity);
   const target = cents(targetGross, "targetGross");
-  if (target < 0n || target > totalAt(ceiling, count)) {
+  if (target < 0n || target > totalAt(ceiling, count, per)) {
     throw new RangeError("targetGross lies outside the line");
   }
-  return money(nearestPrice(ceiling, count, target));
+  return money(nearestPrice(ceiling, count, target, per));
 }
 
 function splitRows(units: bigint, target: bigint): PricedRow[] {

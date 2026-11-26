@@ -6,6 +6,8 @@ export const ADJUSTMENTS_TABLES = [
   "adjustments",
   "adjustment_refunds",
   "adjustment_lines",
+  "adjustment_endings",
+  "adjustment_ending_lines",
 ] as const;
 
 export const ADJUSTMENTS_CHANGE_SOURCES: readonly ChangeSource[] = ADJUSTMENTS_TABLES.map(

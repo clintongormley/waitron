@@ -7,7 +7,13 @@ import { ADJUSTMENTS_TABLES } from "./classification.js";
 import * as schema from "@waitron/db/schema/adjustments.js";
 
 const tables = [...ADJUSTMENTS_TABLES];
-const immutableTables = ["adjustments", "adjustment_refunds", "adjustment_lines"];
+const immutableTables = [
+  "adjustments",
+  "adjustment_refunds",
+  "adjustment_lines",
+  "adjustment_endings",
+  "adjustment_ending_lines",
+];
 const addedAdjustmentColumns: Readonly<Record<string, BackupValue>> = {
   charge_kept: 0n,
   preparation_started: null,

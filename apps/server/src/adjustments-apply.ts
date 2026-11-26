@@ -22,6 +22,7 @@ import {
   type AdjustmentStage,
   type AdjustmentVerdict,
   type DishPrice,
+  type Ending,
   type Approval,
   type CompAction,
   type PricedRow,
@@ -85,6 +86,13 @@ import {
 } from "./working-order-removal.js";
 import { bumpRevision, refusePaymentInFlight } from "./working-order-edit-state.js";
 import { billTotalOf } from "./adjustment-bill-total.js";
+import {
+  endReplacedOnSetMenu,
+  setMenuDishes,
+  setMenuReplacement,
+  type Replaced,
+} from "./set-menu-adjustment.js";
+import { discountsCancelledBy, endDiscountsCancelledBy } from "./set-menu-discount-ending.js";
 import { atReleasedPrices, regroupAdjusted, releaseDishes } from "./set-menu-dish-release.js";
 import {
   assertTabOpen,
@@ -156,6 +164,8 @@ export interface AdjustmentPreview {
     reduction: string;
     rows: { quantity: string; unitGross: string }[];
   }[];
+  /** The set menu's comp or discount the action replaces (D52); absent when there is none. */
+  replaces?: Replaced;
 }
 
 /** New prices for one row, or for the part of it split off with the part of its dish covered when
@@ -522,12 +532,14 @@ function zeroed(subjects: readonly Subject[]): Change[] {
  * Everything an adjustment decides before it writes, reading only: the refusals of the bill, the
  * line, the amount and the reason's policy, and the rows it would change. A dish is
  * taken with its extras; part of one splits its extras in proportion, the part covered taking the
- * part of each. An extra is taken on its own, and only whole.
+ * part of each. An extra is taken on its own, and only whole. `ending`'s adjustments are read as
+ * ended (D59).
  */
 export async function planAdjustment(
   tx: Transaction,
   ask: AdjustmentAsk,
   venueLocale: string,
+  ending?: Ending,
 ): Promise<Plan> {
   const { orderId } = ask;
   // An open bill, a table's or a counter order.
@@ -538,7 +550,7 @@ export async function planAdjustment(
   await refusePaymentInFlight(tx, [orderId]);
   await requireOrderBillEditor(tx, orderId, ask);
   const reason = await findAdjustmentReason(tx, ask.reasonId);
-  const read = await readRows(tx, orderId);
+  const read = await readRows(tx, orderId, ending);
   const { rows, released } = await atReleasedPrices(tx, ask, read);
 
   let line: Row | null = null;
@@ -594,7 +606,11 @@ export async function planAdjustment(
     }
     const target = line;
     // An extra has no extras of its own, so it is a family of one.
-    const family = [target, ...view.filter((other) => other.parentLineId === target.id)];
+    const family = [
+      target,
+      ...view.filter((other) => other.parentLineId === target.id),
+      ...setMenuDishes(target, view),
+    ];
     covered = coveredQuantity(orderId, target, ask.quantity);
     const partial = covered < target.quantity;
     const weighed = (target.unitPrecision ?? 0) > 0;
@@ -740,6 +756,7 @@ export async function planAdjustment(
       ? evaluateCancel(reason, { actorPermissions, note: ask.note, stage: stage! })
       : await judgeComp(tx, reason, {
           orderId,
+          ended: ending?.adjustmentIds,
           action: ask.action,
           rows,
           writes: writes ?? changes,
@@ -784,6 +801,8 @@ async function judgeComp(
   reason: AdjustmentReason,
   ask: {
     orderId: string;
+    /** Read as ended (D59). */
+    ended: readonly string[] | undefined;
     action: CompAction;
     /** Every line of the bill, as {@link readRows} reads it. */
     rows: readonly Row[];
@@ -800,7 +819,11 @@ async function judgeComp(
 ): Promise<AdjustmentVerdict> {
   const { orderId, rows } = ask;
   const standingOnBill = standingOff(
-    await readReasonStanding(tx, { workingOrderId: orderId, reasonId: reason.id }),
+    await readReasonStanding(tx, {
+      workingOrderId: orderId,
+      reasonId: reason.id,
+      ended: ask.ended,
+    }),
   );
   const billComped = sumDecimals(
     rows.map((row) => {
@@ -901,7 +924,11 @@ export async function previewAdjustment(
   ask: AdjustmentAsk,
   venueLocale: string,
 ): Promise<AdjustmentPreview> {
-  const plan = await planAdjustment(tx, ask, venueLocale);
+  const replacing = await setMenuReplacement(tx, ask);
+  const ending =
+    replacing?.ending ??
+    (await discountsCancelledBy(tx, ask, () => planAdjustment(tx, ask, venueLocale)));
+  const plan = await planAdjustment(tx, ask, venueLocale, ending);
   const regrouped =
     ask.action === "cancel"
       ? await regroupDropOfRemoval(
@@ -909,6 +936,7 @@ export async function previewAdjustment(
           ask.orderId,
           (plan.removedPortions ?? [plan.line!]).map(voidTargetOf),
           plan.removed,
+          ending,
         )
       : 0;
   const lines =
@@ -936,6 +964,7 @@ export async function previewAdjustment(
     ask.orderId,
     plan,
     ask.action === "cancel" ? reduction : null,
+    ending,
   );
   await assertBillInvariantAt(tx, ask.orderId, billTotal.after);
   if (ask.action !== "cancel") {
@@ -947,6 +976,7 @@ export async function previewAdjustment(
     billTotal: { before: money(billTotal.before), after: money(billTotal.after) },
     needsApproval: plan.approval === null ? null : wireApproval(plan.approval),
     lines,
+    ...(replacing === null ? {} : { replaces: replacing.replaces }),
   };
 }
 
@@ -1094,6 +1124,9 @@ export async function applyAdjustment(
     "adjustment.apply",
     { ...command, expectedEdit, approverId: approver?.personId },
     async () => {
+      const before = args.action === "cancel" ? null : await totalBeforeEdit(tx, cfg, args.orderId);
+      await endReplacedOnSetMenu(tx, args);
+      await endDiscountsCancelledBy(tx, args, () => planAdjustment(tx, args, venueLocale));
       const plan = await planAdjustment(tx, args, venueLocale);
       const approved = await approvedBy(tx, plan.approval, approver);
       const activity =
@@ -1126,7 +1159,6 @@ export async function applyAdjustment(
           args.preparationStarted,
         );
       } else {
-        const before = await totalBeforeEdit(tx, cfg, args.orderId);
         await releaseDishes(tx, plan.released);
         const repriced = await reprice(
           tx,

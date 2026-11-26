@@ -23,6 +23,9 @@ declare module "@waitron/shared" {
      * of a line, or of a whole bill, that is already free, or a discount that rounds to nothing at
      * the prices it can set. A cancel is never refused this way. */
     "adjustment.no_reduction": { workingOrderId: string };
+    /** An ending that would give nothing back: no row on the bill holds anything the comp or
+     * discount took off, because it already came off them or none of them is on that bill. */
+    "adjustment.not_standing": { adjustmentId: string; workingOrderId: string };
     /** Part of a line sold in a unit with decimal places, which a give-away or a discount takes
      * only whole; a cancel can take part of it. */
     "adjustment.weighed_partial": { workingOrderId: string; lineNo: number };

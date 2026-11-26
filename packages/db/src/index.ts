@@ -415,6 +415,9 @@ export {
 } from "./schema/menu/suggestions.js";
 export type { SuggestionJobRow, SuggestionRow } from "./schema/menu/suggestions.js";
 export {
+  adjustmentEndingLines,
+  adjustmentEndings,
+  adjustmentEndingWhy,
   adjustmentLines,
   adjustmentReasons,
   adjustmentRefunds,
@@ -422,6 +425,7 @@ export {
   adjustmentStage,
 } from "./schema/index.js";
 export type { AdjustmentSplit, AdjustmentStage } from "./schema/adjustments/adjustments.js";
+export type { AdjustmentEndingWhy } from "./schema/adjustments/adjustment-endings.js";
 export {
   allergyLineTicks,
   openingHours,
