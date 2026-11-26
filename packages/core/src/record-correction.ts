@@ -27,7 +27,12 @@ import { requireCorrectiveSeries } from "./corrective-series.js";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
-import { requireSupportedCorrection } from "./correction-eligibility.js";
+import {
+  requireFullInvoiceCorrection,
+  requireSupportedCorrection,
+  requireTaxpayerDomicile,
+} from "./correction-eligibility.js";
+import { storedCounterparty } from "./counterparty.js";
 import { authorizeCorrectionApproval } from "./correction-approval.js";
 import { authorizeReopenedCredit } from "./correction-reopen.js";
 import { correctionTargetFor } from "./correction-target.js";
@@ -54,7 +59,8 @@ export interface RecordCorrectionInput {
    * asesor before a real cross-node caller is wired.
    */
   nodeId: NodeId;
-  /** Must name a `corrective` series (`sale.series_wrong_purpose`); none is provisioned here. */
+  /** Must name a `corrective` series, or with `fullInvoice` a `full_corrective` one
+   * (`sale.series_wrong_purpose`); none is provisioned here. */
   seriesId: SeriesId;
   /** The earlier sale being corrected; a replaced sale is corrected through its replacement
    * (`correctionTargetFor`), whose lines `correctsLineId` then names. */
@@ -84,6 +90,14 @@ export interface RecordCorrectionInput {
    * state its gross. Refused together with `wholeInvoice`.
    */
   partialVatBreakdown?: readonly VatBreakdownLine[];
+  /**
+   * Files a full invoice's corrective: it names the customer the invoice names, as stored, and the
+   * business's registered address as it is now. Refused with `sale.correction_unsupported` when
+   * the invoice names nobody or beside `wholeInvoice`, and with `fiscal.taxpayer_domicile_missing`
+   * when the business has no registered address. Without it, an invoice naming a customer is
+   * refused with `sale.correction_unsupported`.
+   */
+  fullInvoice?: true;
   /** Checked by `recordCorrection` itself; the authorizer is recorded on `sales.authorized_by`.
    * A till or management session must hold `sale.rectify`, or a till session's override must. An
    * `invoiceCorrectionId` files on the approval given when that correction was opened, whose
@@ -149,6 +163,11 @@ export async function recordCorrection(
       invoiceLocales: sales.invoiceLocales,
       total: sales.total,
       counterpartyTaxId: sales.counterpartyTaxId,
+      counterpartyLegalName: sales.counterpartyLegalName,
+      counterpartyCountryCode: sales.counterpartyCountryCode,
+      counterpartyIdentifierType: sales.counterpartyIdentifierType,
+      counterpartyIdentifierCountryCode: sales.counterpartyIdentifierCountryCode,
+      counterpartyAddress: sales.counterpartyAddress,
       vatBreakdown: sales.vatBreakdown,
       corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
       correctionCount: sql<number>`(select count(*) from sales c where c.corrects_sale_id = ${sales}.id)`,
@@ -169,7 +188,13 @@ export async function recordCorrection(
     throw new AppError("sale.voided", { saleId: correctsSaleId });
   }
 
-  const series = await requireCorrectiveSeries(tx, input.seriesId, input.nodeId, "corrective");
+  const fullInvoice = input.fullInvoice === true;
+  const series = await requireCorrectiveSeries(
+    tx,
+    input.seriesId,
+    input.nodeId,
+    fullInvoice ? "full_corrective" : "corrective",
+  );
 
   const authorization =
     "reopenedBillId" in input.authz
@@ -196,7 +221,14 @@ export async function recordCorrection(
               override: input.authz.override,
             });
 
-  requireSupportedCorrection(original.counterpartyTaxId, correctsSaleId);
+  let taxpayerDomicile: string | null = null;
+  if (fullInvoice) {
+    requireFullInvoiceCorrection(original.counterpartyTaxId, correctsSaleId, input.wholeInvoice);
+    taxpayerDomicile = await requireTaxpayerDomicile(tx);
+  } else {
+    requireSupportedCorrection(original.counterpartyTaxId, correctsSaleId);
+  }
+  const counterparty = fullInvoice ? storedCounterparty(original) : null;
 
   // After the gate, so a session that may not correct is not told what is left on the invoice.
   // Compared, stored and filed at the cent amount the row stores, not the unrounded input.
@@ -323,6 +355,15 @@ export async function recordCorrection(
     fiscalBackend: backend.id,
     fiscalState: "recorded",
     correctsSaleId,
+    ...(fullInvoice && {
+      counterpartyTaxId: original.counterpartyTaxId,
+      counterpartyLegalName: original.counterpartyLegalName,
+      counterpartyCountryCode: original.counterpartyCountryCode,
+      counterpartyIdentifierType: original.counterpartyIdentifierType,
+      counterpartyIdentifierCountryCode: original.counterpartyIdentifierCountryCode,
+      counterpartyAddress: original.counterpartyAddress,
+      taxpayerDomicile,
+    }),
     // Written at insert: `sales` is append-only, so the authorizer cannot be added later.
     authorizedBy: authorization.authorizedBy,
   });
@@ -360,7 +401,7 @@ export async function recordCorrection(
       descriptionOfOperation,
       total: correction,
       vatBreakdown,
-      counterparty: null,
+      counterparty,
     },
     { correctsSaleId },
   );

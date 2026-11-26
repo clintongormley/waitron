@@ -579,6 +579,112 @@ it.each([
   });
 });
 
+describe("a full invoice's correction, asked for with fullInvoice", () => {
+  const FULL = { fullInvoice: true } as const;
+  const admitted = {
+    eligible: true,
+    filing: "queued",
+    original: { number: "F/1", issuedAt: "2026-03-01" },
+  } as const;
+
+  async function sellFull() {
+    const [full] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    suite.db.run(
+      sql`update taxpayer set taxpayer_domicile = 'Calle Fiscal 8, 28001 Madrid' where id = 1`,
+    );
+    return sell([{ ...invoiceLines()[1]!, lineNo: 1 }], "12.10", {
+      seriesId: brandSeriesId(full!.id),
+      counterparty: { taxId: "12345678Z", legalName: "Ana Garcia", countryCode: "ES" },
+      recipientAddress: "Calle Mayor 2, 28013 Madrid, Spain",
+    });
+  }
+
+  const previewFull = (saleId: SaleId) =>
+    withTransaction(suite.db, (tx) =>
+      previewCorrectionAmounts(tx, backend, saleId, nodeId, { gross: decimal("6.05") }, FULL),
+    );
+  const linesFull = (saleId: SaleId) =>
+    withTransaction(suite.db, (tx) => readCorrectableLines(tx, backend, saleId, nodeId, FULL));
+
+  it("previews and reads the lines of a full invoice the regime marks as one", async () => {
+    const { saleId, ids } = await sellFull();
+    backend.setCorrectionAdmission({ ...admitted, fullInvoice: true });
+
+    expect(await previewFull(saleId)).toMatchObject({
+      gross: "6.05",
+      filing: "queued",
+      original: { number: "F/1", issuedAt: "2026-03-01" },
+      lines: [{ name: "Steak", lineTotal: "-5.00", lineGross: "-6.05", correctsLineId: ids[0] }],
+    });
+    expect(await linesFull(saleId)).toEqual([
+      {
+        id: ids[0],
+        descriptions: { "es-ES": "Steak" },
+        rate: "21.00",
+        gross: "12.10",
+        left: "12.10",
+      },
+    ]);
+  });
+
+  it.each([
+    ["the preview", previewFull],
+    ["the lines", linesFull],
+  ] as const)("refuses %s when the business has no registered address", async (_name, read) => {
+    const { saleId } = await sellFull();
+    backend.setCorrectionAdmission({ ...admitted, fullInvoice: true });
+    suite.db.run(sql`update taxpayer set taxpayer_domicile = ' ' where id = 1`);
+
+    expect(await captureError(() => read(saleId))).toMatchObject({
+      code: "fiscal.taxpayer_domicile_missing",
+    });
+  });
+
+  it.each([
+    ["the preview", previewFull],
+    ["the lines", linesFull],
+  ] as const)("refuses %s of a receipt, which names nobody", async (_name, read) => {
+    const { saleId } = await sellSteak();
+
+    backend.setCorrectionAdmission({ ...admitted, fullInvoice: true });
+    expect(await captureError(() => read(saleId))).toMatchObject({
+      code: "sale.correction_unsupported",
+      params: { saleId },
+    });
+    backend.setCorrectionAdmission(admitted);
+    expect(await captureError(() => read(saleId))).toMatchObject({
+      code: "sale.correction_unsupported",
+      params: { saleId },
+    });
+  });
+
+  it("refuses an answer the regime does not mark as a full invoice", async () => {
+    const { saleId } = await sellFull();
+    backend.setCorrectionAdmission(admitted);
+
+    expect(await captureError(() => previewFull(saleId))).toMatchObject({
+      code: "sale.correction_unsupported",
+      params: { saleId },
+    });
+  });
+
+  it.each(["filing_refused", "refused_no_fix", "wrong_node"] as const)(
+    "refuses a full invoice the regime answers %s for, with that reason",
+    async (reason) => {
+      const { saleId } = await sellFull();
+      backend.setCorrectionAdmission({ eligible: false, reason, fullInvoice: true });
+
+      expect(await captureError(() => previewFull(saleId))).toMatchObject({
+        code: "sale.correction_not_admitted",
+        params: { reason },
+      });
+    },
+  );
+});
+
 it("refuses a substituted invoice as replaced before asking the regime", async () => {
   const { saleId } = await sellSteak();
   const substitute = await sellSteak();

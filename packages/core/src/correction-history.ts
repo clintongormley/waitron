@@ -21,7 +21,11 @@ import {
   type CorrectionAmountPreview,
   remainingLines,
 } from "./correction-allocation.js";
-import { requireSupportedCorrection } from "./correction-eligibility.js";
+import {
+  requireFullInvoiceCorrection,
+  requireSupportedCorrection,
+  requireTaxpayerDomicile,
+} from "./correction-eligibility.js";
 import { correctionTargetFor } from "./correction-target.js";
 import { deductionsTaken, type TakenCents } from "./deductions-taken.js";
 import type { RecordSaleLine } from "./record-sale.js";
@@ -32,6 +36,11 @@ type InvoiceLine = typeof saleLines.$inferSelect;
 export type CorrectionPreview = CorrectionAmountPreview &
   Omit<Extract<CorrectionAdmission, { eligible: true }>, "eligible"> & { lines: RecordSaleLine[] };
 
+/** Asks for a full invoice's corrective, which only a caller that files one may do. */
+export interface FullInvoiceCorrection {
+  fullInvoice?: true;
+}
+
 /**
  * What a correction of `selection.gross` from the invoice `saleId`, issued by `issuingNodeId`, would
  * file, as the lines and split `recordCorrection` takes; a replaced invoice is read through its
@@ -41,6 +50,10 @@ export type CorrectionPreview = CorrectionAmountPreview &
  * regime's newest filed figures of it or of an earlier correction cannot be read or differ from the
  * stored ones; refused with
  * `sale.correction_unsupported`, as `recordCorrection` is, when the invoice names a customer.
+ * With `fullInvoice`, it is a full invoice's correction instead: refused with
+ * `sale.correction_unsupported` unless the invoice names a customer and the regime's admission
+ * says it is a full invoice, and with `fiscal.taxpayer_domicile_missing` when the business has no
+ * registered address.
  */
 export async function previewCorrectionAmounts(
   tx: Transaction,
@@ -48,12 +61,14 @@ export async function previewCorrectionAmounts(
   saleId: SaleId,
   issuingNodeId: NodeId,
   selection: { gross: Decimal; lineIds?: readonly string[] },
+  kind: FullInvoiceCorrection = {},
 ): Promise<CorrectionPreview> {
   const { admission, history, invoiceLines, partsTaken } = await admittedHistory(
     tx,
     backend,
     saleId,
     issuingNodeId,
+    kind,
   );
   const preview = allocateCorrectionAmounts(history, selection);
   return {
@@ -79,8 +94,9 @@ export async function readCorrectableLines(
   backend: FiscalBackend,
   saleId: SaleId,
   issuingNodeId: NodeId,
+  kind: FullInvoiceCorrection = {},
 ): Promise<CorrectableLine[]> {
-  const { history, invoiceLines } = await admittedHistory(tx, backend, saleId, issuingNodeId);
+  const { history, invoiceLines } = await admittedHistory(tx, backend, saleId, issuingNodeId, kind);
   const left = new Map(remainingLines(history).map((line) => [line.id, line.gross]));
   const byId = new Map(invoiceLines.map((line) => [line.id, line]));
   return history.lines.map((line) => ({
@@ -97,6 +113,7 @@ async function admittedHistory(
   backend: FiscalBackend,
   invoiceId: SaleId,
   issuingNodeId: NodeId,
+  kind: FullInvoiceCorrection,
 ) {
   const saleId = await correctionTargetFor(tx, invoiceId);
   // The requested invoice as well as its replacement: an exchange names the invoice it took.
@@ -110,14 +127,22 @@ async function admittedHistory(
   const admission: CorrectionAdmission = backend.correctionAdmissionFor
     ? await backend.correctionAdmissionFor(tx, saleId, issuingNodeId)
     : { eligible: false, reason: "unsupported" };
-  if (admission.fullInvoice) {
+  if (admission.fullInvoice && kind.fullInvoice !== true) {
     throw new AppError("sale.correction_not_admitted", { reason: "not_simplified" });
   }
   if (!admission.eligible) {
     throw new AppError("sale.correction_not_admitted", { reason: admission.reason });
   }
   const stored = await readStored(tx, saleId);
-  requireSupportedCorrection(stored.sale.counterpartyTaxId, saleId);
+  if (kind.fullInvoice === true) {
+    requireFullInvoiceCorrection(
+      admission.fullInvoice === true ? stored.sale.counterpartyTaxId : null,
+      saleId,
+    );
+    await requireTaxpayerDomicile(tx);
+  } else {
+    requireSupportedCorrection(stored.sale.counterpartyTaxId, saleId);
+  }
   await refuseMovedFigures(tx, backend, [stored.sale, ...stored.corrections]);
   return { admission, ...(await readHistory(tx, saleId, stored)) };
 }

@@ -1,6 +1,6 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AppError,
   decimal,
@@ -10,7 +10,12 @@ import {
 } from "@waitron/shared";
 import type { DeviceId, NodeId, SaleId, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import type { FiscalBackend, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
+import type {
+  Counterparty,
+  FiscalBackend,
+  SaleForFiscalRecord,
+  TrustedClock,
+} from "@waitron/fiscal";
 import {
   statementChunks,
   CORE_MIGRATIONS,
@@ -19,6 +24,7 @@ import {
   invoiceSeries,
   saleLines,
   sales,
+  taxpayer,
   withTransaction,
   nextInvoiceNumberOf,
 } from "@waitron/db";
@@ -1689,4 +1695,189 @@ it("records all 2,001 correction lines and their parent links", async () => {
   expect(stored[boundary]!.parentLineId).toBe(stored[boundary - 1]!.id);
   expect(stored.map((row) => row.correctsLineId)).toEqual(originalLines.map((row) => row.id));
   expect(stored.every((row) => row.quantity === -1000 && row.lineTotal === -100)).toBe(true);
+});
+
+describe("recordCorrection — a full invoice's corrective, asked for with fullInvoice", () => {
+  const SPANISH: Counterparty = { taxId: "12345678Z", legalName: "Ana García", countryCode: "ES" };
+  const FOREIGN: Counterparty = {
+    taxId: "Ab-09 /xy",
+    legalName: "Jean Martin",
+    countryCode: "FR",
+    identifierType: "passport",
+    identifierCountryCode: "FR",
+  };
+  let fullRectSeriesId: SeriesId;
+
+  beforeEach(async () => {
+    const [row] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "FR", purpose: "full_corrective" })
+      .returning({ id: invoiceSeries.id });
+    fullRectSeriesId = brandSeriesId(row!.id);
+  });
+
+  async function sellFull(backend: FiscalBackend, counterparty: Counterparty = SPANISH) {
+    const [full] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId, code: "F", purpose: "full" })
+      .returning({ id: invoiceSeries.id });
+    await suite.db.update(taxpayer).set({ taxpayerDomicile: "8 Tax Street, 28001 Madrid" });
+    return sell(backend, {
+      seriesId: brandSeriesId(full!.id),
+      counterparty,
+      recipientAddress: "2 Main Street, 28013 Madrid, Spain",
+    });
+  }
+
+  async function seriesNext(id: SeriesId): Promise<number | undefined> {
+    const [series] = await suite.db
+      .select({ n: nextInvoiceNumberOf(invoiceSeries.id) })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, id));
+    return series?.n;
+  }
+
+  const full = (
+    overrides: Partial<RecordCorrectionInput> = {},
+  ): Partial<RecordCorrectionInput> => ({
+    fullInvoice: true,
+    seriesId: fullRectSeriesId,
+    ...overrides,
+  });
+
+  async function expectRefused(
+    backend: FakeFiscalBackend,
+    originalId: SaleId,
+    overrides: Partial<RecordCorrectionInput>,
+    refusal: { code: string; params?: Record<string, unknown> },
+  ) {
+    const filed = (await backend.recordsFor(nodeId)).map((r) => r.kind);
+    await withTransaction(suite.db, async (tx) => {
+      await expect(
+        recordCorrection(tx, backend, correctionInput(originalId, overrides)),
+      ).rejects.toMatchObject(refusal);
+    });
+    expect(await countCorrectives(originalId)).toBe(0);
+    expect(await seriesNext(fullRectSeriesId)).toBe(1);
+    expect(await rectSeriesNext()).toBe(1);
+    expect((await backend.recordsFor(nodeId)).map((r) => r.kind)).toEqual(filed);
+  }
+
+  it.each([
+    ["a Spanish tax number", SPANISH],
+    ["a foreign passport", FOREIGN],
+  ] as const)(
+    "copies the customer and the business's current address, numbered from the full-invoice corrective series, for %s",
+    async (_name, counterparty) => {
+      const backend = new FakeFiscalBackend(suite.db);
+      const { saleId: originalId } = await sellFull(backend, counterparty);
+      await suite.db.update(taxpayer).set({ taxpayerDomicile: "9 New Street, 28002 Madrid" });
+      const filing = vi.spyOn(backend, "recordCorrection");
+
+      const { saleId } = await correct(backend, originalId, full());
+
+      const customer = {
+        counterpartyTaxId: sales.counterpartyTaxId,
+        counterpartyLegalName: sales.counterpartyLegalName,
+        counterpartyCountryCode: sales.counterpartyCountryCode,
+        counterpartyIdentifierType: sales.counterpartyIdentifierType,
+        counterpartyIdentifierCountryCode: sales.counterpartyIdentifierCountryCode,
+        counterpartyAddress: sales.counterpartyAddress,
+      };
+      const [original] = await suite.db
+        .select(customer)
+        .from(sales)
+        .where(eq(sales.id, originalId));
+      const [row] = await suite.db
+        .select({
+          ...customer,
+          taxpayerDomicile: sales.taxpayerDomicile,
+          seriesId: sales.seriesId,
+          invoiceNumber: sales.invoiceNumber,
+        })
+        .from(sales)
+        .where(eq(sales.id, saleId));
+      expect(original!.counterpartyAddress).toBe("2 Main Street, 28013 Madrid, Spain");
+      expect(row).toEqual({
+        ...original,
+        taxpayerDomicile: "9 New Street, 28002 Madrid",
+        seriesId: fullRectSeriesId,
+        invoiceNumber: 1,
+      });
+      expect(await rectSeriesNext()).toBe(1);
+      expect(filing).toHaveBeenCalledOnce();
+      expect(filing.mock.calls[0]![1]).toMatchObject({ seriesCode: "FR", invoiceNumber: 1 });
+      expect(filing.mock.calls[0]![1].counterparty).toEqual(counterparty);
+    },
+  );
+
+  it("names nobody and no business address on a receipt's corrective, as before", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    const filing = vi.spyOn(backend, "recordCorrection");
+
+    const { saleId } = await correct(backend, originalId);
+
+    const [row] = await suite.db
+      .select({ taxId: sales.counterpartyTaxId, domicile: sales.taxpayerDomicile })
+      .from(sales)
+      .where(eq(sales.id, saleId));
+    expect(row).toEqual({ taxId: null, domicile: null });
+    expect(filing.mock.calls[0]![1].counterparty).toBeNull();
+  });
+
+  it("refuses when the business has no registered address", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellFull(backend);
+    await suite.db.update(taxpayer).set({ taxpayerDomicile: " " });
+
+    await expectRefused(backend, originalId, full(), {
+      code: "fiscal.taxpayer_domicile_missing",
+    });
+  });
+
+  it("refuses an invoice naming nobody", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    await expectRefused(backend, originalId, full(), {
+      code: "sale.correction_unsupported",
+      params: { saleId: originalId },
+    });
+  });
+
+  it("refuses a whole-invoice credit beside it", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellFull(backend);
+
+    await expectRefused(backend, originalId, full({ wholeInvoice: true }), {
+      code: "sale.correction_unsupported",
+      params: { saleId: originalId },
+    });
+  });
+
+  it("refuses a receipt's correction numbered from the full-invoice corrective series", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    await expectRefused(
+      backend,
+      originalId,
+      { seriesId: fullRectSeriesId },
+      {
+        code: "sale.series_wrong_purpose",
+        params: { expected: "corrective", actual: "full_corrective" },
+      },
+    );
+  });
+
+  it("refuses the receipts' corrective series", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellFull(backend);
+
+    await expectRefused(backend, originalId, full({ seriesId: rectSeriesId }), {
+      code: "sale.series_wrong_purpose",
+      params: { expected: "full_corrective", actual: "corrective" },
+    });
+  });
 });
