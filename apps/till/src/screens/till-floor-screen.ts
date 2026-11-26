@@ -558,7 +558,13 @@ export class TillFloorScreen extends LitElement {
           calc(max(var(--wt-tap-min) * 6, 100dvh - var(--wt-tap-min) * 8) * var(--floor-map-ratio))
         );
         aspect-ratio: var(--floor-map-ratio);
-        min-height: calc(var(--wt-tap-min) + var(--wt-space-2) * 2);
+      }
+
+      @media ${unsafeCSS(PHONE_WIDTH)}, (max-height: 40rem) and (orientation: landscape) {
+        wt-floor-map {
+          --floor-map-tap-size: var(--wt-tap-min);
+          min-height: calc(var(--wt-tap-min) + var(--wt-space-2) * 2);
+        }
       }
 
       /* A token's unsent-order mark hangs below it, into the row gap and the tray's padding. */

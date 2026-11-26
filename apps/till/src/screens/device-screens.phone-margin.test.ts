@@ -135,9 +135,10 @@ describe("device screens at phone width", () => {
   }
 
   it.each([
-    [390, 844],
-    [844, 390],
-  ])("fits the Downstairs bar stools as named tap targets at %i × %i px", async (width, height) => {
+    [390, 844, 44],
+    [844, 390, 44],
+    [1280, 844, 30.77],
+  ])("fits the Downstairs bar stools at %i × %i px", async (width, height, size) => {
     await onPage(width, height);
     const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
       canChangeToday: true,
@@ -175,8 +176,8 @@ describe("device screens at phone width", () => {
       let previousRight = mapBox.left;
       for (const shape of shapes) {
         const rect = shape.getBoundingClientRect();
-        expect(rect.width).toBeGreaterThanOrEqual(44);
-        expect(rect.height).toBeGreaterThanOrEqual(44);
+        expect(rect.width).toBeCloseTo(size, 1);
+        expect(rect.height).toBeCloseTo(size, 1);
         expect(rect.left).toBeGreaterThanOrEqual(previousRight);
         expect(rect.right).toBeLessThanOrEqual(mapBox.right);
         expect(rect.top).toBeGreaterThanOrEqual(mapBox.top);

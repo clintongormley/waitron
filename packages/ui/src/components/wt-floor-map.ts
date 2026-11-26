@@ -1009,7 +1009,7 @@ export class WtFloorMap extends LitElement {
 
     const size = this.#size!;
     const styles = getComputedStyle(this);
-    const tap = parseFloat(styles.getPropertyValue("--wt-tap-min"));
+    const tap = parseFloat(styles.getPropertyValue("--floor-map-tap-size"));
     const edge = parseFloat(styles.getPropertyValue("--wt-space-2"));
     const minimum = tap + edge * 2;
     if (!(view.scale > 0 && size.height >= minimum && size.width >= minimum)) return;
@@ -1060,8 +1060,8 @@ export class WtFloorMap extends LitElement {
     const box = target ?? group.box;
     const [first] = members as [FloorMapTable, ...FloorMapTable[]];
     const merged = members.length > 1;
-    const drawn = merged ? box : (target ?? first.placement);
-    const named = group.drawsName && showsName(drawn, view.scale);
+    const drawn = merged ? box : first.placement;
+    const named = group.drawsName && showsName(target ?? drawn, view.scale);
     const cue = named && showsCue(drawn, view.scale) ? first.cue : null;
     const drag = this.#drag?.tableId === first.id && !group.fixed ? this.#drag : null;
     const allergy = members.some((member) => member.allergy);
