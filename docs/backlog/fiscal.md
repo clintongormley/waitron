@@ -90,7 +90,10 @@ invoice can give back at most what was paid on it; once nothing paid on it is le
 Refund a payment on the advance's own ticket gives back the rest, files no corrective invoice, and
 the accountant export lists it with the VAT left declared (owner, 2026-11-21 16:36; the refusal
 while the table's invoice still holds money is the watcher's decision of 16:54;
-`refusePlainRefundOfAdvance`, the same file). So that a correction opened before the table's
+`refusePlainRefundOfAdvance`, the same file). While the table's invoice is not paid in full and
+its bill can be reopened, that refund is refused too, with "Reopen the bill, then give the
+money back." (`reopenBill`; the owner's choice (c) of 2026-11-25, in the ADVISER-SPLIT-AFTER-PRINT
+note). So that a correction opened before the table's
 invoice cannot file a credit note after it, the table's invoice is held back while a correction of
 one of its advances is open: the payment that pays the bill off (refused before any card reader is
 asked), Print the bill, the unpaid departure, deferred close and an edit of the bill that would leave

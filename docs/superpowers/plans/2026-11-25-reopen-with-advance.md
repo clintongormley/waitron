@@ -173,3 +173,8 @@ number of reopens.
 
 **Size.** Product about +30/−35 lines by hand (no till code beyond deleted words), generated baseline about 8 lines,
 tests about +450/−110. Should it be smaller? No: the queue's way is larger; this is the smallest that files right.
+
+_2026-11-26, as built: the till also gained the words and mark for RA-D4's `reopenBill` refusal.
+Beyond the readers table, `find-bill-bills.ts`'s paid figure counts what is left of an advance, as
+`readBillAdvances` does. Also changed in `advance-final.test.ts`: the two "Refund a payment" cases
+on a printed bill now expect `reopenBill`, and "Find bills' paid figure does not move" was deleted._
