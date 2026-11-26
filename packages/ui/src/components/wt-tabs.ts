@@ -456,6 +456,7 @@ export class WtTabs extends LitElement {
               html`<button
                 type="button"
                 role="tab"
+                part="tab"
                 class=${item.marked ? "marked" : ""}
                 aria-label=${item.marked ? `${item.label}, ${item.marked}` : nothing}
                 data-key=${item.key}

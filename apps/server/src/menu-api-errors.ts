@@ -105,9 +105,3 @@ export const runStructureSave = runBodyIds(
   "set_menu.not_found",
   "product.not_found",
 );
-// The single-variant route names its variant in the path, so an unknown one is a 404; the whole-list
-// PUT names variants in its body, and an unknown one there stays a 400.
-export const runVariant = createErrorBoundary(
-  { ...STATUS, "product.variant_not_found": 404 },
-  "menu.failed",
-);

@@ -9660,7 +9660,12 @@ it.each(["home", "clash"] as const)(
       if (kind === "home") {
         expect(nativeNavigation).toBe(false);
         await expect.poll(() => location.pathname).toBe("/menus/menu/menu-lunch/view/home");
-      } else expect(clashEvent).toBe(true);
+      } else {
+        expect(anchor.getAttribute("href")).toBe(
+          "/menus/menu/menu-lunch/view/structure/filter/clashes",
+        );
+        expect(clashEvent).toBe(true);
+      }
     } finally {
       window.removeEventListener("click", blockNative);
     }

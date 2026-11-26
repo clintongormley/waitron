@@ -164,7 +164,6 @@ it("returns focus to the Structure row after the live menu question closes", asy
 
 it("clears a pending live menu question when browser history leaves Structure", async () => {
   const menu = await openMenu({
-    getMenuPrices: async () => [],
     updateProductEditor: async () => ({
       ...menuProductEditorValue,
       declarationMenus: [{ menuId: "menu-one", name: "Lunch", live: true, queued: [] }],
@@ -178,7 +177,7 @@ it("clears a pending live menu question when browser history leaves Structure", 
   const question = page.getByRole("dialog", { name: "Update the live menus now?" });
   await expect.element(question).toBeVisible();
 
-  history.replaceState(null, "", "/menus/menu/menu-one/view/prices");
+  history.replaceState(null, "", "/menus/menu/menu-one/view/home");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await expect.element(question).not.toBeInTheDocument();
   history.replaceState(null, "", address);
@@ -351,7 +350,7 @@ it.each(["light", "dark"] as const)("passes axe with the in-place dialog in %s",
   await expectNoA11yViolations(menu.host);
 });
 
-it.each(["saved", "other menu", "Prices"] as const)(
+it.each(["saved", "other menu", "Home page"] as const)(
   "handles a late product answer for %s",
   async (result) => {
     const saved = result === "saved";
@@ -376,7 +375,6 @@ it.each(["saved", "other menu", "Prices"] as const)(
         { id: "menu-one", name: "Lunch", active: true, kind: "menu", setPrice: null },
         { id: "menu-two", name: "Dinner", active: true, kind: "menu", setPrice: null },
       ],
-      getMenuPrices: async () => [],
       updateProductEditor: update,
       listLibraryProducts: async () => [product],
     });
@@ -386,15 +384,15 @@ it.each(["saved", "other menu", "Prices"] as const)(
       page.elementLocator(editor.shadowRoot!.querySelector('[data-test="save"]')!),
     );
     expect(update).toHaveBeenCalledTimes(1);
-    const prices = result === "Prices";
-    const destination = prices
-      ? "/menus/menu/menu-one/view/prices"
+    const home = result === "Home page";
+    const destination = home
+      ? "/menus/menu/menu-one/view/home"
       : "/menus/menu/menu-two/view/structure";
     history.replaceState(null, "", destination);
     window.dispatchEvent(new PopStateEvent("popstate"));
     await expect
       .poll(() => menu.root.querySelector("h1")?.textContent?.trim())
-      .toBe(prices ? "Lunch" : "Dinner");
+      .toBe(home ? "Lunch" : "Dinner");
     if (saved) {
       await expect.poll(menu.row).toBeTruthy();
       await menu.open();
@@ -413,7 +411,7 @@ it.each(["saved", "other menu", "Prices"] as const)(
     }
     expect(menu.editor()?.open ?? false).toBe(saved);
     expect(menu.root.querySelector("dashboard-live-declarations-dialog")).toBeNull();
-    if (prices) {
+    if (home) {
       history.replaceState(null, "", address);
       window.dispatchEvent(new PopStateEvent("popstate"));
       await expect.poll(menu.row).toBeTruthy();

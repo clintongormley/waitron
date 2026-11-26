@@ -6,7 +6,7 @@ import { DashboardApi } from "./client.js";
 import { QUERY_DEPENDENCIES, dashboardQuery, type DashboardQueryName } from "./live-queries.js";
 
 it("quiets only the audited database queries while connected", () => {
-  const expected = `listMenus getMenuStructure getMenuStructures getMenuPrices getMenuHome
+  const expected = `listMenus getMenuStructure getMenuStructures getMenuHome
     listCategories getCategory listLibraryProducts listProducts listUnits listOptionLists getOptionList
     listExtraLists getExtraList getVenueTheme listThemes listPrinters listPrinterProfiles
     listPrinterStationNames listPagePrinters listPagePrinterSummaries listPrinterStations getPrinterDeleteImpact listReaders
@@ -334,25 +334,6 @@ it.each([
   ["listMenus", [], ["menus", "sections", "section_members"]],
   ["getMenuStructure", ["menu-1"], ["sections", "section_members", "menus"]],
   ["getMenuStructures", [], ["sections", "section_members", "menus"]],
-  [
-    "getMenuPrices",
-    ["menu-1"],
-    [
-      "sections",
-      "section_members",
-      "menu_items",
-      "menus",
-      "products",
-      "menu_item_variant_overrides",
-      "settings.venue",
-      "product_modifiers",
-      "extra_lists",
-      "extra_list_items",
-      "option_lists",
-      "option_labels",
-      "units",
-    ],
-  ],
   ["getMenuHome", ["menu-1"], ["sections", "section_members", "products", "menus"]],
   // `/management-api/printer-profiles` (apps/server/src/print-assignments-routes.ts):
   // the list rows, joined to their profile and the profile’s department. This query omits
@@ -555,7 +536,7 @@ it("subscribes no read to the product label tables, which products no longer car
   expect(named).not.toContain("product_labels");
 });
 
-it.each(["getMenuPrices", "getMenuStatus", "getMenuStatuses", "getMenuPreview"] as const)(
+it.each(["getMenuStatus", "getMenuStatuses", "getMenuPreview"] as const)(
   "refreshes %s after an included menu's decision changes",
   async (name) => {
     const fetchImpl = vi.fn(async () => new Response("[]"));
@@ -870,7 +851,6 @@ it.each([
   ["listProducts", true],
   ["listLibraryProducts", true],
   ["getMenuHome", false],
-  ["getMenuPrices", false],
   ["getMenuStatus", false],
   ["getMenuPreview", false],
   ["getSalesOverview", false],

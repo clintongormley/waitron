@@ -261,6 +261,26 @@ it("reports a missing dish at the course route even though the set menu still ex
   );
 });
 
+it("sets a dish's supplement through the menu item price request", async () => {
+  const f = await fixture();
+  await addSoup(f);
+  const { dishes } = await json<{ dishes: { menuItemId: string }[] }>(
+    await f.send("GET", f.draft),
+    200,
+  );
+  const { menuItemId } = dishes[0]!;
+  expect(
+    (
+      await f.send("PATCH", `${menus}/${f.set.id}/items/${menuItemId}`, {
+        grossPrice: "2.50",
+      })
+    ).status,
+  ).toBe(204);
+  expect(await json(await f.send("GET", f.draft), 200)).toMatchObject({
+    dishes: [{ menuItemId, surcharge: "2.50" }],
+  });
+});
+
 it("returns saved variant choices and refuses an unrecognised variant", async () => {
   const f = await fixture();
   const [cup, bowl] = await withTransaction(suite.db, (tx) =>

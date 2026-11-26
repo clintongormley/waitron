@@ -255,10 +255,8 @@ the variant itself contribute to its price. If none is set, it sells at its prod
 Leave a menu price empty to let those contributions decide it. For example, if Drinks prices beer at
 €3.00 and Evening includes only Drinks' beer, Evening charges €3.00. If Evening also puts that beer
 in its own section at the product's €2.80, the prices disagree. Set Evening's beer price to resolve
-that disagreement before publishing. The menu's **Price overrides** tab shows where each price comes
-from and which settings still need your decision. A product with variants shows there the price or
-range its variants sell at, with no field: set the prices on its variants' rows. Edit the prices
-there and choose **Save** at the bottom. Choose **Cancel** to discard the edits.
+that disagreement before publishing. In **Structure**, the clash shows which prices disagree.
+Expand a dish with variants to set a price on the affected variant's row.
 
 ## Declare allergens and dietary suitability directly {#allergens}
 
@@ -324,7 +322,7 @@ Check **Main menu** to see which periods open on a menu and **Staff menus** to s
 
 **Unpublished changes** under a menu's status means the tills do not have your latest edits yet:
 choose it to review them and publish. **Price clashes** there must be fixed before the menu can be
-published: choose it to see them.
+published: choose the link to open **Structure** filtered to those clashes.
 
 When you save a new product, the editor closes and a window such as **Add Flat white to menus** asks where it goes. It
 lists each menu's **Top level** and the sections inside it: tick the places you want and choose
@@ -341,7 +339,8 @@ rows. Choose a section row and copy the address if you need to link back to that
 
 Enter a price beside a dish to set its price on this menu. Expand a dish with variants to price
 each one. Clear an entered price to use the usual price. A price you change applies everywhere
-the dish or variant appears on this menu. **Price overrides** is still available as a separate tab.
+the dish or variant appears on this menu. Choose **Price clashes** on the Menus list or
+**Choose a price** in Preview to open Structure with **Clashes** selected.
 
 Choose **Save** at the bottom of Structure to keep the arrangement and prices together. Choose
 **Cancel** and confirm to go back to the saved menu.

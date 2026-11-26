@@ -69,7 +69,6 @@ function api(status: MenuStatus = changed): DashboardApi {
     }),
     getMenuStatuses: vi.fn().mockResolvedValue({ "menu-lunch": status }),
     getMenuStatus: vi.fn().mockResolvedValue(status),
-    getMenuPrices: async () => [],
     getMenuRead(id: string, parts: readonly MenuReadPart[]) {
       return menuReadFixture(this as DashboardApi, id, parts);
     },

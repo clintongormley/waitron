@@ -1626,8 +1626,14 @@ export class MenuStructureTable extends LitElement {
     if (ref.kind !== "product" || !this.pricing) return nothing;
     const { productId } = ref;
     const variantId = row.variant?.id;
-    return structurePriceCell(this.pricing, productId, variantId, row.name, this.busy, (value) =>
-      this.#send("wt-structure-price", { productId, variantId, value }),
+    return structurePriceCell(
+      this.pricing,
+      productId,
+      variantId,
+      row.name,
+      this.busy,
+      (value) => this.#send("wt-structure-price", { productId, variantId, value }),
+      this.#productById.get(productId)?.variants,
     );
   }
 

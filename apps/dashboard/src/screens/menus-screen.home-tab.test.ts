@@ -234,7 +234,6 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
     addSectionMember: vi.fn(),
     removeSectionMember: vi.fn(),
     moveSectionMember: vi.fn(),
-    getMenuPrices: vi.fn().mockResolvedValue([]),
     getMenuStatuses: vi.fn(async () => ({
       "menu-lunch": status("menu-lunch"),
       "menu-dinner": status("menu-dinner"),
@@ -257,7 +256,7 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
       const readClient = client as unknown as DashboardApi;
       const reads = {
         structure: () => readClient.getMenuStructure(id),
-        prices: () => readClient.getMenuPrices(id),
+        prices: async () => [],
         home: () => readClient.getMenuHome(id),
         status: () => readClient.getMenuStatus(id),
         preview: () => readClient.getMenuPreview(id),
@@ -435,7 +434,7 @@ describe("the Home page tab's shortcuts", () => {
     client.getMenuHome.mockResolvedValue(renamed);
     live.invalidate([{ type: "sections" }]);
     await vi.waitFor(() => expect(preview(el)!.shortcuts![0]!.name).toBe("Big burger"));
-    await chooseTab(el, "prices");
+    await chooseTab(el, "structure");
     const reads = client.getMenuHome.mock.calls.length;
     live.invalidate([{ type: "sections" }]);
     await new Promise((resolve) => setTimeout(resolve, 50));

@@ -1,12 +1,6 @@
 import "@waitron/menu/src/errors.js";
 import type { Transaction } from "@waitron/db";
-import {
-  refuseSetMenu,
-  menuStatus,
-  readMenuStructure,
-  menuPrices,
-  previewMenu,
-} from "@waitron/menu";
+import { refuseSetMenu, menuStatus, readMenuStructure, previewMenu } from "@waitron/menu";
 import { type Logger, requireManagementSession } from "@waitron/server-kit";
 import { AppError, normaliseUuid } from "@waitron/shared";
 import type { Hono } from "hono";
@@ -27,14 +21,6 @@ export function mountMenuDetailRoutes(app: Hono, gated: GatedWork, log: Logger):
       const sessionId = requireManagementSession(c);
       const menuId = normaliseUuid(c.req.param("id"), "MenuId");
       return c.json(await gated(c, sessionId, (tx) => readMenuStructure(tx, menuId)));
-    }),
-  );
-
-  app.get("/management-api/menus/:id/prices", (c) =>
-    run(c, log, async () => {
-      const sessionId = requireManagementSession(c);
-      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      return c.json(await gated(c, sessionId, (tx) => menuPrices(tx, menuId)));
     }),
   );
 

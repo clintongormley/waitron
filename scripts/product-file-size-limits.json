@@ -17,7 +17,6 @@
   "apps/dashboard/src/widgets/content-translations-dialog.ts": 1250,
   "apps/dashboard/src/widgets/extra-list-form.ts": 1250,
   "apps/dashboard/src/widgets/menu-patch-dialog.ts": 1250,
-  "apps/dashboard/src/widgets/menu-prices-table.ts": 1250,
   "apps/dashboard/src/widgets/menu-structure-table.ts": 1750,
   "apps/dashboard/src/widgets/product-browser.ts": 1250,
   "apps/dashboard/src/widgets/product-editor.ts": 2000,

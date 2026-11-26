@@ -504,8 +504,7 @@ and English with nothing listed as missing.
 ## Colour
 
 A colour helps staff find a dish on a busy till, so a product has one colour, the same on every
-menu and in every section that holds it. Nothing stores a colour on a menu's placement of a product
-or on its Price overrides tab.
+menu and in every section that holds it.
 
 That colour is worked out in order. It is the product's own colour (`products.color`) if it has
 one. Otherwise it is its main category's colour, or, when that category has none, the colour of the
@@ -659,11 +658,9 @@ included, when the product's variant list is saved with an Active variant, and o
 duplicated menu stores none; and the menu's offers read one still in the table as blank. A set
 menu's price on such a dish is its supplement and stays.
 
-A menu may leave any product's price blank (`menu_items.gross_price` is nullable), which means the
-product's own price. A menu's Price overrides tab shows the price a blank field inherits as its
-placeholder: one amount or a clash (`apps/dashboard/src/widgets/menu-price-inheritance.ts`). A
-product with an Active variant has no field there: its row shows the amount or range its sizes
-sell at as text. The
+In **Structure**, leave a price blank to use the usual price. The field's placeholder shows the
+inherited amount or asks you to set a price when the sources clash. A product with active variants
+shows their price or range. Expand it to edit the variants' prices. The
 product-editor save accepts a blank variant price both in the parent's variants list and on the
 variant's own page (`parseProductEditorInput`, `packages/menu/src/product-editor-input.ts`),
 and `writeProductVariants` (`packages/menu/src/variants.ts`) stores it blank.
@@ -695,12 +692,9 @@ you reset that test venue.
 Missing-translation discovery lists active products and variants. Explicit translation targets can
 still amend retained customer names. A save opened before deletion fails its stored-state check.
 
-A menu's Price overrides tab lists every Active product an active menu's working structure
-reaches, with its Active sizes. The working offers leave deleted products and sizes out. The tab's Available
-column reads the product's, or a size's, own Available flag. The tab reads `menuPrices`; a
-menu's offers, and the published document built from them
-(`packages/menu/src/menu-document.ts`), come from `listMenuOffers` (both in
-`packages/menu/src/operations.ts`), and both leave a deleted product or size out.
+The Structure editor reads `menuPrices` with the working structure. Its Available filter checks
+the product or variant's own flag. `listMenuOffers` supplies offers for the proposed published
+document. Both reads omit deleted products and variants (`packages/menu/src/operations.ts`).
 
 The offers a till sells from are each menu's published version, which leaves out a product that was
 already deleted when it was published (`listMenuOffers`, `packages/menu/src/operations.ts`). A product

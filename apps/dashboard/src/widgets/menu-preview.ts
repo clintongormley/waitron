@@ -24,7 +24,7 @@ import {
   renderPublishWarningConfirmation,
 } from "./menu-publish-warnings.js";
 import { placeName } from "./price-source.js";
-import { setMenuAddress, leftToBrowser } from "../navigation.js";
+import { setMenuAddress, leftToBrowser, menuClashesAddress } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import {
   publicationBlockerCount,
@@ -564,7 +564,7 @@ export class MenuPreviewPanel extends LitElement {
   #renderBlockers(preview: MenuPreview) {
     const count = publicationBlockerCount(preview);
     if (count === 0) return nothing;
-    const href = `/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/prices/filter/clashes`;
+    const href = menuClashesAddress(preview.document.menuId);
     return html`<wt-card class="blockers" data-test="publish-blockers">
       <h2 slot="header" id="publish-blockers-heading">
         ${fill("menu_preview.blockers_heading", { count: String(count) })}

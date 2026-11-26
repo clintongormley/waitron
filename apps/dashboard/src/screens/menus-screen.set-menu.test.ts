@@ -100,7 +100,6 @@ function api() {
       };
     },
     getMenuStatus: vi.fn().mockResolvedValue(status),
-    getMenuPrices: vi.fn().mockResolvedValue([]),
     getMenuPreview: vi.fn().mockResolvedValue(preview),
     getMenuPublications: vi
       .fn()
@@ -469,17 +468,17 @@ it("shows a read failure after saving lines without showing the previous problem
   await expect.element(failure).not.toBeInTheDocument();
 });
 
-it("recovers the ordinary Prices tab after the menus list is retried", async () => {
+it("recovers the ordinary Structure tab after the menus list is retried", async () => {
   const client = api();
   client.listMenus.mockRejectedValueOnce(new Error("Connection lost"));
-  const screen = await mount("/menus/menu/lunch/view/prices", client);
+  const screen = await mount("/menus/menu/lunch/view/structure", client);
   const retry = () => screen.shadowRoot!.querySelector<HTMLElement>('[data-test="retry"]');
   await vi.waitFor(() => expect(retry()).toBeTruthy());
   retry()!.click();
   await vi.waitFor(() => {
     expect(retry()).toBeNull();
-    expect(screen.shadowRoot!.querySelector("wt-tabs")?.value).toBe("prices");
-    expect(screen.shadowRoot!.querySelector("dashboard-menu-prices-table")?.loading).toBe(false);
+    expect(screen.shadowRoot!.querySelector("wt-tabs")?.value).toBe("structure");
+    expect(screen.shadowRoot!.querySelector("dashboard-menu-structure-table")).not.toBeNull();
     expect(client.listMenus).toHaveBeenCalledTimes(2);
   });
 });

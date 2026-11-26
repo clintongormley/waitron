@@ -44,14 +44,13 @@ import type {
   MenuStructure,
   MenuStructureNode,
 } from "../api/menu-api.js";
-import type { MenuPricesTable } from "../widgets/menu-prices-table.js";
 import type { DashboardApp } from "../dashboard-app.js";
 import type { MenuDocumentTree } from "../widgets/menu-document-tree.js";
 import type { SectionAddProducts } from "../widgets/section-add-products.js";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { formatMoney, type MenuStructureSaveInput } from "@waitron/shared";
+import { decimal, type MenuStructureSaveInput } from "@waitron/shared";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 
@@ -290,38 +289,6 @@ function lunchPrices(): MenuPriceRow[] {
   ];
 }
 
-/** Lemonade with two variants, each named differently for guests and the kitchen. */
-function variantProducts(): Product[] {
-  const variant = (id: string, name: string, unitPrice: string | null) => ({
-    id,
-    name,
-    customerName: { es: `${name} para clientes` },
-    kitchenName: `${name.toUpperCase()} KITCHEN`,
-    image: null,
-    unitPrice,
-    available: true,
-    active: true,
-    courseId: null,
-    allergensInherited: true,
-    effective: {
-      allergens: null,
-      unitPrice: unitPrice ?? "3.00",
-      vatClass: "general" as const,
-      takeawayVatRate: "21.00",
-      primaryCategoryId: "c-drinks",
-      courseId: null,
-    },
-  });
-  return products.map((each) =>
-    each.id === "p-lemonade"
-      ? {
-          ...each,
-          variants: [variant("v-small", "Small", null), variant("v-large", "Large", "3.40")],
-        }
-      : each,
-  );
-}
-
 const WRITES = [
   "createMenu",
   "duplicateMenu",
@@ -339,7 +306,6 @@ const WRITES = [
   "moveSectionMember",
   "moveSectionMembersInto",
   "updateMenuItem",
-  "setMenuVariantPrice",
   "publishMenu",
   "saveMenuHome",
   "scheduleMenuPublication",
@@ -476,10 +442,11 @@ function emptyHome(homeSectionId = "home-dinner"): MenuHome {
 }
 
 /** A menu's top level the fake keeps, so a move is visible in what the next read answers. */
-function api(
-  overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
-  nodes: MenuStructureNode[] = lunchNodes(),
-) {
+type ApiOverrides = Partial<Record<keyof DashboardApi, unknown>> & {
+  priceRows?: ReturnType<typeof vi.fn<(id: string) => Promise<MenuPriceRow[]>>>;
+};
+
+function api(overrides: ApiOverrides = {}, nodes: MenuStructureNode[] = lunchNodes()) {
   let root = nodes;
   const client = {
     listMenus: vi.fn().mockResolvedValue(menus),
@@ -617,9 +584,8 @@ function api(
       }
       return root.map((node, position) => ({ id: node.memberId, position, ref: node.ref }));
     }),
-    getMenuPrices: vi.fn(async (id: string) => (id === "menu-lunch" ? lunchPrices() : [])),
+    priceRows: vi.fn(async (id: string) => (id === "menu-lunch" ? lunchPrices() : [])),
     updateMenuItem: vi.fn().mockResolvedValue(undefined),
-    setMenuVariantPrice: vi.fn().mockResolvedValue(undefined),
     getMenuStatuses: vi.fn(async () => statuses()),
     getMenuStatus: vi.fn(
       async (id: string) => statuses()[id] ?? { state: "unpublished", clashes: 0 },
@@ -648,10 +614,10 @@ function api(
   };
   Object.assign(client, {
     getMenuRead: vi.fn((id: string, parts: readonly MenuReadPart[]) =>
-      menuReadFixture(client as unknown as DashboardApi, id, parts),
+      menuReadFixture(client as unknown as DashboardApi, id, parts, client.priceRows),
     ),
   });
-  return client as unknown as DashboardApi & {
+  return client as unknown as DashboardApi & { priceRows: typeof client.priceRows } & {
     [K in keyof DashboardApi]: ReturnType<typeof vi.fn>;
   };
 }
@@ -987,7 +953,7 @@ it("lists the menus and opens one, recording the menu and its tab in the address
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Lunch Menu"));
   const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
   expect(tabs.value).toBe("structure");
-  expect(tabs.items.map((item) => item.key)).toEqual(["structure", "prices", "home", "preview"]);
+  expect(tabs.items.map((item) => item.key)).toEqual(["structure", "home", "preview"]);
   history.back();
   await vi.waitFor(() => expect(location.pathname).toBe("/menus"));
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe(t("menus.title")));
@@ -1499,7 +1465,7 @@ describe("the menus list's Status column and its changes link", () => {
   };
 
   /** Lunch has changes on its live version 2, Dinner is current, Brunch was never published. */
-  function mixed(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}): Api {
+  function mixed(overrides: ApiOverrides = {}): Api {
     return api({
       listMenus: vi.fn().mockResolvedValue([...menus, BRUNCH]),
       getMenuStatuses: vi
@@ -1740,7 +1706,7 @@ describe("the menus list's Status column and its changes link", () => {
     return row(el, id).querySelector<HTMLAnchorElement>(`[data-test="clashes-${id}"]`);
   }
 
-  const CLASHES = (id: string) => `/menus/menu/${id}/view/prices/filter/clashes`;
+  const CLASHES = (id: string) => `/menus/menu/${id}/view/structure/filter/clashes`;
 
   it("puts a menu's price clashes on a line of their own under its changes link, linking to them", async () => {
     await at([1280, 900], "en-GB", async () => {
@@ -1794,7 +1760,7 @@ describe("the menus list's Status column and its changes link", () => {
     });
   });
 
-  it("opens the menu's Price overrides tab filtered to its clashes from the clash link", async () => {
+  it("opens the menu's Structure tab filtered to its clashes from the clash link", async () => {
     await at([1280, 900], "en-GB", async () => {
       const opens = opened();
       const el = await listed(clashing());
@@ -1959,7 +1925,7 @@ describe("the menus list's Status column and its changes link", () => {
       expect(opens()).toEqual([PREVIEW("menu-lunch")]);
       await vi.waitFor(() => expect(client.getMenuPreview).toHaveBeenCalledWith("menu-lunch"));
       expect(client.getMenuStatus).not.toHaveBeenCalled();
-      expect(client.getMenuPrices).not.toHaveBeenCalled();
+      expect(client.priceRows).not.toHaveBeenCalled();
     });
   });
 
@@ -3617,7 +3583,7 @@ it("says the menu's structure could not be loaded, and tries again", async () =>
 
 it("waits for both arrangement and prices before offering Structure edits", async () => {
   const client = api();
-  client.getMenuPrices.mockRejectedValueOnce(new Error("prices unavailable"));
+  client.priceRows.mockRejectedValueOnce(new Error("prices unavailable"));
   const el = await mount(client, LUNCH_PATH);
   await vi.waitFor(() => expect(q(el, '[data-test="structure-error"]')).not.toBeNull());
   expect(q(el, "dashboard-menu-structure-table")).toBeNull();
@@ -3634,10 +3600,7 @@ it("waits for both arrangement and prices before offering Structure edits", asyn
 const WINE_NAMES = { en: "Wine list", es: "Carta de vinos" };
 
 /** Lunch and the Wines menu it includes. */
-function winesClient(
-  folder: IncludeFolder,
-  overrides: Partial<Record<keyof DashboardApi, unknown>> = {},
-) {
+function winesClient(folder: IncludeFolder, overrides: ApiOverrides = {}) {
   const live = new LiveData();
   let names: Record<string, string> = WINE_NAMES;
   const client = api({
@@ -3717,8 +3680,8 @@ describe("the Structure tree", () => {
     expect(location.pathname).toBe(address);
     expect(push).not.toHaveBeenCalled();
 
-    await chooseTab(el, "prices");
-    expect(location.pathname).toBe(PRICES_PATH);
+    await chooseTab(el, "home");
+    expect(location.pathname).toBe(HOME_PATH);
     await chooseTab(el, "structure");
     expect(location.pathname).toBe(address);
     expect(currentKey(el)).toBe("m-drinks");
@@ -3752,7 +3715,7 @@ describe("the Structure tree", () => {
   }
 
   /** Lunch, with Wines among the menus it could include. */
-  function includeClient(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
+  function includeClient(overrides: ApiOverrides = {}) {
     const client = api(overrides);
     const read = client.getMenuStructure.getMockImplementation()! as (
       id: string,
@@ -5341,7 +5304,7 @@ describe("the Structure tree", () => {
   });
 
   describe("an included menu", () => {
-    async function mountWithWines(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
+    async function mountWithWines(overrides: ApiOverrides = {}) {
       const client = includeClient({
         getMenuStructure: vi.fn(async (id: string) =>
           id === "wine"
@@ -5961,276 +5924,16 @@ describe("an include's Edit dialog", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// The Price overrides tab
-
-function prices(el: MenusScreen): MenuPricesTable {
-  return q<MenuPricesTable>(el, "dashboard-menu-prices-table")!;
-}
-
-/** Opens Lunch's Prices from its address and waits for its rows. */
-async function mountPrices(client: Api = api()) {
-  const el = await mount(client, PRICES_PATH);
-  await vi.waitFor(() => expect(prices(el)?.rows.length).toBe(3));
-  return el;
-}
-
-// Where `fits` is false a price may start under the pinned row menu, the table's box scrolling
-// sideways under it: once scrolled until the price ends at the menu, the whole price is in view.
-it.each([
-  ["en-GB", "12.50", "15.00", "", true],
-  ["es-ES", "12.50", "15.00", "", true],
-  ["en-GB", "1000.00", "9999.99", "", true],
-  ["es-ES", "1000.00", "9999.99", "", false],
-  ["es-ES", "1000.00", "9999.99", "Verdana", false],
-])(
-  "shows Lemonade's range as text, breaking it only between its prices, and every field whole, left of its row menu, in the dashboard at 390 px (%s, %s – %s, font %s)",
-  async (locale, low, high, font, fits) => {
-    await import("../dashboard-app.js");
-    registerIcons(DASHBOARD_ICONS);
-    const width = window.innerWidth,
-      height = window.innerHeight;
-    const before = currentLocale();
-    onTestFinished(async () => {
-      setLocale(before);
-      await page.viewport(width, height);
-    });
-    await page.viewport(390, 844);
-    history.replaceState(null, "", PRICES_PATH);
-    const rows = lunchPrices();
-    rows[1] = {
-      ...rows[1]!,
-      override: null,
-      combined: combinedFixture(
-        "p-lemonade",
-        low,
-        [
-          { variantId: "v-small", price: low },
-          { variantId: "v-large", price: high },
-        ],
-        null,
-        low,
-        { "v-small": low, "v-large": high },
-      ),
-      variants: [
-        { variantId: "v-small", price: low, available: true },
-        { variantId: "v-large", price: high, available: true },
-      ],
-    };
-    const client = api({
-      getMenuPrices: vi.fn().mockResolvedValue(rows),
-      getMe: async () => ({
-        personId: "p1",
-        email: "ada@example.com",
-        roleIds: ["manager"],
-        locale,
-        venueLocale: locale,
-        sessionDefault: locale,
-        venueName: "Venue",
-        permissions: ["product.manage", "menu.manage", "venue.view"],
-        modules: [],
-      }),
-      forgetLocales: () => {},
-      getLocales: async () => ({
-        locales: [
-          { code: "en-GB", label: "English" },
-          { code: "es-ES", label: "Español" },
-        ],
-        venueDefault: locale,
-        loginDefault: locale,
-        venueName: "Venue",
-        onboardingIntent: "prepare",
-      }),
-      listAlerts: async () => ({ visible: false, alerts: [] }),
-      getDiskStop: async () => ({ stopped: false, deleted: null }),
-      getGoogleConfig: async () => ({ configured: false }),
-      passkeySignals: async () => ({
-        rpId: "localhost",
-        userId: "cDE",
-        credentialIds: [],
-        name: "ada@example.com",
-        displayName: "Ada",
-      }),
-    });
-    const { el: app, host } = await mountWidget<DashboardApp>(
-      "dashboard-app",
-      { api: client },
-      "light",
-    );
-    if (font !== "") {
-      const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
-      expect(family).not.toBe("");
-      host.style.setProperty("--wt-font-family", `${font}, ${family}`);
-    }
-    const screen = () =>
-      app.shadowRoot!.querySelector<MenusScreen>("dashboard-menus-screen") ?? undefined;
-    await vi.waitFor(() => expect(screen() && prices(screen()!)?.rows.length).toBe(3));
-    const widget = prices(screen()!);
-    await vi.waitFor(() => expect(widget.style.getPropertyValue("--actions-width")).not.toBe(""));
-    const grid = widget.shadowRoot!.querySelector("wt-data-table")!;
-    const firstField = grid.shadowRoot!.querySelector("wt-price-input")!;
-    await vi.waitFor(() =>
-      expect(widget.style.getPropertyValue("--field-width")).toBe(
-        `${firstField.getBoundingClientRect().width}px`,
-      ),
-    );
-    await vi.waitFor(() => expect(grid.hasAttribute("narrow")).toBe(true));
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    expect(window.innerWidth).toBe(390);
-    expect(currentLocale()).toBe(locale);
-    const rowOf = (key: string) =>
-      grid.shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"]`)!;
-    rowOf("mi-lemonade").querySelector<HTMLElement>("button.tree-toggle")!.click();
-    await vi.waitFor(() => expect(rowOf("mi-lemonade:v-large")).not.toBeNull());
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const input = (key: string) =>
-      rowOf(key).querySelector("wt-price-input")!.shadowRoot!.querySelector("input")!;
-    // A product with variants shows its range as text, breaking it only between its prices, and
-    // offers no field.
-    const range = rowOf("mi-lemonade").querySelector('[part~="derived-price"]')!;
-    expect(rowOf("mi-lemonade").querySelector("wt-price-input")).toBeNull();
-    expect(range.textContent).toBe(
-      t("menu_prices.range")
-        .replace("{low}", formatMoney(low, locale))
-        .replace("{high}", formatMoney(high, locale)),
-    );
-    const text = [...range.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
-    for (const price of [formatMoney(low, locale), formatMoney(high, locale)]) {
-      const start = text.textContent!.indexOf(price);
-      expect(start, price).toBeGreaterThanOrEqual(0);
-      const words = document.createRange();
-      words.setStart(text, start);
-      words.setEnd(text, start + price.length);
-      expect(words.getClientRects().length, price).toBe(1);
-    }
-    for (const key of [
-      "mi-burger",
-      "mi-lemonade",
-      "mi-lemonade:v-small",
-      "mi-lemonade:v-large",
-      "mi-lager",
-    ]) {
-      const fieldOf = () =>
-        (
-          rowOf(key).querySelector("wt-price-input") ??
-          rowOf(key).querySelector('[part~="derived-price"]')!
-        ).getBoundingClientRect();
-      const menuOf = () =>
-        rowOf(key).querySelector('td[data-pinned="end"]')!.getBoundingClientRect();
-      if (key !== "mi-lemonade") {
-        const field = input(key);
-        const shown = field.value === "" ? field.placeholder : field.value;
-        const style = getComputedStyle(field);
-        const context = document.createElement("canvas").getContext("2d")!;
-        context.font = getComputedStyle(field, field.value === "" ? "::placeholder" : null).font;
-        const fit = {
-          key,
-          shown,
-          needed: context.measureText(shown).width,
-          room:
-            field.getBoundingClientRect().width -
-            parseFloat(style.borderLeftWidth) -
-            parseFloat(style.borderRightWidth) -
-            parseFloat(style.paddingLeft) -
-            parseFloat(style.paddingRight),
-        };
-        expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
-      }
-      const scroller = grid.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
-      if (!fits) {
-        scroller.scrollLeft = 0;
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        scroller.scrollLeft = Math.max(0, Math.ceil(fieldOf().right - menuOf().left));
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        expect(fieldOf().left, key).toBeGreaterThanOrEqual(scroller.getBoundingClientRect().left);
-      }
-      const menu = menuOf();
-      expect(fieldOf().right, key).toBeLessThanOrEqual(menu.left + 0.5);
-      expect(menu.right, key).toBeLessThanOrEqual(window.innerWidth);
-      rowOf(key).scrollIntoView({ block: "center", inline: "nearest" });
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      const trigger = rowOf(key)
-        .querySelector("wt-row-actions")!
-        .shadowRoot!.querySelector("button")!
-        .getBoundingClientRect();
-      const hit = grid.shadowRoot!.elementFromPoint(
-        trigger.left + trigger.width / 2,
-        trigger.top + trigger.height / 2,
-      );
-      expect(
-        hit !== null && rowOf(key).querySelector('td[data-pinned="end"]')!.contains(hit),
-        `${key} ⋮ covered`,
-      ).toBe(true);
-      scroller.scrollLeft = 0;
-    }
-  },
-);
-
 async function chooseTab(el: MenusScreen, key: string): Promise<void> {
   const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
   tabs.shadowRoot!.querySelector<HTMLElement>(`[role="tab"][data-key="${key}"]`)!.click();
   await el.updateComplete;
 }
 
-function priceField(el: MenusScreen, key: string) {
-  const table = prices(el).shadowRoot!.querySelector<Table>("wt-data-table")!;
-  return table.shadowRoot.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
-    `wt-price-input[data-row="${key}"]`,
-  )!;
-}
-
-/** Types a price into a row's field and presses Enter in it. */
-async function commitPrice(el: MenusScreen, key: string, value: string): Promise<void> {
-  type(priceField(el, key), value);
-  await prices(el).updateComplete;
-  priceField(el, key)
-    .shadowRoot!.querySelector("input")!
-    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
-  await el.updateComplete;
-}
-
-/** Opens a product's variants in the prices table. */
-async function expandPrices(el: MenusScreen, key: string): Promise<void> {
-  const table = prices(el).shadowRoot!.querySelector<Table>("wt-data-table")!;
-  await table.updateComplete;
-  table.shadowRoot
-    .querySelector<HTMLButtonElement>(`tr[data-row-key="${key}"] button.tree-toggle`)!
-    .click();
-  await table.updateComplete;
-}
-
-it("keeps the Price overrides tab in the address, and switching tabs keeps the chosen menu", async () => {
-  const client = api();
-  const el = await mountLunch(client);
-  expect(client.getMenuPrices).toHaveBeenCalledExactlyOnceWith("menu-lunch");
-  const tab = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.shadowRoot!.querySelector(
-    '[role="tab"][data-key="prices"]',
-  );
-  expect(text(tab)).toBe(t("menus.tab_prices"));
-  expect([t("menus.tab_prices", "en"), t("menus.tab_prices", "es-ES")]).toEqual([
-    "Price overrides",
-    "Precios propios",
-  ]);
-  await chooseTab(el, "prices");
-  expect(location.pathname).toBe(PRICES_PATH);
-  await vi.waitFor(() => expect(prices(el)?.rows.length).toBe(3));
-  expect(client.getMenuPrices).toHaveBeenCalledTimes(2);
-  expect(text(q(el, "h1"))).toBe("Lunch Menu");
-  expect(prices(el).menuName).toBe("Lunch Menu");
-  await chooseTab(el, "structure");
-  expect(location.pathname).toBe(LUNCH_PATH);
-  expect(text(q(el, "h1"))).toBe("Lunch Menu");
-  history.back();
-  await vi.waitFor(() => expect(location.pathname).toBe(PRICES_PATH));
-  await vi.waitFor(() =>
-    expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices"),
-  );
-});
-
 it("keeps its tab when a change event bubbles up from a control inside a tab's content", async () => {
   const el = await mountLunch();
-  await chooseTab(el, "prices");
-  q(el, '[slot="prices"]')!.dispatchEvent(
+  await chooseTab(el, "home");
+  q(el, '[slot="home"]')!.dispatchEvent(
     new CustomEvent("wt-change", {
       detail: { value: "structure" },
       bubbles: true,
@@ -6238,600 +5941,9 @@ it("keeps its tab when a change event bubbles up from a control inside a tab's c
     }),
   );
   await el.updateComplete;
-  expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices");
-  expect(location.pathname).toBe(PRICES_PATH);
+  expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("home");
+  expect(location.pathname).toBe(HOME_PATH);
 });
-
-it("opens the Price overrides tab the address names, with the structure's sections, categories and products", async () => {
-  const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
-  const el = await mountPrices(client);
-  expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices");
-  const table = prices(el);
-  expect(table.sections.map(({ id }) => id)).toEqual(["s-drinks", "s-beer", "s-fav"]);
-  expect(table.categories).toEqual(categories);
-  expect(table.products.map(({ id }) => id)).toContain("p-lemonade");
-  const cells = text(
-    table.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.querySelector("tbody"),
-  );
-  expect(cells).toContain("Favourites");
-  expect(cells).toContain("Drinks › Beer");
-  expect(cells).not.toContain("Our picks");
-  expect(cells).not.toContain("Something to drink");
-});
-
-it("reads another menu's prices when the person opens it", async () => {
-  const client = api();
-  const el = await mountPrices(client);
-  await click(el, "back");
-  await inTable(el, "open-menu-dinner");
-  await chooseTab(el, "prices");
-  await vi.waitFor(() => expect(client.getMenuPrices).toHaveBeenCalledWith("menu-dinner"));
-  await vi.waitFor(() => expect(prices(el).rows).toEqual([]));
-});
-
-function priceSave(el: MenusScreen) {
-  return prices(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    '[data-test="prices-save"]',
-  )!;
-}
-
-/** Lunch's prices with Burger, a product without variants, at this menu's own 11.00. */
-function pricedBurgerRows(): MenuPriceRow[] {
-  return lunchPrices().map((row) =>
-    row.menuItemId === "mi-burger" ? { ...row, override: "11.00" } : row,
-  );
-}
-
-it("stages two price edits on blur, then saves both with one refresh", async () => {
-  const client = api({
-    getMenuPrices: vi.fn(async (id: string) => (id === "menu-lunch" ? pricedBurgerRows() : [])),
-    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
-  });
-  const el = await mountPrices(client);
-  await expandPrices(el, "mi-lemonade");
-  const reads = client.getMenuPrices.mock.calls.length;
-  const product = priceField(el, "mi-burger");
-  const variant = priceField(el, "mi-lemonade:v-small");
-  product.focus();
-  type(product, "");
-  variant.focus();
-  type(variant, "1.90");
-  variant.blur();
-  await prices(el).updateComplete;
-  expect(writeCalls(client)).toEqual([]);
-
-  priceSave(el).click();
-  await vi.waitFor(() => expect(priceSave(el).disabled).toBe(true));
-  await vi.waitFor(() => expect(client.getMenuPrices.mock.calls.length).toBe(reads + 1));
-  expect(client.updateMenuItem.mock.calls).toEqual([
-    ["menu-lunch", "mi-burger", { grossPrice: null }],
-  ]);
-  expect(client.setMenuVariantPrice.mock.calls).toEqual([
-    ["menu-lunch", "mi-lemonade", "v-small", "1.90"],
-  ]);
-  expect(writeCalls(client)).toEqual(["updateMenuItem", "setMenuVariantPrice"]);
-});
-
-it("writes a product without variants through its menu item alone, and offers no field on a product with variants", async () => {
-  const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
-  const el = await mountPrices(client);
-  await expandPrices(el, "mi-lemonade");
-  expect(
-    prices(el)
-      .shadowRoot!.querySelector<Table>("wt-data-table")!
-      .shadowRoot.querySelector('wt-price-input[data-row="mi-lemonade"]'),
-  ).toBeNull();
-  await commitPrice(el, "mi-burger", "11.00");
-  await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledOnce());
-  expect(client.updateMenuItem.mock.calls).toEqual([
-    ["menu-lunch", "mi-burger", { grossPrice: "11.00" }],
-  ]);
-  await vi.waitFor(() => expect(priceSave(el).disabled).toBe(true));
-  expect(writeCalls(client)).toEqual(["updateMenuItem"]);
-});
-
-it("writes only that variant's price when only a variant's field changed, then reads the prices again", async () => {
-  const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
-  const el = await mountPrices(client);
-  await expandPrices(el, "mi-lemonade");
-  const reads = client.getMenuPrices.mock.calls.length;
-  await commitPrice(el, "mi-lemonade:v-small", "1.90");
-  await vi.waitFor(() => expect(client.setMenuVariantPrice).toHaveBeenCalledOnce());
-  expect(client.setMenuVariantPrice.mock.calls).toEqual([
-    ["menu-lunch", "mi-lemonade", "v-small", "1.90"],
-  ]);
-  await vi.waitFor(() => expect(client.getMenuPrices.mock.calls.length).toBeGreaterThan(reads));
-  await vi.waitFor(() => expect(priceSave(el).disabled).toBe(true));
-  expect(writeCalls(client)).toEqual(["setMenuVariantPrice"]);
-});
-
-it("writes nothing and marks nothing as saving for Enter on an unchanged field", async () => {
-  const client = api({
-    getMenuPrices: vi.fn(async (id: string) => (id === "menu-lunch" ? pricedBurgerRows() : [])),
-    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
-  });
-  const el = await mountPrices(client);
-  await commitPrice(el, "mi-burger", "11.00");
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  expect(writeCalls(client)).toEqual([]);
-  expect(priceSave(el).disabled).toBe(true);
-});
-
-it("keeps a refused price and its refusal in the field, which stays editable, and writes nothing else", async () => {
-  const client = api({
-    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
-    updateMenuItem: vi
-      .fn()
-      .mockRejectedValue({ code: "management.request_invalid", params: { field: "grossPrice" } }),
-  });
-  const el = await mountPrices(client);
-  await commitPrice(el, "mi-burger", "11.80");
-  await vi.waitFor(() =>
-    expect(priceField(el, "mi-burger").error).toBe(codeMessage("management.request_invalid")),
-  );
-  expect(priceField(el, "mi-burger").value).toBe("11.80");
-  expect(priceField(el, "mi-burger").disabled).toBe(false);
-  expect(writeCalls(client)).toEqual(["updateMenuItem"]);
-  expect(priceSave(el).disabled).toBe(false);
-});
-
-it("keeps a refused variant staged and retries only that variant after the product saved", async () => {
-  const client = api({
-    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
-    setMenuVariantPrice: vi.fn().mockRejectedValueOnce({
-      code: "product.variant_invalid",
-      params: { field: "price" },
-    }),
-  });
-  const el = await mountPrices(client);
-  await expandPrices(el, "mi-lemonade");
-  type(priceField(el, "mi-burger"), "11.80");
-  type(priceField(el, "mi-lemonade:v-small"), "1.90");
-  await prices(el).updateComplete;
-  expect(writeCalls(client)).toEqual([]);
-  priceSave(el).click();
-
-  await vi.waitFor(() =>
-    expect(priceField(el, "mi-lemonade:v-small").error).toBe(
-      codeMessage("product.variant_invalid"),
-    ),
-  );
-  expect(priceField(el, "mi-lemonade:v-small").value).toBe("1.90");
-  expect(priceSave(el).disabled).toBe(false);
-  priceSave(el).click();
-  await vi.waitFor(() => expect(priceSave(el).disabled).toBe(true));
-  expect(client.updateMenuItem).toHaveBeenCalledOnce();
-  expect(client.setMenuVariantPrice.mock.calls).toEqual([
-    ["menu-lunch", "mi-lemonade", "v-small", "1.90"],
-    ["menu-lunch", "mi-lemonade", "v-small", "1.90"],
-  ]);
-});
-
-it("a save that succeeded but could not then be reloaded is a load failure, not a refused save", async () => {
-  const client = api();
-  const el = await mountPrices(client);
-  client.getMenuPrices.mockRejectedValue(new Error("down"));
-  await commitPrice(el, "mi-burger", "11.00");
-  await vi.waitFor(() => expect(prices(el).failed).toBe(true));
-  expect(priceFeedback(el)).toBe("");
-  expect(priceSave(el).disabled).toBe(true);
-  expect(q(el, '[data-test="prices-retry"]')).not.toBeNull();
-});
-
-it("names a refused price when a failed refresh hides its field", async () => {
-  const client = api({
-    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
-    setMenuVariantPrice: vi.fn().mockRejectedValue({
-      code: "product.variant_invalid",
-      params: { field: "price" },
-    }),
-  });
-  const el = await mountPrices(client);
-  await expandPrices(el, "mi-lemonade");
-  type(priceField(el, "mi-burger"), "11.00");
-  type(priceField(el, "mi-lemonade:v-small"), "1.90");
-  await prices(el).updateComplete;
-  client.getMenuPrices.mockRejectedValueOnce(new Error("down"));
-  priceSave(el).click();
-  await vi.waitFor(() => expect(prices(el).failed).toBe(true));
-  await vi.waitFor(() => expect(priceFeedback(el)).toContain("Lemonade — Small"));
-  expect(priceSave(el).disabled).toBe(false);
-});
-
-it("says the prices could not be loaded, and tries again", async () => {
-  const client = api();
-  client.getMenuPrices.mockRejectedValueOnce(new Error("down"));
-  const el = await mount(client, PRICES_PATH);
-  await vi.waitFor(() => expect(prices(el).failed).toBe(true));
-  await click(el, "prices-retry");
-  await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
-  expect(prices(el).failed).toBe(false);
-  expect(q(el, '[data-test="prices-retry"]')).toBeNull();
-});
-
-it("names the product when its save is refused after the person has gone to another menu", async () => {
-  const pending = deferred<void>();
-  const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
-  const el = await mountPrices(client);
-  await commitPrice(el, "mi-burger", "11.00");
-  history.pushState(null, "", "/menus/menu/menu-dinner/view/prices");
-  window.dispatchEvent(new PopStateEvent("popstate"));
-  await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
-  pending.reject({ code: "menu.not_found" });
-  await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(
-      t("menus.change_not_saved")
-        .replace("{name}", "Burger")
-        .replace("{reason}", codeMessage("menu.not_found")),
-    ),
-  );
-});
-
-it("routes a price refusal to the price notice when Menus has closed", async () => {
-  const pending = deferred<void>();
-  const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
-  const el = await mountPrices(client);
-  el.reportLatePriceSave = vi.fn();
-  el.reportLateSave = vi.fn();
-  await commitPrice(el, "mi-burger", "11.00");
-  expect(client.updateMenuItem).toHaveBeenCalledOnce();
-
-  el.remove();
-  pending.reject({ code: "menu.not_found" });
-  await vi.waitFor(() => expect(el.reportLatePriceSave).toHaveBeenCalledExactlyOnceWith("Burger"));
-  expect(el.reportLateSave).not.toHaveBeenCalled();
-});
-
-it("keeps the prices within a phone's width, the table scrolling inside it", async () => {
-  await page.viewport(390, 844);
-  try {
-    const el = await mountPrices();
-    expect(window.innerWidth).toBe(390);
-    expect(prices(el).getBoundingClientRect().width).toBeLessThanOrEqual(390);
-    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
-  } finally {
-    await page.viewport(1280, 900);
-  }
-});
-
-it.each(["another menu", "another tab"])(
-  "finishes a save quietly after moving to %s",
-  async (destination) => {
-    const pending = deferred<void>();
-    const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
-    const el = await mountPrices(client);
-    const oldTable = prices(el);
-    type(priceField(el, "mi-burger"), "11.00");
-    await oldTable.updateComplete;
-    await el.updateComplete;
-    const refresh = vi.fn(oldTable.refreshPrices);
-    const save = vi.fn(oldTable.savePrices!);
-    oldTable.refreshPrices = refresh;
-    oldTable.savePrices = save;
-    priceSave(el).click();
-    if (destination === "another menu") {
-      history.pushState(null, "", "/menus/menu/menu-dinner/view/prices");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-      await vi.waitFor(() => expect(client.getMenuPrices).toHaveBeenCalledWith("menu-dinner"));
-    } else {
-      await chooseTab(el, "structure");
-    }
-    const reads = client.getMenuPrices.mock.calls.length;
-    expect(client.updateMenuItem).toHaveBeenCalledOnce();
-    pending.resolve();
-    await save.mock.results[0]!.value;
-    await Promise.resolve();
-    expect(oldTable.isConnected).toBe(false);
-    expect(refresh).not.toHaveBeenCalled();
-    expect(client.getMenuPrices.mock.calls).toHaveLength(reads);
-    expect(q(el, '[data-test="member-error"]')).toBeNull();
-  },
-);
-
-it("stops following a menu's prices once another menu is opened, so its changes never show under the new one", async () => {
-  const live = new LiveData();
-  const client = api({ liveData: live });
-  const el = await mountPrices(client);
-  const dinner = deferred<MenuPriceRow[]>();
-  client.getMenuPrices.mockImplementation((id: string) =>
-    id === "menu-dinner" ? dinner.promise : Promise.resolve(lunchPrices()),
-  );
-  history.pushState(null, "", "/menus/menu/menu-dinner/view/structure");
-  window.dispatchEvent(new PopStateEvent("popstate"));
-  await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
-  const reads = client.getMenuPrices.mock.calls.length;
-  live.invalidate([{ type: "menu_items" }]);
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  expect(client.getMenuPrices.mock.calls.length).toBe(reads);
-  await chooseTab(el, "prices");
-  await vi.waitFor(() => expect(client.getMenuPrices).toHaveBeenCalledWith("menu-dinner"));
-  expect(prices(el).rows).toEqual([]);
-  expect(prices(el).loading).toBe(true);
-  dinner.resolve([]);
-  await vi.waitFor(() => expect(prices(el).loading).toBe(false));
-});
-
-it("refreshes the open menu's price facts on Structure and reads Price overrides again on return", async () => {
-  const live = new LiveData();
-  const client = api({ liveData: live });
-  const el = await mountPrices(client);
-  await chooseTab(el, "structure");
-  expect(prices(el)).toBeNull();
-  const reads = client.getMenuPrices.mock.calls.length;
-  const structureReads = client.getMenuStructure.mock.calls.length;
-  live.invalidate([{ type: "section_members" }, { type: "menu_items" }]);
-  await vi.waitFor(() => {
-    expect(client.getMenuStructure.mock.calls.length).toBeGreaterThan(structureReads);
-    expect(client.getMenuPrices.mock.calls.length).toBeGreaterThan(reads);
-  });
-  expect(client.getMenuPrices).toHaveBeenLastCalledWith("menu-lunch");
-  const afterUpdate = client.getMenuPrices.mock.calls.length;
-  await chooseTab(el, "prices");
-  await vi.waitFor(() => expect(prices(el)?.rows.length).toBe(3));
-  expect(client.getMenuPrices).toHaveBeenCalledTimes(afterUpdate + 1);
-  expect(client.getMenuPrices).toHaveBeenLastCalledWith("menu-lunch");
-});
-
-it("shows the prices as loading on return to the Price overrides tab until they are read again", async () => {
-  const client = api();
-  const el = await mountPrices(client);
-  await chooseTab(el, "structure");
-  const again = deferred<MenuPriceRow[]>();
-  client.getMenuPrices.mockImplementation(() => again.promise);
-  const reads = client.getMenuPrices.mock.calls.length;
-  await chooseTab(el, "prices");
-  await vi.waitFor(() => expect(client.getMenuPrices.mock.calls.length).toBe(reads + 1));
-  await el.updateComplete;
-  expect(prices(el).rows).toEqual([]);
-  expect(prices(el).loading).toBe(true);
-  again.resolve(lunchPrices());
-  await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
-  expect(prices(el).loading).toBe(false);
-});
-
-it("starts no second read when the address is read again on the Price overrides tab it already shows", async () => {
-  const client = api();
-  const el = await mountPrices(client);
-  const reads = client.getMenuPrices.mock.calls.length;
-  window.dispatchEvent(new PopStateEvent("popstate"));
-  await el.updateComplete;
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  expect(client.getMenuPrices.mock.calls.length).toBe(reads);
-  expect(prices(el).rows.length).toBe(3);
-});
-
-it("leaves the Price overrides tab without writing an unsaved edit", async () => {
-  const client = api();
-  const el = await mountPrices(client);
-  const field = priceField(el, "mi-burger");
-  field.focus();
-  type(field, "11.00");
-  field.dispatchEvent(new FocusEvent("focusout", { bubbles: true, composed: true }));
-  await chooseTab(el, "structure");
-  await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
-  expect(writeCalls(client)).toEqual([]);
-});
-
-it("reports beside the Structure tab a save refused after Back left the Price overrides tab", async () => {
-  const pending = deferred<void>();
-  const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
-  const el = await mountLunch(client);
-  await chooseTab(el, "prices");
-  await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
-  await commitPrice(el, "mi-burger", "11.00");
-  history.back();
-  await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
-  pending.reject({ code: "menu.not_found" });
-  await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(
-      t("menus.change_not_saved")
-        .replace("{name}", "Burger")
-        .replace("{reason}", codeMessage("menu.not_found")),
-    ),
-  );
-});
-
-it("puts a variant's refused price under that variant's field, writing nothing else and reading no prices", async () => {
-  const client = api({
-    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
-    setMenuVariantPrice: vi
-      .fn()
-      .mockRejectedValue({ code: "product.variant_invalid", params: { field: "price" } }),
-  });
-  const el = await mountPrices(client);
-  await expandPrices(el, "mi-lemonade");
-  const reads = client.getMenuPrices.mock.calls.length;
-  await commitPrice(el, "mi-lemonade:v-small", "1.90");
-  const expected = codeMessage("product.variant_invalid");
-  await vi.waitFor(() => expect(priceField(el, "mi-lemonade:v-small").error).toBe(expected));
-  expect(priceFeedback(el)).toBe(t("form.fix_fields"));
-  expect(client.setMenuVariantPrice).toHaveBeenCalledOnce();
-  expect(client.updateMenuItem).not.toHaveBeenCalled();
-  expect(priceField(el, "mi-lemonade:v-small").value).toBe("1.90");
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  expect(client.getMenuPrices.mock.calls.length).toBe(reads);
-});
-
-it("names the product and its variant beside the list when a variant's refusal lands after the person left its menu", async () => {
-  const pending = deferred<void>();
-  const client = api({
-    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
-    setMenuVariantPrice: vi.fn(() => pending.promise),
-  });
-  const el = await mountPrices(client);
-  await expandPrices(el, "mi-lemonade");
-  await commitPrice(el, "mi-lemonade:v-small", "1.90");
-  await vi.waitFor(() => expect(client.setMenuVariantPrice).toHaveBeenCalledOnce());
-  history.pushState(null, "", "/menus/menu/menu-dinner/view/prices");
-  window.dispatchEvent(new PopStateEvent("popstate"));
-  await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
-  pending.reject({ code: "management.request_invalid" });
-  await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(
-      t("menus.change_not_saved")
-        .replace("{name}", "Lemonade — Small")
-        .replace("{reason}", codeMessage("management.request_invalid")),
-    ),
-  );
-  expect(client.updateMenuItem).not.toHaveBeenCalled();
-});
-
-function priceFeedback(el: MenusScreen) {
-  return prices(el).shadowRoot!.querySelector("wt-form-actions")!.error;
-}
-
-it("says a connection failure above the Save bar and keeps the price ready to retry", async () => {
-  const client = api({ updateMenuItem: vi.fn().mockRejectedValue({ code: "connection.failed" }) });
-  const el = await mountPrices(client);
-  await commitPrice(el, "mi-burger", "11.00");
-  await vi.waitFor(() => expect(priceFeedback(el)).toContain(codeMessage("connection.failed")));
-  expect(priceField(el, "mi-burger").error).toBe("");
-  expect(priceField(el, "mi-burger").value).toBe("11.00");
-  expect(priceSave(el).disabled).toBe(false);
-  expect(q(el, '[data-test="member-error"]')).toBeNull();
-});
-
-it("clears the refusal and keeps the saved price when a retry succeeds before its refresh", async () => {
-  const refresh = deferred<MenuPriceRow[]>();
-  const client = api({
-    updateMenuItem: vi
-      .fn()
-      .mockRejectedValueOnce({ code: "product.invalid", params: { field: "grossPrice" } })
-      .mockResolvedValue(undefined),
-  });
-  const el = await mountPrices(client);
-  await commitPrice(el, "mi-burger", "11.00");
-  await vi.waitFor(() =>
-    expect(priceField(el, "mi-burger").error).toBe(codeMessage("product.invalid")),
-  );
-  client.getMenuPrices.mockImplementation(() => refresh.promise);
-  priceSave(el).click();
-  await vi.waitFor(() => expect(client.getMenuPrices).toHaveBeenCalledTimes(2));
-  expect(priceField(el, "mi-burger").value).toBe("11.00");
-  expect(priceField(el, "mi-burger").error).toBe("");
-  expect(priceSave(el).disabled).toBe(true);
-  refresh.resolve(
-    lunchPrices().map((row) =>
-      row.menuItemId === "mi-burger" ? { ...row, override: "11.00" } : row,
-    ),
-  );
-  await vi.waitFor(() => expect(prices(el).rows[0]!.override).toBe("11.00"));
-  expect(client.updateMenuItem).toHaveBeenCalledTimes(2);
-});
-
-it.each([
-  ["mi-burger", { code: "management.request_invalid", params: { field: "_form" } }],
-  ["mi-burger", { code: "management.request_invalid", params: { field: "variants" } }],
-  ["mi-burger", { code: "product.variant_not_found", params: {} }],
-  ["mi-lemonade:v-small", { code: "management.request_invalid", params: { field: "variantId" } }],
-  ["mi-lemonade:v-small", { code: "product.variant_invalid", params: { field: "variants.1" } }],
-  ["mi-lemonade:v-small", { code: "menu_item.not_found", params: {} }],
-])(
-  "says %s's refusal %j, which names no price, above the Save bar and under no field",
-  async (key, refusal) => {
-    const client = api({
-      listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
-      updateMenuItem: vi.fn().mockRejectedValue(refusal),
-      setMenuVariantPrice: vi.fn().mockRejectedValue(refusal),
-    });
-    const el = await mountPrices(client);
-    await expandPrices(el, "mi-lemonade");
-    await commitPrice(el, key, "1.90");
-    await vi.waitFor(() => expect(priceFeedback(el)).toContain(codeMessage(refusal.code)));
-    await vi.waitFor(() => expect(priceField(el, key).value).toBe("1.90"));
-    expect(priceField(el, key).error).toBe("");
-  },
-);
-
-it.each([
-  ["mi-burger", { code: "management.request_invalid", params: { field: "grossPrice" } }],
-  ["mi-burger", { code: "product.invalid", params: { field: "grossPrice" } }],
-  ["mi-lemonade:v-small", { code: "product.variant_invalid", params: { field: "price" } }],
-  ["mi-lemonade:v-small", { code: "product.variant_not_found", params: { variantId: "v-small" } }],
-])("puts a refusal naming %s's price under its field, and focuses it", async (key, refusal) => {
-  const client = api({
-    listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
-    updateMenuItem: vi.fn().mockRejectedValue(refusal),
-    setMenuVariantPrice: vi.fn().mockRejectedValue(refusal),
-  });
-  const el = await mountPrices(client);
-  await expandPrices(el, "mi-lemonade");
-  await commitPrice(el, key, "1.90");
-  await vi.waitFor(() => expect(priceField(el, key).error).toBe(codeMessage(refusal.code)));
-  const input = priceField(el, key);
-  await vi.waitFor(() =>
-    expect(input.shadowRoot!.activeElement).toBe(input.shadowRoot!.querySelector("input")),
-  );
-});
-
-it.each(["stored", "refused"] as const)(
-  "waits for the first price before sending the next when the first is %s",
-  async (answer) => {
-    const first = deferred<void>();
-    const client = api({
-      listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()),
-      updateMenuItem: vi.fn(() => first.promise),
-    });
-    const el = await mountPrices(client);
-    await expandPrices(el, "mi-lemonade");
-    type(priceField(el, "mi-burger"), "11.00");
-    type(priceField(el, "mi-lemonade:v-small"), "1.90");
-    await prices(el).updateComplete;
-    priceSave(el).click();
-    await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledOnce());
-    expect(client.setMenuVariantPrice).not.toHaveBeenCalled();
-    await vi.waitFor(() => expect(priceField(el, "mi-burger").readonly).toBe(true));
-    expect(priceField(el, "mi-lemonade:v-small").readonly).toBe(true);
-    expect(priceSave(el).disabled).toBe(true);
-    expect(priceSave(el).variant).toBe("primary");
-    expect(
-      prices(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-        '[data-test="prices-cancel"]',
-      )!.disabled,
-    ).toBe(true);
-    if (answer === "refused")
-      first.reject({ code: "product.invalid", params: { field: "grossPrice" } });
-    else first.resolve();
-    await vi.waitFor(() =>
-      expect(client.setMenuVariantPrice).toHaveBeenCalledExactlyOnceWith(
-        "menu-lunch",
-        "mi-lemonade",
-        "v-small",
-        "1.90",
-      ),
-    );
-    await vi.waitFor(() => expect(priceField(el, "mi-burger").readonly).toBe(false));
-    expect(writeCalls(client)).toEqual(["updateMenuItem", "setMenuVariantPrice"]);
-    if (answer === "refused") {
-      expect(priceField(el, "mi-burger").error).toBe(codeMessage("product.invalid"));
-      expect(priceSave(el).disabled).toBe(false);
-    }
-  },
-);
-
-it("reports beside the list, naming the product, a refusal for a row the menu no longer lists", async () => {
-  const pending = deferred<void>();
-  const live = new LiveData();
-  const client = api({ liveData: live, updateMenuItem: vi.fn(() => pending.promise) });
-  const el = await mountPrices(client);
-  await commitPrice(el, "mi-burger", "11.00");
-  client.getMenuPrices.mockResolvedValue(lunchPrices().filter((r) => r.menuItemId !== "mi-burger"));
-  live.invalidate([{ type: "menu_items" }]);
-  await vi.waitFor(() =>
-    expect(prices(el).rows.map((r) => r.menuItemId)).not.toContain("mi-burger"),
-  );
-  pending.reject({ code: "menu_item.not_found" });
-  await vi.waitFor(() =>
-    expect(text(q(el, '[data-test="member-error"]'))).toBe(
-      t("menus.change_not_saved")
-        .replace("{name}", "Burger")
-        .replace("{reason}", codeMessage("menu_item.not_found")),
-    ),
-  );
-});
-
-// ---------------------------------------------------------------------------
-// Publishing
 
 describe("publishing", () => {
   // Read as a person reads the page, in English unless a case says otherwise, on a screen wide enough for every column.
@@ -8756,13 +7868,13 @@ describe("the Home page tab", () => {
     return el;
   }
 
-  it("puts the Home page tab between Prices and Preview, keeps it in the address, and reads the home and the preview only while it shows", async () => {
+  it("puts the Home page tab between Structure and Preview, keeps it in the address, and reads the home and the preview only while it shows", async () => {
     const live = new LiveData();
     const client = api({ liveData: live });
-    const el = await mountPrices(client);
+    const el = await mount(client, LUNCH_PATH);
     const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
-    expect(tabs.items.map(({ key }) => key)).toEqual(["structure", "prices", "home", "preview"]);
-    expect(tabs.items[2]!.label).toBe(t("menus.tab_home"));
+    expect(tabs.items.map(({ key }) => key)).toEqual(["structure", "home", "preview"]);
+    expect(tabs.items[1]!.label).toBe(t("menus.tab_home"));
     expect(client.getMenuHome).not.toHaveBeenCalled();
     expect(client.getMenuPreview).not.toHaveBeenCalled();
     await chooseTab(el, "home");
@@ -8780,7 +7892,7 @@ describe("the Home page tab", () => {
       expect(client.getMenuPreview.mock.calls.length).toBe(shownPreviewReads + 1),
     );
     expect(client.getMenuStatus.mock.calls.length).toBe(ownStatus);
-    await chooseTab(el, "prices");
+    await chooseTab(el, "structure");
     const homeReads = client.getMenuHome.mock.calls.length;
     const previewReads = client.getMenuPreview.mock.calls.length;
     live.invalidate([{ type: "menus" }]);
@@ -9256,7 +8368,7 @@ describe("the include-a-menu field", () => {
     { id: "drinks", name: "Drinks", rootSectionId: "drinks-root" },
     { id: "wine", name: "Wines", rootSectionId: "wine-root" },
   ];
-  function includeClient(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
+  function includeClient(overrides: ApiOverrides = {}) {
     return api({
       getMenuStructure: vi.fn().mockResolvedValue({
         rootSectionId: "root-lunch",
@@ -9379,7 +8491,7 @@ it("lists the menus that include this one, with their clashes", async () => {
 });
 
 describe("review fix: inclusion target and validation", () => {
-  function includeApi(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
+  function includeApi(overrides: ApiOverrides = {}) {
     const client = api(overrides);
     const read = client.getMenuStructure.getMockImplementation()! as (
       id: string,
@@ -9625,8 +8737,8 @@ it("shows the current clash count from the menus status read", async () => {
 describe("after the server comes back", () => {
   const down = { code: "connection.failed" };
 
-  function failing(client: Api, ...names: (keyof DashboardApi)[]): () => void {
-    const mocks = client as Record<keyof DashboardApi, ReturnType<typeof vi.fn>>;
+  function failing(client: Api, ...names: (keyof Api)[]): () => void {
+    const mocks = client as Record<keyof Api, ReturnType<typeof vi.fn>>;
     const reads = names.map((name) => [mocks[name], mocks[name].getMockImplementation()] as const);
     for (const [read] of reads) read.mockRejectedValue(down);
     return () => {
@@ -9696,15 +8808,15 @@ describe("after the server comes back", () => {
   it("shows the open menu's prices once the server answers again", async () => {
     const live = new LiveData();
     const client = api({ liveData: live });
-    const answer = failing(client, "getMenuPrices");
-    const el = await mount(client, PRICES_PATH);
-    await vi.waitFor(() => expect(prices(el)?.failed).toBe(true));
+    const answer = failing(client, "priceRows");
+    const el = await mount(client, LUNCH_PATH);
+    await vi.waitFor(() => expect(q(el, '[data-test="structure-error"]')).not.toBeNull());
 
     answer();
     live.refresh();
 
-    await vi.waitFor(() => expect(prices(el).rows.length).toBe(3));
-    expect(prices(el).failed).toBe(false);
+    await vi.waitFor(() => expect(structure(el)).not.toBeNull());
+    expect(q(el, '[data-test="structure-error"]')).toBeNull();
   });
 
   it("shows the open menu's preview and state once the server answers again", async () => {
@@ -10222,119 +9334,94 @@ it("W69 Menu Add products transfers dirty state from the picker to Structure", a
 });
 
 it.each(["link", "keyboard", "address", "retry"])(
-  "A349 opens Clashes from the Preview %s despite remembered All prices",
+  "shows a clashing dish and its sections from the Preview %s",
   async (entry) => {
-    const before = currentLocale();
-    setLocale("en");
-    try {
-      const rows = lunchPrices();
-      const lager = rows.find((row) => row.productId === "p-lager")!;
-      lager.combined = {
-        ...lager.combined,
-        price: {
-          state: "clash",
-          candidates: [
-            { value: "2.80", place: { kind: "own_sections" }, source: { kind: "product" } },
-            {
-              value: "3.00",
-              place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
-              source: { kind: "own" },
-            },
-          ],
-        } as MenuPriceRow["combined"]["price"],
-      };
-      const value = lunchPreview();
-      value.document = { ...value.document, menuId: "menu-lunch" };
-      value.clashes = [
-        {
-          productId: "p-lager",
-          variantId: null,
-          field: "price",
-          candidates: lager.combined.price.state === "clash" ? lager.combined.price.candidates : [],
-        },
-      ] as MenuPreview["clashes"];
-      const client = api({
-        getMenuPrices: vi.fn(async () => rows),
-        getMenuPreview: vi.fn(async () => value),
+    const rows = lunchPrices();
+    const lager = rows.find((row) => row.productId === "p-lager")!;
+    const candidates = [
+      { value: decimal("2.80"), place: { kind: "own_sections" }, source: { kind: "product" } },
+      {
+        value: decimal("3.00"),
+        place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
+        source: { kind: "own" },
+      },
+    ] as const;
+    lager.combined = {
+      ...lager.combined,
+      price: { state: "clash", candidates: [...candidates] },
+    };
+    const value = lunchPreview();
+    value.document = { ...value.document, menuId: "menu-lunch" };
+    value.clashes = [
+      { productId: "p-lager", variantId: null, field: "price", candidates: [...candidates] },
+    ];
+    const drinks = {
+      ...drinksNode("included-drinks", "other-drinks-root"),
+      includedMenuId: "drinks",
+      ownerMenuId: "drinks",
+      children: [productNode("other-lager", "p-lager")],
+    };
+    const client = api({
+      priceRows: vi.fn(async (id: string) =>
+        id === "drinks"
+          ? [
+              {
+                ...lager,
+                combined: combinedFixture("p-lager", "3.00", [], "3.00", "2.80", {}),
+              },
+            ]
+          : rows,
+      ),
+      getMenuStructure: vi.fn(async (id: string) =>
+        id === "drinks" ? lunchWith(drinks.children) : lunchWith([...lunchNodes(), drinks]),
+      ),
+      getMenuPreview: vi.fn(async () => value),
+    });
+    const destination = `${LUNCH_PATH}/filter/clashes`;
+    const el = await mount(client, entry === "address" ? destination : PREVIEW_PATH);
+    if (entry !== "address") {
+      const link = await vi.waitFor(() => {
+        const link = q(el, "dashboard-menu-preview")?.shadowRoot?.querySelector<HTMLAnchorElement>(
+          '[data-test="clash-prices"]',
+        );
+        expect(link).toBeTruthy();
+        return link!;
       });
-      const el = await mountPrices(client);
-      const priceTable = () =>
-        prices(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
-          "wt-data-table",
-        )!;
-      await priceTable().updateComplete;
-      priceTable().chooseFilter("override", []);
-      await priceTable().updateComplete;
-      expect(priceTable().filterValues("override")).toEqual([]);
-      await chooseTab(el, "preview");
-      await vi.waitFor(() =>
-        expect(
-          q(el, "dashboard-menu-preview")?.shadowRoot?.querySelector('[data-test="clash-prices"]'),
-        ).not.toBeNull(),
-      );
-      const link = q(el, "dashboard-menu-preview")!.shadowRoot!.querySelector<HTMLAnchorElement>(
-        '[data-test="clash-prices"]',
-      )!;
-      expect(link.getAttribute("href")).toBe(`${PRICES_PATH}/filter/clashes`);
-      const pending = deferred<MenuPriceRow[]>();
-      client.getMenuPrices.mockImplementation(() => pending.promise);
-      if (entry !== "address") {
-        link.addEventListener("click", (event) => event.preventDefault());
-        if (entry === "keyboard") {
-          link.focus();
-          await userEvent.keyboard("{Enter}");
-        } else await userEvent.click(link);
-      } else {
-        history.pushState(null, "", link.href);
-        window.dispatchEvent(new PopStateEvent("popstate"));
-      }
-      await vi.waitFor(() => expect(prices(el).loading).toBe(true));
+      expect(link.getAttribute("href")).toBe(destination);
+      if (entry === "retry") client.priceRows.mockRejectedValueOnce(new Error("down"));
+      if (entry === "keyboard") {
+        link.focus();
+        await userEvent.keyboard("{Enter}");
+      } else await userEvent.click(link);
       if (entry === "retry") {
-        pending.reject(new Error("down"));
-        await vi.waitFor(() => expect(prices(el).failed).toBe(true));
-        client.getMenuPrices.mockResolvedValue(rows);
-        await click(el, "prices-retry");
-      } else pending.resolve(rows);
-      await vi.waitFor(() =>
-        expect(
-          priceTable().filterValues("override"),
-          JSON.stringify({
-            url: location.pathname,
-            clashesFor: prices(el).clashesFor,
-            loading: prices(el).loading,
-            failed: prices(el).failed,
-            rows: prices(el).rows.length,
-          }),
-        ).toEqual(["clash"]),
-      );
-      expect(
-        [...priceTable().shadowRoot!.querySelectorAll("tbody tr[data-row-key]")].map((row) =>
-          row.getAttribute("data-row-key"),
-        ),
-      ).toEqual(["mi-lager"]);
-      priceTable().chooseFilter("override", []);
-      await priceTable().updateComplete;
-      history.replaceState(null, "", location.href);
-      window.dispatchEvent(new PopStateEvent("popstate"));
-      await el.updateComplete;
-      expect(priceTable().filterValues("override")).toEqual([]);
-      await chooseTab(el, "structure");
-      await chooseTab(el, "prices");
-      await vi.waitFor(() => expect(prices(el).loading).toBe(false));
-      expect(location.pathname).toBe(PRICES_PATH);
-      expect(priceTable().filterValues("override")).toEqual([]);
-    } finally {
-      setLocale(before);
+        await vi.waitFor(() => expect(q(el, '[data-test="structure-error"]')).not.toBeNull());
+        await click(el, "structure-retry");
+      }
     }
+
+    await vi.waitFor(() =>
+      expect(
+        structure(el).shadowRoot!.querySelector("wt-data-table")!.filterValues("price"),
+      ).toEqual(["clashes"]),
+    );
+    expect(location.pathname).toBe(destination);
+    await vi.waitFor(() => {
+      expect(rowOf(el, "m-drinks")).not.toBeNull();
+      expect(rowOf(el, "m-burger")).toBeNull();
+    });
+    await vi.waitFor(() => expect(rowOf(el, "m-drinks/m-beer/m-lager-2")).not.toBeNull());
+    structure(el).shadowRoot!.querySelector("wt-data-table")!.chooseFilter("price", []);
+    await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
+    await vi.waitFor(() => expect(rowOf(el, "m-burger")).not.toBeNull());
   },
 );
 
 it.each([
   ["/menus/filter/clashes", "/menus"],
-  ["/menus/menu/menu-lunch/view/structure/filter/clashes", LUNCH_PATH],
-  ["/menus/menu/menu-lunch/view/prices/filter/unknown", PRICES_PATH],
+  ["/menus/menu/menu-lunch/view/preview/filter/clashes", PREVIEW_PATH],
+  [`${PRICES_PATH}/filter/clashes`, LUNCH_PATH],
 ])(
-  "A349 removes a price-filter request that does not name a Prices destination: %s",
+  "A349 removes a price-filter request that does not name a Structure destination: %s",
   async (path, wanted) => {
     await mount(api(), path);
     expect(location.pathname).toBe(wanted);
@@ -10342,7 +9429,7 @@ it.each([
 );
 
 it("A349 removes the explicit price-filter destination when returning to the menu list", async () => {
-  const el = await mount(api(), `${PRICES_PATH}/filter/clashes`);
+  const el = await mount(api(), `${LUNCH_PATH}/filter/clashes`);
   await click(el, "back");
   expect(location.pathname).toBe("/menus");
 });
@@ -10569,31 +9656,6 @@ describe("a name put into a sentence", () => {
     await rowAction(el, "m-drinks", "delete");
     expect(text(modal(el, "delete-section").querySelector("p"))).toBe(
       "Remove Drinks $& {name} and its contents from this menu? Its products stay in the library.",
-    );
-  });
-
-  it("names a product holding a replacement pattern and the reason's placeholder as written when its price is refused elsewhere", async () => {
-    const pending = deferred<void>();
-    const client = api({
-      updateMenuItem: vi.fn(() => pending.promise),
-      getMenuPrices: vi.fn(async (id: string) =>
-        id === "menu-lunch"
-          ? lunchPrices().map((row) =>
-              row.menuItemId === "mi-burger" ? { ...row, name: "Burger $& {reason}" } : row,
-            )
-          : [],
-      ),
-    });
-    const el = await mountPrices(client);
-    await commitPrice(el, "mi-burger", "11.00");
-    history.pushState(null, "", "/menus/menu/menu-dinner/view/prices");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Dinner Menu"));
-    pending.reject({ code: "menu.not_found" });
-    await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="member-error"]'))).toBe(
-        `Your change to Burger $& {reason} was not saved. ${codeMessage("menu.not_found")}`,
-      ),
     );
   });
 

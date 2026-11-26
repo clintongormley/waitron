@@ -179,17 +179,9 @@ value. On a menu other than a set menu, a price for a product with an Active var
 (400, `field: "active"` or `field: "offered"`), whatever their value. An item no longer reached by
 this menu answers `menu_item.not_found` (404). Publish again to change what the till sells.
 
-`PATCH /management-api/menus/:id/items/:itemId/variants/:variantId` sets or clears this
-menu's price for one Active size of the item's product, and leaves every other size's price as it
-is. The body is `{ price }`, a price or null; it returns 204. A missing `price`, or one
-that is neither a string nor null, answers `management.request_invalid` (400, `field: "price"`),
-and any other key in the body answers the same code naming that key. A malformed price answers
-`product.variant_invalid` (400, `field: "price"`); a size that is not one of the product's Active
-sizes, `product.variant_not_found` (404); an item of another menu, or one this menu no longer reaches,
-`menu_item.not_found` (404).
-
-`GET /management-api/menus/:id/prices` gives one row per Active product reached by the
-working structure, including sold-out products. An inactive menu gives no rows. Each row is
+`GET /management-api/menus/:id/read?part=structure&part=prices` reads Structure and prices
+together. The `prices` part wraps its rows in `{ status, body }`. It gives one row per Active
+product reached by the working structure, including sold-out products. An inactive menu gives no rows. Each row is
 `{ menuItemId, productId, name, categoryId, placements, override, effectivePrice, combined, available, variants }`,
 with `available` the product's own Available.
 `override` is this menu's saved price, which may be null, and is null for a product with an

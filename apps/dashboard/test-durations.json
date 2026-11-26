@@ -394,8 +394,6 @@
   "src/widgets/menu-preview.test.ts": 2.3,
   "src/widgets/menu-preview.unit-changes.test.ts": 3.1,
   "src/widgets/menu-price-inheritance.test.ts": 1.1,
-  "src/widgets/menu-prices-table.a11y.test.ts": 5.6,
-  "src/widgets/menu-prices-table.test.ts": 14.3,
   "src/widgets/menu-publications.a11y.test.ts": 5.6,
   "src/widgets/menu-publications.save-state.test.ts": 2.7,
   "src/widgets/menu-publications.test.ts": 8.4,

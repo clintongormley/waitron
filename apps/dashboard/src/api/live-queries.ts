@@ -70,6 +70,24 @@ const TRANSLATION_READS = [
   "units",
 ] as const;
 
+// `menuPrices` (packages/menu/src/operations.ts): the structure's tables for the placements,
+// then each reached product's menu item, menu and price, and its variants' overrides.
+const MENU_PRICE_READS = [
+  "sections",
+  "section_members",
+  "menu_items",
+  "menus",
+  "products",
+  "menu_item_variant_overrides",
+  "settings.venue",
+  "product_modifiers",
+  "extra_lists",
+  "extra_list_items",
+  "option_lists",
+  "option_labels",
+  "units",
+] as const;
+
 export const QUERY_DEPENDENCIES = {
   getZoneDeleteImpact: HIERARCHY_DELETE_READS,
   getDepartmentDeleteImpact: HIERARCHY_DELETE_READS,
@@ -280,23 +298,6 @@ export const QUERY_DEPENDENCIES = {
   listMenus: ["menus", "sections", "section_members"],
   getMenuStructure: ["sections", "section_members", "menus"],
   getMenuStructures: ["sections", "section_members", "menus"],
-  // `menuPrices` (packages/menu/src/operations.ts): the structure's tables for the placements,
-  // then each reached product's menu item, menu and price, and its variants' overrides.
-  getMenuPrices: [
-    "sections",
-    "section_members",
-    "menu_items",
-    "menus",
-    "products",
-    "menu_item_variant_overrides",
-    "settings.venue",
-    "product_modifiers",
-    "extra_lists",
-    "extra_list_items",
-    "option_lists",
-    "option_labels",
-    "units",
-  ],
   // The tables `menuStatus` and `previewMenu` read (packages/menu/src/menu-publication.ts); a
   // category's colour and the venue default colour are part of each offer's colour.
   getMenuRead: MENU_PUBLICATION_READS,
@@ -485,7 +486,6 @@ export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
   "listMenus",
   "getMenuStructure",
   "getMenuStructures",
-  "getMenuPrices",
   "getMenuHome",
   "listCategories",
   "getCategory",
@@ -563,7 +563,7 @@ function dependenciesOf<N extends DashboardQueryName>(
     const parts = (args as Parameters<DashboardApi["getMenuRead"]>)[1];
     const reads = {
       structure: QUERY_DEPENDENCIES.getMenuStructure,
-      prices: QUERY_DEPENDENCIES.getMenuPrices,
+      prices: MENU_PRICE_READS,
       home: QUERY_DEPENDENCIES.getMenuHome,
       status: QUERY_DEPENDENCIES.getMenuStatus,
       preview: QUERY_DEPENDENCIES.getMenuPreview,

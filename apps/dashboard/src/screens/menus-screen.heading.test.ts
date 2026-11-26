@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { NavigationGuard } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import { page, userEvent } from "vitest/browser";
 import {
@@ -25,7 +26,6 @@ beforeEach(() => {
 const LIST_PATH = "/menus";
 const LUNCH_PATH = "/menus/menu/menu-lunch/view/structure";
 const PREVIEW_PATH = "/menus/menu/menu-lunch/view/preview";
-const PRICES_PATH = "/menus/menu/menu-lunch/view/prices";
 const PUBLISHED_AT = "2026-09-26T10:15:00.000Z";
 /** The screen's clock, 1 hour 15 minutes after PUBLISHED_AT. */
 const NOW = "2026-09-26T11:30:00.000Z";
@@ -120,7 +120,6 @@ function api(
       return menuReadFixture(this as DashboardApi, id, parts);
     },
     getMenuPreview: vi.fn(async () => ({ ...preview, status: await status() })),
-    getMenuPrices: vi.fn().mockResolvedValue([]),
     getMenuPublications: vi
       .fn()
       .mockResolvedValue({ timeZone: "Europe/Madrid", live: null, editions: [] }),
@@ -556,12 +555,12 @@ describe("the menu editor's heading", () => {
     ["es-ES", 1, "No se puede publicar hasta resolver 1 conflicto"],
     ["es-ES", 3, "No se puede publicar hasta resolver 3 conflictos"],
   ])(
-    "says how many clashes block publishing on Prices in %s (%i)",
+    "says how many clashes block publishing on Structure in %s (%i)",
     async (locale, clashes, words) => {
       setLocale(locale);
       const el = await mount(
         api(async () => ({ ...CHANGED, clashes })),
-        PRICES_PATH,
+        LUNCH_PATH,
       );
       await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());
       expect(text(clashWords(el))).toBe(words);
@@ -571,7 +570,7 @@ describe("the menu editor's heading", () => {
     },
   );
 
-  it("links to filtered Prices in underlined red on the Structure tab", async () => {
+  it("links to filtered Structure in underlined red on the Structure tab", async () => {
     const el = await mount(
       api(async () => ({ ...CHANGED, clashes: 2 })),
       LUNCH_PATH,
@@ -579,39 +578,42 @@ describe("the menu editor's heading", () => {
     await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());
     const link = clashWords(el)!;
     expect(link.tagName).toBe("A");
-    expect(link.getAttribute("href")).toBe(`${PRICES_PATH}/filter/clashes`);
+    expect(link.getAttribute("href")).toBe(`${LUNCH_PATH}/filter/clashes`);
     expect(text(link)).toBe("Publishing waits on 2 clashes");
     const style = getComputedStyle(link);
     expect(style.textDecorationLine).toContain("underline");
     expect(style.color).toBe(resolved(el, "--wt-color-danger"));
   });
 
-  it("draws the clash words as plain words on the Prices tab, which they would only open again", async () => {
-    const el = await mount(
-      api(async () => ({ ...CHANGED, clashes: 2 })),
-      PRICES_PATH,
-    );
-    await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());
-    expect(text(clashWords(el))).toBe("Publishing waits on 2 clashes");
-    expect(clashWords(el)!.closest("a")).toBeNull();
-    expect(clashWords(el)!.querySelector("a")).toBeNull();
-  });
-
-  it("opens the Prices tab filtered to the clashes on a plain click on the clash words, as the list's clash link does", async () => {
-    const seen = watchClicks();
+  it("reapplies the clash filter after clearing it without discarding a draft", async () => {
     const el = await mount(api(async () => ({ ...CHANGED, clashes: 2 })));
     await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());
-    clashWords(el)!.click();
-    await el.updateComplete;
-    expect(seen).toEqual([true]);
-    expect(location.pathname).toBe(`${PRICES_PATH}/filter/clashes`);
-    expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices");
-    await vi.waitFor(() =>
-      expect(
-        q<HTMLElementTagNameMap["dashboard-menu-prices-table"]>(el, "dashboard-menu-prices-table")!
-          .clashesFor,
-      ).toBe("menu-lunch"),
+    const tree = q<HTMLElementTagNameMap["dashboard-menu-structure-table"]>(
+      el,
+      "dashboard-menu-structure-table",
+    )!;
+    const table = tree.shadowRoot!.querySelector("wt-data-table")!;
+    tree.dispatchEvent(
+      new CustomEvent("wt-structure-price", {
+        detail: { productId: burger.id, value: "12.00" },
+        bubbles: true,
+      }),
     );
+    const save = () => q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="structure-save"]')!;
+    await vi.waitFor(() => expect(save().disabled).toBe(false));
+
+    const request = vi.fn();
+    const guard = new NavigationGuard(window, { isDirty: () => true, request });
+    onTestFinished(() => guard.dispose());
+    for (let click = 0; click < 2; click++) {
+      await userEvent.click(clashWords(el)!);
+      await vi.waitFor(() => expect(table.filterValues("price")).toEqual(["clashes"]));
+      expect(location.pathname).toBe(`${LUNCH_PATH}/filter/clashes`);
+      expect(save().disabled).toBe(false);
+      table.chooseFilter("price", []);
+      await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
+    }
+    expect(request).not.toHaveBeenCalled();
   });
 
   it.each(MODIFIERS)(
@@ -629,7 +631,7 @@ describe("the menu editor's heading", () => {
   );
 
   it.each([
-    ["Prices", PRICES_PATH],
+    ["Structure", LUNCH_PATH],
     ["Preview", PREVIEW_PATH],
   ])("says nothing about clashes on the %s tab while none is left", async (_tab, path) => {
     const el = await mount(api(), path);
@@ -638,29 +640,12 @@ describe("the menu editor's heading", () => {
     expect(q(el, '[data-test="menu-clashes"]')).toBeNull();
   });
 
-  it("reads the clashes again on the Prices tab when a price override changes", async () => {
+  it("reads the clashes again on Structure when a price override changes", async () => {
     let clashes = 0;
     const client = api(async () => ({ ...CHANGED, clashes }));
     const live = new LiveData();
-    // A live re-read asks for every part in one request, as the server's read route answers it.
-    Object.assign(client, {
-      liveData: live,
-      getMenuRead: async (id: string, parts: readonly ("structure" | "status")[]) =>
-        Object.fromEntries(
-          await Promise.all(
-            parts.map(async (part) => [
-              part,
-              {
-                status: 200,
-                body: await (part === "status"
-                  ? client.getMenuStatus(id)
-                  : client.getMenuStructure(id)),
-              },
-            ]),
-          ),
-        ),
-    });
-    const el = await mount(client, PRICES_PATH);
+    Object.assign(client, { liveData: live });
+    const el = await mount(client, LUNCH_PATH);
     await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(LIVE_WORDS));
     clashes = 2;
     live.invalidate([{ type: "menu_item_variant_overrides" }]);
@@ -679,6 +664,19 @@ describe("the menu editor's heading", () => {
     expect(vi.mocked(client.getMenuStatus).mock.calls.length).toBeGreaterThan(reads);
     await vi.waitFor(() => expect(clashWords(el)).toBeNull());
     expect(text(q(el, '[data-test="menu-status"]'))).toBe(LIVE_WORDS);
+  });
+
+  it.each(["en", "es-ES"])("fits all three menu tabs at 390 px in %s", async (locale) => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    onTestFinished(() => page.viewport(width, height));
+    await page.viewport(390, 900);
+    setLocale(locale);
+    const el = await mount();
+    const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
+    const strip = tabs.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
+    expect(strip.querySelectorAll('[role="tab"]')).toHaveLength(3);
+    expect(strip.scrollWidth).toBeLessThanOrEqual(strip.clientWidth);
   });
 
   /** Mounts a menu named `name` at phone width, putting the viewport back afterwards. */

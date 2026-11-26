@@ -92,7 +92,6 @@ function client(save: () => Promise<unknown> = async () => ({ dropped: [] }), cu
     getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
     getMenuStatuses: async () => ({ menu: { state: "unpublished", clashes: 0 } }),
-    getMenuPrices: async () => [],
     moveSectionMembersInto: vi.fn(async () => []),
     saveMenuStructure: vi.fn(save),
     getMenuStructure: () => reads.structure(),
