@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { performance } from "node:perf_hooks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleStorageRequest, storageCommand } from "./storage-host.mjs";
 
@@ -372,6 +373,37 @@ describe("storage.list", () => {
     expect(commands(host, "mount").map((args) => args.at(-2))).toEqual(["/dev/sdb1"]);
   });
 
+  it("remounts a drive with no file-system id, never counting it unchanged", async () => {
+    const host = fakeHost({
+      disks: [disk("sdb", "usb", [node("sdb1", { fstype: "vfat", "maj:min": "8:17" })])],
+    });
+    await ask(LIST, host);
+    host.run.mockClear();
+    expect(await ask(LIST, host)).toEqual({
+      ok: true,
+      drives: [{ drive: "sdb1", fileSystem: "vfat", readable: true }],
+    });
+    expect(commands(host, "umount")).toEqual([[join(root, "sdb1")]]);
+    expect(commands(host, "mount").map((args) => args.at(-2))).toEqual(["/dev/sdb1"]);
+  });
+
+  it("unmounts every pulled drive it can, then fails when one will not unmount", async () => {
+    const host = fakeHost({
+      disks: [],
+      mounts: [
+        { target: join(root, "sdb1"), device: "8:17" },
+        { target: join(root, "sdc1"), device: "8:33" },
+      ],
+    });
+    const run = host.run.getMockImplementation();
+    host.run.mockImplementation((command, args, limit) => {
+      if (command === "umount" && args.at(-1) === join(root, "sdb1")) throw new Error("stuck");
+      return run(command, args, limit);
+    });
+    expect(await ask(LIST, host)).toEqual({ ok: false, reason: "host_failed" });
+    expect(host.mounts.map((mount) => mount.target)).toEqual([join(root, "sdb1")]);
+  });
+
   it("remounts a drive folder it holds no record of", async () => {
     const host = fakeHost({
       disks: [disk("sdb", "usb", [part("sdb1", "vfat", "B-1", "8:17")])],
@@ -473,6 +505,19 @@ describe("time limits", () => {
     expect(existsSync(join(root, "sdd1"))).toBe(false);
   });
 
+  it("kills a command that ignores SIGTERM at its limit", () => {
+    const run = storageCommand();
+    const started = performance.now();
+    expect(() =>
+      run(
+        process.execPath,
+        ["-e", "process.on('SIGTERM', () => {}); setTimeout(() => {}, 4000);"],
+        250,
+      ),
+    ).toThrow();
+    expect(performance.now() - started).toBeLessThan(2000);
+  });
+
   it("gives every command one twelve-second deadline", () => {
     let time = 0;
     const exec = vi.fn(() => "out");
@@ -531,6 +576,35 @@ describe("storage.release", () => {
     host.run.mockClear();
     expect(await ask(RELEASE, host)).toEqual({ ok: true, released: 0 });
     expect(commands(host, "umount")).toEqual([]);
+  });
+
+  it("releases every other drive when one will not unmount, keeps its record and fails", async () => {
+    const host = fakeHost({
+      disks: [
+        disk("sdb", "usb", [part("sdb1", "vfat", "B-1", "8:17")]),
+        disk("sdc", "usb", [part("sdc1", "exfat", "C-1", "8:33")]),
+      ],
+    });
+    await ask(LIST, host);
+    const run = host.run.getMockImplementation();
+    host.run.mockImplementation((command, args, limit) => {
+      if (command === "umount" && args.at(-1) === join(root, "sdb1")) throw new Error("stuck");
+      return run(command, args, limit);
+    });
+    host.run.mockClear();
+    expect(await ask(RELEASE, host)).toEqual({ ok: false, reason: "host_failed" });
+    expect(commands(host, "umount")).toEqual([
+      [join(root, "sdb1")],
+      ["-l", join(root, "sdb1")],
+      [join(root, "sdc1")],
+    ]);
+    expect(host.mounts.map((mount) => mount.target)).toEqual([join(root, "sdb1")]);
+    expect(readdirSync(root)).toEqual(["sdb1"]);
+    host.run.mockImplementation(run);
+    host.run.mockClear();
+    await ask(LIST, host);
+    expect(commands(host, "umount")).toEqual([]);
+    expect(commands(host, "mount").map((args) => args.at(-2))).toEqual(["/dev/sdc1"]);
   });
 
   it("logs before unmounting", async () => {

@@ -27,6 +27,7 @@ export function storageCommand({ now = () => performance.now(), exec = execFileS
     return exec(command, args, {
       encoding: "utf8",
       timeout: Math.min(remaining, limit),
+      killSignal: "SIGKILL",
       env: { ...process.env, LC_ALL: "C" },
     });
   };
@@ -79,13 +80,18 @@ function driveMounts(run, root) {
     .map((mount) => ({ target: mount.target, device: mount["maj:min"] }));
 }
 
+/** @returns {boolean} whether the target is no longer mounted */
 function unmount(run, target) {
-  try {
-    run("umount", [target]);
-  } catch {
-    run("umount", ["-l", target]);
+  for (const args of [[target], ["-l", target]]) {
+    try {
+      run("umount", args);
+      removeFolder(target);
+      return true;
+    } catch {
+      // Tried lazily next, then left for the caller to report.
+    }
   }
-  removeFolder(target);
+  return false;
 }
 
 function removeFolder(target) {
@@ -124,14 +130,17 @@ function list(run, root, recordPath) {
   const record = readRecord(recordPath);
   /** @type {Record<string, string>} file-system id by drive name */
   const kept = {};
+  let stuck = false;
   for (const mount of driveMounts(run, root)) {
     const name = mount.target.slice(root.length + 1);
     const drive = drives.find((entry) => entry.drive === name);
     const known = Object.hasOwn(record, name) ? record[name] : undefined;
-    const same = drive?.type && drive.device === mount.device && known === drive.uuid;
+    const same =
+      drive?.type && drive.uuid != null && drive.device === mount.device && known === drive.uuid;
     if (same) kept[name] = drive.uuid;
-    else unmount(run, mount.target);
+    else if (!unmount(run, mount.target)) stuck = true;
   }
+  if (stuck) throw new Error("a drive would not unmount");
   mkdirSync(root, { recursive: true, mode: 0o755 });
   const mounted = { ...kept };
   const answer = drives.map(({ drive, type, uuid }) => {
@@ -158,8 +167,18 @@ function list(run, root, recordPath) {
 
 function release(run, root, recordPath) {
   const mounts = driveMounts(run, root);
-  for (const mount of mounts) unmount(run, mount.target);
-  writeRecord(recordPath, {});
+  const record = readRecord(recordPath);
+  /** @type {Record<string, string>} */
+  const still = {};
+  let stuck = false;
+  for (const mount of mounts) {
+    if (unmount(run, mount.target)) continue;
+    stuck = true;
+    const name = mount.target.slice(root.length + 1);
+    if (Object.hasOwn(record, name)) still[name] = record[name];
+  }
+  writeRecord(recordPath, still);
+  if (stuck) throw new Error("a drive would not unmount");
   return { ok: true, released: mounts.length };
 }
 
