@@ -5,6 +5,7 @@ import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";
 import { WtLanguageChooser } from "./wt-language-chooser.js";
+import "./wt-row-actions.js";
 
 const twoLocales = async () => [
   { code: "es-ES", label: "Español (servidor)" },
@@ -497,6 +498,34 @@ describe("wt-language-chooser", () => {
     expect(before.top - trigger.top).toBeCloseTo(150, 0);
     expect(menu.top).toBeGreaterThanOrEqual(trigger.bottom);
     expect(menu.top - trigger.bottom).toBeLessThan(trigger.height);
+  });
+
+  it("follows its trigger when the row-actions panel it is slotted into scrolls", async () => {
+    const container = await mount(`
+      <div>
+        <style>wt-row-actions::part(popup) { max-height: 160px !important; }</style>
+        <wt-row-actions label="Account" opens-below>
+          <div style="height: 60px"></div>
+          <wt-language-chooser active="en-GB" opens-below data-keep-open></wt-language-chooser>
+          <div style="height: 180px"></div>
+        </wt-row-actions>
+      </div>`);
+    const parent = container.querySelector("wt-row-actions")!;
+    const el = container.querySelector("wt-language-chooser")!;
+    el.loadLocales = twoLocales;
+    await parent.updateComplete;
+    parent.show();
+    await open(el);
+    const popup = parent.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    const button = triggerOf(el);
+    const before = button.getBoundingClientRect().bottom;
+    const gap = () =>
+      menuOf(el)!.getBoundingClientRect().top - button.getBoundingClientRect().bottom;
+    const initialGap = gap();
+    expect(initialGap).toBeGreaterThan(0);
+    popup.scrollTop = 32;
+    expect(button.getBoundingClientRect().bottom).toBeCloseTo(before - 32, 0);
+    await expect.poll(gap).toBeCloseTo(initialGap, 0);
   });
 
   it("stops listening for scrolls in the shadow root holding it once the menu closes or it leaves the page", async () => {

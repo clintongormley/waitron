@@ -580,6 +580,10 @@ it.each([1440, 390])("keeps a long Language list below its button at %ipx", asyn
       }),
     });
     await openAccountMenu(el);
+    const name = languageTrigger(el).querySelector("[part=name]")!;
+    const code = languageTrigger(el).querySelector("[part=code]")!;
+    expect(name.getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(code.getBoundingClientRect().width).toBe(0);
     await openLanguageList(el);
     const menu = languageMenu(el)!;
     expect(menu.getBoundingClientRect().top).toBeGreaterThan(
