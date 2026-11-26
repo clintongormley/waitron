@@ -380,7 +380,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 ### The setup wizard, onboarding and the demo venue
 
-- **Staff-owned Android phones.** The owner’s decision waits for A1573’s trust checks on a second Android phone and an iPhone. [Phone checks](backlog/setup.md#androidios-on-device-install-and-trust-rows)
+- **Staff-owned Android phones.** The owner still has to decide whether staff may use their own Android phones. The Pixel Tablet trust check passed. iOS remains untested. [Phone checks](backlog/setup.md#androidios-on-device-install-and-trust-rows)
 - **Stream the remaining recovery archive uploads.**
   The unused archive-preparation route and emergency handover buffer uploads within 256 MiB.
   [Detail](backlog/setup.md#stream-the-remaining-recovery-archive-uploads).
