@@ -26,7 +26,7 @@ en cada inicio hasta que un administrador [deje que siga sin él](servers.md#car
 
 Antes de empezar, comprueba dos cosas en el servidor principal:
 
-- Tiene una clave de cifrado de copias, que el servidor de reserva necesita. Si no la tiene, elige
+- Tiene una clave de las copias, que el servidor de reserva necesita. Si no la tiene, elige
   **Cambiar la clave de las copias** en la tarjeta **Paquete de recuperación** de **Copias de
   seguridad**.
 - **Copia continua en tu bucket** está desactivada. El local copia sus cambios en un solo sitio a

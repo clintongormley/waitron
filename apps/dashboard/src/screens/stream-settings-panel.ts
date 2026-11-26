@@ -395,7 +395,6 @@ export class StreamSettingsPanel extends LitElement {
       if (!current()) return;
       this.settings = settings;
       this.#scope?.commit(submitted);
-      // Save can give the box its first recovery key; the Backups screen must stop offering its own.
       this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.editing = (Object.keys(EMPTY) as Field[]).some(
         (field) => this.#body()[field] !== submitted[field],

@@ -1416,8 +1416,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Un archivo enviado al destino de las copias o leído de él superaba el tamaño que admite el servidor.",
   },
   "backup.rotation_metadata_failed": {
-    en: "The new backup encryption key is in use, but the box could not record the change in the backup settings.",
-    es: "La nueva clave de cifrado de copias ya está en uso, pero el servidor no ha podido anotar el cambio en los ajustes de las copias.",
+    en: "The new backup key is in use, but the box could not record the change in the backup settings.",
+    es: "La nueva clave de las copias ya está en uso, pero el servidor no ha podido anotar el cambio en los ajustes de las copias.",
   },
   "backup.archive_settings_invalid": {
     en: "The saved settings for scheduled backups are not valid. Choosing the destinations again and using “Turn on backups” replaces them.",

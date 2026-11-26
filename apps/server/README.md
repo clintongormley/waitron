@@ -350,7 +350,7 @@ setting's source, default and accepted values. The [print agent's inventory](../
 covers its own settings.
 
 A box keeps its deployment identity in `trading.env`, its credential keys in `secrets.env`, and
-its backup recovery key and rotation date in `backup.env`. Each file supplies only the names it
+its backup key, the key's number, its master key's id and rotation date in `backup.env`. Each file supplies only the names it
 owns. A non-empty process value takes precedence over a value from a file.
 
 `WAITRON_ENV` defaults to `preproduction`. Set `production` explicitly for a Live deployment.
@@ -575,10 +575,10 @@ share that document. Only each bucket's access key and secret key are sealed as 
 Use **Backups** to save or remove these settings. The credentials tool refuses backup changes
 because the bucket keys and the backup choices must be saved or removed together.
 
-The dashboard writes the recovery key and its rotation time to `backup.env` under `WAITRON_STATE_DIR`.
+Setup writes backup key 1 of the master key, its number and the master key's id to `backup.env` under `WAITRON_STATE_DIR`; Change the backup key and Make a new master key write the next one.
 The box reads that file along with its other env files; a process-environment key still takes precedence.
 
-Rotating the recovery key from the dashboard writes the new key and rotation time to `backup.env`,
+Change the backup key writes the new key and rotation time to `backup.env`,
 then stores the same archive settings again under a new revision, so every destination and the
 schedule are kept. If that second write fails, the new key is already in effect: the route answers
 `backup.rotation_metadata_failed` and the old key is not put back. A stored record that cannot be

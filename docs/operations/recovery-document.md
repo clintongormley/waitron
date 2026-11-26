@@ -37,6 +37,11 @@ new pack. The dialog then shows the master key with its name: use **Download** o
 **Continue**. **Copy** copies the master key alone and does not count: the pack holds more than the key, so use
 **Download** or **Print** before **Continue**. It is shown only this once, so **Stop** and Escape do nothing while the box is making
 it. The button is offered once the card has read the box's status.
+New backups then use a backup key from the new master key.
+
+## Change the backup key
+
+Choose **Change the backup key** on the card and type the master key, or choose the recovery pack PDF. New backups then use the next backup key, which a box you removed can't read. A wrong master key changes nothing.
 
 During an unfinished first setup, carry on in the tab that was doing it (reloading that tab
 carries on until activation starts) and use that flow's recovery-pack step. Follow [first Live setup](first-live-fiscal-setup.md); do not start a
@@ -45,7 +50,8 @@ fresh identity just to obtain another pack.
 ## Implementation references
 
 The dashboard card is [recovery-pack-card.ts](../../apps/dashboard/src/screens/recovery-pack-card.ts)
-and its dialog [recovery-pack-dialog.ts](../../apps/dashboard/src/widgets/recovery-pack-dialog.ts).
+and its dialogs [recovery-pack-dialog.ts](../../apps/dashboard/src/widgets/recovery-pack-dialog.ts)
+and [backup-key-dialog.ts](../../apps/dashboard/src/widgets/backup-key-dialog.ts).
 The server's [recovery pack routes](../../apps/server/src/backup-recovery-pack-api.ts) check
 `system.manage`, the secure connection and a fresh sign-in, make a new master key when asked,
 and keep a record of each pack and each master key's name and check value, never the

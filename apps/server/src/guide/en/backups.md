@@ -32,7 +32,7 @@ If Cloud becomes unavailable, open **Change destination or schedule** and choose
 
 The backup key opens encrypted copies. The master key, on the first page of your recovery pack, authorises a restore. Keep the pack that holds the master key each backup needs.
 
-To change the backup key, choose **Change the backup key** on the **Recovery pack** card and type the master key. New backups then use the next backup key, which a box you removed can't read.
+To change the backup key, choose **Change the backup key** on the **Recovery pack** card and type the master key. New backups then use the next backup key, which a box you removed can't read. Then choose **Make recovery pack** and keep the new pack: restoring a newer backup asks for the backup key it prints.
 
 Keep older keys and packs for the backups you still hold. See [Prove access to the selected backup](backup-recovery.md#proof) for what you need when restoring.
 

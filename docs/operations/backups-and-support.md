@@ -12,8 +12,7 @@ the box, outside the bucket. Keep earlier packs and keys for archives made befor
 changing the recovery key does not re-encrypt older files. After changing the recovery key, or
 the bucket copy or archive settings on **Backups**, the card says the pack is out of date; make a new one.
 
-If rotation reports `backup.rotation_metadata_failed`, the new key is already in effect.
-Keep that key and make a new recovery pack. Do not assume that the failed metadata step kept
+If Change the backup key reports that the box could not record the change, the new key is already in use: make a new recovery pack. Do not assume that the failed metadata step kept
 the former key active. See the [archive settings reference](../../apps/server/README.md)
 and [restore procedures](../developers/offline-fiscal-restore.md) for the separate archive
 recovery keys.

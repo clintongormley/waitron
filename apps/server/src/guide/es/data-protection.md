@@ -623,7 +623,7 @@ clave de acceso** y **Clave de acceso secreta**, y elige **Guardar cambios**. De
 **Paquete de recuperación**, elige **Cambiar la clave de las copias** para que las copias nuevas usen
 una clave que esa persona no tiene; si también puede tener el paquete de recuperación con la clave
 maestra, elige en su lugar **Crear una clave maestra nueva**, que también cambia la clave de las
-copias. Una clave de cifrado de copias
+copias. Una clave de las copias
 nueva no cambia las contraseñas y claves de tus otros proveedores, así que cámbialas también en cada
 proveedor. Conserva el paquete de recuperación
 correspondiente a cualquier copia anterior que puedas necesitar restaurar.
