@@ -171,8 +171,6 @@ it("a covered soup with bread keeps its bread's figures on the full invoice", as
   ]);
 });
 
-// An invoice naming a customer is never credited (`sale.correction_unsupported`); the corrective
-// printed as a full invoice is a replacement (R4), made once AEAT has refused the original.
 it("a replacement (R4) of a set-menu invoice follows the same rule", async () => {
   const { tabId } = await specBill(spec, "fire");
   await asFullInvoice(tabId);

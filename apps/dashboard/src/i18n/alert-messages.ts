@@ -484,12 +484,26 @@ export const ALERT_MESSAGES: Readonly<
     es: `Las devoluciones automáticas han fallado en {count} pagos con tarjeta. Waitron no las volverá a intentar; devuélvelos desde el panel del proveedor.${MORE_ES}`,
   },
   "invoice_correction.unfinished": {
-    en: `{moneyBack:money} went back to a customer over an hour ago, but that money back is not finished, so its corrective receipt has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish to issue it for what has gone back.${MORE_EN}`,
-    es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente, pero esa devolución no está terminada, así que no se ha emitido su ticket rectificativo. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar para emitirlo por lo devuelto.${MORE_ES}`,
+    en: `{moneyBack:money} went back to a customer over an hour ago, but that money back is not finished, so its corrective receipt has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish. If none of these can be pressed, follow what it says, then press Check again there.${MORE_EN}`,
+    es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente, pero esa devolución no está terminada, así que no se ha emitido su ticket rectificativo. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar. Si no se puede pulsar ninguna de estas opciones, sigue lo que indica y pulsa allí Comprobar de nuevo.${MORE_ES}`,
+    variants: {
+      fullInvoice: {
+        mode: "replace",
+        en: `{moneyBack:money} went back to a customer over an hour ago, but that money back is not finished, so its corrective invoice has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish. If none of these can be pressed, follow what it says, then press Check again there.${MORE_EN}`,
+        es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente, pero esa devolución no está terminada, así que no se ha emitido su factura rectificativa. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar. Si no se puede pulsar ninguna de estas opciones, sigue lo que indica y pulsa allí Comprobar de nuevo.${MORE_ES}`,
+      },
+    },
   },
   "invoice_correction.filing_refused": {
-    en: `{moneyBack:money} went back to a customer, but its corrective receipt could not be issued. Do not give the money back again. On a till, open Find a bill, choose it under Money back under way and press Finish.${MORE_EN}`,
-    es: `Se devolvieron {moneyBack:money} a un cliente, pero no se ha podido emitir su ticket rectificativo. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta, elígela en Devoluciones en curso y pulsa Terminar.${MORE_ES}`,
+    en: `{moneyBack:money} went back to a customer, but its corrective receipt could not be issued. Do not give the money back again. On a till, open Find a bill and choose it under Money back under way. If it offers Finish, press it. If not, follow what it says, then press Check again there.${MORE_EN}`,
+    es: `Se devolvieron {moneyBack:money} a un cliente, pero no se ha podido emitir su ticket rectificativo. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso. Si ofrece Terminar, púlsalo. Si no, sigue lo que indica y pulsa allí Comprobar de nuevo.${MORE_ES}`,
+    variants: {
+      fullInvoice: {
+        mode: "replace",
+        en: `{moneyBack:money} went back to a customer, but its corrective invoice could not be issued. Do not give the money back again. On a till, open Find a bill and choose it under Money back under way. If it offers Finish, press it. If not, follow what it says, then press Check again there.${MORE_EN}`,
+        es: `Se devolvieron {moneyBack:money} a un cliente, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso. Si ofrece Terminar, púlsalo. Si no, sigue lo que indica y pulsa allí Comprobar de nuevo.${MORE_ES}`,
+      },
+    },
   },
   "route.dish_not_sent": {
     en: "Paid order {orderNumber} has dishes no prep station could take: {dishes}. They were not sent to the station. Tell the staff preparing these dishes directly, and check the Prep stations page: a closed station with no replacement, or no active default station, leaves a dish nowhere to go.",

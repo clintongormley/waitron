@@ -33,11 +33,12 @@ import {
   seriesId as brandSeriesId,
   sumDecimals,
   type Decimal,
-  type ErrorParams,
   type SaleId,
 } from "@waitron/shared";
 import { invalid, MONEY } from "./bill-allocation.js";
 import {
+  AS_ADMITTED,
+  closableRefusal,
   readCorrectionLegs,
   readCorrectionLegsOf,
   readCorrectionMoney,
@@ -139,7 +140,14 @@ async function checkCorrectionOpenable(
       refundId: pending.pendingRefundId!,
     });
   const moneyRefundable = appliedRemainingOf(refundable);
-  const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection);
+  const preview = await previewCorrectionAmounts(
+    tx,
+    backend,
+    saleId,
+    cfg.nodeId,
+    selection,
+    AS_ADMITTED,
+  );
   if (compareDecimal(moneyRefundable, preview.gross) < 0)
     throw new AppError("invoice_correction.money_short", {
       saleId,
@@ -228,7 +236,7 @@ export async function readCorrectableNow(
       .where(eq(saleSettlements.saleId, saleId));
     if (settled === undefined) throw new AppError("invoice_correction.not_settled", { saleId });
     await refuseTakenOffAdvance(tx, saleId);
-    lines = await readCorrectableLines(tx, backend, saleId, cfg.nodeId);
+    lines = await readCorrectableLines(tx, backend, saleId, cfg.nodeId, AS_ADMITTED);
   } catch (error) {
     const none = { refundable, correctable: 0 };
     if (refusesForGood(error)) return { tenders, lines: null, amounts: none, waiting: null };
@@ -420,11 +428,12 @@ export async function listOpenInvoiceCorrections(
 }
 
 /**
- * Files the R5 of the open correction `correctionId` for the money its refunds have given back,
+ * Files the corrective of the open correction `correctionId` (an R1 in the full invoices' series
+ * where the regime's admission says so, else an R5) for the money its refunds have given back,
  * after the filing checks run again, and marks the correction filed. The one place a correction's
- * R5 is filed. When a person asked (`asked`) and `cfg`'s device may print receipts, queues the
- * R5's original on that device's receipt printer when one resolves; an automatic filing passes
- * none and queues nothing.
+ * corrective is filed. When a person asked (`asked`) and `cfg`'s device may print receipts, queues
+ * the corrective's original on that device's receipt printer when one resolves; an automatic
+ * filing passes none and queues nothing.
  */
 export async function fileCorrectionIn(
   tx: Transaction,
@@ -440,17 +449,27 @@ export async function fileCorrectionIn(
   const { completed } = await readSettledMoney(tx, correction);
   if (completed === 0) throw new AppError("invoice_correction.nothing_back", { correctionId });
   const saleId = correction.originalSaleId as SaleId;
-  const preview = await previewCorrectionAmounts(tx, deps.backend, saleId, cfg.nodeId, {
-    gross: centsToDecimal(completed),
-    ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
-  });
+  const preview = await previewCorrectionAmounts(
+    tx,
+    deps.backend,
+    saleId,
+    cfg.nodeId,
+    {
+      gross: centsToDecimal(completed),
+      ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
+    },
+    AS_ADMITTED,
+  );
+  const fullInvoice = preview.fullInvoice === true;
   if (asked?.expectedSplit !== undefined)
     await refuseChangedSplit(tx, saleId, preview, asked.expectedSplit);
   if ((await deps.backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
     throw new AppError("invoice_correction.chain_unsound", { saleId });
 
   const clock = await prepareIssueClock(tx, cfg, deps.clock);
-  const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "corrective"));
+  const seriesId = brandSeriesId(
+    await readLiveSeriesIdTx(tx, cfg.nodeId, fullInvoice ? "full_corrective" : "corrective"),
+  );
   const { saleId: correctiveSaleId } = await recordCorrection(tx, deps.backend, {
     operationDescription: await readSaleOperationDescription(tx, cfg, { kind: "sale", saleId }),
     origin: cfg.origin,
@@ -466,6 +485,7 @@ export async function fileCorrectionIn(
     })),
     authz,
     clock,
+    ...(fullInvoice && { fullInvoice: true as const }),
   });
 
   const filed = await tx
@@ -494,8 +514,8 @@ export async function fileCorrectionIn(
 }
 
 /**
- * Files the R5 of the open correction `correctionId` for the money its refunds have given back so
- * far.
+ * Files the corrective of the open correction `correctionId` for the money its refunds have given
+ * back so far.
  */
 export async function fileInvoiceCorrectionNow(
   tx: Transaction,
@@ -512,20 +532,10 @@ export async function fileInvoiceCorrectionNow(
   return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
 }
 
-/** The refusals of a filing that no later attempt on this box can get past. */
-type NotAdmitted = ErrorParams["sale.correction_not_admitted"];
-const NEVER_FILEABLE = new Set<NotAdmitted["reason"]>([
-  "replaced",
-  "voided",
-  "wrong_node",
-  "not_simplified",
-  "refused_no_fix",
-]);
-
 /**
  * Ends the open correction `correctionId` without filing: discarded when nothing has gone back;
  * with money back, closed keeping its refunds only when filing it is refused for good
- * (`sale.correction_not_admitted` for a reason in `NEVER_FILEABLE`), and otherwise refused
+ * (`closableRefusal`), and otherwise refused
  * `invoice_correction.still_correctable`.
  */
 export async function closeInvoiceCorrection(
@@ -606,8 +616,8 @@ async function openCorrection(tx: Transaction, correctionId: string) {
 }
 
 /**
- * What filing `selection` off the sale would file, or the refusal it meets and whether that refusal
- * is one in `NEVER_FILEABLE`, which Close may end the correction over.
+ * What filing `selection` off the sale would file, or the refusal it meets and whether Close may
+ * end the correction over it (`closableRefusal`).
  */
 export async function previewOrRefusal(
   tx: Transaction,
@@ -617,14 +627,17 @@ export async function previewOrRefusal(
   selection: { gross: Decimal; lineIds?: readonly string[] },
 ): Promise<CorrectionPreview | { refusal: AppError; closable: boolean }> {
   try {
-    return await previewCorrectionAmounts(tx, backend, saleId as SaleId, cfg.nodeId, selection);
+    return await previewCorrectionAmounts(
+      tx,
+      backend,
+      saleId as SaleId,
+      cfg.nodeId,
+      selection,
+      AS_ADMITTED,
+    );
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
-    return {
-      refusal: error,
-      closable:
-        hasCode(error, "sale.correction_not_admitted") && NEVER_FILEABLE.has(error.params.reason),
-    };
+    return { refusal: error, closable: closableRefusal(error) };
   }
 }
 

@@ -9,6 +9,7 @@ import {
   exists,
   inArray,
   isNotNull,
+  ne,
   not,
   notExists,
   or,
@@ -21,6 +22,7 @@ import {
   billAdvances,
   billPayments,
   invoiceCorrectionRefunds,
+  invoiceCorrections,
   invoiceSeries,
   persons,
   refunds,
@@ -93,7 +95,7 @@ export interface AdvanceCell {
   takenOffBy: string | null;
 }
 
-/** A completed plain refund of a ticket's payment: no corrective was filed for it. */
+/** A completed refund of a ticket's payment that no corrective covers. */
 export interface RefundWithoutCorrective {
   id: string;
   refundedAt: string;
@@ -683,7 +685,16 @@ export function refundsWithoutCorrectiveQuery(tx: Transaction, window: (column: 
           tx
             .select({ id: invoiceCorrectionRefunds.id })
             .from(invoiceCorrectionRefunds)
-            .where(eq(invoiceCorrectionRefunds.tenderRefundId, refunds.id)),
+            .innerJoin(
+              invoiceCorrections,
+              eq(invoiceCorrections.id, invoiceCorrectionRefunds.invoiceCorrectionId),
+            )
+            .where(
+              and(
+                eq(invoiceCorrectionRefunds.tenderRefundId, refunds.id),
+                ne(invoiceCorrections.state, "closed"),
+              ),
+            ),
         ),
       ),
     )
@@ -691,8 +702,10 @@ export function refundsWithoutCorrectiveQuery(tx: Transaction, window: (column: 
 }
 
 /**
- * Refunds of a ticket's payment completed within `window`, by calendar date, that are not part of
- * a correction. A bill refund is never listed: what it gives back is owed on the bill again.
+ * Refunds of a ticket's payment completed within `window`, by calendar date, that no corrective
+ * covers: a plain refund, or one of a correction closed with no corrective. One of a correction
+ * still open or filed is not listed. A bill refund is never listed: what it gives back is owed on
+ * the bill again.
  */
 async function listRefundsWithoutCorrective(
   tx: Transaction,

@@ -801,6 +801,8 @@ declare module "@waitron/shared" {
       saleId: string;
       moneyBack: string;
       completedSince: string;
+      /** Present on a full invoice's correction; absent on a receipt's. */
+      fullInvoice?: true;
     };
     /** An incident: a correction's money all went back, but filing its corrective automatically on
      * the opening approval was refused with the code `refusal`; the payment check's alert. */
@@ -809,6 +811,8 @@ declare module "@waitron/shared" {
       saleId: string;
       moneyBack: string;
       refusal: string;
+      /** Present on a full invoice's correction; absent on a receipt's. */
+      fullInvoice?: true;
     };
     /** The bill cannot be closed as a deferred payment: it is not one whole, positive bill. */
     "deferred_close.ineligible": {

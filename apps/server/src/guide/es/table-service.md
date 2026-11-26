@@ -449,15 +449,15 @@ Cuando una devolución a tarjeta espera a la compañía de la tarjeta, elige **C
 para preguntarle por esa devolución, y **Devolver el resto** cuando la ventana lo ofrezca. Si no
 puedes devolver dinero, un responsable o encargado aprueba la consulta con su PIN. Si la ventana dice
 que el servidor no respondió, elige **Enviar de nuevo**. **Comprobar de nuevo** y **Enviar de nuevo**
-nunca devuelven el mismo dinero dos veces. Un ticket rectificativo que no se imprime solo se puede
-imprimir desde **Buscar cuenta**, en la pestaña **Transacciones**.
+nunca devuelven el mismo dinero dos veces. Un ticket rectificativo o una factura rectificativa que no se imprime
+solo se puede imprimir desde **Buscar cuenta**, en la pestaña **Transacciones**.
 
 Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **Buscar cuenta**, en
 **Devoluciones en curso**. Si no está, la devolución espera en esta caja: vuelve a abrir **Devolver
 dinero** en el recibo para continuar. Si está, elígelo en **Buscar cuenta** para continuar:
 
 - **Devolver … en efectivo** o **Devolver … a la tarjeta** devuelve lo que queda de esa forma.
-- **Terminar** registra lo devuelto. Si el ticket no lo admite, la ventana explica por qué y **Terminar** acaba la devolución; lo devuelto queda devuelto.
+- **Terminar** registra lo devuelto. Si el ticket o la factura no lo admite, la ventana lo indica: si sigue ofreciendo **Terminar**, este acaba la devolución y lo devuelto queda devuelto; si no, sigue lo que indica y elige **Comprobar de nuevo**. Hasta que **Comprobar de nuevo** lo resuelva, no se puede devolver más dinero.
 - **Parar aquí**, que aparece en su lugar mientras queda dinero, se queda con lo ya devuelto y
   no devuelve más.
 - **Anular esta devolución** termina una que no ha devuelto nada.
@@ -770,8 +770,9 @@ Primero envía o quita los platos que aún no se han enviado. Si hay platos de l
 como servidos, todavía no se imprime nada: la caja los muestra bajo **Aún sin servir:**. Si los
 clientes ya los han tomado, elige **Marcar como servidos** donde aparezca y vuelve a elegir
 **Imprimir la cuenta**. Si no, elige **Imprimir igualmente**: un plato que al final no llegue se devuelve después
-del cobro con [Devolver dinero](table-service.md#give-money-back). La caja no puede rectificar una factura completa a nombre de
-un cliente, así que en esas cuentas quita antes de imprimir los platos que puedan no llegar.
+del cobro con [Devolver dinero](table-service.md#give-money-back). En una factura completa a nombre
+de un cliente, el dinero que se devuelve por un plato cancelado no se descuenta de la factura, así que
+en esas cuentas quita antes de imprimir los platos que puedan no llegar.
 
 Una cuenta impresa no admite más platos. Si los clientes piden algo más, ponlo en **+ Cuenta
 nueva**.

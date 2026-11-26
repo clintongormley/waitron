@@ -698,6 +698,42 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
       });
     },
   );
+
+  it("with as_admitted, takes the kind the regime's answer says: a full invoice's for a marked one, a receipt's otherwise", async () => {
+    const AS_ADMITTED = { fullInvoice: "as_admitted" } as const;
+    const asAdmitted = (saleId: SaleId) =>
+      withTransaction(suite.db, async (tx) => ({
+        preview: await previewCorrectionAmounts(
+          tx,
+          backend,
+          saleId,
+          nodeId,
+          { gross: decimal("6.05") },
+          AS_ADMITTED,
+        ),
+        lines: await readCorrectableLines(tx, backend, saleId, nodeId, AS_ADMITTED),
+      }));
+    const full = await sellFull();
+    backend.setCorrectionAdmission({ ...admitted, fullInvoice: true });
+    const asFull = await asAdmitted(full.saleId);
+    expect(asFull.preview).toMatchObject({ gross: "6.05", fullInvoice: true });
+    expect(asFull.lines).toMatchObject([{ id: full.ids[0], left: "12.10" }]);
+    suite.db.run(sql`update taxpayer set taxpayer_domicile = ' ' where id = 1`);
+    expect(await captureError(() => asAdmitted(full.saleId))).toMatchObject({
+      code: "fiscal.taxpayer_domicile_missing",
+    });
+
+    const receipt = await sellSteak();
+    backend.setCorrectionAdmission(admitted);
+    const asReceipt = await asAdmitted(receipt.saleId);
+    expect(asReceipt.preview).toMatchObject({ gross: "6.05", filing: "queued" });
+    expect(asReceipt.preview).not.toHaveProperty("fullInvoice");
+    expect(asReceipt.lines).toHaveLength(1);
+    expect(await captureError(() => asAdmitted(full.saleId))).toMatchObject({
+      code: "sale.correction_unsupported",
+      params: { saleId: full.saleId },
+    });
+  });
 });
 
 it("refuses a substituted invoice as replaced before asking the regime", async () => {

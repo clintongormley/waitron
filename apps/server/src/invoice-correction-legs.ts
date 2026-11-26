@@ -6,12 +6,39 @@ import {
   tenders,
   type Transaction,
 } from "@waitron/db";
+import { previewCorrectionAmounts } from "@waitron/core";
+import type { FiscalBackend } from "@waitron/fiscal";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
-import { AppError, centsToDecimal } from "@waitron/shared";
+import {
+  AppError,
+  centsToDecimal,
+  hasCode,
+  type ErrorParams,
+  type NodeId,
+  type SaleId,
+} from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import "./errors.js";
 
 export type InvoiceCorrectionRow = typeof invoiceCorrections.$inferSelect;
+
+/** Asks core for whichever corrective the regime's admission says the invoice takes. */
+export const AS_ADMITTED = { fullInvoice: "as_admitted" } as const;
+
+/** The refusals of a filing that no later attempt on this box can get past. */
+const NEVER_FILEABLE = new Set<ErrorParams["sale.correction_not_admitted"]["reason"]>([
+  "replaced",
+  "voided",
+  "wrong_node",
+  "not_simplified",
+  "refused_no_fix",
+]);
+
+/** Whether a filing's refusal is one no later attempt on this box gets past, so Close may end the
+ * correction over it with its refunds kept. */
+export function closableRefusal(error: AppError): boolean {
+  return hasCode(error, "sale.correction_not_admitted") && NEVER_FILEABLE.has(error.params.reason);
+}
 
 /** The correction `correctionId`; refused `invoice_correction.not_found` when there is none. */
 export async function readCorrectionRow(
@@ -121,11 +148,13 @@ export async function readCorrectionMoney(
  * { correctionId, state }), a cash leg comes through the correction's cash request
  * (`invoice_correction.cash_route_only` { correctionId }), the tip is zero (`invalid("tipAmount")`),
  * no cancellation ids are named (`invalid("cancellationIds")`), and the leg fits what is left
- * (`invoice_correction.leg_too_large` { correctionId, left }). Answers the correction. Reads the
- * correction and its money unless `read` hands them in; every check runs either way.
+ * (`invoice_correction.leg_too_large` { correctionId, left }), then runs {@link checkLegFileable}
+ * unless `read.fileableChecked` says the caller already has. Answers the correction. Reads the
+ * correction and its money unless `read` hands them in.
  */
 export async function checkCorrectionLeg(
   tx: Transaction,
+  fiscal: { backend: FiscalBackend; nodeId: NodeId },
   saleId: string,
   link: { id: string; cashRoute?: true },
   leg: {
@@ -153,14 +182,46 @@ export async function checkCorrectionLeg(
       correctionId: correction.id,
       left: centsToDecimal(left),
     });
+  if (read?.fileableChecked !== true)
+    await checkLegFileable(tx, fiscal, correction, correction.gross - left + leg.appliedCents);
   return correction;
 }
 
-/** The correction as its caller read it in this transaction, and the cents it had left before this
- * leg. */
+/**
+ * Refuses as `previewCorrectionAmounts` refuses the correction's corrective for `moneyBack` cents
+ * (its admission, a full invoice's customer and registered address), except a refusal Close ends the
+ * correction over (`closableRefusal`), whose money goes back unrecorded. The chain and clock checks
+ * filing also runs are not repeated here.
+ */
+export async function checkLegFileable(
+  tx: Transaction,
+  fiscal: { backend: FiscalBackend; nodeId: NodeId },
+  correction: InvoiceCorrectionRow,
+  moneyBack: number,
+): Promise<void> {
+  try {
+    await previewCorrectionAmounts(
+      tx,
+      fiscal.backend,
+      correction.originalSaleId as SaleId,
+      fiscal.nodeId,
+      {
+        gross: centsToDecimal(moneyBack),
+        ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
+      },
+      AS_ADMITTED,
+    );
+  } catch (error) {
+    if (!(error instanceof AppError) || !closableRefusal(error)) throw error;
+  }
+}
+
+/** The correction as its caller read it in this transaction, the cents it had left before this
+ * leg, and whether the caller has run {@link checkLegFileable} for this leg's money or more. */
 export interface CorrectionRead {
   correction: InvoiceCorrectionRow;
   left: number;
+  fileableChecked?: true;
 }
 
 /** The cents of `correction` neither given back nor pending. */

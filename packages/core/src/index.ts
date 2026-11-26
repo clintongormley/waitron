@@ -12,7 +12,11 @@ export { correctionTargetFor } from "./correction-target.js";
 export { requireSupportedCorrection } from "./correction-eligibility.js";
 export type { RecordReplacementInput } from "./record-replacement.js";
 export { previewCorrectionAmounts, readCorrectableLines } from "./correction-history.js";
-export type { CorrectableLine, CorrectionPreview } from "./correction-history.js";
+export type {
+  CorrectableLine,
+  CorrectionPreview,
+  FullInvoiceCorrection,
+} from "./correction-history.js";
 export { recordSubstitution } from "./record-substitution.js";
 export type { RecordSubstitutionInput } from "./record-substitution.js";
 export { listOutstandingSales } from "./list-outstanding-sales.js";

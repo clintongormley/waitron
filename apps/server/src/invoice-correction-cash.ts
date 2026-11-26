@@ -11,6 +11,7 @@ import {
 } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import {
+  checkLegFileable,
   correctionLeft,
   readCorrectionLegs,
   readCorrectionMoney,
@@ -58,7 +59,7 @@ async function readCashLeft(tx: Transaction, saleId: string) {
 /**
  * Gives `request.amount` of the open correction `correctionId` back in cash, spread over the
  * invoice's cash payments oldest first with one drawer opening, and, once the money back reaches the
- * correction's gross, files its R5 in the same transaction: a refused filing undoes the cash and the
+ * correction's gross, files its corrective in the same transaction: a refused filing undoes the cash and the
  * drawer job. A repeat of the same submission answers its first legs.
  */
 export async function giveCorrectionCash(
@@ -102,6 +103,13 @@ export async function giveCorrectionCash(
       left: centsToDecimal(unclaimed),
     });
 
+  await checkLegFileable(
+    tx,
+    { backend: deps.backend, nodeId: cfg.nodeId },
+    correction,
+    correction.gross - unclaimed + amount,
+  );
+
   const reading = deps.clock.now();
   const createdAt = reading.instant.toISOString();
   const refunds: TenderRefundView[] = [];
@@ -128,7 +136,7 @@ export async function giveCorrectionCash(
       },
       createdAt,
       { backend: deps.backend, reading },
-      { correction, left: unclaimed },
+      { correction, left: unclaimed, fileableChecked: true },
     );
     unclaimed -= leg;
     const refund = await carryNewTenderRefund(

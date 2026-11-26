@@ -494,8 +494,8 @@ export interface ServeLinesDetail {
   items: { lineId: string; quantity: string }[];
 }
 
-/** A recipient becomes the sale's customer tax number, and the server refuses to correct a sale that
- * has one (`sale.correction_unsupported`). */
+/** A recipient becomes the sale's customer tax number; the server refuses to reopen or wholly credit a
+ * sale that has one (`sale.correction_unsupported`). */
 function namesCustomer(bill: PartyBill): boolean {
   return (bill.recipient ?? null) !== null;
 }

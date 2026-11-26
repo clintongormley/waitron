@@ -4885,6 +4885,36 @@ describe("till-app: service cancellation consent", () => {
         .toBe("correction-1");
     });
 
+    it.each([
+      ["F2", false],
+      ["F1", true],
+    ] as const)(
+      "tells Give money back whether the receipt is a full invoice (%s)",
+      async (invoiceType, full) => {
+        const methods = paidMethods({
+          getRefundableTenders: vi.fn().mockResolvedValue([]),
+          getTransactionReceipt: vi.fn().mockResolvedValue({ ...paidReceipt, invoiceType }),
+          readGiveBack: vi
+            .fn()
+            .mockResolvedValue({ ...VIEW, underWay: { ...UNDER_WAY, saleId: "own-sale" } }),
+        });
+        const { el } = await mountApp(methods);
+        await flush(el);
+        emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
+        await flush(el);
+        emit(shell(el), "find-bill");
+        const findBill = () => el.shadowRoot!.querySelector("till-find-bill-screen");
+        await expect.poll(findBill).not.toBeNull();
+        emit(findBill()!, "find-correction-open", {
+          correction: { id: "correction-1", saleId: "own-sale" },
+        });
+        await flush(el);
+        const giving = () => el.shadowRoot!.querySelector("till-give-back-dialog");
+        await expect.poll(() => giving()).not.toBeNull();
+        expect(giving()!.fullInvoice).toBe(full);
+      },
+    );
+
     it("reports a transaction load failure after the kitchen write without reopening a cancellation", async () => {
       const methods = paidMethods({
         getTransactionReceipt: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),

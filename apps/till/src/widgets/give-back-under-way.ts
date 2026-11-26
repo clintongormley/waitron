@@ -86,6 +86,7 @@ export class TillGiveBackUnderWay extends LitElement {
   static override styles = [baseStyles, giveBackStyles];
   @property({ attribute: false }) api!: GiveBackUnderWayApi;
   @property() saleId = "";
+  @property({ type: Boolean }) fullInvoice = false;
   @property({ attribute: false }) correction!: InvoiceCorrectionView;
   @property({ attribute: false }) corrections!: InvoiceCorrectionSession;
   @property({ attribute: false }) refunds!: TenderRefundSession;
@@ -291,7 +292,10 @@ export class TillGiveBackUnderWay extends LitElement {
     this.message =
       recoveryText(refusal) ??
       (FILING_REFUSALS.has(refusal.code)
-        ? giveBackFilingMessage(refusal.code, currentLocale(), { reason: refusal.reason })
+        ? giveBackFilingMessage(refusal.code, currentLocale(), {
+            reason: refusal.reason,
+            fullInvoice: this.fullInvoice,
+          })
         : codeMessage(refusal.code, currentLocale(), refusal));
     if (REREAD_AFTER.has(refusal.code)) await this.#refreshAfter();
   }
@@ -427,19 +431,33 @@ export class TillGiveBackUnderWay extends LitElement {
         refundMethodAllowed(row, this.capabilities),
     );
   }
-  #choice(name: string, label: string, hint: string, run: () => void, variant = "secondary") {
+  #choice(
+    name: string,
+    label: string,
+    hint: string,
+    run: () => void,
+    variant = "secondary",
+    barred = false,
+  ) {
     return html`<div class="choice">
       <wt-button
         variant=${variant}
         data-choice=${name}
-        .disabled=${this.busy}
+        .disabled=${this.busy || barred}
         @click=${() => {
-          if (!this.busy) run();
+          if (!this.busy && !barred) run();
         }}
         >${label}</wt-button
       >
       ${hint ? html`<p class="muted" data-hint=${name}>${hint}</p>` : nothing}
     </div>`;
+  }
+  /** Whether the filing refusal shown is one the box also refuses fresh money back over: any
+   * refusal Finish cannot close over. With none shown (nothing back yet, or a refund waiting) it
+   * bars nothing, and the box may still refuse. */
+  #barred(): boolean {
+    const { fileNow } = this.correction;
+    return fileNow !== null && "refusal" in fileNow && !fileNow.closable;
   }
   #cashChoice(left: string) {
     const cashLeft: string = sumDecimals(
@@ -448,15 +466,17 @@ export class TillGiveBackUnderWay extends LitElement {
         .map((row) => decimal(row.appliedRemaining)),
     );
     const allowed = refundMethodAllowed({ method: "cash", manual: false }, this.capabilities);
+    const saved = this.#savedCash();
     const amount =
-      this.#savedCash() ??
-      (positive(left) && positive(cashLeft) && allowed ? least(left, cashLeft) : null);
+      saved ?? (positive(left) && positive(cashLeft) && allowed ? least(left, cashLeft) : null);
     if (amount !== null)
       return this.#choice(
         "cash",
         t("give_back.uw_cash").replace("{amount}", () => this.#money(amount)),
         t("give_back.uw_cash_hint"),
         () => void this.#run(this.#giveCash(amount), "give_back.uw_unknown"),
+        "secondary",
+        saved === null && this.#barred(),
       );
     return positive(left) && positive(cashLeft)
       ? html`<p data-no-cash>${t("give_back.uw_no_cash")}</p>`
@@ -473,6 +493,8 @@ export class TillGiveBackUnderWay extends LitElement {
         : t("give_back.uw_card_any").replace("{amount}", () => amount),
       t(row.manual ? "give_back.uw_terminal_hint" : "give_back.uw_card_hint"),
       () => void this.#card(row),
+      "secondary",
+      this.#barred(),
     );
   }
   #endChoices(correction: InvoiceCorrectionView) {
@@ -488,9 +510,10 @@ export class TillGiveBackUnderWay extends LitElement {
     return html`${
       fileNow !== null && "refusal" in fileNow
         ? html`<p data-file-refusal>
-            ${giveBackFilingMessage(fileNow.refusal, currentLocale(), fileNow)}${
-              finishes && closes ? ` ${t("give_back.uw_finish_unrecorded")}` : ""
-            }
+            ${giveBackFilingMessage(fileNow.refusal, currentLocale(), {
+              ...fileNow,
+              fullInvoice: this.fullInvoice,
+            })}${finishes && closes ? ` ${t("give_back.uw_finish_unrecorded")}` : ""}
           </p>`
         : nothing
     }

@@ -63,9 +63,13 @@ export async function readApprovers(
     limit.done();
   }
 }
-/** Why a choice, a dish or a payment must wait. */
-export const waitReasonText = (reason: GiveBackWaitReason): string =>
-  recoveryText(reason) ?? giveBackReasonMessage(reason.code, currentLocale(), reason.params);
+/** Why a choice, a dish or a payment must wait, on a full invoice when `fullInvoice`. */
+export const waitReasonText = (reason: GiveBackWaitReason, fullInvoice = false): string =>
+  recoveryText(reason) ??
+  giveBackReasonMessage(reason.code, currentLocale(), {
+    ...reason.params,
+    ...(fullInvoice && { fullInvoice }),
+  });
 /** Runs `work`, keeping the till from reloading for a box update until it ends, also when the
  * device locks meanwhile and the window goes. */
 export function holdingReload<T>(host: HTMLElement, work: () => Promise<T>): Promise<T> {
@@ -193,6 +197,7 @@ function outcomeLines(
   way: GiveBackWay | undefined,
   notice: string | null,
   underWay: boolean,
+  fullInvoice: boolean,
 ) {
   const amounts = (state: string, kinds: readonly string[]) =>
     sumOf(
@@ -217,7 +222,7 @@ function outcomeLines(
     way?.way !== "cash" &&
     outcome.parts.some((part) => part.kind === "correction" && part.state === "completed")
   )
-    lines.push(t("give_back.print_later"));
+    lines.push(t(fullInvoice ? "give_back.print_later_invoice" : "give_back.print_later"));
   if (positive(pending))
     lines.push(t("give_back.pending").replace("{amount}", () => money(pending)));
   if (outcome.rest !== null && outcome.refusal === null)
@@ -297,11 +302,12 @@ export function doneStep(
   sending: boolean,
   on: { close: () => void; checkAgain: () => void },
   underWay?: TemplateResult,
+  fullInvoice = false,
 ) {
   if (underWay !== undefined)
-    return html`${outcomeLines(step.outcome, way, step.notice, true)}${underWay}`;
+    return html`${outcomeLines(step.outcome, way, step.notice, true, fullInvoice)}${underWay}`;
   const waits = waitsForCard(step.outcome);
-  return html`${outcomeLines(step.outcome, way, step.notice, false)}
+  return html`${outcomeLines(step.outcome, way, step.notice, false, fullInvoice)}
     <wt-form-actions
       >${recoveryLinkOf(step.outcome.refusal)}<wt-button
         slot="cancel"

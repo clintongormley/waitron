@@ -1,7 +1,12 @@
 import { en, es } from "./strings.js";
 import { afterEach, expect, it } from "vitest";
 import { setLocale } from "./t.js";
-import { codeMessage, freeItemAtFinishMessage, giveBackReasonMessage } from "./codes.js";
+import {
+  codeMessage,
+  freeItemAtFinishMessage,
+  giveBackFilingMessage,
+  giveBackReasonMessage,
+} from "./codes.js";
 import { formatMoney } from "@waitron/shared";
 
 it("explains an empty order in English and Spanish", () => {
@@ -80,19 +85,19 @@ it("words a card refund still waiting on a payment like one waiting on the bill"
   );
 });
 
-it("words a refusal the tax agency gave the receipt by the page that fixes it, and in Give money back what can still go back", () => {
+it("words a refused or held filing by the page that shows which, and in Give money back what can still go back", () => {
   const refused = { reason: "filing_refused" };
   expect(codeMessage("sale.correction_not_admitted", "en", refused)).toBe(
-    "The tax agency refused this receipt. Fix it in Fiscal filing, on the dashboard, then try again.",
+    "The tax agency refused this invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Then try again.",
   );
   expect(codeMessage("sale.correction_not_admitted", "es", refused)).toBe(
-    "La Agencia Tributaria rechazó este ticket. Corrígelo en Remisión a la AEAT, en el panel, y vuelve a intentarlo.",
+    "La Agencia Tributaria rechazó esta factura, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después vuelve a intentarlo.",
   );
   expect(giveBackReasonMessage("sale.correction_not_admitted", "en", refused)).toBe(
-    "The tax agency refused this receipt, so money for dishes or goodwill cannot go back until the receipt is fixed in Fiscal filing, on the dashboard. Money owed for cancelled dishes and the extra paid on top can still go back.",
+    "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, money for dishes or goodwill cannot go back; money owed for cancelled dishes and the extra paid on top can.",
   );
   expect(giveBackReasonMessage("sale.correction_not_admitted", "es", refused)).toBe(
-    "La Agencia Tributaria rechazó este ticket, así que el dinero de platos o por cortesía no se puede devolver hasta que se corrija en Remisión a la AEAT, en el panel. El dinero de platos cancelados y lo pagado de más sí se pueden devolver.",
+    "La Agencia Tributaria rechazó este ticket, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
   );
   for (const locale of ["en", "es"]) {
     const other = { reason: "voided" };
@@ -1121,10 +1126,109 @@ it.each([
 
 it("words sale.correction_unsupported for every flow that meets it, the whole-order cancel included", () => {
   expect(codeMessage("sale.correction_unsupported", "en")).toBe(
-    "This is a full invoice naming a customer, and the till cannot credit it.",
+    "The till cannot cancel or credit this invoice this way. If it has been paid, use Give money back.",
   );
   expect(codeMessage("sale.correction_unsupported", "es")).toBe(
-    "Es una factura completa a nombre de un cliente y la caja no puede abonarla.",
+    "La caja no puede anular ni abonar esta factura de esta forma. Si ya se ha pagado, usa Devolver dinero.",
+  );
+});
+
+it("words a full invoice made from receipts, and one the tax agency refused with no fix, in both places", () => {
+  const notSimplified = { reason: "not_simplified" };
+  const noFix = { reason: "refused_no_fix" };
+  const pins: [string, Record<string, string>, string, string][] = [
+    [
+      "codeMessage",
+      notSimplified,
+      "A full invoice made from receipts cannot be corrected here.",
+      "Aquí no se puede rectificar una factura completa que sustituye tickets.",
+    ],
+    [
+      "giveBackFilingMessage",
+      notSimplified,
+      "This is a full invoice made from receipts, so the money given back cannot be recorded on it here.",
+      "Es una factura completa que sustituye tickets, así que aquí no se puede registrar en ella el dinero devuelto.",
+    ],
+    [
+      "codeMessage",
+      noFix,
+      "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
+      "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo, así que el dinero que se devuelva de esta factura aparece en Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
+    ],
+    [
+      "giveBackFilingMessage",
+      noFix,
+      "The tax agency refused this full invoice and Waitron cannot fix that. Once this money back ends, the money given back goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
+      "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo. Cuando termine esta devolución, el dinero devuelto aparecerá en Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
+    ],
+  ];
+  const words = { codeMessage, giveBackFilingMessage };
+  for (const [fn, params, en, es] of pins) {
+    expect(words[fn as keyof typeof words]("sale.correction_not_admitted", "en", params)).toBe(en);
+    expect(words[fn as keyof typeof words]("sale.correction_not_admitted", "es", params)).toBe(es);
+  }
+});
+
+it("names a full invoice, not a receipt, in Give money back's and Money back under way's refusals", () => {
+  const full = (reason?: string) => ({
+    ...(reason === undefined ? {} : { reason }),
+    fullInvoice: true,
+  });
+  const pins: [string, string | undefined, string, string][] = [
+    [
+      "giveBackReasonMessage",
+      "filing_refused",
+      "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, money for dishes or goodwill cannot go back; money owed for cancelled dishes and the extra paid on top can.",
+      "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
+    ],
+    [
+      "giveBackFilingMessage",
+      "filing_refused",
+      "The tax agency refused this full invoice, or sending it to the agency is on hold, so the money given back cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
+      "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido, así que el dinero devuelto aún no se puede registrar en ella. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después pulsa Comprobar de nuevo.",
+    ],
+    [
+      "giveBackFilingMessage",
+      "wrong_node",
+      "Another box issued this full invoice, so this box cannot record the money given back on it.",
+      "Otro servidor emitió esta factura completa, así que este servidor no puede registrar en ella el dinero devuelto.",
+    ],
+    [
+      "giveBackFilingMessage",
+      "voided",
+      "This full invoice was cancelled, so the money given back cannot be recorded on it.",
+      "Esta factura completa se anuló, así que el dinero devuelto no se puede registrar en ella.",
+    ],
+    [
+      "giveBackFilingMessage",
+      "missing",
+      "The money given back cannot be recorded on this full invoice now, so Finish is not offered. Press Check again to see whether that has changed.",
+      "El dinero devuelto no se puede registrar ahora en esta factura completa, así que no se ofrece Terminar. Pulsa Comprobar de nuevo para ver si ha cambiado.",
+    ],
+  ];
+  const words = { giveBackReasonMessage, giveBackFilingMessage };
+  for (const [fn, reason, en, es] of pins) {
+    const say = words[fn as keyof typeof words];
+    expect(say("sale.correction_not_admitted", "en", full(reason))).toBe(en);
+    expect(say("sale.correction_not_admitted", "es", full(reason))).toBe(es);
+    expect(say("sale.correction_not_admitted", "en", { reason })).not.toBe(en);
+  }
+  for (const reason of ["not_simplified", "refused_no_fix"])
+    expect(giveBackFilingMessage("sale.correction_not_admitted", "en", full(reason))).toBe(
+      giveBackFilingMessage("sale.correction_not_admitted", "en", { reason }),
+    );
+});
+
+it("says in Money back under way that the business's registered address is missing, and where to add it", () => {
+  expect(
+    giveBackFilingMessage("fiscal.taxpayer_domicile_missing", "en", { fullInvoice: true }),
+  ).toBe(
+    "The business's registered address is missing, so the money given back cannot be recorded on this full invoice yet. Add it on the dashboard, under Venue settings › Venue details. Then press Check again.",
+  );
+  expect(
+    giveBackFilingMessage("fiscal.taxpayer_domicile_missing", "es", { fullInvoice: true }),
+  ).toBe(
+    "Falta el domicilio fiscal del negocio, así que el dinero devuelto aún no se puede registrar en esta factura completa. Añádelo en el panel, en Ajustes del local › Datos del local. Después pulsa Comprobar de nuevo.",
   );
 });
 
@@ -1388,13 +1492,13 @@ it.each([
   },
 );
 
-it("tells staff the receipt waits for the advance's open correction, naming the advance and the correction's buttons", () => {
+it("tells staff the receipt waits for the advance's open money back, naming the advance, to finish, stop or cancel it", () => {
   const advance = { invoiceNumber: "A/12" };
   expect(codeMessage("advance.correction_open", "en", advance)).toBe(
-    "The receipt cannot be issued while money back on the payment on account A/12 is under way. In Give money back on that ticket, press Finish, Stop here or Cancel this money back, then try again.",
+    "The receipt cannot be issued while money back on the payment on account A/12 is under way. In Give money back on that ticket, finish, stop or cancel the money back; if it offers none of these, follow what it says. Then try again.",
   );
   expect(codeMessage("advance.correction_open", "es", advance)).toBe(
-    "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta A/12. En Devolver dinero de ese ticket, pulsa Terminar, Parar aquí o Anular esta devolución y vuelve a intentarlo.",
+    "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta A/12. En Devolver dinero de ese ticket, termina, para o anula la devolución; si no ofrece nada de esto, sigue lo que indica. Después vuelve a intentarlo.",
   );
   expect(codeMessage("advance.correction_open", "en")).toMatch(
     /while money back on the payment on account is under way\. /,
@@ -1565,8 +1669,8 @@ it("words the table refusals Print the bill shows in their own words, in both la
     ],
     [
       "fiscal.taxpayer_domicile_missing",
-      "The business's registered address is missing. Add it in the dashboard, under Venue settings › Venue details, before issuing a full invoice",
-      "Falta el domicilio fiscal del negocio. Añádelo en el panel, en Ajustes del local › Datos del local, antes de emitir una factura completa",
+      "The business's registered address is missing. Add it in the dashboard, under Venue settings › Venue details, before issuing or correcting a full invoice",
+      "Falta el domicilio fiscal del negocio. Añádelo en el panel, en Ajustes del local › Datos del local, antes de emitir o rectificar una factura completa",
     ],
     [
       "session.required",

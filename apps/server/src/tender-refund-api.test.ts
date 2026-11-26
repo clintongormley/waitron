@@ -37,7 +37,6 @@ import {
   type OrderVenue,
 } from "./testing/order-venue.js";
 import { inTx, send } from "./testing/bill-venue.js";
-import { readCorrectionMoney } from "./invoice-correction-legs.js";
 import { fingerprint } from "./parties.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 
@@ -704,23 +703,19 @@ it("refuses a refund with 409 while the ticket has an unfinished correction, nam
   });
   expect((await effects()).refunds).toHaveLength(0);
 });
-it("takes a reader refund as a correction's leg, counting it in the correction's money back", async () => {
+it("refuses a reader refund as a correction's leg on a ticket with no filed record, sending nothing", async () => {
   const t = await target("card");
   const correctionId = await seededCorrection(t.saleId);
 
-  const answer = await create(t.saleId, { ...ask(t.tenderId), invoiceCorrectionId: correctionId });
-
-  expect(answer).toMatchObject({
-    status: 200,
-    json: { state: "completed", appliedAmount: "2.00" },
-  });
-  expect(await inTx(venue, (tx) => tx.select().from(invoiceCorrectionRefunds))).toMatchObject([
-    { invoiceCorrectionId: correctionId, tenderRefundId: answer.json.id },
-  ]);
-  expect(await inTx(venue, (tx) => readCorrectionMoney(tx, correctionId))).toMatchObject({
-    completed: 200,
-    pending: 0,
-  });
+  expect(await create(t.saleId, { ...ask(t.tenderId), invoiceCorrectionId: correctionId })).toEqual(
+    {
+      status: 409,
+      json: { code: "sale.correction_not_admitted", params: { reason: "missing" } },
+    },
+  );
+  expect((await effects()).refunds).toHaveLength(0);
+  expect(await inTx(venue, (tx) => tx.select().from(invoiceCorrectionRefunds))).toEqual([]);
+  expect(venue.card.refundCalls).toHaveLength(0);
 });
 it("refuses a reader refund over what the correction has left with 409, naming what is left", async () => {
   const t = await target("card");

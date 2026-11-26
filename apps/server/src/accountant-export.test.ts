@@ -1665,6 +1665,78 @@ describe("refunds without a corrective", () => {
     ).toEqual(["1.00"]);
   });
 
+  it("lists a give-back's refund once the give-back ended with no corrective, on a receipt and a full invoice, but not one still open or one that filed its corrective", async () => {
+    const paid = async (invoiceNumber: number, customer: { counterpartyTaxId?: string } = {}) => {
+      const saleId = await seedSale(suite.db, venue, {
+        invoiceNumber,
+        issuedAt: "2026-11-02T12:00:00.000Z",
+        total: "11.00",
+        lines: [{ vatRate: "10.00", lineTotal: "10.00" }],
+        ...customer,
+      });
+      await seedTender(
+        suite.db,
+        { saleId },
+        { method: "cash", amount: "11.00", settledAt: "2026-11-02T12:00:00.000Z" },
+      );
+      const [tender] = await suite.db.select().from(tenders).where(eq(tenders.saleId, saleId));
+      return { saleId, tenderId: tender!.id, method: "cash" as const, venue };
+    };
+    const tied = async (
+      target: Awaited<ReturnType<typeof paid>>,
+      ended:
+        | { state: "open"; endedAt: null }
+        | { state: "closed"; endedBy: string }
+        | { state: "filed"; correctiveSaleId: string },
+    ) => {
+      const refundId = await refund(target, "5.50", "2026-11-05T12:00:00.000Z");
+      const [correction] = await suite.db
+        .insert(invoiceCorrections)
+        .values({
+          originalSaleId: target.saleId,
+          submissionId: `correction-${refundId}`,
+          fingerprint: "fixture",
+          gross: 550,
+          reason: "Overcharged",
+          requestedBy: "cccccccc-0000-4000-8000-000000000010",
+          authorizedBy: "cccccccc-0000-4000-8000-000000000011",
+          viaOverride: false,
+          source: "device",
+          deviceId: venue.deviceId,
+          nodeId: venue.nodeId,
+          endedAt: "2026-11-05T12:00:00.000Z",
+          ...ended,
+        })
+        .returning({ id: invoiceCorrections.id });
+      await suite.db.insert(invoiceCorrectionRefunds).values({
+        invoiceCorrectionId: correction!.id,
+        tenderRefundId: refundId,
+        requestId: `request-${refundId}`,
+      });
+      return refundId;
+    };
+    const closed = { state: "closed", endedBy: "cccccccc-0000-4000-8000-000000000010" } as const;
+    const receipt = await tied(await paid(1), closed);
+    const fullInvoice = await tied(await paid(2, { counterpartyTaxId: "B12345678" }), closed);
+    const correctedSale = await paid(3);
+    const corrective = await seedSale(suite.db, venue, {
+      invoiceNumber: 4,
+      issuedAt: "2026-11-05T12:00:00.000Z",
+      total: "-5.50",
+      correctsSaleId: correctedSale.saleId,
+      lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
+    });
+    await tied(correctedSale, { state: "filed", correctiveSaleId: corrective });
+    await tied(await paid(5), { state: "open", endedAt: null });
+
+    expect(
+      (await list()).refundsWithoutCorrective.map((row) => [row.id, row.customerTaxId]),
+    ).toEqual([
+      [receipt, undefined],
+      [fullInvoice, "B12345678"],
+    ]);
+  });
+
   it("shares a refund over a two-rate ticket by gross, a tied leftover cent going to the earlier rate, so the rows sum to the refund", async () => {
     const saleId = await seedSale(suite.db, venue, {
       invoiceNumber: 1,

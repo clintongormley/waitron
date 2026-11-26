@@ -194,6 +194,30 @@ export async function filedRecordsOf(
   }));
 }
 
+/** Every invoice filed against `saleId`, in number order: its record's invoice type, whether it
+ * corrects by differences or replaces, its series' purpose, the customer it names and its total in
+ * cents. */
+export function correctiveRecordsOf(
+  db: Database,
+  saleId: string,
+): {
+  type: string;
+  by: "differences" | "replacement" | null;
+  purpose: string;
+  customer: string | null;
+  total: number;
+}[] {
+  return db.all(sql`
+    select r.tipo_factura as type,
+           case r.tipo_rectificativa when 'I' then 'differences' when 'S' then 'replacement' end as by,
+           ser.purpose as purpose, s.counterparty_tax_id as customer, s.total as total
+    from sales s
+    join invoice_series ser on ser.id = s.series_id
+    join verifactu_records r on r.sale_id = s.id
+    where s.corrects_sale_id = ${saleId}
+    order by s.invoice_number`);
+}
+
 /** Stores AEAT's refusal, with `code`, as the filing reply to one record. */
 export async function refuseRecord(db: Database, recordId: string, code: string): Promise<void> {
   await db

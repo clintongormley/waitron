@@ -19,6 +19,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { previewCorrectionAmounts } from "@waitron/core";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, saleId as brandSaleId } from "@waitron/shared";
@@ -33,7 +34,6 @@ import { openInvoiceCorrection } from "./invoice-corrections.js";
 import {
   openedCorrection,
   parseInvoiceCorrection,
-  previewCorrection,
   previewedSplit,
 } from "./testing/invoice-correction.js";
 import { fingerprint } from "./parties.js";
@@ -201,7 +201,7 @@ async function refusedNeedsCorrection(
   expect(await written()).toEqual(before);
 }
 
-/** Has the unpaid bill's invoice name a customer: a full invoice, which Correct invoice refuses. */
+/** Has the unpaid bill's invoice name a customer: a full invoice. */
 async function chooseCustomer(b: Bill) {
   const [taxpayer] = venue.db.all<{ domicile: string | null }>(
     sql`select taxpayer_domicile as domicile from taxpayer`,
@@ -518,7 +518,7 @@ function staffRefund(paid: { saleId: string }, body: object) {
 describe("server-held cancellation approval bounds a linked refund", () => {
   /** A paid table of a Burger (€12.00) and a Steak (€25.00); the Burger is cancelled with the
    * Refund tick. With `tipped`, the table is the Burger alone and its cash tender carries a €1.00
-   * tip; with `customer`, its invoice names a customer, which Correct invoice cannot correct. */
+   * tip; with `customer`, its invoice is a full invoice naming a customer. */
   async function oneCancel(tipped = false, customer = false) {
     const b = await bill(tipped ? [{ name: "Burger" }] : [{ name: "Burger" }, { name: "Steak" }]);
     if (customer) await chooseCustomer(b);
@@ -560,10 +560,12 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     );
   });
 
-  it("refuses a linked refund without new approval above what its cancels owe on an invoice naming a customer", async () => {
+  it("refuses a linked refund above what its cancels owe on a full invoice as its corrective's money, and without new approval once AEAT refused it with no fix", async () => {
     const { paid, burger } = await oneCancel(false, true);
     const first = await staffRefund(paid, refundBody(paid, "6.00", [burger]));
     expect(first.status, JSON.stringify(first.json)).toBe(200);
+    await refusedNeedsCorrection(paid, refundBody(paid, "8.00", [burger]), staffRefund);
+    await inTx(venue, (tx) => refusedByAeat(tx, paid.saleId));
     expect(await refusedOver(paid, refundBody(paid, "8.00", [burger]))).toBe("6.00");
   });
 
@@ -1013,16 +1015,11 @@ describe("Refund a payment naming no cancels", () => {
     await refusedNeedsCorrection(paid, refundBody(paid, "0.01"));
   });
 
-  it("is taken on an invoice naming a customer", async () => {
+  it("is refused on an invoice naming a customer, as its corrective's money", async () => {
     const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
     await chooseCustomer(b);
     const paid = await pay(b, "37.00");
-    expect(await previewCorrection(venue, paid.saleId, { gross: "1.00" })).toEqual({
-      json: { code: "sale.correction_not_admitted", params: { reason: "not_simplified" } },
-    });
-    const answer = await refund(paid, refundBody(paid, "10.00"));
-    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect(answer.json).toMatchObject({ state: "completed", appliedAmount: "10.00" });
+    await refusedNeedsCorrection(paid, refundBody(paid, "10.00"));
   });
 
   it("after Correct invoice gave back part, still takes no more than the cancels owe", async () => {

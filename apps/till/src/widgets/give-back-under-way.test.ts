@@ -359,7 +359,7 @@ describe("ending it", () => {
     expect(
       giveBackFilingMessage("sale.correction_not_admitted", "en", { reason: "filing_refused" }),
     ).toBe(
-      "The tax agency refused this receipt, so the money given back cannot be recorded on it until the receipt is fixed in Fiscal filing, on the dashboard. Then press Check again.",
+      "The tax agency refused this receipt, or sending it to the agency is on hold, so the money given back cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
     );
 
     setLocale("es");
@@ -380,6 +380,74 @@ describe("ending it", () => {
         expect(words).not.toContain("equipo");
         expect(words).not.toBe(giveBackFilingMessage(code, "en", { reason }));
       }
+  });
+
+  it("on a full invoice refused with no fix, says Finish ends it and the money then goes on the accountant's list", async () => {
+    const fileNow = {
+      refusal: "sale.correction_not_admitted",
+      reason: "refused_no_fix",
+      closable: true,
+    };
+    const { el } = await mount({ ...OPEN, moneyBack: "2.00", fileNow });
+    el.fullInvoice = true;
+    await el.updateComplete;
+    expect(shown(el, "finish")).toBe(true);
+    expect(text(root(el).querySelector("[data-file-refusal]"))).toBe(
+      "The tax agency refused this full invoice and Waitron cannot fix that. Once this money back ends, the money given back goes in Download for accountant (XLSX), on the dashboard's Sales & takings page. Press Finish to end this money back. The money already given back stays given back.",
+    );
+  });
+
+  it("on a full invoice refused or held, says so and offers Check again, not Finish", async () => {
+    const fileNow = {
+      refusal: "sale.correction_not_admitted",
+      reason: "filing_refused",
+      closable: false,
+    };
+    const { el } = await mount({ ...OPEN, moneyBack: "6.05", left: "0.00", fileNow });
+    el.fullInvoice = true;
+    await el.updateComplete;
+    expect(shown(el, "finish")).toBe(false);
+    expect(shown(el, "check")).toBe(true);
+    expect(text(root(el).querySelector("[data-file-refusal]"))).toBe(
+      giveBackFilingMessage("sale.correction_not_admitted", "en", {
+        reason: "filing_refused",
+        fullInvoice: true,
+      }),
+    );
+    expect(text(root(el).querySelector("[data-file-refusal]"))).toMatch(/this full invoice/);
+  });
+
+  it("keeps cash and card quiet and disabled while the filing waits, as the box refuses them, and pressable where Finish closes it", async () => {
+    const button = (el: TillGiveBackUnderWay, name: string) =>
+      root(el).querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-choice=${name}]`)!;
+    const waiting = {
+      ...OPEN,
+      moneyBack: "2.00",
+      left: "4.05",
+      fileNow: {
+        refusal: "sale.correction_not_admitted",
+        reason: "filing_refused",
+        closable: false,
+      },
+    };
+    const held = await mount(waiting);
+    for (const name of ["cash", "card"]) {
+      expect(button(held.el, name).disabled).toBe(true);
+      expect(button(held.el, name).variant).toBe("secondary");
+      press(held.el, name);
+    }
+    await held.el.updateComplete;
+    expect(held.api.giveInvoiceCorrectionCash).not.toHaveBeenCalled();
+    expect(held.api.refundTransaction).not.toHaveBeenCalled();
+    expect(root(held.el).querySelector("till-supervisor-override-dialog")).toBeNull();
+    expect(button(held.el, "check").disabled).toBe(false);
+
+    const noFix = { ...waiting.fileNow, reason: "refused_no_fix", closable: true };
+    const closes = await mount({ ...waiting, fileNow: noFix });
+    for (const name of ["cash", "card", "finish"])
+      expect(button(closes.el, name).disabled).toBe(false);
+    press(closes.el, "cash");
+    await vi.waitFor(() => expect(closes.api.giveInvoiceCorrectionCash).toHaveBeenCalledOnce());
   });
 
   it("Cancel this money back is offered only with nothing back or waiting, and closes it", async () => {
