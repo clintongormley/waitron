@@ -231,6 +231,68 @@ it("prints a 10% Daily moved whole as one Discount 10% under the Daily on its ne
   expect(ticket.total).toBe("17.10");
 });
 
+/** Prints the bill and answers its total and every comp or discount line its receipt prints. */
+async function printedAdjustments(bill: Bill) {
+  await printSpecBill(spec, bill.partyId, bill.tabId);
+  const ticket = await inTx(venue, (tx) =>
+    readSettledTicket(venue.backend, tx, venue.cfg, bill.tabId),
+  );
+  return {
+    total: ticket.total,
+    lines: ticket.lines.flatMap((line) => line.adjustments ?? []),
+    onBill: ticket.billAdjustments ?? [],
+  };
+}
+
+it("keeps the Water's 25% line on the bill a 10% Daily moved away from, and prints the 10% once on the new bill", async () => {
+  const daily = await tenPercentDaily(["Water"]);
+  await discountSpecLine(
+    spec,
+    daily.bill.tabId,
+    await specLineId(spec, daily.bill.tabId, "Water"),
+    2500,
+  );
+  const target = await otherBill(daily.bill);
+
+  await move(daily.bill, target, [daily.soup, daily.sirloin]);
+
+  expect(await printedAdjustments(daily.bill)).toEqual({
+    total: "1.50",
+    lines: [{ kind: "discount", percentBp: 2500, amount: "0.50" }],
+    onBill: [],
+  });
+  expect(await printedAdjustments(target)).toEqual({
+    total: "17.10",
+    lines: [{ kind: "discount", percentBp: 1000, amount: "1.90" }],
+    onBill: [],
+  });
+});
+
+it("prints only a new Daily's 20% on the bill a 10% Daily moved away from", async () => {
+  const daily = await tenPercentDaily(["Water"]);
+  const target = await otherBill(daily.bill);
+  await move(daily.bill, target, [daily.soup, daily.sirloin]);
+  await send(daily.bill, ["Soup", "Sirloin"]);
+  await discountSpecLine(
+    spec,
+    daily.bill.tabId,
+    await specLineId(spec, daily.bill.tabId, "Daily menu"),
+    2000,
+  );
+
+  // The Water's 2.00 and a Daily of 19.00 at 20% off (3.80).
+  expect(await printedAdjustments(daily.bill)).toEqual({
+    total: "17.20",
+    lines: [{ kind: "discount", percentBp: 2000, amount: "3.80" }],
+    onBill: [],
+  });
+  expect(await printedAdjustments(target)).toEqual({
+    total: "17.10",
+    lines: [{ kind: "discount", percentBp: 1000, amount: "1.90" }],
+    onBill: [],
+  });
+});
+
 it("merges a bill holding a 10% Daily into another, the Daily keeping its 10% (D51)", async () => {
   const { bill } = await tenPercentDaily();
   const into = await otherBill(bill);

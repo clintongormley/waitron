@@ -1,4 +1,4 @@
-import { and, asc, eq, exists, ne, notExists, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
   centsToDecimal,
@@ -11,7 +11,7 @@ import {
 import { isFullComp } from "./full-comp.js";
 import type { AdjustmentAction, AdjustmentPolicySnapshot } from "@waitron/shared";
 import {
-  adjustmentEndings,
+  adjustmentEndingLines,
   adjustmentLines,
   adjustments,
   workingOrderLines,
@@ -151,9 +151,11 @@ export interface BillAdjustment {
 }
 
 /**
- * This bill's comps and discounts, oldest first, and those given on another bill that took
- * something off a row now on this one (a set menu moved whole keeps its discount), leaving out any
- * ended on either bill; cancellations are not read.
+ * The comps and discounts this bill's receipt shows, oldest first: each that still takes something
+ * off a row now on this bill, wherever it was given, and each given on this bill that never took
+ * anything off a row now elsewhere and has given nothing back. A record stays on the bill it was
+ * given on while its rows move (a set menu moved whole keeps its discount), so the rows decide.
+ * Cancellations are not read.
  */
 export async function readBillAdjustments(
   tx: Transaction,
@@ -174,35 +176,51 @@ export async function readBillAdjustments(
     .from(adjustments)
     .where(
       and(
+        ne(adjustments.action, "cancel"),
         or(
-          eq(adjustments.workingOrderId, workingOrderId),
-          exists(
+          inArray(
+            adjustments.id,
             tx
-              .select({ id: adjustmentLines.id })
-              .from(adjustmentLines)
-              .innerJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
+              .select({ id: adjustmentLines.adjustmentId })
+              .from(workingOrderLines)
+              .innerJoin(adjustmentLines, eq(adjustmentLines.lineId, workingOrderLines.id))
+              .leftJoin(
+                adjustmentEndingLines,
+                eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id),
+              )
               .where(
                 and(
-                  eq(adjustmentLines.adjustmentId, adjustments.id),
                   eq(workingOrderLines.workingOrderId, workingOrderId),
+                  gt(adjustmentLines.reduction, 0),
+                  isNull(adjustmentEndingLines.id),
                 ),
               ),
           ),
-        ),
-        ne(adjustments.action, "cancel"),
-        notExists(
-          tx
-            .select({ id: adjustmentEndings.id })
-            .from(adjustmentEndings)
-            .where(
-              and(
-                eq(adjustmentEndings.adjustmentId, adjustments.id),
-                or(
-                  eq(adjustmentEndings.workingOrderId, adjustments.workingOrderId),
-                  eq(adjustmentEndings.workingOrderId, workingOrderId),
+          and(
+            eq(adjustments.workingOrderId, workingOrderId),
+            notExists(
+              tx
+                .select({ id: adjustmentLines.id })
+                .from(adjustmentLines)
+                .leftJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
+                .leftJoin(
+                  adjustmentEndingLines,
+                  eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id),
+                )
+                .where(
+                  and(
+                    eq(adjustmentLines.adjustmentId, adjustments.id),
+                    or(
+                      isNotNull(adjustmentEndingLines.id),
+                      and(
+                        gt(adjustmentLines.reduction, 0),
+                        ne(workingOrderLines.workingOrderId, workingOrderId),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
             ),
+          ),
         ),
       ),
     )

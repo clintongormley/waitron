@@ -1365,7 +1365,12 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   change (`appendOnly`), so they still say the rows were reduced once their prices are back, and
   nothing else records which dish's change ended it, which the notice names. Alternative: work out
   on every read which discounts no row holds (the old D37); every reader repeats it, and why it came
-  off is lost.
+  off is lost. _2026-11-26, after the second review:_ the receipt's read
+  (`readBillAdjustments`) no longer goes by the bill a discount was given on or ended on: it shows
+  each discount that still takes something off a row now on the bill being printed, and one given
+  on that bill only while none of its rows has left or been given back. So a set menu moved whole
+  prints its discount once, on its new bill and not on the old one, and a discount ended on one
+  bill still prints on another whose rows still carry it.
 - **D48. A cancel that breaks a discounted set menu ends the discount first, then is worked out and
   recorded from there (D24).** In the comp window's apply the ending runs before the cancel is
   planned (`planAdjustment`, `adjustments-apply.ts:1097`), so the cancelled row's own price and the

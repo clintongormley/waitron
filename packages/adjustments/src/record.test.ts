@@ -13,6 +13,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { decimal, decimalToCents, stringToThousandths, subtractDecimal } from "@waitron/shared";
+import { endAdjustment } from "./endings.js";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import {
   readBillAdjustments,
@@ -477,6 +478,102 @@ describe("readBillAdjustments", () => {
 
     const read = await withTransaction(db, (tx) => readBillAdjustments(tx, order));
     expect(read.map((row) => row.full)).toEqual([true, true, true, true, false]);
+  });
+
+  it("reads a discount on the bill its rows are on: once on the bill they moved to, not on the bill it was given on, and on neither once it ended", async () => {
+    const given = await seedWorkingOrder(db);
+    const reached = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const line = await lineOn(given, "1");
+    await recordTaking(percent(given, reason, line, 2500), [
+      { lineId: line, reduction: "2.50", quantity: "1" },
+    ]);
+    await db
+      .update(workingOrderLines)
+      .set({ workingOrderId: reached })
+      .where(eq(workingOrderLines.id, line));
+    const read = (order: string) => withTransaction(db, (tx) => readBillAdjustments(tx, order));
+
+    expect(await read(given)).toEqual([]);
+    expect(await read(reached)).toEqual([
+      {
+        lineId: line,
+        splits: [],
+        partOfLine: false,
+        action: "discount_percent",
+        percentBp: 2500,
+        reduction: "2.50",
+        full: false,
+      },
+    ]);
+
+    const [{ id }] = await db
+      .select({ id: adjustments.id })
+      .from(adjustments)
+      .where(eq(adjustments.workingOrderId, given));
+    await withTransaction(db, (tx) =>
+      endAdjustment(tx, {
+        adjustmentId: id!,
+        workingOrderId: reached,
+        why: "dish_cancelled",
+        dishName: "Burger",
+      }),
+    );
+    expect(await read(given)).toEqual([]);
+    expect(await read(reached)).toEqual([]);
+  });
+
+  it("still reads a dish discount on the bill whose rows carry it after it ended on the bill it was given on", async () => {
+    const given = await seedWorkingOrder(db);
+    const reached = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const stayed = await lineOn(given, "1");
+    // The other portion moved to the second bill on a row split off, which carries what the
+    // discount took off the two, as `carryLineReductions` copies it.
+    const moved = await lineOn(reached, "1");
+    const twoBurgers = percent(given, reason, stayed, 2500);
+    await recordTaking(
+      {
+        ...twoBurgers,
+        line: { ...twoBurgers.line!, quantity: "2" },
+        quantity: "2",
+        beforeAmount: decimal("20.00"),
+        afterAmount: decimal("15.00"),
+        reduction: decimal("5.00"),
+        nominalValue: decimal("20.00"),
+      },
+      [
+        { lineId: stayed, reduction: "5.00", quantity: "2" },
+        { lineId: moved, reduction: "5.00", quantity: "2" },
+      ],
+    );
+    const [{ id }] = await db
+      .select({ id: adjustments.id })
+      .from(adjustments)
+      .where(eq(adjustments.workingOrderId, given));
+
+    await withTransaction(db, (tx) =>
+      endAdjustment(tx, {
+        adjustmentId: id!,
+        workingOrderId: given,
+        why: "dish_cancelled",
+        dishName: "Burger",
+      }),
+    );
+
+    const read = (order: string) => withTransaction(db, (tx) => readBillAdjustments(tx, order));
+    expect(await read(given)).toEqual([]);
+    expect(await read(reached)).toEqual([
+      {
+        lineId: stayed,
+        splits: [],
+        partOfLine: false,
+        action: "discount_percent",
+        percentBp: 2500,
+        reduction: "5.00",
+        full: false,
+      },
+    ]);
   });
 
   it("reads the bill's adjustments through the index that leads with the working order", async () => {
