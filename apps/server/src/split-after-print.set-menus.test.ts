@@ -16,7 +16,7 @@ import { readBillSetMenus } from "./set-menu-bill.js";
 import { readGroupingCopies, saveBillGrouping } from "./set-menu-regroup.js";
 import { splitAfterPrint } from "./split-after-print.js";
 import { readOrderRevision } from "./working-order-context.js";
-import { GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
+import { COMP_BILL_REASON, GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
 import { commandFor, inTx, type PartyVenue } from "./testing/party-venue.js";
 import { markServed } from "./working-order-serving.js";
 import {
@@ -56,9 +56,8 @@ function split(billId: string) {
   return splitAfterPrint(specDeps(spec), venue.cfg, billId, venue.operator);
 }
 
-/** Comps line `lineNo` of the bill whole, under the give-away reason. */
-async function comp(billId: string, lineNo: number) {
-  const line = (await specRows(spec, billId)).find((row) => row.lineNo === lineNo)!;
+/** Comps line `lineId` of the bill whole, or takes half off the whole bill when it is null. */
+async function adjust(billId: string, lineId: string | null) {
   await inTx(venue, async (tx) =>
     applyAdjustment(
       tx,
@@ -69,9 +68,14 @@ async function comp(billId: string, lineNo: number) {
         expectedEdit: await readBillEditState(tx, billId),
         submissionId: crypto.randomUUID(),
         expectedRevision: await readOrderRevision(tx, billId),
-        lineId: line.id,
-        reasonId: await reasonIdOf(tx, GIVE_AWAY_REASON),
-        action: "comp",
+        lineId,
+        ...(lineId === null
+          ? {
+              reasonId: await reasonIdOf(tx, COMP_BILL_REASON),
+              action: "discount_percent",
+              percentBp: 5000,
+            }
+          : { reasonId: await reasonIdOf(tx, GIVE_AWAY_REASON), action: "comp" }),
         note: null,
         operatorId: venue.operator.personId,
       },
@@ -150,12 +154,57 @@ it("a printed set-menu bill splits after print", async () => {
   expect(ticket(await specSaleLines(spec, billId, saleId!))).toEqual(ticket(firstTicket));
 });
 
-it("a comped set-menu dish splits after print with its comp", async () => {
+function reductions(lineId: string) {
+  return venue.db
+    .select({
+      adjustmentId: adjustmentLines.adjustmentId,
+      reduction: adjustmentLines.reduction,
+      quantity: adjustmentLines.quantity,
+    })
+    .from(adjustmentLines)
+    .where(inArray(adjustmentLines.lineId, [lineId]));
+}
+
+it("a comped set-menu dish splits after print a la carte, with its comp", async () => {
   const tab = await specBill(spec, "fire");
-  // Both Sirloins sit at +5.00 in a Daily menu; each is comped, so neither may be offered a move.
   const sirloins = (await specRows(spec, tab.tabId)).filter(({ name }) => name === "Sirloin");
   expect(sirloins).toHaveLength(2);
-  for (const sirloin of sirloins) await comp(tab.tabId, sirloin.lineNo);
+  for (const sirloin of sirloins) await adjust(tab.tabId, sirloin.id);
+  await serveSpecBill(spec, tab.partyId, tab.tabId);
+  await printSpecBill(spec, tab.partyId, tab.tabId);
+  const { billId } = await split(tab.tabId);
+
+  const copied = await specRows(spec, billId);
+  for (const sirloin of sirloins) {
+    const copy = copied.find(({ lineNo }) => lineNo === sirloin.lineNo)!;
+    expect(copy).toMatchObject({
+      name: "Sirloin",
+      setMenuRole: null,
+      setMenuLineId: null,
+      setMenuPlace: null,
+      unitPriceGross: 0,
+      lineTotal: 0,
+      listUnitPriceGross: 2400,
+    });
+    const original = await reductions(sirloin.id);
+    expect(original).toMatchObject([{ reduction: 2400 }]);
+    expect(await reductions(copy.id)).toEqual(original);
+  }
+  // Soup and Hake at 14.00, Soup and Sea bass at 20.00, two Soups at 6.00.
+  expect(copied.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(4600);
+
+  const state = await inTx(venue, (tx) => readBillSetMenus(tx, billId));
+  const offered = new Set(state.dishes.map(({ lineId }) => lineId));
+  expect(offered.size).toBe(4);
+  expect(copied.filter(({ name, id }) => name === "Sirloin" && offered.has(id))).toEqual([]);
+});
+
+it("a set-menu dish a whole-bill discount reduced splits after print in its set menu, with its part", async () => {
+  const tab = await specBill(spec, "fire");
+  // Both Sirloins sit at +5.00 in a Daily menu; each is reduced, so neither may be offered a move.
+  const sirloins = (await specRows(spec, tab.tabId)).filter(({ name }) => name === "Sirloin");
+  expect(sirloins).toHaveLength(2);
+  await adjust(tab.tabId, null);
   await serveSpecBill(spec, tab.partyId, tab.tabId);
   await printSpecBill(spec, tab.partyId, tab.tabId);
   const movable = async (billId: string, lineId: string) =>
@@ -167,15 +216,6 @@ it("a comped set-menu dish splits after print with its comp", async () => {
   const { billId } = await split(tab.tabId);
 
   const copied = await specRows(spec, billId);
-  const reductions = (lineId: string) =>
-    venue.db
-      .select({
-        adjustmentId: adjustmentLines.adjustmentId,
-        reduction: adjustmentLines.reduction,
-        quantity: adjustmentLines.quantity,
-      })
-      .from(adjustmentLines)
-      .where(inArray(adjustmentLines.lineId, [lineId]));
   for (const sirloin of sirloins) {
     const copy = copied.find(({ lineNo }) => lineNo === sirloin.lineNo)!;
     const setMenuLineNo = old.find(({ id }) => id === sirloin.setMenuLineId)!.lineNo;
@@ -183,18 +223,18 @@ it("a comped set-menu dish splits after print with its comp", async () => {
       name: "Sirloin",
       setMenuLineId: copied.find(({ lineNo }) => lineNo === setMenuLineNo)!.id,
       setMenuPlace: 1,
-      unitPriceGross: 0,
-      lineTotal: 0,
+      unitPriceGross: 250,
+      lineTotal: 250,
       listUnitPriceGross: 500,
     });
     const original = await reductions(sirloin.id);
-    expect(original).toMatchObject([{ reduction: 500 }]);
+    expect(original).toMatchObject([{ reduction: 250 }]);
     expect(await reductions(copy.id)).toEqual(original);
     expect(await movable(billId, copy.id)).toBe(false);
   }
-  expect(copied.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(6200);
+  expect(copied.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(3600);
 
-  // Uncomped, an empty Special would draw a Sirloin off its +5.00 place to make room for a Hake.
+  // Undiscounted, an empty Special would draw a Sirloin off its +5.00 place to make room for a Hake.
   const [third] = await addEmptySpecSetMenus(spec, billId, spec.special);
   const suggestion = suggestMove(await inTx(venue, (tx) => readBillSetMenus(tx, billId)), [], {
     id: crypto.randomUUID(),
@@ -209,7 +249,7 @@ it("a comped set menu splits after print with its comp", async () => {
   const tab = await specBill(spec, "fire");
   const daily = (await specRows(spec, tab.tabId)).find(({ id }) => id === tab.daily[0])!;
   expect(daily).toMatchObject({ setMenuRole: "set_menu", lineTotal: 1400 });
-  await comp(tab.tabId, daily.lineNo);
+  await adjust(tab.tabId, daily.id);
   await serveSpecBill(spec, tab.partyId, tab.tabId);
   await printSpecBill(spec, tab.partyId, tab.tabId);
   const { billId } = await split(tab.tabId);
@@ -222,15 +262,6 @@ it("a comped set menu splits after print with its comp", async () => {
     lineTotal: 0,
     listUnitPriceGross: 1400,
   });
-  const reductions = (lineId: string) =>
-    venue.db
-      .select({
-        adjustmentId: adjustmentLines.adjustmentId,
-        reduction: adjustmentLines.reduction,
-        quantity: adjustmentLines.quantity,
-      })
-      .from(adjustmentLines)
-      .where(inArray(adjustmentLines.lineId, [lineId]));
   const original = await reductions(daily.id);
   expect(original).toMatchObject([{ reduction: 1400 }]);
   expect(await reductions(copy.id)).toEqual(original);

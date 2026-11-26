@@ -154,7 +154,7 @@ function preview(billId: string, ask: Ask) {
     const { submissionId, approver, ...args } = await argsFor(tx, billId, ask);
     void submissionId;
     void approver;
-    return previewAdjustment(tx, args, venue.venueLocale);
+    return previewAdjustment(tx, venue.cfg, args, venue.venueLocale);
   });
 }
 
@@ -2971,6 +2971,7 @@ describe("an extra on its own (B11d)", () => {
       reduction: "1.50",
       nominalValue: "1.50",
       needsApproval: null,
+      billTotal: { before: "10.50", after: "9.00" },
       lines: [
         {
           lineId: olives,
@@ -3061,6 +3062,7 @@ describe("an extra on its own (B11d)", () => {
       reduction: "1.50",
       nominalValue: "1.50",
       needsApproval: null,
+      billTotal: { before: "13.00", after: "11.50" },
       lines: [{ lineId: olives, lineNo: 2, reduction: "1.50", rows: [] }],
     });
   });
@@ -3257,6 +3259,7 @@ describe("part of a dish with extras (B11d)", () => {
       reduction: "10.50",
       nominalValue: "10.50",
       needsApproval: null,
+      billTotal: { before: "21.00", after: "10.50" },
       lines: [
         {
           lineId: pizza,
@@ -3533,7 +3536,7 @@ describe("what an adjustment reads (B11d)", () => {
       void submissionId;
       void approver;
       const probe = counting(tx);
-      await previewAdjustment(probe.tx, args, venue.venueLocale);
+      await previewAdjustment(probe.tx, venue.cfg, args, venue.venueLocale);
       return probe.counts;
     });
   }

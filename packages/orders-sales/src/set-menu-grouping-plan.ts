@@ -25,7 +25,7 @@ export interface GroupingLine {
   /** Its unit was a measure (g, ml…) when it was ordered: never a set-menu dish
    *  (`set_menu.dish_sold_by_measure`). */
   soldByMeasure: boolean;
-  /** Stamped by any comp or discount (D15). */
+  /** Stamped by a comp or discount, on a row it took nothing off too (D30). */
   listUnitPriceGross: number | null;
   unitPriceGross: number;
   lineTotal: number;
@@ -50,6 +50,8 @@ export interface GroupingDishUpdate {
   setMenuPlace: number | null;
   unitPriceGross: number;
   lineTotal: number;
+  /** A stamp equal to the old price would print a dish the grouping lowers as discounted (D30). */
+  listUnitPriceGross: null;
 }
 
 export interface GroupingPlan {
@@ -68,19 +70,27 @@ export interface GroupingPlan {
 
 const ONE_PORTION = 1000;
 
-/** D2/D15: a dish is frozen by one of its extras, a set-menu row by one of its dishes, and every
- *  dish of a frozen set-menu row with it. A row stamped with a list price counts as named. */
+/** What freezes a line by name (D30): a comp or discount took something off it, or something else
+ *  (a kept charge or a service cancellation) holds it as it is. */
+export interface FrozenLineSources {
+  reduced: ReadonlySet<string>;
+  held: ReadonlySet<string>;
+}
+
+/** D2/D15: a dish is frozen by one of its extras being held, a set-menu row by one of its dishes,
+ *  and every dish of a frozen set-menu row with it. An extra's comp or discount leaves its dish
+ *  free (D34). A row priced below its list price counts as reduced. */
 export function frozenLinesOf(
   lines: readonly Pick<
     GroupingLine,
-    "id" | "parentLineId" | "setMenuLineId" | "listUnitPriceGross"
+    "id" | "parentLineId" | "setMenuLineId" | "listUnitPriceGross" | "unitPriceGross"
   >[],
-  named: ReadonlySet<string>,
+  { reduced, held }: FrozenLineSources,
 ): Set<string> {
-  const frozen = new Set(named);
-  for (const line of lines) if (line.listUnitPriceGross !== null) frozen.add(line.id);
+  const frozen = new Set([...reduced, ...held]);
   for (const line of lines) {
-    if (line.parentLineId !== null && frozen.has(line.id)) frozen.add(line.parentLineId);
+    if (belowListPrice(line)) frozen.add(line.id);
+    if (line.parentLineId !== null && held.has(line.id)) frozen.add(line.parentLineId);
   }
   for (const line of lines) {
     if (line.setMenuLineId !== null && frozen.has(line.id)) frozen.add(line.setMenuLineId);
@@ -89,6 +99,13 @@ export function frozenLinesOf(
     if (line.setMenuLineId !== null && frozen.has(line.setMenuLineId)) frozen.add(line.id);
   }
   return frozen;
+}
+
+export function belowListPrice({
+  listUnitPriceGross,
+  unitPriceGross,
+}: Pick<GroupingLine, "listUnitPriceGross" | "unitPriceGross">): boolean {
+  return listUnitPriceGross !== null && unitPriceGross < listUnitPriceGross;
 }
 
 function isGroupingDish(line: GroupingLine, frozen: ReadonlySet<string>): boolean {
@@ -119,10 +136,14 @@ function aLaCarteUpdate(line: GroupingLine): GroupingDishUpdate | null {
     id: line.id,
     ...A_LA_CARTE,
     unitPriceGross: line.aLaCarteUnitPrice,
-    lineTotal: decimalToCents(
-      grossOf(centsToDecimal(line.aLaCarteUnitPrice), thousandthsToDecimal(line.quantity)),
-    ),
+    lineTotal: aLaCarteLineTotal(line.aLaCarteUnitPrice, line.quantity),
+    listUnitPriceGross: null,
   };
+}
+
+/** A dish's line total at its a la carte price, in cents, for `quantity` thousandths of it. */
+export function aLaCarteLineTotal(aLaCarteUnitPrice: number, quantity: number): number {
+  return decimalToCents(grossOf(centsToDecimal(aLaCarteUnitPrice), thousandthsToDecimal(quantity)));
 }
 
 function copyKey(copies: readonly GroupingCopy[], row: GroupingLine): string {
@@ -138,7 +159,8 @@ function sameDish(line: GroupingLine, update: GroupingDishUpdate): boolean {
     line.setMenuLineId === update.setMenuLineId &&
     line.setMenuPlace === update.setMenuPlace &&
     line.unitPriceGross === update.unitPriceGross &&
-    line.lineTotal === update.lineTotal
+    line.lineTotal === update.lineTotal &&
+    line.listUnitPriceGross === update.listUnitPriceGross
   );
 }
 
@@ -280,6 +302,7 @@ export function planBillGrouping(
       id,
       unitPriceGross: chargeCents,
       lineTotal: chargeCents,
+      listUnitPriceGross: null,
       ...(place
         ? {
             setMenuRole: "dish",

@@ -194,6 +194,7 @@ const mistake: AdjustmentReason = {
 const preview = (over: Partial<AdjustmentPreview> = {}): AdjustmentPreview => ({
   reduction: "2.50",
   nominalValue: "2.50",
+  billTotal: { before: over.reduction ?? "2.50", after: "0.00" },
   needsApproval: null,
   lines: [],
   ...over,

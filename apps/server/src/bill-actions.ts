@@ -22,7 +22,7 @@ import {
 import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { guardParty, refuseMovedParty, requireBillOfParty } from "./parties.js";
-import { namedFrozenLineIds } from "./set-menu-freeze.js";
+import { frozenLineIdSources } from "./set-menu-freeze.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
   assertDistinctTransferLines,
@@ -276,6 +276,7 @@ async function takesEveryDish(
       setMenuRole: workingOrderLines.setMenuRole,
       setMenuLineId: workingOrderLines.setMenuLineId,
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
+      unitPriceGross: workingOrderLines.unitPriceGross,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, billId));
@@ -283,11 +284,11 @@ async function takesEveryDish(
   const left = rows.filter((row) => row.parentLineId === null && !moving.has(row.lineNo));
   if (left.length === 0) return true;
   if (left.some(({ setMenuRole }) => setMenuRole !== "set_menu")) return false;
-  const named = await namedFrozenLineIds(
+  const sources = await frozenLineIdSources(
     tx,
     rows.map(({ id }) => id),
   );
-  const frozen = frozenLinesOf(rows, named);
+  const frozen = frozenLinesOf(rows, sources);
   return !left.some(({ id }) => frozen.has(id));
 }
 

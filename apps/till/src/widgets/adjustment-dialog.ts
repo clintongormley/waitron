@@ -7,7 +7,13 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
-import { compareDecimal, decimal, formatMoney, multiplyDecimal } from "@waitron/shared";
+import {
+  compareDecimal,
+  decimal,
+  formatMoney,
+  multiplyDecimal,
+  subtractDecimal,
+} from "@waitron/shared";
 import { choiceRowStyles } from "./choice-styles.js";
 import { trackDialog } from "./track-dialog.js";
 import { formatDecimalInput, parseDecimalInput } from "@waitron/ui";
@@ -358,6 +364,20 @@ export class TillAdjustmentDialog extends LitElement {
     return formatMoney(amount, currentLocale());
   }
 
+  /** What the bill loses, or, when its set menus make its change differ, what it goes to. */
+  #billChange({ reduction, billTotal: { before, after } }: AdjustmentPreview): string {
+    const change = subtractDecimal(decimal(before), decimal(after));
+    if (compareDecimal(change, decimal(reduction)) === 0) {
+      return t("adjust.takes_off").replace("{amount}", () => this.#money(reduction));
+    }
+    if (compareDecimal(change, decimal("0")) === 0) {
+      return t("adjust.bill_stays").replace("{total}", () => this.#money(before));
+    }
+    return t("adjust.bill_goes")
+      .replace("{before}", () => this.#money(before))
+      .replace("{after}", () => this.#money(after));
+  }
+
   /** Whose PIN the adjustment needs; a reason no longer listed gets the general sentence. */
   #approvalText(approval: AdjustmentApproval, reason: AdjustmentReason | undefined): string {
     switch (approval.by) {
@@ -453,8 +473,15 @@ export class TillAdjustmentDialog extends LitElement {
     const parts: string[] = [];
     if (fieldErrors.size > 0) parts.push(t("form.fix_fields"));
     if (this.shownRefusal !== null && this.#refusalField() === null)
-      parts.push(codeMessage(this.shownRefusal));
+      parts.push(this.#refusalMessage(this.shownRefusal));
     return parts.join(" ");
+  }
+
+  /** The code's own words, except where this window offers other choices than the code's. */
+  #refusalMessage(code: string): string {
+    if (code !== "sale.total_exceeds_simplified_limit") return codeMessage(code);
+    const free = this.kind === "comp" ? this.compKind === "free" : this.#billFree();
+    return t(free ? "adjust.over_simplified_limit_free" : "adjust.over_simplified_limit");
   }
 
   #changed(field: Field): void {
@@ -998,9 +1025,7 @@ export class TillAdjustmentDialog extends LitElement {
               ${t("adjust.note_shown").replace("{note}", () => choice.note!)}
             </p>`
       }
-      <p class="takes-off" data-takes-off>
-        ${t("adjust.takes_off").replace("{amount}", () => this.#money(preview.reduction))}
-      </p>
+      <p class="takes-off" data-takes-off>${this.#billChange(preview)}</p>
       ${asked}
       ${
         preview.needsApproval === null

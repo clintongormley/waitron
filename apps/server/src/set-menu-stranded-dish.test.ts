@@ -210,7 +210,7 @@ it("cancels Water at its own 2.00 when Hake's unit became a measure after it was
         note: null,
         operatorId: await ensureOperator(tx, venue.operator.personId),
       };
-      const preview = await previewAdjustment(tx, ask, venue.cfg.locale);
+      const preview = await previewAdjustment(tx, venue.cfg, ask, venue.cfg.locale);
       await applyAdjustment(
         tx,
         venue.cfg,

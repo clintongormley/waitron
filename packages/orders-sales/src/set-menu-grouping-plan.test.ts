@@ -238,6 +238,7 @@ describe("planBillGrouping", () => {
           setMenuPlace: 1,
           unitPriceGross: 0,
           lineTotal: 0,
+          listUnitPriceGross: null,
         },
         {
           id: "soup",
@@ -246,6 +247,7 @@ describe("planBillGrouping", () => {
           setMenuPlace: 0,
           unitPriceGross: 0,
           lineTotal: 0,
+          listUnitPriceGross: null,
         },
       ],
       deletes: [],
@@ -273,6 +275,7 @@ describe("planBillGrouping", () => {
       setMenuPlace: 1,
       unitPriceGross: 500,
       lineTotal: 500,
+      listUnitPriceGross: null,
     });
   });
 
@@ -378,6 +381,7 @@ describe("planBillGrouping", () => {
         setMenuPlace: 1,
         unitPriceGross: 0,
         lineTotal: 0,
+        listUnitPriceGross: null,
       },
     ]);
   });
@@ -400,6 +404,7 @@ describe("planBillGrouping", () => {
         setMenuPlace: 0,
         unitPriceGross: 0,
         lineTotal: 0,
+        listUnitPriceGross: null,
       },
     ]);
     expect(plan.menuUpdates).toEqual([]);
@@ -417,6 +422,7 @@ describe("planBillGrouping", () => {
         setMenuPlace: null,
         unitPriceGross: 600,
         lineTotal: 600,
+        listUnitPriceGross: null,
       },
     ]);
   });
@@ -522,6 +528,7 @@ describe("planBillGrouping", () => {
       setMenuRole: null,
       setMenuLineId: null,
       setMenuPlace: null,
+      listUnitPriceGross: null,
     };
     const lines = [
       placed(dish("soup", 1, "soup"), "menu-a", 0),
@@ -547,15 +554,92 @@ describe("planBillGrouping", () => {
     ]);
   });
 
+  it("clears the stamp on a dish it charges a la carte as no longer one portion, or sold by measure (D30)", () => {
+    const lines = [
+      placed(dish("hake", 1, "hake", { quantity: 2000, listUnitPriceGross: 0 }), "menu-a", 1),
+      menuRow("menu-a", 2),
+      placed(
+        dish("sirloin", 3, "sirloin", { soldByMeasure: true, listUnitPriceGross: 500 }),
+        "menu-b",
+        1,
+        500,
+      ),
+      menuRow("menu-b", 4),
+    ];
+    const frozen = frozenLinesOf(lines, { reduced: none, held: none });
+    const plan = planBillGrouping(lines, frozen, [daily], ids("unused"));
+    expect(
+      plan.dishUpdates.map(({ id, unitPriceGross, listUnitPriceGross }) => ({
+        id,
+        unitPriceGross,
+        listUnitPriceGross,
+      })),
+    ).toEqual([
+      { id: "hake", unitPriceGross: 1200, listUnitPriceGross: null },
+      { id: "sirloin", unitPriceGross: 1800, listUnitPriceGross: null },
+    ]);
+  });
+
   it("leaves a frozen placed dish of two portions as it is", () => {
     const lines = [
       placed(dish("hake", 1, "hake", { quantity: 2000 }), "menu-a", 1),
       menuRow("menu-a", 2),
     ];
-    const frozen = frozenLinesOf(lines, new Set(["hake"]));
+    const frozen = frozenLinesOf(lines, { reduced: new Set(["hake"]), held: none });
     const plan = planBillGrouping(lines, frozen, [daily], ids());
     expect(plan.dishUpdates).toEqual([]);
     expect(plan.deletes).toEqual([]);
+  });
+
+  it("clears a stamp equal to the price on a dish it otherwise leaves as it is (D30)", () => {
+    const lines = [
+      placed(dish("soup", 1, "soup", { listUnitPriceGross: 0 }), "menu-a", 0),
+      placed(dish("hake", 2, "hake"), "menu-a", 1),
+      menuRow("menu-a", 3),
+    ];
+    const frozen = frozenLinesOf(lines, { reduced: none, held: none });
+    const plan = planBillGrouping(lines, frozen, [daily], ids());
+    expect(plan.dishUpdates).toEqual([
+      {
+        id: "soup",
+        setMenuRole: "dish",
+        setMenuLineId: "menu-a",
+        setMenuPlace: 0,
+        unitPriceGross: 0,
+        lineTotal: 0,
+        listUnitPriceGross: null,
+      },
+    ]);
+    expect(plan.deletes).toEqual([]);
+  });
+
+  it("clears the stamp on a dish it lowers into a set menu (D30)", () => {
+    const lines = [dish("soup", 1, "soup", { listUnitPriceGross: 600 }), dish("hake", 2, "hake")];
+    const frozen = frozenLinesOf(lines, { reduced: none, held: none });
+    const plan = planBillGrouping(lines, frozen, [daily], ids("menu-a"));
+    expect(plan.dishUpdates.find(({ id }) => id === "soup")).toMatchObject({
+      setMenuLineId: "menu-a",
+      unitPriceGross: 0,
+      listUnitPriceGross: null,
+    });
+  });
+
+  it("keeps a set menu and its dishes when one of them is stamped above its price (D30)", () => {
+    const lines = [
+      placed(dish("soup", 1, "soup", { listUnitPriceGross: 600 }), "menu-a", 0),
+      placed(dish("hake", 2, "hake"), "menu-a", 1),
+      menuRow("menu-a", 3),
+    ];
+    const frozen = frozenLinesOf(lines, { reduced: none, held: none });
+    const { plan, input } = planWithInput(lines, frozen, [daily], ids());
+    expect(input.dishes).toEqual([]);
+    expect(plan).toEqual({
+      exact: true,
+      inserts: [],
+      dishUpdates: [],
+      menuUpdates: [],
+      deletes: [],
+    });
   });
 
   it("passes a dish with no course or no menu item as not eligible, and charges it a la carte (D12)", () => {
@@ -581,6 +665,7 @@ describe("planBillGrouping", () => {
         setMenuPlace: null,
         unitPriceGross: 1200,
         lineTotal: 1200,
+        listUnitPriceGross: null,
       },
       {
         id: "soup",
@@ -589,6 +674,7 @@ describe("planBillGrouping", () => {
         setMenuPlace: null,
         unitPriceGross: 600,
         lineTotal: 600,
+        listUnitPriceGross: null,
       },
     ]);
   });
@@ -689,35 +775,61 @@ describe("frozenLinesOf", () => {
     extra("cheese", 6, "soup-2", 100),
   ];
 
-  it("spreads from an extra to its dish, its set menu and that set menu's other dishes", () => {
-    expect(frozenLinesOf(lines, new Set(["croutons"]))).toEqual(
+  it("spreads from a held extra to its dish, its set menu and that set menu's other dishes", () => {
+    expect(frozenLinesOf(lines, { reduced: none, held: new Set(["croutons"]) })).toEqual(
       new Set(["croutons", "soup", "menu-a", "hake"]),
     );
   });
 
-  it("spreads from a named set menu to its dishes", () => {
-    expect(frozenLinesOf(lines, new Set(["menu-a"]))).toEqual(new Set(["menu-a", "soup", "hake"]));
+  it("freezes neither the dish nor the set menu of a reduced extra (D34)", () => {
+    expect(frozenLinesOf(lines, { reduced: new Set(["croutons"]), held: none })).toEqual(
+      new Set(["croutons"]),
+    );
   });
+
+  it.each(["reduced", "held"] as const)("spreads from a %s set menu to its dishes", (source) => {
+    expect(
+      frozenLinesOf(lines, { reduced: none, held: none, [source]: new Set(["menu-a"]) }),
+    ).toEqual(new Set(["menu-a", "soup", "hake"]));
+  });
+
+  it.each(["reduced", "held"] as const)(
+    "spreads from a %s dish to its set menu and that set menu's other dishes",
+    (source) => {
+      expect(
+        frozenLinesOf(lines, { reduced: none, held: none, [source]: new Set(["hake"]) }),
+      ).toEqual(new Set(["hake", "menu-a", "soup"]));
+    },
+  );
 
   it("freezes a dish alone when it is in no set menu", () => {
-    expect(frozenLinesOf(lines, new Set(["soup-2"]))).toEqual(new Set(["soup-2"]));
+    expect(frozenLinesOf(lines, { reduced: none, held: new Set(["soup-2"]) })).toEqual(
+      new Set(["soup-2"]),
+    );
   });
 
-  it("freezes nothing when nothing is named or stamped", () => {
-    expect(frozenLinesOf(lines, new Set())).toEqual(new Set());
+  it("freezes nothing when nothing is named or priced below its list price", () => {
+    expect(frozenLinesOf(lines, { reduced: none, held: none })).toEqual(none);
   });
 
-  it("treats a row stamped with a list price as named (D15)", () => {
+  it("treats a row priced below its stamped list price as reduced (D30)", () => {
     const stamped = lines.map((line) =>
       line.id === "hake" ? { ...line, listUnitPriceGross: 1200 } : line,
     );
-    expect(frozenLinesOf(stamped, new Set())).toEqual(new Set(["hake", "menu-a", "soup"]));
+    expect(frozenLinesOf(stamped, { reduced: none, held: none })).toEqual(
+      new Set(["hake", "menu-a", "soup"]),
+    );
   });
 
-  it("treats an extra stamped with a list price as named (D15)", () => {
+  it("treats an extra priced below its stamped list price as reduced, leaving its dish (D34)", () => {
     const stamped = lines.map((line) =>
-      line.id === "cheese" ? { ...line, listUnitPriceGross: 100 } : line,
+      line.id === "croutons" ? { ...line, listUnitPriceGross: 200 } : line,
     );
-    expect(frozenLinesOf(stamped, new Set())).toEqual(new Set(["cheese", "soup-2"]));
+    expect(frozenLinesOf(stamped, { reduced: none, held: none })).toEqual(new Set(["croutons"]));
+  });
+
+  it("freezes nothing for a stamp equal to the price, on a dish, a set menu or an extra (D30)", () => {
+    const stamped = lines.map((line) => ({ ...line, listUnitPriceGross: line.unitPriceGross }));
+    expect(frozenLinesOf(stamped, { reduced: none, held: none })).toEqual(none);
   });
 });

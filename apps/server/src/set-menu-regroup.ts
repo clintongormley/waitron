@@ -20,11 +20,12 @@ import type { MenuDocument, SetMenuGrouping, SetMenuGroupingInput } from "@waitr
 import { serveRecordedSetMenus } from "@waitron/venue-service";
 import {
   hasBillSetMenuLines,
+  isSetMenuBill,
   isSetMenuBillRow,
   readBillSetMenuVersions,
   setMenuLineDescriptions,
 } from "./set-menu-bill.js";
-import { namedFrozenLineIds } from "./set-menu-freeze.js";
+import { frozenLineIdSources } from "./set-menu-freeze.js";
 
 type Calculate = (input: SetMenuGroupingInput) => SetMenuGrouping;
 
@@ -124,11 +125,11 @@ async function planGrouping(
   copies: readonly GroupingCopy[],
   calculate?: Calculate,
 ): Promise<GroupingPlan> {
-  const named = await namedFrozenLineIds(
+  const sources = await frozenLineIdSources(
     tx,
     lines.map(({ id }) => id),
   );
-  return planBillGrouping(lines, frozenLinesOf(lines, named), copies, newId, calculate);
+  return planBillGrouping(lines, frozenLinesOf(lines, sources), copies, newId, calculate);
 }
 
 /** {@link saveBillGrouping} for a bill whose stored `set_menus_exact` is `wasExact`. */
@@ -233,6 +234,13 @@ export async function regroupBills(
   return changed;
 }
 
+/** Whether {@link regroupBills} groups the bill over any set menu: a set-menu bill recording one. */
+export async function takesSetMenus(tx: Transaction, billId: string): Promise<boolean> {
+  return (
+    (await isSetMenuBill(tx, billId)) && (await readBillSetMenuVersions(tx, billId)).length > 0
+  );
+}
+
 /** An open bill's stored `set_menus_exact` and the copies it is grouped over; null when not open. */
 async function readOpenBill(
   tx: Transaction,
@@ -303,8 +311,8 @@ export async function totalOnOwnBill(
   billId: string,
   taken: TakenRows,
 ): Promise<number> {
-  return totalOfRows(tx, billId, (line) =>
-    taken.ids.has(line.id) ? { ...line, ...taken.resized.get(line.id) } : null,
+  return totalAfterAdjusting(tx, billId, (line) =>
+    taken.ids.has(line.id) ? [{ ...line, ...taken.resized.get(line.id) }] : [],
   );
 }
 
@@ -317,19 +325,23 @@ export async function totalLeftBehind(
   billId: string,
   taken: TakenRows,
 ): Promise<number> {
-  return totalOfRows(tx, billId, (line) => {
+  return totalAfterAdjusting(tx, billId, (line) => {
     const part = taken.resized.get(line.id);
-    if (part === undefined) return taken.ids.has(line.id) ? null : line;
+    if (part === undefined) return taken.ids.has(line.id) ? [] : [line];
     const { quantity, lineTotal } = line;
-    return { ...line, quantity: quantity - part.quantity, lineTotal: lineTotal - part.lineTotal };
+    return [{ ...line, quantity: quantity - part.quantity, lineTotal: lineTotal - part.lineTotal }];
   });
 }
 
-/** What the bill's rows, each as `rowOf` answers it (null for none), come to once grouped. */
-async function totalOfRows(
+/**
+ * What `billId` would come to, in cents, with each row as `rowsAfter` answers it (none, itself
+ * changed, or the rows a split would make of it, each with an id of its own) and grouped as
+ * {@link regroupBills} groups them, writing nothing.
+ */
+export async function totalAfterAdjusting(
   tx: Transaction,
   billId: string,
-  rowOf: (line: GroupingLine) => GroupingLine | null,
+  rowsAfter: (line: GroupingLine) => readonly GroupingLine[],
 ): Promise<number> {
   const [bill] = await tx
     .select({
@@ -339,7 +351,7 @@ async function totalOfRows(
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
-  const lines = (await readGroupingLines(tx, billId)).flatMap((line) => rowOf(line) ?? []);
+  const lines = (await readGroupingLines(tx, billId)).flatMap((line) => rowsAfter(line));
   const drop = await planDrop(tx, lines, await copiesOf(tx, billId, bill!));
   return sum(lines.map(({ lineTotal }) => lineTotal)) - drop;
 }

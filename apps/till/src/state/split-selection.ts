@@ -98,15 +98,17 @@ function without(split: SplitPicks, id: string): { whole: Set<string>; picks: Ma
 
 const setMenuDishes = (source: SplitSource) => source.bill.setMenus?.dishes ?? [];
 
-/** The set menus that hold a dish here and go with the last one. A comp or discount on the set menu,
- * on a dish of it or on that dish's extra keeps it here, as does a dish that leaves only with it. */
+const belowListPrice = ({ unitPriceGross, listUnitPriceGross }: TabLine) =>
+  listUnitPriceGross !== undefined &&
+  compareDecimal(decimal(unitPriceGross), decimal(listUnitPriceGross)) < 0;
+
+/** The set menus that hold a dish here and go with the last one. One below its list price stays, as
+ * does one holding a dish that is, or that leaves only with it. */
 function setMenusThatGo(source: SplitSource): Set<string> {
   const kept = new Set(
-    source.groups.groups.flatMap(({ members, extras }) =>
-      [...members, ...extras].some((line) => line.listUnitPriceGross !== undefined)
-        ? members.map(({ id }) => id)
-        : [],
-    ),
+    source.groups.groups
+      .flatMap(({ members }) => members.filter(belowListPrice))
+      .map(({ id }) => id),
   );
   for (const { lineId, setMenuLineId, movable } of setMenuDishes(source))
     if (!movable || kept.has(lineId)) kept.add(setMenuLineId);

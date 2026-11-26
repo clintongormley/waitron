@@ -57,9 +57,12 @@ import {
   setupSetMenuSpecVenue,
   specGrouping,
   specLineId,
+  specRows,
   type SpecDish,
+  type SpecExtra,
   type SpecVenue,
 } from "./testing/set-menu-spec-fixture.js";
+import { freezeBillLine } from "./testing/set-menu-bill-fixture.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { storedOrderTotal } from "./stored-order-lines.js";
@@ -1206,14 +1209,17 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
     };
     const NONE = { rows: [], total: 0 };
 
-    /** A bill of one Daily (Soup and `main`) with a full invoice for Acme, and an empty simplified
-     *  bill. */
-    async function dailyBill(main: "Hake" | "Sirloin" = "Hake") {
+    /** A bill of one Daily (Soup with `soupExtras`, and `main`) with a full invoice for Acme, and an
+     *  empty simplified bill. */
+    async function dailyBill(main: "Hake" | "Sirloin" = "Hake", soupExtras?: SpecExtra[]) {
       const { partyId, tabId } = await seat(spec.venue, await spec.venue.table(randomUUID()));
       await sendSpecDishes(
         spec,
         { partyId, tabId },
-        (["Soup", main] as const).map((name) => ({ dish: name, from: spec.daily })),
+        [
+          { dish: "Soup", from: spec.daily, extras: soupExtras },
+          { dish: main, from: spec.daily },
+        ],
         "fire",
       );
       const bill2 = await inTx(spec.venue, (tx) => insertPartyBill(tx, spec.venue.cfg, partyId));
@@ -1315,9 +1321,48 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
       expect(await invoiceOf(spec.venue, p.bill2)).toMatchObject(invoiceTo(ACME));
     });
 
-    it("A1519 move dishes refuses: every dish named, one of them comped, is set_menu.move_adjusted before any invoice question", async () => {
+    it("A1519 move dishes refuses: every dish named, one of them comped, without a choice, is bill.merge_invoice_choice_required, and with one empties the bill", async () => {
       const p = await dailyBill("Sirloin");
       await compSpecLine(spec, p.bill1, await specLineId(spec, p.bill1, "Sirloin"));
+
+      await refusedUnchanged(p, ["Soup", "Sirloin"], choiceRequired(p));
+      await moveNamed(p, ["Soup", "Sirloin"], KEEP_ACME);
+
+      expect(await specGrouping(spec, p.bill1)).toEqual(NONE);
+      expect(await specGrouping(spec, p.bill2)).toEqual({
+        rows: [
+          { what: "Soup", price: 600, in: null },
+          { what: "Sirloin", price: 0, in: null },
+        ],
+        total: 600,
+      });
+      expect(await invoiceOf(spec.venue, p.bill2)).toMatchObject(invoiceTo(ACME));
+    });
+
+    it("A1519 move dishes refuses: every dish named, an extra of one of them comped, without a choice, is bill.merge_invoice_choice_required, and with one empties the bill", async () => {
+      const p = await dailyBill("Hake", [spec.bread]);
+      const soup = await specLineId(spec, p.bill1, "Soup");
+      const bread = (await specRows(spec, p.bill1)).find(
+        ({ parentLineId }) => parentLineId === soup,
+      )!;
+      await compSpecLine(spec, p.bill1, bread.id);
+      expect(await specGrouping(spec, p.bill1)).toEqual(DAILY);
+
+      await refusedUnchanged(p, ["Soup", "Hake"], choiceRequired(p));
+      await moveNamed(p, ["Soup", "Hake"], KEEP_ACME);
+
+      expect(await specGrouping(spec, p.bill1)).toEqual(NONE);
+      expect(await specGrouping(spec, p.bill2)).toEqual(DAILY);
+      expect((await specRows(spec, p.bill2)).find(({ id }) => id === bread.id)).toMatchObject({
+        lineTotal: 0,
+        listUnitPriceGross: 150,
+      });
+    });
+
+    it("A1519 move dishes refuses: every dish named, one of them reduced inside its set menu, is set_menu.move_adjusted before any invoice question", async () => {
+      const p = await dailyBill("Sirloin");
+      const sirloin = await specLineId(spec, p.bill1, "Sirloin");
+      await inTx(spec.venue, (tx) => freezeBillLine(tx, sirloin));
 
       await refusedUnchanged(p, ["Soup", "Sirloin"], {
         code: "set_menu.move_adjusted",

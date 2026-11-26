@@ -1046,6 +1046,7 @@ describe("a cancel's preview", () => {
       reduction: "25.00",
       nominalValue: "25.00",
       needsApproval: null,
+      billTotal: { before: "50.00", after: "25.00" },
       lines: [{ lineId, lineNo: 1, reduction: "25.00", rows: [] }],
     });
     expect(await recordedOn(billId)).toEqual([]);

@@ -1412,6 +1412,7 @@ async function asked(billId: string, ask: Ask) {
   const preview = await inTx(venue, async (tx) =>
     previewAdjustment(
       tx,
+      venue.cfg,
       await argsFor(tx, billId, { ...ask, operatorId: venue.staffId }),
       venue.venueLocale,
     ),
@@ -2212,6 +2213,7 @@ async function steakOff(billId: string, amount: string) {
   const preview = await inTx(venue, async (tx) =>
     previewAdjustment(
       tx,
+      venue.cfg,
       await argsFor(
         tx,
         billId,
@@ -3445,6 +3447,57 @@ describe("A803 portions: the extras of a row of identical portions", () => {
         await refusalOf(billId, { ...tenOff, lineId: toppings[0]!, lineIds: toppings }),
       ).toBeNull();
       expect(await recordedOn(billId)).toMatchObject([{ lineId: toppings[0] }]);
+    },
+  );
+});
+
+describe("the preview's bill total", () => {
+  const totalOf = async (billId: string) =>
+    (await rowsOf(venue, billId)).reduce(
+      (sum, row) => sum + Math.round(Number(row.lineTotal) * 100),
+      0,
+    );
+
+  it.each<[string, RoundLine[], string, Omit<Ask, "lineId" | "lineIds">, number]>([
+    [
+      "one of three pizzas with an olive each comped",
+      [{ name: "Pizza", quantity: "3", olives: 1 }],
+      "Pizza",
+      { action: "comp", quantity: "1" },
+      2100,
+    ],
+    [
+      "5.26 off one of three pizzas with an olive each",
+      [{ name: "Pizza", quantity: "3", olives: 1 }],
+      "Pizza",
+      { action: "discount_amount", amount: "5.26", quantity: "1" },
+      2624,
+    ],
+    [
+      "10% off three croquettes at 3.33",
+      [{ name: "Croquettes", quantity: "3" }],
+      "Croquettes",
+      { action: "discount_percent", percentBp: 1000 },
+      899,
+    ],
+  ])(
+    "is the total the apply leaves, today's line and portions alike: %s",
+    async (_, lines, dish, ask, after) => {
+      for (const bound of [false, true]) {
+        const { billId } = bound ? await portionsBill(lines) : await groupedBill(lines);
+        const ids = await dishesNamed(billId, dish);
+        const full: Ask = { ...ask, ...(bound ? rowOf(ids) : { lineId: ids[0]! }) };
+        const before = await totalOf(billId);
+        const preview = await inTx(venue, async (tx) =>
+          previewAdjustment(tx, venue.cfg, await argsFor(tx, billId, full), venue.venueLocale),
+        );
+        await adjust(billId, full);
+        expect(await totalOf(billId), `bound ${bound}`).toBe(after);
+        expect(preview.billTotal, `bound ${bound}`).toEqual({
+          before: (before / 100).toFixed(2),
+          after: (after / 100).toFixed(2),
+        });
+      }
     },
   );
 });

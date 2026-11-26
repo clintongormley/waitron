@@ -576,8 +576,9 @@ folder shows which dishes it includes and which cost extra: open it from the gri
 name in **Search** and tap the result.
 
 Open the set-menu summary on **Order** to see which dishes each set menu holds and which places
-are free. To comp or discount a set menu, choose **Comp…** on it in the summary. A set menu cannot
-be cancelled: cancel or move its dishes instead.
+are free. To comp or discount a set menu, choose **Comp…** on it in the summary. A dish you comp
+or discount leaves its set menu and is charged à la carte, less what you take off. A set menu
+cannot be cancelled: cancel or move its dishes instead.
 
 To move a set menu to another bill, open **Move dishes…** and select the set menu. Its dishes move
 with it.

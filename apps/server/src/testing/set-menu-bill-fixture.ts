@@ -71,11 +71,11 @@ export async function priceSetMenuDish(
   return publishWorkingMenu(tx, copy.fullMenuId);
 }
 
-/** Stamps the line's list price at its current price, taking nothing off and recording no adjustment. */
+/** Stamps the line's list price one cent above its price, as if reduced, recording no adjustment. */
 export async function freezeBillLine(tx: Transaction, lineId: string): Promise<void> {
   await tx
     .update(workingOrderLines)
-    .set({ listUnitPriceGross: sql`${workingOrderLines.unitPriceGross}` })
+    .set({ listUnitPriceGross: sql`${workingOrderLines.unitPriceGross} + 1` })
     .where(eq(workingOrderLines.id, lineId));
 }
 

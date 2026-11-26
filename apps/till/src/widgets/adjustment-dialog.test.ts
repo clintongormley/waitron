@@ -464,6 +464,7 @@ describe("till-adjustment-dialog: what a request out holds still", () => {
     el.preview = {
       reduction: "25.00",
       nominalValue: "25.00",
+      billTotal: { before: "25.00", after: "0.00" },
       needsApproval: null,
       lines: [],
     };
@@ -483,6 +484,7 @@ describe("till-adjustment-dialog: before confirming", () => {
     reduction: "12.00",
     nominalValue: "12.00",
     needsApproval: null,
+    billTotal: { before: over.reduction ?? "12.00", after: "0.00" },
     lines: [],
     ...over,
   });
@@ -714,6 +716,33 @@ describe("till-adjustment-dialog: before confirming", () => {
     expect(confirmButton(el).textContent!.trim()).toBe(t("adjust.do_discount"));
   });
 
+  it("says what the bill goes to when its change is not what the discount takes off", async () => {
+    const shown = async (billTotal: AdjustmentPreview["billTotal"]) => {
+      const { el } = await atConfirm({ preview: preview({ reduction: "1.60", billTotal }) }, (el) =>
+        chooseReason(el, "Complaint"),
+      );
+      return text(root(el).querySelector("[data-takes-off]")!);
+    };
+
+    expect(await shown({ before: "14.00", after: "20.40" })).toBe(
+      `The bill goes from ${money("14.00")} to ${money("20.40")}`,
+    );
+    expect(await shown({ before: "28.00", after: "26.40" })).toBe(
+      t("adjust.takes_off").replace("{amount}", money("1.60")),
+    );
+    expect(await shown({ before: "14.00", after: "14.00" })).toBe(
+      `The bill stays at ${money("14.00")}`,
+    );
+
+    setLocale("es-ES");
+    expect(await shown({ before: "14.00", after: "20.40" })).toBe(
+      "La cuenta pasa de 14,00\u00a0€ a 20,40\u00a0€",
+    );
+    expect(await shown({ before: "14.00", after: "14.00" })).toBe(
+      "La cuenta sigue en 14,00\u00a0€",
+    );
+  });
+
   it("names no reason once the reasons no longer hold the one chosen", async () => {
     const { el } = await atConfirm({}, (el) => chooseReason(el, "Complaint"));
     el.reasons = [staffMeal];
@@ -832,6 +861,44 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(field(el, "percent").error).toBe("");
   });
 
+  it("says a discount over the simplified-invoice limit raises the bill, in both languages, and leaves the form usable", async () => {
+    const el = await mount({ kind: "comp" });
+    await chooseReason(el, "Complaint");
+    await choose(el, "discountKind", "percent");
+    await type(el, "percent", "10");
+    el.refusal = "sale.total_exceeds_simplified_limit";
+    await el.updateComplete;
+    expect(actions(el).error).toBe(
+      "This would raise the bill above the limit for a simplified invoice. Take more off, or Close, choose Full invoice on the bill, and try again.",
+    );
+    expect(shownMessages(el).filter((message) => message !== "")).toHaveLength(1);
+    expect(continueButton(el).disabled).toBe(false);
+    expect(field(el, "percent").hasAttribute("disabled")).toBe(false);
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(actions(el).error).toBe(
+      "Esto subiría la cuenta por encima del límite de una factura simplificada. Quita más, o pulsa Cerrar, elige Factura completa en la cuenta y vuelve a intentarlo.",
+    );
+  });
+
+  it("offers no more off when a free comp would pass the simplified-invoice limit, in both languages", async () => {
+    const el = await mount({ kind: "comp" });
+    await chooseReason(el, "Complaint");
+    el.refusal = "sale.total_exceeds_simplified_limit";
+    await el.updateComplete;
+    expect(actions(el).error).toBe(
+      "This would raise the bill above the limit for a simplified invoice. Close, choose Full invoice on the bill, and try again.",
+    );
+    expect(continueButton(el).disabled).toBe(false);
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(actions(el).error).toBe(
+      "Esto subiría la cuenta por encima del límite de una factura simplificada. Pulsa Cerrar, elige Factura completa en la cuenta y vuelve a intentarlo.",
+    );
+  });
+
   it("explains required approval in Spanish", async () => {
     setLocale("es");
     const el = await mount({
@@ -851,6 +918,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     el.preview = {
       reduction: "12.00",
       nominalValue: "12.00",
+      billTotal: { before: "12.00", after: "0.00" },
       needsApproval: null,
       lines: [],
     };

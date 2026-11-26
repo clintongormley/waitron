@@ -247,6 +247,7 @@ it("a reason withdrawn after preview cannot be confirmed", async () => {
   el.preview = {
     reduction: "36.00",
     nominalValue: "36.00",
+    billTotal: { before: "36.00", after: "0.00" },
     needsApproval: null,
     lines: [],
   };
@@ -269,6 +270,7 @@ it("labels both preview and confirmation with the actual covered quantity", asyn
   el.preview = {
     reduction: "24.00",
     nominalValue: "24.00",
+    billTotal: { before: "24.00", after: "0.00" },
     needsApproval: null,
     lines: [],
   };
@@ -286,6 +288,7 @@ it("asks for approval when the server needs a PIN", async () => {
   el.preview = {
     reduction: "36.00",
     nominalValue: "36.00",
+    billTotal: { before: "36.00", after: "0.00" },
     needsApproval: {
       by: "limit",
       permission: "adjustment.approve",
@@ -307,6 +310,7 @@ it("confirms the same choice when its object keys are in a different order", asy
   el.preview = {
     reduction: "36.00",
     nominalValue: "36.00",
+    billTotal: { before: "36.00", after: "0.00" },
     needsApproval: null,
     lines: [],
   };
@@ -459,7 +463,13 @@ it("A803 portion grouping: a preview for a row whose members changed cannot be c
   await click(el, 'input[name="reason"][value="Free"]');
   await click(el, "[data-adjust-continue]");
   el.choice = asked!;
-  el.preview = { reduction: "36.00", nominalValue: "36.00", needsApproval: null, lines: [] };
+  el.preview = {
+    reduction: "36.00",
+    nominalValue: "36.00",
+    needsApproval: null,
+    billTotal: { before: "36.00", after: "0.00" },
+    lines: [],
+  };
   await el.updateComplete;
   const confirm = q(el, "[data-adjust-confirm]");
   el.target = { ...row, lineIds: ["dish", "dish-2", "dish-4"] };

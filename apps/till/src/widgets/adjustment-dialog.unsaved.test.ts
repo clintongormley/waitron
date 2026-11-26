@@ -180,6 +180,7 @@ it("preview and refusal retain protection while confirming sends the original ex
   form.preview = {
     reduction: "5.50",
     nominalValue: "5.50",
+    billTotal: { before: "5.50", after: "0.00" },
     needsApproval: null,
     lines: [],
   };

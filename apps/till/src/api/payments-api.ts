@@ -79,6 +79,9 @@ export interface AdjustmentPreview {
   nominalValue: string;
   /** Whose PIN it needs, or null when the operator may apply it alone. */
   needsApproval: AdjustmentApproval | null;
+  /** The bill's total now and once applied: a set menu worked out again can make the change
+   * differ from `reduction`. */
+  billTotal: { before: string; after: string };
   lines: {
     lineId: string;
     lineNo: number;

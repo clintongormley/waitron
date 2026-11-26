@@ -126,7 +126,7 @@ function run(p: Fixture, op: Operation, ask: Ask) {
             { ...ask, admission: testTradingAdmission() },
             venue.venueLocale,
           )
-        : previewAdjustment(tx, ask, venue.venueLocale),
+        : previewAdjustment(tx, venue.cfg, ask, venue.venueLocale),
   );
 }
 function frozen(http = false) {
@@ -309,7 +309,9 @@ for (const op of ["preview", "apply"] as const)
       submissionId: randomUUID(),
     };
     if (op === "preview") {
-      const result = await inTx(venue, (tx) => previewAdjustment(tx, ask, venue.venueLocale));
+      const result = await inTx(venue, (tx) =>
+        previewAdjustment(tx, venue.cfg, ask, venue.venueLocale),
+      );
       expect(result.reduction).toBe("9.00");
     } else {
       await inTx(venue, (tx) =>
