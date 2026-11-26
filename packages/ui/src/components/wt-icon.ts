@@ -2,6 +2,9 @@ import { registerIcons } from "@waitron/ui-core/components/wt-icon";
 
 export * from "@waitron/ui-core/components/wt-icon";
 
+// Material Symbols, Copyright Google, Apache-2.0 (https://fonts.google.com/icons).
+export const CHECK_ICON_PATH = "M6.37 12L2.57 8.2L3.52 7.25L6.37 10.1L12.48 3.98L13.43 4.93Z";
+
 export const MENU_ICONS: Record<string, string> = {
   kebab:
     "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
@@ -113,4 +116,8 @@ export const MENU_ICONS: Record<string, string> = {
     "M4.67 11.33h6.66v-6.66H8.67q-0.55 0-0.94 0.39T7.33 6v0.87q-0.33 0.18-0.5 0.46t-0.16 0.67q0 0.55 0.39 0.94T8 9.33q0.55 0 0.94-0.39T9.33 8q0-0.38-0.18-0.67t-0.48-0.46v-0.87h1.33v4H6v-4h0.67v-1.33H4.67v6.66Zm-1.34 2.67q-0.55 0-0.94-0.39T2 12.67v-9.34q0-0.55 0.39-0.94T3.33 2h9.34q0.55 0 0.94 0.39T14 3.33v9.34q0 0.55-0.39 0.94T12.67 14H3.33Zm0-1.33h9.34v-9.34H3.33v9.34Zm0-9.34v9.34-9.34Z",
 };
 
-registerIcons(MENU_ICONS);
+registerIcons({
+  ...MENU_ICONS,
+  check: CHECK_ICON_PATH,
+  "chevron-left": "M10.5 2.5L5 8l5.5 5.5 1.1-1.1L7.2 8l4.4-4.4Z",
+});

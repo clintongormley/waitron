@@ -96,3 +96,28 @@ test("with no keyboard, a plain wt-dialog's height is the page less 24px margins
   expect(rect.height).toBeCloseTo(640 - 48, 0);
   expect(rect.top).toBeCloseTo(24, 0);
 });
+
+test("a full-screen dialog fills the visible band with no outer scroller or tab stop", async () => {
+  await page.viewport(390, 640);
+  const el = (await mount(`
+    <wt-dialog full-screen aria-label="Pay">
+      <div style="height:900px">Bill</div>
+    </wt-dialog>`)) as WtDialog;
+  host.style.setProperty("--wt-keyboard-top", "87px");
+  host.style.setProperty("--wt-keyboard-inset", "361px");
+  el.open = true;
+  await el.updateComplete;
+
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+  const body = el.shadowRoot!.querySelector<HTMLElement>("[part=body]")!;
+  await expect.element(page.getByRole("dialog", { name: "Pay" })).toBeVisible();
+  expect(dialog.querySelector("h2")).toBeNull();
+  const rect = dialog.getBoundingClientRect();
+  expect([rect.top, rect.bottom, rect.left, rect.right]).toEqual([87, 279, 0, 390]);
+  expect(getComputedStyle(dialog).borderWidth).toBe("0px");
+  expect(getComputedStyle(body).padding).toBe("0px");
+  expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+  body.scrollTop = 100;
+  expect(body.scrollTop).toBe(0);
+  expect(body.hasAttribute("tabindex")).toBe(false);
+});

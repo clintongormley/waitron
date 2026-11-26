@@ -620,6 +620,7 @@ section action adds anything to your basket. The dashboard Home preview keeps it
 `--wt-space-1` … `--wt-space-6` (4–32px), `--wt-radius-sm|md|lg`, `--wt-font-family`,
 `--wt-font-family-mono` (text read or copied character by character, such as a key or a log line),
 `--wt-font-family-google` (the Google sign-in button only), `--wt-font-size-sm|md|lg|xl`,
+`--wt-font-size-payment-amount` (42px at the default browser size, used by `wt-amount-block`),
 `--wt-font-weight-normal|medium|bold`, `--wt-google-mark-size` (20px), `--wt-google-mark-gap`
 (10px) and `--wt-google-button-line-height` (20px) (the Google sign-in button's "G", the gap after
 it and its label's line height), `--wt-google-button-font-size` and
@@ -860,6 +861,30 @@ rather than the component. `packages/ui/src/tap-target-and-focus.test.ts` mounts
 this floor — removing the `min-width` regresses that guard.
 
 ## Primitives
+
+### Full-screen panels and payment controls
+
+Use `wt-full-screen-panel` when your actions need to stay visible while the details scroll. Give
+the panel a container with a set height. Put the top bar in `header` and the actions in `footer`.
+The default slot scrolls between them. Always set `body-label` so the area has a name when it
+becomes a keyboard tab stop. For a modal, put the panel inside `wt-dialog full-screen`. The
+dialog's outer body clips its content, so the panel supplies the scrolling. Set the dialog's
+`aria-label` and put any heading or description in the panel itself. Send Back through
+`requestClose` to keep the dialog's leave check. Keep validation messages and recovery links
+immediately above your foot actions.
+
+`wt-top-bar` centres its heading and optional `subtitle` between the Back and action areas. Supply
+`heading` or put a title button in the `title` slot. Set `back-label` to the previous screen's name
+and handle `wt-back` to navigate. The `action` slot holds a named icon button. Put the formatted
+amount in the default slot of `wt-amount-block`. Give it a `label` and, when needed, a `breakdown`
+with the amount and any tip or adjustment.
+
+Place your `wt-button` actions in `wt-foot-button-bar`. It stacks them by default. Use `layout="row"`
+for the order buttons. A ghost button in the `link` slot goes below the main actions. Use
+`wt-choice-tile` for an individual option that can be picked. Supply `label`, optional `hint` and
+`selected`. `check-position="start"` keeps a leading check column for ways to pay. The default check
+is at the end. Tiles expose their own pressed state and native click, so a group can allow one
+choice or several without changing the tile.
 
 `wt-segmented-control` shows a short single-choice list as joined buttons. Give it `name`,
 `label`, `options` (`{ value, label }`), and `value`. Use `hide-label` in a labelled table column;
