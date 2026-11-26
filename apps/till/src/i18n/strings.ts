@@ -4463,7 +4463,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.items_barred_counter_receipt":
     "Un pedido de mostrador con su ticket emitido se paga con Una cantidad, Dividir a partes iguales o Toda la cuenta.",
   "bill_pay.items_barred_counter_prepay":
-    "Un pedido de mostrador de una zona que se paga antes de preparar se paga con Una cantidad, Dividir a partes iguales o Toda la cuenta.",
+    "En una zona que se paga antes de preparar, un pedido de mostrador se cobra con Una cantidad, Dividir a partes iguales o Toda la cuenta.",
   "bill_pay.items_barred_found":
     "Desde Buscar cuenta, una cuenta de mesa impresa se paga con Una cantidad, Dividir a partes iguales o Toda la cuenta.",
   "bill_pay.items_required": "Elige al menos un artículo",

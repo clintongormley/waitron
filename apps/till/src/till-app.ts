@@ -22451,18 +22451,22 @@ export class TillApp extends LitElement {
       )
         return;
       if (this.#hasLeftCounterOrder(id, session)) return;
+      // Items chooses from the dishes last read. Unread ones are read only once sent: an unsent
+      // order whose dishes could not be read is still paid, with nothing to choose.
+      const listed = this.counterLines;
+      const dishesStale =
+        listed === null
+          ? this.stage === "collect"
+          : listed.orderId !== id || listed.revision !== this.#store.revision;
       const choiceRevision = await this.#saveInvoiceChoice(id, this.#counterExpectedEdit(id));
       if (choiceRevision !== undefined) {
         if (this.#hasLeftCounterOrder(id, session)) return;
         this.#store.markSaved(choiceRevision);
+        // Saved at the revision the dishes were read at, so they are still those dishes.
+        if (!dishesStale && listed !== null && this.counterLines === listed)
+          this.counterLines = { ...listed, revision: choiceRevision };
       }
-      // An order just sent has had no lines read, and Items chooses from them.
-      if (
-        this.stage === "collect" &&
-        this.counterLines?.orderId !== id &&
-        (await this.#reloadCounterOrder(id, session)) !== "read"
-      )
-        return;
+      if (dishesStale && (await this.#reloadCounterOrder(id, session)) !== "read") return;
     } catch (error) {
       refused = true;
       if (!this.#hasLeftCounterOrder(id, session)) {
