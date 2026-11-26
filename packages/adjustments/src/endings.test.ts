@@ -488,21 +488,29 @@ describe("the notices a bill answers", () => {
         endAdjustment(tx, { adjustmentId, workingOrderId, why: "dish_moved", dishName: "Hake" }),
       );
     }
+    const byBill = (rows: { workingOrderId: string; givenBack: string }[]) =>
+      [...rows].sort((a, b) => a.workingOrderId.localeCompare(b.workingOrderId));
     const givenBack = async () =>
-      (await withTransaction(db, (tx) => readDiscountNotices(tx, [first, second]))).map(
-        ({ workingOrderId, givenBack }) => ({ workingOrderId, givenBack }),
+      byBill(
+        (await withTransaction(db, (tx) => readDiscountNotices(tx, [first, second]))).map(
+          ({ workingOrderId, givenBack }) => ({ workingOrderId, givenBack }),
+        ),
       );
-    expect(await givenBack()).toEqual([
-      { workingOrderId: second, givenBack: "1.60" },
-      { workingOrderId: first, givenBack: "1.60" },
-    ]);
+    expect(await givenBack()).toEqual(
+      byBill([
+        { workingOrderId: second, givenBack: "1.60" },
+        { workingOrderId: first, givenBack: "1.60" },
+      ]),
+    );
 
     await db.delete(workingOrderLines).where(eq(workingOrderLines.id, stayed));
 
-    expect(await givenBack()).toEqual([
-      { workingOrderId: second, givenBack: "1.60" },
-      { workingOrderId: first, givenBack: "3.20" },
-    ]);
+    expect(await givenBack()).toEqual(
+      byBill([
+        { workingOrderId: second, givenBack: "1.60" },
+        { workingOrderId: first, givenBack: "3.20" },
+      ]),
+    );
     const untouched = await seedWorkingOrder(db);
     expect(await withTransaction(db, (tx) => readDiscountNotices(tx, [untouched]))).toEqual([]);
   });
