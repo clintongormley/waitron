@@ -4,10 +4,7 @@ import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { MenuPopover, menuPopoverStyles } from "../menu-popover.js";
 import "./wt-button.js";
-import { DROPDOWN_ICONS } from "./wt-combobox.js";
-import { registerIcons } from "./wt-icon.js";
-
-registerIcons({ "chevron-down": DROPDOWN_ICONS["chevron-down"]! });
+import "./wt-icon.js";
 
 export interface WtLocaleOption {
   code: string;
