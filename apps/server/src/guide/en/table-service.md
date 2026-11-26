@@ -731,9 +731,9 @@ Send or take off any dishes not yet sent first. If dishes on the bill are not ma
 nothing prints yet: the till lists them under **Not served yet:**. If the guests have had them,
 choose **Mark served** where it shows, then **Print the bill** again. Otherwise choose **Print
 anyway**: a dish that then never comes is refunded after payment with
-[Give money back](table-service.md#give-money-back). On a full invoice naming a customer, a
-cancelled dish's money goes back without a corrective invoice, listed in **Download for accountant
-(XLSX)**, so on one of those take off any dish that may not come before you print.
+[Give money back](table-service.md#give-money-back). On a full invoice naming a customer,
+money given back for a cancelled dish is not taken off the invoice, so on one of those take off any
+dish that may not come before you print.
 
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.
 

@@ -775,9 +775,8 @@ como servidos, todavía no se imprime nada: la caja los muestra bajo **Aún sin 
 clientes ya los han tomado, elige **Marcar como servidos** donde aparezca y vuelve a elegir
 **Imprimir la cuenta**. Si no, elige **Imprimir igualmente**: un plato que al final no llegue se devuelve después
 del cobro con [Devolver dinero](table-service.md#give-money-back). En una factura completa a nombre
-de un cliente, el dinero de un plato cancelado se devuelve sin factura rectificativa y figura en
-**Descargar para tu gestor (XLSX)**, así que en esas cuentas quita antes de imprimir los platos que
-puedan no llegar.
+de un cliente, el dinero que se devuelve por un plato cancelado no se descuenta de la factura, así que
+en esas cuentas quita antes de imprimir los platos que puedan no llegar.
 
 Una cuenta impresa no admite más platos. Si los clientes piden algo más, ponlo en **+ Cuenta
 nueva**.

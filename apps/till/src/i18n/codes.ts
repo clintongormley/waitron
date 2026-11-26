@@ -1106,7 +1106,7 @@ const DEFERRED_INELIGIBLE: Record<string, { en: string; es: string }> = {
 
 const REFUSED_NO_FIX = {
   en: "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
-  es: "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo, así que el dinero que se devuelva de ella va a Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
+  es: "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo, así que el dinero que se devuelva de esta factura aparece en Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
 };
 
 const FIGURES_UNCHECKED = {
