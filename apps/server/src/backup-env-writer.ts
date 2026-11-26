@@ -37,11 +37,9 @@ export function assertStorableRecord(record: Record<string, string>): void {
   if (reason !== null) throw new AppError("backup.destinations_invalid", { reason });
 }
 
-/** Sets the recovery key (and its rotation time when one is given), keeping every other setting the
- * file holds. `0o600` because the file carries the key. */
-export async function writeRecoveryKey(
+async function mergeBackupSettings(
   stateDir: string,
-  input: { recoveryKey: string; keyRotatedAt: string | undefined },
+  change: (existing: Record<string, string>) => Record<string, string>,
 ): Promise<void> {
   const path = join(stateDir, BACKUP_ENV_FILE);
   let existing: Record<string, string> = {};
@@ -50,13 +48,33 @@ export async function writeRecoveryKey(
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
-  const record: Record<string, string> = {
-    ...existing,
-    WAITRON_BACKUP_RECOVERY_KEY: input.recoveryKey,
-  };
-  if (input.keyRotatedAt !== undefined) record.WAITRON_BACKUP_KEY_ROTATED_AT = input.keyRotatedAt;
+  const record = change(existing);
   assertStorableRecord(record);
   await writeFileDurable(path, formatEnvFile(record), 0o600);
+}
+
+/** Backup key N of the venue's master key, as `backupKeyRecord` gives it. */
+export interface BackupKeyRecord {
+  /** base64url of the key's 32 bytes. */
+  key: string;
+  keyNumber: number;
+  /** 16 lower-case hex characters. */
+  masterKeyId: string;
+}
+
+/** Sets the backup key, its number and its master key's id (and the rotation time when one is
+ * given), keeping every other setting the file holds. `0o600` because the file carries the key. */
+export async function writeBackupKey(
+  stateDir: string,
+  input: BackupKeyRecord & { rotatedAt?: string },
+): Promise<void> {
+  await mergeBackupSettings(stateDir, (existing) => ({
+    ...existing,
+    WAITRON_BACKUP_RECOVERY_KEY: input.key,
+    WAITRON_BACKUP_KEY_NUMBER: String(input.keyNumber),
+    WAITRON_BACKUP_MASTER_KEY_ID: input.masterKeyId,
+    ...(input.rotatedAt === undefined ? {} : { WAITRON_BACKUP_KEY_ROTATED_AT: input.rotatedAt }),
+  }));
 }
 
 export type BackupSettingsCheck =

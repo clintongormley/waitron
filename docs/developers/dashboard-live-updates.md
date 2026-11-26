@@ -100,10 +100,7 @@ menu tick's room-layout status retain their 15-second polls for today-only chang
 a today's-state column, update its source's quiet list and the readers that show it together.
 
 Keep form drafts separate from query snapshots. Update list rows and report values in the observer;
-do not call a loader that resets a modal or performs a mutation. An observer may take one narrow
-action a first load would have taken, when the screen still lacks its result: the Backups screen's
-status watcher asks for a recovery key at most once, only while the screen has made none, and shares
-a key request already in flight, so it never replaces a key the screen made. Its watchers also
+do not call a loader that resets a modal or performs a mutation. The Backups screen's watchers
 refill a form nobody has changed from the latest read (`#openStoredOff` for switched-off stored
 settings, `#reopenUnchanged` when the stream's bucket changes), and leave a form holding a change
 alone. `DraftRows` helps with

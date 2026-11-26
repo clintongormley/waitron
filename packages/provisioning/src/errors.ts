@@ -16,6 +16,9 @@ declare module "@waitron/shared" {
     "recovery.passphrase_invalid": Record<string, never>;
     "backup.artifact_invalid": { reason: string };
     "backup.archive_invalid": { reason: string };
+    /** A version 2 frame's backup key is not 32 bytes, its master key id not 8, or its N not an
+     * integer from 1 to 2^32 - 1. Never carries the key. */
+    "backup.archive_key_invalid": { input: "backup_key" | "master_key_id" | "key_number" };
     "station.thresholds_invalid": { field: string; stationId?: string; name: string };
     "email.settings_invalid": { field: string };
     "venue.detail_invalid": { field: string; reason: string };

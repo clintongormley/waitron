@@ -69,8 +69,6 @@ async function mount(
   const api = {
     liveData: new LiveData(),
     getBackupStatus: async () => status,
-    mintBackupKey: async () => ({ key: "synthetic-minted-key" }),
-    getBackupRecoveryKey: async () => ({ key: "synthetic-held-key" }),
     applyBackup: async () => on,
     rotateBackupKey: async () => on,
     exportConfiguration: async () => new Blob(["synthetic encrypted export"]),
@@ -134,11 +132,9 @@ async function credentials(screen: Screen) {
   await change(screen, "configuration-confirm", "synthetic passphrase");
 }
 
-it("default configuration and generated-key output leave without warning", async () => {
+it("default configuration leaves without warning", async () => {
   const { app, screen } = await mount({ ...off, recoveryKeySet: false });
-  await expect
-    .poll(() => screen.shadowRoot!.querySelector("[data-test=minted-key]"))
-    .not.toBeNull();
+  await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=apply]")).not.toBeNull();
   expect(await leave(app)).toBe("proceeded");
   expect(unload()).toBe(false);
 });
@@ -288,21 +284,6 @@ it("settings navigation protects changed values and Cancel leaves a normalized r
   await click(screen, "cancel-edit");
   await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=save-settings]")).toBeNull();
 });
-it("pasted rotation keys are protected while generated keys and saved-key acknowledgement are exempt", async () => {
-  const { app, screen } = await mount(on);
-  await expect
-    .poll(() => screen.shadowRoot!.querySelector("[data-test=minted-key]"))
-    .not.toBeNull();
-  await click(screen, "advanced-toggle");
-  expect(unload()).toBe(false);
-  await change(screen, "paste-key", "synthetic pasted key");
-  expect(unload()).toBe(true);
-  const pending = leave(app);
-  await choose(app, "keep");
-  expect(await pending).toBe("kept");
-  await change(screen, "paste-key", "");
-  expect(unload()).toBe(false);
-});
 it("a refused settings write keeps the unsaved draft", async () => {
   const { app, screen } = await mount(on, {
     applyBackup: async () => {
@@ -431,34 +412,11 @@ it("archive setup commits an accepted write while a refused write still warns", 
   expect(await kept).toBe("kept");
   refused = false;
   await click(screen, "apply");
-  await expect.poll(() => screen.shadowRoot!.querySelector("[data-test=rotate]")).not.toBeNull();
+  await expect
+    .poll(() => screen.shadowRoot!.querySelector("[data-test=edit-settings]"))
+    .not.toBeNull();
   expect(unload()).toBe(false);
   expect(await leave(app)).toBe("proceeded");
-});
-it("an accepted rotation retains a newer pasted key against the submitted baseline", async () => {
-  const write = deferred<BackupStatusView>();
-  const { app, screen } = await mount(on, { rotateBackupKey: () => write.promise });
-  await click(screen, "show-old-key");
-  await click(screen, "advanced-toggle");
-  await change(screen, "paste-key", "synthetic submitted key");
-  const acknowledgement = field(screen, "saved-it") as HTMLInputElement;
-  acknowledgement.checked = true;
-  acknowledgement.dispatchEvent(new Event("change"));
-  await screen.updateComplete;
-  await click(screen, "rotate-confirm");
-  await change(screen, "paste-key", "synthetic newer key");
-  write.resolve(on);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await screen.updateComplete;
-  await expect.poll(() => field(screen, "paste-key")?.value).toBe("synthetic newer key");
-  expect(field(screen, "paste-key").value).toBe("synthetic newer key");
-  expect(unload()).toBe(true);
-  const pending = leave(app);
-  await choose(app, "discard");
-  expect(await pending).toBe("proceeded");
-  await screen.updateComplete;
-  expect(field(screen, "paste-key").value).toBe("synthetic submitted key");
-  expect(unload()).toBe(false);
 });
 it("a departed settings write cannot close a reconnected settings draft", async () => {
   const write = deferred<BackupStatusView>();
@@ -563,47 +521,6 @@ it("a departed export cannot clear a reconnected form or its busy gate", async (
   await expect.poll(() => field(screen, "configuration-passphrase").value).toBe("");
   expect(unload()).toBe(false);
 });
-it("a departed key mint cannot replace the new opening's generated key", async () => {
-  const old = deferred<{ key: string }>();
-  let calls = 0;
-  const { app, screen } = await mount(
-    { ...off, recoveryKeySet: false },
-    {
-      mintBackupKey: () =>
-        ++calls === 1 ? old.promise : Promise.resolve({ key: "synthetic current key" }),
-    },
-  );
-  screen.remove();
-  app.shadowRoot!.prepend(screen);
-  await screen.updateComplete;
-  old.resolve({ key: "synthetic departed key" });
-  await expect.poll(() => field(screen, "minted-key")?.textContent).toBe("synthetic current key");
-  expect(unload()).toBe(false);
-});
-
-it("a departed rotation cannot clear a reconnected pasted key", async () => {
-  const write = deferred<BackupStatusView>();
-  const { app, screen } = await mount(on, { rotateBackupKey: () => write.promise });
-  await click(screen, "show-old-key");
-  await click(screen, "advanced-toggle");
-  await change(screen, "paste-key", "synthetic old key");
-  const acknowledgement = field(screen, "saved-it") as HTMLInputElement;
-  acknowledgement.checked = true;
-  acknowledgement.dispatchEvent(new Event("change"));
-  await screen.updateComplete;
-  await click(screen, "rotate-confirm");
-  screen.remove();
-  app.shadowRoot!.prepend(screen);
-  await screen.updateComplete;
-  await click(screen, "advanced-toggle");
-  await change(screen, "paste-key", "synthetic current key");
-  write.resolve(on);
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await screen.updateComplete;
-  expect(field(screen, "paste-key").value).toBe("synthetic current key");
-  expect(unload()).toBe(true);
-});
-
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280]) {
@@ -676,19 +593,6 @@ it("a detached update cannot consume the next opening's archive registration", a
   await choose(app, "keep");
   expect(await pending).toBe("kept");
 });
-it("a departed key reveal cannot put the previous opening's key into a reconnected page", async () => {
-  const read = deferred<{ key: string | null }>();
-  const { app, screen } = await mount(on, { getBackupRecoveryKey: () => read.promise });
-  await click(screen, "show-old-key");
-  screen.remove();
-  await screen.updateComplete;
-  app.shadowRoot!.prepend(screen);
-  await screen.updateComplete;
-  read.resolve({ key: "synthetic departed key" });
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await screen.updateComplete;
-  expect(screen.shadowRoot!.querySelector("[data-test=old-key]")).toBeNull();
-});
 it("another caller enabling archives cannot hide or rebaseline this page's setup draft", async () => {
   let status = off;
   const { app, screen, api } = await mount(off, { getBackupStatus: async () => status });
@@ -703,19 +607,6 @@ it("another caller enabling archives cannot hide or rebaseline this page's setup
   expect(await pending).toBe("proceeded");
   await screen.updateComplete;
   expect(field(screen, "destination").value).toBe("");
-  expect(unload()).toBe(false);
-});
-it("switching from a pasted rotation draft to settings asks before replacing that form", async () => {
-  const { app, screen } = await mount(on);
-  await click(screen, "advanced-toggle");
-  await change(screen, "paste-key", "synthetic pasted key");
-  await click(screen, "edit-settings");
-  await choose(app, "keep");
-  expect(field(screen, "paste-key").value).toBe("synthetic pasted key");
-  expect(screen.shadowRoot!.querySelector("[data-test=save-settings]")).toBeNull();
-  await click(screen, "edit-settings");
-  await choose(app, "discard");
-  await expect.poll(() => field(screen, "save-settings")).not.toBeNull();
   expect(unload()).toBe(false);
 });
 it("opening settings does not consume or ask about independent export credentials", async () => {
@@ -876,46 +767,6 @@ it("Cancel does not carry a hidden edited folder into Turn on backups", async ()
   await screen.updateComplete;
   expect(field(screen, "destination").value).toBe("");
 });
-
-for (const source of ["settings", "stream"] as const)
-  it(`the ${source} recovery-key shortcut asks before leaving settings edits`, async () => {
-    const { app, screen } = await mount(on, {
-      applyBackup: async () => {
-        throw { code: "backup.recovery_key_too_short" };
-      },
-    });
-    await edit(screen);
-    await change(screen, "destination", "/mnt/dirty");
-    if (source === "settings") {
-      await click(screen, "save-settings");
-      await expect
-        .poll(() => screen.shadowRoot!.querySelector("[data-test=recovery-key-action]"))
-        .not.toBeNull();
-    }
-    const request = () =>
-      source === "settings"
-        ? field(screen, "recovery-key-action").click()
-        : screen
-            .shadowRoot!.querySelector("dashboard-stream-settings")!
-            .dispatchEvent(
-              new CustomEvent("recovery-key-needed", { bubbles: true, composed: true }),
-            );
-    request();
-    await choose(app, "keep");
-    expect(
-      field(screen, "destination").shadowRoot!.querySelector<HTMLInputElement>("input")!.value,
-    ).toBe("/mnt/dirty");
-    expect(unload()).toBe(true);
-    request();
-    await choose(app, "discard");
-    await expect
-      .poll(() => screen.shadowRoot!.querySelector("[data-test=save-settings]"))
-      .toBeNull();
-    await expect
-      .poll(() => field(screen, "show-old-key")?.shadowRoot!.activeElement?.tagName)
-      .toBe("BUTTON");
-    expect(unload()).toBe(false);
-  });
 
 it("Cancel does not carry a hidden edited folder into Turn on backups after another device turns backups off", async () => {
   const getBackupStatus = vi.fn().mockResolvedValue(bucketOnly);

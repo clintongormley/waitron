@@ -916,12 +916,24 @@ it("has English and Spanish copy for every refusal of Print invoice and Download
   }
 });
 
-it("says a box holds no recovery key rather than asking for one to be entered, since Edit and the recovery pack reach it", () => {
+it("says a box holds no backup key and points at Change the backup key on the recovery pack card", () => {
   expect(codeMessage("backup.recovery_key_missing", "en")).toBe(
-    "This box holds no backup encryption key.",
+    "This box holds no backup key. Use “Change the backup key” on the Recovery pack card to make one.",
   );
   expect(codeMessage("backup.recovery_key_missing", "es")).toBe(
-    "Este servidor no tiene clave de cifrado de copias.",
+    "Este servidor no tiene clave de las copias. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para crearla.",
+  );
+});
+
+it("words the backup key change's refusals: a wrong master key when the venue has none, and a key held too short", () => {
+  expect(codeMessage("master_key.wrong", "en")).toBe(
+    "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
+  );
+  expect(codeMessage("master_key.wrong", "es")).toBe(
+    "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",
+  );
+  expect(codeMessage("backup.recovery_key_too_short", "es")).toBe(
+    "La clave de las copias que tiene este servidor es demasiado corta. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para sustituirla.",
   );
 });
 

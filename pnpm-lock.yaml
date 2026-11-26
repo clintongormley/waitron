@@ -91,6 +91,9 @@ importers:
       '@waitron/printing':
         specifier: workspace:*
         version: link:../../packages/printing
+      '@waitron/recovery-pack':
+        specifier: workspace:*
+        version: link:../../packages/recovery-pack
       '@waitron/shared':
         specifier: workspace:*
         version: link:../../packages/shared

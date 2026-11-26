@@ -1,4 +1,5 @@
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
+import { HELD_BACKUP_FRAME } from "./testing/recovery-key.js";
 // A backup run while the box sets its own clock, with the real correction and the real run.
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -147,7 +148,7 @@ function box(options: { seatFails?: number } = {}) {
       resolvers: {},
       stateDir,
       buildManifest: async () => MANIFEST,
-      recoveryKey: "recovery-key-1",
+      backupKey: HELD_BACKUP_FRAME,
       stagingDir: staging,
       retain: 7,
       retainDays: 7,

@@ -24,8 +24,8 @@ While a joined spare is switched off, the main box waits at each start until an 
 
 Before you start, check two things on the main box:
 
-- It has a backup encryption key, which the spare needs. If backups have never been turned on, open
-  **Backups** and choose **Turn on backups**.
+- It has a backup key, which the spare needs. If it has none, choose **Change the backup
+  key** on the **Recovery pack** card in **Backups**.
 - **Continuous copy to your bucket** is off. The venue copies its changes to one place at a time,
   and a spare takes that place. To add a spare anyway, choose **Turn off** under that heading; your
   bucket then stops receiving the venue's changes, and in this version it cannot receive them again

@@ -1,3 +1,4 @@
+import { useSetupStateDir } from "./testing/setup-state-dir.js";
 import { readFile, readdir } from "node:fs/promises";
 import { receiveSetupArchive } from "./setup-archive-upload.js";
 import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
@@ -10,11 +11,12 @@ import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { AppError, SUPPORTED_LOCALE_CODES } from "@waitron/shared";
+import { AppError, SUPPORTED_LOCALE_CODES, decodeMasterKeyCode } from "@waitron/shared";
 import type { VenueResult } from "@waitron/provisioning";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import type { Database } from "@waitron/db";
-import type { KeyRing } from "@waitron/credentials";
+import { backupKey, masterKeyId, sealingPublicKey, type KeyRing } from "@waitron/credentials";
+import { parseEnvFile } from "./env-file.js";
 import type { ProvisionRequest } from "./provision.js";
 import type { RestoreRequest } from "./restore-request.js";
 import type { AdoptHooks } from "./adopt.js";
@@ -31,6 +33,8 @@ import type { ConfigurationPreview } from "./configuration-import.js";
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
 import { STUB_NODE } from "./testing/node-copy.js";
+
+const SETUP_STATE_DIR = useSetupStateDir();
 
 // The fake database cannot tell writes apart, so the master key's save and its pack's drawing are
 // recorded by name.
@@ -434,6 +438,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     requestRestart,
     runFiscalTest,
     assertFiscalReady,
+    stateDir: SETUP_STATE_DIR,
     ...overrides,
   };
   return {
@@ -1488,6 +1493,62 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(persistTrading).toHaveBeenCalledWith(
       expect.objectContaining({ environment: "preproduction", onboardingIntent: "live" }),
     );
+  });
+
+  it.each([
+    { name: "preparation", body: prepareBody, devMode: false },
+    { name: "demo", body: demoBody, devMode: false },
+    { name: "Live on a development box", body: liveBody, devMode: true },
+  ])(
+    "preparation, demo and Live on a development box each end with backup key 1 from the shown master key: $name",
+    async ({ body, devMode }) => {
+      const stateDir = mkdtempSync(join(tmpdir(), "setup-backup-key-"));
+      try {
+        writeFileSync(join(stateDir, "backup.env"), "WAITRON_BACKUP_TEST_FOLDER=/srv/backups\n");
+        const app = new Hono();
+        const { deps } = makeDeps({ devMode, stateDir });
+        mountSetup(app, deps, noopLog);
+        const res = await postProvision(app, body());
+        expect(res.status).toBe(200);
+        const bytes = decodeMasterKeyCode((await res.json()).masterKey);
+        expect(parseEnvFile(readFileSync(join(stateDir, "backup.env"), "utf8"))).toEqual({
+          WAITRON_BACKUP_TEST_FOLDER: "/srv/backups",
+          WAITRON_BACKUP_RECOVERY_KEY: backupKey(bytes, 1).toString("base64url"),
+          WAITRON_BACKUP_KEY_NUMBER: "1",
+          WAITRON_BACKUP_MASTER_KEY_ID: masterKeyId(sealingPublicKey(bytes)).toString("hex"),
+        });
+        await tick();
+      } finally {
+        rmSync(stateDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("a box wired without its state folder refuses setup as not ready, before provisioning", async () => {
+    const app = new Hono();
+    const { deps, calls } = makeDeps({ stateDir: undefined });
+    mountSetup(app, deps, noopLog);
+    const res = await postProvision(app, demoBody());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+    expect(calls).toEqual([]);
+  });
+
+  it("a backup key that cannot be written leaves no master key saved", async () => {
+    const stateDir = mkdtempSync(join(tmpdir(), "setup-backup-key-"));
+    try {
+      mkdirSync(join(stateDir, "backup.env"));
+      const app = new Hono();
+      const { deps, calls } = makeDeps({ stateDir });
+      mountSetup(app, deps, noopLog);
+      const res = await postProvision(app, demoBody());
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+      expect(calls).toContain("persistTrading");
+      expect(calls).not.toContain("saveMasterKey");
+    } finally {
+      rmSync(stateDir, { recursive: true, force: true });
+    }
   });
 
   it("passes the full invoice series chosen at setup into provisioning", async () => {

@@ -9,11 +9,8 @@ import {
   type ArchiveSettings,
 } from "./archive-settings.js";
 import { loadRecoveryKey, readHeldKey } from "./backup-config.js";
-import {
-  keyFingerprint,
-  type BackupLoadHistory,
-  type BackupRuntimeStatus,
-} from "./backup-supervisor.js";
+import { keyFingerprint } from "./backup-key-fingerprint.js";
+import type { BackupLoadHistory, BackupRuntimeStatus } from "./backup-supervisor.js";
 import { errnoOf } from "./errno.js";
 import "./errors.js";
 

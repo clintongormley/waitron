@@ -839,15 +839,17 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     const managing = await managementHeaders(urlM, boxM.origin, viaM);
     const keys: string[] = [RECOVERY_KEY];
     const rotate = async (): Promise<string> => {
-      const recoveryKey = `spare-join-rotated-${randomUUID()}`;
       const rotated = await fetch(`${urlM}/api/backup/rotate`, {
         ...viaM,
         method: "POST",
-        headers: managing,
-        body: JSON.stringify({ recoveryKey }),
+        // A key change is taken only from the page at the address it used.
+        headers: { ...managing, origin: urlM },
+        body: JSON.stringify({ masterKey: m.nodeSecret }),
       });
       expect(rotated.status, await rotated.text()).toBe(200);
-      keys.push(recoveryKey);
+      const recoveryKey = (await readBackupSettings(dirsM.state))?.WAITRON_BACKUP_RECOVERY_KEY;
+      expect(keys).not.toContain(recoveryKey);
+      keys.push(recoveryKey!);
       const digest = await backupSettingsDigestIn(dirsM.state);
       expect(digest).toEqual(expect.any(String));
       return digest!;

@@ -556,7 +556,7 @@ import {
 } from "./stream-host.js";
 import { mountStreamApi, settingsBucketProbe } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
-import { replaceBackupSettings, writeRecoveryKey } from "./backup-env-writer.js";
+import { replaceBackupSettings } from "./backup-env-writer.js";
 import {
   createS3ObjectStore,
   parseRecoveryKit,
@@ -1786,6 +1786,7 @@ async function bootServer(
         db,
         node: store.node,
         ring,
+        stateDir: config.stateDir,
         persistTrading,
         requestRestart: signalRestart,
         setupAppDir: config.setupAppDir,
@@ -4364,6 +4365,10 @@ async function bootServer(
       backups: () => backupSupervisor.current(),
       loadFonts: loadRecoveryPackFonts,
       now,
+      stateDir: config.stateDir,
+      stream: streamHost,
+      sealedState,
+      reloadBackups: () => backupSupervisor.reload(),
     },
     log,
   );
@@ -4378,8 +4383,6 @@ async function bootServer(
       isPrimary: () => holders.singletonRole.current === "primary",
 
       readRecoveryKey,
-      writeRecoveryKey: (recoveryKey) =>
-        writeRecoveryKey(config.stateDir, { recoveryKey, keyRotatedAt: undefined }),
       sealedState,
       probe: settingsBucketProbe,
       prepareEncryption: (bucket, signal) => prepareBucketEncryption(bucket, undefined, { signal }),

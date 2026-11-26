@@ -4,12 +4,11 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { assertStorableKey } from "./backup-api.js";
 import {
   assertStorableRecord,
   checkBackupSettings,
   replaceBackupSettings,
-  writeRecoveryKey,
+  writeBackupKey,
 } from "./backup-env-writer.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { syncsAndRenames as recordSyncsAndRenames } from "./testing/durable-writes.js";
@@ -32,20 +31,6 @@ function tempDir(): string {
 
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
-});
-
-describe("assertStorableKey", () => {
-  it.each(["needs a space ", "has\nnewline", "tab\tthere", " leading"])("rejects %j", (k) => {
-    expect(() => assertStorableKey(k)).toThrow(/recovery_key_unstorable/);
-  });
-
-  it("accepts a base64url key and round-trips", () => {
-    const k = "abcDEF-_1234567890";
-    expect(() => assertStorableKey(k)).not.toThrow();
-    expect(
-      parseEnvFile(formatEnvFile({ WAITRON_BACKUP_RECOVERY_KEY: k })).WAITRON_BACKUP_RECOVERY_KEY,
-    ).toBe(k);
-  });
 });
 
 describe("assertStorableRecord", () => {
@@ -92,22 +77,54 @@ describe("assertStorableRecord — values the env file would read back different
   });
 });
 
-describe("writeRecoveryKey", () => {
+const KEY_ONE = {
+  key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  keyNumber: 1,
+  masterKeyId: "0123456789abcdef",
+};
+
+describe("writeBackupKey", () => {
   it("syncs backup.env before renaming it into place, and the folder after", async () => {
     const dir = tempDir();
     const path = join(dir, "backup.env");
-    const events = await syncsAndRenames(() =>
-      writeRecoveryKey(dir, { recoveryKey: "abcDEF-_1234567890", keyRotatedAt: undefined }),
-    );
+    const events = await syncsAndRenames(() => writeBackupKey(dir, KEY_ONE));
     expect(events).toEqual([`sync ${path}.tmp`, `rename ${path}.tmp ${path}`, `sync ${dir}`]);
+  });
+
+  it("writeBackupKey keeps every other setting, 0600, durable", async () => {
+    const dir = tempDir();
+    const path = join(dir, "backup.env");
+    await writeFile(
+      path,
+      formatEnvFile({
+        WAITRON_BACKUP_TEST_FOLDER: "/srv/backups",
+        WAITRON_BACKUP_RECOVERY_KEY: "old-key-0123456789",
+        WAITRON_BACKUP_KEY_NUMBER: "3",
+        WAITRON_BACKUP_MASTER_KEY_ID: "fedcba9876543210",
+        WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-23T00:00:00.000Z",
+      }),
+      { mode: 0o644 },
+    );
+    const events = await syncsAndRenames(() => writeBackupKey(dir, KEY_ONE));
+    expect(events).toEqual([`sync ${path}.tmp`, `rename ${path}.tmp ${path}`, `sync ${dir}`]);
+    expect(parseEnvFile(await readFile(path, "utf8"))).toEqual({
+      WAITRON_BACKUP_TEST_FOLDER: "/srv/backups",
+      WAITRON_BACKUP_RECOVERY_KEY: KEY_ONE.key,
+      WAITRON_BACKUP_KEY_NUMBER: "1",
+      WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
+      WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-23T00:00:00.000Z",
+    });
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
 
   it("creates backup.env holding only the key when there is none, 0600", async () => {
     const dir = tempDir();
-    await writeRecoveryKey(dir, { recoveryKey: "abcDEF-_1234567890", keyRotatedAt: undefined });
+    await writeBackupKey(dir, KEY_ONE);
     const path = join(dir, "backup.env");
     expect(parseEnvFile(await readFile(path, "utf8"))).toEqual({
-      WAITRON_BACKUP_RECOVERY_KEY: "abcDEF-_1234567890",
+      WAITRON_BACKUP_RECOVERY_KEY: KEY_ONE.key,
+      WAITRON_BACKUP_KEY_NUMBER: "1",
+      WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
     });
     expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
@@ -124,9 +141,11 @@ describe("writeRecoveryKey", () => {
         WAITRON_BACKUP_TEST_AGE: "30",
       }),
     );
-    await writeRecoveryKey(dir, {
-      recoveryKey: "new-key-0123456789",
-      keyRotatedAt: "2026-09-23T00:00:00.000Z",
+    await writeBackupKey(dir, {
+      key: "new-key-0123456789",
+      keyNumber: 2,
+      masterKeyId: "0123456789abcdef",
+      rotatedAt: "2026-09-23T00:00:00.000Z",
     });
     expect(parseEnvFile(await readFile(join(dir, "backup.env"), "utf8"))).toEqual({
       WAITRON_BACKUP_TEST_FOLDER: "/srv/backups",
@@ -134,6 +153,8 @@ describe("writeRecoveryKey", () => {
       WAITRON_BACKUP_TEST_INTERVAL: "3600000",
       WAITRON_BACKUP_TEST_COUNT: "7",
       WAITRON_BACKUP_TEST_AGE: "30",
+      WAITRON_BACKUP_KEY_NUMBER: "2",
+      WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
       WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-23T00:00:00.000Z",
     });
   });
@@ -142,7 +163,7 @@ describe("writeRecoveryKey", () => {
     const dir = tempDir();
     await writeFile(join(dir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=kept-key-012345\n");
     await expect(
-      writeRecoveryKey(dir, { recoveryKey: "has\nnewline-0123", keyRotatedAt: undefined }),
+      writeBackupKey(dir, { ...KEY_ONE, key: "has\nnewline-0123" }),
     ).rejects.toMatchObject({ code: "backup.destinations_invalid" });
     expect(await readFile(join(dir, "backup.env"), "utf8")).toBe(
       "WAITRON_BACKUP_RECOVERY_KEY=kept-key-012345\n",

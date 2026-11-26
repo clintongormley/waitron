@@ -36,6 +36,7 @@ const STATUS: RecoveryPackStatus = {
   masterKey: null,
   keepOldPackUntil: "2026-11-11T12:00:00.000Z",
   timeZone: "Europe/Madrid",
+  backupKey: null,
 };
 
 async function fixture(kind: "pack" | "master-key" = "master-key") {

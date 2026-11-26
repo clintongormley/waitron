@@ -1,6 +1,6 @@
 # Recover from backup
 
-Keep the previous recovery pack when you change the backup encryption key. Until the new bucket copy is ready, the previous pack still matches the copy offered for recovery. If the page says the pack does not match the copy or the bucket login cannot read it, try the matching pack, or correct the bucket access and try again.
+Keep the previous recovery pack when you change the backup key. Until the new bucket copy is ready, the previous pack still matches the copy offered for recovery. If the page says the pack does not match the copy or the bucket login cannot read it, try the matching pack, or correct the bucket access and try again.
 
 Scheduled backups and the bucket copy each use the folder you choose, with no extra venue folder. Choose separate folders for scheduled backups and the bucket copy. Neither folder can be inside the other.
 

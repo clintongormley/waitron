@@ -27,8 +27,9 @@ import {
 import { finishStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import { surveyStartAgainLeftovers } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
-import { BACKUP_ROOM_NOTE_FILE, parseEnvFile } from "@waitron/store";
-import { loadKeyRing } from "@waitron/credentials";
+import { BACKUP_ENV_FILE, BACKUP_ROOM_NOTE_FILE, parseEnvFile } from "@waitron/store";
+import { loadKeyRing, makeMasterKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
+import { updateSetupFlowSection } from "./setup-flow-record.js";
 import {
   moveStartAgainUnits,
   prepareSetAside,
@@ -1336,6 +1337,32 @@ it("a Move deletes the backup room note first", async () => {
     code: "ENOENT",
   });
   await expectAllAside(roots, record, before);
+});
+
+it("a Move, and a resumed Move, delete the backup key setup wrote from its staged master key", async () => {
+  for (const cut of [false, true]) {
+    const publicKey = sealingPublicKey(makeMasterKey());
+    const attempt = await startAgainAttempt(await scratch(), {
+      before: (roots) =>
+        updateSetupFlowSection(roots.stateDir, "nodeKey", () => ({
+          masterKeyPublicKey: publicKey.toString("base64"),
+        })),
+    });
+    const { roots } = attempt;
+    const before = await foundEverywhere(roots);
+    const record = await prepared(roots, attempt.administratorId);
+    if (cut) await cutMove(roots, record, 1);
+    await writeFile(
+      join(roots.stateDir, BACKUP_ENV_FILE),
+      `WAITRON_BACKUP_MASTER_KEY_ID=${masterKeyId(publicKey).toString("hex")}\n`,
+    );
+    if (cut) expect(await resumeStartAgainSetAside(roots, {})).toBe("resumed");
+    else await moveStartAgainUnits(roots, record, {});
+    await expect(lstat(join(roots.stateDir, BACKUP_ENV_FILE))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expectAllAside(roots, record, before);
+  }
 });
 
 it("a resumed Move deletes the backup room note first", async () => {

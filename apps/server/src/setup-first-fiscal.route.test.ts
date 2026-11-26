@@ -1,5 +1,5 @@
 import * as filesystem from "node:fs/promises";
-import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -9,6 +9,9 @@ import { hashPassword, hashPin, verifyPin } from "@waitron/identity";
 import type { PreparedSetupAdmin } from "./cloud-sign-in.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
+import { backupKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
+import { BACKUP_ENV_FILE } from "@waitron/store";
+import { parseEnvFile } from "./env-file.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { mountSetup } from "./setup-api.js";
@@ -599,6 +602,60 @@ it("the node-key reply names the master key and carries no box key, on a repeat 
   expect(staged.masterKey).toBe(encodeMasterKeyCode(decodeMasterKeyCode(staged.masterKey)));
   expect(staged.masterKeyName).toMatch(/^\d{4}-\d\d-\d\d · [2-9A-HJKMNP-Z]{4}$/);
   expect(await (await stageKey()).json()).toEqual(staged);
+});
+
+it("Live setup writes backup key 1 from the master key it shows, with N = 1 and its id; a reissue replaces it", async () => {
+  const f = await fixture();
+  expect(f.claimed.status).toBe(200);
+  const { comparisonId, reconfirmation } = await f.settle();
+  const candidates = await f.post(
+    "/setup-api/first-setup/candidates",
+    { module: MODULE, proposal: { comparisonId }, reconfirmation },
+    f.headers(),
+  );
+  const { state } = await candidates.json();
+  const token = async (purpose: string) =>
+    (
+      await f.post(
+        "/setup-api/first-setup/reconfirm",
+        { password: PASSWORD, purpose },
+        f.headers(state),
+      )
+    ).json();
+  const held = async () => parseEnvFile(await readFile(join(f.stateDir, BACKUP_ENV_FILE), "utf8"));
+  const keyOne = (printed: string) => {
+    const bytes = decodeMasterKeyCode(printed);
+    return {
+      WAITRON_BACKUP_RECOVERY_KEY: backupKey(bytes, 1).toString("base64url"),
+      WAITRON_BACKUP_KEY_NUMBER: "1",
+      WAITRON_BACKUP_MASTER_KEY_ID: masterKeyId(sealingPublicKey(bytes)).toString("hex"),
+    };
+  };
+  const staged = await (
+    await f.post("/setup-api/first-setup/node-key", await token("block-use"), f.headers(state))
+  ).json();
+  expect(await held()).toEqual(keyOne(staged.masterKey));
+  expect((await stat(join(f.stateDir, BACKUP_ENV_FILE))).mode & 0o777).toBe(0o600);
+  const again = await (
+    await f.post("/setup-api/first-setup/node-key", await token("block-use"), f.headers(state))
+  ).json();
+  expect(again.masterKey).toBe(staged.masterKey);
+  expect(await held()).toEqual(keyOne(staged.masterKey));
+  const socket = new TLSSocket(new Socket());
+  try {
+    const reissued = await f.post(
+      "/setup-api/first-setup/node-key-reissue",
+      { password: PASSWORD },
+      f.headers(state),
+      { incoming: { socket } },
+    );
+    expect(reissued.status).toBe(200);
+    const { masterKey } = await reissued.json();
+    expect(masterKey).not.toBe(staged.masterKey);
+    expect(await held()).toEqual(keyOne(masterKey));
+  } finally {
+    socket.destroy();
+  }
 });
 
 it("imports only the frozen hour and demands a freshly confirmed kept recovery document", async () => {

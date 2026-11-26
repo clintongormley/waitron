@@ -1470,6 +1470,9 @@ declare module "@waitron/shared" {
      * it saved one. The binding refusals carry none.
      */
     "promotion.break_glass_invalid": { keyName?: string };
+    /** "Change the backup key" was sent a master key that is not the venue's current one; `keyName`
+     * names the current key, when there is one. */
+    "master_key.wrong": { keyName?: string };
     /**
      * `retireSelf` was invoked on a node that is NOT fenced (serving, absent from the chart, or with
      * no membership document). Only a fenced node retires itself.
@@ -1701,11 +1704,13 @@ declare module "@waitron/shared" {
      * never write an unencrypted or box-key-encrypted artifact), or a recovery pack's bucket or
      * archives page is drawn (`backup-recovery-pack-parts.ts`), where it fails that page alone;
      * or a spare asks this box to join while its `backup.env` holds no usable key
-     * (`mirror-bundle-api.ts`), refused on this box before anything is reserved. */
+     * (`mirror-bundle-api.ts`), refused on this box before anything is reserved; or a backups
+     * Save or the bucket copy's Save finds no key held, which only "Change the backup key" then
+     * writes. */
     "backup.recovery_key_missing": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };
-    /** A recovery key a backup Save or key change sends is shorter than `min` characters. */
+    /** A recovery key a request sends is shorter than `min` characters. */
     "backup.new_recovery_key_too_short": { min: number };
     "backup.destinations_invalid": { reason: string };
     /** A box's backup settings this box would not take: a message over 64 KiB (`size`), one that
@@ -1745,16 +1750,9 @@ declare module "@waitron/shared" {
     "backup.not_enabled": Record<string, never>;
     "backup.run_in_progress": Record<string, never>;
     /**
-     * A supplied recovery key cannot be stored verbatim in `backup.env`: it carries a control
-     * character or leading/trailing whitespace, or does not survive the env-file round-trip
-     * byte-for-byte. A key that round-trips to a different string would encrypt archives under one
-     * the operator never recorded — unrecoverable. `reason` is a short machine tag,
-     * never the key. */
-    "backup.recovery_key_unstorable": { reason: string };
-    /**
      * After `apply`/`rotate`, the EFFECTIVE recovery key the box will encrypt under does not equal
-     * the key that was written. The route fails loud rather than let the operator record a key the
-     * box will not use. No params — the keys are secrets. */
+     * the key the box holds. The route fails loud rather than orphan archives under a key no master
+     * key gives. No params — the keys are secrets. */
     "backup.effective_mismatch": Record<string, never>;
     /**
      * `rotate` wrote the new key to `backup.env`, then failed to store the archive settings' new
@@ -1778,14 +1776,13 @@ declare module "@waitron/shared" {
     "backup.stream_test_failed": { reason: ProbeFailure };
     /** Archives in the stream's bucket were asked for while no bucket is configured. */
     "backup.stream_not_configured": Record<string, never>;
-    /** `disable` or `rotate` found no stored archive record; for `rotate`, also no destination
-     * loaded and no key held. */
+    /** `disable` found no stored archive record. */
     "backup.not_configured": Record<string, never>;
     /** The stored archive settings (`backup.archive`) are not a record this server wrote.
      * `reason` names the part that failed, never its value, which could be a secret. */
     "backup.archive_settings_invalid": { reason: string };
     /** A stored archive record could not be read. `disable` has no settings to keep switched off,
-     * `rotate` with no destination loaded and no key held has no key to change, the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
+     * the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
      * archive's, and a recovery pack's archives page (`backup-recovery-pack-parts.ts`) fails; an
      * archive Save replaces the record. `reason` is the read's error code, never the
      * record. */
@@ -1811,11 +1808,6 @@ declare module "@waitron/shared" {
     /** A recovery pack's bucket page was drawn on a node with no membership public key
      * (`nodes.public_key`), so a rebuild could not verify the pointer this node signs. */
     "backup.stream_signer_missing": Record<string, never>;
-    /**
-     * `apply` was given a recovery key different from the usable key this box already holds (a held
-     * key under the length floor is replaced instead). One recovery key per venue; `rotate` is the
-     * way to change a usable one. No params — the keys are secrets. */
-    "backup.recovery_key_exists": Record<string, never>;
     /**
      * The `primaryUrl` a mirror was pointed at fails to parse, uses a scheme other than http/https,
      * or names a host the SSRF policy refuses (a private/link-local/CGNAT/metadata literal IP over

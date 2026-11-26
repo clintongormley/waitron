@@ -3,6 +3,7 @@ import {
   VENUE_FILE,
   NODE_FILE,
   SECRETS_ENV_FILE,
+  BACKUP_ENV_FILE,
   BACKUP_ROOM_NOTE_FILE,
   WAL_SUFFIX,
   SHM_SUFFIX,
@@ -19,6 +20,7 @@ import { basename, dirname, join, relative, sep } from "node:path";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { deleteBackupRoomNote } from "./backup-room-note-file.js";
+import { deleteStagedBackupKey } from "./staged-backup-key-file.js";
 import { canonicalFirstSetupRoots } from "./first-setup-directories.js";
 import {
   readStartAgainChoices,
@@ -358,6 +360,11 @@ async function deleteNoteFirst(stateDir: string): Promise<void> {
     await deleteBackupRoomNote(stateDir);
   } catch (error) {
     throw failed(codeOf(error), `state/${BACKUP_ROOM_NOTE_FILE}`);
+  }
+  try {
+    await deleteStagedBackupKey(stateDir);
+  } catch (error) {
+    throw failed(codeOf(error), `state/${BACKUP_ENV_FILE}`);
   }
 }
 

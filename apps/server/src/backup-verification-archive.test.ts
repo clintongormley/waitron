@@ -10,7 +10,9 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { buildManifest } from "./backup-manifest.js";
 import { packArchive, type ArchiveEntry } from "./backup-archive.js";
-import { encryptArtifact } from "./artifact-cipher.js";
+import { encryptArtifact, encryptArtifactUnderBackupKey } from "./artifact-cipher.js";
+import { backupKeyFrameInput } from "./backup-key-record.js";
+import { HELD_BACKUP_KEY } from "./testing/recovery-key.js";
 import { validateArtifactFile } from "./restore.js";
 import * as fileIo from "./artifact-file-io.js";
 import { validateBackupArtifactFile as validate } from "./backup-verification-archive.js";
@@ -111,6 +113,18 @@ describe("authenticated verification archive", () => {
     await validated.discard();
     expect(await readdir(f.stagingDir)).toEqual([]);
     expect(await readFile(f.artifactPath)).toEqual(encrypted);
+  });
+  it("refuses a backup file written under backup key N: it opens Cloud copies only", async () => {
+    const f = await fixture();
+    f.recoveryKey = HELD_BACKUP_KEY.key;
+    const encrypted = encryptArtifactUnderBackupKey(
+      packArchive(f.entries),
+      backupKeyFrameInput(HELD_BACKUP_KEY),
+    );
+    await writeFile(f.artifactPath, encrypted);
+    f.expected.archive.sha256 = createHash("sha256").update(encrypted).digest("hex");
+    f.expected.archive.bytes = encrypted.length;
+    await refuses(f, unsupported);
   });
   it("decodes gzip before verification, preserves database bytes and refuses decoded archive tails", async () => {
     const f = await fixture();

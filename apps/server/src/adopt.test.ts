@@ -285,6 +285,10 @@ describe("adoptFromPrimary (mirror adopt)", () => {
           backups: () => ({ schedule: undefined, retention: undefined, recoveryKey: undefined }),
           loadFonts: loadRecoveryPackFonts,
           now: () => new Date("2026-11-24T09:00:00.000Z"),
+          stateDir,
+          stream: { reload: async (write) => void (await write?.()) },
+          sealedState: { refresh: async () => "sealed" },
+          reloadBackups: async () => {},
         },
         () => {},
       );

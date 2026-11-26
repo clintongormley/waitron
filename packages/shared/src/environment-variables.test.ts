@@ -25,7 +25,12 @@ describe("the environment list", () => {
         "WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION",
         "WAITRON_CREDENTIALS_KEY_VERSION",
       ],
-      "backup.env": ["WAITRON_BACKUP_KEY_ROTATED_AT", "WAITRON_BACKUP_RECOVERY_KEY"],
+      "backup.env": [
+        "WAITRON_BACKUP_KEY_NUMBER",
+        "WAITRON_BACKUP_KEY_ROTATED_AT",
+        "WAITRON_BACKUP_MASTER_KEY_ID",
+        "WAITRON_BACKUP_RECOVERY_KEY",
+      ],
     });
   });
 

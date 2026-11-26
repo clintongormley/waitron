@@ -16,6 +16,8 @@ import { tmpdir } from "node:os";
 // The store backup query forbids PRAGMAs; this read-only copy needs integrity_check.
 import { DatabaseSync } from "node:sqlite";
 import { readVenue, openVenueDatabase } from "@waitron/db";
+import { randomBytes } from "node:crypto";
+import { decryptArtifactUnderBackupKey, encryptArtifact } from "../src/artifact-cipher.js";
 import { runOnce } from "../src/backup-sweep.js";
 import { validateArtifact, writeValidated } from "../src/restore.js";
 import { ALL_MODULES } from "../src/modules.js";
@@ -78,7 +80,10 @@ if (request.command === "capture") {
   // No lock: Cloud's runner captures while the fixture server on this folder is still running.
   const store = await openVenueDatabase(join(root, VENUE_DIR_NAME), { exclusive: false });
   try {
-    let artifact: Uint8Array | undefined;
+    // A Cloud copy is frame version 1 under Cloud's key. The real Cloud target flushes with fsync,
+    // which the permission model refuses, so the sweep's archive is sealed again as one.
+    const sweepKey = { backupKey: randomBytes(32), keyNumber: 1, masterKeyId: randomBytes(8) };
+    let swept: Uint8Array | undefined;
     await runOnce({
       nodeId: readVariable(
         parseEnvFile(await readFile(join(stateDir, TRADING_ENV_FILE), "utf8")),
@@ -88,10 +93,10 @@ if (request.command === "capture") {
         {
           id: "cloud-test-capture",
           async put(_key, bytes) {
-            artifact = bytes;
+            swept = bytes;
           },
           async putFile(_key, path) {
-            artifact = await readFile(path);
+            swept = await readFile(path);
           },
           async getFile() {
             throw new Error("Capture does not read from its destination");
@@ -117,7 +122,7 @@ if (request.command === "capture") {
       environment: "preproduction",
       resolvers: {},
       stateDir,
-      recoveryKey: request.recoveryKey,
+      backupKey: sweepKey,
       stagingDir: validation.stagingDir,
       retain: 100,
       retainDays: 3650,
@@ -126,7 +131,11 @@ if (request.command === "capture") {
       log: () => {},
       archive: (file) => store.venue.archiveTo(file),
     });
-    assert(artifact, "Waitron did not capture an archive");
+    assert(swept, "Waitron did not capture an archive");
+    const artifact = encryptArtifact(
+      decryptArtifactUnderBackupKey(swept, sweepKey.backupKey),
+      request.recoveryKey,
+    );
     const checked = await validateArtifact({ ...validation, artifact });
     try {
       const trading = checked.secretEntries.find((entry) => entry.name === "secrets/trading.env");

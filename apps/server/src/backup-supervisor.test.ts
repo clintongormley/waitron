@@ -33,7 +33,10 @@ import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import { readBackupRoomNote } from "./backup-room-note.js";
 import { backupAlertSource, type BackupOutcomeHolder } from "./alert-sources.js";
 import { gunzipSync } from "node:zlib";
-import { decryptArtifact } from "./artifact-cipher.js";
+import { decryptArtifactUnderBackupKey } from "./artifact-cipher.js";
+import { decryptBackupFile, readArtifactFileHeader } from "./artifact-cipher-file.js";
+import { makeMasterKey } from "@waitron/credentials";
+import { heldBackupKey } from "./testing/backup-key.js";
 import { unpackArchive } from "./backup-archive.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig } from "./backup-config.js";
@@ -98,8 +101,16 @@ beforeAll(async () => {
   }
 }, 120_000);
 
-const STRONG_KEY_1 = "recovery-key-one-strong";
-const STRONG_KEY_2 = "recovery-key-two-different";
+const SUPERVISOR_MASTER_KEY = makeMasterKey();
+const KEY_RECORDS = [
+  heldBackupKey(SUPERVISOR_MASTER_KEY, 1),
+  heldBackupKey(SUPERVISOR_MASTER_KEY, 2),
+];
+const STRONG_KEY_1 = KEY_RECORDS[0]!.key;
+const STRONG_KEY_2 = KEY_RECORDS[1]!.key;
+/** Opens an archive's bytes under backup key text, as the box holds it. */
+const openUnder = (bytes: Uint8Array, key: string) =>
+  decryptArtifactUnderBackupKey(bytes, Buffer.from(key, "base64url"));
 
 type LogLine = { level: string; event: string };
 
@@ -126,6 +137,7 @@ async function makeDestDir(): Promise<string> {
 }
 
 function localFsConfig(dirs: string[], recoveryKey: string): BackupConfig {
+  const record = KEY_RECORDS.find((held) => held.key === recoveryKey)!;
   return {
     revision: undefined,
     enabled: true,
@@ -141,6 +153,8 @@ function localFsConfig(dirs: string[], recoveryKey: string): BackupConfig {
     staleAfterMs: 2 * 24 * 60 * 60 * 1000,
     destinationTimeoutMs: 15 * 60 * 1000,
     keyRotatedAt: undefined,
+    keyNumber: record.keyNumber,
+    masterKeyId: record.masterKeyId,
   };
 }
 
@@ -241,6 +255,37 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     );
   }, 60_000);
 
+  it("a backup file names its master key id and N and opens with key N only", async () => {
+    const dest = await makeDestDir();
+    const refs: Refs = {
+      config: localFsConfig([dest], STRONG_KEY_2),
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+    };
+    const sup = makeSupervisor(refs, await makeStateDir());
+    const out = await makeDestDir();
+    try {
+      await sup.reload();
+      await waitForArchiveUnderCurrentKey(sup);
+      const [name] = await listArchives(dest);
+      const path = join(dest, name!);
+      expect(await readArtifactFileHeader(path)).toEqual({
+        version: 2,
+        masterKeyId: Buffer.from(KEY_RECORDS[1]!.masterKeyId, "hex"),
+        keyNumber: 2,
+      });
+      await expect(decryptBackupFile(path, join(out, "under-2"), STRONG_KEY_2)).resolves.toMatch(
+        /^[0-9a-f]{64}$/,
+      );
+      await expect(
+        decryptBackupFile(path, join(out, "under-1"), STRONG_KEY_1),
+      ).rejects.toMatchObject({ code: "recovery.passphrase_invalid" });
+    } finally {
+      await sup.stop();
+    }
+  }, 60_000);
+
   it("keeps Cloud freshness across a key rotation and starts a fresh backup", async () => {
     const refs: Refs = {
       config: { ...localFsConfig([], STRONG_KEY_1), cloud: true },
@@ -333,7 +378,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
 
       // The archive's `db.dump` opens as a database and answers a query against the venue's schema.
       const entries = unpackArchive(
-        gunzipSync(decryptArtifact(await readFile(join(dest, name!)), STRONG_KEY_1)),
+        gunzipSync(openUnder(await readFile(join(dest, name!)), STRONG_KEY_1)),
       );
       const copy = join(await makeDestDir(), "restored.db");
       await writeFile(copy, Buffer.from(entries.find((e) => e.name === "db.dump")!.bytes));
@@ -440,9 +485,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       await poll(async () => {
         for (const name of await listArchives(dest)) {
           try {
-            const plain = gunzipSync(
-              decryptArtifact(await readFile(join(dest, name)), STRONG_KEY_2),
-            );
+            const plain = gunzipSync(openUnder(await readFile(join(dest, name)), STRONG_KEY_2));
             if (unpackArchive(plain).some((e) => e.name === "manifest.json")) return true;
           } catch (error) {
             if (!(error instanceof AppError) || error.code !== "recovery.passphrase_invalid")
@@ -649,7 +692,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
       const [archive] = await listArchives(dest);
       expect(archive).toBeDefined();
       const bytes = await readFile(join(dest, archive!));
-      expect(() => decryptArtifact(bytes, STRONG_KEY_1)).not.toThrow();
+      expect(() => openUnder(bytes, STRONG_KEY_1)).not.toThrow();
       expect(sup.current().keyFingerprint).toBe(keyFingerprint(STRONG_KEY_2));
       expect((await sup.status()).archiveUnderCurrentKey).toBe(false);
     } finally {
@@ -2486,7 +2529,7 @@ describe("scheduled backup passes", () => {
       expect(
         bodies.filter((body) => {
           try {
-            decryptArtifact(body, STRONG_KEY_2);
+            openUnder(body, STRONG_KEY_2);
             return true;
           } catch {
             return false;

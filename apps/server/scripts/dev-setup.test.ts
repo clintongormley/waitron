@@ -13,7 +13,13 @@ import {
   taxpayer,
 } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { loadKeyRing, masterKeyCheckValue } from "@waitron/credentials";
+import {
+  backupKey,
+  loadKeyRing,
+  masterKeyCheckValue,
+  masterKeyId,
+  sealingPublicKey,
+} from "@waitron/credentials";
 import { decodeMasterKeyCode } from "@waitron/shared";
 import { mkdtemp, rm } from "node:fs/promises";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -324,6 +330,23 @@ describe("devSetup against a real venue directory", () => {
     expect(again.masterKey).toBeUndefined();
     expect(masterKeySummaryLines(again)).toEqual([]);
     expect(await stored()).toHaveLength(1);
+  });
+
+  it("dev:setup writes backup key 1; a re-run that keeps the venue leaves backup.env alone", async () => {
+    const path = join(workDir, "backup.env");
+    const bytes = decodeMasterKeyCode(first.masterKey!.masterKey);
+    const written = readFileSync(path, "utf8");
+    expect(parseEnvFile(written)).toEqual({
+      WAITRON_BACKUP_RECOVERY_KEY: backupKey(bytes, 1).toString("base64url"),
+      WAITRON_BACKUP_KEY_NUMBER: "1",
+      WAITRON_BACKUP_MASTER_KEY_ID: masterKeyId(sealingPublicKey(bytes)).toString("hex"),
+    });
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    const before = statSync(path).mtimeMs;
+    const again = await devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} });
+    expect(again.reused).toBe(true);
+    expect(readFileSync(path, "utf8")).toBe(written);
+    expect(statSync(path).mtimeMs).toBe(before);
   });
 
   it("provisioning seeds the starter profiles", async () => {

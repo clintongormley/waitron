@@ -90,6 +90,7 @@ const suite = useVenueDb({
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
+const HELD_KEY = "recovery-key-one-strong";
 const VENUE_ID = "c0000000-0000-4000-8000-000000000002";
 const BUCKET: BucketConfig = {
   endpoint: "https://s3.example.net",
@@ -200,8 +201,12 @@ interface Harness {
   seenByReload: (StreamSettings | null)[];
 }
 
-function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Harness {
-  const key = { value: startKey };
+/** The backup key setup writes; `null` starts a box with none. */
+function harness(
+  overrides: Partial<StreamApiDeps> = {},
+  startKey: string | null = HELD_KEY,
+): Harness {
+  const key = { value: startKey ?? undefined };
   const order: string[] = [];
   const seenByReload: (StreamSettings | null)[] = [];
   credentialWrites.onPut = () => order.push("put-credential");
@@ -225,10 +230,6 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
     isPrimary: () => true,
 
     readRecoveryKey: async () => key.value,
-    writeRecoveryKey: vi.fn(async (k: string) => {
-      order.push("write-key");
-      key.value = k;
-    }),
     sealedState: {
       refresh: vi.fn(async () => {
         order.push("refresh");
@@ -440,7 +441,6 @@ describe("stream settings routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "backup.stream_request_failed" } });
     expect(signals[0]!.aborted).toBe(true);
     expect(deps.prepareEncryption).not.toHaveBeenCalled();
-    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
     expect(await storedBucket()).toBeNull();
   });
@@ -449,7 +449,7 @@ describe("stream settings routes", () => {
     await clearBucket();
     const probe = vi.fn<StreamApiDeps["probe"]>(async () => ({ ok: true }));
     const { probe: prepareEncryption, signals } = stalledProbe();
-    const { app, deps, reload } = harness({ probe, prepareEncryption, probeLimitMs: 20 });
+    const { app, reload } = harness({ probe, prepareEncryption, probeLimitMs: 20 });
     const cookie = await login(app);
     const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
     expect(res.status).toBe(502);
@@ -458,7 +458,6 @@ describe("stream settings routes", () => {
     expect(signals[0]!.aborted).toBe(true);
     // One deadline for the whole of Save's wait on the bucket, not one per check.
     expect(probe.mock.calls[0]![1]).toBe(signals[0]);
-    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
     expect(await storedBucket()).toBeNull();
   });
@@ -615,12 +614,11 @@ describe("stream settings routes", () => {
     const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
     expect(res.status).toBe(422);
     expect(deps.prepareEncryption).not.toHaveBeenCalled();
-    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
     expect(await storedBucket()).toBeNull();
   });
 
-  it("Save sets a recovery key when there is none, refreshes the locked row, seals the bucket, then starts streaming", async () => {
+  it("Save refreshes the locked row, seals the bucket, then starts streaming", async () => {
     await clearBucket();
     const { app, deps, key, order, seenByReload } = harness();
     vi.spyOn(deps.stream, "status").mockReturnValue({
@@ -643,11 +641,10 @@ describe("stream settings routes", () => {
       data: { keyVersion: 1 },
     });
 
-    // randomBytes(32).toString("base64url"), as /api/backup/mint-key mints (backup-api.ts).
-    expect(key.value).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(key.value).toBe(HELD_KEY);
     // The row must be locked under the key BEFORE the first generation opens, or a rebuild from
     // that generation finds no row to unlock.
-    expect(order).toEqual(["write-key", "refresh", "put-credential", "reload"]);
+    expect(order).toEqual(["refresh", "put-credential", "reload"]);
     // The reload found the new settings committed.
     expect(seenByReload).toEqual([{ streamId: await readStreamId(suite.db), bucket: BUCKET }]);
     const view = await res.json();
@@ -706,11 +703,10 @@ describe("stream settings routes", () => {
   });
 
   it("Save keeps an existing recovery key", async () => {
-    const { app, deps, key } = harness({}, "recovery-key-one-strong");
+    const { app, key } = harness({}, "recovery-key-one-strong");
     const cookie = await login(app);
     const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
     expect(res.status).toBe(200);
-    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
     expect(key.value).toBe("recovery-key-one-strong");
   });
 
@@ -796,12 +792,25 @@ describe("stream settings routes", () => {
     }
   });
 
-  it("two Saves at once set one recovery key and both succeed", async () => {
+  it("Save with no key held is refused, with nothing probed, sealed or stored", async () => {
+    await clearBucket();
+    const { app, deps, reload } = harness({}, null);
+    const cookie = await login(app);
+    const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "backup.recovery_key_missing" } });
+    expect(deps.probe).not.toHaveBeenCalled();
+    expect(deps.sealedState.refresh).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    expect(await storedBucket()).toBeNull();
+  });
+
+  it("two Saves at once both succeed", async () => {
     await clearBucket();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     let probes = 0;
-    const { app, deps, reload } = harness({
+    const { app, reload } = harness({
       probe: vi.fn(async () => {
         probes += 1;
         if (probes === 2) release();
@@ -823,18 +832,16 @@ describe("stream settings routes", () => {
       app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) }),
     ]);
     expect([first.status, second.status]).toEqual([200, 200]);
-    expect(deps.writeRecoveryKey).toHaveBeenCalledTimes(1);
   });
 
   // As `apply` and `rotate` refuse to write backup.env on such a box.
 
   it("Save reuses the held recovery key", async () => {
     await clearBucket();
-    const { app, deps, reload } = harness({}, "recovery-key-one-strong");
+    const { app, reload } = harness({}, "recovery-key-one-strong");
     const cookie = await login(app);
     const res = await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
     expect(res.status).toBe(200);
-    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
     expect(reload).toHaveBeenCalledTimes(1);
     expect((await readStreamSettings(suite.db, RING))?.bucket).toMatchObject({
       bucket: BUCKET.bucket,
@@ -1050,7 +1057,7 @@ describe("stream settings routes", () => {
 
   it("Save on a box whose recovery key is too short is refused with that code, writing no key", async () => {
     await clearBucket();
-    const { app, deps, reload } = harness({
+    const { app, reload } = harness({
       readRecoveryKey: async () => {
         throw new AppError("backup.recovery_key_too_short", { min: 12 });
       },
@@ -1061,7 +1068,6 @@ describe("stream settings routes", () => {
     expect(await res.json()).toMatchObject({
       error: { code: "backup.recovery_key_too_short", params: { min: 12 } },
     });
-    expect(deps.writeRecoveryKey).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
     expect(await storedBucket()).toBeNull();
   });

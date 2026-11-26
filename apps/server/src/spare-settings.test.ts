@@ -1,5 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +9,9 @@ import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deletePairLinkTx,
+  backupKey,
   loadKeyRing,
+  makeMasterKey,
   sealNodeSigningKeyTx,
   writePairLinkTx,
   type KeyRing,
@@ -16,6 +20,7 @@ import {
   CORE_MIGRATIONS,
   stampDeployment,
   withNodeTransaction,
+  withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -30,7 +35,7 @@ import {
   backupSettingsDigestOf,
   readBackupSettings,
   replaceBackupSettings,
-  writeRecoveryKey,
+  writeBackupKey,
 } from "./backup-env-writer.js";
 import { createTurns } from "./backup-turns.js";
 import { createLogger, type Logger } from "./logger.js";
@@ -38,6 +43,15 @@ import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { runSpareSettings, sendBackupSettings } from "./spare-settings.js";
 import { mountSpareSettingsApi } from "./spare-settings-api.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
+import { heldBackupKey } from "./testing/backup-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
+import { openManagementSession } from "@waitron/identity/test/fixtures.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { mountBackupApi } from "./backup-api.js";
+import { loadRecoveryKey } from "./backup-config.js";
+import type { BackupSupervisor } from "./backup-supervisor.js";
+import { loadBoxEnv } from "./box-env.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x5).toString("base64"),
@@ -266,7 +280,7 @@ describe("runSpareSettings", () => {
     expect(events("spare-settings.sent")).toHaveLength(1);
 
     spareAnswers = "not-started";
-    await writeRecoveryKey(mainDir, { recoveryKey: NEW_RECOVERY_KEY, keyRotatedAt: undefined });
+    await writeBackupKey(mainDir, { ...heldBackupKey(makeMasterKey(), 2), key: NEW_RECOVERY_KEY });
     await tick(RETRY_MS * 3);
     expect(events("spare-settings.send_failed")).toEqual([
       expect.objectContaining({ level: "info" }),
@@ -277,18 +291,102 @@ describe("runSpareSettings", () => {
   it("a change on this box reaches the spare within one check", async () => {
     await link("streaming");
     await start();
-    await writeRecoveryKey(mainDir, { recoveryKey: NEW_RECOVERY_KEY, keyRotatedAt: undefined });
+    await writeBackupKey(mainDir, { ...heldBackupKey(makeMasterKey(), 2), key: NEW_RECOVERY_KEY });
     const changed = await digestIn(mainDir);
     expect(await digestIn(spareDir)).not.toBe(changed);
     await tick(CHECK_MS);
     expect(await digestIn(spareDir)).toBe(changed);
   });
 
+  /** This box's "Change the backup key", over a stand-in TLS socket as its HTTPS listener hands it on. */
+  async function keyChange(): Promise<(masterKey: string) => Promise<Response>> {
+    const { token } = await openManagementSession(mainBox.db);
+    await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, token));
+    const mainApp = new Hono();
+    const readBoxEnv = () => loadBoxEnv({}, mainDir);
+    mountBackupApi(
+      mainApp,
+      {
+        supervisor: {
+          current: () => ({ isPrimary: true, destinations: [], loadErrorCode: null }),
+          reload: async () => {},
+          status: async () => ({}),
+        } as unknown as BackupSupervisor,
+        db: mainBox.db,
+        ring: RING,
+        stateDir: mainDir,
+        readRecoveryKey: async () => loadRecoveryKey(await readBoxEnv()),
+        readBoxEnv,
+        sealedState: { refresh: async () => "sealed" },
+        readStream: () => ({ state: "off" }),
+        stream: { reload: async (write) => write?.() },
+        turns: createTurns(),
+      },
+      logger(),
+    );
+    return async (masterKey) => {
+      const socket = new TLSSocket(new Socket());
+      try {
+        return await mainApp.request(
+          "/api/backup/rotate",
+          {
+            method: "POST",
+            headers: {
+              cookie: `${MANAGEMENT_COOKIE}=${token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ masterKey }),
+          },
+          { incoming: { socket } },
+        );
+      } finally {
+        socket.destroy();
+      }
+    };
+  }
+
+  it("with no master key, a key change answers master_key.wrong naming none, and the spare keeps key 1", async () => {
+    await writeBackupKey(mainDir, heldBackupKey(makeMasterKey(), 1));
+    const change = await keyChange();
+    await link("streaming");
+    await start();
+    const sent = await digestIn(mainDir);
+    expect(await digestIn(spareDir)).toBe(sent);
+    const refused = await change(WRONG_MASTER_KEY);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({ error: { code: "master_key.wrong", params: {} } });
+    await tick(CHECK_MS);
+    expect(await digestIn(mainDir)).toBe(sent);
+    expect(await digestIn(spareDir)).toBe(sent);
+    expect(requests).toHaveLength(1);
+  });
+
+  it("the spare is sent N+1", async () => {
+    const master = makeMasterKey();
+    const { secret } = await mintMasterKey(mainBox.db, { bytes: master });
+    await writeBackupKey(mainDir, heldBackupKey(master, 1));
+    const change = await keyChange();
+    await link("streaming");
+    await start();
+    expect((await readBackupSettings(spareDir))?.WAITRON_BACKUP_KEY_NUMBER).toBe("1");
+
+    const changed = await change(secret);
+    expect(changed.status).toBe(200);
+    const sent = await digestIn(mainDir);
+    expect(await digestIn(spareDir)).not.toBe(sent);
+    await tick(CHECK_MS);
+    expect(await digestIn(spareDir)).toBe(sent);
+    expect(await readBackupSettings(spareDir)).toMatchObject({
+      WAITRON_BACKUP_RECOVERY_KEY: backupKey(master, 2).toString("base64url"),
+      WAITRON_BACKUP_KEY_NUMBER: "2",
+    });
+  });
+
   it("a spare that was off catches up once it answers again, logging one failure for the whole time it was off", async () => {
     await link("streaming");
     await start();
     spareAnswers = "off";
-    await writeRecoveryKey(mainDir, { recoveryKey: NEW_RECOVERY_KEY, keyRotatedAt: undefined });
+    await writeBackupKey(mainDir, { ...heldBackupKey(makeMasterKey(), 2), key: NEW_RECOVERY_KEY });
     await tick(120_000);
     expect(events("spare-settings.send_failed")).toEqual([
       expect.objectContaining({ level: "warn", peerNodeId: spareId, reason: "unreachable" }),
@@ -314,7 +412,7 @@ describe("runSpareSettings", () => {
     await tick(CHECK_MS);
     expect(requests).toHaveLength(1);
     await withNodeTransaction(mainBox.node, (tx) => deletePairLinkTx(tx, MAIN.nodeId));
-    await writeRecoveryKey(mainDir, { recoveryKey: NEW_RECOVERY_KEY, keyRotatedAt: undefined });
+    await writeBackupKey(mainDir, { ...heldBackupKey(makeMasterKey(), 2), key: NEW_RECOVERY_KEY });
     await tick(CHECK_MS * 2);
     expect(requests).toHaveLength(1);
     await duty.stop();
@@ -431,7 +529,7 @@ describe("runSpareSettings", () => {
     const duty = await start();
     expect(requests).toHaveLength(1);
     await duty.stop();
-    await writeRecoveryKey(mainDir, { recoveryKey: NEW_RECOVERY_KEY, keyRotatedAt: undefined });
+    await writeBackupKey(mainDir, { ...heldBackupKey(makeMasterKey(), 2), key: NEW_RECOVERY_KEY });
     await vi.advanceTimersByTimeAsync(RETRY_MS * 4);
     expect(requests).toHaveLength(1);
     expect(vi.getTimerCount()).toBe(0);
@@ -467,7 +565,7 @@ describe("runSpareSettings", () => {
   it("settings the spare took with the reply lost are replaced when this box goes back to the ones it had sent", async () => {
     await link("streaming");
     await start();
-    await writeRecoveryKey(mainDir, { recoveryKey: NEW_RECOVERY_KEY, keyRotatedAt: undefined });
+    await writeBackupKey(mainDir, { ...heldBackupKey(makeMasterKey(), 2), key: NEW_RECOVERY_KEY });
     loseReply = true;
     await tick(CHECK_MS);
     expect((await readBackupSettings(spareDir))?.WAITRON_BACKUP_RECOVERY_KEY).toBe(
@@ -502,7 +600,7 @@ describe("runSpareSettings", () => {
     await start();
     spareAnswers = "yes";
     await tick(RETRY_MS);
-    await writeRecoveryKey(mainDir, { recoveryKey: NEW_RECOVERY_KEY, keyRotatedAt: undefined });
+    await writeBackupKey(mainDir, { ...heldBackupKey(makeMasterKey(), 2), key: NEW_RECOVERY_KEY });
     spareAnswers = "off";
     await tick(RETRY_MS);
     spareAnswers = "yes";

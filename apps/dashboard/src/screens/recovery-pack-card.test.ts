@@ -18,6 +18,13 @@ afterEach(() => setLocale("en-GB"));
 const MADE_AT = "2026-10-12T10:00:00.000Z";
 const FIRST_AT = "2026-09-02T10:00:00.000Z";
 
+const BACKUP_KEY: NonNullable<RecoveryPackStatus["backupKey"]> = {
+  number: 3,
+  fingerprint: "4f9a21c0",
+  changedAt: "2026-11-25T10:00:00.000Z",
+  fromCurrentMasterKey: true,
+};
+
 function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus {
   return {
     latest: null,
@@ -30,6 +37,7 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
     masterKey: null,
     keepOldPackUntil: "2026-11-11T12:00:00.000Z",
     timeZone: "Europe/Madrid",
+    backupKey: BACKUP_KEY,
     ...overrides,
   };
 }
@@ -233,12 +241,14 @@ const DAYS = {
     first: "2 September",
     changed: "20 October",
     until: "19 November",
+    backupKey: "Number 3, changed on 25 November 2026 · fingerprint 4f9a21c0",
   },
   "es-ES": {
     made: "12 de octubre",
     first: "2 de septiembre",
     changed: "20 de octubre",
     until: "19 de noviembre",
+    backupKey: "Número 3, cambiada el 25 de noviembre de 2026 · huella 4f9a21c0",
   },
 } as const;
 
@@ -261,9 +271,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     expect(row(el, "last")).toBe(
       fill("recovery_pack.last_value", { number: "3", date: day.made, name: "Marta Puig" }),
     );
-    expect(row(el, "backup-key")).toBe(
-      fill("recovery_pack.backup_key_same", { number: "3", date: day.made }),
-    );
+    expect(row(el, "backup-key")).toBe(day.backupKey);
   });
 
   it("says the last pack is up to date without a name when its maker is gone", async () => {
@@ -287,13 +295,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
         fill("recovery_pack.keep_backup_key", { number: "3", date: day.made, until: day.until }),
       ].join(" "),
     );
-    expect(row(el, "backup-key")).toBe(
-      fill("recovery_pack.backup_key_changed", {
-        date: day.changed,
-        number: "3",
-        packDate: day.made,
-      }),
-    );
+    expect(row(el, "backup-key")).toBe(day.backupKey);
   });
 
   it("says the last pack is incomplete", async () => {
@@ -417,6 +419,11 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     setLocale(locale);
     const el = await mount(stubApi(status({ ...STATES["up to date"], backupsUseOlderKey: true })));
     expect(line(el)).toContain(t("recovery_pack.older_key"));
+    expect(t("recovery_pack.older_key")).toContain(
+      locale === "en-GB"
+        ? "keep the older pack too while the Recovery pack card says this."
+        : "guarda también el paquete anterior mientras la tarjeta Paquete de recuperación lo diga.",
+    );
   });
 });
 
@@ -1199,7 +1206,7 @@ describe("making a pack", () => {
   });
 });
 
-it("does not claim an emergency-only pack carries a backup key", async () => {
+it("the Backup key row names the box's key, never what a pack holds", async () => {
   const el = await mount(
     stubApi(
       status({
@@ -1208,9 +1215,105 @@ it("does not claim an emergency-only pack carries a backup key", async () => {
       }),
     ),
   );
-  expect(row(el, "backup-key")).toBe(
-    fill("recovery_pack.backup_key_absent", { number: "3", date: DAYS["en-GB"].made }),
+  expect(row(el, "backup-key")).toBe(DAYS["en-GB"].backupKey);
+});
+
+it.each([
+  [
+    "en-GB",
+    "Number 3, changed on 25 November 2026 · fingerprint 4f9a21c0",
+    "Number 1 · fingerprint 0c1d2e3f",
+    "None yet",
+  ],
+  [
+    "es-ES",
+    "Número 3, cambiada el 25 de noviembre de 2026 · huella 4f9a21c0",
+    "Número 1 · huella 0c1d2e3f",
+    "Ninguna todavía",
+  ],
+] as const)(
+  "the card's Backup key row shows the number, the date changed and the fingerprint (%s)",
+  async (locale, changed, never, none) => {
+    setLocale(locale);
+    expect(row(await mount(stubApi(status())), "backup-key")).toBe(changed);
+    expect(row(await mount(stubApi(status({ latest: latest() }))), "backup-key")).toBe(changed);
+    const first = {
+      number: 1,
+      fingerprint: "0c1d2e3f",
+      changedAt: null,
+      fromCurrentMasterKey: true,
+    };
+    expect(row(await mount(stubApi(status({ backupKey: first }))), "backup-key")).toBe(never);
+    expect(row(await mount(stubApi(status({ backupKey: null }))), "backup-key")).toBe(none);
+  },
+);
+
+it.each([
+  ["en-GB", "Backups still use a backup key from the old master key. Change the backup key."],
+  [
+    "es-ES",
+    "Las copias siguen usando la clave de las copias hecha con la clave maestra anterior. Cambia la clave de las copias.",
+  ],
+] as const)(
+  "says when backups still use a backup key from the old master key (%s)",
+  async (locale, sentence) => {
+    setLocale(locale);
+    const old = { ...BACKUP_KEY, fromCurrentMasterKey: false };
+    const master = { name: "2026-11-23 · QZJV", pack: 1 };
+    const stale = await mount(
+      stubApi(status({ latest: latest(), upToDate: true, masterKey: master, backupKey: old })),
+    );
+    expect(line(stale)).toContain(sentence);
+    expect(stale.shadowRoot!.querySelector("[data-test=pack-status]")?.classList).toContain("warn");
+    const current = await mount(
+      stubApi(status({ latest: latest(), upToDate: true, masterKey: master })),
+    );
+    expect(line(current)).not.toContain(sentence);
+    const noMaster = await mount(
+      stubApi(status({ latest: latest(), upToDate: true, masterKey: null, backupKey: old })),
+    );
+    expect(line(noMaster)).not.toContain(sentence);
+  },
+);
+
+it.each([
+  ["en-GB", "Change the backup key"],
+  ["es-ES", "Cambiar la clave de las copias"],
+] as const)(
+  "offers Change the backup key before the card's other buttons, once the status has loaded (%s)",
+  async (locale, words_) => {
+    setLocale(locale);
+    const el = await mount(stubApi(STATES["up to date"]));
+    const order = [...el.shadowRoot!.querySelectorAll(".actions > wt-button")].map((b) =>
+      b.getAttribute("data-test"),
+    );
+    expect(order).toEqual(["change-backup-key", "make-master-key", "make-recovery-pack"]);
+    expect(words(el.shadowRoot!.querySelector("wt-button[data-test=change-backup-key]"))).toBe(
+      words_,
+    );
+    const api = stubApi();
+    api.getRecoveryPackStatus.mockReturnValue(new Promise(() => undefined));
+    const waiting = await mount(api);
+    expect(waiting.shadowRoot!.querySelector("wt-button[data-test=change-backup-key]")).toBeNull();
+  },
+);
+
+it("Change the backup key opens the dialog on the next key, and a change reads the card again", async () => {
+  const api = stubApi(status());
+  const el = await mount(api);
+  const disarm = vi.fn();
+  el.addEventListener("recovery-pack-make", disarm);
+  el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=change-backup-key]")!.click();
+  await settle(el);
+  const dialog = el.shadowRoot!.querySelector("dashboard-backup-key-dialog")!;
+  expect(dialog.isOpen).toBe(true);
+  expect(words(dialog.shadowRoot!.querySelector("[data-test=intro]"))).toBe(
+    fill("backup_key_dialog.text", { number: "4" }),
   );
+  expect(disarm).toHaveBeenCalledTimes(1);
+  const reads = api.getRecoveryPackStatus.mock.calls.length;
+  dialog.dispatchEvent(new CustomEvent("backup-key-changed", { bubbles: true, composed: true }));
+  await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBe(reads + 1);
 });
 
 it("does not call an unknown emergency code out of date or ask for another pack", async () => {

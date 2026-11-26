@@ -9,7 +9,8 @@ import { withNodeTransaction, withTransaction, type NodeDatabase } from "@waitro
 import { recordTakeFailureTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { writeRecoveryKey } from "./backup-env-writer.js";
+import { writeBackupKey } from "./backup-env-writer.js";
+import { HELD_BACKUP_KEY } from "./testing/recovery-key.js";
 import type { StartedServer } from "./boot.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { readSealedStateRow, unsealNodeState, type SealedStateDeps } from "./sealed-state.js";
@@ -101,9 +102,10 @@ async function startBox(scratch: string) {
     });
   }
   await seedModuleSettings(suite.db, { "fiscal-none": false });
-  await writeRecoveryKey(scratch, {
-    recoveryKey: KEY,
-    keyRotatedAt: "2026-10-31T08:00:00.000Z",
+  await writeBackupKey(scratch, {
+    ...HELD_BACKUP_KEY,
+    key: KEY,
+    rotatedAt: "2026-10-31T08:00:00.000Z",
   });
   // The sealed row needs every recovery file, which a set-up box holds.
   await writeFile(join(scratch, "trading.env"), `WAITRON_NODE_ID=${nodeId}\n`);

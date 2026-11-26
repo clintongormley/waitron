@@ -24,6 +24,12 @@ const BASE: RecoveryPackStatus = {
   masterKey: null,
   keepOldPackUntil: "2026-11-11T12:00:00.000Z",
   timeZone: "Europe/Madrid",
+  backupKey: {
+    number: 3,
+    fingerprint: "4f9a21c0",
+    changedAt: "2026-11-25T10:00:00.000Z",
+    fromCurrentMasterKey: true,
+  },
 };
 const LATEST: NonNullable<RecoveryPackStatus["latest"]> = {
   number: 3,
@@ -65,6 +71,13 @@ const STATES: Record<string, RecoveryPackStatus> = {
     ...BASE,
     latest: { ...LATEST, number: 4, received: false },
     unreceived: { number: 4, madeAt: MADE_AT },
+  },
+  "backup key from the old master key": {
+    ...BASE,
+    latest: LATEST,
+    upToDate: true,
+    masterKey: { name: "2026-11-23 · QZJV", pack: 3 },
+    backupKey: { ...BASE.backupKey!, changedAt: null, fromCurrentMasterKey: false },
   },
 };
 

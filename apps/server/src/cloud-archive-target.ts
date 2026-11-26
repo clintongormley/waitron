@@ -5,7 +5,7 @@ import { CLOUD_SNAPSHOTS_DIR, SCRATCH_DIR } from "@waitron/store";
 import { randomUUID } from "node:crypto";
 import { chmod, lstat, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { ARTIFACT_HEADER_BYTES } from "./artifact-cipher.js";
+import { artifactHeaderBytes } from "./artifact-cipher.js";
 import { encryptArtifactFile } from "./artifact-cipher-file.js";
 import { compressArchive } from "./backup-compression.js";
 import type { ScheduleClock } from "./backup-schedule.js";
@@ -73,7 +73,7 @@ function unavailable(): never {
 }
 
 async function* boundedCompressedArchive(input: CloudArchiveInput) {
-  let bytes = ARTIFACT_HEADER_BYTES;
+  let bytes = artifactHeaderBytes(1);
   for await (const chunk of compressArchive(input.entries(), input.signal)) {
     bytes += chunk.byteLength;
     if (bytes > MAX_CLOUD_ARCHIVE_BYTES) unavailable();
@@ -185,7 +185,7 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
       const gzipOverhead = 32 + Math.ceil(plaintextBytes / 1024);
       const ciphertextBytes = Math.min(
         MAX_CLOUD_ARCHIVE_BYTES,
-        plaintextBytes + gzipOverhead + ARTIFACT_HEADER_BYTES,
+        plaintextBytes + gzipOverhead + artifactHeaderBytes(1),
       );
       const status = await deps.connection?.status().catch(() => undefined);
       if (!cloudArchiveAvailable(status)) return 0;
@@ -280,7 +280,7 @@ export function createCloudArchiveTarget(deps: CloudArchiveDeps): CloudArchiveTa
               );
               allowed();
               ({ sha256, bytes } = await digestFile(temporary, signal));
-              if (bytes <= ARTIFACT_HEADER_BYTES || bytes > MAX_CLOUD_ARCHIVE_BYTES) unavailable();
+              if (bytes <= artifactHeaderBytes(1) || bytes > MAX_CLOUD_ARCHIVE_BYTES) unavailable();
               await publishFileDurable(temporary, file);
             } finally {
               await rm(working, { recursive: true, force: true });

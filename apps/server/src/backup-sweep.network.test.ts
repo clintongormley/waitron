@@ -1,4 +1,5 @@
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
+import { HELD_BACKUP_FRAME } from "./testing/recovery-key.js";
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,7 +44,7 @@ function deps(f: Awaited<ReturnType<typeof fixture>>, backends: StorageBackend[]
     modules: [],
     environment: "preproduction" as const,
     resolvers: {},
-    recoveryKey: "key",
+    backupKey: HELD_BACKUP_FRAME,
     retain: 3,
     retainDays: 30,
     destinationTimeoutMs: 60_000,

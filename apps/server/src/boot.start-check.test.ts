@@ -37,7 +37,7 @@ import { mountStreamApi } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { StreamHost, writeStreamSettings } from "./stream-host.js";
-import { holdRecoveryKey } from "./testing/recovery-key.js";
+import { holdRecoveryKey, USABLE_RECOVERY_KEY } from "./testing/recovery-key.js";
 import { rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ALL_MODULES } from "./modules.js";
@@ -401,7 +401,8 @@ describe("the start check on a real start", () => {
             await withNodeTransaction(spareSuite.node, (tx) =>
               sealNodeSigningKeyTx(tx, loadKeyRing(KEY_ENV), SPARE.nodeId, SPARE.privateKey),
             );
-            let recoveryKey: string | undefined;
+            // Setup writes backup key 1 before any Save.
+            const recoveryKey = USABLE_RECOVERY_KEY;
             publisher = new StreamHost({
               db: spareSuite.db,
               node: spareSuite.node,
@@ -445,9 +446,6 @@ describe("the start check on a real start", () => {
                 isPrimary: () => true,
 
                 readRecoveryKey: async () => recoveryKey,
-                writeRecoveryKey: async (key) => {
-                  recoveryKey = key;
-                },
                 sealedState: { refresh: async () => "sealed" },
                 probe: async () => ({ ok: true }),
                 prepareEncryption: async () => ({ ok: true }),
@@ -472,7 +470,6 @@ describe("the start check on a real start", () => {
               }),
             });
             expect(saved.status, await saved.text()).toBe(200);
-            expect(recoveryKey).toMatch(/^[A-Za-z0-9_-]{43}$/);
             await vi.waitFor(() => expect(litestream.running()).toBeDefined());
             publishCopy = async () => {
               const generation = (publisher!.status() as { generation: string }).generation;

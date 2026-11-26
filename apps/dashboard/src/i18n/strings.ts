@@ -1732,16 +1732,25 @@ export const en = {
   "recovery_pack.keep_backup_key":
     "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
   "recovery_pack.older_key":
-    "The box's backups still use the backup key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too until Backups shows the settings loaded.",
+    "The box's backups still use the backup key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too while the Recovery pack card says this.",
   "recovery_pack.row.last": "Last pack",
   "recovery_pack.row.backup_key": "Backup key",
   "recovery_pack.last_none": "None yet",
   "recovery_pack.last_value": "Pack {number}, made on {date} by {name}",
   "recovery_pack.last_value_unnamed": "Pack {number}, made on {date}",
   "recovery_pack.backup_key_changed":
-    "Changed on {date}; pack {number}, made on {packDate}, has the older key",
-  "recovery_pack.backup_key_same": "Unchanged since pack {number}, made on {date}",
-  "recovery_pack.backup_key_absent": "Not in pack {number}, made on {date}",
+    "Number {number}, changed on {date} · fingerprint {fingerprint}",
+  "recovery_pack.backup_key_unchanged": "Number {number} · fingerprint {fingerprint}",
+  "recovery_pack.backup_key_none": "None yet",
+  "recovery_pack.backup_key_old_master_key":
+    "Backups still use a backup key from the old master key. Change the backup key.",
+  "recovery_pack.change_backup_key": "Change the backup key",
+  "backup_key_dialog.text":
+    "New backups will use backup key {number}. A box you removed can't read them.",
+  "backup_key_dialog.done": "Backups now use backup key {number}.",
+  "backup_key_dialog.saved_not_loaded": "Saved, but the box could not load the new settings.",
+  "backup_key_dialog.unconfirmed":
+    "Backup key {number} is saved, but the box could not confirm that backups use it. Reload the page. If this comes back, stop changing backup settings here.",
   "recovery_pack.make": "Make recovery pack",
   "recovery_pack.ready":
     "Recovery pack {number}, made on {date}, is ready. Print it or save it, and keep it locked away, off the box.",
@@ -2432,7 +2441,7 @@ export const en = {
   "servers.join_waiting": "Now choose Join on the new box.",
   "servers.join_approved": "Added. The new box finishes joining while its join page is open.",
   "servers.join_recovery_key_missing":
-    "This box has no backup encryption key, which a spare needs. Choose Turn on backups under Backups, then choose Check again.",
+    "This box has no backup key, which a spare needs. Use “Change the backup key” on the Recovery pack card under Backups, then choose Check again.",
   "servers.join_module_config_invalid":
     "A module's settings on this box could not be read, so the new box's copy was not prepared and nothing was sent.",
   "servers.no_address": "No address",
@@ -2663,23 +2672,6 @@ export const en = {
   "backup.archive_test.timed_out": "The bucket took too long to answer.",
   "backup.archive_test.read_mismatch": "The test file read back was not the one written.",
   "backup.archive_test.not_listed": "The test file was written but the bucket did not list it.",
-  "backup.key.title": "Backup encryption key",
-  "backup.key.existing":
-    "Backups will use the backup encryption key this box already has. A recovery pack made for your bucket copy carries this key in its restore code. To change it, turn backups on, then use “Change the backup encryption key”.",
-  "backup.key.too_short":
-    "The backup encryption key this box holds is too short to protect backups. The new key below replaces it.",
-  "backup.key.minted_note":
-    "Save this key now. It opens encrypted backups. Keep your master key too. You need it to authorise a restore.",
-  "backup.key.copy": "Copy",
-  "backup.key.download": "Download key file",
-  "backup.key.paste_label": "Your own backup encryption key",
-  "backup.key.paste_hint":
-    "At least 12 characters. A pasted key is your responsibility to keep safe.",
-  "backup.key.advanced": "Paste my own key instead",
-  "backup.key.use_minted": "Use the key the box made",
-  "backup.key.file_heading": "Waitron backup encryption key",
-  "backup.key.file_note": "Keep this safe. Without it, an encrypted backup cannot be restored.",
-  "backup.saved_it": "I have saved this key somewhere safe",
   "backup.schedule.title": "When to back up",
   "backup.schedule.days": "Days",
   "backup.schedule.days_daily": "Every day",
@@ -2703,14 +2695,6 @@ export const en = {
   "backup.turn_off.explain":
     "Scheduled backups stop. The saved destination and backup encryption key are kept, and nothing already stored is deleted.",
   "backup.turn_off.cancel": "Cancel",
-  "backup.rotate.title": "Change the backup encryption key",
-  "backup.rotate.warning":
-    "Backups taken before now still need the OLD key — keep it safe too. Changing the key does not re-encrypt older backups.",
-  "backup.rotate.show_old": "Show the current key",
-  "backup.key.retry": "Retry",
-  "backup.rotate.old_label": "Current key (still needed for older backups)",
-  "backup.rotate.new_title": "New backup encryption key",
-  "backup.rotate.confirm": "Change the key",
   "backup.weekday.mon": "Mon",
   "backup.weekday.tue": "Tue",
   "backup.weekday.wed": "Wed",
@@ -2771,11 +2755,7 @@ export const en = {
     "Use only unaccented letters, digits, spaces and basic keyboard symbols. A single quote (') cannot be used.",
   "stream.field.check": "Check this value.",
   "stream.error.recovery_key_too_short":
-    "The backup encryption key this box holds is too short, so the bucket copy cannot use it. Use “Turn on backups” above: the new key it saves replaces the short one.",
-  "stream.error.recovery_key_too_short_archives_on":
-    "The backup encryption key this box holds is too short, so the bucket copy cannot use it. Use “Change the backup encryption key” above: the new key replaces the short one.",
-  "stream.error.recovery_key_too_short_unknown":
-    "The backup encryption key this box holds is too short, so the bucket copy cannot use it.",
+    "The backup key this box holds is too short, so the bucket copy cannot use it. Use “Change the backup key” on the Recovery pack card above: the new key replaces the short one.",
   "stream.change": "Change bucket",
   "stream.turn_off": "Turn off",
   "stream.restart": "Start the copy again",
@@ -6569,16 +6549,25 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.keep_backup_key":
     "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de las copias si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
   "recovery_pack.older_key":
-    "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior hasta que Copias de seguridad muestre los ajustes cargados.",
+    "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior mientras la tarjeta Paquete de recuperación lo diga.",
   "recovery_pack.row.last": "Último paquete",
   "recovery_pack.row.backup_key": "Clave de las copias",
   "recovery_pack.last_none": "Ninguno todavía",
   "recovery_pack.last_value": "Paquete {number}, hecho el {date} por {name}",
   "recovery_pack.last_value_unnamed": "Paquete {number}, hecho el {date}",
-  "recovery_pack.backup_key_changed":
-    "Cambió el {date}; el paquete {number}, hecho el {packDate}, tiene la clave anterior",
-  "recovery_pack.backup_key_same": "Sin cambios desde el paquete {number}, hecho el {date}",
-  "recovery_pack.backup_key_absent": "No está en el paquete {number}, hecho el {date}",
+  "recovery_pack.backup_key_changed": "Número {number}, cambiada el {date} · huella {fingerprint}",
+  "recovery_pack.backup_key_unchanged": "Número {number} · huella {fingerprint}",
+  "recovery_pack.backup_key_none": "Ninguna todavía",
+  "recovery_pack.backup_key_old_master_key":
+    "Las copias siguen usando la clave de las copias hecha con la clave maestra anterior. Cambia la clave de las copias.",
+  "recovery_pack.change_backup_key": "Cambiar la clave de las copias",
+  "backup_key_dialog.text":
+    "Las copias nuevas usarán la clave de las copias número {number}. Un servidor que hayas quitado no podrá leerlas.",
+  "backup_key_dialog.done": "Las copias usan ahora la clave número {number}.",
+  "backup_key_dialog.saved_not_loaded":
+    "Guardada, pero el servidor no ha podido cargar los ajustes nuevos.",
+  "backup_key_dialog.unconfirmed":
+    "La clave de las copias número {number} está guardada, pero el servidor no ha podido confirmar que las copias la usen. Recarga la página. Si vuelve a pasar, no sigas cambiando los ajustes de las copias aquí.",
   "recovery_pack.make": "Hacer paquete de recuperación",
   "recovery_pack.ready":
     "El paquete de recuperación {number}, hecho el {date}, está listo. Imprímelo o guárdalo, y guárdalo bajo llave, lejos del servidor.",
@@ -7281,7 +7270,7 @@ export const es: Record<StringKey, string> = {
   "servers.join_approved":
     "Añadido. El servidor nuevo termina de unirse mientras su página de unión está abierta.",
   "servers.join_recovery_key_missing":
-    "Este servidor no tiene clave de cifrado de copias, que el servidor de reserva necesita. Elige Activar las copias en Copias de seguridad y vuelve a elegir Comprobar.",
+    "Este servidor no tiene clave de las copias, que el servidor de reserva necesita. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación de Copias de seguridad y vuelve a elegir Comprobar.",
   "servers.join_module_config_invalid":
     "No se han podido leer los ajustes de un módulo en este servidor, así que no se ha preparado la copia del servidor nuevo y no se ha enviado nada.",
   "servers.no_address": "Sin dirección",
@@ -7527,24 +7516,6 @@ export const es: Record<StringKey, string> = {
   "backup.archive_test.read_mismatch": "El archivo de prueba leído no era el que se escribió.",
   "backup.archive_test.not_listed":
     "El archivo de prueba se escribió, pero el bucket no lo ha listado.",
-  "backup.key.title": "Clave de cifrado de copias",
-  "backup.key.existing":
-    "Las copias usarán la clave de cifrado de copias que este servidor ya tiene. Un paquete de recuperación hecho para tu copia en el bucket lleva esta clave dentro del código de restauración. Para cambiarla, activa las copias y después usa «Cambiar la clave de cifrado de copias».",
-  "backup.key.too_short":
-    "La clave de cifrado de copias que tiene este servidor es demasiado corta para proteger las copias. La clave nueva de abajo la sustituye.",
-  "backup.key.minted_note":
-    "Guarda esta clave ahora. Sirve para abrir las copias cifradas. Conserva también tu clave maestra. La necesitas para autorizar la restauración.",
-  "backup.key.copy": "Copiar",
-  "backup.key.download": "Descargar archivo de clave",
-  "backup.key.paste_label": "Tu propia clave de cifrado de copias",
-  "backup.key.paste_hint":
-    "Al menos 12 caracteres. Guardar una clave pegada es tu responsabilidad.",
-  "backup.key.advanced": "Pegar mi propia clave",
-  "backup.key.use_minted": "Usar la clave que generó el servidor",
-  "backup.key.file_heading": "Clave de cifrado de copias de Waitron",
-  "backup.key.file_note":
-    "Guárdala en un lugar seguro. Sin ella, no se puede restaurar una copia cifrada.",
-  "backup.saved_it": "He guardado esta clave en un lugar seguro",
   "backup.schedule.title": "Cuándo hacer copias",
   "backup.schedule.days": "Días",
   "backup.schedule.days_daily": "Todos los días",
@@ -7568,14 +7539,6 @@ export const es: Record<StringKey, string> = {
   "backup.turn_off.explain":
     "Las copias programadas se detienen. Se conservan el destino guardado y la clave de cifrado de copias, y no se borra nada de lo ya guardado.",
   "backup.turn_off.cancel": "Cancelar",
-  "backup.rotate.title": "Cambiar la clave de cifrado de copias",
-  "backup.rotate.warning":
-    "Las copias hechas antes de ahora siguen necesitando la clave ANTIGUA; guárdala también. Cambiar la clave no vuelve a cifrar las copias anteriores.",
-  "backup.rotate.show_old": "Mostrar la clave actual",
-  "backup.key.retry": "Reintentar",
-  "backup.rotate.old_label": "Clave actual (aún necesaria para las copias anteriores)",
-  "backup.rotate.new_title": "Nueva clave de cifrado de copias",
-  "backup.rotate.confirm": "Cambiar la clave",
   "backup.weekday.mon": "Lun",
   "backup.weekday.tue": "Mar",
   "backup.weekday.wed": "Mié",
@@ -7636,11 +7599,7 @@ export const es: Record<StringKey, string> = {
     "Usa solo letras sin tilde, cifras, espacios y símbolos básicos del teclado. No se puede usar la comilla simple (').",
   "stream.field.check": "Revisa este valor.",
   "stream.error.recovery_key_too_short":
-    "La clave de cifrado de copias que tiene este servidor es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Activar las copias» más arriba: la clave nueva que guarda sustituye a la corta.",
-  "stream.error.recovery_key_too_short_archives_on":
-    "La clave de cifrado de copias que tiene este servidor es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Cambiar la clave de cifrado de copias» más arriba: la clave nueva sustituye a la corta.",
-  "stream.error.recovery_key_too_short_unknown":
-    "La clave de cifrado de copias que tiene este servidor es demasiado corta, así que la copia en el bucket no puede usarla.",
+    "La clave de las copias de este servidor es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación, más arriba: la clave nueva sustituye a la corta.",
   "stream.change": "Cambiar de bucket",
   "stream.turn_off": "Desactivar",
   "stream.restart": "Volver a iniciar la copia",

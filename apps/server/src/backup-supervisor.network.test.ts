@@ -1,5 +1,7 @@
 import { supervisorWithJob } from "./testing/backup-supervisor.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
+import { makeMasterKey } from "@waitron/credentials";
+import { heldBackupKey } from "./testing/backup-key.js";
 // What the supervisor's status says about each destination when one of them is slow or failing,
 // against a real migrated venue and real folder destinations.
 import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
@@ -66,6 +68,15 @@ async function makeStateDir(): Promise<string> {
   return dir;
 }
 
+const MASTER = makeMasterKey();
+const KEY_ONE = heldBackupKey(MASTER, 1);
+const KEY_TWO = heldBackupKey(MASTER, 2);
+
+/** The config's key fields for one backup key: its text, number and master key id together. */
+function backupKeyFields(record: typeof KEY_ONE): Partial<BackupConfig> {
+  return { recoveryKey: record.key, keyNumber: record.keyNumber, masterKeyId: record.masterKeyId };
+}
+
 function config(
   destinations: { id: string; dir: string }[],
   overrides: Partial<BackupConfig> = {},
@@ -74,13 +85,15 @@ function config(
     revision: undefined,
     enabled: true,
     destinations: destinations.map((d) => ({ kind: "local-fs", ...d })),
-    recoveryKey: "recovery-key-one-strong",
+    recoveryKey: KEY_ONE.key,
     schedule: { kind: "interval", ms: 60 * 60 * 1000 },
     retain: 7,
     retainDays: 30,
     staleAfterMs: 2 * 24 * 60 * 60 * 1000,
     destinationTimeoutMs: 15 * 60 * 1000,
     keyRotatedAt: undefined,
+    keyNumber: KEY_ONE.keyNumber,
+    masterKeyId: KEY_ONE.masterKeyId,
     ...overrides,
   };
 }
@@ -481,7 +494,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
       expect(await local()).toEqual({ stored: true, upload: null, prune: null, archive: true });
 
       holdNextPut = true;
-      cfg = config([{ id: "local", dir }], { recoveryKey: "recovery-key-two-different" });
+      cfg = config([{ id: "local", dir }], backupKeyFields(KEY_TWO));
       await sup.reload();
       await newUpload.reached;
       expect(await local()).toEqual({ stored: false, upload: null, prune: null, archive: false });
@@ -526,9 +539,8 @@ describe("BackupSupervisor status, one destination at a time", () => {
       return realList.call(this, prefix, call);
     });
     const logs: LogLine[] = [];
-    const keyOne = "recovery-key-one-strong";
-    const keyTwo = "recovery-key-two-different";
-    let cfg = config([{ id: "usb", dir: dirA }], { recoveryKey: keyOne });
+    const keyOne = KEY_ONE.key;
+    let cfg = config([{ id: "usb", dir: dirA }], backupKeyFields(KEY_ONE));
     const sup = await supervisor(() => cfg, logs);
     try {
       await sup.reload();
@@ -538,7 +550,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
       const reading = sup.status();
       await listingA.reached;
 
-      cfg = config([{ id: "usb", dir: dirB }], { recoveryKey: keyTwo });
+      cfg = config([{ id: "usb", dir: dirB }], backupKeyFields(KEY_TWO));
       failPut = false;
       await sup.reload();
       await poll(async () => ((await sup.status()).archiveUnderCurrentKey ? true : undefined));

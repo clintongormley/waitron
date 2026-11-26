@@ -1,10 +1,13 @@
 import { seedModuleSettings } from "../test/module-settings.js";
+import { HELD_BACKUP_KEY, holdRecoveryKey, openUnderHeldKey } from "./testing/recovery-key.js";
+import { backupKeySettings } from "./testing/backup-key.js";
+import { keyFingerprint } from "./backup-supervisor.js";
+import { parseEnvFile } from "./env-file.js";
 import { ensureStreamId } from "@waitron/db";
 import { copyMigrationsRoot, tradingBootEnv } from "./testing/boot-trading-fixture.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { gunzipSync } from "node:zlib";
 import { DatabaseSync } from "node:sqlite";
-import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -300,13 +303,13 @@ it("starts, completes a decryptable backup with venue data, sells and answers he
     async (dir) => {
       scratch = dir;
       await storeArchiveRecord(boxRing(), join(dir, "backups"));
-      return { WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };
+      return backupKeySettings(HELD_BACKUP_KEY);
     },
     async (lines) => {
       const completed = await waitForEvent(lines, "backup.destination_completed");
       expect(completed.destination).toBe("primary");
       const encrypted = await readFile(join(scratch, "backups", String(completed.key)));
-      const entries = unpackArchive(gunzipSync(decryptArtifact(encrypted, "twelve-chars!")));
+      const entries = unpackArchive(gunzipSync(openUnderHeldKey(encrypted)));
       const dump = entries.find((entry) => entry.name === "db.dump")!;
       const path = join(scratch, "checked-backup.db");
       await writeFile(path, dump.bytes);
@@ -330,7 +333,7 @@ describe("trading with an archive destination the box cannot use", () => {
         const notAFolder = join(scratch, "backup-destination-is-a-file");
         await writeFile(notAFolder, "not a folder");
         await storeArchiveRecord(boxRing(), notAFolder);
-        return { WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };
+        return backupKeySettings(HELD_BACKUP_KEY);
       },
       async (lines) => {
         const failed = await waitForEvent(lines, "backup.destination_failed");
@@ -348,9 +351,7 @@ describe("trading with an archive destination the box cannot use", () => {
       async (scratch) => {
         await storeArchiveRecord(boxRing(), join(scratch, "backups"));
         cookie = await managerCookie();
-        return {
-          WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
-        };
+        return backupKeySettings(HELD_BACKUP_KEY);
       },
       async (_lines, { base, via }) => {
         await vi.waitFor(() => expect(stall.started).toEqual(["putFile"]), { timeout: 30_000 });
@@ -469,7 +470,7 @@ describe("trading when the backup duty cannot open the venue database", () => {
       async (scratch) => {
         await storeArchiveRecord(boxRing(), join(scratch, "backups"));
         cookie = await managerCookie();
-        return { WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!" };
+        return backupKeySettings(HELD_BACKUP_KEY);
       },
       async (lines, { base, via }) => {
         await waitForEvent(lines, "backup.disabled_open_failed");
@@ -524,9 +525,7 @@ describe("trading with a saved archive bucket", () => {
           ),
         );
         cookie = await managerCookie();
-        return {
-          WAITRON_BACKUP_RECOVERY_KEY: "twelve-chars!",
-        };
+        return backupKeySettings(HELD_BACKUP_KEY);
       },
       async (_lines, { base, via }) => {
         const res = await fetch(`${base}/api/backup/stream`, {
@@ -584,7 +583,7 @@ describe("stream encryption checks at the real trading boot", () => {
             null,
           ),
         );
-        return { WAITRON_BACKUP_RECOVERY_KEY: "backup-key-for-test-0123456789" };
+        return backupKeySettings(HELD_BACKUP_KEY);
       },
       async (_lines, { base, via }) => {
         expect(litestream.children).toHaveLength(0);
@@ -593,9 +592,7 @@ describe("stream encryption checks at the real trading boot", () => {
         expect(response.status).toBe(200);
         await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 10000 });
         expect(litestream.running()!.env.WAITRON_STREAM_ENCRYPTION_KEY).toEqual(expect.any(String));
-        expect(Object.values(litestream.running()!.env)).not.toContain(
-          "backup-key-for-test-0123456789",
-        );
+        expect(Object.values(litestream.running()!.env)).not.toContain(HELD_BACKUP_KEY.key);
       },
       {
         stream: { spawn: litestream.spawn, store },
@@ -614,8 +611,11 @@ describe("stream encryption checks at the real trading boot", () => {
   it("refuses Save when the provider ignores keys and keeps trading without saved stream settings", async () => {
     streamCheck.refuse = true;
     let cookie = "";
+    let stateDir = "";
     await bootAndTrade(
-      async () => {
+      async (scratch) => {
+        stateDir = scratch;
+        await holdRecoveryKey(scratch);
         cookie = await managerCookie();
         return {};
       },
@@ -638,7 +638,15 @@ describe("stream encryption checks at the real trading boot", () => {
           error: { code: "backup.stream_test_failed", params: { reason: "encryption_ignored" } },
         });
         const status = await fetch(`${base}/api/backup/stream`, { ...via, headers: { cookie } });
-        expect(await status.json()).toMatchObject({ configured: false, recoveryKeySet: false });
+        expect(await status.json()).toMatchObject({
+          configured: false,
+          recoveryKeySet: true,
+          keyFingerprint: keyFingerprint(HELD_BACKUP_KEY.key),
+        });
+        // The refused Save left the held key file exactly as it was.
+        expect(parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"))).toEqual(
+          backupKeySettings(HELD_BACKUP_KEY),
+        );
       },
     );
   }, 60_000);

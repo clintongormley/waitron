@@ -1,3 +1,4 @@
+import { useSetupStateDir } from "./testing/setup-state-dir.js";
 import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { Socket } from "node:net";
@@ -41,6 +42,8 @@ import { mountSetup } from "./setup-api.js";
 import { type SetupDeps } from "./setup-api-deps.js";
 import { createSetupOperationStore, type SetupOperationStore } from "./setup-operation.js";
 import { STUB_NODE } from "./testing/node-copy.js";
+
+const SETUP_STATE_DIR = useSetupStateDir();
 
 // GB is not offered for venue setup yet; its `GB-vat` territory is the one whose module has no tax regime.
 vi.mock("@waitron/country-packs", async (importOriginal) => {
@@ -195,6 +198,7 @@ function harness(box: Box, provision?: (req: ProvisionRequest) => Promise<VenueR
     ring: {} as unknown as KeyRing,
     persistTrading: vi.fn(async () => {}),
     requestRestart: vi.fn(),
+    stateDir: SETUP_STATE_DIR,
     assertFiscalReady: vi.fn().mockResolvedValue(undefined),
   };
   const app = new Hono();
@@ -490,6 +494,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
         seedMembership: async () => {},
         persistTrading,
         requestRestart,
+        stateDir,
         assertFiscalReady:
           fiscalGate === "passed"
             ? async () => {}

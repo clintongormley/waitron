@@ -3,7 +3,6 @@ import { publishState } from "./live-publish.js";
 // The supervisor owns its venue handle so a settings reload cannot close boot's request handle.
 // A stored archive under the current key is recorded in process; its mtime cannot prove the key.
 
-import { createHash } from "node:crypto";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { openVenueDatabase, type SingletonRole, type VenueDatabase } from "@waitron/db";
@@ -29,6 +28,8 @@ import {
   type DestinationStatus,
 } from "./backup-status.js";
 import { StatusClients } from "./backup-status-clients.js";
+import { keyFingerprint } from "./backup-key-fingerprint.js";
+import { backupKeyFrameInput } from "./backup-key-record.js";
 import {
   createBackupSchedule,
   type ActiveBackupRun,
@@ -196,9 +197,7 @@ export async function venueStagingEstimate(venueDir: string): Promise<number> {
   }
 }
 
-export function keyFingerprint(key: string): string {
-  return createHash("sha256").update(key).digest("hex").slice(0, 8);
-}
+export { keyFingerprint } from "./backup-key-fingerprint.js";
 
 export class BackupSupervisor {
   readonly #deps: BackupSupervisorDeps;
@@ -279,6 +278,8 @@ export class BackupSupervisor {
         cfg === undefined ||
         !cfg.enabled ||
         cfg.recoveryKey === undefined ||
+        cfg.keyNumber === undefined ||
+        cfg.masterKeyId === undefined ||
         !this.#loadedAsPrimary
       ) {
         // #config is kept so `current()` can report the destinations/schedule; enabled stays false
@@ -335,7 +336,11 @@ export class BackupSupervisor {
         archive: (outFile, signal) =>
           archiveInWorker(join(this.#deps.venueDir, VENUE_FILE), outFile, signal),
         stagingEstimateBytes: () => venueStagingEstimate(this.#deps.venueDir),
-        recoveryKey: cfg.recoveryKey,
+        backupKey: backupKeyFrameInput({
+          key: cfg.recoveryKey,
+          keyNumber: cfg.keyNumber,
+          masterKeyId: cfg.masterKeyId,
+        }),
         schedule: cfg.schedule,
         retain: cfg.retain,
         retainDays: cfg.retainDays,

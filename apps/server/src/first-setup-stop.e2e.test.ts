@@ -1,6 +1,7 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { readModuleRecord } from "@waitron/provisioning";
-import { readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
+import { BACKUP_ENV_FILE, formatEnvFile, parseEnvFile } from "@waitron/store";
 import { join } from "node:path";
 import type { Hono } from "hono";
 import { expect, it, vi } from "vitest";
@@ -131,6 +132,37 @@ it.each([
     await onlyLockFiles(s);
   },
 );
+
+async function startAgain(s: Server) {
+  const stopped = await s.stop(await s.ids());
+  expect(stopped.status, await stopped.clone().text()).toBe(200);
+  const app = await repairEntry(s);
+  const ids = await repairIds(app);
+  const started = await s.post(app, START_AGAIN_ROUTES.startAgain.path, ids);
+  expect(started.status, await started.clone().text()).toBe(200);
+}
+
+it("Start again removes the backup key Live setup wrote from the staged master key it throws away", async () => {
+  const s = await ordinaryServer({ until: "node-key" });
+  const held = parseEnvFile(await readFile(join(s.stateDir, BACKUP_ENV_FILE), "utf8"));
+  expect(held.WAITRON_BACKUP_KEY_NUMBER).toBe("1");
+  await startAgain(s);
+  await expect(readFile(join(s.stateDir, BACKUP_ENV_FILE))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("control: Start again keeps a backup key of another master key", async () => {
+  const s = await ordinaryServer({ until: "node-key" });
+  const path = join(s.stateDir, BACKUP_ENV_FILE);
+  const other = formatEnvFile({
+    ...parseEnvFile(await readFile(path, "utf8")),
+    WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
+  });
+  await writeFile(path, other, { mode: 0o600 });
+  await startAgain(s);
+  expect(await readFile(path, "utf8")).toBe(other);
+});
 
 it("stops and resets a setup holding only its module selection row", async () => {
   const s = await ordinaryServer();

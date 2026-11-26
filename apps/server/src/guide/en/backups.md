@@ -20,7 +20,7 @@ For a **folder on this box**, enter a full path. The example `/var/lib/waitron/b
 
 For an **S3-compatible bucket**, enter the bucket name, region, access key ID and secret access key from your storage provider. Enter an **Endpoint** or a **Folder inside the bucket** if needed. You can choose the bucket on its own or keep the folder and bucket together.
 
-Choose the days and time, then set how many backups to keep and how old they may be. Leave **Let the box choose** selected if you want backups after close and the day's reports. Save the backup encryption key as described below, then choose **Turn on backups**.
+Choose the days and time, then set how many backups to keep and how old they may be. Leave **Let the box choose** selected if you want backups after close and the day's reports. Then choose **Turn on backups**.
 
 If you can choose **Waitron Cloud**, it uses the box’s Cloud connection. Select **Every day** so Cloud can receive backups on your venue's schedule. Waitron Cloud decides when its old copies expire.
 
@@ -30,11 +30,11 @@ If Cloud becomes unavailable, open **Change destination or schedule** and choose
 
 ## Keep your keys {#keys}
 
-The **Backup encryption key** opens encrypted copies. The master key, on the first page of your recovery pack, authorises a restore. Keep the pack that holds the master key each backup needs.
+The backup key opens encrypted copies. The master key, on the first page of your recovery pack, authorises a restore. Keep the pack that holds the master key each backup needs.
 
-Use **Copy** or **Download key file** to keep the backup encryption key somewhere safe outside the box. Tick **I have saved this key somewhere safe** once you have done so.
+To change the backup key, choose **Change the backup key** on the **Recovery pack** card and type the master key. New backups then use the next backup key, which a box you removed can't read. Then choose **Make recovery pack** and keep the new pack: restoring a backup made after the change needs it.
 
-When you change the backup encryption key, use **Show the current key** to save the old key too. Keep older keys and packs for the backups you still hold. See [Prove access to the selected backup](backup-recovery.md#proof) for what you need when restoring.
+Keep older keys and packs for the backups you still hold. See [Prove access to the selected backup](backup-recovery.md#proof) for what you need when restoring.
 
 ## Continuous copy to your bucket {#bucket-copy}
 

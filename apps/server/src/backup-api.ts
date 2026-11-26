@@ -5,11 +5,11 @@ import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import type { KeyRing } from "@waitron/credentials";
-import { withTransaction, type Database } from "@waitron/db";
+import { masterKeyMatches, type KeyRing } from "@waitron/credentials";
+import { readCurrentMasterKey, withTransaction, type Database } from "@waitron/db";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import type { StreamView } from "@waitron/stream";
-import { AppError, hasCode, isAppError } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, hasCode, isAppError } from "@waitron/shared";
 import {
   codeOf,
   createErrorBoundary,
@@ -36,16 +36,15 @@ import {
   MAX_DESTINATION_TIMEOUT_MS,
   MIN_DESTINATION_TIMEOUT_MS,
   loadKeyRotatedAt,
-  mintRecoveryKey,
+  loadRecoveryKey,
   readHeldKey,
   resolveBackupConfig,
   type BackupSchedule,
 } from "./backup-config.js";
-import { writeRecoveryKey } from "./backup-env-writer.js";
+import { backupKeyRecord, changeBackupKey, heldBackupKeyNumber } from "./backup-key-record.js";
 import { readSettingsEvidence, recoveryKeyFacts } from "./backup-settings-evidence.js";
 import { UNREADABLE_CREDENTIAL } from "./credentials.js";
-import { formatEnvFile, parseEnvFile } from "./env-file.js";
-import { checkedNewRecoveryKey, MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
+import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 import {
   keyFingerprint,
   type BackupRuntimeStatus,
@@ -59,6 +58,7 @@ import type { StreamHost } from "./stream-host.js";
 import type { Turns } from "./backup-turns.js";
 import { cloudArchiveAvailable } from "./cloud-archive-target.js";
 import type { CloudConnectionStatus } from "./cloud-client.js";
+import { requireNodeOperationHttps } from "./node-operation-https.js";
 import "./errors.js";
 
 /** Everything the authenticated backup admin routes need. `stateDir` is where `backup.env`, which
@@ -99,10 +99,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.not_enabled": 409,
   "backup.run_in_progress": 409,
   "backup.reload_in_progress": 409,
-  "backup.recovery_key_exists": 409,
-  "backup.recovery_key_unstorable": 400,
   "backup.recovery_key_too_short": 409,
-  "backup.new_recovery_key_too_short": 400,
+  "master_key.wrong": 403,
+  "node.operation_page_required": 403,
   "backup.destinations_invalid": 400,
   "backup.request_invalid": 400,
   "backup.cloud_needs_daily": 400,
@@ -122,22 +121,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 const ARCHIVE_PROBE_TIMEOUT_MS = 30 * 1000;
 const PROBE_CLEANUP_TIMEOUT_MS = 10 * 1000;
 const PROBE_BYTES = Buffer.from("waitron archive test\n");
-
-/**
- * Refuse a recovery key that cannot be stored VERBATIM in `backup.env`: the box would encrypt archives
- * under a DIFFERENT string than the operator recorded. `reason` never carries the key.
- */
-export function assertStorableKey(key: string): void {
-  // `[\r\n\t]` is redundant with `[\x00-\x1f]` (which covers all C0 controls) but is kept explicit —
-  // newlines and tabs are the ways a pasted key most often breaks an env file.
-  // eslint-disable-next-line no-control-regex
-  if (/[\r\n\t]/.test(key) || /[\x00-\x1f]/.test(key) || key.trim() !== key) {
-    throw new AppError("backup.recovery_key_unstorable", { reason: "whitespace_or_control" });
-  }
-  if (parseEnvFile(formatEnvFile({ K: key })).K !== key) {
-    throw new AppError("backup.recovery_key_unstorable", { reason: "round_trip" });
-  }
-}
 
 function projectStatus<T extends BackupRuntimeStatus>(s: T): Omit<T, "recoveryKey"> {
   const rest: Omit<T, "recoveryKey"> & { recoveryKey?: string } = { ...s };
@@ -184,21 +167,12 @@ interface ApplyBody {
   cloud: boolean | undefined;
   /** Resolved inside the write's turn, against the settings held then. */
   destinations: Record<string, unknown>[];
-  /** `undefined` when absent, because a box that already holds a key reuses it. */
-  recoveryKey: string | undefined;
   schedule: BackupSchedule;
   retention: { count: number; days: number };
   destinationTimeoutMs: number | undefined;
 }
 
-const APPLY_FIELDS = [
-  "cloud",
-  "destinations",
-  "recoveryKey",
-  "schedule",
-  "retention",
-  "destinationTimeoutMs",
-];
+const APPLY_FIELDS = ["cloud", "destinations", "schedule", "retention", "destinationTimeoutMs"];
 
 async function readBucketCopySettings(db: Database, ring: KeyRing): Promise<StreamSettings | null> {
   try {
@@ -220,10 +194,7 @@ async function readApplyBody(c: Context): Promise<ApplyBody> {
   const { cloud } = body;
   if ("cloud" in body && typeof cloud !== "boolean") throw requestInvalid("cloud");
   const destinations = checkArchiveChoiceList(body.destinations, cloud !== false);
-  const { recoveryKey, destinationTimeoutMs } = body;
-  if ("recoveryKey" in body && (typeof recoveryKey !== "string" || recoveryKey === "")) {
-    throw requestInvalid("recoveryKey");
-  }
+  const { destinationTimeoutMs } = body;
   if (
     "destinationTimeoutMs" in body &&
     (!isWhole(destinationTimeoutMs) ||
@@ -235,19 +206,33 @@ async function readApplyBody(c: Context): Promise<ApplyBody> {
   return {
     cloud: typeof cloud === "boolean" ? cloud : undefined,
     destinations,
-    recoveryKey: recoveryKey as string | undefined,
     schedule: readSchedule(body.schedule),
     retention: readRetention(body.retention),
     destinationTimeoutMs: destinationTimeoutMs as number | undefined,
   };
 }
 
-async function readRotateBody(c: Context): Promise<{ recoveryKey: string }> {
-  const body = await readJsonBody<{ recoveryKey?: unknown }>(c);
-  if (typeof body.recoveryKey !== "string" || body.recoveryKey === "") {
-    throw requestInvalid("recoveryKey");
+async function readRotateBody(c: Context): Promise<{ masterKey: string }> {
+  const body = await readJsonBody<{ masterKey?: unknown }>(c);
+  if (typeof body.masterKey !== "string" || body.masterKey === "") {
+    throw requestInvalid("masterKey");
   }
-  return { recoveryKey: body.recoveryKey };
+  return { masterKey: body.masterKey };
+}
+
+/** The venue's current master key's bytes and row, or `master_key.wrong` naming that key. */
+async function checkedMasterKey(db: Database, typed: string) {
+  const current = await readCurrentMasterKey(db);
+  let bytes: Uint8Array | null = null;
+  try {
+    bytes = decodeMasterKeyCode(typed);
+  } catch (error) {
+    if (!isAppError(error)) throw error;
+  }
+  if (current === null || bytes === null || !masterKeyMatches(bytes, current.checkValue)) {
+    throw new AppError("master_key.wrong", current === null ? {} : { keyName: current.name });
+  }
+  return { bytes, current };
 }
 
 function testFailed(reason: string): AppError {
@@ -291,10 +276,11 @@ async function probeArchive(
 }
 
 /**
- * `apply` checks what it will store the way boot would read it before writing anything, and after
- * a reload that loads the settings asserts the EFFECTIVE key equals the one it chose. A reload that
- * throws after `apply` or `disable` committed, or that leaves `apply`'s stored settings unusable, is
- * answered 200 with `reloadErrorCode`: the write stands.
+ * `apply` checks what it will store the way boot would read it before writing anything. After a
+ * reload that loads the settings, `apply` and `rotate` assert the EFFECTIVE key equals the one they
+ * wrote. A reload that throws after `apply`, `disable` or `rotate` committed, or that leaves
+ * `apply`'s or `rotate`'s stored settings unusable, is reported as `reloadErrorCode`: the write
+ * stands.
  */
 export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.failed");
@@ -324,10 +310,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     await deps.sealedState.refresh();
   };
 
-  const persistKey = async (key: Parameters<typeof writeRecoveryKey>[1]): Promise<void> => {
-    await deps.stream.reload(() => persist(() => writeRecoveryKey(deps.stateDir, key)));
-  };
-
   const storeSettings = (
     settings: Omit<ArchiveSettings, "revision">,
     personId: string,
@@ -350,16 +332,19 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }
   };
 
+  /** A reload's own failure, or else the code of settings it loaded but cannot use. */
+  const reloadOutcome = async (): Promise<string | undefined> =>
+    (await reloadAfterWrite()) ?? deps.supervisor.current().loadErrorCode ?? undefined;
+
+  // The effective key is what the box will actually encrypt under. If a partial env override (or
+  // any merge) made it differ from the written key, fail LOUD rather than orphan archives.
+  const assertEffectiveKey = (reloadErrorCode: string | undefined, recoveryKey: string): void => {
+    if (reloadErrorCode === undefined && deps.supervisor.current().recoveryKey !== recoveryKey) {
+      throw new AppError("backup.effective_mismatch", {});
+    }
+  };
+
   const readHeldSettings = () => readHeldArchiveSettings(deps.db, deps.ring);
-
-  // The box env (`backup.env` under the raw environment, as a reload reads it) is authoritative: after
-  // a failed reload the supervisor still holds the key it loaded before the key file changed.
-  const heldKey = async (): Promise<string | undefined> =>
-    (await deps.readRecoveryKey()) ?? deps.supervisor.current().recoveryKey;
-
-  // Presence, not validity: a key under the length floor still counts as held, so `rotate` can
-  // replace it.
-  const keyPresent = async (): Promise<boolean> => (await readHeldKey(heldKey)).held;
 
   // One read of the box env gives the held key, its fingerprint and its rotation time. With no
   // usable key there, the fingerprint and rotation time are the supervisor's; with none at all, so
@@ -417,13 +402,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }),
   );
 
-  app.post("/api/backup/mint-key", (c) =>
-    run(c, log, async () => {
-      await authorize(c);
-      return c.json({ key: mintRecoveryKey() });
-    }),
-  );
-
   app.post("/api/backup/apply", (c) =>
     run(c, log, async () => {
       const personId = await authorize(c);
@@ -447,24 +425,16 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (body.cloud === true && (await deps.readCloudStatus?.())?.environment !== "test") {
           throw new AppError("backup.cloud_unavailable", { field: "cloud" });
         }
-        const held = await readHeldKey(heldKey);
-        // A held key under the length floor is replaced, not kept: archives, the bucket copy and
-        // sealed state all read the key through `loadRecoveryKey`, which refuses one this short.
-        if (held.held && held.key === undefined && body.recoveryKey === undefined) {
-          throw new AppError("backup.recovery_key_too_short", { min: MIN_RECOVERY_KEY_LENGTH });
+        // Archives are locked with the key the box env holds (`backup.env` under the raw
+        // environment, as a reload reads it); this route never writes one.
+        const env = await deps.readBoxEnv();
+        const held = await readHeldKey(async () => loadRecoveryKey(env));
+        const recoveryKey = held.key;
+        if (recoveryKey === undefined) {
+          throw held.held
+            ? new AppError("backup.recovery_key_too_short", { min: MIN_RECOVERY_KEY_LENGTH })
+            : new AppError("backup.recovery_key_missing", {});
         }
-        // One recovery key per venue: a box holding a key long enough to use keeps it; only `rotate`
-        // changes it.
-        if (
-          held.key !== undefined &&
-          body.recoveryKey !== undefined &&
-          body.recoveryKey !== held.key
-        ) {
-          throw new AppError("backup.recovery_key_exists", {});
-        }
-        const recoveryKey = held.key ?? body.recoveryKey;
-        if (recoveryKey === undefined) throw requestInvalid("recoveryKey");
-        assertStorableKey(recoveryKey);
 
         // Only a bucket choice reads the bucket copy's settings, and an unreadable one refuses the
         // whole Save, a folder listed beside it included: one Save is one decision.
@@ -503,9 +473,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
             DEFAULT_DESTINATION_TIMEOUT_MS,
         };
         const sealed = archiveRecord(settings).stored;
-        checkedNewRecoveryKey(recoveryKey);
         // Refuse exactly what boot would, before anything is written.
-        resolveBackupConfig({ env: { WAITRON_BACKUP_RECOVERY_KEY: recoveryKey }, sealed });
+        resolveBackupConfig({ env: { ...env, WAITRON_BACKUP_RECOVERY_KEY: recoveryKey }, sealed });
         const bucketDestination = destinations.find((d) => d.kind === "s3");
         if (bucketDestination !== undefined) {
           await probeArchive(
@@ -515,21 +484,9 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           );
         }
 
-        // Deliberate split: the key file cannot join the transaction; refused settings leave a key.
-        if (held.key === undefined) {
-          await persistKey({ recoveryKey, keyRotatedAt: undefined });
-        }
         await storeSettings(settings, personId);
-        const reloadErrorCode =
-          (await reloadAfterWrite()) ?? deps.supervisor.current().loadErrorCode ?? undefined;
-        // The effective key is what the box will actually encrypt under. If a partial env override (or
-        // any merge) made it differ from the key chosen above, fail LOUD rather than orphan archives.
-        if (
-          reloadErrorCode === undefined &&
-          deps.supervisor.current().recoveryKey !== recoveryKey
-        ) {
-          throw new AppError("backup.effective_mismatch", {});
-        }
+        const reloadErrorCode = await reloadOutcome();
+        assertEffectiveKey(reloadErrorCode, recoveryKey);
         return writeAnswer(c, reloadErrorCode);
       });
     }),
@@ -563,59 +520,43 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }),
   );
 
-  // The key the box env holds, which the next archive is locked with, so an operator can re-record
-  // it. The body is never logged: the error boundary logs codes and params, never response bodies,
-  // and this route logs nothing.
-  app.get("/api/backup/recovery-key", (c) =>
-    run(c, log, async () => {
-      await authorize(c);
-      await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
-      let key: string | undefined;
-      try {
-        key = await heldKey();
-      } catch (error) {
-        if (!isAppError(error) || error.code !== "backup.recovery_key_too_short") throw error;
-        key = deps.supervisor.current().recoveryKey;
-        if (key === undefined || key.length < MIN_RECOVERY_KEY_LENGTH) throw error;
-      }
-      return c.json({ key: key ?? null });
-    }),
-  );
-
-  // Rotation writes the key to `backup.env`, then stores the held settings unchanged under a new
-  // revision and reloads. With no readable record and nothing loaded, only the key file changes.
+  // A key change writes backup key N+1 of the venue's master key (1 when none is held) to
+  // `backup.env`, then stores the held settings unchanged under a new revision and reloads. With no
+  // readable record and nothing loaded, only the key file changes.
   app.post("/api/backup/rotate", (c) =>
     run(c, log, async () => {
       const personId = await authorize(c);
       guardWritable();
+      requireNodeOperationHttps(c);
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
-      const { recoveryKey } = await readRotateBody(c);
-      assertStorableKey(recoveryKey);
+      const { masterKey } = await readRotateBody(c);
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
+        const { bytes, current } = await checkedMasterKey(deps.db, masterKey);
+        const record = backupKeyRecord(
+          bytes,
+          heldBackupKeyNumber(await deps.readBoxEnv()) + 1,
+          current.publicKey,
+        );
+        const recoveryKey = record.key;
         const keyRotatedAt = new Date().toISOString();
-        checkedNewRecoveryKey(recoveryKey);
         const read = await readHeldSettings();
         const held = "unreadable" in read ? null : read.settings;
         const unreadableCode = "unreadable" in read ? read.unreadable : undefined;
         // An unreadable record is never rewritten, so its key changes the key-only way.
         if (held === null && deps.supervisor.current().destinations.length === 0) {
-          if (!(await keyPresent())) {
-            if (unreadableCode !== undefined) {
-              throw new AppError("backup.archive_settings_unreadable", { reason: unreadableCode });
-            }
-            throw new AppError("backup.not_configured", {});
-          }
-          await persistKey({ recoveryKey, keyRotatedAt });
+          await changeBackupKey(deps, record, keyRotatedAt);
           if ((await deps.readRecoveryKey()) !== recoveryKey) {
             throw new AppError("backup.effective_mismatch", {});
           }
           return c.json({
             ...(await statusBody()),
-            ...(unreadableCode === undefined ? {} : { loadErrorCode: unreadableCode }),
+            ...(unreadableCode === undefined
+              ? {}
+              : { loadErrorCode: unreadableCode, reloadErrorCode: unreadableCode }),
           });
         }
-        await persistKey({ recoveryKey, keyRotatedAt });
+        await changeBackupKey(deps, record, keyRotatedAt);
         // The key file is authoritative from here: a failure below never puts the old key back.
         if (held !== null) {
           try {
@@ -625,7 +566,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           } catch (error) {
             log("warn", "backup.rotation_metadata_failed", { errorCode: codeOf(error) });
             const sealedState = await deps.sealedState.refresh();
-            const reloadErrorCode = await reloadAfterWrite();
+            const reloadErrorCode = await reloadOutcome();
+            assertEffectiveKey(reloadErrorCode, recoveryKey);
             throw new AppError("backup.rotation_metadata_failed", {
               effectiveKeyChanged: true,
               keyFingerprint: keyFingerprint(recoveryKey),
@@ -636,15 +578,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           }
           await deps.sealedState.refresh();
         }
-        const reloadErrorCode = await reloadAfterWrite();
-        const loaded = deps.supervisor.current();
-        if (
-          reloadErrorCode === undefined &&
-          loaded.loadErrorCode === null &&
-          loaded.recoveryKey !== recoveryKey
-        ) {
-          throw new AppError("backup.effective_mismatch", {});
-        }
+        const reloadErrorCode = await reloadOutcome();
+        assertEffectiveKey(reloadErrorCode, recoveryKey);
         return writeAnswer(c, reloadErrorCode);
       });
     }),

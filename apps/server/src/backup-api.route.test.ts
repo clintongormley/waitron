@@ -11,11 +11,13 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 // `backup-supervisor.test.ts`.
 import { createCipheriv, randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
-import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SingletonRole } from "@waitron/db";
 import { readActivityForSubject, settings, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -26,19 +28,26 @@ import { planVenue } from "@waitron/provisioning";
 import type { StreamView } from "@waitron/stream";
 import { mountBackupApi, type BackupApiDeps } from "./backup-api.js";
 import { eq, sql } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
 import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
 import { createTurns, type Turns } from "./backup-turns.js";
 import {
   deleteCredential,
   loadKeyRing,
+  makeMasterKey,
+  masterKeyId,
+  sealingPublicKey,
+  backupKey,
+  credentialRevision,
   putCredential,
   venueCredentials,
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
 import { mountStreamApi } from "./stream-api.js";
+import * as store from "@waitron/store";
+import { decryptBackupFile, readArtifactFileHeader } from "./artifact-cipher-file.js";
 import {
   loadBackupSettings,
   loadRecoveryKey,
@@ -54,7 +63,9 @@ import type {
 } from "./storage-backend.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
-import { writeRecoveryKey } from "./backup-env-writer.js";
+import { writeBackupKey } from "./backup-env-writer.js";
+import { backupKeySettings, heldBackupKey } from "./testing/backup-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import {
   BackupSupervisor,
   keyFingerprint,
@@ -71,11 +82,35 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 
 const LOCALE = "es-ES";
+const TLS_SOCKET = new TLSSocket(new Socket());
+afterAll(() => {
+  TLS_SOCKET.destroy();
+});
 const PASSWORD = "correct horse"; // the seeded manager's dashboard password
 const MANAGER_EMAIL = "manager@x.com";
-// ≥ MIN_RECOVERY_KEY_LENGTH (12) and base64url-safe (survives the env-file round-trip).
-const KEY_1 = "recovery-key-one-strong";
-const KEY_2 = "recovery-key-two-different";
+const MASTER_BYTES = makeMasterKey();
+/** The venue's current master key, made in `beforeAll`. */
+let MASTER: { secret: string; name: string };
+/** Backup keys 1 and 2 of the venue's master key: what setup writes, and the first change. */
+const KEY_1 = heldBackupKey(MASTER_BYTES, 1).key;
+const KEY_2 = heldBackupKey(MASTER_BYTES, 2).key;
+const KEY_3 = heldBackupKey(MASTER_BYTES, 3).key;
+/** The key the box env holds, which the next archive is locked with. */
+const fileKey = async (stateDir: string) => loadRecoveryKey(await loadBoxEnv({}, stateDir));
+/** `backup.env` as setup leaves it: backup key 1, its number and its master key's id. */
+const KEY_ONE_FILE = backupKeySettings(heldBackupKey(MASTER_BYTES, 1));
+const keyFileOf = async (stateDir: string) =>
+  parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
+/** What "Change the backup key" sends. */
+const changeKey = () => ({ masterKey: MASTER.secret });
+
+/** Backup key `n` of the venue's master key, as setup or a key change writes it. */
+async function holdKey(stateDir: string, n = 1, rotatedAt?: string): Promise<void> {
+  await writeBackupKey(stateDir, {
+    ...heldBackupKey(MASTER_BYTES, n),
+    ...(rotatedAt === undefined ? {} : { rotatedAt }),
+  });
+}
 const VENUE = "c0000000-0000-4000-8000-000000000002";
 const RING_KEY = Buffer.alloc(32, 7);
 const RING = loadKeyRing({
@@ -102,8 +137,10 @@ const venueDir = mkdtempSync(join(tmpdir(), "backup-api-venue-"));
 
 const cleanup: (() => Promise<void>)[] = [];
 
-async function makeStateDir(): Promise<string> {
+/** A box's state folder, holding backup key 1 as setup writes it unless `backupKey` is false. */
+async function makeStateDir({ backupKey = true } = {}): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), "backup-api-state-"));
+  if (backupKey) await holdKey(dir);
   await mkdir(join(dir, "tls"), { recursive: true });
   // The sweep's `collectStateSecrets` fails a tick unless every RECOVERY_FILES path exists.
   for (const rel of RECOVERY_FILES) await writeFile(join(dir, rel), `dummy ${rel}`);
@@ -266,6 +303,10 @@ function buildApp(
     },
     log,
   );
+  // As the box's HTTPS listener hands a request on, unless the test passes its own `env`.
+  const plain = app.request.bind(app);
+  app.request = ((input, init, env, ctx) =>
+    plain(input, init, env ?? { incoming: { socket: TLS_SOCKET } }, ctx)) as typeof app.request;
   return app;
 }
 
@@ -348,15 +389,60 @@ afterEach(async () => {
   bucket = new FakeBucket();
 });
 
+/** A manual run, once the scheduled run Save started has finished. */
+async function startManualRun(sup: BackupSupervisor): Promise<{ run: Promise<void> }> {
+  const started = await poll(async () => {
+    try {
+      return { run: sup.runNow() };
+    } catch (error) {
+      if (isAppError(error) && error.code === "backup.run_in_progress") return undefined;
+      throw error;
+    }
+  });
+  return started;
+}
+
+/** Each archive in `dest` with the N its header names. */
+async function archivesIn(
+  dest: string,
+): Promise<{ name: string; keyNumber: number | undefined }[]> {
+  return Promise.all(
+    (await readdir(dest))
+      .filter((name) => name.endsWith(".backup.enc"))
+      .map(async (name) => {
+        const header = await readArtifactFileHeader(join(dest, name));
+        return { name, keyNumber: header.version === 2 ? header.keyNumber : undefined };
+      }),
+  );
+}
+
+/** Every file opens with the key its own header names. */
+async function expectEachOpensUnderItsKey(
+  dest: string,
+  files: { name: string; keyNumber: number | undefined }[],
+): Promise<void> {
+  const out = mkdtempSync(join(tmpdir(), "backup-api-open-"));
+  cleanup.push(() => rm(out, { recursive: true, force: true }));
+  for (const file of files) {
+    const key = heldBackupKey(MASTER_BYTES, file.keyNumber!).key;
+    await expect(
+      decryptBackupFile(join(dest, file.name), join(out, file.name), key),
+    ).resolves.toMatch(/^[0-9a-f]{64}$/);
+  }
+}
+
 describe("backup admin routes", () => {
   it.each([
     ["POST", "/api/backup/apply"],
     ["POST", "/api/backup/disable"],
     ["POST", "/api/backup/rotate"],
     ["POST", "/api/backup/run-now"],
-    ["GET", "/api/backup/recovery-key"],
   ])("%s %s requires proof before backup effects", async (method, path) => {
-    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const sc: Scenario = {
+      stateDir: await makeStateDir({ backupKey: false }),
+      base: {},
+      role: "primary",
+    };
     const app = buildApp(makeSupervisor(sc), sc.stateDir);
     const cookie = await login(app);
     await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie!, false));
@@ -375,11 +461,13 @@ describe("backup admin routes", () => {
 
   beforeAll(async () => {
     await setupVenue();
+    MASTER = await mintMasterKey(suite.db, { bytes: MASTER_BYTES });
   }, 180_000);
 
   it.each([
-    ["/api/backup/recovery-key", "GET"],
     ["/api/backup/run-now", "POST"],
+    ["/api/backup/rotate", "POST"],
+    ["/api/backup/apply", "POST"],
   ])("refuses staff at %s by permission before asking for proof", async (path, method) => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
     const { token } = await openManagementSession(suite.db, "staff");
@@ -388,19 +476,17 @@ describe("backup admin routes", () => {
       headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
     });
     expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(await response.json()).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
   });
 
   it("unauthenticated requests 401", async () => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
     const app = buildApp(makeSupervisor(sc), sc.stateDir);
-    for (const path of ["/api/backup/status", "/api/backup/recovery-key"]) {
-      const res = await app.request(path);
-      expect(res.status).toBe(401);
-      expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
-    }
-    const mint = await app.request("/api/backup/mint-key", { method: "POST" });
-    expect(mint.status).toBe(401);
+    const res = await app.request("/api/backup/status");
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
   });
 
   it("accepts one manual backup while refusing a second press", async () => {
@@ -417,7 +503,6 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
         destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-        recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
@@ -468,22 +553,6 @@ describe("backup admin routes", () => {
       await sup.stop();
       hold.mockRestore();
     }
-  });
-
-  it("mint-key returns a strong key and stores nothing", async () => {
-    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
-    const sup = makeSupervisor(sc);
-    const app = buildApp(sup, sc.stateDir);
-    const cookie = await login(app);
-    const res = await app.request("/api/backup/mint-key", { method: "POST", headers: { cookie } });
-    expect(res.status).toBe(200);
-    const { key } = (await res.json()) as { key: string };
-    // randomBytes(32).toString("base64url") → 43 chars, no padding.
-    expect(key).toHaveLength(43);
-    expect(key).toMatch(/^[A-Za-z0-9_-]+$/);
-    // Minting stored nothing: backups are still off.
-    const status = await app.request("/api/backup/status", { headers: { cookie } });
-    expect((await status.json()).enabled).toBe(false);
   });
 
   it("status carries the bucket copy's state beside the archive's, off when no reader is given", async () => {
@@ -538,7 +607,6 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
         destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-        recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
@@ -567,7 +635,6 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
         destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-        recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
@@ -588,7 +655,6 @@ describe("backup admin routes", () => {
         headers: { cookie, "content-type": "application/json" },
         body: JSON.stringify({
           destinations: [{ kind: "local-fs", dir: join(sc.stateDir, folder) }],
-          recoveryKey: KEY_1,
           schedule: DAILY_AT_0330,
           retention: RETENTION,
         }),
@@ -618,7 +684,6 @@ describe("backup admin routes", () => {
         headers: { cookie, "content-type": "application/json" },
         body: JSON.stringify({
           destinations: [{ kind: "local-fs", dir: join(parent, "backups") }],
-          recoveryKey: KEY_1,
           schedule: DAILY_AT_0330,
           retention: RETENTION,
         }),
@@ -643,7 +708,6 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
         destinations: [{ kind: "local-fs", dir: "backups" }],
-        recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
@@ -666,7 +730,6 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
         destinations: [{ kind: "local-fs", dir: dest }],
-        recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
@@ -689,26 +752,6 @@ describe("backup admin routes", () => {
     });
   }, 60_000);
 
-  it("apply refuses a non-storable key (trailing space) before any write", async () => {
-    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
-    const app = buildApp(makeSupervisor(sc), sc.stateDir);
-    const cookie = await login(app);
-    const res = await app.request("/api/backup/apply", {
-      method: "POST",
-      headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({
-        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-        recoveryKey: "trailing space key ",
-        schedule: DAILY_AT_0330,
-        retention: RETENTION,
-      }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "backup.recovery_key_unstorable" },
-    });
-  });
-
   it("apply refuses on a non-primary node", async () => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "secondary" };
     const app = buildApp(makeSupervisor(sc), sc.stateDir);
@@ -718,7 +761,6 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
         destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-        recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
@@ -726,28 +768,6 @@ describe("backup admin routes", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "backup.not_primary" } });
   });
-
-  it("recovery-key returns the EFFECTIVE key, not the file, under a partial env override", async () => {
-    const stateDir = await makeStateDir();
-    // The FILE holds KEY_2 (a prior wizard apply)…
-    await writeRecoveryKey(stateDir, { recoveryKey: KEY_2, keyRotatedAt: undefined });
-    const sc: Scenario = {
-      stateDir,
-      base: {
-        WAITRON_BACKUP_RECOVERY_KEY: KEY_1,
-      },
-      role: "primary",
-    };
-    const sup = makeSupervisor(sc);
-    await sup.reload();
-    // The key reader merges the raw environment over the file, as boot's does.
-    const app = buildApp(sup, stateDir, sc.base);
-    const cookie = await login(app);
-
-    const res = await app.request("/api/backup/recovery-key", { headers: { cookie } });
-    expect(res.status).toBe(200);
-    expect((await res.json()).key).toBe(KEY_1); // the EFFECTIVE key, not the file's KEY_2
-  }, 60_000);
 
   it("rotate takes an immediate dump under the new key and bumps keyRotatedAt", async () => {
     const dest = makeDestDir();
@@ -761,7 +781,6 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
         destinations: [{ kind: "local-fs", dir: dest }],
-        recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
@@ -772,7 +791,7 @@ describe("backup admin routes", () => {
     const rot = await app.request("/api/backup/rotate", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ recoveryKey: KEY_2 }),
+      body: JSON.stringify(changeKey()),
     });
     expect(rot.status).toBe(200);
     const manager = suite.db.all<{ id: string }>(
@@ -794,18 +813,161 @@ describe("backup admin routes", () => {
     expect(body.backupStatus.configured).toBe(true);
     expect(typeof body.archiveUnderCurrentKey).toBe("boolean");
     expect(sup.current().recoveryKey).toBe(KEY_2);
-    // GET recovery-key now returns KEY_2, and a fresh archive lands under it.
-    const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
-    expect((await rk.json()).key).toBe(KEY_2);
+    // The box env now holds KEY_2, and a fresh archive lands under it.
+    expect(await fileKey(sc.stateDir)).toBe(KEY_2);
     await poll(async () => {
       const s = await app.request("/api/backup/status", { headers: { cookie } });
       return (await s.json()).archiveUnderCurrentKey === true ? true : undefined;
     });
   }, 60_000);
 
+  it("a backup running during the change is stored under its old key or not at all", async () => {
+    const dest = makeDestDir();
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    const app = buildApp(sup, sc.stateDir);
+    const cookie = await login(app);
+    const applied = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinations: [{ kind: "local-fs", dir: dest }],
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(applied.status).toBe(200);
+    await poll(async () => ((await sup.status()).archiveUnderCurrentKey ? true : undefined));
+    const stored = () => archivesIn(dest);
+    const beforeRun = await stored();
+    expect(beforeRun.map((file) => file.keyNumber)).toEqual([1]);
+
+    let entered!: () => void;
+    let release!: () => void;
+    const reached = new Promise<void>((resolve) => (entered = resolve));
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const archive = store.archiveInWorker;
+    vi.spyOn(store, "archiveInWorker").mockImplementationOnce(async (source, target, signal) => {
+      entered();
+      await released;
+      await archive(source, target, signal);
+    });
+    let manual: Promise<void> | undefined;
+    let change: ReturnType<typeof app.request> | undefined;
+    try {
+      manual = (await startManualRun(sup)).run;
+      // The holder is inside its copy under key 1 before the change is sent.
+      await reached;
+      change = app.request("/api/backup/rotate", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify(changeKey()),
+      });
+      // Released once the change has written key 2, so the run could see it.
+      await poll(async () => ((await fileKey(sc.stateDir)) === KEY_2 ? true : undefined));
+      release();
+      await manual;
+      expect((await change!).status).toBe(200);
+    } finally {
+      release();
+      await Promise.allSettled([manual, change]);
+    }
+    const after = await poll(async () => {
+      const files = await stored();
+      return files.some((file) => file.keyNumber === 2) ? files : undefined;
+    });
+    // None names 2 while written under key 1.
+    await expectEachOpensUnderItsKey(dest, after);
+    // The run the change stopped added at most one file, under key 1.
+    expect(after.filter((file) => file.keyNumber === 1).length).toBeLessThanOrEqual(
+      beforeRun.length + 1,
+    );
+    expect(after.every((file) => file.keyNumber === 1 || file.keyNumber === 2)).toBe(true);
+  }, 60_000);
+
+  it("a backup that finishes after the change wrote key N+1, before its reload, is stored under key N", async () => {
+    const dest = makeDestDir();
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    let changeWrote!: () => void;
+    let releaseChange!: () => void;
+    const wrote = new Promise<void>((resolve) => (changeWrote = resolve));
+    const changeReleased = new Promise<void>((resolve) => (releaseChange = resolve));
+    let holdChange = false;
+    const app = buildApp(sup, sc.stateDir, {}, undefined, undefined, undefined, undefined, {
+      stream: {
+        reload: async (write) => {
+          await write?.();
+          if (holdChange) {
+            changeWrote();
+            await changeReleased;
+          }
+        },
+      },
+    });
+    const cookie = await login(app);
+    const applied = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinations: [{ kind: "local-fs", dir: dest }],
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(applied.status).toBe(200);
+    await poll(async () => ((await sup.status()).archiveUnderCurrentKey ? true : undefined));
+    const beforeRun = await archivesIn(dest);
+    expect(beforeRun.map((file) => file.keyNumber)).toEqual([1]);
+
+    let entered!: () => void;
+    let releaseRun!: () => void;
+    const reached = new Promise<void>((resolve) => (entered = resolve));
+    const runReleased = new Promise<void>((resolve) => (releaseRun = resolve));
+    const archive = store.archiveInWorker;
+    vi.spyOn(store, "archiveInWorker").mockImplementationOnce(async (source, target, signal) => {
+      entered();
+      await runReleased;
+      await archive(source, target, signal);
+    });
+    let manual: Promise<void> | undefined;
+    let change: ReturnType<typeof app.request> | undefined;
+    try {
+      manual = (await startManualRun(sup)).run;
+      // The holder is inside its copy under key 1 before the change is sent.
+      await reached;
+      holdChange = true;
+      change = app.request("/api/backup/rotate", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify(changeKey()),
+      });
+      // The change holds with key 2 in backup.env and its reload not yet begun.
+      await wrote;
+      expect(await fileKey(sc.stateDir)).toBe(KEY_2);
+      releaseRun();
+      await manual;
+      const runStored = (await archivesIn(dest)).filter(
+        (file) => !beforeRun.some((before) => before.name === file.name),
+      );
+      expect(runStored.map((file) => file.keyNumber)).toEqual([1]);
+      await expectEachOpensUnderItsKey(dest, runStored);
+      releaseChange();
+      expect((await change!).status).toBe(200);
+    } finally {
+      releaseRun();
+      releaseChange();
+      await Promise.allSettled([manual, change]);
+    }
+    const next = await poll(async () => {
+      const files = (await archivesIn(dest)).filter((file) => file.keyNumber === 2);
+      return files.length > 0 ? files : undefined;
+    });
+    await expectEachOpensUnderItsKey(dest, next);
+  }, 60_000);
+
   it("apply keeps the date of a key rotated before archives were enabled", async () => {
     const stateDir = await makeStateDir();
-    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
     const sc: Scenario = { stateDir, base: {}, role: "primary" };
     const sup = makeSupervisor(sc);
     await sup.reload();
@@ -815,7 +977,7 @@ describe("backup admin routes", () => {
     const rotated = await app.request("/api/backup/rotate", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ recoveryKey: KEY_2 }),
+      body: JSON.stringify(changeKey()),
     });
     expect(rotated.status).toBe(200);
     const rotatedFile = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
@@ -855,7 +1017,6 @@ describe("backup admin routes", () => {
         headers: { cookie, "content-type": "application/json" },
         body: JSON.stringify({
           destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-          recoveryKey: KEY_1,
           schedule,
           retention: RETENTION,
         }),
@@ -865,10 +1026,9 @@ describe("backup admin routes", () => {
     }
   }, 60_000);
 
-  it("apply fails loud when the effective key differs from the requested one", async () => {
-    // The orphan-prevention guard: a supervisor whose reloaded config resolves a DIFFERENT recovery
-    // key than the operator asked for (here forced via buildConfig) must be refused, not silently
-    // encrypt future archives under a key the operator never recorded.
+  it("apply fails loud when the effective key differs from the held one", async () => {
+    // A supervisor whose reloaded config resolves a DIFFERENT key than `backup.env` holds (forced
+    // here via buildConfig) is refused, not left encrypting archives under a key the venue never held.
     const dest = makeDestDir();
     const stateDir = await makeStateDir();
     const mismatch: BackupConfig = {
@@ -882,6 +1042,8 @@ describe("backup admin routes", () => {
       staleAfterMs: 2 * 24 * 60 * 60 * 1000,
       destinationTimeoutMs: 15 * 60 * 1000,
       keyRotatedAt: undefined,
+      keyNumber: undefined,
+      masterKeyId: undefined,
     };
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
@@ -905,16 +1067,14 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
         destinations: [{ kind: "local-fs", dir: dest }],
-        recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
     });
     expect(res.status).toBe(500);
     expect(await res.json()).toMatchObject({ error: { code: "backup.effective_mismatch" } });
-    // The key file and then the settings were written before the refusal, and the row was re-locked
-    // after each.
-    expect(recorder.seen).toEqual([KEY_1, KEY_1]);
+    // The settings were written before the refusal, and the row was re-locked after.
+    expect(recorder.seen).toEqual([KEY_1]);
   }, 60_000);
 
   it("rotate fails loud when the reloaded key is not the one requested", async () => {
@@ -931,6 +1091,8 @@ describe("backup admin routes", () => {
       staleAfterMs: 2 * 24 * 60 * 60 * 1000,
       destinationTimeoutMs: 15 * 60 * 1000,
       keyRotatedAt: undefined,
+      keyNumber: undefined,
+      masterKeyId: undefined,
     };
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
@@ -953,7 +1115,7 @@ describe("backup admin routes", () => {
     const res = await app.request("/api/backup/rotate", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ recoveryKey: KEY_2 }),
+      body: JSON.stringify(changeKey()),
     });
     expect(res.status).toBe(500);
     expect(await res.json()).toMatchObject({ error: { code: "backup.effective_mismatch" } });
@@ -978,23 +1140,21 @@ describe("backup admin routes", () => {
       (
         await post("/api/backup/apply", {
           destinations: [{ kind: "local-fs", dir: dest }],
-          recoveryKey: KEY_1,
           schedule: DAILY_AT_0330,
           retention: RETENTION,
         })
       ).status,
     ).toBe(200);
-    // Once after the key file is written, once after the settings are.
-    expect(refresh).toHaveBeenCalledTimes(2);
-    expect((await post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
-    // Rotation too: after the key file, and after the settings' new revision.
-    expect(refresh).toHaveBeenCalledTimes(4);
-    expect(recorder.seen).toEqual([KEY_1, KEY_1, KEY_2, KEY_2]);
+    // Once after the settings are written.
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect((await post("/api/backup/rotate", changeKey())).status).toBe(200);
+    // Rotation: after the key file, and after the settings' new revision.
+    expect(refresh).toHaveBeenCalledTimes(3);
+    expect(recorder.seen).toEqual([KEY_1, KEY_2, KEY_2]);
   }, 60_000);
 
   it("reads and rotates a recovery key that has no archive destination", async () => {
     const stateDir = await makeStateDir();
-    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
     const sc: Scenario = { stateDir, base: {}, role: "primary" };
     const sup = makeSupervisor(sc);
     await sup.reload(); // no destination, so the archive duty stays off
@@ -1003,13 +1163,12 @@ describe("backup admin routes", () => {
     const app = buildApp(sup, stateDir, {}, undefined, { refresh });
     const cookie = await login(app);
 
-    const before = await app.request("/api/backup/recovery-key", { headers: { cookie } });
-    expect((await before.json()).key).toBe(KEY_1);
+    expect(await fileKey(stateDir)).toBe(KEY_1);
 
     const rot = await app.request("/api/backup/rotate", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ recoveryKey: KEY_2 }),
+      body: JSON.stringify(changeKey()),
     });
     expect(rot.status).toBe(200);
     expect(await rot.json()).toMatchObject({ enabled: false, recoveryKeySet: true });
@@ -1021,13 +1180,11 @@ describe("backup admin routes", () => {
     // Rotating the key did not invent an archive destination.
     expect(sup.current().enabled).toBe(false);
 
-    const after = await app.request("/api/backup/recovery-key", { headers: { cookie } });
-    expect((await after.json()).key).toBe(KEY_2);
+    expect(await fileKey(stateDir)).toBe(KEY_2);
   }, 60_000);
 
   it("re-locks the state row even when a destination-less rotate fails loud", async () => {
     const stateDir = await makeStateDir();
-    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
     const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
     await sup.reload();
     const recorder = recordingRefresher(stateDir);
@@ -1037,36 +1194,15 @@ describe("backup admin routes", () => {
     const res = await app.request("/api/backup/rotate", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ recoveryKey: KEY_2 }),
+      body: JSON.stringify(changeKey()),
     });
     expect(res.status).toBe(500);
     expect(await res.json()).toMatchObject({ error: { code: "backup.effective_mismatch" } });
     expect(recorder.seen).toEqual([KEY_2]);
   }, 60_000);
 
-  it("refuses a too-short key on a destination-less rotate before writing", async () => {
-    const stateDir = await makeStateDir();
-    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
-    const sc: Scenario = { stateDir, base: {}, role: "primary" };
-    const app = buildApp(makeSupervisor(sc), stateDir);
-    const cookie = await login(app);
-    const rot = await app.request("/api/backup/rotate", {
-      method: "POST",
-      headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ recoveryKey: "short" }),
-    });
-    expect(rot.status).toBe(400);
-    expect(await rot.json()).toMatchObject({
-      error: { code: "backup.new_recovery_key_too_short", params: { min: 12 } },
-    });
-    expect(parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"))).toEqual({
-      WAITRON_BACKUP_RECOVERY_KEY: KEY_1,
-    });
-  }, 60_000);
-
   it("turning archives on reuses the key the box already holds, and reports that one is set", async () => {
     const stateDir = await makeStateDir();
-    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
     const sc: Scenario = { stateDir, base: {}, role: "primary" };
     const sup = makeSupervisor(sc);
     await sup.reload();
@@ -1093,29 +1229,6 @@ describe("backup admin routes", () => {
     expect(sup.current().recoveryKey).toBe(KEY_1);
   }, 60_000);
 
-  it("refuses a different key while one is held, before writing anything", async () => {
-    const stateDir = await makeStateDir();
-    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
-    const sc: Scenario = { stateDir, base: {}, role: "primary" };
-    const app = buildApp(makeSupervisor(sc), stateDir);
-    const cookie = await login(app);
-    const res = await app.request("/api/backup/apply", {
-      method: "POST",
-      headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({
-        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-        recoveryKey: KEY_2,
-        schedule: DAILY_AT_0330,
-        retention: RETENTION,
-      }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "backup.recovery_key_exists" } });
-    expect(parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"))).toEqual({
-      WAITRON_BACKUP_RECOVERY_KEY: KEY_1,
-    });
-  }, 60_000);
-
   it("reports a too-short key in backup.env as set, and still answers status, with no destination", async () => {
     const stateDir = await makeStateDir();
     await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=short\n");
@@ -1127,37 +1240,6 @@ describe("backup admin routes", () => {
     const st = await app.request("/api/backup/status", { headers: { cookie } });
     expect(st.status).toBe(200);
     expect(await st.json()).toMatchObject({ enabled: false, recoveryKeySet: true });
-    // A key no archive would accept is not handed out to be recorded.
-    const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
-    expect(rk.status).toBe(409);
-    expect(await rk.json()).toMatchObject({ error: { code: "backup.recovery_key_too_short" } });
-  }, 60_000);
-
-  it("reveals the loaded usable key when the file was replaced by a short key", async () => {
-    const stateDir = await makeStateDir();
-    await writeFile(join(stateDir, "backup.env"), `WAITRON_BACKUP_RECOVERY_KEY=${KEY_1}\n`);
-    const sc: Scenario = {
-      stateDir,
-      base: {},
-      role: "primary",
-      readRecord: async () => ({
-        revision: "loaded-key",
-        enabled: false,
-        cloud: false,
-        destinations: [{ kind: "local-fs", id: "primary", dir: "/unused/backups" }],
-        schedule: DAILY_AT_0330,
-        retention: RETENTION,
-        destinationTimeoutMs: 900_000,
-      }),
-    };
-    const sup = makeSupervisor(sc);
-    await sup.reload();
-    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=short\n");
-    const app = buildApp(sup, stateDir, sc.base);
-    const cookie = await login(app);
-    const response = await app.request("/api/backup/recovery-key", { headers: { cookie } });
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ key: KEY_1 });
   }, 60_000);
 
   it("rotate replaces a too-short key held with no destination", async () => {
@@ -1171,52 +1253,18 @@ describe("backup admin routes", () => {
     const rot = await app.request("/api/backup/rotate", {
       method: "POST",
       headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({ recoveryKey: KEY_2 }),
+      body: JSON.stringify(changeKey()),
     });
     expect(rot.status).toBe(200);
     const rotated = await rot.json();
     expect(rotated).toMatchObject({ enabled: false, recoveryKeySet: true });
     expect(rotated.recoveryKeyTooShort).toBe(false);
-    const file = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
-    expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_2);
-    const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
-    expect((await rk.json()).key).toBe(KEY_2);
-  }, 60_000);
-
-  it("turning archives on replaces a too-short held key with the one sent", async () => {
-    const stateDir = await makeStateDir();
-    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=short\n");
-    const sc: Scenario = { stateDir, base: {}, role: "primary" };
-    const sup = makeSupervisor(sc);
-    await sup.reload();
-    const app = buildApp(sup, stateDir, sc.base);
-    const cookie = await login(app);
-
-    const before = await app.request("/api/backup/status", { headers: { cookie } });
-    expect(await before.json()).toMatchObject({ recoveryKeySet: true, recoveryKeyTooShort: true });
-
-    const res = await app.request("/api/backup/apply", {
-      method: "POST",
-      headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({
-        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-        recoveryKey: KEY_1,
-        schedule: DAILY_AT_0330,
-        retention: RETENTION,
-      }),
-    });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({
-      enabled: true,
-      recoveryKeySet: true,
-      recoveryKeyTooShort: false,
-    });
+    // A key with no number counts as none held, so the change writes key 1.
     const file = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
     expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
-    expect(sup.current().recoveryKey).toBe(KEY_1);
   }, 60_000);
 
-  it("still refuses to turn archives on with a too-short held key when no key is sent", async () => {
+  it("still refuses to turn archives on with a too-short held key", async () => {
     const stateDir = await makeStateDir();
     await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=short\n");
     const sc: Scenario = { stateDir, base: {}, role: "primary" };
@@ -1242,7 +1290,6 @@ describe("backup admin routes", () => {
 
   it("does not report a held key long enough to use as too short", async () => {
     const stateDir = await makeStateDir();
-    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
     const sc: Scenario = { stateDir, base: {}, role: "primary" };
     const sup = makeSupervisor(sc);
     await sup.reload();
@@ -1272,64 +1319,12 @@ describe("backup admin routes", () => {
     });
   }, 60_000);
 
-  it("refuses a different key when the held key comes from the supervisor's own loaded settings (archives already on)", async () => {
-    const stateDir = await makeStateDir();
-    const sc: Scenario = { stateDir, base: {}, role: "primary" };
-    const sup = makeSupervisor(sc);
-    // The box-env reader answers nothing, so only the supervisor's loaded settings hold the key.
-    const app = buildApp(sup, stateDir, sc.base, async () => undefined);
-    const cookie = await login(app);
-    const apply = (recoveryKey: string) =>
-      app.request("/api/backup/apply", {
-        method: "POST",
-        headers: { cookie, "content-type": "application/json" },
-        body: JSON.stringify({
-          destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-          recoveryKey,
-          schedule: DAILY_AT_0330,
-          retention: RETENTION,
-        }),
-      });
-    expect((await apply(KEY_1)).status).toBe(200);
-    expect(sup.current().recoveryKey).toBe(KEY_1);
-    const before = await readFile(join(stateDir, "backup.env"), "utf8");
-
-    const res = await apply(KEY_2);
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "backup.recovery_key_exists" } });
-    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before);
-  }, 60_000);
-
-  it("accepts the SAME key again while archives are on", async () => {
-    const stateDir = await makeStateDir();
-    const sc: Scenario = { stateDir, base: {}, role: "primary" };
-    const sup = makeSupervisor(sc);
-    const app = buildApp(sup, stateDir);
-    const cookie = await login(app);
-    const apply = (retention: { count: number; days: number }) =>
-      app.request("/api/backup/apply", {
-        method: "POST",
-        headers: { cookie, "content-type": "application/json" },
-        body: JSON.stringify({
-          destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-          recoveryKey: KEY_1,
-          schedule: DAILY_AT_0330,
-          retention,
-        }),
-      });
-    expect((await apply(RETENTION)).status).toBe(200);
-
-    const res = await apply({ count: 3, days: 10 });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ enabled: true, recoveryKeySet: true });
-    const file = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
-    expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
-    expect((await readSealed())?.retention).toEqual({ count: 3, days: 10 });
-    expect(sup.current().recoveryKey).toBe(KEY_1);
-  }, 60_000);
-
-  it("rejects malformed apply/rotate bodies and unconfigured rotate without touching disk", async () => {
-    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+  it("rejects malformed apply/rotate bodies without touching disk", async () => {
+    const sc: Scenario = {
+      stateDir: await makeStateDir({ backupKey: false }),
+      base: {},
+      role: "primary",
+    };
     const app = buildApp(makeSupervisor(sc), sc.stateDir); // never reloaded → no config
     const cookie = await login(app);
     const post = (path: string, body: unknown) =>
@@ -1341,17 +1336,11 @@ describe("backup admin routes", () => {
     const dest = makeDestDir();
     const good = {
       destinations: [{ kind: "local-fs", dir: dest }],
-      recoveryKey: KEY_1,
       retention: RETENTION,
     };
     // Every malformed apply body → 400 backup.request_invalid, rejected before any write.
     const bad: unknown[] = [
       {}, // destinations missing
-      {
-        destinations: [{ kind: "local-fs", dir: dest }],
-        schedule: DAILY_AT_0330,
-        retention: RETENTION,
-      }, // recoveryKey missing
       { ...good, schedule: "nope" }, // schedule not an object
       { ...good, schedule: { kind: "bogus" } }, // unknown schedule kind
       { ...good, schedule: { kind: "interval", ms: 0 } }, // interval ms not positive
@@ -1359,7 +1348,6 @@ describe("backup admin routes", () => {
       { ...good, schedule: { kind: "wall-clock", days: "daily", at: { hour: "x" } } }, // bad time
       {
         destinations: [{ kind: "local-fs", dir: dest }],
-        recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: "nope",
       }, // retention not object
@@ -1375,65 +1363,10 @@ describe("backup admin routes", () => {
       (await (await app.request("/api/backup/status", { headers: { cookie } })).json())
         .recoveryKeySet,
     ).toBe(false);
-    // rotate with no key → request_invalid; with a bad key → unstorable; with a good key but nothing
-    // configured to rotate → not_configured. All before any write.
+    // A key change with no master key is refused before any write.
     expect((await post("/api/backup/rotate", {})).status).toBe(400);
-    const badKey = await post("/api/backup/rotate", { recoveryKey: "bad key " });
-    expect(await badKey.json()).toMatchObject({
-      error: { code: "backup.recovery_key_unstorable" },
-    });
-    const noConfig = await post("/api/backup/rotate", { recoveryKey: KEY_1 });
-    expect(noConfig.status).toBe(409);
-    expect(await noConfig.json()).toEqual({ error: { code: "backup.not_configured", params: {} } });
-    // recovery-key on an unconfigured box → null, not a throw.
-    const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
-    expect((await rk.json()).key).toBeNull();
     await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
   }, 60_000);
-
-  it("apply refuses a too-short key it is sent, before writing", async () => {
-    const stateDir = await makeStateDir();
-    const sc: Scenario = { stateDir, base: {}, role: "primary" };
-    const app = buildApp(makeSupervisor(sc), stateDir);
-    const cookie = await login(app);
-    const res = await app.request("/api/backup/apply", {
-      method: "POST",
-      headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({
-        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-        recoveryKey: "short", // storable, but under MIN_RECOVERY_KEY_LENGTH
-        schedule: DAILY_AT_0330,
-        retention: RETENTION,
-      }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "backup.new_recovery_key_too_short", params: { min: 12 } },
-    });
-    // No backup.env was created.
-    await expect(readFile(join(stateDir, "backup.env"), "utf8")).rejects.toThrow();
-  });
-
-  it("apply answers a refused backup folder before a too-short key it is sent", async () => {
-    const stateDir = await makeStateDir();
-    const sc: Scenario = { stateDir, base: {}, role: "primary" };
-    const app = buildApp(makeSupervisor(sc), stateDir);
-    const cookie = await login(app);
-    const res = await app.request("/api/backup/apply", {
-      method: "POST",
-      headers: { cookie, "content-type": "application/json" },
-      body: JSON.stringify({
-        destinations: [{ kind: "local-fs", dir: join(stateDir, "scratch") }],
-        recoveryKey: "short",
-        schedule: DAILY_AT_0330,
-        retention: RETENTION,
-      }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "backup.request_invalid", params: { field: "dir", reason: "scratch" } },
-    });
-  });
 
   it("an apply while another reload is in flight saves, and answers the reload's code", async () => {
     // The routes wait for each other, so the reload holding the latch is one started on the
@@ -1480,7 +1413,6 @@ describe("backup admin routes", () => {
     const cookie = await login(app);
     const body = JSON.stringify({
       destinations: [{ kind: "local-fs", dir: dest }],
-      recoveryKey: KEY_1,
       schedule: DAILY_AT_0330,
       retention: RETENTION,
     });
@@ -1497,7 +1429,7 @@ describe("backup admin routes", () => {
     expect((await readSealed())?.destinations).toEqual([
       { kind: "local-fs", id: "primary", dir: dest },
     ]);
-    expect(recorder.seen).toEqual([KEY_1, KEY_1]);
+    expect(recorder.seen).toEqual([KEY_1]);
     release();
     await first; // the parked reload completes normally once released
   }, 60_000);
@@ -1507,7 +1439,6 @@ describe("backup admin routes", () => {
   // leaves loaded) the key it read beforehand.
   async function raceKeyWrites(parked: "apply" | "rotate") {
     const stateDir = await makeStateDir();
-    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
     const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
     let release!: () => void;
     const gate = new Promise<void>((r) => {
@@ -1518,14 +1449,16 @@ describe("backup admin routes", () => {
       entered = r;
     });
     let first = true;
-    const app = buildApp(sup, stateDir, {}, async () => {
-      const key = loadRecoveryKey(await loadBoxEnv({}, stateDir));
-      if (first) {
-        first = false;
-        entered();
-        await gate;
-      }
-      return key;
+    const app = buildApp(sup, stateDir, {}, undefined, undefined, undefined, undefined, {
+      readBoxEnv: async () => {
+        const env = await loadBoxEnv({}, stateDir);
+        if (first) {
+          first = false;
+          entered();
+          await gate;
+        }
+        return env;
+      },
     });
     const cookie = await login(app);
     const headers = { cookie, "content-type": "application/json" };
@@ -1543,7 +1476,7 @@ describe("backup admin routes", () => {
       app.request("/api/backup/rotate", {
         method: "POST",
         headers,
-        body: JSON.stringify({ recoveryKey: KEY_2 }),
+        body: JSON.stringify(changeKey()),
       });
 
     const firstReq = parked === "apply" ? apply() : rotate();
@@ -1555,24 +1488,21 @@ describe("backup admin routes", () => {
     release();
     const [firstRes, secondRes] = await Promise.all([firstReq, secondReq]);
     const [applied, rotated] = parked === "apply" ? [firstRes, secondRes] : [secondRes, firstRes];
-    return { applied, rotated, sup, stateDir, app, cookie };
+    return { applied, rotated, sup, stateDir };
   }
 
   for (const parked of ["apply", "rotate"] as const) {
     it(`a rotate that succeeds leaves its key in effect when ${parked} is parked mid-request`, async () => {
-      const { applied, rotated, sup, stateDir, app, cookie } = await raceKeyWrites(parked);
+      const { applied, rotated, sup, stateDir } = await raceKeyWrites(parked);
       expect(rotated.status).toBe(200);
       expect(applied.status).toBe(200);
       expect(loadRecoveryKey(await loadBoxEnv({}, stateDir))).toBe(KEY_2);
       expect(sup.current().recoveryKey).toBe(KEY_2);
-      const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
-      expect((await rk.json()).key).toBe(KEY_2);
     }, 60_000);
   }
 
   it("a write queued behind another is refused if the node stopped being primary while it waited", async () => {
     const stateDir = await makeStateDir();
-    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
     const sc: Scenario = { stateDir, base: {}, role: "primary" };
     const sup = makeSupervisor(sc);
     let release!: () => void;
@@ -1584,14 +1514,16 @@ describe("backup admin routes", () => {
       entered = r;
     });
     let first = true;
-    const app = buildApp(sup, stateDir, {}, async () => {
-      const key = loadRecoveryKey(await loadBoxEnv({}, stateDir));
-      if (first) {
-        first = false;
-        entered();
-        await gate;
-      }
-      return key;
+    const app = buildApp(sup, stateDir, {}, undefined, undefined, undefined, undefined, {
+      readBoxEnv: async () => {
+        const env = await loadBoxEnv({}, stateDir);
+        if (first) {
+          first = false;
+          entered();
+          await gate;
+        }
+        return env;
+      },
     });
     const cookie = await login(app);
     const headers = { cookie, "content-type": "application/json" };
@@ -1599,7 +1531,7 @@ describe("backup admin routes", () => {
     const rotateReq = app.request("/api/backup/rotate", {
       method: "POST",
       headers,
-      body: JSON.stringify({ recoveryKey: KEY_2 }),
+      body: JSON.stringify(changeKey()),
     });
     await paused;
     const applyReq = app.request("/api/backup/apply", {
@@ -1628,7 +1560,6 @@ describe("backup admin routes", () => {
 
   it("a refused write does not hold up the next one", async () => {
     const stateDir = await makeStateDir();
-    await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
     const app = buildApp(makeSupervisor({ stateDir, base: {}, role: "primary" }), stateDir);
     const cookie = await login(app);
     const headers = { cookie, "content-type": "application/json" };
@@ -1636,20 +1567,19 @@ describe("backup admin routes", () => {
       method: "POST",
       headers,
       body: JSON.stringify({
-        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
-        recoveryKey: KEY_2,
+        destinations: [{ kind: "local-fs", dir: join(stateDir, "scratch") }],
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
     });
-    expect(refused.status).toBe(409);
+    expect(refused.status).toBe(400);
     expect(await refused.json()).toMatchObject({
-      error: { code: "backup.recovery_key_exists" },
+      error: { code: "backup.request_invalid", params: { field: "dir", reason: "scratch" } },
     });
     const rotated = await app.request("/api/backup/rotate", {
       method: "POST",
       headers,
-      body: JSON.stringify({ recoveryKey: KEY_2 }),
+      body: JSON.stringify(changeKey()),
     });
     expect(rotated.status).toBe(200);
     expect(loadRecoveryKey(await loadBoxEnv({}, stateDir))).toBe(KEY_2);
@@ -1670,17 +1600,20 @@ describe("backup admin routes", () => {
       makeSupervisor(sc),
       sc.stateDir,
       {},
-      async () => {
-        if (firstRead) {
-          firstRead = false;
-          applyReached();
-          await held;
-        }
-        return readKey();
-      },
+      undefined,
       undefined,
       undefined,
       turns,
+      {
+        readBoxEnv: async () => {
+          if (firstRead) {
+            firstRead = false;
+            applyReached();
+            await held;
+          }
+          return loadBoxEnv({}, sc.stateDir);
+        },
+      },
     );
     mountStreamApi(
       app,
@@ -1693,8 +1626,6 @@ describe("backup admin routes", () => {
         isPrimary: () => true,
 
         readRecoveryKey: readKey,
-        writeRecoveryKey: (recoveryKey) =>
-          writeRecoveryKey(sc.stateDir, { recoveryKey, keyRotatedAt: undefined }),
         sealedState: { refresh: async () => "sealed" },
         probe: async () => ({ ok: true }),
         prepareEncryption: async () => ({ ok: true }),
@@ -1708,7 +1639,6 @@ describe("backup admin routes", () => {
       headers: { cookie, "content-type": "application/json" },
       body: JSON.stringify({
         destinations: [{ kind: "local-fs", dir: dest }],
-        recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       }),
@@ -1745,6 +1675,275 @@ describe("backup admin routes", () => {
       );
     }
   }, 60_000);
+
+  it("a stream Save sent while apply holds its turn is refused for overlapping the bucket apply saved", async () => {
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let applyReached!: () => void;
+    const applyReading = new Promise<void>((resolve) => (applyReached = resolve));
+    let firstRead = true;
+    const turns = createTurns();
+    const app = buildApp(
+      makeSupervisor(sc),
+      sc.stateDir,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      turns,
+      {
+        readBoxEnv: async () => {
+          if (firstRead) {
+            firstRead = false;
+            applyReached();
+            await held;
+          }
+          return loadBoxEnv({}, sc.stateDir);
+        },
+      },
+    );
+    mountStreamApi(
+      app,
+      {
+        db: suite.db,
+        node: suite.node,
+        nodeId: "00000000-0000-0000-0000-000000000000",
+        ring: RING,
+        stream: { reload: async () => {}, status: () => ({ state: "off" }) },
+        isPrimary: () => true,
+        readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv({}, sc.stateDir)),
+        sealedState: { refresh: async () => "sealed" },
+        probe: async () => ({ ok: true }),
+        prepareEncryption: async () => ({ ok: true }),
+        turns,
+      },
+      () => {},
+    );
+    const cookie = await login(app);
+    const apply = app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinations: [
+          {
+            kind: "custom-s3",
+            region: "eu-west-1",
+            bucket: "venue-copy",
+            prefix: `venues/${VENUE}`,
+            accessKeyId: "AKIACUSTOM",
+            secretAccessKey: "custom-secret-0123456789abcdef",
+          },
+        ],
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    await applyReading;
+    const save = app.request("/api/backup/stream", {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        region: "eu-west-1",
+        bucket: "venue-copy",
+        accessKeyId: "AKIAEXAMPLE",
+        secretAccessKey: "not-a-real-secret-0123456789",
+      }),
+    });
+    try {
+      // Long enough for a Save that does not wait its turn to finish.
+      await Promise.race([save, new Promise((resolve) => setTimeout(resolve, 500))]);
+      release();
+      const [applied, saved] = await Promise.all([apply, save]);
+      expect(applied.status).toBe(200);
+      expect(saved.status).toBe(400);
+      expect(await saved.json()).toMatchObject({
+        error: { code: "backup.archive_namespace_overlap" },
+      });
+      const stored = await withTransaction(suite.db, (tx) =>
+        credentialRevision(tx, { purpose: "backup.stream" }),
+      );
+      expect(stored).toBeNull();
+    } finally {
+      release();
+      await Promise.allSettled([apply, save]);
+      await withTransaction(suite.db, (tx) =>
+        deleteCredential(tx, { personId: null, purpose: "backup.stream" }),
+      );
+    }
+  }, 60_000);
+
+  describe("changing the backup key", () => {
+    async function keyApp(stateDir: string) {
+      const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
+      await sup.reload();
+      const refresh = vi.fn(async () => "sealed" as const);
+      const reload = vi.fn(async (write?: () => Promise<void>) => {
+        await write?.();
+      });
+      const app = buildApp(sup, stateDir, {}, undefined, { refresh }, undefined, undefined, {
+        stream: { reload },
+      });
+      const cookie = await login(app);
+      const send = (body: unknown, headers: Record<string, string> = {}, env?: object) =>
+        app.request(
+          "/api/backup/rotate",
+          {
+            method: "POST",
+            headers: { cookie, "content-type": "application/json", ...headers },
+            body: JSON.stringify(body),
+          },
+          env,
+        );
+      const change = (body: unknown) => send(body);
+      const post = (path: string, body: unknown) =>
+        app.request(path, {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      return { change, send, post, refresh, reload };
+    }
+    const keyFile = async (stateDir: string) =>
+      parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
+    const derived = (n: number) => backupKey(MASTER_BYTES, n).toString("base64url");
+    const MASTER_KEY_ID = masterKeyId(sealingPublicKey(MASTER_BYTES)).toString("hex");
+
+    it("a changed backup key is the one the master key gives for N+1", async () => {
+      const stateDir = await makeStateDir();
+      await holdKey(stateDir, 3);
+      const { change, refresh, reload } = await keyApp(stateDir);
+      const res = await change({ masterKey: MASTER.secret });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ keyFingerprint: keyFingerprint(derived(4)) });
+      expect(await keyFile(stateDir)).toEqual({
+        WAITRON_BACKUP_RECOVERY_KEY: derived(4),
+        WAITRON_BACKUP_KEY_NUMBER: "4",
+        WAITRON_BACKUP_MASTER_KEY_ID: MASTER_KEY_ID,
+        WAITRON_BACKUP_KEY_ROTATED_AT: expect.any(String),
+      });
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(refresh).toHaveBeenCalledTimes(1);
+    }, 60_000);
+
+    it("with no backup key held, a change writes key 1 of the master key", async () => {
+      const stateDir = await makeStateDir({ backupKey: false });
+      const { change } = await keyApp(stateDir);
+      const res = await change({ masterKey: MASTER.secret });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ recoveryKeySet: true });
+      expect(await keyFile(stateDir)).toEqual({
+        WAITRON_BACKUP_RECOVERY_KEY: derived(1),
+        WAITRON_BACKUP_KEY_NUMBER: "1",
+        WAITRON_BACKUP_MASTER_KEY_ID: MASTER_KEY_ID,
+        WAITRON_BACKUP_KEY_ROTATED_AT: expect.any(String),
+      });
+    }, 60_000);
+
+    it.each([
+      ["another venue's master key", () => WRONG_MASTER_KEY],
+      ["text that is no master key", () => "not-a-master-key"],
+    ])(
+      "a wrong master key changes nothing and answers master_key.wrong (%s)",
+      async (_label, masterKey) => {
+        const stateDir = await makeStateDir();
+        await holdKey(stateDir, 1);
+        const before = await readFile(join(stateDir, "backup.env"));
+        const { change, refresh, reload } = await keyApp(stateDir);
+        const res = await change({ masterKey: masterKey() });
+        expect(res.status).toBe(403);
+        expect(await res.json()).toEqual({
+          error: { code: "master_key.wrong", params: { keyName: MASTER.name } },
+        });
+        expect(await readFile(join(stateDir, "backup.env"))).toEqual(before);
+        expect(reload).not.toHaveBeenCalled();
+        expect(refresh).not.toHaveBeenCalled();
+      },
+      60_000,
+    );
+
+    it("a wrong master key leaves applied archives' record and revision as they were", async () => {
+      const stateDir = await makeStateDir();
+      const { change, post, refresh, reload } = await keyApp(stateDir);
+      const applied = await post("/api/backup/apply", {
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      });
+      expect(applied.status).toBe(200);
+      const sealed = await readSealed();
+      expect(sealed).not.toBeNull();
+      const before = await readFile(join(stateDir, "backup.env"));
+      refresh.mockClear();
+      reload.mockClear();
+      const res = await change({ masterKey: WRONG_MASTER_KEY });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({
+        error: { code: "master_key.wrong", params: { keyName: MASTER.name } },
+      });
+      expect(await readSealed()).toEqual(sealed);
+      expect(await readFile(join(stateDir, "backup.env"))).toEqual(before);
+      expect(reload).not.toHaveBeenCalled();
+      expect(refresh).not.toHaveBeenCalled();
+    }, 60_000);
+
+    it.each([
+      ["over a connection that is not encrypted", {}, {}],
+      ["from a page on another site", { origin: "https://elsewhere.example" }, undefined],
+      ["from a cross-site page", { "sec-fetch-site": "cross-site" }, undefined],
+    ])(
+      "a key change sent %s changes nothing and answers node.operation_page_required",
+      async (_label, headers, env) => {
+        const stateDir = await makeStateDir();
+        const before = await readFile(join(stateDir, "backup.env"));
+        const { send, refresh, reload } = await keyApp(stateDir);
+        const res = await send({ masterKey: MASTER.secret }, headers, env);
+        expect(res.status).toBe(403);
+        expect(await res.json()).toEqual({
+          error: { code: "node.operation_page_required", params: {} },
+        });
+        expect(await readFile(join(stateDir, "backup.env"))).toEqual(before);
+        expect(reload).not.toHaveBeenCalled();
+        expect(refresh).not.toHaveBeenCalled();
+      },
+      60_000,
+    );
+
+    it("refuses a plain-http key change for its page before asking the person to sign in again", async () => {
+      const stateDir = await makeStateDir();
+      const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
+      const app = buildApp(sup, stateDir);
+      const cookie = await login(app);
+      await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie, false));
+      const res = await app.request(
+        "/api/backup/rotate",
+        {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ masterKey: MASTER.secret }),
+        },
+        {},
+      );
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({
+        error: { code: "node.operation_page_required", params: {} },
+      });
+    }, 60_000);
+
+    it("refuses a body without the master key, naming the field", async () => {
+      const stateDir = await makeStateDir();
+      await holdKey(stateDir, 1);
+      const { change } = await keyApp(stateDir);
+      for (const body of [{}, { masterKey: "" }, { masterKey: 7 }, { recoveryKey: KEY_2 }]) {
+        const res = await change(body);
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({
+          error: { code: "backup.request_invalid", params: { field: "masterKey" } },
+        });
+      }
+      expect((await keyFile(stateDir)).WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
+    }, 60_000);
+  });
 
   describe("archive settings", () => {
     const STREAM_SECRET = "stream-secret-0123456789abcdef";
@@ -1798,9 +1997,8 @@ describe("backup admin routes", () => {
       return { sc, sup, app, cookie, post, status };
     }
 
-    const applyBody = (destination: unknown, recoveryKey: string | undefined = KEY_1) => ({
+    const applyBody = (destination: unknown) => ({
       destinations: [destination],
-      ...(recoveryKey === undefined ? {} : { recoveryKey }),
       schedule: DAILY_AT_0330,
       retention: RETENTION,
     });
@@ -1808,7 +2006,6 @@ describe("backup admin routes", () => {
     const weekly = { ...DAILY_AT_0330, days: [1] };
     const archiveSettings = {
       destinations: [],
-      recoveryKey: KEY_1,
       schedule: DAILY_AT_0330,
       retention: RETENTION,
     };
@@ -1968,7 +2165,11 @@ describe("backup admin routes", () => {
       });
       expect(body.reloadErrorCode).toBeUndefined();
       expect(sup.current().enabled).toBe(true);
-      expect(await backupEnvKeys(sc.stateDir)).toEqual(["WAITRON_BACKUP_RECOVERY_KEY"]);
+      expect(await backupEnvKeys(sc.stateDir)).toEqual([
+        "WAITRON_BACKUP_RECOVERY_KEY",
+        "WAITRON_BACKUP_KEY_NUMBER",
+        "WAITRON_BACKUP_MASTER_KEY_ID",
+      ]);
     }, 60_000);
 
     it("refuses the stream's folder for archives without saving or exposing its secret", async () => {
@@ -1997,7 +2198,6 @@ describe("backup admin routes", () => {
             isPrimary: () => true,
 
             readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv({}, sc.stateDir)),
-            writeRecoveryKey: async () => {},
             sealedState: { refresh: async () => "sealed" },
             probe: async () => ({ ok: true }),
             prepareEncryption: async () => ({ ok: true }),
@@ -2037,7 +2237,7 @@ describe("backup admin routes", () => {
       });
       expect(await readSealed()).toBeNull();
       expect(bucket.calls).toEqual([]);
-      await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+      expect(await keyFileOf(sc.stateDir)).toEqual(KEY_ONE_FILE);
     }, 60_000);
 
     it("an unchanged custom bucket sent with no secret keeps the stored one, under a new revision", async () => {
@@ -2049,7 +2249,7 @@ describe("backup admin routes", () => {
       expect(first.status).toBe(200);
       const oldRevision = (await readSealed())!.revision;
       const second = await post("/api/backup/apply", {
-        ...applyBody({ ...CUSTOM, secretAccessKey: "" }, undefined),
+        ...applyBody({ ...CUSTOM, secretAccessKey: "" }),
         retention: { count: 3, days: 10 },
       });
       expect(second.status).toBe(200);
@@ -2161,7 +2361,7 @@ describe("backup admin routes", () => {
       });
       expect(await readSealed()).toBeNull();
       expect(bucket.calls).toEqual([]);
-      await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+      expect(await keyFileOf(sc.stateDir)).toEqual(KEY_ONE_FILE);
     }, 60_000);
 
     it("Save tests the bucket with one object it then deletes alone", async () => {
@@ -2261,7 +2461,7 @@ describe("backup admin routes", () => {
       expect(calls).toEqual([`put ${key}`, `get ${key}`, `deleteMany ${key}`]);
       expect(bucket.deleted).toEqual([[key]]);
       expect(await readSealed()).toBeNull();
-      await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+      expect(await keyFileOf(sc.stateDir)).toEqual(KEY_ONE_FILE);
     }, 60_000);
 
     it("a bucket that does not answer within the test's time limit is refused", async () => {
@@ -2468,10 +2668,7 @@ describe("backup admin routes", () => {
       await expect(readSealed()).rejects.toMatchObject({
         code: "backup.archive_settings_invalid",
       });
-      const res = await post(
-        "/api/backup/apply",
-        applyBody({ ...CUSTOM, secretAccessKey: "" }, undefined),
-      );
+      const res = await post("/api/backup/apply", applyBody({ ...CUSTOM, secretAccessKey: "" }));
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({
         error: { code: "backup.request_invalid", params: { field: "secretAccessKey" } },
@@ -2523,7 +2720,7 @@ describe("backup admin routes", () => {
         });
         expect(await readSealed()).toBeNull();
         expect(bucket.calls).toEqual([]);
-        await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+        expect(await keyFileOf(sc.stateDir)).toEqual(KEY_ONE_FILE);
       }, 60_000);
     }
 
@@ -2617,7 +2814,7 @@ describe("backup admin routes", () => {
       ).toBe(200);
       const sealed = (await readSealed())!;
       expect(sealed.destinations).toHaveLength(2);
-      expect((await post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
+      expect((await post("/api/backup/rotate", changeKey())).status).toBe(200);
       const after = (await readSealed())!;
       expect(after.revision).not.toBe(sealed.revision);
       expect({ ...after, revision: sealed.revision }).toEqual(sealed);
@@ -2708,26 +2905,7 @@ describe("backup admin routes", () => {
       expect(await res.json()).toMatchObject(TWO_BUCKETS_REFUSED);
       expect(await readSealed()).toBeNull();
       expect(bucket.calls).toEqual([]);
-      await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
-    }, 60_000);
-
-    it("two buckets are refused as the list before a different key is refused, with nothing written", async () => {
-      await storeStream();
-      const { sc, post } = await primaryApp();
-      expect(
-        (await post("/api/backup/apply", applyBody({ kind: "local-fs", dir: makeDestDir() })))
-          .status,
-      ).toBe(200);
-      const held = await readSealed();
-      const keyFile = await readFile(join(sc.stateDir, "backup.env"), "utf8");
-      const res = await post("/api/backup/apply", {
-        ...applyList(TWO_BUCKETS),
-        recoveryKey: KEY_2,
-      });
-      expect(res.status).toBe(400);
-      expect(await res.json()).toMatchObject(TWO_BUCKETS_REFUSED);
-      expect(await readSealed()).toEqual(held);
-      expect(await readFile(join(sc.stateDir, "backup.env"), "utf8")).toBe(keyFile);
+      expect(await keyFileOf(sc.stateDir)).toEqual(KEY_ONE_FILE);
     }, 60_000);
 
     it("two buckets are refused as the list while the bucket copy's settings cannot be read, with nothing written", async () => {
@@ -2738,12 +2916,38 @@ describe("backup admin routes", () => {
       expect(await res.json()).toMatchObject(TWO_BUCKETS_REFUSED);
       expect(await readSealed()).toBeNull();
       expect(bucket.calls).toEqual([]);
-      await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+      expect(await keyFileOf(sc.stateDir)).toEqual(KEY_ONE_FILE);
     }, 60_000);
 
-    it("a folder beside a bucket that fails the test, with no key held, writes no key file", async () => {
-      bucket.failGet = true;
+    it("a settings write the database refuses answers server.internal, stores nothing, and leaves archives off", async () => {
+      const { sc, sup, post, status } = await primaryApp();
+      suite.db.run(
+        sql.raw(`create trigger refuse_archive_settings before insert on settings
+          when new.module = 'backup' begin select raise(abort, 'refused'); end`),
+      );
+      try {
+        const res = await post(
+          "/api/backup/apply",
+          applyBody({ kind: "local-fs", dir: makeDestDir() }),
+        );
+        expect(res.status).toBe(500);
+        expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+      } finally {
+        suite.db.run(sql.raw("drop trigger refuse_archive_settings"));
+      }
+      expect(await fileKey(sc.stateDir)).toBe(KEY_1);
+      expect(await readSealed()).toBeNull();
+      expect(sup.current().enabled).toBe(false);
+      expect(await status()).toMatchObject({
+        enabled: false,
+        recoveryKeySet: true,
+        recoveryKeyTooShort: false,
+      });
+    }, 60_000);
+
+    it("a Save with no backup key held answers backup.recovery_key_missing and writes nothing", async () => {
       const { sc, post } = await primaryApp();
+      await rm(join(sc.stateDir, "backup.env"));
       const res = await post(
         "/api/backup/apply",
         applyList([
@@ -2751,17 +2955,19 @@ describe("backup admin routes", () => {
           { ...CUSTOM, secretAccessKey: CUSTOM_SECRET },
         ]),
       );
-      expect(res.status).toBe(422);
-      expect(await res.json()).toMatchObject({ error: { code: "backup.archive_test_failed" } });
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ error: { code: "backup.recovery_key_missing" } });
+      expect(bucket.calls).toEqual([]);
       expect(await readSealed()).toBeNull();
       await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
     }, 60_000);
 
     it("a malformed destination list is refused as the list, before the key is checked", async () => {
       const { sc, post } = await primaryApp();
+      await rm(join(sc.stateDir, "backup.env"));
       const dir = makeDestDir();
       const folder = { kind: "local-fs", dir };
-      // With no key held and none sent, a well-formed list is refused as `recoveryKey`.
+      // With no key held, a well-formed list is refused for the missing key.
       const noKey = (destinations: unknown) => ({
         destinations,
         schedule: DAILY_AT_0330,
@@ -2776,7 +2982,7 @@ describe("backup admin routes", () => {
       }
       const control = await post("/api/backup/apply", noKey([folder]));
       expect(await control.json()).toMatchObject({
-        error: { code: "backup.request_invalid", params: { field: "recoveryKey" } },
+        error: { code: "backup.recovery_key_missing" },
       });
       expect(await readSealed()).toBeNull();
       await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
@@ -2786,7 +2992,6 @@ describe("backup admin routes", () => {
       const { post } = await primaryApp();
       const res = await post("/api/backup/apply", {
         destination: { kind: "local-fs", dir: makeDestDir() },
-        recoveryKey: KEY_1,
         schedule: DAILY_AT_0330,
         retention: RETENTION,
       });
@@ -2877,7 +3082,7 @@ describe("backup admin routes", () => {
       const good = applyBody({ kind: "local-fs", dir: makeDestDir() });
       for (const [body, field] of [
         [{ ...good, destinationDir: "/mnt/x" }, "body"],
-        [{ ...good, recoveryKey: null }, "recoveryKey"],
+        [{ ...good, recoveryKey: null }, "body"],
         [{ ...good, destinations: null }, "destinations"],
         [{ ...good, destinationTimeoutMs: "900000" }, "destinationTimeoutMs"],
         [{ ...good, destinationTimeoutMs: null }, "destinationTimeoutMs"],
@@ -2905,7 +3110,7 @@ describe("backup admin routes", () => {
         });
       }
       expect(await readSealed()).toBeNull();
-      await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+      expect(await keyFileOf(sc.stateDir)).toEqual(KEY_ONE_FILE);
     }, 60_000);
 
     it("an unknown field is refused without its name, which could be a secret", async () => {
@@ -2946,44 +3151,6 @@ describe("backup admin routes", () => {
       expect((await readSealed())?.destinationTimeoutMs).toBe(60_000);
     }, 60_000);
 
-    it("settings refused after the key is written leave a usable key and archives off", async () => {
-      // The key each re-lock of this node's state row saw, read from the state folder at the time.
-      const relocked: (string | undefined)[] = [];
-      let stateDir = "";
-      const sealedState: Pick<SealedStateRefresher, "refresh"> = {
-        refresh: async () => {
-          relocked.push(loadRecoveryKey(await loadBoxEnv({}, stateDir)));
-          return "sealed";
-        },
-      };
-      const { sc, sup, post, status } = await primaryApp({ sealedState });
-      stateDir = sc.stateDir;
-      suite.db.run(
-        sql.raw(`create trigger refuse_archive_settings before insert on settings
-          when new.module = 'backup' begin select raise(abort, 'refused'); end`),
-      );
-      try {
-        const res = await post(
-          "/api/backup/apply",
-          applyBody({ kind: "local-fs", dir: makeDestDir() }),
-        );
-        expect(res.status).not.toBe(200);
-        expect(res.status).toBe(500);
-        expect(await res.json()).toEqual({ error: { code: "server.internal" } });
-      } finally {
-        suite.db.run(sql.raw("drop trigger refuse_archive_settings"));
-      }
-      expect(relocked).toEqual([KEY_1]);
-      expect(loadRecoveryKey(await loadBoxEnv({}, sc.stateDir))).toBe(KEY_1);
-      expect(await readSealed()).toBeNull();
-      expect(sup.current().enabled).toBe(false);
-      expect(await status()).toMatchObject({
-        enabled: false,
-        recoveryKeySet: true,
-        recoveryKeyTooShort: false,
-      });
-    }, 60_000);
-
     it("stops the old stream before sealing secrets under a replacement key", async () => {
       const events: string[] = [];
       const { post } = await primaryApp({
@@ -3006,11 +3173,11 @@ describe("backup admin routes", () => {
           .status,
       ).toBe(200);
       events.length = 0;
-      expect((await post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
+      expect((await post("/api/backup/rotate", changeKey())).status).toBe(200);
       expect(events.indexOf("stop")).toBeLessThan(events.indexOf("seal"));
     });
 
-    it("reloads the stream under the effective key after initial save and both rotation paths, including metadata failure", async () => {
+    it("reloads the stream under the effective key after both rotation paths, including metadata failure, and not after a Save", async () => {
       const loaded: (string | undefined)[] = [];
       let stateDir = "";
       const { sc, post } = await primaryApp({
@@ -3026,21 +3193,21 @@ describe("backup admin routes", () => {
         (await post("/api/backup/apply", applyBody({ kind: "local-fs", dir: makeDestDir() })))
           .status,
       ).toBe(200);
-      expect(loaded).toEqual([KEY_1]);
-      expect((await post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
-      expect(loaded).toEqual([KEY_1, KEY_2]);
+      expect(loaded).toEqual([]);
+      expect((await post("/api/backup/rotate", changeKey())).status).toBe(200);
+      expect(loaded).toEqual([KEY_2]);
       suite.db.run(
         sql.raw(
           `create trigger refuse_rotation before update on settings when new.module = 'backup' begin select raise(abort, 'refused'); end`,
         ),
       );
       try {
-        const response = await post("/api/backup/rotate", { recoveryKey: KEY_1 });
+        const response = await post("/api/backup/rotate", changeKey());
         expect(response.status).toBe(500);
         expect(await response.json()).toMatchObject({
           error: { code: "backup.rotation_metadata_failed" },
         });
-        expect(loaded).toEqual([KEY_1, KEY_2, KEY_1]);
+        expect(loaded).toEqual([KEY_2, KEY_3]);
       } finally {
         suite.db.run(sql.raw("drop trigger refuse_rotation"));
       }
@@ -3056,9 +3223,8 @@ describe("backup admin routes", () => {
         },
       });
       stateDir = keyOnly.sc.stateDir;
-      await writeRecoveryKey(stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
-      expect((await keyOnly.post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
-      expect(loaded).toEqual([KEY_1, KEY_2, KEY_1, KEY_2]);
+      expect((await keyOnly.post("/api/backup/rotate", changeKey())).status).toBe(200);
+      expect(loaded).toEqual([KEY_2, KEY_3, KEY_2]);
     });
 
     describe("rotation", () => {
@@ -3098,11 +3264,9 @@ describe("backup admin routes", () => {
         return { ...app, seen, relock, saved: await app.status(), sealed: (await readSealed())! };
       }
 
-      const fileKey = async (stateDir: string) => loadRecoveryKey(await loadBoxEnv({}, stateDir));
-
       it("keeps a bucket destination, schedule, retention and time limit, under a new revision", async () => {
         const { post, status, saved, sealed } = await savedInBucket();
-        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        const res = await post("/api/backup/rotate", changeKey());
         expect(res.status).toBe(200);
         const rotated = await res.json();
         expect(rotated.destinations).toEqual(saved.destinations);
@@ -3121,18 +3285,18 @@ describe("backup admin routes", () => {
         );
         expect((await post("/api/backup/disable")).status).toBe(200);
         const sealed = (await readSealed())!;
-        expect((await post("/api/backup/rotate", { recoveryKey: KEY_2 })).status).toBe(200);
+        expect((await post("/api/backup/rotate", changeKey())).status).toBe(200);
         const after = (await readSealed())!;
         expect(after.revision).not.toBe(sealed.revision);
         expect({ ...after, revision: sealed.revision }).toEqual(sealed);
       }, 60_000);
 
       it("a revision that cannot be stored after the key file was written reports the new key in effect", async () => {
-        const { sc, sup, app, cookie, post, status, seen, saved, sealed } = await savedInBucket();
+        const { sc, sup, post, status, seen, saved, sealed } = await savedInBucket();
         const restore = refuseArchiveWrites();
         let res: Response;
         try {
-          res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+          res = await post("/api/backup/rotate", changeKey());
         } finally {
           restore();
         }
@@ -3148,10 +3312,8 @@ describe("backup admin routes", () => {
 
         expect(await fileKey(sc.stateDir)).toBe(KEY_2);
         expect(sup.current().keyFingerprint).toBe(keyFingerprint(KEY_2));
-        const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
-        expect((await rk.json()).key).toBe(KEY_2);
         // Locked under the new key after the key file, and again after the failure.
-        expect(seen).toEqual([KEY_1, KEY_1, KEY_2, KEY_2]);
+        expect(seen).toEqual([KEY_1, KEY_2, KEY_2]);
 
         const after = await status();
         expect(after.revision).toBe(saved.revision);
@@ -3171,7 +3333,7 @@ describe("backup admin routes", () => {
         const restore = refuseArchiveWrites();
         let res: Response;
         try {
-          res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+          res = await post("/api/backup/rotate", changeKey());
         } finally {
           restore();
         }
@@ -3190,21 +3352,20 @@ describe("backup admin routes", () => {
       }, 60_000);
 
       it("after a revision and a reload that both failed, the recovery key read is the new key", async () => {
-        const { sup, app, cookie, post } = await savedInBucket();
+        const { sc, sup, post } = await savedInBucket();
         vi.spyOn(sup, "reload").mockRejectedValueOnce(
           new AppError("backup.destinations_invalid", { reason: "bad_entry" }),
         );
         const restore = refuseArchiveWrites();
         let res: Response;
         try {
-          res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+          res = await post("/api/backup/rotate", changeKey());
         } finally {
           restore();
         }
         expect((await res.json()).error.code).toBe("backup.rotation_metadata_failed");
         expect(sup.current().recoveryKey).toBe(KEY_1);
-        const rk = await app.request("/api/backup/recovery-key", { headers: { cookie } });
-        expect((await rk.json()).key).toBe(KEY_2);
+        expect(await fileKey(sc.stateDir)).toBe(KEY_2);
       }, 60_000);
 
       it("a reload that fails after the key and revision were written answers 200 with its code", async () => {
@@ -3212,7 +3373,7 @@ describe("backup admin routes", () => {
         vi.spyOn(sup, "reload").mockRejectedValueOnce(
           new AppError("backup.destinations_invalid", { reason: "bad_entry" }),
         );
-        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        const res = await post("/api/backup/rotate", changeKey());
         expect(res.status).toBe(200);
         expect(await res.json()).toMatchObject({ reloadErrorCode: "backup.destinations_invalid" });
         expect(await fileKey(sc.stateDir)).toBe(KEY_2);
@@ -3224,13 +3385,52 @@ describe("backup admin routes", () => {
         sc.readRecord = async () => {
           throw new AppError("backup.archive_settings_invalid", { reason: "fields" });
         };
-        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        const res = await post("/api/backup/rotate", changeKey());
         expect(res.status).toBe(200);
         expect(await res.json()).toMatchObject({
+          reloadErrorCode: "backup.archive_settings_invalid",
           loadErrorCode: "backup.archive_settings_invalid",
         });
         expect(await fileKey(sc.stateDir)).toBe(KEY_2);
         expect((await readSealed())!.revision).not.toBe(sealed.revision);
+      }, 60_000);
+
+      it("after the revision fails, settings the reload finds unusable are named beside the changed key", async () => {
+        const { sc, post } = await savedInBucket();
+        sc.readRecord = async () => {
+          throw new AppError("backup.archive_settings_invalid", { reason: "fields" });
+        };
+        const restore = refuseArchiveWrites();
+        let res: Response;
+        try {
+          res = await post("/api/backup/rotate", changeKey());
+        } finally {
+          restore();
+        }
+        expect(res.status).toBe(500);
+        expect((await res.json()).error).toMatchObject({
+          code: "backup.rotation_metadata_failed",
+          params: { reloadErrorCode: "backup.archive_settings_invalid" },
+        });
+        expect(await fileKey(sc.stateDir)).toBe(KEY_2);
+      }, 60_000);
+
+      it("after the revision fails, a reload that loads another key than the one written fails loud", async () => {
+        const { sc, sup, post } = await savedInBucket();
+        // The box's own environment wins over the key file, so the reload keeps KEY_1.
+        sc.base = { WAITRON_BACKUP_RECOVERY_KEY: KEY_1 };
+        const restore = refuseArchiveWrites();
+        let res: Response;
+        try {
+          res = await post("/api/backup/rotate", changeKey());
+        } finally {
+          restore();
+        }
+        expect(res.status).toBe(500);
+        expect(await res.json()).toMatchObject({ error: { code: "backup.effective_mismatch" } });
+        expect(sup.current().recoveryKey).toBe(KEY_1);
+        expect(sup.current().loadErrorCode).toBeNull();
+        expect(await fileKey(sc.stateDir)).toBe(KEY_2);
       }, 60_000);
 
       const failedReloads: [string, (sc: Scenario, sup: BackupSupervisor) => void][] = [
@@ -3256,7 +3456,7 @@ describe("backup admin routes", () => {
         it(`after a reload that ${outcome}, the answer and the next status read show the key file's key and rotation time`, async () => {
           const { sc, sup, post, status } = await savedInBucket();
           failReload(sc, sup);
-          const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+          const res = await post("/api/backup/rotate", changeKey());
           expect(res.status).toBe(200);
           const rotatedAt = parseEnvFile(
             await readFile(join(sc.stateDir, "backup.env"), "utf8"),
@@ -3297,7 +3497,7 @@ describe("backup admin routes", () => {
         });
         expect(sup.current().destinations).toEqual([]);
         const sealed = (await readSealed())!;
-        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        const res = await post("/api/backup/rotate", changeKey());
         expect(res.status).toBe(200);
         const after = (await readSealed())!;
         expect(after.revision).not.toBe(sealed.revision);
@@ -3329,7 +3529,7 @@ describe("backup admin routes", () => {
         ).toBe(200);
         const sealed = (await readSealed())!;
         broken.on = true;
-        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        const res = await post("/api/backup/rotate", changeKey());
         expect(res.status).toBe(500);
         expect(await res.json()).toEqual({ error: { code: "server.internal" } });
         expect(await fileKey(sc.stateDir)).toBe(KEY_1);
@@ -3339,16 +3539,16 @@ describe("backup admin routes", () => {
 
       it("an unreadable record is left as it is, and its code is reported beside the new key", async () => {
         const { sc, post } = await primaryApp();
-        await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
         await withTransaction(suite.db, (tx) => storeArchivePart(tx, {}));
         const stored = () =>
           withTransaction(suite.db, (tx) =>
             tryGetCredential(tx, RING, { purpose: ARCHIVE_PURPOSE }),
           );
         const before = await stored();
-        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        const res = await post("/api/backup/rotate", changeKey());
         expect(res.status).toBe(200);
         expect(await res.json()).toMatchObject({
+          reloadErrorCode: "backup.archive_settings_invalid",
           loadErrorCode: "backup.archive_settings_invalid",
           recoveryKeySet: true,
         });
@@ -3356,23 +3556,22 @@ describe("backup admin routes", () => {
         expect(await stored()).toEqual(before);
       }, 60_000);
 
-      it("an unreadable record with no key held is refused as unreadable, not as unset, and nothing changes", async () => {
+      it("an unreadable record with no key held gets key 1, is left as it is, and its code is reported", async () => {
         const { sc, post } = await primaryApp();
+        await rm(join(sc.stateDir, "backup.env"));
         await withTransaction(suite.db, (tx) => storeArchivePart(tx, {}));
         const stored = () =>
           withTransaction(suite.db, (tx) =>
             tryGetCredential(tx, RING, { purpose: ARCHIVE_PURPOSE }),
           );
         const before = await stored();
-        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
-        expect(res.status).toBe(500);
-        expect(await res.json()).toEqual({
-          error: {
-            code: "backup.archive_settings_unreadable",
-            params: { reason: "backup.archive_settings_invalid" },
-          },
+        const res = await post("/api/backup/rotate", changeKey());
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({
+          loadErrorCode: "backup.archive_settings_invalid",
+          keyFingerprint: keyFingerprint(KEY_1),
         });
-        await expect(readFile(join(sc.stateDir, "backup.env"), "utf8")).rejects.toThrow();
+        expect(await fileKey(sc.stateDir)).toBe(KEY_1);
         expect(await stored()).toEqual(before);
       }, 60_000);
 
@@ -3381,14 +3580,14 @@ describe("backup admin routes", () => {
         // A directory where the key file's working copy goes refuses the write before it starts.
         await mkdir(join(sc.stateDir, "backup.env.tmp"));
         await writeFile(join(sc.stateDir, "backup.env.tmp", "x"), "x");
-        const res = await post("/api/backup/rotate", { recoveryKey: KEY_2 });
+        const res = await post("/api/backup/rotate", changeKey());
         expect(res.status).toBe(500);
         const { error } = await res.json();
         expect(error.code).not.toBe("backup.rotation_metadata_failed");
         expect(error.params ?? {}).not.toHaveProperty("effectiveKeyChanged");
         expect(await fileKey(sc.stateDir)).toBe(KEY_1);
         expect(sup.current().keyFingerprint).toBe(keyFingerprint(KEY_1));
-        expect(seen).toEqual([KEY_1, KEY_1]);
+        expect(seen).toEqual([KEY_1]);
         const after = await status();
         expect([after.revision, after.keyFingerprint, after.keyRotatedAt]).toEqual([
           saved.revision,
@@ -3405,7 +3604,7 @@ describe("backup admin routes", () => {
         const rotated = await app.request("/api/backup/rotate", {
           method: "POST",
           headers: { cookie: cookieB, "content-type": "application/json" },
-          body: JSON.stringify({ recoveryKey: KEY_2 }),
+          body: JSON.stringify(changeKey()),
         });
         expect(rotated.status).toBe(200);
         const tabANext = await status();

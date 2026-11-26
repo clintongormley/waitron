@@ -5,6 +5,7 @@ import {
   readVenue,
   withTransaction,
   type Database,
+  type MasterKeyRecord,
   type RecoveryPackRecord,
   type Transaction,
 } from "@waitron/db";
@@ -41,7 +42,14 @@ export async function currentMasterKeyElsewhere(
   tx: Transaction,
   packs: readonly RecoveryPackRecord[],
 ): Promise<PackMasterKey> {
-  const current = await readCurrentMasterKey(tx);
+  return masterKeyElsewhere(await readCurrentMasterKey(tx), packs);
+}
+
+/** {@link currentMasterKeyElsewhere} for a current master key row already read. */
+export function masterKeyElsewhere(
+  current: MasterKeyRecord | null,
+  packs: readonly RecoveryPackRecord[],
+): PackMasterKey {
   if (current === null) return { masterKey: null, masterKeyName: null, masterKeyHeldBy: null };
   const at = current.madeAt.getTime();
   const holders = packs.filter((pack) => pack.madeAt.getTime() === at);

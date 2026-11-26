@@ -1,3 +1,4 @@
+import { useSetupStateDir } from "./testing/setup-state-dir.js";
 import { sql } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -13,6 +14,8 @@ import type { VenueResult } from "@waitron/provisioning";
 import type { ProvisionRequest } from "./provision.js";
 import { mountSetup } from "./setup-api.js";
 import { type SetupDeps } from "./setup-api-deps.js";
+
+const SETUP_STATE_DIR = useSetupStateDir();
 
 // Spain is the only pack installed for venue setup, and it has provinces, postcode and tax-id rules
 // and a certificate-sealing regime. These cases make two other shapes available to setup: the
@@ -74,6 +77,7 @@ function deps(): { deps: SetupDeps; requests: ProvisionRequest[] } {
       ring: {} as KeyRing,
       persistTrading: vi.fn(async () => {}),
       requestRestart: vi.fn(),
+      stateDir: SETUP_STATE_DIR,
       assertFiscalReady: vi.fn(async () => {}),
     },
   };

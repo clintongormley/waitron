@@ -10,7 +10,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
 /**
- * Scanned in several shapes, including the advanced paste + pick-weekdays + fixed-time branches so every
+ * Scanned in several shapes, including the pick-weekdays + fixed-time branches so every
  * conditional control is scanned. The screen loads on connect, so the stub must resolve or a stray
  * rejection pollutes the run.
  */
@@ -122,9 +122,7 @@ async function setFolder(el: BackupScreen, on: boolean): Promise<void> {
 function stubApi(status: BackupStatusView, overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     getBackupStatus: vi.fn().mockResolvedValue(status),
-    mintBackupKey: vi.fn().mockResolvedValue({ key: "MINTED-KEY-abcdef012345" }),
     applyBackup: vi.fn().mockResolvedValue(ENABLED),
-    getBackupRecoveryKey: vi.fn().mockResolvedValue({ key: "OLD-KEY-xyz789012345" }),
     rotateBackupKey: vi.fn().mockResolvedValue(ENABLED),
     getStreamSettings: vi.fn().mockResolvedValue({
       isPrimary: true,
@@ -151,25 +149,20 @@ const q = (el: BackupScreen, sel: string) => el.shadowRoot!.querySelector<HTMLEl
 afterEach(cleanupWidgets);
 
 describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (theme) => {
-  it.each(["mint", "permission"])("renders the %s recovery action accessibly", async (problem) => {
-    const overrides: Partial<DashboardApi> =
-      problem === "mint"
-        ? { mintBackupKey: vi.fn().mockRejectedValue({ code: "connection.failed" }) }
-        : {
-            getBackupStatus: vi.fn().mockRejectedValue({
-              code: "authorization.not_permitted",
-              params: { permission: "system.manage" },
-            }),
-          };
+  it("renders the permission recovery action accessibly", async () => {
+    const overrides: Partial<DashboardApi> = {
+      getBackupStatus: vi.fn().mockRejectedValue({
+        code: "authorization.not_permitted",
+        params: { permission: "system.manage" },
+      }),
+    };
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
       { onboardingIntent: "live", api: stubApi(OFF, overrides) },
       theme,
     );
     await flush(el);
-    expect(
-      q(el, problem === "mint" ? "[data-test=retry-key]" : "[data-test=backup-admin-sign-in]"),
-    ).not.toBeNull();
+    expect(q(el, "[data-test=backup-admin-sign-in]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -278,53 +271,25 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
-  it("renders the advanced paste + pick-weekdays + fixed-time branches accessibly", async () => {
+  it("renders the pick-weekdays + fixed-time branches accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
       { onboardingIntent: "live", api: stubApi(OFF) },
       theme,
     );
     await flush(el);
-    q(el, "[data-test=advanced-toggle]")!.click();
     await chooseOption(q(el, "[data-test=days-mode]")!, "weekdays");
     await chooseOption(q(el, "[data-test=time-mode]")!, "fixed");
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 
-  it("renders the configure wizard reusing a key the box already holds accessibly", async () => {
-    const { el, host } = await mountWidget<BackupScreen>(
-      "dashboard-backup-screen",
-      { onboardingIntent: "live", api: stubApi({ ...OFF, recoveryKeySet: true }) },
-      theme,
-    );
-    await flush(el);
-    expect(q(el, "[data-test=existing-key]")).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders the configure wizard replacing a held key too short to use accessibly", async () => {
-    const { el, host } = await mountWidget<BackupScreen>(
-      "dashboard-backup-screen",
-      {
-        onboardingIntent: "live",
-        api: stubApi({ ...OFF, recoveryKeySet: true, recoveryKeyTooShort: true }),
-      },
-      theme,
-    );
-    await flush(el);
-    expect(q(el, "[data-test=short-key]")).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
-  it("renders the enabled state with the rotate section + re-shown old key accessibly", async () => {
+  it("renders the enabled state accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
       { onboardingIntent: "live", api: stubApi(ENABLED) },
       theme,
     );
-    await flush(el);
-    q(el, "[data-test=show-old-key]")!.click();
     await flush(el);
     await expectNoA11yViolations(host);
   });

@@ -20,7 +20,7 @@ Para guardar copias en **Una carpeta de este servidor**, escribe una ruta comple
 
 Para usar **Un bucket compatible con S3**, introduce el nombre del bucket, la región, el ID de la clave de acceso y la clave de acceso secreta de tu proveedor. Indica un **Endpoint** o una **Carpeta dentro del bucket** si hace falta. Puedes elegir solo el bucket o guardar copias tanto en la carpeta como en el bucket.
 
-Elige los días y la hora y establece cuántas copias guardar y qué antigüedad pueden tener. Deja seleccionado **Que lo decida el servidor** si quieres hacer las copias tras el cierre y los informes del día. Guarda la clave de cifrado de copias como se indica abajo y elige **Activar las copias**.
+Elige los días y la hora y establece cuántas copias guardar y qué antigüedad pueden tener. Deja seleccionado **Que lo decida el servidor** si quieres hacer las copias tras el cierre y los informes del día. Después elige **Activar las copias**.
 
 Si puedes elegir **Waitron Cloud**, usa la conexión del servidor con Cloud. Selecciona **Todos los días** para que Cloud reciba las copias según la programación de tu local. Waitron Cloud decide cuándo caducan sus copias antiguas.
 
@@ -30,11 +30,11 @@ Si Cloud deja de estar disponible, abre **Cambiar el destino o la programación*
 
 ## Guarda tus claves {#keys}
 
-La **Clave de cifrado de copias** abre las copias cifradas. La clave maestra, en la primera página de tu paquete de recuperación, autoriza la restauración. Conserva el paquete con la clave maestra que necesita cada copia.
+La clave de las copias abre las copias cifradas. La clave maestra, en la primera página de tu paquete de recuperación, autoriza la restauración. Conserva el paquete con la clave maestra que necesita cada copia.
 
-Usa **Copiar** o **Descargar archivo de clave** para guardar la clave de cifrado de copias en un lugar seguro fuera del servidor. Marca **He guardado esta clave en un lugar seguro** cuando lo hayas hecho.
+Para cambiar la clave de las copias, elige **Cambiar la clave de las copias** en la tarjeta **Paquete de recuperación** y escribe la clave maestra. Las copias nuevas usan entonces la clave siguiente, que un servidor que hayas quitado no puede leer. Después elige **Hacer paquete de recuperación** y guarda el paquete nuevo: lo necesitarás para restaurar una copia hecha después del cambio.
 
-Al cambiar la clave de cifrado de copias, usa **Mostrar la clave actual** para guardar también la clave antigua. Conserva las claves y los paquetes antiguos de las copias que aún guardes. Consulta [Identifícate ante la copia elegida](backup-recovery.md#proof) para saber qué necesitas al restaurar.
+Conserva las claves y los paquetes antiguos de las copias que aún guardes. Consulta [Identifícate ante la copia elegida](backup-recovery.md#proof) para saber qué necesitas al restaurar.
 
 ## Copia continua en tu bucket {#bucket-copy}
 

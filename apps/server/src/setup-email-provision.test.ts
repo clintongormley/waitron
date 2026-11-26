@@ -1,3 +1,4 @@
+import { useSetupStateDir } from "./testing/setup-state-dir.js";
 import { makeAuthority as makeCertificateAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,6 +17,8 @@ import { mountSetup } from "./setup-api.js";
 import { type SetupDeps } from "./setup-api-deps.js";
 import { resolveEmailDelivery } from "./email-delivery.js";
 import { createSetupOperationStore } from "./setup-operation.js";
+
+const SETUP_STATE_DIR = useSetupStateDir();
 
 const certificate = makeCertificateAuthority().issue({ passphrase: "fiscal-fixture" });
 
@@ -116,6 +119,7 @@ function mount(overrides: Partial<SetupDeps> = {}) {
         calls.push("publish");
       },
       requestRestart: () => {},
+      stateDir: SETUP_STATE_DIR,
       ...overrides,
     },
     (...line) => {

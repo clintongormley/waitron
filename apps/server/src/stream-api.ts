@@ -27,7 +27,7 @@ import {
   refuseStreamOverlap,
   type ArchivePlace,
 } from "./archive-settings.js";
-import { mintRecoveryKey, readHeldKey } from "./backup-config.js";
+import { readHeldKey } from "./backup-config.js";
 import { keyFingerprint } from "./backup-supervisor.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
@@ -52,7 +52,6 @@ export interface StreamApiDeps {
   isPrimary: () => boolean;
 
   readRecoveryKey: () => Promise<string | undefined>;
-  writeRecoveryKey: (key: string) => Promise<void>;
   /** Re-locks this node's secrets row under the current recovery key. Never throws. */
   sealedState: Pick<SealedStateRefresher, "refresh">;
   /** Throws when the bucket gives no answer at all, a cancelled `signal` included. */
@@ -95,6 +94,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.request_invalid": 400,
   "backup.stream_config_unsafe": 400,
   "backup.recovery_key_too_short": 409,
+  "backup.recovery_key_missing": 409,
   "backup.not_primary": 409,
   "backup.reload_in_progress": 409,
   "backup.stream_held_by_another_box": 409,
@@ -220,6 +220,13 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     };
   };
 
+  // Every backup key comes from the master key, so Save writes none.
+  const requireKey = async (): Promise<void> => {
+    if ((await deps.readRecoveryKey()) === undefined) {
+      throw new AppError("backup.recovery_key_missing", {});
+    }
+  };
+
   app.get("/api/backup/stream", (c) =>
     run(c, log, async () => {
       await authorize(c);
@@ -236,7 +243,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
     }),
   );
 
-  // A key is ensured and the sealed-state refresh attempted before the settings are stored and the
+  // The sealed-state refresh is attempted before the settings are stored and the
   // copy reloaded. A failed refresh does not block Save; it surfaces as the sealed-state alert. The
   // reload runs after the credential has committed: inside the transaction, the write lock refuses
   // the host's own read of the settings.
@@ -246,7 +253,7 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       guardPrimary();
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       await refuseWhilePaired(deps.node);
-      await deps.readRecoveryKey();
+      await requireKey();
       const bucket = await readBucketBody(c);
       await refuseArchiveOverlap(bucket);
       const signal = bucketWait(c);
@@ -258,9 +265,6 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       return deps.turns(async () => {
         guardPrimary();
         await refuseArchiveOverlap(bucket); // Again: archive settings may have changed meanwhile.
-        if ((await deps.readRecoveryKey()) === undefined) {
-          await deps.writeRecoveryKey(mintRecoveryKey());
-        }
         await deps.sealedState.refresh();
         // Again, under node.db's lock: a join checks for these settings and writes its pair link
         // under the same lock (`mirror-bundle-api.ts`), so one of the two sees the other.

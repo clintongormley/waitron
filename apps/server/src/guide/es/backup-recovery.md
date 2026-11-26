@@ -1,6 +1,6 @@
 # Recuperar desde una copia
 
-Conserva el paquete de recuperación anterior cuando cambies la clave de cifrado de copias. Hasta que la nueva copia en el bucket esté lista, el paquete anterior sigue correspondiendo a la copia ofrecida para recuperar. Si la página dice que el paquete no corresponde a la copia o que el acceso al bucket no permite leerla, usa el paquete correspondiente, o corrige el acceso al bucket y vuelve a intentarlo.
+Conserva el paquete de recuperación anterior cuando cambies la clave de las copias. Hasta que la nueva copia en el bucket esté lista, el paquete anterior sigue correspondiendo a la copia ofrecida para recuperar. Si la página dice que el paquete no corresponde a la copia o que el acceso al bucket no permite leerla, usa el paquete correspondiente, o corrige el acceso al bucket y vuelve a intentarlo.
 
 Las copias programadas y la copia en el bucket usan cada una la carpeta que elijas, sin añadir una carpeta para el local. Elige carpetas distintas para las copias programadas y la copia en el bucket. Ninguna puede estar dentro de la otra.
 

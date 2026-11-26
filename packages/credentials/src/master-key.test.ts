@@ -5,6 +5,7 @@ import * as masterKeyModule from "./master-key.js";
 import {
   authorityKey,
   authorityKeyMatches,
+  backupKey,
   makeMasterKey,
   masterKeyCheckValue,
   masterKeyId,
@@ -43,6 +44,46 @@ describe("the fixed vectors", () => {
     expect(masterKeyId(sealingPublicKey(fixedKey)).toString("hex")).toBe("88286ca83ba00be7");
     expect(masterKeyName(sealingPublicKey(fixedKey), "2026-11-23")).toBe("2026-11-23 · EG6B");
   });
+
+  it("backupKey's fixed vectors", () => {
+    expect(backupKey(fixedKey, 1).toString("hex")).toBe(
+      "20c0935fd7e427b2ccdd2448279fad97e45ddfac8cd80b55722541f62617c756",
+    );
+    expect(backupKey(fixedKey, 3).toString("hex")).toBe(
+      "8ebc546b2206fedf736ac430f271aebbec11c6dcecd9fdf001cb9f1c568c73ba",
+    );
+    expect(backupKey(fixedKey, 12).toString("hex")).toBe(
+      "e3e5c18e311c1b8d794820aa88a654e6198cdc1339c2646093e1e7971b038415",
+    );
+  });
+});
+
+describe("backup key N", () => {
+  it("N is written in decimal with no leading zeros", () => {
+    const hkdf = (info: string) => Buffer.from(hkdfSync("sha256", fixedKey, salt, info, 32));
+    expect(backupKey(fixedKey, 3).equals(hkdf("backup-key.3"))).toBe(true);
+    expect(backupKey(fixedKey, 12).equals(hkdf("backup-key.012"))).toBe(false);
+    expect(backupKey(fixedKey, 3).equals(backupKey(fixedKey, 4))).toBe(false);
+    expect(backupKey(fixedKey, 0xffff_ffff).equals(hkdf("backup-key.4294967295"))).toBe(true);
+  });
+
+  it.each([
+    0,
+    -1,
+    1.5,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    0x1_0000_0000,
+    Number.MAX_SAFE_INTEGER + 1,
+  ])("refuses backup key number %s", (n) => {
+    const error = refusal(() => backupKey(fixedKey, n));
+    expect(error.code).toBe("master_key.derivation_input_invalid");
+    expect(error.params).toEqual({ input: "backup_key_number" });
+  });
+
+  it("refuses a master key that is not 16 bytes", () => {
+    expect(refusal(() => backupKey(Buffer.alloc(15), 1)).code).toBe("master_key.code_invalid");
+  });
 });
 
 describe("HKDF takes the decoded bytes, not the printed text", () => {
@@ -79,8 +120,10 @@ describe("making a master key", () => {
 
   it("never hands out the sealing private key", () => {
     expect(Object.keys(masterKeyModule).sort()).toEqual([
+      "LARGEST_BACKUP_KEY_NUMBER",
       "authorityKey",
       "authorityKeyMatches",
+      "backupKey",
       "makeMasterKey",
       "masterKeyCheckValue",
       "masterKeyId",

@@ -1,4 +1,5 @@
 import { driveSchedule } from "./testing/backup-schedule.js";
+import { HELD_BACKUP_FRAME } from "./testing/recovery-key.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
 import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
@@ -48,7 +49,7 @@ async function loopDeps(
     resolvers: {},
     stateDir,
     stagingDir: join(root, "staging"),
-    recoveryKey: "key",
+    backupKey: HELD_BACKUP_FRAME,
     schedule: { kind: "interval", ms: 10 },
     retain: 3,
     retainDays: 30,

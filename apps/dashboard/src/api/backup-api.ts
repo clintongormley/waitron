@@ -1,7 +1,7 @@
 import type { DashboardRequest, DownloadedFile } from "@waitron/dashboard-kit";
 import { CloudApi } from "./cloud-api.js";
 
-// ── Backup admin (recovery-key wizard) types ─────────────────────────────────────────────────────
+// ── Backup admin types ───────────────────────────────────────────────────────────────────────
 
 export type BackupSchedule =
   | { kind: "interval"; ms: number }
@@ -88,8 +88,6 @@ export type BackupWriteAnswer = BackupStatusView & { reloadErrorCode?: string };
 export interface BackupApplyBody {
   destinations: ArchiveChoice[];
   cloud?: boolean;
-  /** Omitted when the box already holds a key: the server uses that one. */
-  recoveryKey?: string;
   schedule: BackupSchedule;
   retention: { count: number; days: number };
 }
@@ -217,6 +215,15 @@ export interface RecoveryPackStatus {
   keepOldPackUntil: string;
   /** The venue's time zone, which the pack's pages are dated in. */
   timeZone: string;
+  /** The box's backup key; null while it holds none it can use. */
+  backupKey: {
+    number: number;
+    fingerprint: string;
+    /** Null when the key was never changed. */
+    changedAt: string | null;
+    /** False with no master key too. */
+    fromCurrentMasterKey: boolean;
+  } | null;
 }
 /** `GET /api/backup/stream` — LOCAL copy of `apps/server/src/stream-api.ts`'s `StreamSettingsView`.
  * Never carries the secret access key. */
@@ -421,9 +428,6 @@ export class BackupApi extends CloudApi {
   markRecoveryPackReceived(packNumber: number): Promise<void> {
     return this.#request<void>(`/api/backup/recovery-pack/${packNumber}/received`, "POST", {});
   }
-  mintBackupKey(): Promise<{ key: string }> {
-    return this.#request<{ key: string }>("/api/backup/mint-key", "POST");
-  }
   applyBackup(body: BackupApplyBody): Promise<BackupWriteAnswer> {
     return this.#request<BackupWriteAnswer>("/api/backup/apply", "POST", body);
   }
@@ -433,11 +437,8 @@ export class BackupApi extends CloudApi {
   disableBackup(): Promise<BackupWriteAnswer> {
     return this.#request<BackupWriteAnswer>("/api/backup/disable", "POST");
   }
-  getBackupRecoveryKey(): Promise<{ key: string | null }> {
-    return this.#request<{ key: string | null }>("/api/backup/recovery-key", "GET");
-  }
-  /** Archives taken before the rotate still need the old key. */
-  rotateBackupKey(body: { recoveryKey: string }): Promise<BackupWriteAnswer> {
+  /** Moves backups to the next backup key of the typed master key, sent as typed. */
+  rotateBackupKey(body: { masterKey: string }): Promise<BackupWriteAnswer> {
     return this.#request<BackupWriteAnswer>("/api/backup/rotate", "POST", body);
   }
   getStreamSettings(): Promise<StreamSettingsView> {

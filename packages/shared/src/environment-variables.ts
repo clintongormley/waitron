@@ -171,6 +171,12 @@ export const ENVIRONMENT_VARIABLES = {
   }),
   WAITRON_BACKUP_RECOVERY_KEY: variable("backup.env", "key", ["server", "restore"]),
   WAITRON_BACKUP_KEY_ROTATED_AT: variable("backup.env", "text", server),
+  WAITRON_BACKUP_KEY_NUMBER: variable("backup.env", "count", server, {
+    rule: "positive integer",
+  }),
+  WAITRON_BACKUP_MASTER_KEY_ID: variable("backup.env", "text", server, {
+    rule: "16 lower-case hex characters",
+  }),
   WAITRON_BREAKGLASS_PASSWORD: variable("command", "text", ["break-glass"], secret),
   WAITRON_BREAKGLASS_PIN: variable("command", "text", ["break-glass"], secret),
   WAITRON_MASTER_KEY: variable("command or start input", "key", ["server", "restore"]),

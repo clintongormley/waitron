@@ -35,14 +35,15 @@ import {
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
-import { loadKeyRing } from "@waitron/credentials";
+import { backupKey, loadKeyRing, masterKeyId, sealingPublicKey } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { decodeMasterKeyCode } from "@waitron/shared";
 import { readStagedConfigurationImport } from "./configuration-import.js";
 import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
-import { SETUP_CLOCK_STEP_FILE } from "@waitron/store";
+import { parseEnvFile } from "./env-file.js";
+import { BACKUP_ENV_FILE, SETUP_CLOCK_STEP_FILE } from "@waitron/store";
 import {
   assignMenuToVenue,
   createMenu,
@@ -1086,6 +1087,12 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
         expect(trading.WAITRON_NODE_ID).toBe(committed.nodeId);
         expect(trading).not.toHaveProperty("WAITRON_TILL_TILL_ID");
+        const shown = decodeMasterKeyCode(reply.masterKey);
+        expect(parseEnvFile(await readFile(join(stateDir, BACKUP_ENV_FILE), "utf8"))).toEqual({
+          WAITRON_BACKUP_RECOVERY_KEY: backupKey(shown, 1).toString("base64url"),
+          WAITRON_BACKUP_KEY_NUMBER: "1",
+          WAITRON_BACKUP_MASTER_KEY_ID: masterKeyId(sealingPublicKey(shown)).toString("hex"),
+        });
         await poll(() => (kills.length > 0 ? kills.length : undefined));
         expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
       });

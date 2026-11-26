@@ -46,7 +46,8 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
-const KEY_1 = "recovery-key-one-strong";
+/** A key text the opener takes: 32 bytes as base64url. */
+const KEY_1 = Buffer.alloc(32, 1).toString("base64url");
 const ringOf = (byte: number, version: string, previous?: { byte: number; version: string }) =>
   loadKeyRing({
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, byte).toString("base64"),
@@ -236,7 +237,11 @@ const write = (ring: KeyRing, settings: Omit<ArchiveSettings, "revision">) =>
 const recordNow = () => readArchiveSettingsWithMeta(suite.db, RING).then((r) => r.meta);
 
 const storeKey = (sc: Scenario, key: string) =>
-  writeFile(join(sc.stateDir, "backup.env"), `WAITRON_BACKUP_RECOVERY_KEY=${key}\n`);
+  writeFile(
+    join(sc.stateDir, "backup.env"),
+    `WAITRON_BACKUP_RECOVERY_KEY=${key}\nWAITRON_BACKUP_KEY_NUMBER=1\n` +
+      "WAITRON_BACKUP_MASTER_KEY_ID=0123456789abcdef\n",
+  );
 
 async function storeRaw(plaintext: string): Promise<void> {
   await write(RING, {
