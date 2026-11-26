@@ -37,6 +37,7 @@ describe.each(["light", "dark"] as const)("wt-menu-row a11y (%s theme)", (theme)
     ['action label="Print"', "Print"],
     ['action label="Allergies" value="Nuts"', "Allergies Nuts"],
     ['action label="Guests" value="3" chevron', "Guests 3"],
+    ['action label="Bill" value="3" check', "Bill 3"],
     ['action label="Move" disabled', "Move"],
     ['action label="Edit" help="Change the name." help-label="Help: Edit"', "Edit"],
   ])("an accessible action with %s", async (attributes, name) => {

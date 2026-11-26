@@ -48,6 +48,9 @@ export const actionChoiceStyles = css`
   [data-row-choice] {
     ${actionRowStyles}
   }
+  [data-row-choice]:has(> wt-menu-row[label]) {
+    padding: 0;
+  }
   [data-row-choice][aria-checked="true"] {
     background: var(--wt-color-surface-lifted);
   }
@@ -324,15 +327,19 @@ export class WtRowActions extends LitElement {
     this.positionPopup();
     this.#resize.observe(popup);
     window.addEventListener("resize", this.onWindowResize);
+    const options = this.menuRows();
+    const selection =
+      options.find((row) => row.getAttribute("aria-checked") === "true") ?? options[0];
+    if (selection) {
+      selection.focus();
+      return;
+    }
     if (this.menuSheet) {
       const first = this.sheetControls().find(
         (control) => control.getAttribute("aria-disabled") !== "true",
       );
       (first ?? this.actions).focus();
-      return;
     }
-    const options = this.menuRows();
-    (options.find((row) => row.getAttribute("aria-checked") === "true") ?? options[0])?.focus();
   }
 
   hide({ restoreFocus = false } = {}): void {
@@ -529,8 +536,8 @@ export class WtRowActions extends LitElement {
       this.hide({ restoreFocus: true });
       return;
     }
-    if (this.menuSheet) {
-      if (event.key !== "Tab") return;
+    if (this.menuContent() === undefined) {
+      if (!this.menuSheet || event.key !== "Tab") return;
       const controls = this.sheetControls();
       const current = controls.indexOf(event.composedPath()[0] as HTMLElement);
       if (current >= 0 && controls[current + (event.shiftKey ? -1 : 1)]) return;
@@ -538,7 +545,6 @@ export class WtRowActions extends LitElement {
       this.hide({ restoreFocus: true });
       return;
     }
-    if (this.menuContent() === undefined) return;
     if (event.key === "Tab") {
       this.hide();
       this.trigger.focus();

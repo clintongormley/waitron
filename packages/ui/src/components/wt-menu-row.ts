@@ -67,6 +67,9 @@ export class WtMenuRow extends LitElement {
         color: inherit;
         flex: none;
       }
+      .trailing wt-icon[name="check"] {
+        color: var(--wt-color-primary);
+      }
       .row ::slotted(*) {
         flex: none;
       }
@@ -107,20 +110,27 @@ export class WtMenuRow extends LitElement {
   @property() label = "";
   @property() value: string | number = "";
   @property({ type: Boolean }) chevron = false;
+  @property({ type: Boolean }) check = false;
   @property({ type: Boolean }) disabled = false;
   @property({ type: Boolean, reflect: true }) divider = false;
 
   private renderRow() {
     const label = html`<span class="label">${this.label}</span>`;
+    const trailing =
+      this.value !== "" || this.chevron || this.check
+        ? html`<span class="trailing">
+            ${this.value === "" ? nothing : html`<span class="value">${this.value}</span>`}
+            ${this.chevron ? html`<wt-icon name="chevron-right" size="lg"></wt-icon>` : nothing}
+            ${this.check ? html`<wt-icon name="check" size="lg"></wt-icon>` : nothing}
+          </span>`
+        : nothing;
     if (this.action)
       return html`<button type="button" class="row" ?disabled=${this.disabled}>
-        ${label}
-        <span class="trailing">
-          ${this.value === "" ? nothing : html`<span class="value">${this.value}</span>`}
-          ${this.chevron ? html`<wt-icon name="chevron-right" size="lg"></wt-icon>` : nothing}
-        </span>
+        ${label}${trailing}
       </button>`;
-    return this.label ? html`<div class="row">${label}<slot></slot></div>` : html`<slot></slot>`;
+    return this.label
+      ? html`<div class="row">${label}${trailing}<slot></slot></div>`
+      : html`<slot></slot>`;
   }
 
   override render() {

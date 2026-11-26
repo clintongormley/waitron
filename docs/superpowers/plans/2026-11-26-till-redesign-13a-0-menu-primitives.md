@@ -23,6 +23,8 @@ assigned this component slice in Lane D’s `questions.md` at 21:58. [Design §�
   value and 6px before the decorative 18px icon. Register `chevron-right` once in
   `packages/ui/src/components/wt-icon.ts`. Use existing tokens first and add missing
   dimensions to `packages/ui-core/src/tokens/structure.css`.
+  The watcher’s 22:57 addition lets a native choice supply its own button and retain its
+  checked state and focus. Put a labelled row inside it for the value, chevron or check mark.
 - [ ] **Focus and action.** In the opt-in sheet, focus the first enabled control
   on open. Tab between controls and dismiss at either end, returning focus to
   the trigger. Keep the native composed click so the existing sheet handler
@@ -35,6 +37,7 @@ assigned this component slice in Lane D’s `questions.md` at 21:58. [Design §�
   sizing. Extend both `.a11y.test.ts` files for named open and closed sheets, and
   plain, value, count with chevron, disabled and help rows, in both themes. Assert
   the open sheet’s dialog role and accessible name.
+  Verify a styled native bill choice still receives checked focus, arrows and activation.
   Delete the action label once and verify axe fails. Add each
   `.forced-colors.test.ts` for the sheet edge and the row’s divider and focus. Run the bottom-sheet case
   in `packages/ui/src/popover-fallback.test.ts`, the UI chrome and type checks, and

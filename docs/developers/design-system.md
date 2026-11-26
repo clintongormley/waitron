@@ -976,8 +976,9 @@ Use `bottom-sheet sheet-variant="menu"` on `wt-row-actions` for the till's menu 
 Set `sheet-heading` to show a title and name the dialog. A sheet without a heading takes
 its name from the trigger's `label`. Use `data-sheet-heading` on a direct child to label a
 section. If the sheet needs to stop above a bottom bar, set `--wt-menu-sheet-bottom-offset`
-to the bar's height. The dimming stops there too. Opening focuses the first enabled control.
-Escape and Tab past either end close the sheet and return focus to its trigger.
+to the bar's height. The dimming stops there too. Opening a sheet of plain actions focuses the
+first enabled control. Escape and Tab past either end close it and return focus to its trigger.
+A sheet with a slotted `role="menu"` follows the menu's selection and keyboard rules above.
 
 Use `<wt-menu-row action label="Guests" value="3" chevron divider></wt-menu-row>` for a
 menu choice with a trailing count. Listen for its native `click`. Give a choice that opens a
@@ -985,6 +986,11 @@ screen `chevron`. Use `divider` when another row follows and `disabled` to disab
 For a setting that provides its own control, give the row a `label` and put the control in
 the default slot. The control keeps its own accessible name and sits at the trailing edge.
 The existing unlabelled slot still wraps a menu option and its help badge.
+
+When you supply a native button with its own role or checked state, include `actionChoiceStyles`
+and give the button `data-row-choice`. Put a labelled `wt-menu-row` inside it, with `value`,
+`chevron` or `check` as needed. The inner row supplies the spacing and trailing marks. The outer
+button retains the action, its checked state and keyboard focus.
 
 A `wt-combobox` panel opens below its field when it fits. Otherwise it uses the side with more
 room and scrolls its list within that room, leaving its field and search box visible. Filtering

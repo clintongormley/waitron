@@ -10,7 +10,7 @@ import { WtDataTable } from "./wt-data-table.js";
 import { cleanup, host, mount } from "../test-helpers.js";
 import { expectNoA11yViolations } from "../a11y-helpers.js";
 import { setHelpMode } from "../help-mode.js";
-import { WtRowActions } from "./wt-row-actions.js";
+import { actionChoiceStyles, WtRowActions } from "./wt-row-actions.js";
 
 async function mountWidget<T extends HTMLElement>(tag: string, props: Partial<T>) {
   const el = (await mount(`<${tag}></${tag}>`)) as T & { updateComplete: Promise<unknown> };
@@ -131,6 +131,35 @@ test("a plain row's slotted control precedes its help button in the sheet's Tab 
   } finally {
     setHelpMode(false);
   }
+});
+
+test("a native bill choice uses the shared row layout and keeps checked focus and activation", async () => {
+  const { el, popup } = await menuSheet(`<style>${actionChoiceStyles.cssText}</style>
+    <div role="menu" aria-label="Bills">
+      <button type="button" data-row-choice role="menuitemradio" aria-checked="false">
+        <wt-menu-row label="Bill 1" value="2" chevron divider></wt-menu-row>
+      </button>
+      <button type="button" data-row-choice role="menuitemradio" aria-checked="true">
+        <wt-menu-row label="Bill 2" value="3" check></wt-menu-row>
+      </button>
+    </div>`);
+  const [first, checked] = el.querySelectorAll<HTMLButtonElement>("button");
+  expect(document.activeElement).toBe(checked);
+  const bill = page.getByRole("menuitemradio", { name: "Bill 2 3" });
+  await expect.element(bill).toBeVisible();
+  const row = checked!.querySelector("wt-menu-row")!;
+  const value = row.shadowRoot!.querySelector(".value")!;
+  const icon = row.shadowRoot!.querySelector("wt-icon[name='check']")!;
+  expect(getComputedStyle(checked!).paddingInlineStart).toBe("0px");
+  expect(checked!.getBoundingClientRect().height).toBe(52);
+  expect(icon.getBoundingClientRect().left - value.getBoundingClientRect().right).toBeCloseTo(6);
+  await userEvent.keyboard("{ArrowUp}");
+  expect(document.activeElement).toBe(first);
+  const selected = vi.fn();
+  first!.addEventListener("click", selected);
+  await userEvent.keyboard("{Enter}");
+  expect(selected).toHaveBeenCalledOnce();
+  expect(popup.matches(":popover-open")).toBe(false);
 });
 
 test("an anchored menu clips through the middle of an opt-in action row", async () => {
