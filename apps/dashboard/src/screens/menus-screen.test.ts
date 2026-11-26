@@ -8893,12 +8893,53 @@ describe("the Home page tab", () => {
       const reads = client.getMenuHome.mock.calls.length;
       if (outcome === "save") pending.resolve({ ...menuHome(), dropped: [] });
       else pending.reject({ code: "server.internal" });
-      await vi.waitFor(() => expect(control(el).disabled).toBe(false));
+      await pending.promise.catch(() => undefined);
+      await el.updateComplete;
+      expect(control(el).disabled).toBe(false);
       expect(control(el).value).toBe("menu_first");
       expect(q(el, '[data-test="home-save"]')!.closest("wt-form-actions")!.error).toBeFalsy();
       expect(client.getMenuHome.mock.calls.length).toBe(reads);
     },
   );
+
+  it("keeps the latest saved Home page when a Save and two reads answer out of order", async () => {
+    const liveData = new LiveData();
+    const menuWriteRevision = { epoch: "server", sequence: 1 };
+    const client = api({ liveData, menuWriteRevision });
+    const pending = deferred<Awaited<ReturnType<DashboardApi["saveMenuHome"]>>>();
+    client.saveMenuHome.mockReturnValueOnce(pending.promise);
+    const el = await mountHome(client);
+    emit(control(el), "wt-change", { value: "menu_first" });
+    await el.updateComplete;
+    q(el, '[data-test="home-save"]')!.click();
+    await vi.waitFor(() => expect(preview(el)?.busy).toBe(true));
+
+    let sequence = 2;
+    const newest = menuHome();
+    newest.shortcuts[0]!.name = "New burger";
+    client.getMenuRead.mockImplementation(async (id: string, parts: readonly MenuReadPart[]) => ({
+      ...(await menuReadFixture(client, id, parts)),
+      revision: { epoch: "server", sequence },
+    }));
+    client.getMenuHome.mockResolvedValue(newest);
+    liveData.invalidate([{ type: "menus" }]);
+    await vi.waitFor(() => expect(preview(el)!.shortcuts![0]!.name).toBe("New burger"));
+    expect(control(el).value).toBe("menu_first");
+
+    const older = { ...menuHome(), order: "menu_first" as const };
+    pending.resolve({ ...older, dropped: [] });
+    await vi.waitFor(() => expect(preview(el)!.busy).toBe(false));
+    expect(control(el).value).toBe("home_first");
+    expect(preview(el)!.shortcuts![0]!.name).toBe("New burger");
+
+    sequence = 1;
+    client.getMenuHome.mockResolvedValue(older);
+    client.getMenuPreview.mockResolvedValue(dinnerPreview());
+    liveData.invalidate([{ type: "menus" }]);
+    await vi.waitFor(() => expect(preview(el)!.document).toEqual(dinnerPreview().document));
+    expect(control(el).value).toBe("home_first");
+    expect(preview(el)!.shortcuts![0]!.name).toBe("New burger");
+  });
 
   it("reads the preview no second time when the person goes from the Preview tab to the Home page tab", async () => {
     const client = api();

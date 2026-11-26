@@ -237,15 +237,18 @@ describe("saveMenuHome", () => {
     const f = await menusFixture(fx.db);
     const soupId = crypto.randomUUID();
     const beerId = crypto.randomUUID();
+    const drinksId = crypto.randomUUID();
     const lemonadeId = crypto.randomUUID();
     await app((tx) => deactivateProduct(tx, f.soup));
     await app((tx) => deleteSection(tx, f.beer));
+    await app((tx) => deactivateMenu(tx, f.drinksMenu));
     const saved = await app((tx) =>
       saveMenuHome(tx, f.lunch, {
         order: "menu_first",
         shortcuts: [
           { memberId: soupId, ref: product(f.soup) },
           { memberId: beerId, ref: { kind: "section", sectionId: f.beer } },
+          { memberId: drinksId, ref: { kind: "section", sectionId: f.drinks } },
           { memberId: lemonadeId, ref: product(f.lemonade) },
         ],
       }),
@@ -253,6 +256,7 @@ describe("saveMenuHome", () => {
     expect(saved.dropped).toEqual([
       { memberId: soupId, reason: "deleted" },
       { memberId: beerId, reason: "deleted" },
+      { memberId: drinksId, reason: "deleted" },
     ]);
     expect(saved.shortcuts.map(({ memberId, position }) => [memberId, position])).toEqual([
       [lemonadeId, 0],

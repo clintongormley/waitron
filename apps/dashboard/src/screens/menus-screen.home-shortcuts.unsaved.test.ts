@@ -243,8 +243,8 @@ it("commits a successful Save before a failed refresh and names dropped tiles be
   );
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect((await question(app)).open).toBe(false);
-  expect(screen.shadowRoot!.querySelector('[data-test="home-dropped"]')?.textContent).toContain(
-    "Lager",
+  expect(screen.shadowRoot!.querySelector('[data-test="home-dropped"]')?.textContent?.trim()).toBe(
+    "Saved the page without Lager.",
   );
   expect(await formMessageOf(actions(screen))).toBeFalsy();
 });

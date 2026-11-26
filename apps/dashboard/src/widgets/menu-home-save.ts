@@ -283,7 +283,7 @@ export class MenuHomeSave implements ReactiveController {
       >${
         this.dropped
           ? html`<p slot="secondary" data-test="home-dropped" role="status">
-              ${fill("menus.structure_dropped", { names: this.dropped })}
+              ${fill("home.shortcuts_dropped", { names: this.dropped })}
             </p>`
           : nothing
       }

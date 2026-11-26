@@ -6882,11 +6882,11 @@ it("marks shared snapshots with the menu write revision they include", async () 
     home: { status: 200, body: { order: "menu_first" } },
   });
   const refused = await send(app, "PUT", `${path}/home`, {
-    body: { order: "menu_first", shortcuts: [{ memberId: null }] },
+    body: { order: ["menu_first"], shortcuts: [] },
   });
   expect(refused.status).toBe(400);
   expect(await refused.json()).toEqual({
-    error: { code: "management.request_invalid", params: { field: "shortcuts.0.memberId" } },
+    error: { code: "management.request_invalid", params: { field: "order" } },
   });
   expect(refused.headers.get("x-waitron-menu-revision")).toBeNull();
   const unchanged = await send(app, "GET", `${path}/read?part=home`);

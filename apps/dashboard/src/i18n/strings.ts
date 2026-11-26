@@ -3957,6 +3957,7 @@ export const en = {
   "home.shortcut_removed":
     "“{name}” was removed from the page. Remove it from your draft and save again.",
   "home.shortcut_refused": "“{name}” could not be saved. {reason}",
+  "home.shortcuts_dropped": "Saved the page without {names}.",
   "home.loading": "Loading the home page…",
   "home.error": "The home page could not be loaded.",
   "home.order": "Shown first",
@@ -8857,6 +8858,7 @@ export const es: Record<StringKey, string> = {
   "home.shortcut_removed":
     "“{name}” se ha quitado de la página. Quítalo de tus cambios y vuelve a guardar.",
   "home.shortcut_refused": "No se ha podido guardar “{name}”. {reason}",
+  "home.shortcuts_dropped": "Se ha guardado la página sin {names}.",
   "home.loading": "Cargando la página de inicio…",
   "home.error": "No se ha podido cargar la página de inicio.",
   "home.order": "Se muestra primero",
