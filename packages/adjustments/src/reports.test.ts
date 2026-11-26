@@ -1692,7 +1692,7 @@ describe("a comp or discount that came off (plan D55)", () => {
   }
 
   /** Records `percentBp` off a Daily (14.00) whose Soup and Hake rows take `soup` and `hake`
-   * cents of it, as the comp window writes it, and sets the rows' prices to match. */
+   * cents of it, the amounts the comp window records, and sets the rows' prices to match. */
   async function dailyDiscount(
     billId: string,
     rows: { soup: string; hake: string },
