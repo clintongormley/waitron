@@ -1,0 +1,167 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/payments-api.ts",
+      "keep": ["DASHBOARD_PIN_SLOT", "mountPaymentsApi"],
+      "lift": {
+        "mount": "mountPaymentsApi",
+        "groups": {
+          "mountPaymentsReaderAdoptionRoutes": {
+            "first": "get /management-api/payments/providers/:id/available-readers",
+            "last": "delete /management-api/payments/readers/:id",
+            "parameters": {
+              "app": "Hono",
+              "deps": "PaymentsApiDeps",
+              "log": "Logger",
+              "gated": "<T>(sessionId: string, fn: (tx: Transaction, personId: string) => Promise<T>) => Promise<T>",
+              "runtimeDeps": "() => CardProviderRuntimeDeps",
+              "requireConnected": "(tx: Transaction, seat: CardProviderContribution) => Promise<void>",
+              "requireEnabled": "(tx: Transaction, seat: CardProviderContribution) => Promise<void>",
+              "readerWhere": "(id: string) => ReturnType<typeof eq>",
+              "requireReader": "(tx: Transaction, id: string) => Promise<typeof cardReaders.$inferSelect>",
+              "adopting": "Set<{ provider: string; providerRef: string; stale: boolean }>",
+              "refuseWhileUnpairing": "(id: string) => void",
+              "holdingReader": "<T>(id: string, fn: (hold: () => void) => Promise<T>) => Promise<T>",
+              "removeAtProvider": "(seat: CardProviderContribution, providerRef: string) => Promise<void>"
+            }
+          },
+          "mountPaymentsBackupAuditRoutes": {
+            "first": "get /management-api/payments/backup-audit",
+            "last": "get /management-api/payments/backup-audit",
+            "parameters": {
+              "app": "Hono",
+              "deps": "PaymentsApiDeps",
+              "log": "Logger"
+            }
+          },
+          "mountPaymentsProviderSettingsRoutes": {
+            "first": "local testProvidersAvailable",
+            "last": "post /management-api/payments/providers/:id/disconnect",
+            "parameters": {
+              "app": "Hono",
+              "deps": "PaymentsApiDeps",
+              "log": "Logger",
+              "gated": "<T>(sessionId: string, fn: (tx: Transaction, personId: string) => Promise<T>) => Promise<T>",
+              "requirePaymentsEnabled": "(tx: Transaction) => Promise<void>"
+            }
+          },
+          "mountPaymentsReaderRoutes": {
+            "first": "get /management-api/payments/readers",
+            "last": "post /management-api/payments/readers/:id/unpair",
+            "parameters": {
+              "app": "Hono",
+              "deps": "PaymentsApiDeps",
+              "log": "Logger",
+              "gated": "<T>(sessionId: string, fn: (tx: Transaction, personId: string) => Promise<T>) => Promise<T>",
+              "runtimeDeps": "() => CardProviderRuntimeDeps",
+              "requireConnected": "(tx: Transaction, seat: CardProviderContribution) => Promise<void>",
+              "requireEnabled": "(tx: Transaction, seat: CardProviderContribution) => Promise<void>",
+              "requireReader": "(tx: Transaction, id: string) => Promise<typeof cardReaders.$inferSelect>",
+              "holdingReader": "<T>(id: string, fn: (hold: () => void) => Promise<T>) => Promise<T>",
+              "removeAtProvider": "(seat: CardProviderContribution, providerRef: string) => Promise<void>",
+              "requirePaymentsEnabled": "(tx: Transaction) => Promise<void>",
+              "refuseWhileUnpairing": "(id: string) => void"
+            }
+          },
+          "mountPaymentsReaderAssignmentRoutes": {
+            "first": "get /management-api/payments/reader-holders",
+            "last": "put /management-api/payments/device-profiles/:id/readers",
+            "parameters": {
+              "app": "Hono",
+              "log": "Logger",
+              "gated": "<T>(sessionId: string, fn: (tx: Transaction, personId: string) => Promise<T>) => Promise<T>"
+            }
+          },
+          "mountPaymentsResolutionRoutes": {
+            "first": "local refundReleaseProviders",
+            "last": "post /management-api/payments/bill-payments/:id/attest",
+            "parameters": {
+              "app": "Hono",
+              "deps": "PaymentsApiDeps",
+              "log": "Logger",
+              "gated": "<T>(sessionId: string, fn: (tx: Transaction, personId: string) => Promise<T>) => Promise<T>",
+              "pinGated": "<T>(sessionId: string, pin: unknown, fn: (tx: Transaction, personId: string, print: SettledSlipPrinter) => Promise<T>) => Promise<T>",
+              "collectionScope": "(tx: Transaction) => Promise<ReturnType<typeof or>>",
+              "refuseUntilRecordable": "(tx: Transaction) => Promise<void>",
+              "requireConnected": "(tx: Transaction, seat: CardProviderContribution) => Promise<void>",
+              "resolveAtProvider": "(attempt: { provider: string; paymentRef: string }, personId: string, notStuck: () => AppError) => Promise<{ provider: PaymentProvider; resolved: AbandonedAttemptOutcome; now: Date }>"
+            }
+          },
+          "mountPaymentsAbandonedRefundRoutes": {
+            "first": "get /management-api/payments/abandoned-refunds",
+            "last": "get /management-api/payments/abandoned-refunds",
+            "parameters": {
+              "app": "Hono",
+              "log": "Logger",
+              "gated": "<T>(sessionId: string, fn: (tx: Transaction, personId: string) => Promise<T>) => Promise<T>"
+            }
+          },
+          "mountPaymentsHeldRoutes": {
+            "first": "get /management-api/payments/held",
+            "last": "post /management-api/payments/held/:id/outcome",
+            "parameters": {
+              "app": "Hono",
+              "deps": "PaymentsApiDeps",
+              "log": "Logger",
+              "gated": "<T>(sessionId: string, fn: (tx: Transaction, personId: string) => Promise<T>) => Promise<T>",
+              "pinGated": "<T>(sessionId: string, pin: unknown, fn: (tx: Transaction, personId: string, print: SettledSlipPrinter) => Promise<T>) => Promise<T>",
+              "refuseUntilRecordable": "(tx: Transaction) => Promise<void>"
+            }
+          },
+          "mountPaymentsRefundRoutes": {
+            "first": "local refundDeps",
+            "last": "post /management-api/payments/tender-refunds/:id/attest",
+            "parameters": {
+              "app": "Hono",
+              "deps": "PaymentsApiDeps",
+              "log": "Logger",
+              "gated": "<T>(sessionId: string, fn: (tx: Transaction, personId: string) => Promise<T>) => Promise<T>",
+              "pinGated": "<T>(sessionId: string, pin: unknown, fn: (tx: Transaction, personId: string, print: SettledSlipPrinter) => Promise<T>) => Promise<T>",
+              "refuseUntilRecordable": "(tx: Transaction) => Promise<void>"
+            }
+          }
+        }
+      },
+      "targets": {
+        "apps/server/src/payments-api-deps.ts": ["PaymentsApiDeps", "PAYMENTS_MANAGE"],
+        "apps/server/src/payments-api-errors.ts": [
+          "STATUS",
+          "run",
+          "runPathProvider",
+          "runConnect",
+          "runBodyProvider",
+          "runBodyReaders"
+        ],
+        "apps/server/src/payments-request-fields.ts": ["parseAttestation"],
+        "apps/server/src/payments-reader-profiles.ts": ["readerProfileChoices"],
+        "apps/server/src/payments-reader-adoption-routes.ts": ["mountPaymentsReaderAdoptionRoutes"],
+        "apps/server/src/payments-backup-audit-routes.ts": ["mountPaymentsBackupAuditRoutes"],
+        "apps/server/src/payments-provider-settings-routes.ts": [
+          "screenStringMap",
+          "mountPaymentsProviderSettingsRoutes"
+        ],
+        "apps/server/src/payments-readers-routes.ts": ["mountPaymentsReaderRoutes"],
+        "apps/server/src/payments-reader-assignments-routes.ts": [
+          "requireKnownReader",
+          "requireKnownDevice",
+          "requireDeviceProfile",
+          "mountPaymentsReaderAssignmentRoutes"
+        ],
+        "apps/server/src/payments-resolution-routes.ts": [
+          "unknownOutcome",
+          "mountPaymentsResolutionRoutes"
+        ],
+        "apps/server/src/payments-abandoned-refunds-routes.ts": [
+          "mountPaymentsAbandonedRefundRoutes"
+        ],
+        "apps/server/src/payments-held-routes.ts": [
+          "heldAlerts",
+          "parseHoldOutcome",
+          "mountPaymentsHeldRoutes"
+        ],
+        "apps/server/src/payments-refunds-routes.ts": ["mountPaymentsRefundRoutes"]
+      }
+    }
+  ]
+}

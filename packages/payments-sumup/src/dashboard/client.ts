@@ -1,6 +1,5 @@
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 
-// The SumUp panel's HTTP face over the generic payments routes (`apps/server/src/payments-api.ts`).
 // These are LOCAL copies of the routes' JSON shapes, never imported from the server (a browser bundle
 // must not drag `@waitron/db` and Node builtins in). The API key never reaches the browser — every
 // pairing call goes through the server, which reads the sealed credential itself.

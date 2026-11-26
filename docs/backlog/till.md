@@ -292,8 +292,8 @@ Open:
   card, later kitchen notices and the till's list of a party's bills keep showing the frozen
   receipt label with the party's name ("Ana · Mesa 4, 5"). Not yet checked: the payment API's
   `/management-api/payments/bill-payments` and
-  `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which read
-  the same column.
+  `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-resolution-routes.ts`
+  and `apps/server/src/payments-refunds-routes.ts`), which read the same column.
 - **Task 7 (#864, move a whole bill).** The move moves the bill's revision on, open or
   presented, without `bumpRevision`'s refusal of money in flight (plan P19): a decision, recorded
   under Decisions and deliberate limits.
