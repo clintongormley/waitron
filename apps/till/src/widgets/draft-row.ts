@@ -157,7 +157,7 @@ export function draftRow(view: DraftRowView): TemplateResult {
     </div>`;
 }
 
-const LEAD_WIDTH = css`calc(var(--wt-space-6) + var(--wt-space-1))`;
+const LEAD_WIDTH = css`var(--wt-tap-min)`;
 
 /** Last in the basket's styles; each rule matches the specificity of the line-details grid it overrides. */
 export const draftRowStyles = css`
@@ -165,10 +165,12 @@ export const draftRowStyles = css`
     display: grid;
     grid-column: 1 / -1;
     grid-template-columns: ${LEAD_WIDTH} minmax(0, 1fr) auto;
+    grid-template-rows: 1fr auto;
     align-items: center;
     min-height: calc(var(--wt-tap-min) + var(--wt-space-2));
     background: var(--wt-color-surface);
-    border-bottom: 1px solid var(--wt-color-border);
+    /* Drawn inside the row, so the selection and split targets reach its full height. */
+    box-shadow: inset 0 -1px 0 var(--wt-color-border);
   }
   :host .order-lines > .entry.draft-row[data-last-added] {
     background: var(--wt-color-surface-lifted);
@@ -274,7 +276,7 @@ export const draftRowSlotStyles = css`
     width: ${LEAD_WIDTH};
   }
   .draft-row-split {
-    width: calc(var(--wt-space-6) + var(--wt-space-2));
+    width: var(--wt-tap-min);
   }
   .draft-row-select:disabled,
   .draft-row-split:disabled {

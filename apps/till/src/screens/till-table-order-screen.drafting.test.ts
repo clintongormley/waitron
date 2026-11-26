@@ -249,8 +249,13 @@ describe("till-table-order-screen: one view of the draft", () => {
     await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
     await el.updateComplete;
     expect(rows(el)).toEqual(["Beer ×3", "Flan ×1"]);
-    expect(first.querySelector(".remove")).not.toBeNull();
-    first.querySelector<HTMLElement>(".remove")!.click();
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select="0"]')!);
+    await el.updateComplete;
+    const remove = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-draft-remove]",
+    )!;
+    expect(remove.disabled).toBe(false);
+    await userEvent.click(remove);
     await el.updateComplete;
     expect(rows(el)).toEqual(["Flan ×1"]);
   });
@@ -341,11 +346,9 @@ describe("till-table-order-screen: a note being written while other lines move",
 
   it("keeps its dish and note when another section loses a line", async () => {
     const el = await writingColasNote();
-    const flanRemove = [...el.shadowRoot!.querySelectorAll("till-basket")]
-      .flatMap((basket) => [...basket.shadowRoot!.querySelectorAll<HTMLElement>(".remove")])
-      .find((button) => button.getAttribute("aria-label")!.endsWith("Flan"))!;
-
-    flanRemove.click();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select][aria-label$="Flan"]')!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-draft-remove]")!.click();
     await settle(el);
 
     expect(rows(el)).toEqual(["Cola ×1", "Beer ×1"]);

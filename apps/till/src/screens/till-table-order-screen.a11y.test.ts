@@ -1,6 +1,7 @@
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { toDraftLineInput } from "../state/draft-lines.js";
+import { draftLinePrice } from "../state/draft-layout.js";
 import type { TillBasket } from "../widgets/basket.js";
 import {
   current,
@@ -1115,7 +1116,7 @@ describe("saved extra layout on the table screen", () => {
     for (const theme of ["light", "dark"] as const)
       for (const locked of [false, true])
         it.each([360, 390, 1280])(
-          `keeps a retired extra's full name, warning and money inside New order (locked=${locked}, ${locale}, ${theme}, %s px)`,
+          `keeps a retired extra's full name and warning, and the row price, inside New order (locked=${locked}, ${locale}, ${theme}, %s px)`,
           async (width) => {
             const priorLocale = currentLocale();
             const priorSize = { width: window.innerWidth, height: window.innerHeight };
@@ -1156,32 +1157,39 @@ describe("saved extra layout on the table screen", () => {
               )!;
               await basket.updateComplete;
               await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-              const extra = [...basket.shadowRoot!.querySelectorAll<HTMLElement>(".option")].find(
-                (row) =>
-                  row.textContent?.includes(
+              const row = basket.shadowRoot!.querySelector<HTMLElement>('[data-draft-row="0"]')!;
+              const more = row.querySelector<HTMLElement>(".draft-row-more")!;
+              const extra = [...more.querySelectorAll<HTMLElement>("[data-draft-extra]")].find(
+                (part) =>
+                  part.textContent?.includes(
                     "ParmigianoReggianoGranRiservaTrentaseiMesiSenzaLattosio",
                   ),
               )!;
-              const name = extra.querySelector<HTMLElement>(".name")!;
-              const money = extra.querySelector<HTMLElement>(".option-total")!;
+              const money = row.querySelector<HTMLElement>(".draft-row-price")!;
               const warning = extra.querySelector<HTMLElement>(".not-offered")!;
               expect(extra.checkVisibility()).toBe(true);
-              expect(name.textContent).toContain(
-                "ParmigianoReggianoGranRiservaTrentaseiMesiSenzaLattosio",
-              );
               expect(warning.checkVisibility()).toBe(true);
-              expect(money.textContent).toContain(formatMoney("1.50", currentLocale()));
+              expect(money.checkVisibility()).toBe(true);
+              expect(money.textContent!.trim()).toBe(formatMoney("8.00", currentLocale()));
+              expect(money.textContent!.trim()).toBe(
+                formatMoney(draftLinePrice(draft.lines[0]!), currentLocale()),
+              );
               await page.screenshot({
                 path: `__screenshots__/r3-saved-extra-layout-${locale}-${theme}-${width}-${locked}.png`,
               });
               expect(window.innerWidth).toBe(width);
               const container = basket.getBoundingClientRect();
               const price = money.getBoundingClientRect();
-              const label = name.getBoundingClientRect();
+              const label = more.getBoundingClientRect();
               expect(price.left).toBeGreaterThanOrEqual(container.left);
               expect(price.right).toBeLessThanOrEqual(Math.min(container.right, width));
+              expect(label.left).toBeGreaterThanOrEqual(container.left);
               expect(label.right).toBeLessThanOrEqual(price.left);
-              expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
+              expect(more.scrollWidth).toBeLessThanOrEqual(more.clientWidth);
+              for (const box of extra.getClientRects()) {
+                expect(box.left).toBeGreaterThanOrEqual(label.left);
+                expect(box.right).toBeLessThanOrEqual(price.left);
+              }
               expect(warning.getBoundingClientRect().right).toBeLessThanOrEqual(price.left);
               expect(toDraftLineInput(draft.lines[0]!)).toEqual(before);
               expect(draft.total).toBe("8.00");

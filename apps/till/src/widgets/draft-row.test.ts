@@ -259,7 +259,9 @@ describe("a new dish's compact row", () => {
       const [leadBox, rowBox, endBox] = [lead, button, end].map((node) =>
         node.getBoundingClientRect(),
       );
-      expect(leadBox.width).toBe(36);
+      expect(leadBox.width).toBe(44);
+      const drawn = box.getBoundingClientRect();
+      expect(drawn.left - leadBox.left).toBeCloseTo(leadBox.right - drawn.right, 0);
       expect(leadBox.right).toBeLessThanOrEqual(rowBox.left);
       expect(endBox.left).toBeGreaterThanOrEqual(rowBox.right);
     } finally {

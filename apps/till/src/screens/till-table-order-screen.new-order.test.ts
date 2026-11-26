@@ -547,7 +547,11 @@ describe("New order: compact rows", () => {
       "2px",
       "6px",
     ]);
-    expect(select.getBoundingClientRect().width).toBe(36);
+    const target = select.getBoundingClientRect();
+    expect([target.width, target.height].every((side) => side >= 44)).toBe(true);
+    const drawn = box.getBoundingClientRect();
+    expect(drawn.left - target.left).toBeCloseTo(target.right - drawn.right, 0);
+    expect(drawn.top - target.top).toBeCloseTo(target.bottom - drawn.bottom, 0);
     expect(box.hasAttribute("data-ticked")).toBe(false);
     expect(box.querySelector('wt-icon[name="check"]')).toBeNull();
 
@@ -598,6 +602,60 @@ describe("New order: compact rows", () => {
     await basketOf(el, 0).updateComplete;
     expect(open).toHaveBeenCalledTimes(1);
     expect(pickerOf(el, 0)).not.toBeNull();
+  });
+
+  const remove = (el: TillTableOrderScreen) =>
+    root(el).querySelector<WtButton>("[data-draft-remove]");
+  async function selectRow(el: TillTableOrderScreen, index: number) {
+    await rowOf(el, index);
+    await userEvent.click(root(el).querySelector<HTMLElement>(`[data-draft-select="${index}"]`)!);
+    await el.updateComplete;
+  }
+
+  it("removes every selected row from the draft bar, and only those", async () => {
+    const { el } = await wide();
+    const draft = store(el);
+    draft.addProduct(beer, "1");
+    draft.addProduct(flan, "1");
+    draft.addProduct(dish("Other"), "1");
+    await selectRow(el, 0);
+    await selectRow(el, 2);
+    expect(remove(el)!.disabled).toBe(false);
+    expect(remove(el)!.textContent!.trim()).toBe("Remove");
+    await userEvent.click(remove(el)!);
+    await el.updateComplete;
+    expect(draft.lines.map((line) => line.product.name)).toEqual(["Flan"]);
+    expect(root(el).querySelectorAll('[data-draft-select][aria-pressed="true"]')).toHaveLength(0);
+    expect(remove(el)!.disabled).toBe(true);
+  });
+
+  it("keeps Remove quiet and disabled while no row is selected", async () => {
+    const { el } = await wide();
+    const draft = store(el);
+    draft.addProduct(beer, "1");
+    await rowOf(el, 0);
+    expect(remove(el)!.disabled).toBe(true);
+    expect(remove(el)!.variant).toBe("secondary");
+    remove(el)!.click();
+    await el.updateComplete;
+    expect(draft.lines).toHaveLength(1);
+    await selectRow(el, 0);
+    expect(remove(el)!.variant).toBe("primary");
+  });
+
+  it.each(["sending", "command"])("removes nothing while %s", async (state) => {
+    const { el } = await wide();
+    const draft = store(el);
+    draft.addProduct(beer, "1");
+    await selectRow(el, 0);
+    const button = remove(el)!;
+    if (state === "sending") draft.sending = true;
+    else el.groupCommandBusy = true;
+    await el.updateComplete;
+    expect(button.disabled).toBe(true);
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(draft.lines).toHaveLength(1);
   });
 
   it("scrolls the last-added row into view", async () => {

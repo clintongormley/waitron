@@ -1102,6 +1102,7 @@ export class TillTableOrderScreen extends LitElement {
       }
 
       .draft-actions,
+      .draft-edits,
       .destination {
         display: flex;
         flex-wrap: wrap;
@@ -5001,7 +5002,9 @@ export class TillTableOrderScreen extends LitElement {
       >`;
     };
     return html`<div class="draft-bar" ?inert=${store.sending}>
-      ${this.#draftMoveButton(store)}
+      <div class="draft-edits">
+        ${this.#draftMoveButton(store)}${this.#draftRemoveButton(store)}
+      </div>
       <div class="draft-actions help-anchor" role="group" aria-label=${t("table.draft_actions")}>
         ${button(true, "table.group_fire", "fire-selected")}
         ${button(false, "table.draft_send_all", "send-all")}
@@ -5031,6 +5034,25 @@ export class TillTableOrderScreen extends LitElement {
         this.draftMoveStore = store;
       }}
       >${t("table.move_line")}</wt-button
+    >`;
+  }
+
+  #draftRemoveButton(store: WorkingOrderStore): TemplateResult {
+    const removable = () =>
+      store.lines.filter((line) => this.#selected.has(line) && this.#canEditDraftLine(store, line));
+    const disabled = removable().length === 0;
+    return html`<wt-button
+      data-draft-remove
+      variant=${disabled ? "secondary" : "primary"}
+      ?disabled=${disabled}
+      @click=${() => {
+        for (const line of removable().reverse()) {
+          store.removeLine(store.lines.indexOf(line));
+          this.#selected.delete(line);
+        }
+        this.requestUpdate();
+      }}
+      >${t("table.remove_lines")}</wt-button
     >`;
   }
 

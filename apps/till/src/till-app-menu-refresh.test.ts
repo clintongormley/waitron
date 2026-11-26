@@ -1827,9 +1827,24 @@ describe("a round at phone width", () => {
       await flush(el);
       tableScreen(el).shadowRoot!.querySelector<HTMLElement>("[data-view=order]")!.click();
       await flush(el);
-      const basket = tableScreen(el).shadowRoot!.querySelector(".round-bar till-basket")!;
-      const remove = basket.shadowRoot!.querySelector<HTMLElement>("wt-button.remove")!;
-      expect(remove.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
+      const screen = tableScreen(el).shadowRoot!;
+      const lines = roundStore(el).lineCount;
+      expect(lines).toBeGreaterThan(0);
+      const selects = screen.querySelectorAll<HTMLElement>("[data-draft-select]");
+      expect(selects).toHaveLength(lines);
+      for (const select of selects) select.click();
+      await flush(el);
+      const remove = screen.querySelector<HTMLElement & { disabled: boolean }>(
+        "[data-draft-remove]",
+      )!;
+      const box = remove.getBoundingClientRect();
+      expect(box.width).toBeGreaterThan(0);
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+      expect(remove.disabled).toBe(false);
+      remove.click();
+      await flush(el);
+      expect(roundStore(el).lineCount).toBe(0);
     } finally {
       await page.viewport(1280, 720);
     }
