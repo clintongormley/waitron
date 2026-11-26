@@ -145,7 +145,7 @@ At the end of Preparation, the **Recovery pack** step shows the master key once.
 **Continue**. Open **Backups** from the dashboard alert to set up your copies.
 
 Below the review, under "Recover this box", choose the recovery pack that holds this backup's
-master key with **Choose the recovery pack PDF**; or type the master key printed on it in **Master key**. A pack with
+master key with **Choose the recovery pack PDF**, or scan its master key QR code with **Scan the recovery pack**; or type the master key printed on it in **Master key**. A pack with
 a newer master key does not open an older backup. Tick "The old box has been shut down.", "I am the only
 person recovering this venue." and "These details are correct."
 

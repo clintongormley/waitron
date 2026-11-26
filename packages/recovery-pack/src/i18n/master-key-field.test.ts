@@ -42,6 +42,33 @@ describe("the master-key field's words", () => {
     });
   });
 
+  it.each([
+    [
+      "en",
+      {
+        scan: "Scan the recovery pack",
+        scanning: "Hold the master key's QR code up to the camera.",
+        notKeyCode: "That is not the master key's QR code.",
+        cameraFailed: "The camera did not start. Type the key or choose the PDF.",
+        camera: "Camera",
+        stopScan: "Stop scanning",
+      },
+    ],
+    [
+      "es",
+      {
+        scan: "Escanear el paquete de recuperación",
+        scanning: "Pon el código QR de la clave maestra delante de la cámara.",
+        notKeyCode: "Ese no es el código QR de la clave maestra.",
+        cameraFailed: "La cámara no se ha iniciado. Escribe la clave o elige el PDF.",
+        camera: "Cámara",
+        stopScan: "Dejar de escanear",
+      },
+    ],
+  ] as const)("names the scan control and its lines in %s", (locale, words) => {
+    expect(MASTER_KEY_FIELD_WORDS[locale]).toMatchObject(words);
+  });
+
   it("says which pack holds the master key, when it is known", () => {
     expect(MASTER_KEY_FIELD_WORDS.en.elsewhere(2)).toBe(
       "This recovery pack does not hold the master key. It is on recovery pack 2: choose that pack, or type the key from it.",

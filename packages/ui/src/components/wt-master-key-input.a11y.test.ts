@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
@@ -6,10 +6,16 @@ import type { RecoveryPackReading, WtMasterKeyInput } from "./wt-master-key-inpu
 import "./wt-master-key-input.js";
 import "./wt-help-tooltip.js";
 import { setHelpMode } from "../help-mode.js";
+import { cameraFilming } from "../../test/qr-camera.js";
+
+let filming: { stop: () => void } | undefined;
 
 afterEach(() => {
   cleanup();
   setHelpMode(false);
+  filming?.stop();
+  filming = undefined;
+  vi.restoreAllMocks();
 });
 
 const KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
@@ -29,6 +35,12 @@ const COPY = {
   notWhole: "Not a whole master key. Check it against the recovery pack.",
   wrongKey: (name: string) => `Wrong master key. Use the one dated ${name}.`,
   elsewhere: () => "This recovery pack does not hold the master key.",
+  scan: "Scan the recovery pack",
+  scanning: "Hold the master key's QR code up to the camera.",
+  notKeyCode: "That is not the master key's QR code.",
+  cameraFailed: "The camera did not start. Type the key or choose the PDF.",
+  camera: "Camera",
+  stopScan: "Stop scanning",
 };
 
 const BADGE =
@@ -79,6 +91,11 @@ async function choose(el: WtMasterKeyInput, line: string): Promise<void> {
   await el.updateComplete;
   await inner(el).updateComplete;
   expect(inner(el).error).toBe(line);
+}
+
+async function scan(el: WtMasterKeyInput): Promise<void> {
+  await page.getByRole("button", { name: COPY.scan, exact: true }).click();
+  await el.updateComplete;
 }
 
 const refusal = (reason: string) =>
@@ -173,6 +190,37 @@ describe.each(["light", "dark"] as const)("wt-master-key-input a11y (%s theme)",
     await badge.updateComplete;
     expect(badge.checkVisibility()).toBe(true);
     await expectNoA11yViolations(host, { enable: ["target-size"] });
+  });
+
+  test("scanning", async () => {
+    const camera = cameraFilming("https://cloud.waitron.example/start/abc");
+    filming = camera;
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
+    const el = await field(theme);
+    await scan(el);
+    const scanner = el.shadowRoot!.querySelector("wt-qr-scanner")!;
+    await expect.poll(() => scanner.shadowRoot!.querySelector("video")).not.toBeNull();
+    await expect
+      .poll(
+        () => scanner.shadowRoot!.querySelector("[data-scanner-message]")!.textContent!.trim(),
+        {
+          timeout: 10_000,
+        },
+      )
+      .toBe(COPY.notKeyCode);
+    await expectNoA11yViolations(host);
+  });
+
+  test("camera failed", async () => {
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockRejectedValue(
+      new DOMException("Permission denied", "NotAllowedError"),
+    );
+    const el = await field(theme);
+    await scan(el);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-camera-failed]")?.textContent?.trim())
+      .toBe(COPY.cameraFailed);
+    await expectNoA11yViolations(host);
   });
 
   test("disabled", async () => {

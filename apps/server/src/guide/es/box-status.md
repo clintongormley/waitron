@@ -168,7 +168,8 @@ que otra máquina siga vendiendo.
 
 Abre `/recovery/fiscal-conflict` en este servidor mediante HTTPS. Necesitas la clave
 maestra actual del local; iniciar sesión en el panel no sustituye esa clave. Escríbela en **Clave
-maestra**, o elige **Elegir el PDF del paquete de recuperación** y el paquete que la tiene, y después
+maestra**, o elige **Elegir el PDF del paquete de recuperación** y el paquete que la tiene, o escanea
+su código QR de la clave maestra con **Escanear el paquete de recuperación**, y después
 elige **Consultar conflicto** para ver la factura y la identidad afectadas. Confirma que has desconectado
 el servidor antiguo o copiado y que nadie más lo está recuperando, y elige **Comparar relojes**. Si el
 servidor no puede comprobar su hora por internet, la página muestra la hora del servidor y la de este

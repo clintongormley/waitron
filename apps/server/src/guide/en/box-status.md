@@ -153,7 +153,8 @@ AEAT lookup, keep any old or copied box offline. A new identity does not stop an
 
 Open `/recovery/fiscal-conflict` on this box over HTTPS. You need the venue's current master key;
 signing in to the dashboard does not replace that key. Type the key in **Master key**, or choose
-**Choose the recovery pack PDF** and pick the pack that holds it, then choose **Check conflict**
+**Choose the recovery pack PDF** and pick the pack that holds it, or scan its master key QR code
+with **Scan the recovery pack**, then choose **Check conflict**
 to see the affected invoice and identity. Confirm that the old or copied box is offline and that
 nobody else is recovering it, then choose **Compare clocks**. If the box cannot check its time over
 the internet, the page then shows the box's time and this device's: check that both are right, then
