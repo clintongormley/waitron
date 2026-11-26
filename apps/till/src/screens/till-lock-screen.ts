@@ -22,6 +22,10 @@ import { chooserStyles } from "../widgets/chooser-styles.js";
 import { themeChooser } from "../widgets/theme-chooser.js";
 import "../widgets/about-button.js";
 import "../widgets/main-server-strip.js";
+import {
+  serverConnectionNotice,
+  serverConnectionNoticeStyles,
+} from "../widgets/server-connection-notice.js";
 import { noticeLine, noticeLineStyles } from "../widgets/notice-strip.js";
 import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
@@ -65,6 +69,7 @@ export class TillLockScreen extends LitElement {
     baseStyles,
     chooserStyles,
     noticeLineStyles,
+    serverConnectionNoticeStyles,
     css`
       :host {
         display: block;
@@ -295,6 +300,7 @@ export class TillLockScreen extends LitElement {
   @property({ type: Boolean }) canChooseDevice = false;
 
   @property({ type: Boolean }) serverWaiting = false;
+  @property({ type: Boolean }) noBoxAnswering = false;
 
   @property({ type: Boolean }) mainServerSilent = false;
   @property({ attribute: false }) mainSilentSince: number | null = null;
@@ -500,6 +506,7 @@ export class TillLockScreen extends LitElement {
           .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
         ></wt-language-chooser>
       </div>
+      ${!pinScreen && this.noBoxAnswering ? this.#renderServers() : nothing}
       <div class=${pinScreen ? "screen pin-screen" : "screen"}>
         ${this.#renderLogo()}
         ${
@@ -530,7 +537,7 @@ export class TillLockScreen extends LitElement {
         }
         ${this.#renderPoweredBy()}
       </div>
-      ${pinScreen ? nothing : this.#renderServers()}
+      ${pinScreen || this.noBoxAnswering ? nothing : this.#renderServers()}
     `;
   }
 
@@ -635,6 +642,7 @@ export class TillLockScreen extends LitElement {
 
   #renderMainServer() {
     return html`<till-main-server-strip
+      .noBoxAnswering=${this.noBoxAnswering}
       panel
       .spareAnswering=${this.spareAnswering}
       .showSwitch=${true}
@@ -651,20 +659,19 @@ export class TillLockScreen extends LitElement {
 
   #renderServers() {
     if (!this.serverWaiting) return nothing;
-    return html`
-      <p class="servers status" role="status" data-server-status>
-        ${this.mainServerSilent ? nothing : t("server.waiting_sales")}
-        <wt-button
-          variant="secondary"
-          size=${this.mainServerSilent ? "lg" : "md"}
-          data-check-again
-          @click=${() =>
-            this.dispatchEvent(new CustomEvent("check-again", { bubbles: true, composed: true }))}
-        >
-          ${t("server.check_again")}
-        </wt-button>
-      </p>
-    `;
+    const checkAgain = html`<wt-button
+      variant="secondary"
+      size=${this.mainServerSilent ? "lg" : "md"}
+      data-check-again
+      @click=${() =>
+        this.dispatchEvent(new CustomEvent("check-again", { bubbles: true, composed: true }))}
+      >${t("server.check_again")}</wt-button
+    >`;
+    if (this.noBoxAnswering && !this.mainServerSilent)
+      return serverConnectionNotice(true, checkAgain);
+    return html`<p class="servers status" role="status" data-server-status>
+      ${this.mainServerSilent ? nothing : t("server.waiting_sales")} ${checkAgain}
+    </p>`;
   }
 
   #renderHeading(fallback: StringKey) {

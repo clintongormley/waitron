@@ -577,8 +577,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
-- **A1574. A till that cannot reach the box says so** (owner, 2026-11-25; important, size M, needs its own plan). Show the right connection notice when the till is already open. [Detail](backlog/till.md#a1574-a-till-that-cannot-reach-the-box-says-so)
-
 - **Overpaid open bills (OVERPAID-BILLS, lane L; design approved by the owner, 24 November 2026).** A
   cancel, discount, move or split may leave more on a bill than it comes to, settled before it closes;
   cash back for a card payment with its own permission. Four pull requests, fiscal (the day close

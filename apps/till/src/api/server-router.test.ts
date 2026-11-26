@@ -53,6 +53,7 @@ describe("ServerRouter", () => {
     await r.probeNow();
     expect(r.current).toBe(BOX);
     expect(r.waiting).toBe(true);
+    expect(r.noBoxAnswering).toBe(false);
     expect(moved).not.toHaveBeenCalled();
     expect(r.statuses()).toEqual([
       { url: BOX, label: "box.deli.test", state: "unreachable", term: null },
@@ -315,6 +316,37 @@ describe("ServerRouter", () => {
     expect(changed).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps the last round's silence while one probe is still pending", async () => {
+    const table: Record<string, Answer> = {};
+    const answering = probeFetch(table);
+    let spareAnswers = false;
+    let answerSpare!: (response: Response) => void;
+    const spareReply = new Promise<Response>((resolve) => {
+      answerSpare = resolve;
+    });
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: (input) =>
+        String(input).startsWith(CLOUD) && spareAnswers ? spareReply : answering(input),
+      storage: memoryStorage(),
+    });
+    router.setServers([{ url: BOX }, { url: CLOUD, standing: "serving-secondary" }]);
+    await router.probeNow();
+    expect(router.noBoxAnswering).toBe(true);
+
+    table[BOX] = { acceptingSales: true, term: 2 };
+    spareAnswers = true;
+    const round = router.probeNow();
+    try {
+      await vi.waitFor(() => expect(router.statuses()[0]!.state).toBe("primary"));
+      expect(router.noBoxAnswering).toBe(true);
+    } finally {
+      answerSpare(Response.json({ acceptingSales: false, term: 1 }));
+      await round;
+    }
+    expect(router.noBoxAnswering).toBe(false);
+  });
+
   // `setServers` and a probe round must share one signature gate: if the gate compared only against
   // the last ROUND's signature, this round would match the stale value and skip its dispatch, leaving
   // the display on `unknown` while the server is really `standby`.
@@ -507,14 +539,15 @@ describe("ServerRouter — polling, refusals and stored state", () => {
 
   it("reads a server answering an error status as unreachable, forgetting the term it had", async () => {
     let status = 200;
-    const fetchImpl = vi.fn(
-      async () =>
-        new Response(JSON.stringify({ acceptingSales: false, term: 4, nodeId: "b" }), {
-          status,
-          headers: { "content-type": "application/json" },
-        }),
-    ) as unknown as typeof fetch;
+    const fetchImpl: typeof fetch = async () => {
+      if (status === 0) throw new TypeError("Failed to fetch");
+      return new Response(JSON.stringify({ acceptingSales: false, term: 4, nodeId: "b" }), {
+        status,
+        headers: { "content-type": "application/json" },
+      });
+    };
     const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    expect(r.noBoxAnswering).toBe(false);
     await r.probeNow();
     expect(r.statuses()[0]).toMatchObject({ state: "standby", term: 4 });
     status = 503;
@@ -523,6 +556,12 @@ describe("ServerRouter — polling, refusals and stored state", () => {
       { url: BOX, label: "box.deli.test", state: "unreachable", term: null },
     ]);
     expect(r.waiting).toBe(true);
+    expect(r.noBoxAnswering).toBe(false);
+
+    const silence: boolean[] = [];
+    r.addEventListener("state-changed", () => silence.push(r.noBoxAnswering));
+    for (status of [0, 503, 0]) await r.probeNow();
+    expect(silence).toEqual([true, false, true]);
   });
 
   it("ranks a primary reporting a term above one reporting none, in either order", async () => {

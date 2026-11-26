@@ -1,6 +1,6 @@
 # A1574 PR 1 · Open the till when the box is unreachable
 
-After one trusted online visit, opening the installed till without a connection shows “Can't reach the box. Check that this phone is on the venue's WiFi.” The page automatically opens the requested till URL once it is available. This works for `/till/` and saved `/till/tabs/…` URLs. A first-ever offline visit and the bare `/till` alias still use the browser's page. The [second slice](../../backlog/till.md#a1574-a-till-that-cannot-reach-the-box-says-so) covers the till that is already open.
+After one trusted online visit, opening the installed till without a connection shows “Can't reach the box. Check that this phone is on the venue's WiFi.” The page automatically opens the requested till URL once it is available. This works for `/till/` and saved `/till/tabs/…` URLs. A first-ever offline visit and the bare `/till` alias still use the browser's page. The [second slice](2026-11-25-a1574-open-till-connection-notice.md) covers the till that is already open.
 
 ## Build
 

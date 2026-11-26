@@ -105,6 +105,7 @@ export class TillMainServerStrip extends LitElement {
   ];
 
   @property({ type: Boolean }) spareAnswering = false;
+  @property({ type: Boolean }) noBoxAnswering = false;
   @property({ type: Boolean }) showSwitch = false;
   @property({ type: Boolean }) switchBusy = false;
   @property({ type: Boolean }) refused = false;
@@ -177,9 +178,9 @@ export class TillMainServerStrip extends LitElement {
               ? "cloud_emergency.main_answering"
               : switchable && this.refused
                 ? "server.main_still_answering"
-                : this.spareAnswering
-                  ? "server.main_silent"
-                  : "server.none_answering",
+                : this.noBoxAnswering && !switchable
+                  ? "server.none_answering"
+                  : "server.main_silent",
           )}
         </p>
         ${

@@ -1567,7 +1567,7 @@ describe("till-app session activity", () => {
     { logo: true, scale: 100 },
     { logo: true, scale: 130 },
   ])(
-    "keeps the phone PIN pad in place through five states (logo $logo, text $scale%)",
+    "keeps the phone PIN pad in place as notices and sign-in state change (logo $logo, text $scale%)",
     async ({ logo, scale }) => {
       let refuse!: (reason: unknown) => void;
       const response = new Promise<never>((_resolve, reject) => {
@@ -1645,6 +1645,23 @@ describe("till-app session activity", () => {
           notices.getBoundingClientRect().bottom + 1,
         );
         expect.soft(top()).toBe(restingTop);
+        screen.loggedOutByOther = false;
+        screen.noBoxAnswering = true;
+        await screen.updateComplete;
+        expect(top()).toBe(restingTop);
+        const offlineBanner = notices.querySelector("[data-server-status]")!;
+        expect(offlineBanner.textContent).toContain(t("server.none_answering"));
+        const offlineRetry = offlineBanner.querySelector<HTMLElement>("[data-check-again]")!;
+        notices.scrollTop = offlineRetry.offsetTop;
+        expect(offlineRetry.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+          notices.getBoundingClientRect().bottom + 1,
+        );
+        screen.noBoxAnswering = false;
+        await screen.updateComplete;
+        expect(top()).toBe(restingTop);
+        expect(notices.querySelector("[data-server-status]")?.textContent).toContain(
+          t("server.waiting_sales"),
+        );
         submit.click();
         await flush(el);
         expect(login).toHaveBeenCalledExactlyOnceWith("p1", "1234");

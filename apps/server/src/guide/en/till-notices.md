@@ -7,13 +7,18 @@ you can read notices on the clock-in and attendance pages. Go back to the till t
 
 If Waitron cannot verify this device for an action, reload or reopen Waitron on this device, then try again.
 
-## When the till cannot open {#cannot-open}
+## When the till cannot reach the box {#cannot-open}
 
 If you see **Can't reach the box**, check that this phone is on the venue's WiFi. Leave the
 page open. The till opens by itself when the box is ready.
 
 If you are already on the venue's WiFi, check that the box is switched on. If it is, you may
 need to [install its certificate again](table-service.md#certificate-trust).
+
+If the till is already open and says **Can't reach the box**, check that this device is on the
+venue's WiFi. Keep the screen open while the till checks again. On the PIN screen, scroll the
+notice above the keypad if needed, then press **Check again** to check now. In **Check your times**,
+press **Retry read** if the read failed.
 
 ## Read the notice line {#notice-line}
 
@@ -26,7 +31,8 @@ open the list of the other notices, most serious first. The list sits under the 
 screen down, so it never covers the order. While it is open, the count reads **Hide**: tap it to
 close the list.
 
-There is no close button for a notice. A prep station display shows no notice line.
+There is no close button for a notice. On a prep station display, look for the connection line if
+the box stops answering. The staff-notice list is on the till and handheld.
 
 ## What each notice means {#notices}
 

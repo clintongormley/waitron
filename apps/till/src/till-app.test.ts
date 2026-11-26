@@ -3368,6 +3368,19 @@ describe("till-app", () => {
     expect(lock(el)).toBeNull();
     expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("enrol");
     expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+    const opened = enrolScreen(el);
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    el.router = router;
+    await router.probeNow();
+    await flush(el);
+    expect(enrolScreen(el)).toBe(opened);
+    expect(el.shadowRoot!.querySelector(".banner[role='status']")?.textContent).toContain(
+      t("server.none_answering"),
+    );
   });
 
   it.each(["edited", "reverted", "submitted"] as const)(
@@ -3514,6 +3527,19 @@ describe("till-app", () => {
     expect((el as unknown as { frontDoor?: string }).frontDoor).toBe("chooser");
     expect(getDeviceIdentity).toHaveBeenCalledOnce();
     expect(chooser(el)!.list).toEqual(list);
+    const opened = chooser(el);
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    el.router = router;
+    await router.probeNow();
+    await flush(el);
+    expect(chooser(el)).toBe(opened);
+    expect(el.shadowRoot!.querySelector(".banner[role='status']")?.textContent).toContain(
+      t("server.none_answering"),
+    );
   });
 
   it("keeps / while the dev chooser is open instead of exposing a post-login tab route", async () => {
@@ -18071,7 +18097,7 @@ describe("till-app follows a server move", () => {
     // present after.
     const router = new ServerRouter({
       origin: BOX,
-      fetchImpl: probeFetch(), // every server is down → a round finds no primary → waiting
+      fetchImpl: answeringFetch({ [BOX]: { acceptingSales: false, term: 2 } }),
       storage: memoryStorage(),
     });
     const api = stubApi();
@@ -18081,8 +18107,7 @@ describe("till-app follows a server move", () => {
     // Not waiting yet (no probe has run) → no banner.
     expect(router.waiting).toBe(false);
     expect(banner()).toBeNull();
-    // A probe round with every server unreachable leaves the router waiting for a server that takes
-    // sales; the `state-changed` it dispatches repaints the app, which now shows the banner.
+    // The box answers but cannot yet sell.
     await router.probeNow();
     await flush(el);
     expect(router.waiting).toBe(true);
@@ -18125,6 +18150,12 @@ describe("till-app follows a server move", () => {
     expect(status!.querySelector("[data-check-again]")).not.toBeNull();
     expect(status!.textContent).not.toContain("box.deli.test");
     expect(status!.textContent).not.toContain("cloud.deli.test");
+  });
+
+  it("shows WiFi guidance beside Check again when the sign-in probe gets no reply", async () => {
+    const { status } = await lockAfterRound(probeFetch(), []);
+    expect(status!.textContent).toContain(t("server.none_answering"));
+    expect(status!.querySelector("[data-check-again]")).not.toBeNull();
   });
 
   it("draws no sign-in line on a one-box till whose box takes sales", async () => {
@@ -18579,23 +18610,31 @@ describe("the main-server strip", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it("a till that reaches no server shows no switch", async () => {
-    answering.spare = false;
-    const { el, router } = await mount();
-    await silentFor(el, router, 20_000);
-    expect(lockStrip(el)).not.toBeNull();
-    expect(lockStrip(el)!.spareAnswering).toBe(false);
-    await lockStrip(el)!.updateComplete;
-    expect(lockStrip(el)!.shadowRoot!.querySelector("[data-switch-to-spare]")).toBeNull();
-  });
+  it.each(["lock", "shell"])(
+    "a till that reaches no server shows no switch on the %s",
+    async (screen) => {
+      answering.spare = false;
+      const { el, router } = await mount();
+      if (screen === "shell") await signIn(el, ["node.manage"]);
+      await silentFor(el, router, 20_000);
+      const strip = screen === "lock" ? lockStrip(el) : shellStrip(el);
+      expect(strip).not.toBeNull();
+      expect(strip!.spareAnswering).toBe(false);
+      await strip!.updateComplete;
+      expect(strip!.shadowRoot!.textContent).toContain(t("server.none_answering"));
+      expect(strip!.shadowRoot!.querySelector("[data-switch-to-spare]")).toBeNull();
+    },
+  );
 
-  it("a venue with no spare shows today's waiting line and no strip", async () => {
+  it("a venue with no spare shows the WiFi line and no strip", async () => {
     const { el, router } = await mount([bothServers[0]!]);
     await signIn(el, ["node.manage"]);
     await silentFor(el, router, 20_000);
     expect(router.spare).toBeUndefined();
     expect(shellStrip(el)).toBeNull();
-    expect(waitingLine(el)).toBeDefined();
+    expect(el.shadowRoot!.querySelector(".banner[role='status']")?.textContent).toContain(
+      t("server.none_answering"),
+    );
   });
 
   const entrance = {
