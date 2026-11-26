@@ -9,6 +9,8 @@ declare module "*/scripts/box/host-protocol.mjs" {
   export const CHANGE_REFUSALS: Readonly<Record<string, readonly string[]>>;
   export const SCAN_SECURITY: readonly string[];
   export const TAG_OUTCOMES: readonly string[];
+  export const STORAGE_DRIVES_MAX: number;
+  export const STORAGE_FILE_SYSTEMS: readonly string[];
   export function formatHostRequest(request: {
     verb: string;
     fields: Readonly<Record<string, unknown>>;

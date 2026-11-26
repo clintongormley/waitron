@@ -14,6 +14,8 @@ import {
   SCAN_SECURITY,
   SHELL_VERBS,
   START_SCREENS,
+  STORAGE_DRIVES_MAX,
+  STORAGE_FILE_SYSTEMS,
   TAG_OUTCOMES,
   VERB_PERMISSION,
   formatHostReply,
@@ -77,6 +79,8 @@ describe("the lists", () => {
       "screen.read",
       "screen.set",
       "tag.write",
+      "storage.list",
+      "storage.release",
     ]);
     expect(SHELL_VERBS).toEqual([
       "clock.status",
@@ -107,6 +111,8 @@ describe("the lists", () => {
       "network.forget": "system.manage",
       "screen.read": "system.manage",
       "screen.set": "system.manage",
+      "storage.list": "system.manage",
+      "storage.release": "system.manage",
     });
     expect(Object.hasOwn(VERB_PERMISSION, "tag.write")).toBe(false);
     expect(Object.isFrozen(VERB_PERMISSION)).toBe(true);
@@ -143,6 +149,8 @@ describe("the reply value lists", () => {
       "screen.read": [],
       "screen.set": [],
       "tag.write": ["busy", "no_free_token", "header_unreadable", "no_space"],
+      "storage.list": ["busy"],
+      "storage.release": ["busy"],
     });
     expect(Object.isFrozen(REPLY_REFUSALS)).toBe(true);
     for (const list of Object.values(REPLY_REFUSALS)) expect(Object.isFrozen(list)).toBe(true);
@@ -184,6 +192,10 @@ const ACCEPTED_FIELDLESS = [
   ["network.scan", person, `{"actor":${PERSON}}`],
   ["screen.read", person, `{"actor":${PERSON}}`],
   ["screen.read", server, `{"actor":${SERVER}}`],
+  ["storage.list", person, `{"actor":${PERSON}}`],
+  ["storage.list", server, `{"actor":${SERVER}}`],
+  ["storage.release", person, `{"actor":${PERSON}}`],
+  ["storage.release", server, `{"actor":${SERVER}}`],
 ];
 
 const ACCEPTED_WITH_FIELDS = [
@@ -342,6 +354,8 @@ describe("the verb", () => {
       "SCAN_SECURITY",
       "SHELL_VERBS",
       "START_SCREENS",
+      "STORAGE_DRIVES_MAX",
+      "STORAGE_FILE_SYSTEMS",
       "TAG_OUTCOMES",
       "VERB_PERMISSION",
       "formatHostReply",
@@ -1068,6 +1082,20 @@ const VALID_REPLIES = [
     { ok: true, tag: kind },
     `{"ok":true,"tag":"${kind}"}\n`,
   ]),
+  ["no drives", "storage.list", { ok: true, drives: [] }, '{"ok":true,"drives":[]}\n'],
+  [
+    "a readable drive and an unreadable one",
+    "storage.list",
+    {
+      ok: true,
+      drives: [
+        { drive: "sdb1", fileSystem: "exfat", readable: true },
+        { drive: "sdc", fileSystem: "other", readable: false },
+      ],
+    },
+    '{"ok":true,"drives":[{"drive":"sdb1","fileSystem":"exfat","readable":true},{"drive":"sdc","fileSystem":"other","readable":false}]}\n',
+  ],
+  ["none released", "storage.release", { ok: true, released: 0 }, '{"ok":true,"released":0}\n'],
 ];
 
 /** @param {unknown} value */
@@ -1097,6 +1125,8 @@ const OWN_REASONS = [
   ["screen.read", []],
   ["screen.set", []],
   ["tag.write", ["busy", "no_free_token", "header_unreadable", "no_space"]],
+  ["storage.list", ["busy"]],
+  ["storage.release", ["busy"]],
 ];
 const ALLOWED_REFUSALS = OWN_REASONS.flatMap(([verb, own]) =>
   [...PARSER_REASONS, "host_failed", ...own].map((reason) => [verb, reason]),
@@ -1535,6 +1565,8 @@ const ADAPTER_OF = {
   "screen.read": ["screenRead", { ok: true, start: "dashboard" }],
   "screen.set": ["screenSet", { ok: true, start: "dashboard" }],
   "tag.write": ["tagWrite", { ok: true, tag: "written" }],
+  "storage.list": ["storageList", { ok: true, drives: [] }],
+  "storage.release": ["storageRelease", { ok: true, released: 0 }],
 };
 
 /**
@@ -2033,5 +2065,109 @@ describe("handleHostRequest reads each adapter once and calls the one it checked
     const answer = await handleHostRequest(CANARY_LINE, adapters);
     expect(answer).toBe(HOST_FAILED);
     expectNoCanary(answer);
+  });
+});
+
+/** @param {number} count */
+const storageDrives = (count) =>
+  Array.from({ length: count }, (_, index) => ({
+    drive: `sdzzz${100 + index}`,
+    fileSystem: "exfat",
+    readable: false,
+  }));
+
+/** @param {string} verb @param {unknown} reply */
+const expectRefusedReply = (verb, reply) => {
+  expect(replyError(verb, reply)).toMatchObject({
+    code: "host_reply.invalid",
+    reason: "reply-invalid",
+  });
+  expect(parseHostReply(verb, `${JSON.stringify(reply)}\n`)).toEqual({ kind: "malformed" });
+};
+
+describe("storage requests", () => {
+  it("both name system.manage and accept a person or the server", () => {
+    for (const verb of ["storage.list", "storage.release"]) {
+      expect(VERB_PERMISSION[verb]).toBe("system.manage");
+      expect(parseHostRequest(line(verb, `{"actor":${PERSON}}`))).toEqual({
+        ok: true,
+        request: { verb, fields: {}, actor: person },
+      });
+      expect(parseHostRequest(line(verb, `{"actor":${SERVER}}`))).toEqual({
+        ok: true,
+        request: { verb, fields: {}, actor: server },
+      });
+      expect(parseHostRequest(line(verb, `{"drive":"sdb1","actor":${SERVER}}`))).toEqual({
+        ok: false,
+        reason: "request_invalid",
+      });
+    }
+  });
+
+  it("a list over 16 drives, a drive name outside the pattern or a file system outside the four is malformed", () => {
+    expect(STORAGE_DRIVES_MAX).toBe(16);
+    expect(STORAGE_FILE_SYSTEMS).toEqual(["vfat", "exfat", "ntfs", "other"]);
+    expect(Object.isFrozen(STORAGE_FILE_SYSTEMS)).toBe(true);
+    expect(formatHostReply("storage.list", { ok: true, drives: storageDrives(16) })).toMatch(/^{/);
+    expectRefusedReply("storage.list", { ok: true, drives: storageDrives(17) });
+    for (const drive of ["sda", "sdb1", "sdzzz999"]) {
+      expect(
+        formatHostReply("storage.list", {
+          ok: true,
+          drives: [{ drive, fileSystem: "vfat", readable: true }],
+        }),
+      ).toMatch(/^{/);
+    }
+    for (const drive of ["sd", "sdb1234", "sdzzzz1", "nvme0n1", "sdB1", "../sdb1", "sdb1 ", 1]) {
+      expectRefusedReply("storage.list", {
+        ok: true,
+        drives: [{ drive, fileSystem: "vfat", readable: true }],
+      });
+    }
+    for (const fileSystem of ["ext4", "ntfs3", "VFAT", null]) {
+      expectRefusedReply("storage.list", {
+        ok: true,
+        drives: [{ drive: "sdb1", fileSystem, readable: false }],
+      });
+    }
+    expectRefusedReply("storage.list", {
+      ok: true,
+      drives: [{ drive: "sdb1", fileSystem: "other", readable: true }],
+    });
+    expectRefusedReply("storage.list", {
+      ok: true,
+      drives: [{ drive: "sdb1", fileSystem: "vfat", readable: "yes" }],
+    });
+    expectRefusedReply("storage.list", {
+      ok: true,
+      drives: [
+        { drive: "sdb1", fileSystem: "vfat", readable: true },
+        { drive: "sdb1", fileSystem: "exfat", readable: true },
+      ],
+    });
+    expectRefusedReply("storage.list", {
+      ok: true,
+      drives: [{ drive: "sdb1", fileSystem: "vfat", readable: true, path: "/x" }],
+    });
+    expectRefusedReply("storage.list", { ok: true, drives: {} });
+  });
+
+  it("the largest allowed list fits 4,096 bytes", () => {
+    const text = formatHostReply("storage.list", { ok: true, drives: storageDrives(16) });
+    expect(Buffer.byteLength(text)).toBe(967);
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(HOST_REPLY_MAX);
+    expect(parseHostReply("storage.list", text).kind).toBe("ok");
+  });
+
+  it("release answers how many it released", () => {
+    for (const released of [0, 1, 16]) {
+      const text = `{"ok":true,"released":${released}}\n`;
+      expect(formatHostReply("storage.release", { ok: true, released })).toBe(text);
+      expect(parseHostReply("storage.release", text)).toEqual({ kind: "ok", value: { released } });
+    }
+    for (const released of [-1, 1.5, 17, "1", null]) {
+      expectRefusedReply("storage.release", { ok: true, released });
+    }
+    expectRefusedReply("storage.release", { ok: true });
   });
 });
