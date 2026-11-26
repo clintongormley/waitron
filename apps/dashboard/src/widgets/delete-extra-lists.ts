@@ -1,6 +1,7 @@
 import { html, nothing } from "lit";
 import type { ExtraList, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
+import type { EditorVariant } from "./product-editor-model.js";
 
 export function deleteExtraListWarning(
   products: readonly Product[],
@@ -19,7 +20,25 @@ export function deleteExtraListWarning(
   return deleteExtraListWarningForIds(removed, lists);
 }
 
-export function deleteExtraListWarningForIds(
+export function stagedVariantDeleteWarning(
+  saved: readonly EditorVariant[],
+  draft: readonly EditorVariant[],
+  lists: readonly Pick<ExtraList, "name" | "items">[],
+) {
+  const savedActiveIds = new Set(
+    saved.filter((variant) => variant.active).map((variant) => variant.id),
+  );
+  if (savedActiveIds.size === 0) return nothing;
+  const removed = new Set(
+    draft.flatMap(({ id, active }) =>
+      id !== undefined && !active && savedActiveIds.has(id) ? [id] : [],
+    ),
+  );
+  const warning = deleteExtraListWarningForIds(removed, lists);
+  return html`<div class="variant-delete-status" role="status">${warning}</div>`;
+}
+
+function deleteExtraListWarningForIds(
   removed: ReadonlySet<string>,
   lists: readonly Pick<ExtraList, "name" | "items">[],
 ) {
