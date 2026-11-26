@@ -227,3 +227,36 @@ it("keeps Add unavailable while the provider read is pending or failed, without 
   expect(root.querySelector("[data-test=configure-providers]")).toBeNull();
   expect(client.availableReaders).not.toHaveBeenCalled();
 });
+
+it.each([
+  { state: "connected", note: false },
+  { state: "not_connected", note: true },
+] as const)(
+  "places other card machines after the settings and tells them SumUp is $state",
+  async ({ state, note }) => {
+    const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+      api: api([reader], {
+        listPaymentProviders: vi
+          .fn()
+          .mockResolvedValue([{ providerId: "sumup", state, canUnpair: false }]),
+        getOtherCardMachines: vi.fn().mockResolvedValue({
+          otherCardMachines: [{ id: "m1", name: "Terrace", paysInto: "connected_account" }],
+          revision: 0,
+        }),
+      }),
+      panels: [],
+    });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("dashboard-payments-settings")).not.toBeNull(),
+    );
+    const machines = el.shadowRoot!.querySelector("dashboard-other-card-machines")!;
+    expect(el.shadowRoot!.querySelector("dashboard-payments-settings")!.nextElementSibling).toBe(
+      machines,
+    );
+    await vi.waitFor(() => expect(machines.sumUpConnected).toBe(!note));
+    await vi.waitFor(() => expect(machines.shadowRoot!.querySelector("wt-input")).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(machines.shadowRoot!.textContent!.includes("SumUp is not connected")).toBe(note),
+    );
+  },
+);

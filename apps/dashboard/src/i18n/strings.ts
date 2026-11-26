@@ -3379,6 +3379,25 @@ export const en = {
     "Payment settings changed while you were editing. Review the current switches.",
   "payments.tips_label": "Offer tips at the till",
   "payments.tips_hint": "Staff can add a tip when taking a payment at the till.",
+  "other_card_machines.heading": "Other card machines",
+  "other_card_machines.intro":
+    "The card machines you take payments on that Waitron is not connected to.",
+  "other_card_machines.loading": "Loading other card machines…",
+  "other_card_machines.empty": "No other card machines yet.",
+  "other_card_machines.new_machine": "New machine",
+  "other_card_machines.name": "Name",
+  "other_card_machines.pays_into": "Where its payments go",
+  "other_card_machines.connected_account": "SumUp account",
+  "other_card_machines.other": "Another bank",
+  "other_card_machines.not_connected_note":
+    "SumUp is not connected, so its payments are recorded as another bank's.",
+  "other_card_machines.add": "Add a machine",
+  "other_card_machines.name_required": "Give this machine a name.",
+  "other_card_machines.name_repeated": "Another machine already has this name.",
+  "other_card_machines.name_refused":
+    "Use a name of up to 60 characters that no other machine has.",
+  "other_card_machines.refreshed":
+    "The list changed while you were editing. Check it and save again.",
   "payments.test_providers_label": "Use card providers' test accounts",
   "payments.test_providers_hint":
     "On this Prepare box, take card payments through your provider's test account instead of the card simulator.",
@@ -8240,6 +8259,25 @@ export const es: Record<StringKey, string> = {
     "Los ajustes de pago cambiaron mientras los editabas. Revisa las opciones actuales.",
   "payments.tips_label": "Ofrecer propina en la caja",
   "payments.tips_hint": "El personal puede añadir una propina al cobrar en la caja.",
+  "other_card_machines.heading": "Otros datáfonos",
+  "other_card_machines.intro":
+    "Los datáfonos con los que cobras y a los que Waitron no está conectado.",
+  "other_card_machines.loading": "Cargando otros datáfonos…",
+  "other_card_machines.empty": "Todavía no hay otros datáfonos.",
+  "other_card_machines.new_machine": "Datáfono nuevo",
+  "other_card_machines.name": "Nombre",
+  "other_card_machines.pays_into": "Adónde van sus pagos",
+  "other_card_machines.connected_account": "Cuenta de SumUp",
+  "other_card_machines.other": "Otro banco",
+  "other_card_machines.not_connected_note":
+    "SumUp no está conectado, así que sus pagos se registran como de otro banco.",
+  "other_card_machines.add": "Añadir un datáfono",
+  "other_card_machines.name_required": "Ponle un nombre a este datáfono.",
+  "other_card_machines.name_repeated": "Otro datáfono ya tiene este nombre.",
+  "other_card_machines.name_refused":
+    "Usa un nombre de hasta 60 caracteres que no tenga otro datáfono.",
+  "other_card_machines.refreshed":
+    "La lista ha cambiado mientras editabas. Revísala y vuelve a guardar.",
   "payments.test_providers_label": "Usar las cuentas de prueba de los proveedores de tarjetas",
   "payments.test_providers_hint":
     "En este servidor configurado para Preparar, cobra con la cuenta de prueba de tu proveedor en lugar del simulador de tarjetas.",

@@ -64,6 +64,7 @@ import {
   type EquipmentLabelWindow,
 } from "../widgets/equipment-label-menu.js";
 import "../widgets/backup-audit.js";
+import "./other-card-machines-panel.js";
 import "./payments-settings-panel.js";
 import { holderText } from "../i18n/equipment.js";
 import { HardwareDeleteDialog } from "../widgets/hardware-delete-dialog.js";
@@ -2577,6 +2578,10 @@ export class PaymentsScreen extends LitElement {
           this.simulatedCardPayments = event.detail;
         }}
       ></dashboard-payments-settings>
+      <dashboard-other-card-machines
+        .api=${this.api}
+        .sumUpConnected=${this.providers?.some((p) => p.providerId === "sumup" && p.state === "connected") ?? false}
+      ></dashboard-other-card-machines>
       ${this.#renderProviderChoice()} ${this.#renderPairReader()}
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}
       ${
