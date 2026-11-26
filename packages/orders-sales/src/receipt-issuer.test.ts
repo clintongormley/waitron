@@ -220,3 +220,46 @@ it.each([
 ] as const)("selects full invoice layout for %s as %s", (type, expected) => {
   expect(printsAsFullInvoice(type)).toBe(expected);
 });
+
+it("types a corrective of a full invoice that does not replace it as R1", async () => {
+  await withTransaction(suite.db, async (tx) => {
+    const { invoice } = await insertSales(tx);
+    const [series] = await tx
+      .insert(invoiceSeries)
+      .values({ nodeId: invoice.nodeId, code: "RF", purpose: "full_corrective" })
+      .returning();
+    const [corrective] = await tx
+      .insert(sales)
+      .values({
+        ...invoice,
+        id: undefined,
+        ...customer,
+        seriesId: series!.id,
+        invoiceNumber: 1,
+        issuedAt: "2026-10-18T09:00:00.000Z",
+        issuedOffsetMinutes: 60,
+        supplyDay: null,
+        total: -400,
+        correctsSaleId: invoice.id,
+      })
+      .returning();
+    const typing = await readInvoiceTyping(tx, corrective!);
+    expect(typing).toEqual({
+      invoiceType: "R1",
+      corrects: {
+        invoiceNumber: "F/3",
+        issuedAt: "2026-10-16T23:30:00.000Z",
+        issuedOffsetMinutes: 120,
+      },
+      recipient: {
+        taxId: "AB123456",
+        legalName: "Saved Customer",
+        countryCode: "FR",
+        identifierType: "passport",
+        identifierCountryCode: "GB",
+        address: "2 Main Street",
+      },
+    });
+    expect(printsAsFullInvoice(typing.invoiceType)).toBe(true);
+  });
+});

@@ -289,6 +289,18 @@ it("reads the filters from the address", async () => {
   });
 });
 
+it("offers R1 in the kind filter and reads it from the address", async () => {
+  history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30/kind/R1");
+  const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([]));
+  const el = await mount({ listTaxOfficeInvoices });
+  await vi.waitFor(() => expect(listTaxOfficeInvoices).toHaveBeenCalled());
+
+  expect(lastQuery(listTaxOfficeInvoices).kind).toBe("R1");
+  const options = (field(el, "kind") as unknown as { options: { value: string; label: string }[] })
+    .options;
+  expect(options).toContainEqual({ value: "R1", label: "R1 Corrective invoice" });
+});
+
 it("asks for the next page with the keyset the last page named, and adds its rows", async () => {
   history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30/kind/F2");
   const next = { at: "2026-11-05T10:30:00.000Z", id: "sale-1" };
@@ -1195,7 +1207,9 @@ it("keeps a space still being typed once the app's guarded address takes the sea
   ]);
 });
 
-it("names AEAT's R4 a corrective invoice and its R5 a corrective receipt", () => {
-  expect(en["tax_office.kind.R4"]).toBe("Corrective invoice");
+it("names AEAT's R1 a corrective invoice, its R4 one replacing another and its R5 a corrective receipt", () => {
+  expect(en["tax_office.kind.R1"]).toBe("Corrective invoice");
+  expect(en["tax_office.kind.R4"]).toBe("Corrective invoice replacing another");
   expect(en["tax_office.kind.R5"]).toBe("Corrective receipt");
+  expect(es["tax_office.kind.R4"]).not.toBe(es["tax_office.kind.R1"]);
 });

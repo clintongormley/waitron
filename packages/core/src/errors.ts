@@ -53,16 +53,19 @@ declare module "@waitron/shared" {
      * from another node's series would let two chains issue from one counter, which no constraint
      * downstream can detect. */
     "sale.series_wrong_node": { seriesId: string; expected: string; actual: string };
-    /** The series is the wrong kind for the operation: `recordSale` and `recordSubstitution` demand
-     * a `standard` series, `recordCorrection` a `corrective` one. Corrective invoices are
-     * numbered in their own series (RD 1619/2012 art. 6.1.a). */
+    /** The series is the wrong kind for the operation: `recordSale` demands `standard`, or `full`
+     * for a sale naming a customer; `recordSubstitution` demands `full`; `recordCorrection` demands
+     * `corrective`, or `full_corrective` with `fullInvoice`; `recordReplacement` demands
+     * `corrective`, or `full_corrective` when the original names a customer. Corrective invoices
+     * are numbered in their own series (RD 1619/2012 art. 6.1.a). */
     "sale.series_wrong_purpose": { seriesId: string; expected: string; actual: string };
     /** The series is retired: a restore retired it and opened a replacement, so numbering from it
      * would re-issue an invoice identity the tax agency may already hold. */
     "sale.series_retired": { seriesId: string; retiredAt: string };
     "fiscal.taxpayer_domicile_missing": Record<string, never>;
-    /** A correction by differences is filed as an R5, which applies only to a simplified
-     * invoice, so it refuses a full invoice and its replacement. */
+    /** The invoice cannot take the correction asked for. Without `fullInvoice`, the invoice names
+     * a customer. With `fullInvoice`, the invoice names nobody, is not an F1 or the replacement
+     * of one, or a whole-invoice credit was asked. */
     "sale.correction_unsupported": { saleId: string };
     /** Thrown by `recordReplacement` when a corrective already names the invoice: a replacement
      * carries the whole invoice, so it must be the first corrective of it. Refused before a number

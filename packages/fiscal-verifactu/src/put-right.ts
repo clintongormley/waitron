@@ -7,11 +7,23 @@ export type PutRight =
   | { kind: "replacement-invoice" }
   | { kind: "none"; why: "full-invoice" | "not-yet" };
 
+/** The parts of a case `putRightFor` reads. */
+export interface PutRightCase {
+  cause: FilingCaseView["cause"];
+  evidence: Pick<FilingCaseView["evidence"], "codigo" | "mensaje">;
+  record: Pick<FilingCaseView["record"], "tipoRegistro" | "tipoFactura">;
+  submission: Pick<
+    NonNullable<FilingCaseView["submission"]>,
+    "estado" | "codigoError" | "mensajeError"
+  > | null;
+}
+
 const NOT_YET: PutRight = { kind: "none", why: "not-yet" };
 
 /**
  * Whether a full invoice (F1) AEAT refused for a future date can be replaced with an R4 "S". The
- * server's remedy policy follows this too (`record-remedy-routes.ts`). Off until AEAT's test service
+ * server's remedy policy (`record-remedy-routes.ts`), the Fiscal filing page and correction
+ * admission (`correction-admission.ts`, through `putRightFor`'s default) follow this too. Off until AEAT's test service
  * has accepted such an R4 (docs/backlog.md).
  */
 export const FULL_INVOICE_REPLACEMENT_ON: boolean = false;
@@ -22,7 +34,7 @@ export const FULL_INVOICE_REPLACEMENT_ON: boolean = false;
  * server still makes its own.
  */
 export function putRightFor(
-  view: FilingCaseView,
+  view: PutRightCase,
   {
     fullInvoiceReplacement = FULL_INVOICE_REPLACEMENT_ON,
   }: { fullInvoiceReplacement?: boolean } = {},

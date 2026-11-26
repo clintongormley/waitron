@@ -519,6 +519,7 @@ const NEVER_FILEABLE = new Set<NotAdmitted["reason"]>([
   "voided",
   "wrong_node",
   "not_simplified",
+  "refused_no_fix",
 ]);
 
 /**

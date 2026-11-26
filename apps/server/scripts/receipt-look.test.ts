@@ -59,6 +59,9 @@ it("renders English sample identities and dishes while retaining the Spanish inv
       "19,69",
     ])
       expect(fixture).toContain(text);
+    const correctiveR1 = texts["a1566-corrective-a4.pdf"]!;
+    for (const text of ["FR/1", "FF/1", "B11223344", "-8,80"]) expect(correctiveR1).toContain(text);
+    for (const text of ["19,69", spanish.change]) expect(correctiveR1).not.toContain(text);
     const allText = Object.values(texts).join(" ");
     for (const dish of [
       "Iberian ham",

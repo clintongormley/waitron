@@ -62,7 +62,7 @@ export async function composeInvoiceEmail({
   const { invoiceNumber, invoiceType } = document.result;
   const simplified = !printsAsFullInvoice(invoiceType);
   const title =
-    invoiceType === "R4" || invoiceType === "R5"
+    invoiceType === "R1" || invoiceType === "R4" || invoiceType === "R5"
       ? labels.correctiveInvoice
       : simplified
         ? labels.simplifiedInvoice

@@ -818,6 +818,35 @@ it.each([
   },
 );
 
+it.each([
+  ["en-GB", "Corrective invoice"],
+  ["es-ES", "Factura rectificativa"],
+] as const)("in %s, names a full invoice's corrective %s", async (language, label) => {
+  const { el } = await mount(
+    findBillApi(async (url) =>
+      json(
+        url.pathname.endsWith("options")
+          ? billOptions
+          : url.pathname === "/api/bills"
+            ? listPage()
+            : {
+                ...listPage([transactionRow({ type: "full-correction", amount: "-4.00" })]),
+                dates: resolvedDates,
+              },
+      ),
+    ),
+  );
+  await ready(el);
+  await switchTab(el, "transactions");
+  setLocale(language);
+  const grid = await ready(el, "transactions");
+  await el.updateComplete;
+  await grid.updateComplete;
+  const options = grid.columns.find((c) => c.key === "type")!.filter!.options;
+  expect(options).toContainEqual({ value: "full-correction", label });
+  expect(grid.shadowRoot!.querySelector('[data-row-key="sale-1"]')!.textContent).toContain(label);
+});
+
 const openCorrection = (patch: Record<string, unknown> = {}) => ({
   id: "correction-1",
   saleId: "sale-1",

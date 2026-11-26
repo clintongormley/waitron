@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { newId, withTransaction } from "@waitron/db";
+import { previewCorrectionAmounts, readCorrectableLines } from "@waitron/core";
+import { captureError, newId, withTransaction } from "@waitron/db";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { CorrectionAdmission, FiledFigures } from "@waitron/fiscal";
-import { saleId as brandSaleId, type SaleId } from "@waitron/shared";
+import { saleId as brandSaleId, decimal, type SaleId } from "@waitron/shared";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import type { DetalleDesgloseInput } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
+import { recordCaseEvent } from "./filing-cases.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { altaFor, seedNode, seedSale, type SeededNode } from "./testing/seed.js";
 
@@ -67,11 +70,12 @@ async function file(
   options: {
     figures?: Figures;
     estado?: Estado | null;
-    tipo?: "F1" | "F2" | "R4" | "R5";
+    tipo?: "F1" | "F2" | "F3" | "R4" | "R5";
     byReplacement?: true;
     on?: SeededNode;
     sale?: SaleId;
     fixes?: { registroId: string; number: number };
+    refusal?: { codigo: string; mensaje?: string; caseOpen?: boolean };
   } = {},
 ): Promise<{ saleId: SaleId; registroId: string; number: number }> {
   const on = options.on ?? node;
@@ -86,7 +90,7 @@ async function file(
       input: {
         ...pending.input,
         TipoFactura: tipo,
-        ...(tipo === "F1" || tipo === "R4"
+        ...(tipo === "F1" || tipo === "F3" || tipo === "R4"
           ? {
               Destinatarios: { IDDestinatario: [{ NombreRazon: "Customer SL", NIF: "B12345674" }] },
             }
@@ -106,8 +110,22 @@ async function file(
       },
     });
     const estado = options.estado === undefined ? "pendiente" : options.estado;
+    const refusal = options.refusal;
     if (estado !== null)
-      await tx.insert(verifactuSubmissions).values({ registroId: id, estado, codigoError: "1161" });
+      await tx.insert(verifactuSubmissions).values({
+        registroId: id,
+        estado,
+        codigoError: refusal?.codigo ?? "1161",
+        mensajeError: refusal?.mensaje ?? null,
+        ...(refusal === undefined || refusal.caseOpen === false
+          ? {}
+          : {
+              caseCause: "fiscal.registro_rechazado" as const,
+              caseEvidence: { codigo: Number(refusal.codigo), mensaje: null, csv: null },
+              caseOpenedAt: AT,
+              caseOpenSeq: number,
+            }),
+      });
     return id;
   });
   return { saleId, registroId, number };
@@ -133,9 +151,127 @@ describe("an F2 is judged by its submission state", () => {
     ["aceptado", eligible("accepted", 1)],
     ["aceptado_con_errores", eligible("accepted_with_issues", 1)],
     ["rechazado", refused("filing_refused")],
+    ["detenido", refused("filing_refused")],
+    ["retenido", refused("filing_refused")],
   ] as const)("%s", async (estado, expected) => {
     const { saleId } = await file({ estado });
     expect(await admission(saleId)).toEqual(expected);
+  });
+
+  it("refused with no fix offered still waits, as today", async () => {
+    const { saleId } = await file({ estado: "rechazado", refusal: { codigo: "1161" } });
+    expect(await admission(saleId)).toStrictEqual(refused("filing_refused"));
+  });
+});
+
+describe("a full invoice, an F1 or an R4 by replacement, says so in every answer", () => {
+  const full = (answer: object) => ({ ...answer, fullInvoice: true });
+  const kinds = [
+    ["an F1", { tipo: "F1" }],
+    ["an R4 by replacement", { tipo: "R4", byReplacement: true }],
+  ] as const;
+
+  it.each(kinds)("%s is admitted", async (_name, kind) => {
+    const { saleId, number } = await file(kind);
+    expect(await admission(saleId)).toStrictEqual(full(eligible("queued", number)));
+  });
+
+  it.each(kinds)("%s refused naming the description waits for its fix", async (_name, kind) => {
+    const { saleId } = await file({
+      ...kind,
+      estado: "rechazado",
+      refusal: {
+        codigo: "1100",
+        mensaje: "Valor o tipo incorrecto del campo: DescripcionOperacion",
+      },
+    });
+    expect(await admission(saleId)).toStrictEqual(full(refused("filing_refused")));
+  });
+
+  it.each([
+    ["an F1 refused 1112", { tipo: "F1" }, "1112"],
+    ["an R4 by replacement refused 1112", { tipo: "R4", byReplacement: true }, "1112"],
+    ["an F1 refused with another code", { tipo: "F1" }, "1161"],
+    ["an F1 refused 1100 over another field", { tipo: "F1" }, "1100"],
+  ] as const)("%s has no fix to wait for", async (_name, kind, codigo) => {
+    const { saleId } = await file({ ...kind, estado: "rechazado", refusal: { codigo } });
+    expect(await admission(saleId)).toStrictEqual(full(refused("refused_no_fix")));
+  });
+
+  it("refused with no open case has no fix to wait for", async () => {
+    const { saleId } = await file({
+      tipo: "F1",
+      estado: "rechazado",
+      refusal: {
+        codigo: "1100",
+        mensaje: "Valor o tipo incorrecto del campo: DescripcionOperacion",
+        caseOpen: false,
+      },
+    });
+    expect(await admission(saleId)).toStrictEqual(full(refused("refused_no_fix")));
+  });
+
+  it("refused with its case resolved has no fix to wait for", async () => {
+    const { saleId, registroId } = await file({
+      tipo: "F1",
+      estado: "rechazado",
+      refusal: {
+        codigo: "1100",
+        mensaje: "Valor o tipo incorrecto del campo: DescripcionOperacion",
+      },
+    });
+    await withTransaction(suite.db, async (tx) =>
+      recordCaseEvent(tx, {
+        caseRegistroId: registroId,
+        actionKey: "resolve-1",
+        kind: "resolved",
+        personId: await seedPerson(tx, {}),
+        action: "Resolved for the test",
+        now: AT,
+      }),
+    );
+    expect(await admission(saleId)).toStrictEqual(full(refused("refused_no_fix")));
+  });
+
+  it.each(["detenido", "retenido"] as const)("held or set aside (%s) waits", async (estado) => {
+    const { saleId } = await file({ tipo: "F1", estado });
+    expect(await admission(saleId)).toStrictEqual(full(refused("filing_refused")));
+  });
+
+  it("another node's", async () => {
+    const other = await seedNode(suite.db, "B");
+    const { saleId } = await file({ tipo: "F1", on: other });
+    expect(await admission(saleId)).toStrictEqual(full(refused("wrong_node")));
+  });
+
+  it.each([
+    [
+      "the preview",
+      (saleId: SaleId) =>
+        withTransaction(suite.db, (tx) =>
+          previewCorrectionAmounts(tx, backend, saleId, node.nodeId, { gross: decimal("1.00") }),
+        ),
+    ],
+    [
+      "the lines",
+      (saleId: SaleId) =>
+        withTransaction(suite.db, (tx) => readCorrectableLines(tx, backend, saleId, node.nodeId)),
+    ],
+  ] as const)(
+    "another node's, read by %s without fullInvoice, is refused as another node's",
+    async (_name, read) => {
+      const other = await seedNode(suite.db, "B");
+      const { saleId } = await file({ tipo: "F1", on: other });
+      expect(await captureError(() => read(saleId))).toMatchObject({
+        code: "sale.correction_not_admitted",
+        params: { reason: "wrong_node" },
+      });
+    },
+  );
+
+  it("with no submission", async () => {
+    const { saleId } = await file({ tipo: "F1", estado: null });
+    expect(await admission(saleId)).toStrictEqual(full(refused("missing")));
   });
 });
 
@@ -186,13 +322,8 @@ describe("refusals", () => {
     expect(await admission(saleId)).toEqual(refused("voided"));
   });
 
-  it.each(["F1", "R5"] as const)("an %s", async (tipo) => {
-    expect(await admission((await file({ tipo })).saleId)).toEqual(refused("not_simplified"));
-  });
-
-  it("an R4 by replacement", async () => {
-    const { saleId } = await file({ tipo: "R4", byReplacement: true });
-    expect(await admission(saleId)).toEqual(refused("not_simplified"));
+  it.each(["F3", "R4", "R5"] as const)("an %s", async (tipo) => {
+    expect(await admission((await file({ tipo })).saleId)).toStrictEqual(refused("not_simplified"));
   });
 
   it("another node's", async () => {

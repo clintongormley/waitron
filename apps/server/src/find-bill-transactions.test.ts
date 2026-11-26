@@ -731,6 +731,55 @@ describe("completed post-invoice refund Transactions", () => {
     expect(result.total).toBe(2);
     expect((await list({ type: "refund" })).rows.map((r) => r.refundId)).toContain(b.id);
   });
+  it("types a full invoice's corrective `full-correction` and never attaches a bill's refund to it (core never writes a corrective holding the bill's order, so this pins the exclusion only)", async () => {
+    const order = await parked(venue, "Tarta");
+    const customer = { counterpartyTaxId: "B12345674", counterpartyLegalName: "Cliente SL" };
+    const full = await invoice(customer);
+    // `sales_working_order_id_key` lets only one sale hold the order, so the corrective holds it.
+    const corrective = await invoice({
+      workingOrderId: order,
+      ...customer,
+      correctsSaleId: full,
+      issuedAt: "2026-10-15T13:00:00.000Z",
+      total: -400,
+    });
+    const bp = randomUUID();
+    await inTx(venue, (tx) =>
+      tx.insert(billPayments).values({
+        id: bp,
+        workingOrderId: order,
+        submissionId: randomUUID(),
+        kind: "contribution",
+        method: "card",
+        tendered: null,
+        applied: 400,
+        tip: 0,
+        fingerprint: "full-correction",
+        requestedBy: venue.operatorId,
+        source: "device",
+        deviceId: venue.deviceId,
+        state: "received",
+        createdAt: AT,
+        receivedAt: AT,
+      }),
+    );
+    const refund = await returned(full, {
+      saleId: null,
+      tenderId: null,
+      billPaymentId: bp,
+      tipAmount: 0,
+    });
+    const rows = (await list()).rows;
+    expect(rows.find((r) => r.transactionId === `sale:${corrective}`)).toMatchObject({
+      type: "full-correction",
+      amount: "-4.00",
+      customerName: "Cliente SL",
+    });
+    expect(rows.filter((r) => r.refundId === refund.id && r.saleId === corrective)).toEqual([]);
+    expect((await list({ type: "full-correction" })).rows.map((r) => r.saleId)).toEqual([
+      corrective,
+    ]);
+  });
   it("pages across invoices and refunds without collapsing shared sale ids and sorts signed amounts", async () => {
     const saleId = await invoice();
     const ids: string[] = [];

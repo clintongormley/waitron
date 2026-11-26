@@ -193,10 +193,10 @@ export interface TillSaleResult extends ReceiptPresentation {
   simulatedCardPayment?: boolean;
   invoiceEvidence?: InvoiceEvidence;
   issuedOffsetMinutes?: number;
-  invoiceType?: "F1" | "F2" | "R4" | "R5";
+  invoiceType?: "F1" | "F2" | "R1" | "R4" | "R5";
   /** The day of the sale (`YYYY-MM-DD`) when it is not its issue day: an F1/F2 issued on a later day, or a replacement corrective. */
   saleDay?: string;
-  /** On a corrective invoice (R4, R5), the invoice it corrects; `inFull` when it replaces it whole. */
+  /** On a corrective invoice (R1, R4, R5), the invoice it corrects; `inFull` when it replaces it whole. */
   corrects?: {
     invoiceNumber: string;
     issuedAt: string;

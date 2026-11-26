@@ -1557,6 +1557,23 @@ describe("File now and Close", () => {
     ).resolves.toMatchObject({ correction: { state: "open" } });
   });
 
+  it("closes keeping the refunds when admission answers refused_no_fix", async () => {
+    const saleId = await soldForCash("Set menu", ["40.00"]);
+    const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
+    await cash(correction.id, "15.00");
+    const noFix = Object.create(venue.backend, {
+      correctionAdmissionFor: {
+        value: async () => ({ eligible: false, reason: "refused_no_fix" }),
+      },
+    }) as typeof venue.backend;
+
+    expect(await close(correction.id, { backend: noFix })).toMatchObject({
+      state: "closed",
+      moneyBack: "15.00",
+      correctiveSaleId: null,
+    });
+  });
+
   it("closes keeping the refunds when another box has taken over, and refuses while the ticket's filing is only stopped", async () => {
     const saleId = await soldForCash("Set menu", ["40.00"]);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });

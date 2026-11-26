@@ -5,7 +5,7 @@ import { validatedRangeWindow } from "@waitron/reporting";
 import { rawCentsToDecimal, type Decimal } from "@waitron/shared";
 import { INVOICE_SEARCH } from "./orders-list.js";
 
-export const TAX_OFFICE_KINDS = ["F1", "F2", "F3", "R4", "R5"] as const;
+export const TAX_OFFICE_KINDS = ["F1", "F2", "F3", "R1", "R4", "R5"] as const;
 export type TaxOfficeKind = (typeof TAX_OFFICE_KINDS)[number];
 export const TAX_OFFICE_PAGE_SIZE = 50;
 
@@ -60,12 +60,15 @@ const FILED_SHIFT = sql`printf('%+d minutes', s.issued_offset_minutes)`;
 const ISSUE_DATE = sql`date(s.issued_at, ${FILED_SHIFT})`;
 const ISSUE_TIME = sql`time(s.issued_at, ${FILED_SHIFT})`;
 
-// As the filing types each record: a corrective is R4 when it names a customer (only a replacement
-// of a full invoice does), else R5; a full invoice replacing tickets is F3; otherwise F1 when it
-// names a customer, else F2. `tax-office-list.kinds.e2e.test.ts` pins one filed sale of each kind.
+// As the filing types each record: a corrective naming a customer is R4 when it replaces the
+// original, else R1, and one naming nobody R5; a full invoice replacing tickets is F3; otherwise F1
+// when it names a customer, else F2. `tax-office-list.kinds.e2e.test.ts` pins one filed sale of each kind.
 const KIND = sql`case
   when s.corrects_sale_id is not null
-    then case when s.counterparty_tax_id is not null then 'R4' else 'R5' end
+    then case
+      when s.counterparty_tax_id is null then 'R5'
+      when s.replaces_original = 1 then 'R4'
+      else 'R1' end
   when exists (select 1 from sale_substitutions sub where sub.substitution_sale_id = s.id) then 'F3'
   when s.counterparty_tax_id is not null then 'F1'
   else 'F2' end`;

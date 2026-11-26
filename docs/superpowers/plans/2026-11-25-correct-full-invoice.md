@@ -48,7 +48,7 @@ Run: `rg -n "recordCorrection|recordReplacement|recordSubstitution|recordVoid"` 
 can file an R5 against a full invoice today:** the admission check (`correction-admission.ts:58-60`), core
 (`record-correction.ts:199`, `correction-history.ts:117`) and the record builder (`backend.ts:583-587`)
 each refuse. The series is the weak point (`invoice-corrections.ts:481` and `cancel-credit.ts` ask for the
-receipts' without looking); Task 2 makes the builder the last word. Printing and resending issue nothing.
+receipts' without looking); The builder picks R1 or R5 from the customer alone and never reads the series, so core is the guard: Task 3 refuses an R1 numbered outside `full_corrective` and an R5 numbered in it, before a number is taken. Printing and resending issue nothing.
 
 | # | Path | After | Held by |
 | --- | --- | --- | --- |
@@ -189,11 +189,12 @@ none}: F1 and R4 "S" with a customer file R1 "I" with the **stored** customer (e
 pair is `fiscal.correction_unsupported`, nothing written. Changes `backend.test.ts:1009`; `:493` stays refused.
 
 **Task 3, core.** `fullInvoice: true` on `previewCorrectionAmounts`, `readCorrectableLines` and
-`recordCorrection`. Without it, any answer saying `fullInvoice` is refused `not_simplified`, so no caller
-changes. With it: the `full_corrective` series; the customer's name, tax number, identifier and address and
+`recordCorrection`. Without it, any answer saying `fullInvoice` is refused `not_simplified`, except
+`wrong_node`, which keeps its reason, so no caller changes. With it: the `full_corrective` series; the customer's name, tax number, identifier and address and
 the business's current registered address copied to the corrective; no registered address refuses
 `fiscal.taxpayer_domicile_missing` in all three, before a number is taken; an invoice naming nobody, or
-`wholeInvoice` beside it, refuses `sale.correction_unsupported`. **Owns what is copied.** Failing first in
+`wholeInvoice` beside it, refuses `sale.correction_unsupported`, as do an F3 and an earlier corrective by
+differences, before a number is taken. **Owns what is copied.** Failing first in
 `correction-history.test.ts` (`:547` kept) and `record-correction.test.ts` (`:689` kept).
 
 **Task 4, readers** (section 3, rows 1 to 4). Failing first: `receipt-issuer.test.ts` (R1 full layout, R4
@@ -229,6 +230,9 @@ no corrective and is on the accountant's list, as today. Until PR 4a, an R1 file
 is printed from Find a bill: a receipt's rule today. A refused **R1** has no fix on the dashboard, as an R5 has
 none (`put-right.test.ts`), and an F1 holding an R1 can never get its R4 (`sale.replacement_not_first`); the PR
 says so. Sale-path read changed: no.
+
+The till's `sale.correction_unsupported` words (`codes.ts`, "This is a full invoice naming a customer…") must also
+cover a full-invoice correction refused because the invoice names nobody or is not a full invoice.
 
 ## PR 2b — a cancelled dish's money goes on it too
 
