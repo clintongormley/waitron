@@ -256,7 +256,7 @@ invoice" returns to Pay.
 
 The amount, large; one-tap buttons for Exact and the next notes up (drawn: €75, €80, €100); a
 keypad for anything else; the change to give back in large type; and a button saying what happened:
-"Took €80.00 · give €6.80". A phone opens no drawer, as today. (pass 2) A tip chosen on the guest's
+"Took €80.00 · give €6.80". A device opens the drawer only when its profile allows it, a phone included (owner, 2026-11-26 17:20, choosing "follow the device profile"). (pass 2) A tip chosen on the guest's
 screen stays in the amount when the guest pays cash: €90 handed over for €73.20 + €7.32 gives back
 €9.48.
 
@@ -279,7 +279,7 @@ payments"). Paying never frees the table; Finish table does, from the table's me
 Everything in [A796](2026-10-19-a796-handheld-payments-design.md) not changed above stays: Whole
 bill as a way to pay, a presented bill paid whole, "Other card machine" as a deliberate choice, no
 Cancel while the card is at the reader, "Pay the next guest" carrying a split on, a declined card's
-retry, paying never freeing the table, and a phone never opening the drawer.
+retry, paying never freeing the table, and the drawer opening only on a device whose profile allows it, a phone included (owner, 2026-11-26 17:20).
 
 ### 7.9 (pass 3) The ways to pay
 
@@ -355,8 +355,8 @@ row folds again (§4).
 The list replaces today's typed machine name and the "Card taken on" question a venue with SumUp sees.
 Each machine on the list says where its payments go: the venue's SumUp account, or another bank. A card
 reader paired with Waitron is not on it: it cannot take a card on its own when the box cannot reach it
-(owner, 2026-11-26). A hand-keyed card still opens a till's drawer for its slip, and a phone's never
-(§7.8).
+(owner, 2026-11-26). A hand-keyed card still opens the drawer for its slip, on a device whose profile may open
+one (§7.8).
 
 ### 7.10 (pass 3) How the ways to pay look
 
