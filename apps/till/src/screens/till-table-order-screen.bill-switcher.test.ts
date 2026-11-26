@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { PartyBill, TableParty } from "../api/floor-api.js";
@@ -282,10 +282,10 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     ["en", "4", "Bills on Table 4"],
     ["en", "12A", "Bills on Table 12A"],
     ["en", "4, 5", "Bills on Tables 4, 5"],
-    ["es", "4, 5", "Cuentas de las mesas 4, 5"],
+    ["es", "4, 5", () => t("table.bills_on_numbered_tables").replace("{party}", "4, 5")],
     ["en", "Table 4", "Bills on Table 4"],
     ["en", "Ventana", "Bills on Ventana"],
-    ["es", "Mesa 4", "Cuentas de Mesa 4"],
+    ["es", "Table 4", () => t("table.bills_on_table").replace("{party}", "Table 4")],
   ] as const)("names the sheet in %s for %s", async (locale, displayName, heading) => {
     setLocale(locale);
     const el = await mountScreen(one, "wo-1", { ...switcherParty, displayName });
@@ -293,7 +293,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     await userEvent.click(picker.shadowRoot!.querySelector("button")!);
     const menu = picker.querySelector('[role="menu"]')!;
     const title = picker.querySelector(`#${menu.getAttribute("aria-labelledby")}`);
-    expect(title?.textContent?.trim()).toBe(heading);
+    expect(title?.textContent?.trim()).toBe(typeof heading === "function" ? heading() : heading);
   });
 
   it("shows on a handheld too", async () => {
