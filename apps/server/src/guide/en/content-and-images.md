@@ -180,9 +180,8 @@ need the earliest ones. Name starts with **A–Z** and also offers **Z–A**. Us
 On a product's or a variant's own page, select the square beside the name, then **Choose image** in
 the panel that opens, to open the same library. With no photo, a product's square shows its colour
 and a pencil. A variant without its own photo shows the main product's photo. In a variant's
-small window or a section's editor, select
-**Choose image**. Then select **Use image** on the photograph you want, and save to keep the
-association. You can also click the photo to inspect it at full size, then choose **Use image**
+small window or a section's editor, select **Choose image**. Then select **Use image** on the
+photograph you want, and save to keep the association. You can also click the photo to inspect it at full size, then choose **Use image**
 there; **Back** returns to the grid. You can reuse one photograph on several products. Uploading a
 file that a current library photo already uses finds that entry and keeps its names and framing.
 A notice names the reused photo and says its name is unchanged. After a save in the

@@ -522,7 +522,8 @@ included.
 
 Open the pencil-marked thumbnail beside Name to choose a product's colour. **Inherit** shows the
 colour it would take from its current category or the venue default. Choose a palette swatch to
-give the product its own colour. A category's colour chooser also shows the inherited colour in its **Inherit** choice.
+give the product its own colour. A category's colour chooser also shows the inherited colour in
+its **Inherit** choice.
 A colour is lowercase `#rrggbb`, or null for none. A save refuses anything else, an empty string
 included, as `product.invalid` with `field: "color"`; a default colour is refused as
 `category.invalid` with `field: "color"` (`saveMenuDefaultColor`,
