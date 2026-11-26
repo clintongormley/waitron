@@ -1,4 +1,4 @@
-import { countryNameFor } from "@waitron/country-packs";
+import { countryNameFor, documentCountryNameFor } from "@waitron/country-packs";
 import { afterEach, describe, expect, it } from "vitest";
 import type { PartyBill } from "../api/floor-api.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -160,6 +160,26 @@ describe("mergeInvoiceQuestion", () => {
       intoName: "Acme Travel SL · B11111111 · Passport · France",
       fromName: "Acme Travel SL · B11111111 · Passport · Germany",
     });
+  });
+
+  it("names an AEAT issuing code that is not a postal country", () => {
+    const passport = (identifierCountryCode: string) => ({
+      ...acme,
+      identifierType: "passport" as const,
+      identifierCountryCode,
+    });
+    const question = mergeInvoiceQuestion(
+      [full("wo-into", passport("FR")), full("wo-from", passport("XU"))],
+      "wo-into",
+      "wo-from",
+    )!;
+    expect(mergeInvoiceNames(question).fromName).toBe(
+      "Acme Travel SL · B11111111 · Passport · Institutions of the European Union",
+    );
+    setLocale("es");
+    expect(mergeInvoiceNames(question).fromName).toBe(
+      `Acme Travel SL · B11111111 · ${t("invoice.identifier.passport", "es")} · ${documentCountryNameFor("XU", "es")}`,
+    );
   });
 });
 

@@ -1,3 +1,4 @@
+import { documentCountryNameFor } from "@waitron/country-packs";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -161,4 +162,16 @@ it("explains that foreign no-match searches preserve exact document text", async
   expect(el.shadowRoot!.querySelector("[data-test=none]")!.textContent).not.toContain(
     "make no difference",
   );
+});
+it.each([
+  ["en-GB", "European Central Bank"],
+  ["es-ES", documentCountryNameFor("XB", "es")],
+])("names AEAT's European Central Bank issuing code in %s", async (locale, name) => {
+  const { el } = await mount();
+  setLocale(locale);
+  await edit(el, "identifierType", "passport");
+  const issuer = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "[name=identifierCountryCode]",
+  )!;
+  expect(issuer.options.find(({ value }) => value === "XB")?.label).toBe(name);
 });

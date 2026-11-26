@@ -1,7 +1,13 @@
 import { contentLanguageChoices, languageDisplayName } from "@waitron/shared";
-import { SPAIN_RECEIPT_SAMPLE_ITEMS } from "@waitron/country-es";
+import { SPAIN_DOCUMENT_ISSUER_NAMES, SPAIN_RECEIPT_SAMPLE_ITEMS } from "@waitron/country-es";
 import { VALENCIA_DEMO_TEXT, GALICIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
-import { countryNameFor, receiptCountryNameFor } from "./registry.js";
+import {
+  RECIPIENT_IDENTIFIER_POLICY,
+  countryNameFor,
+  documentCountryNameFor,
+  receiptCountryNameFor,
+} from "./registry.js";
+import { normalizeRecipientCountryCode } from "./recipient-countries.js";
 import { findAdministrativeArea, resolveFiscalJurisdiction } from "@waitron/country";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as registry from "./registry.js";
@@ -448,6 +454,42 @@ describe("recipient countries without installed packs", () => {
   it.each(["XX", "ZZ", "EU", "ESP", "123", ""])("keeps unassigned stored code %s raw", (code) => {
     expect(countryNameFor(code, "en-GB")).toBe(code);
     expect(receiptCountryNameFor(code, "ca-ES")).toBe(code);
+  });
+});
+
+describe("identity-document issuing country names", () => {
+  const SPECIAL = ["QU", "XB", "XG", "XN", "XU"];
+  it("names exactly the issuing codes that are not postal countries", () => {
+    const special = RECIPIENT_IDENTIFIER_POLICY.documentCountryCodes.filter(
+      (code) => normalizeRecipientCountryCode(code) === undefined,
+    );
+    expect(special).toEqual(SPECIAL);
+    expect(Object.keys(SPAIN_DOCUMENT_ISSUER_NAMES.en).sort()).toEqual(SPECIAL);
+    expect(Object.keys(SPAIN_DOCUMENT_ISSUER_NAMES.es).sort()).toEqual(SPECIAL);
+  });
+  it.each(SPECIAL)("names %s in English and Spanish rather than showing the code", (code) => {
+    const english = documentCountryNameFor(code, "en-GB");
+    const spanish = documentCountryNameFor(code, "es-ES");
+    expect(english).not.toBe(code);
+    expect(spanish).not.toBe(code);
+    expect(spanish).not.toBe(english);
+    expect(documentCountryNameFor(code, "es")).toBe(spanish);
+    expect(documentCountryNameFor(code, "unknown")).toBe(english);
+    expect(documentCountryNameFor(code, "invalid_locale")).toBe(english);
+    expect(documentCountryNameFor(code, "ca-ES")).toBe(english);
+  });
+  it("names the European Central Bank in both languages", () => {
+    expect(documentCountryNameFor("XB", "en-GB")).toBe("European Central Bank");
+    expect(documentCountryNameFor("XB", "es-ES")).toBe(SPAIN_DOCUMENT_ISSUER_NAMES.es.XB);
+  });
+  it.each(["en-GB", "es-ES", "ca-ES"])(
+    "names an ordinary country as the postal list does in %s",
+    (locale) => {
+      expect(documentCountryNameFor("FR", locale)).toBe(countryNameFor("FR", locale));
+    },
+  );
+  it("leaves the special codes out of the postal country names", () => {
+    expect(countryNameFor("XB", "en-GB")).toBe("XB");
   });
 });
 

@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import {
-  countryNameFor,
+  documentCountryNameFor,
   recipientIdentifierResult,
   RECIPIENT_IDENTIFIER_POLICY,
   type RecipientIdentifierType,
@@ -413,7 +413,7 @@ export class InvoiceCustomerDialog extends LitElement {
                       required
                       .label=${t("invoice_customer.identifier_country")}
                       .value=${this.identifierCountryCode}
-                      .options=${RECIPIENT_IDENTIFIER_POLICY.documentCountryCodes.map((value) => ({ value, label: countryNameFor(value, currentLocale()) }))}
+                      .options=${RECIPIENT_IDENTIFIER_POLICY.documentCountryCodes.map((value) => ({ value, label: documentCountryNameFor(value, currentLocale()) }))}
                       .error=${fieldError("identifierCountryCode")}
                       @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, "identifierCountryCode")}
                     ></wt-combobox>`

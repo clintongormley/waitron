@@ -63,11 +63,6 @@ are the audit's, taken on `a3be14ba4`; re-find them on current `main`. Every ite
 for its own diff (grep it for non-English text before pushing — the guard does not read a file
 listed in `scripts/english-only-still-to-clean.ts` line by line).
 
-- **Name special invoice-document issuing codes.** A963's review (on `e5693d460`) reported exactly
-  `QU`, `XB`, `XG`, `XN`, `XU` returned unchanged by `countryNameFor` in English and Spanish.
-  Both dialogs use that helper for the issuing list. Add sourced names for that list without
-  admitting those values to the postal-country list. This is a wording follow-up; the identifiers
-  retain their explicit issuing code.
 - **Regional demo screen qualification.** Inspect the seeded till, kitchen and dashboard in
   English/Spanish, both themes and phone/desktop widths when the development stack can start.
   The regional cuts' local launches refused at Mailpit's absent Docker socket; their native setup
@@ -680,14 +675,6 @@ the day figures from recorded transactions. No removal was missed. `recovery_pac
   data download filters by this field. On a development Mac its first write-lock turn took a
   median 25 ms with one seeded year and 216 ms with five years. [#4058](https://github.com/clintongormley/waitron/pull/4058)
 
-
-## Bundle: Full-invoice recipient: country code names
-
-1 entry, size S. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
-
-- **Name special invoice-document issuing codes.** Both recipient dialogs currently show
-  `QU`, `XB`, `XG`, `XN` and `XU` as bare codes. Add sourced English/Spanish labels without
-  treating them as postal countries. [Detail](architecture.md#a913s-fix-items-general-code-english-only)
 
 ## Bundle: Printer, reader and device delete wording
 

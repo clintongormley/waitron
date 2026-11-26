@@ -22,6 +22,7 @@ import {
   areaOfChosenAddress,
   cloudAddressProvider,
   countryNameFor,
+  documentCountryNameFor,
   getCountryPack,
   RECIPIENT_COUNTRY_CODES,
   RECIPIENT_IDENTIFIER_POLICY,
@@ -683,7 +684,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
                 required
                 .label=${t("invoice.identifier_country")}
                 .value=${this.identifierCountryCode}
-                .options=${RECIPIENT_IDENTIFIER_POLICY.documentCountryCodes.map((value) => ({ value, label: countryNameFor(value, currentLocale()) }))}
+                .options=${RECIPIENT_IDENTIFIER_POLICY.documentCountryCodes.map((value) => ({ value, label: documentCountryNameFor(value, currentLocale()) }))}
                 .error=${this.#fieldError("identifierCountryCode", errors.identifierCountryCode)}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("identifierCountryCode", event)}
               ></wt-combobox>`

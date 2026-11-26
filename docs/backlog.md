@@ -1411,8 +1411,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#go-live-day-steps).
 
 
-- **Full-invoice recipient: country code names** (bundle of 1, size S). [Detail](backlog/architecture.md#bundle-full-invoice-recipient-country-code-names)
-
 - **Regional demo screen qualification.** Inspect the seeded till, kitchen and dashboard in both
   screen languages, themes and phone/desktop widths when the stack is available. The regional cuts'
   local Mailpit start refused the absent Docker socket. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
