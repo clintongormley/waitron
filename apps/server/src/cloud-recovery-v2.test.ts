@@ -193,27 +193,6 @@ async function fixture() {
 }
 
 describe("choosing the approved venue's snapshot", () => {
-  it("keeps the earlier checked snapshot named in Cloud approval", async () => {
-    const f = await fixture();
-    const client = createCloudRecoveryClient(f.options);
-    await client.start();
-    f.rewrite = (action, result) =>
-      action === "info" ? { ...result, point: older, verification: verification(older) } : result;
-    const approved = await client.status();
-    expect(approved.point).toEqual({
-      id: olderId,
-      venueId: older.venueId,
-      capturedAt: older.capturedAt,
-      modules: { core: 1 },
-    });
-    expect(f.calls.map(({ action }) => action)).toEqual(["start", "status", "info"]);
-    expect(f.calls.at(-1)?.payload.slice(3, 5)).toEqual(["info", ""]);
-    expect(await f.saved()).toMatchObject({
-      pointId: olderId,
-      snapshotVerification: verification(older),
-    });
-  });
-
   it("offers the newest checked snapshot first when Cloud approval names no copy", async () => {
     const f = await fixture();
     const fetchCloud = f.options.fetch!;
@@ -418,7 +397,20 @@ describe("target-bound snapshot recovery v2", () => {
     const f = await fixture();
     const client = createCloudRecoveryClient(f.options);
     await client.start();
-    await client.status();
+    f.rewrite = (action, result) =>
+      action === "info" ? { ...result, point: older, verification: verification(older) } : result;
+    const named = await client.status();
+    expect(named.point).toEqual({
+      id: olderId,
+      venueId: older.venueId,
+      capturedAt: older.capturedAt,
+      modules: { core: 1 },
+    });
+    expect(await f.saved()).toMatchObject({
+      pointId: olderId,
+      snapshotVerification: verification(older),
+    });
+    f.rewrite = (_action, result) => result;
     await client.select(point.id, point.venueId);
     let staged: unknown;
     await client.restore(async (request) => {

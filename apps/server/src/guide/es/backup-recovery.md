@@ -116,8 +116,8 @@ solicitud. En el servidor, elige **Comprobar la aprobación**. El servidor selec
 indicada en la aprobación de Cloud o la copia comprobada más reciente si no se indicó ninguna.
 Comprueba la fecha y la hora de la copia seleccionada. Puedes elegir otra antes de pulsar
 **Revisar copia**, que fija tu elección. Para cambiarla después, usa **Cerrar acceso de
-recuperación** en Waitron Cloud e
-inicia una nueva solicitud. Si todavía no hay copias comprobadas, vuelve a pulsar **Comprobar la
+recuperación** en Waitron Cloud e inicia una nueva solicitud. Si todavía no hay copias comprobadas,
+vuelve a pulsar **Comprobar la
 aprobación** cuando haya una disponible.
 
 Elige un servidor con espacio libre suficiente para la base de datos recuperada y las copias

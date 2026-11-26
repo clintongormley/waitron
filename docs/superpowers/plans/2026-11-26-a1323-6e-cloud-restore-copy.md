@@ -17,8 +17,8 @@ page are separate work. Allow about 200 product and 250 test lines.
 
 - [ ] **List and select.** In `cloud-recovery.ts`, reuse the version 2 signed transport and recovery
   lock. Sign an empty value for `points` and the copy ID for `select`. Validate each listed point
-  against Cloud’s approved venue, and expose only the browser-safe summary. Approved status can
-  call `info` once a choice is saved. Check the selected ID, venue, archive and exact-target check
+  against Cloud’s approved venue, and expose only the browser-safe summary. Approved status calls
+  `info` to read any named or saved choice. Check the selected ID, venue, archive and exact-target check
   together before saving the chosen point and its verification. On `400 invalid_input`, fetch one
   fresh list and ask the person to choose again. Repeat the same selection once after a lost reply. On `403 proof_required`, ask the person to
   approve the same request again and retry the choice. On `410`,

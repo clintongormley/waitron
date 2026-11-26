@@ -105,8 +105,8 @@ Cloud, choose **Start Cloud recovery**, enter the code the page shows in your Wa
 The box selects the copy named in Cloud approval or the latest checked copy if approval named
 none. Check the selected copy’s date and time. You can choose a different copy before choosing
 **Review backup**, which fixes your choice. To change it afterward, choose **Close recovery
-access** in Waitron Cloud and start a new request. If Waitron Cloud has no checked copy yet, choose **Check
-approval** again when a checked copy is available.
+access** in Waitron Cloud and start a new request. If Waitron Cloud has no checked copy yet,
+choose **Check approval** again when a checked copy is available.
 
 Choose a box with enough free disk space for the recovered database and the temporary copies
 needed to open the backup.
