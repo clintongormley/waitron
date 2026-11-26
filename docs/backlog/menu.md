@@ -769,7 +769,7 @@ _2026-11-25: Piece 3, the server ([plan](../superpowers/plans/2026-11-24-a1515-3
 
 _2026-11-26: Every discount is an amount, on the whole bill, one dish or one set menu; a percentage is worked out as an amount when it is given (owner, rule C). A discount goes with its dish or set menu when that is cancelled or moved, and comes off with a notice offering to give it again when the dish's price changes or its set menu breaks up. PR 4 is no longer needed ([plan](../superpowers/plans/2026-11-24-a1515-3-set-menus-server.md), D45–D59)._
 
-_Piece 1 ([plan](../superpowers/plans/2026-11-24-a1515-1-pay-for-items-new-bill.md)): two refusals the owner has asked to lift remain: splitting or paying items of a printed bill that has had a payment on its own receipt, even one given back (the owner asked on 25 November for that to be lifted: lane C's REOPEN-WITH-ADVANCE), and Items on a Counter order already sent to the kitchen (the owner asked the same day for it to be built, keeping the order's number: COUNTER-SENT-ITEMS)._
+_Piece 1 ([plan](../superpowers/plans/2026-11-24-a1515-1-pay-for-items-new-bill.md)): one refusal the owner has asked to lift remains: Items on a Counter order already sent to the kitchen (the owner asked on 25 November for it to be built, keeping the order's number: COUNTER-SENT-ITEMS)._
 
 The old set-lunch build has been removed. The owner replaced it on 17 November 2026 with
 [set menus](../superpowers/specs/2026-11-17-set-menus-design.md): ordinary dishes were ordered,

@@ -7,6 +7,7 @@ import {
   saleSettlements,
   saleSubstitutions,
   saleVoids,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
@@ -20,6 +21,7 @@ import {
   type ErrorParams,
 } from "@waitron/shared";
 import { paidOnIssuedBill } from "./bill-payments.js";
+import { billReopenRefusal } from "./bill-reopen-state.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { readInvoiceNumber, readInvoiceNumbers } from "./stored-order-lines.js";
 
@@ -33,7 +35,9 @@ export interface TakenOffBy {
 
 /**
  * The invoice that took each of the advances `advanceSaleIds` off, by advance: the earliest sale
- * with a line deducting it that is neither a corrective nor a full invoice issued in substitution.
+ * with a line deducting it that is neither a corrective, a full invoice issued in substitution,
+ * nor the invoice of a bill since reopened, whose money, an advance's payment included, moved to
+ * the reopened bill.
  * A corrective, a replacement or a substitution copies that line, so it is never the one named;
  * an advance no invoice took off is absent. One read per {@link SQL_VARIABLE_LIMIT} advances.
  */
@@ -57,6 +61,12 @@ export async function advancesTakenOff(
         and(
           inArray(saleLines.deductsSaleId, advanceSaleIds.slice(start, start + SQL_VARIABLE_LIMIT)),
           isNull(sales.correctsSaleId),
+          notExists(
+            tx
+              .select({ id: workingOrders.id })
+              .from(workingOrders)
+              .where(eq(workingOrders.reopenedFrom, sales.workingOrderId)),
+          ),
           notExists(
             tx
               .select({ id: saleSubstitutions.id })
@@ -109,25 +119,36 @@ export async function refundableAdvanceNumbersTakenOffBy(
 /**
  * What Correct invoice on the invoice `finalSaleId` can give back, tips aside: once it is paid, the
  * money its payments still hold, as `invoice_correction.money_short` reads it; while its bill is
- * still being paid, the money paid on it so far, which Correct invoice can give back only once the
- * bill is fully paid (`finalNotFullyPaid`).
+ * still being paid, the money paid on it so far. A bill still being paid whose own state Reopen
+ * bill admits ({@link billReopenRefusal}) is reopened first (`reopenBill`), even with nothing paid
+ * on it, so the advance's money goes back with a corrective on the reopened bill; any other is
+ * given back only once it is fully paid (`finalNotFullyPaid`).
  */
 async function moneyLeftOn(
   tx: Transaction,
   finalSaleId: string,
-): Promise<Pick<TakenOffParams, "finalMoneyLeft" | "finalNotFullyPaid">> {
+): Promise<Pick<TakenOffParams, "finalMoneyLeft" | "finalNotFullyPaid" | "reopenBill">> {
   const [sale] = await tx
     .select({
       workingOrderId: sales.workingOrderId,
       settled: saleSettlements.id,
       voided: saleVoids.id,
+      partyId: workingOrders.partyId,
     })
     .from(sales)
     .leftJoin(saleSettlements, eq(saleSettlements.saleId, sales.id))
     .leftJoin(saleVoids, eq(saleVoids.saleId, sales.id))
+    .leftJoin(workingOrders, eq(workingOrders.id, sales.workingOrderId))
     .where(eq(sales.id, finalSaleId));
   if (sale?.settled === null && sale.voided === null && sale.workingOrderId !== null) {
     const paid = await paidOnIssuedBill(tx, sale.workingOrderId);
+    const refusal = await billReopenRefusal(
+      tx,
+      sale.workingOrderId,
+      sale.partyId,
+      brandSaleId(finalSaleId),
+    );
+    if (refusal === undefined) return { finalMoneyLeft: paid, reopenBill: true };
     return compareDecimal(paid, ZERO) > 0
       ? { finalMoneyLeft: paid, finalNotFullyPaid: true }
       : { finalMoneyLeft: ZERO };
@@ -157,7 +178,8 @@ async function takenOffParams(
 
 /**
  * Refuses `advance.taken_off_final_invoice` once an invoice has taken the advance `saleId` off
- * ({@link advancesTakenOff}). A whole credit of that invoice leaves the refusal in place.
+ * ({@link advancesTakenOff}). A whole credit of that invoice leaves the refusal in place, unless
+ * it was Reopen bill's, whose reopened bill takes the advance off again only once printed.
  */
 export async function refuseTakenOffAdvance(tx: Transaction, saleId: string): Promise<void> {
   const params = await takenOffParams(tx, saleId);
@@ -167,7 +189,7 @@ export async function refuseTakenOffAdvance(tx: Transaction, saleId: string): Pr
 /**
  * Refuses a plain refund of the advance `saleId`'s money with `tender.refund_of_advance` until an
  * invoice took the advance off; then with {@link refuseTakenOffAdvance}'s refusal while that
- * invoice can still give money back, and not once it cannot.
+ * invoice can still give money back or its bill can be reopened (`reopenBill`), and not otherwise.
  */
 export async function refusePlainRefundOfAdvance(
   tx: Transaction,
@@ -177,7 +199,10 @@ export async function refusePlainRefundOfAdvance(
   const takenOff = await takenOffParams(tx, saleId);
   if (takenOff === undefined)
     await refuseNamingAdvance(tx, saleId, "tender.refund_of_advance", params);
-  else if (compareDecimal(decimal(takenOff.finalMoneyLeft), ZERO) > 0)
+  else if (
+    takenOff.reopenBill === true ||
+    compareDecimal(decimal(takenOff.finalMoneyLeft), ZERO) > 0
+  )
     throw new AppError("advance.taken_off_final_invoice", takenOff);
 }
 

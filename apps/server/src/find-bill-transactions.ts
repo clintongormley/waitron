@@ -25,8 +25,9 @@ function scopeRelation(saleId?: string | SQL): SQL {
     select g.sale_id, s.working_order_id as order_id from invoice_scope g
       join sales s on s.id = g.source_sale_id where s.working_order_id is not null
     union
-    select g.sale_id, ba.working_order_id from invoice_scope g
+    select g.sale_id, bp.working_order_id from invoice_scope g
       join bill_advances ba on ba.advance_sale_id = g.source_sale_id
+      join bill_payments bp on bp.id = ba.bill_payment_id
   )`;
 }
 
@@ -38,7 +39,8 @@ function scopeCondition(inZones?: OrderZoneCondition): SQL {
 
 /**
  * True when `inZones` admits every order of the sale `saleId` names, as Find a bill decides it: the
- * sale's own bill, an advance's bill, and those of the invoices it corrects or replaces.
+ * sale's own bill, the bill an advance's payment is on, and those of the invoices it corrects or
+ * replaces.
  */
 export function saleScopeInZones(saleId: SQL, inZones: OrderZoneCondition): SQL {
   return sql`not exists(${scopeRelation(saleId)}

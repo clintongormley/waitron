@@ -277,6 +277,7 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     invoiceNumber?: unknown;
     finalMoneyLeft?: unknown;
     finalNotFullyPaid?: unknown;
+    reopenBill?: unknown;
     moneyLeft?: unknown;
     advanceInvoiceNumbers?: unknown;
     advances?: unknown;
@@ -300,6 +301,7 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
       ? { finalMoneyLeft: refused.finalMoneyLeft }
       : {}),
     ...(refused.finalNotFullyPaid === true ? { finalNotFullyPaid: true as const } : {}),
+    ...(refused.reopenBill === true ? { reopenBill: true as const } : {}),
     ...(typeof refused.moneyLeft === "string" ? { moneyLeft: refused.moneyLeft } : {}),
     ...(Array.isArray(refused.advanceInvoiceNumbers)
       ? {

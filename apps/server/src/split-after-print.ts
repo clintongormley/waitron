@@ -4,19 +4,14 @@ import {
   insertInChunks,
   lineServiceCancellations,
   orderGroups,
-  sales,
-  unpaidDepartures,
   workingOrderLines,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
-import {
-  correctionTargetFor,
-  requireSupportedCorrection,
-  withIssuanceTransaction,
-} from "@waitron/core";
+import { withIssuanceTransaction } from "@waitron/core";
 import { AppError, stringToThousandths } from "@waitron/shared";
 import { holdsPayment } from "./bill-payments.js";
+import { billReopenRefusal } from "./bill-reopen-state.js";
 import { creditWholeInvoice, type IssuedInvoice } from "./cancel-credit.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
 import { readSplitOrderLabel } from "./receipt-order.js";
@@ -152,21 +147,9 @@ async function refuseSplitBill(
   partyId: string | null,
   invoice: IssuedInvoice | undefined,
 ): Promise<{ partyId: string; invoice: IssuedInvoice }> {
-  if (partyId === null) throw new AppError("bill.not_at_table", { workingOrderId: id });
-  const [departure] = await tx
-    .select({ id: unpaidDepartures.workingOrderId })
-    .from(unpaidDepartures)
-    .where(eq(unpaidDepartures.workingOrderId, id));
-  if (departure !== undefined) throw new AppError("bill.left_unpaid", { workingOrderId: id });
-  if (invoice === undefined) throw new AppError("bill.not_issued", { workingOrderId: id });
-  // `recordCorrection` refuses the same invoice, but only after the dishes.
-  const target = await correctionTargetFor(tx, invoice.id);
-  const [credited] = await tx
-    .select({ counterpartyTaxId: sales.counterpartyTaxId })
-    .from(sales)
-    .where(eq(sales.id, target));
-  requireSupportedCorrection(credited!.counterpartyTaxId, target);
-  return { partyId, invoice };
+  const refusal = await billReopenRefusal(tx, id, partyId, invoice?.id);
+  if (refusal !== undefined) throw refusal;
+  return { partyId: partyId!, invoice: invoice! };
 }
 
 async function refuseUnservedDishes(

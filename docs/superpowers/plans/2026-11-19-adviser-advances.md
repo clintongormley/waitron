@@ -1529,6 +1529,12 @@ core's, payments' and fiscal-verifactu's starting migrations, rebuilt.
 - `seatTable` takes `advanceSaleIds` and writes their `bill_advances` rows (no bill payment). It
   does not change the bill's invoice choice: the rest's invoice is as the bill is set.
 - Piece 4 makes `bill_advances.bill_payment_id` nullable for these rows, its unique index partial.
+  _2026-11-26: since REOPEN-WITH-ADVANCE (RA-D1 of `2026-11-25-reopen-with-advance.md`), a bill's
+  advances are found through their payments (`bill_payments.working_order_id`): `readBillAdvances`,
+  `advanceWithOpenCorrection`, `issueAdvanceBill`, Find a bill's zone scope (`scopeRelation` in
+  `find-bill-transactions.ts`) and its paid figure (`find-bill-bills.ts`) all start from
+  `bill_payments`. So piece 4 must find an advance that has no bill payment some other way in each
+  of them, and `bill_advances_working_order_idx` was dropped._
 - **A booking's advance counts only when the meal ends:** it enters `readBillAdvances`, the
   rest's invoice, `issueWhenFullyPaid` and `advance.exceeds_bill`; `assertBillInvariant` leaves it
   out; **Paid so far** includes it only up to the meal so far. `holdsPayment`

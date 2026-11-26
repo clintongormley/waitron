@@ -249,7 +249,8 @@ export interface AdvancePaymentMoney {
 }
 
 /** The named bills' advances, each with its correctives (`correctivesOf`) included, oldest first
- * (a bill with none is absent from `credits`), and by the bill payment that paid each. */
+ * (a bill with none is absent from `credits`), and by the bill payment that paid each. A bill's
+ * advances are those whose payment is on it: a reopen moves the payment, not the advance's row. */
 export interface BillAdvances {
   credits: Map<string, AdvanceCredit[]>;
   payments: Map<string, AdvancePaymentMoney>;
@@ -265,7 +266,7 @@ export async function readBillAdvances(
   if (workingOrderIds.length === 0) return { credits, payments };
   const advances = await tx
     .select({
-      workingOrderId: billAdvances.workingOrderId,
+      workingOrderId: billPayments.workingOrderId,
       billPaymentId: billAdvances.billPaymentId,
       saleId: sales.id,
       code: invoiceSeries.code,
@@ -275,10 +276,11 @@ export async function readBillAdvances(
       total: sales.total,
       vatBreakdown: sales.vatBreakdown,
     })
-    .from(billAdvances)
+    .from(billPayments)
+    .innerJoin(billAdvances, eq(billAdvances.billPaymentId, billPayments.id))
     .innerJoin(sales, eq(sales.id, billAdvances.advanceSaleId))
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
-    .where(inArray(billAdvances.workingOrderId, [...workingOrderIds]))
+    .where(inArray(billPayments.workingOrderId, [...workingOrderIds]))
     .orderBy(sales.issuedAt, sales.invoiceNumber);
   if (advances.length === 0) return { credits, payments };
   const saleIds = sql.join(
@@ -395,14 +397,15 @@ export async function advanceWithOpenCorrection(
 ): Promise<{ saleId: string; invoiceNumber: string } | undefined> {
   const [open] = await tx
     .select({ saleId: sales.id, code: invoiceSeries.code, number: sales.invoiceNumber })
-    .from(billAdvances)
+    .from(billPayments)
+    .innerJoin(billAdvances, eq(billAdvances.billPaymentId, billPayments.id))
     .innerJoin(sales, eq(sales.id, billAdvances.advanceSaleId))
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .innerJoin(
       invoiceCorrections,
       and(eq(invoiceCorrections.originalSaleId, sales.id), eq(invoiceCorrections.state, "open")),
     )
-    .where(eq(billAdvances.workingOrderId, workingOrderId))
+    .where(eq(billPayments.workingOrderId, workingOrderId))
     .orderBy(sales.issuedAt, sales.invoiceNumber)
     .limit(1);
   return open === undefined

@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import {
   allocateInvoiceNumber,
+  billAdvances,
   billPayments,
   invoiceSeries,
   persons,
@@ -536,6 +537,47 @@ describe("Find Transactions SQL paging", () => {
         (r) => r.saleId,
       ),
     ).toEqual([unzoned]);
+  });
+
+  it("scopes an advance to the bill its payment is on, not the bill it was taken on", async () => {
+    const counter = await parked(venue, "Small beer");
+    const party = await seatedWith(venue, "Tarta");
+    const advance = await invoice();
+    await inTx(venue, async (tx) => {
+      const [payment] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: counter,
+          submissionId: randomUUID(),
+          fingerprint: "advance",
+          kind: "contribution",
+          method: "cash",
+          applied: 1210,
+          tendered: 1210,
+          state: "received",
+          receivedAt: AT,
+          requestedBy: venue.operatorId,
+          source: "device",
+          deviceId: venue.deviceId,
+        })
+        .returning({ id: billPayments.id });
+      await tx.insert(billAdvances).values({
+        workingOrderId: party.tabId,
+        advanceSaleId: advance,
+        billPaymentId: payment!.id,
+      });
+    });
+
+    expect(await inTx(venue, (tx) => resolveTransactionScope(tx, advance))).toEqual({
+      workingOrderIds: [counter],
+    });
+    const inCounter = (id: ReturnType<typeof sql>) =>
+      VENUE_SERVICE.orderInZones(id, [venue.counterZone]);
+    expect(
+      (await inTx(venue, (tx) => readFindTransactions(tx, query(), inCounter))).rows.map(
+        (r) => r.saleId,
+      ),
+    ).toContain(advance);
   });
 
   it("retains the saved name of a historical operator who was suspended", async () => {

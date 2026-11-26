@@ -776,8 +776,7 @@ nueva**.
 
 Si después los clientes quieren pagar por separado, abre **⋮** y elige **Reabrir cuenta**. Esto
 anula el ticket y reabre la cuenta, lista para [**Mover platos…**](table-service.md#move-dishes).
-Lo ya pagado cuenta para ella. Una cuenta que ha tenido un pago con su propio ticket no se puede
-reabrir: cobra el resto con **Una cantidad** o **Dividir a partes iguales**.
+Lo ya pagado cuenta para ella.
 Si **Reabrir cuenta** muestra platos sin servir, elige **Marcar como servidos** para los que
 llegaron. Cuando algo de la cuenta ya se ha servido y no se ha pagado nada, **Parar estos platos y
 reabrir** para cada plato que siga en la lista y lo deja fuera de la cuenta reabierta, salvo uno que

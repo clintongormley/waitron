@@ -887,13 +887,16 @@ declare module "@waitron/shared" {
      * `invoiceNumber`, took it off: money comes back through Correct invoice on that invoice, which
      * can still give back `finalMoneyLeft`, and past that by Refund a payment on the advance.
      * `finalNotFullyPaid` marks an invoice whose bill is still being paid: `finalMoneyLeft` is what
-     * has been paid on it so far, and Correct invoice can give it back only once it is fully paid. */
+     * has been paid on it so far, and Correct invoice can give it back only once it is fully paid.
+     * `reopenBill` marks one whose table's bill is still being paid instead: `finalMoneyLeft` is
+     * what has been paid on it so far, and the advance goes back once that bill is reopened. */
     "advance.taken_off_final_invoice": {
       saleId: string;
       finalSaleId: string;
       invoiceNumber: string;
       finalMoneyLeft: string;
       finalNotFullyPaid?: true;
+      reopenBill?: true;
     };
     /** The bill `workingOrderId`'s invoice was asked for while a correction of its advance
      * `saleId`, numbered `invoiceNumber`, is still open: that correction is filed or closed first. */
@@ -934,9 +937,6 @@ declare module "@waitron/shared" {
      * except by Reopen bill, which moves the money to the reopened bill.
      */
     "bill.payments_received": { workingOrderId: string };
-    /** Reopen bill on a printed bill on which an advance was ever taken, even one given back
-     * in full since: an advance's money is on its own ticket, so it cannot follow the dishes. */
-    "bill.has_advance": { workingOrderId: string };
     /** The bill has been presented (placed), so it takes no new order. */
     "bill.presented": { workingOrderId: string };
     /** The bill is closed (paid, or closed as a deferred payment), so it takes no new order. */
@@ -997,7 +997,8 @@ declare module "@waitron/shared" {
     "tender.refund_needs_correction": { tenderId: string };
     /** A refund, outside Correct invoice, of the money a payment on account (`saleId`, numbered
      * `invoiceNumber`) took, before an invoice took it off. After, it is refused
-     * `advance.taken_off_final_invoice` while that invoice's payments still hold money. */
+     * `advance.taken_off_final_invoice` while that invoice's payments still hold money or its bill
+     * can be reopened (`reopenBill`). */
     "tender.refund_of_advance": { tenderId: string; saleId: string; invoiceNumber: string };
     "tender.manual_refund_pin_required": { tenderId: string };
     "tender.refund_unavailable": { tenderId: string };

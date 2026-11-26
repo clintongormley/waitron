@@ -401,10 +401,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This bill has taken payments, so it cannot be merged into another bill.",
     es: "Esta cuenta ya ha recibido pagos, por lo que no se puede añadir a otra cuenta.",
   },
-  "bill.has_advance": {
-    en: "Part of this bill was paid with its own receipt, so its dishes cannot be paid for separately. Take the rest of the payment on this bill with An amount or Split equally.",
-    es: "Parte de esta cuenta se pagó con su propio ticket, así que sus platos no se pueden cobrar por separado. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
-  },
   "bill.merge_invoice_choice_required": {
     en: "The bills' invoice details have changed. Check them and merge again.",
     es: "Los datos de factura de las cuentas han cambiado. Revísalos y vuelve a juntarlas.",
@@ -1188,6 +1184,13 @@ const TAKEN_OFF_NOT_FULLY_PAID = {
   es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}, que aún no está pagado del todo, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Cuando {receipt} esté pagado del todo, devuelve primero dinero con Devolver dinero en {it}: devuelve dinero pagado en {it}. Cuando no quede nada pagado en {it}, Devolver dinero en este ticket devuelve el resto.",
 };
 
+/** `advance.taken_off_final_invoice` while the table's receipt is still being paid and its bill can
+ * be reopened. */
+const TAKEN_OFF_REOPEN_BILL = {
+  en: "Reopen the bill, then give the money back.",
+  es: "Reabre la cuenta y luego devuelve el dinero.",
+};
+
 /** `invoice_correction.money_short` when nothing paid on the receipt is left and it took payments
  * on account off. */
 const MONEY_SHORT_NOTHING_LEFT = {
@@ -1255,6 +1258,7 @@ export const CODE_TABLES: Readonly<Record<string, unknown>> = {
   FREE_ITEM_AT_FINISH,
   TAKEN_OFF_NOTHING_LEFT,
   TAKEN_OFF_NOT_FULLY_PAID,
+  TAKEN_OFF_REOPEN_BILL,
   MONEY_SHORT_NOTHING_LEFT,
   MONEY_SHORT_ADVANCES,
   DINING_FIXED,
@@ -1281,6 +1285,7 @@ export function codeMessage(
     invoiceNumber?: unknown;
     finalMoneyLeft?: unknown;
     finalNotFullyPaid?: unknown;
+    reopenBill?: unknown;
     moneyLeft?: unknown;
     advanceInvoiceNumbers?: unknown;
     advances?: unknown;
@@ -1371,8 +1376,15 @@ export function codeMessage(
 function takenOffMessage(
   locale: string,
   params:
-    { invoiceNumber?: unknown; finalMoneyLeft?: unknown; finalNotFullyPaid?: unknown } | undefined,
+    | {
+        invoiceNumber?: unknown;
+        finalMoneyLeft?: unknown;
+        finalNotFullyPaid?: unknown;
+        reopenBill?: unknown;
+      }
+    | undefined,
 ): string {
+  if (params?.reopenBill === true) return pickLocale(TAKEN_OFF_REOPEN_BILL, locale);
   const number = typeof params?.invoiceNumber === "string" ? params.invoiceNumber : undefined;
   const message = pickLocale(
     isZeroMoney(params?.finalMoneyLeft)

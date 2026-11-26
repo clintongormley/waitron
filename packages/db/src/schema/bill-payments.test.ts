@@ -195,7 +195,11 @@ describe("bill payments: the two tables, their checks and their triggers", () =>
   }
 
   /** A sale on the bill with one tender naming `billPaymentId`. */
-  async function tenderFor(billPaymentId: string | null, amount = 1000): Promise<string> {
+  async function tenderFor(
+    billPaymentId: string | null,
+    amount = 1000,
+    workingOrderId: string | null = null,
+  ): Promise<string> {
     nextInvoice += 1;
     const invoiceNumber = nextInvoice;
     return inTx(async (tx) => {
@@ -215,6 +219,7 @@ describe("bill payments: the two tables, their checks and their triggers", () =>
           invoiceLocales: ["es"],
           fiscalBackend: "verifactu",
           fiscalState: "recorded",
+          workingOrderId,
         })
         .returning({ id: sales.id });
       await tx.insert(tenders).values({
@@ -1260,20 +1265,69 @@ describe("bill payments: the two tables, their checks and their triggers", () =>
       await expectRefusedMove(await reopened({}, { before: (id) => tenderFor(id) }));
     });
 
-    it("…not one that paid an advance", async () => {
+    /** Records an advance for the payment, on the bill it was taken on, naming `advanceSaleId`. */
+    async function advanceFor(paymentId: string, advanceSaleId: string): Promise<void> {
+      const printed = await billOf(paymentId);
+      await inTx((tx) =>
+        tx
+          .insert(billAdvances)
+          .values({ workingOrderId: printed, advanceSaleId, billPaymentId: paymentId }),
+      );
+    }
+
+    it("one that paid an advance moves, its advance's tender naming it, its bill_advances row unchanged", async () => {
+      const { printed, open, paymentId } = await reopened(
+        {},
+        { before: async (id) => advanceFor(id, await tenderFor(id)) },
+      );
+      const before = await inTx((tx) => tx.select().from(billAdvances));
+      await updatePayment(paymentId, `working_order_id = '${open}'`);
+      expect(await billOf(paymentId)).toBe(open);
+      const after = await inTx((tx) => tx.select().from(billAdvances));
+      expect(after).toEqual(before);
+      expect(after).toEqual([
+        expect.objectContaining({ workingOrderId: printed, billPaymentId: paymentId }),
+      ]);
+    });
+
+    it("…not one an advance names when its tender is another sale's", async () => {
       await expectRefusedMove(
         await reopened(
           {},
           {
             before: async (id) => {
-              const advanceSaleId = await tenderFor(null);
-              const printed = await billOf(id);
-              await inTx((tx) =>
-                tx
-                  .insert(billAdvances)
-                  .values({ workingOrderId: printed, advanceSaleId, billPaymentId: id }),
-              );
+              await tenderFor(id);
+              await advanceFor(id, await tenderFor(null));
             },
+          },
+        ),
+      );
+    });
+
+    it("…or when its tender's advance names another payment", async () => {
+      await expectRefusedMove(
+        await reopened(
+          {},
+          {
+            before: async (id) => {
+              const other = await receivedPayment({
+                workingOrderId: await billOf(id),
+                method: "cash",
+                tendered: 1000,
+              });
+              await advanceFor(other, await tenderFor(id));
+            },
+          },
+        ),
+      );
+    });
+
+    it("…or is on a bill's own receipt", async () => {
+      await expectRefusedMove(
+        await reopened(
+          {},
+          {
+            before: async (id) => advanceFor(id, await tenderFor(id, 1000, await billOf(id))),
           },
         ),
       );
