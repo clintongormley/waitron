@@ -1328,8 +1328,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Este servidor no tiene clave de las copias. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para crearla.",
   },
   "master_key.wrong": {
-    en: "Wrong master key. Use the one dated {keyName}.",
-    es: "Clave maestra incorrecta. Usa la del {keyName}.",
+    en: "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
+    es: "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",
   },
   "backup.key_change_page_required": {
     en: "Changing the backup key needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",
@@ -2108,7 +2108,6 @@ export function codeMessage(
     primaryAt?: unknown;
     standbyAt?: unknown;
     limit?: unknown;
-    keyName?: unknown;
   },
 ): string {
   if (
@@ -2119,16 +2118,6 @@ export function codeMessage(
     return registeredCodeMessage(code, locale)
       .replace("{primaryAt}", formatRecentMinute(params.primaryAt))
       .replace("{standbyAt}", formatRecentMinute(params.standbyAt));
-  if (code === "master_key.wrong")
-    return typeof params?.keyName === "string"
-      ? registeredCodeMessage(code, locale).replace("{keyName}", params.keyName)
-      : pickLocale(
-          {
-            en: "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
-            es: "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",
-          },
-          locale,
-        );
   if (code === "mirror.membership_full" && typeof params?.limit === "number")
     return registeredCodeMessage(code, locale).replace("{limit}", String(params.limit));
   if (

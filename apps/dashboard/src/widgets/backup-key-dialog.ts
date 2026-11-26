@@ -81,10 +81,12 @@ export class BackupKeyDialog extends LitElement {
   @state() private opened = false;
   /** The number the next key will have, from the card's status when the dialog opened. */
   @state() private next = 1;
+  /** The current master key's name, from the card's status, so the field refuses another pack's. */
+  @state() private keyName: string | undefined;
   @state() private key = "";
   @state() private busy = false;
-  /** The wrong-key sentence, shown on the field until the key changes. */
-  @state() private keyRefusal = "";
+  /** The box's wrong-key refusal, shown on the field until the key changes; null names no key. */
+  @state() private keyRefusal: { keyName: string | null } | null = null;
   /** Any other refusal's sentence, on the form's own line, kept until the next press. */
   @state() private refusal = "";
   @state() private done: Done | null = null;
@@ -102,9 +104,10 @@ export class BackupKeyDialog extends LitElement {
     if (this.opened) return;
     this.#generation++;
     this.next = (status.backupKey?.number ?? 0) + 1;
+    this.keyName = status.masterKey?.name;
     this.key = "";
     this.busy = false;
-    this.keyRefusal = "";
+    this.keyRefusal = null;
     this.refusal = "";
     this.done = null;
     const { coordinator, scope } = draftScopeFor<{ key: string }>(this, {
@@ -114,7 +117,7 @@ export class BackupKeyDialog extends LitElement {
       equal: (a, b) => a.key === b.key,
       restore: () => {
         this.key = "";
-        this.keyRefusal = "";
+        this.keyRefusal = null;
         this.refusal = "";
       },
     });
@@ -170,7 +173,7 @@ export class BackupKeyDialog extends LitElement {
     const api = this.api;
     this.busy = true;
     this.refusal = "";
-    this.keyRefusal = "";
+    this.keyRefusal = null;
     // Widened: `reloadFailed` changes it from inside a closure, which narrowing does not see.
     let outcome = "confirmed" as Done["outcome"];
     const warnings: string[] = [];
@@ -198,7 +201,8 @@ export class BackupKeyDialog extends LitElement {
       } else {
         this.busy = false;
         if (code === "master_key.wrong") {
-          this.keyRefusal = codeMessage(code, currentLocale(), paramsOf(error));
+          const { keyName } = paramsOf(error);
+          this.keyRefusal = { keyName: typeof keyName === "string" ? keyName : null };
           return;
         }
         this.refusal = codeMessage(code);
@@ -279,13 +283,20 @@ export class BackupKeyDialog extends LitElement {
         .copy=${words}
         .readPack=${loadRecoveryPackReader}
         .maxPdfBytes=${MAX_PACK_PDF}
+        .keyName=${this.keyName}
         .disabled=${this.busy}
-        .error=${this.keyRefusal}
+        .error=${
+          this.keyRefusal === null
+            ? ""
+            : this.keyRefusal.keyName === null
+              ? codeMessage("master_key.wrong")
+              : words.wrongKey(this.keyRefusal.keyName)
+        }
         @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
           // The field empties itself as it leaves, after a change or on closing.
           if (this.done !== null || !this.opened) return;
           this.key = event.detail.masterKey ?? "";
-          this.keyRefusal = "";
+          this.keyRefusal = null;
           this.#scope?.changed();
         }}
       ></wt-master-key-input>`;

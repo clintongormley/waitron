@@ -180,6 +180,76 @@ it.each([
   },
 );
 
+it("words a wrong master key with the name the box's refusal carries", async () => {
+  const rotate = vi.fn().mockRejectedValue({
+    code: "master_key.wrong",
+    params: { keyName: "2026-11-25 · WXYZ" },
+    status: 403,
+  });
+  const { el } = await open(stubApi(rotate));
+  await type(el, KEY);
+  button(el, "change-backup-key")!.click();
+  await expect
+    .poll(() => field(el).error)
+    .toBe(MASTER_KEY_FIELD_WORDS.en.wrongKey("2026-11-25 · WXYZ"));
+});
+
+it("a refusal with no key name says the venue has no master key yet", async () => {
+  const rotate = vi.fn().mockRejectedValue({ code: "master_key.wrong", params: {}, status: 403 });
+  const { el } = await open(stubApi(rotate));
+  await type(el, KEY);
+  button(el, "change-backup-key")!.click();
+  await expect.poll(() => field(el).error).toBe(codeMessage("master_key.wrong"));
+  expect(field(el).error).toBe(
+    "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
+  );
+});
+
+describe("a recovery pack PDF chosen in the field", () => {
+  async function choosePack(el: BackupKeyDialog, masterKeyName: string) {
+    const input = field(el);
+    input.readPack = async () => async () => ({
+      masterKey: KEY,
+      masterKeyName,
+      masterKeyHeldBy: null,
+    });
+    const control = input.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(["%PDF-1.7"], "pack.pdf"));
+    control.files = transfer.files;
+    control.dispatchEvent(new Event("change", { bubbles: true }));
+    await expect.poll(() => input.pdfRead).not.toBeNull();
+    await input.pdfRead;
+    await el.updateComplete;
+  }
+
+  const fieldLine = (el: BackupKeyDialog) =>
+    words(
+      field(el).shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("[data-error]"),
+    );
+
+  it("an older pack's key is refused by the field itself, naming the current key, with no request", async () => {
+    const rotate = vi.fn();
+    const { el } = await open(stubApi(rotate));
+    expect(field(el).keyName).toBe("2026-11-23 · QZJV");
+    await choosePack(el, "2026-10-01 · AAAA");
+    expect(fieldLine(el)).toBe(MASTER_KEY_FIELD_WORDS.en.wrongKey("2026-11-23 · QZJV"));
+    expect(button(el, "change-backup-key")!.disabled).toBe(true);
+    expect(rotate).not.toHaveBeenCalled();
+  });
+
+  it("the current key's pack fills the field and lets the change go ahead", async () => {
+    const rotate = vi.fn().mockResolvedValue(ANSWER);
+    const { el } = await open(stubApi(rotate));
+    await choosePack(el, "2026-11-23 · QZJV");
+    expect(fieldLine(el)).toBe("");
+    expect(button(el, "change-backup-key")!.disabled).toBe(false);
+    button(el, "change-backup-key")!.click();
+    await expect.poll(() => rotate.mock.calls.length).toBe(1);
+    expect(rotate).toHaveBeenCalledWith({ masterKey: KEY });
+  });
+});
+
 it("explains a refusal the box gives before writing on the form's own line, and changes nothing", async () => {
   const rotate = vi
     .fn()

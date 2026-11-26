@@ -925,13 +925,7 @@ it("says a box holds no backup key and points at Change the backup key on the re
   );
 });
 
-it("words the backup key change's refusals: a wrong master key names the current one, and a page refusal says what to open", () => {
-  expect(codeMessage("master_key.wrong", "en", { keyName: "26-11-2026 10:15" })).toBe(
-    "Wrong master key. Use the one dated 26-11-2026 10:15.",
-  );
-  expect(codeMessage("master_key.wrong", "es", { keyName: "26-11-2026 10:15" })).toBe(
-    "Clave maestra incorrecta. Usa la del 26-11-2026 10:15.",
-  );
+it("words the backup key change's refusals: a wrong master key when the venue has none, and a page refusal says what to open", () => {
   expect(codeMessage("master_key.wrong", "en")).toBe(
     "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
   );
