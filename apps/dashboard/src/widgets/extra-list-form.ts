@@ -16,7 +16,13 @@ import { baseStyles, submitOnEnter } from "@waitron/ui";
 import { isProductPrice } from "@waitron/menu/src/modifier-limits.js";
 import { priceForExtraPortion } from "@waitron/menu/src/extra-contract.js";
 import { assertQuantityPrecision, EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
-import { decimal, newRowId, toScale, type ContentLanguages } from "@waitron/shared";
+import {
+  createLabelComparator,
+  decimal,
+  newRowId,
+  toScale,
+  type ContentLanguages,
+} from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
@@ -38,6 +44,7 @@ import {
 } from "./form-fields.js";
 import type { ExtraList, ExtraListInput, Product } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
+import { extraProductChoices, type ExtraProductChoice } from "./extra-product-choices.js";
 
 const decreaseLabel = (label: string) => fill("action.decrease", { label });
 const increaseLabel = (label: string) => fill("action.increase", { label });
@@ -288,8 +295,7 @@ export class ExtraListForm extends LitElement {
   );
 
   protected override willUpdate(changes: PropertyValues<this>): void {
-    if (changes.has("products"))
-      this.#productById = new Map(this.products.map((product) => [product.id, product]));
+    if (changes.has("products")) this.#productById = extraProductChoices(this.products);
     if (
       (changes.has("open") && this.open) ||
       (changes.has("value") &&
@@ -341,7 +347,7 @@ export class ExtraListForm extends LitElement {
     this.#feedback.reset();
   }
 
-  #productById = new Map<string, Product>();
+  #productById = new Map<string, ExtraProductChoice>();
 
   #productName(productId: string): string {
     return this.#productById.get(productId)?.name ?? t("extras.unknown_product");
@@ -350,7 +356,7 @@ export class ExtraListForm extends LitElement {
   /** The server refuses a list naming a product with an Active variant, Available or not
    * (`assertNoParentsWithVariants`, packages/menu/src/extras.ts). */
   #hasActiveVariant(productId: string): boolean {
-    return this.#productById.get(productId)?.variants.some((variant) => variant.active) ?? false;
+    return this.#productById.get(productId)?.hasActiveVariants ?? false;
   }
 
   #inheritedPrice(item: DraftItem): string {
@@ -897,7 +903,10 @@ export class ExtraListForm extends LitElement {
     // A list holds each product once (`extra_list_items_list_product_uq`), so one it holds already
     // is not offered again.
     const listed = new Set(this.items.map((item) => item.productId));
-    const offered = this.products.filter((product) => product.active && !listed.has(product.id));
+    const compare = createLabelComparator(document.documentElement.lang);
+    const offered = [...this.#productById.values()]
+      .filter((product) => product.active && !listed.has(product.id))
+      .sort((left, right) => compare(left.familyName, right.familyName));
     return html`${this.#reorder.liveRegion()}
       <div data-test="added-status" role="status" aria-live="polite" class="visually-hidden">
         ${this.addedMessage}
@@ -948,6 +957,7 @@ export class ExtraListForm extends LitElement {
           class="picker"
           name="add-product"
           data-test="add-product"
+          preserve-order
           label=${t("extras.product")}
           placeholder=${t("extras.choose_product")}
           searchPlaceholder=${t("extras.search_product")}

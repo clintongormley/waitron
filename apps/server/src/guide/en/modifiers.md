@@ -12,8 +12,8 @@ what decides the kind.
 
 Use **Extras** for things a diner adds to a dish. Each entry on an extras list names a product you
 have already created, and takes that product's names, tax treatment, allergens, dietary labels and
-picture from it — you never retype them here. A product that has Active variants cannot be an
-entry, because it is sold only as one of its variants. What you set on the entry is the terms of the
+picture from it. If a product has active variants, choose the specific variant from the picker,
+for example **Wine (Glass)**. What you set on the entry is the terms of the
 offer: **Maximum quantity**, how many of it one dish may take (1 means "one or none");
 **Preselected**, whether it starts chosen; and **Price**, what one pick costs.
 Press − from 2 to 1 and then to an empty box to remove the item's limit. The ∞ placeholder marks
