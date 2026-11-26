@@ -165,6 +165,27 @@ docker image rm waitron-b3-tools:rehearsal "$app" waitron-b3-agent:rehearsal
 rm -rf "$inputs"
 ```
 
+## Read a USB drive
+
+Run `--case installed-usb-drive` in the same tool container after building the recipe:
+
+```sh
+docker exec -w /source -e B3_INSTALLER_IMAGE=/work/output/waitron-install-dev.img \
+  waitron-b3-rehearsal node bench/box-installer/run.mjs \
+  --case installed-usb-drive --run-dir /work/usb-drive
+docker cp waitron-b3-rehearsal:/work/usb-drive/usb-drive.json "$inputs/results/"
+```
+
+It installs and starts the box as `installed-setup` does, without the setup screen checks. Before
+the disk boot it makes an exFAT image in the run folder holding one file named like a backup
+archive, 4.4 GB of random bytes by default (set `B3_USB_FILE_BYTES` for a quicker run), and records
+its SHA-256. Once the box serves, the rig plugs the image in as a USB disk through QEMU's monitor.
+Inside the guest, user 10001 asks the box's host socket to list drives, and the rig requires one
+exFAT drive marked readable. User 10001 in the app container then reads the file and its hash must
+match. The rig then asks the host to release the drives and requires at least one released and the
+file gone from the container. `usb-drive.json` holds the answers. The image needs about 4.5 GB of
+free space in the tool container; it goes when the container does.
+
 ## Check a manual upgrade and interrupted recovery
 
 Supply a synthetic preproduction state archive as `B3_UPGRADE_STATE`, with its producer
