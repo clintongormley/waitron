@@ -2,53 +2,58 @@
 
 Recover a checked snapshot on the owner’s test Cloud with the continuous copy absent. The box
 uses version 2 from setup through Cloud’s acknowledgment after restart. Lane K’s watcher assigned
-this first PR in `questions.md` on 2026-11-26 at 13:22. Build after Claude’s review and the
-watcher’s clearance.
+this first PR on 26 November at 13:22. Build after Claude’s review and the watcher’s clearance.
 
 ## Build test-first
 
-- In `apps/server/src/boot.test.ts`, boot preproduction setup through its real HTTPS listener. POST
-  `/setup-api/cloud-recovery/start` and stub only Cloud. Check the signed v2 request with the full
-  target, the saved v2 request and the browser’s awaiting-approval view. Keep the production gate
-  case. Supply a test target with a module spy because source tests lack the bundle defines.
-  Watch the case fail on the v1 request, then wire `boot.ts` to the existing client with
-  `snapshotProtocol: 2` and lazy `currentBackupVerificationTarget`. Keep the existing refusal
-  for a missing build target or incompatible saved session. Rerun the tests.
-- In `apps/server/src/node-entry.test.ts`, extend “marks a completed managed restore and reports that
-  snapshot after boot” and keep the v1 assertions. Give `runEntry` a valid saved v2 operation and
-  matching Cloud verification. Assert the signed `restored` request for the same point’s archive
-  digest and target, Cloud’s acknowledgment and the saved `reported` phase. Watch v2 completion
-  fail first. In `node-entry.ts`, keep the placement callback’s `markRestored` and use
-  `readCloudRecoveryState` to choose the reporting client after boot. Use the running target for
-  saved v2 and the existing v1 client for recognised v1. Skip reporting on unsupported or invalid
-  state and preserve the file. Keep reporting best-effort. Rerun the tests. Keep direct-client and
-  replacement behavior.
+- In `apps/server/src/boot.test.ts`, use the existing setup HTTPS fixture. POST
+  `/setup-api/cloud-recovery/start` with a fresh state folder. Stub Cloud and the bundled target
+  using the module-spy pattern in `restore-request.verification.test.ts`. Assert the signed v2
+  request, complete target, saved v2 session and awaiting-approval response. Keep the production
+  gate test. Run the new case and watch it send v1. In `boot.ts`, pass `snapshotProtocol: 2` and
+  the lazy `currentBackupVerificationTarget` to the client. Missing targets and incompatible
+  saved sessions still refuse. Setup cannot resume a saved v1 session with v2, so use a fresh
+  disposable folder for the trial.
+- Extend the existing reporting tests in `node-entry.test.ts` and `cloud-replacement.test.ts`
+  for a saved v2 restore with matching Cloud verification. Keep the v1 cases. Verify that boot
+  reports the same point after starting and that replacement can retry a pending report before
+  preparing a replacement. In both cases assert the v2 signed archive digest and target, Cloud
+  acknowledgment and the local `reported` phase. Run the new cases and watch them refuse v2.
+  Add one saved-version reporting helper in `cloud-recovery.ts` using `readCloudRecoveryState`
+  and the existing client. Call it from `node-entry.ts` and the existing retry in
+  `cloud-replacement.ts`. v2 uses the running build’s target and recognised v1 uses its existing
+  proof. Keep the existing `markRestored` callback and failure behavior. Preserve unreadable
+  state for diagnosis.
 
 ```sh
 pnpm --filter @waitron/server exec vitest run src/boot.test.ts src/node-entry.test.ts \
-  src/cloud-recovery-v2.test.ts src/backup-verification-protocol.test.ts \
-  src/backup-verification-target.test.ts src/restore-request.verification.test.ts
+  src/cloud-replacement.test.ts src/cloud-recovery.test.ts src/cloud-recovery-v2.test.ts \
+  src/setup-api.cloud-recovery.test.ts src/restore-request.verification.test.ts \
+  src/backup-verification-protocol.test.ts src/backup-verification-target.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
 ```
 
-## Qualify and land
+## Qualify the candidate before landing
 
-Confirm the deployed test Cloud accepts a named `pointId` approval and serves it through `info`.
-Cloud #1382 merged at `46e77bf820c2a10121dcb9c0a2d0a32d234bd6b8` and retains named approval
-for the current portal. Coordinate the brief trial with lane G. Record the deployed Cloud image
-and source revision. The trial needs an isolated disposable venue and the release gates still apply.
+Ask the watcher to coordinate with lane G. Use the owner's test Cloud with snapshot admission
+scoped to one disposable preproduction venue for the duration of the trial. Record the venue,
+Cloud image and deployed revision, the way admission was scoped, and its removal afterward.
+Confirm that deployment contains Cloud #1382 (`46e77bf820c2a10121dcb9c0a2d0a32d234bd6b8`) and
+that its named `pointId` approval gives setup an `info` reply. Keep ordinary admission gated.
 
-Pin the published Waitron candidate image by digest and record the source revision, release, runtime
-fingerprint and full `currentBackupVerificationTarget()` from `/app/backup-verification.js` with
-`/app/drizzle`. In one run, capture and verify a real Cloud snapshot for that target, record the
-current verification attempt and archive identity, and show the continuous source is absent.
-Isolate the disposable preproduction source and use its own master key and recovery preparation.
-Approve that point, review and restore in setup, then record restart, local `reported` and Cloud
-`restored` for the same request and point. Record the verifier’s `activation: "not_attempted"`
-and the authorised restore’s fresh fiscal allocation. Retain the prior `FISCAL_RESTORE` refusal.
-Keep admission and enforcement gated on Cloud’s child isolation, resource limits, independent
-deadline, strict result checks, current claim and cleanup. [Release procedure](../../operations/backup-verifier-release.md) · [Authority fixture](../../developers/authorised-cloud-restore-fixture.md)
+Build and pin the PR candidate image by digest. Record its source revision, release provenance,
+runtime fingerprint and complete target from `/app/backup-verification.js` using `/app/drizzle`.
+Capture and verify a snapshot of the disposable source with a known sale. Record the current
+verification attempt and archive digest, and confirm that Cloud has no recoverable continuous
+source for the venue and setup has no bucket kit. Match the bundled target digest against the
+setup request and the Cloud verification. Keep the verifier’s `activation: "not_attempted"`
+receipt. Stop the disposable source and use its own master key, this snapshot’s source-bound
+preparation, and setup’s isolation confirmations. Restore through setup. After restart, find the
+known sale and fresh fiscal allocation. Record the local `reported` phase, Cloud’s `restored`
+acknowledgment for the same request and point, and elapsed time against Cloud’s expiry.
+[Release procedure](../../operations/backup-verifier-release.md)
 
-Expect about 20 production lines and 120 test lines added. Exclude fiscal authority changes,
-restore placement, Cloud UI and the chooser. At landing, update the v1 and open-proof claims in
-`docs/backlog/box.md`, A1323’s progress in `docs/backlog.md`, and the v1 setup claim in
-`docs/developers/conventions-data.md`. The chooser waits for this PR to land and watcher clearance.
+Expect about 40 production and 155 test lines added. The chooser, Cloud UI, fiscal authority and
+placement are outside this PR. Update `docs/backlog.md`, `docs/backlog/box.md` and
+`docs/developers/conventions-data.md` from the trial evidence. Run finish-branch with two Claude
+reviews. The owner lands this restore change. The chooser waits for this PR and watcher clearance.
