@@ -95,10 +95,6 @@ export default async function copiedReplica({
     try {
       await store.stop();
     } finally {
-      // The order above is unchanged; what the nesting adds is that the directory goes EITHER WAY. A
-      // `stop()` that rejects would otherwise skip the removal, which is the shape
-      // `s4_offline_load.ts` carried until 2026-09-18 — injecting a rejecting `stop()` there left
-      // the temporary directory behind — and `s0_happy_loop.ts` states the rule.
       if (dir) rmSync(dir, { recursive: true, force: true });
     }
   }

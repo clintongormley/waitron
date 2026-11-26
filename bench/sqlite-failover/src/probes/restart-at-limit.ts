@@ -47,8 +47,7 @@ const AFTER_COPY = 20; // d — once a restore holds every sale before them
 const OFFLINE_ATTACH_MS = 3_000;
 /**
  * Phase b sells in rounds with an idle pause after each, S4's and measurement 2's cadence, so the
- * offline daemon is attached for tens of seconds while the side file grows. Unpaced, the first run
- * (2026-09-24) reached the limit in 825 ms.
+ * offline daemon is attached for tens of seconds while the side file grows.
  */
 const OFFLINE_ROUND = 400;
 const OFFLINE_IDLE_MS = 1_500;

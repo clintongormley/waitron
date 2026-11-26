@@ -1,7 +1,7 @@
 # CI only, never installed on a box: a stand-in for BlueZ on the image-smoke runner's system bus,
 # which has no Bluetooth hardware. Run as root with the bluez package installed: its bus policy is
 # what lets root own `org.bluez` and call a pairing agent.
-# Every failure it chooses to report — a wrong PIN, no agent, an agent's error reply, and no reply
+# Each PIN-agent failure — a wrong PIN, no agent, an agent's error reply, and no reply
 # within FAKE_BLUEZ_AGENT_TIMEOUT_MS (default 60000), after which it sends `Agent1.Cancel` — is
 # `AuthenticationFailed`. That is its own choice, not what bluetoothd was measured to return.
 # A pairing that succeeds is followed by `Disconnected` signals on the device's `org.bluez.Device1`

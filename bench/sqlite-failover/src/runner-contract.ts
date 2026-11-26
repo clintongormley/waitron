@@ -58,12 +58,6 @@ export function formatJson(results: readonly ScenarioResult[]): string {
   );
 }
 
-/**
- * Which output a run asked for. It takes the argument list rather than reading `process.argv` so the
- * choice is driveable from a scenario: with the flag read inside `main()`, a cut wiring printed the
- * table under `--json` and `s_runner_contract.ts` still reported PASS (measured 2026-09-18, with
- * `const asJson = process.argv.includes("--json")` replaced by `const asJson = false`).
- */
 export function wantsJson(argv: readonly string[]): boolean {
   return argv.includes("--json");
 }

@@ -19,10 +19,7 @@ export async function createUnreachableStore(): Promise<{ store: Store; refusedW
 /**
  * A `Store`-shaped value whose endpoint accepts every connection and never answers. Litestream 0.5.18
  * gives up on a refused connection after 8 quick attempts and drops its read transaction before
- * retrying, so a side file that must grow needs a bucket that does not answer (2026-11-06: against a
- * refused port `restart-at-limit.ts` ended 40,000 sales at 87 MB and 134 MB, short of its 256 MiB
- * limit). Unlike `createUnreachableStore` it does not check its own premise: `refusedWith` is a label
- * here.
+ * retrying, so a side file that must grow needs a bucket that does not answer.
  */
 export async function createSilentStore(): Promise<{ store: Store; refusedWith: string }> {
   const sockets = new Set<Socket>();

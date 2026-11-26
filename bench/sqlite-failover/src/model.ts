@@ -314,11 +314,7 @@ const CLASH_INSERT: Record<ClashRule, string> = {
      VALUES (?, ?, ?, ?)`,
 };
 
-/**
- * The same probe is why `errstr` cannot do this job, and a reader will reach for it: all four
- * refusals carry the errstr "constraint failed", so classifying on it would let a NOT NULL refusal
- * or a trigger's refusal be treated as a clash.
- */
+// Match the extended code because NOT NULL and trigger refusals also say "constraint failed".
 const SQLITE_CONSTRAINT_PRIMARYKEY = 1555;
 const SQLITE_CONSTRAINT_UNIQUE = 2067;
 

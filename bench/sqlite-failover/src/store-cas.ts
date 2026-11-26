@@ -57,9 +57,6 @@ function describe(error: unknown): string {
  * Sealed off from the rest of the probe on purpose. Whatever a store does with an `If-Match` it does
  * not implement — ignore it, refuse every one, or answer with an error — the seal keeps it out of
  * the create-only measurement, which is the critical one and the only one this rig's fence needs.
- * The three outcomes below say which was seen. Measured by injecting a 501 on this path: the run
- * still records `create-only=true`, where without the seal it recorded a thrown scenario and no
- * create-only value at all.
  */
 async function probeIfMatch(
   store: Store,

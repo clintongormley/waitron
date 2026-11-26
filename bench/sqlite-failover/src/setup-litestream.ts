@@ -13,8 +13,7 @@ type ReleaseAsset = { name: string; browser_download_url: string };
  * The asset is matched on its FULL name, never a substring. The `v0.5.18` release lists both
  * `litestream-0.5.18-darwin-arm64.tar.gz` (the CLI) and `litestream-vfs-v0.5.18-darwin-arm64.tar.gz`
  * (a different artefact), so a `includes("darwin-arm64")` test matches four assets and the one it
- * picks depends on the order the API happens to return (measured against the release API,
- * 2026-11-06).
+ * picks depends on the order the API happens to return.
  */
 function assetName(): string {
   const arch = process.arch === "x64" ? "x86_64" : process.arch;
