@@ -7,9 +7,10 @@ how the monthly close reads working-time rules. The queue asks for a test of
 - Extend `packages/workforce-es/src/record-export.test.ts` using its existing `useVenueDb` fixture
   and transaction helper. Call `WORKFORCE_ES_RECORD_EXPORT.workSummaryRules` through the package
   export, as the attendance loop calls the exporter through its interface.
-- Check that a venue without an agreement gets `null`. Use `seedConvenioConfig` to set six working
-  days, `period_net`, and 420 daily target minutes. Assert those three fields, with the model
-  returned as `period-net`. The existing convenio tests cover the full field mapping.
+- Check that a venue without an agreement gets `null`. Insert the agreement row through
+  `api.convenioConfig`, as this suite does for the enabled agreement policy. Set six working days,
+  `period_net`, and 420 daily target minutes. Assert those three fields, with the model returned
+  as `period-net`. The existing convenio tests cover the full field mapping.
 - In a separate case, use `vi.spyOn(tx, "select").mockImplementationOnce` inside the transaction
   callback to throw a registered `AppError("setup.request_invalid", { field: "agreement" })`.
   Check that the exporter rejects with the same error object. In a disposable checkout, remove
