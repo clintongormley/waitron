@@ -21968,7 +21968,6 @@ export class TillApp extends LitElement {
           closingRefundedBill &&
           tender.method === "card" &&
           this.handheldMode &&
-          !this.#takesCash() &&
           !this.capabilities.includes("hand-keyed-card-payment") &&
           this.capabilities.includes("integrated-card-payment");
         payment = structuredClone({

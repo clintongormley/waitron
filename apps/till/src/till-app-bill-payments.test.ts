@@ -7925,9 +7925,13 @@ describe("till-app: giving back a bill payment", () => {
     expect(api.takeBillPayment).not.toHaveBeenCalled();
   });
 
-  it.each(["0.00", "5.00"])(
-    "keeps the reader-only handheld close at zero after reading %s",
-    async (latestTotal) => {
+  it.each([
+    ["0.00", false],
+    ["0.00", true],
+    ["5.00", false],
+  ] as const)(
+    "keeps the handheld reader close at zero after reading %s (takes cash: %s)",
+    async (latestTotal, takesCash) => {
       const balance = balanceOf({
         total: "0.00",
         outstanding: "0.00",
@@ -7952,7 +7956,11 @@ describe("till-app: giving back a bill payment", () => {
         getTill: vi.fn().mockResolvedValue({
           ...till,
           formFactor: "phone-portrait",
-          capabilities: ["take-orders", "integrated-card-payment"],
+          capabilities: [
+            "take-orders",
+            "integrated-card-payment",
+            ...(takesCash ? ["take-cash"] : []),
+          ],
         }),
         getPartyBills: vi
           .fn()
@@ -7967,7 +7975,7 @@ describe("till-app: giving back a bill payment", () => {
       });
       const order = await openTable(el);
       expect(order.handheld).toBe(true);
-      expect(order.takesCash).toBe(false);
+      expect(order.takesCash).toBe(takesCash);
       await showBillFooter(order);
       const tender = order.shadowRoot!.querySelector("till-tender-pay")!;
       tender.shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
@@ -7994,6 +8002,35 @@ describe("till-app: giving back a bill payment", () => {
       expect(shown).toEqual(latestTotal === "0.00" ? ticket : undefined);
     },
   );
+
+  it("withholds the zero-total close while a refunded payment still holds a tip", async () => {
+    const bill = billOf({
+      total: "0.00",
+      outstanding: "0.00",
+      hasPayments: true,
+      holdsMoney: true,
+    });
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([bill]),
+      getBillBalance: vi.fn().mockResolvedValue(
+        balanceOf({
+          total: "0.00",
+          outstanding: "0.00",
+          tips: "2.00",
+          payments: [{ ...cashPaid, tip: "2.00", tendered: "52.00", refunds: [refundOf()] }],
+        }),
+      ),
+      getTabLines: vi
+        .fn()
+        .mockResolvedValue({ lines: [line({ unitPriceGross: "0.00" })], revision: 0 }),
+    });
+    const order = await openTable(el);
+    await showBillFooter(order);
+    expect(order.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+    order.billBalance = null;
+    await order.updateComplete;
+    expect(order.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+  });
 
   it("opens the completed payment refund's acknowledgment and prints it once on request", async () => {
     const refund = refundOf();
