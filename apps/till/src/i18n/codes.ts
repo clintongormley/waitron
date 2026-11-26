@@ -1104,11 +1104,6 @@ const DEFERRED_INELIGIBLE: Record<string, { en: string; es: string }> = {
   },
 };
 
-const REFUSED_NO_FIX = {
-  en: "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
-  es: "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo, así que el dinero que se devuelva de esta factura aparece en Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
-};
-
 const FIGURES_UNCHECKED = {
   en: "This invoice's filed figures cannot be checked, so it cannot be corrected.",
   es: "No se pueden comprobar las cifras presentadas de esta factura, así que no se puede rectificar.",
@@ -1140,7 +1135,10 @@ const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
     en: "A full invoice made from receipts cannot be corrected here.",
     es: "Aquí no se puede rectificar una factura completa que sustituye tickets.",
   },
-  refused_no_fix: REFUSED_NO_FIX,
+  refused_no_fix: {
+    en: "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
+    es: "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo, así que el dinero que se devuelva de esta factura aparece en Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
+  },
   // A refused filing and one held from sending both answer `filing_refused`.
   filing_refused: {
     en: "The tax agency refused this invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Then try again.",
@@ -1510,7 +1508,11 @@ const GIVE_BACK_NEVER_RECORDED: Record<string, { en: string; es: string }> = {
     en: "This is a full invoice made from receipts, so the money given back cannot be recorded on it here.",
     es: "Es una factura completa que sustituye tickets, así que aquí no se puede registrar en ella el dinero devuelto.",
   },
-  refused_no_fix: REFUSED_NO_FIX,
+  // An open give-back's refunds reach the accountant's list only once it ends.
+  refused_no_fix: {
+    en: "The tax agency refused this full invoice and Waitron cannot fix that. Once this money back ends, the money given back goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
+    es: "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo. Cuando termine esta devolución, el dinero devuelto aparecerá en Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
+  },
   filing_refused: {
     en: "The tax agency refused this receipt, or sending it to the agency is on hold, so the money given back cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
     es: "La Agencia Tributaria rechazó este ticket, o su envío a la Agencia está detenido, así que el dinero devuelto aún no se puede registrar en él. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después pulsa Comprobar de nuevo.",

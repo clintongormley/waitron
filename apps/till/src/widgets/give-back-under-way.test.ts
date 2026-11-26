@@ -382,6 +382,21 @@ describe("ending it", () => {
       }
   });
 
+  it("on a full invoice refused with no fix, says Finish ends it and the money then goes on the accountant's list", async () => {
+    const fileNow = {
+      refusal: "sale.correction_not_admitted",
+      reason: "refused_no_fix",
+      closable: true,
+    };
+    const { el } = await mount({ ...OPEN, moneyBack: "2.00", fileNow });
+    el.fullInvoice = true;
+    await el.updateComplete;
+    expect(shown(el, "finish")).toBe(true);
+    expect(text(root(el).querySelector("[data-file-refusal]"))).toBe(
+      "The tax agency refused this full invoice and Waitron cannot fix that. Once this money back ends, the money given back goes in Download for accountant (XLSX), on the dashboard's Sales & takings page. Press Finish to end this money back. The money already given back stays given back.",
+    );
+  });
+
   it("on a full invoice refused or held, says so and offers Check again, not Finish", async () => {
     const fileNow = {
       refusal: "sale.correction_not_admitted",
