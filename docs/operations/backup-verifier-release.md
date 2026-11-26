@@ -62,25 +62,27 @@ build that performed it. A completed version 1 restore reports using its saved p
 
 ### Local setup trial, 26 November 2026
 
-The trial used Waitron source `247a1659d54d5411e298813e30f7caa946707a0d` and box image
-`sha256:8607c91caeb4683851bcdc6ca9d0e1f3a57198f2ecd2e64ef137321076b03bdb`.
+The trial used Waitron source `b2ecd05f84920f826500b2bb3a455aeba456c9d4` and the arm64 box image
+`sha256:50ebf121e69a2d000d7e4bc6c3603b75b18d464acf55b6abb51f3662078f6e17`.
 The local Cloud ran `0502b1c6b1ba40f58de2d2df987f4600104a3000`, including Cloud #1382,
-in image `sha256:816d845e593be827b0ff3cc08f9845c41cabfa5c6255b13152a226f76d3aa1a9`.
+in image `sha256:a43cb4cb4502cfc3b1e93c34033087d91c607fa5a3622b71b9a4e9b3a17a2468`.
 Its checker used the candidate's compiled verifier and migrations in
-`sha256:34353c9e6ca6e34184f787ad30283df5e7be840bc2c2bcc87fece17126cfc547`.
+`sha256:c6dae13785db0e029870653bc21688490cc3a23d8739958743411387226d3ca4`.
 Setup and Cloud both recorded target
-`79581efc8b7753ced1b022e03c7ad15619ac4678303c789e7f212f571eeafd01`
-with runtime fingerprint `d5dcc3239bc2e4174040a00cc7d487d79a40b07d34b0a2fc6315b4bd2cc58fdd`.
+`d413e05ff2c1d06d1d1d16d37d85948ecd24136490a13888160756d45003bd9d`
+with runtime fingerprint `c6b02bc604568a1c9e925ee72901288e49021f9a0c2d1c2af11a75fbf2b7e7a2`.
 
-The isolated venue had no continuous copy or stream objects. Cloud admitted the 105,744-byte
-archive with SHA-256 `9928998e89adb1b8291e64320f06aacd9e748b19638a86a8fc68d37c081151e3`.
-The checker passed all eight module checks, recorded `activation: "not_attempted"` and
-removed its child container. The disposable venue's owner approved that copy after signing
-in and confirming their identity in Cloud. Setup reviewed it, used the venue's master key and confirmed the
-time and isolation before staging. After a restart, SQLite reported integrity `ok`, the six
-sales included `A-0CNNY/123` and `A-0CNNY/124`, and four new series used installation `0EFE3`.
+The isolated venue had no continuous copy. Cloud counted zero stream objects and pointer rows
+before and after recovery. It admitted the 105,770-byte archive with SHA-256
+`dd20f4c9c1216a01cd4ea12dea06d1b65e3b41ce4591c83844bb3e6ad65d9959`. The checker passed
+all eight module checks, recorded `activation: "not_attempted"` and removed its child container.
+
+The disposable venue's owner signed in, confirmed their identity and approved the named copy.
+Setup reviewed it, used the venue's master key and confirmed the time and isolation before
+staging. After the restart, SQLite reported integrity `ok`. The six sales included
+`A-0CNNY/123` and `A-0CNNY/124`, and four new series used installation `0EFF3`.
 The box recorded `reported` and Cloud recorded `restored` for the same request and copy at
-13:23:07 UTC, before approval expired at 14:21:00 UTC.
+13:55:06 UTC, before approval expired at 14:53:10 UTC.
 
 ## Complete the joint qualification
 
