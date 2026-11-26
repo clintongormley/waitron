@@ -129,7 +129,11 @@ it("places 18px icons 12px before the full sidebar labels", async () => {
       const header = el.shadowRoot!.querySelector(`[data-test=nav-group-${id}]`)!;
       const icon = header.querySelector<HTMLElement>(".group-icon")!.getBoundingClientRect();
       const label = header.querySelector<HTMLElement>(".nav-group-label")!.getBoundingClientRect();
-      expect.soft(getComputedStyle(header).marginBlockStart, id).toBe("8px");
+      const previous = header.previousElementSibling!;
+      const above = previous.hasAttribute("hidden") ? previous.previousElementSibling! : previous;
+      expect
+        .soft(header.getBoundingClientRect().top - above.getBoundingClientRect().bottom, id)
+        .toBe(8);
       expect.soft(icon.width, id).toBe(18);
       expect.soft(label.left - icon.right, id).toBe(12);
       expect((icon.top + icon.bottom) / 2, id).toBeCloseTo((label.top + label.bottom) / 2, 0);
@@ -181,6 +185,7 @@ it("brightens icons on hover or for the current section, even when it is closed"
     await el.updateComplete;
     const searchHeading = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!;
     await userEvent.hover(searchHeading);
+    expect(searchHeading.matches(":hover")).toBe(true);
     expect(getComputedStyle(searchHeading.querySelector("wt-icon")!).color).toBe("rgb(4, 5, 6)");
   });
 });
