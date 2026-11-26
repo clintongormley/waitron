@@ -114,8 +114,6 @@ async function main(): Promise<void> {
     let dbBytes = 0;
     try {
       node.get("PRAGMA journal_mode = WAL");
-      // Disable SQLite's automatic checkpoint so it cannot fold away changes before Litestream
-      // reads them.
       node.exec("PRAGMA wal_autocheckpoint = 0");
       node.exec("CREATE TABLE IF NOT EXISTS images (id INTEGER PRIMARY KEY, bytes BLOB NOT NULL)");
       const insert = node.handle.prepare("INSERT INTO images (bytes) VALUES (?)");

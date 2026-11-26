@@ -45,7 +45,11 @@ const PAUSED = 20; // d — nothing attached, after the fold-back
 const AFTER_RESTART = 20; // d — right after the restart
 const AFTER_COPY = 20; // d — once a restore holds every sale before them
 const OFFLINE_ATTACH_MS = 3_000;
-// Pace the sales to give the offline daemon time to attach before the WAL hits the limit.
+/**
+ * Phase b sells in rounds with an idle pause after each, S4's and measurement 2's cadence, so the
+ * offline daemon is attached for tens of seconds while the side file grows. Unpaced, the first run
+ * (2026-09-24) reached the limit in 825 ms.
+ */
 const OFFLINE_ROUND = 400;
 const OFFLINE_IDLE_MS = 1_500;
 const POLL_MS = 100;
@@ -61,7 +65,13 @@ type LtxFile = {
   expectedFull: number;
 };
 
-// The page-frame offsets follow the pinned binary's LTX format.
+/**
+ * Walk an LTX file's page frames without decompressing them. The layout is superfly/ltx v0.5.2's
+ * (the version string the pinned binary carries): a 100-byte big-endian header, then per page a
+ * 4-byte page number, a 2-byte flags word and, with flag bit 0 set, a 4-byte length and that many
+ * LZ4 bytes; a zero page number ends the pages, followed by a page index, its 8-byte length and a
+ * 16-byte trailer. The last check refuses a walk that does not land exactly on that index.
+ */
 function decodeLtx(key: string, data: Uint8Array): LtxFile {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const magic = new TextDecoder().decode(data.subarray(0, 4));

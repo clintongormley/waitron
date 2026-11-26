@@ -13,7 +13,11 @@ type Scenario = (ctx: ScenarioContext) => Promise<ScenarioResult>;
 
 const scenarioDir = join(dirname(fileURLToPath(import.meta.url)), "scenarios");
 
-// Discover `.ts` files by type, including scenarios whose names start with `s_`.
+/**
+ * Every `.ts` FILE in the directory, in filename order. Not a prefix match: the scenarios are named
+ * `s_smoke.ts`, `s1_double_promotion.ts`, `s6_store_cas.ts` and so on, and a filter narrower than
+ * "a TypeScript file in this directory" would silently run a subset while still printing a table.
+ */
 function discover(): string[] {
   return readdirSync(scenarioDir)
     .filter((name) => name.endsWith(".ts") && statSync(join(scenarioDir, name)).isFile())

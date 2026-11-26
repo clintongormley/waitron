@@ -55,8 +55,11 @@ export function walBytes(dbPath: string): number {
   return existsSync(path) ? statSync(path).size : 0;
 }
 
-// Treat the missing-backup refusal as a wait. Other errors say the probe could not establish
-// whether there was a backup.
+/**
+ * Restore the store's copy into `outPath` and read its rows, or answer `"no-backup"` when litestream
+ * refuses with its missing-backup words. Every other failure is rethrown: a litestream that could not
+ * run must never read as one that refused (the rule `s_litestream_roundtrip.ts`'s control paid for).
+ */
 export async function restoredRows(
   bin: string,
   config: string,
@@ -75,7 +78,10 @@ export async function restoredRows(
   return rowsIn(outPath);
 }
 
-// Each attempt needs a fresh path because restore refuses a non-empty destination.
+/**
+ * Poll the store by restoring until it holds at least `expected` rows, or the deadline passes. Each
+ * attempt restores into a fresh path, because litestream refuses a non-empty output file.
+ */
 export async function waitForStoredRows(args: {
   bin: string;
   config: string;
@@ -102,7 +108,10 @@ export async function waitForStoredRows(args: {
   return { rows, attempts, reached: false, lastPath };
 }
 
-// A fresh sidecar directory is the pinned binary's observable sign that it opened the database.
+/**
+ * Wait for litestream to have OPENED a fresh database, observed as the `.<name>-litestream` sidecar
+ * directory it creates beside it. Only meaningful for a database no daemon has opened before.
+ */
 export async function waitForAttach(dbPath: string): Promise<number> {
   const separator = dbPath.lastIndexOf("/");
   const marker = join(dbPath.slice(0, separator), `.${dbPath.slice(separator + 1)}-litestream`);
@@ -183,8 +192,11 @@ export function checkpoint(node: NodeDb): { busy: number; log: number; checkpoin
   };
 }
 
-// Read the side file on both sides of each idle pause so a checkpoint during the pause cannot hide
-// its peak.
+/**
+ * `sales` sales in `rounds` rounds with an idle pause after each — S4's cadence, so figures compare
+ * with its recorded control arm. The side file is read on both sides of every pause, because a
+ * checkpoint during the pause can leave the file at its high-water mark (S4's note on `driveLoad`).
+ */
 export async function driveLoad(
   node: NodeDb,
   dbPath: string,

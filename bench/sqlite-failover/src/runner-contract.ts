@@ -16,7 +16,6 @@ export function exitCodeFor(results: readonly ScenarioResult[]): number {
   return criticalFailures(results).length > 0 ? 1 : 0;
 }
 
-// A scenario that throws gets a critical failure row because it never returned a verdict.
 export function resultForThrow(file: string, error: unknown): ScenarioResult {
   return {
     id: file.replace(/\.ts$/, ""),
@@ -42,8 +41,11 @@ export function formatTable(results: readonly ScenarioResult[]): string {
   return lines.join("\n");
 }
 
-// Include the exit code in the JSON because a caller piping stdout can otherwise lose the runner's
-// status.
+/**
+ * The `--json` shape: ONE document, so a caller can pipe the run straight into a parser. It carries
+ * the exit code as well as the rows because a piped run's own exit status is the pipeline's last
+ * command, not the runner's.
+ */
 export function formatJson(results: readonly ScenarioResult[]): string {
   return JSON.stringify(
     {
@@ -56,7 +58,12 @@ export function formatJson(results: readonly ScenarioResult[]): string {
   );
 }
 
-// Take the arguments as input so the scenario can exercise the same renderer selection.
+/**
+ * Which output a run asked for. It takes the argument list rather than reading `process.argv` so the
+ * choice is driveable from a scenario: with the flag read inside `main()`, a cut wiring printed the
+ * table under `--json` and `s_runner_contract.ts` still reported PASS (measured 2026-09-18, with
+ * `const asJson = process.argv.includes("--json")` replaced by `const asJson = false`).
+ */
 export function wantsJson(argv: readonly string[]): boolean {
   return argv.includes("--json");
 }

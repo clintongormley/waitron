@@ -700,8 +700,9 @@ the day figures from recorded transactions. No removal was missed. `recovery_pac
 
 ### Comment pruning
 
-Keep comments for invariants or reasons the code cannot show. Prune on touch and by package when
-you do a deliberate sweep (owner decision, 2026-09-23). Follow `CLAUDE.md` §1 for the sweep check.
+Keep comments for invariants or reasons the code cannot show. Prune on touch and sweep one package
+per pull request (owner decision, 2026-09-23). Follow `CLAUDE.md` §1 for the sweep check. In fiscal
+packages, run the golden huella and `inmutabilidad` suites unedited.
 
 ### Command answers stay available for till retries
 

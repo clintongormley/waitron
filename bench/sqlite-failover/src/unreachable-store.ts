@@ -10,16 +10,20 @@ const PROBE_TIMEOUT_MS = 5_000;
 const CREDENTIALS = { accessKeyId: "waitronbench", secretAccessKey: "waitronbench" };
 const BUCKET = "waitron-failover";
 
-// Draw an unused loopback port and then verify it refuses connections to establish the offline
-// premise.
 export async function createUnreachableStore(): Promise<{ store: Store; refusedWith: string }> {
   const port = await reservePort();
   const refusedWith = await probeRefusal(port);
   return { store: buildStore(port), refusedWith };
 }
 
-// Hold connections open without a reply so the daemon keeps the read transaction while the probe
-// measures contention.
+/**
+ * A `Store`-shaped value whose endpoint accepts every connection and never answers. Litestream 0.5.18
+ * gives up on a refused connection after 8 quick attempts and drops its read transaction before
+ * retrying, so a side file that must grow needs a bucket that does not answer (2026-11-06: against a
+ * refused port `restart-at-limit.ts` ended 40,000 sales at 87 MB and 134 MB, short of its 256 MiB
+ * limit). Unlike `createUnreachableStore` it does not check its own premise: `refusedWith` is a label
+ * here.
+ */
 export async function createSilentStore(): Promise<{ store: Store; refusedWith: string }> {
   const sockets = new Set<Socket>();
   const server = createServer((socket) => {
@@ -56,7 +60,11 @@ function reservePort(): Promise<number> {
   });
 }
 
-// Another error would fail to establish the refused-connection case.
+/**
+ * Connect, and require the connection to be REFUSED. Anything that answers — and any other error —
+ * is thrown rather than recorded, because both mean the scenario above is not measuring an offline
+ * box.
+ */
 function probeRefusal(port: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const socket = connect({ host: HOST, port });
@@ -95,8 +103,9 @@ function buildStore(port: number): Store {
     client,
     bucket: BUCKET,
     credentials: CREDENTIALS,
-    // Make store operations throw so an omitted request cannot look like a successful empty
-    // result.
+    // The three store operations THROW rather than answering. Nothing in S4 calls them; a later
+    // caller that does must be told, because a quiet empty answer from a store that does not exist
+    // is a wrong answer it would have no way to notice.
     putJson: () => unreachable("putJson", endpoint),
     getJson: () => unreachable("getJson", endpoint),
     listKeys: () => unreachable("listKeys", endpoint),

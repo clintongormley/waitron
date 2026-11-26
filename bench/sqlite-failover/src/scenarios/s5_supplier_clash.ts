@@ -1,5 +1,3 @@
-// Exercise both ways of losing a supplier invoice: silent omission and a refusal that rolls the
-// whole batch back.
 import assert from "node:assert";
 import type { ScenarioResult } from "../scenarios.ts";
 import {
@@ -35,7 +33,6 @@ type Ship = {
   receiverRowId: string;
 };
 
-// Give each arm distinct identities so rows from a control cannot satisfy the main comparison.
 function buildShip(slug: string, open: (nodeId: string) => NodeDb): Ship {
   const senderId = `${slug}-box`;
   const receiverId = `${slug}-cloud`;
@@ -90,7 +87,11 @@ type TailRows = {
   supplierInvoices: SupplierInvoiceRow[];
 };
 
-// Compare every field because a row count would also accept overwritten business data.
+/**
+ * The rows of a shipped tail the receiver now holds — the rows themselves, every column of them,
+ * not how many there are. Counting would let a wrong value through: an apply that changed a sale's
+ * total on the way in still lands one sale per sale shipped.
+ */
 function rowsHeldFrom(receiver: NodeDb, senderId: string): TailRows {
   return {
     records: receiver.all<RecordRow>(
@@ -137,7 +138,12 @@ const NOTHING_APPLIED: TailRows = {
   supplierInvoices: [],
 };
 
-// Read the model schema so a table added to the model is included in the replay comparison.
+/**
+ * Every row of every model table, for comparing a database with itself after a second apply.
+ *
+ * Both the table list and each table's columns are asked of the database rather than written out
+ * here, so a table added to the schema later is compared without anyone remembering to add it.
+ */
 function snapshot(db: NodeDb): string {
   const tables = db
     .all<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name`)
@@ -193,7 +199,6 @@ export default async function supplierClash(): Promise<ScenarioResult> {
       "every other row in the tail applied, with its values intact",
     );
 
-    // The retry reports the same clash. The clean invoice's already-held id must stay quiet.
     const before = snapshot(receiver);
     const retried = applyTail(receiver, senderId, tail);
     assert.equal(retried.skippedClashes.length, 1, "the retry reports the same one clash");
@@ -245,8 +250,10 @@ export default async function supplierClash(): Promise<ScenarioResult> {
       "control: the receiver keeps its own row, having written it before the ship",
     );
 
-    // Use a different constraint failure to prove the pair being present is insufficient to
-    // classify a clash.
+    // A refusal that is NOT about the invoice number has to leave the apply and take the batch with
+    // it, whatever rows the receiver happens to hold. That is what the rule's error check is for,
+    // and it is the case a rule reading only the table gets wrong: the receiver below already holds
+    // the arriving row's id, which is exactly what a table-first reading calls a ship arriving twice.
     const refused = buildShip("s5-refused", open);
     insertInvoice(refused.receiver, refused.cleanId, refused.receiver.nodeId, "OTHER", "X-1");
     refused.receiver.exec(

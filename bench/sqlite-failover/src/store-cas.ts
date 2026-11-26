@@ -4,21 +4,21 @@ import type { Store } from "./store.ts";
 
 const RACERS = 8;
 
-// Keep a store refusal distinct from an inconclusive probe, such as one that never got an answer.
 export type IfMatchObservation = "refuses-stale" | "accepts-stale" | "not-established";
 
 export type CasReport = {
   createOnly: boolean;
-  // The promotion model uses create-only, so the stale-ETag result is recorded separately.
   ifMatch: IfMatchObservation;
   ifMatchNote: string;
   raceWinners: number;
   racers: number;
-  // Count accepted writes because a refused write also resolves.
+  /**
+   * The control: how many of the same race were ACCEPTED with no condition attached. A 412 is not a
+   * win — `conditionalPut` resolves rather than rejects on one, so settling is not enough to count.
+   */
   unfencedWinners: number;
 };
 
-// Match HTTP 412 to distinguish a rejected condition from other SDK failures.
 function isPreconditionFailed(error: unknown): boolean {
   return (error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode === 412;
 }
@@ -53,7 +53,14 @@ function describe(error: unknown): string {
   return error.message || error.constructor.name;
 }
 
-// Probe ETag support separately so a store that lacks it can still establish create-only support.
+/**
+ * Sealed off from the rest of the probe on purpose. Whatever a store does with an `If-Match` it does
+ * not implement — ignore it, refuse every one, or answer with an error — the seal keeps it out of
+ * the create-only measurement, which is the critical one and the only one this rig's fence needs.
+ * The three outcomes below say which was seen. Measured by injecting a 501 on this path: the run
+ * still records `create-only=true`, where without the seal it recorded a thrown scenario and no
+ * create-only value at all.
+ */
 async function probeIfMatch(
   store: Store,
 ): Promise<{ observation: IfMatchObservation; note: string }> {
@@ -78,7 +85,14 @@ async function probeIfMatch(
   }
 }
 
-// The probe needs unused keys, which each scenario gets from a fresh store.
+/**
+ * One key per probe, and those keys are fresh only because `startStore()` gives each scenario its
+ * own container (`store.ts`). Called twice against one store this reports `createOnly: false`, so
+ * the scenario supplies a new store.
+ *
+ * The critical measurements run FIRST: if the store dies, they throw rather than being skipped in
+ * favour of the optional one.
+ */
 export async function probeConditionalWrites(store: Store): Promise<CasReport> {
   const first = await claimCreateOnly(store, "probe/create-only", "first");
   const second = await claimCreateOnly(store, "probe/create-only", "second");

@@ -26,7 +26,11 @@ export default async function doublePromotion({
       "current.json names the winner's generation",
     );
 
-    // Read the store to catch any write by the loser even if its call correctly returned `lost`.
+    // The loser commits no promotion (spec §4, S1) — and "lost" is only the loser's own word for
+    // that. The store is read back instead: every key it holds, then the body of each key the loser
+    // could have reached. Keys alone would not do this job twice over — a losing node writing INSIDE
+    // the winner's generation adds no new key, and one overwriting the winner's marker changes no
+    // key at all.
     const afterFenced = (await store.listKeys("")).sort();
     assert.deepEqual(
       afterFenced,
@@ -64,8 +68,10 @@ export default async function doublePromotion({
     const controlWinners = control.filter((result) => result === "won").length;
     assert.equal(controlWinners, NODES.length, "control: each node believes it won");
 
-    // A later caller must be refused by the control's own check, or the shared-base race would
-    // prove nothing.
+    // The control's own check has to be capable of refusing, or "both nodes passed it" says nothing.
+    // A third box holding a base that is already at this term stands down and writes nothing — which
+    // is exactly what the two racers would have done had either of them read AFTER the other wrote,
+    // and why the base is read once above instead of twice.
     const standDown = await promoteUnfenced(
       store,
       UNFENCED_TERM,

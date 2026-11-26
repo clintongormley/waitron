@@ -30,7 +30,6 @@ const HELD_OFFLINE = 20; // phase 2 — daemon attached, its store unreachable
 const WHILE_STOPPED = 20; // phase 3 — no daemon at all
 const AFTER_RESTART = 20; // phase 4 — daemon restarted against the reachable store
 const TOTAL = STREAMED + HELD_OFFLINE + WHILE_STOPPED + AFTER_RESTART;
-// An existing sidecar cannot signal that the daemon reopened this database.
 const OFFLINE_ATTACH_MS = 3_000;
 
 async function main(): Promise<void> {

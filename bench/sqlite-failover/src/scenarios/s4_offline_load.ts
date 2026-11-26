@@ -14,8 +14,6 @@ const NODE = "box-a";
 const OFFLINE_PREFIX = `${VENUE}/gen-1-${NODE}`;
 const CONTROL_PREFIX = `${VENUE}/gen-2-${NODE}`;
 
-// The compressed days model sales volume only. The explicit idle is what gives Litestream time to
-// checkpoint.
 const SALES_PER_DAY = 250;
 const DAYS = 30;
 const SALES = SALES_PER_DAY * DAYS;
@@ -27,19 +25,19 @@ const MAX_WAL_BYTES_PER_SALE = 64 * 1024;
 
 const SPEC_SMALL_MULTIPLE = 10;
 
-// Use one page per sale as the floor for the arm whose WAL is held open.
 const MIN_WAL_BYTES_PER_SALE = 4 * 1024;
 
-// Give both arms the same cadence so only bucket reachability differs.
 const ROUNDS = 15;
 const SALES_PER_ROUND = SALES / ROUNDS;
 const IDLE_MS = 1_500;
 
-// Wait for the daemon to open the database so the offline arm measures a reader that actually
-// holds it.
+/**
+ * How long the daemon is given to open the database before a load starts, watched by polling for the
+ * sidecar directory litestream creates beside it. Waiting matters: a daemon that had not attached
+ * yet would leave Part A measuring a database nobody was holding, which is the other arm's case.
+ */
 const ATTACH_DEADLINE_MS = 30_000;
 
-// The ratio distinguishes a plateau from two arms that accumulated the same load.
 const PLATEAU_FACTOR = 4;
 
 const GIB = 1024 * 1024 * 1024;
@@ -54,7 +52,6 @@ type Load = {
   endWalBytes: number;
   dbBytes: number;
   rows: number;
-  // Count growth across the whole round, since a checkpoint can land during a sale or the idle.
   checkpointRounds: number;
 };
 
@@ -88,7 +85,6 @@ export default async function offlineLoad({
   try {
     const offline = await runOfflineArm(litestream?.bin, dir);
 
-    // Check committed work in both arms because an empty control also satisfies the WAL ratio.
     assert.equal(
       offline.load.rows,
       SALES,
@@ -99,8 +95,6 @@ export default async function offlineLoad({
     if (litestream) {
       store = await startStore();
       control = await runControlArm(litestream.bin, store, dir);
-      // Report the plateau failure first because the same failed control can also trip both later
-      // checks.
       assert.ok(
         control.load.peakWalBytes * PLATEAU_FACTOR <= offline.load.peakWalBytes,
         `with the store reachable the WAL plateaus: ${control.load.peakWalBytes} bytes against the offline arm's ${offline.load.peakWalBytes} for the same ${SALES} sales, which is under ${PLATEAU_FACTOR}x apart`,
@@ -110,7 +104,6 @@ export default async function offlineLoad({
         SALES,
         `the control arm committed ${control.load.rows} rows in \`records\` against the offline arm's ${offline.load.rows}, so the two arms did not drive the same ${SALES}-sale load`,
       );
-      // Require one checkpoint to establish the control without pinning a machine's cadence.
       assert.ok(
         control.load.checkpointRounds > 0,
         `the control arm's rounds left the main database file larger in ${control.load.checkpointRounds} of ${ROUNDS}, so nothing checkpointed and its peak of ${control.load.peakWalBytes} bytes is not a plateau`,
@@ -155,7 +148,6 @@ export default async function offlineLoad({
     try {
       if (store) await store.stop();
     } finally {
-      // Remove the directory even when stopping the store rejects.
       rmSync(dir, { recursive: true, force: true });
     }
   }
@@ -223,12 +215,13 @@ async function runOfflineArm(bin: string | undefined, dir: string): Promise<Offl
       checkpointedDbBytes: statSync(dbPath).size,
     };
   } finally {
-    // Wait for the daemon before closing the handle and removing files it still holds.
+    // Order: the daemon goes first and is AWAITED, then the node's handle, and only then may the
+    // caller's `finally` remove the files. A litestream child left holding this database would
+    // outlive the scenario.
     if (daemon) {
       daemon.kill();
       await daemon.exited;
     }
-    // Close the node even if stopping the store fails.
     try {
       if (unreachableStore) await unreachableStore.stop();
     } finally {
@@ -276,8 +269,9 @@ async function driveLoad(node: NodeDb, dbPath: string): Promise<Load> {
       recordSale(node, 1000 + (i % 997));
       latencies.push(performance.now() - started);
     }
-    // Read both sides of idle because a checkpoint can keep the WAL's high-water size while
-    // letting the next round reuse it.
+    // Both readings are outside the timed region. The second one matters: a checkpoint during the
+    // idle can leave the WAL file at its high-water mark while reusing the space inside it, so the
+    // peak has to be read before the pause as well as after.
     peakWalBytes = Math.max(peakWalBytes, walBytes(dbPath));
     await sleep(IDLE_MS);
     peakWalBytes = Math.max(peakWalBytes, walBytes(dbPath));
@@ -298,7 +292,11 @@ async function driveLoad(node: NodeDb, dbPath: string): Promise<Load> {
   };
 }
 
-// Use TRUNCATE so a retained high-water file cannot masquerade as unreclaimed WAL.
+/**
+ * `TRUNCATE` rather than `PASSIVE` because the question is whether we can get the disk back: a
+ * passive checkpoint that restarts the WAL leaves the file at its high-water mark, so its size alone
+ * would not say whether anything was reclaimed.
+ */
 function reclaim(node: NodeDb, dbPath: string): Reclaim {
   const walBefore = walBytes(dbPath);
   const started = performance.now();
@@ -324,7 +322,6 @@ function timeOneSale(node: NodeDb): number {
   return round(performance.now() - started, 3);
 }
 
-// Use the pinned binary's sidecar as evidence that it opened the database.
 async function waitForAttach(dbPath: string): Promise<number> {
   const separator = dbPath.lastIndexOf("/");
   const marker = join(dbPath.slice(0, separator), `.${dbPath.slice(separator + 1)}-litestream`);
@@ -338,7 +335,10 @@ async function waitForAttach(dbPath: string): Promise<number> {
   );
 }
 
-// Read back `journal_mode` because a WAL request can leave the file in another mode.
+/**
+ * Both pragmas, set and read back. `journal_mode` is answered with the mode the database is in, so
+ * the readback is the only thing separating "asked for WAL" from "is in WAL".
+ */
 function assertPragmas(node: NodeDb): void {
   const mode = node.get<{ journal_mode: string }>("PRAGMA journal_mode = WAL");
   assert.equal(String(mode?.journal_mode), "wal", "the database is in WAL journal mode");

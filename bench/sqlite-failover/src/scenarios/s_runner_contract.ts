@@ -163,8 +163,6 @@ export default async function runnerContract(): Promise<ScenarioResult> {
         `json-selected-by-flag=true`,
     };
   } catch (error) {
-    // Return a scenario FAIL so its own assertion is distinguishable from an exception that broke
-    // the runner.
     if (!(error instanceof assert.AssertionError)) throw error;
     const message = error.message;
     const flattened = message.replaceAll(/\s+/g, " ").replaceAll('"', "'");

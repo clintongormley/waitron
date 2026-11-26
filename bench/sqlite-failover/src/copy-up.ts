@@ -16,7 +16,7 @@ export async function copyUp(
     await store.client.send(
       new CopyObjectCommand({
         Bucket: store.bucket,
-        // The rig generates keys from a restricted alphabet, so `CopySource` needs no escaping.
+        // Only the restricted alphabet of the rig's replica keys lets `CopySource` stay unescaped.
         CopySource: `${store.bucket}/${key}`,
         Key: `${toPrefix}${key.slice(fromPrefix.length)}`,
       }),
@@ -25,7 +25,6 @@ export async function copyUp(
 
   let deleted = 0;
   if (opts.propagateDeletions) {
-    // Delete obsolete destination keys only after every source object has been copied.
     for (const key of await store.listKeys(toPrefix)) {
       if (sourceSuffixes.has(key.slice(toPrefix.length))) continue;
       await store.client.send(new DeleteObjectCommand({ Bucket: store.bucket, Key: key }));
@@ -36,7 +35,12 @@ export async function copyUp(
   return { copied: sourceKeys.length, deleted };
 }
 
-// Overlapping prefixes would let the source listing include the destination's objects.
+/**
+ * Equal prefixes would ask S3 to copy every object onto itself, which S3's API refuses without a
+ * metadata directive; and a prefix that CONTAINS the other makes a listing of one include the
+ * objects of the other, so a mirror would copy its own output and then consider deleting it. Both
+ * are mistakes at the call site, and neither has a sensible reading here.
+ */
 function assertDistinctPrefixes(fromPrefix: string, toPrefix: string): void {
   if (fromPrefix === toPrefix) {
     throw new Error(`copyUp was given one prefix twice: ${fromPrefix}`);

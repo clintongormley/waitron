@@ -1,4 +1,6 @@
-// An independent model of the fiscal ledger for the failover scenarios.
+/**
+ * A MODEL of the fiscal ledger the failover loop moves around — never the ledger itself.
+ */
 import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import type { SQLInputValue, SQLOutputValue } from "node:sqlite";
@@ -81,8 +83,14 @@ export type SupplierInvoiceRow = {
 };
 
 export type HeldSummary = {
-  // A receiver reports only its contiguous prefix from sequence 1. Reporting a later row across a
-  // gap would cause the sender to skip the missing rows.
+  /**
+   * Per node, the highest `secuencia` held with NO gap below it, counting up from 1 (a chain's
+   * first record is secuencia 1). A receiver holding 1, 2, 5 reports 2, not 5: `MAX(secuencia)`
+   * would report 5 and 3 and 4 would never be shipped again, and nothing downstream looks for a
+   * hole. Re-shipping 5 is the price. Its `records` row is re-inserted `ON CONFLICT DO NOTHING` and
+   * nothing about it changes; its `envios` row is not inert, because a re-shipped copy whose
+   * `estado` has advanced IS adopted — the `terminal-state-wins` rule, `EnvioRule` below.
+   */
   contiguousTo: Record<string, number>;
   saleIds: string[];
   supplierInvoiceIds: string[];
@@ -123,10 +131,10 @@ export function toyHuella(prev: string | null, payload: string): string {
 export function openNode(nodeId: string, path?: string): NodeDb {
   const handle = new DatabaseSync(path ?? ":memory:");
   handle.exec("PRAGMA foreign_keys = ON");
-  // SQLite needs recursive triggers enabled for the internal delete in `INSERT OR REPLACE` to hit
-  // the append-only guard.
+  // This pragma is what closes the INSERT OR REPLACE path past the append-only triggers below:
+  // that statement deletes the conflicting row internally, which needs recursive triggers to fire
+  // the BEFORE DELETE trigger.
   handle.exec("PRAGMA recursive_triggers = ON");
-  // The busy timeout lets an immediate write transaction wait for Litestream's lock.
   handle.exec("PRAGMA busy_timeout = 5000");
   handle.exec(SCHEMA);
   return {
@@ -141,8 +149,9 @@ export function openNode(nodeId: string, path?: string): NodeDb {
   };
 }
 
-// Take the write lock before reading the chain tip. Upgrading an existing read transaction can
-// fail immediately despite the busy timeout.
+/**
+ * Every caller writes, so the write lock is asked for at BEGIN rather than partway through.
+ */
 function withTx<T>(handle: DatabaseSync, body: () => T): T {
   handle.exec("BEGIN IMMEDIATE");
   try {
@@ -159,7 +168,11 @@ function changed(result: { changes: number | bigint }): number {
   return Number(result.changes);
 }
 
-// Read the chain tip and append under the same write lock so a sale extends the tip it read.
+/**
+ * Append one hash-linked record with its pending submission row and the sale it describes, in one
+ * transaction: a chain tip read that is not in the same transaction as the append it decides is the
+ * chain fork the whole rig exists to look for.
+ */
 export function recordSale(
   db: NodeDb,
   payloadCents: number,
@@ -227,8 +240,6 @@ export function summarise(db: NodeDb): HeldSummary {
   return { contiguousTo, saleIds, supplierInvoiceIds };
 }
 
-// The receiver's contiguous mark is per chain. Send only the local chain, since a foreign chain
-// might have gaps.
 export function diffTail(sender: NodeDb, receiverHeld: HeldSummary): TailBatch {
   const watermark = Number(receiverHeld.contiguousTo[sender.nodeId] ?? 0);
   const heldSales = new Set(receiverHeld.saleIds);
@@ -271,8 +282,14 @@ export function diffTail(sender: NodeDb, receiverHeld: HeldSummary): TailBatch {
   return { records, envios, sales, saleLines, supplierInvoices };
 }
 
-// The model preserves a terminal receiver row and adopts terminal state sent by
-// its owner. The other rules let S2 exercise those two failures separately.
+/**
+ *  - `terminal-state-wins` — the rule, and it has two sides. A receiver row that is already
+ *    `enviado` and acked is never walked back by a re-shipped copy taken before it was submitted;
+ *    a receiver row that is not yet terminal ADOPTS the shipped state, terminal included. The first
+ *    side keeps the receiver from filing a record it has itself filed, the second keeps it from
+ *    filing a record the record's OWNER has already filed — neither side implies the other, so S2
+ *    drives both.
+ */
 type EnvioRule = "terminal-state-wins" | "regressing" | "insert-only";
 
 const ENVIO_UPSERT: Record<EnvioRule, string> = {
@@ -286,9 +303,6 @@ const ENVIO_UPSERT: Record<EnvioRule, string> = {
      ON CONFLICT DO NOTHING`,
 };
 
-// SQLite's default ABORT leaves the surrounding transaction active after a refused insert. Report
-// a clash only when the pair belongs to a different id, so replay of an already-held id stays
-// quiet.
 type ClashRule = "report-and-skip" | "silent-drop" | "unisolated";
 
 const CLASH_INSERT: Record<ClashRule, string> = {
@@ -300,8 +314,11 @@ const CLASH_INSERT: Record<ClashRule, string> = {
      VALUES (?, ?, ?, ?)`,
 };
 
-// Use the extended code because `errstr` also says `constraint failed` for unrelated trigger and
-// NOT NULL refusals.
+/**
+ * The same probe is why `errstr` cannot do this job, and a reader will reach for it: all four
+ * refusals carry the errstr "constraint failed", so classifying on it would let a NOT NULL refusal
+ * or a trigger's refusal be treated as a clash.
+ */
 const SQLITE_CONSTRAINT_PRIMARYKEY = 1555;
 const SQLITE_CONSTRAINT_UNIQUE = 2067;
 
@@ -370,7 +387,12 @@ function applyShippedTail(
   tail: TailBatch,
   rules: ShipRules,
 ): ApplyResult {
-  // Only `recordSale` appends to this node's own chain. A shipped tail can never supply its rows.
+  // The only writer of a node's OWN chain is `recordSale`, appending 1, 2, 3, … (see `diffTail`).
+  // A tail claiming to come from the receiver itself is refused before any of it is written, and
+  // what that prevents is a chain FORK rather than a hole: the record inserts below are ON CONFLICT
+  // DO NOTHING, so such a batch fills gaps instead of appending past them, but the chain_head
+  // upsert at the end of this function would then move THIS node's own tip onto a huella it never
+  // computed — and `recordSale` reads that tip as the next record's huella_anterior.
   if (senderNodeId === receiver.nodeId) {
     throw new Error(`applyTail: node ${receiver.nodeId} was handed a tail from its own chain`);
   }
@@ -394,7 +416,6 @@ function applyShippedTail(
       );
     }
 
-    // Insert parent records before submission rows because the latter reference them.
     const insertEnvio = receiver.handle.prepare(ENVIO_UPSERT[rules.envio]);
     for (const row of tail.envios) {
       if (row.node_id !== senderNodeId) {
@@ -415,8 +436,11 @@ function applyShippedTail(
       applied += changed(insertSale.run(row.id, row.node_id, row.total_cents));
     }
 
-    // A line inherits ownership from the receiver's parent sale, including parents inserted by
-    // this batch.
+    // A sale line carries no node of its own: its owner is its parent sale's node. Ownership is
+    // read back from the RECEIVER's own `sales` rows, after the parent inserts above have run in
+    // this transaction — never from the batch's claim. A batch claiming a sale id the receiver
+    // already holds under a DIFFERENT node inserts nothing (the insert conflicts), so trusting the
+    // claim would hang the batch's line off that other node's sale.
     const senderSaleIds = new Set(
       (
         receiver.handle
@@ -459,8 +483,9 @@ function applyShippedTail(
           insertSupplierInvoice.run(row.id, row.node_id, row.supplier, row.invoice_number),
         );
       } catch (error) {
-        // Check the SQLite error before looking at stored rows, since a matching pair can coexist
-        // with an unrelated refusal.
+        // Classify by the ERROR before looking at the table: a refusal that is not a uniqueness
+        // one — a NOT NULL value missing, a trigger's RAISE(ABORT) — is no clash, whatever rows
+        // happen to sit there, and reading the table first would swallow it.
         if (!isUniquenessRefusal(error)) throw error;
         const holder = invoiceHoldingPair.get(row.supplier, row.invoice_number) as
           { id: string } | undefined;
@@ -469,8 +494,6 @@ function applyShippedTail(
           continue;
         }
         if (invoiceById.get(row.id)) continue;
-        // Rethrow an unexplained uniqueness refusal, since neither the primary key nor the invoice
-        // pair accounted for it.
         throw error;
       }
     }
@@ -503,15 +526,16 @@ export function fence(db: NodeDb): void {
   fencedNodes.add(db);
 }
 
-// The return batch carries fiscal rows only. Business rows travel with the regular tail.
 export type ReturnBatch = {
   records: RecordRow[];
   envios: EnvioRow[];
   returnedFromEnviando: number[];
 };
 
-// Include submission state for records the receiver already holds. The receiver's reported head
-// covers the records, and can predate filing by their owner.
+/**
+ *  - `full-state` — records after the receiver's reported head, EVERY `envios` row the sender
+ *    holds for its chain, and each `enviando` row carried as `pendiente`.
+ */
 type ReturnRule = "full-state" | "missing-only" | "keeps-enviando";
 
 function buildReturn(
@@ -598,8 +622,10 @@ export function applyReturnBatch(
   });
 }
 
-// The model blocks a chain after its submit stub throws, leaving the refused row pending. The set
-// lasts for one pass.
+/**
+ * `submit` stands in for the AEAT call. A throw returns the row to `pendiente`, so the pass records
+ * a refusal rather than losing the row.
+ */
 export function drainPass(
   db: NodeDb,
   submit: (nodeId: string, secuencia: number) => void,

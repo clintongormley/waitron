@@ -1,5 +1,3 @@
-// Compare filings across the sender and receiver, since the tax agency sees both as one stream of
-// submissions.
 import assert from "node:assert";
 import type { ScenarioResult } from "../scenarios.ts";
 import {
@@ -30,8 +28,6 @@ function submissionKey(nodeId: string, secuencia: number): string {
   return `${nodeId}:${secuencia}`;
 }
 
-// Record repeats instead of throwing. The drain catches submission failures, which would mask the
-// duplicate in the stub.
 function makeSubmit(
   ledger: SubmitLedger,
   refuseOnce?: string,
@@ -133,8 +129,9 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     const receiver = open("box-b");
     for (let cents = 0; cents < 4; cents += 1) recordSale(sender, 200 + cents);
 
-    // Capture the partial ship before the owner files so the receiver initially holds pending
-    // rows.
+    // Taken BEFORE the sender's own drain, so the partial ship carries `pendiente` rows: a
+    // `diffTail` taken after the drain would carry `enviado` rows instead, and the receiver has to
+    // be left holding unsubmitted copies for this part to measure anything.
     const heldBeforeShipB = summarise(receiver);
     const staleTailB = diffTail(sender, heldBeforeShipB);
     applyTail(receiver, "cloud-2", firstRows(staleTailB, 2));
@@ -215,8 +212,6 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     );
     assert.equal(ledger.filed.length, 13, "13 filings: 5 in Part A, 4 in Part B, 4 in Part C");
 
-    // A refreshed receiver head suppresses records already held, even when the owner has since
-    // changed their filing state.
     const ledgerD = newLedger();
     const submitD = makeSubmit(ledgerD);
     const senderD = open("refreshed-sender");
@@ -249,7 +244,10 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
       "control: the retired refreshed-summary ship files record 1 twice",
     );
 
-    // Ship from a submit callback so the synchronous model can observe the chain still blocked.
+    // Shipping from inside the callback is also the ONLY way this synchronous model can express "a
+    // ship lands mid-pass" at all — there are no processes here and nothing runs concurrently. So
+    // what both halves below measure is this model's ORDERING, and neither is a claim about how the
+    // real system's drain and its ship interleave.
     const ledgerE = newLedger();
     const senderE1 = open("cloud-e1");
     const senderE2 = open("cloud-e2");
@@ -277,7 +275,11 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
       midPassApply,
       "Part E: the ship for the blocked chain ran from inside a submit callback",
     );
-    // `firstRows` slices only the fiscal rows. The first ship already carried all sales and lines.
+    // Two rows the receiver did not already hold: chain one's third record and its submission row.
+    // Its sale and that sale's line are not among them — `firstRows` slices `records` and `envios`
+    // only, so the first ship already carried all three sales and all three lines. What makes the
+    // count 2 rather than 4 is that the two `envios` rows re-shipped unaltered are not counted,
+    // which is the whole of what `applied` claims to mean (`src/model.ts`, `applyShippedTail`).
     assert.equal(
       midPassApply.applied,
       2,
@@ -316,8 +318,9 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
       "Part E: nothing in the blocked-chain sequence is filed twice",
     );
 
-    // Take the tail while the sender is submitting so it carries `enviando`. The receiver's normal
-    // drain selects only pending rows.
+    // Part E, second half: the tail is taken while the SENDER's own drain has a row `enviando`.
+    // `applyShippedTail` writes the shipped `estado` verbatim, so the receiver adopts `enviando` —
+    // and a drain claims only `pendiente` rows, so no DRAIN on the receiver touches that row again.
     const ledgerF = newLedger();
     const submitF = makeSubmit(ledgerF);
     const senderF = open("cloud-f");
@@ -352,8 +355,6 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
 
     const returned = runReturnSequence(open, "returned", { fenced: true, build: buildReturnBatch });
 
-    // Each control cuts a different part of the return path so the result identifies which
-    // protection prevented a repeated or missed filing.
     const noFence = runReturnSequence(open, "no-fence", { fenced: false, build: buildReturnBatch });
     assert.deepEqual(
       [noFence.filedTwice, noFence.neverFiled, noFence.sameBytes],
@@ -379,8 +380,10 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
       "control: a batch carrying enviando verbatim leaves record 3 unfiled",
     );
 
-    // Use fresh nodes and a separate ledger for each control so its submissions cannot satisfy the
-    // main assertions.
+    // ---- Control for Part A: the guard removed, so a terminal row is regressed ----------------
+    // Each control runs the same sequence over its own nodes and its own ledger — a control is
+    // meant to file twice, and mixing that into the ledger above would destroy the assertion that
+    // matters. The two controls differ from the real path in the `envios` rule and nothing else.
     const regressed = runPartASequence(open, applyTailRegressing, "regressing");
     assert.deepEqual(
       regressed.statesAfterRetry,
@@ -509,8 +512,6 @@ type ReturnOutcome = {
   salesGained: number;
 };
 
-// The setup gives the four records different filing histories so the return batch has to reconcile
-// more than a single pending tail.
 function runReturnSequence(
   open: (nodeId: string) => NodeDb,
   slug: string,

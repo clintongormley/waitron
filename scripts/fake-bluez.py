@@ -1,5 +1,12 @@
-# The image-smoke runner uses this stand-in for Bluetooth hardware.
-# Run as root with BlueZ installed so its bus policy lets the stub own `org.bluez`.
+# CI only, never installed on a box: a stand-in for BlueZ on the image-smoke runner's system bus,
+# which has no Bluetooth hardware. Run as root with the bluez package installed: its bus policy is
+# what lets root own `org.bluez` and call a pairing agent.
+# Every failure it chooses to report — a wrong PIN, no agent, an agent's error reply, and no reply
+# within FAKE_BLUEZ_AGENT_TIMEOUT_MS (default 60000), after which it sends `Agent1.Cancel` — is
+# `AuthenticationFailed`. That is its own choice, not what bluetoothd was measured to return.
+# A pairing that succeeds is followed by `Disconnected` signals on the device's `org.bluez.Device1`
+# and `org.bluez.Bearer.BREDR1`, as on the owner's box after a real pairing (2026-09-29); their
+# arguments, and their timing before the pairing's reply, are the stand-in's own.
 import os
 
 import dbus
@@ -174,8 +181,8 @@ class Device(dbus.service.Object):
         self.PropertiesChanged("org.bluez.Device1", {"Bonded": True, "Paired": True},
                                dbus.Array([], signature="s"))
         log("Pair %s -> success" % self.path)
-        # Send both signals before the reply so the driver can log them before it quits
-        # bluetoothctl on `Pairing successful`.
+        # Before the reply (the other order was not tried): image-smoke greps the driver's transcript for
+        # these signals, and the driver quits bluetoothctl as soon as it sees `Pairing successful`.
         for iface in ("org.bluez.Bearer.BREDR1", "org.bluez.Device1"):
             signal = dbus.lowlevel.SignalMessage(self.path, iface, "Disconnected")
             signal.append("fake-reason", "fake bluez", signature="ss")
@@ -210,6 +217,7 @@ class Device(dbus.service.Object):
         def error(e):
             log("RequestPinCode error %s" % e.get_dbus_name())
             if e.get_dbus_name() == "org.freedesktop.DBus.Error.NoReply":
+                # bluetoothd 5.82 sends Cancel expecting a reply (src/agent.c send_cancel_request).
                 bus.call_async(owner, agent_path, "org.bluez.Agent1", "Cancel", "", [],
                                lambda *a: log("Cancel reply"),
                                lambda e: log("Cancel error %s" % e.get_dbus_name()))

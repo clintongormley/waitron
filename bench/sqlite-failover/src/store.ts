@@ -8,11 +8,9 @@ import {
 import { GenericContainer, Wait } from "testcontainers";
 import type { StartedTestContainer } from "testcontainers";
 
-// Include the digest to pin what runs and the tag to identify the release.
 export const MINIO_IMAGE =
   "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e";
 
-// MinIO enforces credential lengths at startup, before the client can issue requests.
 export const ROOT_USER = "waitronbench";
 export const ROOT_PASSWORD = "waitronbench";
 export const BUCKET = "waitron-failover";
@@ -56,7 +54,9 @@ async function connect(container: StartedTestContainer): Promise<Store> {
   const client = new S3Client({
     endpoint,
     region: "us-east-1",
-    // Use path-style requests so the bucket stays in the request path MinIO serves.
+    // Without it, against this image: `CreateBucket` answers
+    // `BadRequest: An unsupported API call for method: PUT at '/'` — the SDK's default
+    // virtual-host style leaves the bucket out of the path MinIO reads.
     forcePathStyle: true,
     credentials,
   });

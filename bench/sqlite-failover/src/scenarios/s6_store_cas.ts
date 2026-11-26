@@ -14,8 +14,11 @@ export default async function storeCas({ startStore }: ScenarioContext): Promise
       `exactly one of the ${report.racers} create-only claims wins`,
     );
 
-    // An unconditional race must accept every writer so an unrelated refusal cannot look like a
-    // working condition.
+    // CONTROL. The same race with no condition attached: every racer is accepted. Without it, "one
+    // winner" could just as well mean the store refuses repeated writes to that key for some reason
+    // of its own, and both answers would look alike. What the pair establishes is conditional versus
+    // unconditional acceptance — NOT that the requests overlapped on the wire, which it cannot show
+    // either way: an unconditional PUT is accepted whether or not anything else is in flight.
     assert.equal(
       report.unfencedWinners,
       report.racers,
@@ -30,8 +33,9 @@ export default async function storeCas({ startStore }: ScenarioContext): Promise
       title: "store conditional write",
       verdict: "PASS",
       critical: true,
-      // The modeled promotion uses create-only, so the compare-and-swap result does not decide
-      // this scenario.
+      // if-match is RECORDED, not asserted: S1's fence (plan Task 3) claims a per-term key
+      // create-only, so nothing in this rig turns on compare-and-swap. The product's fence does —
+      // it is a version-conditional write of `current.json` — which is why the value is recorded.
       detail: `create-only=${report.createOnly} if-match=${ifMatch} race=${report.raceWinners}/${report.racers} unfenced=${report.unfencedWinners}/${report.racers}`,
     };
   } finally {

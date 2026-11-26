@@ -1,5 +1,3 @@
-// Start with an unrelated replica at the copy destination so the control can detect leftover
-// objects.
 import assert from "node:assert";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -25,7 +23,6 @@ const VENUE = "venues/v1";
 const BOX_A = "box-a";
 const FOREIGN = "box-b";
 
-// Use disjoint prefixes so a prefix listing can never read two replicas as one.
 const SOURCE_PREFIX = `${VENUE}/gen-1-${BOX_A}`;
 const MIRROR_PREFIX = `${VENUE}/gen-2-${BOX_A}`;
 const ADDITIVE_PREFIX = `${VENUE}/gen-3-${BOX_A}`;
@@ -34,7 +31,6 @@ const SAME_LINEAGE_PREFIX = `${VENUE}/gen-4-${BOX_A}`;
 const SALES_BEFORE_STREAM = 3;
 const WRITE_INTERVAL_MS = 250;
 
-// The foreign stream must leave more files than the source so an additive copy leaves some behind.
 const FOREIGN_SALES = 9;
 
 const STORE_DEADLINE_MS = 120_000;
@@ -54,8 +50,6 @@ type Source = {
   deletedKeys: string[];
   finalKeys: string[];
   earlyCopySuffixes: string[];
-  // This is elapsed time in the polling loop. It includes the polling interval and work between
-  // polls.
   waitedMs: number;
 };
 
@@ -101,7 +95,10 @@ export default async function copiedReplica({
     try {
       await store.stop();
     } finally {
-      // Remove the directory even when stopping the store rejects.
+      // The order above is unchanged; what the nesting adds is that the directory goes EITHER WAY. A
+      // `stop()` that rejects would otherwise skip the removal, which is the shape
+      // `s4_offline_load.ts` carried until 2026-09-18 — injecting a rejecting `stop()` there left
+      // the temporary directory behind — and `s0_happy_loop.ts` states the rule.
       if (dir) rmSync(dir, { recursive: true, force: true });
     }
   }
@@ -140,7 +137,10 @@ async function streamAndCapture(
     const daemon = replicate(bin, config);
     const seen = new Set<string>();
     try {
-      // Start timing after setup so the reading covers the wait for a deletion.
+      // The clock starts HERE, not at the top of the helper: everything before this — opening
+      // box-a, three sales, the config, the daemon spawn — is setup, and folding it in would make
+      // `deletion-waited-ms` a number about the scenario rather than about the deletion. It is
+      // still quantised to the poll interval, and still not a latency (see `Source.waitedMs`).
       const loopStarted = Date.now();
       const deadline = loopStarted + STORE_DEADLINE_MS;
       let sale = 0;
@@ -170,7 +170,9 @@ async function streamAndCapture(
       await daemon.exited;
     }
 
-    // Flush after stopping the daemon while the writer still holds its WAL.
+    // One last one-shot with the handle still open: the daemon is gone, and nothing else would carry
+    // the sales made since its final sync. Closing box-a first would checkpoint its WAL out from
+    // under a replica that had not read it.
     await syncOnce(bin, config);
     const boxARows = boxA.all<RecordRow>(
       `SELECT node_id, secuencia, huella, huella_anterior, payload FROM records
@@ -240,8 +242,6 @@ async function mirrorIntoDirtyDestination(
   };
 }
 
-// Run the same comparison against the additive copy to establish that leftover foreign files
-// matter.
 async function additiveIntoDirtyDestination(
   bin: string,
   store: Store,
@@ -320,7 +320,6 @@ async function additiveIntoDirtyDestination(
   };
 }
 
-// The same-lineage arm records outcomes separately from the foreign-replica verdict.
 async function sameLineageAdditive(
   bin: string,
   store: Store,
@@ -349,7 +348,6 @@ async function sameLineageAdditive(
     "the second additive copy still leaves the source's deleted objects in place",
   );
 
-  // Capture a restore refusal as one of the measurement's results.
   let restored: Restored | null = null;
   let outcome: string;
   try {
@@ -378,8 +376,6 @@ async function sameLineageAdditive(
   return { copied, stale: stale.length, rows: restored?.records.length ?? 0, outcome };
 }
 
-// Match the pinned binary's refusal text because a nonzero exit also covers unrelated restore
-// failures.
 function isRestoreRefusal(error: unknown): boolean {
   return (
     error instanceof Error &&
@@ -429,7 +425,6 @@ async function dirtyDestination(
   const dbPath = join(dir, `${label}.db`);
   const node = openNode(FOREIGN, dbPath);
   try {
-    // Leave fast compaction off so the foreign files are still present when the copy lands.
     const config = writeConfig({
       dbPath,
       store,
@@ -478,7 +473,12 @@ async function restorePath(
   return outPath;
 }
 
-// Hash the file before opening it so the model's initialization cannot enter the comparison.
+/**
+ * The hash is taken BEFORE `openNode` touches the file, so that nothing `openNode` does can enter
+ * it: it runs `CREATE TABLE IF NOT EXISTS` and its triggers (`model.ts`), and opening a database
+ * litestream has restored creates the `-wal` and `-shm` sidecars beside it. The ordering is the
+ * conservative one, and it is not an assertion that an open WOULD change the file.
+ */
 function readRestored(path: string): Restored {
   const sha256 = createHash("sha256").update(readFileSync(path)).digest("hex");
   const node = openNode("reader", path);

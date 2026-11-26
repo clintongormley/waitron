@@ -16,13 +16,21 @@ function generationName(term: number, nodeId: string): string {
   return `gen-${term}-${nodeId}`;
 }
 
-// The marker lets the control detect a generation even after a later promotion overwrites the
-// pointer.
+/**
+ * An object inside the generation's own path, so a promotion leaves a trace in the store's key space
+ * that outlives `current.json` being overwritten by a later term. That trace is what lets S1 count
+ * promotions by reading the store rather than by asking the nodes.
+ */
 function generationMarkerKey(term: number, nodeId: string): string {
   return `${VENUE_PREFIX}${generationName(term, nodeId)}/OWNER`;
 }
 
-// Publish the generation before the pointer so a reader never follows it to a missing generation.
+/**
+ * The generation first, then the pointer. In the product `current.json` names the generation a
+ * returning node restores from (topology §2.2), so publishing the pointer first would name a path
+ * that is not there yet. Nothing in this rig follows the pointer, so that ordering is the product's
+ * invariant modelled here, not something S1 measures.
+ */
 async function activate(store: Store, term: number, nodeId: string): Promise<void> {
   await store.putJson(generationMarkerKey(term, nodeId), { term, nodeId });
   const pointer: CurrentPointer = { term, nodeId, gen: generationName(term, nodeId) };
@@ -36,8 +44,11 @@ export async function promote(store: Store, term: number, nodeId: string): Promi
   return "won";
 }
 
-// Both control racers may read the same base before either writes, which exposes the gap in the
-// read-check-write sequence.
+/**
+ * The CONTROL: the same promotion with the store's refusal replaced by a plain read-check-write
+ * (spec §4, S1). The check is the one anyone would write, and that is the point — two nodes holding
+ * the same base both pass it.
+ */
 export async function promoteUnfenced(
   store: Store,
   term: number,
@@ -49,7 +60,6 @@ export async function promoteUnfenced(
   return "won";
 }
 
-// Match absence by error name because a 404 can refer to something other than a missing pointer.
 export async function readCurrent(store: Store): Promise<CurrentPointer | null> {
   try {
     return (await store.getJson(CURRENT_KEY)) as CurrentPointer;

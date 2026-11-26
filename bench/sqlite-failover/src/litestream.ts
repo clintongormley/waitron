@@ -17,13 +17,16 @@ export const BUNDLED_BIN = join(
   "litestream",
 );
 
-// The config names environment variables so credentials stay in the child process's environment.
+/**
+ * The variable names the generated config references. Litestream expands `${VAR}` in the config by
+ * default (its `-no-expand-env` flag turns that off), so the yaml names these and the spawn supplies
+ * the values, and no credential is written to a file.
+ */
 const ENV_ACCESS_KEY_ID = "WAITRON_BENCH_ACCESS_KEY_ID";
 const ENV_SECRET_ACCESS_KEY = "WAITRON_BENCH_SECRET_ACCESS_KEY";
 
 const credentialsByConfig = new Map<string, Store["credentials"]>();
 
-// Compaction settings belong at the top level. Litestream ignores them under `dbs[0]`.
 const FAST_COMPACTION = [
   `l0-retention: 2s`,
   `l0-retention-check-interval: 1s`,
@@ -33,7 +36,6 @@ const FAST_COMPACTION = [
   `  - interval: 60s`,
 ];
 
-// A missing or unusable pin returns `null` so each scenario can decide whether to skip.
 export async function resolveLitestream(): Promise<{ bin: string; version: string } | null> {
   const candidates = [process.env.WAITRON_LITESTREAM_BIN, BUNDLED_BIN, "litestream"];
   for (const bin of candidates) {
@@ -56,7 +58,6 @@ export function writeConfig(opts: {
   prefix: string;
   configPath: string;
   fastCompaction?: boolean;
-  // Extra top-level YAML lets probes supply their own snapshot and level settings.
   globalLines?: string[];
 }): string {
   const { dbPath, store, prefix, configPath, fastCompaction = false, globalLines = [] } = opts;
@@ -93,7 +94,6 @@ export function replicate(
 
   let killed = false;
   let log = "";
-  // Capture stdout too, where the pinned binary logs by default.
   const collect = (chunk: Buffer) => {
     const text = chunk.toString();
     log = tail(log + text);
@@ -121,7 +121,10 @@ export function replicate(
       child.kill("SIGTERM");
       const escalation = setTimeout(() => {
         child.kill("SIGKILL");
-        // Settle on `exit` because a surviving descendant can hold the stdio pipes open.
+        // Settled here for the reason `run()` records: `close` fires when the stdio pipes close, not
+        // when the process dies, so a killed child whose own children hold those pipes never
+        // produces it. The pipes are destroyed too, or their open handles keep the event loop alive
+        // and the RUNNER never exits even though every promise has settled.
         child.stdout?.destroy();
         child.stderr?.destroy();
         settleExit(null);
@@ -132,7 +135,6 @@ export function replicate(
   };
 }
 
-// `dbName` is the path named in the config. The source file can be absent.
 export async function restore(
   bin: string,
   config: string,
@@ -154,7 +156,6 @@ export async function restore(
   }
 }
 
-// Use `replicate -once` to upload outstanding changes without a resident daemon.
 export async function syncOnce(
   bin: string,
   config: string,
@@ -213,10 +214,11 @@ function run(
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGKILL");
-      // Destroy the pipes too, since a surviving descendant can keep Node alive through them.
+      // The pipes are destroyed as well as the child killed. A SIGKILL settles this promise but does
+      // not close a pipe a surviving grandchild still holds, and an open pipe handle keeps Node's
+      // event loop alive — so the scenario would report its verdict and the runner would never exit.
       child.stdout.destroy();
       child.stderr.destroy();
-      // Settle on `exit` before a surviving descendant can delay pipe closure.
       settle({ code: null, stdout, stderr });
     }, options.timeoutMs ?? CHILD_TIMEOUT_MS);
 

@@ -27,7 +27,12 @@ const DAEMON_SALES_AFTER = 2;
 
 const NEVER_STREAMED_PREFIX = `${VENUE}/gen-3-box-c`;
 
-// Allow more than one restore timeout so a stalled attempt cannot use the whole polling window.
+/**
+ * How long the store is given to hold a write, before the wait is reported as a failure. Several
+ * times `CHILD_TIMEOUT_MS` deliberately: a deadline equal to the bound on one restore is not an
+ * outer deadline, because a single stalled child would consume the whole window and the poll would
+ * get exactly one attempt.
+ */
 const STORE_DEADLINE_MS = 120_000;
 
 type RecordedRow = { secuencia: number; payload: string };
@@ -65,13 +70,15 @@ export default async function litestreamRoundtrip({
     try {
       await store.stop();
     } finally {
-      // Remove the directory even when stopping the store rejects.
+      // The order above is unchanged; what the nesting adds is that the directory goes EITHER WAY. A
+      // `stop()` that rejects would otherwise skip the removal, which is the shape
+      // `s4_offline_load.ts` carried until 2026-09-18 — injecting a rejecting `stop()` there left
+      // the temporary directory behind — and `s0_happy_loop.ts` states the rule.
       if (dir) rmSync(dir, { recursive: true, force: true });
     }
   }
 }
 
-// Delete the original database before restoring to prove the rows came from the bucket.
 async function roundtripOneShot(
   bin: string,
   store: Store,
@@ -106,8 +113,6 @@ async function roundtripOneShot(
   return { keys: keys.length, restored: restored.length };
 }
 
-// Wait for the first sales to restore before making more, so the second wait proves the running
-// daemon picked up a new write.
 async function roundtripDaemon(
   bin: string,
   store: Store,
@@ -176,7 +181,11 @@ async function waitForRows(args: {
         return { rows: seen.length, attempts };
       }
     } catch (error) {
-      // Only a missing backup is a polling result. Other restore errors fail the scenario.
+      // Nothing uploaded yet: the restore refuses with "no matching backup files available", and a
+      // refusal of THAT kind is the wait rather than the answer. Two other kinds are not, and are
+      // rethrown: an assertion failure, and a restore that had to be KILLED at its bound — that one
+      // would otherwise be reported at the deadline as "the store never held the rows", naming
+      // replication for a failure that was really a child that stopped.
       if (error instanceof assert.AssertionError) throw error;
       if (error instanceof Error && error.message.includes("was killed after")) throw error;
     }
@@ -187,8 +196,6 @@ async function waitForRows(args: {
   );
 }
 
-// A prefix with no stream must fail to restore, so an empty successful restore cannot pass as
-// evidence.
 async function restoreWithNothingStreamed(bin: string, store: Store, dir: string): Promise<string> {
   const dbPath = join(dir, "never-streamed.db");
   const config = writeConfig({

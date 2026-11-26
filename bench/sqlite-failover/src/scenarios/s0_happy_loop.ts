@@ -1,6 +1,8 @@
-// Drive the failover loop with real Litestream and the model ledger. The no-ship control must fail
-// the happy loop's own comparison. The lag arm measures repeat submissions when the last filing
-// state never streamed.
+// Every upload here is `syncOnce`. Nothing in this scenario starts `replicate`, litestream's
+// continuous daemon, which is the mode the product would run; the daemon is driven by
+// `s_litestream_roundtrip` and by S3 (`s3_copied_replica.ts`), never here. That is why "the box dies
+// before the next sync" is a scripted step here: under the daemon it would be a timing window, and
+// this scenario says nothing about that window.
 import assert from "node:assert";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,7 +37,6 @@ const CLOUD = "cloud-1";
 const SALES_BEFORE_SYNC = 4;
 const TAIL_SALES = 2;
 
-// The arms share a store and use separate terms to keep their generations and claims apart.
 type Part = {
   boxTerm: number;
   cloudTerm: number;
@@ -88,7 +89,10 @@ export default async function happyLoop({ startStore }: ScenarioContext): Promis
   try {
     const happy = await runLoop(store, litestream.bin, HAPPY, (probe) => assertHappyLoop(probe));
 
-    // The same comparison used by the happy loop must reject the no-ship control.
+    // Part B — the CONTROL. The identical loop with the ship left out must reproduce the opposite
+    // result, and Part A's own comparison must be the thing that refuses it. Without this, "the
+    // restore plus the ship gave us 1..6" is unfalsifiable: a restore that had somehow carried 5
+    // and 6 would look exactly like a ship that worked.
     const control = await runLoop(store, litestream.bin, CONTROL, (probe) =>
       assertShipIsWhatCarriesTheTail(probe),
     );
@@ -213,8 +217,6 @@ async function runLoop<T>(
       current,
     });
   } finally {
-    // Close both handles before deleting their directory. The outer scenario owns the shared
-    // store.
     try {
       boxA?.close();
       cloud?.close();
@@ -343,7 +345,9 @@ function measureStreamLag(probe: LoopProbe): {
   }
 
   assertChainsVerify(probe.cloud);
-  // Require a repeat before comparing the identities, since equality on an empty set would pass.
+  // Derived from the loop above rather than written as a literal in the verdict: with no repeat to
+  // compare, "verbatim-same-identity" would be a shape asserted of an empty set, and would go on
+  // printing on the day the protocol changes and the count reaches zero.
   return {
     refiled,
     shape: refiled.length > 0 ? "verbatim-same-identity" : "no-repeat-to-compare",
@@ -351,7 +355,11 @@ function measureStreamLag(probe: LoopProbe): {
   };
 }
 
-// Compare against the writer's rows so a restore of the right size with the wrong contents fails.
+/**
+ * The receiver holds box-a's whole chain, 1..6, with the contents box-a wrote — compared field by
+ * field against box-a's own rows. Never a count: six rows carrying the wrong payloads, or the right
+ * payloads under shifted secuencias, satisfy a count (`CLAUDE.md` §4).
+ */
 function assertReceiverHoldsSenderChain(probe: LoopProbe): void {
   const held = probe.cloud.all<RecordRow>(
     `SELECT node_id, secuencia, huella, huella_anterior, payload FROM records
@@ -365,7 +373,6 @@ function assertReceiverHoldsSenderChain(probe: LoopProbe): void {
   );
 }
 
-// Use the hash returned at write time as an independent answer for the cloud's record.
 function assertOwnChainIntact(probe: LoopProbe): void {
   const own = probe.cloud.all<RecordRow>(
     `SELECT node_id, secuencia, huella, huella_anterior, payload FROM records
@@ -383,7 +390,6 @@ function assertOwnChainIntact(probe: LoopProbe): void {
   assert.equal(Number(probe.cloudOwn.secuencia), 1, "the cloud's sale was its chain's first");
 }
 
-// Read the writer from the sale UUID so a misplaced row cannot supply its own expected owner.
 function assertEveryRowAttributedToItsWriter(probe: LoopProbe): void {
   const writtenBy = new Map<string, string>();
   for (const row of probe.boxARows) {
