@@ -4,7 +4,7 @@ import { leaveCoordinatorFor, type WtButton, type WtReportDialog } from "@waitro
 import type { TrailEvent } from "@waitron/diagnostics";
 import { diag } from "./diagnostics.js";
 import type { SetupApi } from "./api/client.js";
-import type { SetupApp } from "./setup-app.js";
+import type { Screen, SetupApp } from "./setup-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 import "./setup-app.js";
@@ -123,7 +123,9 @@ it("records rendered wizard steps once in the downloadable report", async () => 
   await mode.updateComplete;
   await userEvent.click(mode.shadowRoot!.querySelector<WtButton>("[data-test=choose-prepare]")!);
   await expect.poll(() => app.shadowRoot!.querySelector("setup-admin-screen")).not.toBeNull();
-  app.requestUpdate();
+  const shell = app as unknown as { screen: Screen };
+  shell.screen = "mode";
+  shell.screen = "admin";
   await app.updateComplete;
   expect(await screens()).toEqual([
     { screen: "connection" },

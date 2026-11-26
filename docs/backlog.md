@@ -894,8 +894,8 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 
 - **A982. Logging Slice 2 — one-touch bug report.** Dashboard, setup and till browser-only preview/download
   are implemented by the [download-first plan](superpowers/plans/2026-11-08-a982-client-only-report-first.md).
-  Setup API route names and stored capture with manager read/download remain;
-  stored capture needs its own plan. Cloud forwarding and automatic crash/freeze reporting are separate.
+  Setup API route names and stored capture with manager read/download remain open. Stored capture
+  needs its own plan. Cloud forwarding and automatic crash/freeze reporting are separate.
   [Detail](backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192).
 
 ### Working time and staff

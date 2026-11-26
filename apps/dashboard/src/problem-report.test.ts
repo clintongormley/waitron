@@ -82,7 +82,8 @@ it("keeps a compact entry named while hiding its text label", async () => {
 
 it.each([
   ["signed-out boot and failed recheck", "/overview", false, false, ["login"]],
-  ["already signed in", "/", true, false, ["my-schedule"]],
+  ["already signed in with a background recheck", "/", true, false, ["my-schedule"]],
+  ["direct zone repair", "/overview", true, false, ["zone-repair"]],
   [
     "account-action link",
     "/account?token=private-account-token&purpose=invitation",
@@ -92,11 +93,13 @@ it.each([
   ],
   ["same-address sign-in", "/overview", false, true, ["login", "overview"]],
   ["canonical redirect after sign-in", "/", false, true, ["login", "overview"]],
-  ["legacy redirect after sign-in", "/printing-rules", false, true, ["login", "overview"]],
+  ["legacy redirect after sign-in", "/printing-rules", false, true, ["login", "prep-stations"]],
 ] as const)(
   "shows the navigation trail in the real dashboard banner report for %s",
   async (_name, path, signedIn, signIn, screens) => {
     const before = navRows(diag.snapshot()).length;
+    const zoneRepair = screens.at(-1) === "zone-repair";
+    const prepStations = path === "/printing-rules";
     vi.stubGlobal("isSecureContext", true);
     history.replaceState(null, "", path);
     vi.stubGlobal(
@@ -115,8 +118,13 @@ it.each([
         locale: "en-GB",
         venueLocale: "en-GB",
         sessionDefault: "en-GB",
-        permissions: signIn ? ["venue.view"] : [],
-        modules: [],
+        permissions: prepStations
+          ? ["venue.view", "venue.configure"]
+          : signIn
+            ? ["venue.view"]
+            : [],
+        modules: prepStations ? ["venue-service"] : [],
+        tradingAdmission: { state: zoneRepair ? "invalid" : "ready" },
         venueName: "Report fixture",
       };
     });
@@ -124,6 +132,19 @@ it.each([
       api: {
         liveData: new LiveData(),
         getMe,
+        request: async () => ({
+          stationTimes: [],
+          todayEnds: null,
+          clockReadable: true,
+          zones: [],
+          categories: [],
+          products: [],
+          periods: [],
+          cells: [],
+          defaultStationId: null,
+          stations: [],
+          canMakeDefault: false,
+        }),
         inspectAccountAction: async () => ({ email: "ada@example.test", purpose: "invitation" }),
         forgetLocales: () => {},
         getLocales: async () => ({
@@ -150,12 +171,21 @@ it.each([
     });
     await expect
       .poll(() =>
-        signedIn
-          ? app.shadowRoot!.querySelector("[data-test=account-menu]")
-          : app.shadowRoot!.querySelector("dashboard-login-screen"),
+        app.shadowRoot!.querySelector(
+          zoneRepair
+            ? "dashboard-venue-zone-repair"
+            : signedIn
+              ? "[data-test=account-menu]"
+              : "dashboard-login-screen",
+        ),
       )
       .not.toBeNull();
-    if (!signedIn) {
+    if (signedIn && !zoneRepair) {
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+      await expect.poll(() => getMe.mock.calls.length).toBe(2);
+      await getMe.mock.results[1]!.value;
+    } else if (!signedIn) {
       const login = app.shadowRoot!.querySelector("dashboard-login-screen")!;
       await expect.poll(() => login.checkingSession).toBe(false);
       if (signIn || path === "/overview") {
@@ -165,12 +195,10 @@ it.each([
         login.dispatchEvent(new CustomEvent("logged-in", { bubbles: true, composed: true }));
         await expect.poll(() => getMe.mock.calls.length).toBe(2);
         await getMe.mock.results[1]!.value.catch(() => undefined);
-        if (signIn) {
-          await expect
-            .poll(() => app.shadowRoot!.querySelector("dashboard-overview-screen"))
-            .not.toBeNull();
-          expect(location.pathname).toBe("/overview");
-        }
+        if (signIn)
+          expect(location.pathname).toBe(
+            prepStations ? "/prep-stations/view/stations" : "/overview",
+          );
         if (path === "/overview") {
           expect(replace).not.toHaveBeenCalled();
           expect(push).not.toHaveBeenCalled();
