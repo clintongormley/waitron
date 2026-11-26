@@ -502,7 +502,7 @@ export class TillBillPayDialog extends LitElement {
   @property({ type: Boolean }) confirmationLocked = false;
   /** Why Items is shown disabled, under the choices; null while it is offered. */
   @property({ attribute: false }) itemsBarred: StringKey | null = null;
-  /** The bill is placed with no receipt: a Counter order sent before it is paid. */
+  /** A Counter bill with no receipt; read with a `placed` balance. */
   @property({ type: Boolean }) sentWithoutReceipt = false;
   /** The printed bill this window paid from was credited, as the till words it; null if not. */
   @property({ attribute: false }) credited: string | null = null;

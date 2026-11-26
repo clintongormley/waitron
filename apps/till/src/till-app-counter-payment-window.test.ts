@@ -313,7 +313,7 @@ it.each(["en", "es"] as const)(
   (locale) => {
     setLocale(locale);
     for (const key of [
-      "bill_pay.items_barred_counter",
+      "bill_pay.items_barred_moved_to_table",
       "bill_pay.items_barred_counter_receipt",
       "bill_pay.items_barred_counter_prepay",
     ] as const)
@@ -714,6 +714,9 @@ it.each([
     await pay();
 
     expect(dialog(el)!.lines.map((row) => [row.lineId, row.quantity])).toEqual([["dish-1", "2"]]);
+    expect(api.getTabLines).toHaveBeenCalledTimes(2);
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledOnce();
+    expect(api.retrievePlacedOrder).not.toHaveBeenCalled();
   },
 );
 
@@ -1243,3 +1246,93 @@ it.each([
     expect(counter.store.lines.map(quantityLabel)).toEqual(["1 ea"]);
   },
 );
+
+it("Items is available as soon as Place succeeds, while Waiting is still being read", async () => {
+  let id = "";
+  let sent = false;
+  let answerWaiting!: () => void;
+  const waitingHeld = new Promise<void>((resolve) => {
+    answerWaiting = resolve;
+  });
+  const api = stubApi({
+    parkOrder: vi.fn(async (request: { id: string }) => {
+      id = request.id;
+      return { id, orderNumber: 7, serviceMode: "ticket_then_pay" };
+    }),
+    getKitchenNote: vi.fn(async () => ({
+      scope: { workingOrderId: id },
+      note: null,
+      revision: 0,
+      ownerRevision: 0,
+    })),
+    listCounterWaiting: vi.fn(async () => {
+      if (!sent) return [];
+      await waitingHeld;
+      return [
+        {
+          id,
+          items: [],
+          orderNumber: 7,
+          label: null,
+          status: "placed",
+          total: "30.00",
+          openedAt: "2026-11-10T10:00:00Z",
+          settledAt: null,
+          collectedAt: null,
+          serviceMode: "ticket_then_pay",
+          counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },
+          canHandOver: false,
+          movableDishes: [],
+        },
+      ];
+    }),
+    placeOrder: vi.fn(async () => {
+      sent = true;
+      return { id, status: "placed" };
+    }),
+    retrievePlacedOrder: vi.fn(async () => ({
+      zoneId: null,
+      serviceMode: "ticket_then_pay",
+      id,
+      orderNumber: 7,
+      revision: 0,
+      label: null,
+      expectedEdit: null,
+      kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+      lines: [
+        { workingOrderLineId: "dish-1", menuItemId: "offer-meal", quantity: "1.000", product },
+      ],
+    })),
+    getTabLines: vi.fn(async () => ({
+      revision: 0,
+      lines: [line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" })],
+    })),
+    getBillBalance: vi.fn(async () =>
+      balanceOf({ workingOrderId: id, status: "placed", total: "30.00", outstanding: "30.00" }),
+    ),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flush(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flush(el);
+  const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  counter.store.addProduct(product, "1");
+  await flush(el);
+  emit(counter, "place-order");
+  await flush(el, 6);
+  expect(counter.stage).toBe("collect");
+  expect(counter.counterWaiting).toEqual([]);
+
+  const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
+  await tender.updateComplete;
+  const pay = tender.shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]");
+  expect(pay).not.toBeNull();
+  pay!.click();
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  await flush(el);
+  const items = dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>(
+    '[name="way"][value="items"]',
+  )!;
+  expect(items.disabled).toBe(false);
+  answerWaiting();
+});

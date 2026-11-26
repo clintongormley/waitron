@@ -103,7 +103,7 @@ export function itemsBarredReason(open: {
   if (open.found) return "bill_pay.items_barred_found";
   if (open.counter && open.printed) return "bill_pay.items_barred_counter_receipt";
   if (open.status !== "placed" || open.printed) return null;
-  if (!open.counter) return "bill_pay.items_barred_counter";
+  if (!open.counter) return "bill_pay.items_barred_moved_to_table";
   return open.paysAfterSending ? null : "bill_pay.items_barred_counter_prepay";
 }
 

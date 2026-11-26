@@ -12166,7 +12166,7 @@ export class TillApp extends LitElement {
         .tipsEnabled=${this.tipsEnabled}
         .deferredOffered=${this.#deferredOfferFor(open)}
         .ownReceiptOffered=${this.#ownReceiptOffered(open)}
-        .itemsBarred=${itemsBarredReason({ found: open.found !== undefined, counter: open.surface === "counter", printed: open.printed === true, paysAfterSending: this.#counterOrderMode?.orderId === open.billId && this.#counterOrderMode.mode === "ticket_then_pay", status: open.balance?.status ?? (open.surface === "counter" ? (this.stage === "collect" ? "placed" : undefined) : this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.status) })}
+        .itemsBarred=${this.#itemsBarredFor(open)}
         .sentWithoutReceipt=${open.surface === "counter" && open.printed !== true}
         .credited=${billNoticeText(open.credited)}
         .cardReader=${this.#cardReader()}
@@ -12238,6 +12238,24 @@ export class TillApp extends LitElement {
         }
       </till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
+  }
+
+  /** Before its balance is read, a Counter bill in the collect stage is taken as placed. */
+  #itemsBarredFor(open: BillPaying): StringKey | null {
+    const counter = open.surface === "counter";
+    const mode = this.#counterOrderMode;
+    const placed = this.stage === "collect" ? "placed" : undefined;
+    return itemsBarredReason({
+      found: open.found !== undefined,
+      counter,
+      printed: open.printed === true,
+      paysAfterSending: mode?.orderId === open.billId && mode.mode === "ticket_then_pay",
+      status:
+        open.balance?.status ??
+        (counter
+          ? placed
+          : this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.status),
+    });
   }
 
   /** A part payment may have its own receipt only on a bill with no invoice yet, set for a
@@ -22392,7 +22410,12 @@ export class TillApp extends LitElement {
         if (!dishesStale && listed !== null && this.counterLines === listed)
           this.counterLines = { ...listed, revision: choiceRevision };
       }
-      if (dishesStale && (await this.#reloadCounterOrder(id, session)) !== "read") return;
+      if (
+        dishesStale &&
+        !(await this.#rereadCounterDishes(id, listed)) &&
+        (await this.#reloadCounterOrder(id, session)) !== "read"
+      )
+        return;
     } catch (error) {
       refused = true;
       if (!this.#hasLeftCounterOrder(id, session)) {
@@ -22428,6 +22451,22 @@ export class TillApp extends LitElement {
       billId: id,
       visit: session,
     });
+  }
+
+  /** Items' dishes alone, read again after the basket's own saves: true once at its revision. */
+  async #rereadCounterDishes(id: string, listed: StoredLines | null): Promise<boolean> {
+    if (listed?.orderId !== id) return false;
+    const visit = this.#store.loadGeneration;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const read = await this.#readStoredLines(id, limit.signal);
+      if (read?.revision !== this.#store.revision || visit !== this.#store.loadGeneration)
+        return false;
+      this.counterLines = read;
+      return true;
+    } finally {
+      limit.done();
+    }
   }
 
   /** After an answer to a payment or a refund, the order the dialog pays is read again: the table's
@@ -23222,14 +23261,14 @@ export class TillApp extends LitElement {
     if (result.payment.state === "pending")
       this.#startPendingReread(open.id, result.payment.id, taken, result.paidOn);
     await reread();
-    await this.#rereadWaitingFor(open);
+    this.#rereadWaitingFor(open);
   }
 
   /** Waiting lists Counter orders sent or paid: one it lists is read again after a payment. A
    * counter order's `visit` is the operator session. */
-  async #rereadWaitingFor(open: PayingOrder): Promise<void> {
+  #rereadWaitingFor(open: PayingOrder): void {
     if (open.surface === "counter" && this.counterWaiting.some((row) => row.id === open.billId))
-      await this.#refreshListsAfterWrite(open.visit, [["waiting", "refresh.waiting_after_sale"]]);
+      void this.#refreshListsAfterWrite(open.visit, [["waiting", "refresh.waiting_after_sale"]]);
   }
 
   /** The order read again after an answer, on `balance` when it is the bill's own; else on `answered`,
@@ -23292,7 +23331,7 @@ export class TillApp extends LitElement {
     // The paid order drops off the held list.
     if (open.surface === "counter")
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
-    await this.#rereadWaitingFor(open);
+    this.#rereadWaitingFor(open);
   }
 
   async #onBillPayRefused(
@@ -24101,6 +24140,15 @@ export class TillApp extends LitElement {
     return this.submitting || this.placing || this.parking || this.counterSetMenuSaving;
   }
 
+  /** A sent order with no receipt pays in the Pay window; Waiting's row, when it has one, says. */
+  #counterPaymentWindow(): boolean {
+    const id = this.#store.id;
+    const row = this.counterWaiting.find((waiting) => waiting.id === id);
+    if (row !== undefined) return row.invoiceNumber === undefined;
+    const stored = this.#counterStoredInvoice;
+    return this.stage === "collect" && !(stored?.orderId === id && stored.invoiced === true);
+  }
+
   /** A placed order is not open, so it offers no adjustment. */
   #basketStoredLines(): StoredLines | null {
     return this.stage === "order" ? this.counterLines : null;
@@ -24164,7 +24212,7 @@ export class TillApp extends LitElement {
         .invoiceLocale=${this.invoiceLocale}
         .orderFlow=${this.#basketFlow()}
         .stage=${this.stage}
-        .paymentWindow=${this.counterWaiting.some((row) => row.id === this.#store.id && row.invoiceNumber === undefined)}
+        .paymentWindow=${this.#counterPaymentWindow()}
         .busy=${this.submitting || this.placing || this.invoiceRecipientReading || this.counterSetMenuSaving}
         .sendingTender=${this.sendingTender}
         .payHeld=${this.basketHeld}

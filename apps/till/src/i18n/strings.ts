@@ -2031,7 +2031,7 @@ export const en = {
   "bill_pay.way_share": "Split equally",
   "bill_pay.items": "Items to pay for",
   "bill_pay.items_none": "Nothing to choose on this bill.",
-  "bill_pay.items_barred_counter":
+  "bill_pay.items_barred_moved_to_table":
     "A Counter order sent to the kitchen and then moved to a table is paid with An amount, Split equally or Whole bill.",
   "bill_pay.items_barred_counter_receipt":
     "A Counter order whose receipt is issued is paid with An amount, Split equally or Whole bill.",
@@ -4458,12 +4458,12 @@ export const es: Record<StringKey, string> = {
   "bill_pay.way_share": "Dividir a partes iguales",
   "bill_pay.items": "Artículos que se pagan",
   "bill_pay.items_none": "No hay nada que elegir en esta cuenta.",
-  "bill_pay.items_barred_counter":
+  "bill_pay.items_barred_moved_to_table":
     "Un pedido de mostrador enviado a cocina y pasado después a una mesa se paga con Una cantidad, Dividir a partes iguales o Toda la cuenta.",
   "bill_pay.items_barred_counter_receipt":
     "Un pedido de mostrador con su ticket emitido se paga con Una cantidad, Dividir a partes iguales o Toda la cuenta.",
   "bill_pay.items_barred_counter_prepay":
-    "En una zona que se paga antes de preparar, un pedido de mostrador se cobra con Una cantidad, Dividir a partes iguales o Toda la cuenta.",
+    "Un pedido de mostrador en una zona que se paga antes de preparar se paga con Una cantidad, Dividir a partes iguales o Toda la cuenta.",
   "bill_pay.items_barred_found":
     "Desde Buscar cuenta, una cuenta de mesa impresa se paga con Una cantidad, Dividir a partes iguales o Toda la cuenta.",
   "bill_pay.items_required": "Elige al menos un artículo",

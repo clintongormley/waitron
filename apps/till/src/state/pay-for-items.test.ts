@@ -95,9 +95,11 @@ describe("itemsBarredReason", () => {
   });
 
   it("bars Items on a table bill placed with no receipt, but not on a printed one or an open one", () => {
-    expect(itemsBarredReason({ ...at, status: "placed" })).toBe("bill_pay.items_barred_counter");
+    expect(itemsBarredReason({ ...at, status: "placed" })).toBe(
+      "bill_pay.items_barred_moved_to_table",
+    );
     expect(itemsBarredReason({ ...at, paysAfterSending: true, status: "placed" })).toBe(
-      "bill_pay.items_barred_counter",
+      "bill_pay.items_barred_moved_to_table",
     );
     expect(itemsBarredReason({ ...at, printed: true, status: "placed" })).toBeNull();
     expect(itemsBarredReason(at)).toBeNull();
