@@ -217,6 +217,7 @@ Hardware checks to complete with the owner. The owner walked most of the list on
 what is left is below. The 25 November session queued A1578 (slow Bluetooth prints) and A1581 (looks
 around A4 printing).
 
+- Measure available memory and Waitron's memory use during observed counter sales before choosing a database-cache allowance. [A1544 idle baseline](../developers/a1544-memory-measurement.md#installed-test-box-baseline-26-november-2026).
 - Verify live Google address completion during Cloud-connected Prepare setup on the owner's real box with Google lookup configured.
 - **A739, two looks at paper.** The payment slip's new lines (#4337) after the box's next update, and, for a new
   reader payment whose first receipt has no card details, a receipt copy after the background lookup

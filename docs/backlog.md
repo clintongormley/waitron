@@ -1539,11 +1539,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   prove that aliases or indirect helper calls are sequential. Do not build it yet (watcher).
   See `docs/developers/conventions-data.md`, "Multi-table writes share ONE transaction".
 
-- **A1544. Measure the real box's memory during counter sales and estimate the database-cache allowance.**
-  Three baseline samples on the test box showed 5.59–5.61 GiB of host memory available.
-  Repeat the measurement during confirmed idle and observed counter sales before choosing a cache
-  allowance. [Test-box baseline and bench results](developers/a1544-memory-measurement.md#installed-test-box-baseline-26-november-2026).
-
 - **SP-4 — the module UI surface on the TILL** (card-registry inversion, self-sourcing cards); the
   dashboard half is done. Migrate the remaining core dashboard screens onto the module UI seat.
 

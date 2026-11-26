@@ -6,7 +6,7 @@ Measured on 17 November 2026. The uncapped, 7 GiB and 8 GiB conditions all compl
 At 7 GiB, the counter-sale median rose from 12.323 to 13.752 ms (11.6%); partial and final
 payments rose by 2.6% and 9.8%. The 8 GiB run varied more and overlapped other host workloads.
 You cannot use these runs to isolate a memory-only effect or predict an appliance's response time.
-They leave A1531's archiving recommendation unchanged. Actual appliance memory use remains open.
+They leave A1531's archiving recommendation unchanged.
 
 ## Dataset and method
 
@@ -169,8 +169,8 @@ A1531's recommendation; this measurement makes none.
 
 Three read-only samples from 12:42:12 to 12:42:23 local time on the shared test box
 (Linux 6.12.115+deb13.1-amd64) found 5.59–5.61 GiB available out of 7.66 GiB total.
-There was no configured swap. The counter-sale workload was unobserved, so confirmed idle
-and counter-sale readings are still open.
+The box had zero configured swap. The samples came from a quiet window without an
+independent record of sales activity.
 
 `docker top <container> -eo pid,rss,comm` showed about 345 MiB of resident process
 memory in the Waitron app, 79 MiB in the print agent, 18 MiB in Mailpit and 3 MiB in
@@ -179,8 +179,8 @@ in `memory.current`, including about 43 MiB of file memory in `memory.stat`. Bot
 `memory.high` and `memory.max` read `max` for the app and its parent `system.slice`.
 
 The kernel describes `MemAvailable` in `/proc/meminfo` as an estimate of memory
-available “for starting new applications, without swapping”. The 5.59–5.61 GiB
-range describes headroom shared by the whole box. The app's file-memory reading
-covers the whole container. The amount available for database pages during counter
-sales and SQLite's own cache allocation remain unmeasured.
+available “for starting new applications, without swapping”. Use about 5.6 GiB as the
+idle headroom for database file pages and all other memory growth combined. SQLite's
+own page cache is part of the app's memory. Set a cache allowance only after measuring
+how much of that headroom the box still has during counter sales.
 [Linux kernel documentation for /proc](https://docs.kernel.org/filesystems/proc.html).
