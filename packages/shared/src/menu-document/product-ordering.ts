@@ -1,7 +1,6 @@
 /**
- * Who may order a product on its own (`products.ordering`). `staff_only` is for guest ordering,
- * which does not exist yet, so today it behaves exactly as `public`. `not_sold_separately` refuses a
- * standalone line; being offered as an extra does not read the setting.
+ * Who may order a product on its own (`products.ordering`). `not_sold_separately` refuses a
+ * standalone line. An extras list can offer the product under every setting.
  *
  * A browser-safe leaf: the dashboard and the till import it.
  */

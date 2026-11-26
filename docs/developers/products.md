@@ -21,7 +21,7 @@ You create a product independently of menus. `products` has no menu ownership; `
 | Name | Stored as | Who reads it |
 | --- | --- | --- |
 | **Name** | `products.name` — plain text, `not null` | Staff. The dashboard, the till's product buttons and basket, a table tab's line list, the sales reports, the image library's "what uses this photo" list |
-| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt and invoice. The till's menu search also matches it, but shows the staff name |
+| **Customer-facing name** | `products.customer_name` — a language map (JSON), nullable | Diners. The printed receipt and invoice, and the published edition in Customer menu. The till's menu search also matches it, but shows the staff name |
 | **Prep station name** | `products.kitchen_name` — plain text, nullable | Cooks. The station ticket and the prep station display |
 
 A variant is itself a `products` row whose `parent_id` names its parent, so it carries the same
@@ -711,9 +711,9 @@ menu, the search results also list each other served menu's matching products in
 own, each at that menu's price; [design-system.md](design-system.md), _The till's menu search_. The exception is a product whose
 standalone ordering the menu published as `not_sold_separately` (`LiveOffer.ordering`): it has no
 button anywhere, and a section left with nothing else goes too (`indexMenu`), though a dish's
-extras list still offers it. Staff only gets a button like Anyone, because there is no guest
-ordering yet. A fresh line in a table draft, or a counter basket line not yet saved, that holds a dish
-now sold only as an extra is marked "Only sold as an extra" (`lineBlock`,
+extras list still offers it. The till also gives Staff only dishes a button. Customer menu lists
+the dishes available to anyone. A fresh line in a table draft, or a counter basket line not yet
+saved, that holds a dish now sold only as an extra is marked "Only sold as an extra" (`lineBlock`,
 `apps/till/src/state/menu-refresh.ts`):
 a draft leaves it out of what it sends and offers it for removal, and the counter holds Pay until it
 is removed.

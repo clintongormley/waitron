@@ -42,7 +42,7 @@ unavailable|Menu unavailable|Carta no disponible|Carta no disponible|Carta non d
 keyLanguage|Key in English|Leyenda en español|Llegenda en català|Lenda en galego
 key|Allergen key|Leyenda de alérgenos|Llegenda d’al·lèrgens|Lenda de alérxenos
 diet|Dietary declarations|Declaraciones dietéticas|Declaracions dietètiques|Declaracións dietéticas
-note|Icons show declared allergens. No icon does not mean allergen-free. Tell staff about allergies.|Los iconos muestran los alérgenos declarados. La ausencia de iconos no significa que no haya alérgenos. Informa al personal de tus alergias.|Les icones mostren els al·lèrgens declarats. L’absència d’icones no vol dir que no hi hagi al·lèrgens. Informa el personal de les teves al·lèrgies.|As iconas mostran os alérxenos declarados. A ausencia de iconas non significa que non haxa alérxenos. Informa o persoal das túas alerxias.
+note|Icons show declared allergens. No icon does not mean allergen-free. Ask staff about allergens.|Los iconos muestran los alérgenos declarados. La ausencia de iconos no significa que no haya alérgenos. Pregunta al personal por los alérgenos.|Les icones mostren els al·lèrgens declarats. L’absència d’icones no vol dir que no hi hagi al·lèrgens. Pregunta al personal pels al·lèrgens.|As iconas mostran os alérxenos declarados. A ausencia de iconas non significa que non haxa alérxenos. Pregunta ao persoal polos alérxenos.
 `
   .trim()
   .split("\n")

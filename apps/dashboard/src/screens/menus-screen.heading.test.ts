@@ -671,7 +671,7 @@ describe("the menu editor's heading", () => {
     ["es-ES", "normal"],
     ["es-ES", "0.15em"],
   ] as const)(
-    "fits all three menu tabs at 390 px in %s with %s letter spacing",
+    "keeps all four menu tabs reachable at 390 px in %s with %s letter spacing",
     async (locale, letterSpacing) => {
       const width = window.innerWidth;
       const height = window.innerHeight;
@@ -683,13 +683,25 @@ describe("the menu editor's heading", () => {
       const strip = tabs.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
       const buttons = [...strip.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
       for (const button of buttons) button.style.letterSpacing = letterSpacing;
-      expect(buttons).toHaveLength(3);
-      expect(strip.scrollWidth).toBeLessThanOrEqual(strip.clientWidth);
+      expect(buttons).toHaveLength(4);
+      if (letterSpacing === "0.15em") {
+        expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+      }
       expect(new Set(buttons.map((button) => button.getBoundingClientRect().top)).size).toBe(1);
       for (const button of buttons) {
         expect(button.clientWidth).toBeGreaterThanOrEqual(44);
         expect(button.scrollWidth, button.innerText).toBeLessThanOrEqual(button.clientWidth);
       }
+      buttons[0]!.focus();
+      await userEvent.keyboard("{End}");
+      const customerTab = page.getByRole("tab", { name: t("menus.tab_customer_menu") });
+      expect(tabs.shadowRoot!.activeElement).toBe(customerTab.element());
+      await vi.waitFor(() => {
+        expect(customerTab.element().getBoundingClientRect().right).toBeLessThanOrEqual(
+          strip.getBoundingClientRect().right + 1,
+        );
+      });
+      if (letterSpacing === "0.15em") expect(strip.scrollLeft).toBeGreaterThan(0);
     },
   );
 
