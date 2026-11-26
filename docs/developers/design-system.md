@@ -6153,7 +6153,9 @@ and hands it over with its own `DeleteDialogCopy`. The dialog first names the re
 from the impact's `target.name`, so it names nothing while `impact` is null. It then lists what
 refuses the delete, then the work it ends, then the settings it removes, one line each written by
 the copy's `refusal` or `item` (names are drawn as text), leaves out an empty group, and ends with
-the copy's `irreversible` sentence. Its Delete is `secondary` and disabled while `impact` is null, while
+the copy's `irreversible` sentence. A screen can supply a `DeleteDialogSummaryCopy` with the name
+in the heading from the start. The dialog shows its summary sentence and work lines when supplied,
+along with any refusals and guidance. Its Delete is `secondary` and disabled while `impact` is null, while
 `loading`, while `readError` is set or while the impact has any refusal; otherwise it is `danger`
 and enabled. While its own delete is sent (`submitting`) it stays `danger`, disabled and busy, and
 Cancel and Escape do nothing. The screen owns the requests: it sets `submitting` inside its

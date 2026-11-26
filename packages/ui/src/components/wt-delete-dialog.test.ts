@@ -152,6 +152,27 @@ test("lists refusals, then work that ends, then settings removed, then the irrev
   expect(modalOf(el).size).toBe("compact");
 });
 
+test("a compact delete confirmation shows its summary and work alongside any refusals", async () => {
+  const el = await openDialog({ impact: refusedImpact() });
+  const compact = {
+    ...copy,
+    heading: "Delete Printer P?",
+    summary: () => ({ sentence: "It will be removed from Bar profile.", ends: ["3 print jobs"] }),
+  };
+  el.copy = compact;
+  await settle(el);
+
+  const root = el.shadowRoot!;
+  expect(root.textContent).toContain("It will be removed from Bar profile.");
+  expect([...root.querySelectorAll("[data-group] li")].map((line) => line.textContent)).toEqual([
+    "reader.payment_in_progress: Payment 1",
+    "3 print jobs",
+  ]);
+  expect(root.querySelector("[data-target], [data-irreversible]")).toBeNull();
+  expect(inner(el, "cancel")).toBe(deepActiveElement());
+  expect(inner(el, "confirm").disabled).toBe(true);
+});
+
 test("shows guidance before either choice and retains the safe initial focus", async () => {
   const el = await openDialog({ loading: true });
   el.copy = {

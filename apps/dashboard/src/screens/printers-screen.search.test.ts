@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { navigationGuardFor, type WtInput } from "@waitron/ui";
-import { setLocale, t } from "../i18n/t.js";
+import { fill, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import {
@@ -299,6 +299,13 @@ it("the drawer guidance opens an operable Edit from Delete in printer details", 
   )!;
   const link = () =>
     deletion.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=delete-guidance] a");
+  await expect
+    .element(
+      page.getByRole("dialog", {
+        name: fill("printers.delete_named", { name: "Kitchen" }),
+      }),
+    )
+    .toBeVisible();
   await expect.poll(link).toBeTruthy();
   await userEvent.click(link()!);
   await expect.poll(() => location.pathname).toBe(path("p1"));

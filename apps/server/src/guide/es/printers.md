@@ -25,8 +25,8 @@ IP y elige **Conectar**. Cuando Waitron la encuentre, elige **Añadir** si apare
 **Cerrar** para salir de la búsqueda.
 
 Para quitar una impresora de recibos o de estación, elige **Eliminar** en su menú o en sus detalles.
-La confirmación indica las asignaciones que se eliminan y el trabajo que finaliza. Para volver a
-usarla, elige **Añadir impresora** y después **Añadir** junto a ella. Si se reconoce, conserva su
+La confirmación indica dónde se quitará la impresora y qué trabajos de impresión pendientes se
+interrumpirán. Para volver a usarla, elige **Añadir impresora** y después **Añadir** junto a ella. Si se reconoce, conserva su
 nombre y calibración, así que no necesitas repetirlos. Vuelve a asignar sus dispositivos y
 estaciones de preparación.
 
@@ -66,8 +66,8 @@ En el menú de la fila de una impresora de recibos, **Imprimir página de prueba
 de muestra con la cabecera del local pero con un nombre de empresa y un NIF inventados, en el
 idioma del ticket del local, marcado como prueba y no como factura.
 En una impresora A4, usa **Editar** para cambiarle el nombre o **Imprimir página de prueba** para
-comprobarla. Para quitarla, elige **Eliminar** en su menú. La
-confirmación indica las asignaciones que se eliminan y el trabajo que finaliza. Para volver a
+comprobarla. Para quitarla, elige **Eliminar** en su menú. Comprueba dónde se quitará la
+impresora y si se interrumpirá algún trabajo pendiente de impresión de facturas A4. Para volver a
 usarla, elige **Añadir impresora**, después **Añadir** junto a ella y otra vez **Añadir**.
 Conserva su nombre y ajustes guardados. Vuelve a asignar sus dispositivos y perfiles de dispositivo.
 

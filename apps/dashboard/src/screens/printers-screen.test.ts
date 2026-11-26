@@ -11351,6 +11351,7 @@ describe("Deleting a printer", () => {
     expect(api.getPrinterDeleteImpact).toHaveBeenCalledWith("p1");
     expect(dialogOf(el)!.open).toBe(true);
     expect(dialogOf(el)!.loading).toBe(true);
+    expect(dialogOf(el)!.shadowRoot!.querySelector("wt-modal")!.heading).toBe("¿Eliminar Kitchen?");
     expect(confirmOf(el).getAttribute("variant")).toBe("secondary");
     expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
 
@@ -11361,20 +11362,15 @@ describe("Deleting a printer", () => {
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("names the drawer defaults, the inheriting device and every count the read answered", async () => {
+  it("summarises printer assignments and ends only the pending jobs", async () => {
     const { el } = await mounted();
     await openDelete(el, "p1");
-    expect(linesOf(el)).toEqual([
-      "3 trabajos de impresión pendientes",
-      "1 recibo de factura sin imprimir",
-      "Handheld Ana deja de llevarla",
-      "Cajón de 1 dispositivo: Handheld Ana",
-      "Cajón en 1 perfil: Waitstaff",
-      "Cajón predeterminado de 1 perfil: Waitstaff",
-      "Cajón predeterminado que usa 1 dispositivo: Bar till",
-      "Imprime para 1 estación: Grill",
-    ]);
-    expect(dialogOf(el)!.shadowRoot!.textContent).toContain(t("printers.delete_retained"));
+    const root = dialogOf(el)!.shadowRoot!;
+    expect(linesOf(el)).toEqual(["3 trabajos de impresión pendientes"]);
+    expect(root.textContent).toContain(
+      "Se quitará de Handheld Ana, de Bar till, del perfil Waitstaff y de la estación Grill.",
+    );
+    expect(root.querySelector("[data-target], [data-irreversible]")).toBeNull();
   });
 
   it.each([{ devices: [{ id: "d-bar", name: "Bar till" }] }, { devices: [] }])(
@@ -11429,8 +11425,9 @@ describe("Deleting a printer", () => {
       ),
     });
     await openDelete(el, "p1");
-    expect(linesOf(el)).toEqual(["Imprime para 1 estación: <b>Grill</b>"]);
-    expect(dialogOf(el)!.shadowRoot!.querySelector("li b")).toBeNull();
+    const root = dialogOf(el)!.shadowRoot!;
+    expect(root.textContent).toContain("Se quitará de la estación <b>Grill</b>.");
+    expect(root.querySelector("b")).toBeNull();
   });
 
   it("a double press sends one delete", async () => {
@@ -12050,11 +12047,11 @@ describe("Deleting a printer", () => {
     expect(el.shadowRoot!.querySelector("dashboard-equipment-qr-label")).toBeNull();
   });
 
-  it("a live read answering not-found while the delete is out leaves the answer to the delete", async () => {
+  it("does not re-read receipt printer impact while Delete is answering", async () => {
     const liveData = new LiveData();
     const sent = deferred<DeleteImpact>();
     const getPrinterDeleteImpact = vi.fn().mockResolvedValue(kitchenImpact);
-    const { el } = await mounted({
+    const { api, el } = await mounted({
       liveData,
       getPrinterDeleteImpact,
       deletePrinter: vi.fn(() => sent.promise),
@@ -12062,18 +12059,23 @@ describe("Deleting a printer", () => {
     await openDelete(el, "p1");
     confirmOf(el).click();
     await flush(el);
+    const listReads = vi.mocked(api.listPrinters).mock.calls.length;
     getPrinterDeleteImpact.mockRejectedValue(
       Object.assign(new Error("x"), { code: "printer.not_found" }),
     );
-    liveData.invalidate([{ type: "print_jobs", id: "j9" }]);
-    await vi.waitFor(() => expect(getPrinterDeleteImpact).toHaveBeenCalledTimes(2));
+    liveData.invalidate([{ type: "printers", id: "p1" }]);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(listReads + 1));
     await flush(el);
     expect(dialogOf(el)!.open).toBe(true);
     expect(dialogOf(el)!.submitting).toBe(true);
+    expect(getPrinterDeleteImpact).toHaveBeenCalledExactlyOnceWith("p1");
 
+    vi.mocked(api.listPrinters).mockResolvedValue(printers.slice(1));
     sent.resolve(kitchenImpact);
+    await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(listReads + 2));
     await flush(el);
     expect(dialogOf(el)?.open ?? false).toBe(false);
+    expect(q(el, "[data-test=printer-row-p1]")).toBeNull();
     expect(refusalShown(el)).not.toContain(codeMessage("printer.not_found"));
   });
 
@@ -13879,8 +13881,9 @@ describe("one table for every printer", () => {
     expect(dialog.shadowRoot!.textContent).toContain(
       t("printers.delete_invoice_a4").replace("{count}", "2"),
     );
-    expect(dialog.shadowRoot!.textContent).toContain("Waitstaff");
-    expect(dialog.shadowRoot!.textContent).toContain(t("printers.page_printer_readd"));
+    expect(dialog.shadowRoot!.querySelector("wt-modal")!.heading).toBe("¿Eliminar Back office?");
+    expect(dialog.shadowRoot!.textContent).toContain("Se quitará del perfil Waitstaff.");
+    expect(dialog.shadowRoot!.querySelector("[data-irreversible]")).toBeNull();
     const confirm = () =>
       dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-confirm]")!;
     confirm().click();
@@ -13891,6 +13894,33 @@ describe("one table for every printer", () => {
     confirm().click();
     await flush(el);
     expect(deletePagePrinter).toHaveBeenCalledTimes(2);
+    expect(dialog.open).toBe(false);
+    expect(q(el, "[data-test=printer-row-pp2]")).toBeNull();
+  });
+
+  it("does not re-read A4 printer impact while Delete is answering", async () => {
+    const liveData = new LiveData();
+    let finish!: (impact: DeleteImpact) => void;
+    const sent = new Promise<DeleteImpact>((resolve) => {
+      finish = resolve;
+    });
+    const { el, api } = await mountTable({ liveData, deletePagePrinter: vi.fn(() => sent) });
+    q(el, "[data-test=delete-page-printer-pp2]")!.click();
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("wt-delete-dialog")!;
+    q(el, "[data-test=delete-confirm]")!.click();
+    await flush(el);
+    const listReads = vi.mocked(api.listPagePrinters).mock.calls.length;
+    vi.mocked(api.getPagePrinterDeleteImpact).mockRejectedValue({ code: "page_printer.not_found" });
+    liveData.invalidate([{ type: "printers", id: "pp2" }]);
+    await vi.waitFor(() => expect(api.listPagePrinters).toHaveBeenCalledTimes(listReads + 1));
+    await flush(el);
+    expect(api.getPagePrinterDeleteImpact).toHaveBeenCalledExactlyOnceWith("pp2");
+
+    vi.mocked(api.listPagePrinters).mockResolvedValue(PAGE_ROWS.filter((row) => row.id !== "pp2"));
+    finish(dialog.impact!);
+    await vi.waitFor(() => expect(api.listPagePrinters).toHaveBeenCalledTimes(listReads + 2));
+    await flush(el);
     expect(dialog.open).toBe(false);
     expect(q(el, "[data-test=printer-row-pp2]")).toBeNull();
   });

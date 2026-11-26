@@ -1216,8 +1216,15 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     remove.click();
     await flush(el);
     expect(q(el, "[data-test=delete-printer-dialog]")!.shadowRoot!.textContent).toContain(
-      t("printers.delete_bluetooth"),
+      t("printers.delete_unpair_only"),
     );
+    await expect
+      .element(
+        page.getByRole("dialog", {
+          name: fill("printers.delete_named", { name: bluetoothPrinter.name }),
+        }),
+      )
+      .toBeVisible();
     await expectNoA11yViolations(host);
     listPrinters.mockResolvedValue(printers);
     q(el, "[data-test=delete-printer-dialog]")!
