@@ -1035,7 +1035,7 @@ jobs:
             (while sleep 10 >/dev/null 2>&1; do sample; done) &
             sampler=$!
             set +m
-            trap 'kill -- "-$sampler" 2>/dev/null || true; wait "$sampler" 2>/dev/null || true; sample' EXIT
+            trap 'kill -- "-$sampler" 2>/dev/null || true; wait "$sampler" 2>/dev/null || true; kill -- "-$sampler" 2>/dev/null || true; sample' EXIT
             compiler=(node scripts/run-with-deadline.mjs "$remaining" -- "${compiler[@]}")
           fi
           started=$SECONDS

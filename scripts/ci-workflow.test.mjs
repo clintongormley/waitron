@@ -7080,6 +7080,7 @@ describe("scoped selection commands", () => {
         hosted
           ? `export "$(GITHUB_ENV=/dev/stdout; ${jobSteps[0].command})"`
           : "unset TYPECHECK_DEADLINE_AT",
+        "date() { echo 1025; }",
         steps[0].command,
       ].join("\n"),
     });
@@ -7087,7 +7088,7 @@ describe("scoped selection commands", () => {
     expect(result.status, result.stderr).toBe(42);
     expect(result.stdout.match(/^pnpm <.*>$/gm)).toEqual(["pnpm <typecheck>"]);
     expect(result.stdout.match(/^wrapper .*$/gm) ?? []).toEqual(
-      hosted ? ["wrapper <scripts/run-with-deadline.mjs> <280> <-->"] : [],
+      hosted ? ["wrapper <scripts/run-with-deadline.mjs> <255> <-->"] : [],
     );
   });
 
