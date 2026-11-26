@@ -53,9 +53,11 @@ test("lays out a slotted control as a plain row and keeps its native behavior", 
 
 test("keeps the help badge beside the new action", async () => {
   setHelpMode(true);
-  await mount(
+  const row = await mount(
     '<wt-menu-row action label="Guests" help="Change the guest count." help-label="Help: Guests"></wt-menu-row>',
   );
+  const picked = vi.fn();
+  row.addEventListener("click", picked);
   const action = page.getByRole("button", { name: "Guests", exact: true });
   const help = page.getByRole("button", { name: "Help: Guests" });
   await expect.element(action).toBeVisible();
@@ -63,8 +65,14 @@ test("keeps the help badge beside the new action", async () => {
     action.element().getBoundingClientRect().right,
   );
   await help.click();
-  await expect.element(page.getByRole("tooltip")).toBeVisible();
+  const tooltip = page.getByRole("tooltip");
+  await expect.element(tooltip).toBeVisible();
   await expect.element(help).toHaveAttribute("aria-expanded", "true");
+  expect(picked).not.toHaveBeenCalled();
+  await tooltip.click();
+  expect(picked).not.toHaveBeenCalled();
+  await action.click();
+  expect(picked).toHaveBeenCalledOnce();
 });
 
 const MENU =

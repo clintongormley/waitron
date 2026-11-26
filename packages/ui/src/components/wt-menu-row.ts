@@ -114,6 +114,10 @@ export class WtMenuRow extends LitElement {
   @property({ type: Boolean }) disabled = false;
   @property({ type: Boolean, reflect: true }) divider = false;
 
+  private stopHelpClick(event: MouseEvent): void {
+    event.stopPropagation();
+  }
+
   private renderRow() {
     const label = html`<span class="label">${this.label}</span>`;
     const trailing =
@@ -142,6 +146,7 @@ export class WtMenuRow extends LitElement {
             aria-label=${this.helpLabel}
             guide-href=${this.guideHref}
             guide-label=${this.guideLabel}
+            @click=${this.action ? this.stopHelpClick : nothing}
             >${this.help}</wt-help-tooltip
           >`
         : nothing

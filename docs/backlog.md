@@ -573,7 +573,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [shared panels and payment controls](developers/design-system.md#full-screen-panels-and-payment-controls).
   The wide floor bar, kitchen destinations, All zones, table jobs, order, menu and payment
   slices remain.
-  The table and ☰ menus use the shared sheet and menu rows in the UI workbench.
+  The UI workbench shows the shared sheet and menu rows. The table and ☰ menus still need to adopt them.
   [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
 
