@@ -3574,7 +3574,8 @@ hit the first deadline and then failed on a 404 for the same Speex package. The
 [fallback run](https://github.com/clintongormley/waitron/actions/runs/45797267603/job/139831030077)
 repeated the deadline and 404, fetched that package from Canonical, and finished its retry in
 44 seconds. Eight theme cases per app and 43 dashboard colour-field cases passed in WebKit.
-The workflow guard checks the install deadline and leaves mirror fallback to the hosted probe.
+The workflow guard looks for a root-owned KILL timeout of any length.
+The hosted probe exercises mirror fallback.
 
 Image smoke restores the newest `image-apt-<Ubuntu release>-<architecture>-<UTC date>`
 package set before contacting Ubuntu. It installs BlueZ, python3-dbus and python3-gi
