@@ -723,7 +723,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     await expectRefusedUnwritten(id, cancelWith(override())(id), refusal);
   });
 
-  it("never checks an override sent by someone who holds sale.void, and cancels on their own authority", async () => {
+  it("ignores an override sent by someone who holds sale.void, and cancels on their own authority", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
 

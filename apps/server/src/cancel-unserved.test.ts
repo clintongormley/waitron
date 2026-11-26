@@ -591,7 +591,7 @@ describe("Nothing was served files the corrective, as before, on any other print
     expect(await voidsOf(saleId)).toEqual([]);
   });
 
-  it("refuses one whose payment was given back in full when AEAT refused it, writing no corrective", async () => {
+  it("one whose payment was given back in full and whose receipt AEAT refused, which is refused, writing no corrective", async () => {
     const party = await seatedWith(venue, "Tarta");
     const paymentId = await fixture.payInCash(venue, party.tabId, "5.00");
     const givenBack = await send(

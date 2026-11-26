@@ -777,7 +777,8 @@ of the departed bill requires correction authority and writes its credit note
 (`cancel-invoiced-order.test.ts:838`). The account below records the earlier counter entry.
 _2026-11-26 (CANCEL-UNSERVED PR 3): when the departed bill never held a payment and nothing on it
 was served, the cancel files a cancellation of its receipt under `sale.void` instead; when anything
-was served it is refused (`bill.served_dishes`)._
+was served it is refused (`bill.served_dishes`), and when AEAT refused its receipt and nothing replaced
+it, it is refused (`fiscal.original_refused`)._
 
 - **C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b,
   decided without the asesor) — landed as #1030.** `POST /api/working-orders/:id/cancel` (`cancelPlacedOrder`,
@@ -1262,7 +1263,7 @@ A dish held in an unsent group is stopped without being fired; D4 still applies 
 _2026-11-26: **Reopen bill**, **Pay for items** on a printed bill and a cancel that files a corrective
 refuse a receipt whose current version AEAT refused and that nothing replaced
 (`fiscal.original_refused`, by the filing queue's own test through the seat's `refuseCreditOf`):
-the corrective would correct a receipt AEAT never held, after which Fiscal filing's replacement is
+the corrective would be filed against a receipt AEAT refused, after which Fiscal filing's replacement is
 refused (`sale.replacement_not_first`) (watcher, lane L `questions.md`, 16:37)._
 
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)

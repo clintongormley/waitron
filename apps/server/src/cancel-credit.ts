@@ -82,7 +82,7 @@ export async function refuseServedDishes(tx: Transaction, workingOrderId: string
 }
 
 /** Refuses, as the regime does (`refuseCreditOf`), a credit of the invoice `invoiceId`, filed
- * against its replacement when it has one, that would correct a record the authority never held. */
+ * against its replacement when it has one, whose current version the authority refused. */
 export async function refuseCreditOfRefused(
   tx: Transaction,
   backend: FiscalBackend,

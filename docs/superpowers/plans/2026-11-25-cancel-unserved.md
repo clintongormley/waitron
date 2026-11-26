@@ -168,6 +168,8 @@ went red with Task 6 in place (run). Void mechanics stay in `record-void.test.ts
 | Payment held | This bill holds a payment, so its receipt cannot be cancelled. | Esta cuenta tiene un pago, así que no se puede anular su ticket. |
 | Approver can't | The person who approved this cannot do it. Choose someone who can. | La persona que lo ha aprobado no puede hacerlo. Elige a alguien que pueda. |
 | Not answered | AEAT has not answered for this receipt yet. Try again later. | La AEAT aún no ha respondido sobre este ticket. Inténtalo más tarde. |
+| Refused | AEAT refused this receipt, so it cannot be cancelled. Take payment. | La AEAT rechazó este ticket, así que no se puede anular. Cobra la cuenta. |
+| Reopen, refused | AEAT refused this receipt, so the bill cannot be reopened. Take payment. | La AEAT rechazó este ticket, así que la cuenta no se puede reabrir. Cóbrala. |
 | Done (no number) | Receipt {number} cancelled. (The receipt is cancelled.) | Ticket {number} anulado. (El ticket queda anulado.) |
 
 **Task 9, words:** both `table-service.md` guides; the dashboard help of both permissions; `conventions-ui.md:630`,
