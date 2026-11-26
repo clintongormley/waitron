@@ -22,10 +22,6 @@ vuelve a comprobar la conexión. En la pantalla del PIN, desplaza el aviso que e
 teclado si hace falta y pulsa **Comprobar de nuevo** para comprobarla al momento.
 En **Comprueba tus horas**, pulsa **Volver a consultar** si no se pudieron cargar.
 
-Si la caja dice **El servidor está comprobando su copia de seguridad antes de aceptar
-ventas**, déjala abierta. La caja continúa cuando el servidor está listo. En la pantalla de
-inicio de sesión, pulsa **Comprobar de nuevo** para ver si el servidor ya está listo.
-
 ## Lee la línea de avisos {#notice-line}
 
 La línea muestra primero el aviso más grave, con su texto principal y, tras " · ", su indicación.
@@ -158,15 +154,16 @@ cobrar. Usa la clave maestra actual y sigue
 Puedes cerrar la ventana de pago sin iniciar una recuperación. El cambio de identidad conserva
 los resultados de envío y las incidencias existentes.
 
-## Cuando este servidor ya no es el servidor principal {#not-main-server}
+## Cuando la caja espera al servidor principal {#not-main-server}
 
 Cuando la caja diga **Este servidor ya no es el servidor principal**, espera a que pase al
 servidor principal y vuelve a intentarlo. Si ya has cobrado con tarjeta en el datáfono, devuelve
 antes el importe ahí.
 
-Cuando la caja diga **Ningún servidor acepta ventas ahora mismo**, déjala abierta: continúa en
-cuanto un servidor vuelva a aceptar ventas. En la pantalla de inicio de sesión, **Comprobar de
-nuevo** lo comprueba al momento.
+Si la caja dice **El servidor está comprobando su copia de seguridad antes de aceptar ventas**
+o **Ningún servidor acepta ventas ahora mismo**, déjala abierta. La caja continúa cuando el servidor
+está listo. En la pantalla de inicio de sesión, pulsa **Comprobar de nuevo** para ver si el servidor
+ya está listo.
 
 ## Guarda un informe sobre un problema {#problem-report}
 

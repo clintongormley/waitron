@@ -18149,6 +18149,22 @@ describe("till-app follows a server move", () => {
     expect(status!.textContent).not.toContain("cloud.deli.test");
   });
 
+  it("shows the backup wait reported by the box on the sign-in screen", async () => {
+    const { status } = await lockAfterRound(
+      answeringFetch({
+        [BOX]: {
+          acceptingSales: false,
+          term: 2,
+          nodeId: "b",
+          standing: "serving-primary",
+          waitingFor: "bucket",
+        },
+      }),
+      [],
+    );
+    expect(status?.textContent).toContain(t("server.checking_backup"));
+  });
+
   it("shows WiFi guidance beside Check again when the sign-in probe gets no reply", async () => {
     const { status } = await lockAfterRound(probeFetch(), []);
     expect(status!.textContent).toContain(t("server.none_answering"));

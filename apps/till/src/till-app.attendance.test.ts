@@ -57,11 +57,19 @@ const empty = (): AttendanceInbox => ({ ...inbox(), prompts: [], items: [] });
 describe("till attendance sign-in flow", () => {
   it("keeps Check your times open through an outage and its refused Retry", async () => {
     const origin = "https://box.example.test";
-    let online = false;
+    let reply: "offline" | "backup" | "trading" = "offline";
     const router = new ServerRouter({
       origin,
-      fetchImpl: async () => {
-        if (!online) throw new TypeError("Failed to fetch");
+      fetchImpl: async (input) => {
+        if (reply === "backup" && new URL(String(input)).origin === origin)
+          return Response.json({
+            acceptingSales: false,
+            term: 1,
+            nodeId: "node",
+            standing: "serving-primary",
+            waitingFor: "bucket",
+          });
+        if (reply !== "trading") throw new TypeError("Failed to fetch");
         return Response.json({ acceptingSales: true, term: 1 });
       },
     });
@@ -99,7 +107,13 @@ describe("till attendance sign-in flow", () => {
     expect(retry()).not.toBeNull();
     expect(banner()).toBeNull();
 
-    online = true;
+    reply = "backup";
+    await router.probeNow();
+    await f.el.updateComplete;
+    expect(open.error).toBe(t("server.checking_backup"));
+    expect(retry()).not.toBeNull();
+
+    reply = "trading";
     await router.probeNow();
     await open.updateComplete;
     expect(open.shadowRoot!.textContent).toContain("Your hours could not be read. Retry read.");
@@ -110,12 +124,12 @@ describe("till attendance sign-in flow", () => {
     expect(open.shadowRoot!.textContent).not.toContain(words);
     expect(questions(f.el)).toBe(open);
 
-    online = false;
+    reply = "offline";
     await router.probeNow();
     f.api.sendAttendanceCommand.mockRejectedValueOnce(offline);
     await questionButton(f.el, "[data-confirm]");
     await vi.waitFor(() => expect(open.error).toBe(words));
-    online = true;
+    reply = "trading";
     await router.probeNow();
     await f.el.updateComplete;
     expect(open.error).toBe("Your response could not be recorded. Try again.");

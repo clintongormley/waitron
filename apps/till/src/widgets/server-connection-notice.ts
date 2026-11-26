@@ -44,6 +44,6 @@ export function serverConnectionNotice(
 
 export function attendanceConnectionRefusal(router: ServerRouter | undefined, write: boolean) {
   if (router?.noBoxAnswering) return t("server.none_answering");
-  if (router?.waiting !== false) return t("server.waiting_sales");
+  if (router?.waiting !== false) return serverWaitingText(router?.waitingFor);
   return codeMessage(write ? "attendance.write_failed" : "attendance.read_failed");
 }

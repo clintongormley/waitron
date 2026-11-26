@@ -94,7 +94,11 @@ it("serves a non-trading bucket waiting page after an unexpected stop", async ()
     },
     async (base) => {
       const probe = await fetch(`${base}/api/node`);
-      expect(await probe.json()).toMatchObject({ acceptingSales: false, waitingFor: "bucket" });
+      expect(await probe.json()).toMatchObject({
+        standing: "serving-primary",
+        acceptingSales: false,
+        waitingFor: "bucket",
+      });
       const page = await fetch(base, { headers: { "Accept-Language": "en" } });
       const html = await page.text();
       expect(html).toContain("Waiting for the backup bucket");

@@ -20,10 +20,6 @@ venue's WiFi. Keep the screen open while the till checks again. On the PIN scree
 notice above the keypad if needed, then press **Check again** to check now. In **Check your times**,
 press **Retry read** if the read failed.
 
-If the till says **The box is checking its backup before taking sales**, leave the till open.
-It carries on when the box is ready. On the sign-in screen, press **Check again** to see if the
-box is ready now.
-
 ## Read the notice line {#notice-line}
 
 The line shows the most serious notice first, in its main words and then its hint after " · ".
@@ -145,13 +141,14 @@ current master key and follow [Recover an invoice identity](box-status.md#invoic
 You can close the payment window without starting a recovery. A completed switch leaves existing
 filing results and cases unchanged.
 
-## When this box is no longer the main box {#not-main-server}
+## When the till is waiting for the main box {#not-main-server}
 
 When the till says **This box is no longer the main box**, wait for the till to move to the
 main box, then try again. If you already charged a card on the terminal, refund it there first.
 
-When the till says **No box is taking sales right now**, keep it open: it carries on as soon as
-a box takes sales again. On the sign-in screen, **Check again** checks now.
+If the till says **The box is checking its backup before taking sales** or **No box is taking
+sales right now**, keep it open. The till carries on when the box is ready. On the sign-in screen,
+press **Check again** to see if the box is ready now.
 
 ## Keep a report about a problem {#problem-report}
 
