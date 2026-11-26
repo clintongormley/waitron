@@ -417,6 +417,39 @@ describe("ending it", () => {
     expect(text(root(el).querySelector("[data-file-refusal]"))).toMatch(/this full invoice/);
   });
 
+  it("keeps cash and card quiet and disabled while the filing waits, as the box refuses them, and pressable where Finish closes it", async () => {
+    const button = (el: TillGiveBackUnderWay, name: string) =>
+      root(el).querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-choice=${name}]`)!;
+    const waiting = {
+      ...OPEN,
+      moneyBack: "2.00",
+      left: "4.05",
+      fileNow: {
+        refusal: "sale.correction_not_admitted",
+        reason: "filing_refused",
+        closable: false,
+      },
+    };
+    const held = await mount(waiting);
+    for (const name of ["cash", "card"]) {
+      expect(button(held.el, name).disabled).toBe(true);
+      expect(button(held.el, name).variant).toBe("secondary");
+      press(held.el, name);
+    }
+    await held.el.updateComplete;
+    expect(held.api.giveInvoiceCorrectionCash).not.toHaveBeenCalled();
+    expect(held.api.refundTransaction).not.toHaveBeenCalled();
+    expect(root(held.el).querySelector("till-supervisor-override-dialog")).toBeNull();
+    expect(button(held.el, "check").disabled).toBe(false);
+
+    const noFix = { ...waiting.fileNow, reason: "refused_no_fix", closable: true };
+    const closes = await mount({ ...waiting, fileNow: noFix });
+    for (const name of ["cash", "card", "finish"])
+      expect(button(closes.el, name).disabled).toBe(false);
+    press(closes.el, "cash");
+    await vi.waitFor(() => expect(closes.api.giveInvoiceCorrectionCash).toHaveBeenCalledOnce());
+  });
+
   it("Cancel this money back is offered only with nothing back or waiting, and closes it", async () => {
     const { el, api } = await mount();
     expect(text(root(el).querySelector("[data-choice=cancel]"))).toBe(t("give_back.uw_cancel"));

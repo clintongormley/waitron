@@ -431,19 +431,32 @@ export class TillGiveBackUnderWay extends LitElement {
         refundMethodAllowed(row, this.capabilities),
     );
   }
-  #choice(name: string, label: string, hint: string, run: () => void, variant = "secondary") {
+  #choice(
+    name: string,
+    label: string,
+    hint: string,
+    run: () => void,
+    variant = "secondary",
+    barred = false,
+  ) {
     return html`<div class="choice">
       <wt-button
         variant=${variant}
         data-choice=${name}
-        .disabled=${this.busy}
+        .disabled=${this.busy || barred}
         @click=${() => {
-          if (!this.busy) run();
+          if (!this.busy && !barred) run();
         }}
         >${label}</wt-button
       >
       ${hint ? html`<p class="muted" data-hint=${name}>${hint}</p>` : nothing}
     </div>`;
+  }
+  /** Whether the box refuses fresh money back now: it refuses as filing does, but not over a
+   * refusal Finish closes the correction over. */
+  #barred(): boolean {
+    const { fileNow } = this.correction;
+    return fileNow !== null && "refusal" in fileNow && !fileNow.closable;
   }
   #cashChoice(left: string) {
     const cashLeft: string = sumDecimals(
@@ -452,15 +465,17 @@ export class TillGiveBackUnderWay extends LitElement {
         .map((row) => decimal(row.appliedRemaining)),
     );
     const allowed = refundMethodAllowed({ method: "cash", manual: false }, this.capabilities);
+    const saved = this.#savedCash();
     const amount =
-      this.#savedCash() ??
-      (positive(left) && positive(cashLeft) && allowed ? least(left, cashLeft) : null);
+      saved ?? (positive(left) && positive(cashLeft) && allowed ? least(left, cashLeft) : null);
     if (amount !== null)
       return this.#choice(
         "cash",
         t("give_back.uw_cash").replace("{amount}", () => this.#money(amount)),
         t("give_back.uw_cash_hint"),
         () => void this.#run(this.#giveCash(amount), "give_back.uw_unknown"),
+        "secondary",
+        saved === null && this.#barred(),
       );
     return positive(left) && positive(cashLeft)
       ? html`<p data-no-cash>${t("give_back.uw_no_cash")}</p>`
@@ -477,6 +492,8 @@ export class TillGiveBackUnderWay extends LitElement {
         : t("give_back.uw_card_any").replace("{amount}", () => amount),
       t(row.manual ? "give_back.uw_terminal_hint" : "give_back.uw_card_hint"),
       () => void this.#card(row),
+      "secondary",
+      this.#barred(),
     );
   }
   #endChoices(correction: InvoiceCorrectionView) {
