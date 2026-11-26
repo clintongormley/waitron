@@ -202,3 +202,15 @@ it.each([
   expect(complete()).toBe(false);
   expect(save(el).disabled).toBe(false);
 });
+it.each([
+  ["en", "European Central Bank"],
+  ["es-ES", "Banco Central Europeo"],
+])("names AEAT's European Central Bank issuing code in %s", async (locale, name) => {
+  setLocale(locale);
+  const el = await mount();
+  await edit(el, "identifierType", "passport");
+  const issuer = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "[name=identifierCountryCode]",
+  )!;
+  expect(issuer.options.find(({ value }) => value === "XB")?.label).toBe(name);
+});

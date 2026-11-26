@@ -25,6 +25,7 @@ import {
 } from "@waitron/shared";
 import {
   SPAIN,
+  SPAIN_DOCUMENT_ISSUER_NAMES,
   SPAIN_RECEIPT_LABELS,
   SPAIN_RECEIPT_SAMPLE_ITEMS,
   SPAIN_RECIPIENT_REGION_NAMES,
@@ -278,6 +279,24 @@ export function countryNameFor(countryCode: string, locale: string): string {
     regionNameFor(code, "en-GB") ??
     code
   );
+}
+
+/** Names an identity document's issuing country, including AEAT's issuing codes that are not postal countries. */
+export function documentCountryNameFor(countryCode: string, locale: string): string {
+  if (!Object.hasOwn(SPAIN_DOCUMENT_ISSUER_NAMES.en, countryCode)) {
+    return countryNameFor(countryCode, locale);
+  }
+  const names =
+    languageOf(locale) === "es" ? SPAIN_DOCUMENT_ISSUER_NAMES.es : SPAIN_DOCUMENT_ISSUER_NAMES.en;
+  return names[countryCode]!;
+}
+
+function languageOf(locale: string): string | undefined {
+  try {
+    return new Intl.Locale(locale).language;
+  } catch {
+    return undefined;
+  }
 }
 
 export function receiptCountryNameFor(countryCode: string, locale: string): string {

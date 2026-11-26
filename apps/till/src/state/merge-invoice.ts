@@ -1,4 +1,4 @@
-import { countryNameFor } from "@waitron/country-packs";
+import { documentCountryNameFor } from "@waitron/country-packs";
 import type { InvoiceIdentity, MergeInvoiceChoice, PartyBill } from "../api/floor-api.js";
 import { currentLocale, t } from "../i18n/t.js";
 
@@ -18,7 +18,7 @@ function identifierOf(bill: PartyBill): string {
   const type = t(`invoice.identifier.${identifierType ?? "tax-number"}`);
   return identifierCountryCode === undefined
     ? type
-    : `${type} · ${countryNameFor(identifierCountryCode, currentLocale())}`;
+    : `${type} · ${documentCountryNameFor(identifierCountryCode, currentLocale())}`;
 }
 
 function identityOf(bill: PartyBill | null): InvoiceIdentity | null {

@@ -162,3 +162,15 @@ it("explains that foreign no-match searches preserve exact document text", async
     "make no difference",
   );
 });
+it.each([
+  ["en-GB", "European Central Bank"],
+  ["es-ES", "Banco Central Europeo"],
+])("names AEAT's European Central Bank issuing code in %s", async (locale, name) => {
+  const { el } = await mount();
+  setLocale(locale);
+  await edit(el, "identifierType", "passport");
+  const issuer = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "[name=identifierCountryCode]",
+  )!;
+  expect(issuer.options.find(({ value }) => value === "XB")?.label).toBe(name);
+});
