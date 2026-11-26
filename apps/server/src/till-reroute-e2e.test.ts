@@ -419,7 +419,12 @@ describe("till reroute — two instances, one venue", () => {
           servername: "waitron.local",
         });
         expect(served?.subjectAltName).toContain("DNS:waitron.local");
-        expect(served?.checkIssued(new X509Certificate(VENUE_TLS.caCertPem))).toBe(true);
+        const intermediate = served?.issuerCertificate;
+        const root = new X509Certificate(VENUE_TLS.caCertPem);
+        expect(intermediate?.checkIssued(root)).toBe(true);
+        expect(intermediate?.verify(root.publicKey)).toBe(true);
+        expect(served?.checkIssued(intermediate!)).toBe(true);
+        expect(served?.verify(intermediate!.publicKey)).toBe(true);
 
         // The promoted, restarted B now accepts sales — pinned to the fixture's `bPrimary` body.
         expect(await (await onB("/api/node")).json()).toEqual(FIXTURE.bPrimary);
