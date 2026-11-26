@@ -118,6 +118,7 @@ it("chooses an amount, then opens the existing cash entry before asking for a pr
   expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("50.00"));
   await click(el, "[data-quiet-pay-cash]");
   expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("40.00"));
+  expect(root(el).querySelector("[data-quiet-pay-breakdown]")).toBeNull();
   expect(previews).toEqual([]);
   await type(el, "tendered", "50");
   await click(el, "[data-pay-continue]");
@@ -126,12 +127,12 @@ it("chooses an amount, then opens the existing cash entry before asking for a pr
   ]);
 });
 
-it("rounds an equal share up on the balance after reserved money", async () => {
+it("rounds a three-person share up to the next cent", async () => {
   const el = await mount({
     quiet: true,
     way: "share",
     cardReader: "simulator",
-    balance: balanceOf({ received: "10.00", reserved: "10.00", outstanding: "100.00" }),
+    balance: balanceOf({ total: "100.00", outstanding: "100.00" }),
   });
   await type(el, "people", "3");
   expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("33.34"));
@@ -1381,13 +1382,23 @@ describe("till-bill-pay-dialog: a card already in progress", () => {
     expect(ask(el)).not.toBeNull();
   });
 
-  it("puts the keyboard on Take another when it asks, and back on Continue after Back", async () => {
-    const el = await chosen("card");
-    await click(el, "[data-pay-continue]");
+  it.each([
+    [false, "[data-pay-continue]"],
+    [true, "[data-quiet-pay-card]"],
+  ])("returns keyboard focus after the second-card question (quiet %s)", async (quiet, start) => {
+    const el = await mount({
+      quiet,
+      way: "contribution",
+      balance: holding,
+      cardReader: "stripe_terminal",
+    });
+    await type(el, "amount", "40");
+    if (!quiet) await pick(el, "method", "card");
+    await click(el, start);
     await expect.poll(() => root(el).activeElement).toBe(button(el, "[data-pay-card-ask-take]"));
 
     await click(el, "[data-pay-card-ask-back]");
-    await expect.poll(() => root(el).activeElement).toBe(button(el, "[data-pay-continue]"));
+    await expect.poll(() => root(el).activeElement).toBe(button(el, start));
   });
 
   it("stops asking once the form is changed", async () => {
