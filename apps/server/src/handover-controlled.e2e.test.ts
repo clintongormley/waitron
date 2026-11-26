@@ -1028,6 +1028,8 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
   const closing = stepdownCloses.get(m1.nodeId);
   if (closing === undefined) throw new Error("M1 asked to restart without a stepdown close");
   await within(closing, STEPDOWN_CLOSE_MS, "M1's stepdown close");
+  // The fixture's close wrapper also updates its count of running servers.
+  await m1.server!.close();
   stepdownCloses.delete(m1.nodeId);
   delete m1.server;
   const m1SweepsAtRestart = m1.sweeps;
@@ -2107,8 +2109,9 @@ describe("a controlled handover between two boxes, simulated in one process", ()
       ...[boxes?.m1, boxes?.m2].map(async (box) => {
         if (box === undefined) return;
         const stepdownClose = stepdownCloses.get(box.nodeId);
-        if (stepdownClose === undefined) await box.server?.close();
-        else await within(stepdownClose, STEPDOWN_CLOSE_MS, `${box.name}'s stepdown close`);
+        if (stepdownClose !== undefined)
+          await within(stepdownClose, STEPDOWN_CLOSE_MS, `${box.name}'s stepdown close`);
+        await box.server?.close();
       }),
       boxes?.m1.agent?.close(),
       boxes?.m2.agent?.close(),
