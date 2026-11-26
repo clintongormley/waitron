@@ -7075,7 +7075,7 @@ describe("scoped selection commands", () => {
       timeout: 3000,
       input: [
         `pnpm() { printf 'pnpm <%s>\\n' "$*"; return 42; }`,
-        `node() { printf 'wrapper <%s> <%s> <%s>\\n' "$1" "$2" "$3"; shift 3; "$@"; }`,
+        `node() { printf 'wrapper <%s>\\n' "$*"; shift 3; "$@"; }`,
         "date() { echo 1000; }",
         hosted
           ? `export "$(GITHUB_ENV=/dev/stdout; ${jobSteps[0].command})"`
@@ -7088,7 +7088,7 @@ describe("scoped selection commands", () => {
     expect(result.status, result.stderr).toBe(42);
     expect(result.stdout.match(/^pnpm <.*>$/gm)).toEqual(["pnpm <typecheck>"]);
     expect(result.stdout.match(/^wrapper .*$/gm) ?? []).toEqual(
-      hosted ? ["wrapper <scripts/run-with-deadline.mjs> <255> <-->"] : [],
+      hosted ? ["wrapper <scripts/run-with-deadline.mjs 255 -- pnpm typecheck>"] : [],
     );
   });
 
