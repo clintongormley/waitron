@@ -423,6 +423,57 @@ describe("payments-screen", () => {
     );
   });
 
+  it("offers profiles for each reader from the current provider dialog", async () => {
+    let pair!: Parameters<CardProviderPanel["renderAddReader"]>[0];
+    const panel: CardProviderPanel = {
+      ...PANELS[0]!,
+      renderAddReader: (ctx) => {
+        pair = ctx;
+        return html``;
+      },
+    };
+    const assignReaderProfiles = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mount(
+      stubApi({
+        listReaderProfileChoices: vi
+          .fn()
+          .mockResolvedValue([{ id: "till", name: "Till", eligible: true }]),
+        assignReaderProfiles,
+      }),
+      { panels: [panel] },
+    );
+    const startPair = async () => {
+      q(el, "[data-test=pair-new-reader]")!.click();
+      await flush(el);
+    };
+    await openAdd(el);
+    await startPair();
+    const departed = pair;
+    departed.onClose();
+    await flush(el);
+    await startPair();
+    departed.onAdded({ id: "late", name: "Late terminal" });
+    pair.onAdded({ id: "first", name: "First terminal" });
+    pair.onAdded({ id: "second", name: "Second terminal" });
+    expect(qProfile(el, "[data-test=equipment-profile-picker]")).toBeNull();
+    pair.onClose();
+    for (const [id, name] of [
+      ["first", "First terminal"],
+      ["second", "Second terminal"],
+    ]) {
+      await vi.waitFor(() =>
+        expect(qProfile(el, "[data-test=equipment-profile-picker]")?.textContent).toContain(name),
+      );
+      await vi.waitFor(() =>
+        expect(qProfile(el, "[data-test=equipment-profile-till]")).not.toBeNull(),
+      );
+      qProfile(el, "[data-test=save-equipment-profiles]")!.click();
+      await vi.waitFor(() => expect(assignReaderProfiles).toHaveBeenCalledWith(id, ["till"]));
+    }
+    await vi.waitFor(() => expect(qProfile(el, "[data-test=equipment-profile-picker]")).toBeNull());
+    expect(assignReaderProfiles).toHaveBeenCalledTimes(2);
+  });
+
   it.each(["success", "failure"])("ignores a superseded status read's late %s", async (outcome) => {
     let resolveOld!: (value: ReaderStatusView) => void;
     let rejectOld!: () => void;

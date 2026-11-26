@@ -36,6 +36,8 @@ it("keeps changed ticks after a refusal and protects them until a retry succeeds
   await expect.poll(() => tick()).toBeTruthy();
   expect(tick()!.checked).toBe(false);
   await userEvent.click(tick()!);
+  const canLeave = () => window.dispatchEvent(new Event("beforeunload", { cancelable: true }));
+  expect(canLeave()).toBe(false);
   const dialog = picker.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
   const save = picker.shadowRoot!.querySelector<HTMLElement>(
     "[data-test=save-equipment-profiles]",
@@ -58,5 +60,6 @@ it("keeps changed ticks after a refusal and protects them until a retry succeeds
   );
   save.click();
   await closed;
+  expect(canLeave()).toBe(true);
   expect(el.save.mock.calls).toEqual([[["till"]], [["till"]]]);
 });

@@ -5,9 +5,8 @@
 En **Impresoras**, abre la pestaña **Impresoras** y elige **Añadir impresora**. Waitron busca
 impresoras de red, USB y Bluetooth. Elige **Añadir** junto a una impresora, cambia el nombre si
 quieres y vuelve a elegir **Añadir**. Si se te pide, marca los perfiles de dispositivo que deben
-usarla y elige **Guardar perfiles**, o elige **Dejar sin asignar**. Las impresoras de recibos se añaden a las listas
-de recibos y justificantes de pago. Las impresoras de oficina se añaden a la lista de facturas.
-Si es una impresora de recibos nueva, después se abre la calibración.
+usarla y elige **Guardar perfiles**, o elige **Dejar sin asignar**. Si es una impresora de recibos nueva,
+después se abre la calibración.
 
 Una impresora Bluetooth debe estar antes en modo de emparejamiento. Elige **Emparejar y añadir**
 junto a ella, introduce su PIN y vuelve a elegir **Emparejar y añadir**. Si es una impresora nueva, se

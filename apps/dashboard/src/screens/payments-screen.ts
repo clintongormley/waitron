@@ -429,7 +429,7 @@ export class PaymentsScreen extends LitElement {
     () => {},
   );
   #pairOpening = 0;
-  #pairedReader?: { id: string; name: string };
+  #pairedReaders: { id: string; name: string }[] = [];
   @state() private profileAssignment: EquipmentProfileAssignment | null = null;
   #statusesDue = true;
   #statusIds: string | undefined;
@@ -692,7 +692,7 @@ export class PaymentsScreen extends LitElement {
     this.#discoveryVersion++;
     this.editor = null;
     this.discoveringId = this.addingId = null;
-    this.#pairedReader = undefined;
+    this.#pairedReaders = [];
     this.profileAssignment = null;
     this.busy = false;
   }
@@ -868,7 +868,7 @@ export class PaymentsScreen extends LitElement {
     if (!this.isConnected || this.discoveringId !== null || this.#discoveryVersion !== version + 1)
       return;
     this.#pairOpening++;
-    this.#pairedReader = undefined;
+    this.#pairedReaders = [];
     this.addingId = id;
   }
 
@@ -884,6 +884,12 @@ export class PaymentsScreen extends LitElement {
       load: () => this.api.listReaderProfileChoices(),
       save: (ids) => this.api.assignReaderProfiles(reader.id, ids),
     };
+  }
+
+  #showNextPairedReader(): void {
+    const reader = this.#pairedReaders.shift();
+    if (reader) this.#assignReader(reader, true);
+    else this.profileAssignment = null;
   }
 
   async #adopt(reader: AvailableReader): Promise<void> {
@@ -2073,15 +2079,14 @@ export class PaymentsScreen extends LitElement {
       ${panel.renderAddReader({
         request: this.request,
         onAdded: (reader) => {
-          if (current()) this.#pairedReader = reader;
+          if (current()) this.#pairedReaders.push(reader);
           if (this.isConnected) void this.#load();
         },
         onClose: () => {
           if (!current()) return;
           this.addingId = null;
-          if (this.#pairedReader) this.#assignReader(this.#pairedReader, true);
+          if (this.#pairedReaders.length > 0) this.#showNextPairedReader();
           else void this.#onAddReader(id!);
-          this.#pairedReader = undefined;
         },
       })}
     </div>`;
@@ -2578,12 +2583,13 @@ export class PaymentsScreen extends LitElement {
       ${
         this.profileAssignment === null
           ? nothing
-          : html`<dashboard-equipment-profile-picker
-              .assignment=${this.profileAssignment}
-              @equipment-profiles-closed=${() => {
-                this.profileAssignment = null;
-              }}
-            ></dashboard-equipment-profile-picker>`
+          : keyed(
+              this.profileAssignment,
+              html`<dashboard-equipment-profile-picker
+                .assignment=${this.profileAssignment}
+                @equipment-profiles-closed=${() => this.#showNextPairedReader()}
+              ></dashboard-equipment-profile-picker>`,
+            )
       }
       ${keyed(this.editor, this.#renderEditor())}
       ${this.#deleteDialog.render(

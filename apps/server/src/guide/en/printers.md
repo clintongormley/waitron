@@ -5,8 +5,7 @@
 In **Printers**, open the **Printers** tab and choose **Add a printer**. Waitron searches for
 network, USB and Bluetooth printers. Choose **Add** beside a printer, change the name if you like,
 and choose **Add** again. When asked, tick the device profiles that should use it and choose
-**Save profiles**, or choose **Leave unassigned**. Receipt printers go on the receipt and payment-slip lists. Office
-printers go on the invoice list. A new receipt printer opens calibration next.
+**Save profiles**, or choose **Leave unassigned**. A new receipt printer opens calibration next.
 
 A Bluetooth printer must be in pairing mode first. Choose **Pair and add** beside it, enter its
 PIN and choose **Pair and add** again. For a new printer, the name dialog opens: choose **Add**.
