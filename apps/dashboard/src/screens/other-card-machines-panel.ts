@@ -65,18 +65,36 @@ export class OtherCardMachinesPanel extends LitElement {
       .muted {
         color: var(--wt-color-text-muted);
       }
+      .rows {
+        display: grid;
+        gap: var(--wt-space-3);
+      }
       .row {
         display: grid;
         grid-template-columns: minmax(0, 2fr) minmax(0, 1.5fr) auto;
         gap: var(--wt-space-3);
-        align-items: end;
+        align-items: start;
       }
       .row .muted {
         grid-column: 1 / -1;
+        grid-row: 2;
       }
       @media (max-width: 640px) {
+        .rows {
+          gap: var(--wt-space-5);
+        }
         .row {
           grid-template-columns: minmax(0, 1fr);
+        }
+        .row + .row {
+          padding-top: var(--wt-space-5);
+          border-top: 1px solid var(--wt-color-border);
+        }
+        .row .muted {
+          grid-row: auto;
+        }
+        .row wt-button {
+          justify-self: start;
         }
       }
       .add {
@@ -295,14 +313,14 @@ export class OtherCardMachinesPanel extends LitElement {
           this.#update(row.key, { paysInto: event.detail.value as Row["paysInto"] });
         }}
       ></wt-combobox>
-      <wt-button variant="secondary" ?disabled=${this.saving} @click=${() => this.#remove(row.key)}
-        >${t("action.remove")}</wt-button
-      >
       ${
         row.paysInto === "connected_account" && !this.sumUpConnected
           ? html`<p class="muted">${t("other_card_machines.not_connected_note")}</p>`
           : nothing
       }
+      <wt-button variant="secondary" ?disabled=${this.saving} @click=${() => this.#remove(row.key)}
+        >${t("action.remove")}</wt-button
+      >
     </div>`;
   }
 
@@ -327,11 +345,17 @@ export class OtherCardMachinesPanel extends LitElement {
             ? nothing
             : html`<p role="status">${t("other_card_machines.loading")}</p>`
           : html`${draft.length === 0 ? html`<p>${t("other_card_machines.empty")}</p>` : nothing}
-              ${repeat(
-                draft,
-                (row) => row.key,
-                (row, index) => this.#row(row, index, errors),
-              )}
+              ${
+                draft.length === 0
+                  ? nothing
+                  : html`<div class="rows">
+                      ${repeat(
+                        draft,
+                        (row) => row.key,
+                        (row, index) => this.#row(row, index, errors),
+                      )}
+                    </div>`
+              }
               <wt-button
                 class="add"
                 variant="secondary"

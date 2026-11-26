@@ -253,3 +253,54 @@ it("shows Spanish wording", async () => {
   await expect.element(page.getByRole("heading", { name: "Otros datáfonos" })).toBeVisible();
   await expect.element(page.getByRole("button", { name: "Añadir un datáfono" })).toBeVisible();
 });
+
+async function atWidth(width: number, check: () => Promise<void>) {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(width, 800);
+  try {
+    await check();
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
+}
+
+function rowParts(el: OtherCardMachinesPanel, index: number) {
+  const group = el.shadowRoot!.querySelectorAll<HTMLElement>(".row")[index]!;
+  const box = (selector: string) => group.querySelector(selector)?.getBoundingClientRect();
+  return {
+    row: group.getBoundingClientRect(),
+    name: box("wt-input")!,
+    paysInto: box("wt-combobox")!,
+    remove: box("wt-button")!,
+    note: box(".muted"),
+  };
+}
+
+it("starts the name, the dropdown and Remove on one line while the name shows an error", async () => {
+  await atWidth(1280, async () => {
+    const { el } = await mount(rig(), false);
+    await nameField(row("Bar terminal")).fill("");
+    await save().click();
+    await expect.element(page.getByText("Give this machine a name.")).toBeVisible();
+    const parts = rowParts(el, 0);
+    expect(parts.paysInto.top).toBe(parts.name.top);
+    expect(parts.remove.top).toBe(parts.name.top);
+    const noted = rowParts(el, 1);
+    expect(noted.remove.top).toBe(noted.paysInto.top);
+    expect(noted.note!.top).toBeGreaterThan(noted.remove.bottom);
+  });
+});
+
+it("puts the note under its dropdown and keeps machines apart on a phone", async () => {
+  await atWidth(390, async () => {
+    const { el } = await mount(rig(), false);
+    const first = rowParts(el, 0);
+    const noted = rowParts(el, 1);
+    expect(noted.note!.top).toBeGreaterThan(noted.paysInto.bottom);
+    expect(noted.remove.top).toBeGreaterThan(noted.note!.bottom);
+    expect(noted.remove.width).toBeLessThan(noted.row.width);
+    expect(noted.row.top - first.row.bottom).toBeGreaterThan(
+      first.paysInto.top - first.name.bottom,
+    );
+  });
+});
