@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { type LiveDeclarationsDialog } from "./live-declarations-dialog.js";
 import "./live-declarations-dialog.js";
@@ -32,6 +32,31 @@ async function mount(live: boolean, queued = [early, late]) {
   const update = page.getByRole("button", { name: "Update now" });
   return { correct, closed, choices, update };
 }
+
+it.each(["en-GB", "es-ES"] as const)(
+  "aligns and punctuates the scheduled choices introduction in %s",
+  async (language) => {
+    setLocale(language);
+    const { el } = await mountWidget<LiveDeclarationsDialog>("dashboard-live-declarations-dialog", {
+      question: {
+        id: "p-saved",
+        menus: [{ menuId: "m1", name: "Lunch", live: true, queued: [early] }],
+      },
+    });
+    await expect.element(page.getByRole("dialog")).toBeVisible();
+    const copy = el.shadowRoot!.querySelector("p")!;
+    const legend = el.shadowRoot!.querySelector("legend")!;
+    const textLeft = (element: HTMLElement) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect().left;
+    };
+    const legendText = legend.textContent?.trim();
+    expect.soft(legendText).toBe(t("live_declarations.also_scheduled"));
+    expect.soft(legendText).toMatch(/:$/);
+    expect(textLeft(legend)).toBeCloseTo(textLeft(copy), 0);
+  },
+);
 
 it("uses the saved product and chosen versions, keeping them for a retry when the reply is lost", async () => {
   const { correct, closed, choices, update } = await mount(true);

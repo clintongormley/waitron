@@ -4072,7 +4072,7 @@ export const en = {
   "live_declarations.scheduled_title": "Update the scheduled menus now?",
   "live_declarations.live_menus":
     "These live menus still show the old allergens and diets: {menus}.",
-  "live_declarations.also_scheduled": "These scheduled menus differ too",
+  "live_declarations.also_scheduled": "These scheduled menus differ too:",
   "live_declarations.scheduled": "Choose the scheduled versions to update",
   "live_declarations.version": "{menu}, from {time}",
   "live_declarations.update": "Update now",
@@ -8969,7 +8969,7 @@ export const es: Record<StringKey, string> = {
   "live_declarations.scheduled_title": "¿Actualizar ahora las cartas programadas?",
   "live_declarations.live_menus":
     "Estas cartas publicadas aún muestran los alérgenos y las dietas anteriores: {menus}.",
-  "live_declarations.also_scheduled": "Estas cartas programadas también tienen diferencias",
+  "live_declarations.also_scheduled": "Estas cartas programadas también tienen diferencias:",
   "live_declarations.scheduled": "Elige las versiones programadas que quieres actualizar",
   "live_declarations.version": "{menu}, a partir del {time}",
   "live_declarations.update": "Actualizar ahora",

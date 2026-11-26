@@ -26,6 +26,9 @@ export class LiveDeclarationsDialog extends LitElement {
       padding: 0;
       border: 0;
     }
+    p + fieldset > legend {
+      padding-inline: 0;
+    }
     label {
       display: flex;
       align-items: center;
