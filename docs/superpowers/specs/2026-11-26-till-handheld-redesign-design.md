@@ -1,7 +1,7 @@
 # Till and handheld redesign — the order, the menu and payment
 
 Status: **approved by the owner on 2026-11-26** (design decided with the owner the same day;
-the write-up approved as written). Nothing here is built yet; the build is queued with lane D.
+the write-up approved as written). Nothing here is built yet; the build is queued with lane F.
 
 This is the first pass of a complete redesign of the till and the handheld. It covers the overall
 map of the app, the order screen, the menu, dish options, the table's and the bill's menus, and

@@ -563,7 +563,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Till and handheld redesign, pass 1: the map, the order, the menu and payment (TILL-REDESIGN-1).**
   Design decided with the owner on 26 November 2026, one picture at a time, and the write-up approved
-  the same day; the build is queued with lane D. Phone first, layout by screen width, one order screen
+  the same day; the build is queued with lane F. Phone first, layout by screen width, one order screen
   for counter and tables, full-screen panels instead of dialogs, a guest-facing bill with a tip
   question. [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md).
 
