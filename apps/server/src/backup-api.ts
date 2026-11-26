@@ -37,6 +37,7 @@ import {
   MIN_DESTINATION_TIMEOUT_MS,
   loadBackupKey,
   loadKeyRotatedAt,
+  loadRecoveryKey,
   readHeldKey,
   resolveBackupConfig,
   type BackupSchedule,
@@ -342,11 +343,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
 
   const readHeldSettings = () => readHeldArchiveSettings(deps.db, deps.ring);
 
-  // The box env (`backup.env` under the raw environment, as a reload reads it) is authoritative: after
-  // a failed reload the supervisor still holds the key it loaded before the key file changed.
-  const heldKey = async (): Promise<string | undefined> =>
-    (await deps.readRecoveryKey()) ?? deps.supervisor.current().recoveryKey;
-
   // 0 when no key with a number is held; a key under the length floor is replaced by key 1.
   const heldKeyNumber = async (): Promise<number> => {
     try {
@@ -436,8 +432,13 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (body.cloud === true && (await deps.readCloudStatus?.())?.environment !== "test") {
           throw new AppError("backup.cloud_unavailable", { field: "cloud" });
         }
-        // Archives are locked with the key the box holds; this route never writes one.
-        const held = await readHeldKey(heldKey);
+        // Archives are locked with the key the box holds; this route never writes one. The box env
+        // (`backup.env` under the raw environment, as a reload reads it) is authoritative: after a
+        // failed reload the supervisor still holds the key it loaded before the key file changed.
+        const env = await deps.readBoxEnv();
+        const held = await readHeldKey(
+          async () => loadRecoveryKey(env) ?? deps.supervisor.current().recoveryKey,
+        );
         const recoveryKey = held.key;
         if (recoveryKey === undefined) {
           throw held.held
@@ -483,7 +484,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         };
         const sealed = archiveRecord(settings).stored;
         // Refuse exactly what boot would, before anything is written.
-        resolveBackupConfig({ env: { WAITRON_BACKUP_RECOVERY_KEY: recoveryKey }, sealed });
+        resolveBackupConfig({ env: { ...env, WAITRON_BACKUP_RECOVERY_KEY: recoveryKey }, sealed });
         const bucketDestination = destinations.find((d) => d.kind === "s3");
         if (bucketDestination !== undefined) {
           await probeArchive(

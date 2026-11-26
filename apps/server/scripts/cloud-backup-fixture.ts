@@ -117,7 +117,12 @@ if (request.command === "capture") {
       environment: "preproduction",
       resolvers: {},
       stateDir,
-      recoveryKey: request.recoveryKey,
+      // Cloud's runner sends its own key, which no master key made, so the header names none.
+      backupKey: {
+        backupKey: Buffer.from(request.recoveryKey, "base64url"),
+        keyNumber: 1,
+        masterKeyId: Buffer.alloc(8),
+      },
       stagingDir: validation.stagingDir,
       retain: 100,
       retainDays: 3650,

@@ -1,5 +1,7 @@
 import { supervisorWithJob } from "./testing/backup-supervisor.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
+import { makeMasterKey } from "@waitron/credentials";
+import { heldBackupKey } from "./testing/backup-key.js";
 // What the supervisor's status says about each destination when one of them is slow or failing,
 // against a real migrated venue and real folder destinations.
 import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
@@ -66,6 +68,10 @@ async function makeStateDir(): Promise<string> {
   return dir;
 }
 
+const MASTER = makeMasterKey();
+const KEY_ONE = heldBackupKey(MASTER, 1);
+const KEY_TWO = heldBackupKey(MASTER, 2);
+
 function config(
   destinations: { id: string; dir: string }[],
   overrides: Partial<BackupConfig> = {},
@@ -74,15 +80,15 @@ function config(
     revision: undefined,
     enabled: true,
     destinations: destinations.map((d) => ({ kind: "local-fs", ...d })),
-    recoveryKey: "recovery-key-one-strong",
+    recoveryKey: KEY_ONE.key,
     schedule: { kind: "interval", ms: 60 * 60 * 1000 },
     retain: 7,
     retainDays: 30,
     staleAfterMs: 2 * 24 * 60 * 60 * 1000,
     destinationTimeoutMs: 15 * 60 * 1000,
     keyRotatedAt: undefined,
-    keyNumber: undefined,
-    masterKeyId: undefined,
+    keyNumber: KEY_ONE.keyNumber,
+    masterKeyId: KEY_ONE.masterKeyId,
     ...overrides,
   };
 }
@@ -483,7 +489,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
       expect(await local()).toEqual({ stored: true, upload: null, prune: null, archive: true });
 
       holdNextPut = true;
-      cfg = config([{ id: "local", dir }], { recoveryKey: "recovery-key-two-different" });
+      cfg = config([{ id: "local", dir }], { recoveryKey: KEY_TWO.key });
       await sup.reload();
       await newUpload.reached;
       expect(await local()).toEqual({ stored: false, upload: null, prune: null, archive: false });
@@ -528,8 +534,8 @@ describe("BackupSupervisor status, one destination at a time", () => {
       return realList.call(this, prefix, call);
     });
     const logs: LogLine[] = [];
-    const keyOne = "recovery-key-one-strong";
-    const keyTwo = "recovery-key-two-different";
+    const keyOne = KEY_ONE.key;
+    const keyTwo = KEY_TWO.key;
     let cfg = config([{ id: "usb", dir: dirA }], { recoveryKey: keyOne });
     const sup = await supervisor(() => cfg, logs);
     try {

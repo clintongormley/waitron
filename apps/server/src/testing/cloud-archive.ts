@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { HELD_BACKUP_FRAME } from "./recovery-key.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Database, NodeDatabase } from "@waitron/db";
@@ -111,7 +112,7 @@ export async function runCloudArchive(
     nodeId,
     resolvers: {},
     stagingDir: deps.stagingDir ?? join(deps.stateDir, "staging"),
-    recoveryKey,
+    backupKey: HELD_BACKUP_FRAME,
     retain: 1,
     retainDays: 1,
     destinationTimeoutMs: 60_000,

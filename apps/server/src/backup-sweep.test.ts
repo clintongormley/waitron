@@ -12,7 +12,7 @@ import { resolveVenueClock } from "./report-api.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { gunzipSync } from "node:zlib";
-import { decryptArtifact } from "./artifact-cipher.js";
+import { HELD_BACKUP_FRAME, openUnderHeldKey } from "./testing/recovery-key.js";
 import { unpackArchive } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import type { ClockStep } from "@waitron/fiscal";
@@ -131,7 +131,7 @@ describe("runOnce (fan-out)", () => {
     resolvers: { media: mediaDir },
     stateDir,
     buildManifest: fixedManifest,
-    recoveryKey: "recovery-key-1",
+    backupKey: HELD_BACKUP_FRAME,
     stagingDir: staging,
     retain: 7,
     // Far off, so only the count cap bites here; `pruneBackend`'s own case pins the age cap.
@@ -148,9 +148,10 @@ describe("runOnce (fan-out)", () => {
 
   const entriesOf = (backend: FakeBackend): Map<string, Buffer> =>
     new Map(
-      unpackArchive(
-        gunzipSync(decryptArtifact(backend.objects.get(keyIn(backend))!, "recovery-key-1")),
-      ).map((e) => [e.name, Buffer.from(e.bytes)]),
+      unpackArchive(gunzipSync(openUnderHeldKey(backend.objects.get(keyIn(backend))!))).map((e) => [
+        e.name,
+        Buffer.from(e.bytes),
+      ]),
     );
 
   it("with one kept, keeps the archive it just stored over an earlier one from the same second", async () => {
@@ -273,9 +274,9 @@ describe("runOnce (fan-out)", () => {
     await writeFile(join(stateDir, "backup.env"), "ARCHIVE_FOLDER=/mnt/usb\n");
     const a = new FakeBackend("a");
     await runOnce(deps([a]));
-    const order = unpackArchive(
-      gunzipSync(decryptArtifact(a.objects.get(keyIn(a))!, "recovery-key-1")),
-    ).map((e) => e.name);
+    const order = unpackArchive(gunzipSync(openUnderHeldKey(a.objects.get(keyIn(a))!))).map(
+      (e) => e.name,
+    );
     expect(order).toEqual([
       "manifest.json",
       "db.dump",
@@ -299,7 +300,7 @@ describe("runOnce (fan-out)", () => {
     // The key is read once, as the encryption's argument, so the timer is set just before it
     // starts. The read count below fails the test if an earlier read is ever added.
     let keyReads = 0;
-    Object.defineProperty(sweepDeps, "recoveryKey", {
+    Object.defineProperty(sweepDeps, "backupKey", {
       get: () => {
         keyReads += 1;
         timer = new Promise<void>((resolve) =>
@@ -308,7 +309,7 @@ describe("runOnce (fan-out)", () => {
             resolve();
           }, 0),
         );
-        return "recovery-key-1";
+        return HELD_BACKUP_FRAME;
       },
     });
     await runOnce(sweepDeps);
@@ -859,7 +860,7 @@ describe("createBackupSchedule (passes driven with injected archive + sleep)", (
       resolvers: {},
       stateDir,
       buildManifest: fixedManifest,
-      recoveryKey: "recovery-key-1",
+      backupKey: HELD_BACKUP_FRAME,
       stagingDir: staging,
       schedule: { kind: "interval", ms: 10 },
       retain: 7,
@@ -2150,7 +2151,7 @@ describe("runOnce with the real buildManifest (a migrated venue)", () => {
       resolvers: {},
       stateDir,
       // No `buildManifest`, so the real default runs.
-      recoveryKey: "recovery-key-1",
+      backupKey: HELD_BACKUP_FRAME,
       stagingDir: staging,
       retain: 7,
       retainDays: 3650,
@@ -2163,9 +2164,10 @@ describe("runOnce with the real buildManifest (a migrated venue)", () => {
       },
     });
     const entries = new Map(
-      unpackArchive(gunzipSync(decryptArtifact(a.objects.get(keyIn(a))!, "recovery-key-1"))).map(
-        (e) => [e.name, Buffer.from(e.bytes)],
-      ),
+      unpackArchive(gunzipSync(openUnderHeldKey(a.objects.get(keyIn(a))!))).map((e) => [
+        e.name,
+        Buffer.from(e.bytes),
+      ]),
     );
     const manifest = JSON.parse(entries.get("manifest.json")!.toString()) as BackupManifest;
     expect(manifest.environment).toBe("preproduction");

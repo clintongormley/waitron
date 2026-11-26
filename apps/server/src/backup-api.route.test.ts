@@ -45,6 +45,8 @@ import {
   type KeyRing,
 } from "@waitron/credentials";
 import { mountStreamApi } from "./stream-api.js";
+import * as store from "@waitron/store";
+import { decryptBackupFile, readArtifactFileHeader } from "./artifact-cipher-file.js";
 import {
   loadBackupSettings,
   loadRecoveryKey,
@@ -776,6 +778,86 @@ describe("backup admin routes", () => {
     });
   }, 60_000);
 
+  it("a backup running during the change is stored under its old key or not at all", async () => {
+    const dest = makeDestDir();
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    const app = buildApp(sup, sc.stateDir);
+    const cookie = await login(app);
+    const applied = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinations: [{ kind: "local-fs", dir: dest }],
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(applied.status).toBe(200);
+    await poll(async () => ((await sup.status()).archiveUnderCurrentKey ? true : undefined));
+    /** Each archive in `dest` with the N its header names. */
+    const stored = async () =>
+      Promise.all(
+        (await readdir(dest))
+          .filter((name) => name.endsWith(".backup.enc"))
+          .map(async (name) => {
+            const header = await readArtifactFileHeader(join(dest, name));
+            return { name, keyNumber: header.version === 2 ? header.keyNumber : undefined };
+          }),
+      );
+    const beforeRun = await stored();
+    expect(beforeRun.map((file) => file.keyNumber)).toEqual([1]);
+
+    let entered!: () => void;
+    let release!: () => void;
+    const reached = new Promise<void>((resolve) => (entered = resolve));
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const archive = store.archiveInWorker;
+    vi.spyOn(store, "archiveInWorker").mockImplementationOnce(async (source, target, signal) => {
+      entered();
+      await released;
+      await archive(source, target, signal);
+    });
+    let manual: Promise<void> | undefined;
+    let change: ReturnType<typeof app.request> | undefined;
+    try {
+      manual = sup.runNow();
+      // The holder is inside its copy under key 1 before the change is sent.
+      await reached;
+      change = app.request("/api/backup/rotate", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify(changeKey()),
+      });
+      // Released once the change has written key 2, so the run could see it.
+      await poll(async () => ((await fileKey(sc.stateDir)) === KEY_2 ? true : undefined));
+      release();
+      await manual;
+      expect((await change!).status).toBe(200);
+    } finally {
+      release();
+      await Promise.allSettled([manual, change]);
+    }
+    const after = await poll(async () => {
+      const files = await stored();
+      return files.some((file) => file.keyNumber === 2) ? files : undefined;
+    });
+    const out = mkdtempSync(join(tmpdir(), "backup-api-open-"));
+    cleanup.push(() => rm(out, { recursive: true, force: true }));
+    for (const file of after) {
+      // Every file opens with the key its header names, so none names 2 under key 1.
+      const key = heldBackupKey(MASTER_BYTES, file.keyNumber!).key;
+      await expect(
+        decryptBackupFile(join(dest, file.name), join(out, file.name), key),
+      ).resolves.toMatch(/^[0-9a-f]{64}$/);
+    }
+    // The run the change stopped added at most one file, under key 1.
+    expect(after.filter((file) => file.keyNumber === 1).length).toBeLessThanOrEqual(
+      beforeRun.length + 1,
+    );
+    expect(after.every((file) => file.keyNumber === 1 || file.keyNumber === 2)).toBe(true);
+  }, 60_000);
+
   it("apply keeps the date of a key rotated before archives were enabled", async () => {
     const stateDir = await makeStateDir();
     const sc: Scenario = { stateDir, base: {}, role: "primary" };
@@ -1260,14 +1342,16 @@ describe("backup admin routes", () => {
       entered = r;
     });
     let first = true;
-    const app = buildApp(sup, stateDir, {}, async () => {
-      const key = loadRecoveryKey(await loadBoxEnv({}, stateDir));
-      if (first) {
-        first = false;
-        entered();
-        await gate;
-      }
-      return key;
+    const app = buildApp(sup, stateDir, {}, undefined, undefined, undefined, undefined, {
+      readBoxEnv: async () => {
+        const env = await loadBoxEnv({}, stateDir);
+        if (first) {
+          first = false;
+          entered();
+          await gate;
+        }
+        return env;
+      },
     });
     const cookie = await login(app);
     const headers = { cookie, "content-type": "application/json" };
@@ -1323,14 +1407,16 @@ describe("backup admin routes", () => {
       entered = r;
     });
     let first = true;
-    const app = buildApp(sup, stateDir, {}, async () => {
-      const key = loadRecoveryKey(await loadBoxEnv({}, stateDir));
-      if (first) {
-        first = false;
-        entered();
-        await gate;
-      }
-      return key;
+    const app = buildApp(sup, stateDir, {}, undefined, undefined, undefined, undefined, {
+      readBoxEnv: async () => {
+        const env = await loadBoxEnv({}, stateDir);
+        if (first) {
+          first = false;
+          entered();
+          await gate;
+        }
+        return env;
+      },
     });
     const cookie = await login(app);
     const headers = { cookie, "content-type": "application/json" };
@@ -1407,17 +1493,20 @@ describe("backup admin routes", () => {
       makeSupervisor(sc),
       sc.stateDir,
       {},
-      async () => {
-        if (firstRead) {
-          firstRead = false;
-          applyReached();
-          await held;
-        }
-        return readKey();
-      },
+      undefined,
       undefined,
       undefined,
       turns,
+      {
+        readBoxEnv: async () => {
+          if (firstRead) {
+            firstRead = false;
+            applyReached();
+            await held;
+          }
+          return loadBoxEnv({}, sc.stateDir);
+        },
+      },
     );
     mountStreamApi(
       app,

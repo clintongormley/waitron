@@ -9,7 +9,7 @@ import { runOnce } from "./backup-sweep.js";
 import { parseBackupArchiveKey } from "./backup-keys.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
-import { decryptArtifact } from "./artifact-cipher.js";
+import { HELD_BACKUP_FRAME, openUnderHeldKey } from "./testing/recovery-key.js";
 import { unpackArchive } from "./backup-archive.js";
 import { ARCHIVE_MAX_METADATA_BYTES } from "./backup-archive-file.js";
 import type { StorageCall } from "./storage-backend.js";
@@ -68,7 +68,7 @@ function deps(f: Awaited<ReturnType<typeof fixture>>, backends: LocalFsBackend[]
     modules: [],
     environment: "preproduction" as const,
     resolvers: {},
-    recoveryKey: "key",
+    backupKey: HELD_BACKUP_FRAME,
     retain: 3,
     retainDays: 30,
     destinationTimeoutMs: 60_000,
@@ -107,7 +107,7 @@ it("streams capture once to independent file destinations and leaves no staging 
   const bytes = await a.get(key, call);
   expect(await b.get(key, call)).toEqual(bytes);
   expect(artifactModes).toEqual([0o600, 0o600]);
-  const entries = unpackArchive(gunzipSync(decryptArtifact(bytes, "key")));
+  const entries = unpackArchive(gunzipSync(openUnderHeldKey(bytes)));
   expect(entries.map((e) => e.name)).toEqual([
     "manifest.json",
     "db.dump",
@@ -141,9 +141,7 @@ it("isolates a failed copy, retains stored success after a prune refusal and cle
   });
   expect(
     unpackArchive(
-      gunzipSync(
-        decryptArtifact(await good.get(await storedKey(join(f.root, "good")), call), "key"),
-      ),
+      gunzipSync(openUnderHeldKey(await good.get(await storedKey(join(f.root, "good")), call))),
     )[1].name,
   ).toBe("db.dump");
   expect(outcomes.failed.has("bad")).toBe(true);

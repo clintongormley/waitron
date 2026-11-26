@@ -1,4 +1,5 @@
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
+import { HELD_BACKUP_FRAME, HELD_BACKUP_KEY } from "./testing/recovery-key.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -72,7 +73,7 @@ describe("queued account mail after a real backup and restore", () => {
         environment: "preproduction",
         resolvers: {},
         stateDir,
-        recoveryKey: "synthetic-mail-restore-key",
+        backupKey: HELD_BACKUP_FRAME,
         stagingDir: join(root, "scratch/backup"),
         retain: 1,
         retainDays: 1,
@@ -89,7 +90,7 @@ describe("queued account mail after a real backup and restore", () => {
       const venueDir = join(root, "restored-venue");
       await restoreFromArtifactFile({
         artifactPath,
-        recoveryKey: "synthetic-mail-restore-key",
+        recoveryKey: HELD_BACKUP_KEY.key,
         venueDir,
         stateDir: join(root, "restored-state"),
         stagingDir: join(root, "scratch/restore"),

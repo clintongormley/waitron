@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { AppError, isAppError } from "@waitron/shared";
-import { decryptArtifactFile } from "./artifact-cipher-file.js";
+import { decryptBackupFile } from "./artifact-cipher-file.js";
 import { MAX_CLOUD_EXPANDED_BYTES } from "./cloud-backup-limits.js";
 import { decodeArchiveFile } from "./backup-compression.js";
 import { unpackArchiveFile } from "./backup-archive-file.js";
@@ -49,7 +49,7 @@ export async function validateBackupArtifactFile(
   const discard = () => rm(scratch, { recursive: true, force: true });
   const plaintext = join(scratch, "plaintext");
   try {
-    await decryptArtifactFile(input.artifactPath, plaintext, input.recoveryKey);
+    await decryptBackupFile(input.artifactPath, plaintext, input.recoveryKey);
     const archive = await decodeArchiveFile(plaintext, join(scratch, "decoded"), {
       maxBytes: MAX_CLOUD_EXPANDED_BYTES,
     });

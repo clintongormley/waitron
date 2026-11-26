@@ -25,7 +25,7 @@ export interface BackupConfig {
   /** IDs are unique, and so are local folders' resolved directories. */
   destinations: BackupDestination[];
   /** The key every backup artifact is encrypted under. `undefined` only on a switched-off record
-   * whose box holds no usable key. */
+   * whose box holds no usable key; an enabled record holds it with its number and master key id. */
   recoveryKey: string | undefined;
   schedule: BackupSchedule;
   /** The count cap: how many archives each destination keeps. */
@@ -123,10 +123,10 @@ export function loadKeyRotatedAt(env: Env): string | undefined {
     : readVariable(env, "WAITRON_BACKUP_KEY_ROTATED_AT");
 }
 
-function requiredKey(env: Env): string {
-  const recoveryKey = loadRecoveryKey(env);
-  if (recoveryKey === undefined) throw new AppError("backup.recovery_key_missing", {});
-  return recoveryKey;
+function requiredBackupKey(env: Env): { key: string; keyNumber: number; masterKeyId: string } {
+  const held = loadBackupKey(env);
+  if (held === undefined) throw new AppError("backup.recovery_key_missing", {});
+  return held;
 }
 
 export function resolveBackupConfig(input: {
@@ -135,21 +135,24 @@ export function resolveBackupConfig(input: {
 }): BackupConfig | undefined {
   const { env, sealed } = input;
   if (sealed === null) return undefined;
+  // A switched-off record runs nothing, so a missing or short key must not stop it being reported.
+  const held = sealed.enabled
+    ? requiredBackupKey(env)
+    : { key: heldUsableKey(env), keyNumber: loadKeyNumber(env), masterKeyId: loadMasterKeyId(env) };
   return {
     revision: sealed.revision,
     enabled: sealed.enabled,
     ...(sealed.cloud ? { cloud: true } : {}),
     destinations: archiveDestinations(sealed),
-    // A switched-off record runs nothing, so a missing or short key must not stop it being reported.
-    recoveryKey: sealed.enabled ? requiredKey(env) : heldUsableKey(env),
+    recoveryKey: held.key,
     schedule: sealed.schedule,
     retain: sealed.retention.count,
     retainDays: sealed.retention.days,
     staleAfterMs: BACKUP_STALE_AFTER_MS,
     destinationTimeoutMs: sealed.destinationTimeoutMs,
     keyRotatedAt: loadKeyRotatedAt(env),
-    keyNumber: loadKeyNumber(env),
-    masterKeyId: loadMasterKeyId(env),
+    keyNumber: held.keyNumber,
+    masterKeyId: held.masterKeyId,
   };
 }
 

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { HELD_BACKUP_FRAME } from "./testing/recovery-key.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import {
   mkdir,
@@ -76,7 +77,7 @@ function deps(f: Awaited<ReturnType<typeof fixture>>, backends: StorageBackend[]
     modules: [],
     environment: "preproduction" as const,
     resolvers: {},
-    recoveryKey: "key",
+    backupKey: HELD_BACKUP_FRAME,
     retain: 3,
     retainDays: 30,
     destinationTimeoutMs: 60_000,

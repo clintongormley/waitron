@@ -236,7 +236,11 @@ const write = (ring: KeyRing, settings: Omit<ArchiveSettings, "revision">) =>
 const recordNow = () => readArchiveSettingsWithMeta(suite.db, RING).then((r) => r.meta);
 
 const storeKey = (sc: Scenario, key: string) =>
-  writeFile(join(sc.stateDir, "backup.env"), `WAITRON_BACKUP_RECOVERY_KEY=${key}\n`);
+  writeFile(
+    join(sc.stateDir, "backup.env"),
+    `WAITRON_BACKUP_RECOVERY_KEY=${key}\nWAITRON_BACKUP_KEY_NUMBER=1\n` +
+      "WAITRON_BACKUP_MASTER_KEY_ID=0123456789abcdef\n",
+  );
 
 async function storeRaw(plaintext: string): Promise<void> {
   await write(RING, {

@@ -1,4 +1,5 @@
 import { gunzipSync } from "node:zlib";
+import { HELD_BACKUP_FRAME, HELD_BACKUP_KEY } from "./testing/recovery-key.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { resolve } from "node:path";
@@ -264,6 +265,7 @@ it("roundtrips real SQLite and state through scheduled capture, local file stora
     signal: new AbortController().signal,
     now: () => stamp,
     archive: (path) => suite.db.archiveTo(path),
+    backupKey: HELD_BACKUP_FRAME,
   });
   const keys = (await readdir(join(f.root, "store"))).filter(
     (name) => parseBackupArchiveKey(name)?.timestamp.getTime() === stamp.getTime(),
@@ -275,7 +277,7 @@ it("roundtrips real SQLite and state through scheduled capture, local file stora
     signal: new AbortController().signal,
   });
   guard.forbidden.add(f.artifactPath);
-  await restoreFromArtifactFile(f);
+  await restoreFromArtifactFile({ ...f, recoveryKey: HELD_BACKUP_KEY.key });
   const opened = await openVenueDatabase(f.venueDir);
   try {
     expect((await opened.venue.select().from(taxpayer))[0].legalName).toBe("File roundtrip");

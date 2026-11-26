@@ -10,7 +10,8 @@ import {
   collectStateParts,
   snapshotNodeDatabase,
 } from "./archive-entries.js";
-import { encryptArtifactFile } from "./artifact-cipher-file.js";
+import { encryptArtifactFileUnderBackupKey } from "./artifact-cipher-file.js";
+import type { BackupKeyFrameInput } from "./artifact-cipher.js";
 import { ArchiveReadBudget } from "./archive-read-budget.js";
 import { packArchiveStream, type ArchiveInputEntry } from "./backup-archive-file.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
@@ -82,7 +83,8 @@ export interface BackupSweepDeps {
   resolvers: Record<string, string>;
   stateDir: string;
   venueDir?: string;
-  recoveryKey: string;
+  /** Backup key N and what the file's header names: N and its master key id. */
+  backupKey: BackupKeyFrameInput;
   /** Shared working directory for local backups. Cloud-enabled runs keep the database copy in private scratch. */
   stagingDir: string;
   schedule: BackupSchedule;
@@ -304,10 +306,10 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
     if (deps.backends.length > 0) {
       encryptedDir = await mkdtemp(join(deps.stagingDir, BACKUP_ENCRYPT_DIR_PREFIX));
       ciphertext = join(encryptedDir, "artifact");
-      await encryptArtifactFile(
+      await encryptArtifactFileUnderBackupKey(
         compressArchive(packArchiveStream(entries), deps.signal),
         ciphertext,
-        deps.recoveryKey,
+        deps.backupKey,
         deps.signal,
       );
       // The encrypted file can be larger than the estimate; each folder copy on the disk writes it

@@ -1,4 +1,5 @@
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
+import { HELD_BACKUP_FRAME, HELD_BACKUP_KEY } from "./testing/recovery-key.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -37,7 +38,7 @@ const T = {
   seriesId: "c0000000-0000-4000-8000-000000000004",
 };
 const NOW = new Date("2026-10-08T12:00:00Z");
-const RECOVERY_KEY = "synthetic-email-restore-key";
+const RECOVERY_KEY = HELD_BACKUP_KEY.key;
 const KEY = Buffer.alloc(32, 17).toString("base64");
 const FOREIGN_KEY = Buffer.alloc(32, 29).toString("base64");
 const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: KEY });
@@ -120,7 +121,7 @@ beforeAll(async () => {
       environment: "production",
       resolvers: {},
       stateDir: root,
-      recoveryKey: RECOVERY_KEY,
+      backupKey: HELD_BACKUP_FRAME,
       stagingDir: join(root, "staging"),
       retain: 1,
       retainDays: 1,

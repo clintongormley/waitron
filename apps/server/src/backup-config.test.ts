@@ -62,33 +62,51 @@ describe("loadBackupKey", () => {
     );
   });
 
-  it("the backup settings carry the number and id they read, without requiring them", () => {
-    const sealed: ArchiveSettings = {
-      revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
-      enabled: true,
-      cloud: false,
-      destinations: [{ kind: "local-fs", id: "primary", dir: "/mnt/sealed" }],
-      schedule: { kind: "interval", ms: 3_600_000 },
-      retention: { count: 5, days: 12 },
-      destinationTimeoutMs: 120_000,
-    };
-    expect(resolveBackupConfig({ env: HELD, sealed })).toMatchObject({
+  const SEALED: ArchiveSettings = {
+    revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
+    enabled: true,
+    cloud: false,
+    destinations: [{ kind: "local-fs", id: "primary", dir: "/mnt/sealed" }],
+    schedule: { kind: "interval", ms: 3_600_000 },
+    retention: { count: 5, days: 12 },
+    destinationTimeoutMs: 120_000,
+  };
+
+  it("the backup settings carry the number and id they read", () => {
+    expect(resolveBackupConfig({ env: HELD, sealed: SEALED })).toMatchObject({
       recoveryKey: "held-recovery-key-0123",
       keyNumber: 2,
       masterKeyId: "0123456789abcdef",
     });
-    const keyOnly = resolveBackupConfig({
+  });
+
+  it.each([
+    ["no number", { WAITRON_BACKUP_KEY_NUMBER: undefined }],
+    ["no master key id", { WAITRON_BACKUP_MASTER_KEY_ID: undefined }],
+    ["a malformed number", { WAITRON_BACKUP_KEY_NUMBER: "01" }],
+  ])("an enabled record with %s is refused", (_, change) => {
+    expect(() => resolveBackupConfig({ env: { ...HELD, ...change }, sealed: SEALED })).toThrow(
+      new AppError("backup.recovery_key_missing", {}),
+    );
+  });
+
+  it("a switched-off record without N or the id still reports the key it holds", () => {
+    const cfg = resolveBackupConfig({
       env: { WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123" },
-      sealed,
+      sealed: { ...SEALED, enabled: false },
     });
-    expect(keyOnly).toMatchObject({ recoveryKey: "held-recovery-key-0123" });
-    expect(keyOnly?.keyNumber).toBeUndefined();
-    expect(keyOnly?.masterKeyId).toBeUndefined();
+    expect(cfg).toMatchObject({ enabled: false, recoveryKey: "held-recovery-key-0123" });
+    expect(cfg?.keyNumber).toBeUndefined();
+    expect(cfg?.masterKeyId).toBeUndefined();
   });
 });
 
 describe("resolveBackupConfig", () => {
   const KEY = "held-recovery-key-0123";
+  const N_AND_ID = {
+    WAITRON_BACKUP_KEY_NUMBER: "1",
+    WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
+  };
   const sealed: ArchiveSettings = {
     revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
     enabled: true,
@@ -119,7 +137,7 @@ describe("resolveBackupConfig", () => {
 
   it("stale after two days regardless of the retired environment setting", () => {
     const cfg = resolveBackupConfig({
-      env: { WAITRON_BACKUP_RECOVERY_KEY: KEY, WAITRON_BACKUP_STALE_AFTER_MS: "1" },
+      env: { WAITRON_BACKUP_RECOVERY_KEY: KEY, ...N_AND_ID, WAITRON_BACKUP_STALE_AFTER_MS: "1" },
       sealed,
     });
     expect(cfg?.staleAfterMs).toBe(172_800_000);
@@ -129,6 +147,7 @@ describe("resolveBackupConfig", () => {
     const cfg = resolveBackupConfig({
       env: {
         WAITRON_BACKUP_RECOVERY_KEY: KEY,
+        ...N_AND_ID,
         WAITRON_BACKUP_KEY_ROTATED_AT: "2026-10-01T00:00:00.000Z",
       },
       sealed,
@@ -144,6 +163,8 @@ describe("resolveBackupConfig", () => {
       staleAfterMs: 2 * 24 * 60 * 60 * 1000,
       destinationTimeoutMs: 120_000,
       keyRotatedAt: "2026-10-01T00:00:00.000Z",
+      keyNumber: 1,
+      masterKeyId: "0123456789abcdef",
     });
   });
 
@@ -222,7 +243,11 @@ describe("loadBackupSettings", () => {
 
   const meta = { keyVersion: 1, writtenAt: "2026-10-29T10:00:00.000Z", digest: "0123456789abcdef" };
   const record = { digest: meta.digest, writtenAt: meta.writtenAt };
-  const KEY = { WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123" };
+  const KEY = {
+    WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123",
+    WAITRON_BACKUP_KEY_NUMBER: "1",
+    WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
+  };
 
   it("keeps a failure's allowlisted detail beside its code", async () => {
     expect(

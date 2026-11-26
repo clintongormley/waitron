@@ -1,4 +1,5 @@
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
+import { HELD_BACKUP_FRAME } from "./testing/recovery-key.js";
 // Needs its own filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_ROOT/backup-room names, or on
 // macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case
 // is reported SKIPPED; with CI=true or WAITRON_REQUIRE_TEST_TOOLS=1 it FAILS instead (testing-guide.md,
@@ -87,7 +88,7 @@ async function runCase(small: SmallDisk, name: string, c: Case) {
         resolvers: {},
         stateDir,
         stagingDir,
-        recoveryKey: "a-recovery-key-long-enough",
+        backupKey: HELD_BACKUP_FRAME,
         retain: 7,
         retainDays: 30,
         destinationTimeoutMs: 60_000,

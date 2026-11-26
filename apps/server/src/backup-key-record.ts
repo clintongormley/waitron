@@ -1,4 +1,5 @@
 import { backupKey, masterKeyId } from "@waitron/credentials";
+import type { BackupKeyFrameInput } from "@waitron/provisioning";
 import { decodeMasterKeyCode } from "@waitron/shared";
 import { writeBackupKey, type BackupKeyRecord } from "./backup-env-writer.js";
 
@@ -24,4 +25,13 @@ export function writeBackupKeyOne(
     stateDir,
     backupKeyRecord(decodeMasterKeyCode(masterKey.made.masterKey), 1, masterKey.publicKey),
   );
+}
+
+/** The record as the archive frame takes it: the key's and the master key id's bytes. */
+export function backupKeyFrameInput(record: BackupKeyRecord): BackupKeyFrameInput {
+  return {
+    backupKey: Buffer.from(record.key, "base64url"),
+    keyNumber: record.keyNumber,
+    masterKeyId: Buffer.from(record.masterKeyId, "hex"),
+  };
 }

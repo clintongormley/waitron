@@ -13,6 +13,7 @@ import { createCloudConnection } from "../src/cloud-client.js";
 import { openVenueDatabase, readCloudVenueId, withTransaction } from "@waitron/db";
 import { createCloudArchiveTarget } from "../src/cloud-archive-target.js";
 import { createBackupSchedule } from "../src/backup-sweep.js";
+import { HELD_BACKUP_FRAME } from "../src/testing/recovery-key.js";
 import { resolveVenueClock } from "../src/report-api.js";
 import { ALL_MODULES } from "../src/modules.js";
 import { parseEnvFile } from "../src/env-file.js";
@@ -126,7 +127,7 @@ else if (request.command === "schedule") {
       resolvers: {},
       stateDir,
       stagingDir: join(stateDir, BACKUP_STAGING_DIR),
-      recoveryKey: "",
+      backupKey: HELD_BACKUP_FRAME,
       schedule: { kind: "interval", ms: 86_400_000 },
       retain: 1,
       retainDays: 1,
