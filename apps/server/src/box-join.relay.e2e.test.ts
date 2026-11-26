@@ -3,6 +3,7 @@
 // state folder as a backup holder would, so TLS hides nothing from it; on loopback it shares S's
 // address, as a relay that has taken over that address would. Not tested, because it is the
 // remaining risk and not a defence: a relay holding M's node key swapping the bundle.
+import { createPrivateKey } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:https";
 import type { AddressInfo } from "node:net";
@@ -178,7 +179,8 @@ async function recoveryKeyOf(pair: JoinPair): Promise<string> {
  */
 async function bundleSecretsIn(pair: JoinPair, text: string): Promise<string[]> {
   const pem = await readFile(join(pair.dirsM.state, "tls", "ca.key"), "utf8");
-  const lines = pem.split(/\r?\n/).filter((l) => l !== "" && !l.startsWith("-"));
+  const key = createPrivateKey(pem).export({ type: "pkcs1", format: "pem" }).toString();
+  const lines = key.split(/\r?\n/).filter((line) => line !== "" && !line.startsWith("-"));
   expect(lines.length).toBeGreaterThan(1);
   const parts = ["PRIVATE KEY", ...lines, await recoveryKeyOf(pair)];
   return parts.filter((part) => text.includes(part));

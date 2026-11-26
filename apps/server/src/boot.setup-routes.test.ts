@@ -72,7 +72,6 @@ import { readModuleConfig } from "./module-config.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { writeStreamSettings } from "./stream-host.js";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
-import { MAIN_AUTHORITY } from "./testing/main-authority.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { encodeRecoveryKit, signPointer } from "@waitron/stream";
 import { loadNodeIdentity } from "./node-config.js";
@@ -470,6 +469,13 @@ function hashedVenueRequest(taxId: string) {
 }
 
 describe("startServer — setup-mode routes that hand work to the boot's own wiring", () => {
+  const SETUP_CLOCK_MS = Date.parse("2026-10-16T11:40:00Z");
+  const MAIN_AUTHORITY = mintSelfSignedServerCert({
+    hostnames: ["waitron.local"],
+    ipAddresses: [],
+    now: new Date(SETUP_CLOCK_MS),
+  });
+
   /** A restore without recovery details is refused unless the real environment names this file;
    * these cases test what happens after that check. */
   const OPERATION_FILE_BASE = {
@@ -512,10 +518,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     const port = held?.port ?? configuredPort;
     let adoption: ReturnType<typeof adoptRetainedListeners> | undefined;
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-setup-routes-"));
-    vi.useFakeTimers({ toFake: ["Date"], now: Date.parse("2026-10-16T11:40:00Z") });
+    vi.useFakeTimers({ toFake: ["Date"], now: SETUP_CLOCK_MS });
     const clockStart = performance.now();
     vi.spyOn(Date, "now").mockImplementation(
-      () => Date.parse("2026-10-16T11:40:00Z") + Math.trunc(performance.now() - clockStart),
+      () => SETUP_CLOCK_MS + Math.trunc(performance.now() - clockStart),
     );
     const release = await import("@waitron/fiscal-verifactu/src/hour-release.js");
     const releaseSpy = vi.spyOn(release, "readHourRelease").mockReturnValue({
@@ -525,7 +531,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       generator: "scripts/generate-hour-release.mjs:v1",
       generatorSha256: "b".repeat(64),
     });
-    const testClock = createHourTestClock(Date.parse("2026-10-16T11:40:00Z"));
+    const testClock = createHourTestClock(SETUP_CLOCK_MS);
     const internet = await import("@waitron/fiscal-verifactu/src/hour-clock-time-service.js");
     const internetSpy = vi
       .spyOn(internet, "observeTimeServiceHourClock")
@@ -795,7 +801,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
   it("refuses to finish a restore while a clock step's note cannot be written, and writes it on the next try", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
-    const clock = createHourTestClock(Date.parse("2026-10-16T11:40:00Z"));
+    const clock = createHourTestClock(SETUP_CLOCK_MS);
     const boxHost = {
       clockStatus: async () => clockServiceAnswer(false),
       setClock: async ({ targetMs }: { targetMs: number }) => {
