@@ -270,6 +270,13 @@ function replacement(id, total, correctsSaleId) {
     .replace(/\)$/, ", 1)");
 }
 
+/** A sale of `workingOrderId`, as issuing one files it. */
+function saleOf(id, workingOrderId) {
+  return sale(id, 0)
+    .replace("corrects_sale_id)", "corrects_sale_id, working_order_id)")
+    .replace(/\)$/, `, '${workingOrderId}')`);
+}
+
 /** An open party. Check constraints are off here, so `closed_at` need not follow `state`. */
 function party(id) {
   return (
@@ -414,6 +421,9 @@ function seed(connection) {
       `'wo-moves-frozen', 'wo-moves-lines')`,
     `update working_orders set status = 'settled', settled_at = '${STAMP}' ` +
       `where id in ('wo-served-settled', 'wo-served-orphan', 'wo-served-relocale')`,
+    // A sale names each placed order whose way back to open is refused.
+    saleOf("sale-of-wo-placed", "wo-placed"),
+    saleOf("sale-of-wo-moves-frozen", "wo-moves-frozen"),
 
     // Lines for the sent-stamp exception: a line sent to the kitchen after its bill was presented or
     // paid.
@@ -853,7 +863,7 @@ describe("tenders_reject_post_settlement", () => {
 });
 
 describe("working_orders_enforce_transition", () => {
-  it("refuses a placed order going back to open", () => {
+  it("refuses a placed order going back to open once a sale names it", () => {
     expect(
       refusalFor(connection, `update working_orders set status = 'open' where id = 'wo-placed'`),
     ).toBe(TRANSITION_REFUSAL);
@@ -1057,7 +1067,7 @@ describe("working_orders_enforce_transition's exception for a presented bill", (
     },
   );
 
-  it("still refuses a presented bill going back to open, alone or with a party change", () => {
+  it("still refuses a presented bill a sale names going back to open, alone or with a party change", () => {
     for (const also of ["", ", party_id = 'party-frozen'"]) {
       expect(
         refusalFor(

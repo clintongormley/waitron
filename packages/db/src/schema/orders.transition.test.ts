@@ -356,11 +356,12 @@ describe("working_orders state machine (enforce_transition)", () => {
     expect(engineErrorMessage(eRecollect)).toBe(TRANSITION_REFUSAL);
   });
 
-  it("rejects placed → open and a non-status update of a placed row (the row-level freeze)", async () => {
+  it("rejects placed → open once a sale names the order, and a non-status update of a placed row", async () => {
     const id = await open();
     await inTx((tx) =>
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
     );
+    await issueSale(id);
     const e1 = await captureError(() =>
       inTx((tx) =>
         tx.update(workingOrders).set({ status: "open" }).where(eq(workingOrders.id, id)),
@@ -375,6 +376,29 @@ describe("working_orders state machine (enforce_transition)", () => {
       ),
     );
     expect(engineErrorMessage(e2)).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("lets a placed order with no sale go back to open by status alone", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+    const eWithLabel = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ status: "open", label: "x" })
+          .where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(eWithLabel)).toBe(TRANSITION_REFUSAL);
+    expect(await statusOf(id)).toBe("placed");
+
+    const before = await rowOf(id);
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "open" }).where(eq(workingOrders.id, id)),
+    );
+    expect(await rowOf(id)).toEqual({ ...before, status: "open" });
   });
 
   it("lets an unissued placed bill save its full-invoice recipient with a revision change", async () => {
