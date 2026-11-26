@@ -4288,8 +4288,9 @@ text. The line and weight make the current page identifiable by more than colour
 
 Section headings and folded panel titles use sentence case, normal letter spacing, 14 px
 `--wt-font-size-md` and weight 600 (`--wt-font-weight-bold`) in `--wt-color-text`. Each heading has
-`--wt-space-2` above it. Indent pages in a headed section to start under the heading's text. Keep
-the label close to its first page and leave `--wt-space-1` below the last page of an open section.
+`--wt-space-2` above it. Indent pages in a headed section to start under the heading's text. Leave
+`--wt-space-1` below the last page of an open section. With a mouse, the text starts about 32 px
+after the heading's text, and the next heading's text starts about 44 px after the last page's text.
 Unheaded staff pages and folded panel pages use the regular row padding.
 
 Overview and Bookings sit at the top as direct rows with their own icons and use the section label

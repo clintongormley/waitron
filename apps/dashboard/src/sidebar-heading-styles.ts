@@ -7,7 +7,7 @@ export const sidebarHeadingStyles = css`
     width: 100%;
     min-height: var(--wt-tap-min);
     margin: var(--wt-space-2) 0 0;
-    padding: var(--wt-space-4) var(--wt-space-3) var(--wt-space-2);
+    padding: var(--wt-space-3);
     border: none;
     border-inline-start: 3px solid transparent;
     background: transparent;
