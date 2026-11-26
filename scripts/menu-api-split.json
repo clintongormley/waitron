@@ -1,0 +1,171 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/menu-api.ts",
+      "keep": [
+        "readMenuSettingsAnswer",
+        "MENU_WRITE_PERMISSION",
+        "requireMenuIdBody",
+        "mountMenuApi"
+      ],
+      "lift": {
+        "mount": "mountMenuApi",
+        "groups": {
+          "mountMenuLanguageRoutes": {
+            "first": "get /management-api/content-languages",
+            "last": "put /management-api/content-languages",
+            "parameters": {
+              "app": "Hono",
+              "deps": "MenuApiDeps",
+              "gated": "GatedWork",
+              "log": "Logger"
+            }
+          },
+          "mountMenuCollectionRoutes": {
+            "first": "get /management-api/menus",
+            "last": "patch /management-api/menus/:id",
+            "parameters": {
+              "app": "Hono",
+              "deps": "MenuApiDeps",
+              "gated": "GatedWork",
+              "log": "Logger"
+            }
+          },
+          "mountMenuDetailRoutes": {
+            "first": "get /management-api/menus/:id/structure",
+            "last": "get /management-api/menus/:id/preview",
+            "parameters": {
+              "app": "Hono",
+              "gated": "GatedWork",
+              "log": "Logger"
+            }
+          },
+          "mountMenuPublishingRoutes": {
+            "first": "post /management-api/menus/:id/publish",
+            "last": "post /management-api/menus/:id/publications/:versionId/cancel",
+            "parameters": {
+              "app": "Hono",
+              "deps": "MenuApiDeps",
+              "gated": "GatedWork",
+              "log": "Logger"
+            }
+          },
+          "mountMenuItemPriceRoutes": {
+            "first": "patch /management-api/menus/:id/items/:itemId",
+            "last": "patch /management-api/menus/:id/items/:itemId/variants/:variantId",
+            "parameters": {
+              "app": "Hono",
+              "gated": "GatedWork",
+              "log": "Logger"
+            }
+          },
+          "mountMenuCategoryRoutes": {
+            "first": "get /management-api/categories",
+            "last": "patch /management-api/categories/:id",
+            "parameters": {
+              "app": "Hono",
+              "gated": "GatedWork",
+              "log": "Logger"
+            }
+          },
+          "mountMenuProductAvailabilityRoutes": {
+            "first": "get /management-api/products",
+            "last": "put /management-api/products/availability",
+            "parameters": {
+              "app": "Hono",
+              "gated": "GatedWork",
+              "log": "Logger"
+            }
+          },
+          "mountMenuProductEditorRoutes": {
+            "first": "post /management-api/products/editor",
+            "last": "post /management-api/products",
+            "parameters": {
+              "app": "Hono",
+              "deps": "MenuApiDeps",
+              "gated": "GatedWork",
+              "log": "Logger",
+              "screenRouting": "(body: Record<string, unknown>) => ProductRouting",
+              "applyRouting": "(tx: Transaction, saved: ProductEditorValue, routing: ProductRouting) => Promise<ProductEditorValue>"
+            }
+          }
+        }
+      },
+      "targets": {
+        "apps/server/src/menu-api-deps.ts": ["MenuApiDeps", "translationContextFor"],
+        "apps/server/src/menu-api-errors.ts": [
+          "STATUS",
+          "run",
+          "runBodyIds",
+          "runCreateProduct",
+          "runBodyMenu",
+          "runBodyCategory",
+          "runBodyProduct",
+          "runFolder",
+          "runBodySection",
+          "runBodyRole",
+          "runBodySetMenu",
+          "runStructureSave",
+          "runVariant"
+        ],
+        "apps/server/src/menu-request-fields.ts": [
+          "nullOrUuid",
+          "sectionInput",
+          "memberRef",
+          "idList",
+          "numberField",
+          "requireUuidParam",
+          "refuseInvalidPrice",
+          "refuseRetiredFields",
+          "isPlainObject"
+        ],
+        "apps/server/src/menu-list-routes.ts": ["ListSurface", "mountListSurface"],
+        "apps/server/src/menu-sections-routes.ts": [
+          "INCLUDE_FOLDER_OVERRIDES",
+          "includeFolderInput",
+          "membersBody",
+          "sectionIdsBody",
+          "mountSectionRoutes"
+        ],
+        "apps/server/src/menu-home-routes.ts": ["mountMenuHomeRoutes"],
+        "apps/server/src/menu-set-menu-routes.ts": [
+          "RETIRED_SET_MENU_FIELDS",
+          "setMenuTerms",
+          "setMenuRows",
+          "mountSetMenuRoutes"
+        ],
+        "apps/server/src/menu-languages-routes.ts": [
+          "NO_CONTENT_LANGUAGE_RULES",
+          "mountMenuLanguageRoutes"
+        ],
+        "apps/server/src/menu-collection-routes.ts": [
+          "deleteDefaultChoices",
+          "mountMenuCollectionRoutes"
+        ],
+        "apps/server/src/menu-details-routes.ts": ["readMenuStatus", "mountMenuDetailRoutes"],
+        "apps/server/src/menu-publishing-routes.ts": [
+          "requireVenueCfg",
+          "mountMenuPublishingRoutes"
+        ],
+        "apps/server/src/menu-item-prices-routes.ts": [
+          "parseMenuVariants",
+          "mountMenuItemPriceRoutes"
+        ],
+        "apps/server/src/menu-categories-routes.ts": [
+          "categoryInput",
+          "selectionBody",
+          "shownBody",
+          "mountMenuCategoryRoutes"
+        ],
+        "apps/server/src/menu-products-routes.ts": [
+          "screenDietOverride",
+          "parseProductModifiers",
+          "screenCustomerName",
+          "mountMenuProductAvailabilityRoutes",
+          "mountMenuProductEditorRoutes"
+        ]
+      }
+    }
+  ]
+}

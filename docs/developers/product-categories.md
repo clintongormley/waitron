@@ -93,7 +93,7 @@ products in a section does not change their category or prep-station rules
 ### Section routes
 
 You edit sections within their owning menu. `mountSectionRoutes` in
-`apps/server/src/menu-api.ts` serves these routes behind the same manager session and
+`apps/server/src/menu-sections-routes.ts` serves these routes behind the same manager session and
 permission as the category routes below. A section answer is
 `{ id, internalName, names, image, color, members }`. A member is `{ id, position, ref }`, where
 `ref` is `{ kind: "product", productId }` or `{ kind: "section", sectionId }`.

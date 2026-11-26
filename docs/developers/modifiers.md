@@ -31,7 +31,7 @@ today and guarded by nothing.
 
 Each kind of list has its own six routes under `/management-api/modifiers`, and the two sets are the
 same six with one path segment different. They are mounted by one helper, `mountListSurface`
-(`apps/server/src/menu-api.ts`), which is why they cannot drift apart.
+(`apps/server/src/menu-list-routes.ts`), which is why they cannot drift apart.
 
 | Route | Answers |
 | --- | --- |
