@@ -24,9 +24,9 @@ must say "ready for the owner" before the owner sees them; and a piece §14.2 na
 
 **Shared pieces.** Lane O builds two: the keypad (in O7, reused by O12 and O15's custom amount) and
 the list of shares with its markers (in O2, reused by O3, O9 and O16). The rest come from other
-lanes and are waited for, never copied: lane I's full-screen panel and amount block (PR 15), lane
-N's top bar, foot bar, choice tile and stepper, and lane D's sheet. If PR 15 lands without an amount
-block piece, lane O asks the watcher.
+lanes and are waited for, never copied: lane I's full-screen panel, amount block, top bar, foot bar
+and choice tile (PR 15a; the watcher moved the last three from lane N at 21:53 on 26 November),
+lane N's stepper, and lane D's sheet. If 15a lands without one of them, lane O asks the watcher.
 
 ## The PRs, in order
 
@@ -54,7 +54,7 @@ lane I's PRs brings Pay there.
 | O13 Other card machine | The amount to type on the machine, three steps, the machine chosen from the venue's list (starting on the one this phone used last), the operation number in view, "It went through" and "It was declined" (back to Pay, nothing recorded). Adds the till's read of the list. | `bd` | O1b, I 15c | lane O |
 | O14 Guest's bill (21a) | On a table with tips switched on, Pay first shows the guest the bill in its customer-facing names and the receipt's language, with a language choice and Skip for the waiter. | `ah` 1 | I 15 | lane O |
 | O15 Guest's tip, whole bill (21b) | The guest chooses 5, 10 or 15% or types a total; the tip travels once, apart from the bill, through Cash, Card and a bill already printed and handed over. | `o` 2–3 | O7, O8, O14 | lane O, or owner if a printed bill's tip changes its receipt |
-| O16 Guest's tip on a share | Each split guest, and each Items guest, is asked on their own share; a tip the table agreed is divided into the shares; Remove tip on a share. | `ba` 2 | O3, O10, O15 | lane O |
+| O16 Guest's tip on a share | Each split guest, and each Items guest, is asked on their own share, with the same column of tip choices as O15 (the owner's "A", relayed at 21:52 on 26 November; frame `ba` 2's row is not built); a tip the table agreed is divided into the shares; Remove tip on a share. | `ba` 2, choices as `o` 2 | O3, O10, O15 | lane O |
 
 Why this order: O1a and O1b are the pieces that can be built before lane I lands anything. Split equally
 needs least from 15c, so it comes first of the screens that open from Pay. Cash, the reader and Paid
@@ -77,8 +77,7 @@ and "No tip · hand back to your waiter".
 2. **The cash drawer follows the device's profile on every device, a phone included** (the owner's
    "2 y" to the watcher's question, lane F `questions.md`, 17:20 on 26 November). The server already
    decides it that way (`apps/server/src/receipt-print.ts:217-220`), so O4 and O7 do not change who
-   may open the drawer. §7.9's last sentence ("and a phone's never") disagrees with that answer; O7
-   adds a dated note beside §7.5, §7.8 and §7.9, unless the watcher says §7.9 wins.
+   may open the drawer. The spec says so too since 1fa2826fdf.
 3. **Who lands what.** O6 changes which printers the server accepts for a full invoice (today the
    device's own A4 printer, or receipt paper: `apps/server/src/invoice-choice-delivery.ts:39-64`).
    O11 changes which lines can move to a bill with its own receipt. O12 makes "their own receipt"
@@ -87,14 +86,32 @@ and "No tip · hand back to your waiter".
    is issued, so the owner lands it. Every PR here touches cards, cash, the drawer or receipts, so
    each takes the full review with two run-it reviews.
 
-## A question for the owner, through the watcher
+## Answered by the owner
 
-**Cancelling a card at the reader.** The reader screen the owner approved has nothing to press
-(§7.6 and §7.8). Since 21 November staff can cancel a SumUp card payment that is still waiting
-(PR #3959). Keep that as a small link on the new reader screen, or remove it? I recommend keeping
-it, listed as a difference from `k` 3: it was added after the owner's own report on 20 November
-([its plan](https://github.com/clintongormley/waitron/blob/f8d93fd328/docs/superpowers/plans/2026-11-21-cancel-waiting-card-payment.md) names it), and the approved picture may simply
-not have shown it.
+**Cancelling a card at the reader** (spec §7.6, §7.8): the owner keeps the small "Cancel payment"
+link that #3959 added (relayed by the watcher at 21:48 on 26 November: "Keep it as a small link").
+O8 builds it as a dated difference from `k` 3.
+
+**The guest's tip choices** are a column of large buttons, "Custom amount" the fourth, on both tip
+screens (O15 and O16; relayed at 21:52).
+
+## After payment (TILL-REDESIGN-PAY-3, queued 21:56): proposed cuts
+
+Spec §7.12 and §7.13, frames `be`–`bh`, §13's build notes. Make it a full invoice and the Refund
+sheet are lane L's; the receipt screen opens them. Proposed, for the watcher's clearance; each PR
+still gets its own one-page plan.
+
+| PR | Staff can use | Frames | Waits for | Lands |
+| --- | --- | --- | --- | --- |
+| R1 "Refund" | Every till string saying "Give money back" or "Give back" says "Refund", in English and Spanish (the `give_back.*` and `bill_refund.*` keys), guides included. | none | nothing | lane O |
+| R2 Find a bill | Finished sales only (the Bills tab goes), one list newest first, a search that also finds an amount (new in `apps/server/src/find-bill-transactions.ts`), the day, staff and kind chips, and the strip of refunds waiting on the card company. | `be` | I 15a's top bar | lane O |
+| R3 The receipt screen | The receipt as printed with Print again (a printer and language sheet), Refund and Make it a full invoice opening lane L's screens, and Change how it was paid once R4 lands. | `bf` | R2; lane D's sheet | lane O |
+| R4 Change how it was paid | Any waiter switches a payment between cash and another card machine, recorded with who and when, until its drawer is closed for the day; never a payment on a reader Waitron drives; the drawer's expected cash and a reprint follow; the tax record is untouched. | `bh` | R3, O13 (the machine dropdown) | lane O |
+
+R1 needs nothing and can be built between PAY-2's PRs while they wait for lane I. R2 and R3 follow
+once 15a is on `main`; R4 after O13. R4 changes no invoice or filing (`SaleForFiscalRecord`,
+`packages/fiscal/src/backend.ts`, carries no payment method), but it changes a drawer's expected
+cash, so it takes two run-it reviews.
 
 Each PR aims at about three hours. O4, O9 and O15 are the likeliest to run over; their plans say
 how they would split.
