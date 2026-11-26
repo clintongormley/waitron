@@ -401,6 +401,27 @@ describe("working_orders state machine (enforce_transition)", () => {
     expect(await rowOf(id)).toEqual({ ...before, status: "open" });
   });
 
+  it("a placed order with no sale refuses going back to open with any other column", async () => {
+    const id = await open();
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, id)),
+    );
+    const columns = suite.db.all<{ name: string }>(
+      sql`select name from pragma_table_info('working_orders')`,
+    );
+    for (const { name } of columns.filter(({ name }) => !["id", "status"].includes(name))) {
+      const error = await captureError(() =>
+        inTx(async (tx) =>
+          tx.execute(
+            sql`update working_orders set status = 'open', ${sql.identifier(name)} = ${"changed"} where id = ${id}`,
+          ),
+        ),
+      );
+      expect(engineErrorMessage(error), name).toBe(TRANSITION_REFUSAL);
+      expect(await statusOf(id), name).toBe("placed");
+    }
+  });
+
   it("lets an unissued placed bill save its full-invoice recipient with a revision change", async () => {
     const id = await open();
     await inTx((tx) =>
