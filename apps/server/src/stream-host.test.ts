@@ -158,6 +158,7 @@ describe("the live copy's wiring", () => {
       options: {
         term?: number;
         solo?: boolean;
+        ownStanding?: "serving-primary" | "sell-only";
         standing?: "serving-secondary" | "evicted";
         endorsement?: "missing" | "forged";
       } = {},
@@ -175,7 +176,11 @@ describe("the live copy's wiring", () => {
           heldDocument: null,
           minTerm: options.term ?? 1,
           nodes: [
-            { nodeId: NODE_ID, contactUrl: "https://old.example", standing: "serving-primary" },
+            {
+              nodeId: NODE_ID,
+              contactUrl: "https://old.example",
+              standing: options.ownStanding ?? "serving-primary",
+            },
             ...(options.solo
               ? []
               : [
@@ -222,10 +227,13 @@ describe("the live copy's wiring", () => {
       await configure({ endorsement: "forged" });
       expect(await readNewerBucketMain(deps(bucket))).toBeNull();
     });
-    it.each(["equal term", "wrong key", "joined peer"])(
+    it.each(["equal term", "wrong key", "joined peer", "an old primary"])(
       "ignores a replacement pointer with %s",
       async (caseName) => {
-        await configure({ solo: caseName !== "joined peer" });
+        await configure({
+          solo: caseName !== "joined peer",
+          ownStanding: caseName === "an old primary" ? "sell-only" : undefined,
+        });
         const bucket = store();
         await publish(
           bucket,

@@ -437,7 +437,7 @@ async function run(
 }
 
 describe("waitron-restore restore --from-archive", () => {
-  it("publishes a newer bucket pointer signed with the archived box's key", async () => {
+  it("publishes with the archived box's key and stops if a later replacement publishes", async () => {
     const f = await fixture();
     const original = await boxDirs(f.root, "original");
     await suite.db.archiveTo(join(original.venue, "venue.db"));
@@ -454,12 +454,12 @@ describe("waitron-restore restore --from-archive", () => {
     );
     const env = await loadBoxEnv({}, original.state);
     const ring = loadKeyRing(env);
-    let publicKey: string;
+    let signingKey: string;
     let streamId: string;
     const source = await openVenueDatabase(original.venue);
     try {
       await establishNodeIdentity({ ownerDb: source.venue, node: source.node, ring }, ids.node);
-      publicKey = nodeSigningPublicKey(await readNodeIdentityKey(source.node, ring, ids.node));
+      signingKey = await readNodeIdentityKey(source.node, ring, ids.node);
       await seedTermZeroMembership(
         { db: source.venue, node: source.node, ring },
         ids.node,
@@ -515,6 +515,7 @@ describe("waitron-restore restore --from-archive", () => {
     }) satisfies S3ObjectStore;
     const open = vi.spyOn(stream, "createS3FolderStore").mockReturnValue(bucket);
     const litestream = new FakeLitestream();
+    const restart = vi.fn();
     const listener = await retainHttpListener();
     try {
       const migrations = await copyMigrations(f.root);
@@ -523,7 +524,11 @@ describe("waitron-restore restore --from-archive", () => {
         f.stateDir,
       );
       const server = await startWithRetainedListeners([listener], () =>
-        startServer(startup, {}, { stream: { store: bucket, spawn: litestream.spawn } }),
+        startServer(
+          startup,
+          {},
+          { stream: { store: bucket, spawn: litestream.spawn, mainCheckIntervalMs: 5 }, restart },
+        ),
       );
       try {
         await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 5_000 });
@@ -538,8 +543,23 @@ describe("waitron-restore restore --from-archive", () => {
           { timeout: 10_000 },
         );
         const pointer = (await stream.readPointer(bucket, streamId))!.pointer;
-        expect(stream.verifyPointer(pointer, publicKey)).toBe(true);
+        expect(stream.verifyPointer(pointer, nodeSigningPublicKey(signingKey))).toBe(true);
         expect(stream.verifyPointer(pointer, generateNodeKeyPair().publicKey)).toBe(false);
+        const next = stream.signPointer(
+          {
+            ...pointer.body,
+            term: 2,
+            generation: `gen-2-${ids.node}-20261002T030000Z`,
+          },
+          signingKey,
+        );
+        await bucket.put(stream.pointerKey(), new TextEncoder().encode(JSON.stringify(next)));
+        await vi.waitFor(() => expect(restart).toHaveBeenCalledOnce(), { timeout: 5_000 });
+        expect(JSON.parse(await readFile(replacementMark, "utf8"))).toEqual({
+          streamId,
+          nodeId: ids.node,
+          term: 2,
+        });
       } finally {
         await server.close();
       }

@@ -1,7 +1,8 @@
 import { loadKeyRing } from "@waitron/credentials";
-import { incidents, withTransaction } from "@waitron/db";
+import { enqueueMail, incidents, outgoingMail, persons, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { AppError } from "@waitron/shared";
 import { pointerKey, signPointer } from "@waitron/stream";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import { eq } from "drizzle-orm";
@@ -9,11 +10,14 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import * as atomic from "./fs-atomic.js";
+import { boxHostnameFor } from "./box-name.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import * as stopAlert from "./stop-alert.js";
 import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
 import { startFakeSmtp } from "./testing/boot-harness.js";
 import { TRADING_BOOT_KEY_ENV } from "./testing/boot-trading-fixture.js";
+import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import {
   ephemeralServerFixture,
   withTradingBootServer,
@@ -145,15 +149,32 @@ it("stops admissions before saving the replacement and stays stopped after an of
     await write(...args);
   });
   let env: Record<string, string>;
-  const boot = (vars: Record<string, string>) =>
-    startServer(vars, vars, {
-      boxHost: synchronisedBoxHost(),
-      stream: { store: bucket, mainCheckIntervalMs: 5 },
-      restart,
-    });
+  let mdns: ReturnType<typeof fakeMdnsSocket>;
+  const boot = (vars: Record<string, string>) => {
+    mdns = fakeMdnsSocket();
+    return startServer(
+      { ...vars, WAITRON_HTTP_HOST: "0.0.0.0", WAITRON_BOX_ADDRESSES: "192.0.2.10" },
+      vars,
+      {
+        boxHost: synchronisedBoxHost(),
+        stream: { store: bucket, mainCheckIntervalMs: 5 },
+        mdnsSocket: () => mdns.socket,
+        restart,
+      },
+    );
+  };
+  const answers = () => {
+    mdns.clear();
+    mdns.query(boxHostnameFor(cfg.nodeId));
+    mdns.query("waitron.local");
+    return mdns.answered();
+  };
   const probe = async (origin: string) =>
     (await fetch(`${origin}/api/node`)).json() as Promise<{ acceptingSales: boolean }>;
   const smtp = await startFakeSmtp();
+  const record = vi
+    .spyOn(stopAlert, "recordReplacement")
+    .mockRejectedValueOnce(new AppError("storage.disk_full", {}));
   try {
     await withTransaction(suite.db, (tx) =>
       saveSmtpForTest(tx, ring, {
@@ -175,6 +196,7 @@ it("stops admissions before saving the replacement and stays stopped after an of
       async (base) => {
         try {
           expect(await probe(base)).toMatchObject({ acceptingSales: true });
+          expect(answers()).toEqual([boxHostnameFor(cfg.nodeId), "waitron.local"]);
           const pointer = signPointer(
             {
               streamId,
@@ -191,6 +213,7 @@ it("stops admissions before saving the replacement and stays stopped after an of
           const refused = await fetch(`${base}/api/attendance/commands`, { method: "POST" });
           expect(refused.status).toBe(503);
           expect(await refused.json()).toMatchObject({ error: { code: "handover.stepping_down" } });
+          expect(answers()).toEqual([]);
           bucket.down = true;
           releaseFirst();
           await vi.waitFor(() => expect(attempts).toBe(2), { timeout: 2_000 });
@@ -205,22 +228,63 @@ it("stops admissions before saving the replacement and stays stopped after an of
             term: 1,
           });
 
+          const now = new Date();
+          await stopAlert.recordUnexpectedStop(suite.db, heartbeatAt, now);
+          const oldClaim = await withTransaction(suite.db, async (tx) => {
+            const [owner] = await tx
+              .select({ id: persons.id })
+              .from(persons)
+              .where(eq(persons.email, "owner@example.test"));
+            const { id } = await enqueueMail(tx, {
+              kind: "box_alert",
+              dedupeKey: "old-alert",
+              personId: owner!.id,
+              params: { code: "storage.space_low" },
+              now,
+              notAfter: new Date(now.getTime() + 60_000),
+            });
+            await tx
+              .update(outgoingMail)
+              .set({
+                status: "sending",
+                claimToken: "old-claim",
+                claimedAt: now.toISOString(),
+                recipient: "owner@example.test",
+              })
+              .where(eq(outgoingMail.id, id));
+            return id;
+          });
           const held = await boot(env);
           try {
             const offline = `http://127.0.0.1:${httpPort()}`;
             expect(await probe(offline)).toMatchObject({ acceptingSales: false });
+            expect(answers()).toEqual([]);
             const response = await fetch(offline, { headers: { "Accept-Language": "en" } });
             const page = await response.text();
             expect(page).toContain("Leave this box switched off");
             expect(page).toContain('href="/help/en/backup-recovery#replaced-box"');
             expect((await fetch(`${offline}/carry-on`, { method: "POST" })).status).toBe(404);
+            await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 10_000 });
+            expect(smtp.messages[0]).toContain("To: owner@example.test");
             const rows = await suite.db
               .select({ code: incidents.code })
               .from(incidents)
               .where(eq(incidents.code, "start.replaced"));
             expect(rows).toEqual([{ code: "start.replaced" }]);
-            await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 10_000 });
-            expect(smtp.messages[0]).toContain("To: owner@example.test");
+            const mail = await suite.db
+              .select({
+                id: outgoingMail.id,
+                status: outgoingMail.status,
+                params: outgoingMail.params,
+              })
+              .from(outgoingMail);
+            expect(mail).toEqual(
+              expect.arrayContaining([
+                expect.objectContaining({ id: oldClaim, status: "unknown" }),
+                expect.objectContaining({ params: { code: "start.replaced", wording: null } }),
+              ]),
+            );
+            expect(mail).toHaveLength(2);
           } finally {
             await held.close();
           }
@@ -232,6 +296,7 @@ it("stops admissions before saving the replacement and stays stopped after an of
     );
   } finally {
     saved.mockRestore();
+    record.mockRestore();
     await smtp.close();
   }
 }, 30_000);

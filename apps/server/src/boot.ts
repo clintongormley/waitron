@@ -2018,11 +2018,11 @@ async function bootServer(
   // Before the start check: a spare that lost its node.db cannot sign its question, so the main box
   // it counts reads as silent and the start would wait, answering the venue's name.
   await refuseLostNodeState(db, store.node, ring, config.node.nodeId);
-  const listenOwnName = (localApp: Hono, stopWork: () => Promise<void>) => {
-    const server = startTradingListener(config, localApp, now, log);
+  const listenBox = (page: Hono, stopWork: BootTeardown["stopWork"], names = ownNameOnly) => {
+    const server = startTradingListener(config, page, now, log);
     undoOnFailure.push(() => closeListener(server));
     const mdns = startMdnsResponder({
-      names: () => ownNameOnly,
+      names: () => names,
       makeSocket: seams.mdnsSocket,
       devMode: config.devMode,
       httpHost: config.httpHost,
@@ -2145,7 +2145,7 @@ async function bootServer(
           ),
       ],
       log,
-      listen: listenOwnName,
+      listen: listenBox,
     });
   };
   if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null) {
@@ -2169,7 +2169,7 @@ async function bootServer(
       now,
       log,
     });
-    return listenOwnName(app, stop);
+    return listenBox(app, stop, []);
   }
   let carriedOnWithoutPeer = false;
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
@@ -3003,9 +3003,7 @@ async function bootServer(
     },
     log,
   );
-  // The public role probe a till polls to follow the venue's primary. Mounted on mirror and fenced
-  // boots too: their "not accepting sales" is what steers a till away. `!fencedOrMirror` is
-  // redundant today; kept so the probe refuses if the role check or the fence demote ever stops.
+  // The till uses this probe to steer away from a mirror or fenced box.
   mountNodeApi(
     app,
     {
@@ -4974,6 +4972,7 @@ async function bootServer(
   else if (acceptingSales && firstStart.mayStream)
     streamHost.observeReplacement((evidence) => {
       health.takesNoSales = true;
+      void mdns.stop().catch(() => {});
       return stepDownForReplacement(stepDownDeps, () =>
         writeReplacementMark(config.stateDir, evidence),
       );

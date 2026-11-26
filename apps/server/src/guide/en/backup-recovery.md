@@ -16,7 +16,11 @@ The replacement is now your venue’s main box. Leave this box switched off.
 
 To move service back to this box, keep the replacement’s latest backup and shut the replacement down. On this box, stop the Waitron service and run the restore command from the installation guide’s **The operator CLIs** section. Use the credentials that open and authorise the selected backup. Start the service again when the command succeeds.
 
-Check whether this box took any sales after the replacement took over and before this box stopped. Those sales are absent from the replacement’s backup. After you restore here, they survive only in the old database copy that Waitron sets aside. Keep that copy if you need those sales. Discarding the set-aside copy deletes them.
+If the restore command is interrupted, run it again before starting the service.
+
+If the restore says the source still appears live, check that the replacement is off before adding `--confirm-old-box-gone` to the command.
+
+The replacement’s backup leaves out sales this box made between the replacement taking over and this box stopping. After you restore here, those sales survive only in the old database copy that Waitron sets aside. Keep that copy if this box might have taken sales during that time. Discarding the set-aside copy deletes them.
 
 ## When first setup was interrupted {#interrupted-setup}
 

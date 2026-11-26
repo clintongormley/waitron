@@ -16,7 +16,11 @@ El servidor de sustitución es ahora el principal de tu local. Deja este servido
 
 Para volver a usar este servidor, guarda la copia de seguridad más reciente del servidor de sustitución y apágalo. En este servidor, detén el servicio de Waitron y ejecuta el comando de restauración indicado en la sección **The operator CLIs** de la guía de instalación. Usa las credenciales que permiten abrir y autorizar la copia elegida. Vuelve a iniciar el servicio cuando el comando termine correctamente.
 
-Comprueba si este servidor registró alguna venta después de que el servidor de sustitución se hiciera cargo y antes de que este se detuviera. Esas ventas no figuran en la copia del servidor de sustitución. Después de restaurar aquí, solo quedarán en la copia de la base de datos anterior que Waitron guarda aparte. Conserva esa copia si necesitas esas ventas. Si la descartas, las perderás.
+Si el comando de restauración se interrumpe, ejecútalo de nuevo antes de iniciar el servicio.
+
+Si la restauración indica que el servidor de origen parece seguir activo, comprueba que el servidor de sustitución está apagado antes de añadir `--confirm-old-box-gone` al comando.
+
+La copia del servidor de sustitución deja fuera las ventas que este servidor registró entre el momento en que el otro se hizo cargo y la parada de este. Después de restaurar aquí, esas ventas solo quedarán en la copia de la base de datos anterior que Waitron guarda aparte. Conserva esa copia si este servidor pudo registrar ventas durante ese tiempo. Si la descartas, perderás esas ventas.
 
 ## Si se interrumpió la primera configuración {#interrupted-setup}
 
