@@ -443,6 +443,12 @@ Cuando tengas todo listo, elige **Publicar ahora** o **Publicar más tarde** en 
 consultar o cambiar una publicación pendiente, búscala en **Versiones programadas**, debajo de
 la vista previa. Tras publicar, comprueba la versión y la hora en el encabezado de la carta.
 
+## Comprueba la carta publicada para clientes {#customer-menu}
+
+Abre **Carta para clientes** y elige **Móvil** u **Ordenador** para comprobar el diseño publicado.
+En **Idioma** puedes revisar el texto en cada idioma del contenido. Los clientes aún no pueden
+abrir esta página. Para revisar o publicar tus cambios, abre **Vista previa**.
+
 ## Corrige la carta publicada en una emergencia {#patch-live-menu}
 
 Usa una corrección cuando encuentres un error en la carta publicada, como un precio equivocado,

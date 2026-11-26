@@ -35,6 +35,7 @@ import { type ContentLanguageRules } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import type { TradingContext } from "./trading-context.js";
 import { libraryImageName, seedLibraryImages } from "@waitron/menu/test/library-images.js";
+import { createStaffApp } from "./cloud-remote.js";
 import { mountMenuApi } from "./menu-api.js";
 import { mountVenueSettingsApi } from "./venue-settings-api.js";
 import { ALL_MODULES } from "./modules.js";
@@ -4812,6 +4813,45 @@ describe("publishing a menu", () => {
       .orderBy(menuVersions.number);
   }
 
+  it("serves the published customer page while a different price is being edited", async () => {
+    const app = mountApp();
+    const { menuId, itemId, name } = await menuWithProduct(app);
+    const path = `/management-api/menus/${menuId}/customer-preview?language=ja`;
+    const unpublished = await send(app, "GET", path);
+    expect(unpublished.status).toBe(200);
+    expect(unpublished.headers.get("cache-control")).toBe("no-store");
+    expect(await unpublished.json()).toEqual({ state: "unpublished" });
+
+    const { hash } = await preview(app, menuId);
+    expect(
+      (
+        await send(app, "POST", `/management-api/menus/${menuId}/publish`, {
+          body: { expectedHash: hash },
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await send(app, "PATCH", `/management-api/menus/${menuId}/items/${itemId}`, {
+          body: { grossPrice: "2.50" },
+        })
+      ).status,
+    ).toBe(204);
+
+    const staffOrigin = "https://staff.example.test";
+    const staff = createStaffApp(app, async () => staffOrigin);
+    const published = await send(staff, "GET", `${staffOrigin}${path}`);
+    expect(published.status).toBe(200);
+    expect(published.headers.get("cache-control")).toBe("no-store");
+    expect(await published.json()).toMatchObject({
+      state: "published",
+      menu: {
+        language: "es",
+        members: [{ name, price: { min: "2.00", max: "2.00" }, unit: "" }],
+      },
+    });
+  });
+
   it("shows an included price clash in prices and refuses publication without a version", async () => {
     const app = mountApp();
     const child = await createMenuVia(app, `Drinks ${crypto.randomUUID()}`);
@@ -7007,5 +7047,37 @@ describe("menu settings routes", () => {
     expect(await staff.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
     const loaded = await send(app, "GET", "/management-api/menu-settings");
     expect(await loaded.json()).toMatchObject({ defaultColor: null });
+  });
+});
+
+describe("customer menu preview permissions", () => {
+  it("limits customer previews to managers and active regular menus", async () => {
+    const app = mountApp();
+    const menuId = await createMenuVia(app, "Preview permissions");
+    const removed = await createMenuVia(app, "Removed preview");
+    expect(
+      (
+        await send(app, "POST", `/management-api/menus/${removed}/delete`, {
+          body: { replacements: {} },
+        })
+      ).status,
+    ).toBe(204);
+    const { id: set } = await withTransaction(suite.db, (tx) =>
+      createMenu(tx, { name: "Set without an online page", kind: "set_menu", setPrice: "14.00" }),
+    );
+    for (const [id, cookie, status, code] of [
+      [menuId, null, 401, "management_session.required"],
+      [menuId, staffCookie, 403, "authorization.not_permitted"],
+      ["bad-id", managerCookie, 400, "shared.invalid_id"],
+      [crypto.randomUUID(), managerCookie, 404, "menu.not_found"],
+      [removed, managerCookie, 409, "menu.deleted"],
+      [set, managerCookie, 409, "set_menu.wrong_place"],
+    ] as const) {
+      const response = await send(app, "GET", `/management-api/menus/${id}/customer-preview`, {
+        cookie,
+      });
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
   });
 });

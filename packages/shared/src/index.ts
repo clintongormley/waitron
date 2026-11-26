@@ -591,6 +591,7 @@ export type { LegalAbout } from "./legal-about.js";
 
 export {
   publicGuestMenu,
+  type CustomerMenuPreview,
   type PublicGuestMenu,
   type GuestMember,
   type GuestChoice,

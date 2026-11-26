@@ -19,10 +19,12 @@ export type GuestModifier =
   | { kind: "options"; name: string; labels: string[] };
 export type GuestMember =
   | { kind: "section"; name: string; members: GuestMember[] }
+  | { kind: "set_menu"; name: string; price: string }
   | (GuestDeclarations & {
       kind: "product";
       name: string;
       description: string;
+      image: string | null;
       price: { min: string; max: string };
       unit: string;
       variants: GuestChoice[];
@@ -35,10 +37,14 @@ export interface PublicGuestMenu {
   members: GuestMember[];
 }
 
+export type CustomerMenuPreview =
+  { state: "unpublished" } | { state: "published"; menu: PublicGuestMenu };
+
 export function publicGuestMenu(
   document: MenuDocument,
   config: ContentLanguages,
   requested: string | readonly string[],
+  eachUnitId: string,
 ): PublicGuestMenu {
   const language =
     matchLanguage(typeof requested === "string" ? [requested] : requested, [
@@ -62,27 +68,33 @@ export function publicGuestMenu(
           ),
     dietary: DIETARY_LABELS.filter((label) => dietary.includes(label)),
   });
-  const unit = (value: { abbreviation: Record<string, string>; staffAbbreviation: string }) =>
-    text(value.abbreviation, value.staffAbbreviation);
+  const unit = (value: {
+    id: string;
+    abbreviation: Record<string, string>;
+    staffAbbreviation: string;
+  }) => (value.id === eachUnitId ? "" : text(value.abbreviation, value.staffAbbreviation));
   const walk = (members: DocumentMember[]): GuestMember[] =>
     members.flatMap((member): GuestMember[] => {
-      if (member.kind === "section")
-        return member.direct
-          ? walk(member.members)
-          : [
-              {
-                kind: "section",
-                name: text(member.names, member.internalName),
-                members: walk(member.members),
-              },
-            ];
-      if (member.kind !== "product") return [];
+      if (member.kind === "section") {
+        const children = walk(member.members);
+        return member.direct || children.length === 0
+          ? children
+          : [{ kind: "section", name: text(member.names, member.internalName), members: children }];
+      }
+      if (member.kind === "set_menu") {
+        const set = document.setMenus?.[member.menuId];
+        return set === undefined
+          ? []
+          : [{ kind: "set_menu", name: text(set.terms.names, set.name), price: set.terms.price }];
+      }
       const offer = document.offers[member.menuItemId]!;
+      if (offer.ordering !== undefined && offer.ordering !== "public") return [];
       return [
         {
           kind: "product",
           name: text(offer.customerName, offer.name),
           description: text(offer.description, null),
+          image: offer.image,
           price: menuPriceRange(offer),
           unit: unit(offer.unit),
           ...declarations(offer.allergens, offer.dietaryDeclarations),
@@ -122,7 +134,7 @@ export function publicGuestMenu(
       ];
     });
   return {
-    name: document.menuName,
+    name: text(document.menuNames, document.menuName),
     language,
     languages: [...config.languages],
     members: walk(document.root.members),

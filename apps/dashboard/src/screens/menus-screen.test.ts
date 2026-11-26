@@ -953,7 +953,7 @@ it("lists the menus and opens one, recording the menu and its tab in the address
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Lunch Menu"));
   const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
   expect(tabs.value).toBe("structure");
-  expect(tabs.items.map((item) => item.key)).toEqual(["structure", "home", "preview"]);
+  expect(tabs.items.map((item) => item.key)).toEqual(["structure", "home", "preview", "customer-menu"]);
   history.back();
   await vi.waitFor(() => expect(location.pathname).toBe("/menus"));
   await vi.waitFor(() => expect(text(q(el, "h1"))).toBe(t("menus.title")));
@@ -7875,7 +7875,7 @@ describe("the Home page tab", () => {
     const client = api({ liveData: live });
     const el = await mount(client, LUNCH_PATH);
     const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
-    expect(tabs.items.map(({ key }) => key)).toEqual(["structure", "home", "preview"]);
+    expect(tabs.items.map(({ key }) => key)).toEqual(["structure", "home", "preview", "customer-menu"]);
     expect(tabs.items[1]!.label).toBe(t("menus.tab_home"));
     expect(client.getMenuHome).not.toHaveBeenCalled();
     expect(client.getMenuPreview).not.toHaveBeenCalled();

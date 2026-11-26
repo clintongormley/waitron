@@ -104,8 +104,9 @@ import { fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { menuEditorHeading, menuEditorHeadingStyles } from "./menu-editor-heading.js";
+import "../widgets/menu-online-preview.js";
 
-const TABS = ["structure", "home", "preview"] as const;
+const TABS = ["structure", "home", "preview", "customer-menu"] as const;
 type Tab = (typeof TABS)[number];
 
 const isTab = (value: string | null): value is (typeof TABS)[number] =>
@@ -3301,6 +3302,7 @@ export class MenusScreen extends LitElement {
           { key: "structure", label: t("menus.tab_structure") },
           { key: "home", label: t("menus.tab_home") },
           { key: "preview", label: t("menus.tab_preview") },
+          { key: "customer-menu", label: t("menus.tab_customer_menu") },
         ]}
         @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
           if (event.target !== event.currentTarget || !isTab(event.detail.value)) return;
@@ -3316,6 +3318,20 @@ export class MenusScreen extends LitElement {
         <div slot="structure">${this.#renderStructure()}</div>
         <div slot="home" class="home">${this.#renderHome()}</div>
         <div slot="preview">${this.#renderPreview()}</div>
+        <div slot="customer-menu">
+          ${
+            this.view === "customer-menu"
+              ? html`<dashboard-menu-online-preview
+                  .api=${this.api.background ?? this.api}
+                  .menuId=${menuId}
+                  .changed=${this.status?.state === "changed"}
+                  .defaultLanguage=${this.contentLanguages?.defaultLanguage ?? "en"}
+                  .previewHref=${tabAddress(menuId, "preview")}
+                  .openPreview=${(event: MouseEvent) => this.#openTab(event, menuId, "preview")}
+                ></dashboard-menu-online-preview>`
+              : nothing
+          }
+        </div>
       </wt-tabs>
       ${this.#renderNewSection()} ${this.#renderIncludeEdit()} ${this.#renderAddProducts()}
       ${this.#renderShortcutPicker()}

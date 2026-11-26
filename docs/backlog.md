@@ -456,8 +456,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/menu.md#bundle-tabs-selected-visible)
 
-- **The customer menu, online and printed (owner, 2026-11-24).** Each menu gets a Customer menu
-  tab with Online and Print, named styles, and a customer page the box serves through Cloud.
+- **The customer menu, online and printed (owner, 2026-11-24).** Extend the Customer menu tab
+  with Online settings, search, section navigation, dish and set-menu details and filters. Add
+  Print, named styles and the customer address through Cloud.
   The box-side **Translate all** for course names follows Cloud D645.
   Hosted copies can show stale prices, allergens and diet labels until Cloud removes them in
   piece 6. [Design](superpowers/specs/2026-11-24-customer-menu-design.md)

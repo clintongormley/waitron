@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { FrozenOffer, MenuDocument } from "./menu-document-types.js";
-import { publicGuestMenu } from "./guest-menu.js";
+import { publicGuestMenu as prepareGuestMenu } from "./guest-menu.js";
 
 const unit = {
   id: "each",
@@ -49,6 +49,13 @@ function document(dish: FrozenOffer = offer): MenuDocument {
     offers: { item: dish },
   };
 }
+const eachUnitId = "canonical-each";
+const publicGuestMenu = (
+  doc: MenuDocument,
+  languages: Parameters<typeof prepareGuestMenu>[1],
+  requested: string | readonly string[],
+) => prepareGuestMenu(doc, languages, requested, eachUnitId);
+
 const config = { defaultLanguage: "en", languages: ["en", "es", "de"] };
 const project = (dish = offer, language = "es") =>
   publicGuestMenu(document(dish), config, language);
@@ -63,6 +70,7 @@ it("allows only resolved guest content, with the effective price and reviewed st
         kind: "product",
         name: "Soup ES",
         description: "Hot soup",
+        image: "private.jpg",
         price: { min: "4.00", max: "4.00" },
         unit: "ea",
         allergens: null,
@@ -70,6 +78,61 @@ it("allows only resolved guest content, with the effective price and reviewed st
         variants: [],
         modifiers: [],
       },
+    ],
+  });
+});
+
+it("uses the published customer title, shows set-menu cards and leaves hidden standalone dishes out", () => {
+  const doc = document({ ...offer, unit: { ...unit, id: eachUnitId } });
+  const dish = { kind: "product", menuItemId: "item", productId: "private-product" } as const;
+  doc.menuNames = { en: "Lunch for customers", es: "Lunch ES" };
+  doc.offers.staff = { ...offer, ordering: "staff_only" };
+  doc.offers.extra = { ...offer, ordering: "not_sold_separately" };
+  doc.setMenus = {
+    fixed: {
+      name: "Staff set menu",
+      terms: { price: "18.50", names: { en: "Three courses" }, lines: [] },
+      courses: {},
+      root: { members: [] },
+      offers: {},
+      changedAt: "2026-11-26T17:00:00.000Z",
+    },
+  };
+  doc.root.members = [
+    {
+      kind: "section",
+      sectionId: "hidden",
+      internalName: "Hidden choices",
+      names: {},
+      image: null,
+      color: null,
+      members: [
+        { ...dish, menuItemId: "staff" },
+        { ...dish, menuItemId: "extra" },
+      ],
+    },
+    dish,
+    { kind: "set_menu", menuId: "fixed", name: "Staff placement" },
+  ];
+
+  expect(publicGuestMenu(doc, config, "ja")).toEqual({
+    name: "Lunch for customers",
+    language: "en",
+    languages: ["en", "es", "de"],
+    members: [
+      {
+        kind: "product",
+        name: "Soup",
+        description: "Hot soup",
+        price: { min: "4.00", max: "4.00" },
+        image: "private.jpg",
+        unit: "",
+        allergens: null,
+        dietary: [],
+        variants: [],
+        modifiers: [],
+      },
+      { kind: "set_menu", name: "Three courses", price: "18.50" },
     ],
   });
 });

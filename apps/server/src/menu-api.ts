@@ -51,6 +51,7 @@ import { mountMenuLanguageRoutes } from "./menu-languages-routes.js";
 import { mountMenuCollectionRoutes } from "./menu-collection-routes.js";
 import { readMenuStatus, mountMenuDetailRoutes } from "./menu-details-routes.js";
 import { mountMenuPublishingRoutes } from "./menu-publishing-routes.js";
+import { mountMenuCustomerPreviewRoute } from "./menu-customer-preview-route.js";
 import { mountMenuItemPriceRoutes } from "./menu-item-prices-routes.js";
 import { mountMenuCategoryRoutes } from "./menu-categories-routes.js";
 import {
@@ -184,6 +185,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
   mountMenuLanguageRoutes(app, deps, gated, log);
 
   mountMenuCollectionRoutes(app, deps, gated, log);
+  mountMenuCustomerPreviewRoute(app, gated, log, deps.venueLocale ?? FALLBACK_LOCALE);
 
   app.get("/management-api/menus/:id/read", (c) =>
     run(c, log, async () => {
