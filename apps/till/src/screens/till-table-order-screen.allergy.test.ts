@@ -94,9 +94,9 @@ it("marks a fresh draft dish by its saved draft assignment rather than a sent di
   });
   el.style.width = "1280px";
   await resized(el);
-  expect(
-    el.shadowRoot!.querySelector('[data-draft-select="0"] [data-allergy-tag]')?.textContent,
-  ).toBe("Blue shirt");
+  const mark = el.shadowRoot!.querySelector('[slot="mark-0"]');
+  expect(mark?.assignedSlot?.closest("[data-draft-row]")).toBeTruthy();
+  expect(mark?.querySelector("[data-allergy-tag]")?.textContent).toBe("Blue shirt");
 });
 
 it.each([null, "none", "allergies"] as const)(
@@ -170,9 +170,9 @@ it("marks the saved draft and sent dish without borrowing a same-id working assi
   });
   el.style.width = "1280px";
   await resized(el);
-  expect(
-    el.shadowRoot!.querySelector('[data-draft-select="0"] [data-allergy-tag]')?.textContent,
-  ).toBe("Blue shirt");
+  const mark = el.shadowRoot!.querySelector('[slot="mark-0"]');
+  expect(mark?.assignedSlot?.closest("[data-draft-row]")).toBeTruthy();
+  expect(mark?.querySelector("[data-allergy-tag]")?.textContent).toBe("Blue shirt");
   const sent = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await sent.updateComplete;
   await userEvent.click(sent.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);

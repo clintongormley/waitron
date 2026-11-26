@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { WtTextarea } from "@waitron/ui";
+import type { WtInput, WtTextarea } from "@waitron/ui";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
@@ -9,6 +9,7 @@ import type { TillProduct } from "../api/menu-api.js";
 import {
   beer,
   browser,
+  draftRow,
   flan,
   ham,
   menuOf,
@@ -129,9 +130,9 @@ describe("till-table-order-screen: the last-added bar", () => {
 
     expect(rows(el)).toEqual(["Jamón ×0.250"]);
     expect(barText(el)).toContain("Jamón 0.250 kg");
-    expect(el.shadowRoot!.querySelector("[data-draft-select]")!.textContent).toMatch(
-      /Jamón\s+0.250 kg/,
-    );
+    const weighed = draftRow(el, 0)!;
+    expect(weighed.querySelector(".draft-row-name .product-name")!.textContent).toBe("Jamón");
+    expect(weighed.querySelector(".draft-row-qty")!.textContent).toBe("0.250 kg");
     expect(bar(el)!.querySelector("[data-last-added-step]")).toBeNull();
   });
 
@@ -173,9 +174,9 @@ describe("till-table-order-screen: the last-added bar", () => {
     add().click();
     await el.updateComplete;
     expect(store(el).lines.map((line) => line.quantity)).toEqual(["250"]);
-    expect(el.shadowRoot!.querySelector("[data-draft-select]")!.textContent).toMatch(
-      /Juice\s+250 ml/,
-    );
+    const measured = draftRow(el, 0)!;
+    expect(measured.querySelector(".draft-row-name .product-name")!.textContent).toBe("Juice");
+    expect(measured.querySelector(".draft-row-qty")!.textContent).toBe("250 ml");
     expect(el.shadowRoot!.querySelector("[data-split-draft-line]")).toBeNull();
     expect(barText(el)).toContain("Juice 250 ml");
     expect(bar(el)!.querySelector("[data-last-added-step]")).toBeNull();
@@ -229,7 +230,7 @@ describe("till-table-order-screen: one view of the draft", () => {
     await tap(el, "Flan");
     const baskets = [...el.shadowRoot!.querySelectorAll("till-basket")];
     const shownLines = baskets.flatMap((basket) => [
-      ...basket.shadowRoot!.querySelectorAll(".line"),
+      ...basket.shadowRoot!.querySelectorAll("[data-draft-row]"),
     ]);
     expect(baskets.length).toBe(2);
     expect(shownLines.length).toBe(2);
@@ -237,13 +238,18 @@ describe("till-table-order-screen: one view of the draft", () => {
       baskets.map(() => true),
     );
     const first = baskets[0]!.shadowRoot!;
-    expect(first.querySelector(".step-inc")).not.toBeNull();
+    expect(first.querySelector(".step-inc")).toBeNull();
     expect(first.querySelector('[data-line-detail="0"]')).not.toBeNull();
-    expect(first.querySelector(".remove")).not.toBeNull();
 
-    first.querySelector<HTMLElement>(".step-inc")!.click();
+    const picker = await openDraftLine(el, 0);
+    const quantity = picker.shadowRoot!.querySelector<WtInput>('[name="quantity"]')!;
+    await quantity.updateComplete;
+    await userEvent.fill(quantity.shadowRoot!.querySelector("input")!, "3");
+    await picker.updateComplete;
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
     await el.updateComplete;
     expect(rows(el)).toEqual(["Beer ×3", "Flan ×1"]);
+    expect(first.querySelector(".remove")).not.toBeNull();
     first.querySelector<HTMLElement>(".remove")!.click();
     await el.updateComplete;
     expect(rows(el)).toEqual(["Flan ×1"]);

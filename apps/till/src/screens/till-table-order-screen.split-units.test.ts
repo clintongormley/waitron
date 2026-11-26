@@ -35,7 +35,8 @@ it("splits from a trailing chevron instead of a separate tool under the row", as
   const { el, draft } = await draftWithUnits();
   const control = split(el)!;
   expect(control.getAttribute("slot")).toBe("end-0");
-  expect(control.textContent!.trim()).toBe("›");
+  expect(control.textContent!.trim()).toBe("");
+  expect(control.querySelector('wt-icon[name="chevron-down"]')).not.toBeNull();
   expect(control.getAttribute("aria-label")).toBe("Split quantity · Beer");
   await userEvent.click(control);
   await el.updateComplete;

@@ -169,6 +169,23 @@ export async function resized(el: TillTableOrderScreen): Promise<void> {
 
 export const shown = (element: Element | null) => element !== null && element.checkVisibility();
 
+/** Every new dish's row button under `root`, in the order the baskets draw them. */
+export const draftRows = (root: ParentNode) =>
+  [...root.querySelectorAll<TillBasket>("till-basket")].flatMap((basket) => [
+    ...basket.shadowRoot!.querySelectorAll<HTMLButtonElement>("[data-draft-row]"),
+  ]);
+
+/** Line `index`'s row button on the order. */
+export const draftRow = (el: TillTableOrderScreen, index: number) =>
+  draftRows(el.shadowRoot!).find((row) => row.dataset.draftRow === String(index)) ?? null;
+
+/** A row's dish name and quantity, as "<name> ×<quantity>". */
+export function draftRowLabel(row: Element): string {
+  const name = row.querySelector(".draft-row-name .product-name")?.textContent ?? "";
+  const quantity = row.querySelector(".draft-row-qty")?.textContent ?? "";
+  return `${name.trim()} ×${quantity.trim()}`;
+}
+
 export async function openDraftLine(
   el: TillTableOrderScreen,
   index: number,

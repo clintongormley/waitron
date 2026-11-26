@@ -8166,7 +8166,7 @@ describe("till-app: submitting the draft", () => {
 
   async function toggle(el: TillApp, order: TillTableOrderScreen, name: string): Promise<void> {
     [...order.shadowRoot!.querySelectorAll<HTMLElement>("[data-draft-select]")]
-      .find((button) => button.textContent!.includes(name))!
+      .find((button) => button.getAttribute("aria-label")!.includes(name))!
       .click();
     await flush(el);
   }

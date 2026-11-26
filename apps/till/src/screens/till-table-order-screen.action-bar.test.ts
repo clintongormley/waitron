@@ -37,7 +37,7 @@ import {
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
-const dishes = Array.from({ length: 12 }, (_, n) => ({
+const dishes = Array.from({ length: 20 }, (_, n) => ({
   ...beer,
   id: `dish-${n}`,
   menuItemId: `offer-dish-${n}`,
@@ -179,10 +179,7 @@ describe("till-table-order-screen: the unsent order's action bar stays in the wi
     const basket = root.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
       "[data-round-controls] till-basket",
     )!;
-    const remove = () =>
-      basket
-        .shadowRoot!.querySelector<HTMLElement>("wt-button.remove")!
-        .shadowRoot!.querySelector<HTMLElement>("button")!;
+    const row = () => basket.shadowRoot!.querySelector<HTMLElement>("button[data-draft-row]")!;
     const menu = root.querySelector("till-menu-browser")!.shadowRoot!;
     const faded = () =>
       [
@@ -192,17 +189,17 @@ describe("till-table-order-screen: the unsent order's action bar stays in the wi
         root.querySelector(".draft-actions")!,
         root.querySelector("[data-draft-move]")!,
       ].map(drawnFaded);
-    remove().focus();
-    expect(remove().getRootNode()).toHaveProperty("activeElement", remove());
+    row().focus();
+    expect(row().getRootNode()).toHaveProperty("activeElement", row());
     expect(faded()).toEqual([false, false, false, false, false]);
-    remove().blur();
+    row().blur();
 
     el.draftStore!.sending = true;
     await el.updateComplete;
     await basket.updateComplete;
-    remove().focus();
+    row().focus();
 
-    expect(remove().getRootNode()).toHaveProperty("activeElement", null);
+    expect(row().getRootNode()).toHaveProperty("activeElement", null);
     expect(faded()).toEqual([true, true, true, true, true]);
   });
 });

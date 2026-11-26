@@ -7,7 +7,7 @@ import { DraftStore } from "../state/draft-sync.js";
 import type { TillDeadEndsSection } from "../widgets/dead-ends-section.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import { beer, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
+import { beer, draftRow, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
 import { heldViews, placeFor } from "../state/draft-place.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
@@ -64,10 +64,10 @@ function save(picker: TillModifierPicker) {
   return picker.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".confirm")!;
 }
 
-it("A738 a mouse double click opens one table line window without changing its quantity or selection", async () => {
+it("A738 a mouse double click on a row opens one table line window without changing its quantity or selection", async () => {
   const { el } = await holding();
   const control = el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select="0"]')!;
-  await userEvent.dblClick(control);
+  await userEvent.dblClick(draftRow(el, 0)!);
   const basket = el.shadowRoot!.querySelector<TillBasket>("till-basket")!;
   await basket.updateComplete;
   expect(basket.shadowRoot!.querySelectorAll("till-modifier-picker")).toHaveLength(1);

@@ -5,7 +5,14 @@ import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
-import { beer, flan, mount, showView, store } from "./till-table-order-screen.test-helpers.js";
+import {
+  beer,
+  draftRow,
+  flan,
+  mount,
+  showView,
+  store,
+} from "./till-table-order-screen.test-helpers.js";
 
 const main = { id: "main", name: "Mains", displayOrder: 2, fireNowZoneIds: [] };
 const held: OrderGroup = {
@@ -132,8 +139,8 @@ it.each([false, true])("draft names use the content language when locked=%s", as
     const release = locked ? draft.lockEdits() : undefined;
     await el.updateComplete;
     await showView(el, "order", { ifShown: true });
-    const lead = el.shadowRoot!.querySelector('[slot="lead-0"]')!;
-    const name = lead.querySelector<HTMLElement>("[lang]");
+    const row = draftRow(el, 0)!;
+    const name = row.querySelector<HTMLElement>(".draft-row-name [lang]");
     expect(name?.lang).toBe("en");
     expect(name?.textContent).toBe("Extraordinarily long seasonal vegetables");
     expect(getComputedStyle(name!).hyphens).toBe("auto");
