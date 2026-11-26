@@ -17,7 +17,7 @@ import { reasonOf, type GiveBackDeps, type WaitReason } from "./give-back-read.j
 import { perDatabase } from "./live-in-process.js";
 import { readCorrectionLegs } from "./invoice-correction-legs.js";
 import {
-  correctionKindOf,
+  AS_ADMITTED,
   openInvoiceCorrection,
   previewInvoiceCorrection,
   readInvoiceCorrection,
@@ -305,11 +305,18 @@ export async function openCorrectionPart(
 ) {
   const lineIds = part.kind === "correction" ? part.lineIds : [];
   const selection = { gross: part.amount, ...(lineIds.length === 0 ? {} : { lineIds }) };
-  const { kind, backend } = await correctionKindOf(tx, deps.backend, saleId, cfg.nodeId);
-  const split = await previewInvoiceCorrection(tx, backend, cfg, reading, saleId, selection, kind);
+  const split = await previewInvoiceCorrection(
+    tx,
+    deps.backend,
+    cfg,
+    reading,
+    saleId,
+    selection,
+    AS_ADMITTED,
+  );
   return openInvoiceCorrection(
     tx,
-    { ...deps, backend },
+    deps,
     cfg,
     saleId,
     {
@@ -321,7 +328,7 @@ export async function openCorrectionPart(
       expectedSplit: split.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
     },
     actor,
-    kind,
+    AS_ADMITTED,
   );
 }
 

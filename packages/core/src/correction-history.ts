@@ -36,9 +36,10 @@ type InvoiceLine = typeof saleLines.$inferSelect;
 export type CorrectionPreview = CorrectionAmountPreview &
   Omit<Extract<CorrectionAdmission, { eligible: true }>, "eligible"> & { lines: RecordSaleLine[] };
 
-/** Asks for a full invoice's corrective, which only a caller that files one may do. */
+/** Asks for a full invoice's corrective, which only a caller that files one may do; with
+ * `"as_admitted"`, for whichever kind the regime's admission says the invoice takes. */
 export interface FullInvoiceCorrection {
-  fullInvoice?: true;
+  fullInvoice?: true | "as_admitted";
 }
 
 /**
@@ -53,7 +54,7 @@ export interface FullInvoiceCorrection {
  * With `fullInvoice`, it is a full invoice's correction instead: refused with
  * `sale.correction_unsupported` unless the invoice names a customer and the regime's admission
  * says it is a full invoice, and with `fiscal.taxpayer_domicile_missing` when the business has no
- * registered address.
+ * registered address. The answer carries `fullInvoice` when it is a full invoice's correction.
  */
 export async function previewCorrectionAmounts(
   tx: Transaction,
@@ -63,7 +64,7 @@ export async function previewCorrectionAmounts(
   selection: { gross: Decimal; lineIds?: readonly string[] },
   kind: FullInvoiceCorrection = {},
 ): Promise<CorrectionPreview> {
-  const { admission, history, invoiceLines, partsTaken } = await admittedHistory(
+  const { admission, full, history, invoiceLines, partsTaken } = await admittedHistory(
     tx,
     backend,
     saleId,
@@ -76,6 +77,7 @@ export async function previewCorrectionAmounts(
     filing: admission.filing,
     original: admission.original,
     lines: correctionLinesFor(invoiceLines, preview.allocations, partsTaken),
+    ...(full && { fullInvoice: true as const }),
   };
 }
 
@@ -129,14 +131,17 @@ async function admittedHistory(
     : { eligible: false, reason: "unsupported" };
   // Another box's invoice is refused as another box's whatever its type, as the regime judges it.
   const otherBox = !admission.eligible && admission.reason === "wrong_node";
-  if (admission.fullInvoice && kind.fullInvoice !== true && !otherBox) {
+  const full =
+    kind.fullInvoice === true ||
+    (kind.fullInvoice === "as_admitted" && admission.fullInvoice === true);
+  if (admission.fullInvoice && !full && !otherBox) {
     throw new AppError("sale.correction_not_admitted", { reason: "not_simplified" });
   }
   if (!admission.eligible) {
     throw new AppError("sale.correction_not_admitted", { reason: admission.reason });
   }
   const stored = await readStored(tx, saleId);
-  if (kind.fullInvoice === true) {
+  if (full) {
     requireFullInvoiceCorrection(
       admission.fullInvoice === true ? stored.sale.counterpartyTaxId : null,
       saleId,
@@ -146,7 +151,7 @@ async function admittedHistory(
     requireSupportedCorrection(stored.sale.counterpartyTaxId, saleId);
   }
   await refuseMovedFigures(tx, backend, [stored.sale, ...stored.corrections]);
-  return { admission, ...(await readHistory(tx, saleId, stored)) };
+  return { admission, full, ...(await readHistory(tx, saleId, stored)) };
 }
 
 /**
