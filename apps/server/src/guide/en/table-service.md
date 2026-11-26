@@ -939,8 +939,8 @@ that will take payments with it. If another device holds it, Equipment shows whi
 
 Where **Scan** is offered for a receipt printer, payment slip printer or card reader, use its
 Waitron label instead of the list. Check the label before scanning because your device starts
-using the equipment without asking. You can check its name in the message after scanning. If you
-use the list to choose equipment another device carries, confirm **Take it**.
+using the equipment without asking. If you scan a card reader, check its name in the confirmation.
+If you use the list to choose equipment another device carries, confirm **Take it**.
 
 ## Switch this device's profile {#device-profile}
 

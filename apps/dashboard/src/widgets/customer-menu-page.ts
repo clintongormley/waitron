@@ -556,24 +556,20 @@ export class CustomerMenuPage extends LitElement {
         .dish {
           grid-template-columns: minmax(0, 1fr);
         }
-        .dish-details {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) fit-content(50%);
+        .dish-heading {
+          display: flex;
+          flex-wrap: wrap;
           column-gap: var(--wt-space-2);
           align-items: baseline;
         }
-        .dish-name {
-          grid-column: 1;
-          grid-row: 1;
-        }
         .price {
-          grid-column: 2;
-          grid-row: 1;
           margin-block-start: 0;
+          margin-inline-start: auto;
           text-align: end;
         }
-        .dish-details > :is(.description, .choices, .extra) {
-          grid-column: 1 / -1;
+        .description {
+          flex-basis: 100%;
+          order: 1;
         }
         img {
           grid-row: 1;
@@ -851,13 +847,13 @@ export class CustomerMenuPage extends LitElement {
               const eager = firstPhoto && image !== null;
               if (image !== null) firstPhoto = false;
               return html`<div class="dish">
-                <div class="dish-details">
-                  <div class="dish-name">
-                    ${this.#entryName(member)} ${declarations(member, words)}
+                <div>
+                  <div class="dish-heading">
+                    <div>${this.#entryName(member)} ${declarations(member, words)}</div>
+                    ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
+                    ${hasCautionedChoice(member, this.excluded) ? html`<p class="description" lang=${words.language}>${words.text.checkChoices}</p>` : nothing}
+                    <p class="price">${dishPrice(member, menu.language)}</p>
                   </div>
-                  ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
-                  ${hasCautionedChoice(member, this.excluded) ? html`<p class="description" lang=${words.language}>${words.text.checkChoices}</p>` : nothing}
-                  <p class="price">${dishPrice(member, menu.language)}</p>
                 </div>
                 ${
                   image === null

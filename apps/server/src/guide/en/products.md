@@ -412,8 +412,8 @@ publish, check the version and publication time in the menu heading.
 
 ## Check the published customer menu {#customer-menu}
 
-Open **Customer menu**. Choose **Phone** to check the list or **Computer** to compare prices in
-the grid. Use **Language** to check the words for each content language. Use **Search dishes**
+Open **Customer menu**. Choose **Computer** to check prices beside dish names or **Phone** to
+review the list. Use **Language** to check the words for each content language. Use **Search dishes**
 to find a dish or set menu by name, or choose a section to jump to it. Open **Allergies and diets**
 to select allergens to exclude or choose a diet. Open a dish or set menu to see which choices are
 marked. Find the allergen key below the dishes.

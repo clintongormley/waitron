@@ -447,11 +447,12 @@ la vista previa. Tras publicar, comprueba la versión y la hora en el encabezado
 
 ## Comprueba la carta publicada para clientes {#customer-menu}
 
-Abre **Carta para clientes**. Elige **Móvil** para revisar la lista u **Ordenador** para comparar
-los precios en la cuadrícula. En **Idioma** puedes revisar el texto en cada idioma del contenido.
-Usa **Buscar platos** para encontrar un plato o menú por su nombre, o elige una sección para ir
-a ella. Abre **Alergias y dietas** para excluir alérgenos o elegir una dieta. Abre un plato o menú
-para ver las opciones marcadas. Debajo de los platos verás la leyenda de alérgenos.
+Abre **Carta para clientes**. Elige **Ordenador** para comprobar los precios junto al nombre de
+cada plato o **Móvil** para revisar la lista. En **Idioma** puedes revisar el texto en cada idioma
+del contenido. Usa **Buscar platos** para encontrar un plato o menú por su nombre, o elige una
+sección para ir a ella. Abre **Alergias y dietas** para excluir alérgenos o elegir una dieta.
+Abre un plato o menú para ver las opciones marcadas. Debajo de los platos verás la leyenda de
+alérgenos.
 Abre un plato para comprobar sus variantes, opciones y extras.
 Consulta **Alérgenos** y **Declaraciones dietéticas** para el plato. Los iconos de alérgenos de
 cada extra aparecen junto a su nombre. También puedes consultar ese extra en **Alérgenos**.

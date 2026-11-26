@@ -819,6 +819,37 @@ describe("the customer menu Online preview", () => {
     }
   });
 
+  it("gives a long name and price range separate lines in the narrow Computer preview", async () => {
+    await page.viewport(390, 844);
+    try {
+      const preview = published();
+      if (preview.state !== "published") throw new Error("Expected a published menu");
+      const section = preview.menu.members[1]!;
+      if (section.kind !== "section") throw new Error("Expected a section");
+      const dish = section.members[0]!;
+      if (dish.kind !== "product") throw new Error("Expected a dish");
+      dish.name = "Wood-roasted peppers with confit garlic";
+      dish.price = { min: "1234.50", max: "2345.00" };
+      dish.unit = "kg";
+      await open(() => Response.json(preview));
+      await page.getByRole("radio", { name: "Computer" }).click();
+      const name = page.getByText(dish.name, { exact: true }).element();
+      const card = name.closest(".dish")!;
+      expect(card.closest("article")!.getBoundingClientRect().width).toBe(720);
+      const price = document.createRange();
+      price.selectNodeContents(card.querySelector(".price")!);
+      expect(price.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        name.getBoundingClientRect().bottom,
+      );
+      expect(price.getBoundingClientRect().right).toBeCloseTo(
+        card.querySelector("img")!.getBoundingClientRect().right,
+        0,
+      );
+    } finally {
+      await page.viewport(1280, 768);
+    }
+  });
+
   it("keeps the last chosen language when the previous request arrives late", async () => {
     const late = gate<Response>();
     const started = gate<void>();
