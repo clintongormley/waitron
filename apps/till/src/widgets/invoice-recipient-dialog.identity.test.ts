@@ -1,3 +1,4 @@
+import { documentCountryNameFor } from "@waitron/country-packs";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -204,7 +205,7 @@ it.each([
 });
 it.each([
   ["en", "European Central Bank"],
-  ["es-ES", "Banco Central Europeo"],
+  ["es-ES", documentCountryNameFor("XB", "es")],
 ])("names AEAT's European Central Bank issuing code in %s", async (locale, name) => {
   setLocale(locale);
   const el = await mount();

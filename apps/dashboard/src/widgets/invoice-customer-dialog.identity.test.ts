@@ -1,3 +1,4 @@
+import { documentCountryNameFor } from "@waitron/country-packs";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -164,7 +165,7 @@ it("explains that foreign no-match searches preserve exact document text", async
 });
 it.each([
   ["en-GB", "European Central Bank"],
-  ["es-ES", "Banco Central Europeo"],
+  ["es-ES", documentCountryNameFor("XB", "es")],
 ])("names AEAT's European Central Bank issuing code in %s", async (locale, name) => {
   const { el } = await mount();
   setLocale(locale);

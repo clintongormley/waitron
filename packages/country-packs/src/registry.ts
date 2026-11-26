@@ -281,7 +281,6 @@ export function countryNameFor(countryCode: string, locale: string): string {
   );
 }
 
-/** Names an identity document's issuing country, including AEAT's issuing codes that are not postal countries. */
 export function documentCountryNameFor(countryCode: string, locale: string): string {
   if (!Object.hasOwn(SPAIN_DOCUMENT_ISSUER_NAMES.en, countryCode)) {
     return countryNameFor(countryCode, locale);

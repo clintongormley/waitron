@@ -16,21 +16,21 @@ const documentCountryCodes: readonly string[] = Object.freeze(
   ).split(" "),
 );
 
-// AEAT, Manual práctico de Sociedades 2023, "Código ISO países y territorios": the CountryType2 codes that are not postal countries.
+// Worded from AEAT's "Código ISO países y territorios" table (Manual práctico de Sociedades 2023); its full rows, and which labels differ from them, are in A1608's pull request.
 export const SPAIN_DOCUMENT_ISSUER_NAMES: Readonly<
   Record<"en" | "es", Readonly<Record<string, string>>>
 > = Object.freeze({
   en: Object.freeze({
     QU: "Other countries or territories not listed",
     XB: "European Central Bank",
-    XG: "Luxembourg (companies in the 1986 tax treaty protocol)",
+    XG: "Luxembourg (income of the companies in paragraph 1 of the 1986 tax treaty protocol)",
     XN: "International organisations other than EU institutions and the ECB",
     XU: "Institutions of the European Union",
   }),
   es: Object.freeze({
     QU: "Otros países o territorios no relacionados",
     XB: "Banco Central Europeo",
-    XG: "Luxemburgo (sociedades del protocolo del convenio de 1986)",
+    XG: "Luxemburgo (rentas de las sociedades del párrafo 1 del protocolo del convenio de 1986)",
     XN: "Organismos internacionales distintos de las instituciones de la UE y del BCE",
     XU: "Instituciones de la Unión Europea",
   }),

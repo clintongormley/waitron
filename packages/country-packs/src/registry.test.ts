@@ -1,7 +1,6 @@
 import { contentLanguageChoices, languageDisplayName } from "@waitron/shared";
-import { SPAIN_RECEIPT_SAMPLE_ITEMS } from "@waitron/country-es";
+import { SPAIN_DOCUMENT_ISSUER_NAMES, SPAIN_RECEIPT_SAMPLE_ITEMS } from "@waitron/country-es";
 import { VALENCIA_DEMO_TEXT, GALICIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
-import { SPAIN_DOCUMENT_ISSUER_NAMES } from "@waitron/country-es";
 import {
   RECIPIENT_IDENTIFIER_POLICY,
   countryNameFor,
@@ -481,7 +480,7 @@ describe("identity-document issuing country names", () => {
   });
   it("names the European Central Bank in both languages", () => {
     expect(documentCountryNameFor("XB", "en-GB")).toBe("European Central Bank");
-    expect(documentCountryNameFor("XB", "es-ES")).toBe("Banco Central Europeo");
+    expect(documentCountryNameFor("XB", "es-ES")).toBe(SPAIN_DOCUMENT_ISSUER_NAMES.es.XB);
   });
   it.each(["en-GB", "es-ES", "ca-ES"])(
     "names an ordinary country as the postal list does in %s",
