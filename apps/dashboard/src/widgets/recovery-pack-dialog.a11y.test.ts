@@ -24,6 +24,7 @@ const STATUS: RecoveryPackStatus = {
   masterKey: { name: "2026-10-12 · QZJV", pack: 3 },
   keepOldPackUntil: "2026-11-11T12:00:00.000Z",
   timeZone: "Europe/Madrid",
+  backupKey: null,
 };
 
 type State =

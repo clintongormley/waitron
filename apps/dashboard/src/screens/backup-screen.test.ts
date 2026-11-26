@@ -208,6 +208,7 @@ const NO_PACK: RecoveryPackStatus = {
   masterKey: null,
   keepOldPackUntil: "2026-11-11T12:00:00.000Z",
   timeZone: "Europe/Madrid",
+  backupKey: null,
 };
 const PACK_UP_TO_DATE: RecoveryPackStatus = {
   ...NO_PACK,
@@ -1668,7 +1669,7 @@ describe("backup-key configuration refusal", () => {
         );
         if (locale === "en-GB") {
           expect(archiveAlertText(el)).toContain(
-            "Keep both the previous key and the key you just saved.",
+            "The box could not confirm which backup key its backups use: the key it loaded is not the one it holds.",
           );
         }
         expect(write).toHaveBeenCalledTimes(1);

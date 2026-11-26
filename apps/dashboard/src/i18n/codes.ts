@@ -1352,8 +1352,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Revisa los ajustes de la copia de seguridad e inténtalo de nuevo",
   },
   "backup.effective_mismatch": {
-    en: "The saved key could not be confirmed. Keep both the previous key and the key you just saved. Stop changing keys here; this page cannot diagnose the conflicting backup-key settings or confirm which key opens a backup.",
-    es: "No se pudo confirmar la clave guardada. Conserva tanto la clave anterior como la que acabas de guardar. No sigas cambiando claves aquí; esta página no puede diagnosticar el conflicto de configuración ni confirmar qué clave abre una copia.",
+    en: "The box could not confirm which backup key its backups use: the key it loaded is not the one it holds. Stop changing backup settings here; this page cannot diagnose the conflicting backup-key settings or confirm which key opens a backup.",
+    es: "El servidor no ha podido confirmar qué clave usan sus copias: la clave que ha cargado no es la que tiene guardada. No sigas cambiando los ajustes de las copias aquí; esta página no puede diagnosticar el conflicto de configuración ni confirmar qué clave abre una copia.",
   },
   "backup.not_enabled": {
     en: "Turn on scheduled backups before starting a backup.",

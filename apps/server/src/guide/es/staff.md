@@ -57,7 +57,7 @@ Waitron te pide que vuelvas a identificarte antes de invitar a alguien, reenviar
 restablecer su acceso, deshabilitar o volver a habilitar su cuenta, o cambiar un correo, rol o
 estado en **Usuarios**, incluido tu propio correo, o crear, copiar, editar o eliminar un rol de acceso. Los nombres, el teléfono y el restablecimiento
 del PIN no necesitan esta confirmación.
-También confirmas antes de cambiar las copias de seguridad, descargar archivos de recuperación
+También confirmas antes de cambiar las copias de seguridad o la clave de las copias, descargar archivos de recuperación
 o exportar la configuración o los datos de otro miembro del personal. La misma confirmación cubre conectar o desconectar proveedores de pagos,
 cambiar el servidor de correo o la conexión Cloud, activar el acceso remoto, preparar un servidor
 sustituto, instalar el certificado fiscal, cambiar la razón social, el domicilio fiscal o la cuenta bancaria y quitar un servidor.

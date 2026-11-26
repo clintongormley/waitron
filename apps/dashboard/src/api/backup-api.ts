@@ -215,6 +215,15 @@ export interface RecoveryPackStatus {
   keepOldPackUntil: string;
   /** The venue's time zone, which the pack's pages are dated in. */
   timeZone: string;
+  /** The box's backup key; null while it holds none it can use. */
+  backupKey: {
+    number: number;
+    fingerprint: string;
+    /** Null when the key was never changed. */
+    changedAt: string | null;
+    /** False with no master key too. */
+    fromCurrentMasterKey: boolean;
+  } | null;
 }
 /** `GET /api/backup/stream` — LOCAL copy of `apps/server/src/stream-api.ts`'s `StreamSettingsView`.
  * Never carries the secret access key. */

@@ -10,7 +10,9 @@ import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { RecoveryPackDialog, RecoveryPackMade } from "../widgets/recovery-pack-dialog.js";
 import "../widgets/recovery-pack-dialog.js";
-import { packDate, withStrong } from "../widgets/recovery-pack-words.js";
+import type { BackupKeyDialog } from "../widgets/backup-key-dialog.js";
+import "../widgets/backup-key-dialog.js";
+import { keepDate, packDate, withStrong } from "../widgets/recovery-pack-words.js";
 
 type Status = RecoveryPackStatus;
 type Worded = Exclude<RecoveryPackReason, { kind: "key_changed" | "code_changed" }>;
@@ -162,6 +164,7 @@ export class RecoveryPackCard extends LitElement {
     madeAt: string;
   } | null = null;
   @query("dashboard-recovery-pack-dialog") private dialog!: RecoveryPackDialog | null;
+  @query("dashboard-backup-key-dialog") private keyDialog!: BackupKeyDialog | null;
 
   readonly #queries = new DashboardQueries(
     this,
@@ -288,6 +291,12 @@ export class RecoveryPackCard extends LitElement {
     this.dialog?.show(this.status, "master-key");
   }
 
+  #changeBackupKey(): void {
+    if (this.status === null || this.failed) return;
+    this.dispatchEvent(new CustomEvent("recovery-pack-make", { bubbles: true, composed: true }));
+    this.keyDialog?.show(this.status);
+  }
+
   #date(iso: string): string {
     return packDate(iso, this.status?.timeZone);
   }
@@ -322,11 +331,16 @@ export class RecoveryPackCard extends LitElement {
         ${
           this.status !== null && !this.failed
             ? html`<wt-button
-                data-test="make-master-key"
-                variant="ghost"
-                @click=${() => this.#makeMasterKey()}
-                >${t("recovery_pack.make_master_key")}</wt-button
-              >`
+                  data-test="change-backup-key"
+                  variant="secondary"
+                  @click=${() => this.#changeBackupKey()}
+                  >${t("recovery_pack.change_backup_key")}</wt-button
+                ><wt-button
+                  data-test="make-master-key"
+                  variant="ghost"
+                  @click=${() => this.#makeMasterKey()}
+                  >${t("recovery_pack.make_master_key")}</wt-button
+                >`
             : nothing
         }
         <wt-button data-test="make-recovery-pack" variant="primary" @click=${() => this.#make()}
@@ -340,6 +354,10 @@ export class RecoveryPackCard extends LitElement {
         @recovery-pack-status=${(event: CustomEvent<Status>) => this.#take(event.detail)}
         @recovery-pack-closed=${() => this.reload()}
       ></dashboard-recovery-pack-dialog>
+      <dashboard-backup-key-dialog
+        .api=${this.api}
+        @backup-key-changed=${() => this.reload()}
+      ></dashboard-backup-key-dialog>
     </section>`;
   }
 
@@ -400,6 +418,10 @@ export class RecoveryPackCard extends LitElement {
     const keep = this.#keep(status, warn);
     if (keep.length > 0) lines.push(keep.join(" "));
     if (status.backupsUseOlderKey) lines.push(t("recovery_pack.older_key"));
+    if (status.masterKey !== null && status.backupKey?.fromCurrentMasterKey === false) {
+      warn = true;
+      lines.push(t("recovery_pack.backup_key_old_master_key"));
+    }
     return html`
       ${
         offered === null
@@ -440,23 +462,19 @@ export class RecoveryPackCard extends LitElement {
         <dt>${t(label)}</dt>
         <dd>${value}</dd>
       </div>`;
-    if (latest === null)
-      return html`<dl>
-        ${row("last", "recovery_pack.row.last", t("recovery_pack.last_none"))}
-        ${row("master-key", "recovery_pack.row.master_key", this.#masterKey(status))}
-      </dl>`;
-    const pack = { number: String(latest.number), date: this.#date(latest.madeAt) };
     return html`<dl>
-      ${row(
-        "last",
-        "recovery_pack.row.last",
-        latest.madeByName === null
-          ? fill("recovery_pack.last_value_unnamed", pack)
-          : fill("recovery_pack.last_value", { ...pack, name: latest.madeByName }),
-      )}
+      ${row("last", "recovery_pack.row.last", this.#last(latest))}
       ${row("master-key", "recovery_pack.row.master_key", this.#masterKey(status))}
-      ${row("backup-key", "recovery_pack.row.backup_key", this.#backupKey(status, pack))}
+      ${row("backup-key", "recovery_pack.row.backup_key", this.#backupKey(status))}
     </dl>`;
+  }
+
+  #last(latest: Status["latest"]): string {
+    if (latest === null) return t("recovery_pack.last_none");
+    const pack = { number: String(latest.number), date: this.#date(latest.madeAt) };
+    return latest.madeByName === null
+      ? fill("recovery_pack.last_value_unnamed", pack)
+      : fill("recovery_pack.last_value", { ...pack, name: latest.madeByName });
   }
 
   #masterKey(status: Status): string {
@@ -466,18 +484,16 @@ export class RecoveryPackCard extends LitElement {
     return fill("recovery_pack.master_key_in", { name: key.name, number: String(key.pack) });
   }
 
-  #backupKey(status: Status, pack: { number: string; date: string }): string {
-    const changed = status.reasons.find((reason) => reason.kind === "key_changed");
-    if (changed?.at)
-      return fill("recovery_pack.backup_key_changed", {
-        date: this.#date(changed.at),
-        number: pack.number,
-        packDate: pack.date,
-      });
-    const holds = status.latest!.parts.some(
-      (part) => (part.part === "bucket" || part.part === "archives") && part.state === "included",
-    );
-    return fill(holds ? "recovery_pack.backup_key_same" : "recovery_pack.backup_key_absent", pack);
+  #backupKey(status: Status): string {
+    const key = status.backupKey;
+    if (key === null) return t("recovery_pack.backup_key_none");
+    const words = { number: String(key.number), fingerprint: key.fingerprint };
+    return key.changedAt === null
+      ? fill("recovery_pack.backup_key_unchanged", words)
+      : fill("recovery_pack.backup_key_changed", {
+          ...words,
+          date: keepDate(key.changedAt, status.timeZone),
+        });
   }
 
   #made(): TemplateResult | typeof nothing {

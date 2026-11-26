@@ -1739,9 +1739,15 @@ export const en = {
   "recovery_pack.last_value": "Pack {number}, made on {date} by {name}",
   "recovery_pack.last_value_unnamed": "Pack {number}, made on {date}",
   "recovery_pack.backup_key_changed":
-    "Changed on {date}; pack {number}, made on {packDate}, has the older key",
-  "recovery_pack.backup_key_same": "Unchanged since pack {number}, made on {date}",
-  "recovery_pack.backup_key_absent": "Not in pack {number}, made on {date}",
+    "Number {number}, changed on {date} · fingerprint {fingerprint}",
+  "recovery_pack.backup_key_unchanged": "Number {number} · fingerprint {fingerprint}",
+  "recovery_pack.backup_key_none": "None yet",
+  "recovery_pack.backup_key_old_master_key":
+    "Backups still use a backup key from the old master key. Change the backup key.",
+  "recovery_pack.change_backup_key": "Change the backup key",
+  "backup_key_dialog.text":
+    "New backups will use backup key {number}. A box you removed can't read them.",
+  "backup_key_dialog.done": "Backups now use backup key {number}.",
   "recovery_pack.make": "Make recovery pack",
   "recovery_pack.ready":
     "Recovery pack {number}, made on {date}, is ready. Print it or save it, and keep it locked away, off the box.",
@@ -6574,10 +6580,15 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.last_none": "Ninguno todavía",
   "recovery_pack.last_value": "Paquete {number}, hecho el {date} por {name}",
   "recovery_pack.last_value_unnamed": "Paquete {number}, hecho el {date}",
-  "recovery_pack.backup_key_changed":
-    "Cambió el {date}; el paquete {number}, hecho el {packDate}, tiene la clave anterior",
-  "recovery_pack.backup_key_same": "Sin cambios desde el paquete {number}, hecho el {date}",
-  "recovery_pack.backup_key_absent": "No está en el paquete {number}, hecho el {date}",
+  "recovery_pack.backup_key_changed": "Número {number}, cambiada el {date} · huella {fingerprint}",
+  "recovery_pack.backup_key_unchanged": "Número {number} · huella {fingerprint}",
+  "recovery_pack.backup_key_none": "Ninguna todavía",
+  "recovery_pack.backup_key_old_master_key":
+    "Las copias siguen usando la clave de las copias hecha con la clave maestra anterior. Cambia la clave de las copias.",
+  "recovery_pack.change_backup_key": "Cambiar la clave de las copias",
+  "backup_key_dialog.text":
+    "Las copias nuevas usarán la clave de las copias número {number}. Un servidor que hayas quitado no podrá leerlas.",
+  "backup_key_dialog.done": "Las copias usan ahora la clave número {number}.",
   "recovery_pack.make": "Hacer paquete de recuperación",
   "recovery_pack.ready":
     "El paquete de recuperación {number}, hecho el {date}, está listo. Imprímelo o guárdalo, y guárdalo bajo llave, lejos del servidor.",

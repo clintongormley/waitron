@@ -619,7 +619,9 @@ que Waitron no puede hacer por ti. Después, en **Copias de seguridad**, elige *
 e introduce las claves nuevas. Las copias programadas en un bucket
 conservan sus propias claves, que **Cambiar de bucket** no cambia: si usaban las claves antiguas,
 elige también **Cambiar el destino o la programación**, escribe las claves nuevas en **ID de la
-clave de acceso** y **Clave de acceso secreta**, y elige **Guardar cambios**. Una clave de cifrado de copias
+clave de acceso** y **Clave de acceso secreta**, y elige **Guardar cambios**. Después, en la tarjeta
+**Paquete de recuperación**, elige **Cambiar la clave de las copias** para que las copias nuevas usen
+una clave que esa persona no tiene. Una clave de cifrado de copias
 nueva no cambia las contraseñas y claves de tus otros proveedores, así que cámbialas también en cada
 proveedor. Conserva el paquete de recuperación
 correspondiente a cualquier copia anterior que puedas necesitar restaurar.

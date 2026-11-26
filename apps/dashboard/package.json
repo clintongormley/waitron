@@ -23,6 +23,7 @@
     "@waitron/diagnostics": "workspace:*",
     "@waitron/layouts": "workspace:*",
     "@waitron/printing": "workspace:*",
+    "@waitron/recovery-pack": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/ui": "workspace:*",
     "@waitron/ui-core": "workspace:*",
