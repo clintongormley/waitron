@@ -10,15 +10,18 @@ open each PR within three active hours.
 
 1. **Record stops and alert managers (140–200 code / 170–250 test lines).** Write a durable local
    `restart` mark on the first stop signal to an admitted primary via `run-server.ts` and its two
-   entry points. Keep the deadline and log write failure. Consume that mark once under the venue
-   lock, even on starts that wait or enter repair. Keep it out of archives and clear it on restore
-   placement and reset. Capture the previous heartbeat
-   while taking the lock and before writing the new holder. Date unplanned-stop email and incidents
-   from it in `box-alert-email.ts`. A valid mark records intent
-   even if closing reaches its deadline. Test signal versus force kill and direct close in
-   `run-server.signals.test.ts` and `run-server.test.ts`. Add `boot.stop-mark.test.ts` for one-time
-   use, restart while waiting, fresh setup, restore and incident delivery.
-
+   entry points. Keep the deadline and log write failure. Consume the mark once under the venue
+   lock, including on starts that wait or enter repair. Read the old heartbeat with
+   `readVenueHolder` in `node-entry.ts` before startup cleanup can take `lockVenueDatabase` and
+   overwrite it. The dev entry captures it before first-setup admission. Declare the file next to
+   `spare-space.released` in `STATE_LAYOUT` so it stays out of backups and reset deletes it.
+   Clear it when placing a restore. On the primary, record an incident only when there is no
+   valid mark and the previous server holder is still there. Use its last heartbeat in the email.
+   First setup, restore, a clean stop whose mark write failed and was logged, and a spare crash
+   raise no alert. Add the incident to `INCIDENT_EMAIL_CODES` and word it in English and Spanish.
+   Test signal versus force kill and direct close in the shutdown suites, wording in
+   `box-alert-email.test.ts`, and incident recording with the heartbeat time in
+   `boot.stop-mark.test.ts`. The remaining slices each require their own plan and Claude read.
 2. **Start a restored box above its bucket (180–270 / 200–320).** In `rebuild-first-start.ts`, take
    a membership term above the pointer and all generation names. Reuse `waiting-start.ts` if a
    configured bucket cannot be read. Hold sales and filing until it answers, or an administrator
