@@ -4,6 +4,10 @@ Status: **pass 1 approved by the owner on 2026-11-26** (design decided with the 
 the write-up approved as written); its build is under way in lanes F, D and I. **Pass 2 (the floor,
 and changes to pass 1) decided with the owner on the evening of 2026-11-26, and this write-up approved
 by the owner the same evening.** Where pass 2 changed a pass-1 decision, the section says so with "(pass 2)".
+**Pass 3 (the ways to pay, §7.9) decided with the owner on the evening of 2026-11-26, and this write-up
+approved by the owner the same evening.**
+**Pass 3 (the ways to pay, §7.9) decided with the owner on the evening of 2026-11-26.** Its write-up
+approved by the owner the same evening.**
 
 This is a complete redesign of the till and the handheld. Pass 1 covered the overall map of the app,
 the order screen, the menu, dish options, the table's and the bill's menus, and payment. Pass 2
@@ -277,6 +281,83 @@ Everything in [A796](2026-10-19-a796-handheld-payments-design.md) not changed ab
 bill as a way to pay, a presented bill paid whole, "Other card machine" as a deliberate choice, no
 Cancel while the card is at the reader, "Pay the next guest" carrying a split on, a declined card's
 retry, paying never freeing the table, and a phone never opening the drawer.
+
+### 7.9 (pass 3) The ways to pay
+
+Decided with the owner on the evening of 2026-11-26 from pictures `ba`–`bd` (§12). The example
+throughout is Table 4.
+
+**Tips when a table splits.** The guest's bill (§7.1) still opens first and asks about a tip on the
+whole bill. When the guests then split, **each guest is asked again on their own share**. The owner:
+"ask twice, the waiter can just skip the screen". A table that agreed a tip together ("as a table we
+agree to 10% tip so then we divide that total between all of us") chooses it on the first screen. Each
+guest's share screen then opens with that guest's part of the tip already added, to leave or change.
+A table whose guests tip one by one skips the first screen and chooses on each share. The waiter's
+Skip works on both.
+
+**Split equally.**
+1. The waiter sets the number of guests with − and + (today it is typed). The shares are listed
+   straight away. Where the bill does not divide, the first shares carry the extra cent: €73.30 for 3
+   is €24.44, €24.43, €24.43 (today's rounding, kept).
+2. When tips are on, each guest sees "Your share" in large type with the tip choices worked out on
+   that share, as on §7.1, including "Custom amount", where the guest types the total they want to
+   pay and the tip is the difference.
+3. The waiter charges that guest on the same Pay screen as a whole bill ("Guest 1 of 3"), with Card,
+   Cash and Remove tip. A list of the shares shows who has paid, who is paying and who is still to pay.
+4. Between guests: what the last guest paid and where the receipt went, who has paid (with how and
+   their tip), "Next: Guest 3 · €24.43", "Print payment slip", and "Change the number of guests",
+   which shares out what is left again.
+
+**Each share is fixed, so a guest's tip cannot be lost.** The owner's case: a €90 bill split between
+3, the first two hand over €35 each meaning €5 tips, and the last asks what is left and pays €20, so
+the tips disappear. Under Split equally each share is €30, so €35 is €30 plus a €5 tip, and the last
+guest is told €30. Both the till and the phone keep the split from guest to guest. Today only the
+phone does; the till clears it after each payment. The owner: "a lot can be solved by the waiter
+saying 'do you want to split it evenly' at the start of payment".
+
+**Items.**
+1. The bill's dishes, each with a tick box; "Tap the dishes this guest is paying for". A row of more
+   than one gets "Paying for 1 of 3" with − and + underneath, and its price for that many.
+2. "Pay for 2 dishes · €17.70" leads to this guest's tip screen (when tips are on), then the Pay
+   screen for those dishes, which says once: "These dishes move to a bill of their own with its own
+   receipt. The rest stays on Bill 1." (as today, A1515).
+3. Paid: what was taken, "Bill 2 · paid" with its dishes and tip, then what is still on Bill 1.
+   "Next guest: choose dishes" is the main button, "Pay the rest · €55.50" the second.
+
+A row of identical dishes is several order lines shown as one (A803 §3.1: one order line is one
+portion), so the stepper picks lines, and a dish with options can be paid for one at a time like any
+other. Today's till offers a dish with options only whole; the owner: "the group of it as 3 x burger
+with onions is a display artifact only. if that isn't the way it works, then it should be". A dish
+sold by weight is still paid whole. Editing one of a group (unfold, open, change) regroups it when the
+row folds again (§4).
+
+**An amount.**
+1. "How much is this guest paying?" with the Cash keypad, and "Still to pay after this" updating as
+   the waiter types. More than is owed: cash gives change, a card takes the extra as a tip (today's
+   rule).
+2. **"Their own receipt for €20.00"** is a switch on the same screen, off by default ("Otherwise it
+   goes on the bill's receipt at the end"). Today the till asks a question after the amount.
+3. **No tip screen is turned to the guest.** The amount goes towards the bill. The owner: "it feels a
+   bit obvious to hand over just an amount and 'WANNA TIP???'". A small "Add a tip" link is there for
+   the waiter, for a guest who says "€30, and €5 for you" (a call made in the write-up).
+4. Paid: what was taken, then a box with the bill's total, each payment on it and "Still to pay".
+   "Pay the rest · €35.50" first, "Another amount" second.
+
+**Other card machine.**
+1. The amount to type on the machine in large type, and three steps: type it on the machine, wait
+   until it says the payment went through, then tap the button.
+2. **"Which card machine"**: a dropdown of the venue's other card machines, starting on the one this
+   phone used last. With only one machine, there is nothing to choose and its name is shown. The
+   owner: "maybe the 'other card machine' should be a list maintained in waitron so we can just
+   select from the dropdown".
+3. "Operation number (optional)" stays in view (owner: "so the person doesn't have to tap in").
+4. "It went through · €80.52" records it; "It was declined" goes back to Pay with nothing recorded.
+
+The list replaces today's typed machine name and the "Card taken on" question a venue with SumUp sees.
+Each machine on the list says where its payments go: the venue's SumUp account, or another bank. A card
+reader paired with Waitron is not on it: it cannot take a card on its own when the box cannot reach it
+(owner, 2026-11-26). A hand-keyed card still opens a till's drawer for its slip, and a phone's never
+(§7.8).
 
 ## 8. The till: the same pieces side by side
 
@@ -557,7 +638,6 @@ The build applies the same rule to every other error.
 
 ## 10. Not designed yet
 
-- The screens behind "Split equally", "Items" and "An amount", and "Other card machine".
 - Find a bill, the receipt screen, clock-in, My hours, the drawer, refunds and corrections.
 - Loading states, and the Spanish wording.
 
@@ -587,7 +667,7 @@ frame 3 the take-off area while dragging, `ac` frame 2 the zone list (without th
 owner dropped), `ad` frame 1 the layout of a counter screen (its jobs became ready orders, §9.8),
 `af` courses, dragging and selecting, `ag` the bar at the bottom (one Map/List button, not two), `ah`
 paying redrawn, `ai` the floor on a till, `aj` ☰ and the kitchen screens, `ak` errors and nothing to
-do; `sum-a`, `sum-b`, `sum-c` a storyboard of the phone screens, in which frames 12 and 13 predate the
+do; (pass 3) `ba` Split equally, `bb` Items, `bc` An amount, `bd` Other card machine; `sum-a`, `sum-b`, `sum-c` a storyboard of the phone screens, in which frames 12 and 13 predate the
 bill dropdown and frame 4's ☰ still lists "Choose zones". Turned down or superseded: `w` (an edit
 mode, dropped), `y` (the Ready strip), `z` frame 2 (a Stations tab), `ab` frame 1 (a zone ⋮ menu,
 now in ☰), `ac` frames 1 and 3 and `ad` frame 2 (a counter zone with seats), `ae` and `al` (a
@@ -621,5 +701,16 @@ counter order delivered to a table; dropped for now, §9.8).
   that time puts away (A857).
 - (pass 2) **A zone setting** "paid before it is sent" for table zones (§9.8), with the order screen's
   Pay and send.
+- (pass 3) **Split equally is kept by the screen** from guest to guest on the till as on the phone
+  (today `#startAgain` in `apps/till/src/widgets/bill-pay-dialog.ts` clears it on the till); the
+  server keeps no record of a split, and §7.9 needs none.
+- (pass 3) **Items offers a dish with options a line at a time**: today `unitTotal` is null for any
+  line with extras (`apps/till/src/state/bill-payment.ts`); the server's part-line check reads as
+  allowing it (`checkLinePart(..., { splitExtras: true })` in `apps/server/src/pay-for-items.ts`),
+  not tried.
+- (pass 3) **"Other card machines" is a new venue list on the dashboard's card readers page**
+  (name, and where its payments go), read by the till; it replaces the free-text machine name and
+  the SumUp radio in `apps/till/src/widgets/outside-card.ts`. What a stored payment keeps of the
+  machine is the plan's to propose.
 - (pass 2) **Lane D's point 8**: in the demo, a device-verification warning stayed after a reload while
   seating, joining and ordering still worked (2026-11-11). Reproduce and fix it in the build.
