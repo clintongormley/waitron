@@ -478,3 +478,20 @@ it("A803 portion grouping: a preview for a row whose members changed cannot be c
   expect(confirms).toBe(0);
   expect(edits).toBe(1);
 });
+it("starts at a target's start count and comps only that many on an untouched Continue", async () => {
+  const el = await mount({ target: { ...dish, startCount: "1" } });
+  const seen = captures(el);
+  await click(el, 'input[name="reason"][value="Free"]');
+  expect((q(el, '[name="adjustQuantity"]') as HTMLElement & { value: string }).value).toBe("1");
+  expect(q(el, "[data-adjust-continue]").textContent!.trim()).toBe("Make 1 free");
+  await click(el, "[data-adjust-continue]");
+  expect(seen).toEqual([{ action: "comp", reasonId: "Free", note: null, quantity: "1" }]);
+});
+it("a start count raised to the whole dish comps all of it", async () => {
+  const el = await mount({ target: { ...dish, startCount: "1" } });
+  const seen = captures(el);
+  await click(el, 'input[name="reason"][value="Free"]');
+  await type(el, "adjustQuantity", "3");
+  await click(el, "[data-adjust-continue]");
+  expect(seen).toEqual([{ action: "comp", reasonId: "Free", note: null }]);
+});

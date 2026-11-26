@@ -736,7 +736,8 @@ Money already paid counts towards it.
 If **Reopen bill** lists dishes not yet served, choose **Mark served** for any that came. Once
 something on the bill has been served and nothing has been paid, **Stop these dishes and reopen**
 stops every dish still listed and leaves it off the reopened bill, except one the kitchen had
-started or finished, which stays on it, charged.
+started or finished, which stays on it, charged. To take that charge off, open the dish's details
+in **Sent** and choose **Comp…** from its **More** menu.
 
 When a guest has already paid part of the bill with
 [a receipt of their own](table-service.md#pay-window), the bill lists the dishes, then that payment

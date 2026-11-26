@@ -117,7 +117,7 @@ box (it then takes no payment, where today €1.00 is taken; Finish and unpaid d
 *As built (PR 2):* the press takes off the dishes the kitchen had not started (watcher 17:48, point 1); a started or
 ready dish is stopped and keeps its charge on the reopened bill (watcher 22:42), and an extra of it the kitchen had
 not started comes off; on the till, that dish's sent-dish window offers only Close, as for any dish cancelled with
-its charge kept, so it cannot be comped there (the server's Comp with a reason does take it off); the stop is not offered on a bill
+its charge kept, so it cannot be comped there (the server's Comp with a reason does take it off) (2026-11-26: A1599 offers **Comp…** there); the stop is not offered on a bill
 holding a payment; the words follow the owner's 18:19 answer: `split.done` "Receipt cancelled and the bill reopened.
 Move each guest's dishes to their own bill, then print each one."
 
