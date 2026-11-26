@@ -179,10 +179,9 @@ export class OtherCardMachinesPanel extends LitElement {
         current: () => this.draft!,
         snapshot: (rows) => rows.map((row) => ({ ...row })),
         equal: sameRows,
-        restore: (rows) => {
-          this.draft = rows;
+        restore: () => {
           this.saveError = "";
-          this.refusals = {};
+          this.#resetDraft(this.#latest!);
         },
       });
       this.#scope = scope;
