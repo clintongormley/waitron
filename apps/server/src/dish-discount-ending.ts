@@ -29,7 +29,7 @@ const dish = alias(workingOrderLines, "dish");
  * on a dish row rather than on an extra, a set-menu row or the whole bill (D56): one entry for each
  * such comp or discount and dish, with every row of that dish and its extras it takes something
  * off. With the extras the edit removed from that dish, those are the only rows its ending gives
- * back, so each dish's share has an ending of its own and is given again on that dish alone.
+ * back, so each dish's share has an ending of its own, offered on that dish.
  */
 async function ownDishDiscounts(
   tx: Transaction,
