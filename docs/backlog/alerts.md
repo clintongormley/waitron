@@ -16,26 +16,19 @@ Nothing is submitted to or stored on the box.
 
 **2026-11-14 update:** the till offers the same preview and download from its More menu and
 above sign-in, enrolment, device choice, clock-in and attendance pages.
-Richer trail hardening and stored capture with manager read/download remain open; the stored slices need separate plans. The
-[2026-10-22 plan](../superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md) and older slice
+Setup API route names and stored capture with manager read/download remain open. The stored slices
+need separate plans. The [2026-10-22 plan](../superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md) and older slice
 notes below retain their original context. Cloud forwarding and automatic crash/freeze intake remain
 separate follow-ups.
 
 - **Slice 2 — one-touch bug report.** A `bug_reports` table (`local`, grants in its
-  module's set), a capture endpoint that FREEZES a self-contained bundle (the client trail as
-  `captureClientReport` keeps it + `LogReader.byRequestIds()` + environment), a `wt-report-dialog`
+  module's set), a capture endpoint that FREEZES a self-contained bundle (the projected client
+  trail + `LogReader.byRequestIds()` + environment), a `wt-report-dialog`
   and "Report a problem" trigger in the till and dashboard chrome, and a GitHub-ready markdown
-  serialiser.
+  serialiser. Send only the client trail fields projected by
+  `captureClientReport` (`packages/diagnostics/src/client-report.ts`).
 - **Slice 3 — triage and forwarding.** A dashboard _Problem reports_ screen and automated GitHub-issue
   creation (through Waitron Cloud — see below).
-- **Hardening carried out of Slice 1, for Slice 2:** route the dashboard's boot-probe-fail
-  transition, and a sign-in that leaves the address unchanged, through the nav trail (today a
-  change of the dashboard's address and a return to sign-in through `#returnToLogin` record one;
-  a first load that shows sign-in without passing through `#returnToLogin` does not); add setup
-  route vocabulary and resolved transitions (setup records no nav event). Stored capture must send
-  only what `captureClientReport` (`packages/diagnostics/src/client-report.ts`) keeps, never the
-  raw trail: the trail itself keeps any string (cut to 300 characters), number or boolean under
-  any key, up to 20 fields, including error messages and stacks.
 - **Owner decisions 2026-09-24 — crash and freeze reports, and where reports go.** These extend
   Slices 2 and 3 and replace one part of Slice 3; design them together before building:
   - **Reports go to Waitron Cloud, which files the GitHub issue.** The box holds no GitHub

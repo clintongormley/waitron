@@ -210,6 +210,13 @@ const CORE_SCREENS = [
   "alerts",
 ] as const;
 type CoreScreen = (typeof CORE_SCREENS)[number];
+const REPORT_SCREENS = new Set([
+  ...CORE_SCREENS,
+  "zone-repair",
+  ...DASHBOARD_MODULES.flatMap((contribution) =>
+    contributedScreens(contribution).map(({ screen }) => screen.id),
+  ),
+]);
 
 /** The `& {}` keeps the `CoreScreen` literal autocomplete while admitting any module id. */
 type ScreenId = CoreScreen | (string & {});
@@ -1412,6 +1419,7 @@ export class DashboardApp extends LitElement {
       else history.replaceState(history.state, "", url);
     }
     if (url.searchParams.has("token")) {
+      diag.record("info", "nav", { screen: "login" });
       this.checkingSession = false;
       await this.#seedLocale();
       return;
@@ -1458,6 +1466,8 @@ export class DashboardApp extends LitElement {
     }
   }
 
+  #historyNavigationCount = 0;
+
   async #probeSession(preference?: PendingLoginPreference): Promise<void> {
     const generation = this.sessionGeneration;
     const localeChoice = this.#sessionLocaleChoice;
@@ -1467,7 +1477,11 @@ export class DashboardApp extends LitElement {
       const me = await this.api.getMe();
       if (!this.isConnected || generation !== this.sessionGeneration || read !== this.#sessionRead)
         return;
+      const historyNavigationCount = this.#historyNavigationCount;
       this.#applyMe(me, preference, localeChoice === this.#sessionLocaleChoice);
+      // A same-address sign-in and a direct zone repair can resolve without a history event.
+      if (!wasAuthenticated && historyNavigationCount === this.#historyNavigationCount)
+        diag.record("info", "nav", { screen: this.screen });
     } catch (error) {
       if (!this.isConnected || generation !== this.sessionGeneration || read !== this.#sessionRead)
         return;
@@ -1481,6 +1495,8 @@ export class DashboardApp extends LitElement {
           code === "management_session.expired" || code === "person.suspended" ? code : null,
         );
       } else {
+        // The shell starts on login, so assigning the screen does not record the boot refusal.
+        if (this.checkingSession) diag.record("info", "nav", { screen: "login" });
         this.screen = "login";
       }
     }
@@ -2656,7 +2672,15 @@ export class DashboardApp extends LitElement {
         </div>
       </div>
       <div class="banner-actions">
-        ${authenticated ? nothing : html`<dashboard-problem-report data-test="problem-report" .compact=${this.narrow}></dashboard-problem-report>`}
+        ${
+          authenticated
+            ? nothing
+            : html`<dashboard-problem-report
+                data-test="problem-report"
+                .compact=${this.narrow}
+                .navigationScreens=${REPORT_SCREENS}
+              ></dashboard-problem-report>`
+        }
         ${
           authenticated
             ? nothing
@@ -2700,6 +2724,7 @@ export class DashboardApp extends LitElement {
                   data-test="problem-report"
                   .compact=${this.narrow}
                   .api=${this.api}
+                  .navigationScreens=${REPORT_SCREENS}
                 ></dashboard-problem-report>
                 <wt-row-actions
                   icon="person"
@@ -3012,6 +3037,7 @@ export class DashboardApp extends LitElement {
     this.#applyRequestedScreen(this.#url.read("dashboard"));
     this.#writeCurrentUrl(true);
     this.drawerOpen = false;
+    this.#historyNavigationCount++;
     diag.record("info", "nav", { screen: this.screen });
   };
 

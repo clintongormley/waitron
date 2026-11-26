@@ -97,6 +97,23 @@ describe("local browser report", () => {
     ]);
     expect(JSON.stringify(base)).not.toMatch(/john\.smith|secret|private/);
   });
+  it("keeps only an exact screen ID declared by the reporting app", () => {
+    const trail = [
+      event({ screen: "overview", token: "private" }, "nav"),
+      event({ screen: "Overview" }, "nav"),
+      event({ screen: "/overview?token=private" }, "nav"),
+    ];
+    const base = diagnostics.captureClientReport({
+      app: "dashboard",
+      trail,
+      client: CLIENT,
+      now: NOW,
+      makeId: () => ID,
+      navigationScreens: new Set(["overview"]),
+    });
+    expect(base.trail.map((row) => row.fields)).toEqual([{ screen: "overview" }, {}, {}]);
+    expect(capture(trail).trail.map((row) => row.fields)).toEqual([{}, {}, {}]);
+  });
   it("keeps the node connection refusal in the exported problem report", () => {
     const snapshot = capture([event({ status: 403, code: "node.operation_page_required" })]);
     const report = diagnostics.renderClientReport!(snapshot, "The box asks me to reopen HTTPS.")!;

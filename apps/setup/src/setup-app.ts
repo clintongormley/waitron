@@ -44,6 +44,7 @@ import "./screens/reset-screen.js";
 import "./screens/done-screen.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";
 import "@waitron/ui/src/components/wt-theme-chooser.js";
+import { diag } from "./diagnostics.js";
 import "./problem-report.js";
 import "./about-sheet.js";
 import "@waitron/ui/src/components/wt-waitron-lockup.js";
@@ -83,28 +84,31 @@ import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-k
 const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" : "en");
 
 /** The wizard's screens, shown one at a time from in-memory state, never a URL route. */
-export type Screen =
-  | "first-owner"
-  | "first-setup"
-  | "connection"
-  | "role"
-  | "connect"
-  | "restore"
-  | "restore-bucket"
-  | "cloud-restore"
-  | "cloud-sign-in"
-  | "live-source"
-  | "configuration-preview"
-  | "fiscal-test"
-  | "email"
-  | "mode"
-  | "admin"
-  | "venue"
-  | "cert"
-  | "review"
-  | "provisioning"
-  | "reset"
-  | "done";
+const SCREENS = [
+  "first-owner",
+  "first-setup",
+  "connection",
+  "role",
+  "connect",
+  "restore",
+  "restore-bucket",
+  "cloud-restore",
+  "cloud-sign-in",
+  "live-source",
+  "configuration-preview",
+  "fiscal-test",
+  "email",
+  "mode",
+  "admin",
+  "venue",
+  "cert",
+  "review",
+  "provisioning",
+  "reset",
+  "done",
+] as const;
+export type Screen = (typeof SCREENS)[number];
+const REPORT_SCREENS = new Set<string>(SCREENS);
 
 /**
  * A recursively-optional view of `T`: every field, at every depth, may be absent — an array is left
@@ -1351,6 +1355,7 @@ export class SetupApp extends LitElement {
     if (!changed.has("screen")) return;
     if (this.screen !== "connection") this.#joinAbort.abort();
     const from = changed.get("screen") as Screen | undefined;
+    if (from !== this.screen) diag.record("info", "nav", { screen: this.screen });
     if (this.screen === "connect" && (from === "mode" || from === "role"))
       this.#connectBackScreen = from;
     this.#startVenueNameReads();
@@ -2814,7 +2819,7 @@ export class SetupApp extends LitElement {
       >
         <header>
           <wt-waitron-lockup class="logo" data-test="setup-logo"></wt-waitron-lockup>
-          <setup-problem-report></setup-problem-report>
+          <setup-problem-report .navigationScreens=${REPORT_SCREENS}></setup-problem-report>
           <div class="header-controls">
             <wt-button
               class="about"

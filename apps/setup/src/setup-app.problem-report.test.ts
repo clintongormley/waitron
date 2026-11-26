@@ -1,6 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { leaveCoordinatorFor, type WtButton, type WtReportDialog } from "@waitron/ui";
+import type { TrailEvent } from "@waitron/diagnostics";
+import { diag } from "./diagnostics.js";
 import type { SetupApi } from "./api/client.js";
 import type { SetupApp } from "./setup-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -77,6 +79,59 @@ it.each(["pending", "refused", "offline"])(
     vi.restoreAllMocks();
   },
 );
+
+it("records rendered wizard steps once in the downloadable report", async () => {
+  const navRows = (trail: TrailEvent[]) => trail.filter((row) => row.event === "nav");
+  const before = navRows(diag.snapshot()).length;
+  let discovered!: (value: { caDownloadAvailable: boolean }) => void;
+  const discovery = new Promise<{ caDownloadAvailable: boolean }>((resolve) => {
+    discovered = resolve;
+  });
+  const { el: app } = await mountWidget<SetupApp>("setup-app", {
+    browserLanguages: ["en-GB"],
+    api: {
+      getStatus: async () => ({
+        provisioned: false,
+        environment: "preproduction",
+        needs: ["venue"],
+      }),
+      getDiscovery: () => discovery,
+      firstSetupStatus: async () => ({ claimed: false }),
+    } as unknown as SetupApi,
+  });
+  const report = app.shadowRoot!.querySelector("setup-problem-report")!;
+  await report.updateComplete;
+  const trigger = report.shadowRoot!.querySelector<WtButton>("[data-report-problem]")!;
+  const dialog = report.shadowRoot!.querySelector<WtReportDialog>("wt-report-dialog")!;
+  const screens = async () => {
+    await userEvent.click(trigger);
+    await report.updateComplete;
+    await dialog.updateComplete;
+    const json = JSON.parse(dialog.preview.split("```json\n")[1]!.split("\n```")[0]!);
+    await userEvent.click(dialog.shadowRoot!.querySelector<WtButton>("[data-download]")!);
+    await expect.poll(() => dialog.open).toBe(false);
+    return navRows(json.trail)
+      .slice(before)
+      .map(({ fields }) => fields);
+  };
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  expect(app.shadowRoot!.querySelector("setup-connection-screen")).not.toBeNull();
+  const initial = await screens();
+  discovered({ caDownloadAvailable: false });
+  await expect.poll(() => app.shadowRoot!.querySelector("setup-mode-screen")).not.toBeNull();
+  const mode = app.shadowRoot!.querySelector("setup-mode-screen")!;
+  await mode.updateComplete;
+  await userEvent.click(mode.shadowRoot!.querySelector<WtButton>("[data-test=choose-prepare]")!);
+  await expect.poll(() => app.shadowRoot!.querySelector("setup-admin-screen")).not.toBeNull();
+  app.requestUpdate();
+  await app.updateComplete;
+  expect(await screens()).toEqual([
+    { screen: "connection" },
+    { screen: "mode" },
+    { screen: "admin" },
+  ]);
+  expect(initial).toEqual([{ screen: "connection" }]);
+});
 
 it("downloading from the real setup shell preserves its unfinished venue details", async () => {
   const { el: app } = await mountWidget<SetupApp>("setup-app", {

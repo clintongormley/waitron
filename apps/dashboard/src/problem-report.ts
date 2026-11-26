@@ -33,6 +33,7 @@ export class DashboardProblemReport extends LitElement {
   `;
   @property({ type: Boolean, reflect: true }) compact = false;
   @property({ attribute: false }) api?: ReportDialogCloud;
+  @property({ attribute: false }) navigationScreens?: ReadonlySet<string>;
   @state() private snapshot?: ClientReportSnapshot;
   @state() private description = "";
   @state() private downloadError = "";
@@ -53,6 +54,7 @@ export class DashboardProblemReport extends LitElement {
     this.snapshot = captureClientReport({
       app: "dashboard",
       trail: diag.snapshot(),
+      navigationScreens: this.navigationScreens,
       client: {
         build: reportBuild,
         locale: currentLocale().startsWith("es") ? "es" : "en",

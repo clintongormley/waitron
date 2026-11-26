@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtButton, WtReportDialog, WtTextarea } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
+import type { TrailEvent } from "@waitron/diagnostics";
 import { DashboardApi } from "./api/client.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import type { DashboardProblemReport } from "./problem-report.js";
@@ -10,9 +11,13 @@ import { diag } from "./diagnostics.js";
 import { setLocale } from "./i18n/t.js";
 import "./dashboard-app.js";
 
+const initialUrl = location.href;
+const navRows = (trail: TrailEvent[]) => trail.filter((row) => row.event === "nav");
+
 afterEach(() => {
   cleanupWidgets();
   vi.restoreAllMocks();
+  history.replaceState(null, "", initialUrl);
   vi.unstubAllGlobals();
   setLocale("en-GB");
 });
@@ -75,34 +80,51 @@ it("keeps a compact entry named while hiding its text label", async () => {
   expect(trigger.getBoundingClientRect().width).toBe(trigger.getBoundingClientRect().height);
 });
 
-it.each([false, true])(
-  "opens the report from the real dashboard banner (signed in=%s)",
-  async (signedIn) => {
+it.each([
+  ["signed-out boot and failed recheck", "/overview", false, false, ["login"]],
+  ["already signed in", "/", true, false, ["my-schedule"]],
+  [
+    "account-action link",
+    "/account?token=private-account-token&purpose=invitation",
+    false,
+    false,
+    ["login"],
+  ],
+  ["same-address sign-in", "/overview", false, true, ["login", "overview"]],
+  ["canonical redirect after sign-in", "/", false, true, ["login", "overview"]],
+  ["legacy redirect after sign-in", "/printing-rules", false, true, ["login", "overview"]],
+] as const)(
+  "shows the navigation trail in the real dashboard banner report for %s",
+  async (_name, path, signedIn, signIn, screens) => {
+    const before = navRows(diag.snapshot()).length;
     vi.stubGlobal("isSecureContext", true);
-    history.replaceState(null, "", "/");
+    history.replaceState(null, "", path);
     vi.stubGlobal(
       "PublicKeyCredential",
       class {
         static isConditionalMediationAvailable = async () => false;
       },
     );
+    let authenticated: boolean = signedIn;
+    const getMe = vi.fn(async () => {
+      if (!authenticated) throw { code: "management_session.required" };
+      return {
+        personId: "00000000-0000-4000-8000-000000000001",
+        email: "ada@example.test",
+        roleIds: ["manager"],
+        locale: "en-GB",
+        venueLocale: "en-GB",
+        sessionDefault: "en-GB",
+        permissions: signIn ? ["venue.view"] : [],
+        modules: [],
+        venueName: "Report fixture",
+      };
+    });
     const { el: app } = await mountWidget<DashboardApp>("dashboard-app", {
       api: {
         liveData: new LiveData(),
-        getMe: async () => {
-          if (!signedIn) throw { code: "management_session.required" };
-          return {
-            personId: "00000000-0000-4000-8000-000000000001",
-            email: "ada@example.test",
-            roleIds: ["manager"],
-            locale: "en-GB",
-            venueLocale: "en-GB",
-            sessionDefault: "en-GB",
-            permissions: [],
-            modules: [],
-            venueName: "Report fixture",
-          };
-        },
+        getMe,
+        inspectAccountAction: async () => ({ email: "ada@example.test", purpose: "invitation" }),
         forgetLocales: () => {},
         getLocales: async () => ({
           locales: [{ code: "en-GB", label: "English" }],
@@ -133,6 +155,30 @@ it.each([false, true])(
           : app.shadowRoot!.querySelector("dashboard-login-screen"),
       )
       .not.toBeNull();
+    if (!signedIn) {
+      const login = app.shadowRoot!.querySelector("dashboard-login-screen")!;
+      await expect.poll(() => login.checkingSession).toBe(false);
+      if (signIn || path === "/overview") {
+        const replace = vi.spyOn(history, "replaceState");
+        const push = vi.spyOn(history, "pushState");
+        authenticated = signIn;
+        login.dispatchEvent(new CustomEvent("logged-in", { bubbles: true, composed: true }));
+        await expect.poll(() => getMe.mock.calls.length).toBe(2);
+        await getMe.mock.results[1]!.value.catch(() => undefined);
+        if (signIn) {
+          await expect
+            .poll(() => app.shadowRoot!.querySelector("dashboard-overview-screen"))
+            .not.toBeNull();
+          expect(location.pathname).toBe("/overview");
+        }
+        if (path === "/overview") {
+          expect(replace).not.toHaveBeenCalled();
+          expect(push).not.toHaveBeenCalled();
+        }
+      } else {
+        expect(getMe).not.toHaveBeenCalled();
+      }
+    }
     const report = app.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-problem-report"]>(
       "[data-test=brand-banner] dashboard-problem-report",
     )!;
@@ -145,7 +191,14 @@ it.each([false, true])(
     const dialog = report.shadowRoot!.querySelector<WtReportDialog>("wt-report-dialog")!;
     await dialog.updateComplete;
     expect(dialog.open).toBe(true);
-    expect(data(preview(dialog)).app).toBe("dashboard");
+    const snapshot = data(preview(dialog));
+    expect(snapshot.app).toBe("dashboard");
+    expect(
+      navRows(snapshot.trail)
+        .slice(before)
+        .map(({ fields }) => fields),
+    ).toEqual(screens.map((screen) => ({ screen })));
+    expect(JSON.stringify(snapshot)).not.toContain("private-account-token");
   },
 );
 

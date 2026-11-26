@@ -23,7 +23,7 @@ export interface ClientReportSnapshot {
 }
 const KEYS: Record<string, readonly string[]> = {
   api: ["phase", "method", "path", "requestId", "status", "code", "error"],
-  nav: [],
+  nav: ["screen"],
   "window.error": ["name", "code"],
   "window.unhandledrejection": ["name", "code"],
   "alerts.load_failed": ["code"],
@@ -45,7 +45,11 @@ const NAMES = new Set([
   "EvalError",
   "AggregateError",
 ]);
-function field(key: string, value: TrailField | undefined): TrailField | undefined {
+function field(
+  key: string,
+  value: TrailField | undefined,
+  navigationScreens: ReadonlySet<string> | undefined,
+): TrailField | undefined {
   switch (key) {
     case "phase":
       return value === "start" || value === "end" ? value : undefined;
@@ -61,6 +65,8 @@ function field(key: string, value: TrailField | undefined): TrailField | undefin
       return typeof value === "number" && Number.isInteger(value) && value >= 100 && value <= 599
         ? value
         : undefined;
+    case "screen":
+      return typeof value === "string" && navigationScreens?.has(value) ? value : undefined;
     case "code":
       return reportCode(value);
     case "error":
@@ -75,7 +81,11 @@ function field(key: string, value: TrailField | undefined): TrailField | undefin
       return undefined;
   }
 }
-function project(event: TrailEvent, end: number): TrailEvent | undefined {
+function project(
+  event: TrailEvent,
+  end: number,
+  navigationScreens: ReadonlySet<string> | undefined,
+): TrailEvent | undefined {
   const at = Date.parse(event.at);
   if (
     !Number.isFinite(at) ||
@@ -87,7 +97,7 @@ function project(event: TrailEvent, end: number): TrailEvent | undefined {
     return;
   const fields: Record<string, TrailField> = {};
   for (const key of KEYS[event.event]!) {
-    const value = field(key, event.fields[key]);
+    const value = field(key, event.fields[key], navigationScreens);
     if (value !== undefined) fields[key] = value;
   }
   return Object.freeze({
@@ -121,12 +131,14 @@ export function captureClientReport({
   app,
   trail,
   client,
+  navigationScreens,
   now = new Date(),
   makeId = () => crypto.randomUUID(),
 }: {
   app: ClientReportSnapshot["app"];
   trail: readonly TrailEvent[];
   client: ClientReportEnvironment;
+  navigationScreens?: ReadonlySet<string>;
   now?: Date;
   makeId?: () => string;
 }): ClientReportSnapshot {
@@ -137,7 +149,7 @@ export function captureClientReport({
   let size = 2,
     truncated = false;
   for (let i = trail.length - 1; i >= 0; i--) {
-    const row = project(trail[i]!, +now);
+    const row = project(trail[i]!, +now, navigationScreens);
     if (!row) {
       truncated = true;
       continue;
