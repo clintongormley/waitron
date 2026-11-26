@@ -1355,7 +1355,7 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   also gives a set-menu dish's `movable`, `apps/server/src/set-menu-bill.ts:357`, and through
   `frozenLineIdSources` feeds `refuseMovingFrozenDishes` and the grouping); the reason's standing on
   the bill (`readReasonStanding`, `record.ts:98`, which also takes a preview's ending); the receipt
-  (`readBillAdjustments`, `record.ts:145`, which leaves out one with an ending on its own bill); the corrections report's free items
+  (`readBillAdjustments`, `record.ts:145`); the corrections report's free items
   (`listFreeItems`, `apps/server/src/free-items.ts:119`, read at `report-api.ts:342`); and the
   adjustments report (D55). Without that, its `adjustment_lines` would freeze the set menu for good
   (D30), and the receipt would print per dish, since its records would no longer add up
