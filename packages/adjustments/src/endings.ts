@@ -258,6 +258,49 @@ export async function endAdjustment(
   }
 }
 
+const NOTHING = "0.00" as Decimal;
+
+/**
+ * What each of `endingIds` gave back, in money: each row's recorded reduction is what was taken off
+ * the quantity its line held then, so it counts in proportion to the quantity the row holds now, as
+ * {@link restoreOf} gave it back; a row no longer on any bill counts whole.
+ */
+export async function givenBackBy(
+  tx: Transaction,
+  endingIds: readonly string[],
+): Promise<Map<string, Decimal>> {
+  if (endingIds.length === 0) return new Map();
+  const rows = await tx
+    .select({
+      endingId: adjustmentEndingLines.endingId,
+      reduction: adjustmentLines.reduction,
+      quantityThen: adjustmentLines.quantity,
+      quantity: workingOrderLines.quantity,
+    })
+    .from(adjustmentEndingLines)
+    .innerJoin(adjustmentLines, eq(adjustmentLines.id, adjustmentEndingLines.adjustmentLineId))
+    .leftJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
+    .where(
+      inArray(
+        adjustmentEndingLines.endingId,
+        sql`(select value from json_each(${JSON.stringify(endingIds)}))`,
+      ),
+    );
+  const byEnding = new Map<string, Decimal>();
+  for (const row of rows) {
+    const back = divideDecimal(
+      multiplyDecimal(
+        centsToDecimal(row.reduction),
+        thousandthsToDecimal(row.quantity ?? row.quantityThen),
+      ),
+      thousandthsToDecimal(row.quantityThen),
+      MONEY_SCALE,
+    );
+    byEnding.set(row.endingId, addDecimal(byEnding.get(row.endingId) ?? NOTHING, back));
+  }
+  return byEnding;
+}
+
 /** An ending a bill answers a notice for, with the comp or discount that ended. */
 export interface EndedDiscount {
   workingOrderId: string;
@@ -270,6 +313,8 @@ export interface EndedDiscount {
   percentBp: number | null;
   /** What it took off when given, in cents. */
   reduction: number;
+  /** What this ending gave back ({@link givenBackBy}). */
+  givenBack: Decimal;
   reasonId: string;
   lineName: string | null;
 }
@@ -287,6 +332,7 @@ export async function readDiscountNotices(
   if (billIds.length === 0) return [];
   const rows = await tx
     .select({
+      endingId: adjustmentEndings.id,
       workingOrderId: adjustmentEndings.workingOrderId,
       adjustmentId: adjustmentEndings.adjustmentId,
       why: adjustmentEndings.why,
@@ -321,5 +367,13 @@ export async function readDiscountNotices(
       ),
     )
     .orderBy(asc(adjustmentEndings.endedAt), asc(adjustmentEndings.id));
-  return rows.map((row) => ({ ...row, why: row.why as DiscountNoticeWhy }));
+  const givenBack = await givenBackBy(
+    tx,
+    rows.map(({ endingId }) => endingId),
+  );
+  return rows.map(({ endingId, ...row }) => ({
+    ...row,
+    why: row.why as DiscountNoticeWhy,
+    givenBack: givenBack.get(endingId) ?? NOTHING,
+  }));
 }

@@ -468,4 +468,39 @@ describe("the notices a bill answers", () => {
     ]);
     expect(await withTransaction(db, (tx) => readDiscountNotices(tx, []))).toEqual([]);
   });
+
+  it("answers what each ending gave back: one of two Hakes split onto another bill gives back 1.60 of 3.20, and a row since gone counts whole", async () => {
+    const first = await seedWorkingOrder(db);
+    const second = await seedWorkingOrder(db);
+    const stayed = await discountedHakes(first, "2");
+    const adjustmentId = await tenPercentOff(first, stayed, "2");
+    await db
+      .update(workingOrderLines)
+      .set({ quantity: stringToThousandths("1"), lineTotal: 1440 })
+      .where(eq(workingOrderLines.id, stayed));
+    const moved = await discountedHakes(second, "1");
+    await db
+      .insert(adjustmentLines)
+      .values({ adjustmentId, lineId: moved, reduction: 320, quantity: stringToThousandths("2") });
+    for (const workingOrderId of [second, first]) {
+      await withTransaction(db, (tx) =>
+        endAdjustment(tx, { adjustmentId, workingOrderId, why: "dish_moved", dishName: "Hake" }),
+      );
+    }
+    const givenBack = async () =>
+      (await withTransaction(db, (tx) => readDiscountNotices(tx, [first, second]))).map(
+        ({ workingOrderId, givenBack }) => ({ workingOrderId, givenBack }),
+      );
+    expect(await givenBack()).toEqual([
+      { workingOrderId: second, givenBack: "1.60" },
+      { workingOrderId: first, givenBack: "1.60" },
+    ]);
+
+    await db.delete(workingOrderLines).where(eq(workingOrderLines.id, stayed));
+
+    expect(await givenBack()).toEqual([
+      { workingOrderId: second, givenBack: "1.60" },
+      { workingOrderId: first, givenBack: "3.20" },
+    ]);
+  });
 });

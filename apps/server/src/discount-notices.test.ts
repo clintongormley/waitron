@@ -445,3 +445,50 @@ it("answers no notice on a paid bill while its party stays open", async () => {
   expect("discountNotices" in paid).toBe(false);
   expect(bills.find(({ workingOrderId }) => workingOrderId === target.tabId)!.status).toBe("open");
 });
+
+/** Two Soups as two portion rows, 50% off given over both: 3.00 off each. */
+async function halfOffTwoSoups() {
+  const bill = await billOf([{ menuItemId: ordinary.Soup, quantity: "2" }]);
+  const [first, second] = (await specRows(spec, bill.tabId)).filter(
+    (row) => specDishOf(spec, row) === "Soup",
+  );
+  const ask = await askOf(bill.tabId, first!.id, 5000);
+  const { adjustmentIds } = await inTx(venue, (tx) =>
+    applyAdjustment(
+      tx,
+      venue.cfg,
+      {
+        ...ask,
+        lineIds: [first!.id, second!.id],
+        admission: testTradingAdmission(),
+        submissionId: randomUUID(),
+      },
+      venue.cfg.locale,
+    ),
+  );
+  return { bill, given: adjustmentIds[0]!, first: first!, second: second! };
+}
+
+it("answers what came off the one Soup given Bread, 3.00 of a 6.00 off two Soups, then 6.00 once the other is given Bread too", async () => {
+  const { bill, given, first, second } = await halfOffTwoSoups();
+
+  await editExtras(bill.tabId, first.lineNo, [spec.bread]);
+
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({
+      adjustmentId: given,
+      amount: "3.00",
+      reapplyOn: { lineId: first.id },
+    }),
+  ]);
+
+  await editExtras(bill.tabId, second.lineNo, [spec.bread]);
+
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({
+      adjustmentId: given,
+      amount: "6.00",
+      reapplyOn: { lineId: first.id },
+    }),
+  ]);
+});

@@ -1,7 +1,7 @@
-import { inArray, sql } from "drizzle-orm";
 import { readDiscountNotices, type EndedDiscount } from "@waitron/adjustments";
 import { workingOrderLines, type Transaction } from "@waitron/db";
-import { AppError, centsToDecimal, type DiscountNotice } from "@waitron/shared";
+import { AppError, addDecimal, decimal, type DiscountNotice } from "@waitron/shared";
+import { inIds } from "./in-ids.js";
 import "./errors.js";
 
 /**
@@ -28,19 +28,18 @@ export async function readBillsDiscountNotices(
           await tx
             .select({ id: workingOrderLines.id, billId: workingOrderLines.workingOrderId })
             .from(workingOrderLines)
-            .where(
-              inArray(
-                workingOrderLines.id,
-                sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
-              ),
-            )
+            .where(inIds(workingOrderLines.id, lineIds))
         ).map(({ id, billId }) => [id, billId]),
   );
   const byBill = new Map<string, DiscountNotice[]>();
   for (const one of ended) {
     if (one.lineId !== null && billOfLine.get(one.lineId) !== one.workingOrderId) continue;
     const notices = byBill.get(one.workingOrderId) ?? [];
-    if (notices.some(({ adjustmentId }) => adjustmentId === one.adjustmentId)) continue;
+    const held = notices.find(({ adjustmentId }) => adjustmentId === one.adjustmentId);
+    if (held !== undefined) {
+      held.amount = addDecimal(decimal(held.amount), one.givenBack);
+      continue;
+    }
     notices.push({
       adjustmentId: one.adjustmentId,
       why: one.why,
@@ -48,7 +47,7 @@ export async function readBillsDiscountNotices(
       on: one.lineName!,
       action: one.action as DiscountNotice["action"],
       percentBp: one.percentBp,
-      amount: centsToDecimal(one.reduction),
+      amount: one.givenBack,
       reasonId: one.reasonId,
       reapplyOn: reapplyOn(one),
     });
