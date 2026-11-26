@@ -125,6 +125,8 @@ export default defineConfig({
       "lit/async-directive.js",
       "lit/directive.js",
       "@oddbird/popover-polyfill",
+      "jsqr",
+      "qrcode-generator",
     ],
   },
   test: {

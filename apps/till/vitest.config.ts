@@ -44,7 +44,7 @@ export default defineConfig({
       "axe-core",
       "@waitron/ui > @oddbird/popover-polyfill",
       "qrcode-generator",
-      "jsqr",
+      "@waitron/ui > jsqr",
       "lit/directives/unsafe-html.js",
       "lit/directives/keyed.js",
       "lit/directives/live.js",
