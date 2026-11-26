@@ -2,10 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { encodeMasterKeyCode } from "@waitron/shared";
 import type { WtDialog, WtMasterKeyInput } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { DashboardApi } from "../api/client.js";
+type DashboardApi = RealDashboardApi;
 import type { BackupWriteAnswer, RecoveryPackStatus } from "../api/backup-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { createFreshSignInGate } from "../api/fresh-sign-in.js";
+import { DashboardApi as RealDashboardApi } from "../api/client.js";
 import { cleanupWidgets, dialogClosed, dialogMessageOf, mountWidget } from "./test-helpers.js";
 import type { BackupKeyDialog } from "./backup-key-dialog.js";
 import "./backup-key-dialog.js";
@@ -92,9 +96,9 @@ describe.each([
   ],
   [
     "es-ES",
-    "Las copias nuevas usarán la clave de las copias número 4. Un servidor que hayas quitado no podrá leerlas.",
-    "Cambiar la clave de las copias",
-    "Cancelar",
+    es["backup_key_dialog.text"].replace("{number}", "4"),
+    es["recovery_pack.change_backup_key"],
+    es["action.cancel"],
   ],
 ] as const)("the backup key dialog in %s", (locale, text, change, cancel) => {
   it("names the next backup key, and keeps Change the backup key off until a whole key is typed", async () => {
@@ -151,7 +155,7 @@ it("offers backup key 1 when the box holds none", async () => {
 
 it.each([
   ["en-GB", "Wrong master key. Use the one dated 2026-11-23 · QZJV."],
-  ["es-ES", "Clave maestra incorrecta. Usa la del 2026-11-23 · QZJV."],
+  ["es-ES", MASTER_KEY_FIELD_WORDS.es.wrongKey("2026-11-23 · QZJV")],
 ] as const)(
   "a wrong master key shows 'Wrong master key. Use the one dated {name}.' (%s)",
   async (locale, sentence) => {
@@ -177,18 +181,63 @@ it.each([
   },
 );
 
-it("explains another refusal on the form's own line, and changes nothing", async () => {
-  const rotate = vi.fn().mockRejectedValue({ code: "backup.effective_mismatch", status: 500 });
+it("explains a refusal the box gives before writing on the form's own line, and changes nothing", async () => {
+  const rotate = vi
+    .fn()
+    .mockRejectedValue({ code: "backup.key_change_page_required", status: 403 });
   const api = stubApi(rotate);
   const { el, dialog } = await open(api);
   const changed = vi.fn();
   el.addEventListener("backup-key-changed", changed);
   await type(el, KEY);
   button(el, "change-backup-key")!.click();
-  await expect.poll(() => dialogMessageOf(dialog)).toBe(codeMessage("backup.effective_mismatch"));
+  await expect
+    .poll(() => dialogMessageOf(dialog))
+    .toBe(codeMessage("backup.key_change_page_required"));
   expect(field(el).error).toBe("");
   expect(changed).not.toHaveBeenCalled();
+  expect(api.liveData.invalidate).not.toHaveBeenCalled();
   expect(button(el, "change-backup-key")!.disabled).toBe(false);
+});
+
+it("a key change the box could not confirm was still written: says so, reads again, and offers no second press", async () => {
+  const rotate = vi.fn().mockRejectedValue({ code: "backup.effective_mismatch", status: 500 });
+  const api = stubApi(rotate);
+  const { el } = await open(api);
+  const changed = vi.fn();
+  el.addEventListener("backup-key-changed", changed);
+  await type(el, KEY);
+  button(el, "change-backup-key")!.click();
+  await expect
+    .poll(() => words(el.shadowRoot!.querySelector("[data-test=done]")))
+    .toBe(
+      "Backup key 4 is saved, but the box could not confirm that backups use it. Reload the page, and stop changing backup settings here if this happens again: this page cannot tell which key is right.",
+    );
+  expect(words(el.shadowRoot!.querySelector("[data-test=done]"))).not.toContain("Backups now use");
+  expect(api.liveData.invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(button(el, "change-backup-key")).toBeNull();
+  expect(el.shadowRoot!.querySelector("wt-master-key-input")).toBeNull();
+  expect(rotate).toHaveBeenCalledTimes(1);
+});
+
+it("after another failure from the box, the next press offers the key after the one the box now holds", async () => {
+  const rotate = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "server.internal", status: 500 })
+    .mockResolvedValue(ANSWER);
+  const api = stubApi(rotate, status(4));
+  const { el, dialog } = await open(api);
+  const changed = vi.fn();
+  el.addEventListener("backup-key-changed", changed);
+  await type(el, KEY);
+  button(el, "change-backup-key")!.click();
+  await expect.poll(() => dialogMessageOf(dialog)).toBe(codeMessage("server.internal"));
+  expect(changed).toHaveBeenCalledTimes(1);
+  expect(api.liveData.invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
+  await expect
+    .poll(() => words(el.shadowRoot!.querySelector("[data-test=intro]")))
+    .toBe(fill("backup_key_dialog.text", { number: "5" }));
 });
 
 it("treats a key change whose settings record failed as done, and says so", async () => {
@@ -213,7 +262,7 @@ it("treats a key change whose settings record failed as done, and says so", asyn
   expect(changed).toHaveBeenCalledTimes(1);
 });
 
-it("says when the box changed the key but could not load the settings again", async () => {
+it("never says backups use the new key when the box could not load the new settings", async () => {
   const rotate = vi
     .fn()
     .mockResolvedValue({ ...ANSWER, reloadErrorCode: "backup.reload_in_progress" });
@@ -221,8 +270,110 @@ it("says when the box changed the key but could not load the settings again", as
   await type(el, KEY);
   button(el, "change-backup-key")!.click();
   await expect
+    .poll(() => words(el.shadowRoot!.querySelector("[data-test=done]")))
+    .toBe(t("recovery_pack.older_key"));
+  expect(words(el.shadowRoot!.querySelector("[data-test=done-warning]"))).toBe(
+    codeMessage("backup.reload_in_progress"),
+  );
+  expect(el.shadowRoot!.textContent).not.toContain("Backups now use");
+});
+
+it("names the box's next try when a reload failure has no words of its own", async () => {
+  const rotate = vi.fn().mockResolvedValue({ ...ANSWER, reloadErrorCode: "backup.something_new" });
+  const { el } = await open(stubApi(rotate));
+  await type(el, KEY);
+  button(el, "change-backup-key")!.click();
+  await expect
     .poll(() => words(el.shadowRoot!.querySelector("[data-test=done-warning]")))
-    .toBe(`${t("backup.reload_failed_after_save")} ${codeMessage("backup.reload_in_progress")}`);
+    .toBe(t("backup.reload_failed_retry"));
+});
+
+it("reads the reload failure a failed settings record carries, and then claims nothing about the new key", async () => {
+  const rotate = vi.fn().mockRejectedValue({
+    code: "backup.rotation_metadata_failed",
+    params: { effectiveKeyChanged: true, reloadErrorCode: "backup.reload_in_progress" },
+    status: 500,
+  });
+  const api = stubApi(rotate);
+  const { el } = await open(api);
+  const changed = vi.fn();
+  el.addEventListener("backup-key-changed", changed);
+  await type(el, KEY);
+  button(el, "change-backup-key")!.click();
+  await expect
+    .poll(() => words(el.shadowRoot!.querySelector("[data-test=done]")))
+    .toBe(t("recovery_pack.older_key"));
+  expect(words(el.shadowRoot!.querySelector("[data-test=done-warning]"))).toBe(
+    `${codeMessage("backup.rotation_metadata_failed")} ${codeMessage("backup.reload_in_progress")}`,
+  );
+  expect(changed).toHaveBeenCalledTimes(1);
+});
+
+describe("a stale sign-in", () => {
+  function realApi(prompt: () => Promise<boolean>) {
+    const bodies: unknown[] = [];
+    let rotates = 0;
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const call = `${init?.method ?? "GET"} ${String(input)}`;
+      const json = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        });
+      if (call === "POST /api/backup/rotate") {
+        bodies.push(JSON.parse(String(init?.body)));
+        if (rotates++ === 0)
+          return json({ error: { code: "management_session.proof_required" } }, 400);
+        return json({ enabled: true });
+      }
+      if (call === "GET /api/backup/recovery-pack") return json(status(4));
+      throw new Error(`Unexpected request: ${call}`);
+    });
+    const api = new RealDashboardApi("", fetchImpl as typeof fetch, undefined, undefined, false, {
+      freshSignIn: createFreshSignInGate({ sessionGeneration: () => 0, prompt }),
+    });
+    return { api, bodies };
+  }
+
+  async function openReal(api: RealDashboardApi) {
+    const { el } = await mountWidget<BackupKeyDialog>("dashboard-backup-key-dialog", { api });
+    el.show(status(3));
+    await el.updateComplete;
+    await type(el, KEY);
+    return el;
+  }
+
+  it("asks the person to confirm it is them, then sends the same key again and finishes", async () => {
+    let answer!: (value: boolean) => void;
+    const prompt = vi.fn(() => new Promise<boolean>((resolve) => (answer = resolve)));
+    const { api, bodies } = realApi(prompt);
+    const el = await openReal(api);
+    button(el, "change-backup-key")!.click();
+    await expect.poll(() => prompt.mock.calls.length).toBe(1);
+    expect(button(el, "change-backup-key")!.disabled).toBe(true);
+    expect(button(el, "cancel-backup-key")!.disabled).toBe(true);
+    answer(true);
+    await expect
+      .poll(() => words(el.shadowRoot!.querySelector("[data-test=done]")))
+      .toBe("Backups now use backup key 4.");
+    expect(bodies).toEqual([{ masterKey: KEY }, { masterKey: KEY }]);
+  });
+
+  it("a cancelled confirmation changes nothing and leaves the button ready to press again", async () => {
+    const prompt = vi.fn(async () => false);
+    const { api, bodies } = realApi(prompt);
+    const el = await openReal(api);
+    const changed = vi.fn();
+    el.addEventListener("backup-key-changed", changed);
+    button(el, "change-backup-key")!.click();
+    const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
+    await expect.poll(() => dialogMessageOf(dialog)).not.toBe("");
+    expect(await dialogMessageOf(dialog)).toBe(codeMessage("management_session.proof_required"));
+    expect(field(el).error).toBe("");
+    expect(button(el, "change-backup-key")!.disabled).toBe(false);
+    expect(changed).not.toHaveBeenCalled();
+    expect(bodies).toEqual([{ masterKey: KEY }]);
+  });
 });
 
 it("a lost answer may have changed the key, so the card and Backups read again", async () => {

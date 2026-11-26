@@ -565,7 +565,7 @@ wherever that person can reach them. Revoke the old access keys at your bucket p
 Waitron cannot do for you. Then, on **Backups**, choose **Change bucket** and enter the new keys. Scheduled
 backups to a bucket keep their own keys, which **Change bucket** does not change: if they used the
 old keys, also choose **Change destination or schedule**, enter the new keys in **Access key ID**
-and **Secret access key**, and choose **Save changes**. Then, on the **Recovery pack** card, choose **Change the backup key** so new backups use a key that person does not have. A new backup encryption key does not change the passwords and keys for your other providers,
+and **Secret access key**, and choose **Save changes**. Then, on the **Recovery pack** card, choose **Change the backup key** so new backups use a key that person does not have; if they may also have the recovery pack that holds the master key, choose **Make a new master key** instead, which also changes the backup key. A new backup encryption key does not change the passwords and keys for your other providers,
 so change those at each provider too. Keep the matching recovery pack for any older copy you may need to restore.
 To replace the master key, choose **Make a new master key**: restoring a backup made after that needs the new master key, and restoring an older backup still needs the old one.
 

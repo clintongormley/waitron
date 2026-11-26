@@ -1748,6 +1748,8 @@ export const en = {
   "backup_key_dialog.text":
     "New backups will use backup key {number}. A box you removed can't read them.",
   "backup_key_dialog.done": "Backups now use backup key {number}.",
+  "backup_key_dialog.unconfirmed":
+    "Backup key {number} is saved, but the box could not confirm that backups use it. Reload the page, and stop changing backup settings here if this happens again: this page cannot tell which key is right.",
   "recovery_pack.make": "Make recovery pack",
   "recovery_pack.ready":
     "Recovery pack {number}, made on {date}, is ready. Print it or save it, and keep it locked away, off the box.",
@@ -6589,6 +6591,8 @@ export const es: Record<StringKey, string> = {
   "backup_key_dialog.text":
     "Las copias nuevas usarán la clave de las copias número {number}. Un servidor que hayas quitado no podrá leerlas.",
   "backup_key_dialog.done": "Las copias usan ahora la clave número {number}.",
+  "backup_key_dialog.unconfirmed":
+    "La clave de las copias número {number} está guardada, pero el servidor no ha podido confirmar que las copias la usen. Recarga la página y, si vuelve a pasar, no sigas cambiando los ajustes de las copias aquí: esta página no puede saber qué clave es la correcta.",
   "recovery_pack.make": "Hacer paquete de recuperación",
   "recovery_pack.ready":
     "El paquete de recuperación {number}, hecho el {date}, está listo. Imprímelo o guárdalo, y guárdalo bajo llave, lejos del servidor.",

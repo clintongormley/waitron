@@ -621,7 +621,9 @@ conservan sus propias claves, que **Cambiar de bucket** no cambia: si usaban las
 elige también **Cambiar el destino o la programación**, escribe las claves nuevas en **ID de la
 clave de acceso** y **Clave de acceso secreta**, y elige **Guardar cambios**. Después, en la tarjeta
 **Paquete de recuperación**, elige **Cambiar la clave de las copias** para que las copias nuevas usen
-una clave que esa persona no tiene. Una clave de cifrado de copias
+una clave que esa persona no tiene; si también puede tener el paquete de recuperación con la clave
+maestra, elige en su lugar **Crear una clave maestra nueva**, que también cambia la clave de las
+copias. Una clave de cifrado de copias
 nueva no cambia las contraseñas y claves de tus otros proveedores, así que cámbialas también en cada
 proveedor. Conserva el paquete de recuperación
 correspondiente a cualquier copia anterior que puedas necesitar restaurar.

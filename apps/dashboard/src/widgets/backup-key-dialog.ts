@@ -28,9 +28,22 @@ type Params = { keyName?: unknown; reloadErrorCode?: unknown };
 const paramsOf = (error: unknown): Params =>
   ((error as { params?: Params } | null)?.params ?? {}) as Params;
 
-/** A refusal envelope carries the status the box answered with; a lost answer has none. */
-const answeredByBox = (error: unknown): boolean =>
-  typeof (error as { status?: unknown } | null)?.status === "number";
+/**
+ * The rotate route refuses with a 4xx only before it writes the key; a 5xx can follow the write, and
+ * a lost answer (no status) may too.
+ */
+const refusedBeforeWriting = (error: unknown): boolean => {
+  const status = (error as { status?: unknown } | null)?.status;
+  return typeof status === "number" && status < 500;
+};
+
+/** What the dialog says once the key may have been written. */
+type Done = {
+  /** "confirmed": backups use the key; "not_loaded": the box still uses the old one; "unconfirmed": unknown. */
+  outcome: "confirmed" | "not_loaded" | "unconfirmed";
+  number: number;
+  warnings: string[];
+};
 
 /**
  * Moves backups to the next backup key of the venue's master key, which the person types. Fires
@@ -71,7 +84,7 @@ export class BackupKeyDialog extends LitElement {
   @state() private keyRefusal = "";
   /** Any other refusal's sentence, on the form's own line, kept until the next press. */
   @state() private refusal = "";
-  @state() private done: { number: number; warning: string } | null = null;
+  @state() private done: Done | null = null;
 
   #generation = 0;
   #scope?: DraftScope<{ key: string }>;
@@ -155,16 +168,24 @@ export class BackupKeyDialog extends LitElement {
     this.busy = true;
     this.refusal = "";
     this.keyRefusal = "";
-    let warning = "";
+    let outcome: Done["outcome"] = "confirmed";
+    const warnings: string[] = [];
+    const reloadFailed = (code: unknown) => {
+      if (typeof code !== "string") return;
+      outcome = "not_loaded";
+      warnings.push(hasCodeMessage(code) ? codeMessage(code) : t("backup.reload_failed_retry"));
+    };
     try {
       const answer: BackupWriteAnswer = await api.rotateBackupKey({ masterKey: this.key });
-      if (answer.reloadErrorCode !== undefined)
-        warning = this.#reloadFailed(answer.reloadErrorCode);
+      reloadFailed(answer.reloadErrorCode);
     } catch (error) {
       if (generation !== this.#generation) return;
       const code = codeOf(error, "server.internal");
       if (code === "backup.rotation_metadata_failed") {
-        warning = codeMessage(code);
+        warnings.push(codeMessage(code));
+        reloadFailed(paramsOf(error).reloadErrorCode);
+      } else if (code === "backup.effective_mismatch") {
+        outcome = "unconfirmed";
       } else {
         this.busy = false;
         if (code === "master_key.wrong") {
@@ -172,28 +193,29 @@ export class BackupKeyDialog extends LitElement {
           return;
         }
         this.refusal = codeMessage(code);
-        // Without an answer the box may have changed the key all the same.
-        if (!answeredByBox(error)) this.#changed(api);
+        if (refusedBeforeWriting(error)) return;
+        this.#changed(api);
+        const held = await this.#heldNumber(api);
+        if (generation !== this.#generation) return;
+        if (held !== null) this.next = held + 1;
         return;
       }
     }
     this.#changed(api);
-    let number = this.next;
-    try {
-      number = (await api.getRecoveryPackStatus()).backupKey?.number ?? number;
-    } catch {
-      // The number asked for stands; the card says what the box holds once it reads again.
-    }
+    const number = (await this.#heldNumber(api)) ?? this.next;
     if (generation !== this.#generation) return;
     this.busy = false;
-    this.done = { number, warning };
+    this.done = { outcome, number, warnings };
     this.#scope?.commit({ key: "" });
   }
 
-  #reloadFailed(code: string): string {
-    return `${t("backup.reload_failed_after_save")} ${
-      hasCodeMessage(code) ? codeMessage(code) : t("backup.reload_failed_retry")
-    }`;
+  /** The number of the key the box holds now; null when the read fails or names none. */
+  async #heldNumber(api: this["api"]): Promise<number | null> {
+    try {
+      return (await api.getRecoveryPackStatus()).backupKey?.number ?? null;
+    } catch {
+      return null;
+    }
   }
 
   override render(): TemplateResult {
@@ -213,15 +235,26 @@ export class BackupKeyDialog extends LitElement {
   }
 
   #body(): TemplateResult {
-    if (this.done !== null)
-      return html`<p data-test="done" role="status">
-          ${fill("backup_key_dialog.done", { number: String(this.done.number) })}
+    const done = this.done;
+    if (done !== null)
+      return html`<p
+          data-test="done"
+          class=${done.outcome === "confirmed" ? "" : "warning"}
+          role=${done.outcome === "confirmed" ? "status" : "alert"}
+        >
+          ${
+            done.outcome === "confirmed"
+              ? fill("backup_key_dialog.done", { number: String(done.number) })
+              : done.outcome === "unconfirmed"
+                ? fill("backup_key_dialog.unconfirmed", { number: String(done.number) })
+                : t("recovery_pack.older_key")
+          }
         </p>
         ${
-          this.done.warning === ""
+          done.warnings.length === 0
             ? nothing
             : html`<p class="warning" data-test="done-warning" role="alert">
-                ${this.done.warning}
+                ${done.warnings.join(" ")}
               </p>`
         }`;
     const words = MASTER_KEY_FIELD_WORDS[currentLocale().startsWith("es") ? "es" : "en"];
@@ -237,6 +270,8 @@ export class BackupKeyDialog extends LitElement {
         .disabled=${this.busy}
         .error=${this.keyRefusal}
         @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
+          // The field empties itself as it leaves, after a change or on closing.
+          if (this.done !== null || !this.opened) return;
           this.key = event.detail.masterKey ?? "";
           this.keyRefusal = "";
           this.#scope?.changed();

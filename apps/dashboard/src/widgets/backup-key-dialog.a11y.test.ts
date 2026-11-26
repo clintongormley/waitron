@@ -31,7 +31,15 @@ const STATUS: RecoveryPackStatus = {
 };
 
 type State =
-  "empty" | "typed" | "busy" | "wrong key" | "refused" | "done" | "done, settings unrecorded";
+  | "empty"
+  | "typed"
+  | "busy"
+  | "wrong key"
+  | "refused"
+  | "done"
+  | "done, settings unrecorded"
+  | "unconfirmed"
+  | "settings not loaded";
 
 function rotateFor(state: State) {
   if (state === "busy") return vi.fn(() => new Promise(() => undefined));
@@ -42,7 +50,13 @@ function rotateFor(state: State) {
       status: 400,
     });
   if (state === "refused")
+    return vi.fn().mockRejectedValue({ code: "backup.key_change_page_required", status: 403 });
+  if (state === "unconfirmed")
     return vi.fn().mockRejectedValue({ code: "backup.effective_mismatch", status: 500 });
+  if (state === "settings not loaded")
+    return vi
+      .fn()
+      .mockResolvedValue({ enabled: true, reloadErrorCode: "backup.reload_in_progress" });
   if (state === "done, settings unrecorded")
     return vi.fn().mockRejectedValue({ code: "backup.rotation_metadata_failed", status: 500 });
   return vi.fn().mockResolvedValue({ enabled: true });
@@ -56,6 +70,8 @@ const STATES: State[] = [
   "refused",
   "done",
   "done, settings unrecorded",
+  "unconfirmed",
+  "settings not loaded",
 ];
 
 describe.each(["light", "dark"] as const)("backup key dialog accessibility (%s)", (theme) => {
@@ -107,7 +123,7 @@ describe.each(["light", "dark"] as const)("backup key dialog accessibility (%s)"
         .not.toBe("");
     if (state === "refused")
       await expect.poll(() => root.querySelector("wt-form-actions")!.error).not.toBe("");
-    if (state.startsWith("done"))
+    if (state.startsWith("done") || state === "unconfirmed" || state === "settings not loaded")
       await expect.poll(() => root.querySelector("[data-test=done]")).toBeTruthy();
     await el.updateComplete;
     await root.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")
