@@ -33,12 +33,12 @@ import {
   seriesId as brandSeriesId,
   sumDecimals,
   type Decimal,
-  type ErrorParams,
   type SaleId,
 } from "@waitron/shared";
 import { invalid, MONEY } from "./bill-allocation.js";
 import {
   AS_ADMITTED,
+  closableRefusal,
   readCorrectionLegs,
   readCorrectionLegsOf,
   readCorrectionMoney,
@@ -532,20 +532,10 @@ export async function fileInvoiceCorrectionNow(
   return readInvoiceCorrection(tx, deps.backend, cfg, correctionId);
 }
 
-/** The refusals of a filing that no later attempt on this box can get past. */
-type NotAdmitted = ErrorParams["sale.correction_not_admitted"];
-const NEVER_FILEABLE = new Set<NotAdmitted["reason"]>([
-  "replaced",
-  "voided",
-  "wrong_node",
-  "not_simplified",
-  "refused_no_fix",
-]);
-
 /**
  * Ends the open correction `correctionId` without filing: discarded when nothing has gone back;
  * with money back, closed keeping its refunds only when filing it is refused for good
- * (`sale.correction_not_admitted` for a reason in `NEVER_FILEABLE`), and otherwise refused
+ * (`closableRefusal`), and otherwise refused
  * `invoice_correction.still_correctable`.
  */
 export async function closeInvoiceCorrection(
@@ -626,8 +616,8 @@ async function openCorrection(tx: Transaction, correctionId: string) {
 }
 
 /**
- * What filing `selection` off the sale would file, or the refusal it meets and whether that refusal
- * is one in `NEVER_FILEABLE`, which Close may end the correction over.
+ * What filing `selection` off the sale would file, or the refusal it meets and whether Close may
+ * end the correction over it (`closableRefusal`).
  */
 export async function previewOrRefusal(
   tx: Transaction,
@@ -647,11 +637,7 @@ export async function previewOrRefusal(
     );
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
-    return {
-      refusal: error,
-      closable:
-        hasCode(error, "sale.correction_not_admitted") && NEVER_FILEABLE.has(error.params.reason),
-    };
+    return { refusal: error, closable: closableRefusal(error) };
   }
 }
 

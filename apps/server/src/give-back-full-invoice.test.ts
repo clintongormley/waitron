@@ -10,6 +10,7 @@ import {
   refusedByAeat,
 } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { refundsWithoutCorrectiveQuery } from "./accountant-export.js";
 import { readBillEditState } from "./bill-editing.js";
 import type { GiveBackRequest } from "./give-back-plan.js";
 import { cancelItem } from "./line-cancel.js";
@@ -414,6 +415,46 @@ describe("a fresh leg on an open give-back once its corrective cannot be filed",
       json: { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } },
     });
     expect(moneyOf(saleId)).toEqual(before);
+  });
+
+  it("on a full invoice AEAT refused with no fix, takes cash and a reader leg unrecorded, and Finish lists them for the accountant", async () => {
+    const { saleId } = await fullInvoice({ card: "10.00" }, { cash: "20.00" }, { reader: "7.00" });
+    const [keyed] = venue.db.all<{ id: string }>(
+      sql`select id from tenders where sale_id = ${saleId} and method = 'card' and amount = 1000`,
+    );
+    const correctionId = await opened(saleId, keyed!.id);
+    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+
+    const cash = await cashLeg(correctionId, "8.00");
+    expect(cash.status, JSON.stringify(cash.json)).toBe(200);
+    const reader = venue.db.all<{ id: string }>(
+      sql`select id from tenders where sale_id = ${saleId} and method = 'card' and amount = 700`,
+    )[0]!.id;
+    expect(await cardLeg(saleId, correctionId, reader)).toMatchObject({
+      status: 200,
+      json: { state: "completed", appliedAmount: "5.00" },
+    });
+    const finished = await send(
+      venue.app,
+      adminCookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/close`,
+      {},
+    );
+    expect(finished.status, JSON.stringify(finished.json)).toBe(200);
+    expect(finished.json).toMatchObject({ state: "closed", correctiveSaleId: null });
+    expect(correctivesOf(saleId)).toEqual([]);
+    const listed = await inTx(venue, (tx) => refundsWithoutCorrectiveQuery(tx, () => sql`1`));
+    expect(
+      listed
+        .filter((row) => row.saleId === saleId)
+        .map(({ applied, method }) => ({ applied, method }))
+        .sort((a, b) => a.applied - b.applied),
+    ).toEqual([
+      { applied: 500, method: "card" },
+      { applied: 800, method: "cash" },
+      { applied: 1000, method: "card" },
+    ]);
   });
 });
 

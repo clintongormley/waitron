@@ -11,6 +11,7 @@ import {
 } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import {
+  checkLegFileable,
   correctionLeft,
   readCorrectionLegs,
   readCorrectionMoney,
@@ -102,6 +103,13 @@ export async function giveCorrectionCash(
       left: centsToDecimal(unclaimed),
     });
 
+  await checkLegFileable(
+    tx,
+    { backend: deps.backend, nodeId: cfg.nodeId },
+    correction,
+    correction.gross - unclaimed + amount,
+  );
+
   const reading = deps.clock.now();
   const createdAt = reading.instant.toISOString();
   const refunds: TenderRefundView[] = [];
@@ -128,7 +136,7 @@ export async function giveCorrectionCash(
       },
       createdAt,
       { backend: deps.backend, reading },
-      { correction, left: unclaimed },
+      { correction, left: unclaimed, fileableChecked: true },
     );
     unclaimed -= leg;
     const refund = await carryNewTenderRefund(
