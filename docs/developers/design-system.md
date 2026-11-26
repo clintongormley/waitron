@@ -1109,17 +1109,18 @@ the table marked as its drop target, and a party's tables are joined by a line. 
 actions follow `canChangeToday` (the profile's take-orders): without it nothing on the map moves,
 a free table cannot be seated, the sheet offers no changes for today and the zone menu holds no change. With it, on a zone with
 today's plan or whose department has a floor plan set (the zone list's `hasPlan`), a
-`wt-row-actions` ⋮ named "Today's plan" beside the List/Map toggle opens the zone menu: Add a spare
+`wt-row-actions` ⋮ on the wide floor named "Today's plan" beside the List/Map toggle opens the zone menu: Add a spare
 table, Taken off today and "Reset to {set} plan", naming the set today's plan was last made from
 (`layoutSetName`; with none, that item is not shown). On a phone (`PHONE_WIDTH`) the List/Map
 toggle is the menu's first item, above a muted "Today's plan · {zone}" heading; a menu holding
 only that item is named "Floor view" (`apps/till/src/widgets/floor-zone-menu.ts`). Each change
-opens a `wt-dialog`; the two lists name their tables by the names they show today, in number order (2, 9, 10),
+opens a `wt-dialog`. On the narrow floor these same actions appear in ☰ under the zone's name.
+The two lists name their tables by the names they show today, in number order (2, 9, 10),
 each list says so in one line when it is empty, and Reset asks before it resets.
 
 List/Map is remembered per zone on the device (`apps/till/src/state/floor-view-memory.ts`); a zone
-never switched shows Map when it has a table on the map, else List. On a handheld (the `handheld`
-property) a Ready bar fixed at the foot of the Floor, `position: sticky` under the floor's
+never switched shows Map when it has a table on the map, else List. A wide handheld floor shows
+a Ready bar at the foot of the Floor, `position: sticky` under the floor's
 `isolation: isolate`, replaces the per-station summary, listing the shown zones' tables with food
 ready; a till keeps the summary, titled "Ready" (`#readyBar`, `#stationSummary`). While a table's
 food has waited as long as its station's ready warning time (`readyBar`,
@@ -1132,7 +1133,9 @@ redraws it when a table starts to warn and each minute while it warns. Entries t
 scroll sideways between the heading and Open ›, and an end hiding an entry fades over
 `--wt-space-6` (`apps/till/src/widgets/edge-fade.ts`, shared with the till bar's table buttons).
 While the bar is drawn the Floor carries a `ready-bar` attribute, and the app raises its Sent and Served toasts by
-the page's padding (`--wt-page-padding`, `apps/till/index.html`) so they sit above it.
+the page's padding (`--wt-page-padding`, `apps/till/index.html`) so they sit above it. On the narrow
+floor the shell measures the toolbar for its sheets and the app's toasts
+(`apps/till/src/widgets/floor-bar.ts`).
 
 On the Order screen the New order's button bar (Move to…, Fire, Send all; `.draft-bar`,
 `apps/till/src/screens/till-table-order-screen.ts`) is `position: sticky` with `bottom: 0`, beside
@@ -6364,8 +6367,8 @@ Real-Chromium cases in `till-app-boot-and-counter.test.ts`, the shell suites
 and `till-app-kitchen-note.test.ts` cover the fixed mounts, fallback navigation and note drafts.
 
 Zones on this device lets a till or a handheld show a subset of the profile's permitted zones and
-choose the starting zone: a till's is under ☰ → Settings, a handheld's under ☰ → Zones on this
-device, in ☰'s Settings group. These choices stay with the device and profile across operators and
+choose the starting zone. On the narrow floor, tap the zone and choose **Choose zones for this
+phone…**. Elsewhere, open ☰ and find **Zones on this device** in Settings. These choices stay with the device and profile across operators and
 restarts. A display choice grants no permission. On a till, Counter is one tab for one counter zone
 and a checked list for several, and Floor contains only selected table zones. A handheld has no
 Counter, so its Floor contains every selected zone, counter zones included. A handheld opens on its
@@ -6373,9 +6376,11 @@ Counter, so its Floor contains every selected zone, counter zones included. A ha
 where it always has, on the URL's zone or the first tab. Once a table has been opened, Floor
 opens on that table's zone instead when this device shows that zone, as "Navigation and language controls" above says. A handheld whose zones read fails at
 sign-in says so, holds no choice and shows every permitted zone until a later read applies one.
-Floor's pills disappear with one zone. The pills, List/Map and zone menu share one toolbar,
-including at phone width. When a zone has nothing to draw, a sentence stands in for the tables and
-List/Map is left out: "This zone has no tables", "No table in this zone is in today's plan", or,
+Below 800 CSS px of shell width, the floor has a bottom bar with a zone chooser, one button
+naming the other view (Map or List), and ☰. The zone chooser marks the selected zone with a check.
+Both menus open above the bar. An urgent cue from another zone appears above the bar.
+The wide floor keeps the top toolbar and shows pills only when there's more than one zone.
+When a zone has nothing to draw, a sentence stands in for the tables: "This zone has no tables", "No table in this zone is in today's plan", or,
 after a failed tables or zones read, "The tables could not be read. Try again." with Retry; while a
 read is still out it draws as before. A till with no permitted zones shows an explanation, Settings
 and Retry, and a handheld the same without Settings; a till whose zones read failed says the zones
@@ -6734,9 +6739,8 @@ When Station agreed is refused for want of `venue.configure`, the manager's PIN 
 
 `till-notice-strip` (`apps/till/src/widgets/notice-strip.ts`) shows the box's staff notices on a
 signed-in till or handheld. It is app-owned, not a `wt-*` primitive. `till-shell` gives it the
-`notices` slot between its top bar and the screen, drawn only where the shell draws a top bar, so
-it sits under the top bar on Counter, Floor, Order and the till's Station tab, and never on a
-kiosk or a station display; `TillApp` renders that one only outside device mode, and draws its own
+`notices` slot above Counter, Floor, Order and the till's Station tab. On a narrow floor it
+remains above the floor content. The shell omits it on a kiosk or a station display. `TillApp` renders that one only outside device mode, and draws its own
 words-only strip above the clock-in and attendance pages (below). The update bar and the
 mode line stay where they are.
 

@@ -2,6 +2,7 @@ import { openOrderAddress } from "../test/order-address.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import {
   floorPartyBills,
   cleanupWidgets,
@@ -323,9 +324,11 @@ const browser = (el: TillApp) =>
   tableOrder(el)!.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser");
 const draft = (el: TillApp) => tableOrder(el)!.draftStore!;
 
-/** The bar's tabs as `[Floor]`, `✎ T4`: brackets mark the selected one, ✎ the unsent icon. */
+/** The navigation's controls as `[Floor]`, `✎ T4`: brackets mark the selected tab. */
 function bar(el: TillApp): string[] {
-  return [...shell(el).shadowRoot!.querySelectorAll<HTMLElement>('[role="tab"]')].map((tab) => {
+  return [
+    ...shell(el).shadowRoot!.querySelectorAll<HTMLElement>('[role="tab"], [data-bar-table]'),
+  ].map((tab) => {
     const icon = tab.querySelector('wt-icon[name="floor-unsent"]') === null ? "" : "✎ ";
     const label = `${icon}${tab.textContent!.trim()}`;
     return tab.getAttribute("aria-selected") === "true" ? `[${label}]` : label;
@@ -352,6 +355,11 @@ async function signIn(el: TillApp, personId = "p1", displayName = "Ana"): Promis
 async function toFloor(el: TillApp): Promise<void> {
   emit(shell(el), "screen-select", { screen: "floor" });
   await flush(el);
+  if (floor(el) && shell(el).clientWidth < 800) {
+    await vi.waitFor(() =>
+      expect(shell(el).shadowRoot!.querySelector("[data-floor-bar]")).not.toBeNull(),
+    );
+  }
 }
 
 async function openTable(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
@@ -389,9 +397,11 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await flush(el);
     await signIn(el);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    expect(bar(el)).toEqual(["✎ T4"]);
 
-    barButton(el, "t4").click();
+    await userEvent.keyboard("{Tab}");
+    expect(shell(el).shadowRoot!.activeElement).toBe(barButton(el, "t4"));
+    await userEvent.keyboard("{Enter}");
     await flush(el, 6);
     expect(tableOrder(el)?.checkVisibility()).toBe(true);
     expect(tableOrder(el)?.party?.id).toBe("v1");
@@ -518,7 +528,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await flush(el);
     await signIn(el);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]"]);
+    expect(bar(el)).toEqual([]);
   });
 
   it("selects the open table's button, with ✎ from the first dish added and none once it is removed", async () => {
@@ -539,7 +549,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await tap(el, "Beer");
     const store = draft(el);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    expect(bar(el)).toEqual(["✎ T4"]);
 
     const reads = api.getTablesState!.mock.calls.length;
     barButton(el, "t4").click();
@@ -555,7 +565,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await openTable(el);
     expect(bar(el)).toEqual(["Floor", "[T4]"]);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]"]);
+    expect(bar(el)).toEqual([]);
   });
 
   it("opens another table's button as a Floor tap does, closing an open overlay", async () => {
@@ -615,7 +625,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     expect(bar(el)).toEqual(["Floor", "[✎ T4]"]);
     await toFloor(el);
     await flush(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    expect(bar(el)).toEqual(["✎ T4"]);
   });
 
   it("hands the shell the same array when a redraw changes no button", async () => {
@@ -714,7 +724,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
     await flush(el);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T9"]);
+    expect(bar(el)).toEqual(["✎ T9"]);
 
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
@@ -752,12 +762,12 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await waitForSave();
     await flush(el);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    expect(bar(el)).toEqual(["✎ T4"]);
     emit(shell(el), "logout");
     await flush(el);
     await signIn(el);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    expect(bar(el)).toEqual(["✎ T4"]);
   });
 
   it("rebuilds the buttons for the next person", async () => {
@@ -767,12 +777,12 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await flush(el);
     await signIn(el);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    expect(bar(el)).toEqual(["✎ T4"]);
     emit(shell(el), "logout");
     await flush(el);
     await signIn(el, "p2", "Sam");
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]"]);
+    expect(bar(el)).toEqual([]);
   });
 
   it("keeps a hidden zone's table's ✎ button", async () => {
@@ -783,7 +793,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await flush(el);
     await signIn(el);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    expect(bar(el)).toEqual(["✎ T4"]);
   });
 
   it("keeps ✎ T9 when a later floor read fails", async () => {
@@ -794,7 +804,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     await flush(el);
     await signIn(el);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T9"]);
+    expect(bar(el)).toEqual(["✎ T9"]);
     api.getTablesState!.mockRejectedValue(new TypeError("Failed to fetch"));
 
     // Seating re-reads the floor through `#reloadTables`, which empties `tables` when it fails.
@@ -816,7 +826,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     });
     api.getTablesState!.mockResolvedValue([table("t4", "T4", null), table("t9", "T9", moved)]);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T9"]);
+    expect(bar(el)).toEqual(["✎ T9"]);
     expect(shell(el).barTables.map((button) => button.tableId)).toEqual(["t9"]);
 
     barButton(el, "t9").click();
@@ -837,7 +847,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     api.getTablesState!.mockResolvedValue([table("t4", "T4", since)]);
     await toFloor(el);
     expect(floor(el)?.tables[0]?.party?.id).toBe("v-new");
-    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    expect(bar(el)).toEqual(["✎ T4"]);
   });
 
   it("opens the party seated at T4 since the held one left it from ✎ T4", async () => {
@@ -850,7 +860,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     });
     api.getTablesState!.mockResolvedValue([table("t4", "T4", since)]);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    expect(bar(el)).toEqual(["✎ T4"]);
 
     barButton(el, "t4").click();
     await flush(el, 6);
@@ -867,7 +877,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     api.getTablesState!.mockResolvedValue([table("t4", "T4", since)]);
     await toFloor(el);
     expect(floor(el)?.tables[0]?.party?.id).toBe("v-new");
-    expect(bar(el)).toEqual(["[Floor]"]);
+    expect(bar(el)).toEqual([]);
   });
 
   it("selects Floor on the Order screen with no table", async () => {
@@ -898,7 +908,7 @@ describe("till-app: a handheld's bar buttons for this person's tables", () => {
     expect(floor(el)).not.toBeNull();
     expect(tableOrder(el)).toBeNull();
     expect(location.pathname).toBe("/till/tabs/floor");
-    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    expect(bar(el)).toEqual(["✎ T4"]);
   });
 });
 
@@ -942,7 +952,7 @@ describe("till-app: the bill a bar button opens (slice 11, D5–D7)", () => {
     await openTable(el);
     expect(tableOrder(el)?.orderId).toBe("wo-4");
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    expect(bar(el)).toEqual(["✎ T4"]);
 
     barButton(el, "t4").click();
     await flush(el, 6);
@@ -958,7 +968,7 @@ describe("till-app: the bill a bar button opens (slice 11, D5–D7)", () => {
     await tap(el, "Beer");
     const store = draft(el);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]", "✎ T4"]);
+    expect(bar(el)).toEqual(["✎ T4"]);
 
     barButton(el, "t4").click();
     await flush(el, 6);
@@ -1152,7 +1162,7 @@ describe("till-app: a table left for another keeps its button", () => {
 
       await signIn(el);
       await toFloor(el);
-      expect(bar(el)).toEqual(["[Floor]"]);
+      expect(shell(el).shadowRoot!.querySelector("[data-bar-table]")).toBeNull();
     },
   );
 
@@ -1209,7 +1219,7 @@ describe("till-app: a table left for another keeps its button", () => {
     expect(lock(el)).not.toBeNull();
     await signIn(el, "p2", "Sam");
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]"]);
+    expect(bar(el)).toEqual([]);
   });
 
   it("drops the kept button when the server changes", async () => {
@@ -1238,7 +1248,7 @@ describe("till-app: a table left for another keeps its button", () => {
     await flush(el, 6);
     await signIn(el);
     await toFloor(el);
-    expect(bar(el)).toEqual(["[Floor]"]);
+    expect(bar(el)).toEqual([]);
   });
 
   it("lets only a floor read started after the save answered drop the kept button", async () => {

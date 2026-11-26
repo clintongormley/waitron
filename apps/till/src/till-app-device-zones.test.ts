@@ -14,7 +14,6 @@ import {
   resetPage,
   rgb,
   servedMenus,
-  toggleFloorView,
 } from "./widgets/test-helpers.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
@@ -230,6 +229,17 @@ async function mount(
 const shell = (el: TillApp) => el.shadowRoot!.querySelector<TillShell>("till-shell")!;
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen");
+const zoneChooser = (el: TillApp) =>
+  shell(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+    "[data-floor-zone-chooser]",
+  );
+async function openZoneChooser(el: TillApp) {
+  await vi.waitFor(() => expect(zoneChooser(el)).not.toBeNull());
+  const chooser = zoneChooser(el)!;
+  await chooser.updateComplete;
+  await userEvent.click(chooser.shadowRoot!.querySelector("button")!);
+  return chooser;
+}
 
 describe("live device zones", () => {
   beforeEach(() => vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] }));
@@ -664,9 +674,9 @@ it("a table-only device starts on Floor and never asks for an unrestricted count
   expect(api.getDeviceZones).toHaveBeenCalledOnce();
   expect(api.listDefaultZoneOffers).not.toHaveBeenCalled();
   expect(api.listZoneOffers).not.toHaveBeenCalled();
-  expect(
-    [...shell(el).shadowRoot!.querySelectorAll('[role="tab"]')].map((e) => e.textContent!.trim()),
-  ).toEqual(["Floor"]);
+  await vi.waitFor(() => expect(zoneChooser(el)).not.toBeNull());
+  expect(shell(el).shadowRoot!.querySelector('[role="tab"]')).toBeNull();
+  expect(zoneChooser(el)!.label).toBe("Room");
   const floor = el.shadowRoot!.querySelector("till-floor-screen")!;
   expect(floor.zones.map((zone) => zone.id)).toEqual(["room"]);
 });
@@ -1482,9 +1492,28 @@ describe("a handheld's zones", () => {
   async function activeTab(el: TillApp) {
     await floorZoneIds(el);
     await floor(el).updateComplete;
-    return floor(el)
-      .shadowRoot!.querySelector('nav.tabs wt-button.tab[variant="primary"]')
-      ?.getAttribute("data-zone");
+    await shell(el).updateComplete;
+    return (
+      zoneChooser(el)?.querySelector<HTMLElement>('[data-floor-zone][aria-checked="true"]')?.dataset
+        .floorZone ??
+      floor(el)
+        .shadowRoot!.querySelector('nav.tabs wt-button.tab[variant="primary"]')
+        ?.getAttribute("data-zone")
+    );
+  }
+
+  async function showZone(el: TillApp, zoneId: string) {
+    await floorZoneIds(el);
+    const chooser = await openZoneChooser(el);
+    await userEvent.click(chooser.querySelector<HTMLElement>(`[data-floor-zone="${zoneId}"]`)!);
+    await vi.waitFor(() => expect(activeTab(el)).resolves.toBe(zoneId));
+  }
+
+  async function switchView(el: TillApp) {
+    await userEvent.click(
+      shell(el).shadowRoot!.querySelector<HTMLElement>("[data-floor-bar] [data-view-toggle]")!,
+    );
+    await floor(el).updateComplete;
   }
 
   it.each(handhelds)(
@@ -1518,18 +1547,24 @@ describe("a handheld's zones", () => {
       expect(await floorZoneIds(el)).toEqual(["garden"]);
       await floor(el).updateComplete;
       expect(floor(el).shadowRoot!.querySelector("nav.tabs")).toBeNull();
+      const chooser = await openZoneChooser(el);
+      expect(
+        [...chooser.querySelectorAll("[data-floor-zone]")].map((row) =>
+          row.getAttribute("data-floor-zone"),
+        ),
+      ).toEqual(["garden"]);
     },
   );
 
   it.each(handhelds)(
-    "with two zones chosen the Floor shows their two zone tabs (worked example 6) (%s)",
+    "with two zones chosen the chooser lists those two zones (%s)",
     async (formFactor) => {
       const { el } = await mountHandheld(selection(["room", "garden"], "room"), formFactor);
       await floorZoneIds(el);
-      await floor(el).updateComplete;
+      const chooser = await openZoneChooser(el);
       expect(
-        [...floor(el).shadowRoot!.querySelectorAll("nav.tabs wt-button.tab")].map((tab) =>
-          tab.getAttribute("data-zone"),
+        [...chooser.querySelectorAll("[data-floor-zone]")].map((row) =>
+          row.getAttribute("data-floor-zone"),
         ),
       ).toEqual(["room", "garden"]);
     },
@@ -1546,19 +1581,15 @@ describe("a handheld's zones", () => {
     },
   );
 
-  it("the More entry opens the zones dialog and a save narrows the Floor", async () => {
+  it("the zone chooser opens the zones dialog and a save narrows the Floor", async () => {
     const { el, api } = await mountHandheld(
       selection(["bar", "shop", "room", "garden"], "bar", false),
       "phone-portrait",
       { setDeviceZones: vi.fn().mockResolvedValue(selection(["garden"], "garden")) },
     );
     await floorZoneIds(el);
-    const more = shell(el).shadowRoot!.querySelector<
-      HTMLElement & { updateComplete: Promise<unknown> }
-    >('header wt-row-actions[data-test="more-menu"]')!;
-    await more.updateComplete;
-    await userEvent.click(more.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
-    await userEvent.click(more.querySelector<HTMLElement>("wt-button.zones")!);
+    const chooser = await openZoneChooser(el);
+    await userEvent.click(chooser.querySelector<HTMLElement>("[data-open-device-zones]")!);
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("till-device-zones-dialog")).not.toBeNull(),
     );
@@ -1993,11 +2024,6 @@ describe("a handheld's zones", () => {
       return { ...mounted, drafts };
     }
     const orderScreen = (el: TillApp) => el.shadowRoot!.querySelector("till-table-order-screen");
-    async function showZone(el: TillApp, zoneId: string) {
-      await floorZoneIds(el);
-      floor(el).shadowRoot!.querySelector<HTMLElement>(`.tabs [data-zone="${zoneId}"]`)!.click();
-      await vi.waitFor(() => expect(activeTab(el)).resolves.toBe(zoneId));
-    }
     async function openFromBar(el: TillApp, tableId: string) {
       const button = () =>
         shell(el).shadowRoot!.querySelector<HTMLElement>(`[data-bar-table="${tableId}"]`);
@@ -2134,6 +2160,10 @@ describe("a handheld's zones", () => {
       await vi.waitFor(() => expect(sendAll().disabled).toBe(false));
       sendAll().click();
       await vi.waitFor(() => expect(drafts.submitDraft.mock.calls.length).toBe(sent + 1));
+      const toast =
+        el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-toast"]>("[data-submitted-toast]")!;
+      await vi.waitFor(() => expect(toast.open).toBe(true));
+      await userEvent.click(toast.shadowRoot!.querySelector("button.close")!);
       await tapFloor(el);
     }
 
@@ -2184,12 +2214,12 @@ describe("a handheld's zones", () => {
       await signOut(el);
       await signIn(el, "person", "Ana");
       expect(await activeTab(el)).toBe("room");
-      await tapFloor(el);
+      await showZone(el, "room");
       expect(await activeTab(el)).toBe("room");
     });
 
     it.each([false, true])(
-      "a zone tab tapped after the return keeps its zone, on screen and in the address (saved %s)",
+      "a zone chosen after the return keeps its zone, on screen and in the address (saved %s)",
       async (saved) => {
         const { el } = await mountTables(selection(all, "room", saved));
         await openFromBar(el, "table-garden");
@@ -2203,7 +2233,7 @@ describe("a handheld's zones", () => {
     );
 
     it.each([false, true])(
-      "a zone tab tapped after the return keeps its zone across a language change (saved %s)",
+      "a zone chosen after the return keeps its zone across a language change (saved %s)",
       async (saved) => {
         const { el } = await mountTables(selection(all, "room", saved));
         await openFromBar(el, "table-garden");
@@ -2262,12 +2292,12 @@ describe("a handheld's zones", () => {
       expect(location.pathname).toBe("/till/tabs/floor/zone/garden");
     });
 
-    it("tapping Floor again while on the Floor keeps the zone tapped", async () => {
+    it("selecting the current zone again keeps it after returning from a table", async () => {
       const { el } = await mountTables(selection(all, "room"));
       await openFromBar(el, "table-garden");
       await tapFloor(el);
       await showZone(el, "room");
-      await tapFloor(el);
+      await showZone(el, "room");
       await el.updateComplete;
       expect(await activeTab(el)).toBe("room");
       expect(location.pathname).toBe("/till/tabs/floor/zone/room");
@@ -2916,7 +2946,7 @@ describe("a handheld's zones", () => {
     expect(api.getDeviceZones).not.toHaveBeenCalled();
   });
 
-  describe("the Ready bar and the remembered view", () => {
+  describe("floor cues and the remembered view", () => {
     const readyIn = (
       id: string,
       zoneId: string,
@@ -2949,6 +2979,7 @@ describe("a handheld's zones", () => {
       await resetPage();
     });
     const readyBar = (el: TillApp) => floor(el)?.shadowRoot!.querySelector("[data-ready-bar]");
+    const floorBar = (el: TillApp) => shell(el).shadowRoot!.querySelector("[data-floor-bar]");
     const summary = (el: TillApp) => floor(el)?.shadowRoot!.querySelector("[data-station-summary]");
     const readyEntries = (el: TillApp) =>
       [...floor(el).shadowRoot!.querySelectorAll("[data-ready-table]")].map((entry) =>
@@ -2956,19 +2987,15 @@ describe("a handheld's zones", () => {
       );
     const viewOf = (el: TillApp) =>
       floor(el).shadowRoot!.querySelector("wt-floor-map") === null ? "list" : "map";
-    async function showZone(el: TillApp, zoneId: string) {
-      floor(el).shadowRoot!.querySelector<HTMLElement>(`.tabs [data-zone="${zoneId}"]`)!.click();
-      await floor(el).updateComplete;
-      await vi.waitFor(() => expect(activeTab(el)).resolves.toBe(zoneId));
-    }
     async function onReadyFloor(el: TillApp) {
       await vi.waitFor(() => expect(floor(el)?.tables.length).toBe(2));
       await floor(el).updateComplete;
     }
 
     it.each(handhelds)(
-      "a handheld's Floor draws the Ready bar for its chosen zones only (%s)",
+      "a wide handheld's Floor draws the Ready bar for its chosen zones only (%s)",
       async (formFactor) => {
+        await pageAt(1024, 768);
         const { el } = await mountHandheld(selection(["room"], "room"), formFactor, {
           getTablesState: vi.fn().mockResolvedValue(readyTables()),
         });
@@ -2978,6 +3005,41 @@ describe("a handheld's zones", () => {
         expect(summary(el)).toBeNull();
       },
     );
+
+    it("the narrow floor shows the ready cue from another shown zone and opens that zone", async () => {
+      const { el } = await mountHandheld(selection(["room", "garden"], "room"), "phone-portrait", {
+        getTablesState: vi.fn().mockResolvedValue(readyTables()),
+      });
+      await onReadyFloor(el);
+      const cue = () => shell(el).shadowRoot!.querySelector<HTMLElement>("[data-floor-other-zone]");
+      await vi.waitFor(() =>
+        expect(cue()?.querySelector("span")?.textContent?.trim()).toBe("Garden · 2 ready"),
+      );
+      expect(readyBar(el)).toBeNull();
+
+      const chooser = await openZoneChooser(el);
+      expect(
+        chooser.querySelector('[data-floor-zone="garden"] .floor-zone-mark')?.textContent,
+      ).toBe("2 ready");
+      await userEvent.keyboard("{Escape}");
+      await userEvent.click(cue()!);
+      expect(await activeTab(el)).toBe("garden");
+      expect(location.pathname).toBe("/till/tabs/floor/zone/garden");
+      expect(cue()?.querySelector("span")?.textContent?.trim()).toBe("Room · 2 ready");
+    });
+
+    it("the zone sheet leaves the narrow floor bar visible in the real page", async () => {
+      await pageAt(700, 500);
+      applyTokens(document.documentElement);
+      const { el } = await mountHandheld(selection(["room", "garden"], "room"));
+      el.parentElement!.id = "app";
+      const chooser = await openZoneChooser(el);
+      const rows = chooser.shadowRoot!.querySelector(".actions")!;
+      await vi.waitFor(() => {
+        const bar = floorBar(el)!.getBoundingClientRect();
+        expect(rows.getBoundingClientRect().bottom).toBeCloseTo(bar.top, 0);
+      });
+    });
 
     it("a till with the same tables draws the summary and no bar", async () => {
       const { el } = await mount(selection(["room"], "room"), {
@@ -2994,7 +3056,8 @@ describe("a handheld's zones", () => {
       return [readyIn("t-late", "room", readyFor(1)), readyIn("t-room", "room", readyFor(4.5))];
     };
 
-    it("a handheld's Ready bar warns once food has waited its station's minutes", async () => {
+    it("a wide handheld's Ready bar warns once food has waited its station's minutes", async () => {
+      await pageAt(1024, 768);
       const drafts = draftServer(() => ({ tabId: "bill-t-room", revision: 1, groups: [] }));
       drafts.bills.add("bill-t-room");
       const { el } = await mountHandheld(selection(["room"], "room"), "phone-portrait", {
@@ -3035,10 +3098,10 @@ describe("a handheld's zones", () => {
     });
 
     it.each([
-      ["phone-portrait", 390, 844],
+      ["phone-portrait", 900, 844],
       ["tablet-landscape", 1024, 768],
     ] as const)(
-      "opening a table from the bar takes the Floor and its bar off the screen; an overlay from ☰ is drawn over the bar (%s, %i px)",
+      "on a wide handheld, opening a table takes the Floor and its bar off the screen; an overlay from ☰ is drawn over the bar (%s, %i px)",
       async (formFactor, width, height) => {
         // The real page: tokens on <html> (main.ts), index.html's style, and the app inside #app.
         await pageAt(width, height);
@@ -3199,18 +3262,20 @@ describe("a handheld's zones", () => {
 
     it.each([
       ["phone-portrait", 390, 844],
+      ["tablet-landscape", 700, 500],
       ["tablet-landscape", 1024, 768],
     ] as const)(
-      "after a send the Sent toast sits above the Ready bar, never over it (%s, %i px)",
+      "after a send the Sent toast clears the bottom controls (%s, %i px)",
       async (formFactor, width, height) => {
         const el = await mountSending(width, height, formFactor);
         const toast = await sendCoffee(el, true);
-        await vi.waitFor(() => expect(readyBar(el)).not.toBeNull());
-        const bar = readyBar(el)!.getBoundingClientRect();
-        const box = toast.getBoundingClientRect();
-        expect(box.height).toBeGreaterThan(0);
-        expect(bar.bottom).toBeLessThanOrEqual(window.innerHeight);
-        expect(box.bottom).toBeLessThanOrEqual(bar.top);
+        await vi.waitFor(() => {
+          const bar = (width < 800 ? floorBar(el) : readyBar(el))!.getBoundingClientRect();
+          const box = toast.getBoundingClientRect();
+          expect(box.height).toBeGreaterThan(0);
+          expect(bar.bottom).toBeLessThanOrEqual(window.innerHeight);
+          expect(box.bottom).toBeLessThanOrEqual(bar.top);
+        });
       },
     );
 
@@ -3218,12 +3283,23 @@ describe("a handheld's zones", () => {
       [390, 844],
       [1024, 768],
     ] as const)(
-      "on a till, which draws no bar, the Sent toast keeps its place (%i px)",
+      "on a till the Sent toast clears the narrow floor controls and keeps its wide position (%i px)",
       async (width, height) => {
         const el = await mountSending(width, height, "till");
         const toast = await sendCoffee(el, false);
         expect(readyBar(el)).toBeNull();
-        expect(toast.getBoundingClientRect().bottom).toBeCloseTo(window.innerHeight - oneLine(), 0);
+        if (width < 800) {
+          await vi.waitFor(() => {
+            expect(toast.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+              floorBar(el)!.getBoundingClientRect().top,
+            );
+          });
+        } else {
+          expect(toast.getBoundingClientRect().bottom).toBeCloseTo(
+            window.innerHeight - oneLine(),
+            0,
+          );
+        }
       },
     );
 
@@ -3240,7 +3316,7 @@ describe("a handheld's zones", () => {
         const first = await mountHandheld(chosen, formFactor, tablesInBoth());
         await showZone(first.el, "room");
         expect(viewOf(first.el)).toBe("list");
-        await toggleFloorView(floor(first.el));
+        await switchView(first.el);
         expect(viewOf(first.el)).toBe("map");
         cleanupWidgets();
 
@@ -3260,7 +3336,7 @@ describe("a handheld's zones", () => {
       const chosen = selection(["room", "garden"], "room");
       const first = await mountHandheld(chosen, "phone-portrait", tablesInBoth());
       await showZone(first.el, "room");
-      await toggleFloorView(floor(first.el));
+      await switchView(first.el);
       expect(viewOf(first.el)).toBe("map");
       cleanupWidgets();
 
@@ -3287,7 +3363,7 @@ describe("a handheld's zones", () => {
         tablesInBoth(),
       );
       await showZone(el, "room");
-      await toggleFloorView(floor(el));
+      await switchView(el);
       expect(viewOf(el)).toBe("map");
       await showZone(el, "garden");
       expect(viewOf(el)).toBe("list");
@@ -3296,7 +3372,8 @@ describe("a handheld's zones", () => {
       expect(floorKeys()).toEqual([]);
     });
 
-    it("the bar follows a profile switch from a till profile to a handheld one", async () => {
+    it("the wide Ready bar follows a profile switch from a till profile to a handheld one", async () => {
+      await pageAt(1024, 768);
       const handheldSetup = {
         locale: "en-GB",
         invoiceLocale: "en-GB",

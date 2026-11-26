@@ -559,7 +559,7 @@ fila mientras no se haya pagado nada de él.
 
 En un turno con mucho trabajo es fácil empezar un pedido en una mesa, que te llamen desde otra y
 olvidar los platos que no llegaste a enviar. Por eso, en un móvil o una tableta, la barra de arriba
-muestra **Sala** y después un botón como **✎ M4**, con el nombre corto de la mesa, por cada mesa
+muestra un botón como **✎ M4**, con el nombre corto de la mesa, por cada mesa
 donde tienes platos sin enviar; aunque varias cuentas tuyas tengan platos sin enviar allí, la mesa
 tiene un solo botón. Toca un botón para volver a esa mesa. La mesa en la que estás aparece
 resaltada. Cuando ya no queda nada tuyo sin enviar en ella, por ejemplo después de enviarlo todo, su
@@ -567,20 +567,13 @@ botón sigue resaltado sin el ✎ hasta que sales, y entonces desaparece, mientr
 que sales con platos aún sin enviar conserva su botón con ✎. Si
 otra persona se queda con tu cuenta, deja de contar como tuya: al momento en la mesa en la que
 estás, y en cualquier otra mesa cuando Sala vuelva a actualizar sus mesas. Cuando hay más botones
-de los que caben, **Sala** se queda en su sitio y los botones de las mesas se deslizan de lado junto
-a él; un borde difuminado indica que hay más por ese lado.
+de los que caben, deslízalos hacia un lado. Un borde difuminado indica dónde hay más.
 
-Con un teclado, Tab lleva al botón seleccionado. Las flechas izquierda y derecha abren la pestaña
-anterior o siguiente, pasando de **Sala** a tus mesas y volviendo al principio al llegar al final.
-Inicio abre **Sala** y Fin abre la última mesa.
-
-Si tocas **Sala** después de una mesa, se abre la zona de esa mesa, si este dispositivo la muestra.
-Todo lo demás está en **Más** (☰): tu nombre, con las acciones de fichaje si fichas en este
-dispositivo, cuando no cabe en la barra, lo que en un móvil ocurre siempre; las pantallas que
-permite tu perfil; **Zonas en este dispositivo**, **Equipo**, **Idioma**, **Tema** y, si este
-dispositivo tiene pantalla táctil y su navegador admite la vibración, **Vibrar al pulsar un
-botón**, bajo el título **Ajustes**; **Acerca de Waitron**; **Salir**; y, mientras el local tiene un logotipo, **Con la
-tecnología de Waitron** debajo.
+Elige **Sala** después de una mesa para abrir su zona, si este dispositivo la muestra. En una
+pantalla estrecha, toca el nombre de la zona abajo para cambiar de zona. Abre **Más** (☰) abajo
+para fichar, cambiar el plano de hoy, buscar cuentas, gestionar el efectivo, consultar tu
+jornada, pedir ayuda o abrir los ajustes. En una tableta con la sala en pantalla ancha, abre
+**Más** arriba para encontrar **Equipo**, **Idioma** y **Tema** en **Ajustes**.
 
 ## Tomar un pedido en un móvil {#phone-order}
 
@@ -921,8 +914,12 @@ nombre no se imprime en los tickets de estación ni en los recibos.
 
 ## Ver qué mesas tienen comida lista {#ready-bar}
 
+En una pantalla estrecha, consulta cuántos platos están listos en cada mesa. Si el aviso encima
+de la barra indica que hay comida lista en otra zona, tócalo para ir allí. También puedes ver el
+aviso de cada zona en la lista de zonas.
+
 Cuando la estación tiene platos listos, quieres saber a qué mesas llevarlos sin tener que ir a mirar.
-En un móvil o una tableta, una barra al pie de **Sala** muestra cada mesa con comida lista y cuántos
+En un móvil o una tableta con la sala en pantalla ancha, una barra al pie de **Sala** muestra cada mesa con comida lista y cuántos
 platos esperan, por ejemplo **Listo · M2 · 3**. Cada mesa aparece con su nombre corto, por ejemplo
 M2 para Mesa 2, o con su nombre completo mientras no tenga uno; una mesa unida a otra hoy muestra
 las dos, por ejemplo M4+M5. Mientras ninguna comida haya esperado demasiado, primero aparece la
@@ -948,8 +945,7 @@ permite su perfil, no solo de las que enseña.
 
 ## Ver una zona como mapa o lista {#floor-view}
 
-Toca **Lista** o **Mapa** para cambiar cómo muestra sus mesas la zona que tienes en pantalla. En un
-móvil, el cambio está en el menú ⋮ de la zona. El dispositivo guarda tu elección para cada zona, así
+Toca **Lista** o **Mapa** para cambiar la vista. En una pantalla estrecha, el botón está abajo. El dispositivo guarda tu elección para cada zona, así
 que la zona se abre igual la próxima vez, y cambiar una zona no cambia las demás. Una zona que no
 has cambiado se abre como mapa cuando tiene mesas colocadas en su plano, y como lista cuando no
 tiene ninguna. Si las mesas están demasiado juntas para tocarlas en el mapa, cambia esa zona a
@@ -1007,12 +1003,11 @@ Para elegir qué zonas muestra este dispositivo, consulta
 
 Un dispositivo muestra todas las zonas que permite su perfil. Si solo atiendes la terraza, las demás
 zonas estorban, así que puedes elegir cuáles muestra este dispositivo y en cuál se abre. En una
-caja, abre **Más** (☰), luego **Ajustes** y luego **Zonas en este dispositivo**. En un móvil o una
-tableta, abre **Más** (☰) y elige **Zonas en este dispositivo**, en **Ajustes**. Marca **Mostrar**
-en cada zona que quieras, elige la que **Abre primero** y toca **Guardar**.
+pantalla estrecha, toca el nombre de la zona abajo y elige **Elegir zonas para este móvil…**.
+En las demás pantallas, abre **Más** (☰) y elige **Zonas en este dispositivo** en **Ajustes**.
+Marca **Mostrar** en cada zona que quieras, elige la que **Abre primero** y toca **Guardar**.
 
-Desde entonces, **Sala** muestra solo las zonas que has elegido, y con una sola zona no muestra
-pestañas de zona. Una caja muestra en Sala las zonas de mesas elegidas y en Mostrador las zonas de
+Una caja muestra en Sala las zonas de mesas elegidas y en Mostrador las zonas de
 mostrador elegidas. Un móvil o una tableta no tiene Mostrador, así que su Sala muestra todas las
 zonas que has elegido. Hasta que guardas una elección, un móvil o una tableta se abre donde siempre;
 después se abre en tu zona de **Abre primero**. Tras abrir una mesa, mira

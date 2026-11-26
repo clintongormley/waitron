@@ -365,6 +365,7 @@ import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/till-shell.js";
+import { floorToastStyles } from "./widgets/floor-bar.js";
 import "./screens/till-drawer-close.js";
 import "./screens/till-drawer-cash.js";
 import "./widgets/find-bill-dialog.js";
@@ -2245,6 +2246,7 @@ function zoneKeepOpenMoved(
 export class TillApp extends LitElement {
   static override styles = [
     serverConnectionNoticeStyles,
+    floorToastStyles,
     baseStyles,
     css`
       .finish-refund-list {
@@ -2325,23 +2327,6 @@ export class TillApp extends LitElement {
         inset-inline: var(--wt-space-3);
         top: calc(var(--wt-space-3) + env(safe-area-inset-top));
         z-index: 10;
-      }
-
-      /* Over the page: in the flow, its closing would move the floor under a waiter's finger. */
-      .submitted-toast {
-        position: fixed;
-        inset-inline: var(--wt-space-3);
-        bottom: calc(var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom));
-        z-index: 10;
-      }
-
-      /* The Ready bar, no taller than the offset above, sits at the scrolling area's foot, which
-         the page's padding lifts off the window's bottom. */
-      .app:has(till-floor-screen[ready-bar]) .submitted-toast {
-        bottom: calc(
-          var(--wt-page-padding) + var(--wt-tap-min) + 2 * var(--wt-space-3) +
-            env(safe-area-inset-bottom)
-        );
       }
 
       .error-action {
@@ -25626,6 +25611,9 @@ export class TillApp extends LitElement {
                         html`<till-shell
                           .formFactor=${shellFormFactor}
                           .activeScreen=${this.activeTabKey}
+                          @floor-bar-resized=${(event: CustomEvent<number>) => {
+                            this.style.setProperty("--wt-floor-bar-height", `${event.detail}px`);
+                          }}
                           .counterZones=${this.deviceZoneSelection?.zones.filter((zone) => this.#deviceNavigation()?.counterZoneIds.includes(zone.id)) ?? []}
                           .selectedCounterZoneId=${this.counterServiceZoneId}
                           .showCounter=${this.formFactor !== "till" || (this.#deviceNavigation()?.counterZoneIds.length ?? 0) > 0}

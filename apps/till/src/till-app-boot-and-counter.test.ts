@@ -6548,7 +6548,7 @@ it.each([["till", "floor", "till-floor-screen"]] as const)(
 );
 
 it.each(["phone-portrait", "tablet-landscape"] as const)(
-  "draws only Floor as a tab on a %s",
+  "puts the narrow Floor controls at the bottom on a %s",
   async (formFactor) => {
     const { el } = await mountApp({
       getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
@@ -6558,7 +6558,12 @@ it.each(["phone-portrait", "tablet-landscape"] as const)(
     });
     await toCounter(el);
     const fixedShell = el.shadowRoot!.querySelector("till-shell")!;
-    expect(fixedShell.shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab")).toHaveLength(1);
+    await vi.waitFor(() =>
+      expect(
+        fixedShell.shadowRoot!.querySelector("[data-floor-bar] [data-floor-zone-chooser]"),
+      ).not.toBeNull(),
+    );
+    expect(fixedShell.shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab")).toHaveLength(0);
     openOrderAddress();
     await flush(el);
     const screen = el.shadowRoot!.querySelector("till-table-order-screen") as HTMLElement & {
