@@ -100,7 +100,7 @@ export interface GiveBackAsk {
   manualConfirmed?: boolean;
 }
 
-/** `POST /api/transactions/:saleId/give-back`. */
+/** `POST /api/transactions/:saleId/give-back`, which takes `request`'s fields at the top level. */
 export interface GiveBackWrite extends GiveBackAsk {
   submissionIds: GiveBackSubmissionIds;
   override?: { personId: string; pin: string };

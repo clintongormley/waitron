@@ -38,7 +38,7 @@ it("previews a give-back on the encoded receipt with the whole request", async (
   });
 });
 
-it("sends a give-back on the encoded receipt with its ids, parts and PIN", async () => {
+it("sends a give-back on the encoded receipt with the request's fields at the top level", async () => {
   const body = {
     request: { purpose: "goodwill" as const, amount: "5.00", extra: "0.00", way: "cash" },
     reasonId: "reason-1",
@@ -54,7 +54,17 @@ it("sends a give-back on the encoded receipt with its ids, parts and PIN", async
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      purpose: "goodwill",
+      amount: "5.00",
+      extra: "0.00",
+      way: "cash",
+      reasonId: "reason-1",
+      note: null,
+      expected: [{ kind: "refund", amount: "5.00", way: "cash" }],
+      submissionIds: { refund: "a", extra: "b", correction: "c", leg: "d" },
+      override: { personId: "boss", pin: "1234" },
+    }),
   });
 });
 

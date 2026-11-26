@@ -151,8 +151,20 @@ export class FindBillApi extends DrawerApi {
       request,
     );
   }
-  giveBack(saleId: string, body: GiveBackWrite): Promise<GiveBackOutcome> {
-    return this.#request(`/api/transactions/${encodeURIComponent(saleId)}/give-back`, "POST", body);
+  giveBack(saleId: string, { request, ...rest }: GiveBackWrite): Promise<GiveBackOutcome> {
+    // Copied by name, so a stray property on `request` never reaches the server's top-level fields.
+    const fields = {
+      purpose: request.purpose,
+      lineIds: request.lineIds,
+      amount: request.amount,
+      extra: request.extra,
+      way: request.way,
+      fromCancel: request.fromCancel,
+    } satisfies Record<keyof GiveBackRequest, unknown>;
+    return this.#request(`/api/transactions/${encodeURIComponent(saleId)}/give-back`, "POST", {
+      ...fields,
+      ...rest,
+    });
   }
   giveInvoiceCorrectionCash(
     correctionId: string,
