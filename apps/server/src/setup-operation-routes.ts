@@ -1,7 +1,6 @@
 import { ALL_MODULES } from "@waitron/composition";
 import { withTransaction } from "@waitron/db";
 import {
-  type SetupOperationPhase,
   type ActiveSetupOperation,
   type FirstSetupHold,
   type SetupOperationStore,
@@ -55,7 +54,7 @@ import {
 } from "./setup-cloud-sign-in.js";
 import { mountSetupEmailTest } from "./setup-email-api.js";
 import { mountSetupJoinRoutes } from "./setup-join-routes.js";
-import { isUnfinishedAdopt } from "./setup-operation.js";
+import { isUnfinishedAdopt, setupPhaseReached } from "./setup-operation.js";
 import { parseProvisionPayload } from "./setup-provision-input.js";
 import { mountRecoveryPreparationApi } from "./setup-recovery-preparation-api.js";
 import {
@@ -98,25 +97,6 @@ function recoveryCredentials(
     ...(selected === undefined ? {} : { recoveryContext: selected }),
   };
 }
-const SETUP_PHASES: readonly SetupOperationPhase[] = [
-  "started",
-  "venue_committed",
-  "content_seeded",
-  "identity_established",
-  "membership_seeded",
-  "secret_sealed",
-  "publishing",
-  "complete",
-];
-function setupPhaseReached(
-  operation: ActiveSetupOperation | undefined,
-  phase: SetupOperationPhase,
-): boolean {
-  return (
-    operation !== undefined && SETUP_PHASES.indexOf(operation.phase) >= SETUP_PHASES.indexOf(phase)
-  );
-}
-
 export const MAX_CONFIGURATION_UPLOAD_BYTES = 64 * 1024 * 1024;
 // Finish joining reads nothing from its body, so every resend counts as the same request.
 const JOIN_ADOPT_REQUEST_HASH = createHash("sha256").update("adopt-joined").digest("hex");
@@ -204,7 +184,8 @@ export function mountSetupOperationRoutes(
   });
 
   app.post("/setup-api/provision", async (c) => {
-    // Deps gate — before the latch, so an unwired box never engages it.
+    // Deps gate — before the latch, so an unwired box never engages it. Captured as consts so
+    // TypeScript narrows them for the async closure below.
     const provision = deps.provision;
     const recoverProvision = deps.recoverProvision;
     const seedDemo = deps.seedDemo;
@@ -214,6 +195,7 @@ export function mountSetupOperationRoutes(
     const ring = deps.ring;
     const persistTrading = deps.persistTrading;
     const requestRestart = deps.requestRestart;
+    const stateDir = deps.stateDir;
     if (
       provision === undefined ||
       (deps.operations !== undefined && recoverProvision === undefined) ||
@@ -223,7 +205,8 @@ export function mountSetupOperationRoutes(
       db === undefined ||
       ring === undefined ||
       persistTrading === undefined ||
-      requestRestart === undefined
+      requestRestart === undefined ||
+      stateDir === undefined
     ) {
       return directError(c, log, "setup.not_ready", 503);
     }
@@ -373,7 +356,7 @@ export function mountSetupOperationRoutes(
           cloudStaffEmailUnavailable = staffEmail && enabled !== true;
         }
         await deps.clearConfiguration?.();
-        if (deps.stateDir !== undefined) await writeBackupKeyOne(deps.stateDir, masterKey);
+        await writeBackupKeyOne(stateDir, masterKey);
         // Last venue.db write: a failure before it leaves no master_keys row.
         madeMasterKey = await saveNewMasterKey(db, masterKey, madeAt, null);
         await operation?.advance("publishing", { ...operation.data, cloudStaffEmailUnavailable });

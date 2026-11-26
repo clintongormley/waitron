@@ -307,6 +307,7 @@ function app(overrides: Partial<SetupDeps> = {}) {
       seedMembership: async () => {},
       persistTrading: async () => {},
       requestRestart: () => {},
+      stateDir,
       ...overrides,
     },
     () => {},

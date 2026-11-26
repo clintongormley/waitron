@@ -78,7 +78,7 @@ export interface SetupDeps {
    */
   seedMembership?: (nodeId: string) => Promise<void>;
   /** The box's state folder: preparation, demo and a development box's Live setup write backup key
-   * 1 of the master key they make into its `backup.env`. */
+   * 1 of the master key they make into its `backup.env`, and answer `setup.not_ready` without it. */
   stateDir?: string;
   /** Persists `trading.env` so the next boot enters trading mode. */
   persistTrading?: (cfg: TradingConfig) => Promise<void>;

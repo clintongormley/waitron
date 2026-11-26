@@ -1,8 +1,7 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { readModuleRecord } from "@waitron/provisioning";
-import { existsSync } from "node:fs";
-import { readdir, writeFile } from "node:fs/promises";
-import { BACKUP_ENV_FILE } from "@waitron/store";
+import { readFile, readdir, writeFile } from "node:fs/promises";
+import { BACKUP_ENV_FILE, formatEnvFile, parseEnvFile } from "@waitron/store";
 import { join } from "node:path";
 import type { Hono } from "hono";
 import { expect, it, vi } from "vitest";
@@ -59,17 +58,14 @@ async function repairIds(app: Hono) {
   };
 }
 
-/** `backupKeyHeld`: setup had written `backup.env`, which Start again keeps. */
-async function onlyLockFiles(s: Server, backupKeyHeld = true) {
+async function onlyLockFiles(s: Server) {
   for (const dir of [s.stateDir, s.venueDir])
     expect(
-      (await readdir(dir))
-        .filter(
-          (name) => !name.endsWith(".lock") && (dir !== s.stateDir || name !== "module-records"),
-        )
-        .sort(),
+      (await readdir(dir)).filter(
+        (name) => !name.endsWith(".lock") && (dir !== s.stateDir || name !== "module-records"),
+      ),
       dir,
-    ).toEqual(dir === s.stateDir ? [...(backupKeyHeld ? ["backup.env"] : []), "flows"] : []);
+    ).toEqual(dir === s.stateDir ? ["flows"] : []);
   expect(await readdir(join(s.stateDir, "flows"))).toEqual([]);
   expect(await readModuleRecord(s.stateDir, "fiscal-verifactu")).toEqual({
     version: 1,
@@ -123,7 +119,6 @@ it.each([
   "%s: then the repair entry serves Start again for it, and Start again deletes it",
   async (_, reach, before) => {
     const s = await reach();
-    const backupKeyHeld = existsSync(join(s.stateDir, BACKUP_ENV_FILE));
     expect((await resolveFirstSetupEntry(roots(s), {})).kind).toBe(before);
     const stopped = await s.stop(await s.ids());
     expect(stopped.status, await stopped.clone().text()).toBe(200);
@@ -134,9 +129,40 @@ it.each([
     expect(summary.status, await summary.clone().text()).toBe(200);
     const started = await s.post(app, START_AGAIN_ROUTES.startAgain.path, ids);
     expect(started.status, await started.clone().text()).toBe(200);
-    await onlyLockFiles(s, backupKeyHeld);
+    await onlyLockFiles(s);
   },
 );
+
+async function startAgain(s: Server) {
+  const stopped = await s.stop(await s.ids());
+  expect(stopped.status, await stopped.clone().text()).toBe(200);
+  const app = await repairEntry(s);
+  const ids = await repairIds(app);
+  const started = await s.post(app, START_AGAIN_ROUTES.startAgain.path, ids);
+  expect(started.status, await started.clone().text()).toBe(200);
+}
+
+it("Start again removes the backup key Live setup wrote from the staged master key it throws away", async () => {
+  const s = await ordinaryServer({ until: "node-key" });
+  const held = parseEnvFile(await readFile(join(s.stateDir, BACKUP_ENV_FILE), "utf8"));
+  expect(held.WAITRON_BACKUP_KEY_NUMBER).toBe("1");
+  await startAgain(s);
+  await expect(readFile(join(s.stateDir, BACKUP_ENV_FILE))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("control: Start again keeps a backup key of another master key", async () => {
+  const s = await ordinaryServer({ until: "node-key" });
+  const path = join(s.stateDir, BACKUP_ENV_FILE);
+  const other = formatEnvFile({
+    ...parseEnvFile(await readFile(path, "utf8")),
+    WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
+  });
+  await writeFile(path, other, { mode: 0o600 });
+  await startAgain(s);
+  expect(await readFile(path, "utf8")).toBe(other);
+});
 
 it("stops and resets a setup holding only its module selection row", async () => {
   const s = await ordinaryServer();

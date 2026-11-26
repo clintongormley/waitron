@@ -11,7 +11,7 @@ import "./errors.js";
 
 const MASTER_KEY_BYTES = 16;
 const SALT = Buffer.from("waitron.master-key.v1", "ascii");
-const LARGEST_BACKUP_KEY_NUMBER = 0xffff_ffff;
+export const LARGEST_BACKUP_KEY_NUMBER = 0xffff_ffff;
 const X25519_PKCS8_PREFIX = Buffer.from("302e020100300506032b656e04220420", "hex");
 
 function derive(masterKey: Uint8Array, info: string): Buffer {

@@ -1,3 +1,4 @@
+import { LARGEST_BACKUP_KEY_NUMBER } from "@waitron/credentials";
 import { codeOf } from "@waitron/server-kit";
 import { AppError, isAppError, readVariable } from "@waitron/shared";
 import { type ArchiveSettings } from "./archive-settings.js";
@@ -38,9 +39,9 @@ export interface BackupConfig {
   /** `undefined` when never rotated. Reported in `GET /api/box/status` only; it gates no behaviour. */
   keyRotatedAt: string | undefined;
   /** Which backup key of the master key `recoveryKey` is; `undefined` when the file names none. */
-  keyNumber?: number | undefined;
+  keyNumber: number | undefined;
   /** The id of the master key `recoveryKey` comes from; `undefined` when the file names none. */
-  masterKeyId?: string | undefined;
+  masterKeyId: string | undefined;
 }
 
 export const BACKUP_STALE_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
@@ -91,14 +92,11 @@ export async function readHeldKey(
   }
 }
 
-/** What a version 2 archive frame's four-byte field can name. */
-const LARGEST_KEY_NUMBER = 0xffff_ffff;
-
 function loadKeyNumber(env: Env): number | undefined {
   const raw = readVariable(env, "WAITRON_BACKUP_KEY_NUMBER");
   if (raw === undefined || !/^[1-9]\d{0,9}$/.test(raw)) return undefined;
   const n = Number(raw);
-  return n <= LARGEST_KEY_NUMBER ? n : undefined;
+  return n <= LARGEST_BACKUP_KEY_NUMBER ? n : undefined;
 }
 
 function loadMasterKeyId(env: Env): string | undefined {

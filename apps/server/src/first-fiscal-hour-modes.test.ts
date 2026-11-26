@@ -109,6 +109,7 @@ async function fixture() {
           ),
         persistTrading: async () => {},
         requestRestart: () => {},
+        stateDir,
         ...overrides,
       },
       () => {},

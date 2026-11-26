@@ -141,6 +141,8 @@ function localFsConfig(dirs: string[], recoveryKey: string): BackupConfig {
     staleAfterMs: 2 * 24 * 60 * 60 * 1000,
     destinationTimeoutMs: 15 * 60 * 1000,
     keyRotatedAt: undefined,
+    keyNumber: undefined,
+    masterKeyId: undefined,
   };
 }
 

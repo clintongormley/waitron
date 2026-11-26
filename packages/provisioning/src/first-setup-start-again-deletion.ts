@@ -8,6 +8,7 @@ import {
   SETUP_OPERATION_FILE,
   TRADING_ENV_FILE,
   FIRST_FISCAL_DOCUMENTS_DIR,
+  BACKUP_ENV_FILE,
   BACKUP_ROOM_NOTE_FILE,
   VENUE_WAL_FILE,
   NODE_WAL_FILE,
@@ -37,6 +38,7 @@ import {
 import { AppError, isUuid } from "@waitron/shared";
 import { clearModulePrepared } from "./module-records.js";
 import { deleteBackupRoomNote } from "./backup-room-note-file.js";
+import { deleteStagedBackupKey } from "./staged-backup-key-file.js";
 import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
 import { canonicalFirstSetupRoots } from "./first-setup-directories.js";
 import { removeAndSync } from "./folder-sync.js";
@@ -584,6 +586,8 @@ export async function deleteMarkedAttempt(
   try {
     current = join(canonical.stateDir, BACKUP_ROOM_NOTE_FILE);
     await deleteBackupRoomNote(canonical.stateDir);
+    current = join(canonical.stateDir, BACKUP_ENV_FILE);
+    await deleteStagedBackupKey(canonical.stateDir);
     for (const item of await itemsOnDisk(canonical, heldBy(value))) {
       current = item.path;
       if (item.kind === "folder") await remove(item.path, "folder");

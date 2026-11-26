@@ -842,6 +842,8 @@ describe("backup admin routes", () => {
       staleAfterMs: 2 * 24 * 60 * 60 * 1000,
       destinationTimeoutMs: 15 * 60 * 1000,
       keyRotatedAt: undefined,
+      keyNumber: undefined,
+      masterKeyId: undefined,
     };
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
@@ -889,6 +891,8 @@ describe("backup admin routes", () => {
       staleAfterMs: 2 * 24 * 60 * 60 * 1000,
       destinationTimeoutMs: 15 * 60 * 1000,
       keyRotatedAt: undefined,
+      keyNumber: undefined,
+      masterKeyId: undefined,
     };
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,

@@ -120,6 +120,7 @@ describe("making a master key", () => {
 
   it("never hands out the sealing private key", () => {
     expect(Object.keys(masterKeyModule).sort()).toEqual([
+      "LARGEST_BACKUP_KEY_NUMBER",
       "authorityKey",
       "authorityKeyMatches",
       "backupKey",

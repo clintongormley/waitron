@@ -1,3 +1,4 @@
+import { useSetupStateDir } from "./testing/setup-state-dir.js";
 import { readFile, readdir } from "node:fs/promises";
 import { receiveSetupArchive } from "./setup-archive-upload.js";
 import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
@@ -32,6 +33,8 @@ import type { ConfigurationPreview } from "./configuration-import.js";
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
 import { STUB_NODE } from "./testing/node-copy.js";
+
+const SETUP_STATE_DIR = useSetupStateDir();
 
 // The fake database cannot tell writes apart, so the master key's save and its pack's drawing are
 // recorded by name.
@@ -435,6 +438,7 @@ function makeDeps(overrides: Partial<SetupDeps> = {}): {
     requestRestart,
     runFiscalTest,
     assertFiscalReady,
+    stateDir: SETUP_STATE_DIR,
     ...overrides,
   };
   return {
@@ -1520,6 +1524,16 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     },
   );
 
+  it("a box wired without its state folder refuses setup as not ready, before provisioning", async () => {
+    const app = new Hono();
+    const { deps, calls } = makeDeps({ stateDir: undefined });
+    mountSetup(app, deps, noopLog);
+    const res = await postProvision(app, demoBody());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+    expect(calls).toEqual([]);
+  });
+
   it("a backup key that cannot be written leaves no master key saved", async () => {
     const stateDir = mkdtempSync(join(tmpdir(), "setup-backup-key-"));
     try {
@@ -1527,7 +1541,9 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       const app = new Hono();
       const { deps, calls } = makeDeps({ stateDir });
       mountSetup(app, deps, noopLog);
-      expect((await postProvision(app, demoBody())).status).not.toBe(200);
+      const res = await postProvision(app, demoBody());
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ error: { code: "server.internal" } });
       expect(calls).toContain("persistTrading");
       expect(calls).not.toContain("saveMasterKey");
     } finally {
