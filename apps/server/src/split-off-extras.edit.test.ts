@@ -141,8 +141,8 @@ describe("editing split-off extras", () => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "burger", "1", 1)]);
       const old = (await state(tx, id)).items;
       if (here) await setMadeHere(tx, venue.cfg.origin.deviceId, [venue.stations.fryer]);
-      venue.cfg.sendingDeviceId = venue.cfg.origin.deviceId;
-      await edit(tx, venue, 1, { portionLineNos: [], note: "No salt" });
+      const cfg = here ? { ...venue.cfg, sendingDeviceId: venue.cfg.origin.deviceId } : venue.cfg;
+      await edit(tx, { ...venue, cfg }, 1, { portionLineNos: [], note: "No salt" });
       const current = await state(tx, id);
       expect(current.items.map((item) => item.id)).not.toContain(
         old.find((item) => item.stationId === venue.stations.fryer)!.id,
@@ -154,7 +154,7 @@ describe("editing split-off extras", () => {
       const fryer = await slips(tx, venue.printers.fryer);
       expect(fryer.join("\n")).toContain("RECALLED");
       expect(fryer.at(-1)).toContain("CHIPS");
-      expect(fryer.at(-1)).not.toContain("RECALLED");
+      expect(fryer.filter((slip) => !slip.includes("RECALLED"))).toHaveLength(2);
     });
   });
 
