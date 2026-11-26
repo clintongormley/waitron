@@ -286,3 +286,40 @@ test("Clear all clears a choice in one column while another column's multi-selec
   expect(shownKeys(el)).toEqual(["1", "2", "3"]);
   expect(changes).toEqual([{ name: "Bea" }, { status: [] }]);
 });
+
+test("resetColumnView saves the view without that column's filter and sort, and keeps the rest", async () => {
+  const sortedStatus = { ...statusColumn({}), sortValue: (person: Person) => person.status };
+  const team = {
+    key: "team",
+    label: "Team",
+    cell: (person: Person) => person.id,
+    filter: {
+      label: "Filter by team",
+      allLabel: "Any team",
+      value: (person: Person) => person.id,
+      options: [{ value: "1", label: "One" }],
+    },
+  } satisfies DataTableColumn<Person>;
+  const el = await peopleTable({
+    viewKey: "people.reset",
+    columns: [name, sortedStatus, team],
+    sortKey: "status",
+    sortDirection: "descending",
+    filterSelections: { status: "active", team: "1" },
+  });
+  el.resetColumnView("status", "name");
+  expect(el.sortKey).toBe("name");
+  expect(el.sortDirection).toBe("ascending");
+  expect(el.filterSelections).toEqual({ team: "1" });
+  expect(JSON.parse(sessionStorage.getItem("people.reset")!)).toEqual({
+    sortKey: "name",
+    sortDirection: "ascending",
+    filters: { team: "1" },
+  });
+  el.sortKey = "status";
+  el.sortDirection = "descending";
+  el.resetColumnView("team", "name");
+  expect(el.sortKey).toBe("status");
+  expect(el.sortDirection).toBe("descending");
+  expect(el.filterSelections).toEqual({});
+});
