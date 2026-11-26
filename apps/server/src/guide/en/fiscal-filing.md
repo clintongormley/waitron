@@ -45,8 +45,7 @@ print by itself: on a till, open it in **Find a bill**, on the **Transactions** 
 send either; anyone else can sign in as one from the case.
 
 When a receipt AEAT refused is then cancelled in Waitron, its case stays open beside a
-**Cancellation set aside** case: AEAT never held that receipt, so there is nothing to send or
-correct.
+**Cancellation set aside** case, and Fiscal filing offers no fix for either.
 
 The table lists the newest 200 cases. When there are more, it says how many; export them to see
 every one.

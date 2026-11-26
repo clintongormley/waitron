@@ -1681,7 +1681,7 @@ a later payment is recorded against that invoice. Nothing is held back from the 
 the money is collected. Recovering the VAT on a debt never collected (art. 80.Cuatro) is the
 venue's own business and is not built. *(2026-10-02, C126: cancelling such a bill, by a person
 holding `sale.rectify` or on the PIN of one who does (B33, 2026-10-02), now credits its whole invoice, VAT included, with a corrective invoice,
-unless the cancel is refused (see Q32), and leaves the departure as recorded — see Q32, part (c).)* *(2026-11-26, CANCEL-UNSERVED PR 3: when such a bill never held a payment and nothing on it was served, the cancel files a cancellation of its receipt under `sale.void` instead.)* The basis, quoted from the BOE
+unless the cancel is refused (see Q32), and leaves the departure as recorded — see Q32, part (c).)* *(2026-11-26, CANCEL-UNSERVED PR 3: when such a bill never held a payment, names no customer, its receipt was never corrected or replaced and nothing on it was served, the cancel files a cancellation of its receipt under `sale.void` instead; when anything on it was served, the cancel is refused.)* The basis, quoted from the BOE
 consolidated texts fetched 2026-10-01:
 
 - Ley 37/1992 (IVA), art. 75.Uno.2.º — the tax falls due «En las prestaciones de servicios, cuando
