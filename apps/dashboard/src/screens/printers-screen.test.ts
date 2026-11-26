@@ -499,6 +499,23 @@ function typeField(el: PrintersScreen, sel: string, value: string): void {
   );
 }
 
+async function checkPrinterAddress(el: PrintersScreen, host: string): Promise<void> {
+  await openDiscovery(el);
+  q(el, "[data-test=probe-panel] summary")!.click();
+  typeField(el, "[data-test=probe-host]", host);
+  q(el, "[data-test=probe-printer]")!.click();
+  await flush(el);
+}
+
+async function closeAfterAddressCheck(el: PrintersScreen): Promise<void> {
+  const closed = dialogClosed(q(el, "[data-test=new-printer-modal]")!);
+  q(el, "[data-test=cancel-new-printer]")!.click();
+  await flush(el);
+  expect(questionOf(el).open).toBe(false);
+  await closed;
+  expect(q(el, "[data-test=new-printer-modal]")).toBeNull();
+}
+
 async function bottomOf(el: PrintersScreen, actions: string): Promise<string> {
   const row = q(el, actions) as HTMLElementTagNameMap["wt-form-actions"];
   return (await formMessageOf(row))?.textContent?.trim() ?? "";
@@ -2600,6 +2617,106 @@ describe("printers-screen", () => {
     expect(status).toBe(t("printers.probe_page_printer"));
     expect(status).not.toContain(t("printers.probe_found"));
     expect(q(el, "[data-test='register-a1:192.168.20.56:9100']")).toBeNull();
+  });
+
+  describe("closing after checking a printer address", () => {
+    async function checkedReceipt({
+      stale = false,
+      registered = false,
+      liveData,
+    }: { stale?: boolean; registered?: boolean; liveData?: LiveData } = {}) {
+      history.replaceState(null, "", "/printers/view/printers");
+      const source = registered ? discoveredRegisteredNetwork[0]! : discoveredNetwork[0]!;
+      const requestedAt = Date.now();
+      const freshReport = { ...source, lastSeenAt: new Date(requestedAt).toISOString() };
+      const probePrinterAddress = vi.fn().mockResolvedValue({
+        host: source.host,
+        port: 9100,
+        requestedAt,
+        expiresAt: requestedAt + 30_000,
+      });
+      const api = stubApi({
+        liveData,
+        probePrinterAddress,
+        listDiscoveredPrinters: vi
+          .fn()
+          .mockResolvedValue([
+            stale
+              ? { ...source, lastSeenAt: new Date(requestedAt - 1).toISOString() }
+              : freshReport,
+            discovered[0]!,
+          ]),
+      });
+      const { el } = await mountSharedPrinter(api);
+      await checkPrinterAddress(el, source.host!);
+      return { api, el, freshReport };
+    }
+
+    it.each([
+      [false, "printers.probe_found"],
+      [true, "printers.probe_registered"],
+    ] as const)(
+      "closes after a receipt printer answers before any Add (already added: %s)",
+      async (registered, status) => {
+        const { api, el } = await checkedReceipt({ registered });
+        expect(text(el, "[data-test=probe-status]")).toContain(t(status));
+        await closeAfterAddressCheck(el);
+        expect(api.createPrinter).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([false, true])(
+      "keeps the discard prompt for an unchecked address (stale report: %s)",
+      async (stale) => {
+        const { el } = await checkedReceipt({ stale });
+        expect(text(el, "[data-test=probe-status]")).toContain(
+          t(stale ? "printers.probe_waiting" : "printers.probe_found"),
+        );
+        if (!stale) typeField(el, "[data-test=probe-port]", "9200");
+        const closed = dialogClosed(q(el, "[data-test=new-printer-modal]")!);
+        q(el, "[data-test=cancel-new-printer]")!.click();
+        await choosePrinter(el, "discard");
+        await closed;
+      },
+    );
+
+    it("finishes Close when a fresh printer report resolves the pending address question", async () => {
+      const liveData = new LiveData();
+      const { api, el, freshReport } = await checkedReceipt({ stale: true, liveData });
+      expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_waiting"));
+      for (const field of ["probe-host", "probe-port"])
+        expect(q(el, `[data-test=${field}]`)!.shadowRoot!.querySelector("input")!.disabled).toBe(
+          true,
+        );
+
+      const closed = vi.fn();
+      q(el, "[data-test=new-printer-modal]")!.addEventListener("wt-close", closed);
+      q(el, "[data-test=cancel-new-printer]")!.click();
+      await expect.poll(() => questionOf(el).open).toBe(true);
+
+      vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([freshReport]);
+      liveData.invalidate([{ type: "printer_discovery" }]);
+      await expect.poll(() => questionOf(el).open).toBe(false);
+      await expect.poll(() => closed.mock.calls.length).toBe(1);
+      expect(q(el, "[data-test=new-printer-modal]")).toBeNull();
+    });
+
+    it("closes Add a printer and opens calibration after adding a different receipt printer", async () => {
+      const { api, el } = await checkedReceipt();
+      expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_found"));
+      const closed = dialogClosed(q(el, "[data-test=new-printer-modal]")!);
+      await addDiscovered(el, q(el, "[data-test='register-a1:SN-1']")!);
+      await vi.waitFor(() =>
+        expect(api.createPrinter).toHaveBeenCalledWith(
+          expect.objectContaining({ transport: "usb", localKey: "SN-1" }),
+        ),
+      );
+      await vi.waitFor(() =>
+        expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true),
+      );
+      expect(q(el, "[data-test=new-printer-modal]")).toBeNull();
+      await closed;
+    });
   });
 
   it("explains invalid address and port fields once Check address is pressed, not by disabling it beforehand", async () => {
@@ -11944,6 +12061,34 @@ describe("office printers in discovery", () => {
       ipp: { port: 631, resourcePath: path },
       office: { ...printable, resourcePath: path },
     });
+
+  it("closes without a discard prompt after checking and adding an office printer", async () => {
+    const requestedAt = Date.now();
+    const device = office({ lastSeenAt: new Date(requestedAt).toISOString() });
+    const api = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue([device]),
+      probePrinterAddress: vi.fn().mockResolvedValue({
+        host: "10.0.0.56",
+        port: 9100,
+        requestedAt,
+        expiresAt: requestedAt + 30_000,
+      }),
+    });
+    const { el } = await mountSharedPrinter(api);
+    await checkPrinterAddress(el, "10.0.0.56");
+    expect(text(el, "[data-test=probe-status]")).toBe(t("printers.probe_page_printer"));
+    q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
+    await flush(el);
+    await clickAndAwaitClose(el, "page-printer-add-modal", "confirm-add-page-printer");
+    expect(api.registerPagePrinter).toHaveBeenCalledExactlyOnceWith({
+      agentId: "a1",
+      host: "10.0.0.56",
+      port: 631,
+      path: "/ipp/print",
+      name: "HP LaserJet",
+    });
+    await closeAfterAddressCheck(el);
+  });
 
   it("A576 a raw receipt row with IPP metadata still shows its raw print address", async () => {
     const { el } = await mountWith([

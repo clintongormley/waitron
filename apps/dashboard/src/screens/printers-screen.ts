@@ -949,15 +949,24 @@ export class PrintersScreen extends LitElement {
   #addPrinterOpening = 0;
   #addressScope?: DraftScope<{ host: string; port: string }>;
   #addressLeave?: LeaveCoordinator;
-  readonly #beforeAddPrinterClose = async (reason: LeaveReason): Promise<boolean> =>
-    this.submitting ||
-    (this.pairSubmitting && !this.#addressScope?.isDirty() && !this.#printerNameScope?.isDirty()) ||
-    !this.#addressScope ||
-    (await this.#addressLeave!.request({
-      scopes: [this.#addressScope.id],
-      reason,
-      proceed() {},
-    })) === "proceeded";
+  readonly #beforeAddPrinterClose = async (reason: LeaveReason): Promise<boolean> => {
+    const scope = this.#addressScope;
+    if (
+      this.submitting ||
+      !scope ||
+      (this.pairSubmitting && !scope.isDirty() && !this.#printerNameScope?.isDirty())
+    )
+      return true;
+    const leave = this.#addressLeave!;
+    const scopes = [scope.id];
+    const wasChecking = this.probeStatus === "pending";
+    const outcome = await leave.request({ scopes, reason, proceed() {} });
+    // A successful check can clear the address while Close is waiting on the discard question.
+    return (
+      outcome === "proceeded" ||
+      (outcome === "stale" && wasChecking && this.#addressScope === scope && !leave.isDirty(scopes))
+    );
+  };
 
   #addressValues(): { host: string; port: string } {
     const port = Number(this.probePort);
@@ -1692,7 +1701,13 @@ export class PrintersScreen extends LitElement {
     }));
     this.#absorbCommands(devices);
     this.#findPairAgain();
-    if (this.probeStatus === "pending") this.probeStatus = this.#probeOutcome() ?? "pending";
+    if (this.probeStatus === "pending") {
+      const outcome = this.#probeOutcome();
+      if (outcome !== undefined) {
+        this.#addressScope?.commit(this.#addressValues());
+        this.probeStatus = outcome;
+      }
+    }
   }
 
   /** What the address check found, judged against the current scan and registrations. */

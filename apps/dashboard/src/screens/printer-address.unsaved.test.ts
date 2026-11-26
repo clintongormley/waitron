@@ -6,7 +6,7 @@ import type { DashboardApi } from "../api/client.js";
 import type { DiscoveredPrinter } from "../api/printing-api.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import { PrintersScreen } from "./printers-screen.js";
 
 registerIcons(DASHBOARD_ICONS);
@@ -210,7 +210,7 @@ it("address replacement and disconnect invalidate the old discard question and d
   await expect.poll(() => app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect(unload()).toBe(false);
 });
-it("a successful address check submits normalized values and keeps the registration draft dirty", async () => {
+it("a successful address check submits normalized values and clears the draft", async () => {
   let submitted: unknown;
   const { app, screen } = await mount({
     probePrinterAddress: async (body) => {
@@ -224,15 +224,19 @@ it("a successful address check submits normalized values and keeps the registrat
   });
   change(screen, "host", " 192.168.20.247 ");
   change(screen, "port", "09100");
+  expect(unload()).toBe(true);
   q(screen, "[data-test=probe-printer]")!.click();
   await expect
     .poll(() => q(screen, "[data-test=probe-status]")!.textContent)
     .toContain(t("printers.probe_found"));
   expect(submitted).toEqual({ host: "192.168.20.247", port: 9100 });
-  expect(unload()).toBe(true);
-  await userEvent.keyboard("{Escape}");
-  await choose(app, "keep");
   expect(field(screen, "host").value).toBe(" 192.168.20.247 ");
+  expect(unload()).toBe(false);
+  const closed = dialogClosed(modal(screen)!);
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  expect(modal(screen)).toBeNull();
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
 });
 async function register(screen: PrintersScreen) {
   await expect

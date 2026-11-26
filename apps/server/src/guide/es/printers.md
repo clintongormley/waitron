@@ -11,7 +11,8 @@ junto a ella, introduce su PIN y vuelve a elegir **Emparejar y añadir**. Si es 
 abre el diálogo del nombre: elige **Añadir**.
 
 Si no aparece una impresora de red, abre **Comprobar una dirección conocida**, escribe su dirección
-IP y elige **Conectar**.
+IP y elige **Conectar**. Cuando Waitron la encuentre, elige **Añadir** si aparece esa opción o
+**Cerrar** para salir de la búsqueda.
 
 Para quitar una impresora de recibos o de estación, elige **Eliminar** en su menú o en sus detalles.
 La confirmación indica las asignaciones que se eliminan y el trabajo que finaliza. Para volver a
