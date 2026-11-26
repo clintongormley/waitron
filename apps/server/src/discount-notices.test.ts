@@ -547,3 +547,21 @@ it("gives a 50% again over both Soups of a row when the line its notice names is
 
   expect(await noticesOn(bill)).toBeUndefined();
 });
+
+it("gives a 50% over two Soups again on the second Soup once two edits each took a Soup's share off", async () => {
+  const { bill, given, first, second } = await halfOffTwoSoups();
+  await editExtras(bill.tabId, first.lineNo, [spec.bread]);
+  await editExtras(bill.tabId, second.lineNo, [spec.bread]);
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({
+      adjustmentId: given,
+      amount: "6.00",
+      reapplyOn: { lineId: first.id },
+    }),
+  ]);
+
+  expect((await preview(bill.tabId, second.id, 5000, given)).reduction).toBe("3.75");
+  await give(bill.tabId, second.id, 5000, given);
+
+  expect(await noticesOn(bill)).toBeUndefined();
+});

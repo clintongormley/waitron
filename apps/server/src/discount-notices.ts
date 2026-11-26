@@ -12,12 +12,9 @@ function reapplyOn(ended: EndedDiscount): DiscountNotice["reapplyOn"] {
   return ended.lineId === null ? null : { lineId: ended.lineId };
 }
 
-/** Each bill's notices among `billIds`; a bill with none has no entry. A dish's notice goes once
- * its line has left the bill. */
-export async function readBillsDiscountNotices(
-  tx: Transaction,
-  billIds: readonly string[],
-): Promise<Map<string, DiscountNotice[]>> {
+/** The endings among `billIds` that a notice still shows: a dish's goes once its line has left the
+ * bill. */
+async function shownEndings(tx: Transaction, billIds: readonly string[]): Promise<EndedDiscount[]> {
   const ended = await readDiscountNotices(tx, billIds);
   const lineIds = ended.flatMap(({ lineId }) => (lineId === null ? [] : [lineId]));
   const billOfLine = new Map(
@@ -30,9 +27,18 @@ export async function readBillsDiscountNotices(
             .where(inIds(workingOrderLines.id, lineIds))
         ).map(({ id, billId }) => [id, billId]),
   );
+  return ended.filter(
+    ({ lineId, workingOrderId }) => lineId === null || billOfLine.get(lineId) === workingOrderId,
+  );
+}
+
+/** Each bill's notices among `billIds`; a bill with none has no entry. */
+export async function readBillsDiscountNotices(
+  tx: Transaction,
+  billIds: readonly string[],
+): Promise<Map<string, DiscountNotice[]>> {
   const byBill = new Map<string, DiscountNotice[]>();
-  for (const one of ended) {
-    if (one.lineId !== null && billOfLine.get(one.lineId) !== one.workingOrderId) continue;
+  for (const one of await shownEndings(tx, billIds)) {
     const notices = byBill.get(one.workingOrderId) ?? [];
     const held = notices.find(({ adjustmentId }) => adjustmentId === one.adjustmentId);
     if (held !== undefined) {
@@ -65,18 +71,19 @@ export function discountNoticesOf(
 }
 
 /** Refuses `reapplies` unless it names a notice open on `orderId` and, when the notice names a
- * line, the ask gives it on that line or on a row holding it. */
+ * line, the ask gives it on, or on a row holding, a line one of its shown endings names. */
 export async function requireOpenNotice(
   tx: Transaction,
   ask: { orderId: string; reapplies?: string; lineId: string | null; lineIds?: string[] },
 ): Promise<void> {
   if (ask.reapplies === undefined) return;
-  const open = (await readBillsDiscountNotices(tx, [ask.orderId])).get(ask.orderId) ?? [];
-  const notice = open.find(({ adjustmentId }) => adjustmentId === ask.reapplies);
-  const on = notice?.reapplyOn?.lineId;
+  const shown = (await shownEndings(tx, [ask.orderId])).filter(
+    ({ adjustmentId }) => adjustmentId === ask.reapplies,
+  );
+  const asked = new Set([ask.lineId, ...(ask.lineIds ?? [])]);
   if (
-    notice === undefined ||
-    (on !== undefined && ask.lineId !== on && !(ask.lineIds ?? []).includes(on))
+    shown.length === 0 ||
+    (shown[0]!.lineId !== null && !shown.some(({ lineId }) => lineId !== null && asked.has(lineId)))
   ) {
     throw new AppError("management.request_invalid", { field: "reapplies" });
   }
