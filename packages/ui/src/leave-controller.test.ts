@@ -95,6 +95,21 @@ for (const decision of ["keep", "discard"] as const) {
   });
 }
 
+test("asking is true only while the application question waits for an answer", async () => {
+  const { app, scope } = await draft();
+  expect(app.leave.asking).toBe(false);
+  const pending = app.leave.coordinator.request({
+    scopes: [scope.id],
+    reason: "navigation",
+    proceed() {},
+  });
+  const q = await question(app);
+  expect(app.leave.asking).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
+  expect(await pending).toBe("kept");
+  expect(app.leave.asking).toBe(false);
+});
+
 test("a committed draft aborts its question and leaves the next question independent", async () => {
   const { app, field, scope } = await draft();
   let proceeded = 0;

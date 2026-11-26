@@ -293,3 +293,20 @@ test("follows the badge guide link without closing the row menu", async () => {
   await userEvent.click(guide!);
   expect(popup.matches(":popover-open")).toBe(true);
 });
+
+for (const [attribute, value] of [
+  ["guide-label", "Read the guide"],
+  ["guide-href", "/help/example"],
+] as const) {
+  test(`draws no guide link in the badge when only ${attribute} is given`, async () => {
+    const { menu, row, popup, badge } = await mountMenu();
+    row.setAttribute(attribute, value);
+    await row.updateComplete;
+    await turnHelp(true, badge());
+    await open(menu, popup);
+    const { button, box } = parts(badge()!);
+    await userEvent.click(button);
+    await vi.waitFor(() => expect(box.matches(":popover-open")).toBe(true));
+    expect(box.querySelector("a")).toBeNull();
+  });
+}

@@ -759,3 +759,137 @@ test("resolves default cell spacing at a part-local heading override", async () 
   expect(getComputedStyle(root.querySelector("td")!).paddingInlineStart).toBe("12px");
   expect(getComputedStyle(heading).paddingInlineStart).toBe("4px");
 });
+
+test("a tree row that spans the unpinned columns draws its heading across them and keeps its pinned cells", async () => {
+  const offered: string[][] = [];
+  const priceColumn: DataTableColumn<Row> = { key: "price", label: "Price", cell: () => "1" };
+  const actionsColumn: DataTableColumn<Row> = {
+    key: "actions",
+    label: "Actions",
+    cell: (row) => `edit ${row.id}`,
+    pinned: "end",
+  };
+  const el = await table({
+    columns: [nameColumn, statusColumn, priceColumn, actionsColumn],
+    rowParent: (row: Row) => row.parent,
+    rowSpansUnpinnedColumns: (row: Row, columns: readonly DataTableColumn<Row>[]) => {
+      offered.push(columns.map((column) => column.key));
+      return row.id === "food";
+    },
+  });
+  const cells = (key: string) =>
+    [...el.shadowRoot!.querySelectorAll(`tr[data-row-key="${key}"] td`)].map((td) => [
+      td.textContent!.replace(/\s+/g, " ").trim(),
+      td.getAttribute("colspan"),
+    ]);
+  expect(offered[0]).toEqual(["name", "status", "price"]);
+  expect(cells("food")).toEqual([
+    ["▾ Food", "3"],
+    ["edit food", null],
+  ]);
+  expect(cells("eggs")).toEqual([
+    ["Eggs", null],
+    ["off", null],
+    ["1", null],
+    ["edit eggs", null],
+  ]);
+  el.rowSpansUnpinnedColumns = (row: Row) => row.id === "eggs";
+  await el.updateComplete;
+  expect(cells("food")).toEqual([
+    ["▾ Food", null],
+    ["active", null],
+    ["1", null],
+    ["edit food", null],
+  ]);
+  expect(cells("eggs")).toEqual([
+    ["Eggs", "3"],
+    ["edit eggs", null],
+  ]);
+});
+
+test("a tree's Select all is unavailable only when its own check leaves no row to pick", async () => {
+  const all = (el: WtDataTable<Row>) =>
+    el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-all"]')!;
+  const tree = { selectable: true, rowParent: (row: Row) => row.parent };
+  const unfiltered = await table({ ...tree, rowSelectAll: (_row, filtered) => !filtered });
+  expect(all(unfiltered).disabled).toBe(false);
+  unfiltered.rowSelectAll = () => false;
+  await unfiltered.updateComplete;
+  expect(all(unfiltered).disabled).toBe(true);
+  const unchecked = await table({ ...tree, rowSelectable: () => false });
+  expect(all(unchecked).disabled).toBe(false);
+});
+
+test("a focused control in a tree cell keeps its focus when the columns are reordered", async () => {
+  const editColumn: DataTableColumn<Row> = {
+    key: "edit",
+    label: "Edit",
+    cell: (row) => html`<button data-edit=${row.id}>Edit</button>`,
+  };
+  const el = await table({
+    columns: [nameColumn, statusColumn, editColumn],
+    rowParent: (row: Row) => row.parent,
+  });
+  const button = () => el.shadowRoot!.querySelector<HTMLButtonElement>('[data-edit="eggs"]')!;
+  const focused = button();
+  focused.focus();
+  el.columns = [nameColumn, editColumn, statusColumn];
+  await el.updateComplete;
+  const cells = el.shadowRoot!.querySelectorAll('tr[data-row-key="eggs"] td');
+  expect(cells[1]!.contains(focused)).toBe(true);
+  expect(button()).toBe(focused);
+  expect(el.shadowRoot!.activeElement).toBe(focused);
+});
+
+const widthRows: Row[] = [
+  { id: "1", parent: null, name: "Ada", status: "active" },
+  { id: "2", parent: null, name: "A much longer product name than the rest", status: "off" },
+];
+
+function headerWidths(el: WtDataTable<Row>): number[] {
+  return [...el.shadowRoot!.querySelectorAll("thead th")].map((cell) => box(cell).width);
+}
+
+async function chooseActive(el: WtDataTable<Row>): Promise<void> {
+  await chooseOption(el.shadowRoot!.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+  await el.updateComplete;
+}
+
+test("columns a layout hides while a filter holds the widths release the held widths", async () => {
+  await wide();
+  const extra: DataTableColumn<Row> = { key: "extra", label: "Extra", cell: (row) => row.id };
+  const columns = [nameColumn, statusColumn, extra];
+  const natural = headerWidths(await table({ rows: widthRows.slice(0, 1), columns }));
+  const el = await table({ rows: widthRows, columns });
+  const before = headerWidths(el);
+  expect(natural).not.toEqual(before);
+  await chooseActive(el);
+  expect(headerWidths(el)).toEqual(before);
+  el.layoutHiddenColumns = ["extra"];
+  await el.updateComplete;
+  expect(headerWidths(el)).toHaveLength(2);
+  el.layoutHiddenColumns = undefined;
+  await el.updateComplete;
+  expect(headerWidths(el)).toEqual(natural);
+});
+
+test("widths a filter holds are let go and redrawn when the table's own width changes", async () => {
+  await wide();
+  const sized = async (rows: Row[], width: string) => {
+    const el = await table({ rows, columns: [nameColumn, statusColumn] });
+    el.style.display = "block";
+    el.style.width = width;
+    return el;
+  };
+  const natural = await sized(widthRows.slice(0, 1), "1000px");
+  const el = await sized(widthRows, "900px");
+  // Without this wait the case still passes when the redraw after letting the widths go is removed.
+  for (let frame = 0; frame < 2; frame++) await new Promise(requestAnimationFrame);
+  await el.updateComplete;
+  const before = headerWidths(el);
+  await chooseActive(el);
+  expect(headerWidths(el)).toEqual(before);
+  expect(headerWidths(natural)).not.toEqual(before);
+  el.style.width = "1000px";
+  await vi.waitFor(() => expect(headerWidths(el)).toEqual(headerWidths(natural)));
+});

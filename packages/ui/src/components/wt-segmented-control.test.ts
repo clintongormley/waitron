@@ -431,3 +431,20 @@ test("hides a repeated visible label while keeping the group named and keyboard-
   expect(el.value).toBe("staff_only");
   expect(el.shadowRoot!.activeElement).toBe(buttons(el)[1]);
 });
+
+test("draws its label by default", async () => {
+  const el = await setup();
+  expect(el.shadowRoot!.querySelector(".label")?.textContent).toBe("Ordered on its own by");
+});
+
+test("turning equal segments off measures the row again, so the choices stay inside the control", async () => {
+  const el = await setupNarrow(300, PASS_ES);
+  el.setAttribute("equal-width", "");
+  await el.updateComplete;
+  host.style.width = "200px";
+  await expect.poll(() => group(el).getBoundingClientRect().width).toBe(200);
+  await frame();
+  el.removeAttribute("equal-width");
+  await el.updateComplete;
+  expectInsideControl(el);
+});
