@@ -839,7 +839,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este motivo necesita una nota. Añádela e inténtalo de nuevo",
   },
   "adjustment.exceeds_amount": {
-    en: "That discount is more than it would come off. Enter a smaller amount",
+    en: "That comp is more than the amount it applies to. Enter a smaller amount",
     es: "Ese descuento es mayor que el importe al que se aplica. Introduce un importe menor",
   },
   "adjustment.approval_required": {
@@ -859,7 +859,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se puede usar esa cantidad en esta línea. Comprueba cuántos hay; un extra va entero",
   },
   "adjustment.no_reduction": {
-    en: "That takes nothing off. Check whether it is already free, or enter a larger discount",
+    en: "That takes nothing off. Check whether it is already free, or enter a larger comp",
     es: "Así no se descuenta nada. Comprueba si ya es gratis o introduce un descuento mayor",
   },
   "adjustment_reason.not_found": {

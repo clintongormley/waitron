@@ -11,3 +11,5 @@ Task 15 stays open for the watcher. Counter's separate **Take the rest** button 
 3. Run both changed test files. Check the rendered report and Comp refusal on phone and desktop, in both themes and languages. In `apps/server/src/guide/{en,es}/table-service.md`, align the existing reason-picking instruction with the Comp and Descuento labels. Run `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`. Remove the A957 and A1011 wording entries from `docs/backlog.md` and `docs/backlog/till.md`, keeping the other rows. Record the exact changed English assertion in the pull request.
 
 Estimate 4 changed product lines and 8–14 test lines, plus the guide sentence edits and backlog edits.
+
+The watcher cleared the wording plan on 26 November at 08:55 and asked to fix the zero-total button here if the change stayed small. Staff with a zero-total open bill that still holds a payment can use the existing Give back action as soon as the bill list shows the excess. Remove the old contribution button and use the shared Pay window for part-paid bills that can still be paid. Keep Task 15's wording decision open.
