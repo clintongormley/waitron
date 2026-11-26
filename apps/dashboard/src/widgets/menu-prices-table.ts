@@ -212,25 +212,27 @@ export class MenuPricesTable extends LitElement {
       wt-data-table {
         isolation: isolate;
       }
-      /* The table is never narrower than its cells' unwrapped text, so at phone width a name, and
-         the note under it, is capped at the room the price column and the pinned row-menu column
-         leave beside the cell's padding and the tree's toggle. The row-menu column is as wide as
-         its heading in the current language, so its width is measured into --actions-width. A
-         variant's name is indented one tree step further. */
+      /* At phone width a name, and the note under it, takes exactly the room the price column and
+         the pinned row-menu column leave in the table's box beside the cell's padding and the tree's
+         toggle, so the columns after the price start under the row menu rather than a sliver of
+         one showing beside it. The box's inner width, inside its border, is measured into
+         --table-room, and the row-menu column, as wide as its heading in the current language,
+         into --actions-width. A variant's name is indented one tree step further. */
       @container (max-width: 30rem) {
         wt-data-table {
+          --cells-room: calc(var(--table-room, 100cqi) - var(--actions-width, var(--wt-tap-min)));
           --name-room: calc(
-            100cqi - var(--actions-width, var(--wt-tap-min)) - var(--shown-price-width) - 4 *
-              var(--wt-space-3) - var(--tree-arrow-width) - var(--wt-space-4)
+            var(--cells-room) - var(--shown-price-width) - 4 *
+              var(--wt-space-3) - var(--tree-arrow-width)
           );
         }
         wt-data-table::part(name-box) {
           display: block;
-          max-inline-size: max(var(--wt-tap-min), var(--name-room));
+          inline-size: max(var(--wt-tap-min), var(--name-room));
         }
         wt-data-table::part(variant-name) {
           padding-inline-start: var(--wt-space-3);
-          max-inline-size: calc(max(var(--wt-tap-min), var(--name-room)) - var(--wt-space-2));
+          inline-size: calc(max(var(--wt-tap-min), var(--name-room)) - var(--wt-space-2));
         }
       }
     `,
@@ -379,6 +381,8 @@ export class MenuPricesTable extends LitElement {
   #fitColumns(): void {
     const root = this.#table()?.shadowRoot;
     this.#measureInto("--actions-width", root?.querySelector('thead th[data-pinned="end"]'));
+    const scroller = root?.querySelector(".scroll");
+    this.#measureInto("--table-room", scroller, scroller?.clientWidth);
     const field = root?.querySelector("wt-price-input") ?? null;
     if (field !== this.#measuredField) {
       if (this.#measuredField !== null) this.#tableSize.unobserve(this.#measuredField);
@@ -388,8 +392,12 @@ export class MenuPricesTable extends LitElement {
     this.#measureInto("--field-width", field);
   }
 
-  #measureInto(property: string, node: Element | null | undefined): void {
-    const width = node ? `${node.getBoundingClientRect().width}px` : "";
+  #measureInto(
+    property: string,
+    node: Element | null | undefined,
+    size = node?.getBoundingClientRect().width,
+  ): void {
+    const width = node ? `${size}px` : "";
     if (this.style.getPropertyValue(property) === width) return;
     if (width === "") this.style.removeProperty(property);
     else this.style.setProperty(property, width);

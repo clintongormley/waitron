@@ -2027,6 +2027,134 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 
+/** Rioja crianza and Sangria are sold as variants, Rioja's showing a range and a variant of its
+ * own price on this menu; Patatas bravas has its own price on this menu. */
+const tapasBar = (() => {
+  const wine = [
+    ["v-glass-100", "Glass 100 ml", null],
+    ["v-glass-125", "Glass 125 ml", null],
+    ["v-glass-150", "Glass 150 ml", "4.00"],
+    ["v-bottle", "Bottle 750 ml", "18.00"],
+  ] as const;
+  const jugs = [
+    ["v-half-jug", "Half jug", null],
+    ["v-jug", "Jug", "14.00"],
+  ] as const;
+  const product = (
+    id: string,
+    name: string,
+    variants: readonly (readonly [string, string, string | null])[],
+  ) =>
+    ({
+      ...lemonadeProduct,
+      id,
+      name,
+      variants: variants.map(([variantId, variantName, price]) =>
+        variant(variantId, variantName, price),
+      ),
+    }) as unknown as Product;
+  const plain = (id: string, name: string, price: string, own: string | null, section: string) => ({
+    ...burger,
+    menuItemId: `mi-${id}`,
+    productId: `p-${id}`,
+    name,
+    placements: [[section]],
+    combined: combinedFixture(`p-${id}`, own ?? price, [], own, price),
+    override: own,
+    effectivePrice: own ?? price,
+  });
+  const ofVariants = (
+    id: string,
+    name: string,
+    price: string,
+    variants: readonly (readonly [string, string, string | null])[],
+    own: Record<string, string>,
+  ): MenuPriceRow => ({
+    ...plain(id, name, price, null, "s-wine"),
+    combined: combinedFixture(
+      `p-${id}`,
+      price,
+      variants.map(([variantId]) => ({ variantId, price: own[variantId] ?? null })),
+      null,
+      price,
+      Object.fromEntries(variants.map(([variantId, , at]) => [variantId, at])),
+    ),
+    variants: variants.map(([variantId]) => ({
+      variantId,
+      price: own[variantId] ?? null,
+      available: variantId !== "v-bottle",
+    })),
+  });
+  return {
+    sections: [
+      ["s-wine", "Wine"],
+      ["s-tapas", "Tapas"],
+    ].map(([id, internalName]) => ({ ...sections[0]!, id: id!, internalName: internalName! })),
+    products: [product("p-rioja", "Rioja crianza", wine), product("p-sangria", "Sangria", jugs)],
+    rows: [
+      ofVariants("rioja", "Rioja crianza", "3.50", wine, { "v-glass-125": "5.00" }),
+      ofVariants("sangria", "Sangria", "8.00", jugs, {}),
+      plain("bravas", "Patatas bravas", "6.50", "7.00", "s-tapas"),
+      plain("croquettes", "Ham croquettes", "8.50", null, "s-tapas"),
+    ],
+  };
+})();
+
+// At phone width the name, price and row-menu columns fill the table's box, so the columns after
+// the price start under the pinned row menu, reached by scrolling, rather than a sliver of the next
+// one showing beside it.
+it.each([
+  ["en-GB", "the tapas bar"],
+  ["es-ES", "the tapas bar"],
+  ["en-GB", "short names only"],
+  ["es-ES", "short names only"],
+  ["en-GB", "a long name"],
+])(
+  "starts the columns after the price under the row menu at phone width (%s, %s)",
+  async (locale, rows) => {
+    const props =
+      rows === "the tapas bar"
+        ? tapasBar
+        : rows === "short names only"
+          ? { rows: [burger, lager] }
+          : { rows: [{ ...burger, name: "Unfiltered craft wheat beer from cask" }, lemonade] };
+    const el = await atPhoneWidth(locale, props);
+    if (rows === "the tapas bar") {
+      toggleOf(el, "mi-rioja")!.click();
+      await table(el).updateComplete;
+      await frame();
+      await frame();
+      for (const [key, part] of [
+        ["mi-rioja", "name"],
+        ["mi-rioja:v-bottle", "variant-name"],
+        ["mi-bravas", "name"],
+        ["mi-croquettes", "name"],
+      ]) {
+        const name = row(el, key!)!.querySelector(`[part="${part}"]`)!;
+        expect(linesOf(name), `${key} "${text(name)}"`).toBe(1);
+      }
+    }
+    const pinned = table(el)
+      .shadowRoot.querySelector('thead th[data-pinned="end"]')!
+      .getBoundingClientRect().left;
+    const keys = headers(el);
+    const price = keys.indexOf("override");
+    expect(keys[price + 1]).toBe("placements");
+    const rowsSeen = table(el).shadowRoot.querySelectorAll("thead tr, tbody tr");
+    expect(rowsSeen.length).toBe(rows === "the tapas bar" ? 9 : 3);
+    for (const tr of rowsSeen) {
+      const cells = [...tr.children].filter((node) => !node.hasAttribute("data-pinned"));
+      const label = tr.getAttribute("data-row-key") ?? "heading";
+      expect(cells[price]!.getBoundingClientRect().right, label).toBeCloseTo(pinned, 0);
+      expect(cells[price + 1]!.getBoundingClientRect().left, label).toBeGreaterThanOrEqual(
+        pinned - 0.5,
+      );
+    }
+    const root = document.documentElement;
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+  },
+);
+
 // English draws a field's sign before its amount and Spanish after it, the amount then at the
 // field's end.
 it.each([
