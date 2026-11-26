@@ -1391,12 +1391,17 @@ export class TillShell extends LitElement {
         ${items.zones}${items.equipment}${this.#chooser("group")}${this.#themeChoices()}
       </div>
       <hr class="menu-rule" />
-      ${this.#reportOption()}${this.#aboutOption()}
-      <wt-button icon="menu-logout" class="logout" @click=${() => this.#emit("logout")}
-        >${t("shell.logout")}</wt-button
-      >
-      ${this.#poweredBy()}
+      ${this.#reportOption()}${this.#aboutOption()} ${this.#logoutButton()} ${this.#poweredBy()}
     </wt-row-actions>`;
+  }
+
+  #logoutButton(inFloorMenu = false): TemplateResult {
+    return html`<wt-button
+      icon=${inFloorMenu ? nothing : "menu-logout"}
+      class="logout"
+      @click=${() => this.#emit("logout")}
+      >${t("shell.logout")}</wt-button
+    >`;
   }
 
   #floorShortcuts(counterLabel: string): TemplateResult {
@@ -1442,10 +1447,7 @@ export class TillShell extends LitElement {
             ${items.equipment}${items.profile}${this.#themeChoices()}
           </details>
           ${items.expo}${this.formFactor !== "till" || this.testingKitchen ? items.station : nothing}
-          ${this.#reportOption(true)}${this.#aboutOption(true)}
-          <wt-button class="logout" @click=${() => this.#emit("logout")}
-            >${t("shell.logout")}</wt-button
-          >
+          ${this.#reportOption(true)}${this.#aboutOption(true)} ${this.#logoutButton(true)}
           ${this.#poweredBy()}
         `,
       )}

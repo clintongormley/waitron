@@ -81,11 +81,11 @@ export const floorBarStyles = css`
     background: var(--wt-color-surface);
     border-block-start: 1px solid var(--wt-color-border);
   }
-  .floor-bar > wt-row-actions::part(trigger),
   .floor-bar > [data-view-toggle]::part(button) {
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
   }
   .floor-bar > wt-row-actions::part(trigger) {
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
     inline-size: 100%;
     border: 1px solid var(--wt-color-border);
     background: var(--wt-color-surface);
@@ -123,7 +123,7 @@ export const floorBarStyles = css`
     font-weight: var(--wt-font-weight-bold);
   }
   .floor-bar [data-floor-zone][aria-checked="true"] [data-row-check] {
-    color: var(--wt-color-primary);
+    --wt-action-native-icon-color: var(--wt-color-primary);
   }
   .floor-bar [data-open-device-zones] {
     justify-content: center;
