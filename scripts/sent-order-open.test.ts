@@ -15,8 +15,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
-import { describe, expect, test } from "vitest";
-import { sourceFilesIn } from "./no-till-as-issuer.mjs";
+import { describe, expect, test, vi } from "vitest";
+import { decodeEscapes, sourceFilesIn } from "./no-till-as-issuer.mjs";
+
+vi.mock("typescript", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("typescript")>();
+  return { default: { ...actual.default } };
+});
 
 const ROOT = join(import.meta.dirname, "..");
 const ALLOWED = "apps/server/src/sent-order-open.ts";
@@ -72,8 +77,13 @@ function insideSet(node: ts.Node): boolean {
   return false;
 }
 
+const hasWriteWords = (text: string): boolean => /status/i.test(text) && /open/i.test(text);
+
 /** The 1-based lines of `source` that write the literal open status to an order. */
 function openingWrites(source: string): number[] {
+  if (!hasWriteWords(source)) {
+    if (!source.includes("\\") || !hasWriteWords(decodeEscapes(source))) return [];
+  }
   const file = ts.createSourceFile("x.ts", source, ts.ScriptTarget.Latest, true);
   const lines = new Set<number>();
   const lineAt = (position: number) => file.getLineAndCharacterOfPosition(position).line + 1;
@@ -113,6 +123,7 @@ describe("sent-order-open guard", () => {
     ["sql`update working_orders\n set status = 'open' where id = 1`", [2]],
     [`sql\`update working_orders set "status" = 'open' where id = 1\``, [1]],
     [`sql.raw("update working_orders set status = 'open' where id = 1")`, [1]],
+    ["sql`UPDATE working_orders SET STATUS = 'OPEN' WHERE id = 1`", [1]],
     ['tx.update(t).set({ revision: sql`${t.revision} + 1`, status: "open" })', [1]],
     [`tx.update(t).set({ meta: { a: 1 }, note: "})", status: "open" })`, [1]],
     [`tx.update(t).set({ pattern: /[("']/, status: "open" })`, [1]],
@@ -124,6 +135,25 @@ describe("sent-order-open guard", () => {
     [`// tx.update(t).set({ status: "open" })`, []],
   ])("reads %j", (source, lines) => {
     expect(openingWrites(source)).toEqual(lines);
+  });
+
+  test.each([
+    String.raw`tx.update(t).set({ st\u0061tus: "op\x65n" })`,
+    String.raw`sql.raw("update working_orders set st\x61tus = 'op\u0065n' where id = 1")`,
+  ])("finds writes that spell status and open with escapes: %j", (source) => {
+    expect(source).not.toMatch(/status|open/i);
+    expect(openingWrites(source)).toEqual([1]);
+  });
+
+  test("skips parsing text missing either required word", () => {
+    const parse = vi.spyOn(ts, "createSourceFile");
+    try {
+      expect(openingWrites('const label = "open";')).toEqual([]);
+      expect(openingWrites(String.raw`const status = "\u00a0";`)).toEqual([]);
+      expect(parse).not.toHaveBeenCalled();
+    } finally {
+      parse.mockRestore();
+    }
   });
 
   test("selects product sources by their real suffixes", () => {
