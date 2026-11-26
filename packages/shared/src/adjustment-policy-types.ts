@@ -47,8 +47,8 @@ export interface DiscountNotice {
   action: Exclude<AdjustmentAction, "cancel">;
   percentBp: number | null;
   /** What its endings on this bill not yet given again gave back, reckoned from each row's
-   * recorded reduction at the quantity the row holds now: less than it took off when given once
-   * only part of it came off, such as one portion's share. */
+   * recorded reduction at the quantity the row holds now, a row since removed counting whole: less
+   * than it took off when given once only part of it came off, such as one portion's share. */
   amount: string;
   reasonId: string;
   reapplyOn: { lineId: string } | null;

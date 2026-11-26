@@ -223,12 +223,41 @@ export async function endingRestores(
   return restoresOf(tx, await standingOn(tx, query), query.adjustmentIds);
 }
 
+/** The `adjustment_lines` rows of `adjustmentId` not yet given back whose line, one of `lineIds`,
+ * is no longer on any bill. */
+async function standingOnGone(
+  tx: Transaction,
+  adjustmentId: string,
+  lineIds: readonly string[],
+): Promise<string[]> {
+  if (lineIds.length === 0) return [];
+  const rows = await tx
+    .select({ id: adjustmentLines.id })
+    .from(adjustmentLines)
+    .leftJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
+    .leftJoin(adjustmentEndingLines, eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id))
+    .where(
+      and(
+        eq(adjustmentLines.adjustmentId, adjustmentId),
+        inArray(
+          adjustmentLines.lineId,
+          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+        ),
+        isNull(workingOrderLines.id),
+        gt(adjustmentLines.reduction, 0),
+        isNull(adjustmentEndingLines.id),
+      ),
+    );
+  return rows.map(({ id }) => id);
+}
+
 /**
  * Ends `adjustmentId` on `workingOrderId`: records the ending and each row it gives back, then
  * writes exactly what {@link endingRestores} answers. A row is given back once, wherever it moves
  * after; an ending that would give nothing back is refused `adjustment.not_standing`. `lineId` is
  * the line a notice offers it again on; `lineIds`, when named, are the only rows it gives back, so
- * the rest of the bill keeps its share.
+ * the rest of the bill keeps its share. `removedLineIds` are rows the change ending it has just
+ * deleted from the bill: what it took off them is given back too, with nothing to restore.
  */
 export async function endAdjustment(
   tx: Transaction,
@@ -239,6 +268,7 @@ export async function endAdjustment(
     dishName: string;
     lineId?: string;
     lineIds?: readonly string[];
+    removedLineIds?: readonly string[];
   },
 ): Promise<void> {
   const { adjustmentId, workingOrderId, lineIds } = ending;
@@ -247,7 +277,8 @@ export async function endAdjustment(
     adjustmentIds: [adjustmentId],
     ...(lineIds === undefined ? {} : { lineIds }),
   });
-  if (taken.length === 0) {
+  const gone = await standingOnGone(tx, adjustmentId, ending.removedLineIds ?? []);
+  if (taken.length === 0 && gone.length === 0) {
     throw new AppError("adjustment.not_standing", { adjustmentId, workingOrderId });
   }
   const restores = await restoresOf(tx, taken, [adjustmentId]);
@@ -264,7 +295,10 @@ export async function endAdjustment(
   await insertInChunks(
     tx,
     adjustmentEndingLines,
-    taken.map((one) => ({ endingId: written!.id, adjustmentLineId: one.adjustmentLineId })),
+    [...taken.map(({ adjustmentLineId }) => adjustmentLineId), ...gone].map((adjustmentLineId) => ({
+      endingId: written!.id,
+      adjustmentLineId,
+    })),
   );
   for (const { lineId, ...price } of restores) {
     await tx.update(workingOrderLines).set(price).where(eq(workingOrderLines.id, lineId));

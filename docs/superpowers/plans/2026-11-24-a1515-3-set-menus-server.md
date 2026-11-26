@@ -1483,7 +1483,11 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   extras or variant ends only the changed dish's share of its own comp or discount, so its other
   portions keep theirs; a notice's amount is what came off that bill; a dish's notice is given
   again only on that dish; and the report counts what still stands of a discount partly ended,
-  leaving out only one ended whole.
+  leaving out only one ended whole. _2026-11-26, after the second finish review:_ removing an extra
+  ends the dish's own discount over the extra too, though the edit has already deleted its row, so a
+  Soup with Bread at 50% (3.75) whose Bread is removed counts nothing in the report and its notice
+  says 3.75 came off; a comp given on the removed extra alone ends nothing and stays counted, as a
+  cancelled dish's comp does.
 - **D56 (3c). A dish's part of a whole-bill discount stays through a change of its extras,** with
   no notice: it is the bill's discount, not the dish's; the dish keeps its price and the new extra
   pays full price, as today (`working-order-line-edits.ts:443-446`). A cancelled, moved or

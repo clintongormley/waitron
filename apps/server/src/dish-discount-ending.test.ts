@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { adjustmentEndings, createAdjustmentReason } from "@waitron/adjustments";
+import {
+  adjustmentEndings,
+  computeAdjustmentReport,
+  createAdjustmentReason,
+} from "@waitron/adjustments";
 import { adjustmentLines, kitchenCourses, products, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -16,7 +20,13 @@ import {
   writeProductModifiers,
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { decimal, type ExtraSelection, type OptionSelection } from "@waitron/shared";
+import { currentBusinessDay, resolveVenueClock } from "@waitron/reporting";
+import {
+  decimal,
+  subtractDecimal,
+  type ExtraSelection,
+  type OptionSelection,
+} from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readOrderRevision } from "./working-order-context.js";
@@ -299,6 +309,25 @@ async function give(billId: string, lineId: string | null, given: Given, lineIds
   return adjustmentIds[0]!;
 }
 
+/** The adjustments report's count and reduction for today, over every bill this file has made. */
+async function reported() {
+  const { overall } = await inTx(venue, async (tx) => {
+    const clock = await resolveVenueClock(tx, venue.cfg.nodeId);
+    const day = currentBusinessDay(clock);
+    return computeAdjustmentReport(tx, { ...clock, fromBusinessDay: day, toBusinessDay: day });
+  });
+  return { count: overall.count, reduction: overall.reduction };
+}
+
+/** What the report gained since `before`. */
+async function reportedSince(before: { count: number; reduction: string }) {
+  const now = await reported();
+  return {
+    count: now.count - before.count,
+    reduction: subtractDecimal(decimal(now.reduction), decimal(before.reduction)),
+  };
+}
+
 async function editLine(
   billId: string,
   lineNo: number,
@@ -389,6 +418,55 @@ it("keeps a Free given on the Bread alone when the Soup is given Croutons", asyn
     { what: "Bread", price: 0 },
     { what: "Croutons", price: 100 },
   ]);
+});
+
+it("leaves a comped Soup out of the report once its comped Bread is removed", async () => {
+  const { tabId } = await billOf([dish("Soup", [spec.bread])]);
+  const before = await reported();
+  await give(tabId, (await rowOf(tabId, "Soup")).id, FREE);
+  expect(await reportedSince(before)).toEqual({ count: 1, reduction: "7.50" });
+
+  await editLine(tabId, (await rowOf(tabId, "Soup")).lineNo, { extras: [] });
+
+  expect(await reportedSince(before)).toEqual({ count: 0, reduction: "0.00" });
+});
+
+it("leaves a Soup's 50% out of the report once its discounted Bread is removed", async () => {
+  const { tabId } = await billOf([dish("Soup", [spec.bread])]);
+  const before = await reported();
+  await give(tabId, (await rowOf(tabId, "Soup")).id, percent(5000));
+  expect(await reportedSince(before)).toEqual({ count: 1, reduction: "3.75" });
+
+  await editLine(tabId, (await rowOf(tabId, "Soup")).lineNo, { extras: [] });
+
+  expect(await priced(tabId)).toEqual([{ what: "Soup", price: 600 }]);
+  expect(await reportedSince(before)).toEqual({ count: 0, reduction: "0.00" });
+});
+
+it("counts the other Soup's 3.75 of 7.50 off two Soups with Bread once the first loses its Bread", async () => {
+  const { tabId } = await billOf([dish("Soup", [spec.bread]), dish("Soup", [spec.bread])]);
+  const [first, second] = [await rowOf(tabId, "Soup"), await rowOf(tabId, "Soup", 1)];
+  const before = await reported();
+  await give(tabId, first.id, percent(5000), [first.id, second.id]);
+  expect(await reportedSince(before)).toEqual({ count: 1, reduction: "7.50" });
+
+  await editLine(tabId, first.lineNo, { extras: [] });
+
+  expect(await total(tabId)).toBe(600 + 375);
+  expect(await reportedSince(before)).toEqual({ count: 1, reduction: "3.75" });
+});
+
+it("keeps a Free given on the Bread alone in the report once the Bread is removed, as a cancelled dish's comp stays", async () => {
+  const { tabId } = await billOf([dish("Soup", [spec.bread])]);
+  const bread = (await rows(tabId)).find(({ name }) => name === "Bread")!;
+  const before = await reported();
+  await give(tabId, bread.id, FREE);
+
+  await editLine(tabId, (await rowOf(tabId, "Soup")).lineNo, { extras: [] });
+
+  expect(await endingsOn(tabId)).toEqual([]);
+  expect(await priced(tabId)).toEqual([{ what: "Soup", price: 600 }]);
+  expect(await reportedSince(before)).toEqual({ count: 1, reduction: "1.50" });
 });
 
 it("keeps a Daily's 50% when its Sirloin is given a Sauce (D49)", async () => {

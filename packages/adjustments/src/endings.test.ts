@@ -412,6 +412,63 @@ describe("ending a comp or discount on some of its rows", () => {
   });
 });
 
+describe("ending a comp or discount over rows the change removed", () => {
+  it("gives back what it took off a named row no longer on any bill, not off one still on it, and ends one whose only rows left are removed", async () => {
+    const order = await seedWorkingOrder(db);
+    const dish = await discountedHakes(order, "1");
+    const adjustmentId = await tenPercentOff(order, dish, "1");
+    const [removed, kept] = [await discountedHakes(order, "1"), await discountedHakes(order, "1")];
+    await db.insert(adjustmentLines).values(
+      [removed, kept].map((lineId) => ({
+        adjustmentId,
+        lineId,
+        reduction: 160,
+        quantity: stringToThousandths("1"),
+      })),
+    );
+    const alone = await tenPercentOff(order, await discountedHakes(order, "1"), "1");
+    const [aloneLine] = await db
+      .select({ lineId: adjustmentLines.lineId })
+      .from(adjustmentLines)
+      .where(eq(adjustmentLines.adjustmentId, alone));
+    for (const lineId of [removed, aloneLine!.lineId]) {
+      await db.delete(workingOrderLines).where(eq(workingOrderLines.id, lineId));
+    }
+    const end = (id: string, lineIds: string[], removedLineIds: string[]) =>
+      withTransaction(db, (tx) =>
+        endAdjustment(tx, {
+          adjustmentId: id,
+          workingOrderId: order,
+          why: "extras_changed",
+          dishName: "Hake",
+          lineId: dish,
+          lineIds,
+          removedLineIds,
+        }),
+      );
+
+    await end(adjustmentId, [dish], [removed, kept]);
+    await end(alone, [], [aloneLine!.lineId]);
+
+    const givenBack = new Map(
+      (await withTransaction(db, (tx) => readDiscountNotices(tx, [order]))).map((one) => [
+        one.adjustmentId,
+        one.givenBack,
+      ]),
+    );
+    expect(givenBack.get(adjustmentId)).toBe("3.20");
+    expect(givenBack.get(alone)).toBe("1.60");
+    expect(await priceOf(kept)).toEqual({
+      unitPriceGross: 1440,
+      lineTotal: 1440,
+      listUnitPriceGross: 1600,
+    });
+    await expect(end(alone, [], [aloneLine!.lineId])).rejects.toMatchObject({
+      code: "adjustment.not_standing",
+    });
+  });
+});
+
 describe("the notices a bill answers", () => {
   it("answers an ending a change caused on its own bill, not a replacement, and not once a comp or discount on that bill gives it again", async () => {
     const order = await seedWorkingOrder(db);

@@ -274,6 +274,24 @@ it("offers a Soup's 50% again on the Soup once its Bread took it off, at 3.75 of
   expect((await preview(bill.tabId, soup.id, 5000, given)).reduction).toBe("3.75");
 });
 
+it("answers the 3.75 a Soup's 50% took off it and its Bread once the Bread is removed", async () => {
+  const bill = await billOf([{ ...dish("Soup"), extras: [spec.bread] }]);
+  const soup = await rowOf(bill.tabId, "Soup");
+  const given = await give(bill.tabId, soup.id, 5000);
+
+  await editExtras(bill.tabId, soup.lineNo, []);
+
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({
+      adjustmentId: given,
+      why: "extras_changed",
+      amount: "3.75",
+      reapplyOn: { lineId: soup.id },
+    }),
+  ]);
+  expect((await preview(bill.tabId, soup.id, 5000, given)).reduction).toBe("3.00");
+});
+
 it("answers no notice once the Soup whose Bread took its 50% off is cancelled", async () => {
   const bill = await billOf([dish("Soup")]);
   const soup = await rowOf(bill.tabId, "Soup");
