@@ -23,14 +23,13 @@ export const themeChoicesStyles = css`
   .theme-choice {
     box-sizing: border-box;
     display: inline-flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: var(--wt-space-1);
     min-width: var(--wt-tap-min);
     min-height: var(--wt-tap-min);
     padding: var(--wt-space-1);
-    border: 1px solid transparent;
+    border: var(--wt-field-line-width) solid var(--wt-color-border);
     border-radius: var(--wt-radius-md);
     background: transparent;
     color: var(--wt-color-text);
@@ -44,9 +43,11 @@ export const themeChoicesStyles = css`
   .theme-choice[aria-pressed="true"] {
     border-color: var(--wt-color-primary);
     background: var(--wt-color-surface-lifted);
+    font-weight: var(--wt-font-weight-bold);
   }
   .theme-choice > wt-icon {
     color: inherit;
+    flex: none;
   }
   .theme-choice:focus-visible {
     outline: var(--wt-focus-ring);

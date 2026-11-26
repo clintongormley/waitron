@@ -4,7 +4,7 @@ import { popupIndex, popupPlacement } from "./popup-helpers.js";
 export interface MenuPopoverParts {
   trigger: () => HTMLElement;
   close: () => void;
-  fitVertically?: boolean;
+  verticalPlacement?: () => "below" | "above";
 }
 
 export const menuOptionStyles = css`
@@ -138,13 +138,14 @@ export class MenuPopover implements ReactiveController {
     // From clientWidth rather than 100vw, which counts a scrollbar the clamp below must not.
     const room = document.documentElement.clientWidth;
     menu.style.maxWidth = `${room - 16}px`;
-    if (this.#parts.fitVertically) {
+    const verticalPlacement = this.#parts.verticalPlacement?.();
+    if (verticalPlacement !== undefined) {
       const style = getComputedStyle(menu);
       const gap = parseFloat(style.marginBlockStart);
       const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
       const height = menu.scrollHeight + border;
       const anchor = { top: trigger.top - gap, bottom: trigger.bottom + gap };
-      const placement = popupPlacement(anchor, height, innerHeight, "above");
+      const placement = popupPlacement(anchor, height, innerHeight, verticalPlacement);
       menu.style.maxHeight = `${placement.maxHeight}px`;
       menu.style.top = `${placement.top - gap}px`;
     } else {

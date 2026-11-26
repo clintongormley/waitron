@@ -553,6 +553,45 @@ it("signed in, fetches languages only when opening the Language list", async () 
   expect(languageChoice(el, "es-ES")!.getAttribute("aria-checked")).toBe("false");
 });
 
+it.each([1440, 390])("keeps a long Language list below its button at %ipx", async (width) => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(width, 485);
+  try {
+    const { el } = await signedIn({
+      getMe: vi.fn().mockResolvedValue({ ...englishMe, onboardingIntent: "demo" }),
+      getLocales: vi.fn().mockResolvedValue({
+        locales: [
+          "en-GB",
+          "es-ES",
+          "ca-ES",
+          "eu-ES",
+          "gl-ES",
+          "fr-FR",
+          "de-DE",
+          "it-IT",
+          "pt-PT",
+        ].map((code) => ({
+          code,
+          label: new Intl.DisplayNames([code], { type: "language" }).of(code),
+        })),
+        venueDefault: "es-ES",
+        loginDefault: "es-ES",
+        venueName: "Deli Test SL",
+      }),
+    });
+    await openAccountMenu(el);
+    await openLanguageList(el);
+    const menu = languageMenu(el)!;
+    expect(menu.getBoundingClientRect().top).toBeGreaterThan(
+      languageTrigger(el).getBoundingClientRect().bottom,
+    );
+    expect(menu.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
+    expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight);
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
+});
+
 it.each([1280, 390])(
   "there is one language chooser at %ipx, signed in and signed out",
   async (width) => {

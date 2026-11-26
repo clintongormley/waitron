@@ -56,21 +56,29 @@ export const accountMenuStyles = css`
     font-size: var(--wt-font-size-sm);
   }
 
+  [data-test="account-menu"] .theme-choices {
+    padding-block: var(--wt-space-2);
+    row-gap: var(--wt-space-2);
+  }
+
   .account-language {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: var(--wt-space-2);
-    padding: var(--wt-space-1) var(--wt-space-3);
+    padding: var(--wt-space-2) var(--wt-space-3);
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
   }
 `;
 
 function initials(name: string): string {
-  const words = name.split(/\s+/u);
-  const first = Array.from(words[0]!)[0];
-  const last = words.length > 1 ? Array.from(words.at(-1)!)[0] : "";
+  const letters = name
+    .normalize("NFC")
+    .split(/\s+/u)
+    .flatMap((word) => word.match(/\p{L}\p{M}*/u)?.[0] ?? []);
+  const first = letters[0] ?? "";
+  const last = letters.length > 1 ? letters.at(-1)! : "";
   return `${first}${last}`.toLocaleUpperCase(currentLocale());
 }
 
@@ -86,6 +94,7 @@ export function accountMenu(options: {
   onLogout: () => void;
 }): TemplateResult {
   const name = options.displayName?.trim();
+  const badge = name ? initials(name) : "";
   return html`<wt-row-actions
     icon="account-person"
     align="end"
@@ -101,14 +110,18 @@ export function accountMenu(options: {
     }}
   >
     ${
-      name
+      badge
         ? html`<span
-              slot="trigger"
-              class="account-initials"
-              aria-hidden="true"
-              data-initials=${initials(name)}
-            ></span>
-            <div class="account-identity" data-test="account-identity">
+            slot="trigger"
+            class="account-initials"
+            aria-hidden="true"
+            data-initials=${badge}
+          ></span>`
+        : nothing
+    }
+    ${
+      name
+        ? html`<div class="account-identity" data-test="account-identity">
               <div class="account-name" data-test="account-name">${name}</div>
               ${
                 options.email
@@ -139,6 +152,7 @@ export function accountMenu(options: {
     <div class="account-language" data-test="language-row">
       <span>${t("profile.language")}</span>
       <wt-language-chooser
+        opens-below
         data-keep-open
         data-test="language-chooser"
         .active=${currentLocale()}

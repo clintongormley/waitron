@@ -112,6 +112,8 @@ export class WtLanguageChooser extends LitElement {
   /** `menu`: a trigger and a pop-up. `group`: the choices in a row, for inside another menu. */
   @property({ reflect: true }) layout: "menu" | "group" = "menu";
 
+  @property({ type: Boolean, attribute: "opens-below" }) opensBelow = false;
+
   /** The group's visible name, in `group` layout. */
   @property() label = "";
 
@@ -136,7 +138,7 @@ export class WtLanguageChooser extends LitElement {
   readonly #menuPopover = new MenuPopover(this, {
     trigger: () => this.#trigger(),
     close: () => this.#close(),
-    fitVertically: true,
+    verticalPlacement: () => (this.opensBelow ? "below" : "above"),
   });
 
   override connectedCallback(): void {

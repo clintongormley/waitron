@@ -104,6 +104,21 @@ it("puts the label above three equal choices at 320 px, each at least a tap targ
   }
 });
 
+it("places each label beside its icon and gives unpressed choices a visible border", () => {
+  const { buttons } = mountChoices("device");
+  const button = buttons[0]!;
+  const icon = button.querySelector("wt-icon")!.getBoundingClientRect();
+  const label = [...button.childNodes].find((node) => node.textContent?.trim() === "Claro")!;
+  const text = document.createRange();
+  text.selectNodeContents(label);
+  const box = text.getBoundingClientRect();
+  expect(icon.right).toBeLessThan(box.left);
+  expect(box.top).toBeLessThan(icon.bottom);
+  const style = getComputedStyle(button);
+  expect(style.borderColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(parseFloat(style.borderWidth)).toBeGreaterThan(0);
+});
+
 it("themeLabelsPerLocale hands back the same labels until the language changes", () => {
   const build = vi.fn(() => ({ ...labels }));
   const labelsFor = themeLabelsPerLocale(build);

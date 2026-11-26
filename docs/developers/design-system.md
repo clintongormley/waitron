@@ -4180,12 +4180,13 @@ covers the banner and the menu with its full-window modal; its Undo, Redo, Cance
 row down to 320 px (A502). Signed out, the Theme chooser (`wt-theme-chooser`) and then the language
 chooser (`wt-language-chooser`) sit at the trailing edge, with nothing after them (see "Navigation
 and language controls"). After sign-in, put Theme and Language in the account menu. Put the
-visible Theme label above three equal buttons for Light, Dark and Device. Device keeps the accessible
+visible Theme label above three equal bordered buttons for Light, Dark and Device. Put each icon
+beside its label. Device keeps the accessible
 name Follow device. The selected choice uses `aria-pressed="true"`, `--wt-color-surface-lifted` and a
 `--wt-color-primary` border. The dashboard and the till share `themeChoices` and
 `themeChoicesStyles` in `packages/ui/src/theme-choices.ts`. The Language row labels a dropdown
-showing the current language's full name and a chevron. It loads the list on open and scrolls when
-space is short. The account menu stays open while choosing a language. Escape closes the language
+showing the current language's full name and a chevron. It loads the list on open, opens below its
+button, and scrolls when space is short. The account menu stays open while choosing a language. Escape closes the language
 list first. Picking a language closes both and returns focus to the account button. Each language
 appears under its own name, left-aligned. A Theme choice closes the account menu. Measured
 2026-10-17 in the plan review for A681: a 52 px stand-in in the signed-in banner shrank the lockup

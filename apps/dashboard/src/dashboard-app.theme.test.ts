@@ -271,6 +271,13 @@ it("shows one initial and no email row for a one-word name without an email", as
   expect(q(el, "[data-test=account-email]")).toBeNull();
 });
 
+it("keeps accented initials and skips brackets in a display name", async () => {
+  const { el } = await mountApp(
+    signedInApi("en-GB", { displayName: "E\u0301lodie (Mira)", email: null }),
+  );
+  expect(accountInitials(el)).toBe('"ÉM"');
+});
+
 it("signed out, a pick in the banner turns the dashboard dark and is kept", async () => {
   await commands.emulateColorScheme("light");
   const { el, host } = await mountApp(stubApi("en-GB"));
