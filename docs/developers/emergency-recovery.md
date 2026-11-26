@@ -193,7 +193,7 @@ files, so your browser can reconnect. You can then restore another backup or set
 This choice covers restores started from setup. If the first-start record becomes unreadable
 after the box has served, the box starts by itself and leaves first start pending. A successful
 first start removes the unreadable record. If a command-line restore is stuck at first start,
-run `waitron-restore restore` again with the backup and the key that opens it. The command
+run `waitron-restore restore` again with the same backup and inputs as the first run. The command
 retries the restore over the pending first-start record. Its within-attempt file rollback is
 unchanged.
 

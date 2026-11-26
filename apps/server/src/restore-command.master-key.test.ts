@@ -257,6 +257,19 @@ describe("waitron-restore restore <file> and the master key", () => {
     expect(restore).not.toHaveBeenCalled();
   });
 
+  it("says a file that is not a backup file is not one, given only the master key", async () => {
+    const path = join(dir, "junk.enc");
+    await writeFile(path, "not a backup file at all");
+    const { code, out, restore } = await run(["restore", path], {
+      WAITRON_MASTER_KEY: MASTER_KEY_TEXT,
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([
+      "restore failed: this file is not a Waitron backup file, or it is damaged; choose another backup",
+    ]);
+    expect(restore).not.toHaveBeenCalled();
+  });
+
   it("hands the master key from --master-key-file to the recovery operation as well", async () => {
     const path = await backupFile();
     const keyFile = join(dir, "master-key.txt");

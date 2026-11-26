@@ -877,11 +877,14 @@ command against it treat that entrypoint differently:
 - **A restore takes one of three sources.** `restore <backup-file>` restores an encrypted backup
   file. The file opens with the master key, set in `WAITRON_MASTER_KEY` or given with
   `--master-key-file <path>`, where `<path>` is a text file holding the key or the venue's
-  recovery pack PDF when it holds the key. Giving both is refused, and the key itself is never a
+  recovery pack PDF when it holds the key. That file must be visible inside the container and
+  readable by the image's user, as for the bucket form's file below, or the command stops with
+  `cannot read master key file: <path>`. Giving both is refused, and the key itself is never a
   command-line value. A master key that is not the backup's stops the command with
   `promotion.break_glass_invalid` and the date of the master key the backup needs. A Waitron
   Cloud copy opens instead with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`; that variable
-  never opens a backup file a box made.
+  opens only a version 1 file such as a Cloud copy, never a backup file the box keeps in its backup
+  folders or bucket, which opens only with the master key.
   `restore --from-bucket <pack-or-kit-file>` rebuilds the box from the copy the old box kept in the
   owner's bucket. `<pack-or-kit-file>` is the venue's recovery pack PDF, made with **Make recovery
   pack** on the dashboard's Backups screen, or a recovery kit file saved before the pack replaced
@@ -946,8 +949,9 @@ command against it treat that entrypoint differently:
   current when the backup was made, and the restored box then answers to that key again, not to a
   master key made after the backup. Keep each older master key until every backup made before its
   replacement has been deleted. When the restored copy contains a key name,
-  `restore.recovery_key_selected` names it. The same master key opens the backup file and
-  authorises the recovery.
+  `restore.recovery_key_selected` names it. Normally the same master key opens the backup file and
+  authorises the recovery. When those keys differ, the command takes only one, so restore that
+  backup through setup's Restore from backup.
 
   A restore that fails while it writes the backup's secrets or moves its database into place
   leaves the box's database, identity file (`trading.env`) and other secrets as they were. One that

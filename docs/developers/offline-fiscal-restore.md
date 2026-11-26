@@ -123,9 +123,10 @@ key against the selected database and rereads current outside evidence before ac
 
 If you use the operator CLI instead, stop the app first and supply the same override to
 `docker compose run`. Set `WAITRON_MASTER_KEY` privately in your shell: for a backup file the same
-master key opens the file and authorises the recovery. Instead of the variable, you can mount a
-file holding the key, or the recovery pack PDF that holds it, and name it with
-`--master-key-file <path>`; giving both is refused. Never put the key itself on the command line.
+master key normally opens the file and authorises the recovery. When those keys differ, the
+command takes only one, so restore that backup through setup's Restore from backup. Instead of the
+variable, you can mount a file holding the key, or the recovery pack PDF that holds it, and name it
+with `--master-key-file <path>`; giving both is refused. Never put the key itself on the command line.
 Keep `operation.json` in the public directory and mount the selected archive read-only:
 
 ```sh
