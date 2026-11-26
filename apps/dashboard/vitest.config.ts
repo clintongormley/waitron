@@ -15,11 +15,13 @@ import {
 
 type ColorScheme = "light" | "dark" | null;
 type ReducedMotion = "reduce" | "no-preference" | null;
+type ForcedColors = "active" | "none" | null;
 
 interface PlaywrightPage {
   emulateMedia(options: {
     colorScheme?: ColorScheme;
     reducedMotion?: ReducedMotion;
+    forcedColors?: ForcedColors;
   }): Promise<void>;
 }
 
@@ -41,6 +43,14 @@ const emulateReducedMotion: BrowserCommand<[reducedMotion: ReducedMotion]> = asy
 ) => {
   const { page } = context as unknown as { page: PlaywrightPage };
   await page.emulateMedia({ reducedMotion });
+};
+
+const emulateForcedColors: BrowserCommand<[forcedColors: ForcedColors]> = async (
+  context,
+  forcedColors,
+) => {
+  const { page } = context as unknown as { page: PlaywrightPage };
+  await page.emulateMedia({ forcedColors });
 };
 
 const followDevDeviceLink: BrowserCommand<[href: string]> = async (_context, href) => {
@@ -118,6 +128,7 @@ const browserProject = {
         followDevDeviceLink,
         emulateColorScheme,
         emulateReducedMotion,
+        emulateForcedColors,
         ...parkPointerCommands,
         probeVenueThemeStartup: venueThemeStartupProbe(new URL("./index.html", import.meta.url)),
       },

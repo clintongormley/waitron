@@ -22,6 +22,12 @@ const SECTION_ICONS = {
   configuration: "section-system",
 } as const;
 
+declare module "vitest/browser" {
+  interface BrowserCommands {
+    emulateForcedColors: (forcedColors: "active" | "none" | null) => Promise<void>;
+  }
+}
+
 beforeEach(() => registerIcons(DASHBOARD_ICONS));
 
 const initialUrl = location.href;
@@ -142,6 +148,96 @@ it("places 18px icons 12px before the full sidebar labels", async () => {
       expect.soft(icon.getBoundingClientRect().width).toBe(18);
       expect.soft(getComputedStyle(icon).marginInlineEnd).toBe("12px");
     }
+  });
+});
+
+it("gives top-level labels the weight of section names and keeps the current page teal", async () => {
+  await atSize(1280, 800, async () => {
+    const { el, host } = await mountApp();
+    host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
+    const overview = el.shadowRoot!.querySelector("[data-test=nav-overview]")!;
+    const bookings = el.shadowRoot!.querySelector("[data-test=nav-bookings]")!;
+    expect(overview.getAttribute("aria-current")).toBe("page");
+    expect.soft(getComputedStyle(overview).color).toBe("rgb(4, 5, 6)");
+    expect.soft(getComputedStyle(bookings).color).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(bookings).fontWeight).toBe("600");
+  });
+});
+
+it.each(["light", "dark"] as const)(
+  "paints the current page's band at rest in %s",
+  async (theme) => {
+    await atSize(1280, 800, async () => {
+      history.replaceState(null, "", "/devices");
+      const { el, host } = await mountApp({}, theme);
+      const current = sidebar(el).querySelector("[data-test=nav-devices]")!;
+      const idle = current.parentElement!.querySelector(".nav-item:not([aria-current])")!;
+      await commands.parkPointer();
+      expect(current.matches(":hover")).toBe(false);
+      expect(current.getAttribute("aria-current")).toBe("page");
+      const raisedSurface = document.createElement("div");
+      raisedSurface.style.backgroundColor = "var(--wt-color-surface-raised)";
+      host.append(raisedSurface);
+      expect(getComputedStyle(current).backgroundColor).toBe(
+        getComputedStyle(raisedSurface).backgroundColor,
+      );
+      expect(getComputedStyle(idle).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    });
+  },
+);
+
+it("keeps the current top-level page bolder than idle pages in forced colours", async () => {
+  await atSize(1280, 800, async () => {
+    await commands.emulateForcedColors("active");
+    try {
+      const { el } = await mountApp();
+      expect(matchMedia("(forced-colors: active)").matches).toBe(true);
+      const overview = sidebar(el).querySelector("[data-test=nav-overview]")!;
+      const bookings = sidebar(el).querySelector("[data-test=nav-bookings]")!;
+      expect(overview.getAttribute("aria-current")).toBe("page");
+      expect(getComputedStyle(overview).fontWeight).toBe("600");
+      expect(getComputedStyle(bookings).fontWeight).toBe("400");
+    } finally {
+      await commands.emulateForcedColors(null);
+    }
+  });
+});
+
+it("leaves 12px between Bookings and the visible divider", async () => {
+  await atSize(1280, 800, async () => {
+    const { el } = await mountApp();
+    const pinned = el.shadowRoot!.querySelector("#nav-group-panel-overview")!;
+    const bookings = pinned.querySelector("[data-test=nav-bookings]")!;
+    const divider = getComputedStyle(pinned);
+    expect(divider.borderBlockEndWidth).toBe("1px");
+    expect(pinned.getBoundingClientRect().bottom - bookings.getBoundingClientRect().bottom).toBe(
+      13,
+    );
+  });
+});
+
+it("keeps the section name close to its first page and leaves a larger gap before the next section", async () => {
+  await atSize(1280, 800, async () => {
+    const { el } = await mountApp();
+    const root = el.shadowRoot!;
+    const hardware = root.querySelector<HTMLButtonElement>("[data-test=nav-group-hardware]")!;
+    hardware.click();
+    await el.updateComplete;
+    const pages = root.querySelector("#nav-group-panel-hardware")!;
+    const nextHeading = root.querySelector("[data-test=nav-group-purchasing] .nav-group-label")!;
+    const textTop = (element: Element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect().top;
+    };
+    const first = textTop(pages.firstElementChild!);
+    const last = textTop(pages.lastElementChild!);
+    const heading = textTop(hardware.querySelector(".nav-group-label")!);
+    const withinSection = first - heading;
+    const betweenSections = textTop(nextHeading) - last;
+    expect.soft(Math.abs(withinSection - 32)).toBeLessThan(2);
+    expect(Math.abs(betweenSections - 44)).toBeLessThan(2);
   });
 });
 
@@ -558,6 +654,27 @@ async function mountFoldedReading(group: string, me: Record<string, unknown> = {
 }
 
 describe("a section with several pages opens a panel beside its icon", () => {
+  it("keeps the open section's tile visible after the pointer leaves its icon", async () => {
+    await atSize(1280, 800, async () => {
+      const { el, host } = await mountFoldedReading("menu");
+      host.style.setProperty("--wt-color-surface", "rgb(21, 22, 23)");
+      const menu = stripButton(el, "menu");
+      expect(menu.hasAttribute("aria-current")).toBe(false);
+      await userEvent.click(menu);
+      await el.updateComplete;
+      await commands.parkPointer();
+      expect(menu.matches(":hover")).toBe(false);
+      expect(menu.getAttribute("aria-expanded")).toBe("true");
+      expect.soft(getComputedStyle(menu).backgroundColor).toBe("rgb(21, 22, 23)");
+
+      await userEvent.click(menu);
+      await el.updateComplete;
+      await commands.parkPointer();
+      expect(menu.getAttribute("aria-expanded")).toBe("false");
+      expect(getComputedStyle(menu).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    });
+  });
+
   it("listing the section's name and its pages in order, the strip staying folded and nothing stored", async () => {
     await atSize(1280, 800, async () => {
       const { el, pages } = await mountFoldedReading("team");
@@ -596,6 +713,7 @@ describe("a section with several pages opens a panel beside its icon", () => {
       const { el, host } = await mountFoldedReading("reports");
       host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
       host.style.setProperty("--wt-color-primary", "rgb(7, 8, 9)");
+      host.style.setProperty("--wt-color-surface-raised", "rgb(10, 11, 12)");
       host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
       await userEvent.click(stripButton(el, "reports"));
       await el.updateComplete;
@@ -612,6 +730,7 @@ describe("a section with several pages opens a panel beside its icon", () => {
       expect(current!.getAttribute("aria-current")).toBe("page");
       expect(getComputedStyle(current!).borderInlineStartColor).toBe("rgb(7, 8, 9)");
       expect(getComputedStyle(current!).color).toBe("rgb(4, 5, 6)");
+      expect(getComputedStyle(current!).backgroundColor).toBe("rgb(10, 11, 12)");
       expect(other!.hasAttribute("aria-current")).toBe(false);
     });
   });

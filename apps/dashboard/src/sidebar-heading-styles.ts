@@ -17,6 +17,17 @@ export const sidebarHeadingStyles = css`
     cursor: pointer;
   }
 
+  @media (pointer: fine) {
+    .nav-group {
+      min-height: var(--wt-space-6);
+      padding-block: var(--wt-space-2) 0;
+    }
+  }
+
+  .nav-group-pages {
+    padding-block-end: var(--wt-space-1);
+  }
+
   /* After .nav-group's own rule, whose font shorthand would reset the size and weight. */
   .nav-group,
   .strip-panel-label {

@@ -70,6 +70,8 @@ it("keeps touch nav rows at 44px and their chevrons visible without hover", asyn
     expect(header.matches(":hover")).toBe(false);
     expect(header.matches(":focus-visible")).toBe(false);
     expect(header.getBoundingClientRect().height).toBe(44);
+    const label = header.querySelector(".nav-group-label")!;
+    expect(label.getBoundingClientRect().top - header.getBoundingClientRect().top).toBe(12);
     expect(getComputedStyle(header.querySelector(".chevron")!).opacity).toBe("1");
   }
   expect(

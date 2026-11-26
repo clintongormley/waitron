@@ -108,6 +108,11 @@ is used daily, and a Service section with one page would be a heading over one r
 - **The folded strip's panel**: its pages are not indented, as it has no icon column.
 - Touch and fine-pointer row heights stay as today (44 px on touch, 32 px with a mouse).
 
+**26 November 2026, visual follow-up.** See the
+[dashboard sidebar contract](../../developers/design-system.md#dashboard-sidebar-navigation)
+for the top-level labels, divider, section spacing and folded tile. The owner then said “Add the
+band, then land” in the sidebar screenshot review. The current page has a raised background across its row.
+
 ### 6. Pages get no icons
 
 About 45 pages, many abstract (Periods, Seasons, Units, Courses, Modifiers, Diagnostics beside Box

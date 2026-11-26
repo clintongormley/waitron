@@ -4286,15 +4286,21 @@ Tests: `apps/dashboard/src/dashboard-app.disk-stop.test.ts` and
 
 A sidebar page uses a flat `.nav-item` button. Resting pages use regular `--wt-font-size-md` text in
 `--wt-color-text-muted`. Hover uses `--wt-color-text` on `--wt-color-surface`. The current page
-has `aria-current="page"`, a `--wt-color-primary` leading edge and bold `--wt-color-primary-text`
-text. The line and weight make the current page identifiable by more than colour.
+has `aria-current="page"`, a `--wt-color-primary` leading edge, a `--wt-color-surface-raised` band
+across the row and bold `--wt-color-primary-text` text. The line and weight make the current page
+identifiable by more than colour.
 
 Section headings and folded panel titles use sentence case, normal letter spacing, 14 px
 `--wt-font-size-md` and weight 600 (`--wt-font-weight-bold`) in `--wt-color-text`. Each heading has
-`--wt-space-2` above it. Indent pages in a headed section to start under the heading's text.
+`--wt-space-2` above it. Indent pages in a headed section to start under the heading's text. Leave
+`--wt-space-1` below the last page of an open section. With a mouse, the tops of the heading text and
+first page text are about 32 px apart. The last page text and next heading text are about 44 px apart.
 Unheaded staff pages and folded panel pages use the regular row padding.
 
-Overview and Bookings sit at the top as direct rows with their own icons and a line underneath.
+Overview and Bookings sit at the top as direct rows with their own icons and use the section label
+colour and weight when idle. When the browser forces its own colours, idle top-level labels use
+regular weight so the bold current page stays distinct. Leave `--wt-space-3` between the last row
+and the divider beneath it.
 Each headed section combines its core and module pages in ascending order of their declared
 `order`. A headed group is its own disclosure toggle except while a search term is typed
 (below). Its header is a
@@ -4416,8 +4422,11 @@ magnifier first (not for staff), which unfolds the sidebar, keeps that choice an
 the search box; then direct buttons for the pinned pages and one button per headed section the session can
 open. The shared icon tooltip appears beside each button. The section holding the current page
 has a `--wt-color-primary` leading edge and a `--wt-color-surface-lifted` fill. A section with one page opens it. A
-section with more opens a panel beside its icon, listing the section's name and its pages, and
-placed before its first paint, lifted to stay inside the layout when the icon is low; picking a page
+section with more opens a panel beside its icon, listing the section's name and its pages. The current
+page in the panel uses the same band, leading edge and bold text as in the full sidebar. The section's
+icon button keeps the hover fill while its panel is open. The icon for the current section keeps
+its lifted fill. Place the panel before its first paint and lift it to
+stay inside the layout when the icon is low. Picking a page
 opens it and closes the panel, and the strip stays folded. Escape closes the panel and returns focus
 to its icon. A click outside it, focus leaving it, another section's icon, unfolding the sidebar, a
 page change and narrowing to a phone close it too. Opened from the keyboard it focuses its first page.
