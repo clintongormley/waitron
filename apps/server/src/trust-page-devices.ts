@@ -121,7 +121,7 @@ export const DEVICE_HELP: Record<DeviceId, DeviceHelp> = {
       "Close the browser you want to use by swiping it away in the app switcher, then reopen this page.",
     ],
     removal: [
-      "Open Settings, then General, then VPN &amp; Device Management. Check the certificate in the profile. If it matches, choose Remove Profile.",
+      "Open Settings, then General, then VPN &amp; Device Management. Open the profile and check its certificate. If it matches, choose Remove Profile.",
     ],
   },
   "firefox-linux": {

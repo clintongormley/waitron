@@ -176,7 +176,7 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
     heading: "Instalar en este iPhone o iPad",
     summary: "iPhone y iPad: Safari, Chrome, Edge y Firefox",
     removal: [
-      "Abre Ajustes, General, VPN y gestión de dispositivos. Comprueba el certificado del perfil. Si coincide, elige Eliminar perfil.",
+      "Abre Ajustes, General, VPN y gestión de dispositivos. Abre el perfil y comprueba su certificado. Si coincide, elige Eliminar perfil.",
     ],
     install: [
       "Abre esta página en Safari para descargar el archivo y permite la descarga del perfil.",

@@ -104,6 +104,7 @@ describe("the Spanish guide", () => {
     const html = renderTrustPage({ ...base, locale: "es", device: "macos" });
     const mac = CONNECTION_DEVICE_ES.macos;
     expect(html).toMatch(heading("1. Elimina el certificado anterior de este servidor"));
+    expect(html).toContain("espera a que se restablezca y se vuelva a unir al local");
     expect(html).toContain(mac.removal[0]);
     expect(html).toMatch(heading(`3. ${mac.heading}`));
     expect(html).toContain(mac.install[0]);

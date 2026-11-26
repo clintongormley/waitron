@@ -119,7 +119,7 @@ function certificateSteps(
   const devices = locale === "es" ? CONNECTION_DEVICE_ES : DEVICE_HELP;
   const previous = input.previousCertificate;
   const removal = previous
-    ? `<section><h2>1. ${words.remove}</h2><p>${words.removeIntro}</p>
+    ? `<section><h2>1. ${words.remove}</h2><p>${words.removeIntro}</p><p>${labels.shared}</p>
       <p>${labels.previous}<br />${escapeHtml(previous.name)} <code>${escapeHtml(previous.fingerprint)}</code></p>
       ${device === "windows" ? thumbprint(locale, previous) : ""}
       ${device === "unknown" ? `<p class="note">${words.findDevice}</p>` : `${removalList(devices[device])}<p>${words.reopen}</p>`}</section>`

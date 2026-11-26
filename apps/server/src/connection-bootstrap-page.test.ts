@@ -211,6 +211,9 @@ it("holds the action while its request is pending then explains a new trust inst
     expect(await removal.isVisible()).toBe(true);
     expect(await removal.textContent()).toContain("waitron-setup-ca");
     expect(await removal.textContent()).toContain("CC:DD");
+    expect(await removal.textContent()).toContain(
+      "For a spare, wait until it has been reset and rejoined.",
+    );
   } finally {
     release();
     await page.close();

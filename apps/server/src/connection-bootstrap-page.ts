@@ -101,6 +101,7 @@ export function renderConnectionPage(
       const entry = help[id];
       return `<details data-device="${id}"${id === input.device ? " open" : ""}><summary>${entry.summary}</summary>
     <div data-removal${hidden(Boolean(previous))}><p>${labels.match}</p>
+    <p>${labels.shared}</p>
     <p>${labels.previous}<br />
     <span data-previous-name>${escape(previous?.name ?? "")}</span> <code data-previous-fingerprint>${escape(previous?.fingerprint ?? "")}</code></p>
     ${id === "windows" ? `<p>${labels.thumbprint} <code data-previous-thumbprint>${escape(previous?.thumbprint ?? "")}</code></p>` : ""}

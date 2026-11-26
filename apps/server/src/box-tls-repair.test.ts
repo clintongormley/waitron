@@ -3,6 +3,7 @@ import { X509Certificate, createPrivateKey } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createSecureContext } from "node:tls";
+import { TLS_PREVIOUS_CERTIFICATE_FILE } from "@waitron/store";
 import forge from "node-forge";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
@@ -290,6 +291,27 @@ it("keeps healthy TLS byte-identical even without the CA signing key", async () 
     expect(await readFile(join(f.stateDir, "tls", name))).toEqual(before[name]);
   await expect(stat(join(f.stateDir, "tls", "repair"))).rejects.toMatchObject({
     code: "ENOENT",
+  });
+});
+
+it("does not name the current certificate for removal when a saved record repeats it", async () => {
+  const f = await fixture();
+  const ca = new X509Certificate(material.caCertPem);
+  const previous = {
+    name: ca.subject.slice(3),
+    fingerprint: ca.fingerprint256,
+    thumbprint: ca.fingerprint.replaceAll(":", ""),
+  };
+  await writeFile(
+    join(f.stateDir, TLS_PREVIOUS_CERTIFICATE_FILE),
+    JSON.stringify({
+      replacement: ca.fingerprint256,
+      previous,
+    }),
+  );
+  expect(await tlsRepair.readBoxCertificateDetails(f.stateDir)).toMatchObject({
+    fingerprint: ca.fingerprint256,
+    previousCertificate: undefined,
   });
 });
 

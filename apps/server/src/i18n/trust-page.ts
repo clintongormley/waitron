@@ -8,6 +8,8 @@ export const CERTIFICATE_WORDS = {
     current: "Certificate to install (SHA-256 fingerprint)",
     previous: "Previous certificate (SHA-256 fingerprint)",
     match: "Remove the previous certificate only if both its name and fingerprint match.",
+    shared:
+      "If a spare or another box still uses that certificate, keep it installed until that box has its new certificate. For a spare, wait until it has been reset and rejoined. Then remove the old certificate.",
     unavailable:
       "Leave installed certificates alone. Download and install the certificate shown here.",
     thumbprint: "Windows: open Details and compare Thumbprint (SHA-1).",
@@ -16,6 +18,8 @@ export const CERTIFICATE_WORDS = {
     current: "Certificado que vas a instalar (huella SHA-256)",
     previous: "Certificado anterior (huella SHA-256)",
     match: "Elimina el certificado anterior solo si coinciden el nombre y la huella.",
+    shared:
+      "Si un servidor de reserva u otro servidor aún usa ese certificado, consérvalo hasta que ese servidor tenga el nuevo. Si es el de reserva, espera a que se restablezca y se vuelva a unir al local. Después, elimina el certificado anterior.",
     unavailable:
       "Deja los certificados instalados como están. Descarga e instala el certificado que se muestra aquí.",
     thumbprint: "En Windows, abre Detalles y compara la Huella digital (SHA-1).",
