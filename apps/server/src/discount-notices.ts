@@ -11,48 +11,59 @@ import {
 import { inIds } from "./in-ids.js";
 import "./errors.js";
 
-/**
- * The line to give an ended comp or discount again on: the dish whose extras or variant changed.
- * A set menu's answers null (D54); staff choose in the comp window.
- */
-function reapplyOn(ended: EndedDiscount): DiscountNotice["reapplyOn"] {
-  return ended.lineId === null ? null : { lineId: ended.lineId };
-}
+/** An ending a notice still shows, with the line number of the line it offers it again on. */
+type Shown = EndedDiscount & { lineNo: number | null };
 
 /** The endings among `billIds` that a notice still shows: a dish's goes once its line has left the
  * bill. */
-async function shownEndings(tx: Transaction, billIds: readonly string[]): Promise<EndedDiscount[]> {
+async function shownEndings(tx: Transaction, billIds: readonly string[]): Promise<Shown[]> {
   const ended = await readDiscountNotices(tx, billIds);
   const lineIds = ended.flatMap(({ lineId }) => (lineId === null ? [] : [lineId]));
-  const billOfLine = new Map(
+  const lineOf = new Map(
     lineIds.length === 0
       ? []
       : (
           await tx
-            .select({ id: workingOrderLines.id, billId: workingOrderLines.workingOrderId })
+            .select({
+              id: workingOrderLines.id,
+              billId: workingOrderLines.workingOrderId,
+              lineNo: workingOrderLines.lineNo,
+            })
             .from(workingOrderLines)
             .where(inIds(workingOrderLines.id, lineIds))
-        ).map(({ id, billId }) => [id, billId]),
+        ).map((line) => [line.id, line]),
   );
-  return ended.filter(
-    ({ lineId, workingOrderId }) => lineId === null || billOfLine.get(lineId) === workingOrderId,
-  );
+  return ended.flatMap((one): Shown[] => {
+    if (one.lineId === null) return [{ ...one, lineNo: null }];
+    const line = lineOf.get(one.lineId);
+    return line?.billId === one.workingOrderId ? [{ ...one, lineNo: line.lineNo }] : [];
+  });
 }
 
-/** Each bill's notices among `billIds`; a bill with none has no entry. */
+/**
+ * Each bill's notices among `billIds`; a bill with none has no entry. A notice offers its comp or
+ * discount again on the lowest-numbered dish its shown endings name; a set menu's on none,
+ * as staff choose in the comp window.
+ */
 export async function readBillsDiscountNotices(
   tx: Transaction,
   billIds: readonly string[],
 ): Promise<Map<string, DiscountNotice[]>> {
   const byBill = new Map<string, DiscountNotice[]>();
+  const offeredAt = new Map<DiscountNotice, number>();
   for (const one of await shownEndings(tx, billIds)) {
     const notices = byBill.get(one.workingOrderId) ?? [];
     const held = notices.find(({ adjustmentId }) => adjustmentId === one.adjustmentId);
+    const on = one.lineId === null ? null : { lineId: one.lineId };
     if (held !== undefined) {
       held.amount = addDecimal(decimal(held.amount), one.givenBack);
+      if (one.lineNo !== null && one.lineNo < (offeredAt.get(held) ?? Infinity)) {
+        held.reapplyOn = on;
+        offeredAt.set(held, one.lineNo);
+      }
       continue;
     }
-    notices.push({
+    const notice: DiscountNotice = {
       adjustmentId: one.adjustmentId,
       why: one.why,
       dishName: one.dishName,
@@ -61,8 +72,10 @@ export async function readBillsDiscountNotices(
       percentBp: one.percentBp,
       amount: one.givenBack,
       reasonId: one.reasonId,
-      reapplyOn: reapplyOn(one),
-    });
+      reapplyOn: on,
+    };
+    if (one.lineNo !== null) offeredAt.set(notice, one.lineNo);
+    notices.push(notice);
     byBill.set(one.workingOrderId, notices);
   }
   return byBill;
