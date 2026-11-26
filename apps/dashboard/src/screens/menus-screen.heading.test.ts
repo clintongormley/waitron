@@ -680,21 +680,25 @@ describe("the menu editor's heading", () => {
   });
 
   /** Mounts a menu named `name` at phone width, putting the viewport back afterwards. */
-  async function onPhone(name: string): Promise<MenusScreen> {
+  async function onPhone(name: string, phoneWidth = 390): Promise<MenusScreen> {
     const width = window.innerWidth,
       height = window.innerHeight;
     onTestFinished(() => page.viewport(width, height));
-    await page.viewport(390, 844);
+    await page.viewport(phoneWidth, 844);
     return mount(
       api(undefined, [{ id: "menu-lunch", name, active: true, kind: "menu", setPrice: null }]),
     );
   }
 
-  it.each(["en", "es-ES"])(
-    "puts Review and publish beside the live version below the title at 390 px in %s",
-    async (locale) => {
+  it.each([
+    ["en", 390],
+    ["es-ES", 390],
+    ["es-ES", 360],
+  ] as const)(
+    "puts Review and publish beside the live version below the title in %s at %i px",
+    async (locale, phoneWidth) => {
       setLocale(locale);
-      const el = await onPhone("Casa Delgado");
+      const el = await onPhone("Casa Delgado", phoneWidth);
       el.now = () => new Date("2026-09-26T10:43:00.000Z");
       await el.updateComplete;
       await vi.waitFor(() => expect(q(el, '[data-test="review-publish"]')).not.toBeNull());
@@ -713,10 +717,8 @@ describe("the menu editor's heading", () => {
         new Set(Array.from(element.getClientRects(), (rect) => rect.top)).size;
       expect(lines(version)).toBe(1);
       expect(lines(time)).toBe(1);
-      if (locale === "es-ES")
-        expect(time.getBoundingClientRect().top).toBeGreaterThan(
-          version.getBoundingClientRect().top,
-        );
+      expect(version.getBoundingClientRect().right).toBeLessThan(action.left);
+      expect(time.getBoundingClientRect().right).toBeLessThan(action.left);
       q(el, "wt-relative-time")!.shadowRoot!.querySelector("button")!.focus();
       await userEvent.keyboard("{Tab}");
       expect(el.shadowRoot!.activeElement).toBe(review);

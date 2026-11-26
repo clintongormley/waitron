@@ -129,9 +129,8 @@ the 2026-09-30 folders design; what remains:
   before it, checked at `002b79f69`).
 - **The Menus screen (#664).** If someone exactly undoes a move while it is saving, the move's
   answer is shown over their change until the menu is next read.
-- **The Price overrides tab (named Prices until W89; #670, #680).** The owner decided 2026-09-26
-  that removing a product's last placement needs no warning before it clears the menu price and
-  variant settings.
+- **Removing a product's last placement (#670, #680).** The owner decided 2026-09-26 that this
+  clears the menu price and variant settings without a warning.
 - **Publishing (#677).** The status and preview reads build every menu's frozen copy inside
   `withTransaction`, the venue's write lock. Measured about 21 ms median for 4 menus and 300
   dishes on a dev laptop. The figure for the box is unknown. At phone width the list keeps a
