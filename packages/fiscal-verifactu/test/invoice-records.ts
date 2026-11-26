@@ -112,6 +112,88 @@ export function filedInvoicesOf(db: Database, saleId: string, now: Date): FiledI
     });
 }
 
+/** One `Desglose` line, under English names. */
+export interface FiledBreakdownLine {
+  /** `Impuesto`. */
+  taxKind?: string;
+  /** `ClaveRegimen`. */
+  regime?: string;
+  /** `CalificacionOperacion`, or `OperacionExenta` on an exempt line. */
+  treatment: string;
+  /** `TipoImpositivo`. */
+  rate?: string;
+  /** `BaseImponibleOimporteNoSujeto`. */
+  base: string;
+  /** `CuotaRepercutida`. */
+  vat?: string;
+}
+
+/** A sale's one filed invoice record, under English names, with the invoices it corrects. */
+export interface FiledInvoiceRecord {
+  /** `IDEmisorFactura`. */
+  issuerTaxId: string;
+  /** `NumSerieFactura`. */
+  number: string;
+  /** `TipoFactura`: F1, F2, F3, R4 or R5. */
+  kind: string;
+  /** `TipoRectificativa`, or null on an invoice that corrects nothing. */
+  correctionKind: string | null;
+  /** `ImporteTotal`. */
+  total: string;
+  /** `CuotaTotal`. */
+  vatTotal: string;
+  breakdown: FiledBreakdownLine[];
+  /** `FacturasRectificadas`: each corrected invoice's issuer, number and issue day. */
+  corrects: { issuerTaxId: string; number: string; issuedOn: string }[];
+}
+
+/** The sale's filed invoice record; throws unless the sale has exactly one record, an invoice. */
+export function filedInvoiceOf(db: Database, saleId: string): FiledInvoiceRecord {
+  const rows = db.all<RegistroRow>(sql`select * from verifactu_records where sale_id = ${saleId}`);
+  if (rows.length !== 1) throw new Error(`sale ${saleId} has ${rows.length} records`);
+  const record = fromRegistroRow(decodeRegistroRow(rows[0]!));
+  if (!("TipoFactura" in record)) throw new Error(`sale ${saleId} has a cancellation record`);
+  return {
+    issuerTaxId: record.IDFactura.IDEmisorFactura,
+    number: record.IDFactura.NumSerieFactura,
+    kind: record.TipoFactura,
+    correctionKind: record.TipoRectificativa ?? null,
+    total: record.ImporteTotal,
+    vatTotal: record.CuotaTotal,
+    breakdown: record.Desglose.map((line) => ({
+      taxKind: line.Impuesto,
+      regime: line.ClaveRegimen,
+      treatment: line.CalificacionOperacion ?? line.OperacionExenta!,
+      rate: line.TipoImpositivo,
+      base: line.BaseImponibleOimporteNoSujeto,
+      vat: line.CuotaRepercutida,
+    })),
+    corrects: (record.FacturasRectificadas?.IDFacturaRectificada ?? []).map((invoice) => ({
+      issuerTaxId: invoice.IDEmisorFactura,
+      number: invoice.NumSerieFactura,
+      issuedOn: invoice.FechaExpedicionFactura,
+    })),
+  };
+}
+
+/** Each record filed for the sale in chain order: an invoice or a cancellation, and its stored
+ * filing state (null before one is queued). */
+export async function filedRecordsOf(
+  db: Database,
+  saleId: string,
+): Promise<{ kind: "invoice" | "cancellation"; state: string | null }[]> {
+  const rows = await db
+    .select({ kind: verifactuRecords.tipoRegistro, state: verifactuSubmissions.estado })
+    .from(verifactuRecords)
+    .leftJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, verifactuRecords.id))
+    .where(eq(verifactuRecords.saleId, saleId))
+    .orderBy(verifactuRecords.secuencia);
+  return rows.map(({ kind, state }) => ({
+    kind: kind === "alta" ? "invoice" : "cancellation",
+    state,
+  }));
+}
+
 /** Stores AEAT's refusal, with `code`, as the filing reply to one record. */
 export async function refuseRecord(db: Database, recordId: string, code: string): Promise<void> {
   await db

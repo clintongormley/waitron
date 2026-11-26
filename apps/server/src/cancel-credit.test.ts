@@ -5,6 +5,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { saleLines, saleSettlements, workingOrderLines } from "@waitron/db";
 import { listOutstandingSales } from "@waitron/core";
+import { filedInvoiceOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { deviceId as brandDeviceId, type SaleId } from "@waitron/shared";
 import { creditWholeInvoice, readOrderInvoice, reversedLines } from "./cancel-credit.js";
 import { inTx, send, type BillVenue } from "./testing/bill-venue.js";
@@ -127,7 +128,7 @@ function placed(
 
 const invoiceOf = (billId: string) => fixture.invoiceOf(venue, billId);
 const creditsOf = (saleId: string) => fixture.creditsOf(venue, saleId);
-const fiscalRecordOf = (saleId: string) => fixture.fiscalRecordOf(venue, saleId);
+const filedOf = (saleId: string) => filedInvoiceOf(venue.db, saleId);
 const linesOf = (saleId: string) => fixture.linesOf(venue, saleId);
 const activeCorrective = () => fixture.activeCorrective(venue);
 const negate = fixture.negate;
@@ -186,26 +187,25 @@ describe("creditWholeInvoice", () => {
       })),
     );
 
-    const filed = await fiscalRecordOf(credit.id);
-    const rectified = await fiscalRecordOf(original.id);
+    const filed = filedOf(credit.id);
+    const rectified = filedOf(original.id);
     expect(filed).toMatchObject({
-      tipoRegistro: "alta",
-      tipoFactura: "R5",
-      tipoRectificativa: "I",
-      importeTotal: negate(rectified.importeTotal!),
-      cuotaTotal: negate(rectified.cuotaTotal!),
+      kind: "R5",
+      correctionKind: "I",
+      total: negate(rectified.total),
+      vatTotal: negate(rectified.vatTotal),
     });
-    expect(filed.desglose).toEqual(
-      rectified.desglose.map((group) => ({
+    expect(filed.breakdown).toEqual(
+      rectified.breakdown.map((group) => ({
         ...group,
-        BaseImponibleOimporteNoSujeto: negate(group.BaseImponibleOimporteNoSujeto),
-        CuotaRepercutida: negate(group.CuotaRepercutida),
+        base: negate(group.base),
+        vat: negate(group.vat!),
       })),
     );
-    expect(filed.facturasRectificadas?.IDFacturaRectificada).toEqual([
+    expect(filed.corrects).toEqual([
       expect.objectContaining({
-        IDEmisorFactura: rectified.idEmisorFactura,
-        NumSerieFactura: rectified.numSerieFactura,
+        issuerTaxId: rectified.issuerTaxId,
+        number: rectified.number,
       }),
     ]);
 
@@ -281,7 +281,7 @@ describe("creditWholeInvoice", () => {
       [
         { name: "Small beer", quantity: "2" },
         {
-          name: "Café",
+          name: "Coffee",
           quantity: "1",
           extras: [
             { listId: extraListId, picks: [{ productId: productIdOf("Leche"), quantity: 2 }] },
@@ -309,7 +309,7 @@ describe("creditWholeInvoice", () => {
     const invoiced = await linesOf(original.id);
     expect(invoiced.map((line) => [line.name, line.quantity, line.parentLineNo])).toEqual([
       ["Small beer", 2000, null],
-      ["Café", 1000, null],
+      ["Coffee", 1000, null],
       ["Leche", 2000, 2],
     ]);
     expect(await linesOf(credit!.id)).toEqual(
@@ -346,7 +346,7 @@ describe("creditWholeInvoice", () => {
           name: "Mosto",
           quantity: "1",
           extras: [
-            { listId: portionListId, picks: [{ productId: productIdOf("Jamón"), quantity: 3 }] },
+            { listId: portionListId, picks: [{ productId: productIdOf("Ham"), quantity: 3 }] },
           ],
         },
       ],
@@ -357,7 +357,7 @@ describe("creditWholeInvoice", () => {
     const original = await invoiceOf(id);
     const invoiced = await linesOf(original.id);
     expect(invoiced[1]).toMatchObject({
-      name: "Jamón",
+      name: "Ham",
       quantity: 150,
       priceQuantity: 50,
       unitPrice: 1,
@@ -395,18 +395,18 @@ describe("creditWholeInvoice", () => {
       expect(credit!.total).toBe(-original.total);
       const negated = { rate: "21.00", base: negate(invoiced.base), tax: negate(invoiced.tax) };
       expect(credit!.vatBreakdown).toEqual([negated]);
-      const filed = await fiscalRecordOf(credit!.id);
+      const filed = filedOf(credit!.id);
       expect(filed).toMatchObject({
-        tipoFactura: "R5",
-        importeTotal: total,
-        cuotaTotal: negated.tax,
+        kind: "R5",
+        total,
+        vatTotal: negated.tax,
       });
-      const [rectified] = (await fiscalRecordOf(original.id)).desglose;
-      expect(filed.desglose).toEqual([
+      const [rectified] = filedOf(original.id).breakdown;
+      expect(filed.breakdown).toEqual([
         {
           ...rectified,
-          BaseImponibleOimporteNoSujeto: negated.base,
-          CuotaRepercutida: negated.tax,
+          base: negated.base,
+          vat: negated.tax,
         },
       ]);
     },

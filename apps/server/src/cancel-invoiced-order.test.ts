@@ -133,6 +133,34 @@ function annulmentsOf(saleId: string) {
   );
 }
 
+/** Credits 1.00 of a Small beer's 3.00 invoice: 0.83 at 21%, so a credit of the whole would exceed it. */
+async function creditPartly(saleId: string) {
+  const series = await activeCorrective();
+  await inTx(venue, (tx) =>
+    recordCorrection(tx, venue.backend, {
+      operationDescription: "Restaurante",
+      origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
+      seriesId: brandSeriesId(series!.id),
+      correctsSaleId: brandSaleId(saleId),
+      total: "-1.00",
+      lines: [
+        {
+          lineNo: 1,
+          name: "Small beer",
+          descriptions: { [venue.cfg.locale]: "Glass of lager" },
+          quantity: "-0.333",
+          unitPrice: "2.48",
+          vatRate: "21.00",
+          lineTotal: "-0.83",
+        },
+      ],
+      authz: { sessionId: supervisorSessionId },
+      clock: venue.clock,
+    }),
+  );
+}
+
 /** Everything a credit or a cancellation would write, so a refusal can be shown to have written none of it. */
 function fiscalSnapshot() {
   return venue.db.all(sql`
@@ -221,7 +249,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
           name: "Mosto",
           quantity: "1",
           extras: [
-            { listId: portionListId, picks: [{ productId: productIdOf("Jamón"), quantity: 3 }] },
+            { listId: portionListId, picks: [{ productId: productIdOf("Ham"), quantity: 3 }] },
           ],
         },
       ]);
@@ -237,7 +265,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
           name: "Mosto",
           quantity: "1",
           extras: [
-            { listId: portionListId, picks: [{ productId: productIdOf("Jamón"), quantity: 3 }] },
+            { listId: portionListId, picks: [{ productId: productIdOf("Ham"), quantity: 3 }] },
           ],
         },
       ]);
@@ -252,7 +280,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
           .select({ unitPrecision: saleLines.unitPrecision })
           .from(saleLines)
           .where(
-            and(eq(saleLines.saleId, newSale.id), eq(saleLines.productId, productIdOf("Jamón"))),
+            and(eq(saleLines.saleId, newSale.id), eq(saleLines.productId, productIdOf("Ham"))),
           ),
       );
       expect(child?.unitPrecision).toBe(2);
@@ -478,31 +506,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
   it("refuses an invoice already partly credited, writing nothing", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
-    const series = await activeCorrective();
-    // 0.83 at 21% is 1.00 of the Small beer's 3.00, so a credit of the whole 3.00 would exceed it.
-    await inTx(venue, (tx) =>
-      recordCorrection(tx, venue.backend, {
-        operationDescription: "Restaurante",
-        origin: venue.cfg.origin,
-        nodeId: venue.cfg.nodeId,
-        seriesId: brandSeriesId(series!.id),
-        correctsSaleId: brandSaleId(original.id),
-        total: "-1.00",
-        lines: [
-          {
-            lineNo: 1,
-            name: "Small beer",
-            descriptions: { [venue.cfg.locale]: "Glass of lager" },
-            quantity: "-0.333",
-            unitPrice: "2.48",
-            vatRate: "21.00",
-            lineTotal: "-0.83",
-          },
-        ],
-        authz: { sessionId: supervisorSessionId },
-        clock: venue.clock,
-      }),
-    );
+    await creditPartly(original.id);
     const partial = await creditsOf(original.id);
     expect(partial.map((credit) => credit.total)).toEqual([-100]);
     const before = fiscalSnapshot();
@@ -894,12 +898,41 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
     await watchedOrder();
   });
 
-  function cancelWithSupervisor(id: string) {
-    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/cancel`, {
+  function cancelWithSupervisor(id: string, cookie = venue.cookie) {
+    return send(venue.app, cookie, "POST", `/api/working-orders/${id}/cancel`, {
       reason: REASON,
       override: { personId: supervisorId, pin: SUPERVISOR_PIN },
     });
   }
+
+  it("checks the PIN ahead for an operator holding only sale.rectify, on a receipt it cancels", async () => {
+    const operator = await fixture.cookieOfPersonHolding(cv, "sale.rectify");
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    watchDerivations(SUPERVISOR_PIN, anotherWriter, anotherWriter, anotherWriter);
+
+    const answer = await cancelWithSupervisor(id, operator);
+
+    expect(answer.status).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await voidsOf(original.id)).toEqual([{ reason: REASON, voidedBy: supervisorId }]);
+  });
+
+  it("checks the PIN ahead for an operator holding only sale.void, on an invoice it credits", async () => {
+    const operator = await fixture.cookieOfPersonHolding(cv, "sale.void");
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
+    await creditPartly((await invoiceOf(id)).id);
+    watchDerivations(SUPERVISOR_PIN, anotherWriter, anotherWriter, anotherWriter);
+
+    const answer = await cancelWithSupervisor(id, operator);
+
+    // The credit is refused after the PIN check: the invoice has already been partly credited.
+    expect({ status: answer.status, code: answer.json.code }).toEqual({
+      status: 409,
+      code: "sale.correction_exceeds_total",
+    });
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+  });
 
   it("cancels the receipt while another writer commits during the PIN check, deriving the key once", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);

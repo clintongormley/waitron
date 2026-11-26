@@ -34,6 +34,7 @@ import { PRODUCER_PENDING, SOFTWARE_IDENTITY } from "./software-identity.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedTaxpayerWithSif } from "../test/fixtures.js";
+import { seedFixtureSif } from "../test/sif-fixture.js";
 import { refusedByAeat, saleInput, steadyClock } from "../test/write-path-fixtures.js";
 
 let backend: VerifactuBackend;
@@ -423,6 +424,40 @@ describe("recordVoid", () => {
       expect(ref.state).toBe("pending");
     },
   );
+
+  /** Opens a new installation on this same box, as a producer change does. */
+  async function openNewInstallation() {
+    await withTransaction(suite.db, async (tx) => {
+      const { nif, idSistemaInformatico } = await currentSif(tx, nodeId);
+      await seedFixtureSif(tx, { nodeId, nif, idSistemaInformatico });
+    });
+  }
+
+  it.each(["pendiente", "enviando", "retenido", "detenido"])(
+    "refuses this box's receipt from an earlier installation AEAT has not answered (%s), writing nothing",
+    async (estado) => {
+      const { saleId } = await sell();
+      await answer(saleId, estado);
+      await openNewInstallation();
+      const before = written();
+
+      await expect(
+        withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", nodeId)),
+      ).rejects.toMatchObject({ code: "fiscal.original_unanswered", params: { saleId } });
+      expect(written()).toEqual(before);
+    },
+  );
+
+  it("cancels this box's receipt from an earlier installation once AEAT has answered it", async () => {
+    const { saleId } = await sell();
+    await answer(saleId, "aceptado");
+    await openNewInstallation();
+
+    const ref = await withTransaction(suite.db, (tx) =>
+      backend.recordVoid(tx, saleId, "staff error", nodeId),
+    );
+    expect(ref.state).toBe("pending");
+  });
 
   it.each(["pendiente", "enviando", "retenido", "detenido"])(
     "cancels this box's own receipt AEAT has not answered (%s)",

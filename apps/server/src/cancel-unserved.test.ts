@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import { recordReplacement } from "@waitron/core";
 import { createExtraList, writeProductModifiers } from "@waitron/menu";
-import { verifactuRecords, verifactuSubmissions } from "@waitron/fiscal-verifactu";
+import { filedRecordsOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
@@ -167,17 +167,6 @@ function voidsOf(saleId: string) {
   );
 }
 
-function recordsOf(saleId: string) {
-  return inTx(venue, (tx) =>
-    tx
-      .select({ tipo: verifactuRecords.tipoRegistro, estado: verifactuSubmissions.estado })
-      .from(verifactuRecords)
-      .leftJoin(verifactuSubmissions, eq(verifactuSubmissions.registroId, verifactuRecords.id))
-      .where(eq(verifactuRecords.saleId, saleId))
-      .orderBy(verifactuRecords.secuencia),
-  );
-}
-
 /** Everything a cancel writes: the cancellation, any corrective, records and amendments. */
 function written() {
   return venue.db.all(sql`
@@ -212,9 +201,9 @@ describe("Cancel and credit on a printed bill nothing was served on and nobody p
 
     expect(answer).toEqual({ status: 200, json: { body: "" } });
     expect(await voidsOf(saleId)).toEqual([{ reason: REASON, voidedBy: venue.supervisorId }]);
-    expect(await recordsOf(saleId)).toEqual([
-      { tipo: "alta", estado: "pendiente" },
-      { tipo: "anulacion", estado: "pendiente" },
+    expect(await filedRecordsOf(venue.db, saleId)).toEqual([
+      { kind: "invoice", state: "pendiente" },
+      { kind: "cancellation", state: "pendiente" },
     ]);
     expect(await fixture.creditsOf(venue, saleId)).toEqual([]);
     expect(await statusOf(venue, party.tabId)).toBe("abandoned");

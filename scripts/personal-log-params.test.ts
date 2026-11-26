@@ -62,6 +62,7 @@ const REVIEWED_TYPES: ReadonlyMap<string, string> = new Map([
   ["ProductUsingUnit", "a product's id, name and whether it is active; the name of a thing"],
   ["Readonly", "TypeScript's own; holds what its argument names, which the guard reads"],
   ["Record", "TypeScript's own; holds what its arguments name, which the guard reads"],
+  ["ServedBillDish", "a dish's line id, its name and the quantity served or charged"],
   ["ThemeNameRefusal", "an enum: empty, too_long or reserved"],
   ["ThemeRefusalReason", "an enum of why a theme document is refused"],
   ["UnservedBillDish", "a dish's line id, its name, quantity and whether the kitchen has it"],

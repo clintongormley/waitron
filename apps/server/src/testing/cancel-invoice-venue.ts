@@ -4,6 +4,8 @@ import { expect } from "vitest";
 import {
   invoiceSeries,
   nextInvoiceNumberOf,
+  personRoles,
+  roles,
   saleLines,
   sales,
   workingOrders,
@@ -16,7 +18,6 @@ import {
   units,
   writeProductModifiers,
 } from "@waitron/menu";
-import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { removeBuiltInPermissionForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
 import { decimal, deviceId as brandDeviceId, negateDecimal } from "@waitron/shared";
@@ -35,7 +36,7 @@ export interface CancelInvoiceVenue {
   /** Menu-item id of each product by its staff name, offered in the invoice-first counter zone. */
   offerOf: (name: string) => string;
   productIdOf: (name: string) => string;
-  /** Café's extras list, offering Leche at 0.50. */
+  /** Coffee's extras list, offering Leche at 0.50. */
   extraListId: string;
   portionListId: string;
   supervisorId: string;
@@ -64,13 +65,13 @@ export async function provisionCancelInvoiceVenue(db: Database): Promise<CancelI
       .returning({ id: units.id });
     const [category] = db.all<{ id: string }>(sql`select id from categories where name = 'Platos'`);
     // Taken away at 21%, 0.55 is invoiced 0.45 + 0.10 by the menu's gross arithmetic and 2.10 is
-    // 1.74 + 0.36, while those bases taxed at 21% are 0.09 and 0.37; Café with two 0.50 extras at
+    // 1.74 + 0.36, while those bases taxed at 21% are 0.09 and 0.37; Coffee with two 0.50 extras at
     // 10% matches both ways.
     const created = new Map<string, string>();
     for (const [name, price, vatClass, takeawayVatRate] of [
       ["Mosto", "0.55", "general", "21.00"],
       ["Zumo", "2.10", "general", "21.00"],
-      ["Café", "3.00", "reduced", "10.00"],
+      ["Coffee", "3.00", "reduced", "10.00"],
       ["Leche", "1.00", "reduced", "10.00"],
     ] as const) {
       const product = await createProduct(tx, {
@@ -88,7 +89,7 @@ export async function provisionCancelInvoiceVenue(db: Database): Promise<CancelI
     const extras = await createExtraList(
       tx,
       {
-        name: "Añadidos",
+        name: "Extras",
         customerName: null,
         kitchenName: null,
         minPicks: 0,
@@ -103,7 +104,7 @@ export async function provisionCancelInvoiceVenue(db: Database): Promise<CancelI
     extraListId = extras.id;
     const ham = await createProduct(tx, {
       categoryId: category!.id,
-      name: "Jamón",
+      name: "Ham",
       unitId: kg!.id,
       unitPrice: "0.27",
       vatClass: "general",
@@ -131,7 +132,7 @@ export async function provisionCancelInvoiceVenue(db: Database): Promise<CancelI
       venue.cfg.locale,
     );
     portionListId = portions.id;
-    await writeProductModifiers(tx, created.get("Café")!, [{ kind: "extras", id: extras.id }]);
+    await writeProductModifiers(tx, created.get("Coffee")!, [{ kind: "extras", id: extras.id }]);
     const [beer] = db.all<{ id: string }>(sql`select id from products where name = 'Small beer'`);
     await setTakeawayVatRate(tx, beer!.id, "21.00");
     await writeProductModifiers(tx, created.get("Mosto")!, [{ kind: "extras", id: portions.id }]);
@@ -172,6 +173,26 @@ export async function provisionCancelInvoiceVenue(db: Database): Promise<CancelI
     supervisorCookie: [`${SESSION_COOKIE}=${session.token}`, ...device].join("; "),
     supervisorSessionId: session.id,
   };
+}
+
+/** A till session cookie, on the first till's device, for a new person whose only role grants
+ * `permission`. */
+export async function cookieOfPersonHolding(v: CancelInvoiceVenue, permission: string) {
+  const { venue } = v;
+  const pin = "2468";
+  const name = `Only ${permission} ${randomUUID()}`;
+  const session = await inTx(venue, async (tx) => {
+    const [person] = await seedPersons(tx, { displayName: name, pinHash: hashPin(pin) });
+    const [role] = await tx
+      .insert(roles)
+      .values({ name, nameFolded: name.toLowerCase(), permissions: [permission] })
+      .returning({ id: roles.id });
+    await tx.delete(personRoles).where(eq(personRoles.personId, person!.id));
+    await tx.insert(personRoles).values({ personId: person!.id, roleId: role!.id });
+    return loginWithPin(tx, { deviceId: venue.deviceId, personId: person!.id, pin });
+  });
+  const [, ...device] = venue.cookie.split("; ");
+  return [`${SESSION_COOKIE}=${session.token}`, ...device].join("; ");
 }
 
 /** Park and place through the routes, optionally seeding an issued invoice between them. */
@@ -225,20 +246,6 @@ export async function invoiceOf(venue: BillVenue, billId: string) {
 
 export function creditsOf(venue: BillVenue, saleId: string) {
   return inTx(venue, (tx) => tx.select().from(sales).where(eq(sales.correctsSaleId, saleId)));
-}
-
-export async function fiscalRecordOf(venue: BillVenue, saleId: string) {
-  const [row] = await inTx(venue, (tx) =>
-    tx.select().from(verifactuRecords).where(eq(verifactuRecords.saleId, saleId)),
-  );
-  return row as typeof row & {
-    desglose: {
-      BaseImponibleOimporteNoSujeto: string;
-      TipoImpositivo: string;
-      CuotaRepercutida: string;
-    }[];
-    facturasRectificadas: { IDFacturaRectificada: Record<string, string>[] } | null;
-  };
 }
 
 export async function linesOf(venue: BillVenue, saleId: string) {
