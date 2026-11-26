@@ -210,7 +210,7 @@ it("a key change the box could not confirm was still written: says so, reads aga
   await expect
     .poll(() => words(el.shadowRoot!.querySelector("[data-test=done]")))
     .toBe(
-      "Backup key 4 is saved, but the box could not confirm that backups use it. Reload the page, and stop changing backup settings here if this happens again: this page cannot tell which key is right.",
+      "Backup key 4 is saved, but the box could not confirm that backups use it. Reload the page. If this comes back, stop changing backup settings here.",
     );
   expect(words(el.shadowRoot!.querySelector("[data-test=done]"))).not.toContain("Backups now use");
   expect(api.liveData.invalidate).toHaveBeenCalledWith([{ type: "backup_status" }]);
