@@ -4259,22 +4259,15 @@ Tests: `apps/dashboard/src/dashboard-app.disk-stop.test.ts` and
 
 ### Dashboard sidebar navigation
 
-A sidebar nav row is a `.nav-item` — a plain flat `<button>`, not `wt-button`. `wt-button`'s own
-box (border, background, bold text) is right for a page action, but a sidebar lists ~20 of them;
-stacking that many buttons reads as a wall of buttons, not navigation. A resting row is
-`--wt-color-text-muted`, not full-strength text — at equal weight and colour, ~20 items compete
-with the group headers above them and bury the current page's accent in a crowd of equally dark
-siblings. The selected item carries `aria-current="page"` and is styled from that attribute: an
-accent-coloured leading edge plus bold, full-strength coloured text, no background fill — the same
-idiom `wt-tabs` already uses for its selected tab (`border-bottom-color` there,
-`border-inline-start-color` here), not a new one — and it is now the one loud thing in an otherwise
-calm list. Hovering a row moves it to full-strength text plus a `--wt-color-surface` background —
-visible here because the sidebar itself sits on `--wt-color-bg`, unlike `wt-button`'s own secondary
-variant, whose hover changes its border. A `.nav-group` header takes a small-caps treatment
-(uppercase, `letter-spacing: 0.04em`) so it reads as a label, not a fainter link. The headers' text
-and the selected item's text read `--wt-color-primary-text`, and the selected item's leading edge
-reads `--wt-color-primary`: `--wt-color-primary` measured 4.32:1 as text on the light
-`--wt-color-bg` the sidebar sits on (A306).
+A sidebar page uses a flat `.nav-item` button. Resting pages use regular `--wt-font-size-md` text in
+`--wt-color-text-muted`. Hover uses `--wt-color-text` on `--wt-color-surface`. The current page
+has `aria-current="page"`, a `--wt-color-primary` leading edge and bold `--wt-color-primary-text`
+text. The line and weight make the current page identifiable by more than colour.
+
+Section headings and folded panel titles use sentence case, normal letter spacing, 14 px
+`--wt-font-size-md` and weight 600 (`--wt-font-weight-bold`) in `--wt-color-text`. Each heading has
+`--wt-space-2` above it. Indent pages in a headed section to start under the heading's text.
+Unheaded staff pages and folded panel pages use the regular row padding.
 
 Overview and Bookings sit at the top as direct rows with their own icons and a line underneath.
 Each headed section combines its core and module pages in ascending order of their declared
@@ -4377,13 +4370,15 @@ keyed by page, so at desktop width a page row pressed with Enter or Space keeps 
 full list comes back. A language switch keeps the term and searches the new
 language's labels, and signing out empties the box.
 
-A header's text starts at the same leading edge as its page labels; its section's icon
-(`icon` on every `NAV_GROUPS` entry, small size) occupies the gutter before it, a `--wt-space-1`
-gap from the label. Every sidebar icon, here and in the folded strip, draws in `--wt-color-text`,
-never the headers' primary colour (owner, 2026-10-15, A654). The strip's buttons explicitly keep
-that text colour in their resting and expanded states. The trailing chevron uses `--wt-space-4` (16px), reserves its
-space while hidden, and centres on the label's first line. It appears under hover or keyboard
-focus, and stays visible on devices without hover. Search labels reserve that same trailing space.
+Section headings, Overview and Bookings each use an 18 px Material Symbols Outlined icon inside
+the row, with `--wt-space-3` between the icon and the label. The folded strip uses 20 px icons in
+44 px buttons. These icons use `--wt-color-text-muted` at rest and `--wt-color-text` on hover or
+when their section contains the current page. This revises the icon placement and resting colour
+from [A654](../backlog/dashboard.md#decisions-and-deliberate-limits).
+
+The disclosure chevron is always visible in `--wt-color-text-muted`. It uses `--wt-space-4` (16 px)
+and centres on the label's first line, with `--wt-space-1` between the label box and the chevron.
+Search labels reserve the same trailing space.
 The sidebar is 34ch wide, capped at 85vw in the phone drawer, with a border and `--wt-shadow-1`.
 
 **Folding to a strip of icons (A654).** Wider than the drawer breakpoint, the banner's menu
@@ -4394,9 +4389,8 @@ sidebar. The choice is kept in this browser's `localStorage`
 opens folded and any other opens unfolded, read once when the app starts. The strip holds a
 magnifier first (not for staff), which unfolds the sidebar, keeps that choice and puts the cursor in
 the search box; then direct buttons for the pinned pages and one button per headed section the session can
-open. The shared icon tooltip appears beside each button. The section holding the
-current page is marked by the highlight alone: a `--wt-color-primary` leading edge and a
-`--wt-color-surface-lifted` fill, the icon staying uncoloured. A section with one page opens it. A
+open. The shared icon tooltip appears beside each button. The section holding the current page
+has a `--wt-color-primary` leading edge and a `--wt-color-surface-lifted` fill. A section with one page opens it. A
 section with more opens a panel beside its icon, listing the section's name and its pages, and
 placed before its first paint, lifted to stay inside the layout when the icon is low; picking a page
 opens it and closes the panel, and the strip stays folded. Escape closes the panel and returns focus
@@ -4785,7 +4779,7 @@ the normal, expected treatment there.
 | Role        | Token(s)                                    | Example                                                                                                                                                                                                                     |
 | ----------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Page title  | `--wt-font-size-xl`, bold                   | a screen's own `<h1>` — "Your profile" no longer qualifies: it's a `wt-modal` heading now (`--wt-font-size-lg`, its own role, not this one)                                                                                 |
-| Group label | `--wt-font-size-sm`, bold, uppercase, muted | a form's `.group-label`: the product editor's groups of fields are each a `fieldset` whose `legend` carries it (`apps/dashboard/src/widgets/product-editor.ts`); the nav's own small-caps group header is styled separately (primary-accent, not muted — see "Dashboard sidebar navigation" below)                 |
+| Group label | `--wt-font-size-sm`, bold, uppercase, muted | A form's `.group-label`, such as the `legend` of each fieldset in the product editor (`apps/dashboard/src/widgets/product-editor.ts`). Section headings follow [Dashboard sidebar navigation](#dashboard-sidebar-navigation). |
 | Field label | `--wt-font-size-sm`, normal weight, muted   | "Name"                                                                                                                                                                                                                      |
 | Field value | `--wt-font-size-md`, bold                   | "Clinton Gormley"                                                                                                                                                                                                           |
 

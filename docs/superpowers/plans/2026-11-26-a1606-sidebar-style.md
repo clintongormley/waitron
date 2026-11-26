@@ -9,8 +9,9 @@ on top of #4428. PR 3 owns the banner, account menu and shared help, theme and l
    update the expected glyphs and extend the mounted checks to cover an 18 px in-row icon and 12 px
    gap, muted at rest and full text colour on hover and on the current section. Close the current
    section and check its icon retains that colour. Check headings and the folded-panel title use
-   full text colour and sentence case. Check 20 px icons inside 44 px folded buttons and regular
-   page padding in the folded panel. Keep its keyboard and both theme axe checks.
+   full text colour, sentence case and normal letter spacing. Check 20 px icons inside 44 px folded
+   buttons, muted at rest and full text colour on the current section. Check regular page padding
+   in the folded panel. Keep its keyboard and both theme axe checks.
    In `apps/dashboard/src/dashboard-app.test.ts`, keep the first-line chevron alignment, narrow
    wrapping and keyboard focus checks, expect the arrow to be visible at rest, and replace the
    old left offset with matching label starts. Update the System glyph check and keep the single
@@ -19,14 +20,17 @@ on top of #4428. PR 3 owns the banner, account menu and shared help, theme and l
    `dashboard-app.a11y.test.ts` through `pnpm --filter @waitron/dashboard exec vitest run`.
 2. In `apps/dashboard/src/dashboard-app.ts`, keep the existing rows, disclosures and strip panel.
    Give the existing Overview and Bookings rows and section headings `wt-icon` size `lg` (18 px)
-   and a `--wt-space-3` gap to the label. Keep the divider and the chevron's first-line position.
+   and a `--wt-space-3` gap to the label. Put the spacing on the icon so the label-to-chevron gap
+   stays `--wt-space-1`. Keep the divider and the chevron's first-line position.
    Use `--wt-color-text`, `--wt-font-size-md`, `--wt-font-weight-bold` (600) and sentence case for
-   headings and the folded panel title. Set section spacing to `--wt-space-2`. Show the muted chevron
+   headings and the folded panel title, with normal letter spacing. Set section spacing to
+   `--wt-space-2`. Show the muted chevron
    on every toggle and keep the search heading spacer. Scope indentation to headed lists so their
    text starts under the heading. Keep regular page padding in the folded panel and in the unheaded
    My schedule and Orders links for staff. Size strip icons with `--wt-space-4` plus `--wt-space-1`.
-   Set the icon hosts to `--wt-color-text-muted` at rest and `--wt-color-text` on hover and in the
-   current section. Use `#isCurrentNavPage` on the section's permitted rows before search filtering.
+   Use `--wt-color-text-muted` at rest and `--wt-color-text` on hover and in the current section
+   for heading icons, Overview and Bookings row icons and the folded strip's buttons. Use
+   `#isCurrentNavPage` on the section's permitted rows before search filtering.
    Keep `aria-current="page"`, the current page's teal line and bold text, the strip's current marker,
    and 44 px touch and 32 px fine-pointer rows.
 3. In `apps/dashboard/src/icons.ts`, use Google's Material Symbols Outlined weight 400 paths on the
