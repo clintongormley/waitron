@@ -1,4 +1,4 @@
-# O1a and O1b. The venue's other card machines, kept on the dashboard · PLAN FOR APPROVAL
+# O1a and O1b. The venue's other card machines, kept on the dashboard
 
 Part of [lane O's payment plan](2026-11-26-o-till-payment-after-pay.md). What a manager can do once
 both land: on the dashboard's card readers page, add, rename and remove the venue's other card
@@ -32,9 +32,9 @@ hours each. Its precedent is #4088, which added the tips switch the same way.
 3. **Both choices are always accepted.** A machine can say "SumUp account" while SumUp is not
    connected (after a disconnect, or from an imported configuration); O13 then records "other", as
    the till does today (`apps/till/src/widgets/outside-card.ts:18-30`).
-4. **The till learns the list from its start read**: `readTillSetup` answers `otherCardMachines`
-   beside `sumUpConnected` (`apps/server/src/till-setup.ts:120-145`). Its revision is a hash of the
-   whole answer, so a change reaches open tills by the existing refresh; no new till route.
+4. **No till read yet.** The watcher's clearance (21:47) moves the till's read of the list to O13,
+   where the screen that reads it is built. The natural place is the till's start read,
+   `readTillSetup`, beside `sumUpConnected` (`apps/server/src/till-setup.ts:120-145`).
 5. **The configuration export carries the list** (`transfers`, beside `tipsEnabled`), so the
    export format moves from 61 to 62 (`packages/provisioning/src/configuration-transfer.ts:587-590`), and every pin of 61 moves with it, as #4088 did for 56 to 57. An export in format 61 is then
    refused as out of date (`setup.configuration_outdated`, `:590`), as every format change before
@@ -43,8 +43,7 @@ hours each. Its precedent is #4088, which added the tips switch the same way.
 Tests first: `packages/payments/src/settings.test.ts` (each refusal, the empty default, a stored
 document without the key reading as an empty list); `apps/server/src/payments-api.test.ts` (GET and
 PUT, other keys kept, a stale counter refused, someone without `hardware.manage` refused, each field
-refusal naming its row, ids given on the server); `apps/server/src/till-api.setup-revision.test.ts`
-(a changed list changes the till's revision); the configuration transfer suites (the list travels). About 150 lines of product code and 250 of tests.
+refusal naming its row, ids given on the server); the configuration transfer suites (the list travels). About 150 lines of product code and 250 of tests.
 
 ## O1b. The list on the dashboard
 
