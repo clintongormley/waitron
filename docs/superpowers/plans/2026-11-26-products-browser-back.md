@@ -25,7 +25,7 @@ Menu Structure 2(c) already landed in #4357 and keeps its own editor flow.
   an owned step. Replace the address and clear the photo field when closing a link or after reload.
 - In `apps/dashboard/src/widgets/product-editor-dialog.ts`, let Products distinguish a list or
   nested open from one driven by the address. Keep the saved draft committed before leaving.
-  On a completed close, update the screen's address tracking before navigation. When the list
+  On a completed close, clear the pending linked editor. Let accepted Back update the address. When the list
   address arrives, close only an open or loading editor, so it cannot invalidate a completed save's
   row reveal or Add to menus step. Keep the dialog's existing Cancel without a question.
 - Update `apps/server/src/guide/{en,es}/products.md` for Back and the return from a nested variant.

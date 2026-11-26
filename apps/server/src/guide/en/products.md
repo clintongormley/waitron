@@ -9,8 +9,7 @@ and enter its price.
 
 When you open an editor from the Products list, use your browser’s **Back** button to return to
 the list. If you’ve made changes, choose **Keep editing** or **Discard changes**. When you open a
-variant from its product, **Back** returns to the product. **Save** and **Cancel** take you there
-too if you haven’t reloaded the page.
+variant from its product, **Back** returns to the product.
 
 The editor holds three cards. The first holds Name with its photo, **Category**, and **Available**.
 The third holds the price, the variants and the modifiers. Between them, **Details** holds the rest:

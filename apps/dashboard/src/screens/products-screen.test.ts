@@ -3621,18 +3621,26 @@ describe("menu-screen", () => {
         await expect.poll(() => editor(el).value?.id).toBe("v1");
         expect(location.pathname).toBe("/products/product/v1");
         expect(location.search).toBe("");
-        expect(vi.mocked(api.getProductEditor).mock.calls).toEqual([["p1"], ["v1"]]);
         history.back();
         await expect.poll(() => editor(el).value?.id).toBe("p1");
         expect(location.search).toBe("?field=image");
         history.forward();
         await expect.poll(() => editor(el).value?.id).toBe("v1");
-        if (action === "save") emit(editor(el), "wt-submit", { value: variantValue });
-        else emit(editor(el), "wt-cancel", {});
+        if (action === "save") {
+          emit(editor(el), "wt-submit", { value: variantValue });
+          expect(api.updateProductEditor).toHaveBeenCalledWith("v1", expect.any(Object));
+        } else emit(editor(el), "wt-cancel", {});
         await expect.poll(() => editor(el).value?.id).toBe("p1");
         emit(editor(el), "wt-cancel", {});
         await expect.poll(() => location.pathname).toBe("/products");
         await expect.poll(() => editor(el).open).toBe(false);
+        expect(vi.mocked(api.getProductEditor).mock.calls).toEqual([
+          ["p1"],
+          ["v1"],
+          ["p1"],
+          ["v1"],
+          ["p1"],
+        ]);
       },
     );
 
