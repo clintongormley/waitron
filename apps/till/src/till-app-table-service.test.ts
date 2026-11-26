@@ -2020,8 +2020,9 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     refuse({ code: "ticket.already_started", stationName: "Grill" });
     await flush(el);
 
-    expect(banner(el)!.textContent).toContain("Grill");
-    expect(banner(el)!.textContent).toContain(t("table.void_line"));
+    expect(banner(el)!.textContent!.trim()).toBe(
+      fill(t("table.change_dish_started_void_named"), { dish: "Burger", name: "Grill" }),
+    );
     expect(tableOrder(el)!.changeRefusal).toBeNull();
   });
 
@@ -2199,14 +2200,21 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       return { el, settle, reads: vi.mocked(api.getTabLines).mock.calls.length };
     }
 
-    it("says the change to the old table's line was refused, and touches nothing on the new table", async () => {
+    it("names the station when a change is refused after the waiter opens another table", async () => {
       const { el, settle, reads } = await changeThenOpenTable3();
 
-      settle.reject({ code: "ticket.already_started" });
+      settle.reject({ code: "ticket.already_started", stationName: "Grill" });
       await flush(el);
 
-      expect(banner(el)!.textContent).toContain(
-        "Tu cambio en Burger de la mesa 2 no se ha guardado. Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
+      expect(banner(el)!.textContent!.trim()).toBe(
+        fill(t("table.change_not_saved"), {
+          line: "Burger",
+          table: "2",
+          reason: fill(t("table.change_dish_started_void_named"), {
+            dish: "Burger",
+            name: "Grill",
+          }),
+        }),
       );
       expect(banner(el)!.textContent).not.toContain("Tarta");
       await flush(el);

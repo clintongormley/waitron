@@ -2647,13 +2647,21 @@ describe("till-app: a counter save refused for a dish already sent", () => {
   it.each([
     ["Send", "place-order", {}, "placeOrder"],
     ["Pay in cash", "confirm-payment", { method: "cash", amount: "10" }, "recordSale"],
+    [
+      "Pay in cash (station named)",
+      "confirm-payment",
+      { method: "cash", amount: "10" },
+      "recordSale",
+      "Grill",
+    ],
     ["Pay by card", "collect-card", {}, "pay"],
     ["Pay the rest", "counter-bill-pay", {}, "getBillBalance"],
   ] as const)(
-    "a %s refused because a dish was served loads the order again and says so, going no further",
-    async (_, event, detail, next) => {
+    "a refused %s loads the order again and explains why it cannot go further",
+    async (_, event, detail, next, stationName) => {
       const combined = next === "recordSale" || next === "pay";
-      const refuse = vi.fn().mockRejectedValue({ code: "ticket.already_served", status: 409 });
+      const code = stationName === undefined ? "ticket.already_served" : "ticket.already_started";
+      const refuse = vi.fn().mockRejectedValue({ code, status: 409, stationName });
       const onward = vi.fn();
       const el = await (event === "place-order" ? placeCounter : retrieved)({
         ...sentMeanwhile(),
@@ -2669,7 +2677,11 @@ describe("till-app: a counter save refused for a dish already sent", () => {
       expect(onward).not.toHaveBeenCalled();
       expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
       expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
-      expect(banner(el)!.textContent!.trim()).toBe(t(words["ticket.already_served"]));
+      expect(banner(el)!.textContent!.trim()).toBe(
+        stationName === undefined
+          ? t(words[code])
+          : t("held.sent_dish_started_named").replace("{name}", stationName),
+      );
       expect(counter(el).store.dirty).toBe(false);
       expect(inBasket(el, '[data-cancel-line="1"]')).not.toBeNull();
     },
