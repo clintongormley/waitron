@@ -36,7 +36,7 @@ import {
   type BillRead,
 } from "./working-order-counter.js";
 import { createOpenOrder } from "./working-order-open.js";
-import { servedOrCharged } from "./served-dishes.js";
+import { handedOver, servedOrCharged } from "./served-dishes.js";
 import { readInvoiceNumber } from "./stored-order-lines.js";
 import { removeFromLine } from "./working-order-removal.js";
 import { type TillSaleDeps } from "./working-order-context.js";
@@ -160,8 +160,11 @@ async function refuseUnservedDishes(
   const dishes = await unservedDishes(tx, id);
   if (dishes.length === 0) return dishes;
   // Not offered on a bill holding a payment: stopping dishes could leave the reopened bill owing
-  // less than it has received.
-  const canStop = (await servedOrCharged(tx, id)).length > 0 && !(await holdsPayment(tx, id));
+  // less than it has received. Nor on one handed over, whose dishes the customer took.
+  const canStop =
+    (await servedOrCharged(tx, id)).length > 0 &&
+    !(await handedOver(tx, id)) &&
+    !(await holdsPayment(tx, id));
   if (!stopUnserved || !canStop)
     throw new AppError("bill.unserved_dishes", { workingOrderId: id, dishes, canStop });
   return dishes;

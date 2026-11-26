@@ -1,13 +1,13 @@
+import "./errors.js";
 import { prepareIssueClock } from "@waitron/fiscal";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { eq } from "drizzle-orm";
-import { readLiveSeriesIdTx, saleLines, sales } from "@waitron/db";
+import { readLiveSeriesIdTx, saleLines, saleSubstitutions, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { correctionTargetFor, recordCorrection, recordVoid, settleSale } from "@waitron/core";
+import { correctionTargetFor, recordCorrection, settleSale } from "@waitron/core";
 import type { RecordCorrectionInput, RecordSaleLine } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import type { AuthzInput } from "@waitron/identity";
 import {
   basisPointsToDecimal,
   centsToDecimal,
@@ -41,7 +41,8 @@ export async function readOrderInvoice(
 /**
  * What a cancel files for the bill's invoice, by the permission it needs: a cancellation
  * (`sale.void`) when the bill never held a payment (one given back counts), the invoice has no
- * corrective or replacement and names no customer; otherwise a corrective (`sale.rectify`).
+ * corrective, replacement or full invoice in its place and names no customer; otherwise a
+ * corrective (`sale.rectify`).
  */
 export async function cancelPermission(
   tx: Transaction,
@@ -59,26 +60,24 @@ export async function cancelPermission(
     .from(sales)
     .where(eq(sales.correctsSaleId, invoice.id))
     .limit(1);
-  return corrective === undefined ? "sale.void" : "sale.rectify";
+  return corrective === undefined && !(await substituted(tx, invoice.id))
+    ? "sale.void"
+    : "sale.rectify";
 }
 
-/**
- * Cancel an issued invoice nothing on its bill was served against, else `bill.served_dishes`.
- * `recordVoid` checks `authz` and counts nothing, as `recordCorrection` does for
- * {@link creditWholeInvoice}.
- */
-export async function voidUnservedInvoice(
-  tx: Transaction,
-  deps: { backend: FiscalBackend },
-  cfg: DeviceRequestConfig,
-  workingOrderId: string,
-  invoice: IssuedInvoice,
-  reason: string,
-  authz: AuthzInput,
-): Promise<void> {
+/** Whether a full invoice took the receipt's place. */
+async function substituted(tx: Transaction, saleId: SaleId): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: saleSubstitutions.id })
+    .from(saleSubstitutions)
+    .where(eq(saleSubstitutions.substitutedSaleId, saleId));
+  return row !== undefined;
+}
+
+/** Refuses `bill.served_dishes` while {@link servedOrCharged} names any of the bill's rows. */
+export async function refuseServedDishes(tx: Transaction, workingOrderId: string): Promise<void> {
   const dishes = await servedOrCharged(tx, workingOrderId);
   if (dishes.length > 0) throw new AppError("bill.served_dishes", { workingOrderId, dishes });
-  await recordVoid(tx, deps.backend, invoice.id, reason, authz, cfg.nodeId);
 }
 
 /**
@@ -96,6 +95,9 @@ export async function creditWholeInvoice(
   authz: RecordCorrectionInput["authz"],
 ): Promise<SaleId> {
   await requireEconomicWrite(tx, cfg, deps.admission);
+  // `recordCorrection` does not look for a full invoice in the receipt's place, as a replacement does.
+  if (await substituted(tx, invoice.id))
+    throw new AppError("sale.correction_not_admitted", { reason: "replaced" });
   const clock = await prepareIssueClock(tx, cfg, deps.clock);
   const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "corrective"));
   const total = centsToDecimal(-invoice.total);

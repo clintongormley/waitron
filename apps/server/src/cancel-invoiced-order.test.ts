@@ -45,6 +45,22 @@ vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
 );
 
+/** Run once, after the PIN is checked ahead and before the cancel's transaction opens. */
+const beforeTransaction = vi.hoisted(() => ({
+  run: undefined as (() => Promise<void>) | undefined,
+}));
+vi.mock("./pin-check-ahead.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./pin-check-ahead.js")>();
+  return {
+    ...original,
+    withPinCheckAhead: ((db, credential, attempts, transaction) =>
+      original.withPinCheckAhead(db, credential, attempts, async (checked) => {
+        await beforeTransaction.run?.();
+        return transaction(checked);
+      })) satisfies typeof original.withPinCheckAhead,
+  };
+});
+
 // Cancelling a placed order whose invoice was issued cancels it (`sale.void`) when nothing was
 // served and nothing paid, and otherwise credits it whole (an R5 corrective invoice), in the
 // cancel's one transaction. Driven over HTTP against a venue that files real Veri*Factu records.
@@ -864,7 +880,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     ]);
   });
 
-  it("an override sent by someone who holds sale.rectify is never checked, so it neither counts nor clears", async () => {
+  it("an override sent by someone who holds sale.rectify neither counts nor clears", async () => {
     const { app } = throttledApp();
     const byStaff = (pin: string) => cancelWith({ personId: supervisorId, pin }, venue.cookie, app);
     const bySupervisor = (pin: string) =>
@@ -934,6 +950,29 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
     expect(await watchedOrder()).toEqual(["writer", "derived"]);
   });
 
+  it("checks the PIN ahead for an operator holding only sale.void, when a corrective arrives before the cancel's transaction", async () => {
+    const operator = await fixture.cookieOfPersonHolding(cv, "sale.void");
+    const id = await placed([{ name: "Small beer", quantity: "1" }]);
+    const original = await invoiceOf(id);
+    let credited = false;
+    beforeTransaction.run = async () => {
+      beforeTransaction.run = undefined;
+      await creditPartly(original.id);
+      credited = true;
+    };
+    watchDerivations(SUPERVISOR_PIN, anotherWriter, anotherWriter, anotherWriter);
+
+    const answer = await cancelWithSupervisor(id, operator);
+
+    expect(credited).toBe(true);
+    expect({ status: answer.status, code: answer.json.code }).toEqual({
+      status: 409,
+      code: "sale.correction_exceeds_total",
+    });
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await voidsOf(original.id)).toEqual([]);
+  });
+
   it("cancels the receipt while another writer commits during the PIN check, deriving the key once", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
@@ -964,7 +1003,7 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
   });
 });
 
-describe("who may approve a cancel and credit (GET /api/cancel-credit-authorizers)", () => {
+describe("who may approve cancelling an invoiced bill (GET /api/cancel-credit-authorizers)", () => {
   it("lists the active holders of sale.rectify, and no one else, by id and name only", async () => {
     const [suspended] = await inTx(venue, (tx) =>
       seedPersons(tx, {

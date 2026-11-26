@@ -1,5 +1,5 @@
 import "./errors.js";
-import { withIssuanceTransaction } from "@waitron/core";
+import { recordVoid, withIssuanceTransaction } from "@waitron/core";
 import {
   withTransaction,
   workingOrders,
@@ -22,7 +22,7 @@ import {
   cancelPermission,
   creditWholeInvoice,
   readOrderInvoice,
-  voidUnservedInvoice,
+  refuseServedDishes,
   type IssuedInvoice as OrderInvoice,
 } from "./cancel-credit.js";
 import { readFormerNumbers } from "./former-numbers.js";
@@ -39,7 +39,7 @@ import {
   bumpPartyRevision,
   readDeferredBillIds,
 } from "./parties.js";
-import { overrideToCheck, withPinCheckAhead, withCheck } from "./pin-check-ahead.js";
+import { withPinCheckAhead, withCheck } from "./pin-check-ahead.js";
 import { enqueueCollectionTicket } from "./receipt-print.js";
 import { readIssuedSales } from "./sale-due.js";
 import { stillMovable } from "./station-move.js";
@@ -194,13 +194,14 @@ export async function cancelPlacedOrder(
     withIssuanceTransaction(deps.db, async (tx) => {
       const authz = { sessionId: operator.sessionId, override: checkedOverride };
       const { partyId, invoice } = await lockPlacedOrder(tx, deps, cfg, id);
-      // Read again here: a payment or corrective may have arrived since the PIN check's read.
       const permission = invoice && (await cancelPermission(tx, id, invoice));
       if (permission !== undefined)
         await authorize(tx, { ...authz, permission }, operator.attempts);
       await refusePlacedOrderMoney(tx, id);
+      if (invoice !== undefined) await refuseServedDishes(tx, id);
+      // `recordVoid` and `recordCorrection` check `authz` and count nothing.
       if (permission === "sale.void") {
-        await voidUnservedInvoice(tx, deps, cfg, id, invoice!, reason, authz);
+        await recordVoid(tx, deps.backend, invoice!.id, reason, authz, cfg.nodeId);
       } else if (invoice !== undefined) {
         await creditWholeInvoice(tx, deps, cfg, invoice, authz);
       }
@@ -216,28 +217,18 @@ export async function cancelPlacedOrder(
 }
 /**
  * Runs `transaction` with the override it should check, its PIN checked ahead when the order has an
- * invoice to cancel or credit, under the permission {@link cancelPermission} reads now
- * ({@link withPinCheckAhead}).
+ * invoice to cancel or credit ({@link withPinCheckAhead}), whatever the operator holds: the
+ * permission the cancel needs is read in the transaction, which a payment or corrective arriving
+ * first can change.
  */
 export async function withCancelPinAhead<T>(
   deps: Pick<TillSaleDeps, "db">,
   id: string,
-  operator: { sessionId: string; attempts: PinAttempts },
+  operator: { attempts: PinAttempts },
   override: Override | undefined,
   transaction: (override: Override | undefined) => Promise<T>,
 ): Promise<T> {
-  const invoice = await readOrderInvoice(deps.db, id);
-  const toCheck =
-    invoice === undefined
-      ? undefined
-      : await overrideToCheck(
-          deps.db,
-          {
-            sessionId: operator.sessionId,
-            permission: await cancelPermission(deps.db, id, invoice),
-          },
-          override,
-        );
+  const toCheck = (await readOrderInvoice(deps.db, id)) === undefined ? undefined : override;
   return withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) =>
     transaction(withCheck(override, checked)),
   );

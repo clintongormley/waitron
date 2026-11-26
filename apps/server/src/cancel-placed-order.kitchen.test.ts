@@ -153,4 +153,44 @@ describe("cancelling a counter order whose receipt nobody paid and nothing was s
         .where(eq(kitchenNotices.workingOrderId, id)),
     ).toEqual([{ kind: "void" }]);
   });
+
+  it("refuses once the order was handed over, naming its dishes and writing nothing", async () => {
+    const id = randomUUID();
+    await parkOrder(deps(), venue.cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: venue.offerFor("Steak"), quantity: "1" }],
+      operatorId: venue.operatorId,
+    });
+    const tillDeps = { ...deps(), admission: testTradingAdmission() };
+    await issueOrderInvoice(tillDeps, venue.cfg, id, venue.operatorId);
+    await placeOrder(tillDeps, venue.cfg, id, venue.operatorId);
+    expect(
+      (await send(venue.app, venue.cookie, "POST", `/api/orders/${id}/collect`, {})).status,
+    ).toBe(200);
+    const [line] = await venue.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+
+    const answer = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/cancel`, {
+      reason: "guest left",
+      override: { personId: venue.adminId, pin: "1234" },
+    });
+
+    expect({ status: answer.status, params: answer.json.params }).toEqual({
+      status: 409,
+      params: {
+        workingOrderId: id,
+        dishes: [{ lineId: line!.id, dishName: "Steak", quantity: "1.000" }],
+      },
+    });
+    expect(answer.json.code).toBe("bill.served_dishes");
+    const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, id));
+    expect(await venue.db.select().from(saleVoids).where(eq(saleVoids.saleId, sale!.id))).toEqual(
+      [],
+    );
+    const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, id));
+    expect(order!.status).toBe("placed");
+  });
 });

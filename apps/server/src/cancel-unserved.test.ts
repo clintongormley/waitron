@@ -13,7 +13,7 @@ import {
   workingOrders,
   writeNodeMembership,
 } from "@waitron/db";
-import { recordReplacement } from "@waitron/core";
+import { recordReplacement, recordSubstitution } from "@waitron/core";
 import { createExtraList, writeProductModifiers } from "@waitron/menu";
 import { filedRecordsOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
@@ -143,6 +143,35 @@ async function seatedWithLines(lines: (string | { name: string; extras: unknown[
   return party;
 }
 
+/** The receipt refused by AEAT and replaced; answers the replacement's id. */
+function replacedAfterRefusal(saleId: SaleId): Promise<SaleId> {
+  return inTx(venue, async (tx) => {
+    await refusedByAeat(tx, saleId);
+    const session = await loginWithPin(tx, {
+      deviceId: venue.deviceId,
+      personId: venue.adminId,
+      pin: "1234",
+    });
+    const replaced = await recordReplacement(tx, venue.backend, {
+      operationDescription: "Restaurante",
+      origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
+      seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "corrective")),
+      correctsSaleId: saleId,
+      authz: { sessionId: session.id },
+      clock: venue.clock,
+    });
+    return replaced.saleId;
+  });
+}
+
+/** Stamps the bill handed over, as a counter handover does before the order is moved to a table. */
+function handOver(billId: string): void {
+  venue.db.run(
+    sql`update working_orders set collected_at = ${new Date(Date.now() - 60_000).toISOString()} where id = ${billId}`,
+  );
+}
+
 function cancel(billId: string, cookie = venue.supervisorTill, app = venue.app): Promise<Answer> {
   return send(app, cookie, "POST", `/api/working-orders/${billId}/cancel`, { reason: REASON });
 }
@@ -192,7 +221,7 @@ async function expectRefused(
   return answered;
 }
 
-describe("Cancel and credit on a printed bill nothing was served on and nobody paid", () => {
+describe("Nothing was served on a printed bill nobody paid", () => {
   it("files a cancellation of the receipt, no corrective, and abandons the bill", async () => {
     const party = await printedUnserved("Tarta");
     const saleId = await saleOf(party.tabId);
@@ -283,7 +312,7 @@ describe("Cancel and credit on a printed bill nothing was served on and nobody p
   });
 });
 
-describe("Cancel and credit refuses a cancellation", () => {
+describe("Nothing was served refuses a cancellation", () => {
   it("of a bill with a dish served, naming it", async () => {
     const party = await seatedWith(venue, "Tarta", "Steak");
     expect((await fixture.serve(venue, party, party.tabId, "Tarta")).status).toBe(200);
@@ -351,6 +380,107 @@ describe("Cancel and credit refuses a cancellation", () => {
     ]);
   });
 
+  it("of a replaced receipt with a dish served, instead of crediting the replacement", async () => {
+    const party = await seatedWith(venue, "Tarta", "Steak");
+    expect((await fixture.serve(venue, party, party.tabId, "Tarta")).status).toBe(200);
+    await printAnyway(party);
+    await replacedAfterRefusal(await saleOf(party.tabId));
+
+    const answer = await expectRefused(party.tabId, () => cancel(party.tabId), {
+      status: 409,
+      code: "bill.served_dishes",
+    });
+    expect((answer.json.params as { dishes: { dishName: string }[] }).dishes).toEqual([
+      expect.objectContaining({ dishName: "Tarta" }),
+    ]);
+  });
+
+  it("of a bill handed over before it came to the table, naming every dish", async () => {
+    const party = await printedUnserved("Tarta", "Steak");
+    handOver(party.tabId);
+
+    const answer = await expectRefused(party.tabId, () => cancel(party.tabId), {
+      status: 409,
+      code: "bill.served_dishes",
+    });
+    expect(
+      (answer.json.params as { dishes: { dishName: string; quantity: string }[] }).dishes,
+    ).toEqual([
+      expect.objectContaining({ dishName: "Tarta", quantity: "1.000" }),
+      expect.objectContaining({ dishName: "Steak", quantity: "1.000" }),
+    ]);
+  });
+
+  it("of a replaced receipt on a bill handed over, instead of crediting the replacement", async () => {
+    const party = await printedUnserved("Tarta");
+    await replacedAfterRefusal(await saleOf(party.tabId));
+    handOver(party.tabId);
+
+    await expectRefused(party.tabId, () => cancel(party.tabId), {
+      status: 409,
+      code: "bill.served_dishes",
+    });
+  });
+
+  it("of a bill handed over before its party left without paying", async () => {
+    const party = await seatedWith(venue, "Tarta");
+    handOver(party.tabId);
+    const departure = await send(
+      venue.app,
+      venue.supervisorTill,
+      "POST",
+      `/api/parties/${party.partyId}/unpaid-departure`,
+      {
+        billId: party.tabId,
+        expectedPartyRevision: fixture.revisionOf(venue, party.partyId),
+        reason: "Se marcharon sin pagar",
+      },
+    );
+    expect(departure.status, JSON.stringify(departure.json)).toBe(200);
+
+    await expectRefused(party.tabId, () => cancel(party.tabId), {
+      status: 409,
+      code: "bill.served_dishes",
+    });
+  });
+
+  it("of a receipt a full invoice took the place of, as a replaced invoice is refused", async () => {
+    const party = await printedUnserved("Tarta");
+    const saleId = await saleOf(party.tabId);
+    await inTx(venue, async (tx) =>
+      recordSubstitution(tx, venue.backend, {
+        operationDescription: "Restaurante",
+        origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
+        seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "full")),
+        substitutedSaleIds: [saleId],
+        counterparty: { taxId: "B12345674", legalName: "Customer SL", countryCode: "ES" },
+        total: "5.00",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Tarta",
+            descriptions: { [venue.cfg.locale]: "Tarta" },
+            quantity: "1",
+            unitPrice: "4.55",
+            vatRate: "10.00",
+            lineTotal: "4.55",
+          },
+        ],
+        locale: venue.cfg.locale,
+        invoiceLocales: [venue.cfg.locale],
+        clock: venue.clock,
+      }),
+    );
+
+    const answer = await expectRefused(party.tabId, () => cancel(party.tabId), {
+      status: 400,
+      code: "sale.correction_not_admitted",
+    });
+    expect(answer.json.params).toEqual({ reason: "replaced" });
+    expect(await voidsOf(saleId)).toEqual([]);
+  });
+
   it("on a box waiting for its time", async () => {
     const party = await printedUnserved("Tarta");
     const waiting = venue.appWith({
@@ -389,7 +519,7 @@ describe("Cancel and credit refuses a cancellation", () => {
   });
 });
 
-describe("Cancel and credit files the corrective, as before, on any other printed bill", () => {
+describe("Nothing was served files the corrective, as before, on any other printed bill", () => {
   it("one holding a payment: its approver needs sale.rectify", async () => {
     const party = await seatedWith(venue, "Tarta", "Steak");
     await fixture.payInCash(venue, party.tabId, "5.00");
@@ -432,24 +562,7 @@ describe("Cancel and credit files the corrective, as before, on any other printe
   it("one replaced after AEAT refused it, crediting the replacement", async () => {
     const party = await printedUnserved("Tarta");
     const saleId = await saleOf(party.tabId);
-    const replacementId = await inTx(venue, async (tx) => {
-      await refusedByAeat(tx, saleId);
-      const session = await loginWithPin(tx, {
-        deviceId: venue.deviceId,
-        personId: venue.adminId,
-        pin: "1234",
-      });
-      const replaced = await recordReplacement(tx, venue.backend, {
-        operationDescription: "Restaurante",
-        origin: venue.cfg.origin,
-        nodeId: venue.cfg.nodeId,
-        seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "corrective")),
-        correctsSaleId: saleId,
-        authz: { sessionId: session.id },
-        clock: venue.clock,
-      });
-      return replaced.saleId;
-    });
+    const replacementId = await replacedAfterRefusal(saleId);
 
     const answer = await cancel(party.tabId);
 

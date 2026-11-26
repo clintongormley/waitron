@@ -100,7 +100,7 @@ export function mountTillDrawerAndCancelRoutes(
     }),
   );
 
-  // Like the refund's list: any operator may see who could approve their cancel and credit.
+  // Like the refund's list: any operator may see who could approve cancelling an invoiced bill.
   app.get("/api/cancel-credit-authorizers", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);

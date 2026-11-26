@@ -903,7 +903,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
   });
 });
 
-describe("Cancel and credit on a printed table bill", () => {
+describe("Nothing was served on a printed table bill", () => {
   it("takes the bill's dishes, and a kitchen-ready one's Ready, out of the party's groups", async () => {
     const party = await seat("Tarta");
     venue.db.run(sql`update ticket_items set state = 'ready' where working_order_line_id in
@@ -1185,6 +1185,20 @@ describe("Reopen bill stopping the dishes that never came", () => {
       { kind: "void", lineName: "CHULETA", quantity: 1000 },
       { kind: "void", lineName: "BEER SMALL", quantity: 1000 },
     ]);
+  });
+
+  it("refuses the flag on a bill handed over at the counter before it was moved to the table", async () => {
+    const party = await steakAndBeer();
+    venue.db.run(
+      sql`update working_orders set collected_at = ${new Date().toISOString()} where id = ${party.tabId}`,
+    );
+
+    const refused = await expectRefused(party.tabId, () => stop(party.tabId), {
+      status: 409,
+      code: "bill.unserved_dishes",
+    });
+
+    expect(refused.json.params).toMatchObject({ canStop: false });
   });
 
   it("refuses the flag when nothing was served, as Reopen does today", async () => {
