@@ -64,7 +64,7 @@ export interface AdjustmentAsk {
   /** A money string, such as "2.50". */
   amount?: string;
   note: string | null;
-  /** The notice's `adjustmentId` this comp or discount gives again, which clears the notice. */
+  /** The notice's `adjustmentId` this comp or discount gives again. */
   reapplies?: string;
 }
 /** An adjustment to apply: made once per person's confirmation, and sent again unchanged only when

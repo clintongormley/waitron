@@ -1474,7 +1474,10 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   once its discount ends, so a set menu's notice offers no place (`reapplyOn` null; staff pick it in
   the comp window) and stays until the bill closes, even once its other dishes are gone (the
   watcher, lane B `questions.md`, "WATCHER 2026-11-26 20:07"). A notice also goes once its bill is
-  paid or abandoned, and a dish's notice once its line leaves the bill.
+  paid or abandoned, and a dish's notice once its line leaves the bill. _2026-11-26, after the second
+  finish review:_ a dish's ending stays on its notice until a comp or discount naming it takes
+  something off that dish or its extras, so giving it again on one dish leaves the others' shares on
+  the notice; a set menu's goes once any one names it.
 - **D55. The adjustments report leaves out a discount that came off.** Its total is "What the bills
   actually lost" (`AdjustmentTally.reduction`, `packages/adjustments/src/reports.ts:45-46`): a 50%
   Daily (7.00) whose Hake is then cancelled counts the cancel's 8.00 (D48), the difference between
