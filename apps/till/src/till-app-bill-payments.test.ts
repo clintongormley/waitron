@@ -8026,9 +8026,11 @@ describe("till-app: giving back a bill payment", () => {
     });
     const order = await openTable(el);
     await showBillFooter(order);
+    expect(order.shadowRoot!.querySelector("[data-bill-payments]")).not.toBeNull();
     expect(order.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
     order.billBalance = null;
     await order.updateComplete;
+    expect(order.shadowRoot!.querySelector("[data-bill-payments]")).not.toBeNull();
     expect(order.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
   });
 
