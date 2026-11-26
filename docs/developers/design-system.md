@@ -1916,137 +1916,22 @@ a match, and including rows a closed branch hides. For flat search, it defaults 
 `shownKeys({ includeCollapsedSearchMatches: true })` also includes filter-passing rows reachable
 under a closed search match.
 
-**A menu's Structure tab is the second tree** (`dashboard-menu-structure-table`,
-`apps/dashboard/src/widgets/menu-structure-table.ts`; W88, owner 2026-10-04). Its first row is the
-menu itself, like Products' All products row (A453, 2026-10-10; it replaced A337's toolbar plus
-button): the menu's name in bold, then its counts, such as "3 sections, 12 products", each section
-and product counted once, those inside included menus too. The menu's colour chip is drawn before
-the name only when the menu has a colour; it is a picture, not a button, since the colour is edited
-in the menu's settings. That row's ⋮ holds the menu's own adds — Add section, Include a menu and Add
-products. Its chevron opens its own level; closing it closes every descendant. It starts open,
-has no checkbox or grip in Select mode, nothing can
-be dropped on it, and no search or filter matches it, so while one is set the row is drawn only
-above a match. Under it the menu's members are the top-level rows,
-in menu order, with no sort, and any of them can close. While the menu is empty the table draws no
-rows and no toolbar, so its empty box says
-"Nothing is on this menu yet." with the same three adds as buttons under it, and Select turns off. A row's key
-is the member ids from the top level down to it, so a section shown in two places is two rows. The ⋮
-of a section the menu owns holds the same three adds, then Edit and Delete; an add acts on that
-section from whichever place it was chosen, and makes that row the current one, whose name is drawn
-bold and underlined with `aria-current="true"`. A product's ⋮ holds Edit product and "Remove
-from <list>", naming the list that holds it. Edit product opens over Structure for people who can
-open Products. An included menu's row reads "Menu: <name>" with "Shown as a folder" or
-"Sections shown directly" under it. Its ⋮ holds "Open <name>", a link to that menu's own Structure
-tab; Edit, which opens the include's dialog (`dashboard-include-folder-form`) with a
-"Show as a folder" switch and, while the switch is on, the folder's customer-facing names, colour
-and photo, each following the included menu until it is changed. **Use included menu colour** and
-**Use included menu photo** stage a return to the menu’s value when the folder fixes that field.
-The included menu’s row menu (⋮) also holds "Remove from this menu".
-Rows inside an included menu open and close for browsing but have no grip, no ⋮ and a muted name.
-In Select mode each keeps an unseen grip-sized space. Only an owned row has a grip.
-In Select mode, put every grip in one leading column before the tree arrow and indentation.
-Reserve that column on read-only rows. Keep the arrow and media slot inside
-the indented name column, so names at one level and the Name heading stay aligned. The media slot
-holds a section's colour square or a product's colour square or photo. A photo has a ring in the product's own colour, falling back to its category's inherited
-colour, then to the venue's default. On an owned row the product slot opens the editor at the photo
-control. On an included menu's row or for a product the library no longer holds, the slot is display only. Section squares still open their colour picker directly. Hide
-media in both trees when the tree's box is at most 440px wide. In the Products list the product
-editor remains available through the row's Actions menu, and a Menus Structure product row's
-Actions menu offers Edit product at every width.
+**A menu’s Structure tab** (`dashboard-menu-structure-table`) has Name, Price and pinned row
+menus. The root row shows the menu’s picture and counts, and its row menu holds the top-level adds.
+A member row’s key follows its member IDs from the root. A variant row adds its variant ID to its
+product’s key. Sections show counts, products and variants show Unavailable when needed, and set
+menus show their own price as text. Pictures stay visible at phone width.
 
-The toolbar has a search box ("Search this menu" / "Buscar en esta carta") that matches the names the
-rows show and lists their own matches with inline paths, and the Available column has a Yes / No filter; a
-section or an included menu answers neither, so it stays only on the way to a match. There is no
-filter on Type: its three values are already told apart by the folder frame and the arrow.
-Dragging remains available during search and carries only visible ticks; hidden ticks remain
-selected. Move, Remove and Delete use all ticks. A changed query cancels a held drag. While search or
-the Available filter hides rows, ArrowUp and ArrowDown move past the next drawn sibling.
-The search clears when another menu opens or the menu empties.
+Search matches staff names, including variants, in a flat view with paths. Filters cover availability,
+price, main category, modifiers and variants. Owned members have drag handles. Select keeps the drag
+handle and checkbox together on desktop and replaces the handle with the checkbox on a phone. Move,
+Remove and Done sit together. Removing a section with contents asks before staging the removal.
 
-The toolbar has one Select icon button (the Products tree's, "Select" / "Seleccionar"). In Select
-mode every row the menu owns has a box and a drag handle named "<name>, in <list>" (rows inside an included menu have
-none), and a bar under the toolbar shows how many rows are ticked with four buttons: **Move to
-section…**, **Remove from menu**, **Delete** and Done, which leaves the mode and puts focus back on Select.
-Select and Done cannot be pressed while a change is being saved. While a search or filter is on, a section
-shown only because something inside it matches has no box, so Select all never ticks a section whose
-hidden rows would go with it; a section whose own name matches keeps its box, and none has one under
-the Available filter, which no section answers. Search and filter changes keep ticks, including hidden rows, so you can gather items across searches.
-Select all changes only rendered eligible rows and keeps hidden ticks. The selection clears when the
-mode turns off, another menu opens, or a bulk change succeeds. A re-read drops removed rows or rows
-no longer owned by this menu from the selection and open operation; a rename or availability change
-keeps them. The operation closes once nothing is left. Only the outermost selected rows are acted on: a row inside a selected section
-travels with it, wherever that section is shown, and a member ticked in two places is sent once, so
-the confirms and the dialog count what is sent. Remove from menu and Delete are judged on the rows sent, so a row inside a selected section does
-not count. Delete is enabled when every sent row is a section the menu owns, and Remove from menu
-when none is, because a section the menu owns is deleted, never removed; each is quiet while its
-rule rules it out. A selection that mixes a section the menu owns with anything else disables both,
-with the line "Delete sections and remove other items separately." under the bar. Remove from menu
-asks first ("Remove 2 items?", "¿Quitar 2 elementos?") and lists each item with the list it leaves.
-Delete asks first too ("Delete 2 sections?", "¿Eliminar 2 secciones?") and lists each section once,
-leaving out one that another listed section holds; a section with sections the menu owns below it
-reads "Wines and the 2 sections below it", and the list ends "Its products stay." for one section
-or "Their products stay." for more.
-Move to section… opens a dialog with one required destination: "Top level" first, then every section
-the menu owns, by its path joined with " › ", leaving out each selected section and every section
-below it; never a list inside an included menu. Its Move action is quiet until a destination is
-chosen, and again if a live update takes the chosen one away; closing it with one chosen asks
-first (`draftScopeFor`, `menus-screen.structure-move.unsaved.test.ts`). Each sends one request: `POST
-/management-api/section-members/remove`, `POST /management-api/sections/delete` (`deleteSections`,
-`packages/menu/src/sections.ts`) and `POST /management-api/sections/:id/members/move-in`,
-which moves the member rows themselves, so a moved product keeps the menu's price for it and an
-included menu keeps its folder setting (`moveMembersInto`, `packages/menu/src/sections.ts`).
-A Move to section…, Remove from menu or Delete answered after another menu has been opened moves no
-focus there. A refusal that arrives once its confirm has closed — opening another menu closes it, and
-so does a live update that takes away every row it named — shows as "Your change to <menu> was not
-saved." and the reason, naming the menu it was sent from (`#sendSelected`,
-`apps/dashboard/src/screens/menus-screen.ts`).
-Copying products into another section is not built.
-
-The grips show only in Select mode, alongside the checkboxes. Done leaves both selection and
-reordering and returns focus to Select; pressing Select again also leaves the mode. Opening
-another menu, returning to the list or emptying the menu clears the mode. A live re-read keeps it
-(`structureSelecting`, `apps/dashboard/src/screens/menus-screen.ts`). Products and Structure have
-no Expand all button. Closing any branch closes its descendants, including those hidden by a
-search or filter; opening it shows only its own level. Preview keeps Expand all. Closing a current
-Structure branch returns editing to its parent, or to the menu when its root closes. Search
-closures reconcile the current path when you clear the search.
-
-A grip moves a member anywhere in its own menu, not only among its siblings (owner decision
-2026-10-07, A338: "if i drag a product in the menu into a different section, it doesn't move"). A
-pointer drag starts from the grip only, with Products' ghost and gap (the shared
-`apps/dashboard/src/widgets/tree-drag.ts`). Over the middle half of the row of a closed or empty
-section the menu owns, a release puts the member at the end of that section; the row's first cell
-is marked `part="drop-target"`, every cell of the row is tinted `--wt-color-surface-lifted` inside a
-`--wt-color-primary` ring (`markInto`; the Products tree marks a category the same way), and no gap is drawn. Over any other row, or the top or bottom
-quarter of that one, the gap shows beside the row. Beside a sibling the release reorders the
-list (`wt-member-move`), with the gap before a sibling above the member and after the last drawn
-row of one below it. Beside a row of another list it moves the member into that list at that place
-(`wt-member-move-into`), with the gap before the row while the pointer is in its upper half and
-after its last drawn row while in its lower half. Nothing is offered — no gap, no mark, and a
-release sends nothing — over the dragged row or anything drawn inside it, over a list inside a
-dragged section wherever that list is drawn, over a row inside an included menu, over another list
-that already holds the same product or section, over the dragged member's own list where it is drawn in
-another place, and, for a product no longer in the menu, anywhere but beside its siblings. On
-a grip, ArrowUp and ArrowDown move the member one place within its own list. ArrowRight moves it to
-the end of the sibling drawn directly above it, when that sibling is a section the menu owns that
-does not already hold the same product or section and is not the moved section or one inside it.
-ArrowLeft moves a member out of its section to the place directly after that section, unless that
-list already holds the same product or section; at the top level it does nothing. Neither of
-these two keys moves a product no longer in the menu. Each key
-announces the move, and the grip lists the four keys in `aria-keyshortcuts`. A move into another
-list sends the same request as Move to section… (`moveMembersInto`), so a moved product keeps the
-menu's price for it. The screen then reads the menu again and, while the menu on screen still has the
-destination where it was, opens it so the moved row is drawn; otherwise the member error line says
-the move was saved but another change took the destination away; after ArrowLeft or ArrowRight, focus goes to the moved row's grip, or back to the old
-grip when no such row is drawn. A refusal shows in the tab's member error line, naming the
-destination list when it is not the list on screen, and the menu is read again; a move whose source or
-destination list another change has moved or taken off the menu by the time it is sent, or one
-still waiting when another menu is opened, sends nothing and reads the menu again. When a window
-opened from a row's ⋮ closes, focus goes back to that ⋮ once nothing is being saved or read, or to
-the ⋮ of the nearest row above it still drawn; a removal hands it to the ⋮ of the row that held the
-member; at the top level, to the root row's ⋮, or in an empty menu to the empty box's first add. Guards: `apps/dashboard/src/widgets/menu-structure-table.test.ts`,
-`menu-structure-table.a11y.test.ts` beside it, and the Structure tree cases in
-`apps/dashboard/src/screens/menus-screen.test.ts`, inside `describe("the Structure tree")` and the member-move cases above it.
+Structure’s fixed Save and Cancel bar covers arrangement, section and folder details and this menu’s
+prices. Cancel and leaving a dirty tab ask before discarding. Review and publish offers Save and
+review while dirty. Included rows keep their own arrangement and take any price entered on this
+menu. A refusal carrying a row or price field marks it in the table. The product editor opens over
+the table and saves that product independently.
 
 Hold a dragged row or tile near the visible top or bottom edge to reach rows outside the current
 view. `DragEdgeScroll` (`packages/ui/src/drag-edge-scroll.ts`) follows the nearest scrolling box
@@ -2331,8 +2216,8 @@ including on All products and a category being named. In the phone List, labels 
 the name. The category path joins them when its column is hidden in Customise. In the phone Tree
 the counts stay visible under category names. Price ranges and units can wrap. Phone Select gives the
 name the space of the Price and Available columns while keeping the current filters.
-The Structure tree uses `--wt-tap-min` squares and hides its section and
-product slots when narrow, except while naming a section.
+The Structure tree keeps its photo and icon frames on phones. They measure 36 px at desktop width
+and 30 px when the table is narrow. The phone checkbox takes the place of the drag grip in Select.
 A variant's row draws no grip. Its photo and name sit one step further in than the product's.
 The square shows the variant's photo or the product's photo and opens the variant's editor at its
 photo. Names wrap within their cells. On a phone, the category name field sits beside the swatch,
@@ -6247,8 +6132,8 @@ the tab:
 `apps/dashboard/src/navigation.ts`). Structure adds `/section/<path>` to the current address when a
 section is selected. The path joins the row's member IDs in order and encodes them as one segment.
 Another tab drops that segment. Returning to Structure puts the remembered selection back in the
-current address without a new history entry. Refusals for a remove or drag within the current
-Structure tab name the affected list in an alert directly above the tree.
+current address without a new history entry. Leaving a dirty Structure tab asks before discarding
+its draft.
 The Modifiers screen's `/modifiers/view/<extras|options>/list/<id>` opens that list's editor
 once the screen has loaded its lists (`dashboardPath`, `apps/dashboard/src/navigation.ts`). An id
 the selected tab's lists do not hold opens nothing and is dropped from the address without adding a

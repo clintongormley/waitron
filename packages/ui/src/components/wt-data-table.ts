@@ -2901,6 +2901,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
       <div
         class="table-search-end"
+        part=${this.#hasToolbarSearch() ? "toolbar-search" : nothing}
         ?data-search=${this.#hasToolbarSearch()}
         ?data-chooser=${chooser}
       >

@@ -86,6 +86,7 @@ function client(addHomeShortcut: () => Promise<unknown>, afterAdd: () => Promise
         ref: { kind: "product", productId },
       })),
     }),
+    prices: async () => [],
     home: () => (added ? afterAdd() : Promise.resolve(home)),
     status: async () => ({ state: "unpublished", clashes: 0 }),
     preview: async () => ({

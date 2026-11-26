@@ -563,6 +563,7 @@ function dependenciesOf<N extends DashboardQueryName>(
     const parts = (args as Parameters<DashboardApi["getMenuRead"]>)[1];
     const reads = {
       structure: QUERY_DEPENDENCIES.getMenuStructure,
+      prices: QUERY_DEPENDENCIES.getMenuPrices,
       home: QUERY_DEPENDENCIES.getMenuHome,
       status: QUERY_DEPENDENCIES.getMenuStatus,
       preview: QUERY_DEPENDENCIES.getMenuPreview,
