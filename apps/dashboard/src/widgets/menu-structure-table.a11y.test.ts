@@ -161,7 +161,8 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
       );
     }
     if (state === "coloured root") {
-      expect(inTable('[data-test="color-root"]')).not.toBeNull();
+      const swatch = inTable('tr[data-row-key="root"] [part~="color-swatch"]');
+      expect(swatch.style.getPropertyValue("--product-media-color")).toBe("#aabbcc");
       expect(inTable('[data-test="count-root"]').textContent!.trim()).toBe(
         `${t("menus.section_count").replace("{count}", "3")}, ${t("folders.product_count").replace("{count}", "3")}`,
       );
@@ -229,7 +230,7 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     await expectNoA11yViolations(host);
   });
 
-  it("renders accessibly with a product row's menu open on Edit product, and Yes and No in Available", async () => {
+  it("renders accessibly with a product row's Edit product menu and an unavailable dish", async () => {
     const { el, host } = await mountWidget<MenuStructureTable>(
       "dashboard-menu-structure-table",
       {
@@ -244,11 +245,16 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
     const inTable = (selector: string) => table.shadowRoot!.querySelector<HTMLElement>(selector)!;
     inTable('tr[data-row-key="m-drinks"] .row-activate').click();
     await table.updateComplete;
-    const words = [...table.shadowRoot!.querySelectorAll('[data-test="available"]')].map((span) =>
-      span.textContent!.trim(),
-    );
-    expect(words).toContain(t("menus.available_yes"));
-    expect(words).toContain(t("menus.available_no"));
+    expect(
+      inTable(
+        'tr[data-row-key="m-drinks/m-lager"] [part~="structure-unavailable"]',
+      ).textContent?.trim(),
+    ).toBe(t("product.unavailable_badge"));
+    expect(
+      table.shadowRoot!.querySelector(
+        'tr[data-row-key="m-burger"] [part~="structure-unavailable"]',
+      ),
+    ).toBeNull();
     const menu = inTable(
       '[data-test="actions-m-burger"]',
     ) as HTMLElementTagNameMap["wt-row-actions"];
@@ -289,7 +295,7 @@ describe.each(["light", "dark"] as const)("menu structure table (%s)", (theme) =
           .click();
         await table.updateComplete;
       }
-      expect(table.shadowRoot!.querySelectorAll('[part~="color-swatch"]').length).toBe(8);
+      expect(table.shadowRoot!.querySelectorAll('[part~="color-swatch"]').length).toBe(9);
       await expectNoA11yViolations(host);
       const link = table.shadowRoot!.querySelector<HTMLAnchorElement>(
         'a[data-test="color-m-burger"]',

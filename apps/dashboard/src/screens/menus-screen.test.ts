@@ -3409,6 +3409,26 @@ it("moves a member out of a section to the menu's top level by the menu's own li
   expect(currentPlace(el)).toBe("Lunch Menu");
 });
 
+it("explains a drag that would add a second copy to the destination", async () => {
+  const client = api();
+  const el = await mountLunch(client);
+  await editDrinks(el);
+  await toggleRow(el, "m-drinks/m-beer");
+  emit(structure(el), "wt-member-move-into", {
+    from: ["m-drinks"],
+    memberId: "m-lager",
+    to: ["m-drinks", "m-beer"],
+  });
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="structure-write-error"]'))).toBe(
+      codeMessage("menu_section.member_duplicate"),
+    ),
+  );
+  expect(childKeys(el, "m-drinks")).toContain("m-drinks/m-lager");
+  expect(childKeys(el, "m-drinks/m-beer")).toEqual(["m-drinks/m-beer/m-lager-2"]);
+  expect(writeCalls(client)).toEqual([]);
+});
+
 it("moves a member into a closed section with no position, and puts it last in the draft", async () => {
   const client = api();
   const el = await mountLunch(client);
@@ -5143,6 +5163,28 @@ describe("the Structure tree", () => {
         await vi.waitFor(() => expect(modal(el, "move-selected").open).toBe(true));
         await el.updateComplete;
       }
+
+      it("keeps both placements and the selection when Move would create a duplicate", async () => {
+        const client = api();
+        const el = await mountLunch(client);
+        await editDrinks(el);
+        await toggleRow(el, "m-drinks/m-beer");
+        await pressSelect(el);
+        await tick(el, "m-drinks/m-lager");
+        await openMove(el);
+        await chooseOption(destination(el), "s-beer");
+        confirm(el).click();
+        await vi.waitFor(() =>
+          expect(modal(el, "move-selected").querySelector("wt-form-actions")!.error).toBe(
+            codeMessage("menu_section.member_duplicate"),
+          ),
+        );
+        expect(modal(el, "move-selected").open).toBe(true);
+        expect(structure(el).selected).toEqual(["m-drinks/m-lager"]);
+        expect(childKeys(el, "m-drinks")).toContain("m-drinks/m-lager");
+        expect(childKeys(el, "m-drinks/m-beer")).toEqual(["m-drinks/m-beer/m-lager-2"]);
+        expect(writeCalls(client)).toEqual([]);
+      });
 
       it("sits before Remove, disabled until something is selected and secondary throughout", async () => {
         const el = await mountLunch();

@@ -50,7 +50,10 @@ function editList(
   return { ...structure, nodes };
 }
 
-function listAt(structure: MenuStructure, listId: string): readonly MenuStructureNode[] {
+function listAt(
+  structure: MenuStructure,
+  listId: string,
+): readonly MenuStructureNode[] | undefined {
   function find(nodes: readonly MenuStructureNode[]): readonly MenuStructureNode[] | undefined {
     for (const node of nodes) {
       if (node.ref.kind !== "section" || node.includedMenuId !== undefined) continue;
@@ -60,7 +63,7 @@ function listAt(structure: MenuStructure, listId: string): readonly MenuStructur
     }
     return undefined;
   }
-  return listId === structure.rootSectionId ? structure.nodes : (find(structure.nodes) ?? []);
+  return listId === structure.rootSectionId ? structure.nodes : find(structure.nodes);
 }
 
 function refKey({ ref }: MenuStructureNode): string {
@@ -292,7 +295,7 @@ export class MenuStructureDraft {
       const ids = removals.get(listId) ?? new Set<string>();
       ids.add(memberId);
       removals.set(listId, ids);
-      const node = listAt(this.structure, listId).find((row) => row.memberId === memberId);
+      const node = listAt(this.structure, listId)?.find((row) => row.memberId === memberId);
       if (node?.ref.kind !== "section" || node.includedMenuId !== undefined) continue;
       for (const child of ownedNodes([node]))
         if (child.ref.kind === "section" && child.includedMenuId === undefined)
@@ -319,24 +322,21 @@ export class MenuStructureDraft {
     const moved: MenuStructureNode[] = [];
     const remove = new Map<string, Set<string>>();
     for (const { listId, memberId } of members) {
-      const node = listAt(structure, listId).find((row) => row.memberId === memberId);
+      const node = listAt(structure, listId)?.find((row) => row.memberId === memberId);
       if (node === undefined) return false;
       moved.push(node);
       const ids = remove.get(listId) ?? new Set<string>();
       ids.add(memberId);
       remove.set(listId, ids);
     }
-    const refs = [
-      ...listAt(structure, destination).filter(
-        (node) => !remove.get(destination)?.has(node.memberId),
-      ),
-      ...moved,
-    ].map(refKey);
-    if (refs.length !== new Set(refs).size) return false;
     for (const [listId, ids] of remove)
       structure = editList(structure, listId, (nodes) =>
         nodes.filter((node) => !ids.has(node.memberId)),
       );
+    const remaining = listAt(structure, destination);
+    if (remaining === undefined) return false;
+    const refs = [...remaining, ...moved].map(refKey);
+    if (refs.length !== new Set(refs).size) return false;
     this.structure = editList(structure, destination, (nodes) => {
       const to = position ?? nodes.length;
       return [...nodes.slice(0, to), ...moved, ...nodes.slice(to)];

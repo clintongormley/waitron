@@ -423,6 +423,24 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("renders accessibly with a draft, ready to Save and review", async () => {
+    const { el, host } = await mount("populated", theme, LUNCH);
+    await editDrinks(el);
+    await rowAction(el, "m-drinks/m-lager", "remove");
+    const save = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      '[data-test="structure-save"]',
+    )!;
+    expect(save.disabled).toBe(false);
+    await expectNoA11yViolations(host);
+    q(el, '[data-test="review-publish"]').click();
+    const review = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+      '[data-test="structure-review"]',
+    )!;
+    await vi.waitFor(() => expect(review.open).toBe(true));
+    expect(review.querySelector('[data-test="structure-save-review"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("accessible expanded owned section being edited", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
     await vi.waitFor(() =>

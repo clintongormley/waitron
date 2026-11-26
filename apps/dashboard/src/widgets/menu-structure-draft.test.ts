@@ -44,6 +44,36 @@ function coffee(price: string): MenuPriceRow {
   };
 }
 
+it("keeps one placement when append names a product the list already holds", () => {
+  const draft = new MenuStructureDraft();
+  draft.accept(tree(product("first")), []);
+  draft.append("root", [product("second")]);
+  expect(draft.input().rootMembers).toEqual([{ id: "first", ref: product("first").ref }]);
+  expect(draft.dirty).toBe(false);
+});
+
+it.each(["inner", "missing"])("keeps the section when a move cannot reach %s", (destination) => {
+  const draft = new MenuStructureDraft();
+  draft.accept(
+    tree({
+      memberId: "outer-row",
+      ref: { kind: "section", sectionId: "outer" },
+      children: [
+        {
+          memberId: "inner-row",
+          ref: { kind: "section", sectionId: "inner" },
+          children: [product("one")],
+        },
+      ],
+    }),
+    [],
+  );
+  const before = draft.input();
+  expect(draft.move([{ listId: "root", memberId: "outer-row" }], destination)).toBe(false);
+  expect(draft.input()).toEqual(before);
+  expect(draft.dirty).toBe(false);
+});
+
 it("preserves an explicit price with only an included placement, even while sold out", () => {
   const draft = new MenuStructureDraft();
   draft.accept(tree(included), [coffee("4.00")]);

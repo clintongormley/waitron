@@ -286,12 +286,6 @@ function placesOf(structure: MenuStructure | null, listId: string): MenuStructur
   return found ? [found] : [];
 }
 
-/**
- * The menus, and one menu's editor. Its Structure tab shows the menu as one tree, each list edited
- * from its own row, and each change is its own request, sent in order through one queue, because a
- * move leaves focus on the row. Its Price overrides tab lists every Active product the menu reaches,
- * with its Active variants, and edits the price this menu sets for each product and variant.
- */
 @customElement("dashboard-menus-screen")
 export class MenusScreen extends LitElement {
   @property({ attribute: false }) reportLateSave?: (name: string) => void;
@@ -1047,30 +1041,30 @@ export class MenusScreen extends LitElement {
         return (this.api.background ?? this.api).getMenuRead(menuId, parts);
       const cached = {
         structure: this.structureError ? null : this.structure,
-        prices: null,
         home: this.homeLoadError ? null : this.menuHome,
         status: null,
         preview: this.previewError ? null : this.preview,
       };
       const reads = {
         structure: () => this.api.getMenuStructure(menuId),
-        prices: () => this.api.getMenuPrices(menuId),
         home: () => this.api.getMenuHome(menuId),
         status: () => this.api.getMenuStatus(menuId),
         preview: () => this.api.getMenuPreview(menuId),
       };
       const entries = await Promise.all(
-        parts.map(async (part) => {
-          let response;
-          try {
-            response = { status: 200, body: cached[part] ?? (await reads[part]()) };
-          } catch (error) {
-            response = { status: 409, body: { error } };
-          }
-          if (this.#menuReadGeneration === generation && this.menuId === menuId)
-            this.#applyMenuRead(menuId, { [part]: response } as MenuReadResult);
-          return [part, response];
-        }),
+        parts
+          .filter((part) => part !== "prices")
+          .map(async (part) => {
+            let response;
+            try {
+              response = { status: 200, body: cached[part] ?? (await reads[part]()) };
+            } catch (error) {
+              response = { status: 409, body: { error } };
+            }
+            if (this.#menuReadGeneration === generation && this.menuId === menuId)
+              this.#applyMenuRead(menuId, { [part]: response } as MenuReadResult);
+            return [part, response];
+          }),
       );
       return Object.fromEntries(entries) as MenuReadResult;
     };
@@ -1484,7 +1478,10 @@ export class MenusScreen extends LitElement {
       !this.#moveDestinations(keys).some(({ path }) => path.join("/") === to.join("/"))
     )
       return false;
-    if (!this.#structureSave.draft.move(members, this.#targetAt(to).listId, position)) return false;
+    if (!this.#structureSave.draft.move(members, this.#targetAt(to).listId, position)) {
+      this.structureWriteError = codeMessage("menu_section.member_duplicate");
+      return false;
+    }
     this.#structureSave.changed();
     this.#edit(to);
     return true;
