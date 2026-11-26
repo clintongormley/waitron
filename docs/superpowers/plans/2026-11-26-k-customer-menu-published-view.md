@@ -1,56 +1,46 @@
 # Lane K · Published customer menu data
 
-**Resets venues.** Put this on the PR’s first line. The 26 November 16:50 watcher assignment in Lane K
-`questions.md` says “Take piece 3's first slice, the published customer view, as the spec's Delivery 3
-says (it resets venues; you split it).” Structure #4420, published allergens #4416 and the shared
-`tilePrice` function are on the base. [Design, Delivery 3 and §§3, 8](../specs/2026-11-24-customer-menu-design.md#delivery)
+**Resets venues.** Use this on the PR’s first line. The watcher assigned Delivery 3’s first
+slice on 26 November at 16:50 in Lane K `questions.md`. Structure #4420 and published
+allergens #4416 are on the base. [Customer menu design](../specs/2026-11-24-customer-menu-design.md#delivery)
 
-Staff can set customer names in Menu details and Courses, review course suggestions from Translate
-all, export the names with their configuration, and publish or schedule the full menu from Preview.
-Saving a name edits the working menu. Publishing or scheduling makes a fixed copy. Till and kitchen
-labels keep their existing sources.
+Staff can give a course a customer name in each content language, export those names with the
+venue configuration, and see customer title and course name changes in Preview before publishing
+or scheduling. The published version holds fixed copies of the names for the future customer app.
 
-- **Freeze names.** In `packages/menu/src/{menu-document,set-menus,set-menu-document}.ts` and
-  `packages/shared/src/menu-document/menu-document-types.ts`, copy the menu root’s `sections.names`
-  beside `menuName`. Use the existing batched course read to freeze the staff name and translations
-  for every course used by a set menu’s lines, including both choices on a shared line. Keep their
-  order and the set-menu title in `terms.names`. A name-only edit appears in Preview and can be
-  published. Resolve customer text from the frozen translations and staff fallback with
-  `resolveMenuText`.
-- **Edit and translate courses.** Add optional `customer_name` in `packages/db/src/schema/kitchen-courses.ts`.
-  Reuse `apps/server/src/{kitchen,management-courses-routes}.ts` and dashboard `api/kitchen-api.ts`
-  and `widgets/course-list.ts`, including the Products course picker’s shared editor. Reuse
-  `optionalTextFields` and the language validation. Add `course` to shared `content-translation-{kinds,report-types}.ts`
-  and menu `content-translation-{candidates,types,baseline,writes}.ts`. Label it in both dashboard
-  languages and keep the existing permissions for course settings and name translation. In
-  `content-suggestion-collect.ts`, send course headings as `section` in job items and
-  examples. Cloud’s local `job-body.ts` parser at `ad191ac58` accepts this with opaque `course:<id>`
-  references for replies and refuses `kind: course`.
-- **Test the saved publication.** In `packages/menu/src/set-menu-document.test.ts`, add “freezes
-  customer titles and course names until republishing.” Cover a name-only edit, a scheduled copy and
-  blank names falling back to staff. Add “publishes and patches allergens and diets on a set-menu-only
-  dish and variant.” Read `menu_versions` after `publishMenu`, product edits and `patchLiveMenu`.
-  `buildMenuDocuments` calls `freezeOffer` then `freezeSetMenu`, which spreads both dishes and
-  variants. `menu-patch.ts` already visits set menus. Change declarations code only for a gap the
-  test exposes.
-- **Test the staff paths.** In dashboard `widgets/course-list.test.ts` and server `management-api.test.ts`,
-  check “saves and clears a customer name without renaming the course.” In menu `content-suggestion-store.test.ts`,
-  check “offers a course and saves the reviewed translation by course ID.” In server
-  `configuration-transfer.floor-kitchen.test.ts`, check “round-trips course customer names” through
-  the registered `kitchen_courses` export in `packages/db/src/configuration-transfer.ts`.
+1. **Edit and export.** Add optional `customer_name` to `packages/db/src/schema/kitchen-courses.ts`.
+   Extend the existing GET and PATCH through `apps/server/src/{kitchen,management-courses-routes}.ts`
+   and `apps/dashboard/src/api/kitchen-api.ts`. In `courses-screen.ts` and the shared `course-list.ts`,
+   add a **Customer names** row action on Courses. Use the existing multilingual text fields and
+   a draft-scoped Save and Cancel dialog. A blank clears that language. Use the same validation
+   and permission as the existing Courses editor. The `kitchen_courses` export in
+   `packages/db/src/configuration-transfer.ts` carries the column.
+2. **Freeze and show changes.** In `packages/menu/src/{menu-document,set-menus,set-menu-document}.ts`
+   and the shared `menu-document-types.ts`, freeze the root’s `sections.names` as `MenuDocument.menuNames`.
+   Add `PublishedSetMenu.courses`, keyed by the course IDs in its lines, with `{ name, names }` from
+   the existing active-course read. Keep line order and both choices on shared lines. The frozen staff
+   name supplies the fallback, so a staff rename also appears as a change in menus holding that course.
+   Use `menu-document.ts` and `menu-navigation.ts` to list customer title changes and mark course names
+   in the existing `set_menu_changed` row. Put English and Spanish wording in the dashboard Preview
+   change widgets and `strings.ts`. Publish and Schedule take the new names. Patch live leaves them
+   for the next publication. The till and kitchen keep their existing name paths.
+3. **Test from the existing entry points.** Start with failing cases in `course-list.test.ts` for
+   saving and clearing a translation while keeping the staff name, `management-api.test.ts` for GET
+   and PATCH validation and existing permissions, and `configuration-transfer.floor-kitchen.test.ts`
+   for export and import. In `set-menu-document.test.ts`, publish and schedule a menu holding a set
+   menu with two courses on a line. Change the title and course names and check that Preview and the
+   next publication update while the saved editions retain both old names and their staff fallback.
+   Check name-only rows in `menu-change-navigation.test.ts` and wording in `menu-preview-tree.test.ts`.
 
-Start with failing feature tests. Advance document format 6 to 7 in the builder and shared type,
-and bundle version 60 to 61 in `packages/provisioning/src/configuration-transfer.ts`. Recheck both
-after rebase. Run `pnpm --filter @waitron/server migration-baseline rebuild --set core` and the
-schema, trigger, starting migration, fiscal immutability and guide guards. Typecheck document
-consumers. Review the new baseline, backup format refusal, translation contract and publish/patch
-boundaries. Claude reviews the plan before watcher clearance. After rebasing, the built branch
-gets two run-it reviews and a fresh read of any fixes.
+Use the existing declaration paths and tests in `published-declarations.test.ts`, `menu-patch.test.ts`
+and `menu-change-navigation.test.ts`. Bump menu format 6 to 7 and bundle version 60 to 61, checking
+both after rebase. Rebuild with `pnpm --filter @waitron/server migration-baseline rebuild --set core`.
+Run the named tests, schema and trigger guards, fiscal immutability, guide checks and scoped types.
+Update `docs/backlog.md` and both Products guides. Send local screenshots of Courses and Preview at
+1440, 1280 and 390 px, in English and Spanish and both dashboard themes, to the watcher for owner
+approval before landing. Estimate 200–320 product and 220–350 test lines plus format fixtures and the
+generated baseline. Migration and document contract changes get two run-it reviews.
 
-Update `apps/server/src/guide/{en,es}/{products,content-and-images}.md` and note the slice in
-`docs/backlog.md`. Before landing, give the
-watcher local screenshots for the owner of Courses and the translation editor at 1440, 1280 and
-390 px, in English and Spanish and both dashboard themes. Estimate 200–300 product lines and
-220–350 test lines, excluding generated files. The next independent slice adds the customer app and
-signed-in Online preview in one built-in style, with phone/computer, light/dark and photo
-combinations. Print and public URLs follow in later deliveries.
+The next slice adds the signed-in customer app and Online preview, with the style and photo picture
+matrix. Delivery 3 also needs Translate all for course headings, after a separate Cloud contract
+decision. Print and public URLs follow in later deliveries.
