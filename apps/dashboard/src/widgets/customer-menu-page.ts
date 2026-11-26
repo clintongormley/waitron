@@ -22,20 +22,20 @@ function icon(name: string, label: string) {
   return html`<wt-icon name=${name} role="img" aria-label=${label} title=${label}></wt-icon>`;
 }
 
-function declarations(value: GuestDeclarations, { language, text }: Words) {
+function declarations({ allergens, dietary }: GuestDeclarations, { language, text }: Words) {
   return html`<span class="declarations" lang=${language}>
     ${
-      value.allergens === null
-        ? html`<span>${text.unreviewed}</span>`
-        : ALLERGEN_CODES.filter((code) => Object.hasOwn(value.allergens!, code)).map((code) => {
-            const kinds = value.allergens![code]!.kinds?.map((kind) => text[kind]!).join(", ");
+      allergens === null
+        ? nothing
+        : ALLERGEN_CODES.filter((code) => Object.hasOwn(allergens, code)).map((code) => {
+            const kinds = allergens[code]!.kinds?.map((kind) => text[kind]!).join(", ");
             return html`<span>
               ${icon(`allergen-${code}`, kinds ? `${text[code]} (${kinds})` : text[code]!)}
               ${kinds ? html`<span aria-hidden="true">${kinds}</span>` : nothing}
             </span>`;
           })
     }
-    ${value.dietary.map((diet) => icon(`diet-${diet}`, text[diet]!))}
+    ${dietary.map((diet) => icon(`diet-${diet}`, text[diet]!))}
   </span>`;
 }
 

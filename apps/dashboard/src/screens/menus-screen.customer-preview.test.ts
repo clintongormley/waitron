@@ -193,7 +193,17 @@ describe("the customer menu Online preview", () => {
     await expect.element(page.getByRole("heading", { name: "Lunch for guests" })).toBeVisible();
     await expect.element(page.getByText("This preview shows the published menu.")).toBeVisible();
     await expect.element(page.getByText("Two courses")).toBeVisible();
-    await expect.element(page.getByText("Allergens not reviewed").first()).toBeVisible();
+    expect.soft(page.getByText("Allergens not reviewed").elements()).toHaveLength(0);
+    expect
+      .soft(
+        page
+          .getByText(
+            "Icons show declared allergens. No icon does not mean allergen-free. Ask staff about allergens.",
+            { exact: true },
+          )
+          .elements(),
+      )
+      .toHaveLength(1);
     await expect
       .element(page.getByRole("img", { name: "Cereals containing gluten (Wheat)" }))
       .toBeVisible();
