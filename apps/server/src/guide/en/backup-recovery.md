@@ -18,7 +18,7 @@ To move service back to this box, keep the replacement’s latest backup and shu
 
 If the restore command is interrupted, run it again before starting the service.
 
-If the restore says the source still appears live, check that the replacement is off before adding `--confirm-old-box-gone` to the command.
+Before adding `--confirm-old-box-gone`, make sure the replacement is off. A running replacement with no recent bucket uploads can pass the restore check.
 
 The replacement’s backup leaves out sales this box made between the replacement taking over and this box stopping. After you restore here, those sales survive only in the old database copy that Waitron sets aside. Keep that copy if this box might have taken sales during that time. Discarding the set-aside copy deletes them.
 

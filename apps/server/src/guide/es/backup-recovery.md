@@ -18,7 +18,7 @@ Para volver a usar este servidor, guarda la copia de seguridad más reciente del
 
 Si el comando de restauración se interrumpe, ejecútalo de nuevo antes de iniciar el servicio.
 
-Si la restauración indica que el servidor de origen parece seguir activo, comprueba que el servidor de sustitución está apagado antes de añadir `--confirm-old-box-gone` al comando.
+Antes de añadir `--confirm-old-box-gone`, comprueba que el servidor de sustitución está apagado. Un servidor de sustitución activo que no haya subido datos al bucket recientemente puede superar la comprobación.
 
 La copia del servidor de sustitución deja fuera las ventas que este servidor registró entre el momento en que el otro se hizo cargo y la parada de este. Después de restaurar aquí, esas ventas solo quedarán en la copia de la base de datos anterior que Waitron guarda aparte. Conserva esa copia si este servidor pudo registrar ventas durante ese tiempo. Si la descartas, perderás esas ventas.
 

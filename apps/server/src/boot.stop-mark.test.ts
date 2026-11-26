@@ -265,6 +265,7 @@ it("stops admissions before saving the replacement and stays stopped after an of
             expect(page).toContain('href="/help/en/backup-recovery#replaced-box"');
             expect((await fetch(`${offline}/carry-on`, { method: "POST" })).status).toBe(404);
             await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 10_000 });
+            expect(record).toHaveBeenCalledTimes(2);
             expect(smtp.messages[0]).toContain("To: owner@example.test");
             const rows = await suite.db
               .select({ code: incidents.code })
