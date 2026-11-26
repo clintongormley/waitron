@@ -740,6 +740,8 @@ BEGIN
     OR NOT exists (SELECT 1 FROM working_orders WHERE id = new.reopened_from AND status = 'placed');
 END;
 --> statement-breakpoint
+-- Its placed-to-open branch names the modes `paysAfterSending` (apps/server/src/working-order-context.ts)
+-- lists; the two lists change together, and nothing guards that.
 CREATE TRIGGER working_orders_enforce_transition
 BEFORE UPDATE ON working_orders
 FOR EACH ROW
@@ -829,6 +831,8 @@ BEGIN
         AND new.editor_version IS old.editor_version
         AND new.delivery_table_label IS old.delivery_table_label)
     OR (old.status = 'placed' AND new.status = 'open'
+        AND old.party_id IS NULL
+        AND old.service_mode IS 'ticket_then_pay'
         AND NOT EXISTS (SELECT 1 FROM sales WHERE working_order_id = old.id)
         AND new.id IS old.id
         AND new.source IS old.source

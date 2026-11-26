@@ -421,9 +421,6 @@ function seed(connection) {
       `'wo-moves-frozen', 'wo-moves-lines')`,
     `update working_orders set status = 'settled', settled_at = '${STAMP}' ` +
       `where id in ('wo-served-settled', 'wo-served-orphan', 'wo-served-relocale')`,
-    // A sale names each placed order whose way back to open is refused.
-    saleOf("sale-of-wo-placed", "wo-placed"),
-    saleOf("sale-of-wo-moves-frozen", "wo-moves-frozen"),
 
     // Lines for the sent-stamp exception: a line sent to the kitchen after its bill was presented or
     // paid.
@@ -863,7 +860,7 @@ describe("tenders_reject_post_settlement", () => {
 });
 
 describe("working_orders_enforce_transition", () => {
-  it("refuses a placed order going back to open once a sale names it", () => {
+  it("refuses a placed order going back to open", () => {
     expect(
       refusalFor(connection, `update working_orders set status = 'open' where id = 'wo-placed'`),
     ).toBe(TRANSITION_REFUSAL);
@@ -1067,7 +1064,7 @@ describe("working_orders_enforce_transition's exception for a presented bill", (
     },
   );
 
-  it("still refuses a presented bill a sale names going back to open, alone or with a party change", () => {
+  it("still refuses a presented bill going back to open, alone or with a party change", () => {
     for (const also of ["", ", party_id = 'party-frozen'"]) {
       expect(
         refusalFor(
@@ -1357,6 +1354,89 @@ describe("working_orders_enforce_transition's exception for a released delivery 
           connection,
           `update working_orders set ${RELEASE}, ${column} = 'changed' where id = '${id}'`,
         ),
+      ).toBe(TRANSITION_REFUSAL);
+    },
+  );
+});
+
+/** Every column of `working_orders` a placed order going back to open must leave as it is. */
+const FROZEN_REOPEN_COLUMNS = connection
+  .prepare(`select name from pragma_table_info('working_orders') order by cid`)
+  .all()
+  .map((row) => String(row.name))
+  .filter((name) => name !== "status");
+
+/** A placed order no sale names, recorded in a zone with `serviceMode` (or none) and in `partyId`
+ * (or none), written for one case alone. */
+function sentOrder(id, serviceMode = "ticket_then_pay", partyId = null) {
+  connection.exec(workingOrder(id, "placed", partyId ? { partyId } : {}));
+  if (serviceMode !== null) {
+    connection.exec(
+      `update working_orders set zone_id = 'zone-sent', department_id = 'department-sent', ` +
+        `service_mode = '${serviceMode}' where id = '${id}'`,
+    );
+  }
+}
+
+describe("working_orders_enforce_transition's exception for a sent Counter order with no sale going back to open", () => {
+  it("reads the table's columns, so the per-column cases below are not vacuous", () => {
+    expect(FROZEN_REOPEN_COLUMNS).toEqual(
+      expect.arrayContaining(["id", "label", "party_id", "service_mode", "revision"]),
+    );
+  });
+
+  it("accepts a sent Counter order with no sale going back to open alone", () => {
+    sentOrder("wo-reopen-alone");
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set status = 'open' where id = 'wo-reopen-alone'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it.each(FROZEN_REOPEN_COLUMNS)(
+    "refuses a placed order going back to open when %s changes with it",
+    (column) => {
+      const id = `wo-reopen-with-${column}`;
+      sentOrder(id);
+      expect(
+        refusalFor(
+          connection,
+          `update working_orders set status = 'open', ${column} = 'changed' where id = '${id}'`,
+        ),
+      ).toBe(TRANSITION_REFUSAL);
+    },
+  );
+
+  it("refuses a sent Counter order going back to open once a sale names it", () => {
+    sentOrder("wo-reopen-sold");
+    connection.exec(saleOf("sale-of-wo-reopen-sold", "wo-reopen-sold"));
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set status = 'open' where id = 'wo-reopen-sold'`,
+      ),
+    ).toBe(TRANSITION_REFUSAL);
+  });
+
+  it("refuses a placed order going back to open while it belongs to a party", () => {
+    sentOrder("wo-reopen-party", "ticket_then_pay", "party-frozen");
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set status = 'open' where id = 'wo-reopen-party'`,
+      ),
+    ).toBe(TRANSITION_REFUSAL);
+  });
+
+  it.each(["prepay", "table_tab", null])(
+    "refuses a placed order going back to open when its recorded mode is %s",
+    (serviceMode) => {
+      const id = `wo-reopen-mode-${serviceMode}`;
+      sentOrder(id, serviceMode);
+      expect(
+        refusalFor(connection, `update working_orders set status = 'open' where id = '${id}'`),
       ).toBe(TRANSITION_REFUSAL);
     },
   );
