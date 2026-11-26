@@ -151,9 +151,9 @@ describe("Orders routes", () => {
     expect((staffPaid.json as { rows: { id: string }[] }).rows.map((row) => row.id)).not.toContain(
       cancelled,
     );
-    const staffCancelled = await get(venue.staffDashboard, "?status=cancelled&anyDate=true");
-    expect(staffCancelled.status).toBe(200);
-    expect((staffCancelled.json as { rows: { id: string }[] }).rows.map((row) => row.id)).toContain(
+    const staffVoided = await get(venue.staffDashboard, "?status=voided&anyDate=true");
+    expect(staffVoided.status).toBe(200);
+    expect((staffVoided.json as { rows: { id: string }[] }).rows.map((row) => row.id)).toContain(
       cancelled,
     );
     expect((await get(venue.staffDashboard, "?status=unpaid&anyDate=true")).status).toBe(200);

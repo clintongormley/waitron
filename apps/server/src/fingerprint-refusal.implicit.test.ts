@@ -26,8 +26,6 @@ import type { BillDraftSnapshot } from "./order-drafts.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelBody } from "./testing/cancel-line.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
-import { issueOrderInvoice } from "./testing/issue-order.js";
-import { placeOrder } from "./testing/order-writer-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   provisionBillVenue,
@@ -417,55 +415,6 @@ describe("late issuance rolls back its initiating command", () => {
       body,
     );
     expect(fault.calls).toBe(1);
-    expect(answer).toEqual({
-      status: 409,
-      json: { code: "fiscal.fingerprint_mismatch", params: {} },
-    });
-    expect(snapshot()).toEqual(before);
-    expect((await suite.db.select().from(incidents)).map((row) => row.code)).toEqual([
-      "fiscal.fingerprint_mismatch",
-    ]);
-  });
-
-  it("a placed-order credit refusal leaves its original invoice unchanged", async () => {
-    const [product] = await suite.db.select().from(products);
-    const offers = await withTransaction(suite.db, (tx) =>
-      offerProducts(tx, {
-        zone: "counter",
-        orderStart: "counter",
-        paidWhen: "ticket_then_pay",
-      }),
-    );
-    const id = randomUUID();
-    expect(
-      (
-        await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
-          dining: "eat_in",
-          id,
-          zoneId: offers.zoneId,
-          lines: [{ menuItemId: offers.offerFor(product!.id), quantity: "1" }],
-        })
-      ).status,
-    ).toBe(200);
-    const deps = { db: suite.db, backend: venue.backend, clock: venue.clock };
-    await issueOrderInvoice(
-      { ...deps, admission: testTradingAdmission() },
-      venue.cfg,
-      id,
-      venue.operatorId,
-    );
-    await placeOrder(
-      { ...deps, admission: testTradingAdmission() },
-      venue.cfg,
-      id,
-      venue.operatorId,
-    );
-    const before = snapshot();
-    fault.enabled = true;
-    const answer = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/cancel`, {
-      reason: "Wrong order",
-      override: { personId: venue.adminId, pin: "1234" },
-    });
     expect(answer).toEqual({
       status: 409,
       json: { code: "fiscal.fingerprint_mismatch", params: {} },

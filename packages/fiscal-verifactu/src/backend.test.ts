@@ -352,6 +352,7 @@ describe("recordVoid", () => {
 
   it("a cancellation of another box's sale is chained on the issuing box, citing the original", async () => {
     const { saleId } = await sell({ origin: deviceOrigin(deviceId) });
+    await answer(saleId, "aceptado");
     const m2 = await seedTaxpayerWithSif(suite.db);
     const m2Sif = await withTransaction(suite.db, (tx) => currentSif(tx, m2.nodeId));
 

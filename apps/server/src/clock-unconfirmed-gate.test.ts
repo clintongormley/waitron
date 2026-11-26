@@ -760,12 +760,12 @@ const moneyRoutes: Record<string, () => Promise<MoneyRoute>> = {
       grows: ["deferredClosures", "records"],
     };
   },
-  "a cancel's credit of an order whose invoice was filed": async () => {
+  "a cancel of an order whose invoice was filed": async () => {
     const id = await counterOrder(true);
     const body = { reason: "Wrong order", override: OVERRIDE() };
     return {
       send: (app) => as(app, "POST", `/api/working-orders/${id}/cancel`, body),
-      grows: ["sales", "records"],
+      grows: ["records"],
     };
   },
   "an adjustment that settles a part-paid bill": async () => {

@@ -379,24 +379,6 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect(byId.get(party.tabId)).not.toHaveProperty("reopenedFrom");
   });
 
-  it("Cancel and credit still needs sale.rectify", async () => {
-    const party = await printed("Tarta");
-    const before = written();
-    const cancel = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${party.tabId}/cancel`,
-      { reason: "Wrong" },
-    );
-    expect({ status: cancel.status, code: cancel.json.code }).toEqual({
-      status: 403,
-      code: "authorization.not_permitted",
-    });
-    expect(written()).toEqual(before);
-    expect(await statusOf(venue, party.tabId)).toBe("placed");
-  });
-
   it("a part-paid bill names its unserved dishes, its money moving nowhere", async () => {
     const party = await seat("Tarta");
     expect((await printBill(party, party.tabId, true)).status).toBe(200);
@@ -633,6 +615,8 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
 
   it("refuses on a box waiting for its time as the cancel does, copying nothing", async () => {
     const party = await printed("Tarta");
+    const unserved = await seat("Tarta");
+    expect((await printBill(unserved, unserved.tabId, true)).status).toBe(200);
     const waiting = venue.appWith({
       backend: gateSeatOnStartClock(venue.backend, () => true),
       clockUnconfirmed: () => true,
@@ -641,10 +625,13 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       waiting,
       venue.supervisorTill,
       "POST",
-      `/api/working-orders/${party.tabId}/cancel`,
+      `/api/working-orders/${unserved.tabId}/cancel`,
       { reason: "Wrong" },
     );
-    expect(cancel.status).not.toBe(200);
+    expect({ status: cancel.status, code: cancel.json.code }).toEqual({
+      status: 409,
+      code: "clock.unconfirmed",
+    });
 
     await expectRefused(party.tabId, () => split(party.tabId, venue.supervisorTill, waiting), {
       status: cancel.status,
@@ -1032,11 +1019,10 @@ describe("the Given free sheet for a printed bill", () => {
     expect(await freeOn(party.tabId)).toEqual([]);
   });
 
-  it("leaves out a comped dish on a printed bill that was cancelled and credited", async () => {
+  it("leaves out a comped dish on a printed bill that was cancelled", async () => {
     const party = await seat("Red wine bottle", "Tarta");
     await seedGivenAwayLine(venue, party.tabId, 1);
-    expect((await serve(party, party.tabId)).status).toBe(200);
-    expect((await printBill(party, party.tabId)).status).toBe(200);
+    expect((await printBill(party, party.tabId, true)).status).toBe(200);
     expect(await freeOn(party.tabId)).toHaveLength(1);
 
     const cancelled = await send(

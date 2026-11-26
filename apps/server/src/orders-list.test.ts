@@ -215,14 +215,14 @@ describe("each status, from the product's own write paths", () => {
       reason: "Error",
     });
 
-  it("reads a sent bill cancelled at the till as Cancelled and credited in full, with its corrective", async () => {
+  it("reads a sent bill cancelled at the till as Voided, with no corrective", async () => {
     const id = await placedIssuedBill(venue, "Small beer");
     expect((await cancel(id)).status).toBe(200);
     expect(await rowOf(id)).toMatchObject({
-      status: "cancelled",
+      status: "voided",
       invoiceNumber: expect.stringMatching(/^A\/\d+$/),
-      correctives: [expect.stringMatching(/^R\/\d+$/)],
-      credited: "in_full",
+      correctives: [],
+      credited: null,
       stillOwed: null,
     });
   });
@@ -239,13 +239,13 @@ describe("each status, from the product's own write paths", () => {
     expect(await rowOf(id)).toEqual(before);
   });
 
-  it("reads a debt cancelled at the till afterwards as Cancelled and credited in full, not Left without paying", async () => {
+  it("reads a debt cancelled at the till afterwards as Voided, with no corrective, not Left without paying", async () => {
     const party = await departed(venue, "Small beer");
     expect((await cancel(party.tabId)).status).toBe(200);
     expect(await rowOf(party.tabId)).toMatchObject({
-      status: "cancelled",
-      correctives: [expect.stringMatching(/^R\/\d+$/)],
-      credited: "in_full",
+      status: "voided",
+      correctives: [],
+      credited: null,
       stillOwed: null,
       departedAt: expect.any(String),
     });
