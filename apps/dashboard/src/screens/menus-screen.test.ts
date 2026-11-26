@@ -307,12 +307,12 @@ function lunchPrices(): MenuPriceRow[] {
       menuItemId: "mi-lemonade",
       combined: combinedFixture(
         "p-lemonade",
-        "2.50",
+        "3.00",
         [
           { variantId: "v-small", price: null },
           { variantId: "v-large", price: "3.75" },
         ],
-        "2.50",
+        null,
         "3.00",
         { "v-large": "3.40" },
       ),
@@ -320,8 +320,8 @@ function lunchPrices(): MenuPriceRow[] {
       name: "Lemonade",
       categoryId: "c-drinks",
       placements: [["s-fav"], ["s-drinks"]],
-      override: "2.50",
-      effectivePrice: "2.50",
+      override: null,
+      effectivePrice: "3.00",
       available: true,
       variants: [
         { variantId: "v-small", price: null, available: true },
@@ -8344,7 +8344,7 @@ it.each([
   ["es-ES", "1000.00", "9999.99", "", false],
   ["es-ES", "1000.00", "9999.99", "Verdana", false],
 ])(
-  "shows Lemonade's range as text and every field whole, left of its row menu, in the dashboard at 390 px (%s, %s – %s, font %s)",
+  "shows Lemonade's range as text, breaking it only between its prices, and every field whole, left of its row menu, in the dashboard at 390 px (%s, %s – %s, font %s)",
   async (locale, low, high, font, fits) => {
     await import("../dashboard-app.js");
     registerIcons(DASHBOARD_ICONS);
@@ -8428,6 +8428,12 @@ it.each([
     const widget = prices(screen()!);
     await vi.waitFor(() => expect(widget.style.getPropertyValue("--actions-width")).not.toBe(""));
     const grid = widget.shadowRoot!.querySelector("wt-data-table")!;
+    const firstField = grid.shadowRoot!.querySelector("wt-price-input")!;
+    await vi.waitFor(() =>
+      expect(widget.style.getPropertyValue("--field-width")).toBe(
+        `${firstField.getBoundingClientRect().width}px`,
+      ),
+    );
     await vi.waitFor(() => expect(grid.hasAttribute("narrow")).toBe(true));
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     expect(window.innerWidth).toBe(390);
@@ -8439,7 +8445,8 @@ it.each([
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const input = (key: string) =>
       rowOf(key).querySelector("wt-price-input")!.shadowRoot!.querySelector("input")!;
-    // A product with variants shows its range as text, on one line, and offers no field.
+    // A product with variants shows its range as text, breaking it only between its prices, and
+    // offers no field.
     const range = rowOf("mi-lemonade").querySelector('[part~="derived-price"]')!;
     expect(rowOf("mi-lemonade").querySelector("wt-price-input")).toBeNull();
     expect(range.textContent).toBe(
@@ -8447,9 +8454,15 @@ it.each([
         .replace("{low}", formatMoney(low, locale))
         .replace("{high}", formatMoney(high, locale)),
     );
-    const words = document.createRange();
-    words.selectNodeContents(range);
-    expect(words.getClientRects().length).toBe(1);
+    const text = [...range.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
+    for (const price of [formatMoney(low, locale), formatMoney(high, locale)]) {
+      const start = text.textContent!.indexOf(price);
+      expect(start, price).toBeGreaterThanOrEqual(0);
+      const words = document.createRange();
+      words.setStart(text, start);
+      words.setEnd(text, start + price.length);
+      expect(words.getClientRects().length, price).toBe(1);
+    }
     for (const key of [
       "mi-burger",
       "mi-lemonade",
@@ -8659,18 +8672,7 @@ it("stages two price edits on blur, then saves both with one refresh", async () 
   expect(writeCalls(client)).toEqual(["updateMenuItem", "setMenuVariantPrice"]);
 });
 
-it("writes a product without variants through its menu item alone", async () => {
-  const client = api();
-  const el = await mountPrices(client);
-  await commitPrice(el, "mi-burger", "11.00");
-  await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledOnce());
-  expect(client.updateMenuItem.mock.calls).toEqual([
-    ["menu-lunch", "mi-burger", { grossPrice: "11.00" }],
-  ]);
-  expect(client.setMenuVariantPrice).not.toHaveBeenCalled();
-});
-
-it("writes only the product's price when only its field changed, and offers no field on a product with variants", async () => {
+it("writes a product without variants through its menu item alone, and offers no field on a product with variants", async () => {
   const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
   const el = await mountPrices(client);
   await expandPrices(el, "mi-lemonade");
@@ -8679,10 +8681,10 @@ it("writes only the product's price when only its field changed, and offers no f
       .shadowRoot!.querySelector<Table>("wt-data-table")!
       .shadowRoot.querySelector('wt-price-input[data-row="mi-lemonade"]'),
   ).toBeNull();
-  await commitPrice(el, "mi-burger", "11.60");
+  await commitPrice(el, "mi-burger", "11.00");
   await vi.waitFor(() => expect(client.updateMenuItem).toHaveBeenCalledOnce());
   expect(client.updateMenuItem.mock.calls).toEqual([
-    ["menu-lunch", "mi-burger", { grossPrice: "11.60" }],
+    ["menu-lunch", "mi-burger", { grossPrice: "11.00" }],
   ]);
   await vi.waitFor(() => expect(priceSave(el).disabled).toBe(true));
   expect(writeCalls(client)).toEqual(["updateMenuItem"]);

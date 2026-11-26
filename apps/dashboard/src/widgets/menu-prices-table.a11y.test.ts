@@ -48,12 +48,12 @@ const rows: MenuPriceRow[] = [
     menuItemId: "mi-lemonade",
     combined: combinedFixture(
       "p-lemonade",
-      "2.50",
+      "3.00",
       [
         { variantId: "v-small", price: null },
         { variantId: "v-large", price: "3.75" },
       ],
-      "2.50",
+      null,
       "3.00",
       { "v-large": "3.40" },
     ),
@@ -61,8 +61,8 @@ const rows: MenuPriceRow[] = [
     name: "Lemonade",
     categoryId: "c-drinks",
     placements: [["s-drinks"], ["s-drinks", "s-beer"]],
-    override: "2.50",
-    effectivePrice: "2.50",
+    override: null,
+    effectivePrice: "3.00",
     available: true,
     variants: [
       { variantId: "v-small", price: null, available: true },
