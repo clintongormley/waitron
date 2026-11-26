@@ -199,7 +199,7 @@ describe("Cancel and credit on a printed bill nothing was served on and nobody p
 
     const answer = await cancel(party.tabId);
 
-    expect(answer).toEqual({ status: 200, json: { body: "" } });
+    expect(answer).toEqual({ status: 200, json: { filed: "cancellation" } });
     expect(await voidsOf(saleId)).toEqual([{ reason: REASON, voidedBy: venue.supervisorId }]);
     expect(await filedRecordsOf(venue.db, saleId)).toEqual([
       { kind: "invoice", state: "pendiente" },

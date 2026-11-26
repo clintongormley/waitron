@@ -363,7 +363,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
 
     const answer = await cancel(party.tabId);
 
-    expect(answer).toEqual({ status: 200, json: { body: "" } });
+    expect(answer).toEqual({ status: 200, json: { filed: "corrective" } });
     expect(await creditsOf(original.id)).toEqual([expect.objectContaining({ total: -300 })]);
     expect(
       await inTx(venue, (tx) => tx.select().from(tenders).where(eq(tenders.saleId, original.id))),
@@ -653,7 +653,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
 
     const answer = await cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN })(id);
 
-    expect(answer).toEqual({ status: 200, json: { body: "" } });
+    expect(answer).toEqual({ status: 200, json: { filed: "cancellation" } });
     expect(await voidsOf(original.id)).toEqual([{ reason: REASON, voidedBy: supervisorId }]);
     expect(await statusOf(venue, id)).toBe("abandoned");
     expect(await amendmentsOf(id)).toEqual([
@@ -1183,7 +1183,7 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     expect(declined.status).toBe(200);
     expect(declined.json.outcome).toBe("declined");
 
-    expect(await cancel(id)).toEqual({ status: 200, json: { body: "" } });
+    expect(await cancel(id)).toEqual({ status: 200, json: { filed: "cancellation" } });
     expect(await voidsOf(original.id)).toHaveLength(1);
     expect(await statusOf(venue, id)).toBe("abandoned");
   });
@@ -1386,7 +1386,7 @@ describe("cancelling an invoiced counter order from the counter's waiting list",
       invoiceNumber: await formattedNumberOf(original),
     });
 
-    expect(await cancel(id)).toEqual({ status: 200, json: { body: "" } });
+    expect(await cancel(id)).toEqual({ status: 200, json: { filed: "cancellation" } });
 
     expect(await voidsOf(original.id)).toHaveLength(1);
     expect(await annulmentsOf(original.id)).toHaveLength(1);

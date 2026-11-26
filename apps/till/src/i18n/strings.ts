@@ -2220,6 +2220,7 @@ export const en = {
   "cancel_credit.served":
     "These dishes were served or charged, so the receipt can't be cancelled. Take payment, or use Reopen bill where it is offered.",
   "cancel_credit.done": "Corrective receipt {number} issued. The bill is cancelled.",
+  "cancel_credit.done_unnumbered": "A corrective receipt was issued and the bill is cancelled.",
   "cancel_credit.voided": "Receipt {number} cancelled.",
   "cancel_credit.voided_unnumbered": "The receipt is cancelled.",
   "cancel_credit.done_action": "Done",
@@ -4647,6 +4648,7 @@ export const es: Record<StringKey, string> = {
   "cancel_credit.served":
     "Estos platos se sirvieron o se cobran, así que el ticket no se puede anular. Cobra la cuenta o, si se ofrece, usa Reabrir cuenta.",
   "cancel_credit.done": "Ticket rectificativo {number} emitido. La cuenta queda cancelada.",
+  "cancel_credit.done_unnumbered": "Se emitió el ticket rectificativo y la cuenta queda cancelada.",
   "cancel_credit.voided": "Ticket {number} anulado.",
   "cancel_credit.voided_unnumbered": "El ticket queda anulado.",
   "cancel_credit.done_action": "Hecho",

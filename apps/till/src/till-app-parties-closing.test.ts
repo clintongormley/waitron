@@ -13,6 +13,7 @@ import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { completedFor, previewFor } from "./widgets/give-back-dialog.test-helpers.js";
 import type { GiveBackRequest, GiveBackView, GiveBackWrite } from "./api/give-back-types.js";
 import type { PartyBill, TableState } from "./api/floor-api.js";
+import type { CancelFiled } from "./api/orders-api.js";
 import {
   seated,
   table4,
@@ -71,8 +72,12 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
   const offered = (el: TillApp) =>
     tableOrder(el)!.shadowRoot!.querySelector("[data-cancel-credit]");
 
-  /** The server's side of the party's bills: `cancelOrder` cancels the bill unless it rejects. */
-  function billServer(cancel: (id: string) => Promise<void> = async () => {}) {
+  /** The server's side of the party's bills: `cancelOrder` cancels the bill unless it rejects,
+   * answering that it filed `filed`; the corrective's number is R/3. */
+  function billServer(
+    cancel: (id: string) => Promise<void> = async () => {},
+    filed: CancelFiled = "corrective",
+  ) {
     let bills: PartyBill[] = [tabBill, invoiced];
     let readsFail = false;
     return {
@@ -82,7 +87,8 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
       }),
       cancelOrder: vi.fn(async (id: string) => {
         await cancel(id);
-        bills = [tabBill, cancelled];
+        bills = [tabBill, filed === "corrective" ? cancelled : { ...cancelled, correctives: [] }];
+        return { filed };
       }),
       cancelBehindTheScenes: () => {
         bills = [tabBill, cancelled];
@@ -132,11 +138,10 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     await flush(el, 6);
   }
 
-  it("opens over the table naming the bill's invoice and amount, and sends nothing yet", async () => {
+  it("opens over the table naming the bill's invoice, and sends nothing yet", async () => {
     const { el } = await openCancel();
 
     expect(dialog(el)!.invoiceNumber).toBe("A/12");
-    expect(dialog(el)!.amount).toBe("30.00");
     expect(api.cancelOrder).not.toHaveBeenCalled();
   });
 
@@ -395,30 +400,41 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(doneText(el)).toBeNull();
   });
 
-  it("when the bills cannot be read after the cancel, still says the bill is cancelled and offers no cancel again", async () => {
-    const server = billServer();
-    server.cancelOrder.mockImplementationOnce(async () => server.failReads());
-    const { el } = await openCancel(server);
-    await typeReason(el, "Wrong table");
+  it.each([
+    ["corrective", t("cancel_credit.done_unnumbered")],
+    ["cancellation", "Receipt A/12 cancelled."],
+  ] as const)(
+    "when the bills cannot be read after a cancel filing a %s, says so and offers no cancel again",
+    async (filed, said) => {
+      const server = billServer(async () => server.failReads(), filed);
+      const { el } = await openCancel(server);
+      await typeReason(el, "Wrong table");
 
-    await confirmCancel(el);
+      await confirmCancel(el);
 
-    expect(doneText(el)).toBe("Receipt A/12 cancelled.");
-    expect(offered(el)).toBeNull();
-  });
+      expect(doneText(el)).toBe(said);
+      expect(offered(el)).toBeNull();
+    },
+  );
 
-  it("shows a completed table cancel while the corrective read has not answered", async () => {
-    const server = billServer();
-    const { el } = await openCancel(server);
-    server.getPartyBills.mockImplementationOnce(() => new Promise<PartyBill[]>(() => undefined));
-    await typeReason(el, "Wrong table");
+  it.each([
+    ["corrective", t("cancel_credit.done_unnumbered")],
+    ["cancellation", "Receipt A/12 cancelled."],
+  ] as const)(
+    "shows a completed table cancel filing a %s while the bills read has not answered",
+    async (filed, said) => {
+      const server = billServer(undefined, filed);
+      const { el } = await openCancel(server);
+      server.getPartyBills.mockImplementationOnce(() => new Promise<PartyBill[]>(() => undefined));
+      await typeReason(el, "Wrong table");
 
-    await confirmCancel(el);
+      await confirmCancel(el);
 
-    expect(server.cancelOrder).toHaveBeenCalledOnce();
-    expect(dialog(el)!.busy).toBe(false);
-    expect(doneText(el)).toBe("Receipt A/12 cancelled.");
-  });
+      expect(server.cancelOrder).toHaveBeenCalledOnce();
+      expect(dialog(el)!.busy).toBe(false);
+      expect(doneText(el)).toBe(said);
+    },
+  );
 
   it("shows a table cancel refusal while the follow-up bills read has not answered", async () => {
     const server = billServer(async () => {
@@ -573,7 +589,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(vi.mocked(api.cancelOrder).mock.calls).toEqual([
       ["wo-check", "Wrong table", undefined, { signal: expect.any(AbortSignal) }],
     ]);
-    expect(doneText(el)).toBe("Receipt A/12 cancelled.");
+    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
     dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-finished]")!.click();
     await expect.poll(() => dialog(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -624,7 +640,10 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
         table7,
         table9,
       ]),
-      cancelOrder: vi.fn(async () => cancel()),
+      cancelOrder: vi.fn(async () => {
+        cancel();
+        return { filed: "corrective" as const };
+      }),
       createPartyBill: vi.fn().mockResolvedValue({ billId: "wo-new", revision: 5 }),
     };
   }
@@ -662,11 +681,8 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(server.getPartyBills).toHaveBeenCalledTimes(billReads);
   });
 
-  it("names the receipt cancelled when the bills read after it name no corrective", async () => {
-    const server = billServer();
-    server.cancelOrder.mockImplementationOnce(async () => {
-      server.getPartyBills.mockResolvedValue([tabBill, { ...cancelled, correctives: [] }]);
-    });
+  it("names the receipt cancelled when the server answers that it filed a cancellation", async () => {
+    const server = billServer(undefined, "cancellation");
     const { el } = await openCancel(server);
     await typeReason(el, "Nobody came");
 

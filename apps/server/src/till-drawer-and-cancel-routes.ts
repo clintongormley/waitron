@@ -121,7 +121,7 @@ export function mountTillDrawerAndCancelRoutes(
       if (typeof body.reason !== "string")
         throw new AppError("working_order.reason_required", { workingOrderId: id });
       const override = parseOverrideField(body.override);
-      await cancelPlacedOrder(
+      const filed = await cancelPlacedOrder(
         {
           db: deps.db,
           backend: deps.backend,
@@ -136,7 +136,7 @@ export function mountTillDrawerAndCancelRoutes(
         { personId, sessionId, attempts: overridePinAttempts(pinThrottle, session.deviceId) },
         override,
       );
-      return c.body(null, 200);
+      return c.json({ filed: filed ?? null });
     }),
   );
 

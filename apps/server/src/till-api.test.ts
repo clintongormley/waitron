@@ -1830,7 +1830,7 @@ describe("/api/working-orders/:id/cancel", () => {
       body: JSON.stringify({ reason: "customer left" }),
     });
     expect(cancel.status).toBe(200);
-    expect(await cancel.text()).toBe("");
+    expect(await cancel.json()).toEqual({ filed: null });
 
     const order = await suite.db.execute<{ status: string }>(
       sql`select status from working_orders where id = ${id}`,

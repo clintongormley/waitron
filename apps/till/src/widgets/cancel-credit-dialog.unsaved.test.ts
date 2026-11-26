@@ -14,7 +14,6 @@ class CancelCreditLeaveApp extends LitElement {
   override render() {
     return html`<till-cancel-credit-dialog
         .invoiceNumber=${"A/12"}
-        .amount=${"14.00"}
         @cancel-credit-close=${() => this.closes++}
         @cancel-credit-continue=${(event: CustomEvent<{ reason: string }>) =>
           this.submitted.push(event.detail)}
@@ -109,7 +108,7 @@ it("cancel-credit submission sends the exact trimmed reason directly and a refus
   expect(app.submitted).toEqual([{ reason: "Ran off" }]);
   expect((await question(app)).open).toBe(false);
   form.refusal = { code: "management.request_invalid", field: "reason" };
-  form.amount = "12.00";
+  form.invoiceNumber = "A/13";
   await form.updateComplete;
   expect(unload()).toBe(true);
   cancel(form);
@@ -188,7 +187,7 @@ it("an accepted credit commits the reason before result refresh and invalidates 
   const q = await question(app);
   expect(q.open).toBe(true);
   const discard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
-  form.done = { corrective: "R/3" };
+  form.done = { filed: "corrective", corrective: "R/3" };
   form.refusal = { code: "network" };
   await form.updateComplete;
   await expect.poll(() => q.open).toBe(false);
@@ -205,7 +204,7 @@ it("a retained result is exempt on reconnect and cannot submit a second credit",
   const { app, form } = await mount();
   await fill(form, "Wrong table");
   const confirm = form.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-confirm]")!;
-  form.done = { corrective: null };
+  form.done = { filed: "cancellation", corrective: null };
   await form.updateComplete;
   form.remove();
   app.shadowRoot!.appendChild(form);

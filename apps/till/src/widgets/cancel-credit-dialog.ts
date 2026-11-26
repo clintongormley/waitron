@@ -12,17 +12,19 @@ import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, type DialogRefusal } from "../state/bill-payment.js";
 import type { MealEndUnservedDish, PartyBill } from "../api/floor-api.js";
+import type { CancelFiled } from "../api/orders-api.js";
 import type { TillApi } from "../api/client.js";
 import type { StaffMember } from "../api/device-session-api.js";
 import { servableDishes, serveListed, unservedDishText } from "./dish-format.js";
 
-/** `cancel` credits the receipt and cancels the bill; `split` also puts its dishes on a new bill. */
+/** `split` also puts the bill's dishes on a new bill. */
 export type CancelCreditMode = "cancel" | "split";
 
-/** A cancelled bill: the number of the corrective issued, or null when no number was read; a split
- * names no number.
- * `creditedElsewhere` is a split that found the bill already credited and no open bill reopened from it. */
+/** A cancelled bill: what was filed for its receipt, and the corrective's number once a read of the
+ * bills names it. `creditedElsewhere` is a split that found the bill already credited and no open
+ * bill reopened from it. */
 export interface CancelCreditDone {
+  filed: CancelFiled;
   corrective: string | null;
   creditedElsewhere?: boolean;
 }
@@ -153,7 +155,6 @@ export class TillCancelCreditDialog extends LitElement {
   @property({ attribute: false }) mode: CancelCreditMode = "cancel";
   @property({ attribute: false }) canMarkServed = false;
   @property({ attribute: false }) invoiceNumber: string | null = null;
-  @property({ attribute: false }) amount = "0.00";
   @property({ attribute: false }) refusal: CancelCreditRefusal | null = null;
   @property({ attribute: false }) done: CancelCreditDone | null = null;
   @property({ type: Boolean }) busy = false;
@@ -287,7 +288,10 @@ export class TillCancelCreditDialog extends LitElement {
   #doneText(done: CancelCreditDone): string {
     if (this.mode === "split")
       return t(done.creditedElsewhere ? "split.credited_elsewhere" : "split.done");
-    if (done.corrective !== null) return fill(t("cancel_credit.done"), { number: done.corrective });
+    if (done.filed === "corrective")
+      return done.corrective === null
+        ? t("cancel_credit.done_unnumbered")
+        : fill(t("cancel_credit.done"), { number: done.corrective });
     return this.invoiceNumber === null
       ? t("cancel_credit.voided_unnumbered")
       : fill(t("cancel_credit.voided"), { number: this.invoiceNumber });

@@ -44,10 +44,10 @@ const states: [string, State][] = [
     },
   ],
   ["sending", { refusal: null, busy: true, pressed: false, done: null }],
-  ["done", { refusal: null, busy: false, pressed: false, done: { corrective: "R/3" } }],
+  ["done", { refusal: null, busy: false, pressed: false, done: { filed: "corrective", corrective: "R/3" } }],
   [
     "done, receipt cancelled",
-    { refusal: null, busy: false, pressed: false, done: { corrective: null } },
+    { refusal: null, busy: false, pressed: false, done: { filed: "cancellation", corrective: null } },
   ],
 ];
 
@@ -57,7 +57,6 @@ describe.each(["light", "dark"] as const)("till-cancel-credit-dialog a11y (%s th
       "till-cancel-credit-dialog",
       {
         invoiceNumber: "A/12",
-        amount: "24.50",
         refusal: state.refusal,
         busy: state.busy,
         done: state.done,
@@ -96,7 +95,6 @@ describe.each(["light", "dark"] as const)(
         {
           mode: "split",
           invoiceNumber: "A/12",
-          amount: "24.50",
           refusal:
             unserved === null ? null : { code: "bill.unserved_dishes", dishes: unserved, canStop },
           canMarkServed: true,

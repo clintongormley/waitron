@@ -11,7 +11,6 @@ beforeEach(() => setLocale("en"));
 async function mount(over: Partial<TillCancelCreditDialog> = {}) {
   const { el } = await mountWidget<TillCancelCreditDialog>("till-cancel-credit-dialog", {
     invoiceNumber: "A/12",
-    amount: "24.50",
     ...over,
   });
   return el;
@@ -244,7 +243,7 @@ describe("till-cancel-credit-dialog: dismissing", () => {
 
 describe("till-cancel-credit-dialog: done", () => {
   it("names the corrective receipt issued, offers only Done, and asks for no reason", async () => {
-    const el = await mount({ done: { corrective: "R/3" } });
+    const el = await mount({ done: { filed: "corrective", corrective: "R/3" } });
     const closed = capture(el, "cancel-credit-close");
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
@@ -257,13 +256,21 @@ describe("till-cancel-credit-dialog: done", () => {
   });
 
   it("puts Done in the shared actions row", async () => {
-    const el = await mount({ done: { corrective: "R/3" } });
+    const el = await mount({ done: { filed: "corrective", corrective: "R/3" } });
 
     expect(root(el).querySelector("wt-form-actions [data-cancel-credit-finished]")).not.toBeNull();
   });
 
-  it("names the receipt cancelled when no corrective receipt was read", async () => {
-    const el = await mount({ done: { corrective: null } });
+  it("says a corrective receipt was issued while its number has not been read", async () => {
+    const el = await mount({ done: { filed: "corrective", corrective: null } });
+
+    expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
+      "A corrective receipt was issued and the bill is cancelled.",
+    );
+  });
+
+  it("names the receipt cancelled when its cancellation was filed", async () => {
+    const el = await mount({ done: { filed: "cancellation", corrective: null } });
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
       "Receipt A/12 cancelled.",
@@ -271,7 +278,7 @@ describe("till-cancel-credit-dialog: done", () => {
   });
 
   it("says the receipt is cancelled when it has no number either", async () => {
-    const el = await mount({ invoiceNumber: null, done: { corrective: null } });
+    const el = await mount({ invoiceNumber: null, done: { filed: "cancellation", corrective: null } });
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
       "The receipt is cancelled.",
@@ -280,10 +287,15 @@ describe("till-cancel-credit-dialog: done", () => {
 
   it("speaks Spanish", async () => {
     setLocale("es");
-    const el = await mount({ done: { corrective: "R/3" } });
+    const el = await mount({ done: { filed: "corrective", corrective: "R/3" } });
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
       "Ticket rectificativo R/3 emitido. La cuenta queda cancelada.",
+    );
+    el.done = { filed: "corrective", corrective: null };
+    await el.updateComplete;
+    expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
+      "Se emitió el ticket rectificativo y la cuenta queda cancelada.",
     );
   });
 
@@ -292,7 +304,7 @@ describe("till-cancel-credit-dialog: done", () => {
     [null, "El ticket queda anulado."],
   ])("names the receipt cancelled (%s) in Spanish", async (invoiceNumber, said) => {
     setLocale("es");
-    const el = await mount({ invoiceNumber, done: { corrective: null } });
+    const el = await mount({ invoiceNumber, done: { filed: "cancellation", corrective: null } });
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(said);
   });
@@ -650,7 +662,7 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
   it.each(["R/3", null])(
     "says the receipt is cancelled and what to do next, whatever corrective was read (%s)",
     async (corrective) => {
-      const el = await mount({ mode: "split", done: { corrective } });
+      const el = await mount({ mode: "split", done: { filed: "corrective", corrective } });
 
       expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
         "Receipt cancelled and the bill reopened. Move each guest's dishes to their own bill, then print each one.",
@@ -661,7 +673,10 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
   it.each(["R/3", null])(
     "says a bill whose receipt was already cancelled opened no new bill, whatever corrective was read (%s)",
     async (corrective) => {
-      const el = await mount({ mode: "split", done: { corrective, creditedElsewhere: true } });
+      const el = await mount({
+        mode: "split",
+        done: { filed: "corrective", corrective, creditedElsewhere: true },
+      });
 
       expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
         "This bill's receipt was already cancelled on another device.",
@@ -727,13 +742,13 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
       "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Este dispositivo no puede marcar platos como servidos: márcalos en un dispositivo que pueda y vuelve a elegir Reabrir cuenta.",
     );
 
-    el.done = { corrective: "R/3" };
+    el.done = { filed: "corrective", corrective: "R/3" };
     await el.updateComplete;
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
       "Ticket anulado y cuenta reabierta. Pasa los platos de cada cliente a su propia cuenta y después imprime cada una.",
     );
 
-    el.done = { corrective: "R/3", creditedElsewhere: true };
+    el.done = { filed: "corrective", corrective: "R/3", creditedElsewhere: true };
     await el.updateComplete;
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
       "El ticket de esta cuenta ya se anuló en otro dispositivo.",

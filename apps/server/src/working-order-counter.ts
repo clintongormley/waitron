@@ -173,6 +173,9 @@ export async function markOrderPlaced(
   });
   await captureOrderAmendment(tx, attendance, amendment.id, operatorId, now.instant);
 }
+/** What a cancel filed for the order's receipt; undefined when the order had none. */
+export type CancelFiled = "cancellation" | "corrective" | undefined;
+
 /** Cancel a placed order, cancelling or crediting an issued invoice as {@link cancelPermission} says. */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
@@ -181,13 +184,13 @@ export async function cancelPlacedOrder(
   reason: string,
   operator: { personId: string; sessionId: string; attempts: PinAttempts },
   override?: Override,
-): Promise<void> {
+): Promise<CancelFiled> {
   // The reason is the amendment's accountable content. Checked before the status, so a missing reason
   // is a request-shape error, not the state conflict `not_placed` names.
   if (reason.trim() === "") {
     throw new AppError("working_order.reason_required", { workingOrderId: id });
   }
-  await withCancelPinAhead(deps, id, operator, override, (checkedOverride) =>
+  return withCancelPinAhead(deps, id, operator, override, (checkedOverride) =>
     withIssuanceTransaction(deps.db, async (tx) => {
       const authz = { sessionId: operator.sessionId, override: checkedOverride };
       const { partyId, invoice } = await lockPlacedOrder(tx, deps, cfg, id);
@@ -206,6 +209,8 @@ export async function cancelPlacedOrder(
         await bumpPartyRevision(tx, partyId);
       }
       await recordPlacedOrderCancelled(tx, deps, cfg, id, operator.personId, reason);
+      if (permission === "sale.void") return "cancellation";
+      return invoice === undefined ? undefined : "corrective";
     }),
   );
 }
