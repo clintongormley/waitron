@@ -22,8 +22,7 @@ const sections = [
 
 async function mount(props: Partial<HomeShortcutPicker> = {}) {
   return mountWidget<HomeShortcutPicker>("dashboard-home-shortcut-picker", {
-    kind: "product",
-    options: products,
+    options: [...products, ...sections],
     ...props,
   });
 }
@@ -53,50 +52,35 @@ async function press(el: HomeShortcutPicker) {
   await el.updateComplete;
 }
 function adds(el: HomeShortcutPicker) {
-  const add = vi.fn<(event: CustomEvent<{ kind: string; ids: string[] }>) => void>();
+  const add = vi.fn<(event: CustomEvent<{ values: string[] }>) => void>();
   el.addEventListener("wt-shortcuts-add", add as unknown as EventListener);
   return add;
 }
 
-it("offers the options it is given in one multiple-choice list named for products", async () => {
+it("offers the products and sections together in one searchable multiple-choice list", async () => {
   const { el } = await mount();
   const box = combobox(el);
   expect(box.multiple).toBe(true);
-  expect(box.name).toBe("shortcut-products");
-  expect(box.label).toBe(t("home.picker_products"));
-  expect(box.placeholder).toBe(t("home.choose_products"));
+  expect(box.name).toBe("shortcuts");
+  expect(box.label).toBe(t("home.picker_shortcuts"));
+  expect(box.placeholder).toBe(t("home.choose_shortcuts"));
   expect(box.required).toBe(true);
-  expect(box.options).toEqual(products);
-});
-
-it("is named for sections when it adds sections", async () => {
-  const { el } = await mount({ kind: "section", options: sections });
-  const box = combobox(el);
-  expect(box.name).toBe("shortcut-sections");
-  expect(box.label).toBe(t("home.picker_sections"));
-  expect(box.placeholder).toBe(t("home.choose_sections"));
+  expect(box.options).toEqual([...products, ...sections]);
+  expect(box.search).toBe("auto");
 });
 
 it("rows clicked one after another are sent in the order chosen, bubbling out of the page", async () => {
   const { el, host } = await mount();
-  const add = vi.fn<(event: CustomEvent<{ kind: string; ids: string[] }>) => void>();
+  const add = vi.fn<(event: CustomEvent<{ values: string[] }>) => void>();
   host.addEventListener("wt-shortcuts-add", add as unknown as EventListener);
   await pick(el, "Lager");
-  await pick(el, "Lemonade");
+  await pick(el, "Drinks");
   await userEvent.keyboard("{Escape}");
   await press(el);
   expect(add).toHaveBeenCalledOnce();
   const event = add.mock.calls[0]![0];
-  expect(event.detail).toEqual({ kind: "product", ids: ["p-lager", "p-lemonade"] });
+  expect(event.detail).toEqual({ values: ["p-lager", "s-drinks"] });
   expect(event.bubbles && event.composed).toBe(true);
-});
-
-it("sends the section kind for sections", async () => {
-  const { el } = await mount({ kind: "section", options: sections });
-  const add = adds(el);
-  await choose(el, ["s-mains", "s-drinks"]);
-  await press(el);
-  expect(add.mock.calls[0]![0].detail).toEqual({ kind: "section", ids: ["s-mains", "s-drinks"] });
 });
 
 it("does not send a chosen id that is no longer offered", async () => {
@@ -106,7 +90,7 @@ it("does not send a chosen id that is no longer offered", async () => {
   el.options = products.filter(({ value }) => value !== "p-lager");
   await el.updateComplete;
   await press(el);
-  expect(add.mock.calls[0]![0].detail.ids).toEqual(["p-burger", "p-lemonade"]);
+  expect(add.mock.calls[0]![0].detail.values).toEqual(["p-burger", "p-lemonade"]);
 });
 
 it("counts only the chosen ids still offered", async () => {
@@ -126,36 +110,25 @@ it("says nothing is left to add, under the field, when every chosen id has since
   await el.updateComplete;
   await press(el);
   expect(add).not.toHaveBeenCalled();
-  expect(combobox(el).error).toBe(t("home.none_chosen_products"));
+  expect(combobox(el).error).toBe(t("home.none_chosen"));
 });
 
 it("shows a field error under the list, tied to it, with the form's sentence at the bottom", async () => {
-  const { el } = await mount({ error: "Lager is not on this menu any more." });
+  const { el } = await mount();
+  await choose(el, ["p-lager"]);
+  el.options = products.filter(({ value }) => value !== "p-lager");
+  await el.updateComplete;
+  await press(el);
   const box = combobox(el);
   await box.updateComplete;
   const message = box.shadowRoot!.querySelector("[data-error]")!;
-  expect(message.textContent!.trim()).toBe("Lager is not on this menu any more.");
+  expect(message.textContent!.trim()).toBe(t("home.none_chosen"));
   expect(trigger(el).getAttribute("aria-describedby")).toContain(message.id);
   expect(trigger(el).getAttribute("aria-invalid")).toBe("true");
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
   await actions.updateComplete;
   const bottom = actions.shadowRoot!.querySelector('[role="alert"]')!;
   expect(bottom.textContent!.trim()).toBe(t("form.fix_fields"));
-});
-
-it("shows a refusal that names no field at the bottom alone", async () => {
-  const { el } = await mount({ formError: "The server could not be reached." });
-  expect(combobox(el).error).toBe("");
-  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  expect(actions.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
-    "The server could not be reached.",
-  );
-});
-
-it("disables the list while busy", async () => {
-  const { el } = await mount({ busy: true });
-  expect(combobox(el).disabled).toBe(true);
 });
 
 it("puts a host's own Cancel beside Add", async () => {

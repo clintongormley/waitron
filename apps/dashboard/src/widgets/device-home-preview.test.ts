@@ -804,8 +804,8 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     root(el).querySelector<HTMLElement & { disabled: boolean }>(
       `[data-test="remove-${memberId}"]`,
     )!;
-  const add = (el: DeviceHomePreview, kind: "product" | "section") =>
-    root(el).querySelector<HTMLElement & { disabled: boolean }>(`[data-test="add-${kind}"]`)!;
+  const add = (el: DeviceHomePreview) =>
+    root(el).querySelector<HTMLElement & { disabled: boolean }>('[data-test="add-shortcuts"]')!;
   const status = (el: DeviceHomePreview) =>
     root(el).querySelector('[role="status"]')!.textContent!.trim();
 
@@ -982,20 +982,6 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(button.shadowRoot!.querySelector("button")!.disabled).toBe(true);
   });
 
-  it("holds only removal during a reorder, keeping grips usable", async () => {
-    const { el, host } = await mount({ shortcuts: LIST, removeDisabled: true });
-    const events = heard(host);
-    const button = remove(el, "sc-lemonade");
-    expect(button.shadowRoot!.querySelector("button")!.disabled).toBe(true);
-    button.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
-    expect(events).toEqual([]);
-    expect(grip(el, "sc-lemonade").disabled).toBe(false);
-    await press(el, "sc-lemonade", "ArrowRight");
-    expect(events).toEqual([
-      { type: "wt-shortcut-move", detail: { memberId: "sc-lemonade", to: 1 } },
-    ]);
-  });
-
   it("sends a remove for the tile's member, a missing one included", async () => {
     const gone = shortcut("sc-gone", { kind: "missing", name: "Soup" }, "Soup", {
       reachable: false,
@@ -1010,28 +996,21 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     ]);
   });
 
-  it("ends the shortcuts with two add tiles that send their kind, drawn with no shortcuts too", async () => {
+  it("ends the shortcuts with one Add shortcuts tile that works in an empty list", async () => {
     const { el } = await mount({ shortcuts: LIST });
-    const drawn = cells(el);
-    expect(drawn.slice(-2)).toEqual([add(el, "product"), add(el, "section")]);
-    expect(add(el, "product").textContent!.trim()).toBe("Add products");
-    expect(add(el, "section").textContent!.trim()).toBe("Add sections");
+    expect(cells(el).at(-1)).toBe(add(el));
+    expect(root(el).querySelectorAll("wt-button.add")).toHaveLength(1);
+    expect(add(el).textContent!.trim()).toBe("Add shortcuts");
     setLocale("es-ES");
     await el.updateComplete;
-    expect(add(el, "product").textContent!.trim()).toBe("Añadir productos");
-    expect(add(el, "section").textContent!.trim()).toBe("Añadir secciones");
+    expect(add(el).textContent!.trim()).toBe("Añadir accesos directos");
     setLocale("en");
-    await el.updateComplete;
 
     const empty = await mount({ shortcuts: [], document: lunch([], []) });
     expect(regions(empty.el)).toEqual(["search", "shortcuts"]);
     const events = heard(empty.host);
-    await click(empty.el, add(empty.el, "product"));
-    await click(empty.el, add(empty.el, "section"));
-    expect(events).toEqual([
-      { type: "wt-shortcut-add", detail: { kind: "product" } },
-      { type: "wt-shortcut-add", detail: { kind: "section" } },
-    ]);
+    await click(empty.el, add(empty.el));
+    expect(events).toEqual([{ type: "wt-shortcut-add", detail: {} }]);
 
     const dividing = await mount({ shortcuts: [] });
     expect(regions(dividing.el)).toEqual(["search", "shortcuts", "structure"]);
@@ -1059,7 +1038,7 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     const { el, host } = await mount({ shortcuts });
     await widen(host, width);
 
-    const lastAdd = add(el, "section").getBoundingClientRect();
+    const lastAdd = add(el).getBoundingClientRect();
     const heading = root(el).querySelector(".divider")!.getBoundingClientRect();
     const sectionGap = parseFloat(getComputedStyle(frame(el)).rowGap);
     expect(heading.top - lastAdd.bottom).toBeCloseTo(sectionGap);
@@ -1073,7 +1052,7 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     await widen(host, 374);
 
     const face = tiles(el, "shortcuts")[0]!.getBoundingClientRect();
-    const addFace = add(el, "section").getBoundingClientRect();
+    const addFace = add(el).getBoundingClientRect();
     const controls = root(el).querySelector(".controls")!.getBoundingClientRect();
     const heading = root(el).querySelector(".divider")!.getBoundingClientRect();
     expect(face.height).toBeGreaterThan(66);
@@ -1083,7 +1062,7 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     );
   });
 
-  it("draws the add tiles in the primary colour, dashed and unfilled, as tall as a shortcut tile", async () => {
+  it("draws the Add shortcuts tile in the primary colour, dashed and unfilled, as tall as a shortcut tile", async () => {
     const { el } = await mount({ shortcuts: [LEMONADE, HAM] });
     const token = (name: string) => {
       const probe = document.createElement("span");
@@ -1096,16 +1075,14 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     const primary = token("--wt-color-primary");
     const primaryText = token("--wt-color-primary-text");
     const tile = tiles(el, "shortcuts")[0]!.getBoundingClientRect();
-    for (const kind of ["product", "section"] as const) {
-      const button = add(el, kind).shadowRoot!.querySelector("button")!;
-      const style = getComputedStyle(button);
-      expect(style.color).toBe(primaryText);
-      expect(style.borderTopColor).toBe(primary);
-      expect(style.borderTopStyle).toBe("dashed");
-      expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
-      expect(getComputedStyle(add(el, kind).querySelector("wt-icon")!).color).toBe(primary);
-      expect(Math.abs(button.getBoundingClientRect().height - tile.height)).toBeLessThan(1);
-    }
+    const button = add(el).shadowRoot!.querySelector("button")!;
+    const style = getComputedStyle(button);
+    expect(style.color).toBe(primaryText);
+    expect(style.borderTopColor).toBe(primary);
+    expect(style.borderTopStyle).toBe("dashed");
+    expect(style.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect(getComputedStyle(add(el).querySelector("wt-icon")!).color).toBe(primary);
+    expect(Math.abs(button.getBoundingClientRect().height - tile.height)).toBeLessThan(1);
   });
 
   it.each([
@@ -1161,18 +1138,17 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade", "Drinks para clientes", "Ham"]);
   });
 
-  it("while busy, disables grips, Remove buttons and the add tiles, and sends nothing", async () => {
+  it("while busy, disables grips, Remove buttons and the Add shortcuts tile, and sends nothing", async () => {
     const { el, host } = await mount({ shortcuts: LIST, busy: true });
     const events = heard(host);
     for (const { memberId } of LIST) {
       expect(grip(el, memberId).disabled).toBe(true);
       expect(remove(el, memberId).disabled).toBe(true);
     }
-    expect(add(el, "product").disabled).toBe(true);
-    expect(add(el, "section").disabled).toBe(true);
+    expect(add(el).disabled).toBe(true);
     await press(el, "sc-lemonade", "ArrowRight");
     await click(el, remove(el, "sc-lemonade"));
-    await click(el, add(el, "product"));
+    await click(el, add(el));
     expect(events).toEqual([]);
     expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade", "Drinks para clientes", "Ham"]);
 
@@ -1180,7 +1156,7 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     await el.updateComplete;
     expect(grip(el, "sc-lemonade").disabled).toBe(false);
     expect(remove(el, "sc-lemonade").disabled).toBe(false);
-    expect(add(el, "product").disabled).toBe(false);
+    expect(add(el).disabled).toBe(false);
   });
 
   it("opens a section from its shortcut tile, which holds no other control", async () => {
@@ -1200,7 +1176,7 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     await widen(host, 326);
     const events = heard(host);
     expect(names(tiles(el, "shortcuts"))).toEqual(["Lemonade", "Drinks para clientes", "Ham"]);
-    expect(add(el, "section")).not.toBeNull();
+    expect(add(el)).not.toBeNull();
     await press(el, "sc-drinks", "ArrowRight");
     expect(events).toEqual([
       { type: "wt-shortcut-move", detail: { memberId: "sc-drinks", to: 2 } },
@@ -1217,15 +1193,13 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     }
   });
 
-  it("focuses a shortcut's Remove button, or an add tile, when asked", async () => {
+  it("focuses a shortcut's Remove button, or the Add shortcuts tile, when asked", async () => {
     const { el } = await mount({ shortcuts: LIST });
     expect(await el.focusShortcut("sc-drinks")).toBe(true);
     expect(root(el).activeElement).toBe(remove(el, "sc-drinks"));
     expect(await el.focusShortcut("sc-nowhere")).toBe(false);
-    expect(await el.focusAdd("section")).toBe(true);
-    expect(root(el).activeElement).toBe(add(el, "section"));
-    expect(await el.focusAdd("product")).toBe(true);
-    expect(root(el).activeElement).toBe(add(el, "product"));
+    expect(await el.focusAdd()).toBe(true);
+    expect(root(el).activeElement).toBe(add(el));
   });
 
   describe("dragging a grip", () => {
@@ -1366,13 +1340,13 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
       expect(events).toEqual([]);
     });
 
-    it("never targets an add tile or the menu block", async () => {
+    it("never targets the Add shortcuts tile or the menu block", async () => {
       const { el, host } = await mount({ shortcuts: LIST });
       const events = heard(host);
       await hold(el, "sc-lemonade", cellOf(el, "sc-ham"));
-      await hold(el, "sc-lemonade", add(el, "section"));
+      await hold(el, "sc-lemonade", add(el));
       expect(marked(el)).toEqual([]);
-      await release(el, "sc-lemonade", add(el, "section"));
+      await release(el, "sc-lemonade", add(el));
 
       const water = tile(el, "structure", "Water");
       water.scrollIntoView({ block: "center" });

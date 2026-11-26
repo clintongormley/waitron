@@ -382,19 +382,17 @@ it("places a set menu and can replace a member with a set menu", async () => {
   );
 });
 
-it("refuses a set-menu reference on both Device Home shortcut routes", async () => {
-  const { send, full, fullRoot, ref, soup } = await fixture();
-  const productRef = { kind: "product", productId: soup.id };
-  await json(
-    await send("POST", `/management-api/sections/${fullRoot}/members`, { ref: productRef }),
-    201,
+it("refuses a set-menu reference in the Device Home Page draft", async () => {
+  const { send, full, ref } = await fixture();
+  await refused(
+    await send("PUT", `${menus}/${full.id}/home`, {
+      order: "home_first",
+      shortcuts: [{ memberId: crypto.randomUUID(), ref }],
+    }),
+    409,
+    "set_menu.wrong_place",
+    { menuId: ref.menuId, field: "shortcuts.0.ref" },
   );
-  const path = `${menus}/${full.id}/home/shortcuts`;
-  const shortcut = await json<{ id: string }>(await send("POST", path, { ref: productRef }), 201);
-  for (const route of [path, `${path}/${shortcut.id}/replace`])
-    await refused(await send("POST", route, { ref }), 409, "set_menu.wrong_place", {
-      menuId: ref.menuId,
-    });
 });
 
 it("returns added lines when the existing batch member route adds a dish to a set menu", async () => {

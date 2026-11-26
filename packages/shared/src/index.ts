@@ -498,6 +498,8 @@ export type {
   SectionInput,
   HomeTile,
   MenuHome,
+  MenuHomeSaveInput,
+  MenuHomeSaveResult,
 } from "./menu-document/section-types.js";
 export type {
   MenuKind,

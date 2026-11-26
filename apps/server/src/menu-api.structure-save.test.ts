@@ -201,12 +201,3 @@ it("rolls back the arrangement and leaves the revision unchanged when a price is
     before.headers.get("x-waitron-menu-revision"),
   );
 });
-
-it("reports malformed draft data at its field", async () => {
-  const f = await fixture();
-  const response = await f.send("PUT", f.lunch.id, { ...empty, sections: [{ id: null }] });
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({
-    error: { code: "management.request_invalid", params: { field: "sections.0.id" } },
-  });
-});

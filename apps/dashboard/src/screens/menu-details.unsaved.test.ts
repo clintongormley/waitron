@@ -173,7 +173,7 @@ for (const kind of ["menu", "section"] as const) {
 }
 
 for (const succeeds of [true, false]) {
-  it(`Device Home Page display writes remain exempt after ${succeeds ? "success" : "refusal"}`, async () => {
+  it(`Device Home Page changes are ${succeeds ? "clean after Save" : "still unsaved after refusal"}`, async () => {
     history.replaceState(null, "", "/menus/menu/menu/view/home");
     const writes: unknown[] = [];
     const client = {
@@ -199,7 +199,7 @@ for (const succeeds of [true, false]) {
         nodes: [],
       }),
       getMenuHome: async () => ({
-        id: "home",
+        homeSectionId: "home",
         shortcuts: [],
         order: "home_first",
       }),
@@ -207,9 +207,10 @@ for (const succeeds of [true, false]) {
         throw { code: "connection.failed" };
       },
       getMenuPublications: async () => ({ timeZone: "Europe/Madrid", live: null, editions: [] }),
-      setHomeDisplay: async (...args: unknown[]) => {
+      saveMenuHome: async (...args: unknown[]) => {
         writes.push(args);
         if (!succeeds) throw { code: "server.internal" };
+        return { homeSectionId: "home", order: "menu_first", shortcuts: [], dropped: [] };
       },
     } as unknown as DashboardApi;
     Object.defineProperty(client, "background", { get: () => client });
@@ -224,18 +225,25 @@ for (const succeeds of [true, false]) {
     await expect.poll(control).not.toBeNull();
     await control()!.updateComplete;
     control()!.shadowRoot!.querySelectorAll("button")[1]!.click();
-    await expect.poll(() => writes).toEqual([["menu", "menu_first"]]);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    expect(writes).toEqual([]);
+    screen.shadowRoot!.querySelector<HTMLElement>('[data-test="home-save"]')!.click();
+    await expect.poll(() => writes).toEqual([["menu", { order: "menu_first", shortcuts: [] }]]);
     await screen.updateComplete;
-    expect(app.leave.coordinator.isDirty()).toBe(false);
+    expect(app.leave.coordinator.isDirty()).toBe(!succeeds);
     const event = new Event("beforeunload", { cancelable: true });
     window.dispatchEvent(event);
-    expect(event.defaultPrevented).toBe(false);
+    expect(event.defaultPrevented).toBe(!succeeds);
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
     if (!succeeds) {
       await expect
-        .poll(() => screen.shadowRoot!.querySelector('[data-test="home-error"]'))
-        .not.toBeNull();
-      expect(control()!.value).toBe("home_first");
+        .poll(
+          () =>
+            screen.shadowRoot!.querySelector('[data-test="home-save"]')!.closest("wt-form-actions")!
+              .error,
+        )
+        .toBeTruthy();
+      expect(control()!.value).toBe("menu_first");
     }
   });
 }

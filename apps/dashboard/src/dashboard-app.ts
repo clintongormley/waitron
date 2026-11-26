@@ -2926,7 +2926,7 @@ export class DashboardApp extends LitElement {
       isDirty: () => this.leave.coordinator.isDirty(),
       request: async (proceed, signal, destination) => {
         const pendingSave =
-          this.renderRoot.querySelector("dashboard-menus-screen")?.pendingStructureSave;
+          this.renderRoot.querySelector("dashboard-menus-screen")?.pendingMenuSave;
         if (pendingSave) await pendingSave;
         const segment = new URL(destination).pathname.split("/")[1];
         let requested: string | undefined;

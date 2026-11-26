@@ -1,6 +1,14 @@
 import "@waitron/menu/src/errors.js";
 import { type SectionPatch, isProductPrice } from "@waitron/menu";
-import { isUuid, AppError, type SectionInput, type MemberRef } from "@waitron/shared";
+import {
+  isUuid,
+  normaliseUuid,
+  AppError,
+  type SectionInput,
+  type MemberRef,
+  type TileRef,
+} from "@waitron/shared";
+import { requireBodyUuid, requireString } from "@waitron/server-kit";
 
 export function nullOrUuid(value: unknown, field: string): string | null {
   if (value !== null && (typeof value !== "string" || !isUuid(value)))
@@ -80,4 +88,53 @@ export function refuseRetiredFields(
 }
 export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function invalid(field: string): never {
+  throw new AppError("management.request_invalid", { field });
+}
+
+export function object(value: unknown, field: string): Record<string, unknown> {
+  if (!isPlainObject(value)) invalid(field);
+  return value;
+}
+
+export function rows<T>(
+  value: unknown,
+  field: string,
+  read: (row: unknown, path: string) => T,
+): T[] {
+  if (!Array.isArray(value)) invalid(field);
+  return value.map((row, index) => read(row, field + "." + index));
+}
+
+export function bodyId(value: unknown, field: string): string {
+  return normaliseUuid(requireBodyUuid(value, field), field);
+}
+
+export function refOf(value: unknown, path: string): MemberRef {
+  const ref = object(value, path);
+  switch (ref.kind) {
+    case "product":
+      return { kind: ref.kind, productId: bodyId(ref.productId, path + ".productId") };
+    case "section":
+      return { kind: ref.kind, sectionId: bodyId(ref.sectionId, path + ".sectionId") };
+    case "set_menu":
+      return { kind: ref.kind, menuId: bodyId(ref.menuId, path + ".menuId") };
+    default:
+      return invalid(path + ".kind");
+  }
+}
+
+export function tileRefOf(value: unknown, path: string): TileRef {
+  const ref = object(value, path);
+  if (ref.kind === "missing") {
+    const name = requireString(ref.name, path + ".name");
+    if (name.trim() === "") invalid(path + ".name");
+    return { kind: "missing", name };
+  }
+  const member = refOf(ref, path);
+  if (member.kind === "set_menu")
+    throw new AppError("set_menu.wrong_place", { menuId: member.menuId, field: path });
+  return member;
 }

@@ -556,7 +556,7 @@ never as a shortcut around a `--wt-color-*` token.
 
 **A menu's Device Home Page, on the till and in the dashboard's preview.** Both draw it from one
 set of rules (`packages/shared/src/menu-document/device-home.ts`): the till in its menu browser
-(`apps/till/src/widgets/menu-browser.ts`) and the dashboard in a menu's Home page tab
+(`apps/till/src/widgets/menu-browser.ts`) and the dashboard in a menu's Device home page tab
 (`apps/dashboard/src/widgets/device-home-preview.ts`). Under search come two blocks, the shortcuts
 and the menu's own structure, in the order the menu sets for every device. The first block
 has no visible heading, only an accessible name. Between the two sits a divider: the second
@@ -572,25 +572,20 @@ includes "Section". A section emptied by a diet filter keeps its notice. A produ
 menu price or the range of its variant prices, including sold-out variants, with one amount when
 the prices are equal. It appends the unit once for units other than Each.
 
-**A menu's shortcuts are edited in its Home page tab's preview** (owner decision 2026-10-07, A336).
-**Shown first** sits above a single preview with two equal choices, **Shortcuts** and **Full
-menu**. On a phone the control fills the available width with the label above it. On a wide
-screen the label sits beside the buttons, which fit their text.
-The preview is at most 792px wide. Each
-shortcut tile keeps its look and gains a grip ("Reorder: <name>") and a bin button ("Remove
-shortcut: <name>"). The bin is disabled while a shortcut is added, removed or reordered and
-while an order change saves. The grips stay usable during a reorder.
-On the grip,
-the arrow keys move the shortcut one position, Up and Down included, and a drag moves it among the
-shortcuts with a drop marker; Escape cancels a drag. A shortcut whose target the menu no longer
-reaches and one the menu reaches but a device would not show are both dashed, muted tiles; the first
-reads "Missing: <name>" beside a warning icon in the warning colour, the second says why it is not
-shown — nothing to order in the section, in a disabled included menu, only sold as an extra, or not
-on sale on this menu (owner, 2026-10-17, A816). After the last shortcut come two dashed add tiles,
-Add products and Add sections, drawn even when there are none, so an empty shortcut block shows in
-the dashboard but never on a device. Each opens a window whose one multi-select list offers the
-active products, or the sections, the menu reaches that are not already shortcuts, and one Add adds
-every choice in the order chosen. The Structure tab shows no shortcuts.
+**The Device home page tab** shows one editable preview up to 792px wide. **Shown first** sits above
+it with two equal choices, **Shortcuts** and **Full menu**. On a phone the control fills the available
+width with the label above it. On a wide screen the label sits beside the buttons.
+
+Each shortcut has a named Remove button and grip. The arrow keys and dragging move the tile one
+place or to a chosen position. Escape cancels a drag. Dashed tiles mark missing or unpublished
+targets and say why a device would leave the slot empty. **Add shortcuts** stays after the last
+shortcut, including on an empty page. It opens one searchable list of active products and sections
+the menu reaches. Section choices identify their kind. Add stages the selections in the order you
+chose them.
+
+The fixed **Cancel** and **Save** bar uses the same position as Structure. One Save writes the
+shortcut arrangement and Shown first choice together. Cancel and leaving ask before discarding
+edits. Publish the menu to send the saved arrangement to devices.
 
 **Menu wording.** Spanish restaurant menus are "cartas"; an account menu remains "menú".
 The Structure tree and shortcut picker label an included menu "Menu: <name>" / "Carta: <name>",

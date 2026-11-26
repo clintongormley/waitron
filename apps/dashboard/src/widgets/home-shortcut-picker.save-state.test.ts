@@ -14,7 +14,6 @@ const options = [
 
 async function mount() {
   return mountWidget<HomeShortcutPicker>("dashboard-home-shortcut-picker", {
-    kind: "product",
     options,
   });
 }
@@ -45,7 +44,7 @@ async function choose(el: HomeShortcutPicker, values: string[]) {
   await el.updateComplete;
 }
 function adds(el: HomeShortcutPicker) {
-  const add = vi.fn<(event: CustomEvent<{ kind: string; ids: string[] }>) => void>();
+  const add = vi.fn<(event: CustomEvent<{ values: string[] }>) => void>();
   el.addEventListener("wt-shortcuts-add", add as unknown as EventListener);
   return add;
 }
@@ -90,59 +89,14 @@ it("a press after choosing two sends both in the order chosen", async () => {
   await press(el);
   expect(add).toHaveBeenCalledOnce();
   expect(add.mock.calls[0]![0].detail).toEqual({
-    kind: "product",
-    ids: ["p-lager", "p-lemonade"],
+    values: ["p-lager", "p-lemonade"],
   });
-});
-
-it("is disabled while busy and enabled again after a refused add", async () => {
-  const { el } = await mount();
-  await choose(el, ["p-lager"]);
-  await press(el);
-  el.busy = true;
-  expect(await addState(el)).toEqual({ variant: "primary", disabled: true, innerDisabled: true });
-  el.busy = false;
-  expect(await addState(el)).toEqual(ready);
-});
-
-it("a press while busy sends nothing", async () => {
-  const { el } = await mount();
-  const add = adds(el);
-  await choose(el, ["p-lager"]);
-  el.busy = true;
-  await el.updateComplete;
-  addButton(el).click();
-  expect(add).not.toHaveBeenCalled();
 });
 
 it("is quiet again once the chosen shortcuts are added", async () => {
   const { el } = await mount();
   await choose(el, ["p-lager"]);
   await press(el);
-  el.commitSaved();
-  expect(await addState(el)).toEqual(quiet);
-});
-
-it("after a partial failure keepChosen leaves only those chosen, with Add still enabled", async () => {
-  const { el } = await mount();
-  const add = adds(el);
-  await choose(el, ["p-burger", "p-lager", "p-lemonade"]);
-  await press(el);
-  el.options = options.filter(({ value }) => value !== "p-burger");
-  el.keepChosen(["p-lager", "p-lemonade"]);
-  expect(await addState(el)).toEqual(ready);
-  expect(el.shadowRoot!.querySelector("wt-combobox")!.values).toEqual(["p-lager", "p-lemonade"]);
-  await press(el);
-  expect(add.mock.calls[1]![0].detail.ids).toEqual(["p-lager", "p-lemonade"]);
-});
-
-it("after keepChosen, clearing the kept choices makes Add quiet and disabled again", async () => {
-  const { el } = await mount();
-  await choose(el, ["p-burger", "p-lager"]);
-  await press(el);
-  el.options = options.filter(({ value }) => value !== "p-burger");
-  el.keepChosen(["p-lager"]);
-  expect(await addState(el)).toEqual(ready);
-  await choose(el, []);
+  el.commitAdded();
   expect(await addState(el)).toEqual(quiet);
 });

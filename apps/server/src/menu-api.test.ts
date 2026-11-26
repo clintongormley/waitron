@@ -6342,7 +6342,6 @@ describe("mountMenuApi — Device Home Page", () => {
     return (await response.json()) as T;
   };
   const product = (productId: string) => ({ kind: "product" as const, productId });
-  const section = (sectionId: string) => ({ kind: "section" as const, sectionId });
   const homeOf = (menuId: string) => `/management-api/menus/${menuId}/home`;
   const displayOf = (menuId: string) => `/management-api/menus/${menuId}/home-display`;
   const shortcutsOf = (menuId: string) => `/management-api/menus/${menuId}/home/shortcuts`;
@@ -6389,249 +6388,80 @@ describe("mountMenuApi — Device Home Page", () => {
     });
   });
 
-  it("replaces a deleted section shortcut in place, and gates and refuses invalid replacements", async () => {
+  it("saves the ordered Device Home Page and advances its read revision", async () => {
     const app = mountApp();
     const m = await menuWithTargets(app);
-    const tile = await json<{ id: string }>(
-      await send(app, "POST", shortcutsOf(m.menuId), { body: { ref: section(m.drinks) } }),
-      201,
+    const path = homeOf(m.menuId);
+    const before = await send(app, "GET", path);
+    const beforeRevision = JSON.parse(before.headers.get("x-waitron-menu-revision")!);
+    const memberId = crypto.randomUUID();
+    const response = await send(app, "PUT", path, {
+      body: { order: "menu_first", shortcuts: [{ memberId, ref: product(m.soup) }] },
+    });
+    expect(await json(response, 200)).toEqual({
+      homeSectionId: m.homeSectionId,
+      order: "menu_first",
+      shortcuts: [
+        {
+          memberId,
+          position: 0,
+          ref: product(m.soup),
+          name: m.soupName,
+          reachable: true,
+          missingName: null,
+        },
+      ],
+      dropped: [],
+    });
+    const revision = JSON.parse(response.headers.get("x-waitron-menu-revision")!);
+    expect(revision).toEqual({ ...beforeRevision, sequence: beforeRevision.sequence + 1 });
+    expect((await send(app, "GET", path)).headers.get("x-waitron-menu-revision")).toBe(
+      response.headers.get("x-waitron-menu-revision"),
     );
-    expect((await send(app, "DELETE", `/management-api/sections/${m.drinks}`)).status).toBe(204);
-    const replace = `${shortcutsOf(m.menuId)}/${tile.id}/replace`;
-    const body = { ref: product(m.soup) };
-    expect((await send(app, "POST", replace, { body, cookie: null })).status).toBe(401);
-    expect((await send(app, "POST", replace, { body, cookie: staffCookie })).status).toBe(403);
-    const refusal = await send(app, "POST", replace, { body: { ref: product(m.elsewhere) } });
-    expect(refusal.status).toBe(400);
-    expect(await refusal.json()).toMatchObject({ error: { code: "menu.shortcut_unreachable" } });
-    const homeRef = await send(app, "POST", replace, { body: { ref: section(m.homeSectionId) } });
-    expect(homeRef.status).toBe(400);
-    expect(await homeRef.json()).toEqual({
-      error: {
-        code: "menu_section.wrong_role",
-        params: { sectionId: m.homeSectionId, role: "home_layout" },
-      },
-    });
-    const result = await json(await send(app, "POST", replace, { body }), 200);
-    expect(result).toEqual({ id: tile.id, position: 0, ref: product(m.soup) });
-    expect((await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).shortcuts).toEqual([
-      {
-        memberId: tile.id,
-        position: 0,
-        ref: product(m.soup),
-        name: m.soupName,
-        reachable: true,
-        missingName: null,
-      },
-    ]);
-    const malformed = await send(app, "POST", replace, {
-      body: { ref: { kind: "missing", name: "X" } },
-    });
-    expect(malformed.status).toBe(400);
-    expect(await malformed.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   });
 
-  it("adds, moves and removes shortcuts through the menu's own routes, refusing one the menu does not reach", async () => {
+  it("applies the menu permission to the whole-page Save", async () => {
     const app = mountApp();
-    const m = await menuWithTargets(app);
-    const soup = await json<{ id: string; position: number }>(
-      await send(app, "POST", shortcutsOf(m.menuId), { body: { ref: product(m.soup) } }),
-      201,
-    );
-    expect(soup).toEqual({ id: soup.id, position: 0, ref: product(m.soup) });
-    const drinks = await json<{ id: string }>(
-      await send(app, "POST", shortcutsOf(m.menuId), {
-        body: { ref: section(m.drinks), position: 0 },
+    const id = await createMenuVia(app, "Private Home");
+    const body = { order: "menu_first", shortcuts: [] };
+    expect((await send(app, "PUT", homeOf(id), { body, cookie: null })).status).toBe(401);
+    const refusal = await send(app, "PUT", homeOf(id), { body, cookie: staffCookie });
+    expect(await json(refusal, 403)).toMatchObject({
+      error: { code: "authorization.not_permitted", params: { permission: "menu.manage" } },
+    });
+  });
+
+  it("refuses a set menu's Device Home Page Save", async () => {
+    const app = mountApp();
+    const set = await json<{ id: string }>(
+      await send(app, "POST", "/management-api/menus", {
+        body: { name: "Lunch set", kind: "set_menu", setPrice: "20.00" },
       }),
       201,
     );
-    expect(
-      (await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).shortcuts,
-    ).toMatchObject([
-      { position: 0, ref: section(m.drinks), name: m.drinksName, reachable: true },
-      { position: 1, ref: product(m.soup), name: m.soupName, reachable: true },
+    const refusal = await send(app, "PUT", homeOf(set.id), {
+      body: { order: "menu_first", shortcuts: [] },
+    });
+    expect(await json(refusal, 409)).toMatchObject({
+      error: { code: "set_menu.wrong_place", params: { menuId: set.id } },
+    });
+  });
+
+  it("no longer serves the five single-change Device Home Page routes", async () => {
+    const app = mountApp();
+    const id = await createMenuVia(app, "Home Save");
+    const shortcuts = shortcutsOf(id);
+    const member = crypto.randomUUID();
+    const order = { order: "menu_first" };
+    const ref = { ref: product(crypto.randomUUID()) };
+    const results = await Promise.all([
+      send(app, "PATCH", displayOf(id), { body: order }),
+      send(app, "POST", shortcuts, { body: ref }),
+      send(app, "POST", `${shortcuts}/${member}/replace`, { body: ref }),
+      send(app, "DELETE", `${shortcuts}/${member}`),
+      send(app, "PUT", `${shortcuts}/${member}/position`, { body: { to: 0 } }),
     ]);
-    const moved = await json<{ id: string; position: number }[]>(
-      await send(app, "PUT", `${shortcutsOf(m.menuId)}/${soup.id}/position`, { body: { to: 0 } }),
-      200,
-    );
-    expect(moved.map(({ id, position }) => [id, position])).toEqual([
-      [soup.id, 0],
-      [drinks.id, 1],
-    ]);
-    for (const [ref, status, code] of [
-      [product(m.elsewhere), 400, "menu.shortcut_unreachable"],
-      [section(m.rootSectionId), 400, "menu.shortcut_unreachable"],
-      [section(m.homeSectionId), 400, "menu_section.wrong_role"],
-      [product(m.soup), 409, "menu_section.member_duplicate"],
-    ] as const) {
-      const response = await send(app, "POST", shortcutsOf(m.menuId), { body: { ref } });
-      expect(response.status, code).toBe(status);
-      expect(await response.json()).toMatchObject({ error: { code } });
-    }
-    // The generic member routes still refuse every write into a Device Home Page section.
-    const generic = await send(app, "POST", `/management-api/sections/${m.homeSectionId}/members`, {
-      body: { ref: product(m.soup) },
-    });
-    expect(generic.status).toBe(409);
-    expect(await generic.json()).toMatchObject({ error: { code: "menu_section.wrong_role" } });
-    expect((await send(app, "DELETE", `${shortcutsOf(m.menuId)}/${soup.id}`)).status).toBe(204);
-    const missing = await send(app, "DELETE", `${shortcutsOf(m.menuId)}/${soup.id}`);
-    expect(missing.status).toBe(404);
-    expect(await missing.json()).toMatchObject({
-      error: {
-        code: "menu_section.not_found",
-        params: { sectionId: m.homeSectionId, memberId: soup.id },
-      },
-    });
-    // Removing the shortcut left the product on the menu.
-    const offers = await menuPricesVia(app, m.menuId);
-    expect(offers.map((offer) => offer.productId)).toEqual([m.soup]);
-    expect(
-      (await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).shortcuts.map(
-        (tile) => tile.ref,
-      ),
-    ).toEqual([section(m.drinks)]);
-  });
-
-  it("saves one home order and refuses an invalid or missing order", async () => {
-    const app = mountApp();
-    const m = await menuWithTargets(app);
-    const saved = await send(app, "PATCH", displayOf(m.menuId), {
-      body: { order: "menu_first" },
-    });
-    expect(saved.status).toBe(204);
-    for (const body of [{ order: "first" }, { order: ["home_first"] }, { order: null }, {}]) {
-      const response = await send(app, "PATCH", displayOf(m.menuId), { body });
-      expect(response.status, JSON.stringify(body)).toBe(400);
-      expect(await response.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "order" } },
-      });
-    }
-    expect(await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).toMatchObject({
-      order: "menu_first",
-    });
-  });
-
-  it("answers 404 for an unknown menu or member", async () => {
-    const app = mountApp();
-    const m = await menuWithTargets(app);
-    const unknown = crypto.randomUUID();
-    const member = crypto.randomUUID();
-    for (const [method, path, body] of [
-      ["GET", homeOf(unknown), undefined],
-      ["PATCH", displayOf(unknown), { order: "menu_first" }],
-      ["POST", shortcutsOf(unknown), { ref: product(m.soup) }],
-      ["POST", `${shortcutsOf(unknown)}/${member}/replace`, { ref: product(m.soup) }],
-      ["DELETE", `${shortcutsOf(unknown)}/${member}`, undefined],
-      ["PUT", `${shortcutsOf(unknown)}/${member}/position`, { to: 0 }],
-    ] as const) {
-      const response = await send(app, method, path, body === undefined ? {} : { body });
-      expect(response.status, `${method} ${path}`).toBe(404);
-      expect(await response.json()).toMatchObject({
-        error: { code: "menu.not_found", params: { menuId: unknown } },
-      });
-    }
-    for (const [method, path, body] of [
-      ["POST", `${shortcutsOf(m.menuId)}/${member}/replace`, { ref: product(m.soup) }],
-      ["DELETE", `${shortcutsOf(m.menuId)}/${member}`, undefined],
-      ["PUT", `${shortcutsOf(m.menuId)}/${member}/position`, { to: 0 }],
-    ] as const) {
-      const response = await send(app, method, path, body === undefined ? {} : { body });
-      expect(response.status, `${method} ${path}`).toBe(404);
-      expect(await response.json()).toMatchObject({
-        error: { code: "menu_section.not_found", params: { memberId: member } },
-      });
-    }
-  });
-
-  it("answers 400 when a shortcut add names a section that does not exist", async () => {
-    const app = mountApp();
-    const m = await menuWithTargets(app);
-    const unknown = crypto.randomUUID();
-    const response = await send(app, "POST", shortcutsOf(m.menuId), {
-      body: { ref: section(unknown) },
-    });
-    expect(response.status).toBe(400);
-    expect(await response.json()).toEqual({
-      error: { code: "menu_section.not_found", params: { sectionId: unknown } },
-    });
-  });
-
-  it("screens every body's shape and ids", async () => {
-    const app = mountApp();
-    const m = await menuWithTargets(app);
-    const shortcuts = shortcutsOf(m.menuId);
-    const member = crypto.randomUUID();
-    const cases: [method: "POST" | "PATCH" | "PUT", path: string, body: unknown, field: string][] =
-      [
-        ["POST", shortcuts, {}, "ref"],
-        ["POST", shortcuts, { ref: { kind: "x" } }, "ref"],
-        ["POST", shortcuts, { ref: product(m.soup), position: "0" }, "position"],
-        ["POST", `${shortcuts}/${member}/replace`, {}, "ref"],
-        ["PUT", `${shortcuts}/${member}/position`, {}, "to"],
-        ["PATCH", displayOf(m.menuId), { columns: 8 }, "order"],
-      ];
-    for (const [method, path, body, field] of cases) {
-      const response = await send(app, method, path, { body });
-      expect(response.status, `${method} ${path} ${JSON.stringify(body)}`).toBe(400);
-      expect(await response.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field } },
-      });
-    }
-    const idCases: [
-      method: "GET" | "PATCH" | "POST" | "PUT" | "DELETE",
-      path: string,
-      body?: unknown,
-    ][] = [
-      ["GET", homeOf("nope")],
-      ["PATCH", displayOf("nope"), { order: "menu_first" }],
-      ["POST", shortcutsOf("nope"), { ref: product(m.soup) }],
-      ["POST", `${shortcuts}/nope/replace`, { ref: product(m.soup) }],
-      ["DELETE", `${shortcuts}/nope`],
-      ["PUT", `${shortcuts}/nope/position`, { to: 0 }],
-      ["POST", shortcuts, { ref: { kind: "product", productId: "nope" } }],
-    ];
-    for (const [method, path, body] of idCases) {
-      const response = await send(app, method, path, body === undefined ? {} : { body });
-      expect(response.status, `${method} ${path}`).toBe(400);
-      expect(await response.json()).toMatchObject({
-        error: { code: "shared.invalid_id", params: { value: "nope" } },
-      });
-    }
-  });
-
-  it("requires a management session and refuses staff on every Device Home Page route", async () => {
-    const app = mountApp();
-    const m = await menuWithTargets(app);
-    const shortcuts = shortcutsOf(m.menuId);
-    const member = crypto.randomUUID();
-    const routes: [
-      method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
-      path: string,
-      body?: unknown,
-    ][] = [
-      ["GET", homeOf(m.menuId)],
-      ["PATCH", displayOf(m.menuId), { order: "menu_first" }],
-      ["POST", shortcuts, { ref: product(m.soup) }],
-      ["POST", `${shortcuts}/${member}/replace`, { ref: product(m.soup) }],
-      ["DELETE", `${shortcuts}/${member}`],
-      ["PUT", `${shortcuts}/${member}/position`, { to: 0 }],
-    ];
-    for (const [method, path, body] of routes) {
-      const options = body === undefined ? {} : { body };
-      expect((await send(app, method, path, { ...options, cookie: null })).status, path).toBe(401);
-      const staff = await send(app, method, path, { ...options, cookie: staffCookie });
-      expect(staff.status, path).toBe(403);
-      expect(await staff.json(), `${method} ${path}`).toMatchObject({
-        error: { code: "authorization.not_permitted", params: { permission: "menu.manage" } },
-      });
-    }
-    expect(await json<Home>(await send(app, "GET", homeOf(m.menuId)), 200)).toEqual({
-      homeSectionId: m.homeSectionId,
-      shortcuts: [],
-      order: "home_first",
-    });
+    expect(results.map(({ status }) => status)).toEqual([404, 404, 404, 404, 404]);
   });
 
   it("no longer serves the named layout routes", async () => {
@@ -6921,11 +6751,11 @@ describe("shared menu reads", () => {
     const path = `/management-api/menus/${id}`;
     expect(
       (
-        await send(app, "PATCH", `${path}/home-display`, {
-          body: { order: "menu_first" },
+        await send(app, "PUT", `${path}/home`, {
+          body: { order: "menu_first", shortcuts: [] },
         })
       ).status,
-    ).toBe(204);
+    ).toBe(200);
     const response = await send(app, "GET", `${path}/read?part=home&part=status`);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -7039,10 +6869,10 @@ it("marks shared snapshots with the menu write revision they include", async () 
   const before = await send(app, "GET", `${path}/read?part=home`);
   const old = await before.json();
   expect(old.revision).toEqual({ epoch: expect.any(String), sequence: expect.any(Number) });
-  const write = await send(app, "PATCH", `${path}/home-display`, {
-    body: { order: "menu_first" },
+  const write = await send(app, "PUT", `${path}/home`, {
+    body: { order: "menu_first", shortcuts: [] },
   });
-  expect(write.status).toBe(204);
+  expect(write.status).toBe(200);
   const committed = JSON.parse(write.headers.get("x-waitron-menu-revision") ?? "null");
   expect(committed.epoch).toBe(old.revision.epoch);
   expect(committed.sequence).toBeGreaterThan(old.revision.sequence);
@@ -7051,10 +6881,13 @@ it("marks shared snapshots with the menu write revision they include", async () 
     revision: committed,
     home: { status: 200, body: { order: "menu_first" } },
   });
-  const refused = await send(app, "PATCH", `${path}/home-display`, {
-    body: { order: null },
+  const refused = await send(app, "PUT", `${path}/home`, {
+    body: { order: "menu_first", shortcuts: [{ memberId: null }] },
   });
   expect(refused.status).toBe(400);
+  expect(await refused.json()).toEqual({
+    error: { code: "management.request_invalid", params: { field: "shortcuts.0.memberId" } },
+  });
   expect(refused.headers.get("x-waitron-menu-revision")).toBeNull();
   const unchanged = await send(app, "GET", `${path}/read?part=home`);
   expect((await unchanged.json()).revision).toEqual(committed);
@@ -7072,10 +6905,10 @@ it("keeps a shared snapshot's revision with its data when a write commits before
     const result = await lock(work);
     if (intervene) {
       intervene = false;
-      const write = await send(app, "PATCH", `${path}/home-display`, {
-        body: { order: "menu_first" },
+      const write = await send(app, "PUT", `${path}/home`, {
+        body: { order: "menu_first", shortcuts: [] },
       });
-      expect(write.status).toBe(204);
+      expect(write.status).toBe(200);
       savedRevision = JSON.parse(write.headers.get("x-waitron-menu-revision") ?? "null");
     }
     return result;
