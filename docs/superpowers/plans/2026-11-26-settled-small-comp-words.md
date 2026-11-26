@@ -1,0 +1,13 @@
+# Match the words used for comps and cancellations
+
+Staff see **comp** in two till refusals and **cancelado** in the Spanish Adjustment report. The watcher queued the terminology decision for A957 and A1011 point 9 in `~/waitron-campaign-f/queue.md`, SETTLED-SMALL, citing design D22. [Backlog](../../backlog/till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet)
+
+The queue also asks us to check whether Task 15's table button still needs shortening to match Counter. Counter's separate **Take the rest** button was removed in #2725. An open part-paid table bill and Counter both offer **Pay** and show the balance. Keep that current action and retire the old backlog point if the watcher agrees. The existing cases in `apps/till/src/screens/till-table-order-screen.bill-payments.test.ts` and `apps/till/src/screens/till-counter-screen.fixed.test.ts` check those entries. The shared sentence used for payment refusals stays in service. Sent extras and the extras picker are separate changes.
+
+1. In `apps/till/src/i18n/codes.test.ts`, extend the existing bilingual adjustment-refusal case to check the two English sentences below. Keep its existing Spanish and fallback checks. Run it and see the old wording fail, then change only the two English values in `apps/till/src/i18n/codes.ts`.
+   - `adjustment.exceeds_amount` reads “That comp is more than the amount it applies to. Enter a smaller amount”.
+   - `adjustment.no_reduction` reads “That takes nothing off. Check whether it is already free, or enter a larger comp”.
+2. In `packages/adjustments/src/dashboard/adjustment-report-screen.test.ts`, extend the existing Spanish headings case to check the cancelled total's label and the cancellation column heading. Run it and see the old words fail. In `packages/adjustments/src/dashboard/strings.ts`, use «Valor de carta de lo cancelado» for the figure and «Valor de carta cancelado» for the column. The report already uses these keys in its summary, people table and breakdowns.
+3. Run both changed test files. Read the report and the existing Comp refusal on phone and desktop, in both themes and languages. In both `apps/server/src/guide/{en,es}/table-service.md` pages, add to the comp section that you can correct a comp that exceeds the amount by entering less. Run `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`. Remove the settled rows from `docs/backlog.md` and `docs/backlog/till.md` after clearance. Record the exact changed English assertion in the pull request, with the wording decision as its reason.
+
+Estimate 4 changed product lines and 8–14 test lines, plus the two guide sentences and backlog edits.
