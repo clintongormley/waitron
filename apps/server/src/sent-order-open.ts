@@ -1,22 +1,45 @@
 import { and, eq } from "drizzle-orm";
-import { workingOrders, type Transaction } from "@waitron/db";
-import { hasInvoice } from "./bill-payments.js";
+import { sales, workingOrders, type Transaction } from "@waitron/db";
+import { VENUE_SERVICE } from "./modules.js";
+import { paysAfterSending } from "./working-order-context.js";
 
-/** A Counter order (no party) sent to the kitchen whose receipt is not issued. */
+/** A Counter order (no party) sent to the kitchen, in a zone that takes payment after sending. */
+export async function sentUnpaidCounterOrder(
+  tx: Transaction,
+  id: string,
+  order: { status: string; partyId: string | null },
+): Promise<boolean> {
+  if (order.status !== "placed" || order.partyId !== null) return false;
+  const context = await VENUE_SERVICE.findOrderContext(tx, id);
+  return paysAfterSending(context?.serviceMode);
+}
+
+/** {@link sentUnpaidCounterOrder} whose receipt is not issued. */
 export async function isSentCounterOrder(
   tx: Transaction,
   orderId: string,
   order: { status: string; partyId: string | null },
 ): Promise<boolean> {
-  return order.status === "placed" && order.partyId === null && !(await hasInvoice(tx, orderId));
+  return (await sentUnpaidCounterOrder(tx, orderId, order)) && !(await hasSale(tx, orderId));
+}
+
+async function hasSale(tx: Transaction, orderId: string): Promise<boolean> {
+  const [sale] = await tx
+    .select({ id: sales.id })
+    .from(sales)
+    .where(eq(sales.workingOrderId, orderId))
+    .limit(1);
+  return sale !== undefined;
 }
 
 /**
- * Runs `move` with a sent Counter order with no receipt back at `open`, and sets it `placed` again
- * if `move` left it open; any other bill, `move` alone. The database lets a placed order with no
- * sale go back to open by a status-only update (`working_orders_enforce_transition`), and then
- * allows anything an open order allows: this file is the one product file that writes that
- * status (`scripts/sent-order-open.test.ts`).
+ * Runs `move` with a sent Counter order with no receipt ({@link isSentCounterOrder}) back at
+ * `open`, and sets it `placed` again if `move` left it open; any other bill, `move` alone. The
+ * database lets a placed order with no sale go back to open by a status-only update
+ * (`working_orders_enforce_transition`), and then allows anything an open order allows; outside
+ * this file, `scripts/sent-order-open.test.ts` finds no product write of that status by text.
+ * A caller that catches a refusal from `move` must do so outside a savepoint wrapping this call,
+ * or the order is left open.
  */
 export async function withSentOrderOpen<T>(
   tx: Transaction,

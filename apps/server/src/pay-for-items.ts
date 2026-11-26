@@ -215,8 +215,9 @@ export async function priceItemPicks(
  * receipt ({@link withSentOrderOpen}) to a new bill of its party (a new counter order when it has
  * none) that names the bill they came from, and issue the source when what is left of it is paid,
  * unless `holdSourceInvoice`: a card reader's payment can still charge nothing and put the items
- * back, so its source is issued once that payment is received (`completeBillPayment`). The source may be left holding more than it owes; the kitchen is not
- * told, as the items stay where they are served.
+ * back, so its source is issued once that payment is received (`completeBillPayment`). The source
+ * may be left holding more than it owes; the kitchen is not told, as the items stay where they are
+ * served.
  */
 export async function moveItemsToNewBill(
   tx: Transaction,

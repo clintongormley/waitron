@@ -112,6 +112,19 @@ async function sentOrder(...dishes: (string | [string, string])[]): Promise<stri
   return id;
 }
 
+/** An order of no party sent from the tables zone, which serves by tab. */
+async function sentTablesZoneOrder(...names: string[]): Promise<string> {
+  const id = randomUUID();
+  await parkOrder({ db: v.db }, v.cfg, {
+    id,
+    zoneId: v.tables.zoneId,
+    lines: names.map((name) => ({ menuItemId: v.item(name), quantity: "1" })),
+    operatorId: OPERATOR,
+  });
+  await placeOrder(deps(), v.cfg, id, OPERATOR);
+  return id;
+}
+
 async function lineOf(billId: string, name: string): Promise<string> {
   const [row] = await v.db
     .select({ id: workingOrderLines.id })
@@ -308,6 +321,38 @@ describe("Pay for items on a sent Counter order", () => {
     ).rejects.toMatchObject({ code: "bill.not_at_table" });
 
     expect((await billOf(orderId)).status).toBe("placed");
+  });
+
+  it("a no-party order sent in the tables zone is still refused bill.not_at_table", async () => {
+    const orderId = await sentTablesZoneOrder("Burger", "Paella");
+    expect((await billOf(orderId)).partyId).toBeNull();
+    const before = await rowsOf(orderId);
+
+    await expect(
+      payInCash(orderId, [{ lineId: await lineOf(orderId, "Burger") }], "12.00"),
+    ).rejects.toMatchObject({ code: "bill.not_at_table" });
+
+    expect(await rowsOf(orderId)).toEqual(before);
+    expect(before.bill.status).toBe("placed");
+  });
+
+  it("an order sent in a Counter zone that takes payment first is still refused", async () => {
+    await inTx(v, (tx) => setZoneSalePolicyOverride(tx, v.counter.zoneId, "paidWhen", "prepay"));
+    try {
+      const orderId = await sentOrder("Burger", "Paella");
+      const before = await rowsOf(orderId);
+
+      await expect(
+        payInCash(orderId, [{ lineId: await lineOf(orderId, "Burger") }], "12.00"),
+      ).rejects.toMatchObject({ code: "bill.not_at_table" });
+
+      expect(await rowsOf(orderId)).toEqual(before);
+      expect(before.bill.status).toBe("placed");
+    } finally {
+      await inTx(v, (tx) =>
+        setZoneSalePolicyOverride(tx, v.counter.zoneId, "paidWhen", "ticket_then_pay"),
+      );
+    }
   });
 
   it("a sent order at a table is still refused bill.not_issued", async () => {

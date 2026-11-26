@@ -1349,7 +1349,7 @@ export async function requireOpenBill(tx: Transaction, workingOrderId: string): 
   }
 }
 
-export async function hasInvoice(tx: Transaction, workingOrderId: string): Promise<boolean> {
+async function hasInvoice(tx: Transaction, workingOrderId: string): Promise<boolean> {
   const [invoice] = await tx
     .select({ id: sales.id })
     .from(sales)

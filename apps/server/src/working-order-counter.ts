@@ -40,6 +40,7 @@ import {
 import { overrideToCheck, withPinCheckAhead, withCheck } from "./pin-check-ahead.js";
 import { enqueueCollectionTicket } from "./receipt-print.js";
 import { readIssuedSales } from "./sale-due.js";
+import { sentUnpaidCounterOrder } from "./sent-order-open.js";
 import { stillMovable } from "./station-move.js";
 import { readInvoiceNumbers } from "./stored-order-lines.js";
 import { ordersWithUnfiledPayment } from "./till-sale.js";
@@ -397,15 +398,6 @@ async function handOver(
   await captureKitchenActivity(tx, attendance, attendance?.personId, [id]);
 }
 
-async function sentUnpaidCounterOrder(
-  tx: Transaction,
-  id: string,
-  order: { status: string; partyId: string | null },
-): Promise<boolean> {
-  if (order.status !== "placed" || order.partyId !== null) return false;
-  const context = await VENUE_SERVICE.findOrderContext(tx, id);
-  return paysAfterSending(context?.serviceMode);
-}
 /** A counter order the counter is still waiting on: sent and not paid, or settled and not handed over. */
 export interface CounterWaitingOrder {
   items: OrderPreviewItem[];
