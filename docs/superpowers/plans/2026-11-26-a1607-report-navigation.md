@@ -1,0 +1,19 @@
+# A1607 problem report navigation
+
+People downloading a Dashboard or Setup problem report can see the screens they reached, including sign-in after a failed Dashboard session check, the permitted page after signing in at the same address, and the Setup wizard's starting screen and later steps. Lane F's A1607 queue entry assigns the [A982 navigation hardening](../../backlog/alerts.md#logging-diagnostics--one-touch-bug-report-a9-slice-1-landed-192). This plan uses only fixed app screen IDs in the report. The [download-first plan](2026-11-08-a982-client-only-report-first.md) initially excluded screen fields and separately mentions Setup route templates in PR4.
+
+## Dashboard
+
+- [ ] In `apps/dashboard/src/problem-report.test.ts`, check the real preview shows `login` once on a failed boot probe and on an account-action link, and `overview` once after sign-in at `/overview`, with no history write during that sign-in. Use `/` and `/printing-rules` as controls for a canonical redirect and a legacy redirect, with one resolved destination each. A failed re-probe from sign-in must not add another `login`. Run `pnpm --filter @waitron/dashboard exec vitest run src/problem-report.test.ts` before and after wiring.
+- [ ] In `apps/dashboard/src/dashboard-app.ts`, record `login` when an account-action link skips the boot probe and when the ordinary probe refuses while `checkingSession` is true, after the existing stale checks. The shell starts on `login`, so assigning that screen does not record the refusal. When an accepted probe starts signed out, compare the history recorder's count before and after applying the session. If the observer has not recorded the applied screen, record it after screen resolution, including direct zone repair. Use this for every sign-in after being signed out. Keep the existing address events, guards and return-to-login behavior. The profile modal's later address event is outside this change.
+
+## Setup and report projection
+
+- [ ] In `apps/setup/src/setup-app.problem-report.test.ts`, read the real preview before discovery and after discovery reaches Mode and the person chooses another wizard step. Assert the ordered IDs and that a redraw on the same step adds nothing. Run `pnpm --filter @waitron/setup exec vitest run src/setup-app.problem-report.test.ts` before and after wiring.
+- [ ] In `apps/setup/src/setup-app.ts`, record the initial and subsequent rendered screens in the existing `willUpdate` screen branch. Compare its prior value with the next screen so several assignments that return to the same rendered step add nothing. Derive `Screen` from the fixed literal list there.
+- [ ] In `apps/dashboard/src/dashboard-app.ts` and `apps/setup/src/setup-app.ts`, pass each shell's fixed screen set to its `problem-report.ts` component. Build Dashboard's set from its core IDs, `zone-repair` and registered module contributions. Both components pass the set to `captureClientReport` in `packages/diagnostics/src/client-report.ts`. Keep `nav.screen` only when it is an exact member, and omit the field when a caller supplies no set. No raw URL, token, form value, or extra nav field reaches the report. Till keeps its current projection.
+- [ ] In `packages/diagnostics/src/client-report.test.ts`, check an allowed ID, a URL passed as a screen, an extra nav field, and no supplied set. Preserve the current dropped-field assertions. Run `pnpm --filter @waitron/diagnostics exec vitest run src/client-report.test.ts` before and after wiring.
+
+Delete the navigation hardening bullet in `docs/backlog/alerts.md` and carry its projection rule into the stored-capture entry. Update `docs/backlog.md` without retiring separate work. This slice covers screen IDs. Setup API path names, storage, Cloud, crash and freeze reports, and screen wording are outside it.
+
+Run the named files and focused Dashboard and Setup leave checks before finish-branch. Expect about 75 product lines and 100 test lines. Sign off commits.

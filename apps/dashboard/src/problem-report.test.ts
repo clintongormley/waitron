@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtButton, WtReportDialog, WtTextarea } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
+import type { TrailEvent } from "@waitron/diagnostics";
 import { DashboardApi } from "./api/client.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import type { DashboardProblemReport } from "./problem-report.js";
@@ -10,9 +11,13 @@ import { diag } from "./diagnostics.js";
 import { setLocale } from "./i18n/t.js";
 import "./dashboard-app.js";
 
+const initialUrl = location.href;
+const navRows = (trail: TrailEvent[]) => trail.filter((row) => row.event === "nav");
+
 afterEach(() => {
   cleanupWidgets();
   vi.restoreAllMocks();
+  history.replaceState(null, "", initialUrl);
   vi.unstubAllGlobals();
   setLocale("en-GB");
 });
@@ -75,34 +80,75 @@ it("keeps a compact entry named while hiding its text label", async () => {
   expect(trigger.getBoundingClientRect().width).toBe(trigger.getBoundingClientRect().height);
 });
 
-it.each([false, true])(
-  "opens the report from the real dashboard banner (signed in=%s)",
-  async (signedIn) => {
+it.each([
+  ["signed-out boot and failed recheck", "/overview", "refused", ["login"]],
+  ["already signed in with a background recheck", "/", "recheck", ["my-schedule"]],
+  ["direct zone repair", "/overview", "zone", ["zone-repair"]],
+  [
+    "account-action link",
+    "/account?token=private-account-token&purpose=invitation",
+    "account",
+    ["login"],
+  ],
+  ["same-address sign-in", "/overview", "sign-in", ["login", "overview"]],
+  ["canonical redirect after sign-in", "/", "sign-in", ["login", "overview"]],
+  ["legacy redirect after sign-in", "/printing-rules", "sign-in", ["login", "prep-stations"]],
+] as const)(
+  "shows the navigation trail in the real dashboard banner report for %s",
+  async (_name, path, session, screens) => {
+    const before = navRows(diag.snapshot()).length;
+    const signedIn = session === "recheck" || session === "zone";
+    const signIn = session === "sign-in";
+    const prepStations = path === "/printing-rules";
     vi.stubGlobal("isSecureContext", true);
-    history.replaceState(null, "", "/");
+    history.replaceState(null, "", path);
     vi.stubGlobal(
       "PublicKeyCredential",
       class {
         static isConditionalMediationAvailable = async () => false;
       },
     );
+    let authenticated: boolean = signedIn;
+    const getMe = vi.fn(async () => {
+      if (!authenticated) throw { code: "management_session.required" };
+      return {
+        personId: "00000000-0000-4000-8000-000000000001",
+        email: "ada@example.test",
+        roleIds: ["manager"],
+        locale: "en-GB",
+        venueLocale: "en-GB",
+        sessionDefault: "en-GB",
+        permissions: prepStations
+          ? ["venue.view", "venue.configure"]
+          : signIn
+            ? ["venue.view"]
+            : [],
+        modules: prepStations ? ["venue-service"] : [],
+        tradingAdmission: { state: session === "zone" ? "invalid" : "ready" },
+        venueName: "Report fixture",
+      };
+    });
     const { el: app } = await mountWidget<DashboardApp>("dashboard-app", {
       api: {
         liveData: new LiveData(),
-        getMe: async () => {
-          if (!signedIn) throw { code: "management_session.required" };
+        getMe,
+        request: async (route: string) => {
+          expect(route).toBe("/management-api/venue-service/routing");
           return {
-            personId: "00000000-0000-4000-8000-000000000001",
-            email: "ada@example.test",
-            roleIds: ["manager"],
-            locale: "en-GB",
-            venueLocale: "en-GB",
-            sessionDefault: "en-GB",
-            permissions: [],
-            modules: [],
-            venueName: "Report fixture",
+            stationTimes: [],
+            todayEnds: null,
+            clockReadable: true,
+            zones: [],
+            categories: [],
+            products: [],
+            periods: [],
+            cells: [],
+            defaultStationId: null,
+            stations: [],
+            canMakeDefault: false,
           };
         },
+        inspectAccountAction: async () => ({ email: "ada@example.test", purpose: "invitation" }),
         forgetLocales: () => {},
         getLocales: async () => ({
           locales: [{ code: "en-GB", label: "English" }],
@@ -128,11 +174,47 @@ it.each([false, true])(
     });
     await expect
       .poll(() =>
-        signedIn
-          ? app.shadowRoot!.querySelector("[data-test=account-menu]")
-          : app.shadowRoot!.querySelector("dashboard-login-screen"),
+        app.shadowRoot!.querySelector(
+          session === "zone"
+            ? "dashboard-venue-zone-repair"
+            : signedIn
+              ? "[data-test=account-menu]"
+              : "dashboard-login-screen",
+        ),
       )
       .not.toBeNull();
+    if (session === "recheck") {
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+      document.dispatchEvent(new Event("visibilitychange"));
+      await expect.poll(() => getMe.mock.calls.length).toBe(2);
+      await getMe.mock.results[1]!.value;
+    } else if (!signedIn) {
+      const login = app.shadowRoot!.querySelector("dashboard-login-screen")!;
+      await expect.poll(() => login.checkingSession).toBe(false);
+      if (session !== "account") {
+        const replace = vi.spyOn(history, "replaceState");
+        const push = vi.spyOn(history, "pushState");
+        authenticated = signIn;
+        login.dispatchEvent(new CustomEvent("logged-in", { bubbles: true, composed: true }));
+        await expect.poll(() => getMe.mock.calls.length).toBe(2);
+        await getMe.mock.results[1]!.value.catch(() => undefined);
+        if (signIn) {
+          const destination = prepStations ? "prep-stations" : "overview";
+          await expect
+            .poll(() => app.shadowRoot!.querySelector(`dashboard-${destination}-screen`))
+            .not.toBeNull();
+          expect(location.pathname).toBe(
+            prepStations ? "/prep-stations/view/stations" : "/overview",
+          );
+        }
+        if (path === "/overview") {
+          expect(replace).not.toHaveBeenCalled();
+          expect(push).not.toHaveBeenCalled();
+        }
+      } else {
+        expect(getMe).not.toHaveBeenCalled();
+      }
+    }
     const report = app.shadowRoot!.querySelector<HTMLElementTagNameMap["dashboard-problem-report"]>(
       "[data-test=brand-banner] dashboard-problem-report",
     )!;
@@ -145,7 +227,14 @@ it.each([false, true])(
     const dialog = report.shadowRoot!.querySelector<WtReportDialog>("wt-report-dialog")!;
     await dialog.updateComplete;
     expect(dialog.open).toBe(true);
-    expect(data(preview(dialog)).app).toBe("dashboard");
+    const snapshot = data(preview(dialog));
+    expect(snapshot.app).toBe("dashboard");
+    expect(
+      navRows(snapshot.trail)
+        .slice(before)
+        .map(({ fields }) => fields),
+    ).toEqual(screens.map((screen) => ({ screen })));
+    expect(JSON.stringify(snapshot)).not.toContain("private-account-token");
   },
 );
 

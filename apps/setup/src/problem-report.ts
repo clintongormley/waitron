@@ -1,5 +1,5 @@
 import { LitElement, css, html } from "lit";
-import { customElement, state } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import {
   currentThemeChoice,
   draftScopeFor,
@@ -27,6 +27,7 @@ export class SetupProblemReport extends LitElement {
       display: inline-flex;
     }
   `;
+  @property({ attribute: false }) navigationScreens?: ReadonlySet<string>;
   @state() private snapshot?: ClientReportSnapshot;
   @state() private description = "";
   @state() private downloadError = "";
@@ -48,6 +49,7 @@ export class SetupProblemReport extends LitElement {
       app: "setup",
       makeId: makeBrowserUuid,
       trail: diag.snapshot(),
+      navigationScreens: this.navigationScreens,
       client: {
         build: reportBuild,
         locale: currentLocale().startsWith("es") ? "es" : "en",
