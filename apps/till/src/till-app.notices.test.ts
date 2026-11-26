@@ -19,6 +19,7 @@ import {
 } from "../test/equipment-app.js";
 import { NFC_EQUIPMENT } from "../test/equipment-nfc.js";
 import {
+  choosePayWay,
   flush as flushApp,
   lock as billPayLock,
   openTable,
@@ -26,6 +27,7 @@ import {
   stubApi,
   tableOrder,
   till as billPayTill,
+  type as typePay,
 } from "../test/bill-pay-app.js";
 import type { CapabilityFlag } from "./layout.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -1219,21 +1221,9 @@ describe("a payment started while a notice pauses payments", () => {
     order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
     await flushApp(el);
     const pay = billPayDialog(el)!;
-    pay
-      .shadowRoot!.querySelector<HTMLInputElement>('input[name="way"][value="contribution"]')!
-      .click();
-    await flushApp(el);
-    for (const [name, value] of [
-      ["amount", "40"],
-      ["tendered", "50"],
-    ] as const) {
-      const input = pay
-        .shadowRoot!.querySelector(`wt-input[name="${name}"]`)!
-        .shadowRoot!.querySelector("input")!;
-      input.value = value;
-      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-      await flushApp(el);
-    }
+    await choosePayWay(el, "contribution");
+    await typePay(el, "amount", "40");
+    await typePay(el, "tendered", "50");
     pay.shadowRoot!.querySelector<HTMLElement>("[data-pay-continue]")!.click();
     await flushApp(el);
     pay.shadowRoot!.querySelector<HTMLElement>('input[name="ownReceipt"][value="no"]')!.click();

@@ -1109,8 +1109,8 @@ cuando se ofrezca una lista. Comprueba el lector y el total antes de
 confirmar. Para usar otra máquina, sigue [Usar otro datáfono](table-service.md#outside-card).
 
 Si el local acepta propinas y Waitron controla el lector, pulsa **Introducir propina** en Cobrar.
-Para retirarla antes de iniciar el pago, pulsa **Quitar propina**. Con otro datáfono, introduce
-la propina con los demás datos del pago. En Mostrador, rellena **Propina con tarjeta (opcional)**
+Para retirar la propina antes de iniciar el pago, pulsa **Quitar** junto al importe. Con otro
+datáfono, introduce la propina con los demás datos del pago. En Mostrador, rellena **Propina con tarjeta (opcional)**
 antes de continuar. La confirmación separa **Se descuenta de la cuenta**,
 **Propina** y **Se cobra en la tarjeta**.
 Una cantidad superior a lo que queda se convierte en propina: confirma con el cliente el cargo

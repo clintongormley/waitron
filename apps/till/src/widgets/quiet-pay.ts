@@ -244,8 +244,13 @@ export function quietTipBreakdown({
       tip === undefined
         ? nothing
         : html`<span>${fill(t("bill_pay.quiet_breakdown"), { bill, tip })}</span
-            ><wt-button variant="ghost" data-quiet-pay-remove-tip .disabled=${busy} @click=${remove}
-              >${t("bill_pay.remove_tip")}</wt-button
+            ><wt-button
+              variant="ghost"
+              data-quiet-pay-remove-tip
+              aria-label=${t("bill_pay.remove_tip")}
+              .disabled=${busy}
+              @click=${remove}
+              >${t("bill_pay.quiet_remove_tip")}</wt-button
             >`
     }
     <wt-button variant="ghost" data-quiet-pay-tip .disabled=${busy} @click=${edit}

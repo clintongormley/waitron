@@ -159,10 +159,10 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
             way: "whole",
             balance: {
               ...balance,
-              total: "73.20",
+              total: "873.20",
               received: "0.00",
               reserved: "0.00",
-              outstanding: "73.20",
+              outstanding: "873.20",
             },
             tableName: t("floor.table_title").replace("{table}", "4"),
             billName: locale === "en" ? "Bill 1" : "Cuenta 1",
@@ -191,13 +191,18 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
             expect(box.top).toBeGreaterThanOrEqual(boxes[index]!.bottom);
           }
           await pressed(el, "[data-quiet-pay-tip]");
-          await typed(el, "cardTip", locale === "en" ? "7.32" : "7,32");
+          await typed(el, "cardTip", locale === "en" ? "87.32" : "87,32");
           await pressed(el, "[data-quiet-pay-tip]");
           const root = el.shadowRoot!;
-          const tipLinks = [...root.querySelectorAll("[data-quiet-pay-breakdown] wt-button")];
-          expect(tipLinks.map((link) => link.getBoundingClientRect().top)).toEqual(
-            tipLinks.map(() => tipLinks[0]!.getBoundingClientRect().top),
-          );
+          const breakdown = root.querySelector("[data-quiet-pay-breakdown]")!;
+          const summary = breakdown.querySelector("span")!.getBoundingClientRect();
+          const removeTip = breakdown.querySelector("[data-quiet-pay-remove-tip]")!;
+          const editTip = breakdown.querySelector("[data-quiet-pay-tip]")!;
+          const removeBox = removeTip.getBoundingClientRect();
+          const editBox = editTip.getBoundingClientRect();
+          expect(removeBox.top).toBe(editBox.top);
+          expect(removeBox.top).toBeLessThan(summary.bottom);
+          expect(editBox.right).toBeLessThanOrEqual(breakdown.getBoundingClientRect().right);
           const icons = [
             root.querySelector("[data-quiet-pay-equipment] wt-icon")!,
             choices[0]!.shadowRoot!.querySelector("[part=check] wt-icon")!,

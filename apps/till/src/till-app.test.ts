@@ -1,6 +1,11 @@
 import { deferred } from "../test/clock-app.js";
 import { liveReadFixture } from "../test/live-connection.js";
-import { balanceOf, diskFullNotice, pollDiskNotice } from "../test/bill-pay-app.js";
+import {
+  balanceOf,
+  choosePayMethod,
+  diskFullNotice,
+  pollDiskNotice,
+} from "../test/bill-pay-app.js";
 import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { passBoard, passCard, passItem } from "../test/pass-board-fixtures.js";
@@ -11863,6 +11868,7 @@ describe("till-app", () => {
         await flush(el);
         const pay = el.shadowRoot!.querySelector("till-bill-pay-dialog")!;
         expect(pay).not.toBeNull();
+        await choosePayMethod(el, "cash");
         expect(askSaleDeadEnds).not.toHaveBeenCalled();
         expect(pay.shadowRoot!.querySelector('wt-input[name="tendered"]')).not.toBeNull();
       });
