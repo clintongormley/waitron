@@ -579,7 +579,7 @@ export function mountSetupOperationRoutes(
     );
   });
 
-  mountSetupCloudRecoverySessionRoutes(app, deps, log);
+  mountSetupCloudRecoverySessionRoutes(app, deps, log, setupBusy);
   app.post("/setup-api/cloud-recovery/restore", async (c) => {
     const requestRestart = deps.requestRestart;
     if (!deps.cloudRecovery || !deps.stageRestore || !requestRestart)

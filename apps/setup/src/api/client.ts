@@ -238,12 +238,15 @@ export interface BucketRestoreBody extends RecoveryRestoreCredentials {
 }
 
 export interface CloudRecoveryView {
+  version?: 2;
   requestId: string;
   code: string;
   openCloudUrl: string;
   expiresAt: string;
   state: "awaiting_owner" | "approved" | "expired";
   point?: { id: string; venueId: string; capturedAt: string; modules: Record<string, number> };
+  points?: NonNullable<CloudRecoveryView["point"]>[];
+  selectionNotice?: "stale" | "fixed" | "approve_again";
 }
 
 export interface RecoveryBackupPreview {
@@ -636,6 +639,14 @@ export class SetupApi {
 
   cloudRecoveryStatus(): Promise<CloudRecoveryView> {
     return this.#request("/setup-api/cloud-recovery/status", "GET");
+  }
+
+  cloudRecoveryPoints(): Promise<CloudRecoveryView> {
+    return this.#request("/setup-api/cloud-recovery/points", "GET");
+  }
+
+  selectCloudRecoveryPoint(pointId: string, venueId: string): Promise<CloudRecoveryView> {
+    return this.#request("/setup-api/cloud-recovery/select", "POST", { pointId, venueId });
   }
 
   startCloudRecoveryAgain(): Promise<CloudRecoveryView> {

@@ -122,8 +122,14 @@ export const restoreEn = {
   "cloud_restore.expires": "Request expires:",
   "cloud_restore.open_cloud": "Open Waitron Cloud",
   "cloud_restore.check": "Check approval",
-  "cloud_restore.approved_heading": "Approved snapshot",
-  "cloud_restore.captured": "Captured:",
+  "cloud_restore.choose_copy": "Choose the copy to restore",
+  "cloud_restore.no_checked_copies": "Waitron Cloud has no checked copy of this venue yet.",
+  "cloud_restore.review_fixes_choice": "Reviewing fixes this choice.",
+  "cloud_restore.selection.stale": "Choose a copy from the updated list.",
+  "cloud_restore.selection.fixed":
+    "To choose a different copy, use Close recovery access in Waitron Cloud and start a new request.",
+  "cloud_restore.selection.approve_again":
+    "Approve this same request again in Waitron Cloud, then choose the copy again.",
   "cloud_restore.later_changes": "Later changes will not be in this restored venue.",
   "cloud_restore.acknowledge":
     "I confirm the old box and surviving peers are stopped, and I accept losing changes after this snapshot.",
@@ -325,8 +331,15 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "cloud_restore.expires": "La solicitud caduca:",
   "cloud_restore.open_cloud": "Abrir Waitron Cloud",
   "cloud_restore.check": "Comprobar la aprobación",
-  "cloud_restore.approved_heading": "Instantánea aprobada",
-  "cloud_restore.captured": "Tomada:",
+  "cloud_restore.choose_copy": "Elige la copia que quieres restaurar",
+  "cloud_restore.no_checked_copies":
+    "Waitron Cloud todavía no tiene ninguna copia comprobada de este local.",
+  "cloud_restore.review_fixes_choice": "Al revisar, esta elección queda fijada.",
+  "cloud_restore.selection.stale": "Elige una copia de la lista actualizada.",
+  "cloud_restore.selection.fixed":
+    "Para elegir otra copia, usa Cerrar acceso de recuperación en Waitron Cloud e inicia una nueva solicitud.",
+  "cloud_restore.selection.approve_again":
+    "Vuelve a aprobar esta misma solicitud en Waitron Cloud y elige la copia de nuevo.",
   "cloud_restore.later_changes": "Los cambios posteriores no estarán en este local restaurado.",
   "cloud_restore.acknowledge":
     "Confirmo que el servidor anterior y los demás servidores que queden están detenidos, y acepto perder los cambios posteriores a esta instantánea.",

@@ -6,6 +6,13 @@ import "./cloud-restore-screen.js";
 
 afterEach(cleanupWidgets);
 
+const newest = {
+  id: "e8722eb0-3f02-4f35-920b-9b5f6bfb05e8",
+  venueId: "fe78bc70-b66f-4b2f-970d-7acbd3739977",
+  capturedAt: "2026-09-24T10:00:00.000Z",
+  modules: { core: 1 },
+};
+
 /** The form's one message, which `wt-form-actions` draws in its own shadow root. */
 async function bottomOf(el: HTMLElement): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
@@ -28,12 +35,15 @@ describe.each(["light", "dark"] as const)("Cloud restore screen at phone width (
             "https://cloud.example.test/recover#request=be9c200d-d6ae-4dad-8895-e5eb50fa8ea3",
           expiresAt: "2026-09-24T12:00:00.000Z",
           state: "approved",
-          point: {
-            id: "e8722eb0-3f02-4f35-920b-9b5f6bfb05e8",
-            venueId: "fe78bc70-b66f-4b2f-970d-7acbd3739977",
-            capturedAt: "2026-09-24T10:00:00.000Z",
-            modules: { core: 1 },
-          },
+          point: newest,
+          points: [
+            newest,
+            {
+              ...newest,
+              id: "4008dcb0-52a9-4cec-aef8-7c6e37f64278",
+              capturedAt: "2026-09-23T10:00:00.000Z",
+            },
+          ],
         },
       },
       theme,

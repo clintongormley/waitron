@@ -2460,17 +2460,51 @@ export class SetupApp extends LitElement {
           void this.#handKeyToDone(detail.nodeRecoverySecret);
         }
       } else {
-        const shown = this.cloudRecoveryView?.point?.id;
-        const view =
-          detail.action === "start"
-            ? await this.api.startCloudRecovery()
-            : detail.action === "start-again"
-              ? await this.api.startCloudRecoveryAgain()
-              : await this.api.cloudRecoveryStatus();
+        const previous = this.cloudRecoveryView;
+        let view: CloudRecoveryView;
+        if (detail.action === "select") {
+          const choice = previous?.points?.find(({ id }) => id === detail.pointId);
+          if (!choice) return;
+          view = await this.api.selectCloudRecoveryPoint(choice.id, choice.venueId);
+          if (view.state === "approved" && view.requestId === previous?.requestId) {
+            view = {
+              ...view,
+              points: view.points ?? previous.points,
+              point:
+                view.selectionNotice && view.selectionNotice !== "stale"
+                  ? previous.point
+                  : view.point,
+            };
+          }
+        } else {
+          view =
+            detail.action === "start"
+              ? await this.api.startCloudRecovery()
+              : detail.action === "start-again"
+                ? await this.api.startCloudRecoveryAgain()
+                : await this.api.cloudRecoveryStatus();
+          if (view.version === 2 && view.state === "approved" && current()) {
+            const list = await this.api.cloudRecoveryPoints();
+            if (!current()) return;
+            const newest = list.points?.[0];
+            if (!newest || list.requestId !== view.requestId) view = list;
+            else if (view.point) view = { ...view, points: list.points };
+            else if (
+              view.selectionNotice === "stale" ||
+              previous?.selectionNotice === "stale" ||
+              previous?.selectionNotice === "approve_again"
+            )
+              view = { ...list, selectionNotice: view.selectionNotice };
+            else {
+              view = await this.api.selectCloudRecoveryPoint(newest.id, newest.venueId);
+              if (view.state === "approved") view = { ...view, points: view.points ?? list.points };
+            }
+          }
+        }
         if (!current()) return;
         this.cloudRecoveryView = view;
         // The server answered the old-server question for the snapshot it was sent, not for another.
-        if (this.cloudRecoveryView.point?.id !== shown) {
+        if (view.point?.id !== previous?.point?.id) {
           this.cloudLiveSince = undefined;
           this.cloudLiveUnknown = false;
         }

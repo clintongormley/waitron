@@ -111,6 +111,7 @@ it("covers callbacks outside the progress store and passes the held context with
     "restore-bucket",
     "cloud-recovery/start",
     "cloud-recovery/start-again",
+    "cloud-recovery/select",
     "cloud-recovery/preview",
     "cloud-recovery/restore",
   ];
