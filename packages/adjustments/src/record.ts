@@ -1,4 +1,4 @@
-import { and, asc, eq, ne, notExists, sql } from "drizzle-orm";
+import { and, asc, eq, exists, ne, notExists, or, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
   centsToDecimal,
@@ -12,7 +12,9 @@ import { isFullComp } from "./full-comp.js";
 import type { AdjustmentAction, AdjustmentPolicySnapshot } from "@waitron/shared";
 import {
   adjustmentEndings,
+  adjustmentLines,
   adjustments,
+  workingOrderLines,
   type AdjustmentSplit,
   type AdjustmentStage,
 } from "@waitron/db";
@@ -148,7 +150,11 @@ export interface BillAdjustment {
   full: boolean;
 }
 
-/** This bill's comps and discounts not ended on it, oldest first; its cancellations are not read. */
+/**
+ * This bill's comps and discounts, oldest first, and those given on another bill that took
+ * something off a row now on this one (a set menu moved whole keeps its discount), leaving out any
+ * ended on either bill; cancellations are not read.
+ */
 export async function readBillAdjustments(
   tx: Transaction,
   workingOrderId: string,
@@ -168,7 +174,21 @@ export async function readBillAdjustments(
     .from(adjustments)
     .where(
       and(
-        eq(adjustments.workingOrderId, workingOrderId),
+        or(
+          eq(adjustments.workingOrderId, workingOrderId),
+          exists(
+            tx
+              .select({ id: adjustmentLines.id })
+              .from(adjustmentLines)
+              .innerJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
+              .where(
+                and(
+                  eq(adjustmentLines.adjustmentId, adjustments.id),
+                  eq(workingOrderLines.workingOrderId, workingOrderId),
+                ),
+              ),
+          ),
+        ),
         ne(adjustments.action, "cancel"),
         notExists(
           tx
@@ -177,7 +197,10 @@ export async function readBillAdjustments(
             .where(
               and(
                 eq(adjustmentEndings.adjustmentId, adjustments.id),
-                eq(adjustmentEndings.workingOrderId, adjustments.workingOrderId),
+                or(
+                  eq(adjustmentEndings.workingOrderId, adjustments.workingOrderId),
+                  eq(adjustmentEndings.workingOrderId, workingOrderId),
+                ),
               ),
             ),
         ),

@@ -7,11 +7,14 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import { insertPartyBill } from "./parties.js";
 import { payForItems, previewPayForItems } from "./pay-for-items.js";
+import { buildReceiptDocument } from "./receipt-document.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
 import { storedOrderTotal } from "./stored-order-lines.js";
+import { readSettledTicket } from "./till-sale.js";
 import { mergeBills, moveDishes } from "./testing/bill-action-fixture.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { ensureOperator } from "./testing/cancel-line.js";
+import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import {
   commandFor,
@@ -25,6 +28,7 @@ import {
   cancelSpecLineKeepingCharge,
   compSpecLine,
   discountSpecLine,
+  printSpecBill,
   setupSetMenuSpecVenue,
   specDeps,
   specGrouping,
@@ -198,6 +202,33 @@ it.each<{ name: string; moving: (daily: Awaited<ReturnType<typeof tenPercentDail
   expect(await specGrouping(spec, target.tabId)).toEqual(DISCOUNTED_DAILY);
   await send(target, ["Soup", "Hake"]);
   expect(await total(target.tabId)).toBe(1710 + 1400);
+});
+
+it("prints a 10% Daily moved whole as one Discount 10% under the Daily on its new bill", async () => {
+  const daily = await tenPercentDaily(["Water"]);
+  const target = await otherBill(daily.bill);
+  await move(daily.bill, target, [daily.soup, daily.sirloin]);
+  await printSpecBill(spec, target.partyId, target.tabId);
+
+  const ticket = await inTx(venue, (tx) =>
+    readSettledTicket(venue.backend, tx, venue.cfg, target.tabId),
+  );
+  const { elements } = buildReceiptDocument({
+    ...FULL_INVOICE_DOCUMENT_FIXTURE,
+    invoiceLocale: "en-GB",
+    namesLocale: "en-GB",
+    result: ticket,
+  });
+  const rules = elements.flatMap((element, at) => (element.kind === "rule" ? [at] : []));
+  const printed = elements
+    .slice(rules[2]! + 1, rules[3])
+    .flatMap((element) => (element.kind === "amount" ? [[element.caption, element.amount]] : []));
+  expect(printed).toEqual([
+    ["1  Sirloin", "+5.00"],
+    ["1  Daily menu", "14.00"],
+    ["  Discount 10%", "-1.90"],
+  ]);
+  expect(ticket.total).toBe("17.10");
 });
 
 it("merges a bill holding a 10% Daily into another, the Daily keeping its 10% (D51)", async () => {
