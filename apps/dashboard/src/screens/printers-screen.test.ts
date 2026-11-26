@@ -12901,6 +12901,68 @@ describe("office printers in discovery", () => {
     await vi.waitFor(() => expect(api.assignPrinterProfiles).toHaveBeenCalledTimes(1));
   });
 
+  it.each([
+    ["en-GB", true],
+    ["es-ES", true],
+    ["en-GB", false],
+  ] as const)(
+    "confirms the main-box add until reopening (%s, spare can print: %s)",
+    async (locale, spareCanPrint) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const confirmation =
+          locale === "es-ES"
+            ? es["printers.page_printer_added_here"]
+            : "Added through the main box";
+        const listPagePrinters = vi.fn().mockResolvedValue([]);
+        const local = { ...agents[0]!, onThisBox: true };
+        const spare = { ...agents[1]!, active: true, onThisBox: false };
+        const { el } = await mountWith(
+          [
+            office(),
+            ...(spareCanPrint ? [office({ agentId: spare.id, agentName: spare.name })] : []),
+            ...discoveredNetwork,
+          ],
+          {
+            listAgents: vi.fn().mockResolvedValue([local, spare]),
+            listPagePrinters,
+            registerPagePrinter: vi.fn(async () => {
+              listPagePrinters.mockResolvedValue([{ ...added, name: "HP LaserJet" }]);
+              return { id: added.id, outcome: "created" as const };
+            }),
+          },
+        );
+        q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
+        await flush(el);
+        await clickAndAwaitClose(el, "page-printer-add-modal", "confirm-add-page-printer");
+        const hpRow = "[data-test^=discovered-row-][data-test$=':10.0.0.56:9100']";
+        const row = q(el, hpRow);
+        expect(row).not.toBeNull();
+        expect(row!.textContent).toContain("HP LaserJet");
+        expect(row!.textContent).toContain(confirmation);
+        expect(row!.textContent).not.toContain(spare.name);
+        expect(row!.closest("tr")!.querySelector("wt-button")).toBeNull();
+        const kitchenAdd = "[data-test='register-a1:10.0.0.77:9100']";
+        expect(q(el, kitchenAdd)).not.toBeNull();
+
+        await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
+        await openDiscovery(el);
+        expect(q(el, kitchenAdd)).not.toBeNull();
+        if (spareCanPrint) {
+          const move =
+            locale === "es-ES" ? es["printers.page_printer_use_agent"] : "Use this agent";
+          expect(text(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBe(move);
+          expect(text(el, hpRow)).not.toContain(confirmation);
+        } else {
+          expect(q(el, hpRow)).toBeNull();
+        }
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
   it("keeps the dialog and the name when the server refuses the add, with Add still pressable", async () => {
     const registerPagePrinter = vi.fn().mockRejectedValue({ code: "page_printer.not_printable" });
     const { el } = await mountWith([office({ agentName: null })], { registerPagePrinter });

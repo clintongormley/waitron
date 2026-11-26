@@ -6177,8 +6177,10 @@ and port, unless some agent heard its own queue announced. An A4 printer is adde
 box's agent if it is on, then another that is on, then the lowest id (`foundPrinters`,
 `apps/dashboard/src/screens/discovered-printers.ts`). Once added it is left out while the agent it
 prints through reports it, unless another agent can print to it: that row offers **Use this agent**
-and names the agent. A USB or Bluetooth printer keeps a row for each agent, naming the agent that
-found it. A row's action carries the printer's name in its accessible name.
+and names the agent. An A4 printer just added through the main box shows **Added through the main
+box** without an action until you close Add a printer. A USB or Bluetooth printer keeps a row for
+each agent, naming the agent that found it. A row's action carries the printer's name in its
+accessible name.
 
 A device offers **Delete** and **Add**, with no Status column or filter. Delete ends sign-ins,
 releases held equipment and ends its request to come back, while retaining its identity, proof,

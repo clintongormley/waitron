@@ -7,6 +7,9 @@ network, USB and Bluetooth printers. Choose **Add** beside a printer, change the
 and choose **Add** again. When asked, tick the device profiles that should use it and choose
 **Save profiles**, or choose **Leave unassigned**. A new receipt printer opens calibration next.
 
+If you add an A4 printer through the main box and want to move it to another agent, close and
+reopen **Add a printer**. Choose **Use this agent** beside the agent that can reach it.
+
 A Bluetooth printer must be in pairing mode first. Choose **Pair and add** beside it, enter its
 PIN and choose **Pair and add** again. For a new printer, the name dialog opens: choose **Add**.
 
