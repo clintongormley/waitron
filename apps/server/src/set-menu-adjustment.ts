@@ -35,8 +35,8 @@ interface Held {
   replaced: Replaced;
 }
 
-/** The comps or discounts given on the set-menu row `ask` names that still take something off it,
- * found as {@link ownSetMenuDiscountIds} finds them. */
+/** The comps or discounts given on the set-menu row `ask` names that still take something off it
+ * or its dishes, found as {@link ownSetMenuDiscountIds} finds them. */
 async function heldBySetMenu(tx: Transaction, ask: AdjustmentAsk): Promise<Held[]> {
   if (ask.action === "cancel" || ask.lineId === null) return [];
   const [setMenu] = await tx

@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   adjustmentEndingLines,
@@ -21,33 +21,58 @@ export interface SetMenuDiscount {
 export interface SetMenuDiscountsLeft {
   /** The own comp or discount of each set menu that some, but not all, of its dishes leave. */
   broken: SetMenuDiscount[];
-  /** Each set menu whose every dish leaves and whose row a standing comp or discount reduced, its
-   * own among them or the bill's (D51), with its own standing comps or discounts. */
+  /** Each set menu whose every dish leaves and that holds its own standing comp or discount, or
+   * whose row the bill's reduced (D51), with its own standing comps or discounts. */
   whole: { setMenuLineId: string; own: SetMenuDiscount[] }[];
 }
 
 /** The line a comp or discount was given on. */
 const given = alias(workingOrderLines, "given");
+/** The line a comp or discount took something off. */
+const taken = alias(workingOrderLines, "taken");
 
 /**
  * The comps or discounts given on a set-menu row, wherever that row now is, that still take
- * something off one of `setMenuLineIds`: a copy made by Split after print names the row it copied,
- * so they are found by what they took off, not by the row they name.
+ * something off one of `setMenuLineIds` or a dish placed in it: a copy made by Split after print
+ * names the row it copied, so they are found by what they took off, not by the row they name. A set
+ * menu priced 0.00 holds its discount on its supplements alone.
  */
 async function ownStanding(
   tx: Transaction,
   setMenuLineIds: readonly string[],
 ): Promise<{ adjustmentId: string; setMenuLineId: string }[]> {
   if (setMenuLineIds.length === 0) return [];
+  const menus = sql`(select value from json_each(${JSON.stringify(setMenuLineIds)}))`;
   return tx
-    .selectDistinct({ adjustmentId: adjustments.id, setMenuLineId: adjustmentLines.lineId })
+    .selectDistinct({
+      adjustmentId: adjustments.id,
+      setMenuLineId: sql<string>`case when ${taken.setMenuRole} = 'set_menu' then ${taken.id} else ${taken.setMenuLineId} end`,
+    })
     .from(adjustmentLines)
     .innerJoin(adjustments, eq(adjustments.id, adjustmentLines.adjustmentId))
     .innerJoin(given, eq(given.id, adjustments.lineId))
+    .innerJoin(taken, eq(taken.id, adjustmentLines.lineId))
     .leftJoin(adjustmentEndingLines, eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id))
     .where(
       and(
-        inArray(adjustmentLines.lineId, [...setMenuLineIds]),
+        inArray(
+          adjustmentLines.lineId,
+          tx
+            .select({ id: workingOrderLines.id })
+            .from(workingOrderLines)
+            .where(inArray(workingOrderLines.id, menus))
+            .union(
+              tx
+                .select({ id: workingOrderLines.id })
+                .from(workingOrderLines)
+                .where(
+                  and(
+                    inArray(workingOrderLines.setMenuLineId, menus),
+                    eq(workingOrderLines.setMenuRole, "dish"),
+                  ),
+                ),
+            ),
+        ),
         gt(adjustmentLines.reduction, 0),
         isNull(adjustmentEndingLines.id),
         ne(adjustments.action, "cancel"),
@@ -57,7 +82,8 @@ async function ownStanding(
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
 }
 
-/** The ids of the comps or discounts given on `setMenuLineIds` that still take something off them. */
+/** The ids of the comps or discounts given on `setMenuLineIds` that still take something off them
+ * or a dish placed in them. */
 export async function ownSetMenuDiscountIds(
   tx: Transaction,
   setMenuLineIds: readonly string[],
@@ -116,8 +142,8 @@ export async function setMenuDiscountsLeftBy(
   return {
     broken: menus.filter((menu) => !touched.get(menu)!.every).flatMap(ownOf),
     whole: everyDish
-      .filter((menu) => reduced.has(menu))
-      .map((setMenuLineId) => ({ setMenuLineId, own: ownOf(setMenuLineId) })),
+      .map((setMenuLineId) => ({ setMenuLineId, own: ownOf(setMenuLineId) }))
+      .filter(({ setMenuLineId, own }) => own.length > 0 || reduced.has(setMenuLineId)),
   };
 }
 

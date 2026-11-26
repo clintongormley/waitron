@@ -1422,7 +1422,11 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   the server now does, and say before saving that choosing only some of its dishes takes its
   discount off (D50). The server needs no set-menu row from the till. Alternative: only a chosen row
   moves a set menu (today's `resolveMoveLines`), and the till sends the row's id when every dish is
-  chosen; a choice dish by dish from anything else then loses the discount.
+  chosen; a choice dish by dish from anything else then loses the discount. _2026-11-26, after
+  the second review:_ a set menu priced 0.00 takes its whole discount off its supplements, so its
+  own discount is found by what it still takes off the set-menu row or any dish in it
+  (`ownStanding`, `apps/server/src/set-menu-discount-ending.ts`), and such a set menu counts as
+  chosen too; replacement (D52), break-up (D48, D50) and Pay for items read the same answer.
 - **D52. A second comp or discount on a set menu replaces the one it holds; on a dish they still add
   up.** For a set menu this is the owner's 24 November rule (spec section 6: "A new discount
   replaces the old one and the till says so"): the old one ends (`replaced`, no notice) and the
