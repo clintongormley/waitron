@@ -2398,6 +2398,40 @@ describe("scheduled backup passes", () => {
     }
   });
 
+  it("cancels a checked shutdown while an already running manual backup finishes", async () => {
+    const copy = gate();
+    const archive = store.archiveInWorker;
+    vi.spyOn(store, "archiveInWorker").mockImplementation(async (...args) => {
+      copy.entered();
+      await copy.released;
+      await archive(...args);
+    });
+    const { sup, dest } = await prepared();
+    let manual: Promise<void> | undefined;
+    let shutdown: Promise<void> | undefined;
+    try {
+      await sup.reload();
+      manual = sup.runNow();
+      await copy.reached;
+      const controller = new AbortController();
+      const reason = new Error("Cancelled shutdown");
+      let refusal: unknown;
+      shutdown = sup.runForShutdown(controller.signal, null).catch((error) => {
+        refusal = error;
+      });
+      controller.abort(reason);
+      await vi.waitFor(() => expect(refusal).toBe(reason));
+      copy.release();
+      await manual;
+      await shutdown;
+      expect(await listArchives(dest)).toHaveLength(1);
+    } finally {
+      copy.release();
+      await Promise.all([manual, shutdown]);
+      await sup.stop();
+    }
+  });
+
   it("drains the manual copy before reload closes its destination and reports the stop", async () => {
     const copy = gate<AbortSignal>();
     const archive = store.archiveInWorker;

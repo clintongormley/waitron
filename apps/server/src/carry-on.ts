@@ -373,7 +373,11 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
     }
 
     if (shutdown && text("decision") !== "carry")
-      return page(formSection(BLANK, other, words, destination, shutdown), 200);
+      return page(
+        `<p role="status">${escapeHtml(shutdown.kept)}</p>` +
+          formSection(BLANK, other, words, destination, shutdown),
+        200,
+      );
 
     const turn = await deps.beginCarryOn();
     switch (turn.kind) {

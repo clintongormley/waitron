@@ -54,20 +54,47 @@ const { startServer, httpPort } = ephemeralServerFixture();
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const heartbeatAt = "2026-10-22T09:31:00.000Z";
 
-it("writes only the restart mark if the server stops during a shutdown check", async () => {
+it.each([
+  ["drains the scheduled backup and writes only the restart mark if stopped mid-check", false],
+  ["refuses checked shutdown while streaming is configured", true],
+] as const)("%s", async (_description, streaming) => {
   const { cfg } = await setupVenue(suite.db);
   const { token } = await openManagementSession(suite.db, "admin");
+  const { token: staleToken } = await openManagementSession(suite.db, "admin");
+  let releaseScheduled!: () => void;
+  const held = new Promise<void>((resolve) => {
+    releaseScheduled = resolve;
+  });
+  let enterScheduled!: () => void;
+  const scheduled = new Promise<void>((resolve) => {
+    enterScheduled = resolve;
+  });
+  const scheduledBackup = vi
+    .spyOn(BackupSupervisor.prototype, "pass")
+    .mockImplementation(async (_now, signal) => {
+      signal.throwIfAborted();
+      signal.addEventListener("abort", releaseScheduled, { once: true });
+      try {
+        enterScheduled();
+        await held;
+        return { nextDueAt: null };
+      } finally {
+        signal.removeEventListener("abort", releaseScheduled);
+      }
+    });
   let reachedCheck!: () => void;
   const checking = new Promise<void>((resolve) => {
     reachedCheck = resolve;
   });
-  const checkedBackup = vi.spyOn(BackupSupervisor.prototype, "runForShutdown").mockImplementation(
-    (signal) =>
-      new Promise<void>((resolve) => {
+  const checkedBackup = vi
+    .spyOn(BackupSupervisor.prototype, "runForShutdown")
+    .mockImplementation(async (signal) => {
+      signal.throwIfAborted();
+      await new Promise<void>((resolve) => {
         signal.addEventListener("abort", () => resolve(), { once: true });
         reachedCheck();
-      }),
-  );
+      });
+    });
   const socket = new TLSSocket(new Socket());
   let app!: Hono;
   let started!: Awaited<ReturnType<typeof startServer>>;
@@ -98,9 +125,23 @@ it("writes only the restart mark if the server stops during a shutdown check", a
               },
               null,
             );
+            if (streaming)
+              await writeStreamSettings(
+                tx,
+                ring,
+                {
+                  region: "eu-west-1",
+                  bucket: "copies",
+                  prefix: "",
+                  accessKeyId: "test",
+                  secretAccessKey: "test-secret",
+                },
+                null,
+              );
           });
           started = await startServer(env, env, {
             boxHost: synchronisedBoxHost(),
+            stream: { store: new SwitchableStore(() => new Date()) },
             observeApp: (observed) => {
               app = observed;
             },
@@ -110,16 +151,39 @@ it("writes only the restart mark if the server stops during a shutdown check", a
         httpPort,
       },
       async () => {
-        const response = await app.request(
-          "https://box.example/api/box/shutdown",
-          {
-            method: "POST",
-            headers: { cookie: `waitron_management_session=${token}` },
-          },
-          { incoming: { socket } },
-        );
+        await scheduled;
+        const begin = (session: string) =>
+          app.request(
+            "https://box.example/api/box/shutdown",
+            {
+              method: "POST",
+              headers: { cookie: `waitron_management_session=${session}` },
+            },
+            { incoming: { socket } },
+          );
+        const refused = await begin(staleToken);
+        expect(refused.status).toBe(400);
+        expect(await refused.json()).toMatchObject({
+          error: { code: "management_session.proof_required" },
+        });
+        const response = await begin(token);
+        if (streaming) {
+          releaseScheduled();
+          expect(response.status).toBe(409);
+          expect(await response.json()).toMatchObject({
+            error: { code: "box.shutdown_unavailable" },
+          });
+          return;
+        }
         expect(await response.json()).toEqual({ phase: "checking" });
         expect(response.status).toBe(202);
+        const view = await app.request("/api/box/status", {
+          headers: { cookie: `waitron_management_session=${token}` },
+        });
+        const enteredCheckEarly = checkedBackup.mock.calls.length !== 0;
+        releaseScheduled();
+        expect(view.status).toBe(200);
+        expect(enteredCheckEarly).toBe(false);
         await checking;
         await started.markRestart!();
         await started.close();
@@ -133,6 +197,7 @@ it("writes only the restart mark if the server stops during a shutdown check", a
       },
     );
   } finally {
+    scheduledBackup.mockRestore();
     checkedBackup.mockRestore();
     socket.destroy();
   }
@@ -175,7 +240,11 @@ it("keeps the deliberate shutdown hold across starts until an administrator carr
       start: async (env) => {
         mark = join(env.WAITRON_STATE_DIR!, "admin-shutdown.json");
         await writeFile(mark, '{"version":1}');
-        const seams = { boxHost: synchronisedBoxHost(), waitingStart: { secure: () => true } };
+        const seams = {
+          boxHost: synchronisedBoxHost(),
+          waitingStart: { secure: () => true },
+          previousStop: { restart: false, heartbeatAt },
+        };
         const first = await startServer(env, env, seams);
         try {
           expect(first.health.takesNoSales).toBe(true);
@@ -203,7 +272,9 @@ it("keeps the deliberate shutdown hold across starts until an administrator carr
         });
       const keep = await submit("keep");
       expect(keep.status).toBe(200);
-      expect(await keep.text()).toContain("This box is stopped");
+      const keptPage = await keep.text();
+      expect(keptPage).toContain("This box is stopped");
+      expect(keptPage).toContain('<p role="status">This box will stay stopped.</p>');
       expect(await readFile(mark, "utf8")).toBe('{"version":1}');
       const carry = await submit("carry");
       expect(carry.status).toBe(200);
@@ -212,6 +283,12 @@ it("keeps the deliberate shutdown hold across starts until an administrator carr
       await expect(stat(mark)).rejects.toHaveProperty("code", "ENOENT");
       const trading = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
       expect(await trading.json()).toMatchObject({ acceptingSales: true });
+      expect(
+        await suite.db
+          .select({ code: incidents.code })
+          .from(incidents)
+          .where(eq(incidents.code, "start.unplanned_stop")),
+      ).toEqual([]);
     },
   );
 });

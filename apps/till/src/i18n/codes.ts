@@ -1065,6 +1065,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The time check took too long. Check again.",
     es: "La comprobación de la hora ha tardado demasiado. Vuelve a comprobarla.",
   },
+  "box.shutdown_in_progress": {
+    en: "This box is paused for shutdown. Keep this screen open while the box restarts or shutdown is cancelled.",
+    es: "Este servidor está en pausa para apagarse. Deja esta pantalla abierta mientras se reinicia el servidor o se cancela el apagado.",
+  },
   "handover.stepping_down": {
     en: "This box is handing over or has handed over the venue, so it refused this action. Keep this screen open; the till follows the main box once that box is taking sales.",
     es: "Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción. Deja esta pantalla abierta; la caja seguirá al servidor principal cuando ese servidor acepte ventas.",

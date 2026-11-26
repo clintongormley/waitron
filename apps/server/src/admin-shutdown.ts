@@ -9,11 +9,29 @@ export const SHUTDOWN_PATH = "/api/box/shutdown";
 export type ShutdownStatus =
   { phase: "idle" | "checking" | "ready" } | { phase: "paused"; errorCode: string };
 
+export async function waitForShutdownDrain(
+  drain: Promise<unknown> | undefined,
+  signal: AbortSignal,
+): Promise<void> {
+  signal.throwIfAborted();
+  if (drain === undefined) return;
+  let abort!: () => void;
+  const cancelled = new Promise<never>((_resolve, reject) => {
+    abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+  });
+  try {
+    await Promise.race([drain, cancelled]);
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
+}
+
 export function createAdminShutdown(deps: {
   check(signal: AbortSignal): Promise<void>;
   save(): Promise<void>;
   clear(): Promise<void>;
-  pauseDuties?(): { settled: Promise<void>; resume(): void };
+  pauseDuties?(): { settled: Promise<void>; drainRefunds(): Promise<unknown>; resume(): void };
 }) {
   const writers = new Set<Promise<void>>();
   type Attempt = {
@@ -61,10 +79,14 @@ export function createAdminShutdown(deps: {
       const { signal } = current.controller;
       current.settled = (async () => {
         try {
-          await Promise.all(writers);
+          await waitForShutdownDrain(Promise.all(writers), signal);
           signal.throwIfAborted();
           current.duties = deps.pauseDuties?.();
-          await current.duties?.settled;
+          if (current.duties !== undefined) {
+            await waitForShutdownDrain(current.duties.settled, signal);
+            signal.throwIfAborted();
+            await current.duties.drainRefunds();
+          }
           signal.throwIfAborted();
           await deps.check(signal);
           signal.throwIfAborted();

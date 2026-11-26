@@ -11,6 +11,7 @@ import { archiveInWorker, VENUE_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { archiveNamespace } from "./archive-settings.js";
+import { waitForShutdownDrain } from "./admin-shutdown.js";
 import { rehearseShutdownBackup } from "./admin-shutdown-backup.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig, BackupConfigUnusable, BackupSchedule } from "./backup-config.js";
@@ -429,7 +430,7 @@ export class BackupSupervisor {
     )
       throw new AppError("backup.not_enabled", {});
     const stopping = AbortSignal.any([signal, controller.signal]);
-    await schedule.running;
+    await waitForShutdownDrain(schedule.running, stopping);
     stopping.throwIfAborted();
     const running = schedule.start("manual", stopping, (archive, signal) =>
       rehearseShutdownBackup(archive, {

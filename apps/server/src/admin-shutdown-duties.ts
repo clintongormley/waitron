@@ -47,9 +47,8 @@ export function adminShutdownDuties(deps: {
     pauseDuties() {
       const pause = runner.pauseJobs();
       return {
-        settled: pause.settled.then(async () => {
-          await stopTenderRefundResolvers(db);
-        }),
+        settled: pause.settled,
+        drainRefunds: () => stopTenderRefundResolvers(db),
         resume() {
           startTenderRefundResolvers(db);
           pause.resume();

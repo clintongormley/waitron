@@ -1,6 +1,47 @@
 import { Hono } from "hono";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { createAdminShutdown } from "./admin-shutdown.js";
+
+it.each(["request", "job"])("can cancel while an admitted %s is still running", async (kind) => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => (entered = resolve));
+  const check = vi.fn(async () => {});
+  const shutdown = createAdminShutdown({
+    check,
+    save: async () => {},
+    clear: async () => {},
+    pauseDuties: () => {
+      entered();
+      return { settled: held, drainRefunds: async () => {}, resume() {} };
+    },
+  });
+  const app = new Hono();
+  app.use("*", shutdown.middleware);
+  app.post("/admitted", async (c) => {
+    entered();
+    await held;
+    return c.body(null, 204);
+  });
+  app.post("/sale", (c) => c.body(null, 204));
+  const request = kind === "request" ? app.request("/admitted", { method: "POST" }) : undefined;
+  try {
+    if (request) await started;
+    shutdown.start();
+    if (!request) await started;
+    expect((await app.request("/sale", { method: "POST" })).status).toBe(503);
+    const cancelling = shutdown.cancel();
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "idle" }));
+    await cancelling;
+    expect((await app.request("/sale", { method: "POST" })).status).toBe(204);
+  } finally {
+    release();
+    await request;
+    await shutdown.close();
+  }
+  expect(check).not.toHaveBeenCalled();
+});
 
 it("waits for admitted work and keeps new work out until Cancel has settled", async () => {
   let releaseWriter!: () => void;

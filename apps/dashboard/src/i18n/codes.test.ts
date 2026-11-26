@@ -1196,6 +1196,22 @@ it("explains an invalid contains tag in both languages", () => {
 
 it.each([
   [
+    "box.shutdown_in_progress",
+    "This box is paused for shutdown. Open Box status to see its progress.",
+    "Este servidor está en pausa para apagarse. Abre Estado del servidor para ver el progreso.",
+  ],
+  [
+    "box.shutdown_unavailable",
+    "Checked shutdown needs a standalone main box with one saved backup destination and streaming turned off.",
+    "El apagado con comprobación requiere un servidor principal sin servidor de reserva, con un solo destino de copias guardado y la copia continua desactivada.",
+  ],
+])("explains the shutdown refusal %s in both languages", (code, english, spanish) => {
+  expect(codeMessage(code, "en")).toBe(english);
+  expect(codeMessage(code, "es")).toBe(spanish);
+});
+
+it.each([
+  [
     "handover.stepping_down",
     "This box is handing over or has handed over the venue, so it refused this action. Use the main box’s address once that box is taking sales.",
     "Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción. Usa la dirección del servidor principal cuando ese servidor acepte ventas.",
