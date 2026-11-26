@@ -394,3 +394,171 @@ test.each(["click", "toggle"] as const)(
     expect(shownRow(el, "menu").querySelector(".row-activate")).toBeNull();
   },
 );
+
+function toggle(el: WtDataTable<Row>, key: string): Promise<void> {
+  return userEvent.click(shownRow(el, key).querySelector<HTMLButtonElement>(".tree-toggle")!);
+}
+
+async function clearFilter(el: WtDataTable<Row>): Promise<void> {
+  el.chooseFilter("kind", []);
+  await el.updateComplete;
+}
+
+const filteredTree = (
+  filterOpensBranch: (r: Row) => boolean,
+  props: Partial<WtDataTable<Row>> = {},
+) => tree({ collapseDescendants: true, filterOpensBranch, ...props });
+
+test("while filtering, opening a branch the filter does not open is remembered, and one it opens is not", async () => {
+  const el = await filteredTree((r) => r.id !== "desserts", {
+    initiallyCollapsed: true,
+    rememberExpanded: true,
+    viewKey: "filtered-toggle",
+  });
+  el.chooseFilter("kind", ["food"]);
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["desserts", "menu", "coffee", "latte", "oat", "tea"]);
+  expect(el.isExpanded("desserts")).toBe(false);
+  await toggle(el, "menu");
+  expect(keys(el)).toEqual(["desserts", "menu"]);
+  expect(localStorage.getItem("filtered-toggle:expanded")).toBeNull();
+  await toggle(el, "desserts");
+  expect(keys(el)).toEqual(["desserts", "cake", "menu"]);
+  expect(JSON.parse(localStorage.getItem("filtered-toggle:expanded")!)).toEqual(["desserts"]);
+  await clearFilter(el);
+  expect(keys(el)).toEqual(["desserts", "cake", "menu"]);
+});
+
+test("while filtering, a branch the filter opens but no match sits under is reported closed", async () => {
+  const el = await filteredTree(() => true, {
+    initiallyCollapsed: true,
+    rows: [
+      ...menuRows.slice(0, 5),
+      row("desserts", null, "Desserts"),
+      row("cake", "desserts", "Cake", "drink"),
+    ],
+  });
+  el.chooseFilter("kind", ["food"]);
+  await el.updateComplete;
+  expect(keys(el)).toContain("oat");
+  expect(el.isExpanded("desserts")).toBe(false);
+});
+
+test("while filtering, a branch the filter opens stays open below a branch closed and opened again", async () => {
+  const el = await filteredTree((r) => r.id === "coffee");
+  el.chooseFilter("kind", ["food"]);
+  await el.updateComplete;
+  await toggle(el, "menu");
+  expect(keys(el)).toEqual(["desserts", "cake", "menu"]);
+  await toggle(el, "menu");
+  expect(keys(el)).toEqual(["desserts", "cake", "menu", "coffee", "latte", "tea"]);
+});
+
+test("while filtering, setExpanded closes a branch the filter holds open", async () => {
+  const el = await filteredTree((r) => r.id === "coffee");
+  el.chooseFilter("kind", ["food"]);
+  await el.updateComplete;
+  expect(keys(el)).toContain("latte");
+  el.setExpanded("coffee", false);
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["desserts", "cake", "menu", "coffee", "tea"]);
+});
+
+test("while filtering, a branch closed by setExpanded opens again from its toggle", async () => {
+  const el = await filteredTree((r) => r.id === "coffee");
+  el.chooseFilter("kind", ["food"]);
+  await el.updateComplete;
+  el.setExpanded("menu", false);
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["desserts", "cake", "menu"]);
+  await toggle(el, "menu");
+  expect(keys(el)).toContain("tea");
+});
+
+test("while filtering, the expand event says so, and only on a tree whose filter opens branches", async () => {
+  const events: unknown[] = [];
+  const el = await filteredTree(() => true);
+  el.addEventListener("wt-expand-change", (event) => events.push((event as CustomEvent).detail));
+  el.chooseFilter("kind", ["food"]);
+  await el.updateComplete;
+  await toggle(el, "desserts");
+  el.collapseDescendants = false;
+  await el.updateComplete;
+  await toggle(el, "menu");
+  expect(events).toEqual([
+    { key: "desserts", expanded: false, filtering: true },
+    { key: "menu", expanded: false },
+  ]);
+});
+
+test.each(["toggle", "setExpanded"] as const)(
+  "while filtering a flat search, %s on a match remembers it only when it is setExpanded",
+  async (how) => {
+    const el = await filteredTree(() => true, {
+      initiallyCollapsed: true,
+      flatTreeSearch: true,
+      searchTerm: "coffee",
+    });
+    el.chooseFilter("kind", ["food"]);
+    await el.updateComplete;
+    if (how === "toggle") await toggle(el, "coffee");
+    else el.setExpanded("coffee", true);
+    await el.updateComplete;
+    expect(keys(el)).toEqual(["coffee", "latte", "cake"]);
+    el.searchTerm = "";
+    await clearFilter(el);
+    expect(keys(el)).toEqual(
+      how === "toggle" ? ["desserts", "menu"] : ["desserts", "menu", "coffee", "latte", "tea"],
+    );
+  },
+);
+
+test("Expand all while filtering leaves the branches the filter opens closed once it is cleared", async () => {
+  const el = await filteredTree((r) => r.id === "coffee", {
+    initiallyCollapsed: true,
+    expandAllLabel: "Expand all",
+    collapseAllLabel: "Collapse all",
+  });
+  el.chooseFilter("kind", ["food"]);
+  await el.updateComplete;
+  expandAll(el).click();
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["desserts", "cake", "menu", "coffee", "latte", "oat", "tea"]);
+  await clearFilter(el);
+  expect(keys(el)).toEqual(["desserts", "cake", "menu", "coffee", "tea"]);
+});
+
+test("revealRow while filtering keeps open a branch the filter was holding open", async () => {
+  const el = await filteredTree((r) => r.id === "coffee", { initiallyCollapsed: true });
+  el.chooseFilter("kind", ["food"]);
+  await el.updateComplete;
+  await el.revealRow("oat");
+  expect(keys(el)).toContain("oat");
+  await clearFilter(el);
+  expect(keys(el)).toContain("oat");
+});
+
+test("revealRow during a search leaves closed the branches the search holds open", async () => {
+  const el = await tree({ collapseDescendants: true, initiallyCollapsed: true, searchTerm: "oat" });
+  expect(keys(el)).toEqual(["menu", "coffee", "latte", "oat"]);
+  expect(el.isExpanded("coffee")).toBe(true);
+  await el.revealRow("oat");
+  el.searchTerm = "";
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["desserts", "menu"]);
+});
+
+test("a branch remembered closed starts collapsed even when it would open by default, and stays so without collapseDescendants", async () => {
+  localStorage.setItem("seeded-closed:collapsed", JSON.stringify(["coffee"]));
+  const el = await tree({
+    initiallyCollapsed: true,
+    collapseDescendants: true,
+    rememberExpanded: true,
+    viewKey: "seeded-closed",
+    rowInitiallyExpanded: () => true,
+  });
+  expect(keys(el)).toEqual(["desserts", "cake", "menu", "coffee", "tea"]);
+  el.collapseDescendants = false;
+  await el.updateComplete;
+  expect(keys(el)).toEqual(["desserts", "cake", "menu", "coffee", "tea"]);
+});

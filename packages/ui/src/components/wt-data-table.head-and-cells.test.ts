@@ -840,3 +840,40 @@ test("a focused control in a tree cell keeps its focus when the columns are reor
   expect(button()).toBe(focused);
   expect(el.shadowRoot!.activeElement).toBe(focused);
 });
+
+test("columns a layout hides while a filter holds the widths release the held widths", async () => {
+  await wide();
+  const extra: DataTableColumn<Row> = { key: "extra", label: "Extra", cell: (row) => row.id };
+  const el = await table({ rows: filterRows, columns: [nameColumn, statusColumn, extra] });
+  const root = el.shadowRoot!;
+  await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+  await el.updateComplete;
+  expect(root.querySelector("table")!.hasAttribute("data-locked-columns")).toBe(true);
+  el.layoutHiddenColumns = ["extra"];
+  await el.updateComplete;
+  expect(root.querySelector("table")!.hasAttribute("data-locked-columns")).toBe(false);
+  expect(root.querySelectorAll("colgroup col")).toHaveLength(0);
+  el.layoutHiddenColumns = undefined;
+  await el.updateComplete;
+  expect(root.querySelector("table")!.hasAttribute("data-locked-columns")).toBe(false);
+});
+
+test("widths a filter holds are let go and redrawn when the table's own width changes", async () => {
+  await wide();
+  const el = await table({ rows: filterRows, columns: [nameColumn, statusColumn] });
+  el.style.display = "block";
+  el.style.width = "900px";
+  const frames = async () => {
+    for (let frame = 0; frame < 3; frame++) await new Promise(requestAnimationFrame);
+    await el.updateComplete;
+  };
+  await frames();
+  const root = el.shadowRoot!;
+  await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+  await el.updateComplete;
+  const native = root.querySelector("table")!;
+  expect(native.hasAttribute("data-locked-columns")).toBe(true);
+  el.style.width = "1000px";
+  await frames();
+  expect(native.hasAttribute("data-locked-columns")).toBe(false);
+});

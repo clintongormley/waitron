@@ -542,3 +542,13 @@ test("a new view key's stored order after a filter choice sizes each column from
   expect(headers(el)).toEqual(["Name", "Kind", longHeading]);
   expect(longHeadingFits(el)).toBe(true);
 });
+
+test("isColumnShown answers false for a column the chooser hides and for a key no column has", async () => {
+  const el = await table({
+    columns: [nameColumn, movable("m1"), { ...movable("m2"), choosable: "hidden" }, actions],
+  });
+  expect(el.isColumnShown("name")).toBe(true);
+  expect(el.isColumnShown("m1")).toBe(true);
+  expect(el.isColumnShown("m2")).toBe(false);
+  expect(el.isColumnShown("missing")).toBe(false);
+});

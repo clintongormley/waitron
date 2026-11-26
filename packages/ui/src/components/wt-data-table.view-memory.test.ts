@@ -323,3 +323,15 @@ test("resetColumnView saves the view without that column's filter and sort, and 
   expect(el.sortDirection).toBe("descending");
   expect(el.filterSelections).toEqual({});
 });
+
+test("a filter choice set in code is kept as given until the columns change, then judged", async () => {
+  const el = await peopleTable({ viewKey: "people.judged", columns: [name, statusColumn({})] });
+  el.filterSelections = { status: "" };
+  await el.updateComplete;
+  el.sortDirection = "descending";
+  await el.updateComplete;
+  expect(el.filterSelections).toEqual({ status: "" });
+  el.columns = [name, statusColumn({})];
+  await el.updateComplete;
+  expect(el.filterSelections).toEqual({});
+});
