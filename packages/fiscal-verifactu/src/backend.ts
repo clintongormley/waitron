@@ -1,4 +1,5 @@
 import { correctionAdmissionFor } from "./correction-admission.js";
+import { correctionRecordType } from "./correction-record-type.js";
 import { hasReturnedInvoices, returnedInvoices } from "./returned-invoices.js";
 import { filedFiguresFor } from "./filed-figures.js";
 import { readDeviceReceiptEvidence } from "./device-receipt-evidence.js";
@@ -110,13 +111,8 @@ type OriginalAlta = Pick<
 >;
 
 /**
- * The columns `recordCorrection` reads off the alta being corrected. Narrower than `OriginalAlta`
- * in one axis and wider in another: no origin (the corrective's OWN `sale` carries it, unlike a
- * void which must recover it), but `tipo_factura` too — the R-type is derived from it (F2 → R5;
- * F1 → R4 by replacement; an R5 by replacement is corrected like the F2 it replaced), so it is
- * read here rather than assumed. The three identity columns feed `FacturasRectificadas` directly,
- * the same shortcut `recordVoid` takes for the anulada identity, and an R4 names the customer the
- * original's own `destinatarios` named.
+ * The columns `recordCorrection` reads off the alta being corrected. An R1 or R4 names the
+ * customer the original's stored `destinatarios` named.
  */
 type OriginalAltaForCorrection = Pick<
   RegistroRow,
@@ -568,9 +564,6 @@ export class VerifactuBackend implements FiscalBackend {
     if (original === undefined) {
       throw new AppError("fiscal.sale_not_recorded", { saleId: correction.correctsSaleId });
     }
-    // An R5 by replacement stands in for the simplified invoice it replaced, so a later correction
-    // names it by differences, as for an F2.
-    const replacement = original.tipo_factura === "R5" && original.tipo_rectificativa === "S";
     // A full invoice's replacement names its customer and a simplified one's names none.
     const replacesFull = original.tipo_factura === "F1" && sale.counterparty !== null;
     const replacesSimplified = original.tipo_factura === "F2" && sale.counterparty === null;
@@ -581,11 +574,11 @@ export class VerifactuBackend implements FiscalBackend {
       correction.replaces === true &&
       (replacesFull || replacesSimplified) &&
       (await this.refusedEveryRecordOf(tx, original));
-    if (
+    const byDifferences =
       correction.replaces === true
-        ? !replacesRefused
-        : original.tipo_factura !== "F2" && !replacement
-    ) {
+        ? undefined
+        : correctionRecordType(original, sale.counterparty !== null);
+    if (correction.replaces === true ? !replacesRefused : byDifferences === undefined) {
       throw new AppError("fiscal.correction_unsupported", {
         saleId: correction.correctsSaleId,
         // Non-null on every alta; only an anulación stores NULL.
@@ -610,7 +603,7 @@ export class VerifactuBackend implements FiscalBackend {
       NumSerieFactura: formatInvoiceNumber(sale.seriesCode, sale.invoiceNumber),
       FechaExpedicionFactura: sale.issuedAt,
       NombreRazonEmisor: taxpayer.legalName,
-      TipoFactura: replacesRefused && replacesFull ? "R4" : "R5",
+      TipoFactura: byDifferences ?? (replacesFull ? "R4" : "R5"),
       TipoRectificativa: replacesRefused ? "S" : "I",
       FacturasRectificadas: [
         {
@@ -630,8 +623,7 @@ export class VerifactuBackend implements FiscalBackend {
       ...(fechaOperacion !== undefined && { FechaOperacion: fechaOperacion }),
       DescripcionOperacion: sale.descriptionOfOperation,
       // The customer AEAT was sent, as stored, rather than rebuilt from today's sale columns.
-      ...(replacesRefused &&
-        replacesFull &&
+      ...((byDifferences === "R1" || (replacesRefused && replacesFull)) &&
         original.destinatarios !== null && { Destinatarios: original.destinatarios }),
       Desglose: desglose,
       CuotaTotal: cuotaTotal,

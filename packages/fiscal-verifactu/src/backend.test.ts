@@ -498,7 +498,7 @@ describe("recordCorrection — refusals", () => {
     });
   });
 
-  it("refuses to correct a full invoice (F1), which would need an R1 (deferred)", async () => {
+  it("refuses to correct a full invoice (F1) when the corrective names no customer", async () => {
     const original = brandSaleId("44444444-4444-4444-8444-444444444444");
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(sales).values({
@@ -1014,32 +1014,74 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
     expect(await storedReplacement()).toEqual([]);
   });
 
-  it("refuses a by-differences correction of an R4 by replacement, and records nothing", async () => {
+  it("files an R1 by differences of an R4 by replacement, naming the customer it was filed with", async () => {
     const original = await fullOriginalWithDelivery();
     await replace(original, laterDay, "2026-03-01", customer);
-    const before = await registroCount();
+    const correctiveId = brandSaleId("66666666-6666-4666-8666-666666666666");
+    await withTransaction(suite.db, (tx) =>
+      tx.insert(sales).values({
+        id: correctiveId,
+        source: "device",
+        deviceId,
+        nodeId,
+        seriesId,
+        invoiceNumber: 901,
+        issuedAt: laterDay.toISOString(),
+        issuedOffsetMinutes: 60,
+        total: 0,
+        vatBreakdown: [],
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        fiscalBackend: "verifactu",
+        fiscalState: "recorded",
+      }),
+    );
 
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        backend.recordCorrection(
-          tx,
-          {
-            ...replacementSale(laterDay, customer),
-            saleId: brandSaleId("66666666-6666-4666-8666-666666666666"),
-            invoiceNumber: 2,
-            total: decimal("-12.10"),
-            vatBreakdown: [
-              { rate: decimal("21.00"), base: decimal("-10.00"), tax: decimal("-2.10") },
-            ],
-          },
-          { correctsSaleId: replacementId },
-        ),
+    await withTransaction(suite.db, (tx) =>
+      backend.recordCorrection(
+        tx,
+        {
+          ...replacementSale(laterDay, { ...customer, legalName: "Otro Nombre SL" }),
+          saleId: correctiveId,
+          invoiceNumber: 2,
+          total: decimal("-12.10"),
+          vatBreakdown: [
+            { rate: decimal("21.00"), base: decimal("-10.00"), tax: decimal("-2.10") },
+          ],
+        },
+        { correctsSaleId: replacementId },
       ),
-    ).rejects.toMatchObject({
-      code: "fiscal.correction_unsupported",
-      params: { saleId: replacementId, tipoFactura: "R4" },
+    );
+
+    const [replacementRow] = await storedReplacement();
+    const { rows } = await suite.db.execute<Record<string, unknown>>(
+      sql`select * from verifactu_records where sale_id = ${correctiveId}`,
+    );
+    expect(rows).toHaveLength(1);
+    const row = decodeRegistroRow(rows[0]!);
+    expect({
+      tipoFactura: row.tipo_factura,
+      tipoRectificativa: row.tipo_rectificativa,
+      importeRectificacion: row.importe_rectificacion,
+      facturasRectificadas: row.facturas_rectificadas,
+      destinatarios: row.destinatarios,
+    }).toEqual({
+      tipoFactura: "R1",
+      tipoRectificativa: "I",
+      importeRectificacion: null,
+      facturasRectificadas: {
+        IDFacturaRectificada: [
+          {
+            IDEmisorFactura: replacementRow!.id_emisor_factura,
+            NumSerieFactura: "R/1",
+            FechaExpedicionFactura: "05-03-2026",
+          },
+        ],
+      },
+      destinatarios: replacementRow!.destinatarios,
     });
-    expect(await registroCount()).toBe(before);
+    expect(JSON.stringify(row.destinatarios)).toContain("Cliente SL");
+    expect(validate(fromRegistroRow(row) as RegistroAlta, { now: laterDay })).toEqual([]);
   });
 });
 
