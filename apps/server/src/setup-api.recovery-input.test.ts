@@ -228,6 +228,23 @@ it("a missing master key marks the field masterKey, and a backup key alone is no
 });
 
 it.each([
+  ["blank", " \t "],
+  ["4,097-byte", "A".repeat(4097)],
+])("refuses a %s master key as masterKey, with or without a separate key", async (_, typed) => {
+  const { app, stageRestore } = setup();
+  for (const supplied of [{ recoveryOperation: operation }, credentials]) {
+    const req = request("archive", supplied);
+    (req.init.body as FormData).set("masterKey", typed);
+    const response = await app.request(req.path, req.init);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "masterKey" } },
+    });
+  }
+  expect(stageRestore).not.toHaveBeenCalled();
+});
+
+it.each([
   ["archive", null],
   ["bucket", null],
   ["cloud", null],
@@ -522,6 +539,37 @@ it.each(["masterKey", "environment"])(
     expect(receiveArchive).not.toHaveBeenCalled();
   },
 );
+
+it("refuses a raw master key over 4,096 bytes before receiving ciphertext", async () => {
+  const app = new Hono();
+  const receiveArchive = vi.fn(async () => {
+    throw new Error("body was read");
+  });
+  mountSetup(
+    app,
+    {
+      environment: "preproduction",
+      stageRestore: async () => {},
+      requestRestart: () => {},
+      receiveArchive,
+    },
+    () => {},
+  );
+  const response = await app.request("/setup-api/restore", {
+    method: "POST",
+    body: new Uint8Array(),
+    headers: {
+      "content-type": "application/octet-stream",
+      "x-waitron-master-key": "A".repeat(4097),
+      "x-waitron-restore-environment": "preproduction",
+    },
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "setup.request_invalid", params: { field: "masterKey" } },
+  });
+  expect(receiveArchive).not.toHaveBeenCalled();
+});
 
 it("refuses a raw upload before receiving it when the box has no operation file", async () => {
   const app = new Hono();

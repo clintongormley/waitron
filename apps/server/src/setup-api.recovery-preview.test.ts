@@ -130,6 +130,20 @@ it("a missing master key marks the field masterKey, and a backup key alone is no
   }
   expect(read).not.toHaveBeenCalled();
 });
+it("refuses a master key over 4,096 bytes as masterKey before opening any copy", async () => {
+  const app = new Hono();
+  const read = vi.fn(async () => preview);
+  mountSetup(app, { environment: "preproduction", receiveArchive, previewRestore: read }, () => {});
+  const response = await app.request(
+    "/setup-api/restore/preview",
+    request({ "x-waitron-master-key": "A".repeat(4097) }),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "setup.request_invalid", params: { field: "masterKey" } },
+  });
+  expect(read).not.toHaveBeenCalled();
+});
 it.each([
   [{ "content-type": "application/json" }, new Uint8Array([1]), "artifact"],
   [{}, new Uint8Array(), "artifact"],

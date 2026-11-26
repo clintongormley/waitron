@@ -18,3 +18,9 @@ export function asString(value: unknown, field: string): string {
 export function asNullableString(value: unknown, field: string): string | null {
   return value === null ? null : asString(value, field);
 }
+/** A typed master key: refused as `field` when blank or over 4,096 bytes, before anything reads it. */
+export function asMasterKey(value: unknown, field: string): string {
+  const key = asString(value, field);
+  if (key.trim().length === 0 || Buffer.byteLength(key) > 4096) invalidRequest(field);
+  return key;
+}

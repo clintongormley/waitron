@@ -62,6 +62,7 @@ import {
   invalidRequest,
   MAX_RESTORE_UPLOAD_BYTES,
   asObject,
+  asMasterKey,
   asString,
 } from "./setup-request-fields.js";
 import type { TradingConfig } from "./trading-config.js";
@@ -702,7 +703,7 @@ export function mountSetupOperationRoutes(
       try {
         if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream"))
           invalidRequest("artifact");
-        const masterKey = asString(c.req.header("x-waitron-master-key"), "masterKey");
+        const masterKey = asMasterKey(c.req.header("x-waitron-master-key"), "masterKey");
         const environment = c.req.header("x-waitron-restore-environment");
         if (environment !== "production" && environment !== "preproduction")
           invalidRequest("environment");
@@ -757,7 +758,7 @@ export function mountSetupOperationRoutes(
             invalidRequest("artifact");
           const headerKey = multipart
             ? undefined
-            : asString(c.req.header("x-waitron-master-key"), "masterKey");
+            : asMasterKey(c.req.header("x-waitron-master-key"), "masterKey");
           const headerEnvironment = c.req.header("x-waitron-restore-environment");
           if (
             !multipart &&
@@ -783,7 +784,7 @@ export function mountSetupOperationRoutes(
             if (answer != null && answer !== "0" && answer !== "1") invalidRequest("oldBoxGone");
           }
           const masterKey =
-            form === undefined ? headerKey! : asString(form.get("masterKey"), "masterKey");
+            form === undefined ? headerKey! : asMasterKey(form.get("masterKey"), "masterKey");
           const rawEnvironment = form === undefined ? headerEnvironment : form.get("environment");
           if (rawEnvironment !== "production" && rawEnvironment !== "preproduction")
             invalidRequest("environment");
