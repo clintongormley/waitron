@@ -5,7 +5,8 @@ the write-up approved as written); its build is under way in lanes F, D and I. *
 and changes to pass 1) decided with the owner on the evening of 2026-11-26, and this write-up approved
 by the owner the same evening.** Where pass 2 changed a pass-1 decision, the section says so with "(pass 2)".
 **Pass 3 (the ways to pay, §7.9) decided with the owner on the evening of 2026-11-26, and this write-up
-approved by the owner the same evening.**
+approved by the owner the same evening. Pass 3's second part (after payment, §7.12) decided the same
+evening, and its write-up approved by the owner the same evening.**
 §14 says how each piece looks, read off the approved pictures, so the build does not have to guess.
 
 This is a complete redesign of the till and the handheld. Pass 1 covered the overall map of the app,
@@ -556,6 +557,130 @@ with a muted 13px note under it, "Only if the guest asks. It prints once." Once 
 becomes muted text, "Slip printed", and does nothing. With nothing left owed on the table, the foot
 holds "Back to Table 4" (filled) and the slip link; the table is freed by Finish table, never here.
 
+### 7.12 (pass 3) After payment: Find a bill, the receipt, refunds and corrections
+
+Decided with the owner on the evening of 2026-11-26 from pictures `be`–`bh` (§12).
+
+**"Refund" everywhere.** Every "Give money back" and "Give back" on the till becomes "Refund" (owner,
+2026-11-26: "refund everywhere, i don't like 'give money back'"), carrying out A803 §3.10. "Money back
+under way" becomes refunds wording too.
+
+**Find a bill** (`be`), from ☰ → Bills and cash (§9.9).
+- **Finished sales only.** Today's "Bills" tab of open bills goes: open bills live on the floor's
+  jobs and the counter zones' order lists (owner: "i think only closed bills are needed").
+- One list, newest first. Each row: the time, where (table, or the counter's order number), how it
+  was paid (with a card's last four digits) and who served, the amount at the right end with the
+  invoice number under it. A full invoice and a refund carry a small label.
+- One search box: "Number, table, name, card digits or amount". **Searching by amount is new**: a
+  guest who says "you charged me €80.52" is found by typing it.
+- Chips for the days (Today by default; Yesterday, This business day, Last 7 days, This month, From /
+  To, Any date, as today), the staff member and the kind (sale, full invoice, corrective receipt or
+  invoice, refund).
+- Refunds still waiting on the card company sit in a strip on top, opening today's list of them.
+
+**The receipt screen** (`bf`), from a row of Find a bill: the receipt as printed, then three
+full-width actions, each with a hint at its right end, plus a fourth (below):
+1. **Print again**, with this phone's printer as its hint. It opens a sheet with a printer dropdown
+   and the language (starting on the guest's), and "Print on Bar".
+2. **Make it a full invoice**, hint "for a company". **New.** It opens §7.4's details screen and
+   issues a full invoice in place of this simplified receipt (AEAT's F3, "sustitutiva"). The
+   receipt is not cancelled and the new invoice is not a second sale; it names the receipt it
+   replaces and the customer. It is built on the best reading of the rules
+   (`docs/compliance/verifactu-findings.md` §10.2): the same series as full invoices, as AEAT's own
+   invoicing app has it, and any simplified receipt may be replaced. The adviser's open question
+   Q5(d) is asked for confirmation rather than waited on (owner, 2026-11-26: "let's build it and ask
+   for confirmation instead of waiting"). A receipt already replaced cannot be replaced again.
+3. **Refund**, hint "up to €80.52".
+4. **Change how it was paid** (below).
+
+**Refund** (`bg`).
+1. "What is the refund for?": three choices with a line each: **Dishes** ("Something never came, or
+   was not right."), **An amount** ("For example, for a complaint."), **The tip** ("Some or all of the
+   €7.32 paid on top of the bill."). Today's "A dish", "Goodwill or a complaint" and "Extra paid on
+   top of the bill".
+2. Dishes: the Items list of §7.9 (tick dishes, a stepper for part of a row), "Why" from the venue's
+   reasons, and the amount, worked out and editable as today.
+3. "How it goes back": each way back with the most that can go there ("Card ··4821 · up to €80.52",
+   "Cash · up to €80.52"), and one sentence saying what will happen, including the corrective receipt
+   Waitron chooses ("€14.50 is refunded to card ··4821. A corrective receipt prints on Bar."). Staff
+   never choose the tax record, as today.
+4. When the person signed in may not refund, a sheet: **"Supervisor approval required"**, "Refunds
+   need a supervisor or manager. Hand them the phone.", who approves, and their PIN. Today's rule.
+5. Refunded: "€14.50 refunded on card ··4821", the corrective receipt's number and printer, "Back to
+   the receipt" and "Find a bill". A card refund still waiting says so here and in Find a bill's strip.
+
+Refunding on another card machine, a refund waiting on the card company, and refunding the rest stay
+as today, under the new words.
+
+**Change how it was paid** (`bh`). **New.** For a sale recorded as cash that was really paid on
+another card machine, or the reverse, so the drawer count comes out right.
+1. "How it was paid": the receipt's payments. Cash and other-card-machine payments have "Change" at
+   their right end. A payment taken on a reader Waitron drives is shown muted and cannot change ("the
+   card company holds it").
+2. "Change to": Cash or Other card machine, with §7.9's machine dropdown and operation number, and
+   one sentence: "The drawer will expect €12.40 less at the close. The receipt and its invoice number
+   stay the same." Saving: "Save · paid on BBVA terminal".
+3. Changed: "Now paid on BBVA terminal", what it was, who changed it and when, and "Print the receipt
+   again".
+
+**Any waiter may change it, and the change is recorded** (owner, 2026-11-26: "any waiter with a
+record of the change"); no supervisor is asked. A payment can change only until its drawer is closed
+for the day (a call made in the write-up). How a sale was paid is not part of its tax record
+(`SaleForFiscalRecord`, `packages/fiscal/src/backend.ts`, carries no payment method), so the change
+never touches what is filed.
+
+**Corrections otherwise stay as built**: a dish or price is put right with Refund; a printed bill
+not yet paid is reopened or cancelled from the bill's menu ("Reopen bill", "Nothing was served").
+
+### 7.13 (pass 3) How the after-payment screens look
+
+As §7.10 (tokens, app bar, foot bar); pictures `be`–`bh`.
+
+**Find a bill** (`be`). Under the app bar ("‹ Back", "Find a bill" over "Paid today" or "2 found"), a
+plain band with a line under it holding the search field: 44px, 8px corners, line border on the page
+ground, a magnifier icon (search) before the muted placeholder; while typing, a 2px primary border and
+the text in the text colour. Under it, on the same band, the chips: 36px, fully rounded, line border,
+bold 14px, the chevron-down icon after the words. Then the refunds strip: lifted, 10px corners, 12px
+in from each side, "1 refund under way" bold 15px over a muted 13px line, the chevron-right icon at
+the right end. A muted bold 13px label ("Newest first", "Matching the amount") heads the rows. Each
+row is plain with a line under it, three columns: the time, muted 14px in tabular figures, 48px wide;
+the place in bold 15px over a muted 13px line that starts with an 18px icon (card, cash: a note with a
+circle, or the refund's undo arrow) then the way and the person; and at the right end the amount, bold
+in tabular figures, over the invoice number in muted 12px. A label ("Full invoice", "Refund") is a
+small fully rounded pill, bold 11px on `--wt-color-surface-sunken`, before the line's words. A
+matched amount is set on a lifted background.
+
+**The receipt screen** (`bf`). App bar "‹ Find a bill", the receipt number over "Table 4 · 22:58 ·
+Ana". The receipt itself on a plain card with a line border, 4px corners and `--wt-shadow-1`, in a
+monospace face at 12.5px, dashed lines between its parts, as the printer lays it out. The foot holds
+the actions one under another, 52px, 8px corners, line border, plain: a 20px icon in the primary text
+colour first (printer, a page with lines for the full invoice, the undo arrow for Refund, and for
+Change how it was paid a cash note), the action in bold 16px, and the hint muted 13px at the right
+end. Print again's sheet: §7.11's sheet (scrim, 16px top corners, grab handle), "Print again" bold
+18px, two 48px dropdowns with muted labels (Printer; Language), and a filled "Print on Bar" with the
+printer icon before the words.
+
+**Refund** (`bg`). Choices are §7.9's option cards: 10px corners, line border, plain; the name bold
+17px over a muted 13px line, and at the right end, where there is one, the limit in bold tabular
+figures ("up to €80.52"); chosen, a 2px primary border on a lifted background. "Why" is a 48px
+dropdown under a muted label; the amount is a 44px field at the right end of a "Refund" row, bold 18px,
+the figure right-aligned. The sentence of what will happen sits in a lifted panel, 10px corners, 14px.
+"Supervisor approval required": §7.11's sheet; bold 18px title, a muted line, a "Who approves"
+dropdown, four PIN dots (14px circles, filled in the text colour as digits arrive), and the keypad of
+§7.5. Refunded: a 64px circle in `--wt-color-success` with the check icon in the surface colour, the
+outcome as a 30px bold sentence, the corrective receipt in muted 14px; the foot "Back to the receipt"
+(filled) over "Find a bill" (plain).
+
+**Change how it was paid** (`bh`). A muted 14px label over each group ("Payments on this receipt",
+"Taken on a card reader Waitron drives"). Each payment is a card, 10px corners, line border, plain:
+the way in bold 16px over a muted 13px line (time and person, or the reason it cannot change), the
+amount bold in tabular figures, and "Change" as a bold text link in the primary text colour at the
+right end. A payment that cannot change has no link, a transparent background and muted text. "Change
+to" uses the option cards, §7.9's dropdown and operation number field, and the lifted sentence panel;
+the foot holds "Save · paid on BBVA terminal" (filled). Changed: the success circle, "Now paid on BBVA
+terminal" 26px bold, a muted 14px line of what it was, by whom and when; the foot "Back to the receipt"
+(filled) and "Print the receipt again" (a text link).
+
 ## 8. The till: the same pieces side by side
 
 On a screen about 800 pixels wide or more (owner approved the drawing, 2026-11-26):
@@ -835,7 +960,7 @@ The build applies the same rule to every other error.
 
 ## 10. Not designed yet
 
-- Find a bill, the receipt screen, clock-in, My hours, the drawer, refunds and corrections.
+- Clock-in, My hours and the drawer.
 - Loading states, and the Spanish wording.
 
 ## 11. Open questions
@@ -867,7 +992,8 @@ frame 3 the take-off area while dragging, `ac` frame 2 the zone list (without th
 owner dropped), `ad` frame 1 the layout of a counter screen (its jobs became ready orders, §9.8),
 `af` courses, dragging and selecting, `ag` the bar at the bottom (one Map/List button, not two), `ah`
 paying redrawn, `ai` the floor on a till, `aj` ☰ and the kitchen screens, `ak` errors and nothing to
-do; (pass 3) `ba` Split equally, `bb` Items, `bc` An amount, `bd` Other card machine; `sum-a`, `sum-b`, `sum-c` a storyboard of the phone screens, in which frames 12 and 13 predate the
+do; (pass 3) `ba` Split equally, `bb` Items, `bc` An amount, `bd` Other card machine, `be` Find a bill, `bf` the
+receipt screen, `bg` Refund, `bh` Change how it was paid, `tipcmp` the two tip screens compared; `sum-a`, `sum-b`, `sum-c` a storyboard of the phone screens, in which frames 12 and 13 predate the
 bill dropdown and frame 4's ☰ still lists "Choose zones". Turned down or superseded: `w` (an edit
 mode, dropped), `y` (the Ready strip), `z` frame 2 (a Stations tab), `ab` frame 1 (a zone ⋮ menu,
 now in ☰), `ac` frames 1 and 3 and `ad` frame 2 (a counter zone with seats), `ae` and `al` (a
@@ -912,6 +1038,19 @@ counter order delivered to a table; dropped for now, §9.8).
   (name, and where its payments go), read by the till; it replaces the free-text machine name and
   the SumUp radio in `apps/till/src/widgets/outside-card.ts`. What a stored payment keeps of the
   machine is the plan's to propose.
+- (pass 3) **"Refund" replaces "Give money back" and "Give back"** in every till string (the
+  `give_back.*` and `bill_refund.*` keys' English and Spanish), as §7.12 says.
+- (pass 3) **Find a bill searches by amount** (new on `apps/server/src/find-bill-transactions.ts`) and
+  drops the Bills tab (`apps/till/src/screens/till-find-bill-screen.ts`).
+- (pass 3) **Make it a full invoice** is the F3 build deferred in
+  [2026-10-03-full-invoices-at-till-design.md](2026-10-03-full-invoices-at-till-design.md) ("F3
+  conversion is later"): `recordSubstitution` (`packages/core/src/record-substitution.ts`) has no
+  route yet; it needs lookup, the recipient, a refusal of a second exchange, delivery and report
+  tests. A fiscal change: it lands only with the owner's approval. The adviser is asked Q5(d) for
+  confirmation in parallel.
+- (pass 3) **Change how it was paid** is new: a recorded, any-staff change of a payment's way (cash ↔
+  other card machine) until its drawer is closed, reflected in the drawer's expected cash and on a
+  reprint; never on a reader payment, never on the tax record.
 - (pass 2) **Lane D's point 8**: in the demo, a device-verification warning stayed after a reload while
   seating, joining and ordering still worked (2026-11-11). Reproduce and fix it in the build.
 
