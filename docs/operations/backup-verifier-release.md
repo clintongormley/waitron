@@ -56,9 +56,9 @@ bundle with its build identity and migrations so setup can compute the verificat
 
 If setup holds an unfinished version 1 request or a version 2 request from a different build,
 close the old request in Cloud if you can. Keep the old setup state and start a new request
-from an unprovisioned box with an empty state folder. If a restore is already staged, resolve
-that operation before starting another. A completed version 2 restore reports from the build
-that performed it. A completed version 1 restore reports using its saved proof.
+from an unprovisioned box with an empty state folder. If a restore is already staged, keep its
+state and finish it on the build that staged it. A completed version 2 restore reports from the
+build that performed it. A completed version 1 restore reports using its saved proof.
 
 ### Local setup trial, 26 November 2026
 

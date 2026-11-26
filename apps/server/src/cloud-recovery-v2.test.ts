@@ -249,16 +249,15 @@ describe("target-bound snapshot recovery v2", () => {
       snapshotVerification: verification(),
     });
     await client.markRestored({ requestId: String(saved.requestId), pointId: point.id });
-    const readTarget = vi
-      .spyOn(verificationRuntime, "currentBackupVerificationTarget")
-      .mockClear()
-      .mockReturnValue(target());
-    await reportSavedCloudRestore({
-      stateDir: f.stateDir,
-      origin,
-      environment: "preproduction",
-      fetch: f.options.fetch,
-    });
+    const readTarget = vi.spyOn(verificationRuntime, "currentBackupVerificationTarget").mockClear();
+    await readTarget.withImplementation(target, () =>
+      reportSavedCloudRestore({
+        stateDir: f.stateDir,
+        origin,
+        environment: "preproduction",
+        fetch: f.options.fetch,
+      }),
+    );
     expect(readTarget).toHaveBeenCalledOnce();
     for (const call of f.calls.slice(1)) {
       const early = call.action === "status";
@@ -315,6 +314,32 @@ describe("target-bound snapshot recovery v2", () => {
       pointId: point.id,
       phase: "reported",
     });
+  });
+  it("leaves a version 2 restore pending without contacting Cloud from a different build", async () => {
+    const f = await fixture();
+    const client = createCloudRecoveryClient(f.options);
+    await client.start();
+    await client.restore(async () => {}, point.id);
+    const saved = await f.saved();
+    await client.markRestored({ requestId: String(saved.requestId), pointId: point.id });
+    const pending = await f.saved();
+    expect(pending.phase).toBe("restored");
+    f.fetchImpl.mockClear();
+
+    await vi.spyOn(verificationRuntime, "currentBackupVerificationTarget").withImplementation(
+      () => target("d".repeat(40)),
+      () =>
+        refusedLocally(
+          reportSavedCloudRestore({
+            stateDir: f.stateDir,
+            origin,
+            environment: "preproduction",
+            fetch: f.options.fetch,
+          }),
+        ),
+    );
+    expect(f.fetchImpl).not.toHaveBeenCalled();
+    expect(await f.saved()).toEqual(pending);
   });
   it.each([undefined, 1, 3])(
     "never downgrades after response negotiation version %s",
