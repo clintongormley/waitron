@@ -5,33 +5,23 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { recordReplacement } from "@waitron/core";
 import { loadKeyRing } from "@waitron/credentials";
-import {
-  incidents,
-  invoiceCorrections,
-  readLiveSeriesIdTx,
-  sales,
-  taxpayer,
-  workingOrders,
-} from "@waitron/db";
+import { incidents, invoiceCorrections, readLiveSeriesIdTx, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { correctiveRecordsOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { loginWithPin, startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
-import { readBillEditState } from "./bill-editing.js";
 import { refundProvidersOf } from "./bill-refunds.js";
-import { DEVICE_COOKIE } from "./device-session.js";
-import type { GiveBackPlan, GiveBackRequest } from "./give-back-plan.js";
+import type { GiveBackRequest } from "./give-back-plan.js";
 import { sweepInvoiceCorrections } from "./invoice-correction-alerts.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
-import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
+import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
+import * as fixture from "./testing/full-invoice-give-back.js";
+import { ask, r1, type Part } from "./testing/full-invoice-give-back.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { SESSION_COOKIE } from "./till-session.js";
-
-// Section 2 of docs/superpowers/plans/2026-11-25-correct-full-invoice.md: every path that could
-// file against a full invoice once Give money back opens a correction on one.
 
 let venue: BillVenue;
 let reasonId: string;
@@ -48,13 +38,7 @@ useVenueDb({
     await inTx(venue, async (tx) => {
       await tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
       reasonId = (await listAdjustmentReasons(tx))[0]!.id;
-      const session = await loginWithPin(tx, {
-        deviceId: venue.deviceId,
-        personId: venue.adminId,
-        pin: "1234",
-      });
-      const proof = venue.cookie.split("; ").find((part) => part.startsWith(`${DEVICE_COOKIE}=`));
-      adminCookie = `${SESSION_COOKIE}=${session.token}; ${proof}`;
+      adminCookie = await fixture.adminTillCookie(tx, venue);
       const management = await startManagementSession(tx, {
         method: "password",
         personId: venue.adminId,
@@ -70,117 +54,32 @@ afterEach(() => {
 
 const supervisor = () => ({ personId: venue.adminId, pin: "1234" });
 
-type Part = { cash: string } | { card: string } | { reader: string };
+const fullInvoice = async (...parts: Part[]) => (await fixture.fullInvoice(venue, ...parts)).saleId;
+const tenderOf = (saleId: string, method: "cash" | "card") =>
+  fixture.tenderOf(venue, saleId, method);
+const goodwill = (amount: string, way = "cash") => ask("goodwill", amount, { way });
 
-/** A full invoice naming Harbour Foods for a Steak (€25.00) and a House salad (€12.00), paid in
- * `parts`; its sale. */
-async function fullInvoice(...parts: Part[]): Promise<string> {
-  const billId = await tabWith(venue, "Steak", "House salad");
-  const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
-  const chosen = await send(
+/** Previews `request` on the till and presses Give back with what it planned; the correction. */
+async function giveBack(saleId: string, request: GiveBackRequest) {
+  const answer = await send(
     venue.app,
-    venue.cookie,
-    "PUT",
-    `/api/working-orders/${billId}/invoice-choice`,
+    adminCookie,
+    "POST",
+    `/api/transactions/${saleId}/give-back`,
     {
-      revision: order!.revision,
-      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-      invoiceType: "F1",
-      recipient: {
-        taxId: "B12345674",
-        legalName: "Harbour Foods",
-        address: "2 Main Street, 28013 Madrid, Madrid",
-        countryCode: "ES",
-      },
+      ...(await fixture.giveBackBody(venue, adminCookie, saleId, request, reasonId)),
+      ...(request.way === "cash" ? {} : { manualConfirmed: true, override: supervisor() }),
     },
   );
-  expect(chosen.status, JSON.stringify(chosen.json)).toBe(200);
-  for (const part of parts) {
-    const amount = "cash" in part ? part.cash : "card" in part ? part.card : part.reader;
-    const paid = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/payments`,
-      {
-        submissionId: randomUUID(),
-        kind: "contribution",
-        amount,
-        ...("cash" in part
-          ? { method: "cash", tendered: amount }
-          : { method: "card", entry: "card" in part ? "manual" : "reader" }),
-        applied: amount,
-        tip: "0.00",
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-      },
-    );
-    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-  }
-  const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, billId));
-  return sale!.id;
-}
-
-function tenderOf(saleId: string, method: "cash" | "card"): string {
-  return venue.db.all<{ id: string }>(
-    sql`select id from tenders where sale_id = ${saleId} and method = ${method}`,
-  )[0]!.id;
-}
-
-const goodwill = (amount: string, way = "cash"): GiveBackRequest => ({
-  purpose: "goodwill",
-  amount,
-  extra: "0.00",
-  way,
-});
-
-/** Previews `request` on the till and presses Give back with what it planned. */
-async function giveBack(saleId: string, request: GiveBackRequest) {
-  const path = `/api/transactions/${saleId}/give-back`;
-  const previewed = await send(venue.app, adminCookie, "POST", `${path}/preview`, request);
-  expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
-  const answer = await send(venue.app, adminCookie, "POST", path, {
-    ...request,
-    reasonId,
-    note: "Cold",
-    submissionIds: {
-      refund: randomUUID(),
-      extra: randomUUID(),
-      correction: randomUUID(),
-      leg: randomUUID(),
-    },
-    expected: (previewed.json as unknown as GiveBackPlan).parts,
-    ...(request.way === "cash" ? {} : { manualConfirmed: true, override: supervisor() }),
-  });
   expect(answer.status, JSON.stringify(answer.json)).toBe(200);
   const parts = (answer.json as { parts: { correctionId?: string }[] }).parts;
   return { correctionId: parts.find((each) => each.correctionId !== undefined)!.correctionId! };
 }
 
-/** Every invoice filed against `saleId`: its record's type, series, customer and total in cents. */
-function correctivesOf(saleId: string) {
-  return venue.db.all<{
-    tipoFactura: string;
-    tipoRectificativa: string;
-    purpose: string;
-    customer: string | null;
-    total: number;
-  }>(sql`
-    select r.tipo_factura as tipoFactura, r.tipo_rectificativa as tipoRectificativa,
-           ser.purpose as purpose, s.counterparty_tax_id as customer, s.total as total
-    from sales s
-    join invoice_series ser on ser.id = s.series_id
-    join verifactu_records r on r.sale_id = s.id
-    where s.corrects_sale_id = ${saleId}
-    order by s.invoice_number`);
-}
+const correctivesOf = (saleId: string) => correctiveRecordsOf(venue.db, saleId);
 
-const r1 = (total: number, tipoRectificativa = "I") => ({
-  tipoFactura: "R1",
-  tipoRectificativa,
-  purpose: "full_corrective",
-  customer: "B12345674",
-  total,
-});
+/** The R4 replacing a full invoice, as `correctiveRecordsOf` reads it. */
+const r4 = (total: number) => ({ ...r1(total), type: "R4", by: "replacement" });
 
 async function correctionOf(correctionId: string) {
   const [row] = await venue.db
@@ -354,15 +253,11 @@ describe("a corrective full invoice is filed by whatever finishes the money", ()
       });
       return replaced.saleId as string;
     });
-    expect(correctivesOf(saleId)).toEqual([
-      { ...r1(3700, "S"), tipoFactura: "R4", purpose: "full_corrective" },
-    ]);
+    expect(correctivesOf(saleId)).toEqual([r4(3700)]);
 
     await giveBack(saleId, goodwill("10.00"));
     expect(correctivesOf(replacementId)).toEqual([r1(-1000)]);
-    expect(correctivesOf(saleId)).toEqual([
-      { ...r1(3700, "S"), tipoFactura: "R4", purpose: "full_corrective" },
-    ]);
+    expect(correctivesOf(saleId)).toEqual([r4(3700)]);
   });
 });
 
@@ -393,7 +288,9 @@ describe("a correction that can no longer be filed ends unrecorded", () => {
     expect(refundStates(saleId)).toEqual([{ applied: 2000, state: "completed" }]);
   });
 
-  it("opened while queued, a leg pending when AEAT refuses the invoice (1112): nothing filed, one alert, Finish ends it", async () => {
+  // `refusedByAeat` opens no filing case, so no fix is on offer whatever FULL_INVOICE_REPLACEMENT_ON
+  // says: the refusal is one with no fix (`refused_no_fix`).
+  it("opened while queued, a leg pending when AEAT refuses the invoice (1112) with no fix on offer: nothing filed, one alert, Finish ends it", async () => {
     const { saleId, correctionId, refundId } = await readerLegUnanswered();
     await inTx(venue, (tx) => refusedByAeat(tx, saleId));
     providerMadeIt(refundId);

@@ -2,20 +2,20 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
-import { adjustments, billAdvances, parties, sales, taxpayer, workingOrders } from "@waitron/db";
+import { adjustments, billAdvances, parties, taxpayer, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { correctiveRecordsOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
-import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
-import { DEVICE_COOKIE } from "./device-session.js";
-import type { GiveBackPlan, GiveBackRequest } from "./give-back-plan.js";
+import type { GiveBackRequest } from "./give-back-plan.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { REASONS } from "./testing/adjustment-venue.js";
+import * as fixture from "./testing/full-invoice-give-back.js";
+import { ask, r1, type Part } from "./testing/full-invoice-give-back.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { SESSION_COOKIE } from "./till-session.js";
 
 let venue: BillVenue;
 let reasonId: string;
@@ -35,143 +35,29 @@ useVenueDb({
       await tx.update(taxpayer).set({ taxpayerDomicile: DOMICILE });
       reasonId = (await listAdjustmentReasons(tx))[0]!.id;
       voidReasonId = (await createAdjustmentReason(tx, REASONS.houseVoid)).id;
-      const session = await loginWithPin(tx, {
-        deviceId: venue.deviceId,
-        personId: venue.adminId,
-        pin: "1234",
-      });
-      const proof = venue.cookie.split("; ").find((part) => part.startsWith(`${DEVICE_COOKIE}=`));
-      adminCookie = `${SESSION_COOKIE}=${session.token}; ${proof}`;
+      adminCookie = await fixture.adminTillCookie(tx, venue);
     });
   },
 });
 
 const supervisor = () => ({ personId: venue.adminId, pin: "1234" });
 
-/** Sets the unpaid bill's invoice to a full invoice naming Harbour Foods. */
-async function chooseFullInvoice(billId: string) {
-  const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
-  const chosen = await send(
-    venue.app,
-    venue.cookie,
-    "PUT",
-    `/api/working-orders/${billId}/invoice-choice`,
-    {
-      revision: order!.revision,
-      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-      invoiceType: "F1",
-      recipient: {
-        taxId: "B12345674",
-        legalName: "Harbour Foods",
-        address: "2 Main Street, 28013 Madrid, Madrid",
-        countryCode: "ES",
-      },
-    },
-  );
-  expect(chosen.status, JSON.stringify(chosen.json)).toBe(200);
-}
-
-type Part = { cash: string } | { card: string } | { reader: string };
-
-async function payPart(billId: string, part: Part, extra: Record<string, unknown> = {}) {
-  const amount = "cash" in part ? part.cash : "card" in part ? part.card : part.reader;
-  const paid = await send(
-    venue.app,
-    venue.cookie,
-    "POST",
-    `/api/working-orders/${billId}/payments`,
-    {
-      submissionId: randomUUID(),
-      kind: "contribution",
-      amount,
-      ...("cash" in part
-        ? { method: "cash", tendered: amount }
-        : { method: "card", entry: "card" in part ? "manual" : "reader" }),
-      applied: amount,
-      tip: "0.00",
-      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-      ...extra,
-    },
-  );
-  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-}
-
-async function saleOf(billId: string): Promise<string> {
-  const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, billId));
-  return sale!.id;
-}
-
-/** A full invoice naming Harbour Foods for a Steak (€25.00) and a House salad (€12.00), paid in
- * `parts`; its sale and the bill. */
-async function fullInvoice(...parts: Part[]) {
-  const billId = await tabWith(venue, "Steak", "House salad");
-  await chooseFullInvoice(billId);
-  for (const part of parts) await payPart(billId, part);
-  return { billId, saleId: await saleOf(billId) };
-}
-
-async function tenderOf(saleId: string, method: "cash" | "card") {
-  const rows = venue.db.all<{ id: string }>(
-    sql`select id from tenders where sale_id = ${saleId} and method = ${method}`,
-  );
-  return rows[0]!.id;
-}
-
-const ask = (
-  purpose: GiveBackRequest["purpose"],
-  amount: string,
-  more: Partial<GiveBackRequest> = {},
-): GiveBackRequest => ({ purpose, amount, extra: "0.00", way: "cash", ...more });
+const fullInvoice = (...parts: Part[]) => fixture.fullInvoice(venue, ...parts);
+const payPart = (billId: string, part: Part, extra?: Record<string, unknown>) =>
+  fixture.payPart(venue, billId, part, extra);
+const tenderOf = (saleId: string, method: "cash" | "card") =>
+  fixture.tenderOf(venue, saleId, method);
 
 const routePreview = (saleId: string, request: GiveBackRequest) =>
   send(venue.app, adminCookie, "POST", `/api/transactions/${saleId}/give-back/preview`, request);
 
-async function giveBody(saleId: string, request: GiveBackRequest) {
-  const previewed = await routePreview(saleId, request);
-  expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
-  return {
-    ...request,
-    reasonId,
-    note: "Cold",
-    submissionIds: {
-      refund: randomUUID(),
-      extra: randomUUID(),
-      correction: randomUUID(),
-      leg: randomUUID(),
-    },
-    expected: (previewed.json as unknown as GiveBackPlan).parts,
-  };
-}
+const giveBody = (saleId: string, request: GiveBackRequest) =>
+  fixture.giveBackBody(venue, adminCookie, saleId, request, reasonId);
 
 const give = (saleId: string, body: unknown) =>
   send(venue.app, adminCookie, "POST", `/api/transactions/${saleId}/give-back`, body);
 
-/** Every invoice filed against `saleId`: its record's type, its series, the customer it names and
- * its total, in cents. */
-function correctivesOf(saleId: string) {
-  return venue.db.all<{
-    tipoFactura: string;
-    tipoRectificativa: string;
-    purpose: string;
-    customer: string | null;
-    total: number;
-  }>(sql`
-    select r.tipo_factura as tipoFactura, r.tipo_rectificativa as tipoRectificativa,
-           ser.purpose as purpose, s.counterparty_tax_id as customer, s.total as total
-    from sales s
-    join invoice_series ser on ser.id = s.series_id
-    join verifactu_records r on r.sale_id = s.id
-    where s.corrects_sale_id = ${saleId}
-    order by s.invoice_number`);
-}
-
-const r1 = (total: number, customer: string | null = null) => ({
-  tipoFactura: "R1",
-  tipoRectificativa: "I",
-  purpose: "full_corrective",
-  customer: customer ?? expect.any(String),
-  total,
-});
+const correctivesOf = (saleId: string) => correctiveRecordsOf(venue.db, saleId);
 
 /** Every refund on `saleId`, in cents, plain refunds first: whether it is a leg of a correction,
  * and the cancel it pays. */
@@ -242,7 +128,7 @@ describe("Give money back on a full invoice", () => {
       parts: [{ kind: "correction", amount: "10.00", state: "completed" }],
       underWay: null,
     });
-    expect(correctivesOf(saleId)).toEqual([r1(-1000, "B12345674")]);
+    expect(correctivesOf(saleId)).toEqual([r1(-1000)]);
     expect(moneyOf(saleId)).toEqual([
       { applied: 1000, method: "cash", state: "completed", leg: 1, cancel: null },
     ]);
@@ -375,13 +261,13 @@ describe("Give money back on a full invoice", () => {
       .from(billAdvances)
       .where(eq(billAdvances.workingOrderId, billId));
     expect(advance).toBeDefined();
-    await chooseFullInvoice(billId);
+    await fixture.chooseFullInvoice(venue, billId);
     await payPart(billId, { cash: "27.00" });
-    const saleId = await saleOf(billId);
+    const saleId = await fixture.saleOf(venue, billId);
     const answer = await give(saleId, await giveBody(saleId, ask("goodwill", "10.00")));
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(answer.json).toMatchObject({ parts: [{ kind: "correction", state: "completed" }] });
-    expect(correctivesOf(saleId)).toEqual([r1(-1000, "B12345674")]);
+    expect(correctivesOf(saleId)).toEqual([r1(-1000)]);
     expect(correctivesOf(advance!.advanceSaleId)).toEqual([]);
   });
 

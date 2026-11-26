@@ -493,15 +493,12 @@ it.each(["nodeId", "environment", "clock", "origin", "operatorId", "enabledRemed
     await refuses({ ...body, [key]: "claimed" });
   },
 );
-it.each(["nodeId", "correctsSaleId", "clock", "authz", "origin", "unknown"])(
+it.each(["nodeId", "correctsSaleId", "clock", "authz", "origin", "fullInvoice", "unknown"])(
   "refuses client-owned correction field %s",
   async (key) => {
     await refuses({ ...body, correction: { ...correction, [key]: "claimed" } });
   },
 );
-it("refuses a fullInvoice correction field: the dashboard's corrective never files an R1", async () => {
-  await refuses({ ...body, correction: { ...correction, fullInvoice: true } });
-});
 it.each(["caseRegistroId", "registroId", "actionKey", "reason"])(
   "requires nonblank %s",
   async (key) => {
