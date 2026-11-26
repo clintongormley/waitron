@@ -91,6 +91,8 @@ function fakeHost() {
       start: "till",
     })),
     tagWrite: vi.fn<BoxHostRequests["tagWrite"]>(refused),
+    storageList: vi.fn<BoxHostRequests["storageList"]>(refused),
+    storageRelease: vi.fn<BoxHostRequests["storageRelease"]>(refused),
   } satisfies BoxHostRequests;
 }
 

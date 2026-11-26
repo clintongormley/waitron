@@ -7,6 +7,7 @@ import {
   REPLY_REFUSALS,
   SCAN_SECURITY,
   START_SCREENS,
+  STORAGE_FILE_SYSTEMS,
   TAG_OUTCOMES,
 } from "../../../scripts/box/host-protocol.mjs";
 import { WIFI_COPY_FAILURES, WIFI_COPY_STATES } from "../../../scripts/box/wifi-boot-copy.mjs";
@@ -25,6 +26,9 @@ import {
   type ScannedNetwork,
   type ScanSecurity,
   type StartScreen,
+  type StorageFileSystem,
+  type StorageListRefusal,
+  type StorageReleaseRefusal,
   type TagOutcome,
   type TagWriteRefusal,
   type WifiCopyFailure,
@@ -110,6 +114,15 @@ const TAG_REFUSALS = [
   "no_space",
 ] as const satisfies readonly TagWriteRefusal[];
 
+const FILE_SYSTEMS = [
+  "vfat",
+  "exfat",
+  "ntfs",
+  "other",
+] as const satisfies readonly StorageFileSystem[];
+const LIST_REFUSALS = [...PROTOCOL, "busy"] as const satisfies readonly StorageListRefusal[];
+const RELEASE_REFUSALS = [...PROTOCOL, "busy"] as const satisfies readonly StorageReleaseRefusal[];
+
 /**
  * The parser's refusals less `unknown_request` (answered as `unsupported`), plus `host_failed`,
  * which no exported list holds.
@@ -165,6 +178,48 @@ describe("the server's types and the protocol's lists", () => {
     expect(REPLY_REFUSALS["network.read"]).toEqual([]);
     expect(REPLY_REFUSALS["screen.read"]).toEqual([]);
     expect(REPLY_REFUSALS["screen.set"]).toEqual([]);
+  });
+});
+
+describe("the USB drive requests' types and the protocol's lists", () => {
+  it("each request's refusals are the protocol's four plus busy", () => {
+    expectTypeOf<(typeof LIST_REFUSALS)[number]>().toEqualTypeOf<StorageListRefusal>();
+    expect([...moduleProtocol, ...REPLY_REFUSALS["storage.list"]].sort()).toEqual(
+      [...LIST_REFUSALS].sort(),
+    );
+    expectTypeOf<(typeof RELEASE_REFUSALS)[number]>().toEqualTypeOf<StorageReleaseRefusal>();
+    expect([...moduleProtocol, ...REPLY_REFUSALS["storage.release"]].sort()).toEqual(
+      [...RELEASE_REFUSALS].sort(),
+    );
+  });
+
+  it("the file systems equal the module's", () => {
+    expectTypeOf<(typeof FILE_SYSTEMS)[number]>().toEqualTypeOf<StorageFileSystem>();
+    expect([...STORAGE_FILE_SYSTEMS].sort()).toEqual([...FILE_SYSTEMS].sort());
+  });
+
+  it("answers each file system and each refusal over one connection each", async () => {
+    let reply = "";
+    const host = await fakeBoxHost((_line, socket) => socket.end(reply));
+    const client = boxHostRequests({ socketPath: host.path });
+    const trips: RoundTrip[] = [
+      ...FILE_SYSTEMS.map((fileSystem) => {
+        const drives = [{ drive: "sdb1", fileSystem, readable: false }];
+        return {
+          label: `list ${fileSystem}`,
+          reply: `${JSON.stringify({ ok: true, drives })}\n`,
+          call: (c: BoxHostRequests) => c.storageList(SERVER),
+          expected: { available: true, drives },
+        };
+      }),
+      ...refusalTrips("storageList", LIST_REFUSALS, (c) => c.storageList(PERSON)),
+      ...refusalTrips("storageRelease", RELEASE_REFUSALS, (c) => c.storageRelease(SERVER)),
+    ];
+    for (const trip of trips) {
+      reply = trip.reply;
+      expect(await trip.call(client), trip.label).toEqual(trip.expected);
+    }
+    expect(host.connections()).toBe(14);
   });
 });
 

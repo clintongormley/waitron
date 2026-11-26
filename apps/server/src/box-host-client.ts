@@ -397,6 +397,14 @@ export type NetworkJoinRefusal = ProtocolRefusal | "busy" | "no_wifi";
 export type NetworkForgetRefusal = ProtocolRefusal | "busy" | "not_saved";
 export type TagWriteRefusal =
   ProtocolRefusal | "busy" | "no_free_token" | "header_unreadable" | "no_space";
+export type StorageFileSystem = "vfat" | "exfat" | "ntfs" | "other";
+export interface StorageDrive {
+  readonly drive: string;
+  readonly fileSystem: StorageFileSystem;
+  readonly readable: boolean;
+}
+export type StorageListRefusal = ProtocolRefusal | "busy";
+export type StorageReleaseRefusal = ProtocolRefusal | "busy";
 
 export interface BoxHostRequests {
   networkRead(actor: HostActor): Promise<HostAnswer<NetworkSnapshot, ProtocolRefusal>>;
@@ -418,6 +426,12 @@ export interface BoxHostRequests {
   ): Promise<HostAnswer<{ start: StartScreen }, ProtocolRefusal>>;
   /** Always sent as the server: the only actor `tag.write` accepts. */
   tagWrite(tag: NameTag): Promise<HostAnswer<{ tag: TagOutcome }, TagWriteRefusal>>;
+  storageList(
+    actor: HostActor,
+  ): Promise<HostAnswer<{ drives: readonly StorageDrive[] }, StorageListRefusal>>;
+  storageRelease(
+    actor: HostActor,
+  ): Promise<HostAnswer<{ released: number }, StorageReleaseRefusal>>;
 }
 
 export const DEFAULT_HOST_READ_MS = 5_000;
@@ -480,5 +494,7 @@ export function boxHostRequests(
     screenRead: (actor) => request(socketPath, "screen.read", {}, actor, readMs),
     screenSet: (set, actor) => request(socketPath, "screen.set", set, actor, changeMs),
     tagWrite: (tag) => request(socketPath, "tag.write", { tag }, { source: "server" }, changeMs),
+    storageList: (actor) => request(socketPath, "storage.list", {}, actor, changeMs),
+    storageRelease: (actor) => request(socketPath, "storage.release", {}, actor, changeMs),
   };
 }

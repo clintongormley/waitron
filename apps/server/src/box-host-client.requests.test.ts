@@ -602,3 +602,101 @@ describe("boxHostRequests().networkJoin keeps the password in the request line",
     });
   }
 });
+
+describe("boxHostRequests(): the USB drive requests", () => {
+  const DRIVES_REPLY =
+    '{"ok":true,"drives":[{"drive":"sdb1","fileSystem":"exfat","readable":true},{"drive":"sdc","fileSystem":"other","readable":false}]}\n';
+  const DRIVES = [
+    { drive: "sdb1", fileSystem: "exfat", readable: true },
+    { drive: "sdc", fileSystem: "other", readable: false },
+  ];
+
+  it("storageList answers drives over one connection, as the server or a person, within the 20 s wait", async () => {
+    const host = await fakeBoxHost(answer(DRIVES_REPLY));
+    const client = boxHostRequests({ socketPath: host.path });
+    expect(await client.storageList(SERVER)).toEqual({ available: true, drives: DRIVES });
+    expect(await client.storageList(PERSON)).toEqual({ available: true, drives: DRIVES });
+    expect(host.lines).toEqual([
+      'storage.list {"actor":{"source":"server"}}',
+      `storage.list {"actor":${PERSON_JSON}}`,
+    ]);
+    expect(host.connections()).toBe(2);
+
+    const silent = await fakeBoxHost(() => {});
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const pending = boxHostRequests({ socketPath: silent.path, readMs: 1 }).storageList(SERVER);
+      await untilLines(silent, 1);
+      vi.advanceTimersByTime(DEFAULT_HOST_CHANGE_MS - 1);
+      expect(await settled(pending)).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(await pending).toEqual({ available: false, reason: "timeout" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("storageList answers a box with no drives", async () => {
+    const host = await fakeBoxHost(answer('{"ok":true,"drives":[]}\n'));
+    expect(await boxHostRequests({ socketPath: host.path }).storageList(PERSON)).toEqual({
+      available: true,
+      drives: [],
+    });
+  });
+
+  it("storageRelease answers how many it released, as the server or a person", async () => {
+    const host = await fakeBoxHost(answer('{"ok":true,"released":2}\n'));
+    const client = boxHostRequests({ socketPath: host.path });
+    expect(await client.storageRelease(SERVER)).toEqual({ available: true, released: 2 });
+    expect(await client.storageRelease(PERSON)).toEqual({ available: true, released: 2 });
+    expect(host.lines).toEqual([
+      'storage.release {"actor":{"source":"server"}}',
+      `storage.release {"actor":${PERSON_JSON}}`,
+    ]);
+    expect(host.connections()).toBe(2);
+  });
+
+  it("storageRelease waits changeMs, not readMs", async () => {
+    const host = await fakeBoxHost(() => {});
+    const started = performance.now();
+    expect(
+      await boxHostRequests({ socketPath: host.path, readMs: 50, changeMs: 400 }).storageRelease(
+        SERVER,
+      ),
+    ).toEqual({ available: false, reason: "timeout" });
+    expect(performance.now() - started).toBeGreaterThanOrEqual(390);
+  });
+
+  const MALFORMED: Array<[string, Call, string]> = [
+    [
+      "a list naming a file system outside the four",
+      (c) => c.storageList(SERVER),
+      '{"ok":true,"drives":[{"drive":"sdb1","fileSystem":"ext4","readable":true}]}\n',
+    ],
+    [
+      "a list naming a drive outside the pattern",
+      (c) => c.storageList(SERVER),
+      '{"ok":true,"drives":[{"drive":"nvme0n1","fileSystem":"vfat","readable":true}]}\n',
+    ],
+    ["a list refused no_wifi", (c) => c.storageList(SERVER), refusedLine("no_wifi")],
+    ["a release past 16", (c) => c.storageRelease(SERVER), '{"ok":true,"released":17}\n'],
+    ["a release refused not_saved", (c) => c.storageRelease(SERVER), refusedLine("not_saved")],
+  ];
+  for (const [name, call, reply] of MALFORMED) {
+    it(`answers malformed for ${name}`, async () => {
+      const host = await fakeBoxHost(answer(reply));
+      expect(await call(boxHostRequests({ socketPath: host.path }))).toEqual({
+        available: false,
+        reason: "malformed",
+      });
+    });
+  }
+
+  it("answers unsupported for a host that does not know the request", async () => {
+    const host = await fakeBoxHost(answer(refusedLine("unknown_request")));
+    const client = boxHostRequests({ socketPath: host.path });
+    const unsupported = { available: false, reason: "unsupported", detail: "unknown_request" };
+    expect(await client.storageList(SERVER)).toEqual(unsupported);
+    expect(await client.storageRelease(PERSON)).toEqual(unsupported);
+  });
+});
