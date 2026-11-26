@@ -4,7 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import "./equipment-scanner.js";
-import { cameraFilming } from "../../test/qr-camera.js";
+import { cameraFilming } from "@waitron/ui/test/qr-camera.js";
 import type { TillEquipmentScanner } from "./equipment-scanner.js";
 
 const PRINTER = "6f1c3a52-0000-4000-8000-000000000001";
@@ -202,5 +202,20 @@ describe("till-equipment-scanner", () => {
     await expect
       .poll(() => camera.stream.getTracks().every((track) => track.readyState === "ended"))
       .toBe(true);
+  });
+
+  it("names the video with the till's camera label, in English and in Spanish", async () => {
+    film(formatEquipmentCode("printer", PRINTER));
+    const { el } = await mountScanner("printer");
+    await expect.poll(() => el.shadowRoot!.querySelector("video")).not.toBeNull();
+    const name = () => el.shadowRoot!.querySelector("video")!.getAttribute("aria-label");
+    expect(name()).toBe("Camera");
+
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+
+    expect(name()).toBe(es["equipment.camera_label"]);
+    expect(name()).not.toBe("Camera");
   });
 });

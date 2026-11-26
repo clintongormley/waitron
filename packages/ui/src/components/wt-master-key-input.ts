@@ -8,6 +8,7 @@ import { draftScopeFor } from "../leave-controller.js";
 import type { WtInput } from "./wt-input.js";
 import "./wt-input.js";
 import "./wt-button.js";
+import { canFilm, type WtQrScanner } from "./wt-qr-scanner.js";
 
 /** Every word the field shows, in the screen's language. */
 export type MasterKeyInputCopy = {
@@ -15,14 +16,26 @@ export type MasterKeyInputCopy = {
   button: string;
   /** The show/hide button's names, and what is said once it is pressed. */
   visibility: { show: string; hide: string; shown: string; hidden: string };
-  /** Said to screen readers once a chosen PDF filled the field; never the key itself. */
+  /** Said to screen readers once a chosen PDF or a scan filled the field; never the key itself. */
   loaded: string;
   notPack: string;
   damaged: string;
+  /** Said for a damaged pack instead of `damaged` where `scan` is not shown. */
+  damagedNoScan: string;
   notWhole: string;
   wrongKey: (keyName: string) => string;
   /** A pack without the master key; `heldBy` is the number of the pack that holds it, when known. */
   elsewhere: (heldBy: number | null) => string;
+  /** The camera button, shown only where the browser can film. */
+  scan: string;
+  /** Shown under the camera while it films. */
+  scanning: string;
+  /** Shown under the camera after a QR code that is not a whole master key. */
+  notKeyCode: string;
+  cameraFailed: string;
+  /** The camera picture's accessible name. */
+  camera: string;
+  stopScan: string;
 };
 
 /** What `@waitron/recovery-pack`'s `readRecoveryPackPdf` answers that the field reads. */
@@ -46,10 +59,13 @@ type Problem = "notWhole" | "notPack" | "damaged" | "wrongKey" | { heldBy: numbe
 
 const SYMBOLS = 28;
 
-// Upper-cases ASCII only: `toUpperCase` turns some other letters (such as `ſ`) into key symbols,
-// which the decoder refuses as typed.
+// Typed and scanned text both pass through here, so the two take the same keys. Upper-cases ASCII
+// only: `toUpperCase` turns some other letters (such as `ſ`) into key symbols, which the decoder
+// refuses as typed.
 function normalise(value: string): string {
-  return value.replace(/[ \t\r\n-]/g, "").replace(/[a-z]/g, (letter) => letter.toUpperCase());
+  return value
+    .replace(/[ \t\r\n\u2028\u2029-]/g, "")
+    .replace(/[a-z]/g, (letter) => letter.toUpperCase());
 }
 
 function printed(text: string): string | undefined {
@@ -70,9 +86,9 @@ function notAPack(error: unknown): boolean {
 }
 
 /**
- * A master key, typed or read from a recovery pack PDF. It fires `wt-change` on every change,
- * carrying the key as printed only while the field holds a whole one, and says in the field's own
- * line why a typed key or a chosen PDF gave none.
+ * A master key, typed, scanned from a recovery pack's QR code or read from a recovery pack PDF. It
+ * fires `wt-change` on every change, carrying the key as printed only while the field holds a whole
+ * one, and says in the field's own line why a typed key or a chosen PDF gave none.
  */
 @customElement("wt-master-key-input")
 export class WtMasterKeyInput extends LitElement {
@@ -86,8 +102,20 @@ export class WtMasterKeyInput extends LitElement {
       wt-input {
         min-width: var(--wt-tap-min);
       }
-      .choose {
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        column-gap: var(--wt-space-2);
+      }
+      .choose,
+      .scan,
+      wt-qr-scanner,
+      .camera-failed {
         margin-top: var(--wt-space-2);
+      }
+      .camera-failed {
+        margin-bottom: 0;
+        color: var(--wt-color-text);
       }
       .visually-hidden {
         ${visuallyHiddenStyles}
@@ -117,8 +145,12 @@ export class WtMasterKeyInput extends LitElement {
 
   @state() private value = "";
   @state() private problem?: Problem;
-  /** The key in the field came from a chosen PDF and has not been changed since. */
+  /** The key in the field came from a chosen PDF or a scan and has not been changed since. */
   @state() private loaded = false;
+  @state() private scanning = false;
+  @state() private cameraFailed = false;
+  /** A QR code that is not the master key was the latest one read. */
+  @state() private otherCode = false;
   @query('input[type="file"]') private chooser!: HTMLInputElement;
 
   #file?: File;
@@ -141,6 +173,8 @@ export class WtMasterKeyInput extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    // Taken out now, not at the next render, so a field put back on the page does not film again.
+    this.shadowRoot?.querySelector("wt-qr-scanner")?.remove();
     this.clear();
     this.#scope!.dispose();
     this.#scope = undefined;
@@ -148,6 +182,7 @@ export class WtMasterKeyInput extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("disabled") && this.disabled) this.scanning = false;
     if (!this.hasUpdated || !changed.has("keyName")) return;
     const held = this.value !== "" || this.#file !== undefined;
     this.#empty();
@@ -170,6 +205,7 @@ export class WtMasterKeyInput extends LitElement {
   }
 
   #empty(): void {
+    this.scanning = false;
     this.#reading = undefined;
     this.value = "";
     this.#file = undefined;
@@ -194,8 +230,10 @@ export class WtMasterKeyInput extends LitElement {
   }
 
   #start(): object {
+    this.scanning = false;
     this.problem = undefined;
     this.loaded = false;
+    this.cameraFailed = false;
     return (this.#reading = {});
   }
 
@@ -245,6 +283,7 @@ export class WtMasterKeyInput extends LitElement {
     }
     if (reading !== this.#reading) return;
     if (problem === undefined) {
+      this.scanning = false;
       this.value = key!;
       this.loaded = true;
       this.#notify(key);
@@ -253,21 +292,73 @@ export class WtMasterKeyInput extends LitElement {
     await this.renderRoot.querySelector("wt-input")?.updateComplete;
   }
 
+  #startScan(): void {
+    if (this.disabled) return;
+    this.cameraFailed = false;
+    this.otherCode = false;
+    this.scanning = true;
+  }
+
+  #read(text: string, scanner: WtQrScanner): void {
+    const key = printed(normalise(text));
+    if (key === undefined) {
+      this.otherCode = true;
+      return;
+    }
+    scanner.stop();
+    this.#start();
+    this.#mask();
+    this.value = key;
+    this.#file = undefined;
+    this.loaded = true;
+    this.#scope!.changed();
+    this.#notify(key);
+  }
+
+  #scanner(copy: MasterKeyInputCopy) {
+    if (this.scanning)
+      return html`<wt-qr-scanner
+        label=${copy.camera}
+        hint=${copy.scanning}
+        .message=${this.otherCode ? copy.notKeyCode : ""}
+        @wt-qr-read=${(event: CustomEvent<{ text: string }>) => {
+          event.stopPropagation();
+          this.#read(event.detail.text, event.currentTarget as WtQrScanner);
+        }}
+        @wt-qr-unavailable=${(event: Event) => {
+          event.stopPropagation();
+          this.scanning = false;
+          this.cameraFailed = true;
+        }}
+      ></wt-qr-scanner>`;
+    if (this.cameraFailed)
+      return html`<p class="camera-failed" data-camera-failed>${copy.cameraFailed}</p>`;
+    return nothing;
+  }
+
   #line(copy: MasterKeyInputCopy): string {
     const { problem, value } = this;
     // A pack is refused as another key's only while `keyName` is set, and a new one empties the field.
     if (problem === "wrongKey") return copy.wrongKey(this.keyName!);
     if (typeof problem === "object") return copy.elsewhere(problem.heldBy);
+    if (problem === "damaged" && !canFilm()) return copy.damagedNoScan;
     if (problem !== undefined) return copy[problem];
     if (this.attempted && value !== "" && printed(value) === undefined) return copy.notWhole;
     return this.error;
+  }
+
+  /** The hidden status line: the camera failing, a PDF's refusal or a loaded key; never a typed key's line. */
+  #status(copy: MasterKeyInputCopy, line: string): string {
+    if (this.cameraFailed) return copy.cameraFailed;
+    if (this.problem !== undefined && this.problem !== "notWhole") return line;
+    if (this.loaded) return copy.loaded;
+    return "";
   }
 
   override render() {
     const { copy } = this;
     if (copy === undefined) return nothing;
     const line = this.#line(copy);
-    const fromPack = this.problem !== undefined && this.problem !== "notWhole";
     return html`<wt-input
         name=${this.name}
         type="password"
@@ -286,16 +377,34 @@ export class WtMasterKeyInput extends LitElement {
         }}
         ><slot name="help" slot="help"></slot
       ></wt-input>
-      <wt-button
-        class="choose"
-        variant="secondary"
-        ?disabled=${this.disabled}
-        @click=${(event: Event) => {
-          event.stopPropagation();
-          this.chooser.click();
-        }}
-        >${copy.button}</wt-button
-      >
+      <div class="controls">
+        ${
+          canFilm()
+            ? html`<wt-button
+                class="scan"
+                variant="secondary"
+                ?disabled=${this.disabled}
+                @click=${(event: Event) => {
+                  event.stopPropagation();
+                  if (this.scanning) this.scanning = false;
+                  else this.#startScan();
+                }}
+                >${this.scanning ? copy.stopScan : copy.scan}</wt-button
+              >`
+            : nothing
+        }
+        <wt-button
+          class="choose"
+          variant="secondary"
+          ?disabled=${this.disabled}
+          @click=${(event: Event) => {
+            event.stopPropagation();
+            this.chooser.click();
+          }}
+          >${copy.button}</wt-button
+        >
+      </div>
+      ${this.#scanner(copy)}
       <input
         type="file"
         accept="application/pdf,.pdf"
@@ -310,9 +419,7 @@ export class WtMasterKeyInput extends LitElement {
           if (file !== undefined) this.#pdfRead = this.#choose(file);
         }}
       />
-      <p class="visually-hidden" role="status">
-        ${fromPack ? line : this.loaded ? copy.loaded : nothing}
-      </p>`;
+      <p class="visually-hidden" role="status">${this.#status(copy, line)}</p>`;
   }
 }
 

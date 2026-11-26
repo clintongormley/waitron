@@ -14,9 +14,13 @@ import type {
   WtMasterKeyInput,
 } from "./wt-master-key-input.js";
 import "./wt-master-key-input.js";
+import { WtQrScanner } from "./wt-qr-scanner.js";
+import { cameraFilming } from "../../test/qr-camera.js";
 import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 
 const KEY = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
+/** A second whole key, so a key that replaced another shows which one won. */
+const OTHER_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(7));
 const KEY_NAME = "2026-11-23 · QZJV";
 const LIMIT = 16;
 const EN: MasterKeyInputCopy = {
@@ -30,11 +34,18 @@ const EN: MasterKeyInputCopy = {
   },
   loaded: "Key loaded",
   notPack: "This PDF is not a recovery pack.",
-  damaged: "This recovery pack PDF is damaged. Type the key.",
+  damaged: "This recovery pack PDF is damaged. Type the key or scan it.",
+  damagedNoScan: "This recovery pack PDF is damaged. Type the key.",
   notWhole: "Not a whole master key. Check it against the recovery pack.",
   wrongKey: (name) => `Wrong master key. Use the one dated ${name}.`,
   elsewhere: (heldBy) =>
     heldBy === null ? "Choose the pack that holds it." : `It is on pack ${heldBy}.`,
+  scan: "Scan the recovery pack",
+  scanning: "Hold the master key's QR code up to the camera.",
+  notKeyCode: "That is not the master key's QR code.",
+  cameraFailed: "The camera is not available. Type the key or choose the PDF.",
+  camera: "Camera",
+  stopScan: "Stop scanning",
 };
 const ES: MasterKeyInputCopy = MASTER_KEY_FIELD_WORDS.es;
 
@@ -52,8 +63,12 @@ const reading = (overrides: Partial<RecoveryPackReading> = {}): RecoveryPackRead
   ...overrides,
 });
 
+let filming: { stop: () => void } | undefined;
+
 afterEach(() => {
   cleanup();
+  filming?.stop();
+  filming = undefined;
   vi.restoreAllMocks();
 });
 
@@ -202,7 +217,7 @@ test("the button opens the hidden PDF chooser, which takes PDFs only", async () 
   const opened = vi.spyOn(control, "click").mockImplementation(() => {});
   const clicks = vi.fn();
   host.addEventListener("click", clicks);
-  const button = el.shadowRoot!.querySelector("wt-button")!;
+  const button = el.shadowRoot!.querySelector("wt-button.choose")!;
   expect(button.textContent?.trim()).toBe(EN.button);
   await userEvent.click(button);
   expect(opened).toHaveBeenCalledOnce();
@@ -303,6 +318,25 @@ test("a loader that fails is a damaged pack too", async () => {
   await settled(el, EN.damaged);
 });
 
+test("a damaged pack does not offer scanning on a browser with no getUserMedia", async () => {
+  Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+    value: undefined,
+    configurable: true,
+  });
+  try {
+    const { el } = await field();
+    el.readPack = async () => async () => Promise.reject(new Error("broken"));
+    await choose(el);
+    await settled(el, EN.damagedNoScan);
+    expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toContain(
+      EN.damagedNoScan,
+    );
+  } finally {
+    delete (navigator.mediaDevices as { getUserMedia?: unknown }).getUserMedia;
+  }
+  expect(typeof navigator.mediaDevices.getUserMedia).toBe("function");
+});
+
 test("a pack whose key does not decode is damaged", async () => {
   const { el, seen } = await field();
   el.readPack = async () => async () => reading({ masterKey: "NOT A KEY" });
@@ -392,14 +426,16 @@ test.each([
   expect(input.autocomplete).toBe("off");
   expect(input.placeholder).toBe("");
   expect(el.hasAttribute("required")).toBe(true);
-  expect(el.shadowRoot!.querySelector("wt-button")!.textContent?.trim()).toBe(copy.button);
+  expect(el.shadowRoot!.querySelector("wt-button.choose")!.textContent?.trim()).toBe(copy.button);
 });
 
 test("disabled reaches the field and its button", async () => {
   const { el } = await field({ disabled: true });
   expect(el.hasAttribute("disabled")).toBe(true);
   expect(inner(el).disabled).toBe(true);
-  expect(el.shadowRoot!.querySelector("wt-button")!.disabled).toBe(true);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button.choose")!.disabled,
+  ).toBe(true);
   expect(fileControl(el).disabled).toBe(true);
 });
 
@@ -552,6 +588,8 @@ test("paints the field, its button and its messages from tokens", async () => {
   await type(el, `${KEY}2`);
   const choose = getComputedStyle(el.shadowRoot!.querySelector(".choose")!);
   expect(choose.marginTop).toBe("7px");
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".controls")!).columnGap).toBe("7px");
+  expect(getComputedStyle(el.shadowRoot!.querySelector(".scan")!).marginTop).toBe("7px");
   expect(getComputedStyle(inner(el)).minWidth).toBe("51px");
   expect(getComputedStyle(inner(el).shadowRoot!.querySelector("[data-error]")!).color).toBe(
     "rgb(16, 17, 18)",
@@ -1055,4 +1093,437 @@ test("a shown key is left out of the browser's spelling check, correction and fo
   expect(input.getAttribute("spellcheck")).toBe("false");
   expect(input.getAttribute("autocorrect")).toBe("off");
   expect(input.autocomplete).toBe("off");
+});
+
+function film(text: string): MediaStream {
+  const camera = cameraFilming(text);
+  filming = camera;
+  vi.spyOn(navigator.mediaDevices, "getUserMedia").mockResolvedValue(camera.stream);
+  return camera.stream;
+}
+
+const buttonNamed = (el: WtMasterKeyInput, name: string) =>
+  [...el.shadowRoot!.querySelectorAll("wt-button")].find(
+    (button) => button.textContent?.trim() === name,
+  );
+const scanner = (el: WtMasterKeyInput) => el.shadowRoot!.querySelector("wt-qr-scanner");
+const scannerLine = (el: WtMasterKeyInput) =>
+  scanner(el)?.shadowRoot!.querySelector("[data-scanner-message]")?.textContent?.trim();
+const live = (stream: MediaStream) => stream.getTracks().every((t) => t.readyState === "live");
+const ended = (stream: MediaStream) => stream.getTracks().every((t) => t.readyState === "ended");
+const keyInDom = (el: WtMasterKeyInput) =>
+  [el.shadowRoot!, scanner(el)?.shadowRoot].some(
+    (root) =>
+      root?.textContent?.includes(KEY) || (root as ShadowRoot | undefined)?.innerHTML.includes(KEY),
+  );
+
+async function scan(el: WtMasterKeyInput): Promise<void> {
+  await userEvent.click(buttonNamed(el, EN.scan)!);
+  await el.updateComplete;
+}
+
+test("the scanner fills the field from a master key QR code in a still frame", async () => {
+  expect(encodeMasterKeyCode(decodeMasterKeyCode(KEY))).toBe(KEY);
+  const stream = film(KEY);
+  const { el, seen } = await field();
+  const leaked = vi.fn();
+  host.addEventListener("wt-qr-read", leaked);
+  await scan(el);
+  expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledOnce();
+  expect(scannerLine(el)).toBe(EN.scanning);
+  expect(scanner(el)!.label).toBe(EN.camera);
+
+  await vi.waitFor(() => expect(seen.at(-1)).toEqual({ masterKey: KEY }), { timeout: 10_000 });
+  await el.updateComplete;
+  await inner(el).updateComplete;
+  expect(native(el).value).toBe(KEY);
+  expect(native(el).type).toBe("password");
+  expect(ended(stream)).toBe(true);
+  expect(scanner(el)).toBeNull();
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent!.trim()).toBe(EN.loaded);
+  expect(keyInDom(el)).toBe(false);
+  expect(leaked).not.toHaveBeenCalled();
+  expect(message(el)).toBeUndefined();
+});
+
+test("a Cloud QR code is passed over and the camera keeps running", async () => {
+  const stream = film("https://cloud.waitron.example/start/abc");
+  const { el, seen } = await field();
+  await scan(el);
+  await vi.waitFor(() => expect(scannerLine(el)).toBe(EN.notKeyCode), { timeout: 10_000 });
+  expect(live(stream)).toBe(true);
+  expect(scanner(el)).not.toBeNull();
+  host.style.setProperty("--wt-color-danger", "rgb(16, 17, 18)");
+  const line = scanner(el)!.shadowRoot!.querySelector("[data-scanner-message]")!;
+  expect(line.getAttribute("role")).toBe("alert");
+  expect(scanner(el)!.shadowRoot!.querySelector("video")!.nextElementSibling).toBe(line);
+  expect(getComputedStyle(line).color).toBe("rgb(16, 17, 18)");
+  expect(native(el).value).toBe("");
+  expect(seen).toEqual([]);
+});
+
+test("a QR code holding 28 symbols with a wrong check symbol is passed over", async () => {
+  const last = KEY.at(-1) === "5" ? "6" : "5";
+  const wrong = KEY.slice(0, -1) + last;
+  const stream = film(wrong);
+  const { el, seen } = await field();
+  await scan(el);
+  await vi.waitFor(() => expect(scannerLine(el)).toBe(EN.notKeyCode), { timeout: 10_000 });
+  expect(live(stream)).toBe(true);
+  expect(native(el).value).toBe("");
+  expect(seen).toEqual([]);
+  expect(keyInDom(el)).toBe(false);
+  expect(el.shadowRoot!.innerHTML).not.toContain(wrong);
+});
+
+test("Scan the recovery pack is not shown when the browser has no getUserMedia", async () => {
+  Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+    value: undefined,
+    configurable: true,
+  });
+  try {
+    const { el } = await field();
+    expect(buttonNamed(el, EN.scan)).toBeUndefined();
+    expect(buttonNamed(el, EN.button)).toBeDefined();
+  } finally {
+    delete (navigator.mediaDevices as { getUserMedia?: unknown }).getUserMedia;
+  }
+  expect(typeof navigator.mediaDevices.getUserMedia).toBe("function");
+});
+
+test("Scan the recovery pack is shown beside the PDF button when the browser can film", async () => {
+  const { el } = await field();
+  const buttons = [...el.shadowRoot!.querySelectorAll("wt-button")].map((b) =>
+    b.textContent?.trim(),
+  );
+  expect(buttons).toEqual([EN.scan, EN.button]);
+});
+
+test("the camera stops when the field leaves the page", async () => {
+  const stream = film("hello");
+  const { el } = await field();
+  await scan(el);
+  await expect.poll(() => live(stream)).toBe(true);
+  el.remove();
+  expect(ended(stream)).toBe(true);
+  host.appendChild(el);
+  await el.updateComplete;
+  expect(scanner(el)).toBeNull();
+  expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledOnce();
+});
+
+test("Stop scanning hides the camera and ends its tracks", async () => {
+  const stream = film("hello");
+  const { el } = await field();
+  await scan(el);
+  await expect.poll(() => live(stream)).toBe(true);
+  expect(buttonNamed(el, EN.scan)).toBeUndefined();
+  await userEvent.click(buttonNamed(el, EN.stopScan)!);
+  await el.updateComplete;
+  expect(ended(stream)).toBe(true);
+  expect(scanner(el)).toBeNull();
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+});
+
+test("a refused camera shows the camera-failed line, and Scan tries again", async () => {
+  vi.spyOn(navigator.mediaDevices, "getUserMedia").mockRejectedValue(
+    new DOMException("Permission denied", "NotAllowedError"),
+  );
+  const { el } = await field();
+  const leaked = vi.fn();
+  host.addEventListener("wt-qr-unavailable", leaked);
+  await scan(el);
+  const failed = () =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-camera-failed]")?.textContent?.trim();
+  await vi.waitFor(() => expect(failed()).toBe(EN.cameraFailed));
+  expect(scanner(el)).toBeNull();
+  expect(leaked).not.toHaveBeenCalled();
+  expect(announced(el)).toBe(EN.cameraFailed);
+  await scan(el);
+  expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(2);
+  await type(el, "AB");
+  await vi.waitFor(() => expect(failed()).toBeUndefined());
+});
+
+test("disabling the field while it scans stops the camera", async () => {
+  const stream = film("hello");
+  const { el } = await field();
+  await scan(el);
+  await expect.poll(() => live(stream)).toBe(true);
+  el.disabled = true;
+  await el.updateComplete;
+  expect(ended(stream)).toBe(true);
+  expect(scanner(el)).toBeNull();
+  expect(buttonNamed(el, EN.scan)!.disabled).toBe(true);
+});
+
+test("a scanned key replaces a PDF still being read", async () => {
+  film(KEY);
+  let answer!: (reading: RecoveryPackReading) => void;
+  const { el, seen } = await field({
+    readPack: async () => () => new Promise((resolve) => (answer = resolve)),
+  });
+  await choose(el);
+  await scan(el);
+  await vi.waitFor(() => expect(seen.at(-1)).toEqual({ masterKey: KEY }), { timeout: 10_000 });
+  const count = seen.length;
+  answer(reading({ masterKey: OTHER_KEY }));
+  await el.pdfRead;
+  await el.updateComplete;
+  expect(seen).toHaveLength(count);
+  expect(message(el)).toBeUndefined();
+  expect(native(el).value).toBe(KEY);
+  expect(announced(el)).toBe(EN.loaded);
+});
+
+test("a PDF that fills the field while it scans stops the camera, so no later code replaces it", async () => {
+  const stream = film("https://cloud.waitron.example/start/abc");
+  let answer!: (reading: RecoveryPackReading) => void;
+  const { el, seen } = await field({
+    readPack: async () => () => new Promise((resolve) => (answer = resolve)),
+  });
+  await choose(el);
+  await scan(el);
+  await vi.waitFor(() => expect(scannerLine(el)).toBe(EN.notKeyCode), { timeout: 10_000 });
+
+  answer(reading({ masterKey: OTHER_KEY }));
+  await el.pdfRead;
+  await el.updateComplete;
+
+  expect(seen.at(-1)).toEqual({ masterKey: OTHER_KEY });
+  expect(native(el).value).toBe(OTHER_KEY);
+  expect(ended(stream)).toBe(true);
+  expect(scanner(el)).toBeNull();
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+  expect(announced(el)).toBe(EN.loaded);
+});
+
+test("the scan control and its lines in Spanish", async () => {
+  // The words themselves are pinned in `@waitron/recovery-pack`'s master-key-field test.
+  for (const word of [ES.scan, ES.scanning, ES.notKeyCode, ES.stopScan, ES.camera])
+    expect(Object.values(EN)).not.toContain(word);
+  const stream = film("https://cloud.waitron.example/start/abc");
+  const { el } = await field({ copy: ES });
+  await userEvent.click(buttonNamed(el, ES.scan)!);
+  await el.updateComplete;
+  expect(scannerLine(el)).toBe(ES.scanning);
+  expect(scanner(el)!.label).toBe(ES.camera);
+  expect(buttonNamed(el, ES.stopScan)).toBeDefined();
+  await vi.waitFor(() => expect(scannerLine(el)).toBe(ES.notKeyCode), { timeout: 10_000 });
+  expect(live(stream)).toBe(true);
+});
+
+function deepActive(): Element | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active;
+}
+
+const scanControl = (el: WtMasterKeyInput) =>
+  el.shadowRoot!.querySelector("wt-button.scan")!.shadowRoot!.querySelector("button")!;
+
+test("focus stays on the scan button when Scan, Stop scanning and a read key change it", async () => {
+  film(KEY);
+  const { el, seen } = await field();
+  const control = scanControl(el);
+  control.focus();
+  expect(deepActive()).toBe(control);
+
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(scanner(el)).not.toBeNull();
+  expect(deepActive()).toBe(control);
+  expect(buttonNamed(el, EN.stopScan)?.shadowRoot!.querySelector("button")).toBe(control);
+
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(scanner(el)).toBeNull();
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+  expect(deepActive()).toBe(control);
+
+  // The first camera's tracks ended at Stop scanning.
+  filming!.stop();
+  const stream = film(KEY);
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(seen.at(-1)).toEqual({ masterKey: KEY }), { timeout: 10_000 });
+  await el.updateComplete;
+  expect(ended(stream)).toBe(true);
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+  expect(deepActive()).toBe(control);
+});
+
+const announced = (el: WtMasterKeyInput) =>
+  el.shadowRoot!.querySelector(".visually-hidden[role='status']")!.textContent!.trim();
+
+test("the camera stops when a chosen PDF fills the field, and a key seen later changes nothing", async () => {
+  const stream = film(KEY);
+  const { el, seen } = await field({
+    readPack: async () => async () => reading({ masterKey: OTHER_KEY }),
+  });
+  await scan(el);
+  await expect.poll(() => live(stream)).toBe(true);
+  await choose(el);
+  await el.pdfRead;
+  await el.updateComplete;
+  expect(scanner(el)).toBeNull();
+  expect(ended(stream)).toBe(true);
+  expect(seen.at(-1)).toEqual({ masterKey: OTHER_KEY });
+  expect(native(el).value).toBe(OTHER_KEY);
+  const count = seen.length;
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  expect(seen).toHaveLength(count);
+  expect(native(el).value).toBe(OTHER_KEY);
+});
+
+test.each([
+  [
+    "typing",
+    async (el: WtMasterKeyInput) => {
+      await type(el, "88DP");
+    },
+  ],
+  [
+    "clear()",
+    async (el: WtMasterKeyInput) => {
+      el.clear();
+      await el.updateComplete;
+    },
+  ],
+  [
+    "a new key name",
+    async (el: WtMasterKeyInput) => {
+      el.keyName = "2026-01-02 · AAAA";
+      await el.updateComplete;
+    },
+  ],
+])("%s stops the camera", async (_how, change) => {
+  const stream = film("hello");
+  const { el } = await field();
+  await scan(el);
+  await expect.poll(() => live(stream)).toBe(true);
+  await change(el);
+  expect(scanner(el)).toBeNull();
+  expect(ended(stream)).toBe(true);
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+});
+
+test("a script click on Scan while the field is disabled asks for no camera", async () => {
+  film("hello");
+  const { el } = await field({ disabled: true });
+  (buttonNamed(el, EN.scan) as HTMLElement).click();
+  await el.updateComplete;
+  expect(scanner(el)).toBeNull();
+  expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+});
+
+test("a camera that does not start is said through the field's hidden status line", async () => {
+  vi.spyOn(navigator.mediaDevices, "getUserMedia").mockRejectedValue(
+    new DOMException("Permission denied", "NotAllowedError"),
+  );
+  const { el } = await field();
+  await scan(el);
+  await vi.waitFor(() => expect(announced(el)).toBe(EN.cameraFailed));
+  const visible = el.shadowRoot!.querySelector("[data-camera-failed]")!;
+  expect(visible.textContent!.trim()).toBe(EN.cameraFailed);
+  expect(visible.getAttribute("role")).toBeNull();
+});
+
+const failedLine = (el: WtMasterKeyInput) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-camera-failed]")?.textContent?.trim();
+
+test("a camera whose picture will not play shows the camera-failed line and offers Scan again", async () => {
+  const stream = film("hello");
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(
+    new DOMException("The picture would not play", "NotAllowedError"),
+  );
+  const { el } = await field();
+  await scan(el);
+
+  await vi.waitFor(() => expect(failedLine(el)).toBe(EN.cameraFailed));
+  expect(ended(stream)).toBe(true);
+  expect(scanner(el)).toBeNull();
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+  expect(buttonNamed(el, EN.stopScan)).toBeUndefined();
+});
+
+test("a camera that stops by itself while scanning shows the camera-failed line and offers Scan again", async () => {
+  const stream = film("https://cloud.waitron.example/start/abc");
+  const { el } = await field();
+  await scan(el);
+  await vi.waitFor(() => expect(scannerLine(el)).toBe(EN.notKeyCode), { timeout: 10_000 });
+
+  stream.getVideoTracks()[0]!.dispatchEvent(new Event("ended"));
+
+  await vi.waitFor(() => expect(failedLine(el)).toBe(EN.cameraFailed));
+  expect(ended(stream)).toBe(true);
+  expect(scanner(el)).toBeNull();
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+  expect(announced(el)).toBe(EN.cameraFailed);
+});
+
+test("a kept key is stopped through the scanner's own stop() while it is still on the page", async () => {
+  film(KEY);
+  const stop = WtQrScanner.prototype.stop;
+  const onPage: boolean[] = [];
+  vi.spyOn(WtQrScanner.prototype, "stop").mockImplementation(function (this: WtQrScanner) {
+    onPage.push(this.isConnected);
+    stop.call(this);
+  });
+  const { el, seen } = await field();
+  await scan(el);
+  await vi.waitFor(() => expect(seen.at(-1)).toEqual({ masterKey: KEY }), { timeout: 10_000 });
+  expect(onPage[0]).toBe(true);
+});
+
+test.each([
+  ["a line separator", "\u2028", true],
+  ["a paragraph separator", "\u2029", true],
+  ["a space", " ", true],
+  ["a no-break space", "\u00a0", false],
+])("typing and scanning agree on a key split by %s", async (_name, separator, whole) => {
+  const text = KEY.replaceAll(" ", "").replace(/(.{4})(?!$)/g, `$1${separator}`);
+  const typed = await field();
+  await type(typed.el, text);
+  expect(typed.seen.at(-1)).toEqual(whole ? { masterKey: KEY } : {});
+  cleanup();
+
+  film("hello");
+  const scanned = await field();
+  await scan(scanned.el);
+  scanner(scanned.el)!.dispatchEvent(
+    new CustomEvent("wt-qr-read", { detail: { text }, bubbles: true, composed: true }),
+  );
+  await scanned.el.updateComplete;
+  expect(scanned.seen.at(-1)).toEqual(whole ? { masterKey: KEY } : undefined);
+});
+
+test.each([EN.scan, EN.stopScan])("a click on %s stays inside the field", async (name) => {
+  film("hello");
+  const { el } = await field();
+  if (name === EN.stopScan) await scan(el);
+  const clicks = vi.fn();
+  host.addEventListener("click", clicks);
+  await userEvent.click(buttonNamed(el, name)!);
+  expect(clicks).not.toHaveBeenCalled();
+});
+
+test("the camera and its failed line paint from tokens", async () => {
+  film("hello");
+  const { el } = await field();
+  host.style.setProperty("--wt-space-2", "7px");
+  host.style.setProperty("--wt-color-text", "rgb(40, 50, 60)");
+  await scan(el);
+  expect(getComputedStyle(scanner(el)!).marginTop).toBe("7px");
+  scanner(el)!.dispatchEvent(
+    new CustomEvent("wt-qr-unavailable", {
+      detail: { reason: "failed" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  const failed = getComputedStyle(el.shadowRoot!.querySelector("[data-camera-failed]")!);
+  expect(failed.marginTop).toBe("7px");
+  expect(failed.marginBottom).toBe("0px");
+  expect(failed.color).toBe("rgb(40, 50, 60)");
 });

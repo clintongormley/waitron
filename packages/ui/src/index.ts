@@ -223,6 +223,11 @@ export {
   type RecoveryPackReaderLoader,
   type RecoveryPackReading,
 } from "./components/wt-master-key-input.js";
+export {
+  WtQrScanner,
+  canFilm,
+  type QrScannerUnavailableReason,
+} from "./components/wt-qr-scanner.js";
 export { WtLanguageChooser, type WtLocaleOption } from "./components/wt-language-chooser.js";
 export { WtThemeChooser, type WtThemeLabels } from "./components/wt-theme-chooser.js";
 export {

@@ -7,7 +7,8 @@ describe("the master-key field's words", () => {
     expect(words.label).toBe("Master key");
     expect(words.button).toBe("Choose the recovery pack PDF");
     expect(words.notPack).toBe("This PDF is not a recovery pack.");
-    expect(words.damaged).toBe("This recovery pack PDF is damaged. Type the key.");
+    expect(words.damaged).toBe("This recovery pack PDF is damaged. Type the key or scan it.");
+    expect(words.damagedNoScan).toBe("This recovery pack PDF is damaged. Type the key.");
     expect(words.notWhole).toBe("Not a whole master key. Check it against the recovery pack.");
     expect(words.wrongKey("2026-11-23 · QZJV")).toBe(
       "Wrong master key. Use the one dated 2026-11-23 · QZJV.",
@@ -26,6 +27,9 @@ describe("the master-key field's words", () => {
     expect(words.button).toBe("Elegir el PDF del paquete de recuperación");
     expect(words.notPack).toBe("Este PDF no es un paquete de recuperación.");
     expect(words.damaged).toBe(
+      "Este PDF del paquete de recuperación está dañado. Escribe la clave o escanéala.",
+    );
+    expect(words.damagedNoScan).toBe(
       "Este PDF del paquete de recuperación está dañado. Escribe la clave.",
     );
     expect(words.notWhole).toBe(
@@ -40,6 +44,33 @@ describe("the master-key field's words", () => {
       shown: "Clave visible",
       hidden: "Clave oculta",
     });
+  });
+
+  it.each([
+    [
+      "en",
+      {
+        scan: "Scan the recovery pack",
+        scanning: "Hold the master key's QR code up to the camera.",
+        notKeyCode: "That is not the master key's QR code.",
+        cameraFailed: "The camera is not available. Type the key or choose the PDF.",
+        camera: "Camera",
+        stopScan: "Stop scanning",
+      },
+    ],
+    [
+      "es",
+      {
+        scan: "Escanear el paquete de recuperación",
+        scanning: "Pon el código QR de la clave maestra delante de la cámara.",
+        notKeyCode: "Ese no es el código QR de la clave maestra.",
+        cameraFailed: "La cámara no está disponible. Escribe la clave o elige el PDF.",
+        camera: "Cámara",
+        stopScan: "Dejar de escanear",
+      },
+    ],
+  ] as const)("names the scan control and its lines in %s", (locale, words) => {
+    expect(MASTER_KEY_FIELD_WORDS[locale]).toMatchObject(words);
   });
 
   it("says which pack holds the master key, when it is known", () => {

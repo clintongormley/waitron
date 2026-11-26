@@ -97,21 +97,26 @@ const clickForNewPage: BrowserCommand<
 // A crashed Stryker run leaves mutated copies of the source in .stryker-tmp, which Vitest would
 // otherwise run as real test files.
 const exclude = [...configDefaults.exclude, "**/.stryker-tmp/**"];
-// Vite serves the package pre-bundled (`@oddbird_popover-polyfill.js`) or raw from `node_modules/.pnpm`.
-const popoverChunk = /@oddbird[/_]popover-polyfill/;
-const refusePopoverChunk: BrowserCommand<[refuse: boolean]> = async (context, refuse) => {
-  const { page } = context as unknown as {
-    page: {
-      route: (
-        pattern: RegExp,
-        handle: (route: { abort(): Promise<void> }) => Promise<void>,
-      ) => Promise<void>;
-      unroute: (pattern: RegExp) => Promise<void>;
+/** Makes every load of a chunk whose URL matches `chunk` fail, or loads it again. */
+const refuseChunk =
+  (chunk: RegExp): BrowserCommand<[refuse: boolean]> =>
+  async (context, refuse) => {
+    const { page } = context as unknown as {
+      page: {
+        route: (
+          pattern: RegExp,
+          handle: (route: { abort(): Promise<void> }) => Promise<void>,
+        ) => Promise<void>;
+        unroute: (pattern: RegExp) => Promise<void>;
+      };
     };
+    if (refuse) await page.route(chunk, (route) => route.abort());
+    else await page.unroute(chunk);
   };
-  if (refuse) await page.route(popoverChunk, (route) => route.abort());
-  else await page.unroute(popoverChunk);
-};
+// Vite serves each package pre-bundled (`@oddbird_popover-polyfill.js`, `jsqr.js`) or raw from
+// `node_modules/.pnpm`.
+const refusePopoverChunk = refuseChunk(/@oddbird[/_]popover-polyfill/);
+const refuseQrDecoderChunk = refuseChunk(/[/_]jsqr[/@.]/);
 const fallbackTests = "src/popover-fallback.test.ts";
 const touchTests = "src/icon-button.touch.test.ts";
 const scaledTests = "src/components/wt-data-table.scaled.test.ts";
@@ -125,6 +130,8 @@ export default defineConfig({
       "lit/async-directive.js",
       "lit/directive.js",
       "@oddbird/popover-polyfill",
+      "jsqr",
+      "qrcode-generator",
     ],
   },
   test: {
@@ -164,6 +171,7 @@ export default defineConfig({
       ],
       commands: {
         refusePopoverChunk,
+        refuseQrDecoderChunk,
         emulateColorScheme,
         emulateReducedMotion,
         emulateForcedColors,

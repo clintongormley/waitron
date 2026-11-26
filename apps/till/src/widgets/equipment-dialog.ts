@@ -3,7 +3,7 @@ import { LitElement, type PropertyValues, type TemplateResult, css, html, nothin
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { parseEquipmentCode } from "@waitron/shared";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, canFilm } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -88,10 +88,6 @@ export function equipmentTakeover(
       >
     </wt-form-actions>
   </wt-dialog>`;
-}
-
-export function canScan(): boolean {
-  return (navigator.mediaDevices as MediaDevices | undefined)?.getUserMedia !== undefined;
 }
 
 /**
@@ -498,7 +494,7 @@ export class TillEquipmentDialog extends LitElement {
         ></wt-combobox>
         ${
           row.scan !== null &&
-          (canScan() || this.nfcPermission === "granted" || this.nfcPermission === "prompt")
+          (canFilm() || this.nfcPermission === "granted" || this.nfcPermission === "prompt")
             ? html`<wt-button
                 data-equipment-scan
                 variant="secondary"
@@ -532,7 +528,7 @@ export class TillEquipmentDialog extends LitElement {
             ></till-equipment-scanner>`
           : html`
               ${
-                canScan()
+                canFilm()
                   ? html`<wt-button
                       data-equipment-qr
                       variant="secondary"

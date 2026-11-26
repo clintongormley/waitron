@@ -145,7 +145,7 @@ Mantén separados producción y preproducción. Si el manifiesto está dañado o
 copia completa. Si el formato no es compatible, instala una versión de Waitron que lo admita antes
 de volver a intentarlo.
 
-Usa la **Clave de cifrado de copias** para abrir un archivo cifrado. Para una copia en el bucket o en Cloud, usa el kit del bucket o la aprobación de Cloud. Necesitas la clave maestra que estaba en vigor cuando se hizo la copia elegida; escríbela en **Clave maestra**. Conserva también el paquete anterior si contiene esa clave.
+Usa la **Clave de cifrado de copias** para abrir un archivo cifrado. Para una copia en el bucket o en Cloud, usa el kit del bucket o la aprobación de Cloud. Necesitas la clave maestra que estaba en vigor cuando se hizo la copia elegida. Conserva también el paquete anterior si contiene esa clave.
 
 En un servidor de prueba restaurado desde Waitron Cloud, si **Servicios Cloud** dice que no se puede
 leer la solicitud guardada de reconexión, elige **Obtener una nueva solicitud de reconexión** y pide
@@ -159,7 +159,8 @@ vez. Elige **Descargar**, **Imprimir** o **Copiar**, guarda el paquete o la clav
 panel para configurar tus copias.
 
 Bajo la revisión, en «Recuperar este servidor», elige con **Elegir el PDF del paquete de recuperación** el paquete de
-recuperación que tenga la clave maestra de esta copia; o escribe la clave maestra impresa en él en
+recuperación que tenga la clave maestra de esta copia, o escanea su código QR de la clave maestra con
+**Escanear el paquete de recuperación**; o escribe la clave maestra impresa en él en
 **Clave maestra**. Un paquete con una clave maestra más nueva no abre una copia anterior.
 Marca «El servidor anterior se ha apagado.», «Soy la única persona recuperando este local.» y
 «Estos datos son correctos.».

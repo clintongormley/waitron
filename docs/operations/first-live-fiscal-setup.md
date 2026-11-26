@@ -184,8 +184,8 @@ Pack 1 has one page, the master key's, and its attached file names no bucket cop
 stays separate. Keep an older pack while you retain backups that need its key.
 The box keeps only the master key's name, check value and sealing public key, never the key itself.
 
-During recovery, select the recovery pack that holds this backup's master key, or type the master
-key. The typing check catches mistakes; opening the selected backup still authenticates the
+During recovery, select the recovery pack that holds this backup's master key, scan its master key
+QR code, or type the master key. The typing check catches mistakes; opening the selected backup still authenticates the
 complete secret.
 See [recovering a box](hour-recovery.md).
 

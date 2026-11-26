@@ -111,9 +111,16 @@ async function mountNarrow(
       loaded: "",
       notPack: "",
       damaged: "",
+      damagedNoScan: "",
       notWhole: "",
       wrongKey: () => "",
       elsewhere: () => "",
+      scan: "Scan the recovery pack",
+      scanning: "",
+      notKeyCode: "",
+      cameraFailed: "",
+      camera: "",
+      stopScan: "",
     };
   }
   await el.updateComplete;

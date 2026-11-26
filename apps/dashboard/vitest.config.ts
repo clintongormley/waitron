@@ -160,7 +160,7 @@ const nodeTimezoneProject = {
 export default defineConfig({
   optimizeDeps: {
     // Pre-bundled so Vite cannot discover it mid-run and reload an in-flight browser test.
-    include: ["@waitron/ui > @oddbird/popover-polyfill", "axe-core"],
+    include: ["@waitron/ui > @oddbird/popover-polyfill", "@waitron/ui > jsqr", "axe-core"],
     entries: ["src/main.ts"],
   },
   // Under an AI agent, Vite would print every browser console.error, console.warn, uncaught error
