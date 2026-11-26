@@ -925,9 +925,7 @@ export class TillBillPayDialog extends LitElement {
 
   async #backFromSecondCard(): Promise<void> {
     this.askingSecondCard = false;
-    await this.#focusButton(
-      this.quiet && !this.quietEntry ? "[data-quiet-pay-card]" : "[data-pay-continue]",
-    );
+    await this.#focusButton("[data-quiet-pay-card], [data-pay-continue]");
   }
 
   #cardInProgress(): boolean {
@@ -974,6 +972,7 @@ export class TillBillPayDialog extends LitElement {
   override render() {
     const opening =
       this.quiet &&
+      overpaidOf(this.balance) === null &&
       !this.showsRefundAcknowledgment &&
       !this.scanning &&
       !this.nextOffered &&
@@ -1012,7 +1011,8 @@ export class TillBillPayDialog extends LitElement {
 
   #quietPay(): TemplateResult {
     const base = this.#quietAmount();
-    const tip = this.tipsEnabled ? typedMoney(this.cardTip) : null;
+    const cashEntry = this.quietEntry && this.method === "cash";
+    const tip = this.tipsEnabled && !cashEntry ? typedMoney(this.cardTip) : null;
     const includingTip = (value: string) =>
       this.#money(tip === null ? value : moneyPlus(value, tip));
     const amount = base === null ? "" : includingTip(base);
@@ -1033,7 +1033,7 @@ export class TillBillPayDialog extends LitElement {
       ),
       amount,
       breakdown:
-        !this.tipsEnabled || !card || base === null
+        this.quietEntry || !this.tipsEnabled || !card || base === null
           ? undefined
           : quietTipBreakdown({
               bill: this.#money(base),

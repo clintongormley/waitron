@@ -102,12 +102,22 @@ it("starts full-screen Pay with the amount and opens the server preview from Cha
 });
 
 it("chooses an amount, then opens the existing cash entry before asking for a preview", async () => {
-  const el = await mount({ quiet: true, way: "whole", handheld: true, takesCash: true });
+  const el = await mount({
+    quiet: true,
+    way: "whole",
+    handheld: true,
+    takesCash: true,
+    takesReaderCard: true,
+    cardReader: "simulator",
+  });
   const previews = capture<PayRequest>(el, "bill-pay-preview");
   await click(el, '[data-quiet-pay-way="contribution"]');
   await type(el, "amount", "40");
-  expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("40.00"));
+  await click(el, "[data-quiet-pay-tip]");
+  await type(el, "cardTip", "10");
+  expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("50.00"));
   await click(el, "[data-quiet-pay-cash]");
+  expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("40.00"));
   expect(previews).toEqual([]);
   await type(el, "tendered", "50");
   await click(el, "[data-pay-continue]");
@@ -369,22 +379,26 @@ describe("till-bill-pay-dialog: the bill's balance", () => {
     expect(text(root(el).querySelector("[data-pay-outstanding]"))).toContain(money("50.00"));
   });
 
-  it("the Pay window shows what was paid over the total", async () => {
-    const el = await mount({
-      balance: balanceOf({
-        total: "10.00",
-        received: "15.00",
-        outstanding: "-5.00",
-        overpaid: "5.00",
-      }),
-    });
+  it.each([false, true])(
+    "the Pay window shows what was paid over the total (quiet %s)",
+    async (quiet) => {
+      const el = await mount({
+        quiet,
+        balance: balanceOf({
+          total: "10.00",
+          received: "15.00",
+          outstanding: "-5.00",
+          overpaid: "5.00",
+        }),
+      });
 
-    expect(root(el).querySelector("[data-pay-outstanding]")).toBeNull();
-    const over = root(el).querySelector("[data-pay-overpaid]");
-    expect(text(over)).toContain(t("bill_pay.overpaid"));
-    expect(text(over)).toContain(money("5.00"));
-    expect(text(over)).not.toContain("-");
-  });
+      expect(root(el).querySelector("[data-pay-outstanding]")).toBeNull();
+      const over = root(el).querySelector("[data-pay-overpaid]");
+      expect(text(over)).toContain(t("bill_pay.overpaid"));
+      expect(text(over)).toContain(money("5.00"));
+      expect(text(over)).not.toContain("-");
+    },
+  );
 
   it("shows the balance again when it is read again", async () => {
     const el = await mount();
