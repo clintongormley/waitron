@@ -17,6 +17,8 @@ export const HOST_VERBS = Object.freeze([
   "screen.read",
   "screen.set",
   "tag.write",
+  "storage.list",
+  "storage.release",
 ]);
 /** Answered by the shell handler; this module refuses them as unknown. */
 export const SHELL_VERBS = Object.freeze([
@@ -33,6 +35,8 @@ export const HOST_LINE_MAX = 4096;
 export const HOST_REPLY_MAX = 4096;
 export const NETWORK_SCAN_MAX = 32;
 export const PERSON_ID_MAX = 64;
+export const STORAGE_DRIVES_MAX = 16;
+export const STORAGE_FILE_SYSTEMS = Object.freeze(["vfat", "exfat", "ntfs", "other"]);
 
 /** The permission the server must have checked before sending a person's request. */
 export const VERB_PERMISSION = Object.freeze({
@@ -42,6 +46,8 @@ export const VERB_PERMISSION = Object.freeze({
   "network.forget": "system.manage",
   "screen.read": "system.manage",
   "screen.set": "system.manage",
+  "storage.list": "system.manage",
+  "storage.release": "system.manage",
 });
 
 /** @type {Readonly<Record<string, readonly string[]>>} */
@@ -53,6 +59,8 @@ const FIELD_KEYS = Object.freeze({
   "screen.read": [],
   "screen.set": ["start"],
   "tag.write": ["tag"],
+  "storage.list": [],
+  "storage.release": [],
 });
 
 /** @type {Readonly<Record<string, readonly string[]>>} */
@@ -64,6 +72,8 @@ const ACTOR_SOURCES = Object.freeze({
   "screen.read": ["person", "server"],
   "screen.set": ["person"],
   "tag.write": ["server"],
+  "storage.list": ["person", "server"],
+  "storage.release": ["person", "server"],
 });
 
 export const START_SCREENS = Object.freeze(["dashboard", "till"]);
@@ -239,6 +249,8 @@ export const REPLY_REFUSALS = Object.freeze({
   "screen.read": Object.freeze([]),
   "screen.set": Object.freeze([]),
   "tag.write": Object.freeze(["busy", "no_free_token", "header_unreadable", "no_space"]),
+  "storage.list": Object.freeze(["busy"]),
+  "storage.release": Object.freeze(["busy"]),
 });
 
 export const CHANGE_KINDS = Object.freeze(["join", "forget"]);
@@ -320,6 +332,30 @@ function checkedNetworks(networks) {
   return ssids.size === checked.length ? checked : null;
 }
 
+const DRIVE_NAME = /^sd[a-z]{1,3}[0-9]{0,3}$/;
+
+/** @param {unknown} drive */
+function checkedDrive(drive) {
+  if (!exactRecord(drive, ["drive", "fileSystem", "readable"])) return null;
+  const { drive: name, fileSystem, readable } = /** @type {Record<string, any>} */ (drive);
+  if (typeof name !== "string" || !DRIVE_NAME.test(name)) return null;
+  if (!STORAGE_FILE_SYSTEMS.includes(fileSystem) || typeof readable !== "boolean") return null;
+  if (fileSystem === "other" && readable) return null;
+  return { drive: name, fileSystem, readable };
+}
+
+/** @param {unknown} drives */
+function checkedDrives(drives) {
+  if (!Array.isArray(drives)) return null;
+  const { length } = drives;
+  if (length > STORAGE_DRIVES_MAX) return null;
+  const checked = [];
+  for (let index = 0; index < length; index += 1) checked.push(checkedDrive(drives[index]));
+  if (checked.includes(null)) return null;
+  const names = new Set(/** @type {{ drive: string }[]} */ (checked).map((drive) => drive.drive));
+  return names.size === checked.length ? checked : null;
+}
+
 /**
  * Each verb's successful reply, rebuilt in its one key order from the checked values, or null.
  * Each value is read once, so a getter cannot change what is written after it was checked.
@@ -348,6 +384,19 @@ const REPLY_RULES = Object.freeze({
     if (!exactRecord(reply, ["ok", "tag"])) return null;
     const { tag } = reply;
     return TAG_OUTCOMES.includes(/** @type {string} */ (tag)) ? { ok: true, tag } : null;
+  },
+  "storage.list": (reply) => {
+    if (!exactRecord(reply, ["ok", "drives"])) return null;
+    const drives = checkedDrives(reply.drives);
+    return drives === null ? null : { ok: true, drives };
+  },
+  "storage.release": (reply) => {
+    if (!exactRecord(reply, ["ok", "released"])) return null;
+    const { released } = reply;
+    const fits = Number.isInteger(released) && /** @type {number} */ (released) >= 0;
+    return fits && /** @type {number} */ (released) <= STORAGE_DRIVES_MAX
+      ? { ok: true, released }
+      : null;
   },
 });
 
@@ -436,6 +485,8 @@ const VERB_ADAPTER = Object.freeze({
   "screen.read": "screenRead",
   "screen.set": "screenSet",
   "tag.write": "tagWrite",
+  "storage.list": "storageList",
+  "storage.release": "storageRelease",
 });
 const ADAPTER_NAMES = [...Object.values(VERB_ADAPTER), "log"];
 const HOST_FAILED_LINE = '{"ok":false,"reason":"host_failed"}\n';
@@ -443,7 +494,8 @@ const HOST_FAILED_LINE = '{"ok":false,"reason":"host_failed"}\n';
 /**
  * Each adapter is called as a plain function, never with `this`.
  * @typedef {Record<string, (...args: any[]) => unknown>} HostAdapters  exactly networkRead,
- *   networkScan, networkJoin, networkForget, screenRead, screenSet, tagWrite and log
+ *   networkScan, networkJoin, networkForget, screenRead, screenSet, tagWrite, storageList,
+ *   storageRelease and log
  */
 
 /**

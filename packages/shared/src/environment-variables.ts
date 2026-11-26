@@ -101,6 +101,7 @@ export const ENVIRONMENT_VARIABLES = {
   WAITRON_PRINT_AGENT_IMAGE: variable("compose", "text", ["compose", "waitron.sh"]),
   WAITRON_PRINT_AGENT_APPARMOR: variable("compose", "text", compose, { default: "docker-default" }),
   WAITRON_BOX_SOCKET_DIR: variable("compose", "path", compose),
+  WAITRON_BOX_DRIVES_MOUNT: variable("compose", "text", compose),
   WAITRON_TUNNEL_CONTROL_DIR: variable("compose", "path", server, unset),
   WAITRON_LOCAL_BACKUPS_DIR: variable("compose", "path", server, unset),
   WAITRON_TUNNEL_IMAGE: variable("compose", "text", ["compose", "waitron.sh"]),

@@ -93,6 +93,14 @@ function fakeHost() {
       available: true,
       tag: "unchanged",
     })),
+    storageList: vi.fn<BoxHostRequests["storageList"]>(async () => ({
+      available: true,
+      drives: [],
+    })),
+    storageRelease: vi.fn<BoxHostRequests["storageRelease"]>(async () => ({
+      available: true,
+      released: 0,
+    })),
   } satisfies BoxHostRequests;
 }
 

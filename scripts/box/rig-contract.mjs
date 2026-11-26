@@ -43,6 +43,7 @@ export const RIG_CASES = Object.freeze([
   "recipe-setup",
   "installed-setup",
   "installed-refusals",
+  "installed-usb-drive",
   "existing-stick",
   "upgrade-manual",
   "upgrade-power-cut",

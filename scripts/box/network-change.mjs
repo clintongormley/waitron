@@ -1,8 +1,8 @@
 import * as fs from "node:fs/promises";
 import { Buffer } from "node:buffer";
-import { constants } from "node:fs";
+import { constants, realpathSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { inspectEncryptedHostState } from "./disk-start.mjs";
 import { networkBus, networkCommand, networkProfile, networkRadio } from "./network-manager.mjs";
@@ -411,7 +411,7 @@ export async function acceptNetworkForget(request, deps = {}) {
   return formatHostReply("network.forget", result);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     await createNetworkChange().work();
   } catch {

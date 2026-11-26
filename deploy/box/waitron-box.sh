@@ -20,6 +20,9 @@ READ_SECONDS="${WAITRON_TEST_READ_SECONDS:-5}"
 TAG_HOST="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/name-tag-host.mjs"
 NETWORK_HOST="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/network-host.mjs"
 NETWORK_CHANGE="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/network-change.mjs"
+HOST_DIR="${WAITRON_HOST_DIR:-${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host}"
+STORAGE_HOST="$HOST_DIR/box/storage/storage-host.mjs"
+HOST_NODE="$HOST_DIR/node-v26.7.0/bin/node"
 
 # 2024-10-28T00:00:00Z and 2100-01-01T00:00:00Z, in milliseconds.
 FIRST_TARGET_MS=1730073600000
@@ -104,15 +107,20 @@ upgrade_status() {
   answer "{\"ok\":true,\"result\":$result}"
 }
 
+# deploy/waitron.sh names the drives only when one of these exists; keep the two in step.
+storage_node() {
+  if command -v node >/dev/null 2>&1; then printf 'node'; return 0; fi
+  [ -x "$HOST_NODE" ] && printf '%s' "$HOST_NODE"
+}
+
 upgrade_settings() (
-  local host="${WAITRON_HOST_DIR:-${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host}"
   local box="${WAITRON_DIR:-/opt/waitron}" reply
   if [ "$1" = save-upgrade-settings ]; then
     umask 077
     exec 9>"$box.upgrade-settings.lock" || { refuse host_failed; return; }
     if ! flock -n 9; then refuse busy; return; fi
   fi
-  if reply="$("$host/node-v26.7.0/bin/node" "$host/box/upgrades/cli.mjs" "$1" "$box" "${@:2}")"; then
+  if reply="$("$HOST_NODE" "$HOST_DIR/box/upgrades/cli.mjs" "$1" "$box" "${@:2}")"; then
     answer "$reply"
   else
     refuse host_failed
@@ -288,7 +296,7 @@ network_monitor() {
 }
 
 main() {
-  local instance line rc arrived rest target requester reply read_limit=701
+  local instance line rc arrived rest target requester reply node storage_host read_limit=701
   if [ "${1:-}" = --network-monitor ]; then network_monitor; fi
   if [ "${1:-}" = --network-change ]; then
     umask 077
@@ -328,6 +336,21 @@ main() {
       if ! flock -n 9; then refuse busy; exit 0; fi
     fi
     if reply="$(printf '%s' "$line" | node "$NETWORK_HOST")"; then answer "$reply"; else refuse host_failed; fi
+    exit 0
+  fi
+  if [[ "$line" = "storage.list "* || "$line" = "storage.release "* ]] && [ -f "$STORAGE_HOST" ] && node="$(storage_node)"; then
+    umask 077
+    mkdir -p -m 0700 "$STATE_DIR"
+    exec 9> "$STATE_DIR/storage.lock"
+    if ! flock -n 9; then refuse busy; exit 0; fi
+    # Handed to node resolved: given the link, an install renaming a new set's link over
+    # box/storage as node starts makes the module's entry check see two folders and answer nothing.
+    if storage_host="$(readlink -f -- "$STORAGE_HOST")" \
+      && reply="$(printf '%s' "$line" | "$node" "$storage_host")"; then
+      answer "$reply"
+    else
+      refuse host_failed
+    fi
     exit 0
   fi
   if [ ${#line} -gt 700 ]; then refuse request_invalid; exit 0; fi

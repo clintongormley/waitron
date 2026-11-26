@@ -26,15 +26,15 @@ docker build --platform linux/amd64 --target runtime \
   -f deploy/Dockerfile -t "$app" .
 agent=ghcr.io/clintongormley/waitron-print-agent@sha256:650a9d69b217cb2f713cb6209539e3799f42bf4fb107d13f5d2798bb79ef37d9
 docker pull --platform linux/amd64 "$agent"
-docker pull --platform linux/amd64 axllent/mailpit:v1.33.0
+docker pull --platform linux/amd64 axllent/mailpit:v1.34.0
 docker tag "$agent" waitron-b3-agent:rehearsal
 tunnel=waitron-b3-tunnel:rehearsal
 docker build --platform linux/amd64 -f deploy/tunnel/Dockerfile -t "$tunnel" .
-docker image inspect --platform linux/amd64 "$app" "$agent" "$tunnel" axllent/mailpit:v1.33.0 > "$inputs/sources.json"
+docker image inspect --platform linux/amd64 "$app" "$agent" "$tunnel" axllent/mailpit:v1.34.0 > "$inputs/sources.json"
 docker save --platform linux/amd64 -o "$inputs/app.tar" "$app"
 docker save --platform linux/amd64 -o "$inputs/agent.tar" waitron-b3-agent:rehearsal
 docker save --platform linux/amd64 -o "$inputs/tunnel.tar" "$tunnel"
-docker save --platform linux/amd64 -o "$inputs/mailpit.tar" axllent/mailpit:v1.33.0
+docker save --platform linux/amd64 -o "$inputs/mailpit.tar" axllent/mailpit:v1.34.0
 
 docker build -f bench/box-installer/Containerfile -t waitron-b3-tools:rehearsal .
 docker run -d --name waitron-b3-rehearsal --cpus 4 --memory 8g --memory-swap 8g \
@@ -154,16 +154,26 @@ update resealing, kiosk and physical box/stick/Android qualification remain rele
 This unsigned development image carries no theft-protection or release-readiness claim.
 Protected encryption before go-live remains required.
 
-After retaining the small results, remove your rehearsal resources. Do not remove
-shared images, volumes or build caches. Export the image first with `docker cp`
-if you need it; otherwise deleting this container also deletes the built image.
+## Read a USB drive
+
+Run `--case installed-usb-drive` in the same tool container after building the recipe:
 
 ```sh
-docker stop waitron-b3-rehearsal
-docker rm waitron-b3-rehearsal
-docker image rm waitron-b3-tools:rehearsal "$app" waitron-b3-agent:rehearsal
-rm -rf "$inputs"
+docker exec -w /source -e B3_INSTALLER_IMAGE=/work/output/waitron-install-dev.img \
+  waitron-b3-rehearsal node bench/box-installer/run.mjs \
+  --case installed-usb-drive --run-dir /work/usb-drive
+docker cp waitron-b3-rehearsal:/work/usb-drive/usb-drive.json "$inputs/results/"
 ```
+
+It installs and starts the box as `installed-setup` does, without the setup screen checks. Before
+the disk boot it makes an exFAT image in the run folder holding one file named like a backup
+archive, 4.4 GB of random bytes by default (set `B3_USB_FILE_BYTES` for a quicker run), and records
+its SHA-256. Once the box serves, the rig plugs the image in as a USB disk through QEMU's monitor.
+Inside the guest, user 10001 asks the box's host socket to list drives, and the rig requires one
+exFAT drive marked readable. User 10001 in the app container then reads the file and its hash must
+match. The rig then asks the host to release the drives and requires at least one released and the
+file gone from the container. `usb-drive.json` holds the answers. The image needs about 4.5 GB of
+free space in the tool container; it goes when the container does.
 
 ## Check a manual upgrade and interrupted recovery
 
@@ -184,3 +194,16 @@ restored container restart policies. The power-cut case kills QEMU during
 the initial copy and during restore, then checks the held boot and repeated restore.
 The guest needs real internet time synchronisation.
 These current-build synthetic checks create no qualified historical release in the index.
+
+## Remove the rehearsal resources
+
+After retaining the small results, remove your rehearsal resources. Do not remove
+shared images, volumes or build caches. Export the image first with `docker cp`
+if you need it; otherwise deleting this container also deletes the built image.
+
+```sh
+docker stop waitron-b3-rehearsal
+docker rm waitron-b3-rehearsal
+docker image rm waitron-b3-tools:rehearsal "$app" waitron-b3-agent:rehearsal
+rm -rf "$inputs"
+```

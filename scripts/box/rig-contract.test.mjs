@@ -141,6 +141,7 @@ describe("parseRigArgs", () => {
       "recipe-setup",
       "installed-setup",
       "installed-refusals",
+      "installed-usb-drive",
       "existing-stick",
       "upgrade-manual",
       "upgrade-power-cut",

@@ -2,7 +2,7 @@ import process from "node:process";
 import console from "node:console";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
+import { realpathSync } from "node:fs";
 import { installerNameNotice } from "./installer-name-notice.mjs";
 import { INSTALLER_TIMINGS_MS } from "./installer-policy.mjs";
 import { formatInstallerNotice, INSTALLER_MESSAGES, INSTALLER_WORDS } from "./i18n/installer.mjs";
@@ -148,7 +148,7 @@ export async function installerReturn(
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     await installerReturn(process.argv[2]);
   } catch (error) {

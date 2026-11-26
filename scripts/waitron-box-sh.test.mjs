@@ -7,6 +7,7 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  readlinkSync,
   mkdtempSync,
   readFileSync,
   renameSync,
@@ -136,6 +137,7 @@ function sandbox(extra = {}) {
     state: join(dir, "run/waitron-box-state"),
     tagHost: join(dir, "opt/waitron-host/box/name-tag-host.mjs"),
     networkHost: join(dir, "opt/waitron-host/box/network-host.mjs"),
+    storageHost: join(dir, "opt/waitron-host/box/storage/storage-host.mjs"),
   };
   for (const path of Object.values(paths)) mkdirSync(dirname(path), { recursive: true });
   mkdirSync(paths.ntpUnits);
@@ -798,6 +800,175 @@ it.each([0, 1])("takes the worker lock before its adapter (lock refusal %s)", (r
   expect(result.status).toBe(rc);
   expect(result.stdout).toBe(rc ? "" : "worker ran\n");
   expect(sb.calls()).toContainEqual(["flock", "-w", "15", "9"]);
+});
+
+describe("waitron-box.sh storage requests", () => {
+  const LIST = 'storage.list {"actor":{"source":"server"}}';
+  const RELEASE = 'storage.release {"actor":{"source":"person","person":"owner"}}';
+  const echoing = (sb, module = sb.paths.storageHost) => {
+    const received = join(sb.dir, "received");
+    mkdirSync(dirname(module), { recursive: true });
+    writeFileSync(
+      module,
+      `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(received)}, fs.readFileSync(0)); console.log(JSON.stringify({ ok: true, node: process.execPath }));`,
+    );
+    return received;
+  };
+  // A PATH with no node on it: the stubs, bash to run them, and mkdir and readlink, the other
+  // commands the storage path runs.
+  const withoutNode = (sb) => {
+    const tools = join(sb.dir, "tools");
+    mkdirSync(tools);
+    for (const tool of ["bash", "mkdir", "readlink"]) {
+      const found = spawnSync("bash", ["-c", `command -v ${tool}`], { encoding: "utf8" });
+      symlinkSync(found.stdout.trim(), join(tools, tool));
+    }
+    return { ...sb, env: { ...sb.env, PATH: `${STUB_BIN}${delimiter}${tools}` } };
+  };
+  const BASH = spawnSync("bash", ["-c", "command -v bash"], { encoding: "utf8" }).stdout.trim();
+  const answerWith = (sb, line) => {
+    const r = spawnSync(BASH, [HANDLER, "7-100-0"], {
+      input: `${line}\n`,
+      env: sb.env,
+      encoding: "utf8",
+    });
+    expect(r.stdout.trim().split("\n")).toHaveLength(1);
+    return JSON.parse(r.stdout);
+  };
+
+  it.each([LIST, RELEASE])("hands %s to its module under its own lock", (line) => {
+    const sb = sandbox();
+    const received = echoing(sb);
+    expect(answer(sb, line)).toMatchObject({ ok: true });
+    expect(readFileSync(received, "utf8")).toBe(line);
+    expect(sb.calls()).toContainEqual(["flock", "-n", "9"]);
+    expect(existsSync(join(sb.paths.state, "storage.lock"))).toBe(true);
+    expect(existsSync(join(sb.paths.state, "tag.lock"))).toBe(false);
+    expect(existsSync(join(sb.paths.state, "network.lock"))).toBe(false);
+    expect(touchesClock(sb.calls())).toEqual([]);
+  });
+
+  it.each([LIST, RELEASE])("answers busy for %s while another holds the lock", (line) => {
+    const sb = sandbox({ WB_FLOCK_RC: "1" });
+    writeFileSync(sb.paths.storageHost, "throw new Error('must not run');");
+    expect(answer(sb, line)).toEqual({ ok: false, reason: "busy" });
+  });
+
+  it("answers host_failed when the module crashes before a reply", () => {
+    const sb = sandbox();
+    writeFileSync(sb.paths.storageHost, "process.exit(3);");
+    expect(answer(sb, LIST)).toEqual({ ok: false, reason: "host_failed" });
+  });
+
+  it.each([LIST, RELEASE])(
+    "answers unknown_request for %s when the module is absent, taking no lock",
+    (line) => {
+      const sb = sandbox();
+      expect(answer(sb, line)).toEqual({ ok: false, reason: "unknown_request" });
+      expect(sb.calls().some((call) => call[0] === "flock")).toBe(false);
+    },
+  );
+
+  it("runs the module with the retained host runtime when no node is on PATH", () => {
+    const sb = withoutNode(sandbox());
+    echoing(sb);
+    const runtime = join(sb.dir, "opt/waitron-host/node-v26.7.0/bin/node");
+    mkdirSync(dirname(runtime), { recursive: true });
+    symlinkSync(process.execPath, runtime);
+    expect(answerWith(sb, LIST)).toEqual({ ok: true, node: process.execPath });
+  });
+
+  it("reads the module and the runtime from WAITRON_HOST_DIR when it is set", () => {
+    const host = join(mkdtempSync(join(tmpdir(), "waitron-box-host-")), "host");
+    dirs.push(dirname(host));
+    const sb = withoutNode(sandbox({ WAITRON_HOST_DIR: host }));
+    echoing(sb, join(host, "box/storage/storage-host.mjs"));
+    const runtime = join(host, "node-v26.7.0/bin/node");
+    mkdirSync(dirname(runtime), { recursive: true });
+    symlinkSync(process.execPath, runtime);
+    expect(answerWith(sb, LIST)).toEqual({ ok: true, node: process.execPath });
+  });
+
+  it("runs no runtime but the pinned one", () => {
+    const sb = withoutNode(sandbox());
+    echoing(sb);
+    const runtime = join(sb.dir, "opt/waitron-host/node-v26.6.0/bin/node");
+    mkdirSync(dirname(runtime), { recursive: true });
+    symlinkSync(process.execPath, runtime);
+    expect(answerWith(sb, LIST)).toEqual({ ok: false, reason: "unknown_request" });
+  });
+
+  it("answers unknown_request when neither PATH nor the host holds a node", () => {
+    const sb = withoutNode(sandbox());
+    echoing(sb);
+    expect(answerWith(sb, LIST)).toEqual({ ok: false, reason: "unknown_request" });
+  });
+
+  // The installer can rename a new set's link over box/storage after node has loaded the old
+  // set's entry and before that entry's started-directly check runs. The node on PATH here makes
+  // that switch from a load hook, at the moment the entry has loaded.
+  it("answers from the set it started in when the link switches to another as it loads", () => {
+    const sb = sandbox();
+    const box = join(sb.dir, "opt/waitron-host/box");
+    const SET = [
+      "storage-host.mjs",
+      "host-protocol.mjs",
+      "name-tag.mjs",
+      "upgrades/contracts.mjs",
+      "wifi-boot-copy.mjs",
+      "disk-key.mjs",
+      "wifi-record.mjs",
+    ];
+    for (const set of [".storage.old", ".storage.new"]) {
+      for (const module of SET) {
+        mkdirSync(dirname(join(box, set, module)), { recursive: true });
+        copyFileSync(join(HERE, "box", module), join(box, set, module));
+      }
+    }
+    rmSync(join(box, "storage"), { recursive: true });
+    symlinkSync(".storage.old", join(box, "storage"));
+    symlinkSync(".storage.new", join(box, ".storage.new.link"));
+    const hook = join(sb.dir, "switch.mjs");
+    writeFileSync(
+      hook,
+      `import { renameSync } from "node:fs";
+import { registerHooks } from "node:module";
+registerHooks({
+  load(url, context, nextLoad) {
+    const loaded = nextLoad(url, context);
+    if (url.endsWith("/storage-host.mjs")) {
+      renameSync(${JSON.stringify(join(box, ".storage.new.link"))}, ${JSON.stringify(join(box, "storage"))});
+    }
+    return loaded;
+  },
+});
+`,
+    );
+    const bin = join(sb.dir, "switching-bin");
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, "node"),
+      `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} --import ${JSON.stringify(hook)} "$@"\n`,
+    );
+    chmodSync(join(bin, "node"), 0o755);
+    sb.env.PATH = `${bin}${delimiter}${sb.env.PATH}`;
+
+    const reply = ask(sb, "storage.list not-a-request\n");
+    expect(readlinkSync(join(box, "storage"))).toBe(".storage.new");
+    expect(reply.stdout).toBe('{"ok":false,"reason":"request_invalid"}\n');
+  });
+
+  it("answers host_failed, running nothing, when the module's folder cannot be resolved", () => {
+    const sb = sandbox();
+    const received = echoing(sb);
+    const bin = join(sb.dir, "failing-bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "readlink"), "#!/usr/bin/env bash\nexit 1\n");
+    chmodSync(join(bin, "readlink"), 0o755);
+    sb.env.PATH = `${bin}${delimiter}${sb.env.PATH}`;
+    expect(answer(sb, LIST)).toEqual({ ok: false, reason: "host_failed" });
+    expect(existsSync(received)).toBe(false);
+  });
 });
 
 async function observing(sb, { manualClock = false, trace = false } = {}) {

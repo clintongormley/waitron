@@ -1,6 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
-import { constants } from "node:fs";
+import { constants, realpathSync } from "node:fs";
 import * as fs from "node:fs/promises";
 import { execFileSync, spawnSync } from "node:child_process";
 import { lstat, readFile as readText } from "node:fs/promises";
@@ -248,7 +247,7 @@ export async function readDiskOpening({ path = "/run/waitron-disk-opened", owner
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const mode = process.argv[2];
   try {
     if (process.getuid() !== 0 || !["prepare", "check"].includes(mode))

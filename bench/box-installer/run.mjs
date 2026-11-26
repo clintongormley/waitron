@@ -24,6 +24,11 @@ import {
   bootHasOrderingCycle,
 } from "../../scripts/box/recipe-setup.mjs";
 
+import {
+  usbDriveFailures,
+  usbFileBytes,
+  usbGuestScript,
+} from "../../scripts/box/usb-drive-rig.mjs";
 import { stayedUpCheck } from "./upgrade.mjs";
 
 const { caseName, runDir } = parseRigArgs(process.argv.slice(2));
@@ -33,6 +38,7 @@ const started = Date.now();
 if (
   caseName === "installed-setup" ||
   caseName === "installed-refusals" ||
+  caseName === "installed-usb-drive" ||
   caseName === "existing-stick" ||
   upgradeCase
 ) {
@@ -480,6 +486,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
       proof,
     ]);
   }
+  let usbDrive;
   const pcrRead = "echo B3_PCRS:$(tpm2_pcrread sha256:5,7,8,9,15 | base64 -w0)";
   const bootRead =
     'echo B3_MEASURED:$(sha256sum /boot/vmlinuz-* /boot/initrd.img-* /boot/efi/EFI/BOOT/BOOTX64.EFI | sha256sum | cut -d" " -f1)';
@@ -514,6 +521,7 @@ async function installedDiskRun(stick, tpmRoot, startTpm) {
         "-device",
         "usb-storage,bus=usb.0,drive=stick,serial=waitron-dev-stick,bootindex=1",
       );
+    else if (caseName === "installed-usb-drive") args.push("-device", "qemu-xhci,id=usb");
     args.push(
       "-drive",
       `file=${target},format=raw,if=none,id=target`,
@@ -628,6 +636,7 @@ load("startup-password");
 console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupCopy,measuredUnchanged:before===measured()}));
 })().catch(e=>{console.error(e);process.exitCode=1});`;
       const reconcileProbe = probe(reconcile);
+      const usbProbe = name === "drive" ? `; ${probe(usbGuestScript(usbDrive.fileName))}` : "";
       const checks =
         `; ${networkProbe}; ${reconcileProbe}` +
         (caseName === "existing-stick"
@@ -637,7 +646,7 @@ console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupC
         "curl -kfsS --max-time 10 https://127.0.0.1/health >/run/b3-health.json; echo B3_RETURN_HEALTH:$(cat /run/b3-health.json); echo B3_RETURN_READY";
       args.push(
         "-smbios",
-        `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-dev.service=${Buffer.from(unit + `\n[Service]\nExecStartPost=/bin/sh -ec '${returning ? returned : `${copy}${checks}`}'\n`).toString("base64")}`,
+        `type=11,value=io.systemd.credential.binary:systemd.extra-unit.waitron-dev.service=${Buffer.from(unit + `\n[Service]\nExecStartPost=/bin/sh -ec '${returning ? returned : `${copy}${usbProbe}${checks}`}'\n`).toString("base64")}`,
       );
     }
     await writeFile(join(runDir, `${name}-args.json`), JSON.stringify(args));
@@ -790,6 +799,7 @@ console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupC
         );
       });
       return {
+        monitor,
         get serial() {
           return serial;
         },
@@ -855,6 +865,39 @@ console.log("B3_NETWORK_RECONCILE:"+JSON.stringify({savedCopy,forgotten,startupC
     await bootstrap.finish();
     if (!bootstrapSucceeded(bootstrap.serial))
       throw new Error("bootstrap did not restart without Docker");
+    if (caseName === "installed-usb-drive") {
+      const { makeUsbDrive, hotplug } = await import("./usb-drive.mjs");
+      usbDrive = await makeUsbDrive(runDir, usbFileBytes(process.env.B3_USB_FILE_BYTES));
+      const guest = await boot("drive", false, "B3_USB_WAITING", 2400000);
+      try {
+        await writeFile(
+          join(runDir, "drive-monitor.log"),
+          await hotplug(guest.monitor, usbDrive.image),
+        );
+        const until = Date.now() + 1_800_000;
+        while (!rigLine(guest.serial, "B3_USB_RESULT:")) {
+          const failed = rigLine(guest.serial, "B3_USB_FAILED:");
+          if (failed !== undefined) throw new Error(`usb drive probe failed: ${failed}`);
+          if (Date.now() >= until) throw new Error("usb drive probe did not finish");
+          await new Promise((done) => setTimeout(done, 1000));
+        }
+        const result = JSON.parse(rigLine(guest.serial, "B3_USB_RESULT:"));
+        const failures = usbDriveFailures(result, usbDrive.sha256);
+        const { fileName, bytes, sha256 } = usbDrive;
+        await writeFile(
+          join(runDir, "usb-drive.json"),
+          JSON.stringify({ fileName, bytes, sha256, guest: result, failures }, null, 2),
+        );
+        if (failures.length) throw new Error(failures.join(", "));
+      } finally {
+        await guest.stop();
+      }
+      await writeFile(
+        join(runDir, "timing.json"),
+        JSON.stringify({ started, elapsedMs: Date.now() - started }),
+      );
+      return;
+    }
     if (upgradeCase) {
       const { upgradeStage, upgradePayload } = await import("./upgrade.mjs");
       const stage = await boot("upgrade-stage", false, "A950_STAGED", 900000, undefined, {

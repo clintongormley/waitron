@@ -30,6 +30,7 @@ There is no database server in the app's path, no connection string and no datab
 | `tunnel_control` | `/var/lib/waitron/tunnel` in the app, `/control` in the tunnel companion | the staff socket, peer public key and connection configuration                                                                                                              |
 | `tunnel_keys`    | `/keys` in the tunnel companion only                                     | the box's private WireGuard key                                                                                                                                             |
 | `box_socket`     | `/run/waitron-box`                                                       | nothing: an empty stand-in until `waitron.sh install` names the host's socket folder in `.env`                                                                              |
+| `box_drives`     | `/run/waitron-drives`, read-only                                         | nothing: an empty stand-in until `.env` names the host's USB drive folder                                                                                                   |
 
 A box installed before the box ran its own database server was retired also carries a `waitron_db`
 volume holding that old database. Nothing reads it and nothing on the box removes it, including
@@ -178,6 +179,20 @@ saying Waitron cannot set this machine's clock itself or see whether it keeps in
 every start a box that files invoices takes no payment until two tills or handhelds that are
 switched on and connected agree with its clock or someone confirms it; it removes that `.env` line
 and carries on.
+Once the socket has started, `install` also installs the box's USB drive module: it copies
+`scripts/box/storage-host.mjs` and the modules it imports from the ref into a folder of their own,
+`/opt/waitron-host/box/storage/` (mode `0644`), and changes no other host module, not even the
+copies of the same modules that other host code in `/opt/waitron-host/box/` imports. The new set
+goes in beside the old one and replaces it in one step, so a failure part way leaves the old set
+in use. Then it writes `WAITRON_BOX_DRIVES_MOUNT=/run/waitron-drives:/run/waitron-drives:ro,rslave`
+to `.env`, so the app's container sees, read-only, the USB drives the host mounts under
+`/run/waitron-drives`. A checked upgrade does the same. The module runs on Node.js, so `install`
+does this only when the machine has it where the box's request service looks: in systemd's
+service path (`/usr/local/sbin`, `/usr/local/bin`, `/usr/sbin` or `/usr/bin`), or the copy a
+checked upgrade keeps in `/opt/waitron-host/node-v26.7.0/`. Without it, `install` says so, and
+running `install` again once the box is running, which is a checked upgrade, brings it. When there
+is no Node.js, a step fails, or the clock service was not installed, `install` removes that `.env`
+line, and the app sees no drive.
 `reset` leaves the service and the group alone.
 
 The service runs only when the app asks, and sets the clock only while the system says its clock is
@@ -196,8 +211,8 @@ writes no `waitron-box` line.
 
 The box has no secret it needs before it boots: the venue's databases are files in the `state`
 volume that open with no password, and every other setting has a default in the image that suits a
-box reached at `waitron.local`. So `.env` holds only lines `install` writes: the AppArmor line and
-the clock service's line above, and, for a branch or a commit, the image tags it built there. A
+box reached at `waitron.local`. So `.env` holds only lines `install` writes: the AppArmor line,
+the clock service's line and the USB drives line above, and, for a branch or a commit, the image tags it built there. A
 plain `install` on a box with neither AppArmor nor systemd writes no `deploy/.env` at all. So `install` is non-interactive
 and idempotent, and running it again later to update the box does nothing destructive, apart from deleting the
 images it ran before (see Updating and operating).
@@ -324,7 +339,7 @@ If a final stopped-copy check fails, the box stays stopped. Read `sudo bash wait
 to start the candidate despite the failed checks. Keep refuses an upgrade to a numbered release
 that has a change of software producer to make, and still uses the ordinary boot guards.
 Restore puts back the copied data, Compose configuration and old images; the host clock
-service, AppArmor policy and retained upgrade runtime stay updated. An interrupted restore
+service, the host's USB drive module, AppArmor policy and retained upgrade runtime stay updated. An interrupted restore
 starts again from its intact copy. Install and reset refuse while
 an attempt is held. On an unfinished setup, Keep continues setup; choose Restore before
 using `--reset install` instead.
@@ -1015,7 +1030,8 @@ hand. On first installation, `install` records the practice inbox profile in `.e
 listing, pairing, forgetting and printing to Bluetooth printers needs the `WAITRON_PRINT_AGENT_APPARMOR` line `waitron.sh install` writes
 there once it has loaded the profile. Where systemd runs, setting the box's clock needs the
 `WAITRON_BOX_SOCKET_DIR` line `waitron.sh install` writes once the clock service's socket has
-started (see Setting up a box).
+started, and seeing USB drives the `WAITRON_BOX_DRIVES_MOUNT` line it writes after that (see Setting
+up a box).
 The box holds no database credential, because there is no database server to hold one for. Its own secrets, the vault key ring and the CA and leaf
 certificates, are minted on the first setup boot into the `state` volume and never appear here. A
 box restored from a backup brings them back and, at its first trading start, replaces the leaf with

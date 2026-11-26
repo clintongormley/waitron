@@ -84,7 +84,7 @@ afterEach(() => {
 // profile into the running kernel. WT_AA_PARSE_FAIL makes `apparmor_parser` refuse the profile.
 // `install` copies a file only when the destination is inside the case's own directory (WT_SANDBOX),
 // which is where each case points the Bluetooth drop-in and the box's clock service, and applies
-// its `-m` mode there. WT_BOX_ENABLE_FAIL=1 makes `systemctl enable --now waitron-box.socket` fail. `systemctl show … FragmentPath` answers
+// its `-m` mode there; it fails when its destination ends with WT_INSTALL_FAIL. WT_BOX_ENABLE_FAIL=1 makes `systemctl enable --now waitron-box.socket` fail. `systemctl show … FragmentPath` answers
 // WT_BT_UNIT, the path of a stand-in bluetooth.service, or nothing, as a host without Bluetooth
 // does, and `systemctl show … DropInPaths` lists the `.conf` files in the drop-in's folder, sorted by
 // name, so the drop-in counts only once it exists; WT_BT_RESTART_FAIL=1 makes every
@@ -93,7 +93,9 @@ afterEach(() => {
 // the real one; `cp` does the same with WT_CP_FAIL. `cmp` exits 2, its status for trouble, when
 // WT_CMP_FAIL=1, and is the one stub not logged (see `quietStub`). `curl` asked for the script itself
 // copies WT_SELF_SCRIPT's file into the existing output file, keeping that file's mode as the real
-// curl does, and fails when WT_SELF_FETCH_FAIL=1. WT_UPGRADE_BUSY=1 makes every `flock` fail, as when
+// curl does, and fails when WT_SELF_FETCH_FAIL=1; asked for a scripts/box module it writes the one
+// line `source:<url>`, except release-trust files, which come from WT_RELEASE_TRUST_SOURCE when a case
+// sets it. WT_UPGRADE_BUSY=1 makes every `flock` fail, as when
 // another host operation holds the lock; WT_REAL_FLOCK=1 makes `flock -n <fd>` take a real lock on that
 // fd, so a lock held elsewhere refuses it. WT_RECOVERY_UNIT=1 models Docker's dependency on
 // the upgrade recovery service, which takes the host lock itself: once a `flock -n 9` has succeeded
@@ -312,7 +314,10 @@ case "$url" in
   */releases/download/*/waitron-release.json)
     [ -n "\${WT_RELEASE_ASSET:-}" ] || exit 22
     cat "$WT_RELEASE_ASSET"; exit 0 ;;
-  */deploy/box/release-keys/*|*/scripts/box/verify-release.mjs|*/scripts/box/release-list.mjs|*/scripts/box/upgrades/contracts.mjs)
+  */scripts/box/upgrades/contracts.mjs)
+    if [ -n "\${WT_RELEASE_TRUST_SOURCE:-}" ]; then cp "$WT_RELEASE_TRUST_SOURCE/contracts.mjs" "$out"; exit $?; fi
+    printf 'source:%s\\n' "$url" > "$out"; exit 0 ;;
+  */deploy/box/release-keys/*|*/scripts/box/verify-release.mjs|*/scripts/box/release-list.mjs)
     [ -n "\${WT_RELEASE_TRUST_SOURCE:-}" ] || exit 22
     cp "$WT_RELEASE_TRUST_SOURCE/\${url##*/}" "$out"; exit $? ;;
   https://api.github.com/repos/clintongormley/waitron/commits/*)
@@ -324,6 +329,7 @@ case "$url" in
   */scripts/box/upgrades/*)
     if [[ "$url" == */bootstrap.sh ]]; then cp "$WT_BOOTSTRAP" "$out"; else printf 'source:%s\\n' "$url" > "$out"; fi
     exit 0 ;;
+  */scripts/box/*.mjs) printf 'source:%s\\n' "$url" > "$out"; exit 0 ;;
   */deploy/compose.yml)
     if [ "\${WT_COMPOSE_FETCH_FAIL}" = 1 ]; then printf 'partial' > "$out"; exit 22; fi ;;
 esac
@@ -395,6 +401,7 @@ stub(
   "install",
   `
 dest="\${@: -1}"
+case "$dest" in *"\${WT_INSTALL_FAIL:-__never__}") exit 1 ;; esac
 case "$dest" in
   "\${WT_SANDBOX}"/*)
     if [ "$1" != "-d" ]; then [ -f "\${@: -2:1}" ] || exit 1; fi
@@ -3075,6 +3082,172 @@ describe("waitron.sh install and the box's host service", () => {
     const first = sandbox({ systemd: true });
     expect(run(first, ["install"]).status).toBe(0);
     expect(calls(first)).not.toContain("systemctl restart waitron-box.socket");
+  });
+
+  describe("the USB drive module", () => {
+    const MODULES =
+      /^BOX_STORAGE_MODULES="([^"]+)"$/m.exec(readFileSync(SCRIPT, "utf8"))?.[1]?.split(" ") ?? [];
+    const DRIVES = "WAITRON_BOX_DRIVES_MOUNT=/run/waitron-drives:/run/waitron-drives:ro,rslave";
+    const OTHERS = ["name-tag-host", "network-host", "network-manager", "network-change"];
+    const OTHERS_TOO = ["disk-start", "disk-recovery-key", "preboot", "disk-state"];
+    const CANNOT = "Waitron cannot see USB drives plugged into this machine";
+    // A node where systemd's service PATH looks, as on a host with Debian's nodejs package.
+    const withServiceNode = (sb, dir = "usr/bin") => {
+      mkdirSync(join(sb.root, dir), { recursive: true });
+      symlinkSync(process.execPath, join(sb.root, dir, "node"));
+      return sb;
+    };
+    const storage = (sb) => join(sb.root, "host/box/storage");
+    const sets = (sb) =>
+      readdirSync(join(sb.root, "host/box"))
+        .filter((name) => name === "storage" || name.startsWith(".storage"))
+        .sort();
+    // A later install on the running box is a checked upgrade, which fetches by the resolved commit.
+    const SECOND = "2".repeat(40);
+    const THIRD = "3".repeat(40);
+    const source = (ref, module) =>
+      `source:https://raw.githubusercontent.com/clintongormley/waitron/${ref}/scripts/box/${module}\n`;
+
+    it.each([
+      ["a first install", false],
+      ["a checked upgrade", true],
+    ])(
+      "%s copies storage-host.mjs and its imports into a folder of their own, and names the drives once the socket started",
+      (_, upgrade) => {
+        expect(MODULES).toContain("storage-host.mjs");
+        const sb = sandbox({ systemd: true });
+        if (upgrade) installedBox(sb);
+        else withServiceNode(sb);
+        const r = run(sb, ["install", "my-branch"], upgrade ? { WAITRON_SH_REFRESHED: "1" } : {});
+        expect(r.status, r.stderr).toBe(0);
+        const log = calls(sb);
+        const box = join(sb.root, "host/box");
+        const enabled = log.indexOf("systemctl enable --now waitron-box.socket");
+        expect(enabled).toBeGreaterThanOrEqual(0);
+        expect(lstatSync(storage(sb)).isSymbolicLink()).toBe(true);
+        const live = join(box, readlinkSync(storage(sb)));
+        expect(live).toMatch(/\/box\/\.storage\.[^/]+$/);
+        for (const module of MODULES) {
+          const dest = join(live, module);
+          expect(readFileSync(dest, "utf8")).toMatch(
+            new RegExp(
+              `^source:https://raw\\.githubusercontent\\.com/clintongormley/waitron/[^/]+/scripts/box/${module}\\n$`,
+            ),
+          );
+          expect(statSync(dest).mode & 0o777).toBe(0o644);
+          const at = log.findIndex(
+            (c) => c.startsWith("install -m 0644 -o root -g root ") && c.endsWith(` ${dest}`),
+          );
+          expect(at, module).toBeGreaterThan(enabled);
+        }
+        expect(statSync(live).mode & 0o777).toBe(0o755);
+        for (const other of [...OTHERS, ...OTHERS_TOO]) {
+          expect(existsSync(join(box, `${other}.mjs`)), other).toBe(false);
+          expect(existsSync(join(live, `${other}.mjs`)), other).toBe(false);
+          expect(
+            log.some((c) => c.startsWith("curl ") && c.includes(`/scripts/box/${other}.mjs`)),
+          ).toBe(false);
+        }
+        for (const module of MODULES) {
+          expect(
+            log.some(
+              (c) =>
+                c.startsWith("install -m 0644 -o root -g root ") &&
+                c.endsWith(` ${join(box, module)}`),
+            ),
+            module,
+          ).toBe(false);
+        }
+        expect(env(sb).split("\n")).toContain(DRIVES);
+        expect(r.stdout).toContain("Waitron can see USB drives plugged into this machine");
+        expect(r.stdout).toContain("installed the box's USB drive module");
+      },
+    );
+
+    it.each(["usr/local/bin", "usr/bin", "usr/sbin", "usr/local/sbin"])(
+      "names the drives when the only node is in %s, where systemd looks",
+      (dir) => {
+        const sb = withServiceNode(sandbox({ systemd: true }), dir);
+        expect(run(sb, ["install"]).status).toBe(0);
+        expect(env(sb).split("\n")).toContain(DRIVES);
+      },
+    );
+
+    it("names no drives, copies nothing and says what brings them when no node is there for the module", () => {
+      const sb = sandbox({ systemd: true });
+      writeFileSync(join(sb.boxDir, ".env"), `${DRIVES}\n`);
+      mkdirSync(join(sb.root, "bin"), { recursive: true });
+      symlinkSync(process.execPath, join(sb.root, "bin/node"));
+      const r = run(sb, ["install"]);
+      expect(r.status).toBe(0);
+      expect(env(sb)).toMatch(/^WAITRON_BOX_SOCKET_DIR=\/run\/waitron-box$/m);
+      expect(env(sb)).not.toContain("WAITRON_BOX_DRIVES_MOUNT");
+      expect(existsSync(storage(sb))).toBe(false);
+      expect(r.stderr).toContain(CANNOT);
+      expect(r.stderr).toContain("checked upgrade");
+      expect(r.stdout).not.toContain("Waitron can see USB drives");
+    });
+
+    it("a failure on the last module leaves the previous set whole and names no drives", () => {
+      const sb = withServiceNode(sandbox({ systemd: true }));
+      expect(run(sb, ["install", "first-ref"]).status).toBe(0);
+      const before = readlinkSync(storage(sb));
+      const last = MODULES.at(-1);
+      const r = run(sb, ["install", "second-ref"], {
+        WT_INSTALL_FAIL: `/${last}`,
+        WT_REF_SHA: SECOND,
+      });
+      expect(r.status, r.stderr).toBe(0);
+      expect(readlinkSync(storage(sb))).toBe(before);
+      for (const module of MODULES) {
+        expect(readFileSync(join(storage(sb), module), "utf8")).toBe(source("first-ref", module));
+      }
+      expect(sets(sb)).toEqual([before, "storage"].sort());
+      expect(env(sb)).not.toContain("WAITRON_BOX_DRIVES_MOUNT");
+      expect(r.stderr).toContain(CANNOT);
+    });
+
+    it("a later install switches to the whole new set and removes the set replaced before it", () => {
+      const sb = withServiceNode(sandbox({ systemd: true }));
+      expect(run(sb, ["install", "first-ref"]).status).toBe(0);
+      const first = readlinkSync(storage(sb));
+      expect(run(sb, ["install", "second-ref"], { WT_REF_SHA: SECOND }).status).toBe(0);
+      const second = readlinkSync(storage(sb));
+      expect(second).not.toBe(first);
+      for (const module of MODULES) {
+        expect(readFileSync(join(storage(sb), module), "utf8")).toBe(source(SECOND, module));
+      }
+      expect(sets(sb)).toEqual([first, second, "storage"].sort());
+      expect(run(sb, ["install", "third-ref"], { WT_REF_SHA: THIRD }).status).toBe(0);
+      expect(sets(sb)).toEqual([second, readlinkSync(storage(sb)), "storage"].sort());
+      expect(env(sb).split("\n")).toContain(DRIVES);
+    });
+
+    it("names no drives when the socket will not start", () => {
+      const sb = withServiceNode(sandbox({ systemd: true, boxEnableFail: true }));
+      writeFileSync(join(sb.boxDir, ".env"), `${DRIVES}\n`);
+      expect(run(sb, ["install"]).status).toBe(0);
+      expect(env(sb)).not.toContain("WAITRON_BOX_DRIVES_MOUNT");
+      expect(existsSync(storage(sb))).toBe(false);
+    });
+
+    it("names no drives on a host without systemd", () => {
+      const sb = withServiceNode(sandbox());
+      writeFileSync(join(sb.boxDir, ".env"), `${DRIVES}\n`);
+      expect(run(sb, ["install"]).status).toBe(0);
+      expect(env(sb)).not.toContain("WAITRON_BOX_DRIVES_MOUNT");
+    });
+
+    it("keeps the clock service but names no drives, and says so, when a module cannot be fetched", () => {
+      const sb = withServiceNode(sandbox({ systemd: true }));
+      writeFileSync(join(sb.boxDir, ".env"), `${DRIVES}\n`);
+      const r = run(sb, ["install"], { WT_DRIVER_MISSING: "/scripts/box/wifi-record.mjs" });
+      expect(r.status).toBe(0);
+      expect(env(sb)).toMatch(/^WAITRON_BOX_SOCKET_DIR=\/run\/waitron-box$/m);
+      expect(env(sb)).not.toContain("WAITRON_BOX_DRIVES_MOUNT");
+      expect(existsSync(storage(sb))).toBe(false);
+      expect(r.stderr).toContain(CANNOT);
+    });
   });
 
   it("installs nothing, and names no socket, on a host without systemd", () => {

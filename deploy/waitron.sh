@@ -405,6 +405,12 @@ BOX_LIB_DIR="${WAITRON_TEST_HOST_ROOT:-}/usr/local/lib/waitron"
 BOX_UNIT_DIR="${WAITRON_TEST_HOST_ROOT:-}/etc/systemd/system"
 BOX_GROUP=waitron-box
 BOX_GID=10001
+# storage-host.mjs and every module it imports, and nothing else.
+BOX_STORAGE_MODULES="storage-host.mjs host-protocol.mjs name-tag.mjs upgrades/contracts.mjs wifi-boot-copy.mjs disk-key.mjs wifi-record.mjs"
+# A link to the folder holding the set, kept apart from the modules other host code imports.
+BOX_STORAGE="$WAITRON_HOST_DIR/box/storage"
+# systemd's PATH for a service (systemd-path search-binaries-default, systemd 257 on Debian 13).
+SERVICE_PATH_DIRS="/usr/local/sbin /usr/local/bin /usr/sbin /usr/bin"
 box_group_refusal() {
   local by_name by_gid
   by_name="$(getent group "$BOX_GROUP" || true)"
@@ -417,21 +423,24 @@ box_group_refusal() {
   fi
 }
 install_box_service() {
-  local ref="$1" refusal tmp socket_changed=no
+  local ref="$1" refusal tmp node socket_changed=no
   local cannot="so Waitron cannot set this machine's clock itself when a confirmed time shows it is wrong, or see whether it keeps internet time, so at every start a box that files invoices takes no payment until two tills or handhelds that are switched on and connected agree with its clock or someone confirms it"
   if [ ! -d "$SYSTEMD_RUN_DIR" ]; then
     env_unset WAITRON_BOX_SOCKET_DIR
+    env_unset WAITRON_BOX_DRIVES_MOUNT
     echo "waitron.sh: no systemd on this host, so the box's clock service is not installed — $cannot"
     return 0
   fi
   refusal="$(box_group_refusal)"
   if [ -n "$refusal" ]; then
     env_unset WAITRON_BOX_SOCKET_DIR
+    env_unset WAITRON_BOX_DRIVES_MOUNT
     echo "waitron.sh: did not install the box's clock service — $refusal; $cannot" >&2
     return 0
   fi
   if ! tmp="$(mktemp -d "$WAITRON_DIR/waitron-box.XXXXXX")"; then
     env_unset WAITRON_BOX_SOCKET_DIR
+    env_unset WAITRON_BOX_DRIVES_MOUNT
     echo "waitron.sh: could not set up the box's clock service — could not create a temp folder in $WAITRON_DIR; $cannot" >&2
     return 0
   fi
@@ -449,11 +458,70 @@ install_box_service() {
     && { [ "$socket_changed" = no ] || as_root systemctl restart waitron-box.socket; }; then
     env_set WAITRON_BOX_SOCKET_DIR /run/waitron-box
     echo "waitron.sh: installed the box's clock service, so Waitron can set this machine's clock from a confirmed time"
+    if ! node="$(storage_node)"; then
+      env_unset WAITRON_BOX_DRIVES_MOUNT
+      echo "waitron.sh: found no Node.js where the box's host service looks for one (systemd's service path, or $WAITRON_HOST_DIR/node-v26.7.0), so Waitron cannot see USB drives plugged into this machine; running waitron.sh install again once the box is running makes a checked upgrade, which keeps Node.js for the module" >&2
+    elif install_storage_modules "$ref" "$tmp" "$node"; then
+      env_set WAITRON_BOX_DRIVES_MOUNT /run/waitron-drives:/run/waitron-drives:ro,rslave
+      echo "waitron.sh: installed the box's USB drive module, so Waitron can see USB drives plugged into this machine"
+    else
+      env_unset WAITRON_BOX_DRIVES_MOUNT
+      echo "waitron.sh: could not install the box's USB drive module, so Waitron cannot see USB drives plugged into this machine; the next install tries again" >&2
+    fi
   else
     env_unset WAITRON_BOX_SOCKET_DIR
+    env_unset WAITRON_BOX_DRIVES_MOUNT
     echo "waitron.sh: could not set up the box's clock service — $cannot" >&2
   fi
   rm -rf "$tmp"
+}
+
+# What waitron-box.sh runs the module with under systemd: a node on the service's PATH, or the
+# runtime a checked upgrade keeps.
+storage_node() {
+  local dir
+  for dir in $SERVICE_PATH_DIRS; do
+    if [ -x "${WAITRON_TEST_HOST_ROOT:-}$dir/node" ]; then printf '%s' "${WAITRON_TEST_HOST_ROOT:-}$dir/node"; return 0; fi
+  done
+  [ -x "$HOST_NODE" ] && printf '%s' "$HOST_NODE"
+}
+
+# The new set goes into a folder of its own, and a link to it is renamed over $BOX_STORAGE, so a
+# request finds the whole old set or the whole new one. A replaced set is removed only at the next
+# install, because a request that began before the switch may still be loading from it.
+install_storage_modules() {
+  local ref="$1" tmp="$2" node="$3" module active="" old stage
+  mkdir "$tmp/storage" || return 1
+  for module in $BOX_STORAGE_MODULES; do
+    fetch "${RAW_BASE}/${ref}/scripts/box/${module}" "$tmp/storage/${module##*/}" || return 1
+  done
+  as_root install -d -m 0755 -o root -g root "$WAITRON_HOST_DIR/box" || return 1
+  if [ -L "$BOX_STORAGE" ]; then active="$(readlink -- "$BOX_STORAGE")"; fi
+  for old in "$WAITRON_HOST_DIR"/box/.storage.*; do
+    if [ -e "$old" ] || [ -L "$old" ]; then
+      [ "${old##*/}" = "$active" ] || as_root rm -rf -- "$old"
+    fi
+  done
+  stage="$(as_root mktemp -d "$WAITRON_HOST_DIR/box/.storage.XXXXXX")" || return 1
+  if as_root chmod 0755 "$stage" \
+    && stage_storage_modules "$tmp/storage" "$stage" \
+    && as_root ln -s -- "${stage##*/}" "$stage.link" \
+    && as_root "$node" -e 'require("node:fs").renameSync(process.argv[1], process.argv[2])' \
+      "$stage.link" "$BOX_STORAGE"; then
+    return 0
+  fi
+  as_root rm -rf -- "$stage" "$stage.link"
+  return 1
+}
+
+stage_storage_modules() {
+  local from="$1" to="$2" module
+  for module in $BOX_STORAGE_MODULES; do
+    if [ "${module%/*}" != "$module" ]; then
+      as_root install -d -m 0755 -o root -g root "$to/${module%/*}" || return 1
+    fi
+    as_root install -m 0644 -o root -g root "$from/${module##*/}" "$to/$module" || return 1
+  done
 }
 
 # A release tag is v and isReleaseVersion's form (packages/shared/src/built-release.ts).
