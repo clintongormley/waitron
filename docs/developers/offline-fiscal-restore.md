@@ -122,14 +122,16 @@ field. The restart stages the node credential separately from the public request
 key against the selected database and rereads current outside evidence before activation.
 
 If you use the operator CLI instead, stop the app first and supply the same override to
-`docker compose run`. Set `WAITRON_NODE_RECOVERY_KEY` and, for a local archive,
-`WAITRON_BACKUP_RECOVERY_KEY` privately in your shell. Export no secret as a command argument.
+`docker compose run`. Set `WAITRON_MASTER_KEY` privately in your shell: for a backup file the same
+master key opens the file and authorises the recovery. Instead of the variable, you can mount a
+file holding the key, or the recovery pack PDF that holds it, and name it with
+`--master-key-file <path>`; giving both is refused. Never put the key itself on the command line.
 Keep `operation.json` in the public directory and mount the selected archive read-only:
 
 ```sh
 docker compose -f compose.yml -f recovery.override.yml stop app
 docker compose -f compose.yml -f recovery.override.yml run --rm --no-deps \
-  -e WAITRON_NODE_RECOVERY_KEY -e WAITRON_BACKUP_RECOVERY_KEY \
+  -e WAITRON_MASTER_KEY \
   -e WAITRON_RECOVERY_OPERATION_FILE=/outside/operation.json \
   -e WAITRON_ENV=preproduction \
   -v "$PWD/selected-backup.wt:/input/archive.wt:ro" \

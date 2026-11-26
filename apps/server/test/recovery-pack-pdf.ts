@@ -12,16 +12,19 @@ const FONT = new URL("../src/assets/invoice-noto-sans.ttf", import.meta.url);
 export async function recoveryPackPdf(codes: {
   bucketCode: string | null;
   archiveCode: string | null;
+  masterKey?: string;
+  masterKeyName?: string;
 }): Promise<Uint8Array<ArrayBuffer>> {
   const file: RecoveryPackFile = {
     kind: "waitron-recovery-pack",
     version: 2,
     number: 2,
     madeAt: "2026-10-29T17:00:00.000Z",
-    ...codes,
+    bucketCode: codes.bucketCode,
+    archiveCode: codes.archiveCode,
     backupKey: null,
-    masterKey: null,
-    masterKeyName: null,
+    masterKey: codes.masterKey ?? null,
+    masterKeyName: codes.masterKeyName ?? null,
     masterKeyHeldBy: null,
   };
   buildRecoveryPackFile(file);

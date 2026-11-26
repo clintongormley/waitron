@@ -22,7 +22,9 @@ import {
 } from "@waitron/stream";
 import { downloadArchive, type DownloadedArchive } from "./archive-download.js";
 import { decodeArchiveRecoveryPack, type ArchiveRecoveryPack } from "./archive-recovery-pack.js";
+import { readArtifactFileHeader } from "./artifact-cipher-file.js";
 import { DEFAULT_DESTINATION_TIMEOUT_MS } from "./backup-config.js";
+import { openingKeyFor } from "./backup-file-key.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
 import { boundObjectStore } from "./bounded-store.js";
 import { deploymentEnvironment, resolveConfigDir, type DeploymentEnvironment } from "./config.js";
@@ -78,17 +80,21 @@ const FROM_BUCKET = "--from-bucket";
 const CONFIRM_VENUE = "--confirm-venue";
 const FROM_ARCHIVE = "--from-archive";
 const ARCHIVE_KEY = "--archive-key";
+const MASTER_KEY_FILE = "--master-key-file";
 const VALUED_FLAGS: ReadonlySet<string> = new Set([
   FROM_BUCKET,
   CONFIRM_VENUE,
   FROM_ARCHIVE,
   ARCHIVE_KEY,
+  MASTER_KEY_FILE,
 ]);
 const clock = (): Date => new Date();
 
 /**
- * Each restore form collapses these into one message of its own: telling "wrong recovery key" from
- * "corrupt artifact" would hand someone holding a stolen artifact an oracle to guess the recovery key against.
+ * Each restore form words these as one message of its own. A version 1 file names no key, so a
+ * wrong key and a damaged file are not told apart there. A version 2 file's header names its master
+ * key's id, which anyone can compute from a candidate key, and `openingKeyFor` refuses a key that
+ * does not match it before decrypting; a refusal here under a matching key is a damaged file.
  */
 const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
   "recovery.passphrase_invalid",
@@ -101,9 +107,9 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
  * `waitron-restore restore <artifact-path>` restores one backup artifact; `restore --from-bucket
  * <pack-or-kit-file>` rebuilds from the venue's bucket copy instead, and `restore --from-archive
  * <pack-pdf-or-archive-pack-file> --archive-key <name>` downloads one archive and restores it as the
- * first form does. The recovery key comes from
- * `WAITRON_BACKUP_RECOVERY_KEY`, the kit file, the archive pack file or the recovery pack PDF,
- * never argv: an argv element leaks into `ps`.
+ * first form does. A backup file opens with the master key, from `--master-key-file` or
+ * `WAITRON_MASTER_KEY`; a Waitron Cloud copy (version 1) with `WAITRON_BACKUP_RECOVERY_KEY`. No key
+ * is ever taken from argv: an argv element leaks into `ps`.
  *
  * Returns a process exit code: 0 on success, 1 on a failure, 2 on a usage error.
  */
@@ -111,17 +117,21 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   const args = parseArgs(deps.argv);
   if (args === null) {
     deps.out(
-      "usage: waitron-restore restore <artifact-path> [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket <pack-or-kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-archive <pack-pdf-or-archive-pack-file> --archive-key <name> [--confirm-old-box-gone] [--confirm-sole-recovery]",
+      "usage: waitron-restore restore <artifact-path> [--master-key-file <path>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket <pack-or-kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-archive <pack-pdf-or-archive-pack-file> --archive-key <name> [--confirm-old-box-gone] [--confirm-sole-recovery]",
     );
     return 2;
   }
   if ("kitPath" in args) return runBucketRestore(deps, args);
   if ("packPath" in args) return runPackRestore(deps, args);
-  const { artifactPath, oldBoxGone, soleRecovery } = args;
+  const { artifactPath, masterKeyFile, oldBoxGone, soleRecovery } = args;
 
-  const recoveryKey = readVariable(deps.env, "WAITRON_BACKUP_RECOVERY_KEY");
-  if (isUnset(recoveryKey)) {
-    deps.out("WAITRON_BACKUP_RECOVERY_KEY must be set to the backup's recovery key");
+  const masterKey = await readMasterKey(deps, masterKeyFile);
+  if (masterKey === null) return 1;
+  const cloudKey = readVariable(deps.env, "WAITRON_BACKUP_RECOVERY_KEY");
+  if (masterKey === undefined && isUnset(cloudKey)) {
+    deps.out(
+      "restore failed: give the master key: set WAITRON_MASTER_KEY or give --master-key-file (a Waitron Cloud copy opens with WAITRON_BACKUP_RECOVERY_KEY)",
+    );
     return 1;
   }
 
@@ -137,20 +147,33 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
     return 1;
   }
 
-  const resolved = await resolveRestoreTarget(deps);
+  const opening = await fileOpeningKey(artifactPath, masterKey, cloudKey);
+  if ("refused" in opening) {
+    deps.out(opening.refused);
+    return 1;
+  }
+
+  // The master key from a file also authorises the restore, as WAITRON_MASTER_KEY would.
+  const keyed: CommandDeps =
+    masterKeyFile === undefined
+      ? deps
+      : { ...deps, env: { ...deps.env, WAITRON_MASTER_KEY: masterKey } };
+  const resolved = await resolveRestoreTarget(keyed);
   if (typeof resolved === "number") return resolved;
   const { target, hold } = resolved;
   try {
     deps.out(COLD_RESTORE_NOTICE);
     const restored = await restoreArtifact(
-      deps,
+      keyed,
       target,
       artifactPath,
-      recoveryKey,
+      opening.key,
       oldBoxGone,
       soleRecovery,
       {
-        keyDoesNotOpen: "restore failed: wrong recovery key or corrupt artifact",
+        keyDoesNotOpen: opening.underMasterKey
+          ? "restore failed: the backup file is damaged, or was changed after it was made; choose another backup"
+          : "restore failed: wrong recovery key or corrupt artifact",
       },
     );
     if (!restored) return 1;
@@ -218,7 +241,12 @@ const RESTORE_DISK_FULL =
   "restore failed: the disk filled during the restore; free some space and run it again";
 
 type ParsedArgs =
-  | { artifactPath: string; oldBoxGone: boolean; soleRecovery: boolean }
+  | {
+      artifactPath: string;
+      masterKeyFile: string | undefined;
+      oldBoxGone: boolean;
+      soleRecovery: boolean;
+    }
   | {
       kitPath: string;
       confirmedTaxId: string | undefined;
@@ -256,6 +284,8 @@ function parseArgs(argv: readonly string[]): ParsedArgs | null {
   const confirmedTaxId = valued[CONFIRM_VENUE];
   const packPath = valued[FROM_ARCHIVE];
   const archiveKey = valued[ARCHIVE_KEY];
+  const masterKeyFile = valued[MASTER_KEY_FILE];
+  if (masterKeyFile !== undefined && artifactPath === undefined) return null;
   if (packPath !== undefined || archiveKey !== undefined) {
     return packPath !== undefined &&
       archiveKey !== undefined &&
@@ -271,8 +301,79 @@ function parseArgs(argv: readonly string[]): ParsedArgs | null {
       : null;
   }
   return artifactPath !== undefined && confirmedTaxId === undefined
-    ? { artifactPath, oldBoxGone, soleRecovery }
+    ? { artifactPath, masterKeyFile, oldBoxGone, soleRecovery }
     : null;
+}
+
+/**
+ * The master key's text from `--master-key-file` (a text file, or the recovery pack PDF's
+ * `masterKey`) or `WAITRON_MASTER_KEY`; `undefined` when neither is given, `null` once a refusal
+ * is printed. No printed line carries the file's text.
+ */
+async function readMasterKey(
+  deps: CommandDeps,
+  masterKeyFile: string | undefined,
+): Promise<string | undefined | null> {
+  const fromEnv = readVariable(deps.env, "WAITRON_MASTER_KEY");
+  if (masterKeyFile === undefined) return isUnset(fromEnv) ? undefined : fromEnv;
+  if (!isUnset(fromEnv)) {
+    deps.out(
+      "restore failed: give the master key once: --master-key-file or WAITRON_MASTER_KEY, not both",
+    );
+    return null;
+  }
+  let source: Source;
+  try {
+    source = await sourceText(await readFile(masterKeyFile), "masterKey");
+  } catch {
+    deps.out(`cannot read master key file: ${masterKeyFile}`);
+    return null;
+  }
+  if ("refused" in source) {
+    deps.out(source.refused);
+    return null;
+  }
+  return source.text.trim();
+}
+
+/**
+ * The key text the restore opens the file with: a version 2 file's backup key, derived from the
+ * master key; any other file's `WAITRON_BACKUP_RECOVERY_KEY`, as a Waitron Cloud copy needs.
+ * `underMasterKey` says which.
+ */
+async function fileOpeningKey(
+  artifactPath: string,
+  masterKey: string | undefined,
+  cloudKey: string | undefined,
+): Promise<{ key: string; underMasterKey: boolean } | { refused: string }> {
+  const version = await readArtifactFileHeader(artifactPath).then(
+    (header) => header.version,
+    () => undefined,
+  );
+  if (version === 2) {
+    if (masterKey === undefined)
+      return {
+        refused:
+          "restore failed: this backup file opens with the master key; set WAITRON_MASTER_KEY or give --master-key-file",
+      };
+    try {
+      return { key: await openingKeyFor({ artifactPath }, masterKey), underMasterKey: true };
+    } catch (err) {
+      return {
+        refused: hasCode(err as AppError, "promotion.break_glass_invalid")
+          ? sharedRefusal(err)
+          : "restore failed: the backup file is damaged, or was changed after it was made; choose another backup",
+      };
+    }
+  }
+  if (isUnset(cloudKey))
+    return {
+      refused:
+        version === 1
+          ? "restore failed: this file is a Waitron Cloud copy, which opens with its recovery key; set WAITRON_BACKUP_RECOVERY_KEY to it"
+          : "restore failed: this file is not a Waitron backup file, or it is damaged; choose another backup",
+    };
+  return { key: cloudKey, underMasterKey: false };
 }
 
 type RestoreTarget = Pick<
@@ -594,11 +695,13 @@ async function runBucketRestore(
 
 type Source = { text: string } | { refused: string };
 
-const NO_CODE: Record<"bucketCode" | "archiveCode", string> = {
+const NO_CODE: Record<"bucketCode" | "archiveCode" | "masterKey", string> = {
   bucketCode:
     "restore failed: the recovery pack holds no bucket copy code — the box that made the pack had no bucket copy then; give a pack made after the bucket copy was set up, or the recovery kit file",
   archiveCode:
     "restore failed: the recovery pack holds no archive code — the box that made the pack kept no backup archive in a bucket then; give a pack made after archives were set up, or the archive recovery pack file",
+  masterKey:
+    "restore failed: the recovery pack PDF does not hold the master key; give the pack that holds it, or a file with the key",
 };
 
 /**

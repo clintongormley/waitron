@@ -875,7 +875,13 @@ command against it treat that entrypoint differently:
   any bare `docker run` against this image.
 
 - **A restore takes one of three sources.** `restore <backup-file>` restores an encrypted backup
-  file, with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`.
+  file. The file opens with the master key, set in `WAITRON_MASTER_KEY` or given with
+  `--master-key-file <path>`, where `<path>` is a text file holding the key or the venue's
+  recovery pack PDF when it holds the key. Giving both is refused, and the key itself is never a
+  command-line value. A master key that is not the backup's stops the command with
+  `promotion.break_glass_invalid` and the date of the master key the backup needs. A Waitron
+  Cloud copy opens instead with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`; that variable
+  never opens a backup file a box made.
   `restore --from-bucket <pack-or-kit-file>` rebuilds the box from the copy the old box kept in the
   owner's bucket. `<pack-or-kit-file>` is the venue's recovery pack PDF, made with **Make recovery
   pack** on the dashboard's Backups screen, or a recovery kit file saved before the pack replaced
@@ -923,8 +929,8 @@ command against it treat that entrypoint differently:
   `<name>` is the archive's file name as the bucket lists it. This form takes neither a backup
   file, `--from-bucket` nor `--confirm-venue`, and uses the pack's recovery key even when
   `WAITRON_BACKUP_RECOVERY_KEY` is set. An archive file downloaded from the bucket by hand
-  opens with `restore <backup-file>` and its recovery key in
-  `WAITRON_BACKUP_RECOVERY_KEY`. A filing node still needs the separate fiscal recovery inputs.
+  opens with `restore <backup-file>` and the master key. A filing node still needs the separate
+  fiscal recovery inputs.
 
   ```bash
   docker compose run --rm -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \
@@ -940,8 +946,8 @@ command against it treat that entrypoint differently:
   current when the backup was made, and the restored box then answers to that key again, not to a
   master key made after the backup. Keep each older master key until every backup made before its
   replacement has been deleted. When the restored copy contains a key name,
-  `restore.recovery_key_selected` names it. The master key authorises recovery; the separate
-  recovery key opens the backup file.
+  `restore.recovery_key_selected` names it. The same master key opens the backup file and
+  authorises the recovery.
 
   A restore that fails while it writes the backup's secrets or moves its database into place
   leaves the box's database, identity file (`trading.env`) and other secrets as they were. One that
