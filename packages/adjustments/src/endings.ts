@@ -286,7 +286,7 @@ export async function givenBackBy(
         sql`(select value from json_each(${JSON.stringify(endingIds)}))`,
       ),
     );
-  const byEnding = new Map<string, Decimal>();
+  const byEnding = new Map(endingIds.map((id) => [id, NOTHING]));
   for (const row of rows) {
     const back = divideDecimal(
       multiplyDecimal(
@@ -296,7 +296,7 @@ export async function givenBackBy(
       thousandthsToDecimal(row.quantityThen),
       MONEY_SCALE,
     );
-    byEnding.set(row.endingId, addDecimal(byEnding.get(row.endingId) ?? NOTHING, back));
+    byEnding.set(row.endingId, addDecimal(byEnding.get(row.endingId)!, back));
   }
   return byEnding;
 }
@@ -374,6 +374,6 @@ export async function readDiscountNotices(
   return rows.map(({ endingId, ...row }) => ({
     ...row,
     why: row.why as DiscountNoticeWhy,
-    givenBack: givenBack.get(endingId) ?? NOTHING,
+    givenBack: givenBack.get(endingId)!,
   }));
 }

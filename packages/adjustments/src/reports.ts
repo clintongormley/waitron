@@ -1,6 +1,8 @@
-import { and, desc, eq, inArray, lt, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import {
+  adjustmentEndingLines,
   adjustmentEndings,
+  adjustmentLines,
   adjustments,
   workingOrderLines,
   workingOrders,
@@ -17,12 +19,14 @@ import {
   divideDecimal,
   multiplyDecimal,
   rawCentsToDecimal,
+  subtractDecimal,
   thousandthsToDecimal,
   type BusinessDayClock,
   type Decimal,
   ADJUSTMENT_ACTIONS,
   type AdjustmentAction,
 } from "@waitron/shared";
+import { givenBackBy } from "./endings.js";
 import { DEFAULT_ENTRY_PAGE_SIZE, MAX_ENTRY_PAGE_SIZE } from "./entry-pages.js";
 
 /** An inclusive range of the venue's business days, and the clock that places them. */
@@ -287,17 +291,63 @@ function rateOf(reduction: Decimal, sales: Decimal): Decimal | null {
 }
 
 /**
- * What the report reads of each adjustment on the bills opened in the range that has not come off
- * (plan D55), in no order, with the name its reason's most recent row in the range recorded, ended
- * or not.
+ * For each adjustment on the bills opened in the range with an ending, what its endings gave back
+ * ({@link givenBackBy}), or null once no row it took something off is left to give back.
+ */
+async function givenBackOf(tx: Transaction, window: SQL): Promise<Map<string, Decimal | null>> {
+  const endings = await tx
+    .select({ id: adjustmentEndings.id, adjustmentId: adjustmentEndings.adjustmentId })
+    .from(adjustmentEndings)
+    .innerJoin(adjustments, eq(adjustments.id, adjustmentEndings.adjustmentId))
+    .innerJoin(workingOrders, eq(workingOrders.id, adjustments.workingOrderId))
+    .where(window);
+  if (endings.length === 0) return new Map();
+  const ended = [...new Set(endings.map(({ adjustmentId }) => adjustmentId))];
+  const standing = new Set(
+    (
+      await tx
+        .select({ adjustmentId: adjustmentLines.adjustmentId })
+        .from(adjustmentLines)
+        .leftJoin(
+          adjustmentEndingLines,
+          eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id),
+        )
+        .where(
+          and(
+            inArray(
+              adjustmentLines.adjustmentId,
+              sql`(select value from json_each(${JSON.stringify(ended)}))`,
+            ),
+            gt(adjustmentLines.reduction, 0),
+            isNull(adjustmentEndingLines.id),
+          ),
+        )
+    ).map(({ adjustmentId }) => adjustmentId),
+  );
+  const byEnding = await givenBackBy(
+    tx,
+    endings.map(({ id }) => id),
+  );
+  const back = new Map<string, Decimal | null>(
+    ended.map((adjustmentId) => [adjustmentId, standing.has(adjustmentId) ? ZERO : null]),
+  );
+  for (const { id, adjustmentId } of endings) {
+    const sum = back.get(adjustmentId);
+    if (sum != null) back.set(adjustmentId, addDecimal(sum, byEnding.get(id)!));
+  }
+  return back;
+}
+
+/**
+ * What the report reads of each adjustment on the bills opened in the range, less what came off it
+ * (plan D55): one wholly given back is left out. In no order, with the name its reason's most
+ * recent row in the range recorded, ended or not. `nominalValue` is left whole: the totals read it
+ * only for a cancel, which never ends.
  */
 async function readReportRows(tx: Transaction, window: SQL) {
   const rows = await tx
     .select({
-      ended: inArray(
-        adjustments.id,
-        tx.select({ id: adjustmentEndings.adjustmentId }).from(adjustmentEndings),
-      ).mapWith(Boolean),
+      id: adjustments.id,
       action: adjustments.action,
       stage: adjustments.stage,
       reasonId: adjustments.reasonId,
@@ -315,17 +365,19 @@ async function readReportRows(tx: Transaction, window: SQL) {
     .from(adjustments)
     .innerJoin(workingOrders, eq(workingOrders.id, adjustments.workingOrderId))
     .where(window);
-  return rows.flatMap(({ ended, ...row }) =>
-    ended
-      ? []
-      : [
-          {
-            ...row,
-            reduction: centsToDecimal(row.reduction),
-            nominalValue: centsToDecimal(row.nominalValue),
-          },
-        ],
-  );
+  const givenBack = await givenBackOf(tx, window);
+  return rows.flatMap(({ id, ...row }) => {
+    const back = givenBack.get(id);
+    if (back === null) return [];
+    const reduction = centsToDecimal(row.reduction);
+    return [
+      {
+        ...row,
+        reduction: back === undefined ? reduction : subtractDecimal(reduction, back),
+        nominalValue: centsToDecimal(row.nominalValue),
+      },
+    ];
+  });
 }
 
 /**

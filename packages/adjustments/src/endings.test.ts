@@ -502,5 +502,7 @@ describe("the notices a bill answers", () => {
       { workingOrderId: second, givenBack: "1.60" },
       { workingOrderId: first, givenBack: "3.20" },
     ]);
+    const untouched = await seedWorkingOrder(db);
+    expect(await withTransaction(db, (tx) => readDiscountNotices(tx, [untouched]))).toEqual([]);
   });
 });

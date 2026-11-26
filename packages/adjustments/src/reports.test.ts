@@ -1809,6 +1809,53 @@ describe("a comp or discount that came off (plan D55)", () => {
     expect(read.overall).toMatchObject(tally(2, "10.80", "10.18"));
   });
 
+  it("counts a 50% Daily whose Soup's 1.91 alone came off as the Hake's 5.09 that still stands, listing its 7.00", async () => {
+    const alex = await person("Alex");
+    const regular = await seedReason(db);
+    const one = await bill();
+    const rows = {
+      soup: await dailyRow(one.id, "Soup", 382, 382),
+      hake: await dailyRow(one.id, "Hake", 1018, 1018),
+    };
+    const half = await dailyDiscount(
+      one.id,
+      rows,
+      { reason: regular, by: alex, percentBp: 5000, at: "2026-09-15T18:03:00.000Z" },
+      { soup: 191, hake: 509 },
+    );
+    await withTransaction(db, (tx) =>
+      endAdjustment(tx, {
+        adjustmentId: half,
+        workingOrderId: one.id,
+        why: "extras_changed",
+        dishName: "Soup",
+        lineId: rows.soup,
+        lineIds: [rows.soup],
+      }),
+    );
+
+    const read = await report();
+
+    expect(read.overall.byAction.discount_percent).toEqual(tally(1, "5.09", "0.00"));
+    expect(read.overall).toMatchObject(tally(1, "5.09", "0.00"));
+    expect((await entries()).map(({ id, reduction }) => ({ id, reduction }))).toEqual([
+      { id: half, reduction: "7.00" },
+    ]);
+
+    await withTransaction(db, (tx) =>
+      endAdjustment(tx, {
+        adjustmentId: half,
+        workingOrderId: one.id,
+        why: "extras_changed",
+        dishName: "Hake",
+        lineId: rows.hake,
+        lineIds: [rows.hake],
+      }),
+    );
+
+    expect((await report()).overall).toMatchObject(NONE);
+  });
+
   it("still lists all four entries in the drill-down", async () => {
     const day = await twoBills();
 
