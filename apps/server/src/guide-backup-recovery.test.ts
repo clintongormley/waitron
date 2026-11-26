@@ -4,6 +4,17 @@ import { mountGuidePages } from "./guide-pages.js";
 import { GUIDE_PAGES, guideRoot, readGuide } from "./guide-catalogue.js";
 import { renderGuide } from "./guide-markdown.js";
 
+const sections = [
+  "replaced-box",
+  "interrupted-setup",
+  "source",
+  "proof",
+  "series",
+  "resume",
+  "after-recovery",
+  "invoice-conflict",
+];
+
 it.each(["en", "es"])(
   "serves the backup-repair procedure and its matching section links in %s",
   async (language) => {
@@ -13,25 +24,10 @@ it.each(["en", "es"])(
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("text/html");
     const html = await response.text();
-    for (const section of [
-      "interrupted-setup",
-      "source",
-      "proof",
-      "series",
-      "resume",
-      "after-recovery",
-      "invoice-conflict",
-    ])
-      expect(html).toContain(`id="${section}"`);
+    for (const section of sections) expect(html).toContain(`id="${section}"`);
     const markdown = readGuide(guideRoot(), language, "backup-recovery")!;
-    expect(renderGuide(markdown, GUIDE_PAGES).sections.map((section) => section.id)).toEqual([
-      "interrupted-setup",
-      "source",
-      "proof",
-      "series",
-      "resume",
-      "after-recovery",
-      "invoice-conflict",
-    ]);
+    expect(renderGuide(markdown, GUIDE_PAGES).sections.map((section) => section.id)).toEqual(
+      sections,
+    );
   },
 );

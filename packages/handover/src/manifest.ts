@@ -255,6 +255,12 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     treatment: "Not carried: each box retains its own request for its next start",
   },
   {
+    item: "replaced.json",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Each box keeps its own replacement stop",
+  },
+  {
     item: "replaced-reset.json",
     where: "state",
     class: "destination-owned",
