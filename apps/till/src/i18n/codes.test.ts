@@ -1538,10 +1538,10 @@ it("keeps a till on the handover screen while it follows the main server", () =>
 
 it("tells the till why sales are paused during shutdown", () => {
   expect(codeMessage("box.shutdown_in_progress", "en")).toBe(
-    "This box is paused for shutdown. Keep this screen open while the box restarts or shutdown is cancelled.",
+    "This box is paused for shutdown. Keep this screen open until selling resumes.",
   );
   expect(codeMessage("box.shutdown_in_progress", "es")).toBe(
-    "Este servidor está en pausa para apagarse. Deja esta pantalla abierta mientras se reinicia el servidor o se cancela el apagado.",
+    "Este servidor está en pausa para apagarse. Deja esta pantalla abierta hasta que se reanuden las ventas.",
   );
 });
 

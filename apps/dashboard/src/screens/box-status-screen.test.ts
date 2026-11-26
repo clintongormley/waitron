@@ -143,9 +143,13 @@ it("shows that the box can be switched off only when the shutdown check is ready
   const open = q(el, '[data-test="box-shutdown"]');
   expect(open).not.toBeNull();
   await userEvent.click(open!);
+  const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
+  expect(text(confirm.closest("wt-dialog"))).toContain(
+    "If you haven’t set a password, set one in Account settings before you continue.",
+  );
   const ready = t("box_status.shutdown.ready");
   expect(text(el.shadowRoot as unknown as Element)).not.toContain(ready);
-  await userEvent.click(q(el, '[data-test="box-shutdown-confirm"]')!);
+  await userEvent.click(confirm);
   await vi.waitFor(() => expect(startBoxShutdown).toHaveBeenCalledOnce());
   getBoxHealth.mockResolvedValue(health({ shutdown: { phase: "ready", available: true } }));
   api.liveData.refresh();
