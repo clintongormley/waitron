@@ -452,8 +452,9 @@ export class TillGiveBackUnderWay extends LitElement {
       ${hint ? html`<p class="muted" data-hint=${name}>${hint}</p>` : nothing}
     </div>`;
   }
-  /** Whether the box refuses fresh money back now: it refuses as filing does, but not over a
-   * refusal Finish closes the correction over. */
+  /** Whether the filing refusal shown is one the box also refuses fresh money back over: any
+   * refusal Finish cannot close over. With none shown (nothing back yet, or a refund waiting) it
+   * bars nothing, and the box may still refuse. */
   #barred(): boolean {
     const { fileNow } = this.correction;
     return fileNow !== null && "refusal" in fileNow && !fileNow.closable;

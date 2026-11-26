@@ -1492,13 +1492,13 @@ it.each([
   },
 );
 
-it("tells staff the receipt waits for the advance's open money back, naming the advance, to finish or stop it as it offers", () => {
+it("tells staff the receipt waits for the advance's open money back, naming the advance, to finish, stop or cancel it", () => {
   const advance = { invoiceNumber: "A/12" };
   expect(codeMessage("advance.correction_open", "en", advance)).toBe(
-    "The receipt cannot be issued while money back on the payment on account A/12 is under way. In Give money back on that ticket, finish or stop the money back as it offers, then try again.",
+    "The receipt cannot be issued while money back on the payment on account A/12 is under way. In Give money back on that ticket, finish, stop or cancel the money back; if it offers none of these, follow what it says. Then try again.",
   );
   expect(codeMessage("advance.correction_open", "es", advance)).toBe(
-    "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta A/12. En Devolver dinero de ese ticket, termina o para la devolución según ofrezca y vuelve a intentarlo.",
+    "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta A/12. En Devolver dinero de ese ticket, termina, para o anula la devolución; si no ofrece nada de esto, sigue lo que indica. Después vuelve a intentarlo.",
   );
   expect(codeMessage("advance.correction_open", "en")).toMatch(
     /while money back on the payment on account is under way\. /,

@@ -1064,10 +1064,10 @@ describe("a money back left unfinished", () => {
   it("says how much went back and how to finish it on a till", () => {
     const params = { correctionId: "c1", saleId: "s1", moneyBack: "24.20" };
     expect(alertMessage("invoice_correction.unfinished", params, "en")).toBe(
-      "€24.20 went back to a customer over an hour ago, but that money back is not finished, so its corrective receipt has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish to issue it for what has gone back. If it offers none of these, follow what it says, then press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
+      "€24.20 went back to a customer over an hour ago, but that money back is not finished, so its corrective receipt has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish to issue it for what has gone back. If none of these can be pressed, follow what it says, then press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
     );
     expect(alertMessage("invoice_correction.unfinished", params, "es")).toBe(
-      "Hace más de una hora se devolvieron 24,20 € a un cliente, pero esa devolución no está terminada, así que no se ha emitido su ticket rectificativo. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar para emitirlo por lo devuelto. Si no ofrece nada de esto, sigue lo que indica y pulsa allí Comprobar de nuevo. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
+      "Hace más de una hora se devolvieron 24,20 € a un cliente, pero esa devolución no está terminada, así que no se ha emitido su ticket rectificativo. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar para emitirlo por lo devuelto. Si no se puede pulsar ninguna de estas opciones, sigue lo que indica y pulsa allí Comprobar de nuevo. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
     );
   });
 });
@@ -1094,10 +1094,10 @@ describe("a money back on a full invoice", () => {
 
   it("names its corrective invoice when left unfinished", () => {
     expect(alertMessage("invoice_correction.unfinished", params, "en")).toBe(
-      "€24.20 went back to a customer over an hour ago, but that money back is not finished, so its corrective invoice has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish to issue it for what has gone back. If it offers none of these, follow what it says, then press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
+      "€24.20 went back to a customer over an hour ago, but that money back is not finished, so its corrective invoice has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish to issue it for what has gone back. If none of these can be pressed, follow what it says, then press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
     );
     expect(alertMessage("invoice_correction.unfinished", params, "es")).toBe(
-      "Hace más de una hora se devolvieron 24,20 € a un cliente, pero esa devolución no está terminada, así que no se ha emitido su factura rectificativa. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar para emitirla por lo devuelto. Si no ofrece nada de esto, sigue lo que indica y pulsa allí Comprobar de nuevo. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
+      "Hace más de una hora se devolvieron 24,20 € a un cliente, pero esa devolución no está terminada, así que no se ha emitido su factura rectificativa. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar para emitirla por lo devuelto. Si no se puede pulsar ninguna de estas opciones, sigue lo que indica y pulsa allí Comprobar de nuevo. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
     );
   });
 

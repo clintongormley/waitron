@@ -727,8 +727,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Primero devuelve dinero con Devolver dinero en {receipt}: devuelve dinero pagado en {it}. Cuando no quede nada pagado en {it}, Devolver dinero en este ticket devuelve el resto.",
   },
   "advance.correction_open": {
-    en: "The receipt cannot be issued while money back on the payment on account{invoiceNumber} is under way. In Give money back on that ticket, finish or stop the money back as it offers, then try again.",
-    es: "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta{invoiceNumber}. En Devolver dinero de ese ticket, termina o para la devolución según ofrezca y vuelve a intentarlo.",
+    en: "The receipt cannot be issued while money back on the payment on account{invoiceNumber} is under way. In Give money back on that ticket, finish, stop or cancel the money back; if it offers none of these, follow what it says. Then try again.",
+    es: "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta{invoiceNumber}. En Devolver dinero de ese ticket, termina, para o anula la devolución; si no ofrece nada de esto, sigue lo que indica. Después vuelve a intentarlo.",
   },
   "tender.refund_unavailable": {
     en: "This payment cannot be refunded here. Reload the transaction and check its payments",
