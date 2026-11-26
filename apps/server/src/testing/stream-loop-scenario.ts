@@ -3,7 +3,8 @@
 // installation number and chain, streams into a generation of its own and moves the pointer, and a
 // restore of B's generation holds exactly what B's database holds; given versitygw, B then adds a
 // spare (`stream-loop-spare.ts`). `stream-loop.e2e.test.ts` runs it against versitygw; `aws-stream-loop.aws-rehearsal.test.ts` against Amazon S3, by opt-in only.
-import { randomBytes, X509Certificate } from "node:crypto";
+import { X509Certificate } from "node:crypto";
+import { readBackupSettings } from "../backup-env-writer.js";
 import { copyFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -403,15 +404,16 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         });
         expect(proof.status).toBe(204);
         await proof.arrayBuffer();
-        recoveryKey = randomBytes(32).toString("base64");
         const rotated = await fetch(`${origin}/api/backup/rotate`, {
           ...via,
           method: "POST",
           headers,
-          body: JSON.stringify({ recoveryKey }),
+          body: JSON.stringify({ masterKey: nodeSecret }),
         });
         expect(rotated.status).toBe(200);
         await rotated.arrayBuffer();
+        recoveryKey = (await readBackupSettings(dirsA.state))!.WAITRON_BACKUP_RECOVERY_KEY!;
+        expect(recoveryKey).not.toBe(RECOVERY_KEY);
         pointerA = await waitFor("the rotated generation's pointer", POINTER_WAIT_MS, async () => {
           const read = await readPointer(store, streamId);
           return read !== null && read.pointer.body.generation !== originalGeneration

@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { codeOf } from "@waitron/server-kit";
 import { AppError, isAppError, readVariable } from "@waitron/shared";
 import { type ArchiveSettings } from "./archive-settings.js";
@@ -72,11 +71,6 @@ export function checkedNewRecoveryKey(recoveryKey: string | undefined): string |
 /** The recovery key without requiring an archive destination. Unset or empty is `undefined`. */
 export function loadRecoveryKey(env: Env): string | undefined {
   return checkedRecoveryKey(readVariable(env, "WAITRON_BACKUP_RECOVERY_KEY"));
-}
-
-/** A new recovery key: 32 random bytes, base64url. */
-export function mintRecoveryKey(): string {
-  return randomBytes(32).toString("base64url");
 }
 
 /**

@@ -792,7 +792,6 @@ describe("removing the standby this box's pair link names", () => {
         isPrimary: () => true,
 
         readRecoveryKey: async () => "recovery-key-one-strong",
-        writeRecoveryKey: async () => {},
         sealedState: { refresh: async () => "sealed" as const },
         probe: async () => ({ ok: true as const }),
         prepareEncryption: async () => ({ ok: true as const }),

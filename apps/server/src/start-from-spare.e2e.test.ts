@@ -29,7 +29,7 @@ import {
   SPARE_SPACE_FILE,
   SPARE_SPACE_RELEASED_FILE,
 } from "@waitron/provisioning";
-import { mintRecoveryKey } from "./backup-config.js";
+import { USABLE_RECOVERY_KEY } from "./testing/recovery-key.js";
 import { backupArchiveKey } from "./backup-keys.js";
 import { writeBackupRoomNote } from "./backup-room-note.js";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
@@ -308,7 +308,7 @@ describe("a box started from its spare file", () => {
     onTestFinished(() => rmSync(folder, { recursive: true, force: true }));
     writeFileSync(
       join(box.stateDir, "backup.env"),
-      `WAITRON_BACKUP_RECOVERY_KEY=${mintRecoveryKey()}\n`,
+      `WAITRON_BACKUP_RECOVERY_KEY=${USABLE_RECOVERY_KEY}\n`,
     );
     const now = Date.now();
     const daysAgo = (n: number) => new Date(now - n * 86_400_000);

@@ -556,7 +556,7 @@ import {
 } from "./stream-host.js";
 import { mountStreamApi, settingsBucketProbe } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
-import { replaceBackupSettings, writeRecoveryKey } from "./backup-env-writer.js";
+import { replaceBackupSettings } from "./backup-env-writer.js";
 import {
   createS3ObjectStore,
   parseRecoveryKit,
@@ -4379,8 +4379,6 @@ async function bootServer(
       isPrimary: () => holders.singletonRole.current === "primary",
 
       readRecoveryKey,
-      writeRecoveryKey: (recoveryKey) =>
-        writeRecoveryKey(config.stateDir, { recoveryKey, keyRotatedAt: undefined }),
       sealedState,
       probe: settingsBucketProbe,
       prepareEncryption: (bucket, signal) => prepareBucketEncryption(bucket, undefined, { signal }),

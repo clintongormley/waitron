@@ -25,7 +25,9 @@ import { seedTaxpayers, TAXPAYER_A, TAXPAYER_B } from "@waitron/fiscal-verifactu
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { writeArchiveSettings } from "./archive-settings.js";
-import { writeRecoveryKey } from "./backup-env-writer.js";
+import { writeBackupKey } from "./backup-env-writer.js";
+import { HELD_BACKUP_KEY } from "./testing/recovery-key.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import type { StartedServer } from "./boot.js";
 import type { Turns } from "./backup-turns.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
@@ -121,6 +123,7 @@ async function seedVenueWithBackupSettings(): Promise<void> {
 
 it("makes a pack over the real TLS listener, drawn with the production font, that the readers accept, and the status follows a key rotation", async () => {
   await seedVenueWithBackupSettings();
+  const master = await mintMasterKey(suite.db);
   const { token } = await openManagementSession(suite.db, "admin");
   await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
   const cookie = `waitron_management_session=${token}`;
@@ -130,9 +133,10 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
   try {
     await copyMigrationsRoot(join(scratch, "migrations"));
     await seedModuleSettings(suite.db, { "fiscal-none": false });
-    await writeRecoveryKey(scratch, {
-      recoveryKey: KEY,
-      keyRotatedAt: "2026-09-20T08:00:00.000Z",
+    await writeBackupKey(scratch, {
+      ...HELD_BACKUP_KEY,
+      key: KEY,
+      rotatedAt: "2026-09-20T08:00:00.000Z",
     });
     await ensureBoxSecrets({ stateDir: scratch, hostnames: ["localhost"], now: () => new Date() });
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
@@ -206,7 +210,7 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
         ...via,
         method: "POST",
         headers: json,
-        body: JSON.stringify({ recoveryKey: "a-new-recovery-key-after-the-pack" }),
+        body: JSON.stringify({ masterKey: master.secret }),
       });
       expect(rotated.status).toBe(200);
       // The make waited in the same queue as the backup API's key change.
@@ -242,9 +246,10 @@ it("Make a new master key over the real listener changes no series counter and n
   try {
     await copyMigrationsRoot(join(scratch, "migrations"));
     await seedModuleSettings(suite.db, { "fiscal-none": false });
-    await writeRecoveryKey(scratch, {
-      recoveryKey: KEY,
-      keyRotatedAt: "2026-09-20T08:00:00.000Z",
+    await writeBackupKey(scratch, {
+      ...HELD_BACKUP_KEY,
+      key: KEY,
+      rotatedAt: "2026-09-20T08:00:00.000Z",
     });
     await ensureBoxSecrets({ stateDir: scratch, hostnames: ["localhost"], now: () => new Date() });
     await mkdir(join(scratch, "module-records"), { recursive: true });

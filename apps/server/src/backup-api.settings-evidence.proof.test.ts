@@ -19,6 +19,7 @@ import { AppError } from "@waitron/shared";
 import {
   deleteCredential,
   loadKeyRing,
+  makeMasterKey,
   venueCredentials,
   type KeyRing,
 } from "@waitron/credentials";
@@ -36,14 +37,16 @@ import {
 import { attachRecordMeta } from "./backup-settings-evidence.js";
 import { mountBackupApi, type BackupApiDeps } from "./backup-api.js";
 import { loadBackupSettings, loadRecoveryKey } from "./backup-config.js";
-import { writeRecoveryKey } from "./backup-env-writer.js";
+import { writeBackupKey } from "./backup-env-writer.js";
+import { HELD_BACKUP_KEY } from "./testing/recovery-key.js";
+import { heldBackupKey } from "./testing/backup-key.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { createTurns, type Turns } from "./backup-turns.js";
 import { loadBoxEnv } from "./box-env.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
-import { mountStreamApi } from "./stream-api.js";
 import { STREAM_PURPOSE, writeStreamSettings } from "./stream-host.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
@@ -62,7 +65,8 @@ vi.mock("@waitron/credentials", async (importOriginal) => {
 });
 
 const KEY_1 = "recovery-key-one-strong";
-const KEY_2 = "recovery-key-two-different";
+const MASTER_BYTES = makeMasterKey();
+let MASTER: { secret: string };
 const VENUE = "c0000000-0000-4000-8000-000000000002";
 const ringOf = (byte: number, version: string) =>
   loadKeyRing({
@@ -318,6 +322,7 @@ afterEach(async () => {
 describe("GET /api/backup/settings-evidence proofs", () => {
   beforeAll(async () => {
     await setupVenue();
+    MASTER = await mintMasterKey(suite.db, { bytes: MASTER_BYTES });
   }, 180_000);
 
   describe("changes nothing", () => {
@@ -326,7 +331,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
         "a clean load",
         async (sc, folder) => {
           await write(folderSettings(folder));
-          await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+          await writeBackupKey(sc.stateDir, { ...HELD_BACKUP_KEY, key: KEY_1 });
           return {};
         },
       ],
@@ -345,7 +350,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
         "a record this box's key number cannot open",
         async (sc, folder) => {
           await write(folderSettings(folder));
-          await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+          await writeBackupKey(sc.stateDir, { ...HELD_BACKUP_KEY, key: KEY_1 });
           return { ring: ringOf(9, "3") };
         },
       ],
@@ -373,7 +378,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
       const folder = destDir();
       await write(folderSettings(folder));
       const sc = await scenario({ role: "primary", statusReadTimeoutMs: 600_000 });
-      await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+      await writeBackupKey(sc.stateDir, { ...HELD_BACKUP_KEY, key: KEY_1 });
       const sup = makeSupervisor(sc);
       await sup.reload();
       let looking!: () => void;
@@ -418,7 +423,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     await write(folderSettings(folder));
     const before = (await readArchiveSettingsWithMeta(suite.db, RING)).meta!;
     const sc = await scenario({ role: "primary", statusReadTimeoutMs: 600_000 });
-    await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+    await writeBackupKey(sc.stateDir, { ...HELD_BACKUP_KEY, key: KEY_1 });
     const sup = makeSupervisor(sc);
     await sup.reload();
     let looking!: () => void;
@@ -469,9 +474,9 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     }
   }, 60_000);
 
-  describe("after the bucket copy's key write, which paths turn backups on", () => {
-    /** An enabled record, no recovery key, then the bucket copy's Save through its real route. */
-    async function keyWrittenByBucketCopy() {
+  describe("after a key is written behind the loaded settings, which paths turn backups on", () => {
+    /** An enabled record, no recovery key, then backup key 1 written as setup writes it. */
+    async function keyWrittenBehindSupervisor() {
       const folder = destDir();
       await write(folderSettings(folder));
       const sc = await scenario({ role: "primary" });
@@ -481,40 +486,8 @@ describe("GET /api/backup/settings-evidence proofs", () => {
         enabled: false,
         loadErrorCode: "backup.recovery_key_missing",
       });
-      const turns = createTurns();
-      const app = buildApp(sup, sc, { turns });
-      // Wired as boot wires it.
-      mountStreamApi(
-        app,
-        {
-          db: suite.db,
-          node: suite.node,
-          nodeId: "00000000-0000-0000-0000-000000000000",
-          ring: RING,
-          stream: { reload: async () => {}, status: () => ({ state: "off" }) },
-          isPrimary: () => true,
-
-          readRecoveryKey: readKey(sc),
-          writeRecoveryKey: (recoveryKey) =>
-            writeRecoveryKey(sc.stateDir, { recoveryKey, keyRotatedAt: undefined }),
-          sealedState: { refresh: async () => "sealed" },
-          probe: async () => ({ ok: true }),
-          prepareEncryption: async () => ({ ok: true }),
-          turns,
-        },
-        capture(sc),
-      );
-      const copy = await app.request("/api/backup/stream", {
-        method: "PUT",
-        headers: { cookie: cookies.manager, "content-type": "application/json" },
-        body: JSON.stringify({
-          region: "eu-west-1",
-          bucket: "venue-copy",
-          accessKeyId: COPY_ACCESS_KEY,
-          secretAccessKey: COPY_SECRET,
-        }),
-      });
-      expect(copy.status).toBe(200);
+      const app = buildApp(sup, sc);
+      await writeBackupKey(sc.stateDir, heldBackupKey(MASTER_BYTES, 1));
       expect(await readKey(sc)()).toEqual(expect.any(String));
       expect(sup.current().enabled).toBe(false);
       // Read again finds the record readable and the key usable, and still turns nothing on.
@@ -527,14 +500,14 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     }
 
     it("a recovery-key replacement (rotate) turns them on", async () => {
-      const { sup, app } = await keyWrittenByBucketCopy();
-      const res = await post(app, "/api/backup/rotate", { recoveryKey: KEY_2 });
+      const { sup, app } = await keyWrittenBehindSupervisor();
+      const res = await post(app, "/api/backup/rotate", { masterKey: MASTER.secret });
       expect(res.status).toBe(200);
       expect(sup.current()).toMatchObject({ enabled: true, loadErrorCode: null });
     }, 60_000);
 
     it("a Save (apply) turns them on", async () => {
-      const { sup, app } = await keyWrittenByBucketCopy();
+      const { sup, app } = await keyWrittenBehindSupervisor();
       const res = await post(app, "/api/backup/apply", {
         destinations: [{ kind: "local-fs", dir: destDir() }],
         schedule: DAILY,
@@ -545,7 +518,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     }, 60_000);
 
     it("a restart (a fresh supervisor's reload) turns them on", async () => {
-      const { sc, sup } = await keyWrittenByBucketCopy();
+      const { sc, sup } = await keyWrittenBehindSupervisor();
       await sup.stop();
       const fresh = makeSupervisor(sc);
       await fresh.reload();
@@ -583,7 +556,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     const sc = await scenario({
       readRecord: () => Promise.reject(failures.shift() ?? new Error("no more failures")),
     });
-    await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+    await writeBackupKey(sc.stateDir, { ...HELD_BACKUP_KEY, key: KEY_1 });
     const sup = makeSupervisor(sc);
     await sup.reload();
     await sup.reload();
@@ -631,7 +604,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
       }),
     );
     const sc = await scenario();
-    await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+    await writeBackupKey(sc.stateDir, { ...HELD_BACKUP_KEY, key: KEY_1 });
     const sup = makeSupervisor(sc);
     await sup.reload();
     const app = buildApp(sup, sc);
@@ -652,7 +625,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
       destinations: [{ kind: "s3", id: "bucket", bucket: BUCKET }],
     });
     const sc = await scenario();
-    await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+    await writeBackupKey(sc.stateDir, { ...HELD_BACKUP_KEY, key: KEY_1 });
     const sup = makeSupervisor(sc);
     await sup.reload();
     const app = buildApp(sup, sc);

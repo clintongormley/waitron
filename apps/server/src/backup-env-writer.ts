@@ -77,23 +77,6 @@ export async function writeBackupKey(
   }));
 }
 
-/** Sets a key that is no backup key of a master key, so the file's number and id are dropped. */
-export async function writeRecoveryKey(
-  stateDir: string,
-  input: { recoveryKey: string; keyRotatedAt: string | undefined },
-): Promise<void> {
-  await mergeBackupSettings(stateDir, (existing) => {
-    const record: Record<string, string> = {
-      ...existing,
-      WAITRON_BACKUP_RECOVERY_KEY: input.recoveryKey,
-    };
-    delete record.WAITRON_BACKUP_KEY_NUMBER;
-    delete record.WAITRON_BACKUP_MASTER_KEY_ID;
-    if (input.keyRotatedAt !== undefined) record.WAITRON_BACKUP_KEY_ROTATED_AT = input.keyRotatedAt;
-    return record;
-  });
-}
-
 export type BackupSettingsCheck =
   | { ok: true; settings: Record<string, string> }
   | { ok: false; reason: "shape" | "name" | "value" | "control_char" | "round_trip" };

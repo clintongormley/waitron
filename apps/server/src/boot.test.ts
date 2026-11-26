@@ -121,7 +121,7 @@ import { createHourTestClock } from "./testing/hour-test-clock.js";
 import { DEVICE_CLOCK_HEADER, DEV_DEVICE_HEADER } from "./device-session.js";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
-import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
+import { WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { freePort } from "./testing/free-ports.js";
 import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
@@ -3979,7 +3979,7 @@ describe("startServer — what a trading boot wires behind its management routes
       const rotation = fetch(`http://127.0.0.1:${httpPort()}/api/backup/rotate`, {
         method: "POST",
         headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
-        body: JSON.stringify({ recoveryKey: "k".repeat(MIN_RECOVERY_KEY_LENGTH) }),
+        body: JSON.stringify({ masterKey: WRONG_MASTER_KEY }),
       });
       await vi.waitFor(() => expect(backupQueue.started).toBe(started + 1), {
         timeout: POLL_TRIES * POLL_INTERVAL_MS,
@@ -3998,9 +3998,9 @@ describe("startServer — what a trading boot wires behind its management routes
       backupQueue.gate = undefined;
       release();
       const rotationResponse = await rotation;
-      expect(rotationResponse.status).toBe(409);
-      expect(await rotationResponse.json()).toEqual({
-        error: { code: "backup.not_configured", params: {} },
+      expect(rotationResponse.status).toBe(403);
+      expect(await rotationResponse.json()).toMatchObject({
+        error: { code: "master_key.wrong" },
       });
       const switchOffResponse = await switchOff;
       expect(backupQueue.started).toBe(started + 2);

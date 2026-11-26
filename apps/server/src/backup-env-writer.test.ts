@@ -4,13 +4,11 @@ import { readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { assertStorableKey } from "./backup-api.js";
 import {
   assertStorableRecord,
   checkBackupSettings,
   replaceBackupSettings,
   writeBackupKey,
-  writeRecoveryKey,
 } from "./backup-env-writer.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { syncsAndRenames as recordSyncsAndRenames } from "./testing/durable-writes.js";
@@ -33,20 +31,6 @@ function tempDir(): string {
 
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
-});
-
-describe("assertStorableKey", () => {
-  it.each(["needs a space ", "has\nnewline", "tab\tthere", " leading"])("rejects %j", (k) => {
-    expect(() => assertStorableKey(k)).toThrow(/recovery_key_unstorable/);
-  });
-
-  it("accepts a base64url key and round-trips", () => {
-    const k = "abcDEF-_1234567890";
-    expect(() => assertStorableKey(k)).not.toThrow();
-    expect(
-      parseEnvFile(formatEnvFile({ WAITRON_BACKUP_RECOVERY_KEY: k })).WAITRON_BACKUP_RECOVERY_KEY,
-    ).toBe(k);
-  });
 });
 
 describe("assertStorableRecord", () => {
@@ -93,35 +77,6 @@ describe("assertStorableRecord — values the env file would read back different
   });
 });
 
-describe("writeRecoveryKey", () => {
-  it("syncs backup.env before renaming it into place, and the folder after", async () => {
-    const dir = tempDir();
-    const path = join(dir, "backup.env");
-    const events = await syncsAndRenames(() =>
-      writeRecoveryKey(dir, { recoveryKey: "abcDEF-_1234567890", keyRotatedAt: undefined }),
-    );
-    expect(events).toEqual([`sync ${path}.tmp`, `rename ${path}.tmp ${path}`, `sync ${dir}`]);
-  });
-
-  it("drops the backup key number and master key id, which name no key it writes", async () => {
-    const dir = tempDir();
-    await writeFile(
-      join(dir, "backup.env"),
-      formatEnvFile({
-        WAITRON_BACKUP_TEST_FOLDER: "/srv/backups",
-        WAITRON_BACKUP_RECOVERY_KEY: "old-key-0123456789",
-        WAITRON_BACKUP_KEY_NUMBER: "1",
-        WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
-      }),
-    );
-    await writeRecoveryKey(dir, { recoveryKey: "new-key-0123456789", keyRotatedAt: undefined });
-    expect(parseEnvFile(await readFile(join(dir, "backup.env"), "utf8"))).toEqual({
-      WAITRON_BACKUP_TEST_FOLDER: "/srv/backups",
-      WAITRON_BACKUP_RECOVERY_KEY: "new-key-0123456789",
-    });
-  });
-});
-
 const KEY_ONE = {
   key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   keyNumber: 1,
@@ -129,6 +84,13 @@ const KEY_ONE = {
 };
 
 describe("writeBackupKey", () => {
+  it("syncs backup.env before renaming it into place, and the folder after", async () => {
+    const dir = tempDir();
+    const path = join(dir, "backup.env");
+    const events = await syncsAndRenames(() => writeBackupKey(dir, KEY_ONE));
+    expect(events).toEqual([`sync ${path}.tmp`, `rename ${path}.tmp ${path}`, `sync ${dir}`]);
+  });
+
   it("writeBackupKey keeps every other setting, 0600, durable", async () => {
     const dir = tempDir();
     const path = join(dir, "backup.env");
