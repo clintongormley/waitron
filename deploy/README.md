@@ -30,6 +30,7 @@ There is no database server in the app's path, no connection string and no datab
 | `tunnel_control` | `/var/lib/waitron/tunnel` in the app, `/control` in the tunnel companion | the staff socket, peer public key and connection configuration                                                                                                              |
 | `tunnel_keys`    | `/keys` in the tunnel companion only                                     | the box's private WireGuard key                                                                                                                                             |
 | `box_socket`     | `/run/waitron-box`                                                       | nothing: an empty stand-in until `waitron.sh install` names the host's socket folder in `.env`                                                                              |
+| `box_drives`     | `/run/waitron-drives`, read-only                                         | nothing: an empty stand-in until `.env` names the host's USB drive folder                                                                                                   |
 
 A box installed before the box ran its own database server was retired also carries a `waitron_db`
 volume holding that old database. Nothing reads it and nothing on the box removes it, including
@@ -178,6 +179,12 @@ saying Waitron cannot set this machine's clock itself or see whether it keeps in
 every start a box that files invoices takes no payment until two tills or handhelds that are
 switched on and connected agree with its clock or someone confirms it; it removes that `.env` line
 and carries on.
+Once the socket has started, `install` also copies `scripts/box/storage-host.mjs` and the modules it
+imports, and no other host module, from the ref into `/opt/waitron-host/box/` (mode `0644`), and
+writes `WAITRON_BOX_DRIVES_MOUNT=/run/waitron-drives:/run/waitron-drives:ro,rslave` to `.env`, so the
+app's container sees, read-only, the USB drives the host mounts under `/run/waitron-drives`. A
+checked upgrade does the same. When any of these steps fails, or the clock service was not
+installed, it removes that `.env` line, and the app sees no drive.
 `reset` leaves the service and the group alone.
 
 The service runs only when the app asks, and sets the clock only while the system says its clock is
@@ -1015,7 +1022,8 @@ hand. On first installation, `install` records the practice inbox profile in `.e
 listing, pairing, forgetting and printing to Bluetooth printers needs the `WAITRON_PRINT_AGENT_APPARMOR` line `waitron.sh install` writes
 there once it has loaded the profile. Where systemd runs, setting the box's clock needs the
 `WAITRON_BOX_SOCKET_DIR` line `waitron.sh install` writes once the clock service's socket has
-started (see Setting up a box).
+started, and seeing USB drives the `WAITRON_BOX_DRIVES_MOUNT` line it writes after that (see Setting
+up a box).
 The box holds no database credential, because there is no database server to hold one for. Its own secrets, the vault key ring and the CA and leaf
 certificates, are minted on the first setup boot into the `state` volume and never appear here. A
 box restored from a backup brings them back and, at its first trading start, replaces the leaf with

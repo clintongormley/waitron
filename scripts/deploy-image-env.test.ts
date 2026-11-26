@@ -1099,6 +1099,91 @@ describe("the app's mount of the box's clock socket", () => {
   });
 });
 
+describe("the app's view of the box's USB drives", () => {
+  const app = COMPOSE.slice(COMPOSE.indexOf("\n  app:\n"), COMPOSE.indexOf("\n  mailpit:\n"));
+  const BIND = "/run/waitron-drives:/run/waitron-drives:ro,rslave";
+
+  it("binds the drive folder read-only with rslave only when .env names it", () => {
+    expect(app).toMatch(
+      /^ {6}- \$\{WAITRON_BOX_DRIVES_MOUNT:-box_drives:\/run\/waitron-drives:ro\}$/m,
+    );
+    expect(COMPOSE.slice(COMPOSE.indexOf("\nvolumes:\n"))).toMatch(/^ {2}box_drives:$/m);
+    expect(ENV_EXAMPLE).toContain(`\n# WAITRON_BOX_DRIVES_MOUNT=${BIND}\n`);
+    expect(read("deploy/box/build.sh")).toContain(`\\nWAITRON_BOX_DRIVES_MOUNT=${BIND}\\n`);
+    expect(only(WAITRON_SH, /env_set WAITRON_BOX_DRIVES_MOUNT (\S+)/, "drives line")).toBe(BIND);
+  });
+});
+
+describe("the host modules a box carries", () => {
+  const BUILD = read("deploy/box/build.sh");
+  const STATIC = /(?:^|\n)\s*(?:import|export)\s[^;]*?\sfrom\s+"(\.{1,2}\/[^"]+)"/g;
+  const DYNAMIC = /\bawait import\("(\.{1,2}\/[^"]+)"\)/g;
+
+  /** Every module `file` reaches through relative imports, itself included, relative to scripts/box. */
+  function importClosure(file: string): Set<string> {
+    const seen = new Set<string>();
+    const visit = (module: string) => {
+      if (seen.has(module)) return;
+      seen.add(module);
+      const source = read(`scripts/box/${module}`);
+      for (const match of [...source.matchAll(STATIC), ...source.matchAll(DYNAMIC)]) {
+        const target = join("/", module, "..", match[1]!).slice(1);
+        visit(target);
+      }
+    };
+    visit(file);
+    return seen;
+  }
+
+  /** The scripts/box modules build.sh installs into the image's /opt/waitron-host/box. */
+  function imageModules(): Set<string> {
+    const loop = (folder: string) =>
+      only(
+        BUILD,
+        new RegExp(
+          `for module in ([a-z -]+); do\\n\\s+install [^\\n]*"\\$repo/scripts/box/${folder}\\$module\\.mjs"`,
+        ),
+        `${folder || "box"} module loop`,
+      )
+        .split(" ")
+        .map((name) => `${folder}${name}.mjs`);
+    const single = [
+      ...BUILD.matchAll(
+        /install -D -m 0644 "\$repo\/scripts\/box\/([\w/.-]+\.mjs)" "\$root\/opt\/waitron-host\/box\/\1"/g,
+      ),
+    ].map((match) => match[1]!);
+    return new Set([...loop("upgrades/"), ...loop(""), ...single]);
+  }
+
+  it("follows static, re-exported and awaited imports, and not a type named in a comment", () => {
+    expect([...importClosure("network-host.mjs")]).toEqual(
+      expect.arrayContaining(["network-manager.mjs", "network-change.mjs", "upgrades/copy.mjs"]),
+    );
+    expect(importClosure("preboot.mjs")).toEqual(
+      new Set(["preboot.mjs", "disk-state.mjs", "upgrades/contracts.mjs"]),
+    );
+  });
+
+  it("every module build.sh installs has its relative imports installed too", () => {
+    const installed = imageModules();
+    expect(installed).toContain("storage-host.mjs");
+    expect(installed).toContain("upgrades/cli.mjs");
+    for (const module of installed) {
+      for (const needed of importClosure(module)) {
+        expect(installed, `${module} imports ${needed}`).toContain(needed);
+      }
+    }
+  });
+
+  it("install and a checked upgrade copy storage-host.mjs and exactly what it imports, all of which the image carries", () => {
+    const listed = only(WAITRON_SH, /^BOX_STORAGE_MODULES="([^"]+)"$/m, "storage module list");
+    const modules = listed.split(" ");
+    expect(new Set(modules)).toEqual(importClosure("storage-host.mjs"));
+    expect(modules).toHaveLength(new Set(modules).size);
+    for (const module of modules) expect(imageModules()).toContain(module);
+  });
+});
+
 it("stores image-library bytes in the database without a separate image volume", () => {
   expect(IMAGE_ENV).not.toHaveProperty("WAITRON_MEDIA_DIR");
   expect(DOCKERFILE).not.toContain("/var/lib/waitron/media");

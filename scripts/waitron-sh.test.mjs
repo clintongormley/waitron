@@ -93,7 +93,9 @@ afterEach(() => {
 // the real one; `cp` does the same with WT_CP_FAIL. `cmp` exits 2, its status for trouble, when
 // WT_CMP_FAIL=1, and is the one stub not logged (see `quietStub`). `curl` asked for the script itself
 // copies WT_SELF_SCRIPT's file into the existing output file, keeping that file's mode as the real
-// curl does, and fails when WT_SELF_FETCH_FAIL=1. WT_UPGRADE_BUSY=1 makes every `flock` fail, as when
+// curl does, and fails when WT_SELF_FETCH_FAIL=1; asked for a scripts/box module it writes the one
+// line `source:<url>`, except release-trust files, which come from WT_RELEASE_TRUST_SOURCE when a case
+// sets it. WT_UPGRADE_BUSY=1 makes every `flock` fail, as when
 // another host operation holds the lock; WT_REAL_FLOCK=1 makes `flock -n <fd>` take a real lock on that
 // fd, so a lock held elsewhere refuses it. WT_RECOVERY_UNIT=1 models Docker's dependency on
 // the upgrade recovery service, which takes the host lock itself: once a `flock -n 9` has succeeded
@@ -312,7 +314,10 @@ case "$url" in
   */releases/download/*/waitron-release.json)
     [ -n "\${WT_RELEASE_ASSET:-}" ] || exit 22
     cat "$WT_RELEASE_ASSET"; exit 0 ;;
-  */deploy/box/release-keys/*|*/scripts/box/verify-release.mjs|*/scripts/box/release-list.mjs|*/scripts/box/upgrades/contracts.mjs)
+  */scripts/box/upgrades/contracts.mjs)
+    if [ -n "\${WT_RELEASE_TRUST_SOURCE:-}" ]; then cp "$WT_RELEASE_TRUST_SOURCE/contracts.mjs" "$out"; exit $?; fi
+    printf 'source:%s\\n' "$url" > "$out"; exit 0 ;;
+  */deploy/box/release-keys/*|*/scripts/box/verify-release.mjs|*/scripts/box/release-list.mjs)
     [ -n "\${WT_RELEASE_TRUST_SOURCE:-}" ] || exit 22
     cp "$WT_RELEASE_TRUST_SOURCE/\${url##*/}" "$out"; exit $? ;;
   https://api.github.com/repos/clintongormley/waitron/commits/*)
@@ -324,6 +329,7 @@ case "$url" in
   */scripts/box/upgrades/*)
     if [[ "$url" == */bootstrap.sh ]]; then cp "$WT_BOOTSTRAP" "$out"; else printf 'source:%s\\n' "$url" > "$out"; fi
     exit 0 ;;
+  */scripts/box/*.mjs) printf 'source:%s\\n' "$url" > "$out"; exit 0 ;;
   */deploy/compose.yml)
     if [ "\${WT_COMPOSE_FETCH_FAIL}" = 1 ]; then printf 'partial' > "$out"; exit 22; fi ;;
 esac
@@ -3075,6 +3081,79 @@ describe("waitron.sh install and the box's host service", () => {
     const first = sandbox({ systemd: true });
     expect(run(first, ["install"]).status).toBe(0);
     expect(calls(first)).not.toContain("systemctl restart waitron-box.socket");
+  });
+
+  describe("the USB drive module", () => {
+    const MODULES =
+      /^BOX_STORAGE_MODULES="([^"]+)"$/m.exec(readFileSync(SCRIPT, "utf8"))?.[1]?.split(" ") ?? [];
+    const DRIVES = "WAITRON_BOX_DRIVES_MOUNT=/run/waitron-drives:/run/waitron-drives:ro,rslave";
+    const OTHERS = ["name-tag-host", "network-host", "network-manager", "network-change"];
+    const OTHERS_TOO = ["disk-start", "disk-recovery-key", "preboot", "disk-state"];
+
+    it.each([
+      ["a first install", false],
+      ["a checked upgrade", true],
+    ])(
+      "%s copies storage-host.mjs and its imports, nothing else, and names the drives once the socket started",
+      (_, upgrade) => {
+        expect(MODULES).toContain("storage-host.mjs");
+        const sb = sandbox({ systemd: true });
+        if (upgrade) installedBox(sb);
+        const r = run(sb, ["install", "my-branch"], upgrade ? { WAITRON_SH_REFRESHED: "1" } : {});
+        expect(r.status, r.stderr).toBe(0);
+        const log = calls(sb);
+        const box = join(sb.root, "host/box");
+        const enabled = log.indexOf("systemctl enable --now waitron-box.socket");
+        expect(enabled).toBeGreaterThanOrEqual(0);
+        for (const module of MODULES) {
+          const dest = join(box, module);
+          expect(readFileSync(dest, "utf8")).toMatch(
+            new RegExp(
+              `^source:https://raw\\.githubusercontent\\.com/clintongormley/waitron/[^/]+/scripts/box/${module}\\n$`,
+            ),
+          );
+          expect(statSync(dest).mode & 0o777).toBe(0o644);
+          const at = log.findIndex(
+            (c) => c.startsWith("install -m 0644 -o root -g root ") && c.endsWith(` ${dest}`),
+          );
+          expect(at, module).toBeGreaterThan(enabled);
+        }
+        for (const other of [...OTHERS, ...OTHERS_TOO]) {
+          expect(existsSync(join(box, `${other}.mjs`)), other).toBe(false);
+          expect(
+            log.some((c) => c.startsWith("curl ") && c.includes(`/scripts/box/${other}.mjs`)),
+          ).toBe(false);
+        }
+        expect(env(sb).split("\n")).toContain(DRIVES);
+        expect(r.stdout).toContain("Waitron can see USB drives plugged into this machine");
+      },
+    );
+
+    it("names no drives when the socket will not start", () => {
+      const sb = sandbox({ systemd: true, boxEnableFail: true });
+      writeFileSync(join(sb.boxDir, ".env"), `${DRIVES}\n`);
+      expect(run(sb, ["install"]).status).toBe(0);
+      expect(env(sb)).not.toContain("WAITRON_BOX_DRIVES_MOUNT");
+      expect(existsSync(join(sb.root, "host/box/storage-host.mjs"))).toBe(false);
+    });
+
+    it("names no drives on a host without systemd", () => {
+      const sb = sandbox();
+      writeFileSync(join(sb.boxDir, ".env"), `${DRIVES}\n`);
+      expect(run(sb, ["install"]).status).toBe(0);
+      expect(env(sb)).not.toContain("WAITRON_BOX_DRIVES_MOUNT");
+    });
+
+    it("keeps the clock service but names no drives, and says so, when a module cannot be fetched", () => {
+      const sb = sandbox({ systemd: true });
+      writeFileSync(join(sb.boxDir, ".env"), `${DRIVES}\n`);
+      const r = run(sb, ["install"], { WT_DRIVER_MISSING: "/scripts/box/wifi-record.mjs" });
+      expect(r.status).toBe(0);
+      expect(env(sb)).toMatch(/^WAITRON_BOX_SOCKET_DIR=\/run\/waitron-box$/m);
+      expect(env(sb)).not.toContain("WAITRON_BOX_DRIVES_MOUNT");
+      expect(existsSync(join(sb.root, "host/box/storage-host.mjs"))).toBe(false);
+      expect(r.stderr).toContain("Waitron cannot see USB drives plugged into this machine");
+    });
   });
 
   it("installs nothing, and names no socket, on a host without systemd", () => {

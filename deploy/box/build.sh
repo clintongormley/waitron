@@ -55,7 +55,7 @@ install -D -m 0755 "$repo/scripts/box/upgrades/bootstrap.sh" "$root/opt/waitron-
 )
 install -m 0644 "$root/opt/waitron-host/node-v26.7.0/LICENSE" "$root/app/third-party/node-host-LICENSE"
 install -d -m 0755 "$root/opt/waitron-host/box"
-for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag name-tag-host network-host network-manager network-change host-protocol wifi-record wifi-boot-copy; do
+for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag name-tag-host network-host network-manager network-change host-protocol wifi-record wifi-boot-copy storage-host; do
   install -m 0644 "$repo/scripts/box/$module.mjs" "$root/opt/waitron-host/box/"
 done
 install -D -m 0644 "$repo/scripts/box/upgrades/contracts.mjs" "$root/opt/waitron-host/box/upgrades/contracts.mjs"
@@ -96,7 +96,7 @@ done
 app="$(tar -xOf "$inputs/app.tar" manifest.json | jq -er '.[0].RepoTags[0]')"
 agent="$(tar -xOf "$inputs/agent.tar" manifest.json | jq -er '.[0].RepoTags[0]')"
 tunnel="$(tar -xOf "$inputs/tunnel.tar" manifest.json | jq -er '.[0].RepoTags[0]')"
-printf 'WAITRON_IMAGE=%s\nWAITRON_PRINT_AGENT_IMAGE=%s\nWAITRON_TUNNEL_IMAGE=%s\nWAITRON_INSTALLATION_ORIGIN=usb\nCOMPOSE_PROFILES=practice-inbox\nWAITRON_BOX_SOCKET_DIR=/run/waitron-box\n' "$app" "$agent" "$tunnel" > "$root/opt/waitron/.env"
+printf 'WAITRON_IMAGE=%s\nWAITRON_PRINT_AGENT_IMAGE=%s\nWAITRON_TUNNEL_IMAGE=%s\nWAITRON_INSTALLATION_ORIGIN=usb\nCOMPOSE_PROFILES=practice-inbox\nWAITRON_BOX_SOCKET_DIR=/run/waitron-box\nWAITRON_BOX_DRIVES_MOUNT=/run/waitron-drives:/run/waitron-drives:ro,rslave\n' "$app" "$agent" "$tunnel" > "$root/opt/waitron/.env"
 chmod 0600 "$root/opt/waitron/.env"
 install -D -m 0644 "$output/sandbox/usr/share/keyrings/docker.asc" "$root/usr/share/keyrings/docker.asc"
 install -D -m 0644 "$output/sandbox/etc/apt/sources.list.d/docker.sources" "$root/etc/apt/sources.list.d/docker.sources"

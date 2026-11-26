@@ -405,6 +405,8 @@ BOX_LIB_DIR="${WAITRON_TEST_HOST_ROOT:-}/usr/local/lib/waitron"
 BOX_UNIT_DIR="${WAITRON_TEST_HOST_ROOT:-}/etc/systemd/system"
 BOX_GROUP=waitron-box
 BOX_GID=10001
+# storage-host.mjs and every module it imports; nothing else, so no other host request switches on.
+BOX_STORAGE_MODULES="storage-host.mjs host-protocol.mjs name-tag.mjs upgrades/contracts.mjs wifi-boot-copy.mjs disk-key.mjs wifi-record.mjs"
 box_group_refusal() {
   local by_name by_gid
   by_name="$(getent group "$BOX_GROUP" || true)"
@@ -421,17 +423,20 @@ install_box_service() {
   local cannot="so Waitron cannot set this machine's clock itself when a confirmed time shows it is wrong, or see whether it keeps internet time, so at every start a box that files invoices takes no payment until two tills or handhelds that are switched on and connected agree with its clock or someone confirms it"
   if [ ! -d "$SYSTEMD_RUN_DIR" ]; then
     env_unset WAITRON_BOX_SOCKET_DIR
+    env_unset WAITRON_BOX_DRIVES_MOUNT
     echo "waitron.sh: no systemd on this host, so the box's clock service is not installed — $cannot"
     return 0
   fi
   refusal="$(box_group_refusal)"
   if [ -n "$refusal" ]; then
     env_unset WAITRON_BOX_SOCKET_DIR
+    env_unset WAITRON_BOX_DRIVES_MOUNT
     echo "waitron.sh: did not install the box's clock service — $refusal; $cannot" >&2
     return 0
   fi
   if ! tmp="$(mktemp -d "$WAITRON_DIR/waitron-box.XXXXXX")"; then
     env_unset WAITRON_BOX_SOCKET_DIR
+    env_unset WAITRON_BOX_DRIVES_MOUNT
     echo "waitron.sh: could not set up the box's clock service — could not create a temp folder in $WAITRON_DIR; $cannot" >&2
     return 0
   fi
@@ -449,11 +454,31 @@ install_box_service() {
     && { [ "$socket_changed" = no ] || as_root systemctl restart waitron-box.socket; }; then
     env_set WAITRON_BOX_SOCKET_DIR /run/waitron-box
     echo "waitron.sh: installed the box's clock service, so Waitron can set this machine's clock from a confirmed time"
+    if install_storage_modules "$ref" "$tmp"; then
+      env_set WAITRON_BOX_DRIVES_MOUNT /run/waitron-drives:/run/waitron-drives:ro,rslave
+      echo "waitron.sh: installed the box's USB drive service, so Waitron can see USB drives plugged into this machine"
+    else
+      env_unset WAITRON_BOX_DRIVES_MOUNT
+      echo "waitron.sh: could not install the box's USB drive service, so Waitron cannot see USB drives plugged into this machine; the next install tries again" >&2
+    fi
   else
     env_unset WAITRON_BOX_SOCKET_DIR
+    env_unset WAITRON_BOX_DRIVES_MOUNT
     echo "waitron.sh: could not set up the box's clock service — $cannot" >&2
   fi
   rm -rf "$tmp"
+}
+
+install_storage_modules() {
+  local ref="$1" tmp="$2" module
+  mkdir "$tmp/storage" || return 1
+  for module in $BOX_STORAGE_MODULES; do
+    fetch "${RAW_BASE}/${ref}/scripts/box/${module}" "$tmp/storage/${module##*/}" || return 1
+  done
+  as_root install -d -m 0755 -o root -g root "$WAITRON_HOST_DIR/box/upgrades" || return 1
+  for module in $BOX_STORAGE_MODULES; do
+    as_root install -m 0644 -o root -g root "$tmp/storage/${module##*/}" "$WAITRON_HOST_DIR/box/$module" || return 1
+  done
 }
 
 # A release tag is v and isReleaseVersion's form (packages/shared/src/built-release.ts).

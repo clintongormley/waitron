@@ -20,6 +20,7 @@ READ_SECONDS="${WAITRON_TEST_READ_SECONDS:-5}"
 TAG_HOST="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/name-tag-host.mjs"
 NETWORK_HOST="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/network-host.mjs"
 NETWORK_CHANGE="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/network-change.mjs"
+STORAGE_HOST="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/storage-host.mjs"
 
 # 2024-10-28T00:00:00Z and 2100-01-01T00:00:00Z, in milliseconds.
 FIRST_TARGET_MS=1730073600000
@@ -102,6 +103,16 @@ upgrade_status() {
     return
   fi
   answer "{\"ok\":true,\"result\":$result}"
+}
+
+# A hand-installed box may have no node on PATH, only the runtime bootstrap.sh retains.
+storage_node() {
+  local found
+  if command -v node >/dev/null 2>&1; then printf 'node'; return 0; fi
+  for found in "${WAITRON_TEST_HOST_ROOT:-}"/opt/waitron-host/node-*/bin/node; do
+    if [ -x "$found" ]; then printf '%s' "$found"; return 0; fi
+  done
+  return 1
 }
 
 upgrade_settings() (
@@ -288,7 +299,7 @@ network_monitor() {
 }
 
 main() {
-  local instance line rc arrived rest target requester reply read_limit=701
+  local instance line rc arrived rest target requester reply node read_limit=701
   if [ "${1:-}" = --network-monitor ]; then network_monitor; fi
   if [ "${1:-}" = --network-change ]; then
     umask 077
@@ -328,6 +339,14 @@ main() {
       if ! flock -n 9; then refuse busy; exit 0; fi
     fi
     if reply="$(printf '%s' "$line" | node "$NETWORK_HOST")"; then answer "$reply"; else refuse host_failed; fi
+    exit 0
+  fi
+  if [[ "$line" = "storage.list "* || "$line" = "storage.release "* ]] && [ -f "$STORAGE_HOST" ] && node="$(storage_node)"; then
+    umask 077
+    mkdir -p -m 0700 "$STATE_DIR"
+    exec 9> "$STATE_DIR/storage.lock"
+    if ! flock -n 9; then refuse busy; exit 0; fi
+    if reply="$(printf '%s' "$line" | "$node" "$STORAGE_HOST")"; then answer "$reply"; else refuse host_failed; fi
     exit 0
   fi
   if [ ${#line} -gt 700 ]; then refuse request_invalid; exit 0; fi
