@@ -102,6 +102,7 @@ it("puts the label above three equal choices at 320 px, each at least a tap targ
     expect(r.width).toBeGreaterThanOrEqual(tap);
     expect(r.height).toBeGreaterThanOrEqual(tap);
   }
+  for (const button of buttons) expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
 });
 
 it("places each label beside its icon and gives unpressed choices a visible border", () => {

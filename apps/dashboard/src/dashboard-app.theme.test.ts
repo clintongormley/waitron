@@ -278,6 +278,14 @@ it("keeps accented initials and skips brackets in a display name", async () => {
   expect(accountInitials(el)).toBe('"ÉM"');
 });
 
+it("shows the person icon for a display name with no letters", async () => {
+  const { el } = await mountApp(signedInApi("en-GB", { displayName: "123", email: null }));
+  await openAccountMenu(el);
+  expect(q(el, "[slot=trigger]")).toBeNull();
+  expect(accountMenu(el).icon).toBe("account-person");
+  expect(q(el, "[data-test=account-name]")?.textContent).toBe("123");
+});
+
 it("signed out, a pick in the banner turns the dashboard dark and is kept", async () => {
   await commands.emulateColorScheme("light");
   const { el, host } = await mountApp(stubApi("en-GB"));

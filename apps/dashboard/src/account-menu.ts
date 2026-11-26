@@ -152,7 +152,7 @@ export function accountMenu(options: {
     <div class="account-language" data-test="language-row">
       <span>${t("profile.language")}</span>
       <wt-language-chooser
-        opens-below
+        below-only
         data-keep-open
         data-test="language-chooser"
         .active=${currentLocale()}

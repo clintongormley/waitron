@@ -553,9 +553,13 @@ it("signed in, fetches languages only when opening the Language list", async () 
   expect(languageChoice(el, "es-ES")!.getAttribute("aria-checked")).toBe("false");
 });
 
-it.each([1440, 390])("keeps a long Language list below its button at %ipx", async (width) => {
+it.each([
+  [1440, 485],
+  [390, 485],
+  [780, 320],
+])("keeps a long Language list below its button at %i×%i", async (width, height) => {
   const before = { width: window.innerWidth, height: window.innerHeight };
-  await page.viewport(width, 485);
+  await page.viewport(width, height);
   try {
     const { el } = await signedIn({
       getMe: vi.fn().mockResolvedValue({ ...englishMe, onboardingIntent: "demo" }),
@@ -590,6 +594,7 @@ it.each([1440, 390])("keeps a long Language list below its button at %ipx", asyn
       languageTrigger(el).getBoundingClientRect().bottom,
     );
     expect(menu.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
+    expect(menu.clientHeight).toBeGreaterThanOrEqual(44);
     expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight);
   } finally {
     await page.viewport(before.width, before.height);

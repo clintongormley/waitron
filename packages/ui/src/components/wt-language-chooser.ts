@@ -112,7 +112,7 @@ export class WtLanguageChooser extends LitElement {
   /** `menu`: a trigger and a pop-up. `group`: the choices in a row, for inside another menu. */
   @property({ reflect: true }) layout: "menu" | "group" = "menu";
 
-  @property({ type: Boolean, attribute: "opens-below" }) opensBelow = false;
+  @property({ type: Boolean, attribute: "below-only" }) belowOnly = false;
 
   /** The group's visible name, in `group` layout. */
   @property() label = "";
@@ -138,7 +138,7 @@ export class WtLanguageChooser extends LitElement {
   readonly #menuPopover = new MenuPopover(this, {
     trigger: () => this.#trigger(),
     close: () => this.#close(),
-    verticalPlacement: () => (this.opensBelow ? "below" : "above"),
+    belowOnly: () => this.belowOnly,
   });
 
   override connectedCallback(): void {
@@ -204,6 +204,13 @@ export class WtLanguageChooser extends LitElement {
 
   #show(): void {
     this.#openWhenLoaded = false;
+    if (this.belowOnly) {
+      const trigger = this.#trigger();
+      const { bottom, height } = trigger.getBoundingClientRect();
+      // A short account panel can scroll the trigger higher before opening its list below.
+      if (innerHeight - bottom < 2 * height)
+        trigger.scrollIntoView({ behavior: "instant", block: "start", inline: "nearest" });
+    }
     this.open = true;
     this.#menuPopover.listen();
     void this.updateComplete.then(() => this.#menuPopover.focusChecked());

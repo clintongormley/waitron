@@ -43,7 +43,6 @@ export const themeChoicesStyles = css`
   .theme-choice[aria-pressed="true"] {
     border-color: var(--wt-color-primary);
     background: var(--wt-color-surface-lifted);
-    font-weight: var(--wt-font-weight-bold);
   }
   .theme-choice > wt-icon {
     color: inherit;

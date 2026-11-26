@@ -506,7 +506,7 @@ describe("wt-language-chooser", () => {
         <style>wt-row-actions::part(popup) { max-height: 160px !important; }</style>
         <wt-row-actions label="Account" opens-below>
           <div style="height: 60px"></div>
-          <wt-language-chooser active="en-GB" opens-below data-keep-open></wt-language-chooser>
+          <wt-language-chooser active="en-GB" below-only data-keep-open></wt-language-chooser>
           <div style="height: 180px"></div>
         </wt-row-actions>
       </div>`);
