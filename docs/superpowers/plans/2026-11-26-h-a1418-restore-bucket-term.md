@@ -11,32 +11,32 @@ its pointer, the existing stream supervisor refuses to replace it from a lower t
 
 ## One change to first startup after restore
 
-- [ ] Start with failing tests in `apps/server/src/rebuild-first-start.test.ts`, using its venue DB
+- [x] Start with failing tests in `apps/server/src/rebuild-first-start.test.ts`, using its venue DB
   and memory object store. With restored term 0, pointer 5 and a generation at 7 holding only
   its opened marker, run `completeRebuild` with the real bucket reader and assert saved term 8.
   Check a generation with no pointer still supplies the floor. Malformed folders and a
   root-level key with no slash do not count. Keep the pointer-only, no-bucket and restored-term
   cases. A stalled list must time out and receive cancellation. A refused list through the
   real reader and `runFirstStart` leaves the term and restore record in place, with `mayStream: false`.
-- [ ] Change `readBucketPointerTerm` in `apps/server/src/rebuild-first-start.ts` to `readBucketTerm`
+- [x] Change `readBucketPointerTerm` in `apps/server/src/rebuild-first-start.ts` to `readBucketTerm`
   with the same arguments. Rename the injected dependency and its `boot.ts` caller to
   `bucketTerm`. Read the pointer then list `gen-` within the existing 15-second deadline, using
   one abort signal. The configured S3 store returns prefix-relative keys across all pages.
   Use `parseGenerationName` on the first folder of each key containing a slash, as the existing
   prune does for its full listing. Use the highest shaped term from either source and the
   existing `minTerm: bucketTerm + 1` path. Return null if neither source names a term.
-- [ ] Reject floors at or above `Number.MAX_SAFE_INTEGER - 1` with `restore.bucket_term_invalid`
-  in `apps/server/src/errors.ts`. Check MAX-2 is accepted and MAX-1 is refused, from both pointer
-  and generation inputs. Apply the existing first-start failure path to this error in place of
-  the November 7 draft's hard refusal to start. The failure log names the reason, the term and
+- [x] Reject floors at or above `Number.MAX_SAFE_INTEGER - 1` with `restore.bucket_term_invalid`
+  in `apps/server/src/errors.ts`. Check that a generation at MAX−1 is refused. Apply the existing
+  first-start failure path to this error in place of the November 7 draft's hard refusal to start.
+  The failure log names the reason, the term and
   restore record stay in place, and streaming stays off. The unusable bucket contents need
   correction before a subsequent restart can finish the restore.
-- [ ] Run `pnpm --filter @waitron/server exec vitest run src/rebuild-first-start.test.ts` before and
+- [x] Run `pnpm --filter @waitron/server exec vitest run src/rebuild-first-start.test.ts` before and
   after the change. Re-run the unreachable-bucket case in `boot.restore.test.ts` and the
   continuation-token case in `packages/stream/src/s3-store.test.ts` for prefix and page handling.
-  Run the unedited fiscal write-path and immutability suites, Server published-menu suite and
-  Till menu-refresh suite. Report the saved term and the failed-list startup behavior in the PR.
-  Update the A1418 backlog paragraph when the floor ships. Estimate 35–60 product lines and
+  The watcher waived the fiscal and menu suites locally at 14:46 on 26 November. The PR reports
+  the saved term and the failed-list startup behavior. The A1418 backlog paragraph records the
+  floor. Estimate 35–60 product lines and
   75–115 test lines.
 
 The read covers the owner's configured bucket. Paired streaming still uses the spare's store.

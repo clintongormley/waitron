@@ -25,9 +25,9 @@ open each PR within three active hours.
    `box-alert-email.test.ts`, and incident recording with the heartbeat time in
    `boot.stop-mark.test.ts`. The remaining slices each require their own plan and Claude read.
 2. **Start a restored box above its bucket.** The [26 November slice 2 plan](2026-11-26-h-a1418-restore-bucket-term.md)
-   proposes a term above the pointer and generation names that the configured bucket reveals.
-   The watcher asked at 13:03 for owner words before adding a hold on sales or filing. The
-   slice 2 proposal retains the existing first-start failure path and is awaiting clearance.
+   covers the term above the pointer and generation names that the configured bucket reveals.
+   The watcher cleared this slice on 26 November at 14:46. It retains the existing first-start
+   failure path.
 
 3. **Stop a replaced box (250–350 / 280–400).** Preserve A1342’s endorsed-peer rule in
    `stream-host.ts`. Prove a real archive and bucket restore can supply newer signed evidence

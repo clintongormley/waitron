@@ -2018,11 +2018,11 @@ declare module "@waitron/shared" {
      * failed, so the box sells but does not copy to the bucket. Built as data by
      * `firstStartAlertSource`, never thrown. */
     "restore.first_start_failed": Record<string, never>;
-    /** A restored box's first start found bucket settings but could not learn the term the
-     * bucket's pointer names: the bucket did not answer within the bound, or opening or reading it
-     * failed with no code of its own. The first start fails rather than sign a term the pointer may
-     * be above. Logged, never shown. */
+    /** A restore could not read the bucket's term within its deadline, or opening or reading
+     * the bucket failed without a code of its own. Logged, never shown. */
     "restore.pointer_unreadable": Record<string, never>;
+    /** A bucket term leaves too little room to advance the chart. Logged, never shown. */
+    "restore.bucket_term_invalid": Record<string, never>;
     /** After a restore, the held membership document cannot be read or is not shaped as a
      * document (`reason` is `malformed`; on any restored start not finishing an adoption), or, at the
      * start that finishes the restore, fails its check against the copy's own node keys (`reason` is
