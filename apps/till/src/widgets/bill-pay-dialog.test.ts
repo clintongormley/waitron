@@ -1929,9 +1929,9 @@ describe("till-bill-pay-dialog: on a handheld", () => {
       ]),
     ).toEqual([
       ["whole", "Toda la cuenta 120,00 €", true],
-      ["share", "Dividir a partes iguales Entre comensales", false],
-      ["items", "Artículos Elige los platos", false],
-      ["contribution", "Una cantidad Introduce un importe", false],
+      ["share", "Dividir a partes iguales entre comensales", false],
+      ["items", "Artículos elige los platos", false],
+      ["contribution", "Una cantidad escríbelo", false],
     ]);
     expect(text(root(el).querySelector("[data-quiet-pay-card]"))).toBe("Cobrar 120,00 €");
     expect(text(root(el).querySelector("[data-quiet-pay-cash]"))).toBe("Efectivo");

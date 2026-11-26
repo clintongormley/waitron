@@ -193,10 +193,38 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
           await pressed(el, "[data-quiet-pay-tip]");
           await typed(el, "cardTip", locale === "en" ? "7.32" : "7,32");
           await pressed(el, "[data-quiet-pay-tip]");
+          const root = el.shadowRoot!;
+          const tipLinks = [...root.querySelectorAll("[data-quiet-pay-breakdown] wt-button")];
+          expect(tipLinks.map((link) => link.getBoundingClientRect().top)).toEqual(
+            tipLinks.map(() => tipLinks[0]!.getBoundingClientRect().top),
+          );
+          const icons = [
+            root.querySelector("[data-quiet-pay-equipment] wt-icon")!,
+            choices[0]!.shadowRoot!.querySelector("[part=check] wt-icon")!,
+            root.querySelector("[data-quiet-pay-card]")!.shadowRoot!.querySelector("wt-icon") ??
+              root.querySelector("[data-quiet-pay-card] wt-icon")!,
+          ];
+          expect(icons.map((icon) => icon.getBoundingClientRect().width)).toEqual([20, 20, 22]);
           await expectNoA11yViolations(host);
           await page.screenshot({
             path: `__screenshots__/quiet-pay-q1-${locale}-${theme}-${width}x${height}.png`,
           });
+          if (height === 390) {
+            const body = root
+              .querySelector("wt-full-screen-panel")!
+              .shadowRoot!.querySelector<HTMLElement>("[part=body]")!;
+            expect(choices[0]!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+              body.getBoundingClientRect().bottom,
+            );
+            choices.at(-1)!.scrollIntoView({ block: "end" });
+            expect(body.scrollTop).toBeGreaterThan(0);
+            expect(choices.at(-1)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+              body.getBoundingClientRect().bottom,
+            );
+            await page.screenshot({
+              path: `__screenshots__/quiet-pay-ways-${locale}-${theme}-${width}x${height}.png`,
+            });
+          }
         } finally {
           setLocale("es-ES");
           await page.viewport(1280, 900);

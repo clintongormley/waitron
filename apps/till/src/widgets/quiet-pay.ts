@@ -28,9 +28,21 @@ export const quietPayStyles = css`
     padding: var(--wt-space-3);
   }
 
+  .quiet-pay-controls legend.help-anchor {
+    margin-block-end: 0;
+  }
+
   .quiet-pay-ways {
     display: grid;
     gap: var(--wt-space-2);
+  }
+
+  @media (max-height: 480px) and (orientation: landscape) {
+    .quiet-pay-content {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: start;
+    }
   }
 
   .quiet-pay-footer {
@@ -48,9 +60,36 @@ export const quietPayStyles = css`
     margin-inline-end: var(--wt-space-3);
   }
 
-  [data-quiet-pay-breakdown] wt-button {
-    --wt-action-text: var(--wt-color-primary-text);
-    --wt-action-font-size: var(--wt-font-size-md);
+  [data-quiet-pay-equipment] wt-icon {
+    inline-size: calc(var(--wt-space-4) + var(--wt-space-1));
+    block-size: calc(var(--wt-space-4) + var(--wt-space-1));
+  }
+
+  [data-quiet-pay-card] wt-icon {
+    inline-size: var(--wt-font-size-xl);
+    block-size: var(--wt-font-size-xl);
+    color: inherit;
+  }
+
+  wt-choice-tile::part(check) {
+    --wt-font-size-md: calc(var(--wt-space-4) + var(--wt-space-1));
+  }
+
+  [data-quiet-pay-breakdown] {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: baseline;
+    column-gap: calc(var(--wt-space-1) * 1.5);
+    margin-inline: calc(-1 * var(--wt-space-1));
+  }
+
+  [data-quiet-pay-breakdown] wt-button::part(button) {
+    min-inline-size: var(--wt-stepper-button-width);
+    min-block-size: var(--wt-stepper-button-width);
+    padding: 0;
+    font-size: var(--wt-font-size-md);
+    color: var(--wt-color-primary-text);
   }
 `;
 
@@ -75,12 +114,14 @@ export function quietPay(panel: {
     >
       ${panel.equipment}
     </wt-top-bar>
-    <wt-amount-block>
-      <span slot="label">${t("bill_pay.quiet_amount")}</span>
-      <span data-quiet-pay-amount>${panel.amount}</span>
-      ${panel.breakdown ?? nothing}
-    </wt-amount-block>
-    <div class="quiet-pay-controls">${panel.body}</div>
+    <div class="quiet-pay-content">
+      <wt-amount-block>
+        <span slot="label">${t("bill_pay.quiet_amount")}</span>
+        <span data-quiet-pay-amount>${panel.amount}</span>
+        ${panel.breakdown ?? nothing}
+      </wt-amount-block>
+      <div class="quiet-pay-controls">${panel.body}</div>
+    </div>
     <div class="quiet-pay-footer" slot="footer">${panel.actions}</div>
   </wt-full-screen-panel>`;
 }
@@ -101,12 +142,11 @@ export function quietTenderActions(
         ? nothing
         : html`<wt-button
             data-quiet-pay-card
-            icon="pay-card"
             variant="primary"
             .loading=${busy}
             .disabled=${busy || card.disabled === true}
             @click=${card.run}
-            >${fill(t("bill_pay.charge_on_reader"), { amount })}</wt-button
+            >${busy ? nothing : html`<wt-icon name="pay-card"></wt-icon>`}${fill(t("bill_pay.charge_on_reader"), { amount })}</wt-button
           >`
     }
     ${
@@ -200,21 +240,16 @@ export function quietTipBreakdown({
   remove: () => void;
 }): TemplateResult {
   return html`<div slot="breakdown" data-quiet-pay-breakdown>
-    ${tip === undefined ? nothing : fill(t("bill_pay.quiet_breakdown"), { bill, tip })}
-    <wt-button size="sm" variant="ghost" data-quiet-pay-tip .disabled=${busy} @click=${edit}
-      >${t("bill_pay.quiet_tip")}</wt-button
-    >
     ${
       tip === undefined
         ? nothing
-        : html`<wt-button
-            size="sm"
-            variant="ghost"
-            data-quiet-pay-remove-tip
-            .disabled=${busy}
-            @click=${remove}
-            >${t("bill_pay.remove_tip")}</wt-button
-          >`
+        : html`<span>${fill(t("bill_pay.quiet_breakdown"), { bill, tip })}</span
+            ><wt-button variant="ghost" data-quiet-pay-remove-tip .disabled=${busy} @click=${remove}
+              >${t("bill_pay.remove_tip")}</wt-button
+            >`
     }
+    <wt-button variant="ghost" data-quiet-pay-tip .disabled=${busy} @click=${edit}
+      >${t(tip === undefined ? "bill_pay.quiet_tip" : "bill_pay.quiet_edit_tip")}</wt-button
+    >
   </div>`;
 }
