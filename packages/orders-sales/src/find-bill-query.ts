@@ -99,6 +99,7 @@ export function parseTransactionsQuery(params: URLSearchParams): TransactionsQue
     "sale",
     "full-invoice",
     "correction",
+    "full-correction",
     "replacement",
     "refund",
   ]);

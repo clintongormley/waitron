@@ -101,6 +101,8 @@ it("lists each sale with the kind its fiscal record was filed as", async () => {
   await file((tx) => backend.recordSubstitution(tx, f3, { substitutedSaleIds: [ticket.saleId] }));
   const r5 = await sale(null, "-12.10", { correctsSaleId: f2.saleId });
   await file((tx) => backend.recordCorrection(tx, r5, { correctsSaleId: f2.saleId }));
+  const r1 = await sale(customer, "-12.10", { correctsSaleId: f1.saleId });
+  await file((tx) => backend.recordCorrection(tx, r1, { correctsSaleId: f1.saleId }));
 
   // A full invoice is replaced only once AEAT has refused every record of it.
   const refused = await sale(customer, "12.10");
@@ -125,7 +127,7 @@ it("lists each sale with the kind its fiscal record was filed as", async () => {
     page.rows.map((row) => [row.kind, row.kind]),
   );
   expect(new Set(page.rows.map((row) => row.kind))).toEqual(
-    new Set(["F1", "F2", "F3", "R4", "R5"]),
+    new Set(["F1", "F2", "F3", "R1", "R4", "R5"]),
   );
-  expect(page.rows).toHaveLength(7);
+  expect(page.rows).toHaveLength(8);
 });

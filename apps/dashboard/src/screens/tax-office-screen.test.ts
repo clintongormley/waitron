@@ -1195,7 +1195,9 @@ it("keeps a space still being typed once the app's guarded address takes the sea
   ]);
 });
 
-it("names AEAT's R4 a corrective invoice and its R5 a corrective receipt", () => {
-  expect(en["tax_office.kind.R4"]).toBe("Corrective invoice");
+it("names AEAT's R1 a corrective invoice, its R4 one replacing another and its R5 a corrective receipt", () => {
+  expect(en["tax_office.kind.R1"]).toBe("Corrective invoice");
+  expect(en["tax_office.kind.R4"]).toBe("Corrective invoice replacing another");
   expect(en["tax_office.kind.R5"]).toBe("Corrective receipt");
+  expect(es["tax_office.kind.R4"]).not.toBe(es["tax_office.kind.R1"]);
 });

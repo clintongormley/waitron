@@ -20,8 +20,8 @@ export type TypedSale = Pick<
 >;
 
 export interface InvoiceTyping {
-  invoiceType?: "F1" | "F2" | "R4" | "R5";
-  /** On a corrective invoice (R4, R5), the invoice it corrects; `inFull` when it replaces it whole. */
+  invoiceType?: "F1" | "F2" | "R1" | "R4" | "R5";
+  /** On a corrective invoice (R1, R4, R5), the invoice it corrects; `inFull` when it replaces it whole. */
   corrects?: {
     invoiceNumber: string;
     issuedAt: string;
@@ -33,10 +33,10 @@ export interface InvoiceTyping {
   recipient?: InvoiceRecipient;
 }
 
-/** Whether a document of this type prints the full-invoice layout: an F1, or an R4 replacement of
- * one. */
+/** Whether a document of this type prints the full-invoice layout: an F1, or an R1 or R4 corrective
+ * of one. */
 export function printsAsFullInvoice(invoiceType: InvoiceTyping["invoiceType"]): boolean {
-  return invoiceType === "F1" || invoiceType === "R4";
+  return invoiceType === "F1" || invoiceType === "R1" || invoiceType === "R4";
 }
 
 function storedRecipient(sale: TypedSale): Pick<InvoiceTyping, "recipient"> {
@@ -68,9 +68,9 @@ function saleDayOf(sale: TypedSale): Pick<InvoiceTyping, "saleDay"> {
 }
 
 /**
- * An ordinary sale is F1 when it names a customer and F2 otherwise; a corrective is R4 when it
- * names a customer (only a replacement of a full invoice does) and R5 otherwise, and names the
- * invoice it corrects.
+ * An ordinary sale is F1 when it names a customer and F2 otherwise. A corrective naming a customer
+ * corrects a full invoice: R4 when it replaces it, R1 otherwise; one naming nobody is R5. Each
+ * names the invoice it corrects.
  */
 export async function readInvoiceTyping(tx: Transaction, sale: TypedSale): Promise<InvoiceTyping> {
   const recipient = storedRecipient(sale);
@@ -93,7 +93,7 @@ export async function readInvoiceTyping(tx: Transaction, sale: TypedSale): Promi
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .where(eq(sales.id, sale.correctsSaleId));
   return {
-    invoiceType: full ? "R4" : "R5",
+    invoiceType: full ? (sale.replacesOriginal ? "R4" : "R1") : "R5",
     corrects: {
       invoiceNumber: formatInvoiceNumber(corrected!.code, corrected!.invoiceNumber),
       issuedAt: new Date(corrected!.issuedAt).toISOString(),

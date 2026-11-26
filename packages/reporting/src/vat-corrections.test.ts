@@ -163,6 +163,42 @@ describe("computeVatCorrections", () => {
     ]);
   });
 
+  it("lists a full invoice's corrective naming its customer as one reduction for the invoice's quarter", async () => {
+    const customer = { counterpartyTaxId: "B12345674", counterpartyLegalName: "Cliente SL" };
+    const original = await sale("2026-03-10", { ...customer });
+    await sale("2026-05-05", {
+      ...customer,
+      correctsSaleId: original,
+      total: "-5.50",
+      lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
+    });
+    expect(await corrections(Q2)).toEqual({
+      madeIn: "2026-2T",
+      rows: [
+        {
+          madeDay: "2026-05-05",
+          kind: "correction",
+          invoice: { seriesCode: "A", number: 2, issueDate: "2026-05-05" },
+          corrects: { seriesCode: "A", number: 1, issueDate: "2026-03-10" },
+          belongsTo: "2026-1T",
+          rate: "10.00",
+          base: "-5.00",
+          tax: "-0.50",
+          direction: "reduction",
+        },
+      ],
+      summary: [
+        {
+          belongsTo: "2026-1T",
+          rate: "10.00",
+          direction: "reduction",
+          base: "-5.00",
+          tax: "-0.50",
+        },
+      ],
+    });
+  });
+
   it("decides a line whose base is zero by the sign of its VAT", async () => {
     const original = await sale("2026-03-10");
     await sale("2026-05-05", {

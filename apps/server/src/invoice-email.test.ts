@@ -321,6 +321,35 @@ describe("invoice SMTP transport", () => {
     },
   );
 
+  it.each([
+    ["en-GB", "Attached is corrective invoice RF/2 for -€2.00. La Buena"],
+    ["es-ES", "Adjuntamos la factura rectificativa RF/2, de -2,00 €. La Buena"],
+  ])("emails a full invoice's corrective as a corrective invoice in %s", async (locale, body) => {
+    const rig = await smtpRig("accepted");
+    try {
+      const document = structuredClone(fixture);
+      document.invoiceLocale = locale;
+      document.result.invoiceType = "R1";
+      document.result.invoiceNumber = "RF/2";
+      document.result.total = "-2.00";
+      document.result.corrects = {
+        invoiceNumber: fixture.result.invoiceNumber,
+        issuedAt: fixture.result.issuedAt,
+      };
+      const caption = `${receiptLabelsFor(locale).correctiveInvoice} RF/2`;
+      expect(
+        await sendInvoiceThrough(rig.config)({ recipient: "guest@example.test", document }),
+      ).toEqual({ status: "sent" });
+      expect(rig.messages[0]).toContain(`Subject: ${caption}`);
+      expect(textPart(rig.messages[0]!)).toBe(body);
+      const pdf = (await attachmentText(rig.messages[0]!)).replace(/\s+/g, " ");
+      expect(pdf).toContain(caption);
+      expect(pdf).toContain(fixture.result.recipient!.taxId);
+    } finally {
+      await rig.close();
+    }
+  });
+
   it("sends the English subject, message and PDF from the document language", async () => {
     const rig = await smtpRig("accepted");
     try {

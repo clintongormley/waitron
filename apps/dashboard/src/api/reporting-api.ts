@@ -319,7 +319,7 @@ export interface PrintCategorySalesInput {
   printerId: string;
 }
 
-export const TAX_OFFICE_KINDS = ["F1", "F2", "F3", "R4", "R5"] as const;
+export const TAX_OFFICE_KINDS = ["F1", "F2", "F3", "R1", "R4", "R5"] as const;
 
 export type TaxOfficeKind = (typeof TAX_OFFICE_KINDS)[number];
 /** One issued document, as `GET /management-api/tax-office/invoices` answers it. */

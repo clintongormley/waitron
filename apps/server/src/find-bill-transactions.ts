@@ -63,6 +63,8 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
     select s.id, s.working_order_id, s.issued_at, sr.code as series_code, s.invoice_number as number,
       sr.code || '/' || s.invoice_number as invoice_number,
       case when s.replaces_original = 1 then 'replacement'
+        when s.corrects_sale_id is not null and s.counterparty_tax_id is not null
+          then 'full-correction'
         when s.corrects_sale_id is not null then 'correction'
         when s.counterparty_tax_id is not null then 'full-invoice' else 'sale' end as type,
       s.counterparty_legal_name as customer_name, s.operator_id, person.display_name as staff_name,
@@ -88,7 +90,7 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
   ), refund_rows as (
     select r.*, coalesce(r.sale_id, (
       select i.id from invoices i where i.working_order_id = bp.working_order_id
-        and i.type <> 'correction' order by i.issued_at desc, i.id desc limit 1
+        and i.type not in ('correction', 'full-correction') order by i.issued_at desc, i.id desc limit 1
     )) as invoice_id, (select p.card_last4 from payments p
       where p.provider = r.provider and p.payment_ref = r.provider_payment_ref) as last4
     from refunds r left join bill_payments bp on bp.id = r.bill_payment_id
