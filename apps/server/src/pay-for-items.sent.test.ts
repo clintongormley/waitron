@@ -19,6 +19,7 @@ import { createPrinter } from "@waitron/printing";
 import { centsToDecimal, decimal } from "@waitron/shared";
 import { setRoutingCell, setZoneSalePolicyOverride } from "@waitron/venue-service";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
+import { getBillBalance } from "./bill-payments.js";
 import { readBillEditState } from "./bill-editing.js";
 import { moveBill } from "./move-bill.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
@@ -604,6 +605,39 @@ describe("Pay for items on a sent Counter order", () => {
     expect(after.revision).toBeGreaterThan(atReader.revision);
     expect(await salesOf(orderId)).toEqual([]);
     expect([kitchenJobs(), kitchenNotices()]).toEqual(before);
+  });
+
+  it("while the card is at the reader the original names the bill being paid", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    const reader = holdAtReader();
+
+    const paying = payByReader(orderId, [{ lineId: await lineOf(orderId, "Burger") }], "12.00");
+    await reader.atReader;
+    const during = await getBillBalance(deps(), orderId);
+    const [newBill] = await billsNaming(orderId);
+    reader.answer(false);
+    await paying;
+
+    expect(during.status).toBe("placed");
+    expect(during.beingPaidOn).toEqual({ billId: newBill!.id, billNumber: null });
+    expect(await getBillBalance(deps(), orderId)).not.toHaveProperty("beingPaidOn");
+  });
+
+  it("a sent order given its receipt while the card is at the reader names no bill being paid", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    const reader = holdAtReader();
+
+    const paying = payByReader(orderId, [{ lineId: await lineOf(orderId, "Burger") }], "12.00");
+    await reader.atReader;
+    await issueOrderInvoice(deps(), v.cfg, orderId, OPERATOR);
+    const during = await getBillBalance(deps(), orderId);
+    expect(await billsNaming(orderId)).toHaveLength(1);
+    reader.answer(false);
+    await paying;
+
+    expect(during.status).toBe("placed");
+    expect(await salesOf(orderId)).toHaveLength(1);
+    expect(during).not.toHaveProperty("beingPaidOn");
   });
 
   it("Cancel payment at the reader does the same", async () => {

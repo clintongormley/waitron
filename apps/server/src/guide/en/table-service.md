@@ -990,8 +990,8 @@ there: at a table it is listed in the bill switcher, and at the Counter under **
 While their card is still out, the till that
 took it shows **Being paid on** and the number of their bill; do not charge those dishes again.
 On a printed bill, **Items** cancels the existing receipt and reopens the bill. On a Counter order
-already sent to the kitchen, **Items** puts the chosen dishes on a bill of their own, which
-**Waiting** shows with the order's number in brackets. Once such an order is moved to a table, it is
+already sent to the kitchen with no receipt yet, **Items** puts the chosen dishes on a bill of their
+own, which **Waiting orders** shows with the order's number in brackets. Once such an order is moved to a table, it is
 paid with **An amount**, **Split equally** or **Whole bill**, not by item; when its bill is
 presented for collection, choose **Pay in parts** to see those choices.
 
