@@ -21270,7 +21270,6 @@ export class TillApp extends LitElement {
     else await this.#onSplitAfterPrint(open.id, sent, answer.billId);
   }
 
-  /** The split's answer names the new bill, which the screen then shows. */
   async #onSplitAfterPrint(id: number, sent: Sent, billId: string): Promise<void> {
     const open = this.#cancelCreditingNow(id);
     if (open === null) return;
