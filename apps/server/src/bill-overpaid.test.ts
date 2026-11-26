@@ -615,6 +615,46 @@ describe("A1515 a bill left owing less than it was paid", () => {
     expect(cancelled.json).toMatchObject({ code: "bill.received_exceeds_total" });
   });
 
+  it("closes a zero-total bill only after giving back all the money it holds", async () => {
+    const { billId } = await zeroBillHoldingMoney(venue);
+    const paymentRows = () =>
+      venue.db.all<{ id: string }>(
+        sql`select id from bill_payments where working_order_id = ${billId}`,
+      );
+    const drawerJobs = () => venue.db.all(sql`select id from print_jobs where kind = 'drawer'`);
+    const [original] = paymentRows();
+    const close = async () =>
+      send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        method: "cash",
+        amount: "0.00",
+        applied: "0.00",
+        tip: "0.00",
+        tendered: "0.00",
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
+      });
+
+    expect(await close()).toMatchObject({
+      status: 409,
+      json: { code: "bill.nothing_outstanding" },
+    });
+    expect(await giveBack(billId, original!.id, "15.00")).toMatchObject({
+      status: 200,
+      json: { refund: { state: "completed" }, balance: { status: "open", received: "0.00" } },
+    });
+    const drawersAfterRefund = drawerJobs();
+
+    expect(await close()).toMatchObject({
+      status: 200,
+      json: { outcome: "settled", balance: { status: "settled" }, invoice: { total: "0.00" } },
+    });
+    expect(await invoicesOf(billId)).toEqual(["0.00"]);
+    expect(paymentRows()).toEqual([original]);
+    expect(await tendersOfBill(venue, billId)).toEqual([]);
+    expect(drawerJobs()).toEqual(drawersAfterRefund);
+  });
+
   it("printing a bill whose total is zero but which holds money is refused and issues nothing", async () => {
     const { partyId, billId } = await zeroBillHoldingMoney(venue);
     expect(await balanceOf(billId)).toMatchObject({ total: "0.00", overpaid: "15.00" });

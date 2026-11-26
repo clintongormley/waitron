@@ -137,6 +137,7 @@ import {
   billLabel,
   billName,
   billNumberLabel,
+  canCloseRefundedZeroBill,
   finishBlocker,
   overpaidOf,
   owing,
@@ -5212,7 +5213,10 @@ export class TillTableOrderScreen extends LitElement {
   #paySection(): TemplateResult {
     const shown = this.#shownBill;
     const partlyPaid =
-      this.paymentConfirmation === undefined && shown !== undefined && paidInPart(shown)
+      this.paymentConfirmation === undefined &&
+      shown !== undefined &&
+      paidInPart(shown) &&
+      !canCloseRefundedZeroBill(shown, this.#balanceShown())
         ? shown
         : undefined;
     const sheet = this.#paysOnSheet(shown);
@@ -5284,9 +5288,9 @@ export class TillTableOrderScreen extends LitElement {
    * whole-sale path rather than creating a bill payment with no money. */
   #paysOnSheet(shown: PartyBill | undefined): boolean {
     if (
-      !this.handheld &&
       shown !== undefined &&
-      compareDecimal(decimal(shown.total), decimal("0")) === 0
+      ((!this.handheld && compareDecimal(decimal(shown.total), decimal("0")) === 0) ||
+        canCloseRefundedZeroBill(shown, this.#balanceShown()))
     )
       return false;
     if (this.paymentConfirmation !== undefined) return this.handheld && shown?.status === "placed";

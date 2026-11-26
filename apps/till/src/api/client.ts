@@ -286,6 +286,22 @@ export class TillApi extends FindBillApi {
     );
   }
 
+  async closeZeroBillOnReader(
+    id: string,
+    bill: Pick<WholeBillTender, "expectedEdit" | "dining" | "guestCount">,
+  ): Promise<TillSaleResult> {
+    const result = await this.#payWholeBill(
+      id,
+      "open",
+      { ...bill, method: "card", entry: "reader" },
+      "0.00",
+      undefined,
+      { closeZero: true },
+    );
+    if (result.invoice === undefined) throw { code: "bill.payments_received", workingOrderId: id };
+    return result.invoice;
+  }
+
   /** Pay by reader. A placed order pays for the stored bill. A decline is an outcome. */
   pay(
     req: {
@@ -350,7 +366,7 @@ export class TillApi extends FindBillApi {
       },
       undefined,
       basket,
-      options.onSubmission,
+      options,
     ).then((result): PayOutcome => {
       const captureWarning = result.balance.captureWarning;
       const facts = captureWarning === undefined ? {} : { captureWarning };
@@ -468,7 +484,7 @@ export class TillApi extends FindBillApi {
     tender: WholeBillTender,
     manualAmount?: string,
     basket?: CounterPaymentBasket,
-    onSubmission?: (id: string) => void,
+    options: { onSubmission?: (id: string) => void; closeZero?: true } = {},
   ): Promise<WholeBillResult> {
     const person = this.#personSource?.() ?? null;
     const { lateSend, ...basketFields } = basket ?? {};
@@ -517,7 +533,7 @@ export class TillApi extends FindBillApi {
         compareDecimal(decimal(tender.tendered), decimal(balance.outstanding)) < 0
       )
         throw { code: "sale.tender_shortfall", workingOrderId: id };
-      const zero = compareDecimal(decimal(balance.total), decimal("0")) === 0;
+      const zero = options.closeZero || compareDecimal(decimal(balance.total), decimal("0")) === 0;
       request = {
         ...tender,
         ...(zero ? { kind: "contribution", amount: "0.00" } : { kind: "share", shareOf: 1 }),
@@ -528,7 +544,7 @@ export class TillApi extends FindBillApi {
     }
 
     const sent = { person, key, request };
-    onSubmission?.(request.submissionId);
+    options.onSubmission?.(request.submissionId);
     try {
       const result = await this.#request<WholeBillResult>(
         `/api/working-orders/${id}/payments`,

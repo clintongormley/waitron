@@ -7761,6 +7761,10 @@ describe("till-app: giving back a bill payment", () => {
     await openTable(el);
     await openDialog(el, "rest");
     await press(el, `[data-payment-refund="${payment.id}"]`);
+    await chooseRefundReason(el, reason);
+  }
+
+  async function chooseRefundReason(el: TillApp, reason: string): Promise<void> {
     const combo = inRefund(
       el,
       'wt-combobox[name="reason"]',
@@ -7857,6 +7861,139 @@ describe("till-app: giving back a bill payment", () => {
       t("bill_refund.done_cash").replace("{amount}", money("50.00")),
     );
   });
+
+  it("closes after a full refund of the last payment on a zero-total bill", async () => {
+    const bill = billOf({ total: "0.00", outstanding: "0.00", hasPayments: true });
+    const holding = balanceOf({
+      total: "0.00",
+      received: "50.00",
+      outstanding: "-50.00",
+      overpaid: "50.00",
+      payments: [cashPaid],
+    });
+    const refund = refundOf();
+    const refunded = balanceOf({
+      total: "0.00",
+      outstanding: "0.00",
+      payments: [{ ...cashPaid, left: "0.00", refunds: [refund] }],
+    });
+    const ticket = { ...invoiceOf("0.00"), payments: [] };
+    const recordSale = vi.fn().mockResolvedValue(ticket);
+    const getPartyBills = vi
+      .fn()
+      .mockResolvedValue([{ ...bill, holdsMoney: true, overpaid: "50.00" }]);
+    const getBillBalance = vi.fn().mockResolvedValue(holding);
+    const { el } = await mountApp({
+      ...refundReasons(),
+      getPartyBills,
+      getBillBalance,
+      getTabLines: vi
+        .fn()
+        .mockResolvedValue({ lines: [line({ unitPriceGross: "0.00" })], revision: 0 }),
+      refundBillPayment: vi.fn(async () => {
+        getPartyBills.mockResolvedValue([bill]);
+        getBillBalance.mockResolvedValue(refunded);
+        return { refund, balance: refunded };
+      }),
+      recordSale,
+    });
+    const order = await openTable(el);
+    await expect.poll(() => order.shadowRoot!.querySelector("[data-give-back]")).not.toBeNull();
+    order.shadowRoot!.querySelector<HTMLElement>("[data-give-back]")!.click();
+    await flush(el);
+    await chooseRefundReason(el, "Charged twice");
+    expect(text(inDialog(el, "[data-pay-refunded]"))).toBe(
+      t("bill_refund.done_cash").replace("{amount}", money("50.00")),
+    );
+    const closed = new Promise<void>((resolve) => {
+      dialog(el)!.addEventListener("bill-pay-close", () => resolve(), { once: true });
+    });
+    await press(el, "[data-pay-close]");
+    await closed;
+    expect(dialog(el)).toBeNull();
+
+    emit(tableOrder(el), "pay-tab", { method: "cash", amount: "0.00" });
+    await flush(el);
+
+    expect(recordSale).toHaveBeenCalledOnce();
+    expect(recordSale.mock.calls[0]!.slice(0, 3)).toEqual([
+      [],
+      { method: "cash", amount: "0.00" },
+      "wo-4",
+    ]);
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")?.result).toEqual(ticket);
+    expect(api.takeBillPayment).not.toHaveBeenCalled();
+  });
+
+  it.each(["0.00", "5.00"])(
+    "keeps the reader-only handheld close at zero after reading %s",
+    async (latestTotal) => {
+      const balance = balanceOf({
+        total: "0.00",
+        outstanding: "0.00",
+        payments: [{ ...cashPaid, left: "0.00", refunds: [refundOf()] }],
+      });
+      const ticket = { ...invoiceOf("0.00"), payments: [] };
+      const wire = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method !== "POST")
+          return Response.json({ ...balance, total: latestTotal, outstanding: latestTotal });
+        return latestTotal === "0.00"
+          ? Response.json({ outcome: "settled", balance, invoice: ticket })
+          : Response.json(
+              { code: "management.request_invalid", params: { field: "amount" } },
+              { status: 400 },
+            );
+      });
+      const client = new RealTillApi("", wire);
+      const { el } = await mountApp({
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait" }),
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          formFactor: "phone-portrait",
+          capabilities: ["take-orders", "integrated-card-payment"],
+        }),
+        getPartyBills: vi
+          .fn()
+          .mockResolvedValue([billOf({ total: "0.00", outstanding: "0.00", hasPayments: true })]),
+        getBillBalance: vi.fn().mockResolvedValue(balance),
+        getTabLines: vi.fn().mockResolvedValue({
+          lines: [line({ unitPriceGross: "0.00" })],
+          revision: 0,
+        }),
+        recordSale: client.recordSale.bind(client),
+        closeZeroBillOnReader: client.closeZeroBillOnReader.bind(client),
+      });
+      const order = await openTable(el);
+      expect(order.handheld).toBe(true);
+      expect(order.takesCash).toBe(false);
+      await showBillFooter(order);
+      const tender = order.shadowRoot!.querySelector("till-tender-pay")!;
+      tender.shadowRoot!.querySelector<HTMLElement>(".pay-card")!.click();
+      await tender.updateComplete;
+      tender.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      await flush(el);
+
+      const writes = wire.mock.calls.filter(([, request]) => request?.method === "POST");
+      expect(writes).toHaveLength(1);
+      expect(writes[0]![0]).toBe("/api/working-orders/wo-4/payments");
+      expect(JSON.parse(String(writes[0]![1]!.body))).toEqual({
+        kind: "contribution",
+        method: "card",
+        entry: "reader",
+        amount: "0.00",
+        applied: "0.00",
+        tip: "0.00",
+        dining: "eat_in",
+        guestCount: 4,
+        expectedEdit: expect.any(Object),
+        submissionId: expect.any(String),
+      });
+      const shown = el.shadowRoot!.querySelector("till-settlement-document-dialog")?.result;
+      expect(shown).toEqual(latestTotal === "0.00" ? ticket : undefined);
+    },
+  );
 
   it("opens the completed payment refund's acknowledgment and prints it once on request", async () => {
     const refund = refundOf();

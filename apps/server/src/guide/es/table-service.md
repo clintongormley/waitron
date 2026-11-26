@@ -1059,6 +1059,9 @@ ofrece **Cobrar**. Elige **Devolver 5,00 €** para devolver lo que sobra; para 
 falta el PIN de un encargado. Si el local acepta propinas, **Dejar 5,00 € de propina** lo guarda
 como propina.
 
+Si la cuenta suma 0,00 €, pulsa **Cerrar** cuando veas la confirmación de la devolución. En la
+cuenta, elige **Efectivo** o **Tarjeta** y pulsa **Confirmar cobro** por 0,00 € para cerrarla.
+
 **Un ticket propio.** Cuando un cliente paga una parte de una cuenta que aún no tiene factura y que
 va con ticket, no con factura completa, la confirmación pregunta si quiere su propio ticket por ese importe. **Sí** le imprime un ticket
 propio, y el ticket de la mesa lo descuenta. **No** lo deja en el ticket de la mesa.

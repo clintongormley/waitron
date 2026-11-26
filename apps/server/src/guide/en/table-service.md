@@ -996,6 +996,9 @@ contribution followed by dishes paid on a bill of their own. It then says how mu
 offers no **Pay**. Choose **Give back €5.00** to refund the extra; no manager's PIN is needed for
 that amount. If the venue takes tips, **Keep €5.00 as tip** keeps it as a tip instead.
 
+If the bill comes to €0.00, choose **Close** after you see the refund confirmation. Back on the
+bill, choose **Cash** or **Card** and **Confirm payment** for €0.00 to close it.
+
 **A receipt of their own.** When a guest pays part of a bill that has no invoice yet and is set
 for a receipt, not a full invoice, the confirmation asks whether they want their own receipt for that amount. **Yes** prints them a ticket
 of its own, and the table's receipt takes it off. **No** lists it on the table's receipt.
