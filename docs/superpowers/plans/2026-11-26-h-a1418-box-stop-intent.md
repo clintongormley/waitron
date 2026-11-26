@@ -47,14 +47,9 @@ open each PR within three active hours.
    silence expires. Test hanging reads and reason display in `waiting-start.test.ts` and
    `server-router.test.ts`. Update both languages’ guides and the design’s §9 repository rules.
 
-5. **Shut down a primary (300–420 / 340–500).** Start with a saved archive destination and no
-   stream. Qualify `verifyBackupArtifact` on the exact A1557 `BackupSupervisor` output. Prove its
-   existing limits on a real copy before changing them. Box status asks for fresh HTTPS
-   `node.promote` sign-in, offers the recovery pack and shows staff still clocked in. Drain work
-   and pause sales, filing and clocking. Offer wait, explicit shutdown anyway or cancel on failure,
-   with a recorded incident and email. Preserve `shutdown` before power-off and across starts
-   until authorized carry-on. Offer **Keep it stopped**. Cover success, cancel and refusal in
-   `backup-supervisor.test.ts`, `box-status-screen.test.ts` and `waitron-box-sh.test.mjs`.
+5. **Shut down a primary.** The [26 November slice 5 plan](2026-11-26-h-a1418-admin-shutdown.md)
+   qualifies a local restore rehearsal on the exact saved archive. It delivers the Box status
+   action and next-start hold first, followed by the failure choices and appliance power-off.
 
 6. **Cover other backup destinations and pairs (200–350 / 260–430 per PR).** Add checked download
    and stream catch-up to the primary action. Reuse controlled handover as the paired primary’s
