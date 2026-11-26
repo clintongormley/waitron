@@ -1,22 +1,12 @@
 # CI only, never installed on a box: a stand-in for BlueZ on the image-smoke runner's system bus,
 # which has no Bluetooth hardware. Run as root with the bluez package installed: its bus policy is
-# what lets root own `org.bluez` and call a pairing agent. It serves one powered adapter, a scan that
-# finds one more device and reports a changed property, and four printers:
-#   66:55:44:33:22:11  "CI Printer"        already paired.
-#   86:67:7A:00:00:01  "BT Printer PIN"    legacy PIN pairing: `Device1.Pair` calls the caller's own
-#                                          agent (else the default one) with
-#                                          `org.bluez.Agent1.RequestPinCode` and succeeds only on
-#                                          FAKE_BLUEZ_PIN (default 1234).
-#   86:67:7A:00:00:02  "BT Printer NoPin"  pairs without asking an agent.
-#   86:67:7A:00:00:03  "BT Printer Gone"   fails `ConnectionAttemptFailed` before any agent call.
-# Every failure it chooses to report — a wrong PIN, no agent, an agent's error reply, and no reply
+# what lets root own `org.bluez` and call a pairing agent.
+# Each PIN-agent failure — a wrong PIN, no agent, an agent's error reply, and no reply
 # within FAKE_BLUEZ_AGENT_TIMEOUT_MS (default 60000), after which it sends `Agent1.Cancel` — is
 # `AuthenticationFailed`. That is its own choice, not what bluetoothd was measured to return.
 # A pairing that succeeds is followed by `Disconnected` signals on the device's `org.bluez.Device1`
 # and `org.bluez.Bearer.BREDR1`, as on the owner's box after a real pairing (2026-09-29); their
 # arguments, and their timing before the pairing's reply, are the stand-in's own.
-# `StopDiscovery`, `RemoveDevice`, `Properties.Set` and each agent exchange print a `fake bluez:`
-# line, so a check can tell whether a call reached it.
 import os
 
 import dbus

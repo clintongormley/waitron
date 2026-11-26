@@ -1,15 +1,3 @@
-// The runner's own contract, checked against a table of cases: which results make `scenarios` exit
-// non-zero, how a scenario that threw is recorded, and that `--json` prints one parseable document.
-//
-// It is marked critical even though the spec's critical set is S0/S1/S2/S3/S6 (spec §7) for one
-// reason and no more: a wrong exit rule makes every other row's reporting untrustworthy, because a
-// run's exit code is what the campaign reads instead of the table.
-//
-// Like S2 and S5 it takes no `ScenarioContext`: every function it drives is pure, so it starts no
-// container, opens no store and touches no file.
-//
-// Unlike every sibling it reports a failed assertion as a FAIL rather than letting it throw, because
-// a mismatch here is this scenario's result. Anything that is not an assertion failure is rethrown.
 import assert from "node:assert";
 import type { ScenarioResult } from "../scenarios.ts";
 import {
@@ -30,19 +18,13 @@ const CRITICAL_SKIPPED = [row("S0", "SKIPPED", true)];
 const CRITICAL_MEASURED = [row("S0", "MEASURED", true)];
 const CRITICAL_PASS = [row("S6", "PASS", true)];
 const EMPTY: ScenarioResult[] = [];
-/** A whole run that must not fail: the only FAIL in it is a non-critical one. */
 const MIXED_CLEAN = [row("S0", "PASS", true), row("S4", "FAIL", false), row("S5", "PASS", false)];
-/** The same shape with the FAIL moved onto a critical scenario. */
 const MIXED_FAILING = [
   row("S0", "PASS", true),
   row("S2", "FAIL", true),
   row("S4", "MEASURED", false),
 ];
 
-/**
- * Each case is the whole result set of one run and the exit code that run must produce. The order is
- * the order a reader should meet them in: the rule, then each verdict the rule must NOT act on.
- */
 const CASES: { name: string; results: ScenarioResult[]; exit: number }[] = [
   { name: "a critical FAIL exits non-zero", results: CRITICAL_FAIL, exit: 1 },
   { name: "a non-critical FAIL exits 0", results: NON_CRITICAL_FAIL, exit: 0 },
@@ -67,9 +49,6 @@ export default async function runnerContract(): Promise<ScenarioResult> {
       "the run names the critical scenarios that failed, and only those",
     );
 
-    // A scenario that threw never said what it was measuring, so the runner cannot know whether its
-    // subject was critical: it is recorded critical whatever its id, which `S4` — a non-critical
-    // scenario — is the case that shows.
     const thrown = resultForThrow("s4_offline_load.ts", new Error("boom"));
     assert.equal(
       thrown.id,
@@ -96,11 +75,6 @@ export default async function runnerContract(): Promise<ScenarioResult> {
       "a scenario that threw fails the run even though its id is not in the critical set",
     );
 
-    // The table is this gate's product — the results note is filled from it — and `--json` is how a
-    // caller captures a run. Both are reached through `render`, which takes the argument list rather
-    // than reading `process.argv`, so the flag's effect is driveable here: with the choice made
-    // inside `main()` instead, a `formatTable` returning "" printed nothing and a cut `--json`
-    // wiring printed the table, and this scenario reported PASS through both (measured 2026-09-18).
     const table = render(["node", "scenarios.ts"], MIXED_FAILING);
     const tableLines = table.split("\n").filter((line) => line.startsWith("|"));
     assert.equal(
@@ -189,14 +163,7 @@ export default async function runnerContract(): Promise<ScenarioResult> {
         `json-selected-by-flag=true`,
     };
   } catch (error) {
-    // A failed ASSERTION is this scenario's own verdict, not a broken harness, so it is reported as
-    // a FAIL rather than thrown — every sibling throws, and this one does not because the rule it
-    // checks is the runner's own. Anything else is rethrown, so a `TypeError` or a bad import still
-    // reaches `resultForThrow` and reads as the broken harness it is.
     if (!(error instanceof assert.AssertionError)) throw error;
-    // The failing assertion's message is the whole finding, so it is what the detail carries,
-    // flattened first: node's assertion messages run to several lines and carry their own double
-    // quotes, either of which would break the space-separated `key=value` shape the siblings print.
     const message = error.message;
     const flattened = message.replaceAll(/\s+/g, " ").replaceAll('"', "'");
     return {

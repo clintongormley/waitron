@@ -1,11 +1,3 @@
-/**
- * `pnpm --filter @waitron/bench-sqlite-failover setup:litestream` — download the pinned litestream
- * release into the gitignored `.bin/`, where `resolveLitestream()` looks for it.
- *
- * Nothing in the repository ships a litestream binary and nothing installs one: the scenarios that
- * drive it report SKIPPED until this has been run once. S4 (`scenarios/s4_offline_load.ts`) is the
- * exception — it degrades to its SQLite half and says `version=absent` in its row.
- */
 import { execFileSync } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -21,19 +13,7 @@ type ReleaseAsset = { name: string; browser_download_url: string };
  * The asset is matched on its FULL name, never a substring. The `v0.5.18` release lists both
  * `litestream-0.5.18-darwin-arm64.tar.gz` (the CLI) and `litestream-vfs-v0.5.18-darwin-arm64.tar.gz`
  * (a different artefact), so a `includes("darwin-arm64")` test matches four assets and the one it
- * picks depends on the order the API happens to return (measured against the release API,
- * 2026-11-06).
- *
- * The name is composed from this host rather than hardcoded, so a platform this rig has not been run
- * on fails on a missing asset instead of installing a darwin binary. Only darwin/arm64 has actually
- * been downloaded and run; the other names are read off the release listing, not exercised.
- * 2026-09-23: this script itself has still run only on darwin/arm64; `probe:linux`
- * (`probes/linux-binaries.ts`) downloaded and ran the two Linux archives in Docker.
- *
- * `x64` maps to `x86_64` because that is what the CLI assets are called — the listing for this tag
- * holds `litestream-0.5.18-darwin-x86_64.tar.gz` and `litestream-0.5.18-linux-x86_64.tar.gz`, and
- * the only `amd64` names in it belong to the `litestream-vfs-…` artefact (read from the release API,
- * 2026-11-06).
+ * picks depends on the order the API happens to return.
  */
 function assetName(): string {
   const arch = process.arch === "x64" ? "x86_64" : process.arch;
@@ -42,8 +22,6 @@ function assetName(): string {
 
 async function main(): Promise<void> {
   const wanted = assetName();
-  // A named User-Agent rather than the runtime's default; nothing here has tested what this API
-  // does without one.
   const response = await fetch(RELEASE_API, {
     headers: {
       accept: "application/vnd.github+json",

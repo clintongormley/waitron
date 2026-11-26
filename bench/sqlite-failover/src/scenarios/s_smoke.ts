@@ -1,6 +1,3 @@
-// Smoke: the things every other scenario stands on — a running object store, a SQLite node, one
-// hash-linked ledger row, and a ledger that refuses every way of changing one. It asserts nothing
-// about the failover loop; if it fails, no other verdict in the run means anything.
 import assert from "node:assert";
 import type { ScenarioContext, ScenarioResult } from "../scenarios.ts";
 import { openNode, recordSale, type NodeDb } from "../model.ts";

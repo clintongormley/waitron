@@ -1,13 +1,3 @@
-/**
- * The scenario runner: discovers every scenario in `src/scenarios/`, runs them one at a time, prints
- * a Markdown table — or, with `--json`, one JSON document — and exits non-zero only when a CRITICAL
- * scenario failed.
- *
- * A scenario is a measurement, not a build gate (spec §7): a FAIL is a recorded outcome, and only a
- * CRITICAL one stops anything — spec §7's five, S0, S1, S2, S3 and S6, plus `RUNNER`, this runner's
- * own self-check, plus any scenario that THROWS whatever its id. The rule itself is in
- * `runner-contract.ts`, where `s_runner_contract.ts` drives it over a table of cases.
- */
 import { readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -27,11 +17,6 @@ const scenarioDir = join(dirname(fileURLToPath(import.meta.url)), "scenarios");
  * Every `.ts` FILE in the directory, in filename order. Not a prefix match: the scenarios are named
  * `s_smoke.ts`, `s1_double_promotion.ts`, `s6_store_cas.ts` and so on, and a filter narrower than
  * "a TypeScript file in this directory" would silently run a subset while still printing a table.
- *
- * The `isFile()` check is not decoration: a name ending in `.ts` is not necessarily a module, and a
- * directory carrying that name is imported inside the try below, where the throw is reported as a
- * CRITICAL failure of a scenario nobody wrote. Root `CLAUDE.md` §4 states the rule — a source
- * scanner selects files, not just paths ending in `.ts`.
  */
 function discover(): string[] {
   return readdirSync(scenarioDir)
@@ -56,8 +41,6 @@ async function main(): Promise<void> {
     }
   }
 
-  // Exactly one write to stdout, so the document a `--json` caller pipes is parseable whole. Which
-  // shape it is, is `render`'s decision and not this function's — `s_runner_contract.ts` drives it.
   console.log(render(process.argv, results));
 
   const exitCode = exitCodeFor(results);

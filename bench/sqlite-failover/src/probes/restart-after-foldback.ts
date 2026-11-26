@@ -1,21 +1,3 @@
-// Measurement 1 (#540): restart after an outside fold-back.
-//
-// Slice 2's plan for a bucket outage: stop Litestream, fold the side file back into the database
-// from our own connection, restart Litestream when the bucket answers. Sales Litestream saw but could
-// not upload, and sales made while it was stopped, are then only in the database FILE — the fold-back
-// moved them out of the side file Litestream reads. The question is whether a restarted Litestream
-// notices and uploads them.
-//
-// FAILING result — prints `RESTART_RESYNCS=false` with `restore-complete=false missing=<ranges>`
-// naming sales from phases 2-3, or `daemon-alive=false daemon-exit=<code>`.
-// PASSING result — prints `RESTART_RESYNCS=true … restore-complete=true missing=none integrity=ok
-// daemon-alive=true`.
-// CONTROL, the other direction — the same restore taken BEFORE the restart must LACK phases 2-3
-// (`control-before-restart-rows=20`). If it already holds them, the restore is not reading what this
-// probe thinks it is, and the line reads `VOID`.
-//
-// It also records whether a foreign object at the generation's root (`opened.json`, the marker slice
-// 2 writes before Litestream starts) disturbs Litestream or survives it.
 import assert from "node:assert";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -43,17 +25,11 @@ import {
 const PROBE = "m1-restart-after-foldback";
 const GENERATION = "gen-1-box-a-20260923T000000Z";
 const PREFIX = `venues/v1/${GENERATION}`;
-/** Small batches on purpose: the question is WHICH sales arrive, not how fast. */
 const STREAMED = 20; // phase 1 — reachable daemon
 const HELD_OFFLINE = 20; // phase 2 — daemon attached, its store unreachable
 const WHILE_STOPPED = 20; // phase 3 — no daemon at all
 const AFTER_RESTART = 20; // phase 4 — daemon restarted against the reachable store
 const TOTAL = STREAMED + HELD_OFFLINE + WHILE_STOPPED + AFTER_RESTART;
-/**
- * The offline daemon reopens a database it already knows, so its sidecar directory exists and
- * cannot signal the attach. S4 measured attach at 1024-1114ms; three seconds is that with margin, and
- * the busy checkpoint in phase 2 is what shows the daemon really held the file.
- */
 const OFFLINE_ATTACH_MS = 3_000;
 
 async function main(): Promise<void> {
@@ -91,7 +67,6 @@ async function main(): Promise<void> {
     const node = openNode("box-a", dbPath);
     let daemon: ReturnType<typeof replicate> | undefined;
     try {
-      // Phase 1: stream, and see the store hold it.
       daemon = replicate(bin, reachable, onLog);
       await waitForAttach(dbPath);
       sell(node, STREAMED);
@@ -108,7 +83,6 @@ async function main(): Promise<void> {
       await daemon.exited;
       daemon = undefined;
 
-      // Phase 2: attached but offline. Our checkpoint is expected to be refused here (S4's finding).
       daemon = replicate(bin, unreachable, onLog);
       await sleep(OFFLINE_ATTACH_MS);
       sell(node, HELD_OFFLINE);
@@ -137,7 +111,6 @@ async function main(): Promise<void> {
       const beforeRows = before === "no-backup" ? 0 : before.length;
       const objectsBefore = await listObjects(store, PREFIX);
 
-      // Phase 4: restart against the reachable store, sell, and wait for everything.
       const state: { exit: number | null | "alive" } = { exit: "alive" };
       daemon = replicate(bin, reachable, onLog);
       daemon.exited.then(

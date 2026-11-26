@@ -1,5 +1,3 @@
-// Measurement 5, the half that runs inside a Linux container (driven by ./linux-binaries.ts).
-// Prints one line: `| m5-inside-<arch> | PASS|FAIL|CONTROL | … |`.
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -21,7 +19,6 @@ const STORE = {
     secretAccessKey: process.env.M5_SECRET_ACCESS_KEY ?? "",
   },
 };
-/** Long enough for the SDK's own retries: the S4 probe saw a first sync error only after 116s. */
 const TLS_CHECK_MS = 150_000;
 
 async function download(

@@ -1,6 +1,3 @@
-// S6: the store's conditional-write primitive — the fence the prototype's promotion step stands on.
-// A promotion is safe only if the store can refuse a second writer's claim of the same key, so this
-// scenario establishes what the store actually does rather than assuming S3 semantics.
 import assert from "node:assert";
 import type { ScenarioContext, ScenarioResult } from "../scenarios.ts";
 import { probeConditionalWrites } from "../store-cas.ts";

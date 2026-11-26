@@ -890,8 +890,8 @@ separate pass, kills orphaned vitest workers and parentless test binaries a chec
 `.bin` — Litestream and the S3 test server (`isTestBinaryProcess`). **The container half no longer has a subject in any
 package suite.** It matches the `com.waitron.reapable` label alone, and
 `grep -rn com.waitron.reapable` over the repository on 2026-09-23 finds exactly one stamp outside
-that script and its own suite — `bench/sqlite-failover/src/store.ts:75`, a `.withLabels({...})` on
-the MinIO container `startStore` brings up — in a bench that declares no `test` script at all, so
+that script and its own suite — the `.withLabels({...})` call in `startStore` in
+`bench/sqlite-failover/src/store.ts` — in a bench that declares no `test` script at all, so
 no suite under `packages/` or `apps/` can leave a container for it to find. **The worker half's vitest
 case has nothing to do with the storage engine:** an interrupted vitest run still reparents
 its workers to ppid 1, where they spin at ~100% CPU until killed. So the occasion to run it is after

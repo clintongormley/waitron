@@ -1504,8 +1504,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   labels are read from its strings table, and the files that still need non-English text are held
   at their counts in `KEEPS_NON_ENGLISH`, each with its reason; staffing is next.
 
-- **Correct every sentence known to be false, then finish comment pruning** (bundle of 1, size M). [Detail](backlog/architecture.md#bundle-correct-every-sentence-known-to-be-false-then-finish-comment-pruning) The pruning sweep still has `bench/` and `scripts/fake-bluez.py` open.
-
 - **Printer, reader and device delete wording** (bundle of 1, size M, needs the owner). [Detail](backlog/architecture.md#bundle-printer-reader-and-device-delete-wording)
 
 
@@ -1599,7 +1597,7 @@ already paid for:
   [data](developers/conventions-data.md#root-receipts-moved-on-2026-11-24) excerpts from 24 November.
   There is no size gate.
 - **Comments are cut on touch, and pruned deliberately one package per pull request** (CLAUDE.md
-  §1) — see _Modules, data and code health_ → _Prune the comments_.
+  §1). [Decision](backlog/architecture.md#comment-pruning)
 - **Update this file as entries finish**, in the same PR (_How to keep this file honest_).
 
 **Run path (local; no hardware, cloud, or AEAT cert):** `wa-wt demo <worktree-name>` → default till
@@ -1670,7 +1668,7 @@ conflict.
   is optional and Android-only. Decisions and receipts:
   [2026-09-18-handheld-and-till-hardware-decisions.md](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md).
 - **Comments carry invariants, not history, and deliberate pruning sweeps are wanted** (owner,
-  2026-09-23; CLAUDE.md §1) — see _Modules, data and code health_ → _Prune the comments_.
+  2026-09-23; CLAUDE.md §1). [Decision](backlog/architecture.md#comment-pruning)
 - **The coverage bar is negotiable only where the rest of a package's gap could be closed solely by
   tests that assert nothing useful** (owner, 2026-09-23): "we never want to add junk tests just to
   meet a coverage bar. the tests added must actually test something useful."

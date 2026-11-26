@@ -15,15 +15,6 @@ handle. A differently named handle can escape it; expanding that detector needs 
 control and the ordinary `Set.delete` control. The allowance list remains JSON, with the reasons
 beside its reader in `scripts/write-path-tables.test.ts`.
 
-## Prune the comments, one package per pull request
-
-**IN PROGRESS (owner decision 2026-09-23).**
-  Keep a comment only for an invariant, or a non-obvious why, that the code cannot show (CLAUDE.md
-  §1). Every pruning pull request passes `scripts/comments-only.mjs <base>`; its header states what
-  it refuses and misses. The fiscal packages go under the same gates as any other fiscal change: the
-  golden huella test and the `inmutabilidad` suite pass unedited. Still open: `bench/` and
-  `scripts/fake-bluez.py`, which is outside the checker.
-
 ## Every read route now takes the venue's exclusive write lock and issues a DELETE
 
 **OPEN.** `withTransaction` (`packages/db/src/tenancy.ts`) runs its body
@@ -698,13 +689,6 @@ the day figures from recorded transactions. No removal was missed. `recovery_pac
   `QU`, `XB`, `XG`, `XN` and `XU` as bare codes. Add sourced English/Spanish labels without
   treating them as postal countries. [Detail](architecture.md#a913s-fix-items-general-code-english-only)
 
-## Bundle: Correct every sentence known to be false, then finish comment pruning
-
-1 entry, size M.
-
-- **Prune the comments, one package per pull request — IN PROGRESS (owner decision 2026-09-23).**
-  [Detail](architecture.md#prune-the-comments-one-package-per-pull-request)
-
 ## Bundle: Printer, reader and device delete wording
 
 1 entry, size M. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
@@ -713,6 +697,12 @@ the day figures from recorded transactions. No removal was missed. `recovery_pac
   [Detail](architecture.md#loose-ends-left-by-a435s-printer-reader-and-device-delete-steps-2-to-4).
 
 ## Decisions and deliberate limits
+
+### Comment pruning
+
+Keep comments for invariants or reasons the code cannot show. Prune on touch and sweep one package
+per pull request (owner decision, 2026-09-23). Follow `CLAUDE.md` §1 for the sweep check. In fiscal
+packages, run the golden huella and `inmutabilidad` suites unedited.
 
 ### Command answers stay available for till retries
 

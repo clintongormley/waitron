@@ -1,14 +1,3 @@
-// LS: the litestream foundation check — everything S0, S3 and S4 stand on. The pinned binary is
-// found, a config points it at the store, a one-shot sync uploads, a daemon keeps streaming, and a
-// restore rebuilds the database from the store alone.
-//
-// It is not one of the spec's seven scenarios and it claims nothing about the failover loop. It
-// establishes litestream's behaviour on the pin (plan Task 6), so that a later scenario driving the
-// loop can read its own failure as being about the loop rather than about the tool.
-//
-// Nothing here drives `promotion.ts`; the generation names below are literals that follow topology
-// §2.2's `gen-<term>-<node-id>` shape, so the keys this scenario writes sit in the same space a
-// promotion's would rather than in one of their own.
 import assert from "node:assert";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,7 +14,6 @@ import { openNode, recordSale } from "../model.ts";
 import type { ScenarioContext, ScenarioResult } from "../scenarios.ts";
 import type { Store } from "../store.ts";
 
-/** Topology §2.2 gives each venue one prefix in the store; `v1` is this rig's venue. */
 const VENUE = "venues/v1";
 
 const ONE_SHOT_NODE = "box-a";
@@ -37,7 +25,6 @@ const DAEMON_PREFIX = `${VENUE}/gen-2-${DAEMON_NODE}`;
 const DAEMON_SALES_BEFORE = 2;
 const DAEMON_SALES_AFTER = 2;
 
-/** A generation no node in this scenario ever opens, so nothing is ever streamed to it. */
 const NEVER_STREAMED_PREFIX = `${VENUE}/gen-3-box-c`;
 
 /**
@@ -81,29 +68,13 @@ export default async function litestreamRoundtrip({
     };
   } finally {
     try {
-      // The store is stopped FIRST, for the reason `s_smoke.ts` records: a throw ahead of `stop()`
-      // would leave the MinIO container running, and `pnpm reap` ignores a container younger than
-      // two hours, so nothing would clear it for the rest of the session.
       await store.stop();
     } finally {
-      // The order above is unchanged; what the nesting adds is that the directory goes EITHER WAY. A
-      // `stop()` that rejects would otherwise skip the removal, which is the shape
-      // `s4_offline_load.ts` carried until 2026-09-18 — injecting a rejecting `stop()` there left
-      // the temporary directory behind — and `s0_happy_loop.ts` states the rule.
       if (dir) rmSync(dir, { recursive: true, force: true });
     }
   }
 }
 
-/**
- * Part A — record, sync once, then restore with the local database GONE.
- *
- * Deleting the source file first is the measurement, not tidiness: a `restore` that copied the file
- * beside it would produce exactly the same three rows as one that read the store, so a scenario that
- * left the file in place would pass either way. Measured both ways on 2026-09-18, with `restore`
- * replaced by `copyFileSync(dbName, outPath)`: with these two lines in place the part fails on the
- * copy's `ENOENT`; with them removed the whole scenario reports PASS.
- */
 async function roundtripOneShot(
   bin: string,
   store: Store,
@@ -130,8 +101,6 @@ async function roundtripOneShot(
   await restore(bin, config, dbPath, outPath);
 
   const restored = rowsIn(outPath);
-  // Row by row, not a count: three rows carrying the wrong payloads would satisfy a count
-  // (`CLAUDE.md` §4 — "there is a test" is an unfinished sentence).
   assert.deepEqual(
     restored,
     recorded,
@@ -140,20 +109,6 @@ async function roundtripOneShot(
   return { keys: keys.length, restored: restored.length };
 }
 
-/**
- * Part B — a `replicate` daemon keeps streaming writes made AFTER its first sync.
- *
- * The two waits are what make that a measurement rather than a coincidence. Spawning the daemon and
- * then immediately writing proves nothing: a one-shot `replicate -once` syncs a few hundred
- * milliseconds after it starts, by which time two SQLite inserts have already landed, so it uploads
- * them too and looks exactly like a daemon. Measured 2026-09-18 — with `replicate` mutated to spawn
- * `replicate -once`, an earlier shape of this part reported PASS with all four rows. Waiting for the
- * FIRST sync to be visible before writing again is what separates the two: the one-shot has exited
- * by then, so the later rows never arrive and the deadline below is reached.
- *
- * Each wait is an outer deadline over a restore poll, never a sleep: the thing being waited for is
- * "the store holds these rows", and restoring is how that is read (`CLAUDE.md` §4).
- */
 async function roundtripDaemon(
   bin: string,
   store: Store,
@@ -198,7 +153,6 @@ async function roundtripDaemon(
   }
 }
 
-/** Restore until the store holds exactly `expected`, or fail at the deadline. */
 async function waitForRows(args: {
   bin: string;
   dir: string;
@@ -238,18 +192,6 @@ async function waitForRows(args: {
   );
 }
 
-/**
- * Part C — the control. A prefix nothing ever streamed must not yield a database.
- *
- * Without it, "restore produced a database with the right rows" is a claim about a tool that has
- * never been seen to refuse anything, so a `restore` that quietly returned on any input would look
- * identical in Part A.
- *
- * The refusal is matched on its WORDS, not merely counted as an error. Measured 2026-09-18: with
- * only this part's restore replaced by `throw new Error("spawn ENOENT: binary disappeared")`, a
- * control that accepted any non-empty message reported the whole scenario PASS — a litestream that
- * could not be run at all would have been recorded as a litestream that refused.
- */
 async function restoreWithNothingStreamed(bin: string, store: Store, dir: string): Promise<string> {
   const dbPath = join(dir, "never-streamed.db");
   const config = writeConfig({
@@ -274,7 +216,6 @@ async function restoreWithNothingStreamed(bin: string, store: Store, dir: string
   return refusal;
 }
 
-/** `count` sales on a node opened at `dbPath`, returned as the rows a restore must reproduce. */
 function record(dbPath: string, nodeId: string, count: number, from = 0): RecordedRow[] {
   const node = openNode(nodeId, dbPath);
   try {
@@ -288,12 +229,6 @@ function record(dbPath: string, nodeId: string, count: number, from = 0): Record
   }
 }
 
-/**
- * EVERY ledger row a database on disk holds, read back rather than assumed — not one node's rows.
- * The id below is only what the reading handle calls itself; it filters nothing, and each database
- * in this scenario carries exactly one node's chain. Tasks 7 and 8 restore a generation into a node
- * under a different id, which is where a reader would otherwise trust a parameter that does no work.
- */
 function rowsIn(dbPath: string): RecordedRow[] {
   const node = openNode("reader", dbPath);
   try {

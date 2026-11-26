@@ -1,18 +1,3 @@
-// Measurement 4 (#540): how long a rebuild's restore takes, with a day of changes
-// on top of the last full copy, on a database carrying product images (they live in the database:
-// `media_blobs.bytes`, packages/db/src/schema/media/images.ts).
-//
-// Sizes: the owner's figure of up to 5,000 product images, each stored as the
-// shrunk copy an upload makes — 171 KiB on average and 338 KB at most over ten real photos — so
-// the count is the owner's upper figure and the sizes are measured, and the line says so (`sizes=owner-count-measured-size`). Run it twice: the average size, and every image at the
-// largest measured size. Image bytes are random, which does not compress, the way an
-// already-compressed photo does not.
-//
-// No pass/fail. VOID if a restored copy's integrity check is not `ok` or its ledger row count, image
-// count or total image bytes differ from the source's — a fast restore of the wrong database measures
-// nothing. Contents are not compared. The store is a local MinIO, so the time excludes the internet:
-// `store-bytes` is what the store held under the generation, probably an upper bound on what a
-// rebuild downloads (reasoning, not measured); how much a restore reads was not measured.
 import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, statSync, statfsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,9 +26,7 @@ import {
 
 const PROBE = "m4-restore-time";
 const PREFIX = "venues/v1/gen-1-box-a-20260923T000000Z";
-/** Production's snapshot settings, so the restore replays onto a weekly full copy. */
 const PRODUCTION_SNAPSHOT = [`snapshot:`, `  interval: 168h`, `  retention: 335h`];
-/** A generous bound on one restore or upload of a gigabyte-scale database against a local store. */
 const LONG_CHILD_MS = 15 * 60_000;
 /** Source + side file + store copy + one restore at a time, with margin. */
 const DISK_FACTOR = 6;
@@ -131,11 +114,7 @@ async function main(): Promise<void> {
     let dbBytes = 0;
     try {
       node.get("PRAGMA journal_mode = WAL");
-      // Only Litestream folds the side file back in this probe, so none of the day's changes can be
-      // folded before Litestream reads them. What that setting does to the product is measurement 2's
-      // question, not this one's; a restore's duration does not depend on it.
       node.exec("PRAGMA wal_autocheckpoint = 0");
-      // Stands in for media_blobs: each picture's bytes are stored whole.
       node.exec("CREATE TABLE IF NOT EXISTS images (id INTEGER PRIMARY KEY, bytes BLOB NOT NULL)");
       const insert = node.handle.prepare("INSERT INTO images (bytes) VALUES (?)");
       for (let i = 0; i < o.images; i += 20) {
