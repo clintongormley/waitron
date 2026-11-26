@@ -28,7 +28,8 @@ export class StripeAddReader extends LitElement {
   ];
 
   @property({ attribute: false }) request!: DashboardRequest;
-  @property({ attribute: false }) onAdded: () => void = () => {};
+  @property({ attribute: false }) onAdded: (reader: { id: string; name: string }) => void =
+    () => {};
   @property({ attribute: false }) onClose: () => void = () => {};
 
   @state() private name = "";
@@ -154,17 +155,18 @@ export class StripeAddReader extends LitElement {
     this.busy = true;
     scope?.changed();
     try {
-      await new StripePaymentsClient(this.request).addReader({
+      const { id } = await new StripePaymentsClient(this.request).addReader({
         name: submitted.name,
         reference: submitted.reference,
       });
+      const reader = { id, name: submitted.name };
       if (opening !== this.#opening || !this.isConnected || this.#closed) {
-        added();
+        added(reader);
         return;
       }
       this.busy = false;
       scope?.commit(submitted);
-      added();
+      added(reader);
       if (opening === this.#opening && this.isConnected && !this.#closed && !scope?.isDirty()) {
         this.shadowRoot!.querySelector("wt-dialog")!.closeAfter("saved");
         this.#close();

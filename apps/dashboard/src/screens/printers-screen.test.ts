@@ -1135,12 +1135,29 @@ describe("guided printer calibration", () => {
   });
 
   it("opens calibration after adding, and saves the tested draft", async () => {
-    const api = stubApi({ listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered) });
-    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    const api = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
+      createPrinter: vi.fn().mockResolvedValue({ id: "p9", outcome: "created" }),
+      listDeviceProfiles: vi.fn().mockResolvedValue([
+        { id: "till", name: "Till", formFactor: "till" },
+        { id: "kitchen", name: "Kitchen", formFactor: "kds" },
+      ]),
+      assignPrinterProfiles: vi.fn().mockResolvedValue(undefined),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api,
+      canManageStationPrinters: true,
+    });
     await flush(el);
     await openDiscovery(el);
     await addDiscovered(el, q(el, "[data-test='register-a1:SN-1']")!);
     await flush(el);
+    await vi.waitFor(() => expect(q(el, "[data-test=equipment-profile-till]")).not.toBeNull());
+    expect((q(el, "[data-test=equipment-profile-till]") as HTMLInputElement).checked).toBe(false);
+    expect(q(el, "[data-test=equipment-profile-kitchen]")).toBeNull();
+    expect(q(el, "[data-test=calibration-step-1]")).toBeNull();
+    q(el, "[data-test=leave-equipment-unassigned]")!.click();
+    expect(api.assignPrinterProfiles).not.toHaveBeenCalled();
     await vi.waitFor(() =>
       expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true),
     );
@@ -1304,7 +1321,7 @@ describe("printer configuration tabs", () => {
       listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
       createPrinter: vi.fn(() => {
         rows = [{ ...printers[0]!, id: "p9" }];
-        return Promise.resolve({ id: "p9" });
+        return Promise.resolve({ id: "p9", outcome: "created" as const });
       }),
     });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -1332,7 +1349,7 @@ describe("printer configuration tabs", () => {
       listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
       createPrinter: vi.fn(() => {
         rows = [{ ...printers[0]!, id: "p9" }];
-        return Promise.resolve({ id: "p9" });
+        return Promise.resolve({ id: "p9", outcome: "created" as const });
       }),
     });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -10074,10 +10091,10 @@ describe("printers-screen Bluetooth pairing", () => {
 
     it("says it is switching on a printer the scan finds already paired, and sends no second switch-on while it does", async () => {
       const { el, api } = await mountOff([found]);
-      let answer!: (created: { id: string }) => void;
+      let answer!: (created: { id: string; outcome: "enabled" }) => void;
       vi.mocked(api.createPrinter).mockImplementationOnce(
         () =>
-          new Promise<{ id: string }>((resolve) => {
+          new Promise<{ id: string; outcome: "enabled" }>((resolve) => {
             answer = resolve;
           }),
       );
@@ -10095,7 +10112,7 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       expect(api.createPrinter).toHaveBeenCalledOnce();
       expect(api.startPrinterDiscovery).toHaveBeenCalledOnce();
-      answer({ id: "p9" });
+      answer({ id: "p9", outcome: "enabled" });
       await vi.waitFor(() => expect(q(el, sel("pair-again-modal"))).toBeNull());
       expect(api.createPrinter).toHaveBeenCalledOnce();
       expect(api.updatePrinter).not.toHaveBeenCalled();
@@ -12819,7 +12836,14 @@ describe("office printers in discovery", () => {
 
   it("names a new A4 printer in a dialog whose Add is ready with the discovered name, then adds it from the row's discovery entry", async () => {
     const listPagePrinters = vi.fn().mockResolvedValue([]);
-    const { el, api } = await mountWith([office()], { listPagePrinters });
+    const { el, api } = await mountWith([office()], {
+      listPagePrinters,
+      listDeviceProfiles: vi
+        .fn()
+        .mockResolvedValue([{ id: "till", name: "Till", formFactor: "till" }]),
+      assignPrinterProfiles: vi.fn().mockResolvedValue(undefined),
+    });
+    el.canManageStationPrinters = true;
     q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
     await flush(el);
     const field = q(el, "[data-test=page-printer-add-modal] wt-input[name=name]") as unknown as {
@@ -12868,6 +12892,13 @@ describe("office printers in discovery", () => {
       t("printers.added").replace("{name}", "Back office"),
     );
     expect(q(el, "[data-test=new-printer-modal]")).not.toBeNull();
+    await vi.waitFor(() => expect(q(el, "[data-test=equipment-profile-till]")).not.toBeNull());
+    const till = q(el, "[data-test=equipment-profile-till]") as HTMLInputElement;
+    expect(till.checked).toBe(false);
+    till.click();
+    await flush(el);
+    q(el, "[data-test=save-equipment-profiles]")!.click();
+    await vi.waitFor(() => expect(api.assignPrinterProfiles).toHaveBeenCalledTimes(1));
   });
 
   it("keeps the dialog and the name when the server refuses the add, with Add still pressable", async () => {

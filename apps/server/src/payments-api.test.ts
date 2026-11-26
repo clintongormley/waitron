@@ -1,7 +1,7 @@
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { recordIncidentOnce } from "@waitron/core";
-import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { removeBuiltInPermissionForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -1459,7 +1459,7 @@ describe("reader adoption and local management", () => {
       expect.objectContaining({ id, name: "Terrace", printsOwnSlipAutomatically: true }),
     ]);
     const adopted = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
-    expect(await adopted.json()).toEqual({ id, status: "paired" });
+    expect(await adopted.json()).toEqual({ id, status: "paired", outcome: "enabled" });
     expect(await saved()).toEqual([
       expect.objectContaining({ id, printsOwnSlipAutomatically: true }),
     ]);
@@ -1579,7 +1579,7 @@ describe("reader adoption and local management", () => {
       ...opts,
       body: { ...adoption, name: "Terrace" },
     });
-    expect(await again.json()).toEqual({ id, status: "paired" });
+    expect(await again.json()).toEqual({ id, status: "paired", outcome: "enabled" });
     const stored = await suite.db
       .select({
         id: cardReaders.id,
@@ -1641,42 +1641,66 @@ describe("reader adoption and local management", () => {
     }));
   }
 
-  async function expectJoinedTakingProfiles(
-    p: Awaited<ReturnType<typeof seededProfiles>>,
-    id: string,
-  ) {
-    expect(await listsOf(p.till)).toEqual([
-      { readerId: p.r0, position: 0, isDefault: true },
-      { readerId: id, position: 1, isDefault: false },
-    ]);
-    expect(await listsOf(p.handheld)).toEqual([{ readerId: id, position: 0, isDefault: false }]);
-    expect(await listsOf(p.kds)).toEqual([]);
-    expect(await listsOf(p.retired)).toEqual([]);
-  }
-
-  it("adopting a new reader joins every live profile that takes reader payments, never as default", async () => {
+  it("leaves profile assignments empty until a manager saves the selected profiles", async () => {
     const venue = await seedVenueWithStaff();
     const p = await seededProfiles();
     const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
     await connectStripe(app, venue);
-    const res = await send(app, "POST", `${base}/readers/adopt`, {
-      cookie: venue.managerCookie,
-      body: adoption,
-    });
+    const opts = { cookie: venue.managerCookie };
+    const res = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
     expect(res.status).toBe(201);
-    const { id } = (await res.json()) as { id: string };
-    await expectJoinedTakingProfiles(p, id);
+    const added = (await res.json()) as { id: string; outcome: string };
+    const initialTill = [{ readerId: p.r0, position: 0, isDefault: true }];
+    expect(await listsOf(p.till)).toEqual(initialTill);
+    expect(await listsOf(p.handheld)).toEqual([]);
+    expect(added.outcome).toBe("created");
+
+    await withTransaction(suite.db, (tx) =>
+      removeBuiltInPermissionForTest(tx, "manager", "venue.configure"),
+    );
+    const choices = `${base}/reader-profile-choices`;
+    expect((await send(app, "GET", choices, { cookie: venue.staffCookie })).status).toBe(403);
+    const offered = await send(app, "GET", choices, opts);
+    expect(offered.status).toBe(200);
+    const offeredProfiles = await offered.json();
+    expect(offeredProfiles).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: p.retired })]),
+    );
+    expect(offeredProfiles).toEqual(
+      expect.arrayContaining([
+        { id: p.till, name: expect.any(String), eligible: true },
+        { id: p.handheld, name: expect.any(String), eligible: true },
+        { id: p.kds, name: expect.any(String), eligible: false },
+      ]),
+    );
+    const endpoint = `${base}/readers/${added.id}/profiles`;
+    const denied = await send(app, "PUT", endpoint, {
+      ...opts,
+      body: { profileIds: [p.till, p.retired] },
+    });
+    expect(await denied.json()).toMatchObject({ error: { code: "management.request_invalid" } });
+    expect(await listsOf(p.till)).toEqual(initialTill);
+    expect(
+      (await send(app, "PUT", endpoint, { ...opts, body: { profileIds: [p.till] } })).status,
+    ).toBe(204);
+    expect(await listsOf(p.till)).toEqual([
+      ...initialTill,
+      { readerId: added.id, position: 1, isDefault: false },
+    ]);
+    expect(await listsOf(p.handheld)).toEqual([]);
+    expect(await listsOf(p.kds)).toEqual([]);
+    expect(await listsOf(p.retired)).toEqual([]);
   });
 
-  it("a reader added through the add route joins every live profile that takes reader payments, never as default", async () => {
+  it("registers a paired reader without changing profile assignments", async () => {
     const venue = await seedVenueWithStaff();
     const p = await seededProfiles();
     const app = mountApp(venue);
     await connectStripe(app, venue);
-    const res = await addReader(app, venue, nextRef(), "Barra");
+    const res = await addReader(app, venue, nextRef(), "Front counter");
     expect(res.status).toBe(201);
-    const { id } = (await res.json()) as { id: string };
-    await expectJoinedTakingProfiles(p, id);
+    expect(await listsOf(p.till)).toEqual([{ readerId: p.r0, position: 0, isDefault: true }]);
+    expect(await listsOf(p.handheld)).toEqual([]);
   });
 
   it("re-adopting a disabled reader joins no list a manager took it off", async () => {
@@ -1690,7 +1714,7 @@ describe("reader adoption and local management", () => {
     await withTransaction(suite.db, (tx) => removeIdFromJson(tx, deviceProfiles.cardReaders, id));
     await switchOffReader(id);
     const again = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
-    expect(await again.json()).toEqual({ id, status: "paired" });
+    expect(await again.json()).toEqual({ id, status: "paired", outcome: "enabled" });
     expect(await listsOf(p.till)).toEqual([{ readerId: p.r0, position: 0, isDefault: true }]);
     expect(await listsOf(p.handheld)).toEqual([]);
   });
@@ -1716,7 +1740,7 @@ describe("reader adoption and local management", () => {
       body: { ...adoption, name: "Provider name" },
     });
     expect(again.status).toBe(201);
-    expect(await again.json()).toEqual({ id, status: "paired" });
+    expect(await again.json()).toEqual({ id, status: "paired", outcome: "restored" });
     expect(await suite.db.select().from(cardReaders).where(eq(cardReaders.id, id))).toEqual(before);
     expect(await listsOf(p.till)).toEqual([{ readerId: p.r0, position: 0, isDefault: true }]);
     expect(await listsOf(p.handheld)).toEqual([]);
@@ -1828,7 +1852,7 @@ describe("reader adoption and local management", () => {
     ]);
     paired = true;
     const adopted = await send(app, "POST", `${base}/readers/adopt`, { ...opts, body: adoption });
-    expect(await adopted.json()).toEqual({ id, status: "paired" });
+    expect(await adopted.json()).toEqual({ id, status: "paired", outcome: "enabled" });
     expect(listings).toBe(2);
     expect(await (await send(app, "GET", `${base}/readers`, opts)).json()).toEqual([
       {
@@ -3159,7 +3183,11 @@ describe("reader delete", () => {
           body: { providerId: "stripe", providerRef, name: "Ignored" },
         });
         expect(restored.status).toBe(201);
-        expect(await restored.json()).toEqual({ id: current.id, status: "paired" });
+        expect(await restored.json()).toEqual({
+          id: current.id,
+          status: "paired",
+          outcome: "enabled",
+        });
         expect(await readerRow(current.id)).toEqual({
           ...current,
           active: current.disabledAt === null,

@@ -169,15 +169,6 @@ On 25 November 2026 a portable printer's label printed legibly on a network prin
 drawer is switched on, its QR was read in the till, and the print queue held a document and no drawer
 job for it. Still to check: a reader's label, on a second printer.
 
-## A1576. Adding a card reader or a printer asks which device profiles can use it
-
-Owner, 2026-11-25: "the card reader was automatically enabled in my device profile without asking me.
-perhaps after adding we should ask in which device profiles to include it?", then "Ask for both". A
-new reader joins every live profile that takes reader payments (`joinReaderTakingProfiles`,
-`apps/server/src/payments-api.ts`); the two printers added that day joined none by themselves. After adding either, ask
-"Which device profiles can use it?" with a tick for each profile: for a reader, the profiles it joins
-today start ticked; for a printer, none. Draw it for the owner first.
-
 ## A guest paying from their own phone
 
 (owner idea 2026-09-18, parked — the surface it needs does
@@ -259,6 +250,10 @@ Remaining Stripe qualification and maintenance.
   [A796 design §6](../superpowers/specs/2026-10-19-a796-handheld-payments-design.md#6-tap-to-pay)).
 
 ## Decisions and deliberate limits
+
+- **A1576. Choose profiles when adding equipment** (owner, 2026-11-25 and 26). Ask for both readers
+  and printers. A new reader starts with eligible profiles ticked. The printer picker and the re-added reader
+  picker start with clear ticks.
 
 - **A949 signature qualification closed** (owner, 2026-11-20 16:19). No signature-required card was
   available, so the signature step was not tested. The existing

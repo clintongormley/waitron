@@ -2,7 +2,7 @@
 
 **Finish line.** After adding a card reader or printer, a manager can choose which device profiles
 can use it. Show the owner the proposed picker before building. The request and initial ticks are
-in [A1576](../../backlog/payments.md#a1576-adding-a-card-reader-or-a-printer-asks-which-device-profiles-can-use-it).
+in [Payments decisions](../../backlog/payments.md#decisions-and-deliberate-limits) under A1576.
 
 1. **Save only the selected equipment.** In `apps/server/src/payments-api.ts`, remove the automatic
    assignment for new readers. Reuse the card-payment eligibility check and `appendReaderToProfiles`.

@@ -4,7 +4,9 @@
 
 In **Printers**, open the **Printers** tab and choose **Add a printer**. Waitron searches for
 network, USB and Bluetooth printers. Choose **Add** beside a printer, change the name if you like,
-and choose **Add** again. For a receipt printer, calibration opens next.
+and choose **Add** again. When asked, tick the device profiles that should use it and choose
+**Save profiles**, or choose **Leave unassigned**. Receipt printers go on the receipt and payment-slip lists. Office
+printers go on the invoice list. A new receipt printer opens calibration next.
 
 A Bluetooth printer must be in pairing mode first. Choose **Pair and add** beside it, enter its
 PIN and choose **Pair and add** again. For a new printer, the name dialog opens: choose **Add**.
@@ -19,7 +21,7 @@ If a network printer is not found, open **Check a known address**, type its IP a
 To remove a receipt or station printer, choose **Delete** in its row menu or details. The
 confirmation lists the assignments removed and work ended. To use it again, choose **Add a
 printer**, then **Add** beside it. A recognised printer keeps its name and calibration, so you
-do not need to name or calibrate it again. Assign its devices and prep stations again.
+do not need to name or calibrate it again. Choose its profiles and assign its devices and prep stations again.
 
 **Delete** also asks each box that reports the Bluetooth printer paired to unpair it. Put the
 printer in pairing mode and choose **Pair and add** to bring it back. If Waitron says a box
@@ -135,6 +137,8 @@ If you deny a request, the agent can appear again under the other requests as **
 To add a reader, open **Card payments** in Hardware and choose **Add reader** above the table.
 Choose the provider if asked, then add a reader from its list or pair a new one.
 If no provider is connected, choose **Configure card providers** to set one up first.
+Keep the ticks for profiles that should use a new reader and choose **Save profiles**, or choose
+**Leave unassigned**.
 
 Before paying, open **Hardware → Devices**, select your device and choose **Edit** to set its card reader. If a card reader’s battery percentage is missing, check its charge on the reader itself.
 
@@ -143,6 +147,6 @@ on it. In Chrome on an Android phone, **NFC sticker…** writes a sticker they t
 
 In **Card payments**, find the reader under **Card readers** and choose **Delete** in its menu. The confirmation names the assignments removed. If a payment is in progress, let it finish first.
 
-When you add a deleted reader again, a recognised registration shows its saved name and print settings: choose **Add**, then assign it to devices and profiles again. Otherwise, pair it using the provider's normal steps.
+When you add a deleted reader again, a recognised registration shows its saved name and print settings: choose **Add**. Tick the profiles that should use it and choose **Save profiles**. Otherwise, pair it using the provider's normal steps.
 
 Choose **Unpair from …** to remove only its provider registration while keeping it listed in Waitron. You will need to add or pair it again before using it.

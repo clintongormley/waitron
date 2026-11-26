@@ -74,7 +74,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       listPagePrinters: async () => [],
       startPrinterDiscovery: async () => {},
       renewPrinterDiscovery: async () => {},
-      createPrinter: async () => ({ id: "p1" }),
+      createPrinter: async () => ({ id: "p1", outcome: "created" }),
       ...overrides,
     } as DashboardApi,
   });
@@ -258,7 +258,7 @@ it("network registration commits the matching address before a refused refresh",
     },
     createPrinter: async (body) => {
       submitted = body;
-      return { id: "p1" };
+      return { id: "p1", outcome: "created" };
     },
   });
   change(screen, "host", " 192.168.20.247 ");
@@ -310,7 +310,7 @@ it("refused registration retains the address and name for one parent question", 
   expect(q(screen, "[data-test=name-printer-modal]")).not.toBeNull();
 });
 it("a later address edit remains dirty after the submitted registration succeeds", async () => {
-  let finish!: (result: { id: string }) => void;
+  let finish!: (result: { id: string; outcome: "created" }) => void;
   const { screen } = await mount({
     createPrinter: () =>
       new Promise((resolve) => {
@@ -320,7 +320,7 @@ it("a later address edit remains dirty after the submitted registration succeeds
   change(screen, "host", "192.168.20.247");
   await register(screen);
   change(screen, "host", "192.168.20.248");
-  finish({ id: "p1" });
+  finish({ id: "p1", outcome: "created" });
   await expect.poll(() => q(screen, "[data-test=edit-printer-modal]")).not.toBeNull();
   expect(modal(screen)).not.toBeNull();
   expect(field(screen, "host").value).toBe("192.168.20.248");
@@ -330,7 +330,7 @@ it("a later address edit remains dirty after the submitted registration succeeds
 });
 for (const route of ["close", "escape"] as const) {
   it(`submitted registration permits discovery ${route} and reloads without reopening it`, async () => {
-    let finish!: (result: { id: string }) => void;
+    let finish!: (result: { id: string; outcome: "created" }) => void;
     let reads = 0;
     const { app, screen } = await mount({
       listPrinters: async () => {
@@ -352,7 +352,7 @@ for (const route of ["close", "escape"] as const) {
     await expect.poll(() => modal(screen)).toBeNull();
     expect(unload()).toBe(false);
     expect(app.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
-    finish({ id: "p1" });
+    finish({ id: "p1", outcome: "created" });
     await expect.poll(() => reads).toBe(2);
     expect(q(screen, "[data-test=edit-printer-modal]")).toBeNull();
   });

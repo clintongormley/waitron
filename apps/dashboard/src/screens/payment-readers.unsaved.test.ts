@@ -72,7 +72,8 @@ async function mount(overrides: Partial<DashboardApi> = {}, discovery = false) {
       listHeldPayments: async () => [],
       saveReader: async () => {},
       unpairReader: async () => {},
-      adoptReader: async () => ({ id: "r3", status: "paired" }),
+      adoptReader: async () => ({ id: "r3", status: "paired", outcome: "created" }),
+      listReaderProfileChoices: async () => [],
       ...overrides,
     } as DashboardApi,
   });
@@ -177,7 +178,7 @@ for (const discovery of [false, true]) {
         },
         adoptReader: async (body) => {
           sent.push(body);
-          return { id: "r3", status: "paired" };
+          return { id: "r3", status: "paired", outcome: "created" };
         },
       },
       discovery,
@@ -239,6 +240,8 @@ it("adopting one discovery row does not discard another edited name", async () =
   expect(dialog(screen, "reader-discovery")).not.toBeNull();
   expect(unload()).toBe(true);
   expect((q(screen, "[data-test=name-a2]") as HTMLInputElement).value).toBe("New bar");
+  q(screen, "[data-test=leave-equipment-unassigned]")!.click();
+  await expect.poll(() => q(screen, "[data-test=equipment-profile-picker]")).toBeNull();
   await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
 });
@@ -252,7 +255,7 @@ it("adoption commits only the submitted name when newer input arrives before its
         await new Promise<void>((resolve) => {
           finish = resolve;
         });
-        return { id: "r3", status: "paired" };
+        return { id: "r3", status: "paired", outcome: "created" };
       },
     },
     true,
@@ -267,6 +270,8 @@ it("adoption commits only the submitted name when newer input arrives before its
     .toBe(false);
   expect((q(screen, "[data-test=name-a1]") as HTMLInputElement).value).toBe("Newer");
   expect(unload()).toBe(true);
+  q(screen, "[data-test=leave-equipment-unassigned]")!.click();
+  await expect.poll(() => q(screen, "[data-test=equipment-profile-picker]")).toBeNull();
   await userEvent.keyboard("{Escape}");
   await choose(app, "keep");
   change(screen, "Submitted", "name-a1");
@@ -300,7 +305,7 @@ for (const refuses of [false, true]) {
             finish = resolve;
           });
           if (refuses) throw { code: "connection.failed" };
-          return { id: "r3", status: "paired" };
+          return { id: "r3", status: "paired", outcome: "created" };
         },
       },
       true,
@@ -319,6 +324,7 @@ for (const refuses of [false, true]) {
     await screen.updateComplete;
     expect((q(screen, "[data-test=name-a1]") as HTMLInputElement).value).toBe("Replacement");
     expect((q(screen, "[data-test=adopt-a1]") as HTMLButtonElement).disabled).toBe(false);
+    expect(q(screen, "[data-test=equipment-profile-picker]")).toBeNull();
     expect(dialog(screen, "reader-discovery")!.querySelector("wt-form-actions")!.error).toBe("");
     expect(reads).toBe(beforeReply);
     expect(unload()).toBe(true);
@@ -365,7 +371,7 @@ for (const discovery of [false, true]) {
         saveReader: wait,
         adoptReader: async () => {
           await wait();
-          return { id: "r3", status: "paired" };
+          return { id: "r3", status: "paired", outcome: "created" };
         },
       },
       discovery,
