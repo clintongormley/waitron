@@ -1120,6 +1120,66 @@ it("shows a stored price read again while the field holds nothing typed", async 
   expect(override(el, "mi-lager").value).toBe("2.60");
 });
 
+describe("a product that gains its first variant while a price is typed for it", () => {
+  /** Lemonade before another manager adds its first variant: a product with a field of its own. */
+  const plainLemonade: MenuPriceRow = {
+    ...lemonade,
+    combined: combinedFixture("p-lemonade", "3.00"),
+    variants: [],
+  };
+
+  it("sends only the prices still in a field, and keeps the other typed price", async () => {
+    const el = await mount({ rows: [burger, plainLemonade, lager] });
+    const heard = priceSaves(el);
+    await typeIn(el, "mi-lemonade", "3.20");
+    await typeIn(el, "mi-lager", "2.90");
+    el.rows = [burger, lemonade, lager];
+    await el.updateComplete;
+    await table(el).updateComplete;
+    expect(derivedPrice(el, "mi-lemonade")).not.toBeNull();
+    expect(override(el, "mi-lager").value).toBe("2.90");
+    button(el).click();
+    await vi.waitFor(() => expect(heard).toHaveBeenCalledOnce());
+    expect(heard.mock.calls[0]![0].map(({ key }) => key)).toEqual(["mi-lager"]);
+  });
+
+  it("leaves Save and Cancel quiet once the only typed price has no field", async () => {
+    const el = await mount({ rows: [burger, plainLemonade, lager] });
+    const heard = priceSaves(el);
+    const unsent = vi.fn();
+    el.addEventListener("price-draft-change", (event) =>
+      unsent((event as CustomEvent<boolean>).detail),
+    );
+    await typeIn(el, "mi-lemonade", "3.20");
+    expect(button(el).disabled).toBe(false);
+    el.rows = [burger, lemonade, lager];
+    await el.updateComplete;
+    await table(el).updateComplete;
+    expect(button(el).disabled).toBe(true);
+    expect(button(el, "cancel").disabled).toBe(true);
+    expect(unsent).toHaveBeenLastCalledWith(false);
+    button(el).click();
+    await el.updateComplete;
+    expect(heard).not.toHaveBeenCalled();
+    expect(actions(el).error).toBe("");
+  });
+
+  it("drops the refusal named on the field that went", async () => {
+    const el = await mount({ rows: [burger, plainLemonade, lager] });
+    priceSaves(el, { "mi-lemonade": { reason: "Price changed elsewhere", namesField: true } });
+    await typeIn(el, "mi-lemonade", "3.20");
+    button(el).click();
+    await vi.waitFor(() =>
+      expect(override(el, "mi-lemonade").error).toBe("Price changed elsewhere"),
+    );
+    el.rows = [burger, lemonade, lager];
+    await el.updateComplete;
+    await table(el).updateComplete;
+    expect(actions(el).error).toBe("");
+    expect(button(el).disabled).toBe(true);
+  });
+});
+
 it("names a variant the product list does not hold as missing, in its row and its field's label", async () => {
   const el = await mount({ products: [] });
   toggleOf(el, "mi-lemonade")!.click();

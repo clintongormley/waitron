@@ -341,6 +341,7 @@ export class MenuPricesTable extends LitElement {
         this.products.flatMap(({ variants }) => variants.map((variant) => [variant.id, variant])),
       );
     if (changed.has("rows") || changed.has("products")) this.#readLines();
+    if (changed.has("rows")) this.#dropFieldlessDrafts();
     const startedOnClashes = this.#startOnClashes;
     this.#decideStart();
     if (
@@ -350,6 +351,25 @@ export class MenuPricesTable extends LitElement {
       this.#startOnClashes !== startedOnClashes
     )
       this.#columns = this.#buildColumns();
+  }
+
+  /** A product that gained its first variant on a re-read has no field left to show or correct
+   * what was typed in it. */
+  #dropFieldlessDrafts(): void {
+    const gone = [...this.drafts.keys()].filter((key) => {
+      const line = this.#lineOf.get(key);
+      return line !== undefined && !hasField(line);
+    });
+    if (gone.length === 0) return;
+    const drafts = new Map(this.drafts);
+    const refusals = { ...this.refusals };
+    for (const key of gone) {
+      drafts.delete(key);
+      delete refusals[key];
+    }
+    this.drafts = drafts;
+    this.refusals = refusals;
+    this.#feedback.dismiss(...gone);
   }
 
   #readClashes(): void {
@@ -809,6 +829,7 @@ export class MenuPricesTable extends LitElement {
       const price = blankToNull(text);
       if (
         line !== undefined &&
+        hasField(line) &&
         ((price !== null && !isProductPrice(price)) || !samePrice(price, this.#stored(line)))
       )
         saves.push({
