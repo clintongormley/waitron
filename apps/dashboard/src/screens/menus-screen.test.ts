@@ -8926,6 +8926,8 @@ describe("the Home page tab", () => {
     await vi.waitFor(() => expect(preview(el)!.shortcuts![0]!.name).toBe("New burger"));
     expect(control(el).value).toBe("menu_first");
 
+    expect(preview(el)!.busy).toBe(true);
+
     const older = { ...menuHome(), order: "menu_first" as const };
     pending.resolve({ ...older, dropped: [] });
     await vi.waitFor(() => expect(preview(el)!.busy).toBe(false));

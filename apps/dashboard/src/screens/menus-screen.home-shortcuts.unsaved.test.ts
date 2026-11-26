@@ -180,19 +180,22 @@ const actions = (screen: MenusScreen) =>
 const savePage = (screen: MenusScreen) =>
   screen.shadowRoot!.querySelector<HTMLElement>('[data-test="home-save"]')!.click();
 
+function missingTile(memberId: string, name: string, position = 0): MenuHome["shortcuts"][number] {
+  return {
+    memberId,
+    position,
+    ref: { kind: "missing", name },
+    name,
+    reachable: false,
+    missingName: name,
+  };
+}
+
 it("stages shortcut edits and Shown first before sending one ordered Save", async () => {
+  const kept = missingTile("missing-kept", "Soup", 1);
   const api = client(undefined, undefined, {
     ...home,
-    shortcuts: [
-      {
-        memberId: "missing",
-        position: 0,
-        ref: { kind: "missing", name: "Soup" },
-        name: "Soup",
-        reachable: false,
-        missingName: "Soup",
-      },
-    ],
+    shortcuts: [missingTile("missing-removed", "Cake"), kept],
   });
   const { screen, window, picker } = await mount(api);
   await choose(picker(), ["p-lager", "p-burger"]);
@@ -202,7 +205,7 @@ it("stages shortcut edits and Shown first before sending one ordered Save", asyn
 
   const preview = screen.shadowRoot!.querySelector("dashboard-device-home-preview")!;
   await preview.updateComplete;
-  const [missing, lager, burger] = preview.shortcuts!;
+  const [missing, , lager, burger] = preview.shortcuts!;
   preview.dispatchEvent(
     new CustomEvent("wt-shortcut-remove", { detail: { memberId: missing!.memberId } }),
   );
@@ -216,7 +219,11 @@ it("stages shortcut edits and Shown first before sending one ordered Save", asyn
   await vi.waitFor(() =>
     expect(api.saveMenuHome).toHaveBeenCalledExactlyOnceWith("menu", {
       order: "menu_first",
-      shortcuts: [burger, lager].map((tile) => ({ memberId: tile!.memberId, ref: tile!.ref })),
+      shortcuts: [
+        { memberId: burger!.memberId, ref: burger!.ref },
+        { memberId: kept.memberId, ref: { kind: "missing" } },
+        { memberId: lager!.memberId, ref: lager!.ref },
+      ],
     }),
   );
 });
@@ -249,28 +256,45 @@ it("commits a successful Save before a failed refresh and names dropped tiles be
   expect(await formMessageOf(actions(screen))).toBeFalsy();
 });
 
-it("keeps the draft after a refused Save and asks before Cancel discards it", async () => {
-  const api = client(async () => {
-    throw { code: "menu.shortcut_unreachable", params: { field: "shortcuts.0.ref" } };
-  });
-  const { app, screen, window, picker } = await mount(api);
-  await choose(picker(), ["p-lager"]);
-  pressAdd(picker());
-  await vi.waitFor(() => expect(window().open).toBe(false));
-  const preview = screen.shadowRoot!.querySelector("dashboard-device-home-preview")!;
-  savePage(screen);
-  await vi.waitFor(async () =>
-    expect((await formMessageOf(actions(screen)))?.textContent).toContain("Lager"),
-  );
-  expect(preview.shortcuts?.map(({ name }) => name)).toEqual(["Lager"]);
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-  screen.shadowRoot!.querySelector<HTMLElement>('[data-test="home-cancel"]')!.click();
-  const q = await question(app);
-  await vi.waitFor(() => expect(q.open).toBe(true));
-  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-  await vi.waitFor(() => expect(preview.shortcuts).toEqual([]));
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-});
+it.each([
+  { code: "menu.shortcut_unreachable", initial: [], words: "“Lager” could not be saved." },
+  {
+    code: "menu_section.not_found",
+    initial: [missingTile("missing", "Soup")],
+    words: "“Soup” was removed from the page.",
+  },
+])(
+  "keeps the draft after a refused Save ($code) and asks before Cancel discards it",
+  async ({ code, initial, words }) => {
+    const api = client(
+      async () => {
+        throw { code, params: { field: "shortcuts.0.ref" } };
+      },
+      undefined,
+      { ...home, shortcuts: initial },
+    );
+    const { app, screen, window, picker } = await mount(api);
+    await choose(picker(), ["p-lager"]);
+    pressAdd(picker());
+    await vi.waitFor(() => expect(window().open).toBe(false));
+    const preview = screen.shadowRoot!.querySelector("dashboard-device-home-preview")!;
+    savePage(screen);
+    await vi.waitFor(async () =>
+      expect((await formMessageOf(actions(screen)))?.textContent).toContain(words),
+    );
+    expect(preview.shortcuts?.map(({ name }) => name)).toEqual([
+      ...initial.map(({ name }) => name),
+      "Lager",
+    ]);
+    expect(app.leave.coordinator.isDirty()).toBe(true);
+    screen.shadowRoot!.querySelector<HTMLElement>('[data-test="home-cancel"]')!.click();
+    const q = await question(app);
+    await vi.waitFor(() => expect(q.open).toBe(true));
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await vi.waitFor(() => expect(preview.shortcuts).toEqual(initial));
+    expect(app.leave.coordinator.isDirty()).toBe(false);
+  },
+);
 
 it("still asks after the window's picker was taken out of the page and put back", async () => {
   const { app, window, picker } = await mount(client());

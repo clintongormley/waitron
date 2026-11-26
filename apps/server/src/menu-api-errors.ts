@@ -98,8 +98,6 @@ export const runBodyProduct = runBodyIds("product.not_found");
 // A folder move or delete names its products and folders in the body.
 export const runFolder = runBodyIds("category.not_found", "product.not_found");
 export const runBodySection = runBodyIds("menu_section.not_found", "menu_section.wrong_role");
-// A shortcut replace's address (its member) and body (the section it names) can both raise
-// `menu_section.not_found`, so that code keeps its 404.
 export const runBodySetMenu = runBodyIds("set_menu.not_found");
 export const runStructureSave = runBodyIds(
   "menu_section.not_found",
