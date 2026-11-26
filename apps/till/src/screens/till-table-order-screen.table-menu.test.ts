@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
@@ -36,7 +36,7 @@ const twoTables: TableParty = { ...switcherParty, tableIds: ["t4", "t5"] };
 function table(id: string, party: TableParty | null, requested = false): TableState {
   return {
     id,
-    label: id,
+    label: id.slice(1),
     shortName: id,
     party,
     signals: requested ? [{ kind: "bill_requested", requestedAt: "2026-10-31T20:00:00.000Z" }] : [],
@@ -71,22 +71,27 @@ async function mountScreen(
     lines?: TabLine[];
     takesPayment?: boolean;
   } = {},
+  theme: "light" | "dark" = "light",
 ) {
   const party = over.party === undefined ? twoTables : over.party;
-  const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
-    products: [],
-    lines: over.lines ?? [line],
-    orderId: "orderId" in over ? over.orderId : "wo-2",
-    party,
-    bills: over.bills ?? bills,
-    fullInvoices: over.fullInvoices ?? true,
-    tables:
-      party === null ? [] : party.tableIds.map((id) => table(id, party, over.requested ?? false)),
-    busy: over.busy ?? false,
-    billPrintPending: over.billPrintPending ?? false,
-    groupCommandBusy: over.groupCommandBusy ?? false,
-    ...(over.takesPayment === undefined ? {} : { takesPayment: over.takesPayment }),
-  });
+  const { el } = await mountWidget<TillTableOrderScreen>(
+    "till-table-order-screen",
+    {
+      products: [],
+      lines: over.lines ?? [line],
+      orderId: "orderId" in over ? over.orderId : "wo-2",
+      party,
+      bills: over.bills ?? bills,
+      fullInvoices: over.fullInvoices ?? true,
+      tables:
+        party === null ? [] : party.tableIds.map((id) => table(id, party, over.requested ?? false)),
+      busy: over.busy ?? false,
+      billPrintPending: over.billPrintPending ?? false,
+      groupCommandBusy: over.groupCommandBusy ?? false,
+      ...(over.takesPayment === undefined ? {} : { takesPayment: over.takesPayment }),
+    },
+    theme,
+  );
   return el;
 }
 
@@ -134,7 +139,7 @@ describe("Table and bill actions", () => {
       const sheet = el.shadowRoot!.querySelector("[data-party-menu]");
       expect(sheet).not.toBeNull();
       const trigger = sheet!.shadowRoot!.querySelector("button")!;
-      expect(trigger.getAttribute("aria-label")).toBe("4");
+      expect(trigger.getAttribute("aria-label")).toBe("Table 4");
       await userEvent.click(trigger);
 
       const popup = sheet!.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
@@ -145,13 +150,63 @@ describe("Table and bill actions", () => {
       expect(el.shadowRoot!.activeElement).toBe(sheet!.querySelector('[data-action="allergy"]'));
       const finish = sheet!.querySelector<HTMLElement>("[data-finish-table]")!;
       expect(sheet!.lastElementChild).toBe(finish);
-      expect(finish.previousElementSibling?.tagName).toBe("HR");
+      expect(finish.previousElementSibling?.tagName).not.toBe("HR");
       const finished = capture(el, "finish-table");
       await userEvent.click(finish);
       expect(finished).toEqual([{}]);
     } finally {
       await page.viewport(1280, 900);
     }
+  });
+
+  it("keeps the table name above the guest count and party name", async () => {
+    const el = await mountScreen({
+      party: { ...twoTables, displayName: "Garcia", name: "Garcia" },
+    });
+    const sheet = partyMenu(el);
+    const trigger = sheet.shadowRoot!.querySelector("button")!;
+    expect(trigger.getAttribute("aria-label")).toBe("Table 4");
+    expect(textOf(sheet.querySelector('[slot="trigger"]')!)).toBe("Table 4");
+    expect(textOf(sheet.nextElementSibling!)).toBe("3 guests · Garcia");
+    expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+
+    await userEvent.click(trigger);
+    await commands.parkPointer();
+    await expect.element(page.getByRole("dialog", { name: "Table 4" })).toBeVisible();
+    expect(getComputedStyle(trigger).backgroundColor).toBe("rgb(210, 239, 251)");
+    await userEvent.keyboard("{Escape}");
+    expect(focusOnMenu(el, sheet)).toBe(true);
+    await expect.poll(() => getComputedStyle(trigger).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  });
+
+  it.each([
+    ["en", "Split the table"],
+    ["es", "Separar la mesa"],
+  ] as const)("shows the shared split row and its label in %s", async (locale, label) => {
+    setLocale(locale);
+    const el = await mountScreen();
+    const sheet = partyMenu(el);
+    await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
+    const split = sheet.querySelector('[data-action="split-table"]')!;
+    const row = split.querySelector("wt-menu-row");
+    expect(row?.getAttribute("label") ?? textOf(split)).toBe(label);
+    expect(split.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+  });
+
+  it.each([
+    ["light", "rgb(214, 217, 224)"],
+    ["dark", "rgb(16, 18, 22)"],
+  ] as const)("shows the unchecked switch distinctly in %s", async (theme, trackColor) => {
+    const el = await mountScreen({}, theme);
+    const sheet = partyMenu(el);
+    await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
+    const control = sheet.querySelector("wt-switch")!.shadowRoot!;
+    const track = control.querySelector(".track")!;
+    expect(getComputedStyle(track).backgroundColor).toBe(trackColor);
+    expect(track.getBoundingClientRect()).toMatchObject({ width: 44, height: 26 });
+    expect(getComputedStyle(control.querySelector(".thumb")!).backgroundColor).toBe(
+      "rgb(255, 255, 255)",
+    );
   });
 
   it("reopens at the saved bill-request state when a toggle was refused", async () => {
@@ -165,7 +220,8 @@ describe("Table and bill actions", () => {
 
     await userEvent.click(trigger);
     expect(control.checked).toBe(true);
-    await userEvent.click(sheet.querySelector("wt-switch")!.shadowRoot!.querySelector("label")!);
+    await userEvent.click(sheet.querySelector("wt-switch")!.shadowRoot!.querySelector(".thumb")!);
+    expect(focusOnMenu(el, sheet)).toBe(true);
     expect(events).toEqual([{ requested: false }]);
     expect(popup.matches(":popover-open")).toBe(false);
 

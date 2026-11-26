@@ -6,7 +6,7 @@ import "@waitron/ui/src/components/wt-toast.js";
 import type { TableParty, TableState } from "../api/floor-api.js";
 import { t } from "../i18n/t.js";
 import { type PinLook, pinLook, readyCount, readyText } from "../state/floor-look.js";
-import { savedNameUnder, tablePartyHeading } from "../state/floor-today.js";
+import { detailsHeading, groupName, mergeMembersOf, savedNameUnder } from "../state/floor-today.js";
 import { lateBand } from "../state/table-precedence.js";
 import { signalOf } from "../state/table-signals.js";
 import "./table-details-sheet.js";
@@ -126,7 +126,13 @@ export class TillTableStatus extends LitElement {
     if (party === null || rows.length === 0) return nothing;
     const { fill, icon, text } = this.#pin!;
     const first = rows[0]!;
-    const heading = tablePartyHeading(this.tables, first, party);
+    const heading =
+      party.name === null && rows.length === 1
+        ? detailsHeading(
+            first,
+            first.today?.joinId == null ? null : groupName(mergeMembersOf(this.tables, first)),
+          )
+        : party.displayName;
     return html`<button
         type="button"
         class="status-pin"

@@ -4060,11 +4060,13 @@ describe("till-table-order-screen", () => {
       });
     });
 
-    it("offers Split a table only when the party holds two or more tables, and Name the party with a party", async () => {
+    it("offers Split the table only when the party holds two or more tables, and Name the party with a party", async () => {
       const alone = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       await toMenu(alone.el);
       expect(
-        alone.el.shadowRoot!.querySelector('[data-action="move"]')!.textContent!.trim(),
+        alone.el
+          .shadowRoot!.querySelector('[data-action="move"] wt-menu-row')!
+          .getAttribute("label"),
       ).toContain(t("table.action_move_to_table"));
       expect(alone.el.shadowRoot!.querySelector('[data-action="split-table"]')).toBeNull();
       expect(alone.el.shadowRoot!.querySelector('[data-action="name"]')).not.toBeNull();
@@ -4072,7 +4074,9 @@ describe("till-table-order-screen", () => {
       const atTwo = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
       await toMenu(atTwo.el);
       expect(
-        atTwo.el.shadowRoot!.querySelector('[data-action="split-table"]')!.textContent!.trim(),
+        atTwo.el
+          .shadowRoot!.querySelector('[data-action="split-table"] wt-menu-row')!
+          .getAttribute("label"),
       ).toContain(t("table.action_split_table"));
     });
 
@@ -4965,8 +4969,9 @@ describe("till-table-order-screen", () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       await toMenu(el);
       const guests = el.shadowRoot!.querySelector('[data-action="guests"]')!;
-      expect(guests.textContent).toContain(t("table.action_guests"));
-      expect(guests.textContent).toContain(String(el.party!.guestCount));
+      const row = guests.querySelector("wt-menu-row")!.shadowRoot!;
+      expect(row.textContent).toContain(t("table.action_guests"));
+      expect(row.textContent).toContain(String(el.party!.guestCount));
       expect(guests.nextElementSibling).toBe(el.shadowRoot!.querySelector('[data-action="name"]'));
     });
 

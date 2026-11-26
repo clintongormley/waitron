@@ -17,17 +17,16 @@ Full invoice, Print and Receipt copy keep their handlers. This changes no receip
 ## Build
 
 - Create `apps/till/src/screens/table-party-menu.ts` using PR 1’s `wt-row-actions` bottom sheet at
-  phone and till widths. Show the known allergy summary, guest count and party name beside their
-  choices. Use the status pin's naming rule in both places
-  (`detailsHeading` for an unnamed single table, `party.displayName` otherwise). Use the active
-  table's name when there is no party, with Table actions as fallback. Pass its ID from both app
-  mounts. Give the sheet trigger the same accessible and visible name. The status pin opens table details. This table-name trigger occupies
-  the name position Lane F’s order header will use. Offer Join and Move when there is no party.
+  phone and till widths. The watcher’s 21:39 review replaces the earlier naming rule. Use the active
+  table’s name for the trigger and sheet, with the guest count and party name below the trigger. Use
+  the shared sheet and rows from #4449 (§14.2). Show the saved allergy summary, guest count and party
+  name beside their choices. Keep the status pin for table details. Offer Join and Move for an empty table.
 - In `table-bill-controls.ts`, show the existing anchored ⋮ only when there is a current bill.
   Keep the selector used by Full invoice and reuse all bill eligibility and document handlers.
   The bill picker is the route to **+ New bill**. Keep Split for parties at two or more tables.
-- Use `wt-row-actions` in panel mode with ordinary controls. On open, focus the first enabled
-  choice in the `wt-row-actions-toggle` handler in `table-party-menu.ts`. Bind `wt-switch` through Lit’s `live()` to the saved `billRequestOf` state. Keep the
+- Use `wt-row-actions` in panel mode with ordinary controls. The shared sheet focuses the first
+  enabled choice. Put the existing switch in a shared row and style its exposed track and thumb
+  for picture i in both themes. Bind `wt-switch` through Lit’s `live()` to the saved `billRequestOf` state. Keep the
   busy guard, call the sheet’s `hide()` on an accepted toggle and send the existing `request-bill`
   event once. Use the saved state on reopening after a refusal. In `#refocusMenu` and
   `#placeStepFocus`, return focus to the actual opener. Verify return from the app’s allergy
@@ -45,7 +44,7 @@ Full invoice, Print and Receipt copy keep their handlers. This changes no receip
   (both themes), `.bill-switcher`, `.parties`, `.split-table`, `.split-table.unsaved`, `.panel-footer`
   and `.loading` tests. Retarget moved locators while keeping their assertions.
 - Update both `apps/server/src/guide/*/table-service.md` pages, `docs/developers/design-system.md`
-  and the remaining backlog scope. Estimate 150 changed production lines and 250 test lines.
-  After clearance, capture before and after at phone and till widths in both orientations,
-  themes and languages. Send paths outside Git to the watcher. Land after the owner’s picture OK
-  and green CI on the current head.
+  and the remaining backlog scope. The watcher cleared the larger split at 21:26. Capture before
+  and after at phone and till widths in both orientations, themes and languages. Place 390 px captures
+  beside frame i at actual size. Send paths outside Git to the watcher for Lane P’s finish review.
+  Land after the owner’s picture OK and green CI on the current head.

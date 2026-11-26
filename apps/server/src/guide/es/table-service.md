@@ -670,7 +670,7 @@ Escape cierra la lista.
 
 Toca el nombre de la mesa para ver las acciones que afectan a todo el grupo. Puedes consultar
 **Alergias**, cambiar **Comensales** o **Poner nombre a los clientes**, y activar o desactivar
-**Cuenta pedida**. Usa **Mover a otra mesa**, **Unir una mesa** o **Separar una mesa** para cambiar
+**Cuenta pedida**. Usa **Mover a otra mesa**, **Unir una mesa** o **Separar la mesa** para cambiar
 dónde se sienta el grupo. **Cerrar mesa** está al final. En una pantalla baja, desplázate por el
 panel hasta encontrarlo.
 
@@ -856,15 +856,15 @@ cerrada**. Si otra persona tiene platos sin enviar en alguna de las dos cuentas,
 **Tomar el pedido** en el aviso. Elige **Revisar** para comprobar los platos y la cuenta de
 destino y vuelve a elegir **Mover**.
 
-## Separar una mesa {#split-table}
+## Separar la mesa {#split-table}
 
-Cuando parte de un grupo pasa a una mesa propia, toca el nombre de la mesa, elige **Separar una
+Cuando parte de un grupo pasa a una mesa propia, toca el nombre de la mesa, elige **Separar la
 mesa** y toca la mesa que se separa. Marca lo que se lleva: cuentas enteras o platos sueltos de cualquier cuenta.
 Indica los comensales de cada mesa y elige **Separar**.
 
 ## Mover una cuenta o separar una mesa con platos en espera {#held-dishes-move}
 
-Una cuenta con platos en espera puede pasar a otra mesa con **Mover esta cuenta** o **Separar una
+Una cuenta con platos en espera puede pasar a otra mesa con **Mover esta cuenta** o **Separar la
 mesa**. Allí los platos siguen en espera. Después cada mesa marcha su propio grupo: marchar uno no envía
 ningún plato de la otra mesa.
 

@@ -383,7 +383,7 @@ describe("till-table-order-screen: the bill request", () => {
       const asked = capture(el, "request-bill");
       await openPartyMenu(el);
       expect(input(el).checked).toBe(requested);
-      requestSwitch(el).shadowRoot!.querySelector("label")!.click();
+      input(el).click();
       expect(asked).toEqual([{ requested: !requested }]);
       expect((await requestedChip(el))?.textContent?.trim()).toBe(
         requested ? "Bill requested" : undefined,

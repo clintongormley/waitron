@@ -633,7 +633,7 @@ Enter to show it. Home and End reach the first and last choices. Escape closes t
 
 Tap the table name for actions that affect everyone at the table. You can check **Allergies**,
 change **Guests** or **Name the party**, and turn **Bill requested** on or off. Use **Move to another
-table**, **Join a table** or **Split a table** to change where the party sits. **Finish table** is at
+table**, **Join a table** or **Split the table** to change where the party sits. **Finish table** is at
 the bottom. On a short screen, scroll the sheet down to reach it.
 
 Open **⋮** beside the bill switcher for actions on the bill you are viewing. Use it to print the
@@ -812,15 +812,15 @@ meantime, the till names that bill before the reason, such as **Bill 2: This bil
 someone else has unsent dishes on either bill, choose **Take over draft** in the message.
 Choose **Review** to check your dishes and destination, then choose **Move** again.
 
-## Split a table {#split-table}
+## Split the table {#split-table}
 
-When some of a party move to a table of their own, tap the table name, choose **Split a table** and
+When some of a party move to a table of their own, tap the table name, choose **Split the table** and
 tap the table that leaves. Tick what goes with it: whole bills, or single dishes from any bill. Set
 each table's guests, then choose **Split**.
 
 ## Move a bill or split a table with dishes on hold {#held-dishes-move}
 
-A bill with dishes on hold can go to another table with **Move this bill** or **Split a table**.
+A bill with dishes on hold can go to another table with **Move this bill** or **Split the table**.
 The dishes stay on hold there. Each table then fires its own group: firing one sends none of the
 other table's dishes.
 

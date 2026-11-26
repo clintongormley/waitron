@@ -197,11 +197,7 @@ import {
 } from "../state/draft-layout.js";
 import { billRequestOf } from "../state/table-signals.js";
 import { defaultReceiptGuestCount } from "../state/receipt-guests.js";
-import {
-  seatsGuests,
-  shownName as tableShownName,
-  tablePartyHeading,
-} from "../state/floor-today.js";
+import { detailsHeading, seatsGuests, shownName as tableShownName } from "../state/floor-today.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
@@ -6980,9 +6976,13 @@ export class TillTableOrderScreen extends LitElement {
 
   #partyMenu(): TemplateResult {
     const party = this.party;
-    const table = this.tables.find((row) => row.id === (party?.tableIds[0] ?? this.activeTableId));
+    const table =
+      this.tables.find((row) => row.id === this.activeTableId) ??
+      this.tables.find((row) => row.id === party?.tableIds[0]);
     return tablePartyMenu({
-      heading: tablePartyHeading(this.tables, table, party),
+      heading: table
+        ? detailsHeading(table, null)
+        : (party?.displayName ?? t("table.actions_title")),
       party,
       allergy: this.#allergy() ?? null,
       requested: party !== null && billRequestOf(this.tables, party.id) !== undefined,

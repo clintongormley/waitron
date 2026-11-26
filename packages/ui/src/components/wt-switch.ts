@@ -200,8 +200,8 @@ export class WtSwitch extends LitElement {
             aria-describedby=${this.description ? `${this.inputId}-description` : nothing}
             @change=${this.onChange}
           />
-          <span class="track"></span>
-          <span class="thumb"></span>
+          <span class="track" part="track"></span>
+          <span class="thumb" part="thumb"></span>
         </span>
         ${this.label && !this.hideLabel ? html`<label part="label" for=${this.inputId}>${this.label}</label>` : nothing}
       </span>

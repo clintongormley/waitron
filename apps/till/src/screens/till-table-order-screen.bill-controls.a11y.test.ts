@@ -135,7 +135,14 @@ describe.each(["light", "dark"] as const)("Table and bill actions in the %s them
           menu.show();
           await menu.updateComplete;
           expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-          expect(menu.querySelector('[role="group"]')).not.toBeNull();
+          if (menu === billMenu) {
+            expect(menu.querySelector('[role="group"]')).not.toBeNull();
+          } else {
+            const dialog = menu.shadowRoot!.querySelector('[role="dialog"]')!;
+            const heading = dialog.querySelector("h2")!;
+            expect(dialog.getAttribute("aria-labelledby")).toBe(heading.id);
+            expect(heading.textContent?.trim()).toBe(menu.label);
+          }
         }
         await expectNoA11yViolations(menu);
         menu.hide();
