@@ -1,13 +1,41 @@
 # Products list visual fixes
 
-At phone width, you can see List and Tree above a single row of tools and read ordinary names, prices and availability at a glance. On desktop, the Price heading and amounts line up and Price and Available stay put when you switch views or open a category.
+On a phone, see List and Tree above one row of tools and read ordinary names, prices and availability
+at a glance. On desktop, Price and Available stay put as you switch views or open a category.
 
-The scope is Lane P’s eight material findings, assigned by the watcher on 26 November at 22:14 and moved to Lane I at 23:55. Use the approved [Products design](../specs/2026-11-24-products-list-redesign-design.md) §§1–3 and the List and Tree b2 pictures it names. Use the current controls and tokens. Leave the editor and Add category dialog as they are, along with the review’s minor polish list. Keep availability writes, filtering, sorting, selection, drag and saved column choices on their current paths.
+The watcher assigned Lane P’s eight material fixes at 22:14 on 26 November and moved them to Lane I
+at 23:55. Follow the [Products design](../specs/2026-11-24-products-list-redesign-design.md) §§1–3
+and approved b2 List and Tree pictures. Keep the editor, minor polish and catalogue actions outside this change.
 
-- [ ] **Phone toolbar.** In `apps/dashboard/src/widgets/product-list-toolbar.ts`, give the switch’s existing phone placement the segmented control’s `equal-width` setting and the row’s full width. In `product-list-layout.ts`, use the shared table’s exposed `toolbar-search` part to let Search shrink beside Filter, Select and Customise in their current focus order. Let the controls wrap when their usable widths cannot fit.
-- [ ] **Names, swatches and availability.** In `product-list.ts` and `product-list-row-parts.ts`, use normal-weight product names. Keep the outlined desktop label and draw plain red Unavailable text under the phone name, beside the category in List when present. Style only the unavailable suffix red in variant and closed-category counts and keep the existing counts and filtered text. In `product-list-category.ts`, `product-list-layout.ts` and `product-list-row-parts.ts`, make desktop category swatches small markers, about 14 px, independently of photo size and the full-height Tree swatch target. Trim unused leading space at phone width, keeping photo and arrow targets clear of names and selection controls.
-- [ ] **Prices.** In `product-list-row-parts.ts`, `product-list-layout.ts` and the Price column of `product-list.ts`, reserve the same desktop price and switch space in both views. Give unit prices their own aligned space after the amount and match the Price label to the amounts. Keep the sort indicator and focus target. If a part is missing, expose the corresponding existing element in `packages/ui/src/components/wt-data-table.ts` for Products to style. At 390 px fit ordinary kg prices and the pictured range on one line. Longer ranges or labels can wrap where width requires it. Keep the VAT line and inherited-price cue.
-- [ ] **Prove the changes in Chromium.** Before each fix, run the affected case and see the layout assertion fail. In `product-browser.test.ts`, replace the phone toolbar’s former two-row expectation at 390 px and 430 px with full-width equal segments and one tools row in EN and ES. Retain its Tab check and the narrower fallback and mid-width coverage. In `product-list.test.ts`, check a priced-by-weight List and an expanded Tree at 1180 and 1440 px for heading and amount alignment and steady Price and Available columns. At 390 px check the sample range and variant names, plain Unavailable labels, and lack of sideways scrolling. Use the existing count and swatch cases for the red suffix and the reduced painted marker, preserving the target and long-name wrapping checks. Rerun both focused files and the dashboard typecheck, plus table heading and cell checks if the shared part changes.
-- [ ] **Check what ships.** Describe the phone toolbar and availability cues where they help in `apps/server/src/guide/{en,es}/products.md`, verify the guides, and update the Products paragraphs in `docs/developers/design-system.md`. Backlog A1570 tracks the remaining menu-editor inheritance work. Recheck the backlog before committing. Capture List and Tree at 1440, 1180 and 390 px in both themes and languages, including open categories and variants, unavailable items, filters, Select, empty, no matches and failed load. Pair the pictures with b2 outside Git. Use finish-branch, green current-head CI, Lane P’s second review and the owner’s recorded picture approval before landing.
+- [ ] **Toolbar.** In `product-list-toolbar.ts`, give the switch in `above-table` full width and
+  `equal-width` segments. Use `::part(toolbar-search)` in `product-list-layout.ts` to fit Search
+  beside Filter, Select and Customise in focus order. Let it wrap when the controls cannot fit.
+- [ ] **Rows.** In `product-list.ts`, `product-list-layout.ts` and `product-list-row-parts.ts`,
+  use a part to give product names normal weight. Keep bold category names and distinguish variants by
+  indent and band. Use plain red Unavailable under phone names, beside the inline category when shown
+  in List. Keep the outlined desktop label. Paint only the unavailable count red. Reduce unused leading
+  space and phone Tree indentation while preserving photo and arrow targets.
+  In `product-list-category.ts`, give the desktop List Category chip its own part for a roughly 14 px
+  marker. Tree swatches and product photo placeholders keep their size.
+- [ ] **Prices.** In the same row files, measure why the default columns shift before choosing their
+  widths. Replace compact price stacking where the unit fits. Use space from the flexible columns
+  for steady Price and Available positions and a separate desktop unit space. Expose the Price
+  heading via `column-heading-price` in `wt-data-table.ts` and align its text to the amounts.
+  Keep the sort indicator, VAT line, inherited cue and legitimate wrapping at tight widths. If the
+  shared file reaches its cap, move existing heading rendering into `wt-data-table-heading.ts`.
+- [ ] **Chromium checks.** Watch the named regressions fail before each fix. In `product-browser.test.ts`,
+  measure the full-width switch and one tools row at 390 and 430 px in both languages. Retain Tab
+  order and the 320 px fallback. In `product-list.test.ts`, measure Price heading and amount alignment
+  and steady columns in List and open Tree at 1180 and 1440, including Spanish weight prices and no
+  sideways scrolling in the 1180 dashboard’s narrower table. At 390 px in both languages, measure
+  the one-line kg price, House, Single and Double coffee names, range and variant count. Check the
+  plain label, red suffix and List swatch size. Update the old relative font-weight check to require
+  normal weight for both names and keep the indent, joined band and long-name wrapping checks.
+  Rerun both files, the dashboard typecheck and `wt-data-table.head-and-cells.test.ts` for the part.
+- [ ] **Before landing.** Update the Products design-system notes and the EN and ES guides’ phone
+  availability line. Compare 1440, 1180 and 390 px in both themes and languages with the b2 pictures
+  outside Git. Include open categories and variants, unavailable items, filters, Select, empty,
+  no matches and failed load. Run finish-branch, then land with green current-head CI, Lane P’s
+  second review and the owner’s recorded picture approval.
 
-One PR in about three hours. Expect 110–170 added product lines, 110–160 added test lines and short guide edits.
+One PR in about three hours. Expect 110–170 added product lines and 110–160 added test lines.
