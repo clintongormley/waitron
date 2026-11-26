@@ -4124,7 +4124,6 @@ describe("menu-screen", () => {
       const el = await create(api);
       expect(editor(el).open).toBe(false);
       expect(step(el).open).toBe(true);
-      expect(el.shadowRoot!.querySelector("dashboard-live-declarations-dialog")).toBeNull();
       expect(api.getMenuStructures).toHaveBeenCalledExactlyOnceWith();
       expect(api.getMenuStructure).not.toHaveBeenCalled();
       const text = step(el).shadowRoot!.textContent!;

@@ -159,6 +159,7 @@ it("returns focus to the Structure row after the live menu question closes", asy
   await page.getByRole("button", { name: "Not now" }).click();
   await expect.element(question).not.toBeInTheDocument();
   await expect.poll(() => menu.table()?.activeElement).toBe(menu.row());
+  expect(focusRow).toHaveBeenCalled();
 });
 
 it("clears a pending live menu question when browser history leaves Structure", async () => {
