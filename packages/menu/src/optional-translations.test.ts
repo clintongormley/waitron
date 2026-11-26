@@ -4,8 +4,8 @@ import {
   mergeOptionalTranslations,
 } from "./optional-translations.js";
 
-it("reports a malformed translation map as a content translation refusal", () => {
-  expect(() => validateOptionalTranslations({ en: 1 })).toThrowError(
+it("reports an overlong translation as a content translation refusal", () => {
+  expect(() => validateOptionalTranslations({ es: "é".repeat(2048) + "a" })).toThrowError(
     expect.objectContaining({ code: "content.translation_invalid" }),
   );
 });

@@ -2626,9 +2626,9 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     expect(found).toMatchObject({ name, displayOrder: 3, active: true });
   });
 
-  it.each([null, [], { en: 3 }, { "not-a-language": "Name" }])(
-    "rejects malformed customer names %j on a course",
-    async (customerNames) => {
+  it.each([null, [], { en: 3 }, { "not-a-language": "Name" }].map((value) => ({ value })))(
+    "rejects malformed customer names $value on a course",
+    async ({ value: customerNames }) => {
       const id = await createCourse(unique("Customer course"));
       const answer = await req(
         `/courses/${id}`,

@@ -172,12 +172,11 @@ it("exports neither today's keep-open nor station closure, and imports both as o
   for (const row of bundle.tables.kitchen_stations!)
     for (const column of ["closed_on_day", "closed_sends_to_station_id"])
       expect(row).not.toHaveProperty(column);
-  expect(bundle.tables.kitchen_courses).toContainEqual(
-    expect.objectContaining({
-      name: "Shared course",
-      customer_names: '{"en":"To share","es":"Para compartir"}',
-    }),
-  );
+  const course = bundle.tables.kitchen_courses?.find(({ name }) => name === "Shared course");
+  expect(JSON.parse(course?.customer_names as string)).toEqual({
+    en: "To share",
+    es: "Para compartir",
+  });
   await expect(
     withTransaction(target.db, (tx) =>
       importConfigurationTables(

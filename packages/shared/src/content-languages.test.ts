@@ -390,7 +390,7 @@ describe("optional translation maps", () => {
     { es: null },
     { es: 1 },
     { not_a_language: "x" },
-    { ES: "Hola" },
+    { ES: "Greeting" },
   ])("refuses malformed maps or noncanonical keys: %j", (value) => {
     expect(normalizeOptionalTranslations(value)).toBeNull();
   });
