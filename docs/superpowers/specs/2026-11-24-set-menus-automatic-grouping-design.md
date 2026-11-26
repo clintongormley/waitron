@@ -221,6 +221,12 @@ be cancelled or edited by hand.
 
 ### 6. Comps and discounts
 
+_2026-11-26: the owner's rule C replaces the set-menu and whole-bill rules below, and section 7's
+sentences on a set menu's discount and on moving a set menu with its dishes: every discount is an
+amount, on the whole bill, a dish or a set menu, and comes off with a notice when its set menu
+breaks up or its dish's price changes ([plan](../plans/2026-11-24-a1515-3-set-menus-server.md),
+D45)._
+
 - **On a single dish:** the dish leaves the grouping and is charged à la carte, less its discount
   (**owner**: "An individual dish with a discount gets treated as a la carte"). The rest of the bill
   is grouped again without it. The owner's example: soup, two hakes and a dessert are one set menu

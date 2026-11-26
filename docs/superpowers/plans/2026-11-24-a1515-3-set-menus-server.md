@@ -26,8 +26,12 @@ owner in conversation, 24 November 2026, "y"; recorded in the spec's Status line
 old and the till says so, and two discounted menus that become one keep the larger saving (watcher
 note relaying the owner, 24 November 11:21, quoted in the spec's section 6); a dish with its own
 discount is charged à la carte ("An individual dish with a discount gets treated as a la carte"); a
-set-menu discount does not lock its dishes. Code facts below were read at main `e8df6f7699`, not run,
-unless a step says it runs them.
+set-menu discount does not lock its dishes. _2026-11-26: the owner's rule C (D45) replaces
+the two set-menu discount rules above: D52 recommends that a second discount on a set menu still
+replaces the first, but two discounted set menus never become one, since a set menu that breaks up loses its
+discount._ Code facts below were read at main `e8df6f7699`, not run,
+unless a step says it runs them. PR 3b, PR 3c and decisions D45–D59 cite 3a's head after its
+rebase, `fa3d08f2f5` (#4361); the sections in between say which commit theirs are on.
 
 ## The split: four pull requests
 
@@ -40,6 +44,9 @@ the OWNER lands it. Each leaves `main` working on its own.
 | 2. The bill works out its set menus (`feat/a1515-3-regroup`) | A waiter adds dishes from anywhere; the bill forms the cheapest set menus by itself on every send, add, edit, cancel, split and move, and every till shows the same answer. No counts, no "No place for this dish" question. Anything already comped, discounted or paid for by item stays as it was saved (D2). Built as 2a, 2b and 2c (see its section). | 1 |
 | 3. Comps and discounts (3a, 3b and 3c, see its section) | A dish with its own comp or discount is charged à la carte less it, and the rest regroups; a set menu's discount takes off that menu's price and supplements, one per menu, and falls away with a notice when the bill has no menu of that type left; a whole-bill discount stays its percentage or its amount as the bill regroups. | 2 |
 | 4. Moving dishes with their discounts (`feat/a1515-3-moves`) | A discounted dish moves to another bill alone, with its discount; both bills regroup; moving "a set menu with its dishes" is gone. | 3 |
+
+_2026-11-26: rows 3 and 4 are replaced by the owner's rule C (D45): discounts are amounts on the
+whole bill, a dish or a set menu, and PR 4 is no longer needed (D57); PR 3's section has the split._
 
 PRs 1 and 2 are written out task by task below. PRs 3–4 are given as scope, decisions and files; each gets
 its task steps on this page, against `main` as the previous PR left it, before its build starts, and
@@ -518,6 +525,8 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
   `set_menu.no_place_on_target` when a cancel kept its charge (as today, `set-menu-moves.ts:89-91`).
   Otherwise it moves and both bills regroup. Without the widening, a dish comped while included (0
   off) would arrive at 0 on a bill whose regrouping must leave it frozen.
+  _2026-11-26: for a dish of a set menu holding its own comp or discount, replaced by rule C: the
+  discount comes off and the dish moves (D50)._
 - **D19. A set-menu line's credit** (D6) is recomputed at every write: whoever is credited with its
   dish of lowest `line_no` (line numbers grow as dishes are added, `working-order-open.ts:453-472`; a
   moved dish takes the next numbers on its new bill, `working-order-transfer.ts:173-186`).
@@ -1177,7 +1186,8 @@ _2026-11-25: D14 was dropped in Task 2b.8 (VAT-RATES B1 landed first): takeaway 
 ## PR 3 — Comps and discounts (`feat/a1515-3-dish-adjustments`, then 3b and 3c)
 
 Written 25 November against `main` at `5e8d24f285`, where PR 2c (#4332) landed. Every `file:line`
-below is on that commit and was read, not run, unless a step runs it.
+below is on that commit and was read, not run, unless a step runs it; D45–D59, 3b and 3c are on
+`fa3d08f2f5` instead.
 
 **Should this exist?** The spec's section 6, approved by the owner on 24 November ("y", commit
 8dc86752ba): "An individual dish with a discount gets treated as a la carte" and "you would apply it
@@ -1188,16 +1198,20 @@ leaving the freeze, breaks both owner sentences, and a discounted dish could sti
 paid for on its own. The owner's approvals of the discount rules are quoted in the spec; the
 decisions below are this lane's unless marked.
 
-### The split: three pull requests
+### The split: four pull requests (rule C, D58)
+
+_2026-11-26: the owner's rule C (D45) replaced the five-PR split of 25 and 26 November: 3b0 is
+dropped, 3b is rewritten as 3b1 and 3b2, 3c is one pull request, and PR 4 is no longer needed (D57)._
 
 | PR | What a person can do when it lands | Depends on |
 | --- | --- | --- |
 | 3a. A dish's own comp or discount (`feat/a1515-3-dish-adjustments`) | Comping or discounting a dish of a set menu takes it out of the set menu, charges it à la carte less the comp or discount, and works out the rest again. Before saving, the till shows what the bill goes to. A discounted dish moves and is paid for on its own, with its discount. An extra given away leaves its dish in its set menu. No schema change, no venue reset. | 2c; D32 answered by the owner before it lands |
-| 3b. A set menu's comp or discount (`feat/a1515-3-menu-adjustments`) | A discount given on one set menu takes off that set menu's price and its supplements, one per set menu; its dishes can still change, and the bill says so when the discount is replaced or falls away. Resets venues. | 3a |
-| 3c. A whole-bill discount (`feat/a1515-3-bill-discounts`) | A bill discounted as a whole keeps working out its set menus, and the discount is shared out again each time. | 3b; D38 answered by the owner |
+| 3b1. A set menu's comp or discount (`feat/a1515-3-menu-adjustments`) | A comp or discount on a set menu takes off its price and its supplements, and the set menu stays as it is while it holds it; a second one replaces the first; some of its dishes cancelled, moved or paid for alone take the discount off; the whole set menu moved or paid for, by its row or by choosing every one of its dishes, keeps it; previews say so and write nothing; a free takeaway set menu can be refunded. Resets venues. | 3a |
+| 3b2. Saying when a discount came off (`feat/a1515-3-discount-notices`) | Changing a discounted dish's extras, or its variant in a held order's save, takes its discount off; every bill answers a notice for each discount that came off, with what to give it again on (drawn by the till in A1515-4); the report leaves out a discount that came off. No schema change. | 3b1 |
+| 3c. A whole-bill discount as the set menus change (`feat/a1515-3-bill-discounts`) | A bill discounted as a whole keeps working out its set menus; each dish keeps its own part; a dish ordered later pays full price. | 3b2 |
 
-3a is written out below. 3b and 3c are given as decisions and scope; each gets its task steps here,
-against `main` as the one before left it, and the watcher clears each addition.
+3a, 3b1 and 3b2 are written out below; 3c is one page, given its task steps against `main` as 3b2
+leaves it, and the watcher clears them.
 
 **Size of 3a** (estimates from reading): product about +200, −60, with about 350 lines moved to a new file unchanged; tests about +550,
 with about 35 cases changed (14 are whole-shape checks gaining one key); generated files none; five
@@ -1213,6 +1227,7 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
 
 - **D29. The split above.** The alternative, one pull request, is well past three hours, and 3c
   waits for an owner answer 3a and 3b do not need.
+  _2026-11-26: superseded by D58 (the split under rule C)._
 - **D30 (3a). What freezes a row changes, for comps and discounts only.** A dish or set-menu row is
   frozen when an `adjustment_lines` row with a reduction above 0 names it, or its price is below its
   stamped list price. Three things stop freezing:
@@ -1262,49 +1277,216 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   Bread must not charge the Soup 6.00. Comping the dish still takes its extras with it, as today.
   `adjustedDishIds` (`set-menu-bill.ts:341`) follows: an extra's comp no longer makes its dish not
   movable.
-- **D35 (3b). A set menu's discount is the adjustment on its row, carried by one column**,
-  `working_order_lines.set_menu_adjustment_id`, on set-menu rows only. The grouping reads each such
-  row's adjustment (its action, percentage, or reduction as the amount) as a
-  `SetMenuGroupingDiscount` keyed by the adjustment's id, and writes the column on whichever set menu
-  of that type the answer gives it. A discount the answer leaves unused falls away with its row. A
-  new one on the same set menu passes `replacesDiscountId`. Alternative: a table of standing
-  discounts per bill.
-- **D36 (3b). The reduction is shared between the set menu's row and its dishes' supplements in
-  proportion** (`spreadBillDiscount`), each keeping its undiscounted price as its list price; the
-  calculation answers one figure for the whole set menu (`discountCents`, which can exceed the base
-  price) and the row alone could go below zero. 3b must then change two of D30's rules: a supplement
-  at 4.50 with list 5.00 is below its list price without a discount of its own, and the grouping
-  writes `listUnitPriceGross` on it rather than null. A set-menu row's own `adjustment_lines` row
-  still counts as reduced until 3b.
-- **D37 (3b). What was replaced or fell away is kept on the bill and answered with its set menus**,
-  so every till can say so whichever path regrouped it (a send, a cancel, a move). Alternative: a
-  notice in each route's answer, about ten routes.
-- **D38 (3c). FOR THE OWNER. What a whole-bill discount covers after it is given.** Owner, 2026-11-25
-  20:51: "Build it", 3c-1 and 3c-2 as in lane B's `questions.md` 20:20 note; a fixed amount does not grow with later dishes. The spec says it
-  is "spread again over the bill's charged lines whenever the grouping changes" (the writer's call)
-  and does not say what happens to a coffee ordered afterwards, or to a guest who then pays for
-  their own dishes. Today, on every bill, it is taken "off the bill as it stands now"
-  (`~/waitron-campaign-shared/discount-review-2026-10-28.md:34`): a dish added later pays full price, and a dish moved away
-  takes its part of the discount with it.
-  - **B, recommended: it stays with the dishes that were on the bill**, as today. Later dishes pay
-    full price; a guest paying for their own dishes keeps the discount; a set menu holding both kinds
-    is discounted by its discounted dishes' share of its à la carte value. The same on every bill.
-    Built by writing, when the discount is given, one `adjustment_lines` row per dish (0.00 included;
-    a set menu's part shared between its dishes by à la carte price), which moves and splits already
-    carry; each regrouping adds up what the bill's own dishes hold (a percentage of their charge, or
-    their cents) and spreads that over their rows. `adjustment_lines` stays append-only. A fixed
-    amount then shrinks by a leaving dish's cents, which is not section 6's "a fixed amount stays
-    that amount".
-  - **A, the spec's words: it stays with the bill.** Everything on the bill is discounted until it
-    is paid, a later coffee included; a guest paying for their own dishes leaves the discount behind
-    and pays full price. Either only on bills with set menus (the regrouping is what spreads it
-    again), or on every bill, which changes today's rule everywhere.
-  - **C: build nothing.** A bill discounted as a whole stops working out its set menus, as today;
-    a dish moved alone out of a discounted set menu then leaves that set menu charged (run: a Daily
-    of a 10%-discounted bill stays charged 12.60 after one of its dishes leaves).
-- **D39 (3b, 3c). What the adjustments report counts when a discount changes later** (replaced, fell
-  away, spread again) is decided with 3b's steps; until then it counts the amount recorded when it
-  was given, as today when a discounted dish is cancelled.
+- **D35 (3b).** _Withdrawn 2026-11-26 by rule C (D45): no column holds a set menu's discount; it
+  stays on the rows it was given on and comes off when the set menu breaks up (D49, D50). Full
+  text at `bbe95ebd14`._
+- **D36 (3b).** _Withdrawn 2026-11-26 by rule C, except that a set menu's comp or discount still
+  covers its supplements (spec section 6), written with today's spread (D49). Full text at
+  `bbe95ebd14`._
+- **D37 (3b).** _Withdrawn 2026-11-26 by rule C: a discount that comes off is recorded when it does
+  (D47), and the notice is read from that (D54). Full text at `bbe95ebd14`._
+- **D38 (3c). FOR THE OWNER, answered: what a whole-bill discount covers after it is given.** Owner,
+  2026-11-25 20:51: "Build it" (3c-1 and 3c-2, lane B's `questions.md` 20:20); a fixed amount does
+  not grow with later dishes; and at 20:02 a dish cancelled, moved or paid for alone takes its part
+  ("this does seem fairer", "this too"). What stands: the discount stays with the dishes on the bill
+  when it was given; a dish ordered later pays full price; a guest paying for their own dishes keeps
+  their part. _2026-11-26: 3c-2 (a percentage reaching dishes ordered later, moved in or copied)
+  withdrawn by rule C; the rest is 3c's page and D56. Full text at `bbe95ebd14`._
+- **D39 (3b).** _Replaced 2026-11-26 by D55, which keeps its reason: counting both a discount and
+  the cancel that ended it says more was lost than the bill lost. Full text at `bbe95ebd14`._
+- **D40 (3b).** _Superseded 2026-11-26 by D58 (3b is two pull requests, of other shapes). Full text
+  at `bbe95ebd14`._
+- **D41 (3b). DECIDED BY THE OWNER** (26 November 00:04): Free pressed on the Hake Daily stays on
+  the Hake Daily, not on a Sirloin Daily beside it. _2026-11-26: rule C (D45) keeps that and
+  withdraws the rest: a set menu's discount never moves to another set menu. Full text at
+  `bbe95ebd14`._
+- **D42 (3b0).** _Withdrawn 2026-11-26 by rule C (D45), with 3b0. Full text at `bbe95ebd14`._
+- **D43 (3b1).** _Withdrawn 2026-11-26 by rule C (D45): a new discount replaces only what its own
+  set menu holds (D52). Full text at `bbe95ebd14`._
+- **D44 (3b0).** _Withdrawn 2026-11-26 by rule C (D45), unanswered. It was asked in lane B's
+  `questions.md` at 08:05 and built only on 3b0's branch (`eb8c8f6d25`), so `bbe95ebd14` does not
+  hold it._
+
+#### Rule C and what it leaves open (26 November)
+
+- **D45. DECIDED BY THE OWNER: rule C** (26 November 07:58–08:09, relayed by the watcher in lane B's
+  `questions.md`, "WATCHER 2026-11-26 08:08" and "08:09"). The owner: "These discount scenarios are
+  very much not real world, and they're causing masses of complexity. How can we simplify them. The
+  typical thing is that discounts are applied just before payment. What if we were to remove
+  percentage discounts. If somebody wants to give 50% off then it is calculated in the moment and
+  applied as an amount instead. And it should either be attached to the whole meal or to a
+  particular dish or set meal." Asked what can change a single dish, the owner chose "C": every
+  discount is an amount, a percentage being turned into one when it is given, and Free stays its own
+  kind (the whole price); it is on the whole bill, one dish or one set menu; cancelled, the discount
+  goes with it; moved (another table or bill, Pay for items), it goes with the dish or set menu;
+  fewer of it, the amount was split per item when given, so cancelling one removes that item's
+  share; a price change (variant, extras) takes it off, with a notice on the bill saying so and why;
+  a set menu broken up (a dish cancelled from it, for one) loses its discount, with a notice. Added
+  at 08:09: "With the notice allowing the waiter to reapply at the new price". It replaces D41–D44,
+  drops 3b0, and withdraws 3c-2 from the owner's "Build it" of 25 November 20:51 (D38). D46–D59 are
+  what it leaves open.
+- **D46. A percentage stays a way of asking.** The comp window still sends `discount_percent`; the
+  server turns it into an amount at that moment, as today (`requestedDiscount`,
+  `adjustments-apply.ts:262-283`), and records the percentage beside it. Recommended: keep it. The
+  reason's percentage limit (`reason.maxPercentBp`, `packages/adjustments/src/policy.ts:172`) and
+  the receipt's "10%" keep working, and the notice needs the percentage to work it out again on the
+  new price (the owner's 08:09 addition).
+  Alternative: drop `discount_percent` and have the till send the amount; the reason's percentage
+  limit, the report's percentage and every test that sends a percentage then change, and a notice
+  could offer only the old amount.
+- **D47. What "comes off" writes, and on which bill.** One row in a new append-only table,
+  `adjustment_endings` (the adjustment; the bill; why; the dish that left or changed, by name; the
+  line a notice offers it again on, for a change of extras or variant; when), in core's migration
+  set, so 3b1 resets venues. The adjustment's rows on that bill get back what its `adjustment_lines`
+  say it took. An ending belongs to the bill the adjustment's rows are on when it ends, which after a
+  whole set menu moved (D51) is not the bill it was given on: a comp's record stays on the bill it
+  was given on while its rows move (`apps/server/src/set-menu-freeze.ts:49-51`), and
+  `readBillAdjustments` reads by that bill (`packages/adjustments/src/record.ts:162`). So an
+  adjustment ends at most once on each bill (unique on the adjustment and the bill): a 3a dish
+  discount whose portions were split over two bills ends only on the bill whose dish changed. Every
+  reader of standing discounts leaves out an `adjustment_lines` row whose adjustment has an ending
+  on the bill its line is on now: the freeze (`reducedLineIds`, `set-menu-freeze.ts:45-65`, which
+  also gives a set-menu dish's `movable`, `apps/server/src/set-menu-bill.ts:357`, and through
+  `frozenLineIdSources` feeds `refuseMovingFrozenDishes` and the grouping); the reason's standing on
+  the bill (`readReasonStanding`, `record.ts:98`); the receipt (`readBillAdjustments`, `record.ts:145`,
+  which leaves out one with an ending on its bill); the corrections report's free items
+  (`listFreeItems`, `apps/server/src/free-items.ts:119`, read at `report-api.ts:342`); and the
+  adjustments report (D55). Without that, its `adjustment_lines` would freeze the set menu for good
+  (D30), and the receipt would print per dish, since its records would no longer add up
+  (`receipt-adjustments.ts:282`). The venue's most-off-one-bill check needs nothing: it compares
+  each row's list price with its price (`judgeComp`, `adjustments-apply.ts:805-810`). **Why a table
+  rather than working it out from what the bill holds:** `adjustments` and `adjustment_lines` never
+  change (`appendOnly`), so they still say the rows were reduced once their prices are back, and
+  nothing else records which dish's change ended it, which the notice names. Alternative: work out
+  on every read which discounts no row holds (the old D37); every reader repeats it, and why it came
+  off is lost.
+- **D48. A cancel that breaks a discounted set menu ends the discount first, then is worked out and
+  recorded from there (D24).** In the comp window's apply the ending runs before the cancel is
+  planned (`planAdjustment`, `adjustments-apply.ts:1097`), so the cancelled row's own price and the
+  bill's further drop (`regrouped`, `:1106-1127`, what `removeFromLine` answers "beyond the removed
+  part's own charge", `working-order-removal.ts:104-106`) are both read with the discount gone. Free
+  on a Soup and Hake Daily (0.00), the Hake cancelled: the Free ends (14.00), the cancel records
+  8.00, the bill is 6.00, and the notice offers Free on the Soup. Free on a Soup and Sirloin Daily
+  (0.00), the Sirloin cancelled: the Free ends (Daily 14.00, Sirloin 5.00), the cancel records 13.00
+  and the bill is 6.00; planned before the ending it would record 8.00 and lose the Sirloin's 5.00
+  (worked out by hand). Worked the other way round, the cancel's drop would be −6.00, which
+  `adjustments_amounts_ck` refuses (`packages/db/src/schema/adjustments/adjustments.ts:110`). **The
+  paths that remove a dish, and so end a set menu's discount before they remove:** the comp
+  window's cancel (`applyAdjustment`'s cancel branch, `adjustments-apply.ts:1106-1127`, and its
+  preview, D59); Cancel item taking off an unstarted dish with no reason recorded
+  (`apps/server/src/line-cancel.ts:317`, `:327`); Reopen to split taking a stopped dish off its copy
+  (`takeOffCopies`, `apps/server/src/split-after-print.ts:274`, the ending recorded on the reopened
+  bill); and a basket save dropping an unsent dish (`applyLineEdits`,
+  `working-order-line-edits.ts:1159-1173`). Only the first records an amount. `removeFromLine` and
+  `removePortions` themselves end nothing, since the comp window must end before it plans.
+  Alternative: the cancel records 0.00, and the report then never shows the 8.00 by which the bill's
+  charge fell below its list prices.
+- **D49. A set menu's comp or discount is written as any comp is, over its row and the dishes in it
+  that carry a supplement,** so 2b's freeze keeps that set menu as it is (D30). Spec section 6 says
+  it covers "the set menu's price and the supplements of the dishes in it … not the paid extras";
+  today's spread shares it by price and writes `adjustment_lines` on each row
+  (`adjustments-apply.ts:331-345`, `:1177-1187`), and nothing is handed to the calculation.
+  Alternative: the old D35–D36, a holder column and the calculation working the discount in
+  (`5e90544ac4`), which rule C no longer needs.
+- **D50. Some but not all of a discounted set menu's dishes leaving (Move dishes, a table split's
+  loose dishes, Pay for items) breaks it, as a cancel does:** the discount comes off with a notice
+  and those dishes leave at their own price; every dish leaving moves it whole (D51). A merge moves
+  every line (`moveOrderLines` with no line numbers, `bill-actions.ts:184`), so it never breaks one.
+  Today the comped Daily stays behind, frozen (D18). A declined card puts the dishes back
+  (`putItemsBack`, `bill-payments.ts:2343`, which moves every line back) but not the discount; the
+  notice offers it again. Recommended: it is rule C's "broken up", and needs no refusal.
+  Alternative: refuse a dish alone (`set_menu.move_adjusted`); staff move the whole set menu or give
+  the discount again afterwards, and nothing comes off on a move.
+- **D51. A discounted set menu moves whole, keeping its discount, when its own row is chosen or when
+  every one of its dishes is.** The till's Move dishes and Pay for items screens choose dishes, not
+  set menus (spec section 7: "The pay screen lists dishes, not set menus"; the till's
+  `setMenusThatGo`, `apps/till/src/state/split-selection.ts:107-120`), so paying for a discounted
+  set menu dish by dish must not lose its discount, which "goes with the dish or set menu". The
+  server counts a set menu whose row a standing comp or discount reduced (its own; before 3c also
+  its part of a whole-bill one) as chosen once every dish placed in it is chosen whole: in
+  `resolveMoveLines` (`apps/server/src/bill-actions.ts:208`, which serves Move dishes, a table
+  split's loose dishes and Pay for items' move) and in Pay for items' reading of its picks
+  (`readPicks`, `apps/server/src/pay-for-items.ts:85-188`, which its preview prices). Its rows keep
+  their ids when they move (`working-order-transfer.ts:178-187`), so their `adjustment_lines` still
+  name them and they stay frozen on the other bill (D30); it is not worked out again with that
+  bill's dishes, and its comp's record stays on the bill it was given on (D47). Any other set menu
+  is worked out again on both bills as today, and one frozen by a kept-charge cancel still refuses
+  its dish alone (D18). **For A1515-4 (the till):** `setMenusThatGo` keeps a set menu that is below
+  its list price when all its dishes are chosen; it must count it as going with its last dish, as
+  the server now does, and say before saving that choosing only some of its dishes takes its
+  discount off (D50). The server needs no set-menu row from the till. Alternative: only a chosen row
+  moves a set menu (today's `resolveMoveLines`), and the till sends the row's id when every dish is
+  chosen; a choice dish by dish from anything else then loses the discount.
+- **D52. A second comp or discount on a set menu replaces the one it holds; on a dish they still add
+  up.** For a set menu this is the owner's 24 November rule (spec section 6: "A new discount
+  replaces the old one and the till says so"): the old one ends (`replaced`, no notice) and the
+  preview answers `replaces`, working the old one's ending out without writing it (D59). On a dish,
+  today's rule stays: a second is taken off what the dish costs then
+  (`~/waitron-campaign-shared/discount-review-2026-10-28.md:32`). Alternative: replace on a dish
+  too, which changes 3a's and today's rule.
+- **D53. A price change is a change of extras, or of variant in a held order's save.** An edit of a
+  stored dish carries a quantity, a note, options and extras (`LineIntent`,
+  `working-order-edit-state.ts:168-174`), keeps its stored variant (`variantOf`,
+  `working-order-line-edits.ts:259-260`), and prices no options answer (`:114-116`); so on a table
+  bill a dish changes variant only by Cancel item and a new dish, and its discount goes with the
+  cancel. A held order's save (`saveHeldOrderIn`, `apps/server/src/working-order-held-write.ts:109`)
+  differs: the till keeps each line's `workingOrderLineId` (`apps/till/src/state/working-order.ts:79`),
+  and a line naming a stored line of the same menu item with another variant is not taken as an
+  edit of it (`sameItem`, `:138-148`): it is added as a new line and the stored line is removed
+  (`:167`). 3b2 reads that pair as a change of variant: the stored line's own comp or discount ends
+  `variant_changed`, with a notice offering it again on the new line; a dish of a discounted set
+  menu so changed ends the set menu's discount the same way, offered as for a set menu broken up
+  (D54). A stored line removed with no such successor is a cancel (rule C: the discount goes with
+  it, no notice). Recommended: the owner named the variant ("Or it changes variant which could be
+  more or less expensive"). Alternatives: no notice for a swap (this plan's earlier recommendation);
+  or let an edit change a variant, a piece of work of its own.
+- **D54. The notice.** Answered on each open bill for each ending recorded on that bill (D47) caused
+  by a change (`extras_changed`, `variant_changed`, `dish_cancelled`, `dish_moved`,
+  `dish_paid_alone`) that no later comp or discount on that bill gives again
+  (`adjustments.reapplies_adjustment_id`); not for one replaced or a set menu cancelled whole (rule
+  C: "Cancelled: the discount goes with it"), and not once nothing it covered is left on the bill (a
+  set menu whose dishes are then cancelled one by one ends as one cancelled whole). It says what came
+  off (kind, percentage, amount, reason), where (the dish or set menu) and why (which dish, and what
+  happened), and what to give it again on: the dish, for a change of extras; the new line, for a
+  change of variant; for a set menu, the set menu its remaining dishes now share, else the one dish
+  left, else nothing, and staff use the comp window. The amount on the new price is what the comp
+  window's preview answers for the same terms there (3a's preview, D33). No Dismiss: it goes when
+  the bill closes. Recommended. Alternatives: a Dismiss (a column that changes, on an otherwise
+  append-only record); or offering it again on the whole bill when the dishes are spread over
+  several places.
+- **D55. The adjustments report leaves out a discount that came off.** Its total is "What the bills
+  actually lost" (`AdjustmentTally.reduction`, `packages/adjustments/src/reports.ts:45-46`): a 50%
+  Daily (7.00) whose Hake is then cancelled counts the cancel's 8.00 (D48), the difference between
+  the Daily's 14.00 and the Soup's 6.00; counting both says 15.00. The drill-down still lists it.
+  Alternative: count every one as recorded, as today.
+- **D56 (3c). A dish's part of a whole-bill discount stays through a change of its extras,** with
+  no notice: it is the bill's discount, not the dish's; the dish keeps its price and the new extra
+  pays full price, as today (`working-order-line-edits.ts:443-446`). A cancelled, moved or
+  separately paid dish takes its part, as the owner chose on 25 November 20:02 (D38: "this does seem
+  fairer", "this too"). Alternative: end the dish's part with a notice, as for its own discount.
+- **D57. PR 4 is no longer needed** (its section says where each part went). Alternative: keep it
+  as a pull request of tests only.
+- **D58. The split: 3b1 (set menus, resets venues), then 3b2 (dishes and the notice), then 3c.**
+  3b1 comes first because it holds the schema both need and the refund fix the watcher put there
+  (00:20). Between 3b1 and 3b2 a set menu's discount can come off with no notice in any answer;
+  the till draws none until A1515-4 either way. Alternative: one pull request of about 7 hours.
+- **D59. A preview works an ending out without writing it.** Both previews that can end a discount
+  run in a transaction that saves what it writes (`previewPayForItems`, `pay-for-items.ts:564-573`,
+  through `readPicks`, which Pay for items' apply runs too; `previewAdjustment`,
+  `adjustments-apply.ts:898`, called in `withTransaction` at `adjustments-api.ts:270-272`), so an
+  ending written there would stand for good. Only the paths that change the bill end one: D48's
+  removals, `moveOrderLines`'s loose dishes (D50), `applyAdjustment` replacing a set menu's discount
+  (D52) and 3b2's edits. A preview asks `endingRestores(tx, { workingOrderId, adjustmentIds })`,
+  which reads what `endAdjustment` would write (each row its price back, its stamp cleared), and
+  hands it as `ending` to the readers it uses: `readRows`
+  (`apps/server/src/adjustment-rows.ts:71`, for `planAdjustment`), `totalAfterAdjusting` and
+  `regroupDropAfter` (`set-menu-regroup.ts:341`, `:282`, which lay the restored rows over the read
+  ones) and `frozenLineIdSources` (`set-menu-freeze.ts:16`, which leaves those adjustments' rows
+  out). `endAdjustment` writes exactly what `endingRestores` answers, so a preview cannot differ
+  from its apply in how it ends one, and each such preview has a test that it equals its apply,
+  ending included, and writes nothing. Alternative: a savepoint the preview rolls back
+  (`tx.transaction`, as `apps/server/src/alerts.ts:127` uses one): less code, but every such preview
+  then writes, and stays a preview only through the rollback.
 
 ### Global constraints for PR 3
 
@@ -1513,30 +1695,541 @@ Hake 16.00, Sea bass 19.00, Sirloin 24.00.
   A1515: 3a done, 3b, 3c and 4 left. `docs/developers/conventions-data.md` if it states the freeze.
 - [ ] **Step 5: Commit** `git commit -s -m "Check discounted set-menu dishes on every path; record what is left"`.
 
-### 3b — A set menu's comp or discount: scope
+### PR 3b0 — dropped
 
-D35–D37, D39; `groupSetMenus` already takes the discounts (#4224) and answers `unusedDiscountIds`;
-the plan passes `discounts: []` today (`set-menu-grouping-plan.ts`). The freeze stops for a set-menu
-row's own comp or discount. Files: `packages/db/src/schema/orders.ts` (column, baseline rebuilt),
-`set-menu-grouping-plan.ts`, `set-menu-regroup.ts`, `adjustments-apply.ts` (the amount is worked out
-over the set menu and its supplements, D36), `set-menu-bill.ts` (the answer's dropped discounts),
-the carves and copies that list the set-menu columns, and readers of `adjustment_lines`
-(`packages/adjustments/src/record.ts:111`, `apps/server/src/free-items.ts:150`, `carryLineReductions`,
-`reducedLineIds` and `frozenLineIdSources` in `set-menu-freeze.ts`).
+_2026-11-26: dropped by the owner's rule C (D45) before it was pushed. It made the shared
+calculation keep a set menu's discount on the set menu it was given on (D41–D44); under rule C the
+calculation is never handed a discount. Its last commit is `518ccd12f8`; the section as it was
+written is in this file at `bbe95ebd14`._
 
-### 3c — A whole-bill discount: scope
+### PR 3b — A set menu's comp or discount, and saying when a discount comes off (rule C)
 
-D38 as the owner answers it. `reducedLineIds` and `frozenLineIdSources` (`set-menu-freeze.ts`) stop
-counting a share of one (spec section 6). D2's freeze for comps and discounts is gone after 3c; only
-kept-charge cancels and service cancellations freeze.
+Written 26 November against 3a's head (#4361, not yet on `main`). Its `file:line` citations were
+moved the same day to that head after its rebase, `fa3d08f2f5`, and were read there, not run,
+unless it says run; each is checked again once 3a lands. The rules are D45–D59. Prices are the spec
+fixture's (`apps/server/src/testing/set-menu-spec-fixture.ts:78-92`): Daily 14.00 (Soup, Hake,
+Sirloin +5.00), Special 20.00; à la carte Soup 6.00, Hake 16.00, Sea bass 19.00, Sirloin 24.00;
+Bread 1.50 on the Soup. A lone Hake is a Daily at 14.00; a lone Soup is 6.00.
 
-## PR 4 — Moving dishes with their discounts (`feat/a1515-3-moves`)
+**How:** a set menu's discount is written as any comp is, so 2b's freeze keeps the set menu as it
+is and the calculation never sees a discount (D49); what takes one off writes an ending on the bill
+its rows are on (D47); a preview works an ending out without writing it (D59).
 
-_2026-11-25: 3a already lets a dish with its own comp or discount move alone with it; what is left
-here is below._
+**What 3a does today against rule C:**
 
-- `set_menu.move_adjusted` (`refuseMovingFrozenDishes` in `set-menu-moves.ts`) and moving "a set menu
-  with its dishes" (`resolveMoveLines`, `bill-actions.ts:231-247`) go; a set menu's discount stays on
-  its bill.
-- Both bills regroup (PR 2's call already does); a test per move path (`moveDishes`, `mergeBills`,
-  `splitTable`, pay-for-items) shows both totals.
+- Already rule C: a percentage is recorded (`adjustments.percent_bp`, `adjustments-apply.ts:1167`)
+  but charged as an amount worked out when given (`requestedDiscount`, `:262-283`), and more of the
+  dish goes on a new line at full price (`working-order-line-edits.ts:453-455`); a discounted dish
+  moves and is paid for alone with its discount (Task 3a.4); fewer of it takes only that portion's
+  share, which sits in its unit price (`spread`, `adjustments-apply.ts:331-345`).
+- **Changed by 3b2:** changing a discounted dish's extras keeps its discount, since a stored line
+  keeps its unit price (`working-order-line-edits.ts:114-116`, `:433-446`); a held order's save
+  that changes a discounted dish's variant drops the stored line, discount and all, with no notice
+  (D53).
+- **Changed by 3b1:** a set menu's comp covers only its row, because its subjects are the row and
+  its extras (`family`, `adjustments-apply.ts:597`) while its dishes are linked by
+  `set_menu_line_id`, so Free on a Soup and Sirloin Daily leaves the +5.00 charged; and a dish
+  leaving a comped Daily leaves the Daily behind, frozen and comped (D18), as does choosing every
+  one of its dishes (D51).
+
+**Size** (estimates from reading):
+
+| PR | Product | Tests | Generated files | Tasks | Building |
+| --- | --- | --- | --- | --- | --- |
+| 3b1 | about +450, −40 | about +850; 5 behaviour checks change, and the pinned lists of tables | core's starting migration and `scripts/migration-baseline-epoch.json` | 7 | about 4 hours |
+| 3b2 | about +250 | about +450; none changes (the new answer key is absent when empty) | none | 4 | about 3 hours |
+
+**From `feat/a1515-3-menu-adjustments`** (on 3a at `b42f85de31`, never pushed; closed when 3b1
+starts from `main`): `8234a633ec` (the holder columns), `1cd4d825c1`, `fcbe4edde9` and
+`b42f85de31` (carrying a held discount through regroupings and back from a declined card, with
+`left_set_menu_adjustment_id`) are dropped. Of `5e90544ac4`, only
+`packages/orders-sales/src/set-menu-discount-shares.ts` and its test (about 50 lines) are kept, for
+3c. Of `81ac849617`, only its three preview cases are kept, as tests in Task 3b1.2.
+
+**Still unavailable after 3b:** typing an amount larger than what the till's comp window shows for
+a set menu (`adjust.amount_too_large`, `apps/till/src/widgets/adjustment-dialog.ts:439`; A1515-4's
+window), though Free and a percentage reach the supplements; a comp or discount on one dish of a
+set menu that holds its own (3a's refusal, kept); changing the variant of a table bill's dish other
+than by Cancel item and a new dish (D53); and every notice and choice drawn on the till (A1515-4).
+
+**Fiscal gates, both PRs:** `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad
+src/write-path.e2e.test.ts` passes unedited. Neither PR changes how a filed line is built (from
+reading: a discount is already filed as the amount on its lines).
+
+### PR 3b1 — A set menu's comp or discount (`feat/a1515-3-menu-adjustments`, a new branch from `main`)
+
+**What a person can do once it lands.** Comp or discount a set menu: it takes off the set menu's
+price and its dishes' supplements, not their paid extras, and the set menu stays as it is while it
+holds it; the receipt prints it under the set menu. A second one on the same set menu replaces the
+first, and the preview says so (D52). Cancelling, moving or paying alone for some of its dishes
+takes the discount off and works the bill out again (D48, D50); moving or paying for the whole set
+menu, by its row or by choosing every one of its dishes, takes the discount with it (D51). Every
+preview says what saving will do, the discount coming off included, and writes nothing (D59). A
+free set menu on a takeaway ticket can be refunded. **Resets venues.** The server answers no notice
+yet (3b2), and the till draws none until A1515-4.
+
+`adjustments-apply.ts` is 1,206 lines against a cap of 1,250 (`scripts/product-file-size-limits.json:25`),
+so new code goes in new files.
+
+**Task sizes**, in tool calls (estimates from reading; each well under 100): 3b1.1a about 60, 3b1.1b
+about 60, 3b1.2 about 50, 3b1.3a about 65, 3b1.3b about 75, 3b1.4 about 25, 3b1.5 about 50.
+
+#### Task 3b1.1a: The record of a discount that came off (D47)
+
+**Files:** Create `packages/db/src/schema/adjustments/adjustment-endings.ts` (`adjustment_endings`:
+`id`; `adjustment_id`, a foreign key to `adjustments.id`; `working_order_id`, a foreign key, the
+bill the adjustment's rows were on when it ended (D47); a unique index on those two; `why`:
+`extras_changed`, `variant_changed`, `dish_cancelled`, `dish_moved`, `dish_paid_alone`,
+`replaced` or `set_menu_cancelled`; `dish_name`, the dish that left or changed; `line_id`, the line
+a notice offers it again on, for `extras_changed` and `variant_changed`, else null, with no key, as
+`adjustment_lines.line_id` has none, for the reason stated at
+`packages/db/src/schema/adjustments/adjustment-lines.ts:5-9`; `ended_at`), exported beside the other
+adjustments tables. Create `packages/adjustments/src/endings.ts`: `endingRestores(tx, {
+workingOrderId, adjustmentIds })`, which writes nothing and answers, for each row now on that bill
+that those adjustments' `adjustment_lines` took something off, its unit price, line total and list
+price once that is given back (the list price cleared once the price is back at it); and
+`endAdjustment(tx, { adjustmentId, workingOrderId, why, dishName, lineId? })`, which writes exactly
+what `endingRestores` answers, then the ending. Modify
+`packages/db/src/schema/adjustments/adjustments.ts` (`reapplies_adjustment_id`, a foreign key to
+its own `id`, for 3b2, so only 3b1 resets venues).
+
+The new append-only table goes everywhere `adjustment_lines` is named (CLAUDE.md §3: a new
+append-only table travels in its set's migration descriptor and the manifest):
+`packages/db/src/classification.ts` (`appendOnly(..., "ledger", ...)` after `adjustment_lines`,
+`:398-402`; `CORE_MIGRATIONS` derives its list from it, `packages/db/src/migrations.ts:16-20`);
+`packages/migrations/migrations.manifest.json` (core's `appendOnlyTables`, `:28-30`);
+`ADJUSTMENTS_TABLES` (`packages/adjustments/src/classification.ts:4-9`) and its pins
+(`packages/adjustments/src/classification.test.ts:18`, `:28`, `:36`;
+`packages/composition/src/composition.test.ts:396-401`); `FOLDED_APPEND_ONLY` and its `ROWS`
+(`packages/db/src/classification.test.ts:105-156`); `immutableTables`
+(`packages/adjustments/src/backup-verification.ts:10`, pinned at `backup-verification.test.ts:147`);
+`EXPECTED` (`scripts/append-only-triggers.test.ts:34-37`); and `scripts/schema-constraints.test.ts`
+(`EXPECTED_FOREIGN_KEYS`, `:51`, and the unique indexes, `:325`). Generated by `pnpm --filter
+@waitron/server migration-baseline rebuild --set core`.
+
+- [ ] **Tests first** (`packages/adjustments/src/endings.test.ts` and the pins above): 10% on an à
+  la carte Hake (14.40) ended: 16.00, no list price, one ending on that bill, and `endingRestores`
+  answered the same beforehand and wrote nothing; a row of two à la carte Hakes at 10%, one moved to
+  another bill of the party: ending it there gives back only that Hake, ending it there again is
+  refused by the unique index, and ending it on the first bill is accepted; the new foreign keys in
+  `EXPECTED_FOREIGN_KEYS`; the table in each pinned list.
+- [ ] **Run them failing**, implement, rebuild, then `pnpm exec vitest run
+  scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts
+  scripts/behavioural-triggers.test.ts scripts/starting-migrations.test.ts
+  scripts/classification-complete.test.ts scripts/append-only-migration-sets.test.ts
+  scripts/two-file-foreign-keys.test.ts scripts/id-columns-are-references.test.ts`; `pnpm --filter
+  @waitron/adjustments exec vitest run src/endings.test.ts src/classification.test.ts
+  src/backup-verification.test.ts`; `pnpm --filter @waitron/db exec vitest run
+  src/classification.test.ts`; `pnpm --filter @waitron/composition exec vitest run
+  src/composition.test.ts`; `pnpm --filter @waitron/migrations exec vitest run
+  src/apply-append-only.test.ts`; `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` (if it
+  names the table as missing, add it to `ADDED_TABLES`, `:484-491`); the fiscal gates; and `pnpm
+  --filter @waitron/db typecheck`. If backup verification refuses the new column, add
+  `reapplies_adjustment_id: null` to `addedAdjustmentColumns` (`backup-verification.ts:11-16`).
+  Commit `git commit -s -m "Record when a comp or discount comes off a bill (A1515-3 3b1)"`.
+
+#### Task 3b1.1b: Readers leave an ended discount out, and a preview can work one out (D47, D59)
+
+**Files:** `apps/server/src/set-menu-freeze.ts` (`reducedLineIds`, `:45-65`: leaves out a row whose
+adjustment has an ending on the bill its line is on now; `frozenLineIdSources`, `:16`, takes
+`ending?` and leaves those adjustments' rows out as well); `packages/adjustments/src/record.ts`
+(`readReasonStanding`, `:98`, the same rule; `readBillAdjustments`, `:145`, leaves out an
+adjustment with an ending on its bill); `apps/server/src/free-items.ts` (`listFreeItems`, `:119`:
+its reduced rows, `:149-182`, the same rule); `apps/server/src/adjustment-rows.ts` (`readRows`,
+`:71`, takes `ending?` and lays `endingRestores`' rows over what it reads);
+`apps/server/src/set-menu-regroup.ts` (`totalAfterAdjusting`, `:341`, and `regroupDropAfter`,
+`:282`, take `ending?`, lay the rows over the read ones and hand it to `planGrouping`'s freeze,
+`:122-133`); `apps/server/src/adjustments-apply.ts` (`planAdjustment`, `:527`, passes `ending?` to
+`readRows`, nothing else). Test: `apps/server/src/set-menu-discount-ending.test.ts` (new).
+
+- [ ] **Tests first:** Free on a Soup and Hake Daily, ended: the freeze no longer names the Daily
+  (a Soup sent next still finds the Daily formed, at 14.00), the reason's standing on the bill is
+  0.00, `readBillAdjustments` leaves it out and the corrections report's free items leave it out;
+  the same Daily not ended but read with `ending` naming the Free: `totalAfterAdjusting` answers
+  14.00, the freeze leaves the Free's rows out, and every row and `adjustment_endings` are as they
+  were; an ending on another bill leaves this bill's readers as they were.
+- [ ] **Run them failing**; implement; drop the ending rule from `reducedLineIds` and see the
+  freeze case fail; restore. Run `pnpm --filter @waitron/server exec vitest run
+  src/set-menu-discount-ending.test.ts src/set-menu-regroup.test.ts src/set-menu-adjustments.test.ts
+  src/set-menu-dish-adjustments.test.ts src/free-items.test.ts src/adjustments-apply.test.ts`, `pnpm
+  --filter @waitron/adjustments exec vitest run src/record.test.ts`, both typechecks. Commit `git
+  commit -s -m "Leave a discount that came off out of what reads a bill's discounts"`.
+
+#### Task 3b1.2: A set menu's comp or discount covers its supplements; a second one replaces it (D49, D52)
+
+**Files:** Create `apps/server/src/set-menu-adjustment.ts` (the set menu's rows; the replacement)
+and `apps/server/src/set-menu-discount-apply.test.ts`. Modify `apps/server/src/adjustments-apply.ts`
+(`family`, `:597`: for a set-menu row, the row and the dishes placed in it charged above 0.00; a set
+menu holding a standing comp or discount has it ended, `replaced`, in the apply's transaction before
+the new one is worked out; `previewAdjustment`, `:898`, plans with `ending` naming it instead,
+writing nothing (D59), and answers `replaces?: { action, percentBp, amount }`, absent otherwise, so
+no whole preview shape changes); `apps/till/src/api/client.ts` (`AdjustmentPreview` gains
+`replaces?`, the type only).
+
+- [ ] **Tests first**, each asserting the rows, the total, the recorded before, after and
+  reduction, and that the preview's `billTotal.after` equals the apply's total:
+  - A Soup and Sirloin Daily (19.00): Free gives 0.00 (row 0.00 with list 14.00, Sirloin 0.00 with
+    list 5.00), recorded 19.00, 0.00, 19.00; 10% gives 17.10 (12.60 and 4.50); 18.00 off gives
+    1.00 (0.74 and 0.26: by hand, 18.00 × 14/19 = 13.26 and 18.00 × 5/19 = 4.74).
+  - A Soup with Bread and a Hake, 10% on their Daily: the Bread stays 1.50, 14.10.
+  - 10% then 20% on one Soup and Hake Daily: 11.20; the 10% ended `replaced`; the second preview
+    answers `replaces` with amount "1.40" and leaves the 10% standing (no ending written).
+  - The receipt of the Free case prints Free −19.00 under the Daily and its lines add up with no
+    per-dish fallback (`receipt-adjustments.ts:270-285`). Expected to pass.
+  - A takeaway Lunch (`addSpecLunch`) with 50% on the Lunch: the filed lines and VAT match the
+    stored lines. Expected to pass.
+  - `81ac849617`'s cases: 10%, 100% and 2.00 off the whole of a bill whose Daily holds 10%: the
+    preview answers what the apply leaves.
+- [ ] **Run them failing**; implement; take the dishes out of `family` again and see the Sirloin
+  case fail; restore. Run `src/adjustments-apply.test.ts src/order-portions.adjustments.test.ts
+  src/adjustments-api.test.ts src/set-menu-adjustments.test.ts src/set-menu-dish-adjustments.test.ts`.
+  Commit `git commit -s -m "Take a set menu's comp or discount off its supplements too"`.
+
+#### Task 3b1.3a: A cancel that breaks a discounted set menu takes the discount off (D48)
+
+**Files:** Create `apps/server/src/set-menu-discount-ending.ts`: `setMenuDiscountsLeftBy(tx, billId,
+dishIds)`, which writes nothing and answers `broken`, the standing comp or discount of each set menu
+(an adjustment whose `line_id` is that set-menu row) that some but not all of its dishes leave by
+`dishIds`, and `whole`, each set menu whose row a standing comp or discount reduced and whose every
+dish is among `dishIds` (D51, used by 3b1.3b); and `endSetMenuDiscounts(tx, billId, broken, why)`,
+which ends each with `endAdjustment` (`set_menu_cancelled` when a cancel takes its last dish).
+Called before the removal on each path D48 names, and on no other:
+
+- the comp window's cancel (`applyAdjustment`, `adjustments-apply.ts:1097-1127`): ended before
+  `planAdjustment` runs, so the plan and `regrouped` are read after the ending;
+- its preview (`previewAdjustment`, `:898-913`): planned, and `regroupDropOfRemoval`
+  (`working-order-removal.ts:414`, which reaches `regroupDropAfter`) and `billTotalOf`
+  (`adjustment-bill-total.ts:36`) worked out, with `ending` naming them, writing nothing (D59);
+- Cancel item's unrecorded removal (`line-cancel.ts:317`, `:327`);
+- Reopen to split's `takeOffCopies` (`split-after-print.ts:274`), the ending on the reopened bill;
+- a held order's save that drops an unsent dish (`applyLineEdits`, `working-order-line-edits.ts:1159-1173`;
+  only `saveHeldOrderIn` removes through it, `working-order-held-write.ts:160-167`); if the comp
+  window cannot give a set menu on a held order a discount, the PR says so and this call is left
+  out.
+
+- [ ] **Tests first** (`set-menu-discount-ending.test.ts`):
+  - A Soup and Hake Daily at 50% (7.00), the Hake cancelled in the comp window: the 50% ended
+    (`dish_cancelled`, "Hake"), the Soup 6.00, the cancel records 8.00.
+  - Free on a Soup and Sirloin Daily (0.00), the Sirloin cancelled: the Free ended, the cancel
+    records 13.00 (19.00 − 6.00), the bill 6.00 (D48).
+  - Free on a Soup and Hake Daily (0.00), the Hake cancelled: the cancel's 8.00 accepted by
+    `adjustments_amounts_ck`; then the Soup cancelled too: 6.00 recorded, nothing more ended.
+  - A lone Hake Daily at 10% (12.60), the Hake cancelled: ended `set_menu_cancelled`.
+  - For each of those four: the preview answers the reduction and the `billTotal.after` the apply
+    then gives, and leaves every row and `adjustment_endings` as they were.
+  - The 50% case through Cancel item with no reason (an unstarted Hake): ended the same.
+  - A printed bill with that 50% Daily, its Hake unserved, reopened stopping unserved dishes: the
+    ending is on the reopened bill, whose Soup is 6.00.
+  - A held counter order holding a 50% Daily, saved without its Hake: ended, the Soup 6.00.
+  - **Pins:** a dish's own cancel (3a) and an ordinary bill's cancel, preview and apply, unchanged
+    (D24).
+- [ ] **Run them failing**; implement; drop the comp window's call and see the 50% case keep the
+  Soup in a frozen Daily; move it after `planAdjustment` and see the Sirloin case record 8.00;
+  restore. Run `src/set-menu-discount-ending.test.ts src/line-cancel.test.ts
+  src/split-after-print.set-menus.test.ts src/working-order-held-write.test.ts
+  src/adjustments-apply.test.ts src/set-menu-dish-adjustments.test.ts`. Commit `git commit -s -m
+  "Take a set menu's discount off when one of its dishes is cancelled"`.
+
+#### Task 3b1.3b: Moving or paying for some, or every one, of a discounted set menu's dishes (D50, D51)
+
+**Files:** `apps/server/src/set-menu-discount-ending.ts` (from 3b1.3a). Modify:
+
+- `resolveMoveLines` (`bill-actions.ts:208-261`): adds each set menu `setMenuDiscountsLeftBy`
+  answers in `whole` as if its row were named, so its dishes go with it (D51); `takesEveryDish`
+  (`:266-293`) then sees it gone.
+- `moveOrderLines` (`working-order-transfer.ts:84`): before its loose dishes' refusal (`:144-155`)
+  and before any row moves, ends each set-menu discount its loose dishes break, `dish_moved`, or
+  `dish_paid_alone` when Pay for items' move says so through `moveDishes`' options
+  (`bill-actions.ts:336`; `pay-for-items.ts:246`). This serves Move dishes, a table split's loose
+  dishes (`table-actions.ts:383`, `:430`) and Pay for items (`moveItemsToNewBill`,
+  `pay-for-items.ts:220`). A merge moves every line, so nothing ends.
+- `readPicks` (`pay-for-items.ts:85-188`), writing nothing: counts a `whole` set menu as picked (in
+  `ids`, so `taken` and the all-items check, `:164-171`, see it go), and hands `broken` as `ending`
+  to `priceItemPicks`' `totalOnOwnBill` and `totalLeftBehind` (`:199-210`; `set-menu-regroup.ts:309-334`).
+- `refuseMovingFrozenDishes` (`set-menu-moves.ts:19-66`) and a set-menu dish's `movable`
+  (`placedSetMenuDishes`, `set-menu-bill.ts:337-383`) stop counting a reduction made by a set
+  menu's own standing comp or discount, so a Sirloin whose supplement it took moves alone.
+
+- [ ] **Tests first** (`set-menu-discount-ending.test.ts`):
+  - The Sirloin of a 10% Soup and Sirloin Daily (17.10) moved alone to another bill of the party:
+    not refused; ended `dish_moved` on the source; the source's Soup 6.00; the Sirloin a Daily of
+    its own there at 19.00. The same through `splitTable`'s loose dishes.
+  - That Daily moved whole, by its row; by naming both its dishes; and in `mergeBills`: it arrives
+    holding its 10% at 17.10, nothing ended; a Soup and a Hake sent there make their own Daily at
+    14.00 (D51).
+  - Pay for items, the Sirloin alone: the preview prices it at 19.00 and leaves 6.00, writing no
+    ending; paid in cash, the same figures and ended `dish_paid_alone`; by card and declined, the
+    Sirloin comes back and the discount stays ended: 19.00 (D50).
+  - Pay for items, both dishes of that Daily with a Water left behind: preview and payment 17.10,
+    nothing ended; by card and declined, the Daily comes back holding its 10%.
+  - A Daily on a bill discounted 10% as a whole, both its dishes moved: it moves whole with its part
+    of the discount (D51, until 3c).
+  - **Pins:** a Daily frozen by a kept-charge cancel still refuses moving its dish alone, and its
+    every dish named (`set_menu.moves_with_set_menu`); 3a's pin "still takes nothing off a dish of
+    a comped Daily" (`set-menu-dish-adjustments.test.ts:660`) passes unchanged.
+- [ ] **Run them failing**; implement; take `whole` out of `resolveMoveLines` and see the
+  both-dishes Move dishes case end the 10%; restore. Run `src/set-menu-discount-ending.test.ts
+  src/set-menu-regroup-moves.test.ts src/pay-for-items.set-menus.test.ts src/move-dishes.test.ts
+  src/set-menu-bill.test.ts src/set-menu-bill-moves.test.ts src/split-table.fiscal.test.ts
+  src/party-table-actions.test.ts`; the Task 3b1.5 checks are expected to fail here, as listed
+  there. Commit `git commit -s -m "Take a set menu's discount off when some of its dishes leave, and
+  along when all do"`.
+
+#### Task 3b1.4: A free set menu on a takeaway ticket can be refunded (watcher, 26 November 00:20)
+
+Found by lane B (questions.md, "LANE B 2026-11-26 00:45"; run in a scratch test on
+`b42f85de31`): on a settled takeaway ticket with a Free Daily (Soup and Sirloin) and a Water at
+21%, Cancel and refund of the Water is refused `tab.free_item_with_dish` (`served`). The grouping
+writes every set-menu row as served (`servedQuantity: 1000`, `apps/server/src/set-menu-regroup.ts:162`),
+and the free-item check refuses a free item that has been served (`freeItemsComingBack`,
+`apps/server/src/line-cancel.ts:618`). On `main` the same follows from a comp on the set menu's own
+row (lane B's reading, not run). Eat-in bills are not affected. The watcher: fix it here, with a
+test of that ticket.
+
+**Files:** `apps/server/src/line-cancel.ts` (`freeItemsComingBack`, `:605-629`: a set-menu row is
+not counted as a served free item; its dishes' own served state counts, as any dish's does). Test:
+`apps/server/src/free-item-cancel.test.ts`.
+
+- [ ] **Test first:** that ticket: the Water's refund goes through and brings the free Daily back
+  with it, the amounts as its filed lines give them; the Sirloin's own refund is still refused
+  `free_item`; an eat-in bill's case passes unchanged.
+- [ ] **Run it failing**, implement, run `src/free-item-cancel.test.ts src/finish-party-service.test.ts`.
+  Commit `git commit -s -m "Let a free set menu on a takeaway ticket come back with its paid dish"`.
+
+#### Task 3b1.5: The tests whose checks change, the guide, the backlog and the PR
+
+Expected to change, read at `fa3d08f2f5`; each new figure is worked out by hand and listed in the
+PR, and a failure the rules do not explain is a stop:
+
+- `set-menu-regroup-moves.test.ts:328` "moves a dish with no comp of its own out of a comped Daily,
+  which stays on its bill (D18)": the Hake moved alone ends the comp (`dish_moved`); the source is
+  the Soup at 6.00; the target's Hake Daily is unchanged.
+- `pay-for-items.set-menus.test.ts:381` ("… out of a comped Daily, which stays"): still priced and
+  paid at 14.00; the source is left the Soup at 6.00, not a comped Daily.
+- `pay-for-items.set-menus.test.ts:680` ("… a comped Daily whose own dishes have left, which
+  stays"): the move of both dishes now takes the Daily with them (D51), so the Water is all the bill
+  holds and paying for it is refused `bill.all_items_chosen`; rewritten to pin that, the other bill
+  holding the Daily at 0.00.
+- `pay-for-items.set-menus.test.ts:755` ("counts what a comped Daily keeps of its dishes at
+  0.00"): the Hake and a Water chosen now break the Daily, so the bill keeps the Soup at 6.00 and a
+  Water: accepted, priced 16.00, the bill left 8.00 against advances of 3.00.
+- `move-dishes.test.ts:1283` ("… every dish leaves a comped set menu, whose row stays …"): the
+  Daily now goes with its dishes, so the move empties the bill and asks the invoice question:
+  refused `bill.merge_invoice_choice_required` without a choice and moved with one, the other bill
+  holding the comped Daily.
+- Passing unchanged, as pins of D51: `pay-for-items.set-menus.test.ts:666` (every dish of a comped
+  Daily that is the whole bill is still `bill.all_items_chosen`) and `:397` (the comped Daily
+  chosen by its row).
+- Whole `adjustments` row shapes gain `reappliesAdjustmentId`.
+
+- [ ] **Run** `pnpm --filter @waitron/server exec vitest run src/set-menu-adjustments.test.ts
+  src/set-menu-regroup.test.ts src/set-menu-regroup-moves.test.ts src/pay-for-items.set-menus.test.ts
+  src/move-dishes.test.ts src/split-after-print.set-menus.test.ts src/set-menu-dish-adjustments.test.ts
+  src/receipt-document.set-menus.test.ts src/receipt-adjustments.test.ts`; change what fails as listed.
+- [ ] **Guide**, in the Set menus section of `apps/server/src/guide/en/table-service.md` and its
+  Spanish twin: "A comp or discount on a set menu covers its price and its supplements, not paid
+  extras. If some of its dishes are cancelled, moved or paid for on their own, the discount comes
+  off; moving or paying for all of them takes it along." / "Un descuento en un menú cubre su precio
+  y sus suplementos, no los extras de pago. Si se anulan, se mueven o se pagan aparte algunos de sus
+  platos, el descuento se quita; si mueves o pagas todos, se va con ellos." Run
+  `src/guide-content.test.ts` and `pnpm exec vitest run scripts/guide-links.test.ts
+  scripts/product-file-size.test.ts scripts/errors-reachable.test.ts`.
+- [ ] **Backlog** (`docs/backlog/menu.md`, A1515): 3b1 done in one sentence; left 3b2, 3c and piece
+  4, whose till counts a discounted set menu as going with its last chosen dish (D51).
+- [ ] **PR body**, first line: "Resets venues: core's starting migration is rebuilt
+  (`adjustment_endings` and `adjustments.reapplies_adjustment_id` are new), so every box must be set
+  up again." Then D45–D52, D58 and D59, the changed tests with old and new figures, and the deletion
+  results. Commit `git commit -s -m "Say how a set menu's comp or discount works; record what is left"`.
+
+### PR 3b2 — Saying when a discount came off (`feat/a1515-3-discount-notices`)
+
+**What a person can do once it lands.** Changing the extras of a dish that has its own comp or
+discount, or its variant in a held order's save, takes the discount off, and the dish is worked out
+with the bill again (D53). Every bill answers a notice for each discount that came off this way or
+when its set menu broke up: what it was, where, why, and what to give it again on; giving it again
+through the comp window names the notice and clears it (D54). The adjustments report leaves out a
+discount that came off (D55). The till draws the notice in A1515-4 (another lane); this PR is what
+it reads. No schema change.
+
+**What the server provides for A1515-4:** on every bill in the party read (`parties.ts:650`) and the
+counter order read (`working-order-held-read.ts:497`), `discountNotices?: { adjustmentId; why;
+dishName; on: string; action: "comp" | "discount_percent" | "discount_amount"; percentBp: number |
+null; amount: string; reasonId: string; reapplyOn: { lineId: string } | null }[]`, absent when there
+is none; the comp window's preview for those terms on `reapplyOn`, which works the amount out on the
+new price (a percentage of it, Free the whole of it; an amount the waiter types); and `reapplies`
+on the apply and preview routes.
+
+#### Task 3b2.1: Changing a discounted dish's extras or variant takes its discount off (D53, D56)
+
+**Files:** `apps/server/src/working-order-line-edits.ts` (`applyLineEdits`, where `extrasChanged` is
+worked out, `:433-446`: a dish whose own comp or discount stands, on the dish or on one of its
+extras, has it ended, `extras_changed`, with `line_id` the dish; a part of a whole-bill discount is
+kept, D56; and each variant swap it is handed is ended `variant_changed`, with `line_id` the new
+line, once that line is written and before the bill is regrouped, `:1174`);
+`apps/server/src/working-order-held-write.ts` (`saveHeldOrderIn`, `:128-148`: hands `applyLineEdits`
+each new line that names a stored line of the same menu item with another variant, D53). The edits
+file is 1,187 lines against 1,250 (`scripts/product-file-size-limits.json:39`), so the checks go in
+`apps/server/src/dish-discount-ending.ts`. Test: `apps/server/src/dish-discount-ending.test.ts`.
+
+- [ ] **Tests first:**
+  - An à la carte Soup at 50% (3.00) given Bread: ended, the Soup 6.00 and the Bread 1.50.
+  - A Soup with Bread comped (both 0.00), the Bread removed: ended, the Soup 6.00.
+  - A Soup taken out of its Daily by 50% (3a), beside a lone Hake Daily, given Bread: ended, and the
+    Soup rejoins the Hake's Daily: 15.50.
+  - A note or an options answer changed: kept. A quantity raised: kept, the new unit at full price
+    (R12, as today).
+  - A Soup on a bill discounted 10% as a whole given Bread: its part kept, the Bread 1.50 (D56).
+  - A held counter order's dish at 10%, saved naming it with the same menu item at another variant
+    (a menu item with two variants, as the tests under `working-order-held-write.test.ts:1733-1737`
+    build one): ended `variant_changed`, its `line_id` the new line, which is at its own full price;
+    the same save naming another menu item instead: no ending row, the discount gone with the
+    removed line (rule C's cancel). A dish of a held order's 50% Daily swapped the same way: the
+    Daily's discount ended `variant_changed`.
+  - Fewer of it: a row of three Sea bass (à la carte, 19.00 each; a lone one costs more in a
+    Special) with 5.00 off, one cancelled: the cancel takes only that portion's share, as recorded on
+    its row. Expected to pass.
+- [ ] **Run them failing**, implement, run `src/working-order-line-edits*.test.ts
+  src/working-order-held-write.test.ts src/set-menu-dish-adjustments.test.ts`. Commit `git commit
+  -s -m "Take a dish's own discount off when its extras or variant change"`.
+
+#### Task 3b2.2: The bill answers its notices; giving a discount again clears one (D54)
+
+**Files:** `packages/adjustments/src/endings.ts` (`readDiscountNotices(tx, billIds)`: each ending
+recorded on one of those bills (`adjustment_endings.working_order_id`, D47) whose `why` is
+`extras_changed`, `variant_changed`, `dish_cancelled`, `dish_moved` or `dish_paid_alone` and that
+no adjustment on that bill names in `reapplies_adjustment_id`, with the ended adjustment's action,
+percentage, recorded reduction, reason and line name); `apps/server/src/discount-notices.ts`
+(`reapplyOn`: the ending's `line_id` for a change of extras or variant; for a set menu, the set-menu
+row its dishes still on the bill now share, else the one dish left, else null; and no notice at
+all once nothing it covered is left on the bill); `parties.ts:650` and
+`working-order-held-read.ts:497` (answer it); `apps/server/src/adjustments-api.ts` (`parseAsk`,
+`:52-90`, takes `reapplies`: an adjustment with an ending recorded on this bill whose notice is
+open, else `management.request_invalid`; `applyAdjustment` records it); `apps/till/src/api/client.ts`
+and `packages/shared` (the types only).
+
+- [ ] **Tests first** (`apps/server/src/discount-notices.test.ts`): after Task 3b1.3a's 50% case, one
+  notice (`dish_cancelled`, "Hake", on "Daily menu", 50%, 7.00, `reapplyOn` the Soup), and the
+  preview of 50% on the Soup answers 3.00 off; applied with `reapplies`, the notice is gone. After
+  Task 3b2.1's first case: `extras_changed` on the Soup, and 50% previews 3.75 off 7.50; after its
+  variant case, `variant_changed` with `reapplyOn` the new line. Free on a Soup and Hake Daily, the
+  Hake cancelled (a notice offering Free on the Soup), then the Soup cancelled: no notice. The
+  Sirloin of a 10% Daily moved alone to another bill: the notice is on the source, not on the bill
+  it went to; the whole Daily moved, then its Sirloin cancelled there: the notice is on that bill,
+  and `reapplies` naming it is accepted there and refused on the bill it was given on. A
+  replacement, a set menu cancelled whole and a dish's own cancel give none. `reapplies` naming a
+  standing adjustment, one ended only on another bill, or one already given again is refused. A
+  bill with no notice answers no key.
+- [ ] **Run them failing**, implement, run `src/parties*.test.ts src/working-order-held-read*.test.ts
+  src/adjustments-api.test.ts` and the till's `api/client.test.ts`, with both typechecks. Commit
+  `git commit -s -m "Say on each bill which discounts came off and offer to give them again"`.
+
+#### Task 3b2.3: The report leaves out a discount that came off (D55)
+
+**Files:** `packages/adjustments/src/reports.ts` (`readReportRows`, `:292-317`, leaves out an
+adjustment with an ending; `readEntryRows`, `:323`, still lists it). Test:
+`packages/adjustments/src/reports.test.ts`.
+
+- [ ] **Tests first:** 10% then 20% on one Daily counts 2.80; a 50% Daily whose Hake is cancelled
+  counts the cancel's 8.00 and not the 7.00; the drill-down still lists all four entries: the 10%
+  and the 20% on the first bill, the 50% and the cancel on the second.
+- [ ] **Run them failing**, implement, run the package's tests and typecheck. Commit
+  `git commit -s -m "Leave a discount that came off out of the adjustments report"`.
+
+#### Task 3b2.4: The backlog and the PR
+
+- [ ] `docs/backlog/menu.md`, A1515: 3b done; left 3c and piece 4, whose till draws the notice
+  (A1515-4). The guide's Set menus sentence from Task 3b1.5 gains, in both languages: "If you change
+  a discounted dish's extras or variant, its discount comes off." / "Si cambias los extras o la
+  variante de un plato con descuento, el descuento se quita."
+- [ ] PR body: no schema change; D53–D56 as cleared; what A1515-4 reads. Commit
+  `git commit -s -m "Record what is left of A1515-3 after 3b"`.
+
+### PR 3c — A whole-bill discount as the set menus change (`feat/a1515-3-bill-discounts`)
+
+Written 26 November; replaces the 3c-1 and 3c-2 scope the owner cleared on 25 November (D38), of
+which rule C withdraws 3c-2. It gets its task steps on this page against `main` as 3b2 leaves it,
+and the watcher clears them.
+
+**What a person can do once it lands.** A comp or discount on the whole of a bill with set menus no
+longer stops its set menus being worked out: each dish keeps its own part through them, a dish
+cancelled, moved or paid for alone takes its part (the owner's answers of 25 November 20:02, D38),
+and a dish ordered later pays full price (rule C). Plain bills are unchanged.
+
+**Today** (read, not run, at `fa3d08f2f5`): a whole-bill discount is an amount when it is given, a
+percentage being taken off the bill as it stands (`requestedDiscount`,
+`adjustments-apply.ts:262-283`); it is shared over the bill's rows in proportion to what each costs
+then (`spreadReaching`, `:313-330`; `~/waitron-campaign-shared/discount-review-2026-10-28.md:34`)
+and written per row in `adjustment_lines` (`:1177-1187`), which keep naming a moved row, since it
+keeps its id (`working-order-transfer.ts:178-187`), and are copied to a split's new rows
+(`carryLineReductions`, `order-portions.ts:143-167`). On a bill with set menus each part freezes the
+set menu it lands on (D2; `set-menu-regroup.test.ts:619`, "writes nothing on a bill discounted as a
+whole").
+
+**How:** when given, a set menu's part is shared between its dishes by their à la carte prices and
+written on each dish, a dish charged 0.00 included (lane B's example and prices, `questions.md`
+25 November 20:20: 5.00 off a Soup and Hake Daily and a Wine at 8.00 gives the Soup 0.87, the Hake 2.31 and the
+Wine 1.82). The freeze stops counting a part of a whole-bill discount. Each regrouping takes the
+parts a set menu's dishes carry off that set menu, shared over its row and its supplements
+(`set-menu-discount-shares.ts`, reused from `5e90544ac4`), and an à la carte dish's part off
+itself; a set menu never goes below 0.00 (the 20:20 note's one edge, left unbuilt). A set menu with
+its own discount stays frozen as 3b1 left it. A dish's part stays through a change of its extras
+(D56).
+
+**What a row of `adjustment_lines` then means, and the readers that assume the old meaning.**
+Today a row says what a comp or discount took off that line's own price. After 3c, a whole-bill
+discount's row on a dish in a set menu is that dish's part, which each regrouping takes off the set
+menu's row, not off the dish. 3c's task steps change or pin each of these (read, not run):
+
+- **The freeze** (`reducedLineIds`, `apps/server/src/set-menu-freeze.ts:45-65`, which also gives a
+  set-menu dish's `movable`, `set-menu-bill.ts:357`, and feeds `refuseMovingFrozenDishes` and the
+  grouping): it freezes any line with a row above 0.00, so every dish holding a part would freeze its
+  set menu. 3c leaves out the rows of an adjustment on the whole bill (`adjustments.line_id` null),
+  and a set menu row the grouping lowers by parts must not freeze by its price either
+  (`frozenLinesOf`'s below-the-list-price rule, `packages/orders-sales/src/set-menu-grouping-plan.ts:83`,
+  `belowListPrice`, `:104`).
+- **The reason's standing on the bill** (`readReasonStanding`, `packages/adjustments/src/record.ts:98`,
+  read by `judgeComp` at `adjustments-apply.ts:803`): it sums the reason's rows on lines now on the
+  bill, scaled by quantity now over quantity then (`standingOff`, `packages/adjustments/src/policy.ts:255`).
+  Unchanged: that is what the reason still has standing on the bill once a dish takes its part
+  away. Test: 5.00 off the 20:20 bill, the Hake moved away: 2.69 standing.
+- **The receipt's add-up check** (`receipt-adjustments.ts:242-282`): it takes the bill's list prices
+  less each standing record's recorded reduction and prints the records only when that equals what
+  the bill charges. Once a part leaves with its dish, or sits on a dish while the set menu's row
+  carries it, the two differ and the receipt falls back to per dish. 3c counts a whole-bill record
+  as the parts its rows on this bill hold, and the grouping stamps a set menu row it lowers by parts
+  with its price before them as list price, so the check sees it. Test: the 20:20 bill's receipt
+  prints 5.00 off the bill, and 2.69 once the Hake has moved away, with no per-dish fallback.
+- **The corrections report's free items** (`listFreeItems`, `apps/server/src/free-items.ts:119`):
+  it values each row of a Free at its line's price and rates, a takeaway set-menu row at its set
+  menu's highest rate and its dishes apart (`:183-210`). A whole-bill Free's part on a dish in a
+  takeaway set menu would then be valued at the dish's own rate; 3c values it at the rate of the set
+  menu row it is taken off. Test: a whole-bill Free on a takeaway Lunch, against its filed lines.
+- **Copies and splits** (`carryLineReductions`, `order-portions.ts:143-167`): it copies every row
+  of a line to its copy or split part, its quantity then unchanged. Unchanged; the regrouping reads
+  a part as its reduction times quantity now over quantity then, as `standingOff` does, so a split
+  dish's two rows do not count it twice. Test: a row of two Soups holding a part, one paid for alone.
+
+**Tasks:** 3c.1, the parts written per dish when given (the 20:20 example as its test); 3c.2, the
+grouping takes the parts off set menus and the freeze stops counting them (tests: the Hake of that
+bill moved away, 11.69 there and 11.31 left, as the 20:20 note works out; the Soup cancelled; a
+dish sent afterwards at full price; and the readers' tests above); 3c.3, the existing checks that pin a frozen set menu under a
+whole-bill discount (`set-menu-regroup.test.ts:619`, `set-menu-adjustments.test.ts:144`,
+`set-menu-regroup.test.ts:683` and those `rg "discounted as a whole|whole-bill"` finds), the guide,
+the backlog and the PR. **Size:** about +300 product and +500 tests, about 18 existing checks
+changing (lane B's estimate of 25 November less the 12 plain-bill checks only 3c-2 would have
+changed), about 3½ hours with the receipt's and the free items' changes; no schema change, believed from reading (the parts live in
+`adjustment_lines`). The fiscal gates as for 3b.
+
+## PR 4 — no longer needed (2026-11-26, D57)
+
+_2026-11-26: what PR 4 was to do is done elsewhere or no longer wanted:_
+
+- _A discounted dish moves alone with its discount: 3a (Task 3a.4's cases)._
+- _Both bills are worked out again on every move path, with a test per path: 2b (Task 2b.4)._
+- _`set_menu.move_adjusted` goes: after 3b1 it no longer refuses a dish of a set menu holding its
+  own discount (the discount comes off, D50), and after 3c a part of a whole-bill discount freezes
+  nothing; what is left of it refuses a dish whose extra was cancelled keeping its charge or had its
+  service cancelled (`set-menu-moves.ts:56-65`), which is not a discount._
+- _Moving "a set menu with its dishes" stays (`resolveMoveLines`, `bill-actions.ts:208`), and
+  choosing every one of its dishes now does the same for a discounted one: rule C moves a set
+  menu's discount with it (D51), against the spec's section 7, which kept it on its bill._
