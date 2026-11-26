@@ -1052,10 +1052,11 @@ tarjeta estaba en curso, se quedan en una cuenta propia, para cobrarlos allí: e
 en el selector de cuentas y, en **Mostrador**, en **Pedidos aparcados**. Mientras su
 tarjeta sigue en curso, la caja que la cobró muestra **Se está cobrando en la**
 y el número de su cuenta; no vuelvas a cobrar esos platos. En una cuenta impresa, **Artículos**
-anula el ticket y reabre la cuenta. Un pedido de mostrador ya enviado a cocina, aunque después se
-haya pasado a una mesa, se cobra con **Una cantidad**, **Dividir a partes iguales** o **Toda la
-cuenta**, no por artículos; cuando su cuenta está presentada para su cobro, elige **Cobrar por
-partes** para ver esas opciones.
+anula el ticket y reabre la cuenta. En un pedido de mostrador ya enviado a cocina, **Artículos**
+pasa los platos elegidos a una cuenta propia, que **En espera** muestra con el número del pedido
+entre paréntesis. Si ese pedido se pasa después a una mesa, se cobra con **Una cantidad**,
+**Dividir a partes iguales** o **Toda la cuenta**, no por artículos; cuando su cuenta está
+presentada para su cobro, elige **Cobrar por partes** para ver esas opciones.
 
 Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
 cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.

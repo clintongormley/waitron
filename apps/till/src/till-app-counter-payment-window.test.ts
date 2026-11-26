@@ -214,7 +214,7 @@ it.each([undefined, "F1/7"])(
   },
 );
 
-it("a Counter order sent to the kitchen shows Items barred in its Pay window, with the reason", async () => {
+it("a sent Counter order whose own mode takes payment first shows Items barred in its Pay window, with the reason", async () => {
   const id = "placed-order";
   const api = stubApi({
     listCounterWaiting: vi.fn().mockResolvedValue([
@@ -228,7 +228,7 @@ it("a Counter order sent to the kitchen shows Items barred in its Pay window, wi
         openedAt: "2026-11-10T10:00:00Z",
         settledAt: null,
         collectedAt: null,
-        serviceMode: "ticket_then_pay",
+        serviceMode: "prepay",
         counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },
         canHandOver: false,
         movableDishes: [],
@@ -236,6 +236,7 @@ it("a Counter order sent to the kitchen shows Items barred in its Pay window, wi
     ]),
     retrievePlacedOrder: vi.fn().mockResolvedValue({
       zoneId: null,
+      serviceMode: "prepay",
       id,
       orderNumber: 7,
       revision: 0,
@@ -284,7 +285,7 @@ it("a Counter order sent to the kitchen shows Items barred in its Pay window, wi
   expect(
     dialog(el)!.shadowRoot!.querySelector("[data-pay-items-reason]")?.textContent?.trim(),
   ).toBe(
-    "A Counter order sent to the kitchen is paid with An amount, Split equally or Whole bill.",
+    "A Counter order in a zone paid before preparation is paid with An amount, Split equally or Whole bill.",
   );
   expectReasonDescribesItems(el);
 });
@@ -303,18 +304,62 @@ function expectReasonDescribesItems(el: TillApp): void {
 }
 
 it.each(["en", "es"] as const)(
-  "the barred-Items reason in %s names the window's other choices as they are labelled",
+  "each barred-Items reason in %s names the window's other choices as they are labelled",
   (locale) => {
     setLocale(locale);
-    const reason = t("bill_pay.items_barred_counter");
-    for (const way of ["way_contribution", "way_share", "way_whole"] as const)
-      expect(reason).toContain(t(`bill_pay.${way}`));
+    for (const key of [
+      "bill_pay.items_barred_counter",
+      "bill_pay.items_barred_counter_receipt",
+      "bill_pay.items_barred_counter_prepay",
+    ] as const)
+      for (const way of ["way_contribution", "way_share", "way_whole"] as const)
+        expect(t(key)).toContain(t(`bill_pay.${way}`));
   },
 );
 
-it("a Counter order just sent shows Items barred in its Pay window before its balance is read", async () => {
+it("a Counter order just sent offers Items, and paying them keeps the Counter on the order showing what is left", async () => {
   let id = "";
   let sent = false;
+  let paid = false;
+  const lunch = line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" });
+  const beer = line({ id: "dish-2", lineNo: 2, name: "Beer", unitPriceGross: "5.00" });
+  const edit = { editorVersion: 2, draftId: null, draftRevision: null };
+  const left = () =>
+    balanceOf({ workingOrderId: id, status: "placed", total: "5.00", outstanding: "5.00" });
+  const placedOrder = () => ({
+    zoneId: null,
+    serviceMode: "ticket_then_pay",
+    id,
+    orderNumber: 7,
+    revision: paid ? 1 : 0,
+    label: null,
+    expectedEdit: null,
+    kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+    lines: (paid
+      ? []
+      : [{ workingOrderLineId: "dish-1", menuItemId: "offer-meal", quantity: "1.000", product }]
+    ).concat([
+      { workingOrderLineId: "dish-2", menuItemId: "offer-meal", quantity: "1.000", product },
+    ]),
+  });
+  const payForItems = vi.fn(async () => {
+    paid = true;
+    return {
+      billId: "wo-paid",
+      payment: takenOf(
+        { applied: "30.00", tendered: "50.00", change: "20.00" },
+        {
+          workingOrderId: "wo-paid",
+          status: "settled",
+          total: "30.00",
+          received: "30.00",
+          outstanding: "0.00",
+        },
+        invoiceOf("30.00"),
+      ),
+      sourceBalance: left(),
+    };
+  });
   const api = stubApi({
     parkOrder: vi.fn(async (request: { id: string }) => {
       id = request.id;
@@ -336,7 +381,7 @@ it("a Counter order just sent shows Items barred in its Pay window before its ba
               orderNumber: 7,
               label: null,
               status: "placed",
-              total: "30.00",
+              total: paid ? "5.00" : "35.00",
               openedAt: "2026-11-10T10:00:00Z",
               settledAt: null,
               collectedAt: null,
@@ -352,16 +397,30 @@ it("a Counter order just sent shows Items barred in its Pay window before its ba
       sent = true;
       return { id, status: "placed" };
     }),
-    getTabLines: vi.fn().mockResolvedValue({
-      revision: 0,
-      lines: [line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" })],
-    }),
-    // Once the order is sent its balance read never answers, so the window opens on no balance.
+    retrievePlacedOrder: vi.fn(async () => placedOrder()),
+    getFindBill: vi.fn(async () => ({
+      workingOrderId: id,
+      partyId: null,
+      edit: { ...edit, billId: id, editorId: null, editorName: null },
+    })),
+    getTabLines: vi.fn(async () => ({
+      revision: paid ? 1 : 0,
+      lines: paid ? [beer] : [lunch, beer],
+    })),
     getBillBalance: vi.fn(async () =>
-      sent
-        ? new Promise(() => {})
-        : balanceOf({ workingOrderId: id, total: "30.00", outstanding: "30.00" }),
+      paid
+        ? left()
+        : balanceOf({
+            workingOrderId: id,
+            status: sent ? "placed" : "open",
+            total: "35.00",
+            outstanding: "35.00",
+          }),
     ),
+    previewItemPayment: vi
+      .fn()
+      .mockResolvedValue({ total: "30.00", applied: "30.00", tip: "0.00", change: "20.00" }),
+    payForItems,
   });
   const { el } = await mountWidget<TillApp>("till-app", { api });
   await flush(el);
@@ -380,14 +439,28 @@ it("a Counter order just sent shows Items barred in its Pay window before its ba
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await flush(el);
 
-  expect(dialog(el)!.balance).toBeNull();
   const items = dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>(
     '[name="way"][value="items"]',
   )!;
-  expect(items.disabled).toBe(true);
-  expect(
-    dialog(el)!.shadowRoot!.querySelector("[data-pay-items-reason]")?.textContent?.trim(),
-  ).toBe(t("bill_pay.items_barred_counter"));
+  expect(items.disabled).toBe(false);
+  expect(dialog(el)!.shadowRoot!.querySelector("[data-pay-items-reason]")).toBeNull();
+  await press(el, 'input[name="way"][value="items"]');
+  await press(el, 'input[name="line"][value="1"]');
+  await type(el, "tendered", "50");
+  await press(el, "[data-pay-continue]");
+  await press(el, "[data-pay-confirm]");
+  await flush(el, 6);
+
+  expect(payForItems).toHaveBeenCalledWith(
+    id,
+    expect.objectContaining({ picks: [{ lineId: "dish-1" }], method: "cash", applied: "30.00" }),
+    expect.anything(),
+  );
+  expect(api.takeBillPayment).not.toHaveBeenCalled();
+  expect(counter.stage).toBe("collect");
+  expect(counter.store.id).toBe(id);
+  expect(dialog(el)!.balance).toEqual(left());
+  expect(dialog(el)!.lines.map((row) => row.lineId)).toEqual(["dish-2"]);
 });
 
 it("an unsent Counter order offers Items in its Pay window, with no reason", async () => {

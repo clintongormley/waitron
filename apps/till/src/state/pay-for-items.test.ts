@@ -67,26 +67,38 @@ describe("itemsBarredReason", () => {
   const at = {
     found: false,
     counter: false,
-    counterCollect: false,
     printed: false,
+    paysAfterSending: false,
     status: "open" as const,
   };
+  const sent = { ...at, counter: true, paysAfterSending: true, status: "placed" as const };
 
-  it("bars Items on a Counter order sent to the kitchen, even once its receipt is issued, not on one unsent", () => {
-    expect(itemsBarredReason({ ...at, counter: true, status: "placed" })).toBe(
-      "bill_pay.items_barred_counter",
-    );
-    expect(itemsBarredReason({ ...at, counter: true, printed: true, status: "placed" })).toBe(
-      "bill_pay.items_barred_counter",
-    );
-    expect(itemsBarredReason({ ...at, counter: true, counterCollect: true })).toBe(
-      "bill_pay.items_barred_counter",
-    );
+  it("offers Items on a Counter order sent to the kitchen with no receipt, in a zone that takes payment after sending", () => {
+    expect(itemsBarredReason(sent)).toBeNull();
     expect(itemsBarredReason({ ...at, counter: true })).toBeNull();
+    expect(itemsBarredReason({ ...at, counter: true, paysAfterSending: true })).toBeNull();
+  });
+
+  it("bars Items on a Counter order whose receipt is issued, with its own reason", () => {
+    expect(itemsBarredReason({ ...sent, printed: true })).toBe(
+      "bill_pay.items_barred_counter_receipt",
+    );
+    expect(itemsBarredReason({ ...sent, printed: true, paysAfterSending: false })).toBe(
+      "bill_pay.items_barred_counter_receipt",
+    );
+  });
+
+  it("bars Items on a sent Counter order with no receipt whose own mode takes payment first", () => {
+    expect(itemsBarredReason({ ...sent, paysAfterSending: false })).toBe(
+      "bill_pay.items_barred_counter_prepay",
+    );
   });
 
   it("bars Items on a table bill placed with no receipt, but not on a printed one or an open one", () => {
     expect(itemsBarredReason({ ...at, status: "placed" })).toBe("bill_pay.items_barred_counter");
+    expect(itemsBarredReason({ ...at, paysAfterSending: true, status: "placed" })).toBe(
+      "bill_pay.items_barred_counter",
+    );
     expect(itemsBarredReason({ ...at, printed: true, status: "placed" })).toBeNull();
     expect(itemsBarredReason(at)).toBeNull();
   });

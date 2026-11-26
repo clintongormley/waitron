@@ -4494,6 +4494,9 @@ export class TillApp extends LitElement {
   /** The invoice type, customer and delivery stored on the Counter order last read into the basket,
    * which {@link invoiceChoice} does not hold for an order this till did not set it on. */
   #counterStoredInvoice?: ReturnType<typeof storedInvoiceOf>;
+  /** The service mode stored on the Counter order last saved or read: Pay for items takes a sent
+   * one only in a mode that takes payment after sending. */
+  #counterOrderMode?: { orderId: string; mode: HeldOrder["serviceMode"] };
   /** Whether the server still let the Counter order last read into the basket switch its way. */
   @state() private counterDiningChoice?: { orderId: string; choice: DiningChoice };
   /** Re-entry guard for {@link TillApp.#onParkOrder}, set before its first await. */
@@ -9965,6 +9968,7 @@ export class TillApp extends LitElement {
   }
 
   #setSavedCounterFlow(mode: HeldOrder["serviceMode"]): void {
+    this.#counterOrderMode = { orderId: this.#store.id, mode };
     this.collectFlow = mode === "prepay" || mode === "ticket_then_pay" ? mode : undefined;
   }
 
@@ -12237,7 +12241,7 @@ export class TillApp extends LitElement {
         .tipsEnabled=${this.tipsEnabled}
         .deferredOffered=${this.#deferredOfferFor(open)}
         .ownReceiptOffered=${this.#ownReceiptOffered(open)}
-        .itemsBarred=${itemsBarredReason({ found: open.found !== undefined, counter: open.surface === "counter", counterCollect: open.surface === "counter" && this.stage === "collect", printed: open.printed === true, status: open.balance?.status ?? this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.status })}
+        .itemsBarred=${itemsBarredReason({ found: open.found !== undefined, counter: open.surface === "counter", printed: open.printed === true, paysAfterSending: this.#counterOrderMode?.orderId === open.billId && this.#counterOrderMode.mode === "ticket_then_pay", status: open.balance?.status ?? (open.surface === "counter" ? (this.stage === "collect" ? "placed" : undefined) : this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.status) })}
         .credited=${billNoticeText(open.credited)}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
@@ -22452,6 +22456,13 @@ export class TillApp extends LitElement {
         if (this.#hasLeftCounterOrder(id, session)) return;
         this.#store.markSaved(choiceRevision);
       }
+      // An order just sent has had no lines read, and Items chooses from them.
+      if (
+        this.stage === "collect" &&
+        this.counterLines?.orderId !== id &&
+        (await this.#reloadCounterOrder(id, session)) !== "read"
+      )
+        return;
     } catch (error) {
       refused = true;
       if (!this.#hasLeftCounterOrder(id, session)) {

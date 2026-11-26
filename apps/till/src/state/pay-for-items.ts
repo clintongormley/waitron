@@ -89,20 +89,22 @@ export function itemsAllocated(
   };
 }
 
-/** Why the Pay window offers no Items: from Find a bill; or on a Counter order sent to the kitchen
- * (in the Counter window's collect stage or `placed` there, or `placed` with no receipt since moved
- * to a table), which Pay for items refuses; else null. */
+/** Why the Pay window offers no Items, as Pay for items refuses: from Find a bill; on a Counter
+ * order whose receipt is issued; on one sent to the kitchen in a mode that takes payment first; or
+ * on a bill `placed` with no receipt at a table (a Counter order sent and then moved there); else
+ * null. */
 export function itemsBarredReason(open: {
   found: boolean;
   counter: boolean;
-  counterCollect: boolean;
   printed: boolean;
+  paysAfterSending: boolean;
   status: BillBalance["status"] | undefined;
 }): StringKey | null {
   if (open.found) return "bill_pay.items_barred_found";
-  if (open.counterCollect || (open.status === "placed" && (open.counter || !open.printed)))
-    return "bill_pay.items_barred_counter";
-  return null;
+  if (open.counter && open.printed) return "bill_pay.items_barred_counter_receipt";
+  if (open.status !== "placed" || open.printed) return null;
+  if (!open.counter) return "bill_pay.items_barred_counter";
+  return open.paysAfterSending ? null : "bill_pay.items_barred_counter_prepay";
 }
 
 /** Whether `preview` is Pay for items': only it carries the chosen items' price, as they are paid
