@@ -144,6 +144,12 @@ Retiring the summary once its last consumer moves away remains open.
 - **The "Continue with Google" button was checked in Chromium only** (the vitest browser suites and
   screenshots); Firefox and Safari not looked at. Left open by A228 (#1078).
 
+## A1606 The sidebar and account menu: clearer sections, real icons, who is signed in
+
+Approved design, queued for lane D:
+[spec](../superpowers/specs/2026-11-26-dashboard-sidebar-and-account-menu-design.md) (owner,
+2026-11-26). It revises the A654 decision below on where a section's icon sits.
+
 ## Decisions and deliberate limits
 
 - **The theme editor (A841, owner, 2026-10-19 and 2026-10-20).** Moved here from the deleted design.
