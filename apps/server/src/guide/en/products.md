@@ -413,7 +413,8 @@ publish, check the version and publication time in the menu heading.
 ## Check the published customer menu {#customer-menu}
 
 Open **Customer menu** and choose **Phone** or **Computer** to check the published layout. Use
-**Language** to check the words for each content language. Find the allergen key and advice below
+**Language** to check the words for each content language. Use **Search dishes** to find a dish
+or set menu by name, or choose a section to jump to it. Find the allergen key and advice below
 the dishes. Customers cannot open this page yet. To review or publish your changes, switch to
 **Preview**.
 

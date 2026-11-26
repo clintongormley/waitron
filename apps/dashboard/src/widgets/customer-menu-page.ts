@@ -10,13 +10,37 @@ import {
   type PublicGuestMenu,
 } from "@waitron/shared";
 import { applyTokens, baseStyles, NUTRITION_ICONS, registerIcons } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-input.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 
 registerIcons(NUTRITION_ICONS);
 
 type Words = ReturnType<typeof guestMenuWords>;
+type PageMember = { member: GuestMember; sectionId?: string };
+
+function matchingMember(member: GuestMember, query: string, language: string): GuestMember | null {
+  if (member.kind !== "section")
+    return member.name.toLocaleLowerCase(language).includes(query) ? member : null;
+  const members = member.members
+    .map((child) => matchingMember(child, query, language))
+    .filter((child) => child !== null);
+  return members.length ? { ...member, members } : null;
+}
+
+function scrollSource(element: HTMLElement): Element | Document {
+  let ancestor: Element | null = element;
+  while (ancestor) {
+    const root = ancestor.getRootNode();
+    ancestor =
+      ancestor.assignedSlot ??
+      ancestor.parentElement ??
+      (root instanceof ShadowRoot ? root.host : null);
+    if (ancestor && /^(auto|scroll)$/.test(getComputedStyle(ancestor).overflowY)) return ancestor;
+  }
+  return element.ownerDocument;
+}
 
 function icon(name: string, label: string) {
   return html`<wt-icon name=${name} role="img" aria-label=${label} title=${label}></wt-icon>`;
@@ -72,8 +96,52 @@ export class CustomerMenuPage extends LitElement {
         border-radius: var(--wt-radius-lg);
         overflow-wrap: anywhere;
       }
-      h2 {
+      header {
+        display: grid;
+        gap: var(--wt-space-3);
+      }
+      header h2 {
+        margin: 0;
         font-size: calc(1.4 * var(--wt-font-size-xl));
+      }
+      wt-input::part(field) {
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-surface);
+      }
+      nav {
+        position: sticky;
+        inset-block-start: 0;
+        z-index: 1;
+        display: flex;
+        gap: var(--wt-space-4);
+        overflow-x: auto;
+        margin: var(--wt-space-2) 0 var(--wt-space-4);
+        border-block-end: 1px solid var(--wt-color-border);
+        background: var(--wt-color-bg);
+      }
+      nav a {
+        flex: none;
+        max-inline-size: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding-block: var(--wt-space-3);
+        border-block-end: 3px solid transparent;
+        color: var(--wt-color-text-muted);
+        text-decoration: none;
+      }
+      nav a[aria-current] {
+        border-block-end-color: var(--wt-color-primary);
+        color: var(--wt-color-primary-text);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      nav a:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+      header + [role="status"] + .members {
+        margin-block-start: var(--wt-space-4);
       }
       h2,
       .section-title {
@@ -162,6 +230,10 @@ export class CustomerMenuPage extends LitElement {
         article {
           padding: var(--wt-space-6);
         }
+        header {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 24ch);
+          align-items: center;
+        }
         .members {
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
@@ -181,15 +253,95 @@ export class CustomerMenuPage extends LitElement {
   @property({ attribute: false }) defaultLanguage = "en";
   @property({ attribute: "data-theme" }) theme: "light" | "dark" = "light";
 
+  @state() private query = "";
+  #source?: Element | Document;
+  #resize = new ResizeObserver(() => this.#watchScroll());
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#resize.observe(this);
+  }
+
+  override disconnectedCallback(): void {
+    this.#resize.disconnect();
+    this.#source?.removeEventListener("scroll", this.#markSection);
+    this.#source = undefined;
+    super.disconnectedCallback();
+  }
+
+  #watchScroll(): void {
+    const source = scrollSource(this);
+    if (source !== this.#source) {
+      this.#source?.removeEventListener("scroll", this.#markSection);
+      this.#source = source;
+      source.addEventListener("scroll", this.#markSection, { passive: true });
+    }
+    this.#markSection();
+  }
+
+  #heading(link: HTMLAnchorElement) {
+    return this.shadowRoot!.getElementById(link.hash.slice(1))!;
+  }
+
+  #markSection = (): void => {
+    const strip = this.renderRoot.querySelector("nav");
+    if (!strip) return;
+    const links = Array.from(strip.querySelectorAll("a"));
+    const edge = strip.getBoundingClientRect().bottom + 1;
+    const scroller = this.#scroller();
+    const end = scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
+    let current = links[0]!;
+    if (scroller && end > 1 && scroller.scrollTop >= end - 1) current = links.at(-1)!;
+    else {
+      for (const link of links) {
+        if (this.#heading(link).getBoundingClientRect().top > edge) break;
+        current = link;
+      }
+    }
+    const previous = strip.querySelector("[aria-current]");
+    if (previous === current) return;
+    previous?.removeAttribute("aria-current");
+    current.setAttribute("aria-current", "location");
+    const stripLeft = strip.getBoundingClientRect().left;
+    const { left, right } = current.getBoundingClientRect();
+    const stripRight = stripLeft + strip.clientWidth;
+    strip.scrollLeft += left < stripLeft ? left - stripLeft : Math.max(0, right - stripRight);
+  };
+
+  #scroller() {
+    return this.#source instanceof Document ? this.#source.scrollingElement : this.#source;
+  }
+
+  #jump(event: MouseEvent): void {
+    event.preventDefault();
+    const link = event.currentTarget as HTMLAnchorElement;
+    const heading = this.#heading(link);
+    const scroller = this.#scroller();
+    if (scroller) {
+      const top = this.#source instanceof Document ? 0 : scroller.getBoundingClientRect().top;
+      const stripHeight = link.parentElement!.getBoundingClientRect().height;
+      scroller.scrollTop += heading.getBoundingClientRect().top - top - stripHeight;
+    }
+    heading.focus({ preventScroll: true });
+    this.#markSection();
+  }
+
   protected override updated(): void {
     const root = this.renderRoot.querySelector<HTMLElement>("article");
     if (root && !root.hasAttribute("data-wt-theme-root")) applyTokens(root);
+    this.#watchScroll();
   }
 
   protected override render() {
     const menu = this.menu;
     if (!menu) return nothing;
     const words = guestMenuWords(menu.language, this.defaultLanguage);
+    const query = this.query.trim().toLocaleLowerCase(menu.language);
+    const visible = menu.members.flatMap((item, index): PageMember[] => {
+      const member = query ? matchingMember(item, query, menu.language) : item;
+      return member ? [{ member, sectionId: `section-${index}` }] : [];
+    });
+    const sections = visible.filter(({ member }) => member.kind === "section");
     const money = (value: string) => formatMoney(value, menu.language);
     const unit = (value: string) => (value === "" ? "" : `/${value}`);
     const quantity = new Intl.NumberFormat(menu.language, { maximumFractionDigits: 3 });
@@ -205,16 +357,25 @@ export class CustomerMenuPage extends LitElement {
     };
     let firstPhoto = true;
 
-    const members = (items: GuestMember[], level: number): TemplateResult =>
+    const members = (items: PageMember[], level: number): TemplateResult =>
       html` <div class="members">
-        ${items.map((member) => {
+        ${items.map(({ member, sectionId }) => {
           switch (member.kind) {
             case "section":
               return html`<section>
-                <div class="section-title" role="heading" aria-level=${Math.min(6, level)}>
+                <div
+                  class="section-title"
+                  role="heading"
+                  aria-level=${Math.min(6, level)}
+                  id=${sectionId ?? nothing}
+                  tabindex=${sectionId ? "-1" : nothing}
+                >
                   ${member.name}
                 </div>
-                ${members(member.members, level + 1)}
+                ${members(
+                  member.members.map((child) => ({ member: child })),
+                  level + 1,
+                )}
               </section>`;
             case "set_menu":
               return html`<div class="set-menu">
@@ -266,8 +427,41 @@ export class CustomerMenuPage extends LitElement {
         })}
       </div>`;
     return html`<article lang=${menu.language} data-theme=${this.theme}>
-      <h2>${menu.name}</h2>
-      ${members(menu.members, 3)} ${legend(words)}
+      <header>
+        <h2>${menu.name}</h2>
+        <search lang=${words.language}>
+          <wt-input
+            name="dish-search"
+            type="search"
+            hide-label
+            label=${words.text.searchDishes!}
+            placeholder=${words.text.searchDishes!}
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+            @wt-change=${(event: CustomEvent<{ value: string }>) => {
+              event.stopPropagation();
+              this.query = event.detail.value;
+            }}
+          ></wt-input>
+        </search>
+      </header>
+      ${
+        sections.length
+          ? html`<nav lang=${words.language} aria-label=${words.text.menuSections!}>
+              ${sections.map(
+                ({ member, sectionId }) =>
+                  html`<a href=${`#${sectionId}`} lang=${menu.language} @click=${this.#jump}
+                    >${member.name}</a
+                  >`,
+              )}
+            </nav>`
+          : nothing
+      }
+      <div role="status" lang=${words.language}>
+        ${query && !visible.length ? words.text.noDishes : nothing}
+      </div>
+      ${members(visible, 3)} ${legend(words)}
     </article>`;
   }
 }

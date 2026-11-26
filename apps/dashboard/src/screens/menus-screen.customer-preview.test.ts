@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { CustomerMenuPreview, MenuStatus, PublicGuestMenu } from "@waitron/shared";
 import { DashboardApi } from "../api/client.js";
 import type { MenuStructure } from "../api/menu-api.js";
@@ -163,6 +163,25 @@ function customerPage(el: MenusScreen) {
     ?.shadowRoot?.querySelector("dashboard-customer-menu-page");
 }
 
+function publishedSections() {
+  const answer = published();
+  if (answer.state !== "published") throw new Error("Expected a published menu");
+  const oven = answer.menu.members[1]!;
+  if (oven.kind !== "section") throw new Error("Expected the oven section");
+  const [pepper, bread] = oven.members;
+  oven.members = [bread!, { kind: "section", name: "Vegetables", members: [pepper!] }];
+  answer.menu.members.push(
+    ...["From the oven", "Small plates to share", "From the garden", "Desserts and coffee"].map(
+      (name): PublicGuestMenu["members"][number] => ({
+        kind: "section",
+        name,
+        members: [{ ...bread!, name: `Bread for ${name}` }],
+      }),
+    ),
+  );
+  return answer;
+}
+
 describe("the customer menu Online preview", () => {
   it("opens on its own address and links an unpublished menu to Preview", async () => {
     await open(() => Response.json({ state: "unpublished" }));
@@ -223,6 +242,85 @@ describe("the customer menu Online preview", () => {
     });
   });
 
+  it("searches displayed dish and set-menu names without losing focus or allergen advice", async () => {
+    await open(() => Response.json(publishedSections()));
+    const search = page.getByRole("searchbox", { name: "Search dishes" });
+    await expect.element(search, { timeout: 1000 }).toBeVisible();
+    await search.fill("  PEPPER  ");
+    await expect.element(page.getByText("Roast pepper", { exact: true })).toBeVisible();
+    await expect.element(page.getByRole("heading", { name: "Vegetables" })).toBeVisible();
+    await expect.element(page.getByText("House bread", { exact: true })).not.toBeInTheDocument();
+    await expect.element(page.getByRole("link", { name: "From the oven" })).toBeVisible();
+    await expect
+      .element(page.getByRole("link", { name: "From the garden" }))
+      .not.toBeInTheDocument();
+    expect((search.element().getRootNode() as ShadowRoot).activeElement).toBe(search.element());
+    await search.fill("courses");
+    await expect.element(page.getByText("Two courses", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByRole("navigation", { name: "Menu sections" }))
+      .not.toBeInTheDocument();
+    await search.fill("olive oil");
+    await expect.element(page.getByText("No dishes found", { exact: true })).toHaveRole("status");
+    await expect.element(page.getByText(/Ask staff about allergens/)).toBeVisible();
+    await search.fill("");
+    await expect.element(page.getByText("House bread", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Two courses", { exact: true })).toBeVisible();
+  });
+
+  it.each([
+    [390, "Phone", false],
+    [390, "Computer", true],
+    [1200, "Computer", false],
+  ] as const)(
+    "jumps to sections and tracks scrolling at %i px in %s",
+    async (width, size, scrollsInsidePreview) => {
+      const viewport = [innerWidth, innerHeight] as const;
+      try {
+        await page.viewport(width, 800);
+        const { el, host } = await open(() => Response.json(publishedSections()));
+        host.style.cssText += "height: 700px; container-type: size; overflow-y: auto;";
+        const choice = page.getByRole("radio", { name: size });
+        await expect.element(choice).toBeVisible();
+        if (choice.element().getAttribute("aria-checked") !== "true") await choice.click();
+        const first = page.getByRole("link", { name: "From the oven", exact: true }).first();
+        await expect.element(first, { timeout: 1000 }).toHaveAttribute("aria-current", "location");
+        const last = page.getByRole("link", { name: "Desserts and coffee" });
+        const customer = customerPage(el)!;
+        const canvas = customer.parentElement!;
+        const scroller = scrollsInsidePreview ? canvas : host;
+        const strip = first.element().closest("nav")!;
+        const second = page.getByRole("link", { name: "From the oven", exact: true }).nth(1);
+        const heading = page.getByRole("heading", { name: "From the oven", exact: true }).nth(1);
+        second.element().focus();
+        const outerTop = host.scrollTop;
+        await userEvent.keyboard("{Enter}");
+        expect(customer.shadowRoot!.activeElement).toBe(heading.element());
+        expect(scroller.scrollTop).toBeGreaterThan(0);
+        if (scrollsInsidePreview) expect(host.scrollTop).toBe(outerTop);
+        else expect(canvas.scrollTop).toBe(0);
+        expect(location.pathname + location.hash).toBe(address);
+        expect(heading.element().getBoundingClientRect().top).toBeGreaterThanOrEqual(
+          strip.getBoundingClientRect().bottom - 1,
+        );
+        await expect.element(second, { timeout: 1000 }).toHaveAttribute("aria-current", "location");
+
+        scroller.scrollTop = scroller.scrollHeight;
+        await expect.element(last, { timeout: 1000 }).toHaveAttribute("aria-current", "location");
+        if (width === 390 && size === "Phone")
+          expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+        const rail = strip.getBoundingClientRect();
+        const active = last.element().getBoundingClientRect();
+        expect(active.left).toBeGreaterThanOrEqual(rail.left - 1);
+        expect(active.right).toBeLessThanOrEqual(rail.left + strip.clientWidth + 1);
+        scroller.scrollTop = 0;
+        await expect.element(first).toHaveAttribute("aria-current", "location");
+      } finally {
+        await page.viewport(...viewport);
+      }
+    },
+  );
+
   it("keeps the last chosen language when the previous request arrives late", async () => {
     const late = gate<Response>();
     const started = gate<void>();
@@ -237,6 +335,8 @@ describe("the customer menu Online preview", () => {
       );
     });
     await expect.element(page.getByRole("heading", { name: "First lunch" })).toBeVisible();
+    await page.getByRole("searchbox", { name: "Search dishes" }).fill("missing");
+    await expect.element(page.getByText("No dishes found", { exact: true })).toBeVisible();
     const language = page.getByRole("combobox", { name: "Language" });
     await language.click();
     await page.getByRole("option", { name: "Spanish" }).click();
@@ -247,6 +347,7 @@ describe("the customer menu Online preview", () => {
     await language.click();
     await page.getByRole("option", { name: "Spanish" }).click();
     await expect.element(page.getByRole("heading", { name: "Spanish lunch" })).toBeVisible();
+    await expect.element(page.getByRole("searchbox", { name: "Buscar platos" })).toHaveValue("");
     expect(page.getByText("6,50 €–8,50 €", { exact: true }).first().element()).toBeVisible();
     late.resolve(Response.json(published("en", "Late lunch")));
     await new Promise(requestAnimationFrame);
@@ -347,6 +448,13 @@ describe("the customer menu Online preview", () => {
           pageTheme === "dark" ? "rgb(236, 238, 242)" : "rgb(35, 31, 32)",
         ),
       );
+      await expectNoA11yViolations(host);
+      const search = page.getByRole("searchbox", { name: "Search dishes" });
+      await search.fill("pepper");
+      await expect.element(page.getByText("Roast pepper", { exact: true })).toBeVisible();
+      await expectNoA11yViolations(host);
+      await search.fill("missing");
+      await expect.element(page.getByText("No dishes found", { exact: true })).toBeVisible();
       await expectNoA11yViolations(host);
     },
   );

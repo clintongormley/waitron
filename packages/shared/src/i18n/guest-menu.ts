@@ -38,6 +38,9 @@ kosher|Kosher|Kosher|Kosher|Kosher
 no_meat|No meat|Sin carne|Sense carn|Sen carne
 no_fish|No fish|Sin pescado|Sense peix|Sen peixe
 languages|Languages|Idiomas|Idiomes|Idiomas
+searchDishes|Search dishes|Buscar platos|Cerca plats|Buscar pratos
+noDishes|No dishes found|No se han encontrado platos|No s’han trobat plats|Non se atoparon pratos
+menuSections|Menu sections|Secciones de la carta|Seccions de la carta|Seccións da carta
 unavailable|Menu unavailable|Carta no disponible|Carta no disponible|Carta non dispoñible
 keyLanguage|Key in English|Leyenda en español|Llegenda en català|Lenda en galego
 key|Allergen key|Leyenda de alérgenos|Llegenda d’al·lèrgens|Lenda de alérxenos

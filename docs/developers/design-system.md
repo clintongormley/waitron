@@ -6131,8 +6131,9 @@ its draft.
 
 Customer menu shows the published Online preview. Phone and Computer change the width of the
 preview canvas, and the layout follows that canvas. The language picker changes the content and
-its price formatting. The canvas has its own theme root so the dashboard theme does not set the
-customer page’s colours.
+its price formatting. Search matches displayed dish and set-menu names. Top-level section links
+remain visible while scrolling and underline the current section. The canvas has its own theme
+root so the dashboard theme does not set the customer page’s colours.
 
 The Modifiers screen's `/modifiers/view/<extras|options>/list/<id>` opens that list's editor
 once the screen has loaded its lists (`dashboardPath`, `apps/dashboard/src/navigation.ts`). An id
