@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  adjustmentLines,
   CORE_MIGRATIONS,
   persons,
   settings,
@@ -17,6 +18,7 @@ import { seedPerson, seedVenue, seedWorkingOrder } from "@waitron/db/testing/see
 
 import {
   addDecimal,
+  centsToDecimal,
   decimal,
   decimalToCents,
   grossOf,
@@ -25,6 +27,7 @@ import {
 } from "@waitron/shared";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import type { AdjustmentAction } from "@waitron/shared";
+import { endAdjustment } from "./endings.js";
 import { recordAdjustment } from "./record.js";
 import { linkRefundToCancels } from "./refund-links.js";
 import {
@@ -1660,5 +1663,184 @@ describe("the drill-down, a page at a time", () => {
 
   it.each([0, -1, 1.5, 501])("refuses a page size of %s", async (limit) => {
     await expect(page({ limit })).rejects.toThrow(/page size/);
+  });
+});
+
+describe("a comp or discount that came off (plan D55)", () => {
+  /** A Daily's dish row on `billId` at `unit`, first priced at `list` (its share of 14.00). */
+  async function dailyRow(billId: string, name: string, unit: number, list: number) {
+    const [{ n }] = (await db.all(
+      sql`select count(*) as n from working_order_lines where working_order_id = ${billId}`,
+    )) as [{ n: number }];
+    const [row] = await db
+      .insert(workingOrderLines)
+      .values({
+        workingOrderId: billId,
+        lineNo: n + 1,
+        name,
+        descriptions: { es: name },
+        quantity: stringToThousandths("1"),
+        priceQuantity: stringToThousandths("1"),
+        unitPriceGross: unit,
+        listUnitPriceGross: list,
+        vatClass: "general",
+        takeawayVatClass: "general",
+        lineTotal: unit,
+      })
+      .returning({ id: workingOrderLines.id });
+    return row!.id;
+  }
+
+  /** Records `percentBp` off a Daily (14.00) whose Soup and Hake rows take `soup` and `hake`
+   * cents of it, as the comp window writes it, and sets the rows' prices to match. */
+  async function dailyDiscount(
+    billId: string,
+    rows: { soup: string; hake: string },
+    opts: { reason: AdjustmentReason; by: string; percentBp: number; at: string },
+    taken: { soup: number; hake: number },
+  ): Promise<string> {
+    const reduction = taken.soup + taken.hake;
+    const id = await adjust({
+      bill: billId,
+      reason: opts.reason,
+      reasonName: "Regular",
+      action: "discount_percent",
+      line: { name: "Daily", list: "14.00", creditedTo: opts.by, stage: "served" },
+      percentBp: opts.percentBp,
+      before: "14.00",
+      after: centsToDecimal(1400 - reduction),
+      nominal: "14.00",
+      by: opts.by,
+      at: opts.at,
+    });
+    await withTransaction(db, async (tx) => {
+      await tx.insert(adjustmentLines).values([
+        { adjustmentId: id, lineId: rows.soup, reduction: taken.soup, quantity: 1000 },
+        { adjustmentId: id, lineId: rows.hake, reduction: taken.hake, quantity: 1000 },
+      ]);
+      await tx
+        .update(workingOrderLines)
+        .set({ unitPriceGross: 382 - taken.soup, lineTotal: 382 - taken.soup })
+        .where(eq(workingOrderLines.id, rows.soup));
+      await tx
+        .update(workingOrderLines)
+        .set({ unitPriceGross: 1018 - taken.hake, lineTotal: 1018 - taken.hake })
+        .where(eq(workingOrderLines.id, rows.hake));
+    });
+    return id;
+  }
+
+  async function ended(
+    adjustmentId: string,
+    workingOrderId: string,
+    why: "replaced" | "dish_cancelled",
+    dishName: string,
+  ) {
+    await withTransaction(db, (tx) =>
+      endAdjustment(tx, { adjustmentId, workingOrderId, why, dishName }),
+    );
+  }
+
+  async function twoBills() {
+    const alex = await person("Alex");
+    const regular = await seedReason(db);
+    const mistake = await seedReason(db);
+
+    // 10% then 20% on one Daily: the 20% replaces the 10% (D52).
+    const first = await bill();
+    const firstRows = {
+      soup: await dailyRow(first.id, "Soup", 382, 382),
+      hake: await dailyRow(first.id, "Hake", 1018, 1018),
+    };
+    const tenPercent = await dailyDiscount(
+      first.id,
+      firstRows,
+      { reason: regular, by: alex, percentBp: 1000, at: "2026-09-15T18:01:00.000Z" },
+      { soup: 38, hake: 102 },
+    );
+    await ended(tenPercent, first.id, "replaced", "Daily");
+    const twentyPercent = await dailyDiscount(
+      first.id,
+      firstRows,
+      { reason: regular, by: alex, percentBp: 2000, at: "2026-09-15T18:02:00.000Z" },
+      { soup: 76, hake: 204 },
+    );
+
+    // 50% on a Daily whose Hake is then cancelled: the 50% ends first, and the cancel records 8.00
+    // (D48).
+    const second = await bill();
+    const secondRows = {
+      soup: await dailyRow(second.id, "Soup", 382, 382),
+      hake: await dailyRow(second.id, "Hake", 1018, 1018),
+    };
+    const half = await dailyDiscount(
+      second.id,
+      secondRows,
+      { reason: regular, by: alex, percentBp: 5000, at: "2026-09-15T18:03:00.000Z" },
+      { soup: 191, hake: 509 },
+    );
+    await ended(half, second.id, "dish_cancelled", "Hake");
+    const cancel = await adjust({
+      bill: second.id,
+      reason: mistake,
+      reasonName: "Mistake",
+      action: "cancel",
+      line: { id: secondRows.hake, name: "Hake", list: "10.18", creditedTo: alex, stage: "fired" },
+      before: "14.00",
+      after: "6.00",
+      nominal: "10.18",
+      by: alex,
+      at: "2026-09-15T18:04:00.000Z",
+    });
+    return { alex, first, second, tenPercent, twentyPercent, half, cancel };
+  }
+
+  it("counts the 20% that replaced a 10% on one Daily as 2.80, and a 50% Daily's cancelled Hake as the cancel's 8.00, not the 7.00", async () => {
+    await twoBills();
+
+    const read = await report();
+
+    expect(read.overall.byAction).toEqual({
+      cancel: tally(1, "8.00", "10.18"),
+      comp: NONE,
+      discount_percent: tally(1, "2.80", "0.00"),
+      discount_amount: NONE,
+    });
+    expect(read.overall).toMatchObject(tally(2, "10.80", "10.18"));
+  });
+
+  it("still lists all four entries in the drill-down", async () => {
+    const day = await twoBills();
+
+    const listed = await entries();
+
+    expect(
+      listed.map(({ id, action, reduction, workingOrderId }) => ({
+        id,
+        action,
+        reduction,
+        workingOrderId,
+      })),
+    ).toEqual([
+      { id: day.cancel, action: "cancel", reduction: "8.00", workingOrderId: day.second.id },
+      {
+        id: day.half,
+        action: "discount_percent",
+        reduction: "7.00",
+        workingOrderId: day.second.id,
+      },
+      {
+        id: day.twentyPercent,
+        action: "discount_percent",
+        reduction: "2.80",
+        workingOrderId: day.first.id,
+      },
+      {
+        id: day.tenPercent,
+        action: "discount_percent",
+        reduction: "1.40",
+        workingOrderId: day.first.id,
+      },
+    ]);
   });
 });

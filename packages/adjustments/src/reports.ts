@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import {
+  adjustmentEndings,
   adjustments,
   workingOrderLines,
   workingOrders,
@@ -286,12 +287,17 @@ function rateOf(reduction: Decimal, sales: Decimal): Decimal | null {
 }
 
 /**
- * What the report reads of each adjustment on the bills opened in the range, in no order, with
- * the name its reason's most recent row in the range recorded.
+ * What the report reads of each adjustment on the bills opened in the range that has not come off
+ * (plan D55), in no order, with the name its reason's most recent row in the range recorded, ended
+ * or not.
  */
 async function readReportRows(tx: Transaction, window: SQL) {
   const rows = await tx
     .select({
+      ended: inArray(
+        adjustments.id,
+        tx.select({ id: adjustmentEndings.adjustmentId }).from(adjustmentEndings),
+      ).mapWith(Boolean),
       action: adjustments.action,
       stage: adjustments.stage,
       reasonId: adjustments.reasonId,
@@ -309,11 +315,17 @@ async function readReportRows(tx: Transaction, window: SQL) {
     .from(adjustments)
     .innerJoin(workingOrders, eq(workingOrders.id, adjustments.workingOrderId))
     .where(window);
-  return rows.map((row) => ({
-    ...row,
-    reduction: centsToDecimal(row.reduction),
-    nominalValue: centsToDecimal(row.nominalValue),
-  }));
+  return rows.flatMap(({ ended, ...row }) =>
+    ended
+      ? []
+      : [
+          {
+            ...row,
+            reduction: centsToDecimal(row.reduction),
+            nominalValue: centsToDecimal(row.nominalValue),
+          },
+        ],
+  );
 }
 
 /**
