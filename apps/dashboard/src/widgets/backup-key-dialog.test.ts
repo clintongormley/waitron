@@ -383,7 +383,7 @@ it("after a failed reload, says backups still use the old key only when the box 
 });
 
 it.each([
-  ["en-GB", "Saved, but the box could not load the new settings."],
+  ["en-GB", "Saved, but the box could not load the new settings. Reload the page."],
   ["es-ES", es["backup_key_dialog.saved_not_loaded"]],
 ] as const)(
   "after a failed reload with the new key loaded, says only that the settings did not load (%s)",
@@ -397,6 +397,28 @@ it.each([
     button(el, "change-backup-key")!.click();
     await expect.poll(() => words(el.shadowRoot!.querySelector("[data-test=done]"))).toBe(sentence);
     expect(el.shadowRoot!.textContent).not.toContain(t("recovery_pack.older_key"));
+  },
+);
+
+it.each(["en-GB", "es-ES"] as const)(
+  "after a change the box saved but could not load, the dialog says to reload the page (%s)",
+  async (locale) => {
+    setLocale(locale);
+    // The unconfirmed line's second sentence is the reload instruction in each language.
+    const reload = `${fill("backup_key_dialog.unconfirmed", { number: "4" }).split(". ")[1]}.`;
+    const rotate = vi
+      .fn()
+      .mockResolvedValue({ ...ANSWER, reloadErrorCode: "backup.destination_key_invalid" });
+    const { el } = await open(stubApi(rotate, status(4)));
+    await type(el, KEY);
+    button(el, "change-backup-key")!.click();
+    await expect
+      .poll(() => words(el.shadowRoot!.querySelector("[data-test=done]")))
+      .toBe(t("backup_key_dialog.saved_not_loaded"));
+    expect(words(el.shadowRoot!.querySelector("[data-test=done]")).endsWith(`. ${reload}`)).toBe(
+      true,
+    );
+    if (locale === "en-GB") expect(reload).toBe("Reload the page.");
   },
 );
 

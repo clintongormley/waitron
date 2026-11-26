@@ -1750,7 +1750,8 @@ export const en = {
   "backup_key_dialog.text":
     "New backups will use backup key {number}. A box you removed can't read them.",
   "backup_key_dialog.done": "Backups now use backup key {number}.",
-  "backup_key_dialog.saved_not_loaded": "Saved, but the box could not load the new settings.",
+  "backup_key_dialog.saved_not_loaded":
+    "Saved, but the box could not load the new settings. Reload the page.",
   "backup_key_dialog.unconfirmed":
     "Backup key {number} is saved, but the box could not confirm that backups use it. Reload the page. If this comes back, stop changing backup settings here.",
   "recovery_pack.make": "Make recovery pack",
@@ -6612,7 +6613,7 @@ export const es: Record<StringKey, string> = {
     "Las copias nuevas usarán la clave de las copias número {number}. Un servidor que hayas quitado no podrá leerlas.",
   "backup_key_dialog.done": "Las copias usan ahora la clave número {number}.",
   "backup_key_dialog.saved_not_loaded":
-    "Guardada, pero el servidor no ha podido cargar los ajustes nuevos.",
+    "Guardada, pero el servidor no ha podido cargar los ajustes nuevos. Recarga la página.",
   "backup_key_dialog.unconfirmed":
     "La clave de las copias número {number} está guardada, pero el servidor no ha podido confirmar que las copias la usen. Recarga la página. Si vuelve a pasar, no sigas cambiando los ajustes de las copias aquí.",
   "recovery_pack.make": "Hacer paquete de recuperación",
