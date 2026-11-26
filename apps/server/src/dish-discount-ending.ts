@@ -26,10 +26,10 @@ const dish = alias(workingOrderLines, "dish");
 
 /**
  * The comps and discounts that still take something off one of `dishIds` or an extra of one, given
- * on a dish row rather than on an extra, a set-menu row or the whole bill (D56), each with the
- * first of `dishIds` it takes something off and every row among those dishes and their extras it
- * takes something off: with the extras the edit removed, the only rows its ending gives back, so
- * another portion keeps its share.
+ * on a dish row rather than on an extra, a set-menu row or the whole bill (D56): one entry for each
+ * such comp or discount and dish, with every row of that dish and its extras it takes something
+ * off. With the extras the edit removed from that dish, those are the only rows its ending gives
+ * back, so each dish's share has an ending of its own and is given again on that dish alone.
  */
 async function ownDishDiscounts(
   tx: Transaction,
@@ -64,30 +64,32 @@ async function ownDishDiscounts(
       ),
     )
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id), asc(dish.lineNo));
-  const byAdjustment = new Map<
+  const byDish = new Map<
     string,
     { adjustmentId: string; dishId: string; dishName: string; lineIds: string[] }
   >();
-  for (const { lineId, ...first } of found) {
-    const held = byAdjustment.get(first.adjustmentId);
-    if (held === undefined) byAdjustment.set(first.adjustmentId, { ...first, lineIds: [lineId] });
+  for (const { lineId, ...one } of found) {
+    const key = `${one.adjustmentId}:${one.dishId}`;
+    const held = byDish.get(key);
+    if (held === undefined) byDish.set(key, { ...one, lineIds: [lineId] });
     else held.lineIds.push(lineId);
   }
-  return [...byAdjustment.values()];
+  return [...byDish.values()];
 }
 
 /**
  * Ends the own comp or discount of each dish whose extras an edit changed, `extras_changed`, offered
- * again on the dish, giving back too what it took off the extras the edit removed
- * (`removedExtras`); and of each dish a basket save swaps for another variant, `variant_changed`,
- * offered again on the new line, with the own discount of any set menu a swapped dish leaves
- * (D53). Runs once the edit's lines are written and before the swapped dishes are removed.
+ * again on the dish, giving back too what it took off the extras the edit removed from that dish
+ * (`removedExtrasOf`, by dish); and of each dish a basket save swaps for another variant,
+ * `variant_changed`, offered again on the new line, with the own discount of any set menu a swapped
+ * dish leaves (D53). Runs once the edit's lines are written and before the swapped dishes are
+ * removed.
  */
 export async function endRepricedDishDiscounts(
   tx: Transaction,
   billId: string,
   extrasChanged: readonly string[],
-  removedExtras: readonly string[],
+  removedExtrasOf: ReadonlyMap<string, readonly string[]>,
   swaps: readonly { fromId: string; toId: string }[],
 ): Promise<void> {
   for (const { adjustmentId, dishId, dishName, lineIds } of await ownDishDiscounts(
@@ -102,7 +104,7 @@ export async function endRepricedDishDiscounts(
       dishName,
       lineId: dishId,
       lineIds,
-      removedLineIds: removedExtras,
+      removedLineIds: removedExtrasOf.get(dishId) ?? [],
     });
   }
   if (swaps.length === 0) return;

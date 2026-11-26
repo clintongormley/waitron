@@ -1167,7 +1167,12 @@ export async function applyLineEdits(
     tx,
     orderId,
     extrasChangedIds,
-    changes.flatMap(({ removedChildren }) => removedChildren.map(({ id }) => id)),
+    new Map(
+      changes.map(({ parent, removedChildren }) => [
+        parent.id,
+        removedChildren.map(({ id }) => id),
+      ]),
+    ),
     (plan.swaps ?? []).map(({ fromId, freshIndex }) => ({
       fromId,
       toId: groups[freshIndex]!.rows[0]!.id!,

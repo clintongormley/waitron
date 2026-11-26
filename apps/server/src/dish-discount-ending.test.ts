@@ -720,7 +720,7 @@ it("takes only the edited Soup's 3.00 share of 6.00 off two Soups when it is giv
   expect(await total(tabId)).toBe(1050);
 });
 
-it("gives both Soups' shares back in one ending when one edit gives both Bread", async () => {
+it("gives each Soup's share back in an ending of its own, offered on that Soup, when one edit gives both Bread", async () => {
   const { tabId, given, first, second } = await sixOffTwoSoups();
 
   await inTx(venue, async (tx) =>
@@ -739,9 +739,14 @@ it("gives both Soups' shares back in one ending when one edit gives both Bread",
     ),
   );
 
-  expect(await endingsOn(tabId)).toEqual([
-    { adjustmentId: given, why: "extras_changed", dishName: "Soup", lineId: first.id },
-  ]);
+  const ended = await endingsOn(tabId);
+  expect(ended).toHaveLength(2);
+  expect(ended).toEqual(
+    expect.arrayContaining([
+      { adjustmentId: given, why: "extras_changed", dishName: "Soup", lineId: first.id },
+      { adjustmentId: given, why: "extras_changed", dishName: "Soup", lineId: second.id },
+    ]),
+  );
   const prices = await pricesById(tabId);
   expect(prices[first.id]).toEqual({ what: "Soup", unit: 600, total: 600, list: null });
   expect(prices[second.id]).toEqual({ what: "Soup", unit: 600, total: 600, list: null });
@@ -786,6 +791,35 @@ it("takes only the swapped glass's share of 4.50 off two glasses when a basket s
   expect(prices[kept!.id]).toEqual({ what: "Wine", unit: 225, total: 225, list: 450 });
   expect(prices[large.id]).toEqual({ what: "Wine", unit: 550, total: 550, list: null });
   expect(await total(tabId)).toBe(775);
+});
+
+it("ends each swapped glass's share of 4.50 off two glasses on its own new line when one basket save changes both sizes", async () => {
+  const { tabId } = await billOf([{ ...glassOf(wine.small), quantity: "2" }]);
+  const [one, other] = (await rows(tabId)).filter(({ name }) => name === "Wine");
+  const given = await give(tabId, one!.id, { action: "discount_amount", amount: "4.50" }, [
+    one!.id,
+    other!.id,
+  ]);
+
+  await saveBasket(tabId, [
+    { workingOrderLineId: one!.id, ...glassOf(wine.large) },
+    { workingOrderLineId: other!.id, ...glassOf(wine.large) },
+  ]);
+
+  const large = (await rows(tabId)).filter(({ productId }) => productId === wine.large);
+  expect(large.map(({ lineTotal }) => lineTotal)).toEqual([550, 550]);
+  const ended = await endingsOn(tabId);
+  expect(ended).toHaveLength(2);
+  expect(ended).toEqual(
+    expect.arrayContaining(
+      large.map(({ id }) => ({
+        adjustmentId: given,
+        why: "variant_changed",
+        dishName: "Wine",
+        lineId: id,
+      })),
+    ),
+  );
 });
 
 /** A counter order, held, no party: one Small glass of Wine, 10% off it. */

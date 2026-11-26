@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { expect, it } from "vitest";
+import { computeAdjustmentReport } from "@waitron/adjustments";
 import { adjustments, kitchenCourses, products, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -11,7 +12,8 @@ import {
   setProductVariants,
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import type { ExtraSelection } from "@waitron/shared";
+import { currentBusinessDay, resolveVenueClock } from "@waitron/reporting";
+import { decimal, subtractDecimal, type ExtraSelection } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment, type AdjustmentAsk } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { insertPartyBill, readPartyBills } from "./parties.js";
@@ -526,8 +528,8 @@ it("refuses to give a Soup's 50% again on the Wine, keeping the Soup's notice", 
   ]);
 });
 
-/** {@link halfOffTwoSoups}, then one edit gives both Bread, so one ending takes both Soups'
- * shares off and its notice names the first. */
+/** {@link halfOffTwoSoups}, then one edit gives both Bread, so each Soup's share comes off in an
+ * ending of its own and the notice offers it on the first. */
 async function breadOnBothSoups() {
   const soups = await halfOffTwoSoups();
   const { bill, first, second } = soups;
@@ -574,11 +576,134 @@ it("gives a 50% again over both Soups of a row when the line its notice names is
   expect(await noticesOn(bill)).toBeUndefined();
 });
 
-it("refuses to give a 50% again on one Soup of a row when it would go on the Soup its notice does not name, keeping the notice", async () => {
+/** Each Soup's row and its Bread's, by the Soup's id: what each charges now. */
+async function soupTotals(billId: string, soups: readonly { id: string }[]) {
+  const rows = await specRows(spec, billId);
+  return soups.map(({ id }) => ({
+    soup: rows.find((row) => row.id === id)!.lineTotal,
+    bread: rows.filter(({ parentLineId }) => parentLineId === id).map(({ lineTotal }) => lineTotal),
+  }));
+}
+
+/** The adjustments report's count and reduction for today, over every bill this file has made. */
+async function reported() {
+  const { overall } = await inTx(venue, async (tx) => {
+    const clock = await resolveVenueClock(tx, venue.cfg.nodeId);
+    const day = currentBusinessDay(clock);
+    return computeAdjustmentReport(tx, { ...clock, fromBusinessDay: day, toBusinessDay: day });
+  });
+  return { count: overall.count, reduction: overall.reduction };
+}
+
+/** What the report gained since `before`. */
+async function reportedSince(before: { count: number; reduction: string }) {
+  const now = await reported();
+  return {
+    count: now.count - before.count,
+    reduction: subtractDecimal(decimal(now.reduction), decimal(before.reduction)),
+  };
+}
+
+it("gives a 50% again on the second Soup alone once one edit gave both Bread, keeping the first Soup's 3.00 in its notice", async () => {
+  const before = await reported();
   const { bill, given, first, second } = await breadOnBothSoups();
+  expect(await reportedSince(before)).toEqual({ count: 0, reduction: "0.00" });
   const ask = {
     ...(await askOf(bill.tabId, second.id, 5000, given)),
     lineIds: [second.id, first.id],
+    quantity: "1",
+  };
+
+  expect(
+    (await inTx(venue, (tx) => previewAdjustment(tx, venue.cfg, ask, venue.cfg.locale))).reduction,
+  ).toBe("3.75");
+  await inTx(venue, (tx) =>
+    applyAdjustment(
+      tx,
+      venue.cfg,
+      { ...ask, admission: testTradingAdmission(), submissionId: randomUUID() },
+      venue.cfg.locale,
+    ),
+  );
+
+  expect(await soupTotals(bill.tabId, [first, second])).toEqual([
+    { soup: 600, bread: [150] },
+    { soup: 300, bread: [75] },
+  ]);
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({
+      adjustmentId: given,
+      amount: "3.00",
+      reapplyOn: { lineId: first.id },
+    }),
+  ]);
+  expect(await reportedSince(before)).toEqual({ count: 1, reduction: "3.75" });
+});
+
+it("keeps the second Soup's 3.00 in a 50%'s notice, offered on the second, once it is given again on the first Soup alone after one edit gave both Bread", async () => {
+  const before = await reported();
+  const { bill, given, first, second } = await breadOnBothSoups();
+
+  expect((await preview(bill.tabId, first.id, 5000, given)).reduction).toBe("3.75");
+  await give(bill.tabId, first.id, 5000, given);
+
+  expect(await soupTotals(bill.tabId, [first, second])).toEqual([
+    { soup: 300, bread: [75] },
+    { soup: 600, bread: [150] },
+  ]);
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({
+      adjustmentId: given,
+      amount: "3.00",
+      reapplyOn: { lineId: second.id },
+    }),
+  ]);
+  expect(await reportedSince(before)).toEqual({ count: 1, reduction: "3.75" });
+
+  await give(bill.tabId, second.id, 5000, given);
+
+  expect(await noticesOn(bill)).toBeUndefined();
+  expect(await reportedSince(before)).toEqual({ count: 2, reduction: "7.50" });
+});
+
+it("refuses to give a 50% again on one Soup of a row when it would go on the Soup it never took anything off, keeping the notice", async () => {
+  const bill = await billOf([{ menuItemId: ordinary.Soup, quantity: "3" }]);
+  const [first, second, third] = (await specRows(spec, bill.tabId)).filter(
+    (row) => specDishOf(spec, row) === "Soup",
+  );
+  const halfOff = await askOf(bill.tabId, first!.id, 5000);
+  const { adjustmentIds } = await inTx(venue, (tx) =>
+    applyAdjustment(
+      tx,
+      venue.cfg,
+      {
+        ...halfOff,
+        lineIds: [first!.id, second!.id],
+        admission: testTradingAdmission(),
+        submissionId: randomUUID(),
+      },
+      venue.cfg.locale,
+    ),
+  );
+  const given = adjustmentIds[0]!;
+  await inTx(venue, async (tx) =>
+    updateOrderLine(
+      tx,
+      venue.cfg,
+      bill.tabId,
+      first!.lineNo,
+      { portionLineNos: [second!.lineNo, third!.lineNo], extras: [spec.bread] },
+      await readOrderRevision(tx, bill.tabId),
+      {
+        admission: testTradingAdmission(),
+        operatorId: venue.operator.personId,
+        expectedEdit: await readBillEditState(tx, bill.tabId),
+      },
+    ),
+  );
+  const ask = {
+    ...(await askOf(bill.tabId, first!.id, 5000, given)),
+    lineIds: [first!.id, second!.id, third!.id],
     quantity: "1",
   };
 
@@ -596,17 +721,76 @@ it("refuses to give a 50% again on one Soup of a row when it would go on the Sou
     ),
   ).rejects.toMatchObject(REFUSED);
 
-  const soups = (await specRows(spec, bill.tabId)).filter(
-    (row) => specDishOf(spec, row) === "Soup",
-  );
-  expect(soups.map(({ lineTotal }) => lineTotal)).toEqual([600, 600]);
+  expect(await soupTotals(bill.tabId, [first!, second!, third!])).toEqual([
+    { soup: 600, bread: [150] },
+    { soup: 600, bread: [150] },
+    { soup: 600, bread: [150] },
+  ]);
   expect(await noticesOn(bill)).toEqual([
     expect.objectContaining({
       adjustmentId: given,
       amount: "6.00",
-      reapplyOn: { lineId: first.id },
+      reapplyOn: { lineId: first!.id },
     }),
   ]);
+});
+
+it("keeps the second Soup's 3.75 in a 50%'s notice once one edit removed both Soups' Bread and it is given again on the first Soup alone", async () => {
+  const bill = await billOf([{ menuItemId: ordinary.Soup, quantity: "2", extras: [spec.bread] }]);
+  const [first, second] = (await specRows(spec, bill.tabId)).filter(
+    (row) => specDishOf(spec, row) === "Soup",
+  );
+  const before = await reported();
+  const ask = await askOf(bill.tabId, first!.id, 5000);
+  const { adjustmentIds } = await inTx(venue, (tx) =>
+    applyAdjustment(
+      tx,
+      venue.cfg,
+      {
+        ...ask,
+        lineIds: [first!.id, second!.id],
+        admission: testTradingAdmission(),
+        submissionId: randomUUID(),
+      },
+      venue.cfg.locale,
+    ),
+  );
+  const given = adjustmentIds[0]!;
+  expect(await reportedSince(before)).toEqual({ count: 1, reduction: "7.50" });
+  await inTx(venue, async (tx) =>
+    updateOrderLine(
+      tx,
+      venue.cfg,
+      bill.tabId,
+      first!.lineNo,
+      { portionLineNos: [second!.lineNo], extras: [] },
+      await readOrderRevision(tx, bill.tabId),
+      {
+        admission: testTradingAdmission(),
+        operatorId: venue.operator.personId,
+        expectedEdit: await readBillEditState(tx, bill.tabId),
+      },
+    ),
+  );
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({ adjustmentId: given, amount: "7.50" }),
+  ]);
+  expect(await reportedSince(before)).toEqual({ count: 0, reduction: "0.00" });
+
+  await give(bill.tabId, first!.id, 5000, given);
+
+  expect(await soupTotals(bill.tabId, [first!, second!])).toEqual([
+    { soup: 300, bread: [] },
+    { soup: 600, bread: [] },
+  ]);
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({
+      adjustmentId: given,
+      amount: "3.75",
+      reapplyOn: { lineId: second!.id },
+    }),
+  ]);
+  expect(await reportedSince(before)).toEqual({ count: 1, reduction: "3.00" });
 });
 
 it("gives a 50% over two Soups again on the second Soup once two edits each took a Soup's share off, still offering it on the first", async () => {
