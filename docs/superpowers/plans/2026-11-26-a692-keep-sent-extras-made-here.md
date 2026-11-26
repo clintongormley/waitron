@@ -1,6 +1,6 @@
 # A692. Keep a sent extra’s “made here” choice
 
-When staff change a sent dish from another till, an extra the kitchen already received still goes to the kitchen. A reissued extra keeps its original sent order number when the dish has moved bills. The [settled answer](../../backlog/till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet) records the watcher extending the owner’s A1416 “Keep what was sent” answer about options to this extras case.
+When staff change a sent dish from another till, an extra the kitchen already received still goes to the kitchen. A reissued extra keeps its original sent order number when the dish has moved bills. The [settled answer](../../backlog/till.md#decisions-and-deliberate-limits) records the watcher extending the owner’s A1416 “Keep what was sent” answer about options to this extras case.
 
 ## Prove the change at the order edit
 
