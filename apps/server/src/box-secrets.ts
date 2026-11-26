@@ -22,7 +22,6 @@ import {
   boxCertCurrent,
   boxLeafChain,
   boxRoot,
-  firstCertificatePem,
   issueClientCert,
   leafIpv4s,
   mintSelfSignedServerCert,
@@ -190,7 +189,7 @@ async function reissueBoxLeafLocked(deps: {
   await assertNoPendingTlsRepair(deps.stateDir);
   const files = boxTlsPaths(deps.stateDir);
   const leaf = reissueServerLeaf({
-    caCertPem: firstCertificatePem(await readFile(files.caCertFile, "utf8")),
+    caCertPem: await readFile(files.caCertFile, "utf8"),
     caKeyPem: await readFile(files.caKeyFile, "utf8"),
     hostnames: deps.hostnames,
     ipAddresses: leafIpv4s(deps.listIpv4),
@@ -216,7 +215,7 @@ export async function ensureLeaf(deps: {
   const files = boxTlsPaths(deps.stateDir);
   if (mintedBoxLeaf(deps.stateDir) === undefined) return "kept";
   const pem = await readFile(files.certFile, "utf8");
-  const authority = boxRoot(firstCertificatePem(await readFile(files.caCertFile, "utf8")));
+  const authority = boxRoot(await readFile(files.caCertFile, "utf8"));
   if (authority === null) throw new AppError("setup.not_ready", {});
   const chain = boxLeafChain(pem, authority, "server");
   const now = deps.now();
@@ -280,7 +279,7 @@ async function ensureClientCert(
   await withRecoveryLock(stateDir, async () => {
     await assertNoPendingTlsRepair(stateDir);
     const issued = issueClientCert({
-      caCertPem: firstCertificatePem(await readFile(files.caCertFile, "utf8")),
+      caCertPem: await readFile(files.caCertFile, "utf8"),
       caKeyPem: await readFile(files.caKeyFile, "utf8"),
       hostname: name,
       now: now(),

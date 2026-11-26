@@ -144,10 +144,6 @@ export function boxCertCurrent(cert: X509Certificate, now: Date): boolean {
   return cert.validFromDate <= now && now < cert.validToDate;
 }
 
-export function firstCertificatePem(pem: string): string {
-  return pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/)?.[0] ?? "";
-}
-
 export function boxRoot(pem: string): X509Certificate | null {
   const blocks = pemBlocks(pem);
   if (blocks.length !== 1 || blocks[0]?.type !== "CERTIFICATE") return null;

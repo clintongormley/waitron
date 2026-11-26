@@ -12,7 +12,6 @@ import {
   boxLeafChain,
   boxRoot,
   boxSigner,
-  firstCertificatePem,
   leafIpv4s,
   mintSelfSignedServerCert,
   reissueServerLeaf,
@@ -100,26 +99,30 @@ async function pending(deps: BoxTlsRepairDeps): Promise<Pending | null> {
     throw refused();
   return p;
 }
-function caPublic(bytes: Buffer | null, now: Date): X509Certificate | null {
+function caPublic(pem: string, now: Date): X509Certificate | null {
   try {
-    const ca = bytes && boxRoot(firstCertificatePem(bytes.toString("utf8")));
+    const ca = boxRoot(pem);
     return ca && boxCertCurrent(ca, now) ? ca : null;
   } catch {
     return null;
   }
 }
 
+function firstCertificatePem(pem: string): string {
+  return pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/)?.[0] ?? "";
+}
+
 export async function readBoxPublicCa(stateDir: string, now = new Date()): Promise<string | null> {
   const pem = await fs.readFile(join(stateDir, TLS_DIR, "ca.crt"), "utf8");
   const publicPem = firstCertificatePem(pem);
   if (!publicPem) return null;
-  const ca = caPublic(Buffer.from(publicPem), now);
+  const ca = caPublic(publicPem, now);
   return ca?.toString().replaceAll("\n", publicPem.includes("\r\n") ? "\r\n" : "\n") ?? null;
 }
 
 function signingAuthority(s: Snapshot, now: Date): boolean {
   try {
-    const ca = caPublic(s["ca.crt"], now);
+    const ca = caPublic(s["ca.crt"]?.toString("utf8") ?? "", now);
     const signer = ca && s["ca.key"] && boxSigner(s["ca.key"].toString("utf8"), ca);
     return signer !== null && boxCertCurrent(signer.cert, now);
   } catch {
@@ -134,7 +137,7 @@ function healthy(
 ): boolean {
   try {
     const now = deps.now();
-    const ca = caPublic(s["ca.crt"], now);
+    const ca = caPublic(s["ca.crt"]?.toString("utf8") ?? "", now);
     if (ca === null || s["server.pem"] === null) return false;
     const chain = boxLeafChain(s["server.pem"].toString("utf8"), ca, "server");
     if (chain === null) return false;
@@ -162,7 +165,10 @@ function inspection(
   p: Pending | null,
   checkAddresses = true,
 ): BoxTlsInspection {
-  const ca = caPublic(s["ca.crt"], deps.now());
+  const now = deps.now();
+  const pem = s["ca.crt"]?.toString("utf8") ?? "";
+  const ca = caPublic(pem, now);
+  const downloadable = ca ?? caPublic(firstCertificatePem(pem), now);
   const usable = healthy(s, deps, checkAddresses);
   return {
     state: usable && p?.complete !== false ? "healthy" : "repair-required",
@@ -175,7 +181,7 @@ function inspection(
             ? "retained"
             : "new-required",
     caAvailable: ca !== null && (usable || signingAuthority(s, deps.now())),
-    ...(ca === null ? {} : { fingerprint: ca.fingerprint256 }),
+    ...(downloadable === null ? {} : { fingerprint: downloadable.fingerprint256 }),
   };
 }
 export async function inspectBoxTls(
@@ -246,7 +252,7 @@ function readCandidate(value: unknown, deps: BoxTlsRepairDeps): SelfSignedMateri
     : {
         ...m,
         ...reissueServerLeaf({
-          caCertPem: firstCertificatePem(m.caCertPem),
+          caCertPem: m.caCertPem,
           caKeyPem: m.caKeyPem,
           hostnames: deps.hostnames,
           ipAddresses: leafIpv4s(deps.listIpv4),
@@ -312,7 +318,7 @@ export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspec
               caCertPem: s["ca.crt"]!.toString("utf8"),
               caKeyPem: s["ca.key"]!.toString("utf8"),
               ...reissueServerLeaf({
-                caCertPem: firstCertificatePem(s["ca.crt"]!.toString("utf8")),
+                caCertPem: s["ca.crt"]!.toString("utf8"),
                 caKeyPem: s["ca.key"]!.toString("utf8"),
                 hostnames: deps.hostnames,
                 ipAddresses: leafIpv4s(deps.listIpv4),

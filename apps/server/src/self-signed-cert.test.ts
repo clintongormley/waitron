@@ -173,6 +173,18 @@ describe("reissueServerLeaf", () => {
     ).toThrow(expect.objectContaining({ code: "setup.not_ready" }));
   });
 
+  it("reports setup not ready when the box clock predates its signing certificates", () => {
+    const original = mint({ now: new Date("2026-08-26T00:00:00Z") });
+    expect(() =>
+      reissueServerLeaf({
+        ...original,
+        hostnames: ["waitron.local"],
+        ipAddresses: [],
+        now: new Date("2026-08-24T00:00:00Z"),
+      }),
+    ).toThrow(expect.objectContaining({ code: "setup.not_ready" }));
+  });
+
   it("never outlives its authority", () => {
     const original = mint({ now: new Date("2026-09-23T10:00:00Z") });
     const leaf = reissueServerLeaf({
