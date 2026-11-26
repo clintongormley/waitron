@@ -32,7 +32,7 @@ import { Hono } from "hono";
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { authorityKey, makeMasterKey } from "@waitron/credentials";
-import { openVenueDatabase, type VenueHolder } from "@waitron/db";
+import { lockVenueDatabase, openVenueDatabase, type VenueHolder } from "@waitron/db";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   FRESH,
@@ -114,6 +114,40 @@ function recoveryVolume(initial: RecoveryState) {
 }
 
 describe("runEntry", () => {
+  it.each([
+    { text: null, restart: false },
+    { text: '{"version":1,"mark":"restart"}', restart: true },
+    { text: '{"version":1,"mark":"shutdown"}', restart: false },
+  ])(
+    "hands the previous stop to boot before cleanup replaces the holder (%j)",
+    async ({ text, restart }) => {
+      const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-stop-"));
+      onTestFinished(() => rm(stateDir, { recursive: true, force: true }));
+      const venueDir = join(stateDir, "venue");
+      await mkdir(venueDir);
+      const previous: VenueHolder = {
+        kind: "server",
+        pid: 123,
+        host: "old-box",
+        lockedAt: "2026-10-20T14:00:00.000Z",
+        heartbeatAt: "2026-10-22T09:31:00.000Z",
+      };
+      await writeFile(join(venueDir, "venue.holder.json"), JSON.stringify(previous));
+      const markFile = join(stateDir, "stop-mark.json");
+      if (text !== null) await writeFile(markFile, text);
+
+      const startServer = vi.fn<NonNullable<EntryDeps["startServer"]>>(async () => ({
+        close: async () => {},
+      }));
+      await runEntry(deps({ stateDir, venueDir, startServer, lockVenue: lockVenueDatabase }));
+
+      expect(startServer.mock.calls.map((call) => call.slice(2))).toEqual([
+        [{ previousStop: { restart, heartbeatAt: previous.heartbeatAt } }],
+      ]);
+      await expect(lstat(markFile)).rejects.toMatchObject({ code: "ENOENT" });
+    },
+  );
+
   it("warns once about unknown process variable names without including their values", async () => {
     const log = vi.fn<EntryDeps["log"]>();
     await runEntry(deps({ baseEnv: { WAITRON_NOT_A_THING: "synthetic-private-value" }, log }));

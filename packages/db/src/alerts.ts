@@ -7,6 +7,7 @@ export const CORE_ALERTS = {
     { prefix: "chain.", area: "fiscal", permission: "fiscal.view" },
     { prefix: "clock.", area: "fiscal", permission: "fiscal.view" },
     { prefix: "invoice_correction.", area: "fiscal", permission: "fiscal.view" },
+    { prefix: "start.", area: "box", permission: "system.manage" },
     { prefix: "backup.", area: "backup", permission: "system.manage", screen: "backup" },
   ],
 } as const;

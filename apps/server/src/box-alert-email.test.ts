@@ -60,6 +60,18 @@ describe("boxEmailMessage", () => {
   });
 });
 
+it.each([
+  ["en", "Corner Bistro: the box stopped without warning"],
+  ["es", "Corner Bistro: el servidor se detuvo sin aviso"],
+] as const)("dates an unexpected-stop email in %s from the last heartbeat", (language, subject) => {
+  const message = boxEmailMessage("start.unplanned_stop", language, "Corner Bistro", {
+    lastRunningAt: "2026-10-22T09:31:00.000Z",
+    lastRunningOffsetMinutes: 120,
+  });
+  expect(message.subject).toBe(subject);
+  expect(message.text).toContain("22/10/2026 11:31");
+});
+
 describe("the full-disk email", () => {
   it("sends nobody elsewhere, and names the page that frees space", () => {
     const { en, es } = BOX_EMAIL_WORDS["storage.disk_full"];

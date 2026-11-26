@@ -31,6 +31,7 @@ import {
   assertOtherFirstSetupAllowed,
   assertNoStartAgainDeletion,
   readPrivacyContact,
+  readRestoreFlowPhase,
   readTaxpayerIdentities,
 } from "@waitron/provisioning";
 import {
@@ -369,6 +370,8 @@ import { refuseUnactivatedEmergencyCopy } from "./emergency-copy-placement.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 import { errnoOf } from "./errno.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
+import { recordUnexpectedStop } from "./stop-alert.js";
+import { writeRestartMark, type PreviousStop } from "./stop-mark.js";
 import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
@@ -578,6 +581,7 @@ export interface StartedServer {
    * start has finished, and rejects with the error that failed it.
    */
   fullyStarted?: Promise<void>;
+  markRestart?: () => Promise<void>;
 }
 
 /** The mode-specific half of `close()` (see `makeStartedServer`). */
@@ -918,6 +922,7 @@ export interface StartServerSeams {
   restart?: (kind: "restart" | "signal") => void;
   /** The entry point runs the staged venue wipe before starting this server again. */
   resetOnRestart?: true;
+  previousStop?: PreviousStop;
   /** Awaited by the joining spare's first-copy job before each attempt. */
   spareCopy?: { hold?: Promise<void> };
   spareSettings?: { checkMs?: number; retryMs?: number };
@@ -977,6 +982,7 @@ export async function startServer(
   return {
     health: whileWaiting.health,
     fullyStarted,
+    markRestart: async () => current.markRestart?.(),
     close: async () => {
       await closeAll([...beforeClose, () => whileWaiting.close()]);
       // A shutdown after the wait ended waits for the rest of the start, up to the shutdown deadline.
@@ -2344,6 +2350,13 @@ async function bootServer(
   // The boot-captured read-only posture; the gate's own per-request predicate re-reads `mode` live,
   // so a promotion lifts it without a restart.
   const fencedOrMirror = isMirror || fenced;
+  const heartbeatAt = seams.previousStop?.restart ? null : seams.previousStop?.heartbeatAt;
+  const unexpectedStop =
+    !fencedOrMirror &&
+    heartbeatAt != null &&
+    (await readRestoreFlowPhase(config.stateDir)) !== "first-start"
+      ? heartbeatAt
+      : null;
   // A restored box finishes its restore here (rebuild-first-start.ts), before the trading listener
   // reads the certificate and before the sealed-state refresh below seals it. After the peer
   // reconciliation above, so a peer that answers during THIS start can fence the box before its
@@ -3933,6 +3946,10 @@ async function bootServer(
     isPrimary: () => holders.singletonRole.current === "primary",
     log,
   });
+  if (acceptingSales && unexpectedStop !== null)
+    await recordUnexpectedStop(db, unexpectedStop, now()).catch((error: unknown) =>
+      log("warn", "server.stop_alert_failed", { errorCode: codeOf(error) }),
+    );
   jobRunner.add(boxAlertMailJob(boxEmails, BOX_EMAIL_CHECK_MS));
   // A mirror or fenced box writes no alert here; the note waits for a start that trades.
   if (!fencedOrMirror)
@@ -4940,5 +4957,10 @@ async function bootServer(
     }),
   );
 
+  if (acceptingSales)
+    started.markRestart = async () => {
+      if (!handoverGate.isClosed() && holders.singletonRole.current === "primary")
+        await writeRestartMark(config.stateDir);
+    };
   return started;
 }

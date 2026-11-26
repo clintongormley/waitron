@@ -978,6 +978,13 @@ describe("restoreDatabase places a REAL venue file (the two silent failures)", (
     expect(await markersIn(venueDir)).toEqual(["FROM-ARCHIVE"]);
   });
 
+  it("clears the previous installation's restart mark during restore placement", async () => {
+    const mark = join(stateDir, "stop-mark.json");
+    await writeFile(mark, '{"version":1,"mark":"restart"}');
+    await restoreDatabase({ dumpBytes: VENUE_BYTES, venueDir, log: noopLog });
+    await expect(stat(mark)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("removes Litestream's own folder beside the replaced database, so a stale record cannot describe it", async () => {
     const ltx = join(venueDir, ".venue.db-litestream", "ltx", "0");
     await mkdir(ltx, { recursive: true });

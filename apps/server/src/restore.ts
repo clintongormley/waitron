@@ -103,6 +103,7 @@ import {
 } from "./restore-staging-dirs.js";
 import { unpackStateFiles } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
+import { clearRestartMark } from "./stop-mark.js";
 import { removeReplacedResetMarker } from "./replaced-reset.js";
 import { clearSelectedCopy } from "./handover-copy-selection.js";
 import { type StagedSecrets, stageSecrets, moduleRecordEntries } from "./restore-secrets.js";
@@ -730,6 +731,7 @@ export async function restoreDatabase(args: {
       if (args.durable !== false) await reachDisk(nodeIncoming);
     }
     await fs.rm(litestreamMetaDir(target), { recursive: true, force: true });
+    await clearRestartMark(args.stateDir);
     aside = await mkdtemp(join(args.venueDir, REPLACED_DATABASE_PREFIX));
   } catch (error) {
     await removeIncomings();

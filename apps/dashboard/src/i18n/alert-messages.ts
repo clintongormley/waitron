@@ -90,6 +90,10 @@ export const ALERT_MESSAGES: Readonly<
       },
     },
   },
+  "start.unplanned_stop": {
+    en: "The box stopped without warning.",
+    es: "El servidor se detuvo sin aviso.",
+  },
   "backup.archives_deleted": {
     en: "Low disk space: the box deleted its {count} oldest backups ({date:date}).",
     es: "Poco espacio en disco: el servidor borró sus {count} copias más antiguas ({date:date}).",

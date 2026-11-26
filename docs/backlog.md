@@ -292,7 +292,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   record what happened rather than rebuild lost invoices (the incident record below); the adviser is still to confirm the details. Signed witnesses and fencing (W41s-10b)
   were retired on 9 November 2026: A1342 (#2654) stops a returning old main box once a spare it
   vouched for has taken over. A box restored from backup keeps the old box's id, so nothing stops
-  the old box after a restore; A1418 part 1, still a plan, adds a check for a venue of one box.
+  the old box after a restore; A1418 still needs to add the replacement check for a venue of one box.
   Qualify live AEAT
   reconciliation, production TLS and a till payment through a booted restored server. Of Task 8's
   disputed production remedies, the corrective invoice (the replacement) is built to file as an R5
@@ -1201,7 +1201,9 @@ Not in any track until the standalone primary is done.
 - **A1418. A box records how it stopped, and a replaced box stays stopped (owner, 2026-11-07).** One
   admin action takes a box out of service with a full, checked backup; a shutdown waits for an admin
   at the next start, a power cut waits a minute, a restart does not wait.
-  [A1418 design](superpowers/specs/2026-11-07-a1418-box-stop-intent-design.md), approved 2026-11-07; plan next.
+  [A1418 design](superpowers/specs/2026-11-07-a1418-box-stop-intent-design.md), approved 2026-11-07.
+  The startup waits, replacement check and administrator shutdown action are the
+  [remaining slices](superpowers/plans/2026-11-26-h-a1418-box-stop-intent.md).
   A1557 (2026-11-20) added [the shared backup operation](../apps/server/src/backup-supervisor.ts)
   for scheduled and manual backups. A1418 still needs to identify and verify its final copy.
 

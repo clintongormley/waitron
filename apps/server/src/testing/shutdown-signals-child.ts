@@ -4,7 +4,8 @@
 // `installShutdownHandlers` has run.
 import { installShutdownHandlers, restartProcess } from "../run-server.js";
 
-const [how] = process.argv.slice(2) as ["ask" | "signal" | "early"];
+const [how, stateDir] = process.argv.slice(2);
+const markRestart = how === "mark" ? (await import("../stop-mark.js")).writeRestartMark : undefined;
 
 if (how === "early") {
   restartProcess();
@@ -13,6 +14,7 @@ if (how === "early") {
 }
 
 installShutdownHandlers({
+  ...(markRestart ? { markRestart: () => markRestart(stateDir!) } : {}),
   close: async () => {
     process.stdout.write("close started\n");
     await new Promise((resolve) => setTimeout(resolve, how === "early" ? 0 : 1500));
@@ -20,7 +22,10 @@ installShutdownHandlers({
   },
 });
 
-if (how !== "early") {
+if (how === "mark") {
+  process.stdout.write("ready\n");
+  setInterval(() => {}, 1000);
+} else if (how !== "early") {
   const send = how === "ask" ? restartProcess : () => process.kill(process.pid, "SIGTERM");
   send();
   setInterval(send, 100);

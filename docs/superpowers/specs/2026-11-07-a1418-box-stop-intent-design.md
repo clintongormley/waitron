@@ -4,6 +4,10 @@
 the conversation of 7 November 2026. Decisions marked **(default)** are this design's, open to
 correction. Everything else is a fact, with a pointer, and says whether it was read or run.
 
+**26 November 2026:** [Slice 1](../plans/2026-11-26-h-a1418-box-stop-intent.md) records restart intent
+and alerts managers after an unexpected main-box stop. The startup waits, replacement check and
+administrator shutdown action are in the subsequent slices.
+
 ## Why this exists
 
 Reviewing the move to Litestream 0.5.18 (#2529), the owner asked what happens to sales when a stop

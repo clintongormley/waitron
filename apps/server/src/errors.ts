@@ -1867,6 +1867,7 @@ declare module "@waitron/shared" {
       availableBytes: number;
       afterDeleting?: boolean;
     };
+    "start.unplanned_stop": { lastRunningAt: string; lastRunningOffsetMinutes: number };
     /** A backup run deleted `count` of its oldest backups to make room for itself; `date` and
      * `lastDate` are the venue's calendar days the oldest and newest of them were taken,
      * `YYYY-MM-DD`, and `severalDays` says they differ. Recorded as an incident, never thrown. */

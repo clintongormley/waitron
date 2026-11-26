@@ -49,12 +49,12 @@ it("publishes the first shutdown time before restart preparation and retains it 
   }
 });
 
-function harness(closeImpl: () => Promise<void>) {
+function harness(closeImpl: () => Promise<void>, markRestart?: () => Promise<void>) {
   const handlers = new Map<string, () => void>();
   const exit = vi.fn();
   const written: string[] = [];
   installShutdownHandlers(
-    { close: closeImpl },
+    { close: closeImpl, markRestart },
     {
       on: (sig, fn) => void handlers.set(sig, fn),
       write: (line, done) => {
@@ -73,6 +73,29 @@ describe("installShutdownHandlers", () => {
     const h = harness(() => Promise.resolve());
     h.handlers.get("SIGTERM")!();
     await vi.waitFor(() => expect(h.exit).toHaveBeenCalledWith(0));
+  });
+
+  it("records restart before closing, even when two different signals arrive", async () => {
+    const order: string[] = [];
+    const h = harness(
+      async () => void order.push("closed"),
+      async () => void order.push("marked"),
+    );
+    h.handlers.get("SIGTERM")!();
+    h.handlers.get("SIGINT")!();
+    await vi.waitFor(() => expect(h.exit).toHaveBeenCalledWith(0));
+    expect(order).toEqual(["marked", "closed"]);
+  });
+
+  it("logs a failed restart mark and still closes", async () => {
+    const close = vi.fn(async () => {});
+    const h = harness(close, async () => {
+      throw new Error("disk refused the write");
+    });
+    h.handlers.get("SIGTERM")!();
+    await vi.waitFor(() => expect(h.exit).toHaveBeenCalledWith(0));
+    expect(close).toHaveBeenCalledOnce();
+    expect(h.written.join("")).toContain("server.stop_mark_failed");
   });
 
   it("logs a classified code and exits 1 when close rejects", async () => {

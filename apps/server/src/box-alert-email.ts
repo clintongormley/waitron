@@ -26,6 +26,7 @@ import {
   BACKUP_REFUSED_EMAIL_WORDS,
   BOX_EMAIL_WORDS,
   CLOCK_CORRECTED_EMAIL_WORDS,
+  UNPLANNED_STOP_EMAIL_WORDS,
   UPGRADE_ROLLBACK_EMAIL_WORDS,
 } from "./i18n/box-emails.js";
 import type { Logger } from "./logger.js";
@@ -49,7 +50,11 @@ export function isBoxEmailCode(code: string): code is BoxEmailCode {
 
 /** The alerts the duty emails while they stay open, read from the incidents table; a
  * `clock.corrected` one is emailed even once handled, see `createBoxEmailDuty`'s `remember`. */
-export const INCIDENT_EMAIL_CODES = ["backup.archives_deleted", "clock.corrected"] as const;
+export const INCIDENT_EMAIL_CODES = [
+  "backup.archives_deleted",
+  "clock.corrected",
+  "start.unplanned_stop",
+] as const;
 
 export type IncidentEmailCode = (typeof INCIDENT_EMAIL_CODES)[number];
 
@@ -94,6 +99,7 @@ const TIME_PLACEHOLDERS = {
   before: "beforeOffsetMinutes",
   after: "afterOffsetMinutes",
   changedAt: "changedAtOffset",
+  lastRunningAt: "lastRunningOffsetMinutes",
 } as const;
 
 /** A code's subject and text, with the slots only that code fills in `values`. */
@@ -102,6 +108,7 @@ function wordsFor(
   language: "en" | "es",
   params?: Readonly<Record<string, unknown>>,
 ): { subject: string; text: string; values?: Record<string, string> } {
+  if (code === "start.unplanned_stop") return UNPLANNED_STOP_EMAIL_WORDS[language];
   if (code === "backup.archives_deleted") {
     const words = BACKUP_DELETED_EMAIL_WORDS[language];
     const count = params?.["count"];

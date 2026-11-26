@@ -65,6 +65,7 @@ import {
 } from "./recovery-state.js";
 import { BOOT_INCOMPLETE, HOLDER_STALLED, recoveryApp } from "./recovery-surface.js";
 import { installShutdownHandlers, type ShutdownTarget } from "./run-server.js";
+import { readPreviousStop, type PreviousStop } from "./stop-mark.js";
 import { closeListener } from "./close-listener.js";
 import { runStagedRestore, type StagedRestoreDeps } from "./restore-request.js";
 import { createStartClockWaiting, type StartClockWaiting } from "./start-clock-waiting.js";
@@ -135,7 +136,11 @@ export interface EntryDeps {
   /** Reads the holder file beside `venue.lock`; defaults to the real reader. */
   readVenueHolder?: (venueDir: string) => VenueHolder | null;
   now?: () => Date;
-  startServer: (env: NodeJS.ProcessEnv, base?: NodeJS.ProcessEnv) => Promise<StartedEntryServer>;
+  startServer: (
+    env: NodeJS.ProcessEnv,
+    base?: NodeJS.ProcessEnv,
+    stop?: { previousStop: PreviousStop },
+  ) => Promise<StartedEntryServer>;
   serveRecovery: (app: Hono, opts: RecoveryServeOptions) => Promise<unknown>;
   /** Serves the page a restore's start shows while it waits to confirm its time. */
   serveStartClockWaiting: (
@@ -172,6 +177,7 @@ export interface EntryDeps {
 
 /** What a start hands back; `fullyStarted` is present when it answers before its start finishes. */
 interface StartedEntryServer {
+  markRestart?: () => Promise<void>;
   close(): Promise<void>;
   fullyStarted?: Promise<void>;
 }
@@ -400,6 +406,12 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
     log: deps.log,
   };
+  const previousStop = await readPreviousStop(
+    deps,
+    deps.log,
+    cleanUp.lockVenue,
+    cleanUp.readVenueHolder,
+  );
   const space = await freeSpaceAtStart({
     ...cleanUp,
     stateDir: deps.stateDir,
@@ -632,7 +644,9 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   }
 
   const selected = !moved ? deps : rooted;
-  return admission.run((venueHeld) => runAdmittedEntry(selected, transport, venueHeld));
+  return admission.run((venueHeld) =>
+    runAdmittedEntry(selected, transport, venueHeld, previousStop),
+  );
 }
 
 type CountCheck = { written: true } | { written: false; freeBytes: number | null };
@@ -699,6 +713,7 @@ async function runAdmittedEntry(
   deps: EntryDeps,
   transport: RecoveryServeOptions,
   venueHeld: boolean,
+  previousStop: PreviousStop,
 ): Promise<void> {
   // Outside the recovery lock: it decides only whether this start boots or serves the page. Every change
   // below re-reads under the lock, so a write made since is kept rather than overwritten.
@@ -937,7 +952,7 @@ async function runAdmittedEntry(
       // The raw base env goes alongside the merged `env`: boot re-reads the box-env files on every
       // backup reload and needs the unmerged base to tell a file-sourced value from an env-sourced
       // one.
-      server = await deps.startServer(env, deps.baseEnv);
+      server = await deps.startServer(env, deps.baseEnv, { previousStop });
     } finally {
       hold.release();
     }
@@ -956,6 +971,7 @@ async function runAdmittedEntry(
   }
 
   deps.installShutdownHandlers({
+    markRestart: server.markRestart,
     close: () => server.close(),
     // A restart the server asked for itself is not a failed start.
     beforeRestart: () =>
@@ -1042,7 +1058,7 @@ function bootThisProcess(): Promise<void> {
     loadBoxEnv,
     readRecoveryState,
     writeRecoveryState,
-    startServer: (env, base) => startServer(env, base, { resetOnRestart: true }),
+    startServer: (env, base, stop) => startServer(env, base, { resetOnRestart: true, ...stop }),
     serveRecovery: async (app, options) => {
       const listener = await serveRecovery(app, options);
       installShutdownHandlers({ close: () => closeListener(listener) });
