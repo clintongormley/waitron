@@ -3448,6 +3448,10 @@ describe("menu-screen", () => {
     await expect.poll(() => editor(el).value?.id).toBe("p1");
     expect(location.pathname).toBe("/products/product/p1");
     expect(push).toHaveBeenCalledOnce();
+    emit(editor(el), "wt-cancel", {});
+    await expect.poll(() => location.pathname).toBe("/products");
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/profile");
   });
   describe("a variant's own page", () => {
     // Listed under its parent only: the list read nests variants, and nothing lists one at the top.
@@ -3593,38 +3597,44 @@ describe("menu-screen", () => {
           .mockImplementation((id: string) => Promise.resolve(id === "v1" ? variantValue : value)),
       });
 
-    it("returns from a nested variant to its product, then to the Products list", async () => {
-      history.replaceState(null, "", "/products");
-      const guard = new NavigationGuard(window, {
-        isDirty: () => false,
-        request: async (proceed) => {
-          await proceed();
-          return "proceeded";
-        },
-      });
-      onTestFinished(() => guard.dispose());
-      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
-        api: variantApi(),
-      });
-      await flush(el);
-      emit(list(el), "edit-product", { productId: "p1", field: "image" });
-      await expect.poll(() => editor(el).value?.id).toBe("p1");
-      expect(location.search).toBe("?field=image");
-      emit(editor(el), "wt-open-product", { productId: "v1" });
-      await expect.poll(() => editor(el).value?.id).toBe("v1");
-      expect(location.pathname).toBe("/products/product/v1");
-      expect(location.search).toBe("");
-      history.back();
-      await expect.poll(() => editor(el).value?.id).toBe("p1");
-      expect(location.search).toBe("?field=image");
-      history.forward();
-      await expect.poll(() => editor(el).value?.id).toBe("v1");
-      emit(editor(el), "wt-cancel", {});
-      await expect.poll(() => editor(el).value?.id).toBe("p1");
-      emit(editor(el), "wt-cancel", {});
-      await expect.poll(() => location.pathname).toBe("/products");
-      await expect.poll(() => editor(el).open).toBe(false);
-    });
+    it.each(["save", "cancel"] as const)(
+      "returns from a nested variant to its product on %s, then to the Products list",
+      async (action) => {
+        history.replaceState(null, "", "/products");
+        const guard = new NavigationGuard(window, {
+          isDirty: () => false,
+          request: async (proceed) => {
+            await proceed();
+            return "proceeded";
+          },
+        });
+        onTestFinished(() => guard.dispose());
+        const api = variantApi();
+        const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
+          api,
+        });
+        await flush(el);
+        emit(list(el), "edit-product", { productId: "p1", field: "image" });
+        await expect.poll(() => editor(el).value?.id).toBe("p1");
+        expect(location.search).toBe("?field=image");
+        emit(editor(el), "wt-open-product", { productId: "v1" });
+        await expect.poll(() => editor(el).value?.id).toBe("v1");
+        expect(location.pathname).toBe("/products/product/v1");
+        expect(location.search).toBe("");
+        expect(vi.mocked(api.getProductEditor).mock.calls).toEqual([["p1"], ["v1"]]);
+        history.back();
+        await expect.poll(() => editor(el).value?.id).toBe("p1");
+        expect(location.search).toBe("?field=image");
+        history.forward();
+        await expect.poll(() => editor(el).value?.id).toBe("v1");
+        if (action === "save") emit(editor(el), "wt-submit", { value: variantValue });
+        else emit(editor(el), "wt-cancel", {});
+        await expect.poll(() => editor(el).value?.id).toBe("p1");
+        emit(editor(el), "wt-cancel", {});
+        await expect.poll(() => location.pathname).toBe("/products");
+        await expect.poll(() => editor(el).open).toBe(false);
+      },
+    );
 
     it.each([
       ["en", "Edit variant of: Croquettes", "Edit variant of: Croquettes renamed"],
@@ -4418,8 +4428,12 @@ it("closing a guarded linked product retires its field query before opening anot
     api: stubApi(),
   });
   await flush(el);
+  const push = vi.spyOn(history, "pushState");
+  onTestFinished(() => push.mockRestore());
   await guard.write("/products/product/p1?field=name");
   await expect.poll(() => editor(el).value?.id).toBe("p1");
+  expect(location.search).toBe("?field=name");
+  expect(push).toHaveBeenCalledOnce();
   emit(editor(el), "wt-cancel", {});
   await expect.poll(() => location.pathname).toBe("/products");
   expect(location.search).toBe("");

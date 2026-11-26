@@ -68,11 +68,14 @@ export class ProductsEditorHistory {
   }
 
   close(): void {
-    this.#current = "";
     if (this.url.read("dashboard") !== "products") return;
     const address = this.#read();
-    if (address !== null && this.#owns(editorKey(address))) history.back();
-    else void this.url.write({ product: null, editor: null }, true, ["field"]);
+    if (address !== null && this.#owns(editorKey(address))) {
+      history.back();
+    } else {
+      void this.url.write({ product: null, editor: null }, true, ["field"]);
+      this.#current = editorKey(this.#read());
+    }
   }
 
   #read(): ProductsEditorAddress | null {

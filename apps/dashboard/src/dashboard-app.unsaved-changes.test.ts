@@ -1493,11 +1493,15 @@ describe("Products browser history", () => {
       .dispatchEvent(
         new CustomEvent("edit-product", { detail: { productId: "p-burger" }, bubbles: true }),
       );
-    await expect.poll(() => m.editor().open).toBe(true);
-    const name = m.editor().shadowRoot!.querySelector<WtInput>('wt-input[name="name"]')!;
-    name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Edited Burger" } }));
-    await m.editor().updateComplete;
-    expect(m.editor().currentValue.name).toBe("Edited Burger");
+    await changeProductName(m.editor, "Edited Burger");
+  }
+
+  async function changeProductName(editor: () => ProductEditor, value: string) {
+    await expect.poll(() => editor().open).toBe(true);
+    const name = editor().shadowRoot!.querySelector<WtInput>('wt-input[name="name"]')!;
+    name.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+    await editor().updateComplete;
+    expect(editor().currentValue.name).toBe(value);
   }
 
   it("keeps the draft on Keep editing and returns to Products on Discard", async () => {
@@ -1513,6 +1517,20 @@ describe("Products browser history", () => {
     await choose(m, "discard");
     await expect.poll(() => location.pathname).toBe("/products");
     await expect.poll(() => m.editor().open).toBe(false);
+  });
+
+  it("asks before discarding an Add product draft on Back", async () => {
+    const m = await onProducts();
+    await userEvent.click(page.getByRole("button", { name: "Add product", exact: true }));
+    await changeProductName(m.editor, "New Burger");
+    history.back();
+    await expect.poll(() => m.question.open).toBe(true);
+    expect(location.pathname).toBe("/products/editor/new");
+    await choose(m, "discard");
+    await expect.poll(() => location.pathname).toBe("/products");
+    await expect.poll(() => m.editor().open).toBe(false);
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/profile");
   });
 
   it("cancels edits directly and lets the next Back leave Products", async () => {
