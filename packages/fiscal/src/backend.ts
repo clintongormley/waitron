@@ -486,8 +486,8 @@ export interface FiscalBackend {
   ): Promise<CorrectionAdmission>;
 
   /**
-   * Throws this regime's refusal when a corrective of `saleId`, the invoice it would be filed
-   * against, would correct a record the authority does not hold: one it refused that nothing
+   * Throws this regime's refusal when the authority refused the current version of the invoice
+   * `saleId`, the one a corrective would be filed against: its newest version, which nothing
    * replaced. Reads only. Absent when the regime has no such refusal.
    */
   refuseCreditOf?(tx: Transaction, saleId: SaleId): Promise<void>;

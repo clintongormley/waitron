@@ -910,6 +910,7 @@ function cancelsRefusedOriginal(record: "r"): SQL {
   const alias = sql.raw(record);
   return sql`(${alias}.tipo_registro = 'anulacion'
     and ${alias}.sin_registro_previo is not 'S' and ${currentAltaRefused({
+      saleId: sql`${alias}.sale_id`,
       idEmisorFactura: sql`${alias}.id_emisor_factura`,
       numSerieFactura: sql`${alias}.num_serie_factura`,
       fechaExpedicionFactura: sql`${alias}.fecha_expedicion_factura`,

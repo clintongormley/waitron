@@ -127,6 +127,7 @@ export async function fixedVersionOf(
   saleId: string,
   estado: string | null,
   codigoError: string | null,
+  versionSaleId = saleId,
 ) {
   await withTransaction(db, async (tx) => {
     const { rows } = await tx.execute<Record<string, unknown>>(sql`
@@ -138,7 +139,7 @@ export async function fixedVersionOf(
     const previous = fromRegistroRow(stored) as RegistroAlta;
     const appended = await appendToChain(tx, nodeId, {
       tipo: "alta",
-      saleId: brandSaleId(saleId),
+      saleId: brandSaleId(versionSaleId),
       origin: jobOrigin("operator_script"),
       entorno: "production",
       correctsRegistroId: stored.id,
