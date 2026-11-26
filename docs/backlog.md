@@ -602,8 +602,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Small till and floor wording fixes** (bundle of 1, size S). [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
 - **SETTLED-SMALL. Small answers the owner gave, and rules read across from them, not built yet** — queued (lane F):
-  "Take the rest", extras keep "made here" (A692), variants in the extras form, one word per meaning
-  (A957, A1011). [Detail](backlog/till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet)
+  "Take the rest", extras keep "made here" (A692) and variants in the extras form.
+  [Detail](backlog/till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet)
 
 - **A1421. The Downstairs map drawn tiny at phone width.** Seen once, not investigated.
   [Detail](backlog/till.md#a1421-the-downstairs-map-drawn-tiny-at-phone-width)

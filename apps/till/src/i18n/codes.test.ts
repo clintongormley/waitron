@@ -552,8 +552,11 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     "Alguien que pueda autorizarlo debe introducir su PIN",
   );
   expect(codeMessage("adjustment.over_limit", "en")).toBe(codeMessage("server.internal", "en"));
+  expect
+    .soft(codeMessage("adjustment.exceeds_amount", "en"))
+    .toBe("That comp is more than the amount it applies to. Enter a smaller amount");
   expect(codeMessage("adjustment.no_reduction", "en")).toBe(
-    "That takes nothing off. Check whether it is already free, or enter a larger discount",
+    "That takes nothing off. Check whether it is already free, or enter a larger comp",
   );
   expect(codeMessage("adjustment.no_reduction", "es")).toBe(
     "Así no se descuenta nada. Comprueba si ya es gratis o introduce un descuento mayor",

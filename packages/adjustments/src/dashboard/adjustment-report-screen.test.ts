@@ -374,6 +374,17 @@ describe("the adjustment report", () => {
     ]);
   });
 
+  it("uses the same Spanish word for cancelled value in the summary and breakdown", async () => {
+    setLocale("es-ES");
+    const el = await mount(fakeApi());
+    expect
+      .soft(text(part(el, "summary")!.querySelector('[data-figure="cancelled"] dt')))
+      .toBe("Valor de carta de lo cancelado");
+    expect([...part(el, "by-action")!.querySelectorAll("thead th")].map(text)).toContain(
+      "Valor de carta cancelado",
+    );
+  });
+
   it("names the open person in Spanish breakdown headings", async () => {
     setLocale("es-ES");
     const el = await mount(fakeApi());

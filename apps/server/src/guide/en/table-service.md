@@ -7,7 +7,7 @@ blocked so you can practise recovery. In the dashboard's **Payments**, a manager
 
 ## Give a comp or discount {#comps-and-discounts}
 
-Choose a reason when you make an item free or give a discount. With **Apply comps**, you can
+Choose a reason in **Comp…** when you make an item free or take money off. With **Apply comps**, you can
 apply it up to the reason's limits and the bill's comp limit. If you need approval, choose someone
 with **Approve comps** and ask them to enter their PIN. They approve past those limits and can
 apply their own comps without a second person's PIN. By default, all staff can apply within the

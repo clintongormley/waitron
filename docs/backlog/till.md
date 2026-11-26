@@ -733,10 +733,6 @@ answers; where an entry says a rule is read across, the owner was not asked that
 - **The extras form's picker lists variants**: the owner's decision that a variant can be an extra
   (2026-09-24), read across to the picker by the watcher, not an answer. Today it lists top-level products
   only (`listProducts`).
-- **A957 and A1011 point 9. One word per meaning** (D22): «cancelado» for «anulado» in «Valor de carta
-  anulado» and «Valor de carta de lo anulado» (`packages/adjustments/src/dashboard/strings.ts`), and
-  "comp" for "discount" in the English of `adjustment.exceeds_amount` and `adjustment.no_reduction`
-  (`apps/till/src/i18n/codes.ts`).
 
 ## Bundle: Small till and floor wording fixes
 
