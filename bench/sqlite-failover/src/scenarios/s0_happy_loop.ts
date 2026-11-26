@@ -1,47 +1,6 @@
-// S0: the whole failover loop, driven end to end with the real litestream binary by ONE-SHOT syncs
-// (spec §4, S0) — a box sells, syncs to the store, files its own records, sells two more and dies
-// before the next sync; a cloud node restores that generation, takes the venue for a higher term and
-// sells for itself; the box comes back, sees the higher term, and ships its tail instead of selling.
-//
-// Every upload here is `syncOnce`. Nothing in this scenario starts `replicate`, litestream's
-// continuous daemon, which is the mode the product would run; the daemon is driven by
-// `s_litestream_roundtrip` and by S3 (`s3_copied_replica.ts`), never here. That is why "the box dies
-// before the next sync" is a scripted step here: under the daemon it would be a timing window, and
-// this scenario says nothing about that window.
-//
-// What it asserts, on Part A:
-//   - the receiver ends up holding box-a's records 1..6 with the exact contents box-a wrote them
-//     with, compared field by field against box-a's own rows rather than counted;
-//   - the cloud's own chain is separate and intact — one record, under its own id, whose huella is
-//     the one its write returned;
-//   - every `records` row on the receiver is attributed to the node that WROTE it, judged by the
-//     payload, which carries the sale's uuid;
-//   - every chain on the receiver verifies: secuencias 1..N with no gap, each row's
-//     `huella_anterior` the row before it, and each huella the hash of its own payload;
-//   - every record is handed to the tax-agency stub EXACTLY ONCE across all three drains of the run;
-//   - `current.json` in the store names this part's cloud term and generation, read back from the
-//     store.
-//
-// What it does NOT assert, and is not evidence about:
-//   - anything about `packages/fiscal-verifactu`. Every table here is the rig's MODEL (`model.ts`),
-//     and the hash is a toy one.
-//   - that a record can only be present once. `records` is keyed `(node_id, secuencia)`, so the
-//     table cannot hold a row twice whatever the loop does; "exactly once" is a claim about the
-//     SUBMIT ledger, and that is where it is measured.
-//   - the cloud's own generation. `promote` writes the pointer and a generation marker, and nothing
-//     here streams cloud-1's database anywhere — a returning node following that pointer is plan
-//     Task 8's.
-//   - a fenced box refusing to sell. Box-a reads the higher term and ships; that it COULD not have
-//     sold is not modelled, and nothing here stops it.
-//
-// Part C is a MEASUREMENT and does not decide the verdict; Parts A and B do. Part C leaves out the
-// sync that would carry box-a's filing state to the store, so the promoted cloud restores those
-// records `pendiente` and files them a second time. That is the same SAME-IDENTITY duplicate S2
-// already measures — same node, same secuencia, same huella — which a real AEAT refuses with error
-// 3000 and our drain reads as filed, so the model's stub would score it as a double it is not. The
-// README sections "What the FAIL means against the real system (owner review, 2026-09-17)" and this
-// task's note in the plan carry the owner's reading of what it costs. Part C therefore RECORDS the
-// number and the identities, and asserts only what is true of the drain either way.
+// Drive the failover loop with real Litestream and the model ledger. The no-ship control must fail
+// the happy loop's own comparison. The lag arm measures repeat submissions when the last filing
+// state never streamed.
 import assert from "node:assert";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -68,47 +27,19 @@ import type { CurrentPointer } from "../promotion.ts";
 import type { ScenarioContext, ScenarioResult } from "../scenarios.ts";
 import type { Store } from "../store.ts";
 
-/** Topology §2.2 gives each venue one prefix in the store; `v1` is this rig's venue. */
 const VENUE = "venues/v1";
 
 const BOX_A = "box-a";
 const CLOUD = "cloud-1";
 
-/** Sales box-a makes before it syncs, and the two it makes afterwards — its tail. */
 const SALES_BEFORE_SYNC = 4;
 const TAIL_SALES = 2;
 
-/**
- * One run of the loop. The three parts share ONE store and are separated by TERM, the way
- * `s1_double_promotion.ts` separates its fenced race from its control: each part's box streams to
- * `gen-<boxTerm>-box-a`, each part's cloud opens `gen-<cloudTerm>-cloud-1`, and each part's
- * promotion claims a key named for its own term, so no two parts share a generation prefix or a
- * claim. The ONE key all three write is `venues/v1/current.json`, which carries no term and which
- * `promote` overwrites every time (`promotion.ts`); each part reads it back only after its own
- * promotion, so a later part's pointer never reaches an earlier one.
- *
- * What that trades away, stated because the alternative was three stores: with a store per part, a
- * part that reached for another part's prefix would find nothing and fail on the restore. Here it
- * would find a real generation. What makes a wrong prefix loud instead is that every part checks
- * what the receiver holds against the rows its OWN box wrote, and `recordSale` puts a fresh uuid in
- * every payload (`model.ts`), so another part's rows cannot satisfy that check. Which assertion does
- * the work differs by part: `assertReceiverHoldsSenderChain` in Part A, the `deepStrictEqual`
- * against `boxARows.slice(0, SALES_BEFORE_SYNC)` in Part B, and `assertEveryRowAttributedToItsWriter`
- * in Part C — NOT its verbatim check, which walks repeats selected by identity and would find none.
- * Run both ways on 2026-09-18 — each part's restore pointed at Part A's prefix in turn — and the
- * messages are in the package README. The named assertion is the one that FIRES FIRST, not the only
- * one that would: with Part C's attribution check deleted and its restore still pointing at Part
- * A's generation, Part C failed instead on "box-a:5 links to the record before it", because the
- * ship then grafts the part's own tail onto another part's chain.
- */
+// The arms share a store and use separate terms to keep their generations and claims apart.
 type Part = {
-  /** The generation box-a streams to, and the term it holds when it dies. */
   boxTerm: number;
-  /** The term the cloud takes, which names its generation and its claim key. */
   cloudTerm: number;
-  /** Box-a ships its tail when it returns. False is Part B's control. */
   ship: boolean;
-  /** Box-a's filings reach the store before it dies. False is Part C's stream lag. */
   syncAfterDrain: boolean;
 };
 
@@ -128,35 +59,22 @@ function cloudGeneration(part: Part): string {
   return `gen-${part.cloudTerm}-${CLOUD}`;
 }
 
-/** Everything the assertions read, captured while both databases and the store are still open. */
 type LoopProbe = {
-  /** Which part produced this state, so an assertion can spell out that part's own terms. */
   part: Part;
-  /** The receiver: the cloud node, opened on the restored generation. */
   cloud: NodeDb;
-  /** The six records box-a wrote, read from BOX-A's own database before it died. */
   boxARows: RecordRow[];
-  /** What `recordSale` returned for the cloud's own sale — an identity captured at write time. */
   cloudOwn: { secuencia: number; huella: string };
-  /** Every `(node, secuencia)` the tax-agency stub was handed, repeats kept, in order. */
   submissions: string[];
-  /** The same ledger split by the drain that produced each entry. */
   boxADrain: string[];
   cloudFirstDrain: string[];
   cloudSecondDrain: string[];
-  /** What the cloud held `pendiente` in the instant before its first drain. */
   cloudPendingBeforeFirstDrain: string[];
-  /** `current.json` as box-a read it back from the store on its return. */
   current: CurrentPointer | null;
 };
 
 export default async function happyLoop({ startStore }: ScenarioContext): Promise<ScenarioResult> {
   const litestream = await resolveLitestream();
   if (!litestream) {
-    // No container is started on this path. `critical: true` does nothing here: the runner prints
-    // id, title, verdict and detail, and reads `critical` only when a verdict is FAIL
-    // (`src/scenarios.ts`). What keeps this row from reading as a pass is the verdict SKIPPED and
-    // the detail below saying the loop is UNPROVEN; the flag is set because plan Task 7 asks for it.
     return {
       id: "S0",
       title: "the happy failover loop, end to end",
@@ -168,18 +86,13 @@ export default async function happyLoop({ startStore }: ScenarioContext): Promis
 
   const store = await startStore();
   try {
-    // Part A — the happy loop, and the verdict.
     const happy = await runLoop(store, litestream.bin, HAPPY, (probe) => assertHappyLoop(probe));
 
-    // Part B — the CONTROL. The identical loop with the ship left out must reproduce the opposite
-    // result, and Part A's own comparison must be the thing that refuses it. Without this, "the
-    // restore plus the ship gave us 1..6" is unfalsifiable: a restore that had somehow carried 5
-    // and 6 would look exactly like a ship that worked.
+    // The same comparison used by the happy loop must reject the no-ship control.
     const control = await runLoop(store, litestream.bin, CONTROL, (probe) =>
       assertShipIsWhatCarriesTheTail(probe),
     );
 
-    // Part C — the stream-lag MEASUREMENT. Not part of the verdict; see the header.
     const lag = await runLoop(store, litestream.bin, LAG, (probe) => measureStreamLag(probe));
 
     return {
@@ -197,25 +110,6 @@ export default async function happyLoop({ startStore }: ScenarioContext): Promis
   }
 }
 
-/**
- * One turn of the loop, in its own temp directory and under its own terms. The assertions run in
- * `inspect`, before anything is torn down.
- *
- * The sequence:
- *   1. box-a opens `venue.db` and records four sales;
- *   2. a one-shot sync uploads them to `venues/v1/gen-<boxTerm>-box-a`;
- *   3. box-a's own drain files those four, and — under `syncAfterDrain` — a second one-shot sync
- *      carries that state to the store;
- *   4. box-a records two more sales and is KILLED before the next sync, which is modelled by closing
- *      its handle: nothing syncs after this, so the store holds only what steps 2 and 3 put there;
- *   5. the cloud restores box-a's generation into a fresh path, takes `cloudTerm`, sells once for
- *      itself and drains;
- *   6. box-a reopens, reads `current.json`, sees a term above its own — so it ships instead of
- *      selling (under `ship`) — and the cloud drains again.
- *
- * Box-a never drains after it returns, and nothing here forces that: it is the sequence being
- * modelled, and a fenced node that cannot sell is not modelled at all (see the header).
- */
 async function runLoop<T>(
   store: Store,
   bin: string,
@@ -274,7 +168,6 @@ async function runLoop<T>(
       SALES_BEFORE_SYNC + TAIL_SALES,
       "the box wrote six records before it died",
     );
-    // The kill. Nothing syncs after it, and the handle is unusable until box-a returns below.
     boxA.close();
     boxA = undefined;
 
@@ -293,7 +186,6 @@ async function runLoop<T>(
     drainPass(cloud, submit);
     const cloudFirstDrain = submissions.slice(cloudFirstFrom);
 
-    // The return.
     boxA = openNode(BOX_A, dbPath);
     const current = await readCurrent(store);
     assert.ok(
@@ -321,13 +213,8 @@ async function runLoop<T>(
       current,
     });
   } finally {
-    // This part owns the two handles and the temp directory; the store belongs to the scenario,
-    // whose own `finally` stops it. That INVERTS the order the two siblings use — `s_smoke.ts:77-82`
-    // and `s_litestream_roundtrip.ts` stop the store first, inside one `finally`, because a throw
-    // ahead of `stop()` leaves a MinIO container `pnpm reap` will not touch for two hours — and it
-    // reaches the same guarantee by a different route: no close in here can stop the scenario's
-    // `finally` running `store.stop()`. The temp directory needs its own `finally` for the same
-    // reason, one level down: a close that throws would otherwise skip the removal.
+    // Close both handles before deleting their directory. The outer scenario owns the shared
+    // store.
     try {
       boxA?.close();
       cloud?.close();
@@ -337,7 +224,6 @@ async function runLoop<T>(
   }
 }
 
-/** Part A. Every assertion the verdict rests on. */
 function assertHappyLoop(probe: LoopProbe): {
   boxADrain: string[];
   cloudFirstDrain: string[];
@@ -374,7 +260,6 @@ function assertHappyLoop(probe: LoopProbe): {
 
   assertCloudDrainFilesWhatItHeld(probe);
 
-  // Read back from the store, not assumed, and spelled out from this part's own constants.
   assert.deepStrictEqual(
     probe.current,
     { term: probe.part.cloudTerm, nodeId: CLOUD, gen: cloudGeneration(probe.part) },
@@ -392,13 +277,6 @@ function assertHappyLoop(probe: LoopProbe): {
   };
 }
 
-/**
- * Part B — the control. The same loop with the ship left out, where the cloud must end up holding
- * box-a's 1..4 and NOT its tail, and where Part A's own comparison must be what refuses that state.
- *
- * Driving the same helper is the point: a control asserting "5 and 6 are missing" in its own words
- * would still be green if Part A's comparison had stopped checking anything.
- */
 function assertShipIsWhatCarriesTheTail(probe: LoopProbe): {
   heldBoxA: string;
   refusal: string;
@@ -413,8 +291,6 @@ function assertShipIsWhatCarriesTheTail(probe: LoopProbe): {
     Array.from({ length: SALES_BEFORE_SYNC }, (_unused, index) => index + 1),
     "without the ship the cloud holds only the records the stream carried",
   );
-  // The rows it DOES hold are still the box's own, byte for byte — so what the ship adds is the
-  // tail, not the contents of what was already there.
   assert.deepStrictEqual(
     held,
     probe.boxARows.slice(0, SALES_BEFORE_SYNC),
@@ -436,23 +312,6 @@ function assertShipIsWhatCarriesTheTail(probe: LoopProbe): {
   return { heldBoxA: `${BOX_A}:1..${held.length}`, refusal };
 }
 
-/**
- * Part C — the stream lag, recorded rather than judged.
- *
- * Box-a files records 1..4 and dies before that `envios` update syncs, so the cloud restores them
- * `pendiente` and its own drain files them a second time. Three things are asserted, all true
- * whichever way the lag falls: the cloud's drain files exactly the rows the cloud itself held
- * `pendiente`; every REPEAT is a verbatim copy of the row box-a filed — same node, same secuencia,
- * same huella, same payload; and every row the cloud holds sits under the node that wrote it.
- *
- * The first two say nothing about a duplicate filed under a DIFFERENT identity, because they select
- * the repeats by identity in the first place. That is why the third is here and why it is the one
- * that carries the sentence: with it, what this part records is the shape a real AEAT refuses
- * (error 3000) rather than a new danger. Measured — an extra row carrying `box-a:1`'s payload
- * inserted as `box-c:1`, with its huella recomputed and a `pendiente` submission, before the cloud's
- * first drain: without the attribution check the whole scenario reported PASS with that row filed;
- * with it, Part C fails on "the cloud filed box-a:1's record as box-c:1" (2026-09-18).
- */
 function measureStreamLag(probe: LoopProbe): {
   refiled: string[];
   shape: string;
@@ -484,9 +343,7 @@ function measureStreamLag(probe: LoopProbe): {
   }
 
   assertChainsVerify(probe.cloud);
-  // Derived from the loop above rather than written as a literal in the verdict: with no repeat to
-  // compare, "verbatim-same-identity" would be a shape asserted of an empty set, and would go on
-  // printing on the day the protocol changes and the count reaches zero.
+  // Require a repeat before comparing the identities, since equality on an empty set would pass.
   return {
     refiled,
     shape: refiled.length > 0 ? "verbatim-same-identity" : "no-repeat-to-compare",
@@ -494,18 +351,7 @@ function measureStreamLag(probe: LoopProbe): {
   };
 }
 
-/**
- * The receiver holds box-a's whole chain, 1..6, with the contents box-a wrote — compared field by
- * field against box-a's own rows. Never a count: six rows carrying the wrong payloads, or the right
- * payloads under shifted secuencias, satisfy a count (`CLAUDE.md` §4).
- *
- * "Exactly once each" is not what this measures, and cannot be: `records` is keyed
- * `(node_id, secuencia)`, so the table could not hold a row twice however the loop behaved. The
- * exactly-once claim is about the SUBMIT ledger, and lives in `assertHappyLoop`.
- *
- * Part B drives this same function over a receiver that never got the tail, and requires it to
- * throw.
- */
+// Compare against the writer's rows so a restore of the right size with the wrong contents fails.
 function assertReceiverHoldsSenderChain(probe: LoopProbe): void {
   const held = probe.cloud.all<RecordRow>(
     `SELECT node_id, secuencia, huella, huella_anterior, payload FROM records
@@ -519,14 +365,7 @@ function assertReceiverHoldsSenderChain(probe: LoopProbe): void {
   );
 }
 
-/**
- * The cloud's own chain is its own: one record, under its own id, at secuencia 1, with no
- * predecessor — and carrying the huella its own write returned.
- *
- * That returned huella is the one independent capture available for this row: unlike box-a's
- * records, the cloud's record exists in exactly one database, so anything read back from the cloud
- * to check the cloud would be circular.
- */
+// Use the hash returned at write time as an independent answer for the cloud's record.
 function assertOwnChainIntact(probe: LoopProbe): void {
   const own = probe.cloud.all<RecordRow>(
     `SELECT node_id, secuencia, huella, huella_anterior, payload FROM records
@@ -544,15 +383,7 @@ function assertOwnChainIntact(probe: LoopProbe): void {
   assert.equal(Number(probe.cloudOwn.secuencia), 1, "the cloud's sale was its chain's first");
 }
 
-/**
- * Every `records` row on the receiver sits under the node that WROTE it.
- *
- * The payload carries the sale's uuid, so it names its writer independently of the `node_id` column
- * the row is filed under. What this catches that the two chain checks above do not is a row under a
- * THIRD node id: `assertReceiverHoldsSenderChain` reads only box-a's rows and `assertOwnChainIntact`
- * only the cloud's, so a row attributed to a node neither of them names passes both. Part C runs it
- * for a further reason of its own — see `measureStreamLag`.
- */
+// Read the writer from the sale UUID so a misplaced row cannot supply its own expected owner.
 function assertEveryRowAttributedToItsWriter(probe: LoopProbe): void {
   const writtenBy = new Map<string, string>();
   for (const row of probe.boxARows) {
@@ -577,12 +408,6 @@ function assertEveryRowAttributedToItsWriter(probe: LoopProbe): void {
   }
 }
 
-/**
- * The cloud's first drain files exactly the rows the cloud itself held `pendiente` in the instant
- * before that drain — a statement about the drain, true whether the stream lag left it holding
- * records its owner had already filed or not. Part A and Part C both run it, which is what makes
- * Part C's recorded number a difference in the loop's state rather than in what was asserted.
- */
 function assertCloudDrainFilesWhatItHeld(probe: LoopProbe): void {
   assert.deepStrictEqual(
     [...probe.cloudFirstDrain].sort(),
@@ -591,14 +416,6 @@ function assertCloudDrainFilesWhatItHeld(probe: LoopProbe): void {
   );
 }
 
-/**
- * Each chain in a database verifies on its own terms: the secuencias run 1..N with no gap,
- * `huella_anterior` is the row before's huella (null at secuencia 1), and the huella is the model
- * hash of that predecessor and this row's payload.
- *
- * `toyHuella` is the rig's hash and not AEAT's (`model.ts`), so what this establishes is that a link
- * is checkable and unbroken, never that the chain would satisfy the tax agency.
- */
 function assertChainsVerify(db: NodeDb): void {
   const rows = db.all<RecordRow>(
     `SELECT node_id, secuencia, huella, huella_anterior, payload FROM records
@@ -636,14 +453,12 @@ function assertChainsVerify(db: NodeDb): void {
   }
 }
 
-/** `node:first … node:last`, the form the submit ledger records an identity in. */
 function identities(nodeId: string, first: number, last: number): string[] {
   const out: string[] = [];
   for (let secuencia = first; secuencia <= last; secuencia += 1) out.push(`${nodeId}:${secuencia}`);
   return out;
 }
 
-/** What this node holds `pendiente` right now, as submit-ledger identities. */
 function pendingIdentities(db: NodeDb): string[] {
   return db
     .all<{ node_id: string; secuencia: number }>(

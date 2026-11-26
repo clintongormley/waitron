@@ -1,26 +1,5 @@
-// S5: the one clash the design still resolves by a person looking at it — the same supplier invoice
-// number typed on both nodes while they are apart (spec §4, S5). When A's tail is shipped to B that
-// row cannot be applied: B already holds that (supplier, invoice number) pair under a different id.
-//
-// What this scenario measures is what happens to the REST of the ship. The clashing row must be
-// named in the apply's result and left out of the table, and everything else in the tail — the
-// ledger records, their submission rows, the sales, the sale lines and the sender's other supplier
-// invoice — must land as if the clash had never been in the batch. Then the same tail is shipped
-// again, because a ship is retried whenever its confirmation is lost.
-//
-// Spec §4's S5 rules out three outcomes in one line: the clashing row must be "not applied, not
-// silently dropped, not crashing the whole ship". The first is what the assertions below check
-// directly; the other two get a control each, both `ClashRule` settings of the same apply
-// (`src/model.ts`). `silent-drop` reproduces a row silently dropped, `unisolated` a refusal that
-// crashes the whole ship.
-//
-// Everything here is the rig's MODEL of the ledger (`src/model.ts`); no result here is a statement
-// about `packages/fiscal-verifactu`. What this scenario's runs establish, and the savepoint the
-// apply turns out not to need, are in the README section "What S5 measures, and the savepoint it
-// does not need".
-//
-// Like S2 and RUNNER, this scenario takes no `ScenarioContext`: the ship it models happens between
-// two in-memory SQLite databases, so it starts no MinIO container and opens no object store.
+// Exercise both ways of losing a supplier invoice: silent omission and a refusal that rolls the
+// whole batch back.
 import assert from "node:assert";
 import type { ScenarioResult } from "../scenarios.ts";
 import {
@@ -42,10 +21,8 @@ import type {
   TailBatch,
 } from "../model.ts";
 
-/** The pair typed on both nodes while they were apart. */
 const CLASHING_SUPPLIER = "ACME";
 const CLASHING_NUMBER = "INV-1";
-/** How many sales the sender records before the ship, so the tail carries more than invoices. */
 const SALES = 3;
 
 type Ship = {
@@ -53,19 +30,12 @@ type Ship = {
   receiver: NodeDb;
   senderId: string;
   tail: TailBatch;
-  /** The sender row whose (supplier, invoice number) the receiver already holds under another id. */
   clashId: string;
-  /** The sender's other supplier invoice, which nothing on the receiver conflicts with. */
   cleanId: string;
-  /** The receiver's own row for the clashing pair. */
   receiverRowId: string;
 };
 
-/**
- * Two nodes that both typed the same supplier invoice number while apart, and A's tail ready to
- * ship. `slug` names every node and every row, so a control's rows can never be read as the real
- * run's.
- */
+// Give each arm distinct identities so rows from a control cannot satisfy the main comparison.
 function buildShip(slug: string, open: (nodeId: string) => NodeDb): Ship {
   const senderId = `${slug}-box`;
   const receiverId = `${slug}-cloud`;
@@ -80,8 +50,6 @@ function buildShip(slug: string, open: (nodeId: string) => NodeDb): Ship {
   insertInvoice(sender, cleanId, senderId, CLASHING_SUPPLIER, "INV-2");
   insertInvoice(receiver, receiverRowId, receiverId, CLASHING_SUPPLIER, CLASHING_NUMBER);
 
-  // A real diff of a real tail, not a hand-built batch: "everything else applied" is only worth
-  // asserting over the rows a ship would actually carry.
   const tail = diffTail(sender, summarise(receiver));
   assert.equal(tail.records.length, SALES, `${slug}: the tail carries every record appended`);
   assert.equal(tail.envios.length, SALES, `${slug}: the tail carries their submission rows`);
@@ -122,14 +90,7 @@ type TailRows = {
   supplierInvoices: SupplierInvoiceRow[];
 };
 
-/**
- * The rows of a shipped tail the receiver now holds — the rows themselves, every column of them,
- * not how many there are. Counting would let a wrong value through: an apply that changed a sale's
- * total on the way in still lands one sale per sale shipped.
- *
- * Each read is ordered the way `diffTail` orders the tail it builds, because SQLite promises no row
- * order and two lists differing only in order would read as a difference.
- */
+// Compare every field because a row count would also accept overwritten business data.
 function rowsHeldFrom(receiver: NodeDb, senderId: string): TailRows {
   return {
     records: receiver.all<RecordRow>(
@@ -158,12 +119,6 @@ function rowsHeldFrom(receiver: NodeDb, senderId: string): TailRows {
   };
 }
 
-/**
- * The same five lists as the sender shipped them, to compare the receiver's rows against, minus
- * `clashId` — the one row the apply is expected to leave out of the table. Every other shipped
- * supplier invoice is expected there in full, which is what makes this the check on the table S5
- * exists for rather than a count of it.
- */
 function rowsShipped(tail: TailBatch, clashId: string): TailRows {
   return {
     records: tail.records,
@@ -182,16 +137,7 @@ const NOTHING_APPLIED: TailRows = {
   supplierInvoices: [],
 };
 
-/**
- * Every row of every model table, for comparing a database with itself after a second apply.
- *
- * Both the table list and each table's columns are asked of the database rather than written out
- * here, so a table added to the schema later is compared without anyone remembering to add it.
- * Rows are ordered by every column the table has: SQLite promises no row order, and a snapshot
- * differing only in row order would read as a change. `ORDER BY 1, 2` would say that shorter and
- * would hold only for tables of two columns or more — asked for it over a one-column table, SQLite
- * 3.53.4 under node v26.7.0 answered "2nd ORDER BY term out of range - should be between 1 and 1".
- */
+// Read the model schema so a table added to the model is included in the replay comparison.
 function snapshot(db: NodeDb): string {
   const tables = db
     .all<{ name: string }>(`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name`)
@@ -241,19 +187,13 @@ export default async function supplierClash(): Promise<ScenarioResult> {
       "the row the receiver already held is untouched, owner included",
     );
 
-    // Everything else in the tail landed, and landed unaltered: the rows the receiver holds are
-    // compared field by field with the rows the sender shipped — the supplier invoices among them,
-    // minus the clashing row — so a value changed on the way in fails here rather than passing as
-    // one more row.
     assert.deepStrictEqual(
       rowsHeldFrom(receiver, senderId),
       rowsShipped(tail, ship.clashId),
       "every other row in the tail applied, with its values intact",
     );
 
-    // The retry. The clash is reported again, being still a clash, and nothing else moves. An apply
-    // treating every refused insert as a clash would report the clean invoice here too, its id
-    // being held already.
+    // The retry reports the same clash. The clean invoice's already-held id must stay quiet.
     const before = snapshot(receiver);
     const retried = applyTail(receiver, senderId, tail);
     assert.equal(retried.skippedClashes.length, 1, "the retry reports the same one clash");
@@ -261,10 +201,6 @@ export default async function supplierClash(): Promise<ScenarioResult> {
     assert.equal(retried.applied, 0, "the retry changed no row");
     assert.equal(snapshot(receiver), before, "the retry left every table byte-identical");
 
-    // CONTROL A — the plain `ON CONFLICT DO NOTHING` write. It reproduces the failure spec §4's S5
-    // rules out with "not silently dropped": the ship survives, so every assertion above about the
-    // rest of the tail is green here too, and what is gone is the report. Nobody is told a row was
-    // lost, and the row is in neither the table nor the result.
     const dropped = buildShip("s5-drop", open);
     const droppedResult = applyTailSilentDrop(dropped.receiver, dropped.senderId, dropped.tail);
     assert.equal(
@@ -285,10 +221,6 @@ export default async function supplierClash(): Promise<ScenarioResult> {
       "control: the rest of the ship landed, which is why nothing looks wrong",
     );
 
-    // CONTROL B — the same insert with nothing catching its refusal. It reproduces the failure the
-    // same spec line rules out with "not crashing the whole ship": one clashing row costs the whole
-    // batch, the apply throws, and the receiver is left holding none of the tail, records and sales
-    // included.
     const lost = buildShip("s5-lost", open);
     let unisolatedRefusal = "nothing was thrown";
     assert.throws(
@@ -313,18 +245,8 @@ export default async function supplierClash(): Promise<ScenarioResult> {
       "control: the receiver keeps its own row, having written it before the ship",
     );
 
-    // A refusal that is NOT about the invoice number has to leave the apply and take the batch with
-    // it, whatever rows the receiver happens to hold. That is what the rule's error check is for,
-    // and it is the case a rule reading only the table gets wrong: the receiver below already holds
-    // the arriving row's id, which is exactly what a table-first reading calls a ship arriving twice.
-    //
-    // The refusal is a trigger's RAISE(ABORT) — the same device the model already uses to stand in
-    // for the real ledger's append-only defence. A BEFORE INSERT trigger fires ahead of the primary
-    // key check, so the row is refused for a reason that has nothing to do with uniqueness:
-    // measured on SQLite 3.53.4 (`process.versions.sqlite` under node v26.7.0), inserting a held id
-    // against such a trigger gave errcode 1811 and the trigger's own message, not the 1555 a
-    // primary key gives. The receiver's own row goes in BEFORE the trigger is created, or the
-    // trigger refuses that insert too.
+    // Use a different constraint failure to prove the pair being present is insufficient to
+    // classify a clash.
     const refused = buildShip("s5-refused", open);
     insertInvoice(refused.receiver, refused.cleanId, refused.receiver.nodeId, "OTHER", "X-1");
     refused.receiver.exec(

@@ -1,23 +1,3 @@
-// Measurement 2 (#540): should SQLite's automatic fold-back be switched off?
-//
-// `packages/store` keeps SQLite's default (fold back every 1000 pages). The topology design §8.3 says
-// to switch it off once Litestream runs. Four arms, one variable at a time:
-//   A  default fold-back, bucket reachable      — the configuration slice 2 would ship if false
-//   B  fold-back off (0), bucket reachable      — S4's control configuration, for comparison
-//   C  default fold-back, bucket unreachable    — the CONTROL in the other direction: the side file
-//                                                  must grow here, or this probe cannot see growth
-//   D  default, unreachable, 15,000 sales       — arm 2b: past Litestream's documented emergency
-//                                                  threshold, `truncate-page-n` (default 121359 pages,
-//                                                  "~500MB"; litestream.io/reference/config, 2026-09-23)
-//
-// FAILING result for keeping the default — prints `AUTOCHECKPOINT_OFF_NEEDED=true` because arm A's
-// restore is incomplete, its integrity check is not `ok`, Litestream logged a WARN/ERROR line, its
-// peak side file is larger than arm B's, or its store held more than STORE_BYTES_FACTOR times arm B's
-// bytes at the end (the sign of repeated full copies).
-// PASSING result — `AUTOCHECKPOINT_OFF_NEEDED=false` with `A-restore-complete=true A-integrity=ok
-// A-log-problems=0` and A's peak at or below B's.
-// VOID — arm C grew under 4096 bytes a sale (a probe that cannot see growth measured nothing), or
-// arm B's own restore failed (the restore reading is broken).
 import assert from "node:assert";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -48,7 +28,6 @@ const SALES = 7_500;
 const THRESHOLD_SALES = 15_000;
 const ROUNDS = 15;
 const IDLE_MS = 1_500;
-/** SQLite's documented default for `wal_autocheckpoint`, read back rather than assumed. */
 const SQLITE_DEFAULT_AUTOCHECKPOINT = 1000;
 /** Litestream's documented `truncate-page-n` default at SQLite's default 4096-byte page. */
 const TRUNCATE_THRESHOLD_BYTES = 121_359 * 4096;

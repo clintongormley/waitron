@@ -1,20 +1,3 @@
-// Measurement 1b: measurement 1 (`restart-after-foldback.ts`) repeated at the side-file limit the
-// supervisor will enforce — stop Litestream when `venue.db-wal` reaches 256 MiB, fold it back from
-// our own connection, and restart Litestream against the same replica path (the same generation).
-// The offline phase uses a bucket that accepts connections and never answers, because Litestream
-// 0.5.18 did not bring the side file to the limit against a refused one.
-//
-// FAILING result — prints `RESTART_AT_LIMIT_COMPLETE=false` with `missing=<ranges>` naming sales made
-// after the first batch, or `daemon-alive=false`; and, as a separate finding rather than the verdict,
-// `full-copy=false` when no level-0 file written after the restart holds every page of the database.
-// PASSING result — `RESTART_AT_LIMIT_COMPLETE=true … missing=none integrity=ok daemon-alive=true`.
-// CONTROL — the store read BEFORE the restart must hold only the first batch
-// (`control-before-restart-rows` equal to `control-expected`), or the line reads `VOID`. The LTX
-// decoder has its own control: the first batch's level-9 file starts at transaction 1, which the LTX
-// format requires to carry every page, so `l9-control-pages` must equal `l9-control-expected`.
-//
-// `--no-restart` is the failing case on purpose: phase d starts no daemon, so nothing can upload
-// after the fold-back.
 import assert from "node:assert";
 import { mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -61,13 +44,8 @@ const MAX_OFFLINE_SALES = 40_000; // b — a bound, not a target: the loop stops
 const PAUSED = 20; // d — nothing attached, after the fold-back
 const AFTER_RESTART = 20; // d — right after the restart
 const AFTER_COPY = 20; // d — once a restore holds every sale before them
-/** Measurement 1's wait for an offline daemon to reopen a database it already knows. */
 const OFFLINE_ATTACH_MS = 3_000;
-/**
- * Phase b sells in rounds with an idle pause after each, S4's and measurement 2's cadence, so the
- * offline daemon is attached for tens of seconds while the side file grows. Unpaced, the first run
- * (2026-09-24) reached the limit in 825 ms.
- */
+// Pace the sales to give the offline daemon time to attach before the WAL hits the limit.
 const OFFLINE_ROUND = 400;
 const OFFLINE_IDLE_MS = 1_500;
 const POLL_MS = 100;
@@ -80,17 +58,10 @@ type LtxFile = {
   minTxid: number;
   maxTxid: number;
   pages: number;
-  /** Pages 1..commit, less SQLite's lock page when the database reaches it. */
   expectedFull: number;
 };
 
-/**
- * Walk an LTX file's page frames without decompressing them. The layout is superfly/ltx v0.5.2's
- * (the version string the pinned binary carries): a 100-byte big-endian header, then per page a
- * 4-byte page number, a 2-byte flags word and, with flag bit 0 set, a 4-byte length and that many
- * LZ4 bytes; a zero page number ends the pages, followed by a page index, its 8-byte length and a
- * 16-byte trailer. The last check refuses a walk that does not land exactly on that index.
- */
+// The page-frame offsets follow the pinned binary's LTX format.
 function decodeLtx(key: string, data: Uint8Array): LtxFile {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const magic = new TextDecoder().decode(data.subarray(0, 4));
@@ -143,7 +114,6 @@ function dirBytes(path: string): number {
   return total;
 }
 
-/** Restores back to back until one holds `expected` rows; each attempt gets a fresh path. */
 async function pollRestore(args: {
   bin: string;
   config: string;
@@ -212,7 +182,6 @@ async function main(): Promise<void> {
       const journalMode = node.get<{ journal_mode: string }>("PRAGMA journal_mode = WAL");
       assert.equal(journalMode?.journal_mode, "wal", "precondition: the database is in WAL mode");
 
-      // a — stream, and see the store hold it.
       daemon = replicate(bin, reachable);
       await waitForAttach(dbPath);
       sell(node, STREAMED);
@@ -229,7 +198,6 @@ async function main(): Promise<void> {
       await daemon.exited;
       daemon = undefined;
 
-      // b — attached but offline, selling until the side file reaches the limit.
       const offlineState: { exit: number | null | "alive" } = { exit: "alive" };
       daemon = replicate(bin, unreachable, (chunk) => (offlineLog += chunk));
       daemon.exited.then(
@@ -261,7 +229,6 @@ async function main(): Promise<void> {
       }
       const offlineAliveAtLimit = offlineState.exit === "alive";
 
-      // c — the supervisor's action at the limit: stop Litestream, fold back.
       const stopStarted = performance.now();
       daemon.kill();
       const offlineExit = await daemon.exited;
@@ -289,7 +256,6 @@ async function main(): Promise<void> {
       const l9 = objectsBefore.find((object) => object.key.startsWith(`${PREFIX}/0009/`));
       const l9Control = l9 ? await fetchLtx(store, l9) : undefined;
 
-      // d — restart against the reachable store, same config, same replica path.
       const state: { exit: number | null | "alive" } = { exit: noRestart ? null : "alive" };
       const restartStarted = performance.now();
       if (!noRestart) {
@@ -343,7 +309,6 @@ async function main(): Promise<void> {
       const decoded: LtxFile[] = [];
       for (const object of newL0) decoded.push(await fetchLtx(store, object));
 
-      // e — stop, restore to a fresh path, check every sale.
       if (daemon) {
         daemon.kill();
         await daemon.exited;

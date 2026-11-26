@@ -1,18 +1,3 @@
-// Measurement 3 (#540): which restore points survive the history window.
-//
-// Production ships L1 30s, L2 5m, L3 1h, one full copy a week, 335 hours kept. Two weeks cannot
-// be run, so this runs a COMPRESSED schedule that keeps the ORDER of every interval but not their
-// ratios, for three and a half windows, and reports which kind of file survives which boundary. The
-// step from here to "hours" is an extrapolation and is labelled as one where it is recorded.
-//
-// Every level file ever seen is remembered (the listing is sampled every five seconds), so the probe
-// can ask for a boundary whose file has since been merged away — the case that decides granularity.
-//
-// There is no pass/fail: it is a measurement. What would make it VOID, printed in advance:
-// `snapshot-interval-applied=false` (fewer full copies than the schedule implies — the `snapshot:`
-// block was ignored), `unmatched-keys>0` (the store layout is not the recorded `<level>/<min>-<max>.ltx`),
-// `beyond-refused=false` (a restore past the newest transaction succeeded, so a refusal cannot be
-// read as a missing point), or `latest-rows` differing from `sales` (the newest point is wrong).
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,7 +11,6 @@ import type { StoredObject } from "./common.ts";
 
 const PROBE = "m3-restore-points";
 const PREFIX = "venues/v1/gen-1-box-a-20260923T000000Z";
-/** Seconds. Production: L1 30, L2 300, L3 3600, full copy 604800, kept 1206000. */
 const SCHEDULE = { l1: 2, l2: 10, l3: 30, snapshot: 60, retention: 180, l0Retention: 2 };
 const GLOBAL_LINES = [
   `snapshot:`,

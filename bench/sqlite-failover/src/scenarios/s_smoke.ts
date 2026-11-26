@@ -1,6 +1,3 @@
-// Smoke: the things every other scenario stands on — a running object store, a SQLite node, one
-// hash-linked ledger row, and a ledger that refuses every way of changing one. It asserts nothing
-// about the failover loop; if it fails, no other verdict in the run means anything.
 import assert from "node:assert";
 import type { ScenarioContext, ScenarioResult } from "../scenarios.ts";
 import { openNode, recordSale, type NodeDb } from "../model.ts";
@@ -19,12 +16,8 @@ export default async function smoke({ startStore }: ScenarioContext): Promise<Sc
     assert.equal(second.secuencia, 2, "the chain advances");
     assert.notEqual(second.huella, first.huella, "each record hashes to its own huella");
 
-    // The append-only triggers are a guard nothing else in this rig runs: applyTail re-inserts a
-    // RECORDS row with ON CONFLICT DO NOTHING, which fires neither trigger, and its envios write
-    // does update a row already there but envios carries no such trigger. Every way SQLite offers
-    // of changing a row is checked here, INSERT OR REPLACE included: it deletes the conflicting row
-    // internally, and that internal delete reaches the BEFORE DELETE trigger only because openNode
-    // turns recursive_triggers on.
+    // Exercise the append-only triggers directly. The shipping scenarios insert records or skip
+    // duplicates and never try to rewrite them.
     const mutations: [string, string][] = [
       [
         "UPDATE",

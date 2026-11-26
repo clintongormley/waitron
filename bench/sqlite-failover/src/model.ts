@@ -1,10 +1,4 @@
-/**
- * A MODEL of the fiscal ledger the failover loop moves around — never the ledger itself.
- *
- * Nothing here is imported by a product package, and nothing here may be read as a statement about
- * what `packages/fiscal-verifactu` does. Each table below names the real table it stands in for so a
- * reader can check the shape is faithful; the spec's §2 lists what the model deliberately leaves out.
- */
+// An independent model of the fiscal ledger for the failover scenarios.
 import { createHash, randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import type { SQLInputValue, SQLOutputValue } from "node:sqlite";
@@ -86,20 +80,9 @@ export type SupplierInvoiceRow = {
   invoice_number: string;
 };
 
-/** What a receiver already holds, as the sender needs to see it to compute a tail. */
 export type HeldSummary = {
-  /**
-   * Per node, the highest `secuencia` held with NO gap below it, counting up from 1 (a chain's
-   * first record is secuencia 1). A receiver holding 1, 2, 5 reports 2, not 5: `MAX(secuencia)`
-   * would report 5 and 3 and 4 would never be shipped again, and nothing downstream looks for a
-   * hole. Re-shipping 5 is the price. Its `records` row is re-inserted `ON CONFLICT DO NOTHING` and
-   * nothing about it changes; its `envios` row is not inert, because a re-shipped copy whose
-   * `estado` has advanced IS adopted — the `terminal-state-wins` rule, `EnvioRule` below.
-   *
-   * Sparse, not one entry per node: `summarise` only creates a key for a `node_id` that appears in
-   * `records`, so a chain the receiver holds nothing for is `undefined` here, which `diffTail` reads
-   * as 0 — ship the chain from its first record.
-   */
+  // A receiver reports only its contiguous prefix from sequence 1. Reporting a later row across a
+  // gap would cause the sender to skip the missing rows.
   contiguousTo: Record<string, number>;
   saleIds: string[];
   supplierInvoiceIds: string[];
@@ -119,10 +102,6 @@ export type ApplyResult = {
   refusedForeign: number;
 };
 
-/**
- * One node: its SQLite database plus the id whose chain it owns. `handle` is the raw
- * `node:sqlite` database, because later scenarios reach past these helpers into plain SQL.
- */
 export type NodeDb = {
   nodeId: string;
   handle: DatabaseSync;
@@ -132,20 +111,9 @@ export type NodeDb = {
     ...params: SQLInputValue[]
   ): Row | undefined;
   all<Row = Record<string, SQLOutputValue>>(sql: string, ...params: SQLInputValue[]): Row[];
-  /**
-   * Release the SQLite handle. Every node a scenario opens is closed, a `:memory:` one included:
-   * the handle is unusable afterwards (`ERR_INVALID_STATE`), so the close belongs in a `finally`
-   * after the scenario's last read. A node opened on a real file path is closed before anything
-   * replaces that file.
-   */
   close(): void;
 };
 
-/**
- * The model's hash. It is NOT `computeHuella` (from `@waitron/verifactu`), which hashes a
- * field-ordered AEAT record, not an opaque string. Nothing computed here is evidence about the real
- * chain: what the scenarios use it for is that a chain link is checkable, not that it is AEAT's.
- */
 export function toyHuella(prev: string | null, payload: string): string {
   return createHash("sha256")
     .update(`${prev ?? ""}|${payload}`)
@@ -155,29 +123,10 @@ export function toyHuella(prev: string | null, payload: string): string {
 export function openNode(nodeId: string, path?: string): NodeDb {
   const handle = new DatabaseSync(path ?? ":memory:");
   handle.exec("PRAGMA foreign_keys = ON");
-  // This pragma is what closes the INSERT OR REPLACE path past the append-only triggers below:
-  // that statement deletes the conflicting row INTERNALLY, and at SQLite's default OFF an internal
-  // delete fires no BEFORE DELETE trigger. Measured on node v26.7.0 against this schema, one ledger
-  // row, the same statement: OFF -> not refused, the row's huella and payload were rewritten;
-  // ON -> refused, "records is append-only". `s_smoke` asserts all four refusals.
+  // SQLite needs recursive triggers enabled for the internal delete in `INSERT OR REPLACE` to hit
+  // the append-only guard.
   handle.exec("PRAGMA recursive_triggers = ON");
-  // A writer here can be competing with a litestream process reading the same file (S3 sells under
-  // a `replicate` daemon), and without a busy timeout SQLite refuses instead of waiting. It is only
-  // half the fix, and the other half is `BEGIN IMMEDIATE` in `withTx`. The experiment, run twice by
-  // different people on 2026-09-18: a node selling every 5ms for 12 seconds against a daemon on the
-  // fast compaction settings, about 1800 writes a time. Each half ALONE leaves writes refused with
-  // "database is locked" — 16 and 19 on the first run, 15 and 15 on the second — and the two
-  // together leave none, on both runs. The counts move run to run; what reproduced is that one
-  // change alone is not enough.
-  //
-  // Five seconds is a bound on a STALL, and it is NOT justified by a measurement. Nothing here has
-  // measured how long a litestream checkpoint holds the file, which is the wait this pragma exists
-  // for. The only wait on record is an ARTIFICIAL one a probe chose: a holder process told to keep
-  // `BEGIN IMMEDIATE` for 1500ms, against a second connection carrying this pragma, which waited it
-  // out and committed — 1590ms in `delete` journal mode and 1613ms in WAL (2026-09-18; longer than
-  // the hold because the wait also covers the holder's commit). That number is a fact about the
-  // probe, not about this rig. The five seconds is deliberately large rather than dialled to
-  // anything.
+  // The busy timeout lets an immediate write transaction wait for Litestream's lock.
   handle.exec("PRAGMA busy_timeout = 5000");
   handle.exec(SCHEMA);
   return {
@@ -192,36 +141,8 @@ export function openNode(nodeId: string, path?: string): NodeDb {
   };
 }
 
-/**
- * Every caller writes, so the write lock is asked for at BEGIN rather than partway through.
- *
- * The OUTCOME this rests on was measured in BOTH journal modes, and reproduces in both — which
- * matters because litestream switches the file to WAL while it replicates (`litestream.ts`), so a
- * node in S3 is in `delete` mode until the daemon starts and in WAL afterwards. Measured 2026-09-18
- * on node v26.7.0, `node:sqlite`, against a holder process that took `BEGIN IMMEDIATE` and kept it
- * for 1500ms, with the probe connection carrying `PRAGMA busy_timeout = 5000`:
- *
- *     mode=delete style=deferred  -> REFUSED database is locked elapsed-ms=0
- *     mode=delete style=immediate -> ACCEPTED elapsed-ms=1590
- *     mode=wal    style=deferred  -> REFUSED database is locked elapsed-ms=1
- *     mode=wal    style=immediate -> ACCEPTED elapsed-ms=1613
- *
- * "deferred" is what `recordSale` does under a plain `BEGIN`: read `chain_head`, then insert. It is
- * refused AT ONCE in both modes, the timeout buying it nothing, while the same connection asking up
- * front with `BEGIN IMMEDIATE` waits the holder out and commits.
- *
- * WHY the deferred transaction is refused differs by mode, and was NOT established here. A separate
- * two-connection probe the same day, with nobody holding a write lock, says the two modes behave
- * differently: in `delete` mode a connection on `BEGIN` alone did not stop another's
- * `BEGIN EXCLUSIVE` (`ACCEPTED`), while one on `BEGIN` and then a `SELECT` did (refused, "database
- * is locked") — so there a held READ lock is what refuses the upgrade. In WAL mode NEITHER stopped
- * it: a reader there blocks nobody, and that read-lock account does not carry over. What carries
- * over is the table above.
- *
- * Under load the same difference shows as counts: with `openNode`'s pragma set and this word left
- * out, 16 of about 1800 writes were refused on one run and 15 on another (the runs recorded on that
- * pragma).
- */
+// Take the write lock before reading the chain tip. Upgrading an existing read transaction can
+// fail immediately despite the busy timeout.
 function withTx<T>(handle: DatabaseSync, body: () => T): T {
   handle.exec("BEGIN IMMEDIATE");
   try {
@@ -234,20 +155,11 @@ function withTx<T>(handle: DatabaseSync, body: () => T): T {
   }
 }
 
-/** `changes` is `number | bigint` depending on the statement's configuration. */
 function changed(result: { changes: number | bigint }): number {
   return Number(result.changes);
 }
 
-/**
- * Append one hash-linked record with its pending submission row and the sale it describes, in one
- * transaction: a chain tip read that is not in the same transaction as the append it decides is the
- * chain fork the whole rig exists to look for.
- *
- * `recordSale` writes exactly ONE line per sale: `sale_lines` is here only so `applyTail` has a
- * child row whose parent must be inserted first. A scenario needing more than one line per sale has
- * to widen this function.
- */
+// Read the chain tip and append under the same write lock so a sale extends the tip it read.
 export function recordSale(
   db: NodeDb,
   payloadCents: number,
@@ -294,11 +206,7 @@ export function recordSale(
   });
 }
 
-/** What this node holds right now, for every chain — not only its own. */
 export function summarise(db: NodeDb): HeldSummary {
-  // The contiguous run is walked in JavaScript over one ordered read rather than asked of SQL: the
-  // whole model ledger is a scenario's worth of rows, so scanning it costs nothing and the loop
-  // says what it means where a recursive CTE would not. A node holding no secuencia 1 reports 0.
   const held = db.handle
     .prepare(`SELECT node_id, secuencia FROM records ORDER BY node_id, secuencia`)
     .all() as unknown as { node_id: string; secuencia: number }[];
@@ -319,24 +227,8 @@ export function summarise(db: NodeDb): HeldSummary {
   return { contiguousTo, saleIds, supplierInvoiceIds };
 }
 
-/**
- * The rows the SENDER owns that the receiver lacks.
- *
- * Records are selected by a high-water mark rather than row by row, and the mark is the receiver's
- * highest CONTIGUOUS `secuencia` for this chain, so everything at or below it is certainly held and
- * everything above it is shipped. A row above the mark that the receiver already holds is shipped
- * again: its `records` row changes nothing, that insert being `ON CONFLICT DO NOTHING`, but its
- * `envios` row can, because `applyTail` adopts a re-shipped submission state that has advanced
- * (`EnvioRule`). A row at or BELOW the mark is not shipped again at all, whatever its submission
- * state has done since the receiver took its copy — S2's Part D measures what that costs.
- *
- * The narrow claim the design rests on is about the SENDER'S OWN chain, not about `records` as a
- * whole: the only writer of a node's own chain is `recordSale`, appending 1, 2, 3, …. `applyTail`
- * also writes `records`, but only for the FOREIGN `senderNodeId` it was handed — it refuses a row
- * whose `node_id` is not that one — and this diff reads only `sender.nodeId`'s rows.
- *
- * Sales and supplier invoices carry no order, so those are diffed by id.
- */
+// The receiver's contiguous mark is per chain. Send only the local chain, since a foreign chain
+// might have gaps.
 export function diffTail(sender: NodeDb, receiverHeld: HeldSummary): TailBatch {
   const watermark = Number(receiverHeld.contiguousTo[sender.nodeId] ?? 0);
   const heldSales = new Set(receiverHeld.saleIds);
@@ -379,33 +271,8 @@ export function diffTail(sender: NodeDb, receiverHeld: HeldSummary): TailBatch {
   return { records, envios, sales, saleLines, supplierInvoices };
 }
 
-/**
- * How a shipped `envios` row meets the row the receiver already holds. The rule is a parameter so a
- * scenario can drive the same ship under each of these and see the difference; only the first is a
- * rule the design claims, and the other two exist to be the control that reproduces its absence.
- *
- *  - `terminal-state-wins` — the rule, and it has two sides. A receiver row that is already
- *    `enviado` and acked is never walked back by a re-shipped copy taken before it was submitted;
- *    a receiver row that is not yet terminal ADOPTS the shipped state, terminal included. The first
- *    side keeps the receiver from filing a record it has itself filed, the second keeps it from
- *    filing a record the record's OWNER has already filed — neither side implies the other, so S2
- *    drives both.
- *    The guard reads the row already in the table and not the one arriving, so a `pendiente`
- *    arriving over an `enviando` row does overwrite it. `drainPass` never leaves a row `enviando`
- *    across a call: it is synchronous, and reading `envios` back after a pass on node v26.7.0 gave
- *    every row `enviado` when the stub accepted all three, `enviado pendiente pendiente` when it
- *    threw on the second, and three `pendiente` when it threw on all of them — never an `enviando`.
- *    `applyShippedTail` is the way one does arrive: it writes `excluded.estado` verbatim, so a tail
- *    taken WHILE the sender's own drain held a row `enviando` puts the receiver's row into
- *    `enviando` — and since a pass claims only `pendiente` rows, no drain on the receiver moves it
- *    again. S2's Part E measures that.
- *  - `regressing` — the upsert with no guard on the row already there. S2's control for the first
- *    side: a receiver row the receiver itself has submitted is walked back to the state the shipped
- *    copy was in, and the next drain pass files it again.
- *  - `insert-only` — the shipped state is dropped whenever the receiver already holds the row. S2's
- *    control for the second side: a row the SENDER has submitted stays `pendiente` on the receiver,
- *    whose drain then files a record its owner has already filed.
- */
+// The model preserves a terminal receiver row and adopts terminal state sent by
+// its owner. The other rules let S2 exercise those two failures separately.
 type EnvioRule = "terminal-state-wins" | "regressing" | "insert-only";
 
 const ENVIO_UPSERT: Record<EnvioRule, string> = {
@@ -419,47 +286,9 @@ const ENVIO_UPSERT: Record<EnvioRule, string> = {
      ON CONFLICT DO NOTHING`,
 };
 
-/**
- * How a shipped `supplier_invoices` row meets a row the receiver already holds under the same
- * `(supplier, invoice_number)`. Like `EnvioRule` this is a parameter so a scenario can drive the
- * same ship under each of them; only the first is a rule the design claims, and the other two exist
- * to be the controls that reproduce its absence.
- *
- *  - `report-and-skip` — the rule. The insert is attempted, and a refusal is read in two steps,
- *    because the two questions have different answers. WHICH CONSTRAINT refused the row is in the
- *    error, and only a uniqueness refusal is a shape this rule knows (`isUniquenessRefusal`);
- *    anything else is rethrown and takes the batch down with it. WHAT that refusal means is not in
- *    the error, and comes from the rows already in the table: a row holding that pair under a
- *    DIFFERENT id is the clash the design leaves to a person (outbox-swap §4.2), so the arriving
- *    row is named in `skippedClashes` and left out of the table, while a row already held under the
- *    SAME id is a retried ship and a silent no-op. Distinguishing those two is the whole branch — a
- *    ship is retried whenever its confirmation is lost, so reporting every refusal as a clash would
- *    hand a person a queue of rows that are already applied.
- *    Nothing wraps that insert in a SAVEPOINT, and it needs none. SQLite's own documentation says
- *    of ABORT, its default conflict resolution, that it "backs out any changes made by the current
- *    SQL statement; but changes caused by prior SQL statements within the same transaction are
- *    preserved and the transaction remains active" (https://sqlite.org/lang_conflict.html,
- *    read 2026-09-18).
- *    Confirmed on the engine this rig runs — SQLite 3.53.4, `process.versions.sqlite` under node
- *    v26.7.0 — by running one batch twice, once with the clashing insert inside
- *    `SAVEPOINT`/`ROLLBACK TO` and once with the `try`/`catch` alone: both arms committed the same
- *    rows and neither `COMMIT` errored. S5's `assert.deepStrictEqual(rowsHeldFrom(receiver,
- *    senderId), rowsShipped(tail, clashId))` holds a savepoint-free apply to keeping the rest of
- *    the batch — every row of it, the sender's other supplier invoice included — so the `scenarios`
- *    run is the standing check. An insert here written with a conflict resolution other than the
- *    default puts all of that back in question — see the README section "What S5 measures, and the
- *    savepoint it does not need".
- *  - `silent-drop` — the plain `ON CONFLICT DO NOTHING` write. S5's control for the failure spec §4
- *    rules out with "not silently dropped": the clash is absorbed, `skippedClashes` stays empty,
- *    and nothing anywhere records that a row was lost.
- *  - `unisolated` — nothing catches the refusal, so the error leaves `withTx` and rolls the whole
- *    batch back. S5's control for the failure the same line rules out with "not crashing the whole
- *    ship": one clash costs the entire ship.
- *
- * Unlike its sibling `ENVIO_UPSERT`, whose three statements really do differ, `CLASH_INSERT` holds
- * the same statement character for character under `report-and-skip` and under `unisolated`: what
- * separates those two is whether `applyShippedTail` catches the refusal, not what it sends.
- */
+// SQLite's default ABORT leaves the surrounding transaction active after a refused insert. Report
+// a clash only when the pair belongs to a different id, so replay of an already-held id stays
+// quiet.
 type ClashRule = "report-and-skip" | "silent-drop" | "unisolated";
 
 const CLASH_INSERT: Record<ClashRule, string> = {
@@ -471,17 +300,8 @@ const CLASH_INSERT: Record<ClashRule, string> = {
      VALUES (?, ?, ?, ?)`,
 };
 
-/**
- * SQLite's extended result codes for the two refusals `report-and-skip` knows how to read: a
- * PRIMARY KEY conflict and a UNIQUE-index conflict. Measured on SQLite 3.53.4
- * (`process.versions.sqlite` under node v26.7.0), against a table with a text primary key, a NOT
- * NULL column and a two-column UNIQUE — a duplicate primary key gave 1555, a duplicate unique pair
- * 2067, a missing NOT NULL value 1299 and a trigger's RAISE(ABORT) 1811.
- *
- * The same probe is why `errstr` cannot do this job, and a reader will reach for it: all four
- * refusals carry the errstr "constraint failed", so classifying on it would let a NOT NULL refusal
- * or a trigger's refusal be treated as a clash.
- */
+// Use the extended code because `errstr` also says `constraint failed` for unrelated trigger and
+// NOT NULL refusals.
 const SQLITE_CONSTRAINT_PRIMARYKEY = 1555;
 const SQLITE_CONSTRAINT_UNIQUE = 2067;
 
@@ -493,11 +313,6 @@ function isUniquenessRefusal(error: unknown): boolean {
 
 type ShipRules = { envio: EnvioRule; clash: ClashRule };
 
-/**
- * Apply a shipped tail to the receiver, in one transaction. `envios` follows `terminal-state-wins`
- * and `supplier_invoices` follows `report-and-skip` — see `EnvioRule` and `ClashRule` for what each
- * rule is and what it does not cover.
- */
 export function applyTail(receiver: NodeDb, senderNodeId: string, tail: TailBatch): ApplyResult {
   return applyShippedTail(receiver, senderNodeId, tail, {
     envio: "terminal-state-wins",
@@ -505,7 +320,6 @@ export function applyTail(receiver: NodeDb, senderNodeId: string, tail: TailBatc
   });
 }
 
-/** S2's control for one side of terminal-state-wins — see `EnvioRule`. */
 export function applyTailRegressing(
   receiver: NodeDb,
   senderNodeId: string,
@@ -517,7 +331,6 @@ export function applyTailRegressing(
   });
 }
 
-/** S2's control for the other side of terminal-state-wins — see `EnvioRule`. */
 export function applyTailInsertOnly(
   receiver: NodeDb,
   senderNodeId: string,
@@ -529,7 +342,6 @@ export function applyTailInsertOnly(
   });
 }
 
-/** S5's control for a clash nobody is told about — see `ClashRule`. */
 export function applyTailSilentDrop(
   receiver: NodeDb,
   senderNodeId: string,
@@ -541,7 +353,6 @@ export function applyTailSilentDrop(
   });
 }
 
-/** S5's control for a clash that costs the whole ship — see `ClashRule`. */
 export function applyTailUnisolated(
   receiver: NodeDb,
   senderNodeId: string,
@@ -559,12 +370,7 @@ function applyShippedTail(
   tail: TailBatch,
   rules: ShipRules,
 ): ApplyResult {
-  // The only writer of a node's OWN chain is `recordSale`, appending 1, 2, 3, … (see `diffTail`).
-  // A tail claiming to come from the receiver itself is refused before any of it is written, and
-  // what that prevents is a chain FORK rather than a hole: the record inserts below are ON CONFLICT
-  // DO NOTHING, so such a batch fills gaps instead of appending past them, but the chain_head
-  // upsert at the end of this function would then move THIS node's own tip onto a huella it never
-  // computed — and `recordSale` reads that tip as the next record's huella_anterior.
+  // Only `recordSale` appends to this node's own chain. A shipped tail can never supply its rows.
   if (senderNodeId === receiver.nodeId) {
     throw new Error(`applyTail: node ${receiver.nodeId} was handed a tail from its own chain`);
   }
@@ -574,10 +380,6 @@ function applyShippedTail(
     let refusedForeign = 0;
     const skippedClashes: SupplierInvoiceRow[] = [];
 
-    // `records` is idempotent by construction: a ship is retried whenever its confirmation is
-    // lost, so a second apply of a RECORDS row already held must be a no-op rather than an error.
-    // That is a claim about this insert alone — the `envios` write further down DOES change a row
-    // already there, under the rule `EnvioRule` states.
     const insertRecord = receiver.handle.prepare(
       `INSERT INTO records (node_id, secuencia, huella, huella_anterior, payload)
        VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
@@ -592,20 +394,7 @@ function applyShippedTail(
       );
     }
 
-    // Parents before children, or the FK to `records` rejects the envio.
-    //
-    // `applied` counts rows this apply CHANGED, not rows it was handed, and the upsert reports that
-    // itself: under `terminal-state-wins`, `node v26.7.0` returned `{changes:0}` for an existing
-    // `enviado`/`acked=1` row handed a `pendiente` (read back afterwards: unchanged) and
-    // `{changes:1}` for the same statement over a `pendiente` row — probed against this schema
-    // before the rule was written.
-    //
-    // The rule's second condition — the arriving row's `estado`/`acked` differing from the row
-    // already there — is what keeps that count truthful when nothing changes. Probed on node
-    // v26.7.0 against this schema, one record shipped and then shipped again unaltered: without the
-    // condition the second apply returned `applied:1`, with it `applied:0`, and both left every
-    // table byte-identical. S2's Part E holds the count to a number, so the `scenarios` run is the
-    // standing check.
+    // Insert parent records before submission rows because the latter reference them.
     const insertEnvio = receiver.handle.prepare(ENVIO_UPSERT[rules.envio]);
     for (const row of tail.envios) {
       if (row.node_id !== senderNodeId) {
@@ -626,11 +415,8 @@ function applyShippedTail(
       applied += changed(insertSale.run(row.id, row.node_id, row.total_cents));
     }
 
-    // A sale line carries no node of its own: its owner is its parent sale's node. Ownership is
-    // read back from the RECEIVER's own `sales` rows, after the parent inserts above have run in
-    // this transaction — never from the batch's claim. A batch claiming a sale id the receiver
-    // already holds under a DIFFERENT node inserts nothing (the insert conflicts), so trusting the
-    // claim would hang the batch's line off that other node's sale.
+    // A line inherits ownership from the receiver's parent sale, including parents inserted by
+    // this batch.
     const senderSaleIds = new Set(
       (
         receiver.handle
@@ -652,8 +438,6 @@ function applyShippedTail(
       );
     }
 
-    // `supplier_invoices` carries the model's one natural key, so it is the one table where a row
-    // the sender owns can be unapplicable rather than merely already-held — see `ClashRule`.
     const insertSupplierInvoice = receiver.handle.prepare(CLASH_INSERT[rules.clash]);
     const invoiceHoldingPair = receiver.handle.prepare(
       `SELECT id FROM supplier_invoices WHERE supplier = ? AND invoice_number = ?`,
@@ -675,31 +459,18 @@ function applyShippedTail(
           insertSupplierInvoice.run(row.id, row.node_id, row.supplier, row.invoice_number),
         );
       } catch (error) {
-        // Classify by the ERROR before looking at the table: a refusal that is not a uniqueness
-        // one — a NOT NULL value missing, a trigger's RAISE(ABORT) — is no clash, whatever rows
-        // happen to sit there, and reading the table first would swallow it.
+        // Check the SQLite error before looking at stored rows, since a matching pair can coexist
+        // with an unrelated refusal.
         if (!isUniquenessRefusal(error)) throw error;
         const holder = invoiceHoldingPair.get(row.supplier, row.invoice_number) as
           { id: string } | undefined;
         if (holder) {
-          // Held under another id: the clash a person resolves. Held under this same id: a ship
-          // arriving twice, and there is nothing to do.
           if (String(holder.id) !== row.id) skippedClashes.push(row);
           continue;
         }
-        // Nothing holds the pair, so it was the primary key that refused: the receiver holds this
-        // id already, under some other supplier and number. That is an already-applied id rather
-        // than a clash over the invoice number, so it is left alone and not reported. Nothing
-        // drives this line today: a retried ship carries each row's id and its pair together, so
-        // S5 is green with the line deleted — the README section on S5 records that run.
         if (invoiceById.get(row.id)) continue;
-        // Past `isUniquenessRefusal` only two codes arrive, 1555 and 2067, and this table carries
-        // exactly two uniqueness constraints for them to come from: `id TEXT PRIMARY KEY` (`SCHEMA`
-        // above, model.ts:51) and `UNIQUE (supplier, invoice_number)` (model.ts:53). The pair
-        // lookup answers for the second and the id lookup for the first, so each code leaves
-        // through a branch above. A third uniqueness constraint added to the table would leave a
-        // code with no branch, and this rethrow is how such a refusal leaves the apply rather than
-        // being counted as a row applied.
+        // Rethrow an unexplained uniqueness refusal, since neither the primary key nor the invoice
+        // pair accounted for it.
         throw error;
       }
     }
@@ -726,38 +497,21 @@ function applyShippedTail(
   });
 }
 
-/**
- * The model of a stepdown's "files nothing": a fenced node's `drainPass` returns at once. Held in
- * memory rather than in the node's database because S2 never reopens a fenced node, and the fence
- * belongs to the open handle.
- */
 const fencedNodes = new WeakSet<NodeDb>();
 
 export function fence(db: NodeDb): void {
   fencedNodes.add(db);
 }
 
-/**
- * MODEL of A1018's fiscal-only return batch (plan, Formats → "Return batch"): what a returning box
- * sends the box that replaced it. There is no field for sales, sale lines or supplier invoices, so
- * the batch cannot carry a business row. `returnedFromEnviando` names the rows the builder carried
- * as `pendiente` that the sender held `enviando`.
- */
+// The return batch carries fiscal rows only. Business rows travel with the regular tail.
 export type ReturnBatch = {
   records: RecordRow[];
   envios: EnvioRow[];
   returnedFromEnviando: number[];
 };
 
-/**
- * How the batch is cut. Only the first is the design; the other two exist to be S2's controls.
- *
- *  - `full-state` — records after the receiver's reported head, EVERY `envios` row the sender
- *    holds for its chain, and each `enviando` row carried as `pendiente`.
- *  - `missing-only` — records after the head and only THEIR `envios` rows, the `pendiente` return
- *    kept: what `diffTail` ships, without the business rows.
- *  - `keeps-enviando` — every `envios` row, with `estado` carried verbatim.
- */
+// Include submission state for records the receiver already holds. The receiver's reported head
+// covers the records, and can predate filing by their owner.
 type ReturnRule = "full-state" | "missing-only" | "keeps-enviando";
 
 function buildReturn(
@@ -812,7 +566,6 @@ export function buildReturnBatch(
   return buildReturn(sender, reportedHeads, "full-state");
 }
 
-/** S2's control: the batch cut back to the records the receiver lacks — see `ReturnRule`. */
 export function buildReturnBatchMissingOnly(
   sender: NodeDb,
   reportedHeads: Readonly<Record<string, number>>,
@@ -820,7 +573,6 @@ export function buildReturnBatchMissingOnly(
   return buildReturn(sender, reportedHeads, "missing-only");
 }
 
-/** S2's control: the batch built without the `enviando` → `pendiente` return — see `ReturnRule`. */
 export function buildReturnBatchKeepsEnviando(
   sender: NodeDb,
   reportedHeads: Readonly<Record<string, number>>,
@@ -828,12 +580,10 @@ export function buildReturnBatchKeepsEnviando(
   return buildReturn(sender, reportedHeads, "keeps-enviando");
 }
 
-/** The chains a batch touches, which the receiver pauses while it applies. */
 export function chainsOf(batch: ReturnBatch): string[] {
   return [...new Set([...batch.records, ...batch.envios].map((row) => row.node_id))].sort();
 }
 
-/** Apply a return batch under the same rules as a tail ship (`applyTail`), with no business rows. */
 export function applyReturnBatch(
   receiver: NodeDb,
   senderNodeId: string,
@@ -848,36 +598,8 @@ export function applyReturnBatch(
   });
 }
 
-/**
- * One drain pass over every pending submission this node holds. Two SHAPES are borrowed from the
- * real drain; what triggers the second is the model's own stand-in, not a mirror:
- *
- *  1. It claims across EVERY chain with no node filter — the real `claimBatch` takes no node
- *    argument (its declaration in `packages/fiscal-verifactu/src/drain.ts`), which is why a record
- *    shipped from another node can be submitted by the receiver before the ship is confirmed.
- *  2. A per-pass in-memory blocked-chain set, skipping the rest of a blocked chain and re-examining
- *    it next pass (`blockedSifIds` in drain.ts, declared in `drainDue` and handed to `claimBatch` —
- *    the real key is `sif_id`, the model's is `node_id`).
- *
- * The real set is added to in exactly one place, inside `claimBatch`: the claim-time environment
- * guard, when a row's `entorno` is NULL or disagrees with `WAITRON_ENV`. The model has no
- * `entorno`, so it blocks a chain on a `submit` throw instead. The real drain's answer to a
- * `submit` throw is a different thing the model does not have: `drainDue`'s `catch` around
- * `client.submit` calls `backoffBatch`, which backs the claimed batch off (rows to `pendiente`, an
- * incidencia, a later `proximo_intento_en`) and ends the pass for EVERY chain.
- *
- * Every real site above is NAMED rather than numbered. They were cited by line number until
- * 2026-09-21, when task P4b of the storage switch lengthened
- * `packages/fiscal-verifactu/src/drain.ts` and two of the numbers stopped landing on what they
- * described. What those sites DO is unchanged.
- *
- * `submit` stands in for the AEAT call. A throw returns the row to `pendiente`, so the pass records
- * a refusal rather than losing the row.
- *
- * Two inputs from outside, both for S2's return batch (A947 §7.1 as amended by A1018): a fenced
- * node's pass files nothing, and `paused` names chains the pass skips, as `blockedChains` does, for
- * as long as the caller keeps them in the set.
- */
+// The model blocks a chain after its submit stub throws, leaving the refused row pending. The set
+// lasts for one pass.
 export function drainPass(
   db: NodeDb,
   submit: (nodeId: string, secuencia: number) => void,

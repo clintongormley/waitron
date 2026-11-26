@@ -1,9 +1,3 @@
-/**
- * What the slice-2 probes share (#540). A probe is a one-off measurement, not a scenario:
- * `../scenarios.ts` discovers only `src/scenarios/`, so nothing here runs in the scenario table, the
- * pre-push hook or CI. Each probe
- * prints exactly one result line in the table's shape, so the results note can quote it verbatim.
- */
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -23,25 +17,18 @@ export type Load = {
   maxMs: number;
 };
 
-/**
- * Several times the rig's 30-second bound on one restore, so a single stalled child cannot use the
- * whole window — the reason `scenarios/s_litestream_roundtrip.ts` gives for its own deadline.
- */
 export const STORE_DEADLINE_MS = 120_000;
 
-/** How long a daemon is given to open a fresh database, watched by its sidecar directory. */
 const ATTACH_DEADLINE_MS = 30_000;
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** `count` sales, one transaction each. */
 export function sell(node: NodeDb, count: number): void {
   for (let i = 0; i < count; i += 1) recordSale(node, 1000 + (i % 997));
 }
 
-/** Every ledger row in a database on disk, through a read-only handle so reading changes nothing. */
 export function rowsIn(dbPath: string): RecordedRow[] {
   const db = new DatabaseSync(dbPath, { readOnly: true });
   try {
@@ -63,17 +50,13 @@ export function integrityOf(dbPath: string): string {
   }
 }
 
-/** The `-wal` side file's size, or 0 when SQLite has not created it. */
 export function walBytes(dbPath: string): number {
   const path = `${dbPath}-wal`;
   return existsSync(path) ? statSync(path).size : 0;
 }
 
-/**
- * Restore the store's copy into `outPath` and read its rows, or answer `"no-backup"` when litestream
- * refuses with its missing-backup words. Every other failure is rethrown: a litestream that could not
- * run must never read as one that refused (the rule `s_litestream_roundtrip.ts`'s control paid for).
- */
+// Treat the missing-backup refusal as a wait. Other errors say the probe could not establish
+// whether there was a backup.
 export async function restoredRows(
   bin: string,
   config: string,
@@ -92,10 +75,7 @@ export async function restoredRows(
   return rowsIn(outPath);
 }
 
-/**
- * Poll the store by restoring until it holds at least `expected` rows, or the deadline passes. Each
- * attempt restores into a fresh path, because litestream refuses a non-empty output file.
- */
+// Each attempt needs a fresh path because restore refuses a non-empty destination.
 export async function waitForStoredRows(args: {
   bin: string;
   config: string;
@@ -122,11 +102,7 @@ export async function waitForStoredRows(args: {
   return { rows, attempts, reached: false, lastPath };
 }
 
-/**
- * Wait for litestream to have OPENED a fresh database, observed as the `.<name>-litestream` sidecar
- * directory it creates beside it (`scenarios/s4_offline_load.ts` records this as the pin's behaviour,
- * not a documented interface). Only meaningful for a database no daemon has opened before.
- */
+// A fresh sidecar directory is the pinned binary's observable sign that it opened the database.
 export async function waitForAttach(dbPath: string): Promise<number> {
   const separator = dbPath.lastIndexOf("/");
   const marker = join(dbPath.slice(0, separator), `.${dbPath.slice(separator + 1)}-litestream`);
@@ -140,10 +116,6 @@ export async function waitForAttach(dbPath: string): Promise<number> {
   );
 }
 
-/**
- * Every object under `prefix` with its size and time, however many pages the listing takes
- * (`store.ts`'s `listKeys` records the 1000-key page that makes the loop necessary).
- */
 export async function listObjects(store: Store, prefix: string): Promise<StoredObject[]> {
   const objects: StoredObject[] = [];
   let token: string | undefined;
@@ -164,7 +136,6 @@ export async function listObjects(store: Store, prefix: string): Promise<StoredO
   return objects;
 }
 
-/** Objects grouped by the first path segment under `prefix` — a level directory, `opened.json`, … */
 export function bySegment(
   objects: StoredObject[],
   prefix: string,
@@ -182,7 +153,6 @@ export function bySegment(
   return out;
 }
 
-/** The secuencias in 1..expected that `rows` lacks, as compact ranges (`21-40,61-80`), or `none`. */
 export function missingRanges(expected: number, rows: RecordedRow[]): string {
   const held = new Set(rows.map((row) => row.secuencia));
   const ranges: string[] = [];
@@ -198,15 +168,10 @@ export function missingRanges(expected: number, rows: RecordedRow[]): string {
   return ranges.length === 0 ? "none" : ranges.join(",");
 }
 
-/**
- * Lines of litestream's log at WARN or ERROR, in the pin's default text format (`level=ERROR msg=…`,
- * the shape the README's S4 section quotes from the pin).
- */
 export function problemLines(log: string): string[] {
   return log.split("\n").filter((line) => /level=(WARN|ERROR)/.test(line));
 }
 
-/** `PRAGMA wal_checkpoint(TRUNCATE)` from our own connection, and SQLite's three answers. */
 export function checkpoint(node: NodeDb): { busy: number; log: number; checkpointed: number } {
   const row = node.get<{ busy: number; log: number; checkpointed: number }>(
     "PRAGMA wal_checkpoint(TRUNCATE)",
@@ -218,11 +183,8 @@ export function checkpoint(node: NodeDb): { busy: number; log: number; checkpoin
   };
 }
 
-/**
- * `sales` sales in `rounds` rounds with an idle pause after each — S4's cadence, so figures compare
- * with its recorded control arm. The side file is read on both sides of every pause, because a
- * checkpoint during the pause can leave the file at its high-water mark (S4's note on `driveLoad`).
- */
+// Read the side file on both sides of each idle pause so a checkpoint during the pause cannot hide
+// its peak.
 export async function driveLoad(
   node: NodeDb,
   dbPath: string,
@@ -265,7 +227,6 @@ function round3(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
-/** The probe's one Markdown table row: whitespace in a string value is JSON-quoted, `|` escaped. */
 export function report(
   probe: string,
   verdict: string,

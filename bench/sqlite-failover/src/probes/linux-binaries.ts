@@ -1,15 +1,3 @@
-// Measurement 5 (#540): the pinned binary on Linux, both processor types.
-//
-// For each of linux/amd64 and linux/arm64: build `node:26-slim` + ca-certificates (deploy/Dockerfile's
-// runtime stage installs them the same way), run ./linux-inside.ts in it against a MinIO on a private
-// Docker network (mode `full`), then run the TLS half alone in bare `node:26-slim` (mode `tls-only`,
-// the control).
-//
-// FAILING result — `LINUX_BINARIES_RUN=false`, with the failing platform's inside line showing which
-// of sha256-matches-release, version, roundtrip-equal, control-refused or tls is wrong.
-// PASSING result — `LINUX_BINARIES_RUN=true` and both inside lines reading PASS.
-// CONTROL — each bare-image line should read `tls=roots-missing`; `tls=ok` there prints
-// `tls-control=indistinguishable`, and the TLS half is then not established by this probe.
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
