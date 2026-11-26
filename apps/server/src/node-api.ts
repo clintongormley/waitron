@@ -19,6 +19,7 @@ export interface NodeApiDeps {
    * promoted-but-not-restarted process must keep answering false.
    */
   acceptingSales: boolean;
+  waitingFor?: "bucket";
   admissionsClosed?: () => boolean;
   readTradingAdmission?: () => TradingAdmissionView;
   /** Echoed so a till can refuse to follow a server in a different environment from the one it was
@@ -33,6 +34,7 @@ interface NodeProbe {
   term: number | null;
   standing: NodeStanding | null;
   acceptingSales: boolean;
+  waitingFor?: "bucket";
   environment: DeploymentEnvironment;
 }
 
@@ -59,6 +61,7 @@ export function mountNodeApi(app: Hono, deps: NodeApiDeps, log: Logger): void {
         term: held?.body.term ?? null,
         standing: held === null ? null : (standingOf(held, deps.nodeId) ?? null),
         acceptingSales: deps.acceptingSales && !deps.admissionsClosed?.(),
+        waitingFor: deps.waitingFor,
         environment: deps.environment,
       };
       c.header("cache-control", "no-store");

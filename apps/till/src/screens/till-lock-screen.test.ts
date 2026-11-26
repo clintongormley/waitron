@@ -1007,6 +1007,26 @@ describe("till-lock-screen", () => {
     expect(again).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["en", "es"] as const)(
+    "shows the backup wait beside Check again in %s",
+    async (locale) => {
+      const previous = currentLocale();
+      onTestFinished(() => setLocale(previous));
+      setLocale(locale);
+      const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+        api: stubApi(),
+        serverWaiting: true,
+        serverWaitingFor: "bucket",
+      });
+      await flush(el);
+      const status = query(el, "[data-server-status]")!;
+      expect(status.getAttribute("role")).toBe("status");
+      expect(status.textContent!.replace(/\s+/g, " ").trim()).toBe(
+        `${t("server.checking_backup", locale)} ${t("server.check_again", locale)}`,
+      );
+    },
+  );
+
   it.each([390, 820])("puts the connection banner above the roster at %i px", async (width) => {
     await pageAt(width, 844);
     onTestFinished(resetPage);

@@ -94,7 +94,11 @@ it("serves a non-trading bucket waiting page after an unexpected stop", async ()
     },
     async (base) => {
       const probe = await fetch(`${base}/api/node`);
-      expect(await probe.json()).toMatchObject({ acceptingSales: false });
+      expect(await probe.json()).toMatchObject({
+        standing: "serving-primary",
+        acceptingSales: false,
+        waitingFor: "bucket",
+      });
       const page = await fetch(base, { headers: { "Accept-Language": "en" } });
       const html = await page.text();
       expect(html).toContain("Waiting for the backup bucket");
@@ -108,7 +112,9 @@ it("serves a non-trading bucket waiting page after an unexpected stop", async ()
       await started.fullyStarted;
       await vi.waitFor(async () => {
         const trading = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
-        expect(await trading.json()).toMatchObject({ acceptingSales: true });
+        const body: unknown = await trading.json();
+        expect(body).toMatchObject({ acceptingSales: true });
+        expect(body).not.toHaveProperty("waitingFor");
       });
     },
   );

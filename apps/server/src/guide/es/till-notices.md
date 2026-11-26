@@ -154,15 +154,17 @@ cobrar. Usa la clave maestra actual y sigue
 Puedes cerrar la ventana de pago sin iniciar una recuperación. El cambio de identidad conserva
 los resultados de envío y las incidencias existentes.
 
-## Cuando este servidor ya no es el servidor principal {#not-main-server}
+## Cuando la caja espera al servidor principal {#not-main-server}
 
 Cuando la caja diga **Este servidor ya no es el servidor principal**, espera a que pase al
 servidor principal y vuelve a intentarlo. Si ya has cobrado con tarjeta en el datáfono, devuelve
 antes el importe ahí.
 
-Cuando la caja diga **Ningún servidor acepta ventas ahora mismo**, déjala abierta: continúa en
-cuanto un servidor vuelva a aceptar ventas. En la pantalla de inicio de sesión, **Comprobar de
-nuevo** lo comprueba al momento.
+Si la caja dice **El servidor está comprobando su copia de seguridad antes de aceptar ventas**
+o **Ningún servidor acepta ventas ahora mismo**, déjala abierta. La caja continúa en cuanto un
+servidor vuelve a aceptar ventas. En la pantalla de inicio de sesión, pulsa **Comprobar de nuevo**
+para comprobarlo al momento. En **Comprueba tus horas**, pulsa **Volver a consultar** cuando el
+servidor esté listo.
 
 ## Guarda un informe sobre un problema {#problem-report}
 

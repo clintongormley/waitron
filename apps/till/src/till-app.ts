@@ -23821,7 +23821,8 @@ export class TillApp extends LitElement {
         @switch-to-spare=${() => void this.#onSwitchToSpare()}
         @start-in-cloud=${() => void this.#onStartInCloud()}
       ></till-main-server-strip>`;
-    return this.router?.waiting ? serverConnectionNotice(this.router.noBoxAnswering) : nothing;
+    if (!this.router?.waiting) return nothing;
+    return serverConnectionNotice(this.router.noBoxAnswering, this.router.waitingFor);
   }
 
   #inShell(): boolean {
@@ -25725,6 +25726,7 @@ export class TillApp extends LitElement {
                           .deviceId=${this.deviceId}
                           .canChooseDevice=${this.devTab || this.devDevices !== undefined}
                           .serverWaiting=${this.router?.waiting ?? false}
+                          .serverWaitingFor=${this.router?.waitingFor}
                           .noBoxAnswering=${noBoxAnswering}
                           .mainServerSilent=${this.#mainServerStrip() !== undefined}
                           .spareAnswering=${this.#mainServerStrip()?.spareAnswering ?? false}

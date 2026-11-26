@@ -18080,14 +18080,16 @@ describe("till-app follows a server move", () => {
     expect(offerChart).toHaveBeenCalledWith(membership);
   });
 
-  it("shows the no-server-taking-sales banner in the shell while the router waits", async () => {
+  it("updates the shell banner when the main box gives a reason while the router waits", async () => {
     // On the shell surface (an operator mid-shift) the lock-screen's own status line is not visible, so
     // `till-app` surfaces `server.waiting_sales` in its own `role="status"` banner while the router
     // reports no server is accepting sales. Two-sided: absent before a probe leaves the router waiting,
     // present after.
+    const standby = { acceptingSales: false, term: 2, nodeId: "b", standing: "serving-primary" };
+    const answers: Record<string, object> = { [BOX]: standby };
     const router = new ServerRouter({
       origin: BOX,
-      fetchImpl: answeringFetch({ [BOX]: { acceptingSales: false, term: 2 } }),
+      fetchImpl: answeringFetch(answers),
       storage: memoryStorage(),
     });
     const api = stubApi();
@@ -18102,6 +18104,11 @@ describe("till-app follows a server move", () => {
     await flush(el);
     expect(router.waiting).toBe(true);
     expect(banner()!.textContent).toContain(t("server.waiting_sales"));
+
+    answers[BOX] = { ...standby, waitingFor: "bucket" };
+    await router.probeNow();
+    await flush(el);
+    expect(banner()!.textContent).toContain(t("server.checking_backup"));
   });
 
   /** A fetch where each listed server answers its `/api/node` with the given body; the rest fail. */
@@ -18140,6 +18147,22 @@ describe("till-app follows a server move", () => {
     expect(status!.querySelector("[data-check-again]")).not.toBeNull();
     expect(status!.textContent).not.toContain("box.deli.test");
     expect(status!.textContent).not.toContain("cloud.deli.test");
+  });
+
+  it("shows the backup wait reported by the box on the sign-in screen", async () => {
+    const { status } = await lockAfterRound(
+      answeringFetch({
+        [BOX]: {
+          acceptingSales: false,
+          term: 2,
+          nodeId: "b",
+          standing: "serving-primary",
+          waitingFor: "bucket",
+        },
+      }),
+      [],
+    );
+    expect(status?.textContent).toContain(t("server.checking_backup"));
   });
 
   it("shows WiFi guidance beside Check again when the sign-in probe gets no reply", async () => {
