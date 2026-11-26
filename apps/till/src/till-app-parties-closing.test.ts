@@ -320,6 +320,7 @@ describe("till-app: cancelling an invoiced bill", () => {
     ["sale.correction_not_whole", null],
     ["working_order.not_placed", null],
     ["fiscal.original_unanswered", null],
+    ["fiscal.original_refused", null],
   ] as const)(
     "keeps the dialog open with %s's sentence, and reads the bills again",
     async (code, key) => {

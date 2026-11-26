@@ -185,9 +185,9 @@ async function fiscalFacts() {
 }
 
 it("resolves a staff Cancel and refund followed by a test-built cancellation by filing the same held cancellation without returning money twice", async () => {
-  const originalCase = await rejectOriginal();
   const issued = await accounting();
   const { cancellationId, refundBody, refunded, facts } = await cancelAndRefund();
+  const originalCase = await rejectOriginal();
   expect(facts.sales).toEqual(issued.sales);
   expect(facts.lines).toEqual(issued.lines);
   expect(facts.tenders).toEqual(issued.tenders);
@@ -270,8 +270,8 @@ it("resolves a staff Cancel and refund followed by a test-built cancellation by 
 });
 
 it("preserves an unsuitable existing ordinary cancellation instead of generating an absent-original replacement or another refund", async () => {
-  const originalCase = await rejectOriginal();
   const { cancellationId, refundBody, refunded, facts } = await cancelAndRefund();
+  const originalCase = await rejectOriginal();
   const aeat = createFakeAeat({ serverNow: NOW });
   await drain(
     {
@@ -308,8 +308,8 @@ it("preserves an unsuitable existing ordinary cancellation instead of generating
 it.each(["pendiente", "enviando", "detenido"])(
   "keeps an existing staff refund and cancellation unchanged while the original outcome is unknown (%s)",
   async (estado) => {
-    const originalCase = await rejectOriginal();
     const { cancellationId, refundBody, refunded, facts } = await cancelAndRefund();
+    const originalCase = await rejectOriginal();
     await store.db
       .update(verifactuSubmissions)
       .set({ estado })
@@ -384,8 +384,8 @@ it.each(["fiscal.huella_divergente", "fiscal.duplicado_anulado"] as const)(
 );
 
 it("releases the old chain's cancellation once a correction issued on another chain is accepted", async () => {
-  const originalCase = await rejectOriginal();
   const { cancellationId, refundBody, refunded, facts } = await cancelAndRefund();
+  const originalCase = await rejectOriginal();
   const aeat = createFakeAeat({ serverNow: NOW });
   const deps = {
     db: store.db,
@@ -456,8 +456,8 @@ it("releases the old chain's cancellation once a correction issued on another ch
 it.each(["pendiente", "enviando", "aceptado", "aceptado_con_errores", "rechazado", "detenido"])(
   "refuses a record correction while its existing ordinary cancellation is %s",
   async (estado) => {
-    const originalCase = await rejectOriginal();
     const { cancellationId, facts } = await cancelAndRefund();
+    const originalCase = await rejectOriginal();
     await store.db
       .update(verifactuSubmissions)
       .set({ estado })
@@ -481,8 +481,8 @@ it.each(["pendiente", "enviando", "aceptado", "aceptado_con_errores", "rechazado
 );
 
 it("allows the same correction decision after the filing queue has actually held the waiting cancellation", async () => {
-  const originalCase = await rejectOriginal();
   const { cancellationId, facts } = await cancelAndRefund();
+  const originalCase = await rejectOriginal();
   const request = {
     kind: "record-correction",
     caseRegistroId: originalCase.registroId,

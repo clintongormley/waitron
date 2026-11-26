@@ -501,6 +501,9 @@ export class VerifactuBackend implements FiscalBackend {
       limit 1
     `);
     if (unanswered.length > 0) throw new AppError("fiscal.original_unanswered", { saleId });
+    // The filing queue would set such a cancellation aside, on any chain (`cancelsRefusedOriginal`).
+    if (await this.refusedEveryRecordOf(tx, original))
+      throw new AppError("fiscal.original_refused", { saleId });
     const taxpayer = await this.taxpayer(tx);
     const now = (await prepareIssueClock(tx, { nodeId: issuingNodeId }, this.clock)).now();
 

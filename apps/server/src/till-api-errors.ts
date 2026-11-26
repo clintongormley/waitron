@@ -53,6 +53,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "fiscal.fingerprint_mismatch": 409,
   "fiscal.chain_handed_over": 409,
   "fiscal.original_unanswered": 409,
+  "fiscal.original_refused": 409,
   "clock.unusable": 409,
   "clock.unconfirmed": 409,
   "fiscal.foreign_recipient_unsupported": 409,

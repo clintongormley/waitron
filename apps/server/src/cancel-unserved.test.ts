@@ -16,7 +16,10 @@ import {
 import { recordReplacement, recordSubstitution } from "@waitron/core";
 import { createExtraList, writeProductModifiers } from "@waitron/menu";
 import { filedRecordsOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
-import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
+import {
+  acceptedByAeat,
+  refusedByAeat,
+} from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId, type SaleId } from "@waitron/shared";
@@ -265,6 +268,20 @@ describe("Nothing was served on a printed bill nobody paid", () => {
     expect((row.json as { row: { status: string } }).row.status).toBe("voided");
   });
 
+  it("cancels a receipt AEAT accepted", async () => {
+    const party = await printedUnserved("Tarta");
+    const saleId = await saleOf(party.tabId);
+    await inTx(venue, (tx) => acceptedByAeat(tx, saleId));
+
+    const answer = await cancel(party.tabId);
+
+    expect(answer).toEqual({ status: 200, json: { filed: "cancellation" } });
+    expect(await filedRecordsOf(venue.db, saleId)).toEqual([
+      { kind: "invoice", state: "aceptado" },
+      { kind: "cancellation", state: "pendiente" },
+    ]);
+  });
+
   it("lets someone holding only sale.void approve it", async () => {
     const party = await printedUnserved("Tarta");
 
@@ -478,6 +495,22 @@ describe("Nothing was served refuses a cancellation", () => {
     });
     expect(answer.json.params).toEqual({ reason: "replaced" });
     expect(await voidsOf(saleId)).toEqual([]);
+  });
+
+  it("of a receipt AEAT refused and that was never replaced, writing no cancellation", async () => {
+    const party = await printedUnserved("Tarta");
+    const saleId = await saleOf(party.tabId);
+    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+
+    const answer = await expectRefused(party.tabId, () => cancel(party.tabId), {
+      status: 409,
+      code: "fiscal.original_refused",
+    });
+    expect(answer.json.params).toEqual({ saleId });
+    expect(await voidsOf(saleId)).toEqual([]);
+    expect(await filedRecordsOf(venue.db, saleId)).toEqual([
+      { kind: "invoice", state: "rechazado" },
+    ]);
   });
 
   it("on a box waiting for its time", async () => {

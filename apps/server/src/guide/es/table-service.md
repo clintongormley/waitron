@@ -788,7 +788,8 @@ ofrece en una cuenta impresa que no ha recibido ningún pago y no lleva el nombr
 Recupera el ticket en papel, indica el motivo y confirma. Waitron anula el ticket y avisa a cocina
 para que pare los platos de la cuenta. Necesitas **Anular ventas**; si no lo tienes, elige a alguien
 que lo tenga y pídele que introduzca su PIN. Si algo de la cuenta se ha servido, la caja muestra esos
-platos: cobra la cuenta o, si se ofrece, usa **Reabrir cuenta**.
+platos: cobra la cuenta o, si se ofrece, usa **Reabrir cuenta**. Si la AEAT rechazó el ticket, no se
+puede anular: cobra la cuenta.
 
 Cuando un cliente ya ha pagado una parte de la cuenta con
 [un ticket propio](table-service.md#pay-window), la cuenta muestra los platos y después descuenta

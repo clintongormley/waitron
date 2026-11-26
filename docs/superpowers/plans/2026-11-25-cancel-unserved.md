@@ -38,14 +38,15 @@ The till reaches the second row with a 1112 receipt that was replaced and never 
 | a dish, extra or drink served, or a dish cancelled with its charge kept | `bill.served_dishes`, naming them |
 | a payment on its way; time not confirmed; box handed over | today's codes |
 | a receipt **another chain** issued (another box's, or an earlier installation's on this box) and AEAT has not answered | `fiscal.original_unanswered` |
+| a receipt AEAT refused, every version, none as a duplicate (3000) or without a code, on any chain (watcher, 26 Nov 15:31) | `fiscal.original_refused` |
 
 - **Served:** any line's `served_quantity`, or a `line_service_cancellations` row (keeping a served dish's charge puts its
   mark back to 0, run), except rows Record unpaid departure wrote for dishes it stopped: those with `cancelled_at` at or
   after its `recorded_at` (`unpaid-departure.ts:142`, then `:151`).
 - **Other box:** a cancellation of another chain's *held* receipt stopped every later record here (five passes, 100 hours,
   run (earlier)); a waiting one can become held. Thrown in Veri\*Factu's `recordVoid`, no seat method: one expected failure
-  of 330 fiscal tests, 451 of 451 server ones (run (earlier)). Only after a box switch. On the box's own chain a waiting,
-  refused or held receipt needs nothing (run (earlier)).
+  of 330 fiscal tests, 451 of 451 server ones (run (earlier)). Only after a box switch. On the box's own chain a waiting or
+  held receipt needs nothing (run (earlier)); a refused one would leave its cancellation set aside, so it is refused.
 - **After** (run): the bill is abandoned, a seated party gets a fresh one, Orders says **Voided**. If AEAT refuses the
   cancellation: the usual **Refused** case, no resend. Staff's answer decides: Print anyway leaves dishes unmarked, so no
   mark proves nothing, and a wrong answer takes a real sale out of AEAT for good.

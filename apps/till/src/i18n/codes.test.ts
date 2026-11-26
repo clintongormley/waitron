@@ -637,7 +637,7 @@ it("words each refusal Nothing was served can meet, in both languages, naming no
   }
 });
 
-it("words Nothing was served's refusals of served dishes and of a receipt AEAT has not answered, in both languages", () => {
+it("words Nothing was served's refusals of served dishes and of a receipt AEAT has not answered or refused, in both languages", () => {
   expect(codeMessage("bill.served_dishes", "en")).toBe(
     "These dishes were served or charged, so the receipt can't be cancelled. Take payment, or use Reopen bill where it is offered.",
   );
@@ -649,6 +649,12 @@ it("words Nothing was served's refusals of served dishes and of a receipt AEAT h
   );
   expect(codeMessage("fiscal.original_unanswered", "es")).toBe(
     "La AEAT aún no ha respondido sobre este ticket. Inténtalo más tarde.",
+  );
+  expect(codeMessage("fiscal.original_refused", "en")).toBe(
+    "AEAT refused this receipt, so it cannot be cancelled. Take payment.",
+  );
+  expect(codeMessage("fiscal.original_refused", "es")).toBe(
+    "La AEAT rechazó este ticket, así que no se puede anular. Cobra la cuenta.",
   );
 });
 

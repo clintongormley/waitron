@@ -72,6 +72,53 @@ async function storedOrigins(saleId: string) {
   return rows;
 }
 
+/** A correction record of the sale's latest alta, as the record-correction remedy files one,
+ * left in the delivery state given, or with no submission for `null`. */
+async function correctionRecordOf(
+  saleId: ReturnType<typeof brandSaleId>,
+  estado: string | null,
+  codigoError: string | null,
+) {
+  await withTransaction(suite.db, async (tx) => {
+    const { rows } = await tx.execute<Record<string, unknown>>(sql`
+      select * from verifactu_records r
+      where sale_id = ${saleId} and tipo_registro = 'alta'
+        and not exists (select 1 from verifactu_records n where n.corrects_registro_id = r.id)
+    `);
+    const stored = decodeRegistroRow(rows[0]!);
+    const previous = fromRegistroRow(stored) as RegistroAlta;
+    const appended = await appendToChain(tx, nodeId, {
+      tipo: "alta",
+      saleId,
+      origin: jobOrigin("operator_script"),
+      entorno: "production",
+      correctsRegistroId: stored.id,
+      input: {
+        IDEmisorFactura: previous.IDFactura.IDEmisorFactura,
+        NumSerieFactura: previous.IDFactura.NumSerieFactura,
+        FechaExpedicionFactura: new Date(
+          Date.parse(`${stored.fecha_expedicion_factura}T00:00:00Z`) - 60 * 60_000,
+        ),
+        NombreRazonEmisor: previous.NombreRazonEmisor,
+        TipoFactura: "F2",
+        DescripcionOperacion: previous.DescripcionOperacion,
+        Desglose: previous.Desglose,
+        CuotaTotal: previous.CuotaTotal,
+        ImporteTotal: previous.ImporteTotal,
+        Subsanacion: "S",
+        RechazoPrevio: estado === "rechazado" ? "X" : "N",
+        SistemaInformatico: previous.SistemaInformatico,
+        generadoEn: new Date("2026-03-02T10:00:00+01:00"),
+        offsetMinutes: 60,
+      },
+    });
+    if (estado !== null)
+      await tx
+        .insert(verifactuSubmissions)
+        .values({ registroId: appended.id, estado, codigoError });
+  });
+}
+
 describe("id", () => {
   it("identifies itself as the verifactu backend", () => {
     expect(backend.id).toBe("verifactu");
@@ -448,6 +495,104 @@ describe("recordVoid", () => {
     },
   );
 
+  async function refuse(saleId: string, codigo: string | null) {
+    await suite.db
+      .run(sql`update verifactu_submissions set estado = 'rechazado', codigo_error = ${codigo}
+      where registro_id in (select id from verifactu_records where sale_id = ${saleId})`);
+  }
+
+  it.each(["1112", "1100"])(
+    "refuses this box's own receipt AEAT refused (%s), writing nothing",
+    async (codigo) => {
+      const { saleId } = await sell();
+      await refuse(saleId, codigo);
+      const before = written();
+
+      await expect(
+        withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", nodeId)),
+      ).rejects.toMatchObject({ code: "fiscal.original_refused", params: { saleId } });
+      expect(written()).toEqual(before);
+    },
+  );
+
+  it("refuses another box's receipt AEAT refused, writing nothing", async () => {
+    const { saleId } = await sell();
+    await refuse(saleId, "1112");
+    const m2 = await seedTaxpayerWithSif(suite.db);
+    const before = written();
+
+    await expect(
+      withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", m2.nodeId)),
+    ).rejects.toMatchObject({ code: "fiscal.original_refused", params: { saleId } });
+    expect(written()).toEqual(before);
+  });
+
+  it("refuses this box's receipt from an earlier installation AEAT refused, writing nothing", async () => {
+    const { saleId } = await sell();
+    await refuse(saleId, "1112");
+    await openNewInstallation();
+    const before = written();
+
+    await expect(
+      withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", nodeId)),
+    ).rejects.toMatchObject({ code: "fiscal.original_refused", params: { saleId } });
+    expect(written()).toEqual(before);
+  });
+
+  it.each([
+    ["as a duplicate (3000)", "3000"],
+    ["with no code", null],
+  ])("cancels this box's own receipt AEAT refused %s, which it may hold", async (_, codigo) => {
+    const { saleId } = await sell();
+    await refuse(saleId, codigo);
+
+    const ref = await withTransaction(suite.db, (tx) =>
+      backend.recordVoid(tx, saleId, "staff error", nodeId),
+    );
+    expect(ref.state).toBe("pending");
+  });
+
+  it.each(["aceptado", "aceptado_con_errores"])(
+    "cancels this box's own receipt AEAT answered %s",
+    async (estado) => {
+      const { saleId } = await sell();
+      await answer(saleId, estado);
+
+      const ref = await withTransaction(suite.db, (tx) =>
+        backend.recordVoid(tx, saleId, "staff error", nodeId),
+      );
+      expect(ref.state).toBe("pending");
+    },
+  );
+
+  it.each([
+    ["accepted", "aceptado", null],
+    ["refused as a duplicate (3000)", "rechazado", "3000"],
+    ["not yet submitted", null, null],
+  ])(
+    "cancels this box's own receipt AEAT refused while a fixed version of it is %s",
+    async (_, estado, codigo) => {
+      const { saleId } = await sell();
+      await refuse(saleId, "1100");
+      await correctionRecordOf(saleId, estado, codigo);
+
+      const ref = await withTransaction(suite.db, (tx) =>
+        backend.recordVoid(tx, saleId, "staff error", nodeId),
+      );
+      expect(ref.state).toBe("pending");
+    },
+  );
+
+  it("refuses this box's own receipt AEAT refused, and refused again once fixed", async () => {
+    const { saleId } = await sell();
+    await refuse(saleId, "1100");
+    await correctionRecordOf(saleId, "rechazado", "1100");
+
+    await expect(
+      withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", nodeId)),
+    ).rejects.toMatchObject({ code: "fiscal.original_refused", params: { saleId } });
+  });
+
   it("cancels this box's receipt from an earlier installation once AEAT has answered it", async () => {
     const { saleId } = await sell();
     await answer(saleId, "aceptado");
@@ -702,52 +847,6 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
       where registro_id = (select id from verifactu_records where sale_id = ${saleId})
     `);
     return saleId;
-  }
-
-  /** A correction record of the sale's latest alta, as the record-correction remedy files one,
-   * left in the delivery state given. */
-  async function correctionRecordOf(
-    saleId: ReturnType<typeof brandSaleId>,
-    estado: string,
-    codigoError: string | null,
-  ) {
-    await withTransaction(suite.db, async (tx) => {
-      const { rows } = await tx.execute<Record<string, unknown>>(sql`
-        select * from verifactu_records r
-        where sale_id = ${saleId} and tipo_registro = 'alta'
-          and not exists (select 1 from verifactu_records n where n.corrects_registro_id = r.id)
-      `);
-      const stored = decodeRegistroRow(rows[0]!);
-      const previous = fromRegistroRow(stored) as RegistroAlta;
-      const appended = await appendToChain(tx, nodeId, {
-        tipo: "alta",
-        saleId,
-        origin: jobOrigin("operator_script"),
-        entorno: "production",
-        correctsRegistroId: stored.id,
-        input: {
-          IDEmisorFactura: previous.IDFactura.IDEmisorFactura,
-          NumSerieFactura: previous.IDFactura.NumSerieFactura,
-          FechaExpedicionFactura: new Date(
-            Date.parse(`${stored.fecha_expedicion_factura}T00:00:00Z`) - 60 * 60_000,
-          ),
-          NombreRazonEmisor: previous.NombreRazonEmisor,
-          TipoFactura: "F2",
-          DescripcionOperacion: previous.DescripcionOperacion,
-          Desglose: previous.Desglose,
-          CuotaTotal: previous.CuotaTotal,
-          ImporteTotal: previous.ImporteTotal,
-          Subsanacion: "S",
-          RechazoPrevio: estado === "rechazado" ? "X" : "N",
-          SistemaInformatico: previous.SistemaInformatico,
-          generadoEn: new Date("2026-03-02T10:00:00+01:00"),
-          offsetMinutes: 60,
-        },
-      });
-      await tx
-        .insert(verifactuSubmissions)
-        .values({ registroId: appended.id, estado, codigoError });
-    });
   }
 
   async function replace(

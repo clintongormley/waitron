@@ -168,6 +168,7 @@ describe("till-cancel-credit-dialog: refusals", () => {
     "sale.correction_exceeds_total",
     "sale.correction_not_whole",
     "fiscal.original_unanswered",
+    "fiscal.original_refused",
     "server.internal",
     "some.unmapped_code",
   ])("says %s in the shared message for its code, beside no field", async (code) => {

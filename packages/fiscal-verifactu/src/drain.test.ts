@@ -1409,8 +1409,8 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     ]);
   });
 
-  it("makes a later cancellation visible when its original was rejected", async () => {
-    const sale = await sell();
+  /** Makes AEAT refuse the sale's receipt with 1100. */
+  async function refuseOriginal() {
     const raw = await suite.db.execute<Record<string, unknown>>(sql`
       select * from verifactu_records
       where node_id = ${venue.nodeId} and tipo_registro = 'alta'
@@ -1418,14 +1418,32 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     const original = fromRegistroRow(decodeRegistroRow<RegistroRow>(raw.rows[0]!)) as RegistroAlta;
     const key = `${original.IDFactura.IDEmisorFactura}|${original.IDFactura.NumSerieFactura}|${original.IDFactura.FechaExpedicionFactura}`;
     aeat.reject(key, 1100, "Original refused");
+  }
+
+  it("refuses a cancellation once its original was rejected, so nothing is set aside", async () => {
+    const sale = await sell();
+    await refuseOriginal();
     const first = await drain(drainDeps(staticResolver(aeat.client())), firstPass);
     expect(first.recordsHalted).toBe(1);
-    await voidSale(sale.saleId);
+    await expect(voidSale(sale.saleId)).rejects.toMatchObject({ code: "fiscal.original_refused" });
 
     const second = await drain(drainDeps(staticResolver(aeat.client())), secondPass);
 
     expect(second.recordsSubmitted).toBe(0);
-    expect(second.recordsHalted).toBe(1);
+    expect(second.recordsHalted).toBe(0);
+    expect((await chainRows()).map((row) => row.estado)).toEqual(["rechazado"]);
+    expect(await incidentCodes()).toEqual(["fiscal.registro_rechazado"]);
+  });
+
+  it("makes a cancellation written while its original waited visible once the original is rejected", async () => {
+    const sale = await sell();
+    await refuseOriginal();
+    await voidSale(sale.saleId);
+
+    const first = await drain(drainDeps(staticResolver(aeat.client())), firstPass);
+    const second = await drain(drainDeps(staticResolver(aeat.client())), secondPass);
+
+    expect(first.recordsSubmitted + second.recordsSubmitted).toBe(1);
     expect((await chainRows()).map((row) => row.estado)).toEqual(["rechazado", "retenido"]);
     expect(await incidentCodes()).toEqual([
       "fiscal.anulacion_retenida",

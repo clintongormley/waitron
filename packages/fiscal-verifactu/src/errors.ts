@@ -90,6 +90,9 @@ declare module "@waitron/shared" {
     /** `recordVoid` found the sale's receipt on another chain (another box's, or an earlier
      * installation's on this box) with no answer from AEAT yet. */
     "fiscal.original_unanswered": { saleId: string };
+    /** `recordVoid` found every record of the sale's receipt refused by AEAT, none as a duplicate
+     * (`3000`) or without a code. */
+    "fiscal.original_refused": { saleId: string };
 
     /**
      * Params carry the offending field names and issue codes — never the offending
