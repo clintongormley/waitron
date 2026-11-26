@@ -730,6 +730,11 @@ export class MenusScreen extends LitElement {
     },
     () => this.api,
   );
+  #pendingStructureSave?: Promise<boolean>;
+
+  get pendingStructureSave(): Promise<boolean> | undefined {
+    return this.#pendingStructureSave;
+  }
   /** What a home page tile may point at: the active products and the sections the structure
    * reaches. The server checks reach by membership alone; an inactive product is not offered. */
   #tileProducts: { id: string; name: string }[] = [];
@@ -2431,8 +2436,9 @@ export class MenusScreen extends LitElement {
   }
 
   #renderStructure() {
-    const structure = this.structure;
     const draft = this.#structureSave.draft;
+    const structure = this.view === "structure" ? draft.structure : this.structure;
+    const busy = this.busy || this.#structureSave.saving;
     const error = this.structureError
       ? html`<p class="error" role="alert" data-test="structure-error">
             ${t("menus.structure_error")}
@@ -2484,7 +2490,7 @@ export class MenusScreen extends LitElement {
         .defaultColor=${this.menuSettings?.defaultColor ?? null}
         .menuColor=${structure.root?.color ?? null}
         .current=${this.path}
-        .busy=${this.busy || this.#structureSave.saving}
+        .busy=${busy}
         .reordering=${true}
         .search=${this.structureSearch}
         .selecting=${this.structureSelecting}
@@ -2594,9 +2600,9 @@ export class MenusScreen extends LitElement {
           label=${t("folders.select")}
           icon="select-rows"
           .pressed=${this.structureSelecting}
-          ?disabled=${this.busy}
+          ?disabled=${busy}
           @click=${() => {
-            if (this.busy) return;
+            if (this.busy || this.#structureSave.saving) return;
             this.structureSelected = [];
             this.structureSelecting = !this.structureSelecting;
           }}
@@ -2622,6 +2628,7 @@ export class MenusScreen extends LitElement {
     const count = this.structureSelected.length;
     const { sent } = this.#sentSelection();
     const removable = sent.length > 0;
+    const busy = this.busy || this.#structureSave.saving;
     return html`<div
       slot="toolbar-bottom"
       class="selection-bar"
@@ -2635,9 +2642,9 @@ export class MenusScreen extends LitElement {
       <wt-button
         data-test="selection-move"
         variant="secondary"
-        .disabled=${count === 0 || this.busy}
+        .disabled=${count === 0 || busy}
         @click=${() => {
-          if (count === 0 || this.busy) return;
+          if (count === 0 || this.busy || this.#structureSave.saving) return;
           this.#openMove(this.#sentKeys(this.#inTreeOrder(this.structureSelected)));
         }}
         ><span class="selection-move-full">${t("menus.move_selected")}</span
@@ -2646,7 +2653,7 @@ export class MenusScreen extends LitElement {
       <wt-button
         data-test="selection-remove"
         variant=${removable ? "danger" : "secondary"}
-        .disabled=${!removable || this.busy}
+        .disabled=${!removable || busy}
         @click=${() => {
           if (!removable || this.busy || this.#structureSave.saving) return;
           if (
@@ -2663,9 +2670,9 @@ export class MenusScreen extends LitElement {
       <wt-button
         data-test="selection-done"
         variant="secondary"
-        .disabled=${this.busy}
+        .disabled=${busy}
         @click=${() => {
-          if (!this.busy) void this.#leaveSelecting();
+          if (!this.busy && !this.#structureSave.saving) void this.#leaveSelecting();
         }}
         >${t("action.done")}</wt-button
       >
@@ -2780,6 +2787,7 @@ export class MenusScreen extends LitElement {
 
   #removeRows(keys: readonly string[], clearSelection = false): void {
     if (this.#structureSave.saving) return;
+    this.#productEditor.cancelRead();
     this.#structureSave.draft.remove(this.#selectedMembers(keys));
     if (this.#structureSave.draft.structure?.nodes.length === 0 && this.#focusReturn === null)
       this.#returnFocusTo([], this.removingSelected === null);
@@ -2852,7 +2860,14 @@ export class MenusScreen extends LitElement {
   async #moveSelected(): Promise<void> {
     const keys = this.movingSelected;
     const destination = this.moveDestination;
-    if (!keys || this.busy || !destination || saveActionState(this.#moveScope).unchanged) return;
+    if (
+      !keys ||
+      this.busy ||
+      this.#structureSave.saving ||
+      !destination ||
+      saveActionState(this.#moveScope).unchanged
+    )
+      return;
     const members = this.#selectedMembers(keys).map(({ listId, memberId }) => ({
       listId,
       memberId,
@@ -2868,7 +2883,12 @@ export class MenusScreen extends LitElement {
     const path = this.#moveDestinations([]).find(({ value }) => value === destination)?.path;
     if (path) this.#edit(path);
     await this.updateComplete;
-    this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
+    if (this.structureSelecting)
+      this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
+    else if (path && members[0])
+      this.renderRoot
+        .querySelector("dashboard-menu-structure-table")
+        ?.focusRowMenu([...path, members[0].memberId].join("/"));
   }
 
   async #leaveSelecting(): Promise<void> {
@@ -3140,11 +3160,20 @@ export class MenusScreen extends LitElement {
 
   async #saveStructure(review = false): Promise<void> {
     const menuId = this.menuId;
-    if (menuId === null || this.busy || this.view !== "structure") return;
+    if (menuId === null || this.busy || this.#pendingStructureSave || this.view !== "structure")
+      return;
     this.structureReview = false;
     const nameDrop = this.#structureDropNames();
-    if (await this.#structureSave.save(menuId, () => this.#refresh(), nameDrop))
-      if (review && this.menuId === menuId && this.view === "structure") await this.#reviewSaved();
+    const saving = this.#structureSave.save(menuId, () => this.#refresh(), nameDrop);
+    if (this.#structureSave.saving) this.#pendingStructureSave = saving;
+    let saved: boolean;
+    try {
+      saved = await saving;
+    } finally {
+      if (this.#pendingStructureSave === saving) this.#pendingStructureSave = undefined;
+    }
+    if (saved && review && this.menuId === menuId && this.view === "structure")
+      await this.#reviewSaved();
   }
 
   #structureDropNames(): (drop: MenuStructureSaveResult["dropped"][number]) => string {
@@ -3445,7 +3474,7 @@ export class MenusScreen extends LitElement {
         ><wt-button
           variant=${save.variant}
           data-test="move-selected-save"
-          .disabled=${this.busy || blocked}
+          .disabled=${this.busy || this.#structureSave.saving || blocked}
           @click=${() => void this.#moveSelected()}
           >${t("menus.move_selected_confirm")}</wt-button
         ></wt-form-actions
@@ -3542,7 +3571,7 @@ export class MenusScreen extends LitElement {
     ${this.#renderLoadState()} ${this.#renderMemberError()} ${this.#structureSave.dropNotice()}
     ${this.#renderFullMenuEditor(menuId, name)}
     ${
-      this.view === "structure" && this.structure !== null
+      this.view === "structure" && this.#structureSave.draft.structure !== null
         ? this.#structureSave.actions(() => void this.#saveStructure(), this.busy)
         : nothing
     }

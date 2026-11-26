@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi, DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
+import type { MenuReadPart, MenuReadResult } from "../api/menu-api.js";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 
@@ -466,6 +467,31 @@ export async function expectNoA11yViolations(
   expect(results.violations, formatViolations(results.violations)).toEqual([]);
   const colourReadings = undecidedColourReadings(results.incomplete);
   expect(colourReadings, colourReadings.join("\n\n")).toEqual([]);
+}
+
+export async function menuReadFixture(
+  api: DashboardApi,
+  id: string,
+  parts: readonly MenuReadPart[],
+): Promise<MenuReadResult> {
+  const reads = {
+    structure: () => api.getMenuStructure(id),
+    prices: () => api.getMenuPrices(id),
+    home: () => api.getMenuHome(id),
+    status: () => api.getMenuStatus(id),
+    preview: () => api.getMenuPreview(id),
+  };
+  return Object.fromEntries(
+    await Promise.all(
+      parts.map(async (part) => {
+        try {
+          return [part, { status: 200, body: await reads[part]() }];
+        } catch (error) {
+          return [part, { status: 409, body: { error } }];
+        }
+      }),
+    ),
+  );
 }
 
 export function documentProduct(menuItemId: string, productId: string): DocumentMember {

@@ -8,6 +8,7 @@ import {
   documentSection,
   expectNoA11yViolations,
   menuDocument,
+  menuReadFixture,
   mountWidget,
 } from "../widgets/test-helpers.js";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -20,8 +21,9 @@ import type {
   MenuPreview,
   Product,
 } from "../api/client.js";
-import type { MenuStructureNode } from "../api/menu-api.js";
+import type { MenuReadPart, MenuStructureNode } from "../api/menu-api.js";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 
 useLocale("es-ES");
 
@@ -167,10 +169,6 @@ function api(state: State): DashboardApi {
     }),
     createSection: vi.fn(),
     duplicateSection: vi.fn(),
-    setIncludeFolder: vi.fn().mockRejectedValue({
-      code: "menu_section.translation_required",
-      params: { field: "names", language: "es" },
-    }),
     getMenuStatuses:
       state === "statuses-failed"
         ? vi.fn().mockRejectedValue({ code: "server.internal" })
@@ -191,6 +189,9 @@ function api(state: State): DashboardApi {
       publishedAt: "2026-09-26T10:15:00.000Z",
       hash: "a".repeat(64),
     }),
+    getMenuRead(id: string, parts: readonly MenuReadPart[]) {
+      return menuReadFixture(this as DashboardApi, id, parts);
+    },
     getMenuPreview: vi.fn().mockResolvedValue({
       live: null,
       clashes: [],
@@ -385,14 +386,23 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
   it.each(["empty-menu", "populated", "structure-failed"] as const)(
     "accessible Structure tab, %s",
     async (state) => {
-      const { host } = await mount(state, theme, LUNCH);
+      const { el, host } = await mount(state, theme, LUNCH);
+      await vi.waitFor(() =>
+        expect(
+          el.shadowRoot!.querySelector(
+            state === "structure-failed"
+              ? '[data-test="structure-error"]'
+              : "dashboard-menu-structure-table",
+          ),
+        ).not.toBeNull(),
+      );
       await expectNoA11yViolations(host);
     },
   );
 
   it("announces an inline Structure refusal", async () => {
     const client = api("populated");
-    client.removeSectionMember = vi.fn().mockRejectedValue({ code: "menu_section.not_found" });
+    client.saveMenuStructure = vi.fn().mockRejectedValue({ code: "menu_section.not_found" });
     history.replaceState(null, "", LUNCH);
     const { el, host } = await mountWidget<MenusScreen>(
       "dashboard-menus-screen",
@@ -401,10 +411,14 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     );
     await editDrinks(el);
     await rowAction(el, "m-drinks/m-lager", "remove");
+    q(el, '[data-test="structure-save"]').click();
     await vi.waitFor(() => {
-      const alert = q(el, '[role="alert"]');
-      expect(alert?.nextElementSibling).toBe(q(el, "dashboard-menu-structure-table"));
-      expect(alert?.textContent).toContain("Drinks");
+      const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+        "wt-form-actions.structure-actions",
+      )!;
+      expect(actions.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+        codeMessage("menu_section.not_found"),
+      );
     });
     await expectNoA11yViolations(host);
   });
@@ -437,15 +451,19 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     const form = q(el, '[data-test="include-folder-form"]');
     await vi.waitFor(() => expect(form.shadowRoot!.querySelector("wt-modal")!.open).toBe(true));
     if (refused) {
+      el.api.saveMenuStructure = vi.fn().mockRejectedValue({
+        code: "menu_section.translation_required",
+        params: { field: "rootMembers.1.folder.names", language: "es" },
+      });
       form.shadowRoot!.querySelector<HTMLElement>("[data-color='#256bb1']")!.click();
       await (form as HTMLElementTagNameMap["dashboard-include-folder-form"]).updateComplete;
       form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
+      await vi.waitFor(() => expect(form.shadowRoot!.querySelector("wt-modal")!.open).toBe(false));
+      q(el, '[data-test="structure-save"]').click();
       await vi.waitFor(() =>
         expect(
-          form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-            'wt-input[name="names-es"]',
-          )!.error,
-        ).not.toBe(""),
+          treeRows(el).querySelector('tr[data-row-key="included-wine"]')!.textContent,
+        ).toContain(codeMessage("menu_section.translation_required")),
       );
     }
     await expectNoA11yViolations(host);
@@ -638,7 +656,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible Structure tab in Select mode, the bar showing with a section and an included menu selected and its note", async () => {
+  it("accessible Structure tab in Select mode with a section and an included menu selected", async () => {
     const { el, host } = await mount("included", theme, LUNCH);
     q(el, '[data-test="select"]').shadowRoot!.querySelector("button")!.click();
     await vi.waitFor(() => expect(q(el, '[data-test="selection-bar"]')).not.toBeNull());
@@ -651,7 +669,9 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await vi.waitFor(() =>
       treeRows(el).querySelector<HTMLInputElement>('[data-test="select-included-wine"]')!.click(),
     );
-    await vi.waitFor(() => expect(q(el, '[data-test="selection-sections-note"]')).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(q(el, '[data-test="selected-count"]').textContent!.trim()).toMatch(/^2 /),
+    );
     expect(
       q(el, '[data-test="select"]')
         .shadowRoot!.querySelector("button")!
@@ -661,15 +681,19 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
   });
 
   it("accessible Remove confirm for the selected rows", async () => {
-    const { el, host } = await mount("populated", theme, LUNCH);
+    const { el, host } = await mount("included", theme, LUNCH);
     q(el, '[data-test="select"]').shadowRoot!.querySelector("button")!.click();
     await vi.waitFor(() =>
-      treeRows(el).querySelector<HTMLElement>('tr[data-row-key="m-drinks"] .row-activate')!.click(),
+      treeRows(el).querySelector<HTMLInputElement>('[data-test="select-m-drinks"]')!.click(),
     );
     await vi.waitFor(() =>
-      treeRows(el)
-        .querySelector<HTMLInputElement>('[data-test="select-m-drinks/m-lager"]')!
-        .click(),
+      expect(q(el, '[data-test="selected-count"]').textContent!.trim()).toMatch(/^1 /),
+    );
+    await vi.waitFor(() =>
+      treeRows(el).querySelector<HTMLInputElement>('[data-test="select-included-wine"]')!.click(),
+    );
+    await vi.waitFor(() =>
+      expect(q(el, '[data-test="selected-count"]').textContent!.trim()).toMatch(/^2 /),
     );
     await vi.waitFor(() =>
       expect(
@@ -685,7 +709,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible Delete confirm for a selected section with a section below it", async () => {
+  it("accessible Remove confirm for a selected section with a section below it", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
     q(el, '[data-test="select"]').shadowRoot!.querySelector("button")!.click();
     await vi.waitFor(() =>
@@ -693,21 +717,21 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     );
     await vi.waitFor(() =>
       expect(
-        (q(el, '[data-test="selection-delete"]') as HTMLElement & { disabled: boolean }).disabled,
+        (q(el, '[data-test="selection-remove"]') as HTMLElement & { disabled: boolean }).disabled,
       ).toBe(false),
     );
-    q(el, '[data-test="selection-delete"]').click();
+    q(el, '[data-test="selection-remove"]').click();
     await vi.waitFor(() =>
       expect(
-        (q(el, 'wt-modal[data-test="delete-selected"]') as HTMLElement & { open: boolean }).open,
+        (q(el, 'wt-modal[data-test="remove-selected"]') as HTMLElement & { open: boolean }).open,
       ).toBe(true),
     );
     await vi.waitFor(() =>
       expect(
-        q(el, 'wt-modal[data-test="delete-selected"]')
-          .querySelectorAll('[data-test="delete-selected-items"] li')[0]
+        q(el, 'wt-modal[data-test="remove-selected"]')
+          .querySelectorAll('[data-test="remove-selected-items"] li')[0]
           ?.textContent?.trim(),
-      ).toBe("Drinks y la sección debajo"),
+      ).toBe("Drinks, de Lunch Menu"),
     );
     await expectNoA11yViolations(host);
   });

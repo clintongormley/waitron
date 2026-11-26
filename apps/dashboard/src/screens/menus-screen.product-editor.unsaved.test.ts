@@ -206,14 +206,13 @@ it.each(["add", "remove", "select"] as const)(
     const read = new Promise<ProductEditorValue>((resolve) => {
       finishRead = resolve;
     });
-    let endRemoval: (() => void) | undefined;
-    const remove = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          endRemoval = resolve;
-        }),
-    );
-    const menu = await openMenu({ getProductEditor: () => read, removeSectionMember: remove });
+    const remove = vi.fn();
+    const saveMenuStructure = vi.fn();
+    const menu = await openMenu({
+      getProductEditor: () => read,
+      removeSectionMember: remove,
+      saveMenuStructure,
+    });
     await menu.rowAction('[data-test="edit-product-m-burger"]');
     if (action === "add") {
       menu.root.querySelector("dashboard-menu-structure-table")!.dispatchEvent(
@@ -229,13 +228,7 @@ it.each(["add", "remove", "select"] as const)(
       await expect.poll(() => picker.open).toBe(true);
     } else if (action === "remove") {
       await menu.rowAction('[data-test="remove-m-burger"]');
-      expect(remove).toHaveBeenCalledOnce();
-      expect(
-        menu
-          .row()
-          ?.querySelector('[data-test="edit-product-m-burger"]')
-          ?.getAttribute("aria-disabled"),
-      ).toBe("true");
+      await expect.poll(menu.row).toBeFalsy();
     } else {
       const select = menu.root.querySelector<HTMLElement>('[data-test="select"]')!;
       await userEvent.click(page.elementLocator(select));
@@ -243,7 +236,8 @@ it.each(["add", "remove", "select"] as const)(
     finishRead(menuProductEditorValue);
     await read;
     await new Promise(requestAnimationFrame);
-    endRemoval?.();
+    expect(remove).not.toHaveBeenCalled();
+    expect(saveMenuStructure).not.toHaveBeenCalled();
     expect(menu.editor()?.open ?? false).toBe(false);
   },
 );
@@ -336,7 +330,10 @@ it.each(["saved", "other menu", "Prices"] as const)(
     await expect
       .poll(() => menu.root.querySelector("h1")?.textContent?.trim())
       .toBe(prices ? "Lunch" : "Dinner");
-    if (saved) await menu.open();
+    if (saved) {
+      await expect.poll(menu.row).toBeTruthy();
+      await menu.open();
+    }
     finish();
     if (saved) {
       await expect

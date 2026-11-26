@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  menuReadFixture,
+  mountWidget,
+} from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type { DashboardApi, MenuStatus, Product } from "../api/client.js";
-import type { MenuStructureNode } from "../api/menu-api.js";
+import type { MenuReadPart, MenuStructureNode } from "../api/menu-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => sessionStorage.clear());
@@ -64,6 +69,10 @@ function api(status: MenuStatus = changed): DashboardApi {
     }),
     getMenuStatuses: vi.fn().mockResolvedValue({ "menu-lunch": status }),
     getMenuStatus: vi.fn().mockResolvedValue(status),
+    getMenuPrices: async () => [],
+    getMenuRead(id: string, parts: readonly MenuReadPart[]) {
+      return menuReadFixture(this as DashboardApi, id, parts);
+    },
   } as unknown as DashboardApi;
 }
 

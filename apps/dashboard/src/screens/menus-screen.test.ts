@@ -17,6 +17,7 @@ import {
   documentSection,
   expectNoA11yViolations,
   menuDocument,
+  menuReadFixture,
   mountWidget,
 } from "../widgets/test-helpers.js";
 import {
@@ -666,26 +667,9 @@ function api(
     ...overrides,
   };
   Object.assign(client, {
-    getMenuRead: vi.fn(async (id: string, parts: readonly MenuReadPart[]) => {
-      const readClient = client as unknown as DashboardApi;
-      const reads = {
-        structure: () => readClient.getMenuStructure(id),
-        prices: () => readClient.getMenuPrices(id),
-        home: () => readClient.getMenuHome(id),
-        status: () => readClient.getMenuStatus(id),
-        preview: () => readClient.getMenuPreview(id),
-      };
-      const entries = await Promise.all(
-        parts.map(async (part) => {
-          try {
-            return [part, { status: 200, body: await reads[part]() }];
-          } catch (error) {
-            return [part, { status: 409, body: { error } }];
-          }
-        }),
-      );
-      return Object.fromEntries(entries);
-    }),
+    getMenuRead: vi.fn((id: string, parts: readonly MenuReadPart[]) =>
+      menuReadFixture(client as unknown as DashboardApi, id, parts),
+    ),
   });
   return client as unknown as DashboardApi & {
     [K in keyof DashboardApi]: ReturnType<typeof vi.fn>;
@@ -3631,6 +3615,20 @@ it("says the menu's structure could not be loaded, and tries again", async () =>
   expect(q(el, '[data-test="structure-error"]')).toBeNull();
 });
 
+it("waits for both arrangement and prices before offering Structure edits", async () => {
+  const client = api();
+  client.getMenuPrices.mockRejectedValueOnce(new Error("prices unavailable"));
+  const el = await mount(client, LUNCH_PATH);
+  await vi.waitFor(() => expect(q(el, '[data-test="structure-error"]')).not.toBeNull());
+  expect(q(el, "dashboard-menu-structure-table")).toBeNull();
+  expect(q(el, '[data-test="structure-save"]')).toBeNull();
+
+  await click(el, "structure-retry");
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-burger", "m-drinks", "m-fav"]));
+  expect(q(el, 'wt-button[data-test="structure-save"][disabled]')).not.toBeNull();
+  expect(q(el, '[data-test="structure-error"]')).toBeNull();
+});
+
 /** The staff name, the included menu's own customer names and the folder's fixed name all read
  * differently, so a dialog showing the wrong one fails. */
 const WINE_NAMES = { en: "Wine list", es: "Carta de vinos" };
@@ -4138,6 +4136,37 @@ describe("the Structure tree", () => {
       await vi.waitFor(() => expect(modal(el, "remove-selected").open).toBe(true));
       await el.updateComplete;
     }
+
+    it("holds Select and its Move, Remove and Done actions until Structure Save finishes", async () => {
+      const pending = deferred<{ dropped: [] }>();
+      const client = api({ saveMenuStructure: vi.fn(() => pending.promise) });
+      const el = await mountLunch(client);
+      await rowAction(el, "m-burger", "remove");
+      await pressSelect(el);
+      await tick(el, "m-drinks");
+      const move = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-move"]')!;
+      const done = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="selection-done"]')!;
+      expect(move.disabled).toBe(false);
+      expect(removeButton(el).disabled).toBe(false);
+      client.getMenuStructure.mockResolvedValue(lunchWith(lunchNodes().slice(1)));
+
+      await saveStructure(el);
+      try {
+        expect(client.saveMenuStructure).toHaveBeenCalledOnce();
+        expect(move.disabled).toBe(true);
+        expect(removeButton(el).disabled).toBe(true);
+        expect(removeButton(el).variant).toBe("danger");
+        expect(done.disabled).toBe(true);
+        expect(selectToggle(el).disabled).toBe(true);
+      } finally {
+        pending.resolve({ dropped: [] });
+      }
+
+      await vi.waitFor(() => expect(move.disabled).toBe(false));
+      expect(removeButton(el).disabled).toBe(false);
+      expect(done.disabled).toBe(false);
+      expect(selectToggle(el).disabled).toBe(false);
+    });
 
     it.each([
       ["en-GB", "Move…"],
@@ -9997,6 +10026,33 @@ it("keeps a reconnected menu's snapshot when the departed initial read answers l
   await new Promise((resolve) => setTimeout(resolve, 30));
   await el.updateComplete;
   expect(structure(el).nodes).toEqual([]);
+});
+
+it("keeps the staged arrangement through a live read and shows the new arrangement after Cancel", async () => {
+  const live = new LiveData();
+  const client = api({ liveData: live });
+  const host = await placementLeaveHost();
+  const el = await mountLunch(client);
+  await rowAction(el, "m-burger", "remove");
+  await settleStructure(el);
+  expect(topLevelKeys(el)).toEqual(["m-drinks", "m-fav"]);
+  expect(q(el, '[data-test="unpublished-changes"]')).not.toBeNull();
+
+  const [burger, drinks, favourites] = lunchNodes();
+  client.getMenuStructure.mockResolvedValue(lunchWith([favourites!, burger!, drinks!]));
+  client.getMenuStatus.mockResolvedValue({ state: "unpublished", clashes: 0 });
+  live.invalidate([{ type: "section_members" }]);
+  await vi.waitFor(() => expect(q(el, '[data-test="unpublished-changes"]')).toBeNull());
+  await settleStructure(el);
+  expect(topLevelKeys(el)).toEqual(["m-drinks", "m-fav"]);
+  expect(host.leave.coordinator.isDirty([el])).toBe(true);
+
+  await click(el, "structure-cancel");
+  const question = host.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await vi.waitFor(() => expect(question.open).toBe(true));
+  await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!);
+  await vi.waitFor(() => expect(topLevelKeys(el)).toEqual(["m-fav", "m-burger", "m-drinks"]));
+  expect(host.leave.coordinator.isDirty([el])).toBe(false);
 });
 
 for (const route of ["escape"] as const) {
