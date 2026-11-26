@@ -6,8 +6,7 @@ and changes to pass 1) decided with the owner on the evening of 2026-11-26, and 
 by the owner the same evening.** Where pass 2 changed a pass-1 decision, the section says so with "(pass 2)".
 **Pass 3 (the ways to pay, §7.9) decided with the owner on the evening of 2026-11-26, and this write-up
 approved by the owner the same evening.**
-**Pass 3 (the ways to pay, §7.9) decided with the owner on the evening of 2026-11-26.** Its write-up
-approved by the owner the same evening.**
+§14 says how each piece looks, read off the approved pictures, so the build does not have to guess.
 
 This is a complete redesign of the till and the handheld. Pass 1 covered the overall map of the app,
 the order screen, the menu, dish options, the table's and the bill's menus, and payment. Pass 2
@@ -840,6 +839,10 @@ The build applies the same rule to every other error.
    tips design.
 3. **(pass 2) A tip paid in cash** stays in the amount on the Cash screen (§7.5). How a cash tip is
    recorded and shared out stays with the tips design.
+4. **The guest's tip choices are drawn two ways.** On the whole bill (`o` frame 2) the percentages are
+   a column of tiles with Custom amount as one more tile; on a split share (`ba` frame 2) they are a
+   row of three tiles with Custom amount as a link. Not decided whether one look is meant for both;
+   until it is, each screen is built as its own picture shows (§14.5).
 
 ## 12. Pictures
 
@@ -905,3 +908,245 @@ counter order delivered to a table; dropped for now, §9.8).
   machine is the plan's to propose.
 - (pass 2) **Lane D's point 8**: in the demo, a device-verification warning stayed after a reload while
   seating, joining and ordering still worked (2026-11-11). Reproduce and fix it in the build.
+
+## 14. How it looks
+
+Read off the approved pictures (§12), so that a lane builds what the owner approved rather than
+guessing. Added on 2026-11-26 at the watcher's request, after lanes drew ☰'s rows with icons and
+Clock out as a link. Each line names its picture and frame: "`aj` 1" is frame 1 of picture `aj`,
+frames counted from the left. The sizes for passes 1 and 2 come from the stylesheets the pictures
+were drawn with; pass 3's (`ba` to `bd`) were read off the pictures by eye.
+
+How to read it:
+
+- **The text wins over a picture.** Where a frame and §3 to §9 differ, the text is the decision. The
+  known cases are in §14.1.
+- **Sizes** are as drawn, in pixels. Build them with the declared values: drawn 12 or 13 is
+  `--wt-font-size-sm`, 14 or 15 `--wt-font-size-md`, 16 to 18 `--wt-font-size-lg`, 20 and over
+  `--wt-font-size-xl`; drawn bold (700) is `--wt-font-weight-bold`. Nothing tappable is smaller than
+  `--wt-tap-min`. (A call made in this write-up.)
+- **Colours**, in the words used below: **teal** is `--wt-color-primary` with
+  `--wt-color-on-primary` text; **light blue** (chosen, selected, last added) is
+  `--wt-color-surface-lifted`; **outlined** is `--wt-color-surface` with a 1px `--wt-color-border`;
+  **dark** is `--wt-color-text` with `--wt-color-surface` text; **muted** text is
+  `--wt-color-text-muted`; **small capitals** are headings in upper case, 12 or 13, bold, muted,
+  slightly letter-spaced. Tables' and jobs' colours, rings and pulsing are A757's as built (§9.2);
+  the pictures only imitate them. A warning or danger tint means today's.
+- **Icons** are `wt-icon` names. Already registered: `hamburger` (☰), `kebab` (⋮), `close`, `plus`,
+  `minus`, `check`, `chevron-down`, `menu-section` (a menu folder) and `floor-plan-rotate` (the turn
+  handle), and for the grip `column-grip`, the drag handle `wt-data-table` registers. An icon
+  marked **new** has no name yet: it is added once, in `packages/ui`, with the shape given. **No row in a list or menu starts with an icon**
+  unless its line below says so; the `menu-*` icons are not used on these screens.
+
+### 14.1 Where a picture is out of date
+
+- `ag` 1 to 3 and `aj`: Map and List are drawn as two joined halves. Build **one** outlined button
+  naming the other view (§9.1), as `ak` 1 and `ak` 3 draw it.
+- `aj` 1: the headings "Tonight in the Dining room" and "You" are built as "Dining room · until the
+  next service" and "Your time", and "Taken off tonight" as "Taken off" (§9.9).
+- `v`, `x`, `z` 1, `ab` and `ad` were drawn before the bar at the bottom: their top bar ("Tables",
+  zone chips, Map/List) and the tab bar at their foot are gone. Take only their sheets, tables and
+  rows. `ab` 3's "Take off for tonight" is "Take off"; `v` 2's "Seats for today", "Name for today"
+  and "Take off for today" are "Seats", "Name" and "Take off" (§9.5).
+- `i` 2, `h` 1 and `v` 1: "Floor plan: seats, name, rotate" is gone (§6). `v` 1 draws Finish table
+  as a teal row; it is built as `i` 2 draws it (§14.4).
+- `d` and `m`: the menu path's "Home" is a home icon (§5).
+- `d`, `f`, `g`, `i`, `j`, `u`: back reads "‹ Tables". With the tabs gone it reads "‹ Floor", as
+  `af` draws it (§4: "back to the floor").
+- `f` 2 and 3, `g` 3: an opened new row shows Remove and "Split into 3". Remove moved to the
+  selection foot and splitting is the row's arrow (§4), so an opened new row holds only the
+  quantity, Options and Note.
+- `af` 1 draws "Menu" in the foot without its ⌃; it keeps it, as `d`, `g`, `i` and `j` draw it.
+- `i` 1: one tab per bill; built as `j` frame B's dropdown (§4).
+- `q` 1 and 2, `k` 1: the ways to pay as four joined buttons; built as `ah` 2's column (§7). `q` 3
+  was turned down; the device sheet is `r`.
+- `m`: the tabs across the top are gone; a till's bar is `ai`'s, at the bottom (§9.10).
+- `ak` 3 draws a Map button on "All zones"; a phone shows none there (§9.3). The tick meant to sit
+  above "Nothing needs doing" did not draw, and the owner approved the frame without it: there is
+  none.
+
+### 14.2 Pieces used on every screen
+
+- **Top bar** (`af`, `ah`, `k`): white, 56 tall, a line under it. Left: back, a ‹ (`chevron-left`,
+  new) and the word, teal text, 15 bold, no box around it. Centre: the title 17 bold, a subtitle 12
+  muted under it. Right, where the screen has one: an icon button, outlined, 44 square, 8 radius. On
+  the order screen a `chevron-down` follows the table's name.
+- **Selecting or joining header** (`af` 3, `x` 1): takes the top bar's place, dark, with the title
+  at the left, 18 bold ("3 selected", "Join Table 4 with…"), and **Cancel** at the right as a button
+  outlined in the header's text colour, 40 tall, not a link.
+- **A sheet rising from the bottom** (`aj`, `i`, `j`, `v`, `r`): white, its top corners rounded 16,
+  a grab handle centred at its top (40 by 5, `--wt-color-surface-sunken`), a shadow above it; the
+  screen behind it dimmed (black at 40%). Its sections start with small capitals.
+- **Menu row** (`aj` 1, `i` 2 and 3, `h` 1 and 2, `v`): full width, 46 to 60 tall, a line between
+  rows, the label 16 regular at the left and **no icon before it**. At the right, muted 14: a value
+  or a count where there is one ("Nuts", "3", "Garcia"), then › (`chevron-right`, new) on a row that
+  opens a screen. A row that acts at once has no › ("Print the bill", `i` 3). A yes-or-no setting
+  has today's switch at the right instead ("Bill requested"), teal when on.
+- **The foot** (`d`, `ah`, `k`): a white bar with a line above it; buttons 52 tall, 8 radius, 16
+  bold; the main action teal, the others outlined. Side by side on the order screen (Menu, Pay,
+  Send); stacked full width on Pay and the guest's screens. The lesser way sits under the stack as a
+  teal link, 14 bold, centred, with no border ("Other card machine").
+- **Course heading** (`d`, `af`): small capitals on the page background, with a pill at the right,
+  13, fully rounded: "✓ Sent" (`check`) in today's quiet green, "sends now" teal, "held · fire
+  later" grey (`--wt-color-surface-sunken`).
+- **Choice tile** (`f` 1, `ah` 2 and 3, `o` 2, `u`): outlined, 8 to 10 radius, 56 tall. Chosen: a
+  2px teal border and light blue, with a teal `check` at the right on an option and at the left on a
+  way to pay. A hint, muted, at the right ("between guests", "+€1.50").
+- **Keypad** (`ah` 3, `o` 3, `bc` 1): three across, outlined keys 46 tall, 18 regular. Bottom row:
+  the decimal separator, 0, and ⌫ (new: a tag shape with an ×). The pictures draw "," (`ah`, `o`)
+  and "." (`bc`); the key shows the language's own separator. (A call made in this write-up.)
+- **Stepper** (`d`, `f`, `g`, `h` 3): one outlined box 44 tall: `minus`, the number 16, `plus` in
+  teal. Two other shapes are drawn where they appear: the number of guests (`ba` 1) as round − and +
+  buttons, 52 across, either side of the number 40 bold; part of a row (`bb` 1) as a small rounded
+  "− 1 of 2 +".
+
+### 14.3 The floor
+
+- **The bar at the bottom** (`ak` 1, `ag` 1): white, a line above it. Left to right: the zone button
+  (takes the free width, 48 tall, outlined, 10 radius, the name 17 bold, then ⌃ (`chevron-up`,
+  new)); the Map or List button (48 tall, outlined, the word 14 semibold); ☰ (`hamburger`, 48
+  square, outlined). On a till (`ai`): the zone button about 300 wide, then, pushed right, the
+  person's name (semibold), help (new: ? in a circle) and ☰, each 48 square and outlined.
+- **The other zone's job** (`ag` 1): just above the bar, a box 44 tall, 10 radius, in today's
+  warning tint: a dot in the job's colour, "**Terrace** · Collect from Bar 9 min" 15, › at the
+  right.
+- **The map** (`ag` 1, `ai`): the plan in a white card with a line around it, 12 radius, filling the
+  screen above the bar. On each table: the number 17 bold, the job 13 bold under it, the minutes 12
+  semibold under that. Today's red "!" badge at a corner stays.
+- **The zone list** (`ag` 2, `aj` 2): a sheet rising from the bar. Rows 60 tall: a teal `check`
+  before the zone chosen (the others keep the space empty), the name 17 semibold, its most urgent
+  job at the right as a filled pill in the job's colour, 13 bold; the chosen row light blue. "All
+  zones" first; kitchen screens under small capitals. At the foot, above a line: "Choose zones for
+  this phone…" as a centred teal link, 15 semibold, not a row.
+- **The list of jobs** (`ag` 3, `ai`): small capitals "To collect" and "Other jobs"; each station as
+  a white sub-heading (its name 15 bold, "1 table" muted at the right). A job row: a 6-wide strip in
+  the job's colour down its left edge; first line the job or the table, 16 bold, then the minutes 14
+  in the job's colour; second line 14 muted, the table's name bold ("**Table 4** · 3 guests ·
+  €73.20"); at the right, where one tap does the job, an outlined button 44 tall, 14 semibold
+  ("Collected", "Fire", "Pay", "Cleared"). The calm lines at the end are muted 15 with ›.
+- **A long-press** (`v`): at the top of the sheet, a square in the table's colour with its number
+  (52, 10 radius), the name 18 bold and one muted line beside it; then the main action as a
+  full-width teal button ("Open the order", "Seat a party"); then menu rows.
+- **Holding a table** (`ab` 3): across the bottom of the map, a box 72 tall, 14 radius, with a 2px
+  dashed red border and a pale red fill: a bin (new) and "Take off", red, bold.
+- **Joined tables** (`x` 2): the tables inside one rounded band (a pale fill with an outline in the
+  group's colour), each keeping its number; one label on the band, a pill 26 tall, 13 bold ("4 + 6 +
+  8 · Garcia"). Seats in a row the same ("Bar 2–4 · Ana").
+- **Joining** (`x` 1): the joining header; a muted hint under it; each table picked has a thick teal
+  outline and a small teal circle with a `check` at its corner, the rest dimmed; above the teal
+  "Join 3 tables", one muted sentence ("Garcia (4 guests) will sit across 4 + 6 + 8 · 12 seats").
+- **☰** (`aj` 1): first the person: a teal circle 44 with their initials, the name 17 bold, "Clocked
+  in at 17:02" 13 muted, and **Clock out** at the right as an outlined button 40 tall, 14 semibold,
+  not a link. Then the sections, each under small capitals, as menu rows with no icons; a count sits
+  muted before the › ("Add a spare table 3 ›", "Taken off 1 ›"). Language: two joined buttons at the
+  right, "Español" and "English", the one in use teal. Log out last: teal text, semibold, no ›.
+- **Add a spare table** (`ab` 2): a full screen. Each row: a rounded square, 44 across, in the
+  free-table colour with the short name ("S1"), the name 16 and "2 seats · round" muted, an outlined
+  **Add** at the right. Under "Taken off", the same with **Put back**.
+- **Seating a party** (`u`): the guests as four across, two rows of outlined tiles 60 tall, the
+  number 22; the one picked teal; "8 +" smaller. The name field under them. Teal "Seat 3 guests" in
+  the foot. A booking (`u` 2) comes first as a card in the booked colour: a calendar (new) and
+  "Booked for 21:30" in small capitals, the name 22 bold, the guests and where it was booked, the
+  note in quotes, and a teal button inside the card. Then a thin line with "or a walk-in" in its
+  middle; the walk-in's foot button stays outlined and greyed until a number is picked.
+- **A counter zone** (`ad` 1): no map and no Map or List. "To do" rows as job rows; then **New
+  order** across the full width, teal and taller than the foot's buttons; then "Open orders · 4" in
+  small capitals and one row per order ("**Seats 2–3 · Ana**" bold, "5 items · sent" muted under it,
+  the amount at the right).
+- **When something goes wrong** (`ak`): the box out of reach is a strip at the top in today's danger
+  tint, a wifi-off (new) in red, a bold first line and then the rest, with the floor under it greyed
+  (faded to about half and drained of colour). Declined: centred, a circled × (new) in red, 44;
+  "Declined" 22 bold; the sentence muted; the amount 40 bold; teal "Try the card again" and outlined
+  "Another way to pay" in the foot. Nothing to do: a heading 22 bold and one muted line, centred,
+  with no icon. A receipt that did not print: on Paid, a box in today's warning tint with a printer
+  (new) and a bold heading, the reason under it, and two outlined buttons side by side.
+
+### 14.4 The order and the menu
+
+- **The bill** (`j` B, `af`): under the top bar, an outlined box 44 tall: "Bill 1" bold, the amount
+  muted, "1 of 4" 13 muted at the right, then `chevron-down`; beside it ⋮ (`kebab`) in an outlined
+  44 square. Its list (`j` B, opened) is a sheet headed "Bills on Table 4": a teal `check` before
+  the current bill, the amounts at the right, "+ New bill" in teal at the foot.
+- **Rows** (`af` 1): the grip at the left edge (muted, 36 wide), the quantity 16 semibold, the name
+  16 medium with its options 13 muted under it, the price 15 at the right, and a `chevron-down` at
+  the far right on a row of more than one. Sent rows sit on the page background, muted, regular
+  weight, with no grip. The row added last is light blue.
+- **Unfolded rows** (`g` 2): indented under their row, on the page background.
+- **An opened row** (`g` 3): the row and its controls inside a box with a 2px teal border and
+  rounded corners; the controls are outlined: the stepper, Options, Note.
+- **Dragging** (`af` 2): the row lifts (a shadow, a teal outline, tilted slightly), leaving a dashed
+  empty slot; the heading under it turns light blue with a dashed teal outline. "+ New course" at
+  the end is a box 48 tall with a dashed border, a teal `plus` and teal words.
+- **Selecting** (`af` 3): the selecting header; a checkbox takes each grip's place (24 square,
+  rounded 6, a 2px border; ticked, it is teal with a white `check`); chosen rows light blue; the
+  foot becomes an outlined "Move to…" and a teal "Send these 3 now".
+- **The menu** (`d` 2): an outlined search field 44 tall with a magnifier; the path under it, a home
+  (new) then "› Starters › Cooked starters", the earlier steps teal links, the current one dark.
+  Tiles three across, 76 tall, 8 radius, in their section's colour as today; a section is a white
+  outlined tile with `menu-section` over its name; a count as a teal circle at a tile's top right
+  corner. The last added strip (`d` 2) is light blue, just above the foot: "Last added" in small
+  capitals over the name 17 bold, the stepper at the right. The foot: an outlined "⌄ Order" with "5
+  new · €50.10" muted at its right.
+- **Options** (`f` 1): `close` at the top left; each group's name bold with "Choose one" muted at
+  the right; the choices as tiles two across, 56 tall; the note as a field 52 tall with a dashed
+  border and a pencil (new); the foot a stepper and a teal "Add · €21.50".
+- **The table's and the bill's menus** (`i` 2 and 3, `h` 1 and 2): menu rows under "Table 4" and
+  "Bill 1 · €73.20". **Finish table** stands apart at the end as an outlined full-width button, not
+  a row (`i` 2).
+- **Move dishes** (`h` 3): one row per dish with a stepper at the right; a row above 0 is light
+  blue. "Move them to" as rounded pills, the chosen one dark. The teal foot says what will happen.
+- **The till** (`m`): the menu on the left; on the right the order column with its own top bar, bill
+  dropdown and foot (Pay outlined, Send teal).
+
+### 14.5 Paying
+
+- **The guest's bill** (`ah` 1): at the top, the language as a rounded outlined pill 36 tall
+  ("English ⌄") at the left and "Skip ›" at the right, muted 14 semibold, with no box. Under it the
+  venue's name muted 18, "Here is your bill" 24 bold, one muted line, the dishes, and "Total" 20
+  bold. The foot: teal "Leave a tip?" over an outlined "No tip · hand back to your waiter".
+- **The tip** (`o` 2): the percentages as a column of tiles, the percent 20 bold at the left and the
+  amount muted at the right, with "Custom amount" as one more tile. On a split share (`ba` 2) they
+  are a row of three tiles (the percent bold, the amount muted under it) with "Custom amount" as a
+  teal link. Which is meant for both is open (§11, 4).
+- **Pay** (`ah` 2): "To pay" 13 muted, the amount 42 bold, and under it a muted line with "Remove
+  tip" as a teal link. The ways to pay as a column of choice tiles 56 tall, each with its hint.
+  "Full invoice instead" as a teal link. At the top right, the reader and printer button (new: a
+  phone with waves). The foot: teal "Charge €80.52" with a card (new) before the words, outlined
+  "Cash", and "Other card machine" as a teal link.
+- **Cash** (`ah` 3): the quick amounts as choice tiles two across (18 semibold); "Give back" in a
+  light blue box, its amount 26 bold at the right; the keypad; the teal foot "Took €90.00 · give
+  €9.48".
+- **The device sheet** (`r`): the camera, dark, with white corner marks and a white caption; a muted
+  line under it; one dropdown per device (a label 13 muted over the value 17, `chevron-down` at the
+  right). A device just scanned: its dropdown light blue with a teal border, and above it a pale
+  green line with a `check`, "Picked up Reader 3". Teal Done.
+- **At the reader** (`k` 3): no back. A ring 96 across (4px, grey with a teal arc) turning around a
+  card, "Tap or insert the card" 22 semibold, the amount 44 semibold, "on Reader 2 · waiting 0:14"
+  muted, a muted note. Nothing to press.
+- **Paid** (`k` 4): a pale green circle with a green `check`, "Bill 1 paid" bold, then rows with a
+  muted label at the left and the value at the right; "Print payment slip" outlined with a muted
+  note under it. The foot: the next payment in teal, then an outlined "Back to Table 4".
+- **The full invoice** (`q` 4): today's labelled fields; under "Send the invoice", two joined
+  buttons, Print it and Email it, the chosen one dark; teal "Use full invoice".
+- **Split equally** (`ba`): the guests' stepper (§14.2); the guests in a white card, each row with a
+  circle at the left (empty: still to pay; filled teal on a light blue row: paying now or next;
+  circled tick: paid), "Guest 1" 15 semibold with a muted second line, the share bold at the right.
+  Between guests (`ba` 4): "Guest 2 paid" muted, "€24.43 by card" 30 bold, the receipt line muted;
+  "Change the number of guests" as a teal link under the list; the foot teal "Next: Guest 3 ·
+  €24.43" with "Print payment slip" as a teal link.
+- **Items** (`bb`): a muted line "Tap the dishes this guest is paying for"; each row starts with a
+  checkbox (empty, ticked, or a minus for part of a row), then the quantity, name and price. A row
+  paid in part opens a light blue line under it: "Paying for" muted, the small stepper, the amount
+  bold at the right. The teal foot "Pay for 2 dishes · €17.70". After paying (`bb` 3): the paid part
+  as a white card ("Bill 2 · paid" and its dishes), "Still on Bill 1 · €55.50", then the rows; the
+  foot teal "Next guest: choose dishes", outlined "Pay the rest · €55.50", and "Print payment slip"
+  as a teal link.
+- **An amount** (`bc`): "How much is this guest paying?" muted; the amount in a box with a 2px teal
+  border, 40 bold, centred; "Still to pay after this" with the figure bold at the right; a white
+  card holding the switch "Their own receipt for €20.00" with a muted second line; the keypad; the
+  teal foot. After paying (`bc` 2): a white card listing the bill, each payment muted and negative,
+  a line, then "Still to pay" bold.
+- **Other card machine** (`bd`): the amount as on Pay; three numbered steps in a light blue box;
+  "Which card machine" as a dropdown (the name bold, its kind muted, `chevron-down`) whose list
+  opens in place under it, the chosen row light blue; "Operation number (optional)"; the foot teal
+  "It went through · €80.52" over an outlined "It was declined".
