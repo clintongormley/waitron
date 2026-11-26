@@ -8964,21 +8964,21 @@ export const es: Record<StringKey, string> = {
   "menu_preview.warnings_heading": "Avisos",
   "menu_preview.allergens_unreviewed": "Alérgenos sin revisar",
   "menu_preview.declarations_advisory":
-    "Hay cambios de alérgenos o dieta sin publicar: {names}. Publica el menú o actualiza su versión activa.",
-  "live_declarations.live_title": "¿Actualizar ahora los menús activos?",
-  "live_declarations.scheduled_title": "¿Actualizar ahora los menús programados?",
+    "Hay cambios de alérgenos o dieta sin publicar: {names}. Publica la carta o corrige su versión publicada.",
+  "live_declarations.live_title": "¿Actualizar ahora las cartas publicadas?",
+  "live_declarations.scheduled_title": "¿Actualizar ahora las cartas programadas?",
   "live_declarations.live_menus":
-    "Estos menús activos aún muestran los alérgenos y las dietas anteriores: {menus}.",
-  "live_declarations.also_scheduled": "Estos menús programados también tienen diferencias",
+    "Estas cartas publicadas aún muestran los alérgenos y las dietas anteriores: {menus}.",
+  "live_declarations.also_scheduled": "Estas cartas programadas también tienen diferencias",
   "live_declarations.scheduled": "Elige las versiones programadas que quieres actualizar",
   "live_declarations.version": "{menu}, a partir del {time}",
   "live_declarations.update": "Actualizar ahora",
   "live_declarations.not_now": "Ahora no",
   "live_declarations.retry": "Volver a intentar",
   "live_declarations.refused":
-    "El producto se ha guardado, pero no se han actualizado estos menús: {menus}. Vuelve a intentarlo o publícalos.",
+    "El producto se ha guardado, pero no se han actualizado estas cartas: {menus}. Vuelve a intentarlo o publícalas.",
   "live_declarations.unconfirmed":
-    "El producto se ha guardado, pero Waitron no ha podido confirmar la actualización de estos menús: {menus}.",
+    "El producto se ha guardado, pero Waitron no ha podido confirmar la actualización de estas cartas: {menus}.",
   "menu_preview.document_heading": "La carta tal como se publicará",
   "menu_preview.document_heading_live": "La carta tal como está publicada",
   "menu_preview.shortcut_missing_one":

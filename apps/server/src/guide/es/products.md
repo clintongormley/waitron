@@ -303,9 +303,9 @@ o _muy hecho_ no lleva alérgenos ni aptitud dietética propios, porque es una f
 plato, no algo más que comer. La caja y la estación muestran la lista propia de cada elemento.
 
 Cuando guardas un cambio en los alérgenos o las etiquetas dietéticas de un producto, Waitron te
-pregunta si quieres corregir los menús activos o programados que aún muestran los valores
-anteriores. Pulsa **Actualizar ahora** para corregir los menús activos y las versiones programadas
-que marques. Para consultar los cambios pendientes de un menú activo, abre **Revisar y publicar**.
+pregunta si quieres corregir las cartas publicadas o programadas que aún muestran los valores
+anteriores. Pulsa **Actualizar ahora** para corregir las cartas publicadas y las versiones programadas
+que marques. Para consultar los cambios pendientes de una carta publicada, abre **Revisar y publicar**.
 Publica la carta o usa [Corregir la carta publicada](products.md#patch-live-menu) para que esos
 cambios entren en vigor.
 
