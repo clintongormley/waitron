@@ -3114,6 +3114,7 @@ export class TillTableOrderScreen extends LitElement {
           <till-table-status .tables=${this.tables} .party=${this.party}></till-table-status>
           ${billSwitcher({
             party: this.party,
+            bottomSheet: !this.wide,
             bills: this.bills,
             billId: this.orderId,
             personId: this.personId,

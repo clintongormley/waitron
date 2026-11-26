@@ -4,7 +4,7 @@ import {
   actionChoiceStyles,
   actionDividerStyles,
 } from "@waitron/ui/src/components/wt-row-actions.js";
-import { decimal, formatMoney } from "@waitron/shared";
+import { decimal, formatMoney, TABLE_SEPARATOR } from "@waitron/shared";
 import type { PartyBill, TableParty } from "../api/floor-api.js";
 import { countText, currentLocale, fill, named, t } from "../i18n/t.js";
 import { billLabel, billNumberLabel, shownBills } from "../state/bill-state.js";
@@ -83,22 +83,22 @@ export function billRowContent(bill: PartyBill, party: TableParty, marked = fals
     )}`;
 }
 
-/** "Bill 1 · €38.50"; with several bills "Bill 2 · 3 bills · Clint · €54.00"; "Bills" with none shown. */
-function closedLabel(bills: readonly PartyBill[], shown: PartyBill | undefined): string {
-  if (shown === undefined) return t("table.bills_title");
-  const number = billNumberLabel(shown);
-  return [
-    bills.length > 1
-      ? fill(t("table.bill_count"), { bill: number, count: String(bills.length) })
-      : number,
-    ...(shown.billName === null ? [] : [shown.billName]),
-    owes(shown),
-  ].join(" · ");
+function billSheetHeading(party: TableParty): string {
+  const words = { party: party.displayName };
+  if (party.name !== null) return fill(t("table.bills_for_party"), words);
+  const labels = party.displayName.split(TABLE_SEPARATOR);
+  if (labels.some((label) => !/^\d+[a-z]?$/i.test(label)))
+    return fill(t("table.bills_on_table"), words);
+  return fill(
+    t(labels.length === 1 ? "table.bills_on_numbered_table" : "table.bills_on_numbered_tables"),
+    words,
+  );
 }
 
 export interface BillSwitcherOptions {
   party: TableParty | null;
   bills: readonly PartyBill[];
+  bottomSheet: boolean;
   /** The bill on screen. */
   billId: string | undefined;
   /** Who is signed in: another bill holding their unsent dishes is marked. */
@@ -114,30 +114,50 @@ export interface BillSwitcherOptions {
  * always last, New bill. Drawn whenever there is a party, even with one bill or none.
  */
 export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typeof nothing {
-  const { party, billId } = options;
+  const { party, billId, bottomSheet } = options;
   if (party === null) return nothing;
   const bills = shownBills(options.bills);
-  const shown = bills.find((bill) => bill.workingOrderId === billId);
-  const closed = closedLabel(bills, shown);
+  const index = bills.findIndex((bill) => bill.workingOrderId === billId);
+  const shown = bills[index];
+  const closed =
+    shown === undefined ? t("table.bills_title") : `${billLabel(shown)} · ${owes(shown)}`;
+  const position =
+    shown !== undefined && bills.length > 1
+      ? ` · ${fill(t("table.bill_position"), { position: String(index + 1), count: String(bills.length) })}`
+      : "";
+  const heading = bottomSheet ? billSheetHeading(party) : undefined;
   const marked = othersUnsent(bills, party, billId, options.personId);
   const words = marked.length === 0 ? undefined : unsentWords(marked);
-  const label = shown === undefined ? closed : `${t("table.bills_title")}: ${closed}`;
+  const label = shown === undefined ? closed : `${t("table.bills_title")}: ${closed}${position}`;
   return html`<wt-row-actions
     class="bill-switcher"
     data-bill-switcher
+    .bottomSheet=${bottomSheet}
     opens-below
     label=${words === undefined ? label : `${label} · ${words}`}
   >
     <span slot="trigger" class="bill-switcher-trigger"
       ><span class="bill-switcher-closed"
-        ><span data-bill-switcher-label>${closed}</span>${paidMark(shown)}${chevron}</span
+        ><span data-bill-switcher-label>${closed}${paidMark(shown)}${position}</span
+        >${chevron}</span
       >${
         words === undefined
           ? nothing
           : html` <span class="bill-unsent-mark" data-unsent-mark>${unsentIcon}${words}</span>`
       }</span
     >
-    <div role="menu" class="bill-switcher-menu">
+    <div
+      role="menu"
+      class="bill-switcher-menu"
+      aria-labelledby=${heading === undefined ? nothing : "bill-switcher-heading"}
+    >
+      ${
+        heading === undefined
+          ? nothing
+          : html`<div id="bill-switcher-heading" class="table-menu-heading" role="presentation">
+              ${heading}
+            </div>`
+      }
       ${bills.map(
         (bill) =>
           html`<button

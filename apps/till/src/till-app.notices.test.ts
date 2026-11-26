@@ -201,13 +201,13 @@ describe("a poll beside an open order", () => {
   });
 
   it.each([
-    ["till", 1280, "[data-bill-switcher]"],
-    ["till", 1280, "[data-table-menu]"],
-    ["tablet-landscape", 1024, "[data-bill-switcher]"],
-    ["phone-portrait", 390, "[data-bill-switcher]"],
+    ["till", 1280, "[data-bill-switcher]", "anchored"],
+    ["till", 1280, "[data-table-menu]", "anchored"],
+    ["tablet-landscape", 1024, "[data-bill-switcher]", "anchored"],
+    ["phone-portrait", 390, "[data-bill-switcher]", "bottom sheet"],
   ] as const)(
-    "keeps %s %i px %s anchored when a paper-out notice arrives",
-    async (formFactor, width, selector) => {
+    "keeps %s %i px %s open in %s mode when a paper-out notice arrives",
+    async (formFactor, width, selector, placement) => {
       const viewport = { width: window.innerWidth, height: window.innerHeight };
       onTestFinished(() => page.viewport(viewport.width, viewport.height));
       await page.viewport(width, 800);
@@ -234,9 +234,13 @@ describe("a poll beside an open order", () => {
       await poll(el);
       expect(strip(el).words).toContain("Back office");
       const notice = strip(el).drawn!;
-      expect(popup.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-        trigger.getBoundingClientRect().bottom,
-      );
+      expect(popup.matches(":popover-open")).toBe(true);
+      expect(menu.hasAttribute("bottom-sheet")).toBe(placement === "bottom sheet");
+      if (placement === "anchored") {
+        expect(popup.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+          trigger.getBoundingClientRect().bottom,
+        );
+      }
       expect(trigger.getBoundingClientRect().top).toBeGreaterThanOrEqual(
         notice.getBoundingClientRect().bottom,
       );

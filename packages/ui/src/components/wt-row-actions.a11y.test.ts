@@ -40,17 +40,23 @@ describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (the
       await expectNoA11yViolations(host);
     },
   );
-  test("announces a role menu with its checked choice in both closed and open states", async () => {
+  test.each([false, true])("a named role menu, bottom sheet=%s", async (bottomSheet) => {
     const el = await mountThemed(
-      `<wt-row-actions label="Bills"><div role="menu" aria-label="Bills">
-      <button role="menuitemradio" aria-checked="true">Bill 1</button>
-      <button role="menuitemradio" aria-checked="false">Bill 2</button>
-    </div></wt-row-actions>`,
+      `<wt-row-actions label="Bills" ${bottomSheet ? "bottom-sheet" : ""}>
+      <div role="menu" aria-labelledby="bill-menu-heading">
+        <div id="bill-menu-heading" role="presentation">Bills on Table 4</div>
+        <button role="menuitemradio" aria-checked="false">Bill 1</button>
+        <button role="menuitemradio" aria-checked="true">Bill 2</button>
+      </div></wt-row-actions>`,
       theme,
     );
+    const trigger = el.shadowRoot!.querySelector("button")!;
     await expectNoA11yViolations(host);
-    await userEvent.click(el.shadowRoot!.querySelector("button")!);
+    await userEvent.click(trigger);
+    expect(el.querySelector('[aria-checked="true"]')).toBe(document.activeElement);
     await expectNoA11yViolations(host);
+    await userEvent.keyboard("{Escape}");
+    expect(el.shadowRoot!.activeElement).toBe(trigger);
   });
 
   test("names the hamburger and its open create, edit and delete actions", async () => {
