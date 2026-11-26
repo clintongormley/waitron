@@ -546,7 +546,7 @@ Route: Existing: reload after restart. Missing if the half-join remains: a retry
 
 _2026-11-11, A1089 slice 1: the words no longer say to contact support. When joining again reports the join stopped partway, the page offers the reset again (`#offerReset` in `apps/setup/src/setup-app.ts`), and the words now say to press Reset this server again. Still open: nothing tells the person what to do if a repeated reset never takes effect. The rest of this entry records the earlier tree._
 
-_On 26 November 2026 the reset request and restart scheduling call moved with `/setup-api/reset-incomplete-adopt` to `apps/server/src/setup-operation-routes.ts`._
+_On 26 November 2026 `/setup-api/reset-incomplete-adopt` moved to `apps/server/src/setup-operation-routes.ts`. It hands the restart to `restartAfterReply` in `apps/server/src/setup-api.ts`._
 
 ### `aeat_certificate.refused.check_failed`
 

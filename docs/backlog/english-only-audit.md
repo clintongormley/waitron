@@ -180,7 +180,7 @@ _2026-10-22 (A969): the fallback error, fallback alert and empty-table pairs mov
 **The installed demo** (`apps/server/src/demo-seed.ts`, run only when setup's mode is "demo", always
 as a practice venue — `apps/server/src/setup-api.ts:528–529, 787–789`):
 
-_On 26 November 2026 the call to `seedDemo` moved to `apps/server/src/setup-operation-routes.ts`._
+_On 26 November 2026 the provision route moved to `apps/server/src/setup-operation-routes.ts`. It calls `seedDemo` and saves the `onboardingIntent` that `apps/server/src/boot.ts` reads to enable practice mode._
 
 | file:line | text | English beside it? |
 | --- | --- | --- |
