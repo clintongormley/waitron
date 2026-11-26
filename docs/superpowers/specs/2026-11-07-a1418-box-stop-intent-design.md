@@ -1,8 +1,12 @@
 # A1418: how a box stops, and what it does when it starts again
 
-**Status: approved by the owner, 2026-11-07 ("approved"); nothing is built.** Decisions marked **(owner)** quote the owner from
+**Status on 7 November 2026: approved by the owner ("approved").** Decisions marked **(owner)** quote the owner from
 the conversation of 7 November 2026. Decisions marked **(default)** are this design's, open to
 correction. Everything else is a fact, with a pointer, and says whether it was read or run.
+
+**26 November 2026:** [Slice 1](../plans/2026-11-26-h-a1418-box-stop-intent.md) records restart intent
+and alerts managers after an unexpected main-box stop. The startup waits, replacement check and
+administrator shutdown action are in the subsequent slices.
 
 ## Why this exists
 

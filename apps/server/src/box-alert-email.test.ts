@@ -10,6 +10,7 @@ import {
   type BoxEmailCode,
 } from "./box-alert-email.js";
 import { BOX_EMAIL_WORDS, CLOCK_CORRECTED_EMAIL_WORDS } from "./i18n/box-emails.js";
+import { recordUnexpectedStop } from "./stop-alert.js";
 
 const CODES = Object.keys(BOX_EMAIL_WORDS) as BoxEmailCode[];
 const LANGUAGES = ["en", "es"] as const;
@@ -58,6 +59,18 @@ describe("boxEmailMessage", () => {
     expect(isBoxEmailCode("fiscal.records_unsent")).toBe(false);
     expect(STORAGE_EMAIL_CODES).toEqual(["storage.space_low", "storage.disk_full"]);
   });
+});
+
+it.each([
+  ["en", "Corner Bistro: the box stopped without warning"],
+  ["es", "Corner Bistro: el servidor se detuvo sin aviso"],
+] as const)("dates an unexpected-stop email in %s from the last heartbeat", (language, subject) => {
+  const message = boxEmailMessage("start.unplanned_stop", language, "Corner Bistro", {
+    lastRunningAt: "2026-10-22T09:31:00.000Z",
+    lastRunningOffsetMinutes: 120,
+  });
+  expect(message.subject).toBe(subject);
+  expect(message.text).toContain("22/10/2026 11:31");
 });
 
 describe("the full-disk email", () => {
@@ -315,8 +328,25 @@ describe("every clock email", () => {
   });
 });
 
-describe("readOpenEmailedIncidents for the box setting its clock", () => {
+describe("incidents read by the box email duty", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("offers a new email for a later unexpected stop while the earlier alert is open", async () => {
+    const first = "2026-10-22T09:31:00.000Z";
+    const second = "2026-11-20T14:44:00.000Z";
+    await recordUnexpectedStop(suite.db, first, new Date("2026-10-22T09:40:00.000Z"));
+    const [earlier] = await readOpenEmailedIncidents(suite.db);
+    expect(earlier?.params.lastRunningAt).toBe(first);
+    await recordUnexpectedStop(suite.db, second, new Date("2026-11-20T15:00:00.000Z"));
+    const open = await readOpenEmailedIncidents(suite.db);
+    expect(open.map(({ code, params }) => ({ code, params }))).toEqual([
+      {
+        code: "start.unplanned_stop",
+        params: { lastRunningAt: second, lastRunningOffsetMinutes: 0 },
+      },
+    ]);
+    expect(open[0]!.id).not.toBe(earlier!.id);
+  });
 
   it("reads an open clock.corrected alert and no handled one", async () => {
     const row = (detectedAt: string, acknowledgedAt: string | null) => ({

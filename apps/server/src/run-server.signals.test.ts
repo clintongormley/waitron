@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { installShutdownHandlers, restartProcess } from "./run-server.js";
@@ -15,6 +18,42 @@ function runChild(how: "ask" | "signal" | "early") {
     (resolve) => child.once("close", (code, signal) => resolve({ code, signal, out })),
   );
 }
+
+it.each(["SIGTERM", "SIGKILL"] as const)(
+  "%s leaves a restart mark only on an orderly stop",
+  async (signal) => {
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-signal-mark-"));
+    const child = spawn(
+      process.execPath,
+      ["--import", import.meta.resolve("tsx"), CHILD, "mark", stateDir],
+      {
+        stdio: ["ignore", "pipe", "inherit"],
+      },
+    );
+    const stopped = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (resolve, reject) => {
+        child.once("error", reject);
+        child.once("close", (code, signal) => resolve({ code, signal }));
+      },
+    );
+    try {
+      child.stdout.once("data", () => child.kill(signal));
+      const result = await stopped;
+      const mark = join(stateDir, "stop-mark.json");
+      if (signal === "SIGTERM") {
+        expect(result).toEqual({ code: 0, signal: null });
+        expect(JSON.parse(await readFile(mark, "utf8"))).toEqual({ version: 1, mark: "restart" });
+      } else {
+        expect(result).toEqual({ code: null, signal: "SIGKILL" });
+        await expect(readFile(mark, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+      }
+    } finally {
+      child.kill();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  },
+  30_000,
+);
 
 describe("repeated requests to restart during a slow shutdown", () => {
   // Why the asking must stop: `once` has removed the listener, so Node's default action applies.

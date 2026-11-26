@@ -6,10 +6,11 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import {
+  incidents,
   nodes,
   readStandardSeriesId,
   openVenueDatabase,
@@ -388,7 +389,10 @@ describe("promote: mirror → primary, in-process, restart-into-primary", () => 
         WAITRON_STATE_DIR: stateDir,
       },
       {},
-      { timings: TIMINGS },
+      {
+        timings: TIMINGS,
+        previousStop: { restart: false, heartbeatAt: "2026-10-22T09:31:00.000Z" },
+      },
     ).catch(async (err: unknown) => {
       // `server` is never assigned on a failed boot, so the `finally` below cannot clean up.
       await rm(stateDir, { recursive: true, force: true });
@@ -397,6 +401,12 @@ describe("promote: mirror → primary, in-process, restart-into-primary", () => 
 
     try {
       expect(server.promoteMirrorToPrimary).toBeDefined();
+      expect(
+        await mirrorDb.select().from(incidents).where(eq(incidents.code, "start.unplanned_stop")),
+      ).toEqual([]);
+      const stopMark = join(stateDir, "stop-mark.json");
+      await server.markRestart?.();
+      await expect(stat(stopMark)).rejects.toMatchObject({ code: "ENOENT" });
 
       const request = seed.fixture();
       const result = await server.promoteMirrorToPrimary!(
@@ -430,6 +440,8 @@ describe("promote: mirror → primary, in-process, restart-into-primary", () => 
 
       await delay(50);
       expect(restartAsked).toHaveBeenCalled();
+      await server.markRestart?.();
+      expect(JSON.parse(await readFile(stopMark, "utf8"))).toEqual({ version: 1, mark: "restart" });
 
       expect({
         ino: (await stat(tradingEnv)).ino,

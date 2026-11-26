@@ -100,6 +100,10 @@ describe("partOfAlert", () => {
     expect(partOfAlert({ area: "box", code: "storage.space_low" })).toBe("disk");
   });
 
+  it("lists an unexpected stop among the other alerts", () => {
+    expect(partOfAlert({ area: "box", code: "start.unplanned_stop" })).toBeNull();
+  });
+
   it("leaves every other alert off the rows", () => {
     expect(partOfAlert({ area: "kitchen", code: "station.printer_down" })).toBeNull();
     expect(partOfAlert({ area: "backup", code: "backup.destination_failed" })).toBeNull();

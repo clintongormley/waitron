@@ -31,6 +31,17 @@ export const BOX_EMAIL_WORDS = {
   },
 } as const satisfies Record<string, Record<"en" | "es", { subject: string; text: string }>>;
 
+export const UNPLANNED_STOP_EMAIL_WORDS = {
+  en: {
+    subject: "{venue}: the box stopped without warning",
+    text: "The box was last running at {lastRunningAt}. A power cut, a crash or a forced stop can cause this.",
+  },
+  es: {
+    subject: "{venue}: el servidor se detuvo sin aviso",
+    text: "El servidor funcionaba por última vez el {lastRunningAt}. Un corte de luz, un fallo o una parada forzada pueden causar esto.",
+  },
+} as const;
+
 /** By what set the clock, `unverified` (with its own subject) instead of any when the box could
  * not confirm the step took; `{step}` is `forward`, `back` or `moved` with the step's length. */
 export const CLOCK_CORRECTED_EMAIL_WORDS = {

@@ -47,6 +47,7 @@ export function whenShutdownStarts(): Promise<number> {
 
 /** What the shutdown handlers stop. */
 export interface ShutdownTarget {
+  markRestart?: () => Promise<void>;
   close(): Promise<void>;
   /** Runs before `close` only when {@link restartProcess} asked for the shutdown, never for a
    *  signal from outside. A rejection is not logged here, and the close goes ahead anyway. */
@@ -89,6 +90,7 @@ export function installShutdownHandlers(
   const logShutdownFailure = createLogger((line) => deps.write(line, () => exitOnce(1)), deps.now);
   // Fire-and-forget: a stalled stdout pipe must not be able to withhold the deadline's exit.
   const logShutdownTimeout = createLogger((line) => deps.write(line, () => {}), deps.now);
+  const logMarkFailure = createLogger((line) => deps.write(line, () => {}), deps.now);
   let shuttingDown = false;
   const setTimer = deps.setTimer ?? unrefTimer;
   const onSignal = (): void => {
@@ -103,13 +105,22 @@ export function installShutdownHandlers(
       logShutdownTimeout("warn", "server.shutdown_timeout", { deadlineMs: SHUTDOWN_DEADLINE_MS });
       exitOnce(0);
     });
-    const closing =
+    const close = () =>
       restartRequested && server.beforeRestart !== undefined
         ? server
             .beforeRestart()
             .catch(() => {})
             .then(() => server.close())
         : server.close();
+    const closing =
+      server.markRestart === undefined
+        ? close()
+        : Promise.resolve()
+            .then(server.markRestart)
+            .catch((error: unknown) =>
+              logMarkFailure("warn", "server.stop_mark_failed", { errorCode: codeOf(error) }),
+            )
+            .then(close);
     void closing.then(
       () => {
         if (exited) return;

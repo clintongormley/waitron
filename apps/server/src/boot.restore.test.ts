@@ -15,6 +15,7 @@ import { DatabaseSync } from "node:sqlite";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  incidents,
   nodeSealedState,
   openVenueDatabase,
   readNodeMembership,
@@ -269,16 +270,20 @@ describe("startServer, against a migrated venue directory", () => {
       join(stateDir, "flows/restore/record.json"),
       JSON.stringify({ version: 1, phase: "first-start", firstStart: { source: "archive" } }),
     );
-    const server = await startServer({
-      ...KEY_ENV,
-      WAITRON_STATE_DIR: stateDir,
-      WAITRON_VENUE_DIR: venue.directory,
-      WAITRON_HTTP_PORT: String(port),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "preproduction",
-      WAITRON_BOX_ADDRESSES: "10.1.2.3",
-      WAITRON_MANAGEMENT_ORIGIN: "https://box.example.test",
-    });
+    const server = await startServer(
+      {
+        ...KEY_ENV,
+        WAITRON_STATE_DIR: stateDir,
+        WAITRON_VENUE_DIR: venue.directory,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "preproduction",
+        WAITRON_BOX_ADDRESSES: "10.1.2.3",
+        WAITRON_MANAGEMENT_ORIGIN: "https://box.example.test",
+      },
+      {},
+      { previousStop: { restart: false, heartbeatAt: "2026-10-22T09:31:00.000Z" } },
+    );
     try {
       await awaitListening(httpPort());
       const served = await servedCertificate(
@@ -288,6 +293,9 @@ describe("startServer, against a migrated venue directory", () => {
       expect(served.subjectAltName).toContain("IP Address:10.1.2.3");
       expect(served.subjectAltName).not.toContain("192.168.1.10");
       expect(existsSync(join(stateDir, "flows/restore/record.json"))).toBe(false);
+      expect(
+        await db.select().from(incidents).where(eq(incidents.code, "start.unplanned_stop")),
+      ).toEqual([]);
       const held = await readNodeMembership(db);
       expect(held!.body.term).toBe(1);
       expect(held!.body.nodes).toEqual([

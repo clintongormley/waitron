@@ -20,6 +20,8 @@ import { closeListener } from "./close-listener.js";
 import { readRecoveryState, refusedAtStart } from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
 import { lowestFreeBytes } from "./start-space.js";
+import { readPreviousStop } from "./stop-mark.js";
+import type { ShutdownTarget } from "./run-server.js";
 
 export async function startServerOrFirstSetupResolution(
   env: NodeJS.ProcessEnv,
@@ -32,34 +34,35 @@ export async function startServerOrFirstSetupResolution(
     startServer?: (
       env: NodeJS.ProcessEnv,
       base: NodeJS.ProcessEnv,
-    ) => Promise<{ close(): Promise<void>; fullyStarted?: Promise<void> }>;
+    ) => Promise<ShutdownTarget & { fullyStarted?: Promise<void> }>;
     serveResolution?: (
       app: Hono,
       options: RecoveryServeOptions,
     ) => Promise<{ close(): Promise<void> }>;
     requestRestart?: () => void;
   } = {},
-): Promise<{
-  close(): Promise<void>;
-  /**
-   * Rejects with the failure of a normal start, from this call or a relaunch after a repair, that
-   * answered while it waited for its peers and then failed; it never resolves.
-   */
-  failedLater: Promise<never>;
-}> {
+): Promise<
+  ShutdownTarget & {
+    /**
+     * Rejects with the failure of a normal start, from this call or a relaunch after a repair, that
+     * answered while it waited for its peers and then failed; it never resolves.
+     */
+    failedLater: Promise<never>;
+  }
+> {
   const stateDir = resolveConfigDir(readVariable(env, "WAITRON_STATE_DIR"), DEFAULT_STATE_ROOT);
   const venueDir = venueDirOf(env, stateDir);
   const log = createLogger(
     (line) => process.stdout.write(line),
     () => new Date(),
   );
-  let active: { close(): Promise<void> };
+  let active: ShutdownTarget;
   let lateFailure: (error: unknown) => void = () => {};
   const failedLater = new Promise<never>((_, reject) => (lateFailure = reject));
   // Only keeps a caller that never reads it from an unhandled rejection.
   failedLater.catch(() => {});
   // A relaunch's start is watched too: the caller read the handle once, before any relaunch.
-  const watched = (server: { close(): Promise<void>; fullyStarted?: Promise<void> }) => {
+  const watched = (server: ShutdownTarget & { fullyStarted?: Promise<void> }) => {
     server.fullyStarted?.catch(lateFailure);
     return server;
   };
@@ -95,10 +98,9 @@ export async function startServerOrFirstSetupResolution(
     }
   };
   const requestRestart = seams.requestRestart ?? (() => process.kill(process.pid, "SIGTERM"));
-  const launch = async (): Promise<{
-    close(): Promise<void>;
-    fullyStarted?: Promise<void>;
-  }> => {
+  const launch = async (): Promise<ShutdownTarget & { fullyStarted?: Promise<void> }> => {
+    const previousStop = await readPreviousStop({ stateDir, venueDir }, log);
+    const start = seams.startServer ?? ((env, base) => startServer(env, base, { previousStop }));
     const admission = await resolveFirstSetupEntry(
       { stateDir, venueDir },
       env,
@@ -129,14 +131,14 @@ export async function startServerOrFirstSetupResolution(
     if (admission.kind === "normal")
       return admission.run(async () => {
         if (admission.roots.stateDir === stateDir && admission.roots.venueDir === venueDir)
-          return (seams.startServer ?? startServer)(env, base);
+          return start(env, base);
         const selectedBase = {
           ...env,
           WAITRON_STATE_DIR: admission.roots.stateDir,
           WAITRON_VENUE_DIR: admission.roots.venueDir,
         };
         const selectedEnv = await loadBoxEnv(selectedBase, admission.roots.stateDir);
-        return (seams.startServer ?? startServer)(selectedEnv, selectedBase);
+        return start(selectedEnv, selectedBase);
       });
     if (admission.kind === "refused") {
       log("warn", "recovery.serving_refused_start", {
@@ -178,6 +180,7 @@ export async function startServerOrFirstSetupResolution(
   active = watched(await launch());
   return {
     failedLater,
+    markRestart: async () => active.markRestart?.(),
     close: async () => {
       closed = true;
       await transition?.catch(() => {});
