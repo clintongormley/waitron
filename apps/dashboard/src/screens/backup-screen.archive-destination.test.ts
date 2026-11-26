@@ -89,9 +89,7 @@ function withOutcomes(
 function stubApi(status: BackupStatusView, overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     getBackupStatus: vi.fn().mockResolvedValue(status),
-    mintBackupKey: vi.fn().mockResolvedValue({ key: "MINTED-KEY-abcdef012345" }),
     applyBackup: vi.fn().mockResolvedValue(status),
-    getBackupRecoveryKey: vi.fn().mockResolvedValue({ key: "OLD-KEY-xyz789012345" }),
     rotateBackupKey: vi.fn().mockResolvedValue(status),
     getStreamSettings: vi.fn().mockResolvedValue({
       isPrimary: true,
@@ -1480,28 +1478,25 @@ describe("switching off", () => {
     expect(await buttonState(el, "turn-off")).toEqual(["danger", true]);
   });
 
-  it("while its request is out, Edit settings and Show the current key cannot be pressed", async () => {
+  it("while its request is out, Edit settings cannot be pressed", async () => {
     const { el } = await mount(LOCAL_ONLY, {
       disableBackup: vi.fn().mockReturnValue(new Promise(() => undefined)),
     });
     await press(el, "turn-off");
     await press(el, "turn-off");
     expect(await buttonState(el, "edit-settings")).toEqual(["secondary", true]);
-    expect(await buttonState(el, "show-old-key")).toEqual(["secondary", true]);
   });
 
   it("keeps its own colour while its own request is sent, whatever else is pressed", async () => {
-    const { el, api } = await mount(TWO, {
+    const { el } = await mount(TWO, {
       disableBackup: vi.fn().mockReturnValue(new Promise(() => undefined)),
     });
     await press(el, "turn-off");
     await press(el, "turn-off");
-    for (const other of ["edit-settings", "show-old-key", "configuration-export"]) {
+    for (const other of ["edit-settings", "configuration-export"]) {
       await press(el, other);
       expect(await buttonState(el, "turn-off"), other).toEqual(["danger", true]);
     }
-    await settle();
-    expect(api.getBackupRecoveryKey).not.toHaveBeenCalled();
   });
 
   it("an Edit pressed while the turn-off is out does not open the settings editor once backups are back on", async () => {
@@ -1523,10 +1518,7 @@ describe("switching off", () => {
     expect(q(el, "[data-test=edit-title]")).toBeNull();
   });
 
-  for (const [other, overrides] of [
-    ["show-old-key", {}],
-    ["configuration-export", {}],
-  ] as const) {
+  for (const [other, overrides] of [["configuration-export", {}]] as const) {
     it(`pressing ${other} disarms it`, async () => {
       const { el, api } = await mount(TWO, { disableBackup: vi.fn(), ...overrides });
       await press(el, "turn-off");
@@ -1662,7 +1654,7 @@ describe("turning stored settings back on", () => {
       at: { hour: 4, minute: 30 },
     });
     expect(body.retention).toEqual({ count: 5, days: 20 });
-    expect(body.recoveryKey).toBeUndefined();
+    expect(body).not.toHaveProperty("recoveryKey");
   });
 
   it("another stored bucket opens filled in with an empty secret that is kept, and is sent without one", async () => {
@@ -1819,7 +1811,6 @@ describe("Turn off after leaving settings", () => {
     });
     await press(el, "edit-settings");
     await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
-    expect(api.getBackupRecoveryKey).not.toHaveBeenCalled();
     await press(el, "cancel-edit");
     await press(el, "turn-off");
     await press(el, "turn-off");
@@ -1836,7 +1827,6 @@ describe("Turn off after leaving settings", () => {
     expect(q(el, "[data-test=edit-title]")).toBeNull();
     expect(q(el, "[data-test=edit-settings]"), "Edit settings").not.toBeNull();
     expect(q(el, "[data-test=turn-off]"), "Turn off").not.toBeNull();
-    expect(q(el, "[data-test=rotate]"), "the key change").not.toBeNull();
   });
 });
 
@@ -2011,16 +2001,6 @@ describe("Enter in another bucket's fields", () => {
       new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
     );
     await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
-  });
-});
-
-describe("the first recovery key", () => {
-  it("is asked for while the bucket copy's settings are still being read", async () => {
-    const { api } = await mount(
-      { ...OFF_WITH_KEY, recoveryKeySet: false, keyFingerprint: undefined },
-      { getStreamSettings: vi.fn().mockReturnValue(new Promise(() => undefined)) },
-    );
-    await vi.waitFor(() => expect(api.mintBackupKey).toHaveBeenCalledOnce());
   });
 });
 

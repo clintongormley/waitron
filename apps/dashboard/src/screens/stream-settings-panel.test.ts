@@ -842,14 +842,14 @@ describe("stream-settings-panel: once set up", () => {
   it("explains, in this panel's words, a save refused because the box's recovery key is too short", async () => {
     const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
     const api = stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) });
-    const { el } = await mount(api, { archivesEnabled: false });
+    const { el } = await mount(api);
     fillRequired(el);
     await press(el, "save");
     expect(text(el, "[role=alert]")).toBe(t("stream.error.recovery_key_too_short"));
   });
 
   it.each(["en-GB", "es-ES"])(
-    "in %s, points a too-short-key refusal at the button above that replaces the key",
+    "in %s, points a too-short-key refusal at Change the backup key on the recovery pack card, with no button of its own",
     async (locale) => {
       const before = currentLocale();
       setLocale(locale);
@@ -859,83 +859,20 @@ describe("stream-settings-panel: once set up", () => {
             .fn()
             .mockRejectedValue({ code: "backup.recovery_key_too_short", params: { min: 12 } }),
         });
-        const { el } = await mount(api, { archivesEnabled: false });
-        fillRequired(el);
-        await press(el, "save");
-        expect(text(el, "[role=alert]")).toContain(t("backup.apply"));
-        const action = q(el, "[data-test=recovery-key-action]");
-        expect(action).not.toBeNull();
-        expect(action!.textContent!.trim()).toBe(t("backup.apply"));
-        const heard = vi.fn();
-        document.body.addEventListener("recovery-key-needed", heard);
-        try {
-          action!.click();
-          expect(heard).toHaveBeenCalledOnce();
-        } finally {
-          document.body.removeEventListener("recovery-key-needed", heard);
-        }
-      } finally {
-        setLocale(before);
-      }
-    },
-  );
-
-  it.each(["en-GB", "es-ES"] as const)(
-    "in %s, names neither the button nor the environment for a save refused for a too-short key while the Backups status is not known",
-    async (locale) => {
-      const before = currentLocale();
-      setLocale(locale);
-      try {
-        const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
-        const api = stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) });
         const { el } = await mount(api);
-        expect(el.archivesEnabled).toBeUndefined();
         fillRequired(el);
         await press(el, "save");
         const alert = text(el, "[role=alert]");
-        expect(alert).toBe(t("stream.error.recovery_key_too_short_unknown"));
-        expect(alert).not.toContain(t("backup.apply"));
-        expect(alert).not.toMatch(/environment|entorno/i);
+        expect(alert).toContain(t("recovery_pack.title"));
+        expect(alert).toContain(
+          locale === "en-GB" ? "“Change the backup key”" : "«Cambiar la clave de las copias»",
+        );
         expect(q(el, "[data-test=recovery-key-action]")).toBeNull();
       } finally {
         setLocale(before);
       }
     },
   );
-
-  it.each(["en-GB", "es-ES"] as const)(
-    "in %s, with archives on, points a save refused for a too-short key at Change the recovery key, not Turn on backups",
-    async (locale) => {
-      const before = currentLocale();
-      setLocale(locale);
-      try {
-        const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
-        const api = stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) });
-        const { el } = await mount(api, { archivesEnabled: true });
-        fillRequired(el);
-        await press(el, "save");
-        const alert = text(el, "[role=alert]");
-        expect(alert).toContain(t("backup.rotate.title"));
-        expect(alert).not.toContain(t("backup.apply"));
-        expect(q(el, "[data-test=recovery-key-action]")?.textContent!.trim()).toBe(
-          t("backup.rotate.title"),
-        );
-      } finally {
-        setLocale(before);
-      }
-    },
-  );
-
-  it("with archives off, points a too-short key's refusal at Turn on backups", async () => {
-    const refusal = { code: "backup.recovery_key_too_short", params: { min: 12 } };
-    const api = stubApi({ saveStreamSettings: vi.fn().mockRejectedValue(refusal) });
-    const { el } = await mount(api, { archivesEnabled: false });
-    fillRequired(el);
-    await press(el, "save");
-    const alert = text(el, "[role=alert]");
-    expect(alert).toContain(t("backup.apply"));
-    expect(alert).not.toContain(t("backup.rotate.title"));
-  });
 
   it("Cancel leaves the bucket as it was", async () => {
     const api = stubApi({}, ON);

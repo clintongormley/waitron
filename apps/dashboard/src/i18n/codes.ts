@@ -1315,21 +1315,25 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "This node isn't the venue's primary — change backups from the primary node",
     es: "Este nodo no es el principal del local; cambia las copias de seguridad desde el nodo principal",
   },
-  "backup.recovery_key_unstorable": {
-    en: "That backup encryption key can't be stored safely — remove any spaces or line breaks",
-    es: "Esa clave de cifrado de copias no se puede guardar de forma segura; quita los espacios o saltos de línea",
-  },
   "backup.recovery_key_too_short": {
-    en: "The backup encryption key is too short",
-    es: "La clave de cifrado de copias es demasiado corta",
+    en: "The backup key this box holds is too short. Use “Change the backup key” on the Recovery pack card to replace it.",
+    es: "La clave de las copias de este servidor es demasiado corta. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para sustituirla.",
   },
   "backup.new_recovery_key_too_short": {
     en: "That backup encryption key is too short",
     es: "Esa clave de cifrado de copias es demasiado corta",
   },
   "backup.recovery_key_missing": {
-    en: "This box holds no backup encryption key.",
-    es: "Este servidor no tiene clave de cifrado de copias.",
+    en: "This box holds no backup key. Use “Change the backup key” on the Recovery pack card to make one.",
+    es: "Este servidor no tiene clave de las copias. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para crearla.",
+  },
+  "master_key.wrong": {
+    en: "Wrong master key. Use the one dated {keyName}.",
+    es: "Clave maestra incorrecta. Usa la del {keyName}.",
+  },
+  "backup.key_change_page_required": {
+    en: "Changing the backup key needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",
+    es: "Cambiar la clave de las copias necesita una conexión cifrada desde la página del propio servidor. Abre la dirección HTTPS del servidor y vuelve a intentarlo.",
   },
   "backup.destinations_invalid": {
     en: "Check the backup destination",
@@ -1350,10 +1354,6 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   "backup.effective_mismatch": {
     en: "The saved key could not be confirmed. Keep both the previous key and the key you just saved. Stop changing keys here; this page cannot diagnose the conflicting backup-key settings or confirm which key opens a backup.",
     es: "No se pudo confirmar la clave guardada. Conserva tanto la clave anterior como la que acabas de guardar. No sigas cambiando claves aquí; esta página no puede diagnosticar el conflicto de configuración ni confirmar qué clave abre una copia.",
-  },
-  "backup.recovery_key_exists": {
-    en: "This box holds a different backup encryption key from the one this page sent. Reload the page and try again. To replace the key, use “Change the backup encryption key”, which appears while backups are on.",
-    es: "Este servidor tiene una clave de cifrado de copias distinta de la que ha enviado esta página. Vuelve a cargar la página e inténtalo de nuevo. Para sustituir la clave, usa «Cambiar la clave de cifrado de copias», que aparece mientras las copias están activadas.",
   },
   "backup.not_enabled": {
     en: "Turn on scheduled backups before starting a backup.",
@@ -2108,6 +2108,7 @@ export function codeMessage(
     primaryAt?: unknown;
     standbyAt?: unknown;
     limit?: unknown;
+    keyName?: unknown;
   },
 ): string {
   if (
@@ -2118,6 +2119,10 @@ export function codeMessage(
     return registeredCodeMessage(code, locale)
       .replace("{primaryAt}", formatRecentMinute(params.primaryAt))
       .replace("{standbyAt}", formatRecentMinute(params.standbyAt));
+  if (code === "master_key.wrong")
+    return typeof params?.keyName === "string"
+      ? registeredCodeMessage(code, locale).replace("{keyName}", params.keyName)
+      : pickLocale({ en: "Wrong master key.", es: "Clave maestra incorrecta." }, locale);
   if (code === "mirror.membership_full" && typeof params?.limit === "number")
     return registeredCodeMessage(code, locale).replace("{limit}", String(params.limit));
   if (

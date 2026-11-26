@@ -566,10 +566,7 @@ Waitron cannot do for you. Then, on **Backups**, choose **Change bucket** and en
 backups to a bucket keep their own keys, which **Change bucket** does not change: if they used the
 old keys, also choose **Change destination or schedule**, enter the new keys in **Access key ID**
 and **Secret access key**, and choose **Save changes**. A new backup encryption key does not change the passwords and keys for your other providers,
-so change those at each provider too. While scheduled backups are on, **Backups** also offers
-**Change the backup encryption key**; afterwards choose **Make recovery pack** on **Backups** and keep the new
-pack. Scheduled backups made before the change and the whole older bucket copy still need the
-old key. Keep the matching recovery pack for any older copy you may need to restore.
+so change those at each provider too. Keep the matching recovery pack for any older copy you may need to restore.
 To replace the master key, choose **Make a new master key**: restoring a backup made after that needs the new master key, and restoring an older backup still needs the old one.
 
 **A leaked configuration export.** The file holds every person on your staff list, former staff

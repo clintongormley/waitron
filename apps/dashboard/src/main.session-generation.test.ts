@@ -128,7 +128,7 @@ it("the actual entry shares one epoch with shell, API, module requests and backg
       const moduleAction = app
         .request("/protected-module", "POST", { original: true })
         .catch((error: unknown) => error);
-      const apiAction = app.api.getBackupRecoveryKey().catch((error: unknown) => error);
+      const apiAction = app.api.getBackupSettingsEvidence().catch((error: unknown) => error);
       await vi.waitFor(() => expect(profileRead).toHaveBeenCalledTimes(1));
       const proofDialog = app.shadowRoot!.querySelector<FreshSignInDialog>(
         "dashboard-fresh-sign-in-dialog",

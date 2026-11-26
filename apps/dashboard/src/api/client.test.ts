@@ -3342,11 +3342,11 @@ it("a DashboardApi action uses the shared gate but its background read never pro
     sessionGeneration: () => 0,
     freshSignIn,
   });
-  await expect(api.background.getBackupRecoveryKey()).rejects.toMatchObject({
+  await expect(api.background.getBackupSettingsEvidence()).rejects.toMatchObject({
     code: "management_session.proof_required",
   });
   expect(prompt).not.toHaveBeenCalled();
-  expect(await api.getBackupRecoveryKey()).toEqual({ key: "secret" });
+  expect(await api.getBackupSettingsEvidence()).toEqual({ key: "secret" });
   expect(prompt).toHaveBeenCalledTimes(1);
 });
 

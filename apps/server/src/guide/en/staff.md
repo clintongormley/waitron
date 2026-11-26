@@ -52,8 +52,8 @@ Waitron asks you to sign in again before you invite someone, resend an invitatio
 login, disable or re-enable their account, or change an email, role or account status in **Users**.
 This includes changing your own email in **Users**. Creating, copying, editing or deleting an
 access role also needs this confirmation. Names, telephone numbers and PIN resets do not need
-this confirmation. You also confirm before you change backups, download recovery files, show the
-backup encryption key, or export configuration or another staff member's data. The same window
+this confirmation. You also confirm before you change backups, download recovery files, or export
+configuration or another staff member's data. The same window
 covers connecting or disconnecting payment providers, changing the mail server or Cloud
 connection, turning on remote access, preparing a replacement box, installing a tax certificate,
 changing the legal name, registered address or bank account and removing a box. Use your password or passkey, plus an

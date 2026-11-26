@@ -21,7 +21,6 @@ function refusal(code: string, status: number): Response {
 
 const BACKUP_BODY: BackupApplyBody = {
   destinations: [{ kind: "local-fs", dir: "/mnt/usb" }],
-  recoveryKey: "correct horse battery staple",
   schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 0 } },
   retention: { count: 7, days: 30 },
 };
@@ -749,39 +748,32 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("drives the backup wizard's status, key and apply routes", async () => {
+  it("drives the backup screen's status and apply routes, and sends rotate the typed master key", async () => {
     const status = { enabled: true, destinations: [] };
     const body = BACKUP_BODY;
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(status))
-      .mockResolvedValueOnce(jsonResponse({ key: "minted-key" }))
       .mockResolvedValueOnce(jsonResponse(status))
-      .mockResolvedValueOnce(jsonResponse({ key: null }))
       .mockResolvedValueOnce(jsonResponse(status));
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.getBackupStatus()).resolves.toEqual(status);
-    await expect(api.mintBackupKey()).resolves.toEqual({ key: "minted-key" });
     await expect(api.applyBackup(body)).resolves.toEqual(status);
-    await expect(api.getBackupRecoveryKey()).resolves.toEqual({ key: null });
-    await expect(api.rotateBackupKey({ recoveryKey: "a fresh key" })).resolves.toEqual(status);
+    await expect(api.rotateBackupKey({ masterKey: " abcd-efgh " })).resolves.toEqual(status);
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/api/backup/status", "GET", undefined],
-      ["/api/backup/mint-key", "POST", undefined],
       [
         "/api/backup/apply",
         "POST",
         {
           destinations: [{ kind: "local-fs", dir: "/mnt/usb" }],
-          recoveryKey: body.recoveryKey,
           schedule: body.schedule,
           retention: body.retention,
         },
       ],
-      ["/api/backup/recovery-key", "GET", undefined],
-      ["/api/backup/rotate", "POST", { recoveryKey: "a fresh key" }],
+      ["/api/backup/rotate", "POST", { masterKey: " abcd-efgh " }],
     ]);
   });
 
@@ -1171,11 +1163,11 @@ describe("DashboardApi routes", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ enabled: false, destinations: [] }))
-      .mockResolvedValueOnce(jsonResponse({ key: "minted-key" }));
+      .mockResolvedValueOnce(jsonResponse({ enabled: false, destinations: [] }));
     const api = new DashboardApi("", fetchImpl, undefined, onSuccess);
 
     await api.background.getBackupStatus();
-    await api.background.mintBackupKey();
+    await api.background.disableBackup();
 
     const headers = (fetchImpl.mock.calls as [string, RequestInit][]).map(([, init]) =>
       new Headers(init.headers).get("x-waitron-live"),

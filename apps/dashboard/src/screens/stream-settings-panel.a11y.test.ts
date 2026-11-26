@@ -110,19 +110,21 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     return mounted;
   }
 
-  it("offers the short-key action accessibly", async () => {
+  it("explains a too-short key accessibly", async () => {
     const api = stubApi(OFF);
     api.saveStreamSettings = vi.fn().mockRejectedValue({ code: "backup.recovery_key_too_short" });
     const { el, host } = await mountWidget<StreamSettingsPanel>(
       "dashboard-stream-settings",
-      { api, archivesEnabled: true },
+      { api },
       theme,
     );
     await flush(el);
     fillRequired(el);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=recovery-key-action]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent!.trim()).toBe(
+      t("stream.error.recovery_key_too_short"),
+    );
     await expectNoA11yViolations(host);
   });
 

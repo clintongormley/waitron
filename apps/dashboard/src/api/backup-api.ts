@@ -88,8 +88,6 @@ export type BackupWriteAnswer = BackupStatusView & { reloadErrorCode?: string };
 export interface BackupApplyBody {
   destinations: ArchiveChoice[];
   cloud?: boolean;
-  /** Omitted when the box already holds a key: the server uses that one. */
-  recoveryKey?: string;
   schedule: BackupSchedule;
   retention: { count: number; days: number };
 }
@@ -421,9 +419,6 @@ export class BackupApi extends CloudApi {
   markRecoveryPackReceived(packNumber: number): Promise<void> {
     return this.#request<void>(`/api/backup/recovery-pack/${packNumber}/received`, "POST", {});
   }
-  mintBackupKey(): Promise<{ key: string }> {
-    return this.#request<{ key: string }>("/api/backup/mint-key", "POST");
-  }
   applyBackup(body: BackupApplyBody): Promise<BackupWriteAnswer> {
     return this.#request<BackupWriteAnswer>("/api/backup/apply", "POST", body);
   }
@@ -433,11 +428,8 @@ export class BackupApi extends CloudApi {
   disableBackup(): Promise<BackupWriteAnswer> {
     return this.#request<BackupWriteAnswer>("/api/backup/disable", "POST");
   }
-  getBackupRecoveryKey(): Promise<{ key: string | null }> {
-    return this.#request<{ key: string | null }>("/api/backup/recovery-key", "GET");
-  }
-  /** Archives taken before the rotate still need the old key. */
-  rotateBackupKey(body: { recoveryKey: string }): Promise<BackupWriteAnswer> {
+  /** Moves backups to the next backup key of the typed master key, sent as typed. */
+  rotateBackupKey(body: { masterKey: string }): Promise<BackupWriteAnswer> {
     return this.#request<BackupWriteAnswer>("/api/backup/rotate", "POST", body);
   }
   getStreamSettings(): Promise<StreamSettingsView> {

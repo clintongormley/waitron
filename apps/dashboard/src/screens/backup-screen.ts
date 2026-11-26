@@ -57,12 +57,12 @@ import {
   type CustomBucket,
 } from "./backup-destination-model.js";
 
-/** Mirrors the server's `MIN_RECOVERY_KEY_LENGTH` (`apps/server/src/backup-config.ts`) for fast
- * feedback on a PASTED key; the server stays the authority. */
-const MIN_KEY_LENGTH = 12;
+/** Mirrors the configuration export route's floor (`apps/server/src/configuration-export-api.ts`);
+ * the server stays the authority. */
+const MIN_PASSPHRASE_LENGTH = 12;
 
 interface ArchiveDraft {
-  mode: "configure" | "settings" | "rotate";
+  mode: "configure" | "settings";
   cloudOn: boolean;
   folderOn: boolean;
   bucket: BucketChoice;
@@ -74,18 +74,14 @@ interface ArchiveDraft {
   atTime: string;
   retainCount: string;
   retainDays: string;
-  pastedKey: string;
-  advancedPaste: boolean;
 }
-type FormFields = Omit<ArchiveDraft, "mode" | "pastedKey" | "advancedPaste">;
+type FormFields = Omit<ArchiveDraft, "mode">;
 interface ExportDraft {
   passphrase: string;
   confirm: string;
 }
 
 function archivePayload(value: ArchiveDraft): unknown {
-  const pastedKey = value.advancedPaste ? value.pastedKey : "";
-  if (value.mode === "rotate") return { pastedKey };
   return {
     cloud: value.cloudOn,
     destinations: destinationsBody(value.folderOn, value.folder, value.bucket, value.custom),
@@ -93,7 +89,6 @@ function archivePayload(value: ArchiveDraft): unknown {
     at: value.timeMode === "auto" ? "auto" : value.atTime,
     count: parseRetention(value.retainCount) ?? value.retainCount,
     daysRetained: parseRetention(value.retainDays) ?? value.retainDays,
-    ...(value.mode === "configure" ? { pastedKey } : {}),
   };
 }
 
@@ -232,37 +227,11 @@ export class BackupScreen extends LitElement {
         gap: var(--wt-space-2);
         color: var(--wt-color-text);
       }
-      /* The one-time key reveal: a monospace block so every character of the key is legible. */
-      .key {
-        font-family: var(--wt-font-family-mono);
-        font-size: var(--wt-font-size-sm);
-        word-break: break-all;
-        padding: var(--wt-space-2) var(--wt-space-3);
-        background: var(--wt-color-surface);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        color: var(--wt-color-text);
-      }
-      .key-actions {
+      .turn-off-actions {
         display: flex;
         gap: var(--wt-space-2);
         align-items: center;
         flex-wrap: wrap;
-      }
-      /* An underlined, text-coloured link: the text token is the one guaranteed to meet contrast on
-         the surface, unlike the primary accent, which fails AA at this small size (a11y finding). */
-      a.download {
-        color: var(--wt-color-text);
-        font-size: var(--wt-font-size-sm);
-        text-decoration: underline;
-      }
-      /* The rotate warning: loud, because a rotate leaves older archives needing the OLD key. */
-      .warning {
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-danger);
-        border-radius: var(--wt-radius-md);
-        color: var(--wt-color-danger);
-        background: var(--wt-color-surface);
       }
       .guide {
         color: var(--wt-color-primary-text);
@@ -293,7 +262,7 @@ export class BackupScreen extends LitElement {
   /** Kept apart from `errorKey` so a later good read clears its own failure and never an action's. */
   @state() private refreshErrorKey: string | null = null;
 
-  // The configure and rotate forms share this draft: only ONE of them renders at a time.
+  // The configure and settings forms share this draft: only ONE of them renders at a time.
   @state() private cloudOn = false;
   @state() private cloudRefused: "cloud" | "schedule" | null = null;
   @state() private folderOn = true;
@@ -321,10 +290,6 @@ export class BackupScreen extends LitElement {
   /** A write stood but the box could not load it; kept until the next write. */
   @state() private reloadErrorCode: string | null = null;
   @state() private evidenceOpen = false;
-  @state() private mintedKey: string | null = null;
-  @state() private advancedPaste = false;
-  @state() private pastedKey = "";
-  @state() private savedIt = false;
 
   @state() private daysMode: "daily" | "weekdays" = "daily";
   @state() private weekdays: number[] = [1, 2, 3, 4, 5];
@@ -345,9 +310,6 @@ export class BackupScreen extends LitElement {
   @state() private configurationRequestFailed = false;
   @state() private exportingConfiguration = false;
 
-  @state() private oldKey: string | null = null;
-  @state() private needsNewKey = false;
-  @state() private mintFailed = false;
   @state() private streamPermissionRefused = false;
   @state() private turnOffArmed = false;
 
@@ -355,23 +317,10 @@ export class BackupScreen extends LitElement {
   /** A Turn off takes the next number, so an editor opening begun before it never opens. */
   #editOpenings = 0;
   @state() private configureAfterApply = false;
-  #configureUsesHeldKey = false;
   /** The stored policy is one the form cannot write, so the editor shows defaults in its place and
    * saving it as shown changes the box. */
   #policyReplaced = false;
-  /** The status watcher asks for a key at most once, so a failing mint is not retried on every
-   * refresh: the mint is a POST, and a POST is never passive session activity. */
-  #watcherAsked = false;
-  /** Every key request goes through `#mint`, and a second asker waits for the one in flight, so two
-   * answers never race to set the shown key. */
-  #minting: Promise<void> | null = null;
-
-  /** Stable per instance, so re-renders do not shift the downloaded key file's name. */
-  readonly #stamp = new Date().toISOString();
-  readonly #fileStamp = this.#stamp.replace(/[:.]/g, "-");
-
-  /** Keyed by the key text so a re-render reuses the URL rather than leaking a fresh one. */
-  #blobUrls = new Map<string, string>();
+  readonly #fileStamp = new Date().toISOString().replace(/[:.]/g, "-");
   #leave?: LeaveCoordinator;
   #archiveScope?: DraftScope<ArchiveDraft>;
   #archiveMode?: ArchiveDraft["mode"];
@@ -380,16 +329,12 @@ export class BackupScreen extends LitElement {
   #generation = 0;
 
   #archiveValue(): ArchiveDraft {
-    return {
-      mode: this.editSettings
-        ? "settings"
-        : this.configureAfterApply || !this.status?.enabled
-          ? "configure"
-          : "rotate",
-      ...this.#fields(),
-      pastedKey: this.pastedKey,
-      advancedPaste: this.advancedPaste,
-    };
+    return { mode: this.editSettings ? "settings" : "configure", ...this.#fields() };
+  }
+
+  /** Backups that are on and not being edited show no form, so there is no draft to keep. */
+  get #formShown(): boolean {
+    return this.editSettings || this.configureAfterApply || !this.status?.enabled;
   }
 
   #fields(): FormFields {
@@ -415,7 +360,7 @@ export class BackupScreen extends LitElement {
   #trackArchive(): void {
     if (!this.isConnected) return;
     const mode = this.#archiveValue().mode;
-    if (!this.status?.isPrimary) {
+    if (!this.status?.isPrimary || !this.#formShown) {
       this.#archiveScope?.dispose();
       this.#archiveScope = undefined;
       this.#archiveMode = undefined;
@@ -446,8 +391,6 @@ export class BackupScreen extends LitElement {
         this.atTime = value.atTime;
         this.retainCount = value.retainCount;
         this.retainDays = value.retainDays;
-        this.pastedKey = value.pastedKey;
-        this.advancedPaste = value.advancedPaste;
       },
     }).scope;
   }
@@ -467,8 +410,6 @@ export class BackupScreen extends LitElement {
         "atTime",
         "retainCount",
         "retainDays",
-        "pastedKey",
-        "advancedPaste",
       ].some((name) => changed.has(name))
     )
       this.#archiveScope?.changed();
@@ -503,25 +444,13 @@ export class BackupScreen extends LitElement {
     this.#leave = undefined;
     this.configurationPassphrase = "";
     this.configurationConfirm = "";
-    this.pastedKey = "";
-    this.advancedPaste = false;
     this.custom = { ...this.custom, secretAccessKey: "" };
     this.secretVisible = false;
-    this.savedIt = false;
     this.editSettings = false;
     this.submitting = false;
     this.exportingConfiguration = false;
     this.configureAfterApply = false;
-    this.#configureUsesHeldKey = false;
-    this.mintedKey = null;
-    this.oldKey = null;
-    this.needsNewKey = false;
-    this.mintFailed = false;
     this.streamPermissionRefused = false;
-    this.#watcherAsked = false;
-    this.#minting = null;
-    for (const url of this.#blobUrls.values()) URL.revokeObjectURL(url);
-    this.#blobUrls.clear();
     super.disconnectedCallback();
   }
 
@@ -543,74 +472,16 @@ export class BackupScreen extends LitElement {
         async ({ writeAnswers, value }) => {
           this.refreshErrorKey = null;
           if (writeAnswers !== this.#writeAnswers) return;
-          if (this.#archiveMode === "configure" && this.#archiveScope?.isDirty() && value.enabled) {
-            this.#configureUsesHeldKey = this.#reusesHeldKey;
+          if (this.#archiveMode === "configure" && this.#archiveScope?.isDirty() && value.enabled)
             this.configureAfterApply = true;
-          }
           this.status = value;
           if (!value.enabled) this.turnOffArmed = false;
-          await Promise.all([this.#openStoredOff(false), this.#mintIfNone()]);
+          await this.#openStoredOff(false);
         },
       );
     } catch (error) {
       this.refreshErrorKey = codeOf(error);
     }
-  }
-
-  /** A status read may give the screen its first key, but never replaces a key: the operator may be
-   * copying the shown one, and the box would then store a key nobody saved. */
-  async #mintIfNone(): Promise<void> {
-    const s = this.status!;
-    if (this.mintedKey !== null || this.#watcherAsked) return;
-    if (!s.isPrimary || this.#reusesHeldKey) return;
-    this.#watcherAsked = true;
-    await this.#mint();
-  }
-
-  #mint(): Promise<void> {
-    const generation = this.#generation;
-    this.#minting ??= this.#requestKey().finally(() => {
-      if (generation === this.#generation) this.#minting = null;
-    });
-    return this.#minting;
-  }
-
-  async #requestKey(): Promise<void> {
-    const generation = this.#generation;
-    try {
-      const { key } = await this.api.mintBackupKey();
-      if (generation === this.#generation) {
-        this.mintedKey = key;
-        this.mintFailed = false;
-      }
-    } catch (error) {
-      if (generation === this.#generation) {
-        this.errorKey = codeOf(error);
-        this.mintFailed = true;
-      }
-    }
-  }
-
-  async #retryMint(): Promise<void> {
-    this.errorKey = null;
-    await this.#mint();
-  }
-
-  get #effectiveKey(): string {
-    return this.advancedPaste ? this.pastedKey : (this.mintedKey ?? "");
-  }
-
-  /** Archives are off but the box already holds a usable key (the bucket copy may have set it):
-   * turning archives on uses that key, so the recovery pack's key stays valid, and the form neither
-   * makes nor sends one. */
-  get #reusesHeldKey(): boolean {
-    return (
-      (this.status?.enabled === false || this.#configureUsesHeldKey) &&
-      this.status !== undefined &&
-      !this.needsNewKey &&
-      this.status.recoveryKeySet &&
-      !this.status.recoveryKeyTooShort
-    );
   }
 
   get #retentionInvalid(): boolean {
@@ -667,28 +538,7 @@ export class BackupScreen extends LitElement {
     return this.#feedback.attempted && this.#destinationInvalid;
   }
 
-  get #applyDisabled(): boolean {
-    if (this.#reusesHeldKey) return this.submitting || this.#destinationHeld || this.#policyHeld;
-    return (
-      this.submitting ||
-      this.#policyHeld ||
-      this.#pastedKeyInvalid ||
-      !this.savedIt ||
-      this.#destinationHeld ||
-      this.#effectiveKey === ""
-    );
-  }
-
-  get #rotateWaiting(): boolean {
-    // Give the person a chance to record a usable old key before replacing it.
-    return !this.savedIt || this.#effectiveKey === "" || this.oldKey === null;
-  }
-
-  get #rotateDisabled(): boolean {
-    return this.submitting || this.#rotateWaiting || this.#pastedKeyInvalid;
-  }
-
-  get #saveSettingsDisabled(): boolean {
+  get #saveDisabled(): boolean {
     return this.submitting || this.#destinationHeld || this.#policyHeld;
   }
 
@@ -720,9 +570,7 @@ export class BackupScreen extends LitElement {
     const code = codeOf(error);
     const custom = sent.find((d) => d.kind === "custom-s3");
     const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
-    if (code === "backup.request_invalid" && field === "recoveryKey") {
-      this.formRefusal = { code: "backup.recovery_key_missing", reason: null };
-    } else if (code === "backup.cloud_needs_daily" && field === "schedule") {
+    if (code === "backup.cloud_needs_daily" && field === "schedule") {
       this.cloudRefused = "schedule";
       this.#focusFirstInvalidBox();
     } else if (code === "backup.cloud_unavailable" && field === "cloud" && this.#cloudAvailable) {
@@ -768,35 +616,18 @@ export class BackupScreen extends LitElement {
     return { kind: "wall-clock", days, at };
   }
 
-  get #pastedKeyInvalid(): boolean {
-    return (
-      this.#feedback.attempted && this.advancedPaste && this.#effectiveKey.length < MIN_KEY_LENGTH
-    );
-  }
-
-  #pastedKeyTooShort(): boolean {
-    if (this.advancedPaste && this.#effectiveKey.length < MIN_KEY_LENGTH) {
-      this.#feedback.press();
-      this.#focusFirstInvalidBox();
-      return true;
-    }
-    return false;
-  }
-
-  #applyBody(recoveryKey?: string): BackupApplyBody {
+  #applyBody(): BackupApplyBody {
     return {
       destinations: destinationsBody(this.folderOn, this.folder, this.bucket, this.custom),
       ...((this.#cloudAvailable || !this.cloudOn) && this.cloudOn !== (this.status?.cloud ?? false)
         ? { cloud: this.cloudOn }
         : {}),
-      ...(recoveryKey === undefined ? {} : { recoveryKey }),
       schedule: this.#buildSchedule(),
       retention: this.#retention(),
     };
   }
 
   #afterApply(status: BackupWriteAnswer): void {
-    this.needsNewKey = false;
     this.custom = { ...this.custom, secretAccessKey: "" };
     this.secretVisible = false;
     this.secretDemanded = false;
@@ -804,14 +635,13 @@ export class BackupScreen extends LitElement {
   }
 
   async #apply(): Promise<void> {
-    const sendsKey = !this.#reusesHeldKey;
     if (this.#applyAction().unchanged) return;
-    if (this.#applyDisabled || (sendsKey && this.#pastedKeyTooShort())) return;
+    if (this.#saveDisabled) return;
     if (!this.#checkForm()) return;
     this.errorKey = null;
     this.refreshErrorKey = null;
     this.submitting = true;
-    const body = this.#applyBody(sendsKey ? this.#effectiveKey : undefined);
+    const body = this.#applyBody();
     const submitted = this.#archiveValue();
     const generation = this.#generation;
     const scope = this.#archiveScope;
@@ -821,64 +651,10 @@ export class BackupScreen extends LitElement {
       this.#afterApply(status);
       scope?.commit(submitted);
       this.configureAfterApply = scope?.isDirty() ?? false;
-      this.#configureUsesHeldKey = this.configureAfterApply && !sendsKey;
       this.#takeWriteAnswer(status);
-      // The bucket copy's panel reads the same key.
-      if (sendsKey) this.api.liveData.invalidate([{ type: "backup_status" }]);
-      this.savedIt = false;
-      if (!this.configureAfterApply) {
-        this.#feedback.reset();
-        this.advancedPaste = false;
-        this.pastedKey = "";
-        await this.#mint();
-      }
+      if (!this.configureAfterApply) this.#feedback.reset();
     } catch (error) {
       if (generation === this.#generation) this.#onApplyRefused(error, body.destinations);
-    } finally {
-      if (generation === this.#generation) this.submitting = false;
-    }
-  }
-
-  async #rotate(): Promise<void> {
-    if (this.#rotateDisabled || this.#pastedKeyTooShort()) return;
-    this.turnOffArmed = false;
-    this.errorKey = null;
-    this.refreshErrorKey = null;
-    this.submitting = true;
-    const submitted = this.#archiveValue();
-    const generation = this.#generation;
-    const scope = this.#archiveScope;
-    let reloadErrorCode: string | null;
-    try {
-      const status = await this.api.rotateBackupKey({ recoveryKey: this.#effectiveKey });
-      if (generation !== this.#generation) return;
-      reloadErrorCode = status.reloadErrorCode ?? null;
-      this.#takeWriteAnswer(status);
-    } catch (error) {
-      if (generation !== this.#generation) return;
-      if (codeOf(error) !== "backup.rotation_metadata_failed") {
-        this.errorKey = codeOf(error);
-        this.submitting = false;
-        return;
-      }
-      // The new key is in effect: the box changed it before the record failed.
-      this.errorKey = "backup.rotation_metadata_failed";
-      const params = (error as { params?: { reloadErrorCode?: unknown } }).params;
-      reloadErrorCode = typeof params?.reloadErrorCode === "string" ? params.reloadErrorCode : null;
-      this.#packSettingsChanged();
-    }
-    try {
-      this.reloadErrorCode = reloadErrorCode;
-      scope?.commit(submitted);
-      this.api.liveData.invalidate([{ type: "backup_status" }]);
-      this.savedIt = false;
-      if (!scope?.isDirty()) {
-        this.advancedPaste = false;
-        this.pastedKey = "";
-        scope?.commit(this.#archiveValue());
-      }
-      this.oldKey = null;
-      await this.#mint();
     } finally {
       if (generation === this.#generation) this.submitting = false;
     }
@@ -989,21 +765,6 @@ export class BackupScreen extends LitElement {
     if (!this.submitting) this.turnOffArmed = false;
   }
 
-  async #showOldKey(): Promise<void> {
-    if (this.submitting) return;
-    this.#disarmTurnOff();
-    const generation = this.#generation;
-    this.errorKey = null;
-    try {
-      const { key } = await this.api.getBackupRecoveryKey();
-      if (generation === this.#generation) this.oldKey = key;
-    } catch (error) {
-      if (generation === this.#generation) {
-        this.errorKey = codeOf(error);
-      }
-    }
-  }
-
   async #startEdit(): Promise<void> {
     if (this.submitting) return;
     this.#disarmTurnOff();
@@ -1033,7 +794,7 @@ export class BackupScreen extends LitElement {
 
   async #saveSettings(): Promise<void> {
     if (this.#settingsAction().unchanged) return;
-    if (this.#saveSettingsDisabled) return;
+    if (this.#saveDisabled) return;
     if (!this.#checkForm()) return;
     this.errorKey = null;
     this.refreshErrorKey = null;
@@ -1068,39 +829,6 @@ export class BackupScreen extends LitElement {
     };
     if (this.#leave) await this.#leave.request({ scopes: [this], reason, proceed });
     else proceed();
-  }
-
-  async #focusKeyStep(): Promise<void> {
-    if (!this.status?.isPrimary) return;
-    if (this.editSettings) {
-      await this.#leaveSettings("navigation");
-      if (this.editSettings) return;
-    }
-    if (!this.status.enabled) {
-      this.needsNewKey = true;
-      this.savedIt = false;
-      this.formRefusal = null;
-      if (this.mintedKey === null) await this.#mint();
-    }
-    await this.updateComplete;
-    const action = this.renderRoot.querySelector<HTMLElement>(
-      this.status.enabled
-        ? "[data-test=show-old-key]"
-        : "[data-test=copy-key], [data-test=retry-key]",
-    );
-    action?.scrollIntoView({ block: "center" });
-    action?.focus();
-  }
-
-  #recoveryKeyAction(): TemplateResult | typeof nothing {
-    if (this.formRefusal?.code !== "backup.recovery_key_too_short" || !this.status?.isPrimary)
-      return nothing;
-    return html`<wt-button
-      variant="secondary"
-      data-test="recovery-key-action"
-      @click=${() => void this.#focusKeyStep()}
-      >${t(this.status.enabled ? "backup.rotate.title" : "backup.apply")}</wt-button
-    >`;
   }
 
   #prefillFromStatus(s: BackupStatusView): void {
@@ -1150,55 +878,10 @@ export class BackupScreen extends LitElement {
     return fields;
   }
 
-  /** Of the key BEING downloaded, not the running key's server fingerprint: on a rotate the new key's
-   * file must not carry the old key's fingerprint. */
-  #fingerprint(key: string): string {
-    if (key === "") return "box";
-    let h = 0x811c9dc5;
-    for (let i = 0; i < key.length; i++) {
-      h ^= key.charCodeAt(i);
-      h = Math.imul(h, 0x01000193);
-    }
-    return (h >>> 0).toString(16).padStart(8, "0");
-  }
-
-  #keyFileName(key: string): string {
-    return `waitron-recovery-key-${this.#fingerprint(key)}-${this.#fileStamp}.txt`;
-  }
-
-  #keyFileBody(key: string): string {
-    return (
-      `${t("backup.key.file_heading")}\n` +
-      `${t("backup.status.fingerprint")}: ${this.#fingerprint(key)}\n` +
-      `${this.#stamp}\n\n` +
-      `${t("backup.key.file_note")}\n\n` +
-      `${key}\n`
-    );
-  }
-
-  #downloadHref(key: string): string {
-    let url = this.#blobUrls.get(key);
-    if (url === undefined) {
-      const blob = new Blob([this.#keyFileBody(key)], { type: "text/plain" });
-      url = URL.createObjectURL(blob);
-      this.#blobUrls.set(key, url);
-    }
-    return url;
-  }
-
-  /** Guarded so a denied or absent clipboard never becomes an unhandled rejection. */
-  #copy(key: string): void {
-    void navigator.clipboard?.writeText(key).catch(() => {
-      /* clipboard denied — the download + on-screen key are the fallback */
-    });
-  }
-
   #submitOnEnter(event: KeyboardEvent): void {
     submitOnEnter(
       event,
-      this.shadowRoot!.querySelector<HTMLElement>(
-        "[data-test=save-settings], [data-test=apply], [data-test=rotate-confirm]",
-      ),
+      this.shadowRoot!.querySelector<HTMLElement>("[data-test=save-settings], [data-test=apply]"),
     );
   }
 
@@ -1208,13 +891,8 @@ export class BackupScreen extends LitElement {
     this.folderRefused = false;
   }
 
-  #onPaste(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.pastedKey = event.detail.value;
-  }
-
   #configurationFieldError(): string | null {
-    if (this.configurationPassphrase.length < MIN_KEY_LENGTH)
+    if (this.configurationPassphrase.length < MIN_PASSPHRASE_LENGTH)
       return t("backup.configuration.passphrase_error");
     if (this.configurationPassphrase !== this.configurationConfirm)
       return t("backup.configuration.match_error");
@@ -1291,9 +969,7 @@ export class BackupScreen extends LitElement {
               </section>`
             : html`<dashboard-stream-settings
                   .api=${this.api}
-                  @recovery-key-needed=${() => void this.#focusKeyStep()}
                   @stream-permission-refused=${(event: CustomEvent<{ refused: boolean }>) => (this.streamPermissionRefused = event.detail.refused)}
-                  .archivesEnabled=${s?.enabled}
                 ></dashboard-stream-settings>
                 ${this.streamPermissionRefused && !this.#formNeedsAdmin ? this.#adminAction() : nothing}`
         }
@@ -1430,11 +1106,6 @@ export class BackupScreen extends LitElement {
                   >${t("backup.edit.button")}</wt-button
                 >
                 ${this.#renderTurnOff()}`
-            : nothing
-        }
-        ${
-          writable && s.enabled && !this.editSettings && !this.configureAfterApply
-            ? this.#renderRotate()
             : nothing
         }
       </div>
@@ -1809,26 +1480,14 @@ export class BackupScreen extends LitElement {
     return html`<div class="form">
       ${this.#renderDestinationField()}
 
-      <h2>${t("backup.key.title")}</h2>
-      ${
-        this.status?.recoveryKeyTooShort
-          ? html`<p class="hint" data-test="short-key">${t("backup.key.too_short")}</p>`
-          : nothing
-      }
-      ${
-        this.#reusesHeldKey
-          ? html`<p class="hint" data-test="existing-key">${t("backup.key.existing")}</p>`
-          : this.#renderKeyStep()
-      }
-
       <h2>${t("backup.schedule.title")}</h2>
-      ${this.#renderPolicy()} ${this.#recoveryKeyAction()}
+      ${this.#renderPolicy()}
       <wt-form-actions data-test="apply-actions" .error=${this.#policyBottom()}>
         ${this.#formNeedsAdmin ? this.#adminAction() : nothing}
         <wt-button
           variant=${s.variant}
           data-test="apply"
-          ?disabled=${s.unchanged || this.#applyDisabled}
+          ?disabled=${s.unchanged || this.#saveDisabled}
           @click=${() => void this.#apply()}
           >${t("backup.apply")}</wt-button
         >
@@ -1847,7 +1506,7 @@ export class BackupScreen extends LitElement {
       ${this.#renderDestinationField()}
 
       <h2>${t("backup.schedule.title")}</h2>
-      ${this.#renderPolicy()} ${this.#recoveryKeyAction()}
+      ${this.#renderPolicy()}
       <wt-form-actions data-test="settings-actions" .error=${this.#policyBottom()}>
         ${this.#formNeedsAdmin ? this.#adminAction() : nothing}
         <wt-button
@@ -1860,78 +1519,12 @@ export class BackupScreen extends LitElement {
         <wt-button
           variant=${s.variant}
           data-test="save-settings"
-          ?disabled=${s.unchanged || this.#saveSettingsDisabled}
+          ?disabled=${s.unchanged || this.#saveDisabled}
           @click=${() => void this.#saveSettings()}
           >${t("backup.edit.save")}</wt-button
         >
       </wt-form-actions>
     </div>`;
-  }
-
-  #renderKeyStep(): TemplateResult {
-    return html`
-      ${
-        this.advancedPaste
-          ? html`<wt-input
-                data-test="paste-key"
-                name="recovery-key"
-                autocapitalize="none"
-                autocorrect="off"
-                spellcheck="false"
-                label=${t("backup.key.paste_label")}
-                .value=${this.pastedKey}
-                .error=${this.#pastedKeyInvalid ? codeMessage("backup.new_recovery_key_too_short") : ""}
-                @keydown=${(event: KeyboardEvent) => this.#submitOnEnter(event)}
-                @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPaste(e)}
-              ></wt-input>
-              <p class="hint">${t("backup.key.paste_hint")}</p>`
-          : this.mintedKey
-            ? html`<p class="hint">${t("backup.key.minted_note")}</p>
-                <p class="key" data-test="minted-key">${this.mintedKey}</p>
-                <div class="key-actions">
-                  <wt-button
-                    variant="secondary"
-                    data-test="copy-key"
-                    @click=${() => this.#copy(this.mintedKey ?? "")}
-                    >${t("backup.key.copy")}</wt-button
-                  >
-                  <a
-                    class="download"
-                    data-test="download-key"
-                    download=${this.#keyFileName(this.mintedKey)}
-                    href=${this.#downloadHref(this.mintedKey)}
-                    >${t("backup.key.download")}</a
-                  >
-                </div>`
-            : this.mintFailed
-              ? html`<wt-button
-                  variant="secondary"
-                  data-test="retry-key"
-                  @click=${() => void this.#retryMint()}
-                  >${t("backup.key.retry")}</wt-button
-                >`
-              : nothing
-      }
-      <wt-button
-        variant="ghost"
-        data-test="advanced-toggle"
-        @click=${() => {
-          this.advancedPaste = !this.advancedPaste;
-          this.savedIt = false;
-        }}
-        >${t(this.advancedPaste ? "backup.key.use_minted" : "backup.key.advanced")}</wt-button
-      >
-      <label class="checkbox">
-        <input
-          type="checkbox"
-          data-test="saved-it"
-          name="saved-recovery-key"
-          .checked=${this.savedIt}
-          @change=${(e: Event) => (this.savedIt = (e.target as HTMLInputElement).checked)}
-        />
-        ${t("backup.saved_it")}
-      </label>
-    `;
   }
 
   #renderPolicy(): TemplateResult {
@@ -2026,7 +1619,6 @@ export class BackupScreen extends LitElement {
       this.cloudRefused === "schedule" ||
       (cloudChoiceRefused && this.#cloudAvailable) ||
       this.#policyHeld ||
-      this.#pastedKeyInvalid ||
       this.retentionRefused ||
       this.#destinationHeld ||
       this.folderRefused ||
@@ -2079,7 +1671,7 @@ export class BackupScreen extends LitElement {
             </p>`
           : nothing
       }
-      <div class="key-actions">
+      <div class="turn-off-actions">
         <wt-button
           variant=${armed ? "danger" : "ghost"}
           data-armed=${armed ? "true" : nothing}
@@ -2101,55 +1693,6 @@ export class BackupScreen extends LitElement {
         }
       </div>
     `;
-  }
-
-  #renderRotate(): TemplateResult {
-    return html`<div class="form">
-      <h2 data-test="rotate">${t("backup.rotate.title")}</h2>
-      <p class="warning" data-test="rotate-warning" role="note">${t("backup.rotate.warning")}</p>
-      <div class="key-actions">
-        <wt-button
-          variant="secondary"
-          data-test="show-old-key"
-          ?disabled=${this.submitting}
-          @click=${() => void this.#showOldKey()}
-          >${t("backup.rotate.show_old")}</wt-button
-        >
-      </div>
-      ${
-        this.oldKey !== null
-          ? html`<p class="field-label">${t("backup.rotate.old_label")}</p>
-              <p class="key" data-test="old-key">${this.oldKey}</p>
-              <div class="key-actions">
-                <wt-button
-                  variant="secondary"
-                  data-test="copy-old-key"
-                  @click=${() => this.#copy(this.oldKey ?? "")}
-                  >${t("backup.key.copy")}</wt-button
-                >
-                <a
-                  class="download"
-                  data-test="download-old-key"
-                  download=${this.#keyFileName(this.oldKey)}
-                  href=${this.#downloadHref(this.oldKey)}
-                  >${t("backup.key.download")}</a
-                >
-              </div>`
-          : nothing
-      }
-      <h2>${t("backup.rotate.new_title")}</h2>
-      ${this.#renderKeyStep()}
-
-      <wt-form-actions .error=${this.#pastedKeyInvalid ? t("form.fix_fields") : ""}>
-        <wt-button
-          variant=${this.submitting || !this.#rotateWaiting ? "primary" : "secondary"}
-          data-test="rotate-confirm"
-          ?disabled=${this.#rotateDisabled}
-          @click=${() => void this.#rotate()}
-          >${t("backup.rotate.confirm")}</wt-button
-        >
-      </wt-form-actions>
-    </div>`;
   }
 }
 

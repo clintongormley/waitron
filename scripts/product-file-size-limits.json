@@ -1,6 +1,6 @@
 {
   "apps/dashboard/src/dashboard-app.ts": 4000,
-  "apps/dashboard/src/screens/backup-screen.ts": 2250,
+  "apps/dashboard/src/screens/backup-screen.ts": 1750,
   "apps/dashboard/src/screens/box-status-screen.ts": 1500,
   "apps/dashboard/src/screens/cloud-services-screen.ts": 1250,
   "apps/dashboard/src/screens/device-profiles-screen.ts": 2750,

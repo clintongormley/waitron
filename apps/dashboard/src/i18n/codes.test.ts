@@ -916,12 +916,29 @@ it("has English and Spanish copy for every refusal of Print invoice and Download
   }
 });
 
-it("says a box holds no recovery key rather than asking for one to be entered, since Edit and the recovery pack reach it", () => {
+it("says a box holds no backup key and points at Change the backup key on the recovery pack card", () => {
   expect(codeMessage("backup.recovery_key_missing", "en")).toBe(
-    "This box holds no backup encryption key.",
+    "This box holds no backup key. Use “Change the backup key” on the Recovery pack card to make one.",
   );
   expect(codeMessage("backup.recovery_key_missing", "es")).toBe(
-    "Este servidor no tiene clave de cifrado de copias.",
+    "Este servidor no tiene clave de las copias. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para crearla.",
+  );
+});
+
+it("words the backup key change's refusals: a wrong master key names the current one, and a page refusal says what to open", () => {
+  expect(codeMessage("master_key.wrong", "en", { keyName: "26-11-2026 10:15" })).toBe(
+    "Wrong master key. Use the one dated 26-11-2026 10:15.",
+  );
+  expect(codeMessage("master_key.wrong", "es", { keyName: "26-11-2026 10:15" })).toBe(
+    "Clave maestra incorrecta. Usa la del 26-11-2026 10:15.",
+  );
+  expect(codeMessage("master_key.wrong", "en")).toBe("Wrong master key.");
+  expect(codeMessage("master_key.wrong", "es")).toBe("Clave maestra incorrecta.");
+  expect(codeMessage("backup.key_change_page_required", "en")).toBe(
+    "Changing the backup key needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",
+  );
+  expect(codeMessage("backup.key_change_page_required", "es")).toBe(
+    "Cambiar la clave de las copias necesita una conexión cifrada desde la página del propio servidor. Abre la dirección HTTPS del servidor y vuelve a intentarlo.",
   );
 });
 

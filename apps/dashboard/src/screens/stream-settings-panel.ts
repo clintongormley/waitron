@@ -183,8 +183,6 @@ export class StreamSettingsPanel extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  /** Whether scheduled backups are on, which decides what replaces a too-short key. */
-  @property({ attribute: false }) archivesEnabled: boolean | undefined = undefined;
 
   readonly #queries = new DashboardQueries(
     this,
@@ -477,33 +475,11 @@ export class StreamSettingsPanel extends LitElement {
   }
 
   #failureText(failure: Failure): string {
-    if (failure.code === "backup.recovery_key_too_short") {
-      if (this.archivesEnabled === undefined) {
-        return t("stream.error.recovery_key_too_short_unknown");
-      }
-      if (this.archivesEnabled) return t("stream.error.recovery_key_too_short_archives_on");
-    }
     const panelKey = PANEL_CODE_KEYS[failure.code];
     if (panelKey !== undefined) return t(panelKey);
     const reasonKey = failure.reason === null ? undefined : PROBE_REASON_KEYS[failure.reason];
     const message = codeMessage(failure.code);
     return reasonKey === undefined ? message : `${message} ${t(reasonKey)}`;
-  }
-
-  #keyAction(): TemplateResult | typeof nothing {
-    if (
-      this.archivesEnabled === undefined ||
-      !this.settings?.isPrimary ||
-      (this.failure?.code !== "backup.recovery_key_too_short" &&
-        this.readFailure?.code !== "backup.recovery_key_too_short")
-    )
-      return nothing;
-    return html`<wt-button
-      variant="secondary"
-      data-test="recovery-key-action"
-      @click=${() => this.dispatchEvent(new CustomEvent("recovery-key-needed", { bubbles: true, composed: true }))}
-      >${t(this.archivesEnabled ? "backup.rotate.title" : "backup.apply")}</wt-button
-    >`;
   }
 
   override render(): TemplateResult {
@@ -527,7 +503,6 @@ export class StreamSettingsPanel extends LitElement {
                 ${this.#failureText(this.readFailure)}
               </p>`
         }
-        ${this.#keyAction()}
       </section>
     `;
   }

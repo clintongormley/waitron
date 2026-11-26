@@ -52,9 +52,7 @@ const STORED_BODY = {
 function stubApi(status: BackupStatusView): DashboardApi {
   return {
     getBackupStatus: vi.fn().mockResolvedValue(status),
-    mintBackupKey: vi.fn().mockResolvedValue({ key: "MINTED-KEY-abcdef012345" }),
     applyBackup: vi.fn().mockResolvedValue(ENABLED),
-    getBackupRecoveryKey: vi.fn().mockResolvedValue({ key: "OLD-KEY-xyz789012345" }),
     rotateBackupKey: vi.fn().mockResolvedValue(ENABLED),
     getStreamSettings: vi.fn().mockResolvedValue({
       isPrimary: true,
