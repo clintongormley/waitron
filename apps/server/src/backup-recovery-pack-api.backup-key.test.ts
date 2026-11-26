@@ -1,65 +1,40 @@
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile, chmod } from "node:fs/promises";
-import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TLSSocket } from "node:tls";
+import type { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadKeyRing, makeMasterKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
-import {
-  ensureStreamId,
-  readCurrentMasterKey,
-  setNodePublicKey,
-  stampDeployment,
-  withTransaction,
-} from "@waitron/db";
-import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
+import { makeMasterKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
+import { masterKeys, readCurrentMasterKey, readRecoveryPacks, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { ProvisionedNode } from "@waitron/module";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { decodeMasterKeyCode } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
-import { writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
 import { decryptBackupFile, readArtifactFileHeader } from "./artifact-cipher-file.js";
 import { loadBackupSettings } from "./backup-config.js";
 import { writeBackupKey } from "./backup-env-writer.js";
+import { keyFingerprint } from "./backup-key-fingerprint.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
-import { keyFingerprint } from "./backup-supervisor.js";
 import { createTurns } from "./backup-turns.js";
 import { loadBoxEnv } from "./box-env.js";
 import { parseEnvFile } from "./env-file.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
-import { writeStreamSettings } from "./stream-host.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { heldBackupKey } from "./testing/backup-key.js";
 import { supervisorWithJob } from "./testing/backup-supervisor.js";
-import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mintMasterKey } from "./testing/master-key.js";
+import {
+  PACK_ARCHIVES as ARCHIVES,
+  PACK_RING,
+  packRequests,
+  seedPackVenue,
+} from "./testing/recovery-pack-make.js";
 
-const RING = loadKeyRing({
-  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
-  WAITRON_CREDENTIALS_KEY_VERSION: "1",
-});
-const BUCKET = {
-  region: "eu-west-1",
-  bucket: "venue-bucket",
-  prefix: "shop/",
-  accessKeyId: "AKIASTREAMRECOGNISABLE",
-  secretAccessKey: "stream-secret-recognisable-0123456789",
-};
-const ARCHIVES: Omit<ArchiveSettings, "revision"> = {
-  enabled: true,
-  cloud: false,
-  destinations: [{ kind: "s3", id: "bucket", bucket: { ...BUCKET, prefix: "archives/" } }],
-  schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
-  retention: { count: 7, days: 30 },
-  destinationTimeoutMs: 15 * 60 * 1000,
-};
 const MADE_AT = "2026-10-30T09:00:00.000Z";
 const OLD_ROTATED_AT = "2026-09-20T08:00:00.000Z";
 const OLD_MASTER = makeMasterKey();
@@ -83,19 +58,8 @@ afterEach(async () => {
 
 beforeEach(async () => {
   logs = [];
-  await seedTaxpayer(suite.db);
-  await stampDeployment(suite.db, "preproduction");
-  await seedVenue(suite.db, { name: "Sala", invoiceLocales: ["es"] });
-  node = { nodeId: await seedNode(suite.db) };
-  await setNodePublicKey(suite.db, node.nodeId, "SIGNER_PUBLIC_KEY");
-  await withTransaction(suite.db, async (tx) => {
-    await ensureStreamId(tx);
-    await writeStreamSettings(tx, RING, BUCKET, null);
-    await writeArchiveSettings(tx, RING, ARCHIVES, null);
-  });
+  ({ node, admin } = await seedPackVenue(suite.db));
   await mintMasterKey(suite.db, { bytes: OLD_MASTER });
-  admin = await openManagementSession(suite.db, "admin");
-  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin.token));
 });
 
 async function folder(prefix: string): Promise<string> {
@@ -116,7 +80,12 @@ async function stateFolder(n = 3): Promise<string> {
 
 function fixture(
   stateDir: string,
-  options: { reloadBackups?: () => Promise<void>; loadedKey?: () => string | undefined } = {},
+  options: {
+    reloadBackups?: () => Promise<void>;
+    loadFonts?: typeof loadRecoveryPackFonts;
+    /** The stream refuses to start again after the key file is written. */
+    streamStartFails?: boolean;
+  } = {},
 ) {
   const steps: string[] = [];
   const app = new Hono();
@@ -124,22 +93,23 @@ function fixture(
     app,
     {
       db: suite.db,
-      ring: RING,
+      ring: PACK_RING,
       node,
       turns: createTurns(),
       readBoxEnv: () => loadBoxEnv({}, stateDir),
       backups: () => ({
         schedule: ARCHIVES.schedule,
         retention: ARCHIVES.retention,
-        recoveryKey: options.loadedKey?.(),
+        recoveryKey: undefined,
       }),
-      loadFonts: loadRecoveryPackFonts,
+      loadFonts: options.loadFonts ?? loadRecoveryPackFonts,
       now: () => new Date(MADE_AT),
       stateDir,
       stream: {
         reload: async (write) => {
           steps.push("stream stopped");
           await write?.();
+          if (options.streamStartFails === true) throw new Error("stream did not start");
           steps.push("stream started");
         },
       },
@@ -156,31 +126,13 @@ function fixture(
     },
     (...values) => logs.push(values),
   );
-  const post = (path: string, body: unknown) => {
-    const socket = new TLSSocket(new Socket());
-    sockets.push(socket);
-    return app.request(
-      `https://box.test${path}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          cookie: `waitron_management_session=${admin.token}`,
-        },
-        body: JSON.stringify(body),
-      },
-      { incoming: { socket } },
-    );
-  };
+  const requests = packRequests(app, { token: () => admin.token, sockets });
   return {
     steps,
-    make: (newMasterKey: boolean) =>
-      post("/api/backup/recovery-pack", { locale: "en", newMasterKey }),
-    received: (number: number) => post(`/api/backup/recovery-pack/${number}/received`, {}),
+    make: requests.make,
+    received: requests.received,
     status: async () => {
-      const response = await app.request("https://box.test/api/backup/recovery-pack", {
-        headers: { cookie: `waitron_management_session=${admin.token}` },
-      });
+      const response = await requests.status();
       expect(response.status).toBe(200);
       return (await response.json()) as {
         upToDate: boolean;
@@ -285,11 +237,10 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     const current = await withTransaction(suite.db, (tx) => readCurrentMasterKey(tx));
     expect(Buffer.from(current!.publicKey)).toEqual(sealingPublicKey(shown));
     expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before);
-    expect(f.steps).not.toContain("backups reloaded");
     expect(logs).toContainEqual([
       "warn",
       "backup.key_change_after_master_key_failed",
-      { errorCode: expect.any(String) },
+      { errorCode: "EACCES" },
     ]);
     expect((await f.status()).backupKey).toEqual({
       number: 3,
@@ -297,6 +248,82 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
       changedAt: OLD_ROTATED_AT,
       fromCurrentMasterKey: false,
     });
+  });
+});
+
+describe("the backup key is written only once the pack and its master key are saved", () => {
+  const masterKeyRows = () => suite.db.select().from(masterKeys);
+
+  it("a refused pack writes no backup key and restarts no stream", async () => {
+    const stateDir = await stateFolder(3);
+    const before = await readFile(join(stateDir, "backup.env"), "utf8");
+    const rowsBefore = await masterKeyRows();
+    const f = fixture(stateDir, {
+      loadFonts: async () => {
+        throw new Error("no fonts");
+      },
+    });
+    const response = await f.make(true);
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    expect(response.headers.has("x-waitron-master-key")).toBe(false);
+    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before);
+    expect(f.steps).toEqual([]);
+    expect(await masterKeyRows()).toEqual(rowsBefore);
+    expect(await readRecoveryPacks(suite.db, node.nodeId)).toEqual([]);
+  });
+
+  it("an aborted request saves no master key and writes no backup key", async () => {
+    const stateDir = await stateFolder(3);
+    const before = await readFile(join(stateDir, "backup.env"), "utf8");
+    const rowsBefore = await masterKeyRows();
+    const aborted = new AbortController();
+    const f = fixture(stateDir, {
+      // The person goes away while the pack is drawn, before its master key is saved.
+      loadFonts: async () => {
+        aborted.abort();
+        return loadRecoveryPackFonts();
+      },
+    });
+    const response = await f.make(true, { signal: aborted.signal });
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(response.headers.has("x-waitron-master-key")).toBe(false);
+    expect(await masterKeyRows()).toEqual(rowsBefore);
+    expect(await readRecoveryPacks(suite.db, node.nodeId)).toEqual([]);
+    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before);
+    expect(f.steps).toEqual([]);
+  });
+
+  it("a failed backup reload after the key is written is logged as a failed reload", async () => {
+    const stateDir = await stateFolder(3);
+    const f = fixture(stateDir, {
+      reloadBackups: async () => {
+        throw new Error("reload refused");
+      },
+    });
+    const response = await f.make(true);
+    expect(response.status).toBe(200);
+    const next = heldBackupKey(shownBytes(response), 4);
+    await response.arrayBuffer();
+    expect((await keyFile(stateDir)).WAITRON_BACKUP_RECOVERY_KEY).toBe(next.key);
+    const events = logs.filter(([level]) => level === "warn").map(([, event]) => event);
+    expect(events).toEqual(["backup.reload_after_write_failed"]);
+    expect((await f.status()).backupKey).toMatchObject({ number: 4, fromCurrentMasterKey: true });
+  });
+
+  it("reloads the backups when a step after the key file's write fails", async () => {
+    const stateDir = await stateFolder(3);
+    const f = fixture(stateDir, { streamStartFails: true });
+    const response = await f.make(true);
+    expect(response.status).toBe(200);
+    const next = heldBackupKey(shownBytes(response), 4);
+    await response.arrayBuffer();
+    expect((await keyFile(stateDir)).WAITRON_BACKUP_RECOVERY_KEY).toBe(next.key);
+    expect(f.steps).toEqual(["stream stopped", "sealed", "backups reloaded"]);
+    expect(logs).toContainEqual([
+      "warn",
+      "backup.key_change_after_master_key_failed",
+      { errorCode: "unknown" },
+    ]);
   });
 });
 

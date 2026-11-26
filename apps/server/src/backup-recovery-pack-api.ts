@@ -25,6 +25,7 @@ import {
 } from "@waitron/server-kit";
 import { AppError, decodeMasterKeyCode, isAppError } from "@waitron/shared";
 import { readHeldArchiveSettingsIn } from "./archive-settings.js";
+import { errnoOf } from "./errno.js";
 import { inTurn } from "./attempt-turns.js";
 import { loadKeyRotatedAt, loadRecoveryKey, readHeldKey } from "./backup-config.js";
 import type { BackupKeyRecord } from "./backup-env-writer.js";
@@ -45,6 +46,7 @@ import {
 } from "./backup-recovery-pack-parts.js";
 import {
   currentMasterKeyElsewhere,
+  masterKeyElsewhere,
   drawRecoveryPack,
   shownMasterKey,
 } from "./backup-recovery-pack-output.js";
@@ -99,6 +101,11 @@ const makeRun = createErrorBoundary(
   },
   "backup.failed",
 );
+
+/** An error's code, or a file-system error's errno; never its message. */
+function failure(error: unknown): string {
+  return isAppError(error) ? error.code : (errnoOf(error) ?? "unknown");
+}
 
 function invalid(reason: "shape" | "unknown_pack"): never {
   throw new AppError("recovery.pack_invalid", { reason });
@@ -240,6 +247,7 @@ type MakeInput = {
   env: Readonly<Record<string, string | undefined>>;
   madeAt: string;
   newMasterKey: NewMasterKey | undefined;
+  signal: AbortSignal;
 };
 
 /**
@@ -304,6 +312,8 @@ async function makePack(
   );
   await insertRecoveryPack(tx, record);
   if (newMasterKey !== undefined) {
+    // A person who has gone away would never see the master key the box moves its backups onto.
+    input.signal.throwIfAborted();
     await insertNewMasterKey(tx, newMasterKey, new Date(madeAt), input.personId);
   }
   return { number, madeAt, pdf, parts };
@@ -347,7 +357,16 @@ export function mountBackupRecoveryPackMakeApi(
                 );
           const env = nextKey === undefined ? held : { ...held, ...keyEnv(nextKey, madeAt) };
           const pack = await withTransaction(deps.db, (tx) =>
-            makePack(tx, deps, { emergency, token, personId, request, env, madeAt, newMasterKey }),
+            makePack(tx, deps, {
+              emergency,
+              token,
+              personId,
+              request,
+              env,
+              madeAt,
+              newMasterKey,
+              signal: c.req.raw.signal,
+            }),
           );
           return { ...pack, masterKey: newMasterKey?.made, nextKey };
         });
@@ -356,11 +375,14 @@ export function mountBackupRecoveryPackMakeApi(
         if (result.nextKey !== undefined) {
           try {
             await changeBackupKey(deps, result.nextKey, result.madeAt);
+          } catch (error) {
+            log("warn", "backup.key_change_after_master_key_failed", { errorCode: failure(error) });
+          }
+          // Also after a failure: the key file may have been replaced before a later step threw.
+          try {
             await deps.reloadBackups();
           } catch (error) {
-            log("warn", "backup.key_change_after_master_key_failed", {
-              errorCode: isAppError(error) ? error.code : "unexpected",
-            });
+            log("warn", "backup.reload_after_write_failed", { errorCode: failure(error) });
           }
         }
         return result;
@@ -421,8 +443,8 @@ export function mountBackupRecoveryPackMakeApi(
         );
         const loaded = deps.backups();
         const now = deps.now();
-        const master = await currentMasterKeyElsewhere(tx, records);
         const currentMasterKey = await readCurrentMasterKey(tx);
+        const master = masterKeyElsewhere(currentMasterKey, records);
         const status = packStatus({
           records: records.map((r) => ({
             ...r,

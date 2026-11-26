@@ -4,7 +4,7 @@ import { AppError, decodeMasterKeyCode, isAppError } from "@waitron/shared";
 import { backupKeyBytes } from "./artifact-cipher-file.js";
 import { loadBackupKey, loadKeyRotatedAt } from "./backup-config.js";
 import { writeBackupKey, type BackupKeyRecord } from "./backup-env-writer.js";
-import { keyFingerprint } from "./backup-supervisor.js";
+import { keyFingerprint } from "./backup-key-fingerprint.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
 import type { StreamHost } from "./stream-host.js";
 

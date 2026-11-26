@@ -1,11 +1,10 @@
 import { storeArchivePart } from "./testing/backup-settings.js";
 import { nodeHandoverEvents } from "@waitron/node-db";
-import { ensureStreamId, withFoldedPersonChanges } from "@waitron/db";
+import { withFoldedPersonChanges } from "@waitron/db";
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mountMeApi } from "./me-api.js";
 import { mkdtemp, rm } from "node:fs/promises";
-import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TLSSocket } from "node:tls";
@@ -13,12 +12,7 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import {
-  loadKeyRing,
-  masterKeyCheckValue,
-  masterKeyName,
-  sealingPublicKey,
-} from "@waitron/credentials";
+import { masterKeyCheckValue, masterKeyName, sealingPublicKey } from "@waitron/credentials";
 import {
   CORE_CHANGE_SOURCES,
   insertRecoveryPack,
@@ -28,13 +22,10 @@ import {
   readCurrentMasterKey,
   readRecoveryPacks,
   removeChangeFeed,
-  setNodePublicKey,
-  stampDeployment,
   subscribeToChanges,
   withTransaction,
   withNodeTransaction,
 } from "@waitron/db";
-import { seedNode, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { beginOwnPasskeyCheck, persons, webauthnCredentials } from "@waitron/identity";
 import { verifyAuthenticationResponse } from "@simplewebauthn/server";
@@ -59,8 +50,14 @@ import {
 import { createTurns, type Turns } from "./backup-turns.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { requestIdMiddleware } from "./request-id.js";
-import { writeStreamSettings } from "./stream-host.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import {
+  PACK_ARCHIVES,
+  PACK_BUCKET,
+  PACK_RING,
+  packRequests,
+  seedPackVenue,
+} from "./testing/recovery-pack-make.js";
 import { emergencyReply } from "../test/cloud-emergency-fixture.js";
 import type { EmergencyDisplay } from "./cloud-emergency.js";
 import { createStaffApp } from "./cloud-remote.js";
@@ -70,26 +67,10 @@ vi.mock("@simplewebauthn/server", async (original) => ({
   verifyAuthenticationResponse: vi.fn(),
 }));
 
-const RING = loadKeyRing({
-  WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 9).toString("base64"),
-  WAITRON_CREDENTIALS_KEY_VERSION: "1",
-});
+const RING = PACK_RING;
 const KEY = "recovery-key-recognisable-SECRET";
-const BUCKET = {
-  region: "eu-west-1",
-  bucket: "venue-bucket",
-  prefix: "shop/",
-  accessKeyId: "AKIASTREAMRECOGNISABLE",
-  secretAccessKey: "stream-secret-recognisable-0123456789",
-};
-const ARCHIVES: Omit<ArchiveSettings, "revision"> = {
-  enabled: true,
-  cloud: false,
-  destinations: [{ kind: "s3", id: "bucket", bucket: { ...BUCKET, prefix: "archives/" } }],
-  schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
-  retention: { count: 7, days: 30 },
-  destinationTimeoutMs: 15 * 60 * 1000,
-};
+const BUCKET = PACK_BUCKET;
+const ARCHIVES = PACK_ARCHIVES;
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let node: ProvisionedNode;
 let admin: { personId: string; token: string };
@@ -113,22 +94,7 @@ beforeEach(async () => {
     WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-20T08:00:00.000Z",
   };
   loadedKey = KEY;
-  await seedTaxpayer(suite.db);
-  await stampDeployment(suite.db, "preproduction");
-  await seedVenue(suite.db, {
-    name: "Sala",
-    invoiceLocales: ["es"],
-  });
-  const nodeId = await seedNode(suite.db);
-  node = { nodeId };
-  await setNodePublicKey(suite.db, nodeId, "SIGNER_PUBLIC_KEY");
-  await withTransaction(suite.db, async (tx) => {
-    await ensureStreamId(tx);
-    await writeStreamSettings(tx, RING, BUCKET, null);
-    await writeArchiveSettings(tx, RING, ARCHIVES, null);
-  });
-  admin = await openManagementSession(suite.db, "admin");
-  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin.token));
+  ({ node, admin } = await seedPackVenue(suite.db));
 });
 
 function fixture(
@@ -183,57 +149,11 @@ function fixture(
     },
     (...values) => logs.push(values),
   );
-  function post(
-    path: string,
-    body: unknown,
-    {
-      token = admin.token,
-      headers = {},
-      tls = true,
-      raw,
-      stream,
-      signal,
-    }: {
-      token?: string | null;
-      headers?: Record<string, string>;
-      tls?: boolean;
-      raw?: string;
-      stream?: ReadableStream<Uint8Array>;
-      signal?: AbortSignal;
-    } = {},
-  ) {
-    const socket = tls ? new TLSSocket(new Socket()) : undefined;
-    if (socket) sockets.push(socket);
-    return app.request(
-      `https://${options.remote ? "staff.example.test" : "box.test"}${path}`,
-      {
-        method: "POST",
-        signal,
-        headers: {
-          "Content-Type": "application/json",
-          ...(token === null ? {} : { cookie: `waitron_management_session=${token}` }),
-          ...headers,
-        },
-        body: stream ?? raw ?? JSON.stringify(body),
-        ...(stream === undefined ? {} : { duplex: "half" }),
-      } as RequestInit,
-      socket ? { incoming: { socket } } : undefined,
-    );
-  }
-  return {
-    post,
-    make: (
-      newMasterKey = false,
-      extra: Parameters<typeof post>[2] = {},
-      body: unknown = { locale: "en", newMasterKey },
-    ) => post("/api/backup/recovery-pack", body, extra),
-    received: (number: number, extra: Parameters<typeof post>[2] = {}) =>
-      post(`/api/backup/recovery-pack/${number}/received`, {}, extra),
-    status: (token: string | null = admin.token) =>
-      app.request("https://box.test/api/backup/recovery-pack", {
-        headers: token === null ? {} : { cookie: `waitron_management_session=${token}` },
-      }),
-  };
+  return packRequests(app, {
+    token: () => admin.token,
+    sockets,
+    host: options.remote ? "staff.example.test" : "box.test",
+  });
 }
 
 it("verifies remote recovery-pack passkeys against the staff origin and hostname", async () => {
