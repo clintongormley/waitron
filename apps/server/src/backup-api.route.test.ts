@@ -1892,7 +1892,7 @@ describe("backup admin routes", () => {
       ["from a page on another site", { origin: "https://elsewhere.example" }, undefined],
       ["from a cross-site page", { "sec-fetch-site": "cross-site" }, undefined],
     ])(
-      "a key change sent %s changes nothing and answers backup.key_change_page_required",
+      "a key change sent %s changes nothing and answers node.operation_page_required",
       async (_label, headers, env) => {
         const stateDir = await makeStateDir();
         const before = await readFile(join(stateDir, "backup.env"));
@@ -1900,7 +1900,7 @@ describe("backup admin routes", () => {
         const res = await send({ masterKey: MASTER.secret }, headers, env);
         expect(res.status).toBe(403);
         expect(await res.json()).toEqual({
-          error: { code: "backup.key_change_page_required", params: {} },
+          error: { code: "node.operation_page_required", params: {} },
         });
         expect(await readFile(join(stateDir, "backup.env"))).toEqual(before);
         expect(reload).not.toHaveBeenCalled();
@@ -1926,7 +1926,7 @@ describe("backup admin routes", () => {
       );
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual({
-        error: { code: "backup.key_change_page_required", params: {} },
+        error: { code: "node.operation_page_required", params: {} },
       });
     }, 60_000);
 

@@ -1331,10 +1331,6 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
     es: "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",
   },
-  "backup.key_change_page_required": {
-    en: "Changing the backup key needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",
-    es: "Cambiar la clave de las copias necesita una conexión cifrada desde la página del propio servidor. Abre la dirección HTTPS del servidor y vuelve a intentarlo.",
-  },
   "backup.destinations_invalid": {
     en: "Check the backup destination",
     es: "Revisa el destino de la copia de seguridad",

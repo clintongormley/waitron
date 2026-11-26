@@ -50,7 +50,7 @@ function rotateFor(state: State) {
       status: 400,
     });
   if (state === "refused")
-    return vi.fn().mockRejectedValue({ code: "backup.key_change_page_required", status: 403 });
+    return vi.fn().mockRejectedValue({ code: "node.operation_page_required", status: 403 });
   if (state === "unconfirmed")
     return vi.fn().mockRejectedValue({ code: "backup.effective_mismatch", status: 500 });
   if (state === "settings not loaded")

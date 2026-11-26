@@ -925,7 +925,7 @@ it("says a box holds no backup key and points at Change the backup key on the re
   );
 });
 
-it("words the backup key change's refusals: a wrong master key when the venue has none, and a page refusal says what to open", () => {
+it("words the backup key change's refusals: a wrong master key when the venue has none, and a key held too short", () => {
   expect(codeMessage("master_key.wrong", "en")).toBe(
     "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
   );
@@ -934,12 +934,6 @@ it("words the backup key change's refusals: a wrong master key when the venue ha
   );
   expect(codeMessage("backup.recovery_key_too_short", "es")).toBe(
     "La clave de las copias que tiene este servidor es demasiado corta. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para sustituirla.",
-  );
-  expect(codeMessage("backup.key_change_page_required", "en")).toBe(
-    "Changing the backup key needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",
-  );
-  expect(codeMessage("backup.key_change_page_required", "es")).toBe(
-    "Cambiar la clave de las copias necesita una conexión cifrada desde la página del propio servidor. Abre la dirección HTTPS del servidor y vuelve a intentarlo.",
   );
 });
 

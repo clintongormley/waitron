@@ -251,9 +251,7 @@ describe("a recovery pack PDF chosen in the field", () => {
 });
 
 it("explains a refusal the box gives before writing on the form's own line, and changes nothing", async () => {
-  const rotate = vi
-    .fn()
-    .mockRejectedValue({ code: "backup.key_change_page_required", status: 403 });
+  const rotate = vi.fn().mockRejectedValue({ code: "node.operation_page_required", status: 403 });
   const api = stubApi(rotate);
   const { el, dialog } = await open(api);
   const changed = vi.fn();
@@ -262,7 +260,7 @@ it("explains a refusal the box gives before writing on the form's own line, and 
   button(el, "change-backup-key")!.click();
   await expect
     .poll(() => dialogMessageOf(dialog))
-    .toBe(codeMessage("backup.key_change_page_required"));
+    .toBe(codeMessage("node.operation_page_required"));
   expect(field(el).error).toBe("");
   expect(changed).not.toHaveBeenCalled();
   expect(api.liveData.invalidate).not.toHaveBeenCalled();
