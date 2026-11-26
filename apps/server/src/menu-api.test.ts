@@ -2375,6 +2375,39 @@ describe("mountMenuApi — products", () => {
           ],
         }),
       ]);
+
+      const [clock] = (
+        await suite.db.execute<{ timeZone: string }>(
+          sql`select json_extract(doc, '$.timeZone') as timeZone from settings where module = 'business_day'`,
+        )
+      ).rows;
+      const setZone = (zone: string) =>
+        suite.db.execute(
+          sql`update settings set doc = json_set(doc, '$.timeZone', ${zone}) where module = 'business_day'`,
+        );
+      await setZone("Invalid/Zone");
+      try {
+        const fallback = await saveWith(saved.id, { mustard: {} });
+        expect(fallback.declarationMenus).toEqual([
+          expect.objectContaining({
+            menuId,
+            queued: [
+              expect.objectContaining({
+                versionId,
+                local: {
+                  date: "2098-12-31",
+                  time: "23:30",
+                  offset: "+00:00",
+                  repeated: false,
+                  utcFallback: true,
+                },
+              }),
+            ],
+          }),
+        ]);
+      } finally {
+        await setZone(clock!.timeZone);
+      }
     });
   });
 

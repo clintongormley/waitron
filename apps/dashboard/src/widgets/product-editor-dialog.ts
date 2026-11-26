@@ -1,6 +1,5 @@
 import { html, nothing, type LitElement, type ReactiveController } from "lit";
 import type { ContentLanguages } from "@waitron/shared";
-import type { DeclarationMenu } from "@waitron/menu";
 import type { WtModal } from "@waitron/ui";
 import type {
   CategoryInput,
@@ -196,11 +195,16 @@ export class ProductEditorDialog implements ReactiveController {
     this.host.requestUpdate();
     const editing = this.value;
     let generation = this.#editorGeneration;
-    let saved: ProductEditorValue & { declarationMenus?: DeclarationMenu[] };
+    let saved: ProductEditorValue;
+    let question: LiveDeclarationQuestion | null = null;
     try {
-      saved = editing
-        ? await this.#api.updateProductEditor(editing.id, event.detail.body)
-        : await this.#api.createProductEditor(event.detail.body);
+      if (editing === null) saved = await this.#api.createProductEditor(event.detail.body);
+      else {
+        const updated = await this.#api.updateProductEditor(editing.id, event.detail.body);
+        saved = updated;
+        if (updated.declarationMenus?.length)
+          question = { id: updated.id, menus: updated.declarationMenus };
+      }
     } catch (error) {
       if (generation === this.#editorGeneration) {
         this.#fieldErrors = this.#rejectedField(error, event.detail.value);
@@ -222,8 +226,7 @@ export class ProductEditorDialog implements ReactiveController {
     if (generation === this.#editorGeneration) {
       this.#editor()?.closeSaved(event.detail.value);
       this.close();
-      if (editing !== null && saved.declarationMenus?.length)
-        this.#pendingDeclarations = { id: saved.id, menus: saved.declarationMenus };
+      this.#pendingDeclarations = question;
       generation = this.#editorGeneration;
       this.busy = true;
       this.effects.closed?.(false);

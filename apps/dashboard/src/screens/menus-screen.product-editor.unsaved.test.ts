@@ -127,14 +127,23 @@ it("saves a product, refreshes the same Structure row and returns focus to its m
 });
 
 it("returns focus to the Structure row after the live menu question closes", async () => {
+  let product = menuProduct;
   const menu = await openMenu({
-    updateProductEditor: async (_id, body) => ({
-      ...menuProductEditorValue,
-      name: body.name,
-      declarationMenus: [{ menuId: "menu-one", name: "Lunch", live: true, queued: [] }],
-    }),
+    listLibraryProducts: async () => [product],
+    updateProductEditor: async (_id, body) => {
+      product = { ...product, name: body.name };
+      return {
+        ...menuProductEditorValue,
+        name: body.name,
+        declarationMenus: [{ menuId: "menu-one", name: "Lunch", live: true, queued: [] }],
+      };
+    },
   });
   const editor = await menu.open();
+  const focusRow = vi.spyOn(
+    menu.root.querySelector("dashboard-menu-structure-table")!,
+    "focusRowMenu",
+  );
   await changeName(editor, "Double burger");
   const modal = editor.shadowRoot!.querySelector("wt-modal")!;
   const closed = dialogClosed(modal);
@@ -143,7 +152,10 @@ it("returns focus to the Structure row after the live menu question closes", asy
 
   const question = page.getByRole("dialog", { name: "Update the live menus now?" });
   await expect.element(question).toBeVisible();
-  expect(menu.table()?.activeElement).not.toBe(menu.row());
+  await expect
+    .poll(() => menu.table()?.querySelector('[data-test="name"]')?.textContent?.trim())
+    .toBe("Double burger");
+  expect(focusRow).not.toHaveBeenCalled();
   await page.getByRole("button", { name: "Not now" }).click();
   await expect.element(question).not.toBeInTheDocument();
   await expect.poll(() => menu.table()?.activeElement).toBe(menu.row());

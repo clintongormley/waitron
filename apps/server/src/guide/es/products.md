@@ -302,12 +302,12 @@ consigo sus propias declaraciones. Una opción de una lista de opciones no: una 
 o _muy hecho_ no lleva alérgenos ni aptitud dietética propios, porque es una forma de pedir el mismo
 plato, no algo más que comer. La caja y la estación muestran la lista propia de cada elemento.
 
-Si al guardar algún menú activo o programado conserva los alérgenos o las etiquetas anteriores,
-Waitron te muestra los menús activos afectados y te deja elegir qué versiones programadas actualizar.
-Pulsa **Actualizar ahora**
-para corregirlos enseguida. Si eliges **Ahora no**, consulta los cambios pendientes en
-**Revisar y publicar**. Publica la carta o usa [Corregir la carta publicada](products.md#patch-live-menu)
-para que los cambios entren en vigor.
+Cuando guardas un cambio en los alérgenos o las etiquetas dietéticas de un producto, Waitron te
+pregunta si quieres corregir los menús activos o programados que aún muestran los valores
+anteriores. Pulsa **Actualizar ahora** para corregir los menús activos y las versiones programadas
+que marques. Para consultar los cambios pendientes de un menú activo, abre **Revisar y publicar**.
+Publica la carta o usa [Corregir la carta publicada](products.md#patch-live-menu) para que esos
+cambios entren en vigor.
 
 En la lista de Productos, **Sin revisar**, **Ninguno** y **Declarado** distinguen un plato que no has
 comprobado de uno que sí. Una variante muestra el estado de los alérgenos que usa.
