@@ -39,6 +39,7 @@ it("identifies the exact Windows certificate to remove", () =>
       expect(removal).toContain("waitron-setup-ca");
       expect(removal).toContain("CC:DD");
       expect(removal).toMatch(/Thumbprint[\s\S]*ABCD/);
+      expect(removal).toContain("If a spare or another box still uses the previous certificate");
       expect(removal).toContain("For a spare, wait until it has been reset and rejoined.");
       expect(await page.locator("section").nth(1).textContent()).toContain(
         "Waitron box 2026-11-26 0123456789ab",

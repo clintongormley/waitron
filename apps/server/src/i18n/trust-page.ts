@@ -5,21 +5,21 @@ export const NOT_SET_UP_WORDS = {
 
 export const CERTIFICATE_WORDS = {
   en: {
-    current: "Certificate to install (SHA-256 fingerprint)",
+    current: "Current certificate (SHA-256 fingerprint)",
     previous: "Previous certificate (SHA-256 fingerprint)",
     match: "Remove the previous certificate only if both its name and fingerprint match.",
     shared:
-      "If a spare or another box still uses that certificate, keep it installed until that box has its new certificate. For a spare, wait until it has been reset and rejoined. Then remove the old certificate.",
+      "If a spare or another box still uses the previous certificate, keep it installed until that box has its new certificate. For a spare, wait until it has been reset and rejoined. Then remove the old certificate.",
     unavailable:
       "Leave installed certificates alone. Download and install the certificate shown here.",
     thumbprint: "Windows: open Details and compare Thumbprint (SHA-1).",
   },
   es: {
-    current: "Certificado que vas a instalar (huella SHA-256)",
+    current: "Certificado actual (huella SHA-256)",
     previous: "Certificado anterior (huella SHA-256)",
     match: "Elimina el certificado anterior solo si coinciden el nombre y la huella.",
     shared:
-      "Si un servidor de reserva u otro servidor aún usa ese certificado, consérvalo hasta que ese servidor tenga el nuevo. Si es el de reserva, espera a que se restablezca y se vuelva a unir al local. Después, elimina el certificado anterior.",
+      "Si un servidor de reserva u otro servidor aún usa el certificado anterior, consérvalo hasta que ese servidor tenga el nuevo. Si es el de reserva, espera a que se restablezca y se vuelva a unir al local. Después, elimina el certificado anterior.",
     unavailable:
       "Deja los certificados instalados como están. Descarga e instala el certificado que se muestra aquí.",
     thumbprint: "En Windows, abre Detalles y compara la Huella digital (SHA-1).",
@@ -40,7 +40,7 @@ export const TRUST_PAGE_WORDS = {
     findDevice:
       "Find your device in step 3 — each one's steps begin with how to remove an old certificate.",
     reopen: "Then quit your browser completely and reopen this page.",
-    removeFirst: "Remove the matching certificate shown in step 1.",
+    removeFirst: "Follow the removal instructions in step 1.",
     managed:
       "These steps use your device's own settings, with no terminal. Menu names vary by version. If installation is blocked, use a venue device that permits it.",
     install: "Install it on your device",
@@ -69,7 +69,7 @@ export const TRUST_PAGE_WORDS = {
     findDevice:
       "Busca tu dispositivo en el paso 3. Sus instrucciones empiezan por cómo eliminar el certificado anterior.",
     reopen: "Después, cierra por completo el navegador y vuelve a abrir esta página.",
-    removeFirst: "Elimina el certificado que coincida con el del paso 1.",
+    removeFirst: "Sigue las instrucciones para eliminar el certificado del paso 1.",
     managed:
       "Sigue estos pasos en los ajustes del dispositivo. Los nombres de los menús varían según la versión. Si el dispositivo impide instalar el certificado, usa otro del local que lo permita.",
     install: "Instala el certificado en tu dispositivo",

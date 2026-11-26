@@ -235,6 +235,7 @@ it("offers one public repair action, retains installed trust and omits private c
   expect(html).toContain('id="connection-repair"');
   expect(html).toContain("Set up secure connection");
   expect(html).toContain("Keep this box’s current certificate.");
+  expect(html).toContain("Current certificate (SHA-256 fingerprint)");
   expect(html).not.toContain("Remove any old Waitron certificate");
   expect(html).not.toMatch(/<(input|textarea|select|form)\b/);
 });
