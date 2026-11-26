@@ -60,8 +60,8 @@ it("requires only the staff pair and submits empty customer maps without filling
     expect(field(el, name).required).toBe(false);
   await fill(el, "staffName", " Staff crate ");
   await fill(el, "staffAbbreviation", " staff-cr ");
-  expect(field(el, "name-es").placeholder).toBe("Staff crate");
-  expect(field(el, "abbreviation-es").placeholder).toBe("staff-cr");
+  expect(field(el, "name-es").inherited?.value).toBe("Staff crate");
+  expect(field(el, "abbreviation-es").inherited?.value).toBe("staff-cr");
   save(el).click();
   expect(submit).toHaveBeenCalledExactlyOnceWith(
     expect.objectContaining({
@@ -170,8 +170,8 @@ it("uses the configured default for placeholders even when it is not the first v
   const el = await mount({ ...stored, name: { en: "Crate" }, abbreviation: {} });
   setContentLanguages({ defaultLanguage: "en", languages: ["es", "en"] });
   await el.updateComplete;
-  expect(field(el, "name-es").placeholder).toBe("Crate");
-  expect(field(el, "abbreviation-es").placeholder).toBe("staff-cr");
+  expect(field(el, "name-es").inherited?.value).toBe("Crate");
+  expect(field(el, "abbreviation-es").inherited?.value).toBe("staff-cr");
   expect(field(el, "name-es").value).toBe("");
 });
 

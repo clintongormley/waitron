@@ -2755,7 +2755,7 @@ it("puts the colour chooser after Name on a product of its own, its custom input
   appearance(el).openPanel();
   await expect
     .element(page.elementLocator(useCategory(el)))
-    .toHaveAccessibleName(t("editor.color_use_category"));
+    .toHaveAccessibleName(t("inherit.label"));
 });
 
 it("draws the Custom colour input on the same line as its label, after the word", async () => {
@@ -2775,7 +2775,7 @@ it("draws the Custom colour input on the same line as its label, after the word"
   expect(input.bottom).toBeGreaterThan(text.top);
 });
 
-it("describes Use category colour by the draft category's colour, and follows a category chosen since", async () => {
+it("describes Inherit by the draft category's colour, and follows a category chosen since", async () => {
   const el = await mountColoured();
   const describes = (text: string) =>
     expect.element(page.elementLocator(useCategory(el))).toHaveAccessibleDescription(text);
@@ -2812,15 +2812,14 @@ it("describes the inherited choice by the venue default when the product has no 
 });
 
 it.each([
-  { locale: "en-GB", useDefault: "Use default colour", useCategory: "Use category colour" },
+  { locale: "en-GB", label: "Inherit" },
   {
     locale: "es-ES",
-    useDefault: "Usar el color predeterminado",
-    useCategory: "Usar el color de la categoría",
+    label: "Heredar",
   },
 ])(
-  "in $locale, names the inherited choice by the venue default when no category above the product has a colour, and by the category when one does",
-  async ({ locale, useDefault, useCategory: categoryLabel }) => {
+  "in $locale, labels both the venue and category colour choices as inheritance",
+  async ({ locale, label }) => {
     const before = currentLocale();
     setLocale(locale);
     try {
@@ -2834,11 +2833,9 @@ it.each([
           defaultColor: "#b12525",
         });
         appearance(el).openPanel();
-        await expect.element(page.elementLocator(useCategory(el))).toHaveAccessibleName(useDefault);
+        await expect.element(page.elementLocator(useCategory(el))).toHaveAccessibleName(label);
         await pickIn(el, "primary", { value: "wine" });
-        await expect
-          .element(page.elementLocator(useCategory(el)))
-          .toHaveAccessibleName(categoryLabel);
+        await expect.element(page.elementLocator(useCategory(el))).toHaveAccessibleName(label);
         cleanupWidgets();
       }
     } finally {
@@ -2856,7 +2853,7 @@ it("saves a chosen swatch as the product's own colour", async () => {
   expect(submittedValue(el).color).toBe("#b12525");
 });
 
-it("opens with the product's own colour chosen, and Use category colour saves none", async () => {
+it("opens with the product's own colour chosen, and Inherit saves null", async () => {
   const el = await mountColoured({ color: "#b12525" });
   expect(colourSwatch(el, "#b12525").getAttribute("aria-checked")).toBe("true");
   expect(useCategory(el).getAttribute("aria-checked")).toBe("false");
@@ -2874,7 +2871,7 @@ it("holds the colour chooser while a save is in flight", async () => {
   expect(colourSwatch(el, "#b12525").disabled).toBe(true);
 });
 
-it("keeps the product's own colour through a category change, and Use category colour then takes the new category's", async () => {
+it("keeps the product's own colour through a category change, and Inherit then takes the new category's", async () => {
   const el = await mountColoured({ color: "#b12525" });
   await pickIn(el, "primary", { value: "snacks" });
   expect(colourSwatch(el, "#b12525").getAttribute("aria-checked")).toBe("true");
@@ -4487,17 +4484,17 @@ it("shows no standalone ordering choice on a variant's page, and keeps the varia
 
 it("shows a variant's inherited price and description empty, with the parent's value as the hint", async () => {
   const el = await mountVariant();
-  const price = control<{ value: string; placeholder: string; required: boolean }>(
+  const price = control<{ value: string; inherited?: { value: string }; required: boolean }>(
     el,
     "unit-price",
   );
   expect(price.value).toBe("");
-  expect(price.placeholder).toBe("9.00");
+  expect(price.inherited?.value).toBe("9.00");
   // A variant's price is optional: blank sells at the base price.
   expect(price.required).toBe(false);
-  const description = control<HTMLTextAreaElement>(el, "description-en");
+  const description = control<HTMLElementTagNameMap["wt-textarea"]>(el, "description-en");
   expect(description.value).toBe("");
-  expect(description.placeholder).toBe("Roasted in house");
+  expect(description.inherited?.value).toBe("Roasted in house");
 });
 
 // Storage inherits a variant's description as ONE value across every language
@@ -4520,21 +4517,25 @@ async function mountBilingualVariant(description: ProductEditorDraft["descriptio
   });
   return el;
 }
-const placeholders = (el: ProductEditor, locales = ["en", "es"]) =>
-  locales.map((locale) => control<HTMLTextAreaElement>(el, `description-${locale}`).placeholder);
+const descriptionFallbacks = (el: ProductEditor, locales = ["en", "es"]) =>
+  locales.map(
+    (locale) =>
+      control<HTMLElementTagNameMap["wt-textarea"]>(el, `description-${locale}`).inherited?.value ??
+      "",
+  );
 
 it("hints a variant's description with its parent's only while every language is blank", async () => {
   const el = await mountBilingualVariant();
-  expect(placeholders(el)).toEqual(["Roasted in house", "Tostado en casa"]);
+  expect(descriptionFallbacks(el)).toEqual(["Roasted in house", "Tostado en casa"]);
   await input(el, "description-en", "Served in a glass");
-  expect(placeholders(el)).toEqual(["", "Served in a glass"]);
+  expect(descriptionFallbacks(el)).toEqual(["", "Served in a glass"]);
   await input(el, "description-en", "  ");
-  expect(placeholders(el)).toEqual(["Roasted in house", "Tostado en casa"]);
+  expect(descriptionFallbacks(el)).toEqual(["Roasted in house", "Tostado en casa"]);
 });
 
 it("shows no description hint on a variant described only in a language other than the default", async () => {
   const el = await mountBilingualVariant({ es: "Servido en vaso" });
-  expect(placeholders(el)).toEqual(["", ""]);
+  expect(descriptionFallbacks(el)).toEqual(["", ""]);
 });
 
 it("hints a product's blank description in another language with the default-language one, as it is typed", async () => {
@@ -4544,11 +4545,11 @@ it("hints a product's blank description in another language with the default-lan
     locales: ["en", "es"],
     units: [unit],
   });
-  expect(placeholders(el)).toEqual(["", "Freshly roasted"]);
+  expect(descriptionFallbacks(el)).toEqual(["", "Freshly roasted"]);
   await input(el, "description-en", "Dark roast");
-  expect(placeholders(el)).toEqual(["", "Dark roast"]);
+  expect(descriptionFallbacks(el)).toEqual(["", "Dark roast"]);
   await input(el, "description-en", "");
-  expect(placeholders(el)).toEqual(["", ""]);
+  expect(descriptionFallbacks(el)).toEqual(["", ""]);
 });
 
 it("leaves a product's default-language description unhinted when only another language has one", async () => {
@@ -4558,7 +4559,9 @@ it("leaves a product's default-language description unhinted when only another l
     locales: ["en", "es"],
     units: [unit],
   });
-  expect(control<HTMLTextAreaElement>(el, "description-en").placeholder).toBe("");
+  expect(
+    control<HTMLElementTagNameMap["wt-textarea"]>(el, "description-en").inherited,
+  ).toBeUndefined();
 });
 
 it("hints a variant's description in a language its parent left blank with the parent's default-language one", async () => {
@@ -4569,7 +4572,7 @@ it("hints a variant's description in a language its parent left blank with the p
     units: [unit, litre],
     categories,
   });
-  expect(placeholders(el)).toEqual(["Roasted in house", "Roasted in house"]);
+  expect(descriptionFallbacks(el)).toEqual(["Roasted in house", "Roasted in house"]);
 });
 
 it("hints a variant's blank language with its own default-language description, as it is typed", async () => {
@@ -4584,9 +4587,9 @@ it("hints a variant's blank language with its own default-language description, 
     units: [unit, litre],
     categories,
   });
-  expect(placeholders(el, ["es", "ca"])).toEqual(["", "Servido en vaso"]);
+  expect(descriptionFallbacks(el, ["es", "ca"])).toEqual(["", "Servido en vaso"]);
   await input(el, "description-es", "Servido en copa");
-  expect(placeholders(el, ["es", "ca"])).toEqual(["", "Servido en copa"]);
+  expect(descriptionFallbacks(el, ["es", "ca"])).toEqual(["", "Servido en copa"]);
 });
 
 it("saves a variant's description as null once every language is blanked again", async () => {
@@ -4601,7 +4604,7 @@ it("saves a variant's description as null once every language is blanked again",
 
 const nameHints = (el: ProductEditor, locales: readonly string[]) =>
   ["kitchen-name", ...locales.map((locale) => `customer-name-${locale}`)].map(
-    (name) => control<{ placeholder: string }>(el, name).placeholder,
+    (name) => control<{ inherited?: { value: string } }>(el, name).inherited?.value ?? "",
   );
 
 it("hints a product's blank names with what they fall back to, following the fields they copy", async () => {
@@ -4652,7 +4655,9 @@ it("never hints a variant's names from the parent's", async () => {
     "kitchen-name": "Glass of coffee",
   };
   for (const [name, hint] of Object.entries(expected))
-    expect(control<{ placeholder: string }>(el, name).placeholder, name).toBe(hint);
+    expect(control<{ inherited?: { value: string } }>(el, name).inherited?.value ?? "", name).toBe(
+      hint,
+    );
 });
 
 it("offers each inherited choice first as the parent's value, with an empty value", async () => {
@@ -4663,7 +4668,9 @@ it("offers each inherited choice first as the parent's value, with an empty valu
   for (const [name, text] of Object.entries(expected)) {
     const option = firstOption(el, name);
     expect(option.value, name).toBe("");
-    expect(option.label, name).toBe(text);
+    expect(option.label, name).toBe(fill("inherit.value", { value: text }));
+    expect(option.valueLabel, name).toBe(text);
+    expect(option.inherited, name).toBe(true);
     expect(combobox(el, name)!.value, name).toBe("");
   }
   // The price field names the unit the variant sells in: the parent's.
@@ -4726,12 +4733,7 @@ it("hints what a variant will actually use where its parent names nothing there"
     },
   });
   expect(variantPath(el)).toBe(`${t("editor.classification")}: ${t("categories.none")}`);
-  expect(combobox(el, "product-course")!.placeholder).toBe(t("modifiers.none_specified"));
-  expect(
-    combobox(el, "product-course")!
-      .shadowRoot!.querySelector(".trigger .value")!
-      .classList.contains("placeholder"),
-  ).toBe(true);
+  expect(firstOption(el, "product-course").inherited).toBe(true);
   expect(inheritedNutrition(el, "allergens")).toBe(
     `${t("modifiers.allergens")}: ${t("editor.nutrition.allergens_none")}`,
   );
@@ -4750,10 +4752,11 @@ it("names a parent's course or unit missing from the lists as unavailable, never
     ...glass,
     inherited: { ...parentValues, courseId: "gone", unitId: "gone" },
   });
-  expect(combobox(el, "product-course")!.placeholder).toBe(t("editor.missing_choice"));
   expect(firstOption(el, "product-course")).toEqual({
     value: "",
-    label: t("editor.missing_choice"),
+    label: fill("inherit.value", { value: t("editor.missing_choice") }),
+    valueLabel: t("editor.missing_choice"),
+    inherited: true,
   });
   expect(control<{ unit: string }>(el, "unit-price").unit).toBe(
     t("editor.per_unit").replace("{unit}", t("editor.missing_choice")),
@@ -4816,7 +4819,7 @@ it.each([
     locale: "en-GB",
     unit: "Each",
     category: "No category",
-    course: "None specified",
+    course: "Inherit: None",
     allergens: "Allergens: None",
     unreviewed: "Allergens: Not yet reviewed",
   },
@@ -4824,7 +4827,7 @@ it.each([
     locale: "es-ES",
     unit: "Unidad",
     category: "Sin categoría",
-    course: "Sin especificar",
+    course: "Heredar: Ninguno",
     allergens: "Alérgenos: Ninguno",
     unreviewed: "Alérgenos: Sin revisar todavía",
   },
@@ -4846,7 +4849,7 @@ it.each([
       });
       expect(control<{ unit: string }>(el, "unit-price").unit).toBe(expected.unit);
       expect(variantPath(el)).toBe(`${t("editor.classification")}: ${expected.category}`);
-      expect(combobox(el, "product-course")!.placeholder).toBe(expected.course);
+      expect(firstOption(el, "product-course").label).toBe(expected.course);
       expect(inheritedNutrition(el, "allergens")).toBe(expected.allergens);
       expect(inheritedNutrition(el, "dietary")).toBeUndefined();
       cleanupWidgets();
@@ -5384,7 +5387,6 @@ const rateOptions = [
   { value: "10.00", label: "10%" },
   { value: "21.00", label: "21%" },
 ];
-const same = (product: string, rate: string) => fill("editor.takeaway_vat_same", { product, rate });
 /** Writes the case's labels in one locale, whatever an earlier case left set. */
 function inLocale(locale: "en-GB" | "es-ES") {
   const before = currentLocale();
@@ -5417,11 +5419,9 @@ it("words the takeaway field as staff read it, in English and Spanish", () => {
   try {
     setLocale("en-GB");
     expect(t("editor.takeaway_vat")).toBe("VAT when taken away");
-    expect(same("Coffee", "10")).toBe("Same as Coffee — 10%");
     expect(t("editor.takeaway_vat_required")).toBe("Choose the VAT when taken away.");
     setLocale("es-ES");
     expect(t("editor.takeaway_vat")).toBe("IVA para llevar");
-    expect(same("Café", "10")).toBe("Igual que Café — 10 %");
     expect(t("editor.takeaway_vat_required")).toBe("Elige el IVA para llevar.");
   } finally {
     setLocale(before);
@@ -5536,6 +5536,8 @@ it("refuses a stored rate the answer no longer offers, and points a server refus
   expect(combobox(el, "takeaway-tax")!.error).toBe(t("editor.takeaway_vat_required"));
 });
 
+const withParent = (value: ProductEditorDraft) => ({ ...value, inherited: parentValues });
+
 it("offers a variant its product's rate first, not required, and saves that choice as null", async () => {
   inLocale("en-GB");
   const el = await mountTakeaway({
@@ -5544,17 +5546,28 @@ it("offers a variant its product's rate first, not required, and saves that choi
   });
   const takeaway = combobox(el, "takeaway-tax")!;
   expect(takeaway.required).toBe(false);
-  expect(takeaway.placeholder).toBe(same("Coffee", "10"));
-  expect(takeaway.options).toEqual([{ value: "", label: same("Coffee", "10") }, ...rateOptions]);
+  expect(takeaway.options).toEqual([
+    { value: "", label: "Inherit: 10%", inherited: true, valueLabel: "10%" },
+    ...rateOptions,
+  ]);
   expect(takeaway.value).toBe("");
-  expect(await shownIn(el, "takeaway-tax")).toBe(same("Coffee", "10"));
-  await chooseOption(takeaway, "21.00");
+  expect(await shownIn(el, "takeaway-tax")).toBe("10%");
+  expect(takeaway.inheritedSuffix).toBe("inherited");
+  await chooseOption(takeaway, "10.00");
   await el.updateComplete;
-  expect(el.currentValue.takeawayVatRate).toBe("21.00");
-  await chooseOption(combobox(el, "takeaway-tax")!, "");
-  await el.updateComplete;
-  await edit(el);
-  expect(submittedValue(el).takeawayVatRate).toBeNull();
+  const fixed = submittedValue(el);
+  expect(fixed.takeawayVatRate).toBe("10.00");
+  cleanupWidgets();
+  const reopened = await mountTakeaway(withParent(fixed));
+  expect(combobox(reopened, "takeaway-tax")!.value).toBe("10.00");
+  await chooseOption(combobox(reopened, "takeaway-tax")!, "");
+  await reopened.updateComplete;
+  const inherited = submittedValue(reopened);
+  expect(inherited.takeawayVatRate).toBeNull();
+  cleanupWidgets();
+  const again = await mountTakeaway(withParent(inherited));
+  expect(combobox(again, "takeaway-tax")!.value).toBe("");
+  expect(await shownIn(again, "takeaway-tax")).toBe("10%");
 });
 
 it("sends a new product's default takeaway rate where the region does not charge it", async () => {
@@ -5601,23 +5614,36 @@ it("picks the unit from a shared dropdown behind the price field, Each being its
   expect(sharedField(el, "wt-combobox", "unit").error).toBe("That unit is gone");
 });
 
-it("keeps a variant's inherited choice as each inherited dropdown's prompt and first row", async () => {
-  const el = await mountVariant();
-  const expected = {
-    "product-course": "Mains",
-  };
-  for (const [name, text] of Object.entries(expected)) {
-    const box = sharedField(el, "wt-combobox", name);
-    expect(box.placeholder, name).toBe(text);
-    expect(box.options[0], name).toEqual({ value: "", label: text });
-    expect(box.value, name).toBe("");
-    expect(box.required, name).toBe(false);
-    expect(await shownIn(el, name), name).toBe(text);
-    await box.updateComplete;
-    expect(box.shadowRoot!.querySelector(".trigger .value")!.classList, name).toContain(
-      "placeholder",
-    );
-  }
+it("reopens the variant course as inherited or fixed even when both show Mains", async () => {
+  inLocale("en-GB");
+  let el = await mountVariant();
+  const course = combobox(el, "product-course")!;
+  expect(course.options[0]).toEqual({
+    value: "",
+    label: "Inherit: Mains",
+    valueLabel: "Mains",
+    inherited: true,
+  });
+  expect(course.value).toBe("");
+  expect(course.required).toBe(false);
+  expect(course.inheritedSuffix).toBe("inherited");
+  expect(await shownIn(el, "product-course")).toBe("Mains");
+  await chooseOption(course, "mains");
+  await el.updateComplete;
+  const fixed = submittedValue(el);
+  expect(fixed.courseId).toBe("mains");
+  cleanupWidgets();
+  el = await mountVariant(withParent(fixed));
+  expect(combobox(el, "product-course")!.value).toBe("mains");
+  expect(await shownIn(el, "product-course")).toBe("Mains");
+  await chooseOption(combobox(el, "product-course")!, "");
+  await el.updateComplete;
+  const inherited = submittedValue(el);
+  expect(inherited.courseId).toBeNull();
+  cleanupWidgets();
+  el = await mountVariant(withParent(inherited));
+  expect(combobox(el, "product-course")!.value).toBe("");
+  expect(await shownIn(el, "product-course")).toBe("Mains");
 });
 
 // --- The Pricing and Variants sections ---
@@ -6462,13 +6488,13 @@ it("Variants and Modifiers never fold, so they have no summary line", async () =
   }
 });
 
-it("a variant's Details line shows inherited values", async () => {
-  const el = await mountVariant();
+it("a variant's Details line keeps inherited VAT and allergens", async () => {
+  inLocale("en-GB");
+  const el = await mountTakeaway(glass);
   const inherited = summaryOf(el, "details").filter((field) => field.placeholder);
   expect(inherited).toEqual(
     expect.arrayContaining([
-      { label: t("editor.summary_course"), value: "Mains", placeholder: true },
-      { label: t("editor.description"), value: "EN: Roasted in house", placeholder: true },
+      { label: "VAT when taken away", value: "10%", placeholder: true },
       {
         label: t("modifiers.allergens"),
         value: allergenName("milk"),
@@ -6481,7 +6507,7 @@ it("a variant's Details line shows inherited values", async () => {
   await details.updateComplete;
   const drawn = [...details.shadowRoot!.querySelectorAll(".summary-placeholder")];
   expect(drawn.map((value) => value.textContent)).toEqual(
-    expect.arrayContaining(["Mains", "EN: Roasted in house", allergenName("milk")]),
+    expect.arrayContaining(["10%", allergenName("milk")]),
   );
 });
 
@@ -6571,14 +6597,10 @@ it("lists chosen and implied dietary preferences after allergens on the folded l
     ).toBe("true");
 });
 
-it("shows a variant's blank fields folded as its parent's values, as placeholders; its names stay its own", async () => {
+it("leaves inherited course and description off the folded line and keeps nutrition", async () => {
   const el = await mountVariant({ ...glass, kitchenName: null, customerName: null });
-  expect(detailsPart(el, "kitchen")).toEqual([
-    { label: t("editor.summary_course"), value: "Mains", placeholder: true },
-  ]);
-  expect(detailsPart(el, "descriptors")).toEqual([
-    { label: t("editor.description"), value: "EN: Roasted in house", placeholder: true },
-  ]);
+  expect(detailsPart(el, "kitchen")).toEqual([]);
+  expect(detailsPart(el, "descriptors")).toEqual([]);
   expect(detailsPart(el, "nutrition")).toEqual([
     { label: t("modifiers.allergens"), value: allergenName("milk"), placeholder: true },
     {
@@ -6589,8 +6611,6 @@ it("shows a variant's blank fields folded as its parent's values, as placeholder
   ]);
   expect(await foldedLine(el)).toBe(
     [
-      `${t("editor.summary_course")}: [Mains]`,
-      `${t("editor.description")}: [EN: Roasted in house]`,
       `${t("modifiers.allergens")}: [${allergenName("milk")}] · ${t("editor.nutrition.dietary")}: [${t("editor.diet.vegetarian")}, ${t("editor.diet.no_meat")}, ${t("editor.diet.no_fish")}]`,
     ].join(" · "),
   );
@@ -6624,11 +6644,7 @@ it("shows folded what a variant will use where its parent has nothing set either
     placeholder: true,
     warning: true,
   });
-  expect(detailsPart(el, "kitchen")[1]).toEqual({
-    label: t("editor.summary_course"),
-    value: t("editor.missing_choice"),
-    placeholder: true,
-  });
+  expect(detailsPart(el, "kitchen")).toEqual([{ label: t("editor.kitchen_name"), value: "GLS" }]);
   expect(detailsPart(el, "descriptors")).toEqual([
     { label: t("editor.customer_name"), value: "EN: A glass" },
   ]);
@@ -6708,7 +6724,7 @@ it("draws a variant's inherited folded values in muted ink", async () => {
   details.open = false;
   await details.updateComplete;
   const inherited = details.shadowRoot!.querySelector(".summary-placeholder")!;
-  expect(inherited.textContent).toBe("Mains");
+  expect(inherited.textContent).toBe(allergenName("milk"));
   expect(getComputedStyle(inherited).color).toBe("rgb(7, 8, 9)");
   expect(details.shadowRoot!.querySelectorAll(".summary-placeholder")).toHaveLength(
     summaryOf(el, "details").filter((field) => "placeholder" in field && field.placeholder).length,
@@ -7180,8 +7196,8 @@ it("submits only entered regional product names and clearing a version restores 
     { locales: ["en", "en-US", "es"] },
   );
   await openSection(el, "details");
-  const us = control<HTMLInputElement>(el, "customer-name-en-US");
-  expect([us.value, us.placeholder]).toEqual(["", "chips"]);
+  const us = control<HTMLElementTagNameMap["wt-input"]>(el, "customer-name-en-US");
+  expect([us.value, us.inherited?.value]).toEqual(["", "chips"]);
   await input(el, "customer-name-en-US", "fries");
   const submitted = vi.fn();
   el.addEventListener("wt-submit", submitted);

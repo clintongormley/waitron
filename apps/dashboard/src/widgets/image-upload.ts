@@ -101,10 +101,6 @@ export class ImageUpload extends LitElement {
       .thumb:disabled {
         ${disabledStyles}
       }
-      .thumb.inherited {
-        border-style: dashed;
-        border-color: var(--wt-color-text-muted);
-      }
       .thumb[aria-invalid="true"] {
         border-color: var(--wt-color-danger);
       }
@@ -281,7 +277,7 @@ export class ImageUpload extends LitElement {
     const shown = this.image ?? inherited;
     return html`<button
         type="button"
-        class=${inherited ? "thumb inherited" : "thumb"}
+        class="thumb"
         data-test="choose-image"
         aria-label=${t(this.image ? "image.change_photo" : "image.add_photo")}
         aria-invalid=${this.invalid ? "true" : nothing}

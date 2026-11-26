@@ -61,6 +61,7 @@ async function click(el: VariantForm, id: string) {
 function field(el: VariantForm, name: string) {
   return el.shadowRoot!.querySelector(`[name="${name}"]`) as unknown as {
     value: string;
+    inherited?: { value: string };
     label: string;
     checked: boolean;
     required: boolean;
@@ -90,7 +91,7 @@ it("opens with every field of the variant it was given", async () => {
 
 const nameHints = (el: VariantForm) =>
   ["kitchenName", "customerName-es", "customerName-en"].map(
-    (name) => (field(el, name) as unknown as { placeholder: string }).placeholder,
+    (name) => field(el, name).inherited?.value ?? "",
   );
 
 it("hints a new variant's blank names with what they fall back to, as its name is typed", async () => {
@@ -507,7 +508,7 @@ it("holds Escape while the save it started is in flight", async () => {
 it("opens a new variant with a blank price whose hint is the base price, and saves it blank", async () => {
   const el = await mountForm({ basePrice: "9.00" });
   expect(field(el, "unitPrice").value).toBe("");
-  expect((field(el, "unitPrice") as unknown as { placeholder: string }).placeholder).toBe("9.00");
+  expect(field(el, "unitPrice").inherited?.value).toBe("9.00");
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   await change(el, "name", "Glass");
@@ -539,7 +540,7 @@ it("hints the main product's photo while the variant has none of its own", async
 
 it("shows no price hint while the product has no base price yet", async () => {
   const el = await mountForm({ basePrice: "" });
-  expect((field(el, "unitPrice") as unknown as { placeholder: string }).placeholder).toBe("");
+  expect(field(el, "unitPrice").inherited).toBeUndefined();
 });
 
 it("says nothing about errors before the first submission, and Save works", async () => {

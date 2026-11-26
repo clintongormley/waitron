@@ -40,17 +40,6 @@ export const productMediaStyles = css`
   wt-data-table::part(photo-ring) {
     border-width: var(--wt-space-1);
   }
-  wt-data-table::part(media-frame inherited) {
-    border-style: dashed;
-  }
-  wt-data-table::part(thumb-placeholder inherited) {
-    border-color: var(--wt-color-text-muted);
-    background-clip: content-box;
-  }
-  /* The shared chip rule pads an inherited swatch; a photo keeps the whole frame. */
-  wt-data-table::part(media-photo-frame inherited) {
-    padding: 0;
-  }
 `;
 
 export function productMedia(options: {

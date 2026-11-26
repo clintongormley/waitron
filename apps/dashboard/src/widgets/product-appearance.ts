@@ -39,10 +39,6 @@ export class ProductAppearance extends LitElement {
       .thumb[aria-invalid="true"] {
         border-color: var(--wt-color-danger);
       }
-      .thumb.inherited {
-        border-style: dashed;
-        border-color: var(--wt-color-text-muted);
-      }
       .thumb img {
         display: block;
         width: 100%;
@@ -140,7 +136,7 @@ export class ProductAppearance extends LitElement {
     const shown = this.image ?? this.inheritedImage;
     return html`<button
         type="button"
-        class=${!this.image && this.inheritedImage ? "thumb inherited" : "thumb"}
+        class="thumb"
         style=${isHexColor(this.color ?? "") ? `background:${this.color}` : nothing}
         aria-label=${`${t("image.label")} · ${t("editor.color")}`}
         aria-describedby=${!this.error && !this.image && this.inheritedImage ? this.#captionId : nothing}

@@ -455,11 +455,11 @@ describe("image-upload as a thumbnail", () => {
   });
 
   it.each(["en-GB", "es-ES"] as const)(
-    "marks a variant's inherited photo with a dashed border, and names it the main product's for a screen reader only, in %s",
+    "gives an inherited photo the ordinary border and describes its source for a screen reader, in %s",
     async (locale) => {
       setLocale(locale);
       const { el, host } = await thumbnail({ inheritedImage: mediaTestReference("parent.png") });
-      host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
+      host.style.setProperty("--wt-color-border", "rgb(7, 8, 9)");
       await vi.waitFor(() =>
         expect(picture(el)!.getAttribute("src")).toBe(
           `/media/renditions/v1/${mediaTestReference("parent.png")}/square/7500-2500-200.webp`,
@@ -467,7 +467,7 @@ describe("image-upload as a thumbnail", () => {
       );
       expect(button(el).getAttribute("aria-label")).toBe(t("image.add_photo"));
       const style = getComputedStyle(button(el));
-      expect([style.borderTopStyle, style.borderTopColor]).toEqual(["dashed", "rgb(7, 8, 9)"]);
+      expect([style.borderTopStyle, style.borderTopColor]).toEqual(["solid", "rgb(7, 8, 9)"]);
       const caption = el.shadowRoot!.querySelector<HTMLElement>("[data-test=inherited-caption]")!;
       expect(caption.textContent!.trim()).toBe(t("editor.inherited_image_alt"));
       expect(button(el).contains(caption)).toBe(false);

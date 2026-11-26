@@ -397,13 +397,13 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
       const picker = el.shadowRoot!.querySelector("dashboard-product-nutrition-picker")!;
       await picker.updateComplete;
       expect(
-        picker.shadowRoot!.querySelector('[data-choice="same-as"]')!.getAttribute("aria-pressed"),
+        picker.shadowRoot!.querySelector('[data-choice="inherit"]')!.getAttribute("aria-pressed"),
       ).toBe("true");
       expect(picker.shadowRoot!.querySelectorAll(".inherited").length).toBeGreaterThan(0);
-      const area = el.shadowRoot!.querySelector<HTMLElement & { placeholder: string }>(
+      const area = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-textarea"]>(
         "wt-textarea[name=description-en]",
       )!;
-      expect(area.placeholder).toBe("Roasted in house");
+      expect(area.inherited?.value).toBe("Roasted in house");
       // The text box itself is see-through; the filled field box behind it is what it is read on.
       expect(
         contrastRatio(

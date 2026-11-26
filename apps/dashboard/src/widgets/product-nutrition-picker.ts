@@ -238,11 +238,8 @@ export class ProductNutritionPicker extends LitElement {
         <div class="choices">
           ${
             this.inherited
-              ? this.#chip(
-                  "same-as",
-                  fill("editor.nutrition.same_as", { parent: this.inherited.name }),
-                  inheriting,
-                  (event) => this.#emit(event, { field: "allergens", value: null }),
+              ? this.#chip("inherit", t("inherit.label"), inheriting, (event) =>
+                  this.#emit(event, { field: "allergens", value: null }),
                 )
               : nothing
           }

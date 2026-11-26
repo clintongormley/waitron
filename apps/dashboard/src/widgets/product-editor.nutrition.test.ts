@@ -163,12 +163,12 @@ it("nutrition keeps incomplete kinds dirty and marks both fields after an attemp
   });
 });
 
-it("nutrition saves explicit None on a variant without replacing its dietary inheritance", async () => {
+it("nutrition saves explicit None even when the variant already inherits None", async () => {
   const { el, submit } = await mount({
     ...product,
     id: "slice",
     parentId: "bread",
-    inherited: parent,
+    inherited: { ...parent, allergens: {} },
     allergens: null,
     dietaryDeclarations: null,
   });
@@ -181,7 +181,7 @@ it("nutrition saves explicit None on a variant without replacing its dietary inh
   });
 });
 
-it("nutrition Same as saves null while keeping the variant's explicit diet", async () => {
+it("nutrition Inherit saves null while keeping the variant's explicit diet", async () => {
   const { el, submit } = await mount({
     ...product,
     id: "slice",
@@ -190,7 +190,7 @@ it("nutrition Same as saves null while keeping the variant's explicit diet", asy
     allergens: { gluten: { kinds: ["wheat"] }, nuts: { kinds: ["walnuts"] } },
     dietaryDeclarations: ["halal"],
   });
-  await pick(el, "same-as");
+  await pick(el, "inherit");
   save(el);
   expect(submit).toHaveBeenCalledOnce();
   expect(submit.mock.calls[0]![0].detail.value).toMatchObject({

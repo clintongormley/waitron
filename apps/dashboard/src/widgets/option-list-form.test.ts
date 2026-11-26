@@ -395,7 +395,7 @@ it("hints each blank name with what it falls back to, following the fields it co
   const { el } = await mount({ value: { ...cooked, customerName: {}, kitchenName: null } });
   const hints = () =>
     ["kitchen-name", "customer-name-en", "customer-name-es"].map(
-      (name) => field(el, name).placeholder,
+      (name) => field(el, name).inherited?.value,
     );
 
   expect(hints()).toEqual(["Cooked", "Cooked", "Cooked"]);
@@ -410,7 +410,7 @@ it("hints each blank name with what it falls back to, following the fields it co
 it("never hints a customer-facing name with the kitchen name, which keeps its own text", async () => {
   const { el } = await mount({ value: { ...cooked, customerName: {} } });
   const hints = () =>
-    ["customer-name-en", "customer-name-es"].map((name) => field(el, name).placeholder);
+    ["customer-name-en", "customer-name-es"].map((name) => field(el, name).inherited?.value);
 
   expect(field(el, "kitchen-name").value).toBe("COOK");
   expect(hints()).toEqual(["Cooked", "Cooked"]);
@@ -456,11 +456,11 @@ function namesShown(el: OptionListForm) {
       const label = /\(([^)]+)\)$/.exec(input.label)![1]!.toUpperCase();
       return input.value
         ? [{ label, value: input.value }]
-        : input.placeholder
-          ? [{ label, value: input.placeholder, placeholder: true }]
+        : input.inherited?.value
+          ? [{ label, value: input.inherited?.value, placeholder: true }]
           : [];
     }),
-    hints: inputs.map((input) => (input.value ? "" : input.placeholder)),
+    hints: inputs.map((input) => (input.value ? "" : (input.inherited?.value ?? ""))),
   };
 }
 

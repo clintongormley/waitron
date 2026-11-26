@@ -1678,7 +1678,7 @@ it.each([
     await userEvent.keyboard("Beverages");
     const chip = await boxChip(el);
     expect(getComputedStyle(chip).backgroundColor).toBe(painted);
-    expect(getComputedStyle(chip).borderTopStyle).toBe("dashed");
+    expect(getComputedStyle(chip).borderTopStyle).toBe("solid");
     expect(box.shadowRoot!.querySelector("input")!.value).toBe("Beverages");
     await userEvent.click(await boxSquare(el));
     const form = await colorChooser(el);
@@ -1716,10 +1716,13 @@ it("previews inheritance after clearing a category's own colour while renaming",
   expect(getComputedStyle(await boxChip(el)).backgroundColor).toBe("rgb(37, 107, 177)");
   expect(getComputedStyle(await boxChip(el)).borderTopStyle).toBe("solid");
   await userEvent.click(await boxSquare(el));
+  const inherit = (await colorChooser(el)).shadowRoot!.querySelector('[data-color=""] .chip')!;
+  expect(inherit).not.toBeNull();
+  expect(getComputedStyle(inherit).backgroundColor).toBe("rgb(177, 37, 37)");
   await choose(el, "");
   await nameBox(el);
   expect(getComputedStyle(await boxChip(el)).backgroundColor).toBe("rgb(177, 37, 37)");
-  expect(getComputedStyle(await boxChip(el)).borderTopStyle).toBe("dashed");
+  expect(getComputedStyle(await boxChip(el)).borderTopStyle).toBe("solid");
   await userEvent.keyboard("Lager{Enter}");
   expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([
     ["b", { name: "Lager", color: null }],
@@ -1769,7 +1772,7 @@ it("names a category holding placeholder and replacement-pattern text in its col
   const form = await colorChooser(el);
   expect(form.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Colour of {from} $& $1");
 });
-it("sends a null colour when No colour is chosen from a row's square", async () => {
+it("sends a null colour when Inherit is chosen from a row's square", async () => {
   const el = await mountBrowser({
     categories: [{ ...folder("d", "Drinks", null), color: "#b12525" }, ...CATEGORIES.slice(1)],
   });
@@ -1811,7 +1814,7 @@ it("sends nothing when a row's colour chooser is left with Esc or Cancel", async
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   expect(el.api.updateCategory).not.toHaveBeenCalled();
 });
-it("opens an uncoloured category's chooser on No colour, not the colour it inherits, and sends nothing until one is chosen", async () => {
+it("opens an uncoloured category's chooser on Inherit and can fix the same colour", async () => {
   const el = await mountBrowser({
     categories: [{ ...folder("d", "Drinks", null), color: "#b12525" }, ...CATEGORIES.slice(1)],
   });
@@ -1821,6 +1824,13 @@ it("opens an uncoloured category's chooser on No colour, not the colour it inher
   const form = await colorChooser(el);
   const checked = (color: string) =>
     form.shadowRoot!.querySelector(`[data-color="${color}"]`)!.getAttribute("aria-checked");
+  const inherit = form.shadowRoot!.querySelector('[data-color=""]')!;
+  expect(inherit.querySelector("#category-color-none-label")?.textContent?.trim()).toBe(
+    en["inherit.label"],
+  );
+  expect(getComputedStyle(inherit.querySelector(".chip")!).backgroundColor).toBe(
+    "rgb(177, 37, 37)",
+  );
   expect(checked("")).toBe("true");
   expect(checked("#b12525")).toBe("false");
   const closed = chooserCloseReported(el);
@@ -1829,9 +1839,30 @@ it("opens an uncoloured category's chooser on No colour, not the colour it inher
   await vi.waitFor(() => expect(chooserClosed(el)).toBe(true));
   expect(el.api.updateCategory).not.toHaveBeenCalled();
   await menuAction(el, "color-b");
-  await choose(el, "#256bb1");
-  expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([["b", { color: "#256bb1" }]]);
+  await choose(el, "#b12525");
+  expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([["b", { color: "#b12525" }]]);
 });
+it("shows the parent's colour in Inherit for a category with its own colour", async () => {
+  const el = await mountBrowser({
+    categories: [
+      { ...CATEGORIES[0]!, color: "#b12525" },
+      { ...CATEGORIES[1]!, color: "#256bb1" },
+      CATEGORIES[2]!,
+    ],
+  });
+  await toggleCategory(el, "d");
+  await menuAction(el, "color-b");
+  const form = await colorChooser(el);
+  const inherit = form.shadowRoot!.querySelector('[data-color=""]')!;
+  expect(getComputedStyle(inherit.querySelector(".chip")!).backgroundColor).toBe(
+    "rgb(177, 37, 37)",
+  );
+  expect(inherit.getAttribute("aria-checked")).toBe("false");
+  expect(
+    form.shadowRoot!.querySelector('[data-color="#256bb1"]')!.getAttribute("aria-checked"),
+  ).toBe("true");
+});
+
 it.each([
   ["en-GB", "Colour of All products"],
   ["es", "Color de Todos los productos"],
