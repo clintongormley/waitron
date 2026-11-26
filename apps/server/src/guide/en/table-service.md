@@ -272,6 +272,7 @@ the box** in place of the browser warning or the till's certificate screen. On t
 choose **Show me how** to open the certificate steps in a new tab. This link needs the box's
 local certificate page, which is unavailable on a spare, when HTTP access is disabled, or when
 your venue supplies its own TLS certificate.
+Before removing a certificate, compare its name and fingerprint with the ones shown by this box.
 
 On a device that has never trusted the box, the browser may warn about the connection before the
 till can open. Open `http://` followed by the box's IP address and `/setup/trust` instead, for

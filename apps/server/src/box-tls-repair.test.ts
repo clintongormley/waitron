@@ -225,6 +225,8 @@ it.each([
 it("replaces the old certificate set and retains no key for the new root", async () => {
   const root = forge.pki.certificateFromPem(material.caCertPem);
   const signer = forge.pki.certificateFromPem(material.caKeyPem);
+  root.setSubject([{ name: "commonName", value: "waitron-setup-ca" }]);
+  root.setIssuer(root.subject.attributes);
   root.setExtensions(signer.extensions);
   root.sign(keys.privateKey, forge.md.sha256.create());
   const leaf = forge.pki.certificateFromPem(material.serverCertPem);
@@ -248,6 +250,31 @@ it("replaces the old certificate set and retains no key for the new root", async
   expect(
     newRoot.checkPrivateKey(createPrivateKey(forge.pki.privateKeyToPem(keys.privateKey))),
   ).toBe(false);
+
+  const previous = new X509Certificate(forge.pki.certificateToPem(root));
+  const previousCertificate = {
+    name: "waitron-setup-ca",
+    fingerprint: previous.fingerprint256,
+    thumbprint: previous.fingerprint.replaceAll(":", ""),
+  };
+  await tlsRepair.endFinishedTlsRepair(f.stateDir);
+  await expect(stat(join(f.stateDir, "tls/repair"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await inspectBoxTls(f)).toMatchObject({
+    state: "healthy",
+    fingerprint: newRoot.fingerprint256,
+    previousCertificate,
+  });
+  await rm(join(f.stateDir, "tls/server.pem"));
+  expect(await repairBoxTls(f)).toMatchObject({ trust: "retained", previousCertificate });
+  expect(await tlsRepair.readBoxCertificateDetails(f.stateDir)).toMatchObject({
+    fingerprint: newRoot.fingerprint256,
+    previousCertificate,
+  });
+  await writeFile(join(f.stateDir, "tls/ca.crt"), material.caCertPem);
+  expect(await tlsRepair.readBoxCertificateDetails(f.stateDir)).toMatchObject({
+    fingerprint: new X509Certificate(material.caCertPem).fingerprint256,
+    previousCertificate: undefined,
+  });
 });
 
 it("keeps healthy TLS byte-identical even without the CA signing key", async () => {
@@ -536,13 +563,15 @@ it.each([
   expect(await contents(f.stateDir)).toEqual(before);
 });
 
-it("returns only connection facts and the public CA fingerprint", async () => {
+it("returns only connection facts and the public CA identity", async () => {
   const f = await fixture();
+  const certificate = new X509Certificate(material.caCertPem);
   expect(await inspectBoxTls(f)).toEqual({
     state: "healthy",
     trust: "retained",
     caAvailable: true,
-    fingerprint: new X509Certificate(material.caCertPem).fingerprint256,
+    fingerprint: certificate.fingerprint256,
+    certificateName: certificate.subject.slice(3),
   });
 });
 
@@ -620,6 +649,7 @@ it("a second repair keeps only its own old files in the fixed archive", async ()
   expect(await readdir(join(f.stateDir, "tls"))).toEqual([
     "ca.crt",
     "ca.key",
+    "previous-certificate.json",
     "repair",
     "server.pem",
   ]);

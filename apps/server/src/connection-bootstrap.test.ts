@@ -400,12 +400,20 @@ it("an explicit repair replaces a public root with its private key appended", as
   expect(content).not.toContain("PRIVATE KEY");
   const result = JSON.parse(content);
   const replaced = await readFile(caFile, "utf8");
+  const oldCa = new X509Certificate(material.caCertPem);
+  const newCa = new X509Certificate(replaced);
   expect(replaced.includes("PRIVATE KEY")).toBe(false);
   expect(result).toEqual({
     caAvailable: true,
     caCertificate: replaced,
     continuationRequired: true,
-    fingerprint: new X509Certificate(replaced).fingerprint256,
+    certificateName: newCa.subject.slice(3),
+    fingerprint: newCa.fingerprint256,
+    previousCertificate: {
+      name: oldCa.subject.slice(3),
+      fingerprint: oldCa.fingerprint256,
+      thumbprint: oldCa.fingerprint.replaceAll(":", ""),
+    },
     state: "healthy",
     trust: "new-required",
   });

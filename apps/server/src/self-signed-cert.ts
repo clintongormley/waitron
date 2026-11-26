@@ -114,7 +114,10 @@ function nameConstraintsExtension(): CertExtension {
   };
 }
 
-function caWithRole(pem: string, name: string, pathLength: number): forge.pki.Certificate | null {
+function caWithRole(
+  pem: string,
+  matches: (name: string, pathLength: number | undefined) => boolean,
+): { cert: forge.pki.Certificate; name: string } | null {
   let cert: forge.pki.Certificate;
   try {
     cert = forge.pki.certificateFromPem(pem);
@@ -123,12 +126,13 @@ function caWithRole(pem: string, name: string, pathLength: number): forge.pki.Ce
   }
   const basic = cert.getExtension("basicConstraints") as CertExtension | null;
   const usage = cert.getExtension("keyUsage") as CertExtension | null;
-  return cert.subject.getField("CN")?.value === name &&
+  const name = cert.subject.getField("CN")?.value;
+  return typeof name === "string" &&
     basic?.cA === true &&
-    basic.pathLenConstraint === pathLength &&
+    matches(name, basic.pathLenConstraint) &&
     usage?.keyCertSign === true &&
     cert.getExtension("extKeyUsage") === null
-    ? cert
+    ? { cert, name }
     : null;
 }
 
@@ -144,23 +148,35 @@ export function boxCertCurrent(cert: X509Certificate, now: Date): boolean {
   return cert.validFromDate <= now && now < cert.validToDate;
 }
 
-export function boxRoot(pem: string): X509Certificate | null {
+export function boxRootIdentity(
+  pem: string,
+  includeReplacedRoot = false,
+): { cert: X509Certificate; name: string } | null {
   const blocks = pemBlocks(pem);
   if (blocks.length !== 1 || blocks[0]?.type !== "CERTIFICATE") return null;
-  const root = new X509Certificate(pem);
-  return root.checkIssued(root) &&
-    root.verify(root.publicKey) &&
-    caWithRole(pem, CA_COMMON_NAME, 1) !== null
-    ? root
+  const authority = caWithRole(
+    pem,
+    (cn, depth) =>
+      (depth === 1 && (cn === OLD_CA_COMMON_NAME || BOX_CA_NAME.test(cn))) ||
+      (includeReplacedRoot && depth === 0 && cn === OLD_CA_COMMON_NAME),
+  );
+  if (authority === null) return null;
+  const cert = new X509Certificate(pem);
+  return cert.checkIssued(cert) && cert.verify(cert.publicKey)
+    ? { cert, name: authority.name }
     : null;
+}
+
+export function boxRoot(pem: string): X509Certificate | null {
+  return boxRootIdentity(pem)?.cert ?? null;
 }
 
 function signerCertificate(block: forge.pem.ObjectPEM, root: X509Certificate) {
   if (block.type !== "CERTIFICATE") return null;
   const pem = forge.pem.encode(block);
   const cert = new X509Certificate(pem);
-  const signer = caWithRole(pem, SIGNER_COMMON_NAME, 0);
-  const constraints = signer?.getExtension("nameConstraints") as CertExtension | null;
+  const signer = caWithRole(pem, (cn, depth) => cn === SIGNER_COMMON_NAME && depth === 0);
+  const constraints = signer?.cert.getExtension("nameConstraints") as CertExtension | null;
   if (
     !cert.checkIssued(root) ||
     !cert.verify(root.publicKey) ||
@@ -215,7 +231,8 @@ function signerFor(rootPem: string, signerPem: string, now: Date) {
 const DAY_MS = 86_400_000;
 /** The box is a long-lived appliance; a short leaf would strand a running venue. */
 const VALIDITY_DAYS = 3650;
-const CA_COMMON_NAME = "waitron-setup-ca";
+const OLD_CA_COMMON_NAME = "waitron-setup-ca";
+const BOX_CA_NAME = /^Waitron box \d{4}-\d{2}-\d{2} [a-f0-9]{12}$/;
 const SIGNER_COMMON_NAME = "waitron-box-signer";
 
 /**
@@ -279,9 +296,13 @@ export function mintSelfSignedServerCert(opts: MintOptions): SelfSignedMaterial 
   const makeKeypair = keypairFor(hostnames, opts.keypair);
   const validity = validityFrom(now);
   const rootKeys = makeKeypair();
-  const rootIssuer = { cn: CA_COMMON_NAME, key: rootKeys.privateKey };
+  const serial = randomSerial();
+  const rootIssuer = {
+    cn: `Waitron box ${now.toISOString().slice(0, 10)} ${serial.slice(-12)}`,
+    key: rootKeys.privateKey,
+  };
   const caUsage = { name: "keyUsage", keyCertSign: true, cRLSign: true, digitalSignature: true };
-  const root = certificate(CA_COMMON_NAME, rootKeys, rootIssuer, randomSerial(), validity, [
+  const root = certificate(rootIssuer.cn, rootKeys, rootIssuer, serial, validity, [
     { name: "basicConstraints", cA: true, pathLenConstraint: 1 },
     caUsage,
   ]);

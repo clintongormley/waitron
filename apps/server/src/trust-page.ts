@@ -1,10 +1,14 @@
 import { PAGE_THEME_SCRIPT, PAGE_THEME_STYLE } from "./page-theme.js";
-import type { BoxTlsInspection } from "./box-tls-repair.js";
+import type {
+  BoxTlsInspection,
+  CertificateDetails,
+  PreviousCertificate,
+} from "./box-tls-repair.js";
 import { renderConnectionPage } from "./connection-bootstrap-page.js";
 import { CONNECTION_DEVICE_ES, CONNECTION_TEXT } from "./connection-bootstrap-strings.js";
 import { TOUCH_FIRST_CONDITION } from "./detect-device.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
-import { NOT_SET_UP_WORDS, TRUST_PAGE_WORDS } from "./i18n/trust-page.js";
+import { CERTIFICATE_WORDS, NOT_SET_UP_WORDS, TRUST_PAGE_WORDS } from "./i18n/trust-page.js";
 import { DEVICE_HELP, DEVICE_ORDER, type DeviceHelp, type DeviceId } from "./trust-page-devices.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 import type { VenueNameState } from "./mdns.js";
@@ -12,7 +16,7 @@ import type { VenueNameState } from "./mdns.js";
 export const CA_CONTENT_TYPE = "application/x-x509-ca-cert";
 export const CA_FILENAME = "waitron-ca.crt";
 
-export interface TrustPageInput {
+export interface TrustPageInput extends CertificateDetails {
   caCertificate?: string;
   connection?: BoxTlsInspection & {
     repairAllowed?: boolean;
@@ -54,42 +58,52 @@ function escapeHtml(value: string): string {
 }
 
 type Locale = keyof typeof TRUST_PAGE_WORDS;
-type TrustWords = (typeof TRUST_PAGE_WORDS)[Locale];
 
 function notes(help: DeviceHelp): string {
   return (help.notes ?? []).map((n) => `<p class="note">${n}</p>`).join("");
 }
 
-function removeSection(help: DeviceHelp | undefined, words: TrustWords): string {
-  const body = help
-    ? `<ul>${help.removal.map((r) => `<li>${r}</li>`).join("")}</ul><p>${words.reopen}</p>`
-    : `<p class="note">${words.findDevice}</p>`;
-  return `<section><h2>1. ${words.remove}</h2><p>${words.removeIntro}</p>${body}</section>`;
+function thumbprint(locale: Locale, previous: PreviousCertificate): string {
+  return `<p>${CERTIFICATE_WORDS[locale].thumbprint} <code>${escapeHtml(previous.thumbprint)}</code></p>`;
 }
 
-function deviceDetails(help: DeviceHelp, words: TrustWords): string {
-  const removal = help.removal.map((r) => `<li>${r}</li>`).join("");
+function removalList(help: DeviceHelp): string {
+  return `<ul>${help.removal.map((r) => `<li>${r}</li>`).join("")}</ul>`;
+}
+
+function deviceDetails(
+  id: DeviceId,
+  help: DeviceHelp,
+  locale: Locale,
+  previous: PreviousCertificate | undefined,
+): string {
   const install = help.install.map((i) => `<li>${i}</li>`).join("");
+  const removal = previous
+    ? `<p class="note">${TRUST_PAGE_WORDS[locale].removeFirst}</p>${id === "windows" ? thumbprint(locale, previous) : ""}${removalList(help)}`
+    : "";
   return `<details><summary>${help.summary}</summary>
-    <p class="note">${words.removeFirst}</p><ul>${removal}</ul>
-    <p class="note">${words.installNext}</p><ol>${install}</ol>${notes(help)}</details>`;
+    ${removal}<ol>${install}</ol>${notes(help)}</details>`;
 }
 
 function installSection(
   device: DeviceId | "unknown",
   devices: Record<DeviceId, DeviceHelp>,
-  words: TrustWords,
+  locale: Locale,
+  previous: PreviousCertificate | undefined,
 ): string {
+  const words = TRUST_PAGE_WORDS[locale];
+  const number = previous ? 3 : 2;
   const managed = `<p class="note">${words.managed}</p>`;
+  const details = (id: DeviceId) => deviceDetails(id, devices[id], locale, previous);
   if (device === "unknown")
-    return `<section><h2>3. ${words.install}</h2>${managed}
-      ${DEVICE_ORDER.map((id) => deviceDetails(devices[id], words)).join("")}</section>`;
+    return `<section><h2>${number}. ${words.install}</h2>${managed}
+      ${DEVICE_ORDER.map(details).join("")}</section>`;
   const help = devices[device];
   const steps = help.install.map((i) => `<li>${i}</li>`).join("");
-  return `<section><h2>3. ${help.heading}</h2><ol>${steps}</ol>${notes(help)}</section>
+  return `<section><h2>${number}. ${help.heading}</h2><ol>${steps}</ol>${notes(help)}</section>
     <details class="others"><summary>${words.otherDevices}</summary>${managed}
     ${DEVICE_ORDER.filter((d) => d !== device)
-      .map((id) => deviceDetails(devices[id], words))
+      .map(details)
       .join("")}</details>`;
 }
 
@@ -97,16 +111,25 @@ const TOUCH_STEPS_SCRIPT = `if(${TOUCH_FIRST_CONDITION})document.getElementById(
 
 function certificateSteps(
   device: DeviceId | "unknown",
-  caDownloadPath: string,
+  input: TrustPageInput,
   locale: Locale,
 ): string {
   const words = TRUST_PAGE_WORDS[locale];
+  const labels = CERTIFICATE_WORDS[locale];
   const devices = locale === "es" ? CONNECTION_DEVICE_ES : DEVICE_HELP;
-  return `${removeSection(device === "unknown" ? undefined : devices[device], words)}
-       <section><h2>2. ${words.get}</h2>
-       <p><a class="button" href="${escapeHtml(caDownloadPath)}" download="${CA_FILENAME}">${words.download}</a></p>
+  const previous = input.previousCertificate;
+  const removal = previous
+    ? `<section><h2>1. ${words.remove}</h2><p>${words.removeIntro}</p>
+      <p>${labels.previous}<br />${escapeHtml(previous.name)} <code>${escapeHtml(previous.fingerprint)}</code></p>
+      ${device === "windows" ? thumbprint(locale, previous) : ""}
+      ${device === "unknown" ? `<p class="note">${words.findDevice}</p>` : `${removalList(devices[device])}<p>${words.reopen}</p>`}</section>`
+    : "";
+  return `${removal}<section><h2>${previous ? 2 : 1}. ${words.get}</h2>
+       ${previous ? "" : `<p>${labels.unavailable}</p>`}
+       ${input.certificateName && input.fingerprint ? `<p>${labels.current}<br />${escapeHtml(input.certificateName)} <code>${escapeHtml(input.fingerprint)}</code></p>` : ""}
+       <p><a class="button" href="${escapeHtml(input.caDownloadPath)}" download="${CA_FILENAME}">${words.download}</a></p>
        <p class="note">${words.downloadHelp(CA_FILENAME)}</p></section>
-       ${installSection(device, devices, words)}`;
+       ${installSection(device, devices, locale, previous)}`;
 }
 
 /**
@@ -116,20 +139,20 @@ function certificateSteps(
  */
 function stepsOrTouchSteps(
   device: DeviceId | "unknown",
-  caDownloadPath: string,
+  input: TrustPageInput,
   locale: Locale,
 ): string {
-  const steps = certificateSteps(device, caDownloadPath, locale);
+  const steps = certificateSteps(device, input, locale);
   if (device !== "linux") return steps;
   return `<div id="steps">${steps}</div>
-    <template id="touch-steps">${certificateSteps("android", caDownloadPath, locale)}</template>
+    <template id="touch-steps">${certificateSteps("android", input, locale)}</template>
     <script>${TOUCH_STEPS_SCRIPT}</script>`;
 }
 
 /** No external assets: certificate recovery must remain readable without internet access. */
 export function renderTrustPage(input: TrustPageInput): string {
   if (input.connection) return renderConnectionPage({ ...input, connection: input.connection });
-  const { caAvailable, caDownloadPath, qrSvg, device, ownAddress, notSetUp, locale = "en" } = input;
+  const { caAvailable, qrSvg, device, ownAddress, notSetUp, locale = "en" } = input;
   const words = TRUST_PAGE_WORDS[locale];
   const reachUrls = ownAddress
     ? [ownAddress, ...input.reachUrls.filter((url) => url !== ownAddress)]
@@ -150,7 +173,7 @@ export function renderTrustPage(input: TrustPageInput): string {
       ? `<p class="warning-words">${escapeHtml(NOT_SET_UP_WORDS[locale])}</p><p class="warning-words" lang="${otherLocale}">${escapeHtml(NOT_SET_UP_WORDS[otherLocale])}</p>\n`
       : "";
   const steps = caAvailable
-    ? `${warning}${stepsOrTouchSteps(device, caDownloadPath, locale)}`
+    ? `${warning}${stepsOrTouchSteps(device, input, locale)}`
     : `<section><h2>1. ${words.get}</h2><p>${words.unavailable}</p></section>`;
 
   return `<!doctype html>
@@ -190,7 +213,7 @@ code, a { overflow-wrap: anywhere; }
 <h1>${words.heading}</h1>
 ${lead}<p>${words.intro(Boolean(ownAddress))}</p>
 ${steps}
-<section class="go"><h2>${caAvailable ? "4" : "2"}. ${words.open}</h2>
+<section class="go"><h2>${caAvailable ? (input.previousCertificate ? 4 : 3) : 2}. ${words.open}</h2>
 <p>${words.openHelp}</p>
 <p class="continue"><a class="button" href="${escapeHtml(httpsUrl)}">${CONNECTION_TEXT[locale].continue}</a></p>
 <ul>${urlItems}</ul></section>

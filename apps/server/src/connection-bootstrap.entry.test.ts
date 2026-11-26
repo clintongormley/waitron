@@ -617,7 +617,7 @@ it.each(["malformed", "mismatch", "missing-ca", "expired"] as const)(
     if (damage === "missing-ca") {
       expect(installedCa).not.toBe(material.caCertPem);
       await expect(verifiedGet(port, "/", material.caCertPem)).rejects.toMatchObject({
-        code: "CERT_SIGNATURE_FAILURE",
+        code: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
       });
     } else expect(installedCa).toBe(material.caCertPem);
     expect(await readFile(join(f.stateDir, "secrets.env"), "utf8")).toBe("retained evidence");
@@ -725,7 +725,7 @@ it("keeps public CA download and reload available after a discarded repair reply
   );
   expect(strict).toHaveBeenCalledOnce();
   await expect(verifiedGet(port, "/", material.caCertPem)).rejects.toMatchObject({
-    code: "CERT_SIGNATURE_FAILURE",
+    code: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
   });
 });
 

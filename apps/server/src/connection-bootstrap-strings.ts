@@ -33,17 +33,14 @@ export const CONNECTION_TEXT = {
     retainedHelp:
       "If this device already trusts it, continue below. Otherwise, download and install it on this device.",
     newTrust: "Install the new Waitron certificate on each device.",
-    newTrustHelp:
-      "The previous certificate cannot be reused. Remove the old Waitron entry, then download, install and trust the new one.",
+    newTrustHelp: "Follow the instructions for each device before reconnecting.",
     download: "Download public certificate",
     downloadHelp:
       "If your browser asks, choose Keep or Download. If the download does not start, delete the old waitron-ca.crt from your downloads and try again.",
     install: "Installation help",
-    remove: "Remove the old Waitron certificate only when replacing it.",
     managed: "If this device blocks certificate installation, use a venue device that allows it.",
     continue: "Continue to Waitron",
     warning: "Check the page that opens: continue only when HTTPS shows no certificate warning.",
-    fingerprint: "Public certificate fingerprint",
     language: "Language",
     languageName: "English",
   },
@@ -81,19 +78,16 @@ export const CONNECTION_TEXT = {
     retainedHelp:
       "Si este dispositivo ya confía en él, continúa abajo. Si no, descárgalo e instálalo en este dispositivo.",
     newTrust: "Instala el nuevo certificado de Waitron en cada dispositivo.",
-    newTrustHelp:
-      "No se puede reutilizar el certificado anterior. Elimina la entrada antigua de Waitron y descarga, instala y confía en el nuevo.",
+    newTrustHelp: "Sigue las instrucciones de cada dispositivo antes de volver a conectarte.",
     download: "Descargar certificado público",
     downloadHelp:
       "Si tu navegador lo pregunta, elige conservar o descargar el archivo. Si la descarga no empieza, elimina el waitron-ca.crt antiguo de tus descargas y vuelve a intentarlo.",
     install: "Ayuda para instalar",
-    remove: "Elimina el certificado antiguo de Waitron solo si vas a sustituirlo.",
     managed:
       "Si este dispositivo bloquea la instalación del certificado, usa uno del local que la permita.",
     continue: "Continuar a Waitron",
     warning:
       "Comprueba la página que se abre: continúa solo si HTTPS no muestra avisos del certificado.",
-    fingerprint: "Huella del certificado público",
     language: "Idioma",
     languageName: "Español",
   },
@@ -104,7 +98,7 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
     heading: "Instalar en este Mac",
     summary: "macOS: Safari, Chrome, Edge y Firefox",
     removal: [
-      "En Acceso a Llaveros, elimina la entrada antigua de Waitron. Revisa los llaveros de inicio de sesión y del sistema.",
+      "En Acceso a Llaveros, abre el certificado que coincida y comprueba su huella antes de eliminarlo. Revisa los llaveros de inicio de sesión y del sistema.",
     ],
     install: [
       "Abre el archivo descargado con Acceso a Llaveros y añádelo a tu llavero de inicio de sesión.",
@@ -119,7 +113,7 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
     heading: "Instalar en este PC con Windows",
     summary: "Windows: Edge, Chrome y Firefox",
     removal: [
-      "Busca Administrar certificados de usuario en Inicio. En Entidades de certificación raíz de confianza, Certificados, elimina la entrada antigua de Waitron.",
+      "Busca Administrar certificados de usuario en Inicio. En Entidades de certificación raíz de confianza, Certificados, elimina el certificado que coincida.",
       "Para eliminar una copia instalada para todo el equipo, inicia sesión en Windows con una cuenta de administrador.",
     ],
     install: [
@@ -135,7 +129,7 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
     heading: "Instalar en este PC con Linux",
     summary: "Linux: Chrome, Chromium y Edge",
     removal: [
-      "Elimina la entrada antigua de Waitron de Certificados personalizados o Autoridades en cada navegador donde la instalaste.",
+      "Elimina el certificado que coincida de Certificados personalizados o Autoridades en cada navegador donde la instalaste.",
     ],
     install: [
       "Busca Administrar certificados en la configuración de Chrome o Chromium, o abre <code>chrome://certificate-manager</code>.",
@@ -152,7 +146,7 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
     heading: "Instalar en este Chromebook",
     summary: "ChromeOS: Chrome",
     removal: [
-      "Elimina la entrada antigua de Waitron en el mismo administrador de certificados donde la importaste.",
+      "Elimina el certificado que coincida en el mismo administrador de certificados donde la importaste.",
     ],
     install: [
       "Busca Administrar certificados en la configuración de Chrome, o abre <code>chrome://certificate-manager</code>.",
@@ -167,7 +161,7 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
     heading: "Instalar en este teléfono o tableta Android",
     summary: "Android: Chrome, Edge, Firefox y Samsung Internet",
     removal: [
-      "En un Pixel, abre Cifrado y credenciales, Credenciales de confianza, Usuario. En otros teléfonos, como algunos OPPO, abre el almacenamiento de credenciales, los certificados de confianza y, después, Usuario. Elimina solo el certificado antiguo de Waitron.",
+      "En un Pixel, abre Cifrado y credenciales, Credenciales de confianza, Usuario. En otros teléfonos, como algunos OPPO, abre el almacenamiento de credenciales, los certificados de confianza y, después, Usuario. Abre el certificado que coincida y comprueba su huella antes de eliminarlo.",
     ],
     install: [
       "No abras el archivo descargado. Busca «certificado» en Ajustes de Android y elige la opción de instalar un certificado o de instalar certificados desde el almacenamiento. En un Pixel, busca Seguridad y privacidad, Más seguridad y privacidad, Cifrado y credenciales.",
@@ -182,7 +176,7 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
     heading: "Instalar en este iPhone o iPad",
     summary: "iPhone y iPad: Safari, Chrome, Edge y Firefox",
     removal: [
-      "Abre Ajustes, General, VPN y gestión de dispositivos. Selecciona el perfil antiguo de Waitron y elige Eliminar perfil.",
+      "Abre Ajustes, General, VPN y gestión de dispositivos. Comprueba el certificado del perfil. Si coincide, elige Eliminar perfil.",
     ],
     install: [
       "Abre esta página en Safari para descargar el archivo y permite la descarga del perfil.",
@@ -195,7 +189,7 @@ export const CONNECTION_DEVICE_ES: Record<DeviceId, DeviceHelp> = {
     heading: "Instalar en Firefox para Linux",
     summary: "Firefox en Linux: su propio administrador de certificados",
     removal: [
-      "En la misma lista de Autoridades, selecciona la entrada antigua de Waitron y elige Eliminar o dejar de confiar.",
+      "En la misma lista de Autoridades, selecciona el certificado que coincida y elige Eliminar o dejar de confiar.",
     ],
     install: [
       "Abre Ajustes, Privacidad y seguridad, Certificados, Ver certificados.",

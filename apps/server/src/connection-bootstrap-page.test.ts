@@ -181,6 +181,12 @@ it("holds the action while its request is pending then explains a new trust inst
             trust: "new-required",
             caAvailable: true,
             fingerprint: "AA:BB",
+            certificateName: "Waitron box 2026-11-26 0123456789ab",
+            previousCertificate: {
+              name: "waitron-setup-ca",
+              fingerprint: "CC:DD",
+              thumbprint: "ABCD",
+            },
           },
         };
       },
@@ -198,6 +204,13 @@ it("holds the action while its request is pending then explains a new trust inst
     expect(await page.locator("#trust-retained").isVisible()).toBe(false);
     expect(await page.locator("#connection-download").isVisible()).toBe(true);
     expect(await page.locator("#connection-fingerprint").textContent()).toBe("AA:BB");
+    expect(await page.locator("#connection-download").textContent()).toContain(
+      "Waitron box 2026-11-26 0123456789ab",
+    );
+    const removal = page.locator('[data-device="macos"] [data-removal]');
+    expect(await removal.isVisible()).toBe(true);
+    expect(await removal.textContent()).toContain("waitron-setup-ca");
+    expect(await removal.textContent()).toContain("CC:DD");
   } finally {
     release();
     await page.close();

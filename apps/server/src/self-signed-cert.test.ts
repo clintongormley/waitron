@@ -28,6 +28,13 @@ const mint = (over: Record<string, unknown> = {}) => {
 };
 
 describe("mintSelfSignedServerCert", () => {
+  it("gives new roots distinct names even when the boxes share a hostname", () => {
+    const first = new X509Certificate(mint().caCertPem);
+    const second = new X509Certificate(mint().caCertPem);
+    expect(first.subject).not.toBe(second.subject);
+    expect(first.subject).toMatch(/^CN=Waitron box 2026-08-26 [a-f0-9]{12}$/);
+  });
+
   it("mints a leaf carrying every requested hostname and IP as a SAN", () => {
     const { serverCertPem } = mint();
     const cert = new X509Certificate(serverCertPem);
@@ -127,6 +134,30 @@ describe("mintSelfSignedServerCert", () => {
 });
 
 describe("reissueServerLeaf", () => {
+  it("continues to issue leaves for an installed fixed-name root and its constrained signer", () => {
+    const original = mint();
+    const root = forge.pki.certificateFromPem(original.caCertPem);
+    root.setSubject([{ name: "commonName", value: "waitron-setup-ca" }]);
+    root.setIssuer(root.subject.attributes);
+    root.sign(sharedKeys[0]!.privateKey, forge.md.sha256.create());
+    const signer = forge.pki.certificateFromPem(original.caKeyPem);
+    signer.setIssuer(root.subject.attributes);
+    signer.sign(sharedKeys[0]!.privateKey, forge.md.sha256.create());
+    const { serverCertPem } = reissueServerLeaf({
+      caCertPem: forge.pki.certificateToPem(root),
+      caKeyPem:
+        forge.pki.certificateToPem(signer) + forge.pki.privateKeyToPem(sharedKeys[1]!.privateKey),
+      hostnames: ["waitron.local"],
+      ipAddresses: [],
+      now: new Date("2026-08-26T00:00:00Z"),
+    });
+    expect(
+      new X509Certificate(serverCertPem).verify(
+        new X509Certificate(forge.pki.certificateToPem(signer)).publicKey,
+      ),
+    ).toBe(true);
+  });
+
   it("signs a new leaf, with a new key, for new addresses under the SAME authority", () => {
     const now = new Date("2026-09-23T10:00:00Z");
     const original = mint({ ipAddresses: ["127.0.0.1", "192.168.1.10"], now });

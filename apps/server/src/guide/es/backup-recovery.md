@@ -85,6 +85,7 @@ Si la reparación sigue fallando, detente aquí. Esta página no puede reparar t
 de certificados guardados ni sustituir un certificado instalado por separado. Para uno instalado
 por separado, comprueba la dirección HTTPS del servidor y detente si muestra un aviso. Si tu
 dispositivo bloquea la instalación del certificado, usa uno del local que la permita.
+Antes de eliminar un certificado, compara su nombre y su huella con los que muestra este servidor.
 
 Apaga el servidor anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
 
