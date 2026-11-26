@@ -263,7 +263,6 @@ import { SPARE_SPACE_BYTES, spareReleased, spareRestorer } from "./spare-space.j
 import { createFreeSpaceState, FREE_SPACE_CHECK_MS, freeSpaceJob } from "./free-space-watch.js";
 import { mainServerUrl, mountMainServerApi, mountNodeApi } from "./node-api.js";
 import {
-  readBoxAddresses,
   restrictedDownloadDeps,
   restrictedPageRoute,
   type RestrictedPageDeps,
@@ -295,7 +294,7 @@ import {
 import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
 import { mountHandoverStatusApi } from "./handover-status-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
-import { startWaiting, WAIT_RECHECK_MS } from "./waiting-start.js";
+import { openStartupWait, waitForStartupBucket } from "./startup-wait.js";
 import {
   deviceClockNoticeSource,
   deviceNoticeSources,
@@ -372,7 +371,7 @@ import { refuseUnactivatedEmergencyCopy } from "./emergency-copy-placement.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 import { errnoOf } from "./errno.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
-import { recordUnexpectedStop } from "./stop-alert.js";
+import { recordUnconfirmedStart, recordUnexpectedStop } from "./stop-alert.js";
 import {
   hasReplacementMark,
   writeReplacementMark,
@@ -549,7 +548,8 @@ import { readVenueTimeZone } from "./venue-time-zone.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
 import { buildServeOptions, watchTlsFiles } from "./tls.js";
 import {
-  readNewerBucketMain,
+  readStartupBucket,
+  type BucketReplacement,
   StreamHost,
   streamService,
   type StreamHostDeps,
@@ -898,10 +898,10 @@ export interface StartServerSeams {
    */
   peerCheck?: () => Promise<StartPeerCheckOutcome>;
   /**
-   * How often a waiting start asks its peers again (defaults to `WAIT_RECHECK_MS`), and whether a
-   * carry-on request counts as reaching it over HTTPS (tests serve plain HTTP).
+   * How often a waiting start asks again, the total bucket wait, and whether a carry-on request
+   * counts as reaching it over HTTPS (tests serve plain HTTP).
    */
-  waitingStart?: { intervalMs?: number; secure?: (c: Context) => boolean };
+  waitingStart?: { intervalMs?: number; bucketWaitMs?: number; secure?: (c: Context) => boolean };
   /** What this build's release stamp says; unset, the stamp `builtRelease()` reads. */
   builtRelease?: BuiltRelease;
   /** The folder holding the running release's declaration; unset, `declarationRoot()`. */
@@ -2148,7 +2148,7 @@ async function bootServer(
     await closeSupersededOperation({ node: store.node, nodeId: config.node.nodeId }, log);
     return restrictedStart();
   }
-  if (await hasReplacementMark(config.stateDir)) {
+  const replacementHold = async (evidence?: BucketReplacement): Promise<StartedServer> => {
     const runner = createJobRunner({ now, log });
     const stop = () => runner.stopJobs();
     undoOnFailure.push(stop);
@@ -2160,13 +2160,41 @@ async function bootServer(
       ring,
       health,
       runner,
+      save:
+        evidence === undefined ? undefined : () => writeReplacementMark(config.stateDir, evidence),
       disk: diskFull,
       space: freeSpace,
       now,
       log,
     });
     return listenBox(app, stop, []);
-  }
+  };
+  if (await hasReplacementMark(config.stateDir)) return replacementHold();
+  const startupWait = {
+    db,
+    node: store.node,
+    nodeId: node.nodeId,
+    ring,
+    config,
+    log,
+    now,
+    health,
+    modules: enabledAtStart,
+    cors: corsForVenue(allowOrigin),
+    pageCheck: ownPageCheck,
+    store: seams.stream?.store,
+    intervalMs: seams.waitingStart?.intervalMs,
+    secure: seams.waitingStart?.secure,
+    mdnsSocket: seams.mdnsSocket,
+    boxAddresses,
+    ownNameOnly,
+    ownAndVenueNames,
+    listenTrading: (app: Hono) => startTradingListener(config, app, now, log),
+    listenLanding: () => startLandingListener(config, log),
+    closeStore: () => store.close(),
+    restart,
+  };
+  let canCheckBucket = false;
   let carriedOnWithoutPeer = false;
   // One read keeps a concurrent promotion from producing a torn `(mirror, primary)` pair.
   const initialAxes = await readNodeMode(store.node, config.node.nodeId);
@@ -2187,103 +2215,13 @@ async function bootServer(
           })
         : seams.peerCheck();
     let outcome = await checkPeers();
+    canCheckBucket = outcome.result === "proceed" && outcome.hasCountedPeer !== true;
     if (outcome.result === "wait") {
-      const fencedAtWait = isFenced(await readNodeMembership(db), node.nodeId);
-      const waitingStart = startWaiting({
-        health,
-        now,
-        venueDir: config.venueDir,
-        nodeId: node.nodeId,
-        environment: config.environment,
-        readMembership: () => readNodeMembership(db),
-        cors: corsForVenue(allowOrigin),
-        pageCheck: ownPageCheck,
+      const waitingStart = openStartupWait(startupWait, {
+        kind: "peer",
         waitingOn: outcome.waitingOn ?? [],
-        addressesOf: (ids) => readBoxAddresses(db, ids),
-        carryOn: {
-          db,
-          credentialKeyRing: ring,
-          modules: enabledAtStart,
-          readNewerMain: () =>
-            readNewerBucketMain({
-              db,
-              node: store.node,
-              ring,
-              nodeId: node.nodeId,
-              store: seams.stream?.store,
-            }),
-          ...(seams.waitingStart?.secure === undefined
-            ? {}
-            : { secure: seams.waitingStart.secure }),
-          passkey: {
-            rpId: config.managementRpId,
-            managementOrigin: config.managementOrigin,
-            nodeId: node.nodeId,
-          },
-        },
-        routes: [
-          (waitingApp) =>
-            mountPeerStatusApi(
-              waitingApp,
-              { db, node: store.node, ring, nodeId: node.nodeId },
-              log,
-            ),
-          (waitingApp) => {
-            mountHandoverStatusApi(
-              waitingApp,
-              { db, node: store.node, ring, nodeId: node.nodeId },
-              log,
-            );
-            if (!fencedAtWait && config.setupAppDir !== undefined)
-              mountHandoverPage(
-                waitingApp,
-                {
-                  root: config.setupAppDir,
-                  node: store.node,
-                  nodeId: node.nodeId,
-                },
-                log,
-              );
-          },
-          (waitingApp, hooks) =>
-            mountNodeMembershipApi(
-              waitingApp,
-              {
-                db,
-                node: store.node,
-                nodeId: node.nodeId,
-                stepDown: hooks.stepDown,
-                // A box that waits sells once the wait ends, unless its held chart fences it.
-                selling: () => !fencedAtWait,
-              },
-              log,
-            ),
-        ],
-        node: store.node,
-        recheck: checkPeers,
-        intervalMs: seams.waitingStart?.intervalMs ?? WAIT_RECHECK_MS,
-        listen: (waitingApp, steppingDown) => {
-          const server = startTradingListener(config, waitingApp, now, log);
-          const mdns = startMdnsResponder({
-            names: () => (steppingDown() ? ownNameOnly : ownAndVenueNames),
-            makeSocket: seams.mdnsSocket,
-            devMode: config.devMode,
-            httpHost: config.httpHost,
-            getAddresses: boxAddresses,
-            log,
-          });
-          const landing = startLandingListener(config, log);
-          return {
-            close: async () => {
-              await mdns.stop().catch(() => {});
-              await landing?.close().catch(() => {});
-              await closeListener(server);
-            },
-          };
-        },
-        closeStore: () => store.close(),
-        restart,
-        log,
+        fenced: isFenced(await readNodeMembership(db), node.nodeId),
+        check: checkPeers,
       });
       announceWaiting(waitingStart.server);
       const end = await waitingStart.ended;
@@ -2370,13 +2308,9 @@ async function bootServer(
   // The boot-captured read-only posture; the gate's own per-request predicate re-reads `mode` live,
   // so a promotion lifts it without a restart.
   const fencedOrMirror = isMirror || fenced;
+  const restoreFirstStart = (await readRestoreFlowPhase(config.stateDir)) === "first-start";
   const heartbeatAt = seams.previousStop?.restart ? null : seams.previousStop?.heartbeatAt;
-  const unexpectedStop =
-    !fencedOrMirror &&
-    heartbeatAt != null &&
-    (await readRestoreFlowPhase(config.stateDir)) !== "first-start"
-      ? heartbeatAt
-      : null;
+  const unexpectedStop = !fencedOrMirror && !restoreFirstStart ? (heartbeatAt ?? null) : null;
   // A restored box finishes its restore here (rebuild-first-start.ts), before the trading listener
   // reads the certificate and before the sealed-state refresh below seals it. After the peer
   // reconciliation above, so a peer that answers during THIS start can fence the box before its
@@ -2405,6 +2339,26 @@ async function bootServer(
   await disarmRestoreDiscard(config.stateDir);
   const isSingletonPrimary = holders.singletonRole.current === "primary";
   const acceptingSales = isSingletonPrimary && !fencedOrMirror;
+  let sellingUnconfirmed = false;
+  if (
+    acceptingSales &&
+    !restoreFirstStart &&
+    canCheckBucket &&
+    seams.previousStop?.restart === false &&
+    heldMembership !== null &&
+    servingPrimaryNodeId(heldMembership) === node.nodeId
+  ) {
+    const result = await waitForStartupBucket(
+      startupWait,
+      (signal) => readStartupBucket(startupWait, signal),
+      announceWaiting,
+      seams.waitingStart?.bucketWaitMs,
+    );
+    if (result.stopped !== undefined) return result.stopped;
+    if (typeof result.answer === "object") return replacementHold(result.answer);
+    sellingUnconfirmed = result.answer === "silent";
+  }
+
   // Before the tills' notice sources, which read it. Closed on a node that is not primary at its
   // start: the watch looks only on the primary, so it would not close it there (plan decision 14).
   const clockStart = clockStartUp({ primaryAtStart: isSingletonPrimary });
@@ -3967,6 +3921,10 @@ async function bootServer(
   if (acceptingSales && unexpectedStop !== null)
     await recordUnexpectedStop(db, unexpectedStop, now()).catch((error: unknown) =>
       log("warn", "server.stop_alert_failed", { errorCode: codeOf(error) }),
+    );
+  if (sellingUnconfirmed)
+    await recordUnconfirmedStart(db, now()).catch((error: unknown) =>
+      log("warn", "server.unconfirmed_start_alert_failed", { errorCode: codeOf(error) }),
     );
   jobRunner.add(boxAlertMailJob(boxEmails, BOX_EMAIL_CHECK_MS));
   // A mirror or fenced box writes no alert here; the note waits for a start that trades.

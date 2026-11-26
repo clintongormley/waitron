@@ -94,6 +94,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "The box stopped without warning.",
     es: "El servidor se detuvo sin aviso.",
   },
+  "start.selling_unconfirmed": {
+    en: "The box started without confirming from its backup that it was still the main box.",
+    es: "El servidor arrancó sin confirmar en su copia de seguridad que seguía siendo el principal.",
+  },
   "start.replaced": {
     en: "This box has been replaced. Leave it switched off.",
     es: "Este servidor se ha sustituido. Déjalo apagado.",

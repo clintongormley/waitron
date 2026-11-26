@@ -972,6 +972,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
   inline. Since 2026-11-26, a solo primary also stops new sales and filing after it verifies a newer
   backup in its bucket signed with its own node key. The saved stop survives an offline start.
+  Outside a restore's first start, a main box with a configured bucket, no restart mark and no
+  counted peer waits up to 60 seconds before trading and emails managers if it starts without an answer.
   [Replacement check](docs/developers/conventions-data.md#a-solo-box-stays-stopped-when-it-verifies-a-replacement).
   Detail:
   [conventions-data.md](docs/developers/conventions-data.md).
@@ -990,7 +992,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   `boot.node-state-missing.test.ts`, weaker than the rule: named cases only.
   [Detail](docs/superpowers/plans/2026-11-02-a1018-handover-build.md#slice-3-as-built-2026-11-03).
 - **The bucket stream never waits on the bucket to sell or fails `/health`; its local checkpoint
-  can hold the write lock and delay sales.** Fifteen minutes behind (a paired spare's copy:
+  can hold the write lock and delay sales.** The separate startup check can wait after an
+  unplanned stop, as above. Fifteen minutes behind (a paired spare's copy:
   over 60 seconds) raises `backup.stream_behind` unless a stopped/refused/unusable-settings alert
   explains it. Guards: stream loop/pause e2e, health bucket-copy cases and the threshold cases in
   `apps/server/src/alert-sources.test.ts`, weaker than the rule: named cases only; stream cases skip

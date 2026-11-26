@@ -139,7 +139,9 @@ export function partOfAlert(alert: Pick<AlertView, "area" | "code">): PartId | n
   )
     return "clock";
   if (alert.area === "fiscal") return "tax";
-  if (alert.area === "box" && alert.code !== "start.unplanned_stop") return "disk";
+  if (alert.code === "start.unplanned_stop" || alert.code === "start.selling_unconfirmed")
+    return null;
+  if (alert.area === "box") return "disk";
   return null;
 }
 

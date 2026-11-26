@@ -84,6 +84,22 @@ describe("the full-disk email", () => {
 });
 
 it.each([
+  ["en", "Corner Bistro: the box started without backup confirmation", "the backup bucket"],
+  [
+    "es",
+    "Corner Bistro: el servidor arrancó sin confirmación de la copia",
+    "el depósito de copias de seguridad",
+  ],
+] as const)(
+  "explains why trading resumed after the bucket wait in %s",
+  (language, subject, text) => {
+    const message = boxEmailMessage("start.selling_unconfirmed", language, "Corner Bistro");
+    expect(message.subject).toBe(subject);
+    expect(message.text).toContain(text);
+  },
+);
+
+it.each([
   ["en", "Corner Bistro: this box was replaced", "Leave this box switched off"],
   ["es", "Corner Bistro: se ha sustituido este servidor", "Deja este servidor apagado"],
 ] as const)("tells managers what to do with a replaced box in %s", (language, subject, text) => {

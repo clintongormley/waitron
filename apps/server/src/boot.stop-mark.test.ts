@@ -1,6 +1,14 @@
 import { loadKeyRing } from "@waitron/credentials";
-import { enqueueMail, incidents, outgoingMail, persons, withTransaction } from "@waitron/db";
+import {
+  enqueueMail,
+  incidents,
+  outgoingMail,
+  persons,
+  withTransaction,
+  writeNodeMembership,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { buildNextMembershipDocument } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { pointerKey, signPointer } from "@waitron/stream";
@@ -10,10 +18,13 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import * as atomic from "./fs-atomic.js";
+import { startServer as bootServer } from "./boot.js";
 import { boxHostnameFor } from "./box-name.js";
+import * as boxEmail from "./box-alert-email.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import * as stopAlert from "./stop-alert.js";
+import { readPreviousStop } from "./stop-mark.js";
 import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
 import { startFakeSmtp } from "./testing/boot-harness.js";
 import { TRADING_BOOT_KEY_ENV } from "./testing/boot-trading-fixture.js";
@@ -34,6 +45,320 @@ vi.mock("@hono/node-server", async () => {
 const { startServer, httpPort } = ephemeralServerFixture();
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const heartbeatAt = "2026-10-22T09:31:00.000Z";
+
+async function configureStartupBucket() {
+  const { cfg } = await setupVenue(suite.db);
+  const ring = loadKeyRing(TRADING_BOOT_KEY_ENV);
+  const identity = { ownerDb: suite.db, node: suite.node, ring };
+  await establishNodeIdentity(identity, cfg.nodeId);
+  await seedTermZeroMembership({ ...identity, db: suite.db }, cfg.nodeId, "https://old.example");
+  await withTransaction(suite.db, (tx) =>
+    writeStreamSettings(
+      tx,
+      ring,
+      {
+        region: "eu-west-1",
+        bucket: "copies",
+        prefix: "",
+        accessKeyId: "test",
+        secretAccessKey: "test-secret",
+      },
+      null,
+    ),
+  );
+  const key = await readNodeIdentityKey(suite.node, ring, cfg.nodeId);
+  const { streamId } = (await readStreamSettings(suite.db, ring))!;
+  return { cfg, key, streamId, ring };
+}
+
+it("serves a non-trading bucket waiting page after an unexpected stop", async () => {
+  const { cfg } = await configureStartupBucket();
+  const bucket = new SwitchableStore(() => new Date());
+  bucket.down = true;
+  let started: Awaited<ReturnType<typeof startServer>>;
+  await withTradingBootServer(
+    {
+      db: suite.db,
+      nodeId: cfg.nodeId,
+      scratchPrefix: "waitron-boot-bucket-wait-",
+      start: async (env) => {
+        started = await startServer(env, env, {
+          previousStop: { restart: false, heartbeatAt: null },
+          boxHost: synchronisedBoxHost(),
+          stream: { store: bucket },
+          waitingStart: { intervalMs: 100 },
+        });
+        return started;
+      },
+      httpPort,
+    },
+    async (base) => {
+      const probe = await fetch(`${base}/api/node`);
+      expect(await probe.json()).toMatchObject({ acceptingSales: false });
+      const page = await fetch(base, { headers: { "Accept-Language": "en" } });
+      const html = await page.text();
+      expect(html).toContain("Waiting for the backup bucket");
+      expect(html).toContain("This box is checking its backup");
+      expect((await fetch(`${base}/carry-on`, { method: "POST" })).status).toBe(404);
+      const sale = await fetch(`${base}/api/working-orders/order-1/payments`, { method: "POST" });
+      expect(sale.status).toBe(404);
+      await sale.text();
+
+      bucket.down = false;
+      await started.fullyStarted;
+      await vi.waitFor(async () => {
+        const trading = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+        expect(await trading.json()).toMatchObject({ acceptingSales: true });
+      });
+    },
+  );
+});
+
+it("waits and emails managers when the bucket is silent and the chart's spare never joined", async () => {
+  const { cfg, key, ring } = await configureStartupBucket();
+  const chart = buildNextMembershipDocument({
+    heldDocument: null,
+    minTerm: 1,
+    nodes: [
+      { nodeId: cfg.nodeId, contactUrl: "https://old.example", standing: "serving-primary" },
+      {
+        nodeId: "00000000-0000-4000-8000-000000000034",
+        contactUrl: "https://joining.example",
+        standing: "serving-secondary",
+      },
+    ],
+    signerNodeId: cfg.nodeId,
+    signerPrivateKey: key,
+    endorsements: [],
+  });
+  await writeNodeMembership(suite.db, chart);
+  await stopAlert.recordUnconfirmedStart(suite.db, new Date(heartbeatAt));
+  const bucket = new SwitchableStore(() => new Date());
+  bucket.down = true;
+  const smtp = await startFakeSmtp();
+  const job = boxEmail.boxAlertMailJob;
+  const schedule = vi.spyOn(boxEmail, "boxAlertMailJob").mockImplementationOnce((...args) => ({
+    ...job(...args),
+    firstPassAfterMs: 0,
+  }));
+  let started: Awaited<ReturnType<typeof startServer>>;
+  try {
+    await withTransaction(suite.db, (tx) =>
+      saveSmtpForTest(tx, ring, {
+        url: `smtp://127.0.0.1:${smtp.port}`,
+        from: "notices@example.test",
+      }),
+    );
+    await withTradingBootServer(
+      {
+        db: suite.db,
+        nodeId: cfg.nodeId,
+        scratchPrefix: "waitron-boot-bucket-timeout-",
+        start: async (env) => {
+          started = await startServer(env, env, {
+            previousStop: { restart: false, heartbeatAt: null },
+            boxHost: synchronisedBoxHost(),
+            stream: { store: bucket },
+            waitingStart: { intervalMs: 20, bucketWaitMs: 1_000 },
+          });
+          return started;
+        },
+        httpPort,
+      },
+      async (base) => {
+        const probe = await fetch(`${base}/api/node`);
+        expect(await probe.json()).toMatchObject({ acceptingSales: false });
+        await started.fullyStarted;
+        await vi.waitFor(async () => {
+          const trading = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+          expect(await trading.json()).toMatchObject({ acceptingSales: true });
+        });
+        const rows = await suite.db
+          .select({ handledAt: incidents.acknowledgedAt, severity: incidents.severity })
+          .from(incidents)
+          .where(eq(incidents.code, "start.selling_unconfirmed"));
+        expect(rows).toEqual(
+          expect.arrayContaining([
+            { handledAt: expect.anything(), severity: "warning" },
+            { handledAt: null, severity: "warning" },
+          ]),
+        );
+        expect(rows).toHaveLength(2);
+        await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 8_000 });
+        const message = smtp.messages[0]!.replace(/=\r?\n/g, "");
+        expect(message).toContain("To: owner@example.test");
+        expect(message).toContain("Al arrancar, el servidor no pudo confirmar");
+        expect(message).toContain("tras esperar un minuto");
+      },
+    );
+  } finally {
+    schedule.mockRestore();
+    await smtp.close();
+  }
+}, 15_000);
+
+it.each(["waiting", "trading"] as const)(
+  "chooses the next startup check when restarted while %s",
+  async (phase) => {
+    const { cfg } = await configureStartupBucket();
+    const bucket = new SwitchableStore(() => new Date());
+    bucket.down = phase === "waiting";
+    await withTradingBootServer(
+      {
+        db: suite.db,
+        nodeId: cfg.nodeId,
+        scratchPrefix: "waitron-boot-bucket-restart-",
+        start: async (env) => {
+          const seams = {
+            boxHost: synchronisedBoxHost(),
+            stream: { store: bucket },
+          };
+          const first = await startServer(env, env, {
+            ...seams,
+            previousStop: { restart: false, heartbeatAt: null },
+          });
+          try {
+            expect(first.fullyStarted !== undefined).toBe(phase === "waiting");
+            await first.markRestart?.();
+          } finally {
+            await first.close();
+          }
+          const previousStop = await readPreviousStop(
+            { stateDir: env.WAITRON_STATE_DIR!, venueDir: env.WAITRON_VENUE_DIR! },
+            () => {},
+          );
+          expect(previousStop.restart).toBe(phase === "trading");
+          bucket.down = true;
+          return startServer(env, env, { ...seams, previousStop });
+        },
+        httpPort,
+      },
+      async (base) => {
+        const probe = await fetch(`${base}/api/node`);
+        expect(await probe.json()).toMatchObject({ acceptingSales: phase === "trading" });
+        expect(
+          await suite.db
+            .select({ id: incidents.id })
+            .from(incidents)
+            .where(eq(incidents.code, "start.selling_unconfirmed")),
+        ).toEqual([]);
+      },
+    );
+  },
+);
+
+it.each(["peer answered", "deadline spent in the first ask"] as const)(
+  "starts trading without opening a waiting listener when %s",
+  async (reason) => {
+    const { cfg } = await configureStartupBucket();
+    const bucket = new SwitchableStore(() => new Date());
+    bucket.hang = reason === "deadline spent in the first ask";
+    bucket.down = reason === "peer answered";
+    await withTradingBootServer(
+      {
+        db: suite.db,
+        nodeId: cfg.nodeId,
+        scratchPrefix: "waitron-boot-bucket-direct-",
+        start: async (env) => {
+          const server = await bootServer(env, env, {
+            previousStop: { restart: false, heartbeatAt: null },
+            boxHost: synchronisedBoxHost(),
+            stream: { store: bucket },
+            ...(reason === "peer answered"
+              ? {
+                  peerCheck: async () => ({
+                    result: "proceed" as const,
+                    successorNodeId: null,
+                    hasCountedPeer: true as const,
+                  }),
+                }
+              : { waitingStart: { bucketWaitMs: 50 } }),
+          });
+          try {
+            expect(server.fullyStarted).toBeUndefined();
+            await vi.waitFor(async () => {
+              expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
+            });
+          } catch (error) {
+            await server.close();
+            throw error;
+          }
+          return server;
+        },
+        httpPort,
+      },
+      async (base) => {
+        const probe = await fetch(`${base}/api/node`);
+        expect(await probe.json()).toMatchObject({ acceptingSales: true });
+        const alerts = await suite.db
+          .select({ id: incidents.id })
+          .from(incidents)
+          .where(eq(incidents.code, "start.selling_unconfirmed"));
+        expect(alerts).toHaveLength(reason === "peer answered" ? 0 : 1);
+      },
+    );
+  },
+);
+
+it("keeps a verified replacement stopped while retrying its local marker", async () => {
+  const { cfg, key, streamId } = await configureStartupBucket();
+  const bucket = new SwitchableStore(() => new Date());
+  const pointer = signPointer(
+    {
+      streamId,
+      nodeId: cfg.nodeId,
+      term: 1,
+      generation: `gen-1-${cfg.nodeId}-20261022T093100Z`,
+      writtenAt: heartbeatAt,
+    },
+    key,
+  );
+  await bucket.put(pointerKey(), new TextEncoder().encode(JSON.stringify(pointer)));
+  const write = atomic.writeFileDurable;
+  let markerFile: string | undefined;
+  let rejectFirst = true;
+  const saved = vi.spyOn(atomic, "writeFileDurable").mockImplementation(async (...args) => {
+    if (args[0].endsWith("/replaced.json") && rejectFirst) {
+      rejectFirst = false;
+      bucket.down = true;
+      throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
+    }
+    return write(...args);
+  });
+  try {
+    await withTradingBootServer(
+      {
+        db: suite.db,
+        nodeId: cfg.nodeId,
+        scratchPrefix: "waitron-boot-bucket-replacement-",
+        start: (env) => {
+          markerFile = join(env.WAITRON_STATE_DIR!, "replaced.json");
+          return startServer(env, env, {
+            previousStop: { restart: false, heartbeatAt },
+            boxHost: synchronisedBoxHost(),
+            stream: { store: bucket },
+          });
+        },
+        httpPort,
+      },
+      async (base) => {
+        const probe = await fetch(`${base}/api/node`);
+        expect(await probe.json()).toMatchObject({ acceptingSales: false });
+        const page = await fetch(base, { headers: { "Accept-Language": "en" } });
+        expect(await page.text()).toContain("Leave this box switched off");
+        expect(rejectFirst).toBe(false);
+        await vi.waitFor(async () => {
+          expect(JSON.parse(await readFile(markerFile!, "utf8"))).toMatchObject({
+            streamId,
+            term: 1,
+          });
+        });
+      },
+    );
+  } finally {
+    saved.mockRestore();
+  }
+});
 
 it.each([
   { restart: false, heartbeatAt },
@@ -104,27 +429,8 @@ it.each([false, true])(
 );
 
 it("stops admissions before saving the replacement and stays stopped after an offline restart", async () => {
-  const { cfg } = await setupVenue(suite.db);
+  const { cfg, key, streamId } = await configureStartupBucket();
   const ring = loadKeyRing(TRADING_BOOT_KEY_ENV);
-  const identity = { ownerDb: suite.db, node: suite.node, ring };
-  await establishNodeIdentity(identity, cfg.nodeId);
-  await seedTermZeroMembership({ ...identity, db: suite.db }, cfg.nodeId, "https://old.example");
-  await withTransaction(suite.db, (tx) =>
-    writeStreamSettings(
-      tx,
-      ring,
-      {
-        region: "eu-west-1",
-        bucket: "copies",
-        prefix: "",
-        accessKeyId: "test",
-        secretAccessKey: "test-secret",
-      },
-      null,
-    ),
-  );
-  const { streamId } = (await readStreamSettings(suite.db, ring))!;
-  const key = await readNodeIdentityKey(suite.node, ring, cfg.nodeId);
   const bucket = new SwitchableStore(() => new Date());
   const restart = vi.fn();
   let releaseFirst!: () => void;

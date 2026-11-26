@@ -352,6 +352,13 @@ other box's address, says so. While it waits it takes no sales and sends nothing
 It asks again every 15 seconds; once the other box answers, this box starts normally or, if the
 other box has taken over, says so.
 
+## Waiting for the backup bucket {#waiting-for-bucket}
+
+After a power cut or crash, a main box can show **Waiting for the backup bucket**. Give it up to a minute
+to check whether a replacement has taken over. The box starts after a minute and emails managers
+if the bucket stays silent or the box cannot verify the backup it finds, even if that backup is
+newer. If you already moved service to a replacement, use that box and leave this one switched off.
+
 ## Carry on as the main box {#carry-on}
 
 If you know the other box is switched off, you can let this box carry on without it. Open the box

@@ -161,6 +161,7 @@ export interface StartPeerCheckDeps {
 
 export interface StartPeerCheckOutcome {
   result: StartCheckResult;
+  hasCountedPeer?: true;
   /** For `superseded`, the box the restriction names, or `null` (see `successorAfterCheck`). */
   successorNodeId: string | null;
   /** For `wait`, the joined boxes whose silence made this box wait. */
@@ -226,6 +227,7 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
   });
   return {
     result,
+    ...(answers.some((answer) => answer.counted) ? { hasCountedPeer: true as const } : {}),
     ...(result === "wait"
       ? { waitingOn: answers.filter((a) => a.counted && a.answer === "S").map((a) => a.nodeId) }
       : {}),

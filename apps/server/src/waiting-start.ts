@@ -27,6 +27,7 @@ import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { escapeHtml } from "./html-page.js";
 import {
   failureFields,
+  renderBucketWaitingPage,
   waitingPageAnswer,
   waitingPageRoute,
   type WaitingPageSection,
@@ -82,8 +83,9 @@ export interface WaitingStartDeps {
   routes: ((app: Hono, hooks: WaitingHooks) => void)[];
   node: NodeDatabase;
   /** The start check, asked again every `intervalMs` until it answers other than `wait`. */
-  recheck: () => Promise<StartPeerCheckOutcome>;
+  recheck: (signal: AbortSignal) => Promise<StartPeerCheckOutcome>;
   intervalMs: number;
+  bucketDeadline?: AbortSignal;
   /**
    * Called as a carry-on takes its turn, before it waits for the re-ask in flight (`turn`), and
    * as it claims the wait inside the transaction that records it (`claimed`). Tests only.
@@ -102,6 +104,7 @@ export interface WaitingStartDeps {
 export type WaitEnd =
   | { kind: "checked"; outcome: StartPeerCheckOutcome }
   | { kind: "carried-on" }
+  | { kind: "timed-out" }
   /** Closed by a shutdown or a stepdown: the store is closed and the start must not go on. */
   | { kind: "stopped" };
 
@@ -203,6 +206,10 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
         ),
     })(app);
   }
+  if (deps.bucketDeadline !== undefined)
+    section = async (_c, _other, locale, destination) => ({
+      page: renderBucketWaitingPage(locale, destination),
+    });
   waitingPageRoute(() => deps.addressesOf(waitingOn), log, section)(app);
 
   let resolveEnd: (end: WaitEnd) => void = () => {};
@@ -223,6 +230,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   // The latest re-ask, settled once it has decided whether the wait ends (`endedWith` is then
   // set). The store stays open until it has settled, and a carry-on waits for it.
   let asking: Promise<void> = Promise.resolve();
+  const abortAsk = new AbortController();
   let endedWith: WaitEnd | null = null;
   // While a carry-on holds its turn no new re-ask starts, so none can answer after the carry-on
   // has looked; turns are taken one at a time, so a second carry-on sees the first's outcome.
@@ -242,6 +250,8 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     endedWith = end;
     clearTimeout(timer);
     timer = undefined;
+    deps.bucketDeadline?.removeEventListener("abort", timeOut);
+    abortAsk.abort();
     let closeFailure: { error: unknown } | null = null;
     try {
       await listeners.close();
@@ -268,7 +278,10 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
       endedWith = { kind: "stopped" };
       await asking;
       await deps.closeStore();
-    } else deps.health.takesNoSales = false;
+    } else {
+      if (end.kind === "timed-out") await asking;
+      deps.health.takesNoSales = false;
+    }
     resolveEnd(stopped ? { kind: "stopped" } : end);
   };
 
@@ -328,7 +341,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     inAsk = true;
     let outcome: StartPeerCheckOutcome | null = null;
     try {
-      outcome = await deps.recheck();
+      outcome = await deps.recheck(abortAsk.signal);
     } catch (error) {
       log("warn", "waiting_start.recheck_failed", { errorCode: codeOf(error) });
     }
@@ -385,7 +398,12 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
 
   deps.health.takesNoSales = true;
   const listeners = deps.listen(app, gate.isClosed);
-  schedule();
+  const timeOut = () => void leave({ kind: "timed-out" });
+  if (deps.bucketDeadline?.aborted) timeOut();
+  else {
+    deps.bucketDeadline?.addEventListener("abort", timeOut, { once: true });
+    schedule();
+  }
   log("info", "waiting_start.waiting", { waitingOn });
 
   return {

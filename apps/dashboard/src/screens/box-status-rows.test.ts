@@ -102,6 +102,7 @@ describe("partOfAlert", () => {
 
   it("lists an unexpected stop among the other alerts", () => {
     expect(partOfAlert({ area: "box", code: "start.unplanned_stop" })).toBeNull();
+    expect(partOfAlert({ area: "box", code: "start.selling_unconfirmed" })).toBeNull();
   });
 
   it("leaves every other alert off the rows", () => {
