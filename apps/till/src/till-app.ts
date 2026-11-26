@@ -5177,8 +5177,7 @@ export class TillApp extends LitElement {
     if (changed.has("splitRefusal") && this.splitRefusal !== null)
       void this.#watchReopenedSplit(this.splitRefusal);
     if (changed.has("orderParty") || changed.has("partyBills")) this.#followSplitSeen();
-    if (changed.has("staffNotices") && this.drill?.kind === "table-order")
-      void this.#repositionBillPickerAfterNotice();
+    if (changed.has("staffNotices")) void this.#repositionOrderMenusAfterNotice();
     if (this.#moveAllergyOpening && !this.#moveAllergyCurrent()) this.#closeMoveAllergy();
     this.#syncTableAllergy();
     if (this.allergyDialog !== null && !this.allergyDialog.current()) this.#closeAllergyDialog();
@@ -5193,14 +5192,14 @@ export class TillApp extends LitElement {
       this.renderRoot.querySelector<WtToast>("[data-nfc-notice]")!.show();
   }
 
-  async #repositionBillPickerAfterNotice(): Promise<void> {
+  async #repositionOrderMenusAfterNotice(): Promise<void> {
+    const order = this.renderRoot.querySelector("till-table-order-screen");
+    if (order === null) return;
     // The strip moves the order's header after rendering its new height.
     await this.renderRoot.querySelector<HTMLElementTagNameMap["till-notice-strip"]>(
       'till-notice-strip[slot="notices"]',
     )?.updateComplete;
-    this.renderRoot
-      .querySelector<TillTableOrderScreen>('till-table-order-screen[slot="drill"]')
-      ?.repositionBillPicker();
+    if (order.isConnected) order.repositionMenus();
   }
 
   override willUpdate(changed: PropertyValues): void {

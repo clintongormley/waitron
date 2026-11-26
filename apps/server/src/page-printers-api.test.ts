@@ -16,12 +16,14 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedCashSale, seedVenue } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
 import { nodeId as brandNodeId } from "@waitron/shared";
+import { createPrinter, enqueuePrintJob } from "@waitron/printing";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { createStation } from "./kitchen.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import type { Logger } from "./logger.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { mountPrintApi } from "./print-api.js";
+import { readPrinterJobSummaries } from "./printer-job-summaries.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
 import "./errors.js";
@@ -492,6 +494,15 @@ describe("page-printer management routes", () => {
         { ...job, status: "printing", printerHold: "paper_out" },
         { ...job, status: "done", deliveredAt: earlier },
       ]);
+      const receipt = await createPrinter(tx, {
+        name: "Counter",
+        transport: "network_tcp",
+        host: "10.61.7.5",
+        port: 9100,
+      });
+      await enqueuePrintJob(tx, receipt.id, new Uint8Array([7]));
+      const summaries = await readPrinterJobSummaries(tx, "a4");
+      expect([...summaries.keys()]).toEqual([id]);
     });
     const res = await send(app, "GET", "/management-api/page-printers?jobSummary=1", {
       cookie: managerCookie,

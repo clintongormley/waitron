@@ -94,7 +94,7 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
       const rows = await gated(sessionId, async (tx) => {
         const printers = await listPagePrinters(tx);
         const summaries =
-          jobSummary && printers.length > 0 ? await readPrinterJobSummaries(tx) : undefined;
+          jobSummary && printers.length > 0 ? await readPrinterJobSummaries(tx, "a4") : undefined;
         return printers.map((row) => {
           const summary = summaries?.get(row.id);
           return {

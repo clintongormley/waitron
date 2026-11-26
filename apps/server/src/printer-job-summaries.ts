@@ -1,8 +1,11 @@
-import type { Transaction } from "@waitron/db";
+import type { printers, Transaction } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
 import { sql } from "drizzle-orm";
 
-export async function readPrinterJobSummaries(tx: Transaction) {
+export async function readPrinterJobSummaries(
+  tx: Transaction,
+  kind: typeof printers.$inferSelect.kind,
+) {
   // Aggregated over the full history, unlike the job list's bounded completed history.
   // `max(delivered_at)` is the latest instant only because every writer stores the canonical
   // `toISOString()` spelling.
@@ -20,6 +23,7 @@ export async function readPrinterJobSummaries(tx: Transaction) {
         where latest.printer_id = jobs.printer_id and latest.delivered_at is not null
         order by latest.delivered_at desc, latest.id desc limit 1) as last_print_agent_id
     from print_jobs jobs
+    where printer_id in (select id from printers where kind = ${kind} and deleted_at is null)
     group by printer_id`);
   return new Map(
     summaries.rows.map((row) => [

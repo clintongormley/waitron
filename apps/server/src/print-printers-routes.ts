@@ -199,7 +199,7 @@ export function mountPrintPrintersRoutes(
       const rows = await gated(sessionId, async (tx) => {
         const configured = await listPrinters(tx);
         const holders = await readPrinterHolders(tx);
-        const byPrinter = await readPrinterJobSummaries(tx);
+        const byPrinter = await readPrinterJobSummaries(tx, "receipt");
         return configured.map((printer) => {
           const summary = byPrinter.get(printer.id);
           return {

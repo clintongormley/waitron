@@ -6095,6 +6095,7 @@ it("shows office printer holds and allows viewing uncertain invoice pages", asyn
   const dot = (id: string) =>
     getComputedStyle(q(el, `[data-test=job-status-${id}]`)!, "::before").backgroundColor;
   expect(dot("held-page")).not.toBe(dot("printing-page"));
+  expect(dot("held-page")).toBe(dot("uncertain-page"));
   const table = q(el, "[data-test=jobs-table]")!;
   const search = table.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
   search.value = "Held";

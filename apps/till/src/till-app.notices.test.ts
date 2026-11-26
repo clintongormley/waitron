@@ -35,6 +35,7 @@ import {
   openTable as openOrderTable,
   resetAllergyFixture,
   tableOrder as orderScreen,
+  till as orderTill,
 } from "../test/allergy-app-fixture.js";
 import { en, es } from "./i18n/strings.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
@@ -198,9 +199,14 @@ describe("a poll beside an open order", () => {
     cleanupWidgets();
   });
 
-  it.each([1280, 390])(
-    "keeps the bill picker anchored when a paper-out notice arrives at %i px",
-    async (width) => {
+  it.each([
+    ["till", 1280, "[data-bill-switcher]"],
+    ["till", 1280, "[data-table-menu]"],
+    ["tablet-landscape", 1024, "[data-bill-switcher]"],
+    ["phone-portrait", 390, "[data-bill-switcher]"],
+  ] as const)(
+    "keeps %s %i px %s anchored when a paper-out notice arrives",
+    async (formFactor, width, selector) => {
       const viewport = { width: window.innerWidth, height: window.innerHeight };
       onTestFinished(() => page.viewport(viewport.width, viewport.height));
       await page.viewport(width, 800);
@@ -212,22 +218,25 @@ describe("a poll beside an open order", () => {
         params: { printer: "Back office", reason: "held", hold: "paper_out" },
       };
       const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([]));
-      const { el } = await mountOrderApp({ getDeviceEquipment });
+      const { el } = await mountOrderApp({
+        getDeviceEquipment,
+        getTill: vi.fn().mockResolvedValue(orderTill(formFactor)),
+        getDeviceIdentity: vi.fn().mockResolvedValue({ ...TILL_IDENTITY, formFactor }),
+      });
       const order = await openOrderTable(el);
-      const switcher = order.shadowRoot!.querySelector<HTMLElement>("[data-bill-switcher]")!;
-      const trigger = switcher.shadowRoot!.querySelector("button")!;
+      const menu = order.shadowRoot!.querySelector<HTMLElement>(selector)!;
+      const trigger = menu.shadowRoot!.querySelector("button")!;
       await userEvent.click(trigger);
-      const popup = switcher.shadowRoot!.querySelector("[popover]")!;
+      const popup = menu.shadowRoot!.querySelector("[popover]")!;
       expect(popup.matches(":popover-open")).toBe(true);
       getDeviceEquipment.mockResolvedValue(withNotices([paperOut]));
       await poll(el);
       expect(strip(el).words).toContain("Back office");
-      const back = order.shadowRoot!.querySelector("[data-back]")!;
       const notice = strip(el).drawn!;
       expect(popup.getBoundingClientRect().top).toBeGreaterThanOrEqual(
         trigger.getBoundingClientRect().bottom,
       );
-      expect(back.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      expect(trigger.getBoundingClientRect().top).toBeGreaterThanOrEqual(
         notice.getBoundingClientRect().bottom,
       );
     },
