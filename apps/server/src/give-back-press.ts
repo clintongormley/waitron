@@ -305,19 +305,11 @@ export async function openCorrectionPart(
 ) {
   const lineIds = part.kind === "correction" ? part.lineIds : [];
   const selection = { gross: part.amount, ...(lineIds.length === 0 ? {} : { lineIds }) };
-  const kind = await correctionKindOf(tx, deps.backend, saleId, cfg.nodeId);
-  const split = await previewInvoiceCorrection(
-    tx,
-    deps.backend,
-    cfg,
-    reading,
-    saleId,
-    selection,
-    kind,
-  );
+  const { kind, backend } = await correctionKindOf(tx, deps.backend, saleId, cfg.nodeId);
+  const split = await previewInvoiceCorrection(tx, backend, cfg, reading, saleId, selection, kind);
   return openInvoiceCorrection(
     tx,
-    deps,
+    { ...deps, backend },
     cfg,
     saleId,
     {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it, onTestFinished } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
 import { adjustments, billAdvances, parties, sales, taxpayer, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -224,6 +224,12 @@ describe("Give money back on a full invoice", () => {
       status: 409,
       json: { code: "tender.refund_needs_correction", params: { tenderId: cash } },
     });
+    const admissions = vi.spyOn(venue.backend, "correctionAdmissionFor");
+    onTestFinished(() => admissions.mockRestore());
+    const read = await send(venue.app, adminCookie, "GET", `/api/transactions/${saleId}/give-back`);
+    expect(read.status, JSON.stringify(read.json)).toBe(200);
+    expect(admissions).toHaveBeenCalledTimes(1);
+    admissions.mockRestore();
 
     const body = await giveBody(saleId, ask("goodwill", "10.00"));
     expect(body.expected).toEqual([
@@ -343,19 +349,22 @@ describe("Give money back on a full invoice", () => {
   });
 
   it("moves no money while the business has no registered address", async () => {
-    const { saleId } = await fullInvoice({ cash: "37.00" });
-    const body = await giveBody(saleId, ask("goodwill", "10.00"));
+    // On the reader each part's money goes out in its own transaction, so a refusal after a part
+    // would leave that refund behind; cash would undo it with the press.
+    const { saleId } = await fullInvoice({ reader: "37.00" });
+    const reader = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { way: reader }));
     await inTx(venue, (tx) => tx.update(taxpayer).set({ taxpayerDomicile: null }));
     onTestFinished(async () => {
       await inTx(venue, (tx) => tx.update(taxpayer).set({ taxpayerDomicile: DOMICILE }));
     });
-    const drawer = drawerCents();
+    const cardRefunds = venue.card.refundCalls.length;
     const refused = { status: 409, json: { code: "fiscal.taxpayer_domicile_missing", params: {} } };
-    expect(await routePreview(saleId, ask("goodwill", "10.00"))).toEqual(refused);
+    expect(await routePreview(saleId, ask("goodwill", "10.00", { way: reader }))).toEqual(refused);
     expect(await give(saleId, body)).toEqual(refused);
     expect(moneyOf(saleId)).toEqual([]);
     expect(correctivesOf(saleId)).toEqual([]);
-    expect(drawerCents()).toBe(drawer);
+    expect(venue.card.refundCalls.length).toBe(cardRefunds);
   });
 
   it("files an R1 against a full invoice an advance was taken off", async () => {

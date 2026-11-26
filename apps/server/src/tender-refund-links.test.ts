@@ -561,11 +561,12 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     );
   });
 
-  it("refuses a linked refund without new approval above what its cancels owe on a full invoice AEAT refused with no fix", async () => {
+  it("refuses a linked refund above what its cancels owe on a full invoice as its corrective's money, and without new approval once AEAT refused it with no fix", async () => {
     const { paid, burger } = await oneCancel(false, true);
-    await inTx(venue, (tx) => refusedByAeat(tx, paid.saleId));
     const first = await staffRefund(paid, refundBody(paid, "6.00", [burger]));
     expect(first.status, JSON.stringify(first.json)).toBe(200);
+    await refusedNeedsCorrection(paid, refundBody(paid, "8.00", [burger]), staffRefund);
+    await inTx(venue, (tx) => refusedByAeat(tx, paid.saleId));
     expect(await refusedOver(paid, refundBody(paid, "8.00", [burger]))).toBe("6.00");
   });
 
@@ -1015,7 +1016,7 @@ describe("Refund a payment naming no cancels", () => {
     await refusedNeedsCorrection(paid, refundBody(paid, "0.01"));
   });
 
-  it("is refused on an invoice naming a customer, as its corrective's money", async () => {
+  it("is refused on an invoice naming a customer, as its corrective's money, though the receipts-only preview still refuses the invoice", async () => {
     const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
     await chooseCustomer(b);
     const paid = await pay(b, "37.00");

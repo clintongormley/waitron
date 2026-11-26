@@ -119,19 +119,31 @@ export type CorrectionKind = { fullInvoice?: true };
  * Whether a correction of `saleId` is a full invoice's: the mark the regime's admission puts on
  * the invoice the correction is filed against (its replacement, once one took its place). Read
  * from the stored records at every call, the same way when an open correction is read again later.
+ * `backend` is the seat to hand core within `tx`: it answers that admission as read here rather
+ * than reading it again, and asks the seat for any other invoice.
  */
 export async function correctionKindOf(
   tx: Transaction,
   backend: FiscalBackend,
   saleId: SaleId,
   nodeId: DeviceRequestConfig["nodeId"],
-): Promise<CorrectionKind> {
-  const admission = await backend.correctionAdmissionFor?.(
-    tx,
-    await correctionTargetFor(tx, saleId),
-    nodeId,
-  );
-  return admission?.fullInvoice === true ? { fullInvoice: true } : {};
+): Promise<{ kind: CorrectionKind; backend: FiscalBackend }> {
+  if (backend.correctionAdmissionFor === undefined) return { kind: {}, backend };
+  const target = await correctionTargetFor(tx, saleId);
+  const admission = await backend.correctionAdmissionFor(tx, target, nodeId);
+  const ask = backend.correctionAdmissionFor.bind(backend);
+  const answered: FiscalBackend = Object.create(backend, {
+    correctionAdmissionFor: {
+      value: (into: Transaction, id: SaleId, node: typeof nodeId) =>
+        into === tx && id === target && node === nodeId
+          ? Promise.resolve(admission)
+          : ask(into, id, node),
+    },
+  });
+  return {
+    kind: admission.fullInvoice === true ? { fullInvoice: true } : {},
+    backend: answered,
+  };
 }
 
 /**
@@ -252,8 +264,8 @@ export async function readCorrectableNow(
       .where(eq(saleSettlements.saleId, saleId));
     if (settled === undefined) throw new AppError("invoice_correction.not_settled", { saleId });
     await refuseTakenOffAdvance(tx, saleId);
-    const kind = await correctionKindOf(tx, backend, saleId, cfg.nodeId);
-    lines = await readCorrectableLines(tx, backend, saleId, cfg.nodeId, kind);
+    const read = await correctionKindOf(tx, backend, saleId, cfg.nodeId);
+    lines = await readCorrectableLines(tx, read.backend, saleId, cfg.nodeId, read.kind);
   } catch (error) {
     const none = { refundable, correctable: 0 };
     if (refusesForGood(error)) return { tenders, lines: null, amounts: none, waiting: null };
@@ -481,10 +493,10 @@ export async function fileCorrectionIn(
   const { completed } = await readSettledMoney(tx, correction);
   if (completed === 0) throw new AppError("invoice_correction.nothing_back", { correctionId });
   const saleId = correction.originalSaleId as SaleId;
-  const kind = await correctionKindOf(tx, deps.backend, saleId, cfg.nodeId);
+  const { kind, backend } = await correctionKindOf(tx, deps.backend, saleId, cfg.nodeId);
   const preview = await previewCorrectionAmounts(
     tx,
-    deps.backend,
+    backend,
     saleId,
     cfg.nodeId,
     {
@@ -674,8 +686,8 @@ export async function previewOrRefusal(
 ): Promise<CorrectionPreview | { refusal: AppError; closable: boolean }> {
   try {
     const id = saleId as SaleId;
-    const kind = await correctionKindOf(tx, backend, id, cfg.nodeId);
-    return await previewCorrectionAmounts(tx, backend, id, cfg.nodeId, selection, kind);
+    const read = await correctionKindOf(tx, backend, id, cfg.nodeId);
+    return await previewCorrectionAmounts(tx, read.backend, id, cfg.nodeId, selection, read.kind);
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     return {
