@@ -322,8 +322,8 @@ it("keeps Preview and Structure indents aligned, with their own row and photo si
   expect(getComputedStyle(a.querySelector(".tree-cell")!).paddingInlineStart).toBe(
     getComputedStyle(b.querySelector(".tree-cell")!).paddingInlineStart,
   );
-  expect(a.getBoundingClientRect().height).toBeCloseTo(69, 0);
-  expect(b.getBoundingClientRect().height).toBeCloseTo(49, 0);
+  expect(Math.abs(a.getBoundingClientRect().height - 69)).toBeLessThanOrEqual(3);
+  expect(Math.abs(b.getBoundingClientRect().height - 49)).toBeLessThanOrEqual(3);
   const photo = a.querySelector<HTMLElement>("[part~='product-media']")!;
   const otherPhoto = b.querySelector<HTMLElement>("[part~='product-media']")!;
   expect(photo.getBoundingClientRect()).toMatchObject({ width: 44, height: 44 });

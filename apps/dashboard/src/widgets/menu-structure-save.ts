@@ -208,46 +208,47 @@ export class MenuStructureSave implements ReactiveController {
     this.saving = true;
     this.dropped = "";
     this.host.requestUpdate();
-    let result: MenuStructureSaveResult;
-    let pending: Promise<void> | undefined;
+    let settleWrite!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      settleWrite = resolve;
+    });
+    this.#pendingWrite = pending;
     try {
-      const write = this.api().saveMenuStructure(id, input);
-      pending = write.then(
-        () => undefined,
-        () => undefined,
-      );
-      this.#pendingWrite = pending;
-      result = await write;
-    } catch (error) {
-      if (generation === this.#generation) {
-        const field = addressedField(error, input);
-        const message = codeMessage(codeOf(error));
-        if (field?.kind === "price") this.#refusedPrices.set(field.key, message);
-        else if (field?.kind === "row") this.rowErrors.set(field.key, message);
-        else this.message = message;
-        this.saving = false;
-        this.host.requestUpdate();
-        if (field) {
-          await this.host.updateComplete;
-          const table = this.#table();
-          const shown =
-            field.kind === "price"
-              ? await table?.focusPrice(field.key)
-              : await table?.focusRefusedRow(field.key);
-          if (generation === this.#generation && !shown) {
-            this.message = message;
-            this.host.requestUpdate();
+      let result: MenuStructureSaveResult;
+      try {
+        result = await this.api().saveMenuStructure(id, input);
+      } catch (error) {
+        if (generation === this.#generation) {
+          const field = addressedField(error, input);
+          const message = codeMessage(codeOf(error));
+          if (field?.kind === "price") this.#refusedPrices.set(field.key, message);
+          else if (field?.kind === "row") this.rowErrors.set(field.key, message);
+          else this.message = message;
+          this.saving = false;
+          this.host.requestUpdate();
+          if (field) {
+            await this.host.updateComplete;
+            const table = this.#table();
+            const shown =
+              field.kind === "price"
+                ? await table?.focusPrice(field.key)
+                : await table?.focusRefusedRow(field.key);
+            if (generation === this.#generation && !shown) {
+              this.message = message;
+              this.host.requestUpdate();
+            }
           }
         }
+        return false;
       }
-      return false;
+      if (generation !== this.#generation) return false;
+      this.dropped = [...new Set(result.dropped.map(label))].join(", ");
+      this.draft.commit();
+      this.changed();
     } finally {
       if (this.#pendingWrite === pending) this.#pendingWrite = undefined;
+      settleWrite();
     }
-    if (generation !== this.#generation) return false;
-    this.dropped = [...new Set(result.dropped.map(label))].join(", ");
-    this.draft.commit();
-    this.changed();
     await refresh();
     if (generation !== this.#generation) return false;
     this.saving = false;

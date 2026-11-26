@@ -1,5 +1,6 @@
 import { vi, type Mock } from "vitest";
 import type { DashboardApi, Product, ProductEditorValue } from "../api/client.js";
+import { menuReadFixture } from "../widgets/test-helpers.js";
 
 export const menuProductUnit = {
   id: "each",
@@ -81,11 +82,10 @@ export function menuProductApi(product: Product = menuProduct): MenuProductApi {
     getMenuStatus: async () => ({ state: "unpublished", clashes: 0 }),
     getMenuStatuses: async () => ({}),
     getMenuStructure: async () => structure,
-    getMenuRead: async () => ({
-      structure: { status: 200, body: structure },
-      prices: { status: 200, body: [] },
-      status: { status: 200, body: { state: "unpublished", clashes: 0 } },
-    }),
+    getMenuPrices: async () => [],
+    getMenuRead(id, parts) {
+      return menuReadFixture(this as DashboardApi, id, parts);
+    },
     getProductEditor: vi
       .fn<DashboardApi["getProductEditor"]>()
       .mockResolvedValue({ ...menuProductEditorValue, image: product.image }),

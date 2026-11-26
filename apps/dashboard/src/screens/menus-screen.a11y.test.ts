@@ -727,7 +727,7 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("accessible Remove confirm for a selected section with a section below it", async () => {
+  it("accessible Remove confirm for one selected nonempty section", async () => {
     const { el, host } = await mount("populated", theme, LUNCH);
     q(el, '[data-test="select"]').shadowRoot!.querySelector("button")!.click();
     await vi.waitFor(() =>
