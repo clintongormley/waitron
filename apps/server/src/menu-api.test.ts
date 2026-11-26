@@ -26,6 +26,7 @@ import {
   readTakeawayVatSchedules,
   saveMenuSettings,
   sectionMembers,
+  setProductVariants,
 } from "@waitron/menu";
 import type { MenuPreview, MenuStatus } from "@waitron/menu";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/menu";
@@ -2093,7 +2094,7 @@ describe("mountMenuApi — products", () => {
     const read = await send(app, "GET", `/management-api/products/${saved.id}/editor`);
     expect(read.status).toBe(200);
     expect(await read.json()).toEqual(saved);
-    const offerId = await offerVia(app, menuId, saved.id, "2.40");
+    const offerId = await offerVia(app, menuId, saved.id);
     const published = await send(
       app,
       "PUT",
@@ -5453,6 +5454,38 @@ describe("a menu price outside the product editor's rule is refused at the reque
     });
   });
 
+  it("the menu-item write refuses a price on a product with variants", async () => {
+    const app = mountApp();
+    const menuId = await createMenuVia(app, "Variant menu price menu");
+    const productId = await createNamedProductVia(app, `Offered ${crypto.randomUUID()}`);
+    const itemId = await offerVia(app, menuId, productId);
+    await withTransaction(suite.db, (tx) =>
+      setProductVariants(
+        tx,
+        productId,
+        [
+          {
+            name: "Glass",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "2.00",
+            available: true,
+          },
+        ],
+        "en",
+      ),
+    );
+
+    const res = await send(app, "PATCH", `/management-api/menus/${menuId}/items/${itemId}`, {
+      body: { grossPrice: "3.00" },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "menu_item.has_variants", params: { menuItemId: itemId } },
+    });
+  });
+
   it("the menu-item write takes a blank grossPrice as the product's own price", async () => {
     const app = mountApp();
     const menuId = await createMenuVia(app, "Blank menu price menu");
@@ -5553,7 +5586,7 @@ describe("menu routes whose own checks refuse a negative price", () => {
       error: { code: "product.invalid", params: { field: "unitPrice" } },
     });
 
-    const itemId = await offerVia(app, menuId, saved.id, "1.00");
+    const itemId = await offerVia(app, menuId, saved.id);
     const badOfferVariant = await send(
       app,
       "PUT",

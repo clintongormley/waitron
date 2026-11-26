@@ -90,13 +90,6 @@ function pickKey(listId: string, productId: string): string {
   return `${listId}\u0000${productId}`;
 }
 
-/** "+€1.50" for a variant dearer than its parent, "−€0.50" (a minus sign) for a cheaper one. */
-function priceDifference(difference: string): string {
-  return difference.startsWith("-")
-    ? `\u2212${formatMoney(difference.slice(1), currentLocale())}`
-    : `+${formatMoney(difference, currentLocale())}`;
-}
-
 /**
  * Walks the dish's offered lists in the order the offer gives them, which nothing here re-sorts.
  *
@@ -246,8 +239,7 @@ export class TillModifierPicker extends LitElement {
         border-radius: var(--wt-radius-full);
       }
 
-      .option-delta,
-      .price-difference {
+      .option-delta {
         color: var(--wt-color-text-muted);
         font-variant-numeric: tabular-nums;
       }
@@ -1009,13 +1001,6 @@ export class TillModifierPicker extends LitElement {
                               }}
                             />
                             <span class="option-name">${variant.name}</span>
-                            ${
-                              variant.unitPriceDifference === null
-                                ? nothing
-                                : html`<span class="price-difference"
-                                    >${priceDifference(variant.unitPriceDifference)}</span
-                                  >`
-                            }
                             <span class="option-delta"
                               >${formatMoney(variant.unitPrice, currentLocale())}</span
                             >

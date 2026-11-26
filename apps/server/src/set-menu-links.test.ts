@@ -78,11 +78,7 @@ useVenueDb({
         unitPrice: "1.50",
         vatClass: "general",
       });
-      const offer = await addProductToMenu(tx, {
-        menuId: copy.fullMenuId,
-        productId: product.id,
-        grossPrice: "1.50",
-      });
+      const offer = await addProductToMenu(tx, { menuId: copy.fullMenuId, productId: product.id });
       const [large, small] = await setProductVariants(
         tx,
         product.id,

@@ -201,46 +201,48 @@ describe("patchTree", () => {
 const soup = { kind: "offer", menuItemId: "mi-soup" } as const;
 const salad = { kind: "offer", menuItemId: "mi-salad" } as const;
 const bowl = { kind: "variant", menuItemId: "mi-soup", variantId: "v-bowl" } as const;
+/** A dish without variants, so a price of its own is one the patch can set. */
+const water = { kind: "offer", menuItemId: "mi-water" } as const;
 
 describe("MenuPatchDraft", () => {
   it("holds a change until it is set back to the live value", () => {
     const draft = new MenuPatchDraft(lunch(), languages);
-    draft.set({ target: soup, field: "price", value: "3.50" });
-    expect(draft.changes()).toEqual([{ target: soup, field: "price", value: "3.50" }]);
-    expect(draft.changed(soup)).toBe(true);
+    draft.set({ target: water, field: "price", value: "3.50" });
+    expect(draft.changes()).toEqual([{ target: water, field: "price", value: "3.50" }]);
+    expect(draft.changed(water)).toBe(true);
     expect(draft.changed(salad)).toBe(false);
-    draft.set({ target: soup, field: "price", value: "3.00" });
+    draft.set({ target: water, field: "price", value: "3.00" });
     expect(draft.changes()).toEqual([]);
-    expect(draft.changed(soup)).toBe(false);
+    expect(draft.changed(water)).toBe(false);
   });
 
   it("replaces an earlier change to the same field and keeps changes to other fields", () => {
     const draft = new MenuPatchDraft(lunch(), languages);
-    draft.set({ target: soup, field: "price", value: "3.50" });
-    draft.set({ target: soup, field: "name", value: "Broth" });
-    draft.set({ target: soup, field: "price", value: "3.75" });
+    draft.set({ target: water, field: "price", value: "3.50" });
+    draft.set({ target: water, field: "name", value: "Sparkling" });
+    draft.set({ target: water, field: "price", value: "3.75" });
     expect(draft.changes()).toEqual([
-      { target: soup, field: "price", value: "3.75" },
-      { target: soup, field: "name", value: "Broth" },
+      { target: water, field: "price", value: "3.75" },
+      { target: water, field: "name", value: "Sparkling" },
     ]);
   });
 
   it("marks a dish changed until its last changed field is set back", () => {
     const draft = new MenuPatchDraft(lunch(), languages);
-    draft.set({ target: soup, field: "price", value: "3.50" });
-    draft.set({ target: soup, field: "name", value: "Broth" });
-    draft.set({ target: soup, field: "price", value: "3.00" });
-    expect(draft.changed(soup)).toBe(true);
-    draft.set({ target: soup, field: "name", value: "Soup" });
-    expect(draft.changed(soup)).toBe(false);
+    draft.set({ target: water, field: "price", value: "3.50" });
+    draft.set({ target: water, field: "name", value: "Sparkling" });
+    draft.set({ target: water, field: "price", value: "3.00" });
+    expect(draft.changed(water)).toBe(true);
+    draft.set({ target: water, field: "name", value: "Water" });
+    expect(draft.changed(water)).toBe(false);
   });
 
   it("unmarks a dish whose one field was changed twice and then set back", () => {
     const draft = new MenuPatchDraft(lunch(), languages);
-    draft.set({ target: soup, field: "price", value: "3.50" });
-    draft.set({ target: soup, field: "price", value: "3.75" });
-    draft.set({ target: soup, field: "price", value: "3.00" });
-    expect(draft.changed(soup)).toBe(false);
+    draft.set({ target: water, field: "price", value: "3.50" });
+    draft.set({ target: water, field: "price", value: "3.75" });
+    draft.set({ target: water, field: "price", value: "3.00" });
+    expect(draft.changed(water)).toBe(false);
   });
 
   it("does not mark a variant's dish changed, nor the dish's variant", () => {
@@ -252,8 +254,8 @@ describe("MenuPatchDraft", () => {
 
   it("treats a price written another way, or a name with spaces round it, as the live value", () => {
     const draft = new MenuPatchDraft(lunch(), languages);
-    draft.set({ target: soup, field: "price", value: "3" });
-    draft.set({ target: soup, field: "name", value: " Soup " });
+    draft.set({ target: water, field: "price", value: "3" });
+    draft.set({ target: water, field: "name", value: " Water " });
     expect(draft.changes()).toEqual([]);
   });
 
@@ -315,15 +317,15 @@ describe("MenuPatchDraft", () => {
 
   it("clears one field's change and leaves the others", () => {
     const draft = new MenuPatchDraft(lunch(), languages);
-    draft.set({ target: soup, field: "price", value: "3.50" });
-    draft.set({ target: soup, field: "name", value: "Broth" });
-    draft.clear(soup, "price");
-    expect(draft.changes()).toEqual([{ target: soup, field: "name", value: "Broth" }]);
-    expect(draft.changed(soup)).toBe(true);
-    draft.clear(soup, "name");
-    draft.clear(soup, "name");
+    draft.set({ target: water, field: "price", value: "3.50" });
+    draft.set({ target: water, field: "name", value: "Sparkling" });
+    draft.clear(water, "price");
+    expect(draft.changes()).toEqual([{ target: water, field: "name", value: "Sparkling" }]);
+    expect(draft.changed(water)).toBe(true);
+    draft.clear(water, "name");
+    draft.clear(water, "name");
     expect(draft.changes()).toEqual([]);
-    expect(draft.changed(soup)).toBe(false);
+    expect(draft.changed(water)).toBe(false);
   });
 
   it("keeps a value the patch would refuse, so the form can say what is wrong", () => {
@@ -363,11 +365,11 @@ describe("MenuPatchDraft", () => {
   it("on rebase drops without counting a change the new live version already holds", () => {
     const draft = new MenuPatchDraft(lunch(), languages);
     draft.set({ target: salad, field: "price", value: "5.00" });
-    draft.set({ target: soup, field: "price", value: "6.00" });
+    draft.set({ target: water, field: "price", value: "6.00" });
     const next = lunch();
     next.offers["mi-salad"]!.unitPrice = "5.00";
     expect(draft.rebase(next)).toEqual({ dropped: 0, trimmed: [], fixed: [] });
-    expect(draft.changes()).toEqual([{ target: soup, field: "price", value: "6.00" }]);
+    expect(draft.changes()).toEqual([{ target: water, field: "price", value: "6.00" }]);
     draft.set({ target: salad, field: "price", value: "5.00" });
     expect(draft.changes()).toHaveLength(1);
   });
@@ -918,12 +920,14 @@ describe("scheduledCorrections", () => {
   it("lists only the versions that differ for a ticked dish, variant or extra", () => {
     const draft = live(
       differing("q-soup", [soup, true]),
+      differing("q-water", [water, true]),
       differing("q-bowl", [bowl, true]),
       differing("q-cheese", [extraCheese, true]),
     );
     const none: ScheduledChoices = new Map();
     expect(ticks(draft, [], none)).toEqual([]);
-    expect(ticks(draft, [{ target: soup, field: "price", value: "4.00" }], none)).toEqual([]);
+    expect(ticks(draft, [{ target: water, field: "price", value: "4.00" }], none)).toEqual([]);
+    expect(ticks(draft, [declared(water)], none)).toEqual([["q-water", true]]);
     expect(ticks(draft, [declared(soup)], none)).toEqual([["q-soup", true]]);
     expect(ticks(draft, [declared(bowl)], none)).toEqual([["q-bowl", true]]);
     expect(ticks(draft, [declared(extraCheese)], none)).toEqual([["q-cheese", true]]);

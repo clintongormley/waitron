@@ -77,7 +77,6 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
         id: `v${index}`,
         name: `Size ${index}`,
         unitPrice,
-        unitPriceDifference: null,
         available: true,
       }));
       const members = products.map((product) => ({

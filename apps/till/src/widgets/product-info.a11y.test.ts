@@ -204,7 +204,6 @@ it.each([
           id: "cup",
           name: "Cup",
           unitPrice: "2.00",
-          unitPriceDifference: null,
           available: false,
         },
       ],

@@ -262,17 +262,20 @@ la variante. Elige **Eliminar** en el menú de un producto o una variante para q
 Productos de forma permanente. Sus ventas pasadas se conservan.
 
 Una variante sigue a su producto en todas las cartas en las que está el producto, también una variante
-que añadas más tarde. En la carta puedes darle un precio propio o dejar que siga a las cartas de las
-que viene. Gana el precio que pones para esta carta. Si no, los precios fijados para ese tamaño en las
-cartas incluidas y en el producto contribuyen a su precio. Si no hay un precio para el tamaño, sigue el
-precio combinado del producto.
+que añadas más tarde. Una carta pone precio a un producto con variantes solo a través de sus variantes,
+así que añadir la primera variante de un producto quita el precio que cada carta le había fijado. Un
+menú conserva su suplemento. En la carta puedes darle a una variante un precio propio o dejar que siga
+a las cartas de las que viene. Gana el precio que pones para esta carta. Si no, los precios fijados
+para esa variante en las cartas incluidas y en la propia variante contribuyen a su precio. Si no hay
+ninguno, se vende al precio de su producto.
 
 Deja vacío el precio de una carta para que lo decidan esas contribuciones. Por ejemplo, si Bebidas pone
 la cerveza a 3,00 € y Noche incluye solo la cerveza de Bebidas, Noche cobra 3,00 €. Si Noche también
 pone esa cerveza en una sección propia al precio del producto, 2,80 €, los precios no coinciden. Fija
 el precio de la cerveza en Noche para resolver ese desacuerdo antes de publicar. La pestaña **Precios
-propios** de la carta muestra de dónde viene cada precio y qué ajustes aún necesitan tu decisión.
-Edita los precios ahí y elige **Guardar** al pie de la tabla. Elige **Cancelar** para descartar
+propios** de la carta muestra de dónde viene cada precio y qué ajustes aún necesitan tu decisión. Un
+producto con variantes muestra ahí, sin campo, el precio o el rango al que se venden sus variantes:
+fija los precios en las filas de sus variantes. Edita los precios ahí y elige **Guardar** al pie de la tabla. Elige **Cancelar** para descartar
 los cambios.
 
 ## Declara los alérgenos y la aptitud dietética directamente {#allergens}

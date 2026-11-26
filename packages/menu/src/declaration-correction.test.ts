@@ -585,7 +585,7 @@ describe("which live versions and products a correction names", () => {
   it("names nothing for a live version left as it was, or replaced with the same declarations", async () => {
     const v1 = await publish(f.lunch);
     expect(await app((tx) => replacedLiveDeclarations(tx, f.lunch, v1, v1))).toEqual([]);
-    const target = await offer(f.lunch, f.lemonade);
+    const target = await offer(f.lunch, f.soup);
     const { versionId } = await app((tx) =>
       patchLiveMenu(tx, f.lunch, v1, [{ target, field: "price", value: "4.50" }], PERSON),
     );

@@ -1,5 +1,5 @@
 import { storedMenuParts } from "../test/menu-parts.js";
-import { asc, eq, inArray, getTableColumns } from "drizzle-orm";
+import { and, asc, eq, inArray, getTableColumns } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   menus,
@@ -363,6 +363,23 @@ describe("duplicateMenu", () => {
     expect(relabelled(await home(copy.id), copyMenuIds)).toEqual(
       relabelled(await home(f.lunch), sourceMenuIds),
     );
+  });
+
+  it("stores no price on the copy of an ordinary menu for a product with an Active variant, leaving the source's", async () => {
+    const f = await fixture();
+    // The writers refuse this price, so it stands for one left by an earlier release.
+    await fx.db
+      .update(menuItems)
+      .set({ grossPrice: 900 })
+      .where(and(eq(menuItems.menuId, f.lunch), eq(menuItems.productId, f.lemonade)));
+
+    const copy = await app((tx) => duplicateMenu(tx, f.lunch, "Lunch (copy)"));
+
+    const priceOf = async (menuId: string, productId: string) =>
+      (await rowsOf(menuId)).items.find((item) => item.productId === productId)!.grossPrice;
+    expect(await priceOf(copy.id, f.lemonade)).toBeNull();
+    expect(await priceOf(copy.id, f.burger)).toBe(1150);
+    expect(await priceOf(f.lunch, f.lemonade)).toBe(900);
   });
 
   it("keeps stored positions and the source's order where members share a position", async () => {

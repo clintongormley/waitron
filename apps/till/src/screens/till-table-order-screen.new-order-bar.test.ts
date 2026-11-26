@@ -289,7 +289,6 @@ describe("till-table-order-screen: the Menu's tile numbers", () => {
       id: "v-sauce",
       name: "Croquettes with aioli",
       unitPrice: "4.00",
-      unitPriceDifference: null,
       available: true,
     });
     store(el).addProduct(sauce, "2");

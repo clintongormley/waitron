@@ -1441,9 +1441,9 @@ describe("menu operations", () => {
 });
 
 /**
- * A parent's variants follow it onto every menu it is on, nested under its offer
- * and priced by the chain in `offer-price.ts`. The parent's own price (4.00) and its price
- * on this menu (4.50) differ, so a variant priced from the wrong step of the chain fails.
+ * A parent's variants follow it onto every menu it is on, nested under its offer. The parent's
+ * price on this menu (4.50) is cleared when it gains its first variant, so a variant with no price
+ * of its own charges the parent's own price (4.00).
  */
 describe("menu offers nest a product's variants", () => {
   let f: { menuId: string; parentId: string; offerId: string };
@@ -1581,7 +1581,7 @@ describe("menu offers nest a product's variants", () => {
       setProductVariants(tx, f.parentId, [wine("125 ml", null), wine("175 ml", "5.50")], "en"),
     );
     expect(await nested()).toEqual([
-      { name: "125 ml", unitPrice: "4.50", menuPrice: null, available: true },
+      { name: "125 ml", unitPrice: "4.00", menuPrice: null, available: true },
       { name: "175 ml", unitPrice: "5.50", menuPrice: null, available: true },
     ]);
     // Variants are only ever nested: the menu lists the parent alone.
@@ -1637,7 +1637,7 @@ describe("menu offers nest a product's variants", () => {
     // 250 ml is left out of this save, so it becomes Inactive.
     await run((tx) => setProductVariants(tx, f.parentId, [w125!, w175!], "en"));
     expect(await nested()).toEqual([
-      { name: "125 ml", unitPrice: "4.50", menuPrice: null, available: true },
+      { name: "125 ml", unitPrice: "4.00", menuPrice: null, available: true },
       { name: "175 ml", unitPrice: "5.50", menuPrice: null, available: false },
     ]);
   });

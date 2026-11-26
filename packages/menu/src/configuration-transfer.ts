@@ -11,6 +11,7 @@ import { resolveInstalledContentLanguageRules } from "@waitron/country-packs";
 import { menus, readSettings, readTaxpayer, readVenue, type Transaction } from "@waitron/db";
 import { checkedContentLanguages } from "./content-languages.js";
 import { checkSectionMemberRows } from "./include-folder.js";
+import { dropMenuPricesOfProductsWithVariants } from "./menu-removal.js";
 import { syncMenuOffers } from "./menu-structure.js";
 import { MENU_SETTINGS } from "./settings.js";
 import { readVenueVatRates, vatRatesOfArea } from "./takeaway-vat-rates.js";
@@ -365,5 +366,6 @@ export const MENU_CONFIGURATION_TRANSFER = {
       tx,
       rows.map((row) => row.id),
     );
+    await dropMenuPricesOfProductsWithVariants(tx);
   },
 } as const;

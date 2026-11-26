@@ -404,6 +404,16 @@ it("duplicates the set-menu kind, terms, lines and dish choices", async () => {
   ]);
 });
 
+it("duplicates a dish's supplement though its product has variants", async () => {
+  await app((tx) => addSetMenuDishes(tx, f.menuId, [pick(f.wine)]));
+  const item = (await reading()).dishes[0]!.menuItemId;
+  await app((tx) => updateMenuItem(tx, f.menuId, item, { grossPrice: "3.00" }));
+  const copy = await app((tx) => duplicateMenu(tx, f.menuId, "Daily copy"));
+  expect((await app((tx) => readSetMenu(tx, copy.id))).dishes).toMatchObject([
+    { productId: f.wine, surcharge: "3.00" },
+  ]);
+});
+
 it("updates the draft stamp on menu, structure, surcharge, line and variant writes only", async () => {
   const member = await app((tx) => addMember(tx, f.root, { kind: "product", productId: f.soup }));
   await app((tx) => addProducts(tx, f.root, [f.wine]));

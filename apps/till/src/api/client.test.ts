@@ -5874,7 +5874,7 @@ describe("menuOfferToTillProduct", () => {
     expect(menuOfferToTillProduct({ ...offer, grossPrice: "8.00" }).unitPrice).toBe("7.25");
   });
 
-  it("gives each variant the difference between its resolved price and its parent's, null when equal", () => {
+  it("gives each variant its own full price only, with no difference against its parent's", () => {
     const base = {
       id: "offer-wine",
       menuId: "menu-1",
@@ -5932,11 +5932,12 @@ describe("menuOfferToTillProduct", () => {
       ...base,
       variants: [variant("dearer", "5.50"), variant("cheaper", "3.50"), variant("same", "4.00")],
     });
-    expect(product.variants!.map((v) => [v.id, v.unitPriceDifference])).toEqual([
-      ["dearer", "1.50"],
-      ["cheaper", "-0.50"],
-      ["same", null],
+    expect(product.variants!.map((v) => [v.id, v.unitPrice])).toEqual([
+      ["dearer", "5.50"],
+      ["cheaper", "3.50"],
+      ["same", "4.00"],
     ]);
+    for (const v of product.variants!) expect(v).not.toHaveProperty("unitPriceDifference");
   });
 
   it("carries each variant's own effective selling values, never its parent's", () => {
@@ -6015,7 +6016,6 @@ describe("menuOfferToTillProduct", () => {
         kitchenName: "Jarra KDS",
         image: "carafe.webp",
         unitPrice: "9.00",
-        unitPriceDifference: "5.00",
         available: true,
         unit: litre,
         pricingUnit: "weight",

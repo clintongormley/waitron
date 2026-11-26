@@ -189,7 +189,10 @@ function locate(
   let located: Located;
   switch (target.kind) {
     case "offer": {
-      const offers = offersOf(target.menuItemId);
+      // A price change is refused when the live copy lists variants.
+      const offers = offersOf(target.menuItemId).filter(
+        (offer) => field !== "price" || offer.variants.length === 0,
+      );
       located = {
         copies:
           field === "declarations"

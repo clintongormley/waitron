@@ -26,11 +26,7 @@ const clash: Setting<Decimal> = {
 };
 it.each([
   [decided("3.00", product), "The product's own price.", "El precio propio del producto."],
-  [
-    decided("3.00", { kind: "parent" }),
-    "Follows Lager's price on this menu.",
-    "Sigue el precio de Lager en esta carta.",
-  ],
+  [decided("3.00", { kind: "parent" }), "Follows Lager's price.", "Sigue el precio de Lager."],
   [
     decided("3.50", drinks),
     "From Drinks, which sets its own price.",
@@ -43,6 +39,11 @@ it.each([
     }),
     "From Drinks, which takes it from Wines, which uses the product's own price.",
     "De Drinks, que lo toma de Wines, que usa el precio propio del producto.",
+  ],
+  [
+    decided("3.50", { ...drinks, from: { kind: "parent" } }),
+    "From Drinks, which follows Lager's price.",
+    "De Drinks, que sigue el precio de Lager.",
   ],
   [
     decided("4.00", own, decided("3.50", drinks)),

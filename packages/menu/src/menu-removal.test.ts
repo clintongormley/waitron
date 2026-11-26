@@ -96,7 +96,6 @@ async function removalFixture() {
         [croquette, croquetteHalf],
       ] as const) {
         const offer = await offerOf(tx, menuId, productId);
-        await updateMenuItem(tx, menuId, offer, { grossPrice: "5.00" });
         await setMenuVariantPrice(tx, offer, variantId, "3.00", menuId);
       }
     await addShortcut(tx, tapas, product(croquette));
@@ -118,6 +117,31 @@ async function removalFixture() {
 }
 
 type Removal = Awaited<ReturnType<typeof removalFixture>>;
+
+/** Bread, with no variants, in the Tapas folder, on Tapas' top level and Terrace's Cold list, with
+ * a menu price of 5.00 on both: the case where the product's own menu price must be reset. */
+async function pricedBread(r: Removal): Promise<string> {
+  const bread = await app(async (tx) => {
+    const id = (
+      await createProduct(tx, {
+        categoryId: r.tapasFolder,
+        name: "Bread",
+        pricingUnit: "each",
+        unitPrice: "4.00",
+        vatClass: "reduced",
+        allergens: {},
+      })
+    ).id;
+    await addMember(tx, (await readMenuStructure(tx, r.tapas)).rootSectionId, product(id));
+    await addMember(tx, r.cold, product(id));
+    for (const menuId of [r.tapas, r.terrace])
+      await updateMenuItem(tx, menuId, await offerOf(tx, menuId, id), { grossPrice: "5.00" });
+    return id;
+  });
+  for (const menuId of [r.tapas, r.terrace])
+    expect(await offerSettings(menuId, bread)).toEqual({ grossPrice: 500, variantPrices: 0 });
+  return bread;
+}
 
 async function publish(menuId: string) {
   const { hash } = await app((tx) => previewMenu(tx, menuId));
@@ -165,12 +189,13 @@ async function expectOffEveryMenu(r: Removal, productId: string) {
 async function expectStillOnEveryMenu(r: Removal, productId: string) {
   expect(await memberRowsNaming(productId)).toHaveLength(4);
   for (const menuId of [r.tapas, r.terrace])
-    expect(await offerSettings(menuId, productId)).toEqual({ grossPrice: 500, variantPrices: 1 });
+    expect(await offerSettings(menuId, productId)).toEqual({ grossPrice: null, variantPrices: 1 });
 }
 
 describe("a product made Inactive comes off every menu", () => {
   it("updateProduct refuses a published product; historical removal clears every list and price while preserving its neighbour", async () => {
     const r = await removalFixture();
+    const bread = await pricedBread(r);
     await publish(r.tapas);
     await publish(r.terrace);
     expect(await states([r.tapas, r.terrace])).toEqual(["current", "current"]);
@@ -191,11 +216,15 @@ describe("a product made Inactive comes off every menu", () => {
       },
     });
     await app(async (tx) => {
-      await tx.update(products).set({ active: false }).where(eq(products.id, r.omelette));
-      await takeOffMenus(tx, [r.omelette]);
+      await tx
+        .update(products)
+        .set({ active: false })
+        .where(inArray(products.id, [r.omelette, bread]));
+      await takeOffMenus(tx, [r.omelette, bread]);
     });
 
     await expectOffEveryMenu(r, r.omelette);
+    await expectOffEveryMenu(r, bread);
     expect(await states([r.tapas, r.terrace])).toEqual(["changed", "changed"]);
     await expectStillOnEveryMenu(r, r.croquette);
     expect(await listProducts(r.tapasRoot)).toEqual([
@@ -208,55 +237,78 @@ describe("a product made Inactive comes off every menu", () => {
 
   it("refuses restoration and remains off every menu", async () => {
     const r = await removalFixture();
+    const bread = await pricedBread(r);
     await app((tx) => updateProduct(tx, r.omelette, { active: false }));
+    await app((tx) => updateProduct(tx, bread, { active: false }));
     await expect(
       app((tx) => updateProduct(tx, r.omelette, { active: true })),
     ).rejects.toMatchObject({ code: "product.deleted", params: { productId: r.omelette } });
     await expectOffEveryMenu(r, r.omelette);
+    await expectOffEveryMenu(r, bread);
   });
 
   it("through deactivateProduct", async () => {
     const r = await removalFixture();
+    const bread = await pricedBread(r);
     await app((tx) => deactivateProduct(tx, r.omelette));
+    await app((tx) => deactivateProduct(tx, bread));
     await expectOffEveryMenu(r, r.omelette);
+    await expectOffEveryMenu(r, bread);
     await expectStillOnEveryMenu(r, r.croquette);
   });
 
   it("through the product editor's save with active false", async () => {
     const r = await removalFixture();
-    await app(async (tx) => {
-      const value = await readProductEditor(tx, r.omelette);
-      await saveProductEditor(tx, r.omelette, { ...saveBodyOf(value), active: false }, "en");
-    });
+    const bread = await pricedBread(r);
+    for (const productId of [r.omelette, bread])
+      await app(async (tx) => {
+        const value = await readProductEditor(tx, productId);
+        await saveProductEditor(tx, productId, { ...saveBodyOf(value), active: false }, "en");
+      });
     await expectOffEveryMenu(r, r.omelette);
+    await expectOffEveryMenu(r, bread);
     await expectStillOnEveryMenu(r, r.croquette);
   });
 
   it("for every product one Disable of a product selection names", async () => {
     const r = await removalFixture();
+    const bread = await pricedBread(r);
     await app((tx) =>
-      deleteProductItems(tx, { productIds: [r.omelette, r.croquette], categoryIds: [] }, "delete"),
+      deleteProductItems(
+        tx,
+        { productIds: [r.omelette, r.croquette, bread], categoryIds: [] },
+        "delete",
+      ),
     );
     await expectOffEveryMenu(r, r.omelette);
+    await expectOffEveryMenu(r, bread);
     await expectOffEveryMenu(r, r.croquette);
     expect(await listProducts(r.tapasRoot)).toEqual([{ position: 0, productId: null }]);
   });
 
   it("for a product disabled beside a folder deleted with its contents moved up", async () => {
     const r = await removalFixture();
+    const bread = await pricedBread(r);
     await app((tx) =>
-      deleteProductItems(tx, { productIds: [r.omelette], categoryIds: [r.tapasFolder] }, "move_up"),
+      deleteProductItems(
+        tx,
+        { productIds: [r.omelette, bread], categoryIds: [r.tapasFolder] },
+        "move_up",
+      ),
     );
     await expectOffEveryMenu(r, r.omelette);
+    await expectOffEveryMenu(r, bread);
     await expectStillOnEveryMenu(r, r.croquette);
   });
 
   it("for every product in a folder deleted with its contents", async () => {
     const r = await removalFixture();
+    const bread = await pricedBread(r);
     await app((tx) =>
       deleteProductItems(tx, { productIds: [], categoryIds: [r.tapasFolder] }, "delete"),
     );
     await expectOffEveryMenu(r, r.omelette);
+    await expectOffEveryMenu(r, bread);
     await expectOffEveryMenu(r, r.croquette);
   });
 

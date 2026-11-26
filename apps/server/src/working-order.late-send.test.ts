@@ -108,7 +108,7 @@ async function mealVenue(weekdays: readonly number[] = [1], lunchEndsAt = "14:00
         ).id;
       const toastId = await product("Toast", "3.00");
       const saladId = await product("Salad", "8.00");
-      const offer = async (menuId: string, productId: string, grossPrice: string) =>
+      const offer = async (menuId: string, productId: string, grossPrice?: string) =>
         (await addProductToMenu(tx, { menuId, productId, grossPrice })).id;
       const toast = {
         brunch: await offer(menus.brunch, toastId, "2.50"),
@@ -149,8 +149,8 @@ async function mealVenue(weekdays: readonly number[] = [1], lunchEndsAt = "14:00
       });
       const [large] = await setProductVariants(tx, juiceId, [variant("Large", "3.50")], cfg.locale);
       const juice = {
-        setLunch: await offer(menus.setLunch, juiceId, "3.00"),
-        brunch: await offer(menus.brunch, juiceId, "3.00"),
+        setLunch: await offer(menus.setLunch, juiceId),
+        brunch: await offer(menus.brunch, juiceId),
       };
       for (const menuId of Object.values(menus)) await publishWorkingMenu(tx, menuId);
       // Small is added after Brunch was published, so only Set lunch's live version lists it.

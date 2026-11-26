@@ -8,7 +8,7 @@ import {
 } from "@waitron/db";
 import { seedLegacySellingUnits, seedVenueWithSeries } from "./fixtures.js";
 import { libraryImageName, seedLibraryImages } from "./library-images.js";
-import { createMenu, createProduct, updateMenuItem } from "../src/operations.js";
+import { createMenu, createProduct } from "../src/operations.js";
 import { createCategory } from "../src/categories.js";
 import { createExtraList } from "../src/extras.js";
 import { createOptionList } from "../src/options.js";
@@ -53,8 +53,8 @@ export const section = (sectionId: string): MemberRef => ({ kind: "section", sec
 
 /**
  * Review Focus 3's venue. Lunch: Drinks, Soup. Dinner: Drinks, Mains. Drinks holds Lemonade and
- * Beer; Beer holds Lager; Mains, which Dinner alone uses, holds Burger. Lunch sets its own price for
- * Lemonade. Lemonade carries an extras list offering Extra lemon, and an options list.
+ * Beer; Beer holds Lager; Mains, which Dinner alone uses, holds Burger. No menu sets its own price.
+ * Lemonade carries an extras list offering Extra lemon, and an options list.
  *
  * Every product's staff, customer and kitchen names are three different texts, and every section's
  * internal and customer names differ, so a read of the wrong one fails.
@@ -173,9 +173,6 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
       { kind: "extras", id: extrasList },
       { kind: "options", id: iceList },
     ]);
-    await updateMenuItem(tx, lunch.id, await offerOf(tx, lunch.id, lemonade), {
-      grossPrice: "2.80",
-    });
     const [course] = await tx
       .insert(kitchenCourses)
       .values({ name: "Starters" })

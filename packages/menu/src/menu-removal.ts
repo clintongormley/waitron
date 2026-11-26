@@ -1,5 +1,12 @@
-import { and, eq, inArray } from "drizzle-orm";
-import { menuItemVariantOverrides, products, sectionMembers, type Transaction } from "@waitron/db";
+import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
+import {
+  menuItems,
+  menuItemVariantOverrides,
+  menus,
+  products,
+  sectionMembers,
+  type Transaction,
+} from "@waitron/db";
 import { batches } from "./batches.js";
 import { onStructureChanged } from "./section-structure.js";
 import { loadSectionGraph, menusContaining, reachableProducts } from "./section-graph.js";
@@ -14,6 +21,55 @@ export async function dropMenuPrices(
     await tx
       .delete(menuItemVariantOverrides)
       .where(inArray(menuItemVariantOverrides.variantId, batch));
+}
+
+const ordinaryMenus = (tx: Transaction) =>
+  tx.select({ id: menus.id }).from(menus).where(ne(menus.kind, "set_menu"));
+
+/**
+ * Deletes the products' own prices on every ordinary menu, deleted menus included. A set menu's
+ * price on a dish is a supplement and stays.
+ */
+export async function dropProductMenuPrices(
+  tx: Transaction,
+  productIds: readonly string[],
+): Promise<void> {
+  for (const batch of batches(productIds))
+    await tx
+      .update(menuItems)
+      .set({ grossPrice: null })
+      .where(
+        and(
+          inArray(menuItems.productId, batch),
+          inArray(menuItems.menuId, ordinaryMenus(tx)),
+          isNotNull(menuItems.grossPrice),
+        ),
+      );
+}
+
+/**
+ * Deletes, on every ordinary menu or only on `menuId` when it is one, the price of every product
+ * that has an Active variant.
+ */
+export async function dropMenuPricesOfProductsWithVariants(
+  tx: Transaction,
+  menuId?: string,
+): Promise<void> {
+  const withActiveVariants = tx
+    .select({ id: products.parentId })
+    .from(products)
+    .where(and(eq(products.active, true), isNotNull(products.parentId)));
+  await tx
+    .update(menuItems)
+    .set({ grossPrice: null })
+    .where(
+      and(
+        isNotNull(menuItems.grossPrice),
+        inArray(menuItems.productId, withActiveVariants),
+        inArray(menuItems.menuId, ordinaryMenus(tx)),
+        ...(menuId === undefined ? [] : [eq(menuItems.menuId, menuId)]),
+      ),
+    );
 }
 
 /**

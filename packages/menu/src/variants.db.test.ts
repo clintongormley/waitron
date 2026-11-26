@@ -502,7 +502,7 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
 });
 
 describe("addProductToMenu", () => {
-  it("refuses a variant, which follows its parent onto a menu instead, and accepts the parent", async () => {
+  it("refuses a variant, which follows its parent onto a menu instead, and a price on the parent", async () => {
     const f = await fixture();
     const [w125] = await app((tx) =>
       setProductVariants(tx, f.parentId, [wine("125 ml", null)], "en"),
@@ -527,7 +527,7 @@ describe("addProductToMenu", () => {
           grossPrice: "5.00",
         }),
       ),
-    ).resolves.toMatchObject({ productId: f.parentId, grossPrice: "5.00" });
+    ).rejects.toMatchObject({ code: "menu_item.has_variants" });
   });
 });
 

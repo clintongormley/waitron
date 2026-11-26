@@ -59,11 +59,7 @@ it("reads each kind of stored order line's published declarations", async () => 
       productId: productIds.Soup,
       grossPrice: "6.00",
     });
-    const hake = await addProductToMenu(tx, {
-      menuId,
-      productId: productIds.Hake,
-      grossPrice: "16.00",
-    });
+    const hake = await addProductToMenu(tx, { menuId, productId: productIds.Hake });
     return {
       large,
       soupItem: soup.id,

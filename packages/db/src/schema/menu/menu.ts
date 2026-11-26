@@ -4,7 +4,8 @@ import { menus, products } from "../menus.js";
 import { id, money, newId, table } from "../columns.js";
 /**
  * On a set menu, `gross_price` is a surcharge and blank means included. On an ordinary menu,
- * blank means the product's own price.
+ * blank means the product's own price, and a product with an Active variant is priced on its
+ * variants alone.
  */
 export const menuItems = table(
   "menu_items",

@@ -3,9 +3,6 @@ import type { MenuPriceRow, Setting } from "../api/client.js";
 import { sameValue } from "./product-editor-model.js";
 
 export type Inherited = { state: "price"; low: string; high: string } | { state: "clash" };
-/** The product's price as its field reads now: undefined while untouched or holding text that is
- * not a price (no draft), null once emptied, else the price typed. */
-export type ParentPrice = string | null | undefined;
 
 type Priced = Extract<Inherited, { state: "price" }>;
 
@@ -19,23 +16,6 @@ export function withoutOwn(setting: Setting<Decimal>): Setting<Decimal> {
   return setting.state === "decided" && setting.source.kind === "own"
     ? (setting.otherwise ?? setting)
     : setting;
-}
-
-/** Where a blank field takes its price from, and whether that is the product's price, which the
- * variant follows. */
-export interface InheritedFrom {
-  setting: Setting<Decimal>;
-  follows: boolean;
-}
-
-/** The product's price as its field reads now; a price typed there is this menu's own over
- * whatever the menu would otherwise charge. */
-function parentSetting(row: MenuPriceRow, parent: ParentPrice): Setting<Decimal> {
-  if (parent === undefined) return row.combined.price;
-  const under = withoutOwn(row.combined.price);
-  return parent === null
-    ? under
-    : { state: "decided", value: parent as Decimal, source: { kind: "own" }, otherwise: under };
 }
 
 type VariantSetting = MenuPriceRow["combined"]["variants"][number]["price"];
@@ -53,11 +33,12 @@ export function variantSetting(row: MenuPriceRow, variantId: string): VariantSet
   return index.get(variantId)!;
 }
 
-export function variantInheritedFrom(
+/** Where a variant's blank field takes its price from: `product` when it follows its product. */
+function inheritedSetting(
   row: MenuPriceRow,
   variantId: string,
-  parent: ParentPrice,
-): InheritedFrom {
+  product: Setting<Decimal>,
+): Setting<Decimal> {
   const setting = variantSetting(row, variantId);
   const under = withoutOwn(setting);
   // A variant with no variant price from any source carries its product's setting, a clash included
@@ -69,55 +50,39 @@ export function variantInheritedFrom(
     setting.level === "product" ||
     (under.state === "decided" && under.source.kind === "parent") ||
     (under.state === "clash" && sameValue(under, row.combined.price));
-  return follows ? { setting: parentSetting(row, parent), follows } : { setting: under, follows };
+  return follows ? product : under;
 }
 
-export function variantInherited(
-  row: MenuPriceRow,
-  variantId: string,
-  parent: ParentPrice,
-): Inherited {
-  return single(variantInheritedFrom(row, variantId, parent).setting);
+export function variantInheritedFrom(row: MenuPriceRow, variantId: string): Setting<Decimal> {
+  return inheritedSetting(row, variantId, row.combined.price);
 }
 
-/** A variant with no price of its own here charges the product's price, as its field reads
- * now, and that price clashes: a price for the product would settle it. */
-export function followsClash(row: MenuPriceRow, parent: ParentPrice = undefined): boolean {
+export function variantInherited(row: MenuPriceRow, variantId: string): Inherited {
+  return single(variantInheritedFrom(row, variantId));
+}
+
+/** A variant's own price clashes. */
+export function variantClash(row: MenuPriceRow): boolean {
   return row.variants.some((v) => {
-    if (v.price !== null) return false;
-    const from = variantInheritedFrom(row, v.variantId, parent);
-    return from.follows && from.setting.state === "clash";
+    const setting = variantSetting(row, v.variantId);
+    return setting.state === "clash" && setting.level === "variant";
   });
-}
-
-/** A variant's own price clashes, which a price for the product would not settle, and no variant
- * waits on a price for the product. */
-export function variantClash(row: MenuPriceRow, parent: ParentPrice = undefined): boolean {
-  return (
-    !followsClash(row, parent) &&
-    row.variants.some((v) => {
-      const setting = variantSetting(row, v.variantId);
-      return setting.state === "clash" && setting.level === "variant";
-    })
-  );
 }
 
 /** What each variant charges if this menu sets no price for the product: its own price on this
  * menu, else what it inherits. */
-export function variantsInheritedFrom(
-  row: MenuPriceRow,
-): (InheritedFrom & { variantId: string })[] {
+export function variantsInheritedFrom(row: MenuPriceRow): Setting<Decimal>[] {
   return row.variants.map(({ variantId }) => {
     const setting = variantSetting(row, variantId);
     return setting.state === "decided" && setting.source.kind === "own"
-      ? { variantId, setting, follows: false }
-      : { variantId, ...variantInheritedFrom(row, variantId, null) };
+      ? setting
+      : inheritedSetting(row, variantId, withoutOwn(row.combined.price));
   });
 }
 
 /** What the product charges across its variants if this menu sets no price for the product. */
 export function productInherited(row: MenuPriceRow): Inherited {
-  const each = variantsInheritedFrom(row).map(({ setting }) => single(setting));
+  const each = variantsInheritedFrom(row).map(single);
   if (each.length === 0) return single(withoutOwn(row.combined.price));
   const prices = each.filter((value): value is Priced => value.state === "price");
   if (prices.length < each.length) return CLASH;

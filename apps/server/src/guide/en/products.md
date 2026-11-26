@@ -243,17 +243,19 @@ under the variant's price. Choose **Delete** in a product or variant's row menu 
 Products. Its past sales stay on record.
 
 A variant follows its product onto every menu the product is on, including a variant you add later.
-On the menu you can give it a price of its own, or let it follow the menus it comes from. A price
-you set for this menu wins. Otherwise, prices set for that size on included menus and on the
-product contribute to its price. If there is no size-level price, it follows the combined product
-price.
+A menu prices a product with variants only through its variants, so adding a product's first
+variant removes the price each menu set for the product. A set menu keeps its supplement.
+On the menu you can give a variant a price of its own, or let it follow the menus it comes from. A
+price you set for this menu wins. Otherwise, prices set for that variant on included menus and on
+the variant itself contribute to its price. If none is set, it sells at its product's price.
 
 Leave a menu price empty to let those contributions decide it. For example, if Drinks prices beer at
 €3.00 and Evening includes only Drinks' beer, Evening charges €3.00. If Evening also puts that beer
 in its own section at the product's €2.80, the prices disagree. Set Evening's beer price to resolve
 that disagreement before publishing. The menu's **Price overrides** tab shows where each price comes
-from and which settings still need your decision. Edit the prices there and choose **Save** at the
-bottom. Choose **Cancel** to discard the edits.
+from and which settings still need your decision. A product with variants shows there the price or
+range its variants sell at, with no field: set the prices on its variants' rows. Edit the prices
+there and choose **Save** at the bottom. Choose **Cancel** to discard the edits.
 
 ## Declare allergens and dietary suitability directly {#allergens}
 

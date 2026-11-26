@@ -2492,8 +2492,8 @@ describe("zone offers from the published menus", () => {
   it("serves each menu's live version, not its working state, with the version id", async () => {
     const venue = await seedTwoMenuVenue();
     await scoped(async (tx) => {
-      await updateMenuItem(tx, venue.dinner, venue.lemonadeOffer, { grossPrice: "2.50" });
-      await updateProduct(tx, venue.lemonade, {
+      await updateMenuItem(tx, venue.dinner, venue.burgerOffer, { grossPrice: "11.50" });
+      await updateProduct(tx, venue.burger, {
         allergens: { sulphites: {} },
       });
 
@@ -2502,14 +2502,14 @@ describe("zone offers from the published menus", () => {
         { id: venue.menuId, name: "All day", isDefault: true, versionId: venue.versionId },
         { id: venue.dinner, name: "Dinner", isDefault: false, versionId: venue.dinnerVersionId },
       ]);
-      const lemonade = served.offers.find((offer) => offer.id === venue.lemonadeOffer)!;
-      expect(lemonade).toMatchObject({ unitPrice: "3.00", allergens: {}, available: true });
+      const burger = served.offers.find((offer) => offer.id === venue.burgerOffer)!;
+      expect(burger).toMatchObject({ unitPrice: "12.00", allergens: {}, available: true });
 
       const republished = await publish(tx, venue.dinner);
       const after = await listZoneOffers(tx, venue.diningZone);
       expect(after.menus[1]).toMatchObject({ id: venue.dinner, versionId: republished });
-      expect(after.offers.find((offer) => offer.id === venue.lemonadeOffer)).toMatchObject({
-        unitPrice: "2.50",
+      expect(after.offers.find((offer) => offer.id === venue.burgerOffer)).toMatchObject({
+        unitPrice: "11.50",
         allergens: { sulphites: {} },
       });
     });

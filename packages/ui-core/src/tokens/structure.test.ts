@@ -67,7 +67,6 @@ test("defines the structural contract", () => {
     "--wt-help-badge-target",
     "--wt-help-badge-size",
     "--wt-price-field-width",
-    "--wt-price-range-field-width",
     "--wt-duration-fade",
     "--wt-duration-move",
     "--wt-duration-disclosure",

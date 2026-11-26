@@ -35,6 +35,7 @@ import {
   saveSetMenuVariantChoices,
 } from "./set-menus.js";
 import { createUnit, updateUnit } from "./units.js";
+import { setProductVariants } from "./variants.js";
 
 const suite = useMenuDb();
 const app = <T>(operation: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, operation);
@@ -143,6 +144,11 @@ beforeEach(async () => {
   f = await app(fixture);
 });
 
+const without = <T extends object, K extends keyof T>(value: T, key: K): Omit<T, K> => {
+  const copy = { ...value };
+  delete copy[key];
+  return copy;
+};
 const place = () => app((tx) => addMember(tx, f.lunchRoot, f.dailyRef));
 const placeInNewMenu = (name: string) =>
   app(async (tx) => {
@@ -803,4 +809,33 @@ it("warns when an extra offered only by a set-menu dish needs more unit precisio
     abbreviation: { en: "kg" },
     precision: 2,
   });
+});
+
+it("keeps a dish's supplement in the set menu's copy, with variants or on gaining them", async () => {
+  await place();
+  await app((tx) => updateMenuItem(tx, f.daily, f.wineItem, { grossPrice: "1.50" }));
+  expect((await copied())?.offers[f.wineItem]?.grossPrice).toBe("1.50");
+
+  const before = without((await copied())!.offers[f.sirloinItem]!, "variants");
+  expect(before).toMatchObject({ grossPrice: "5.00", unitPrice: "5.00" });
+  await app((tx) =>
+    setProductVariants(
+      tx,
+      f.sirloin,
+      [
+        {
+          name: "Half",
+          customerName: null,
+          kitchenName: null,
+          image: null,
+          unitPrice: null,
+          available: true,
+        },
+      ],
+      "en",
+    ),
+  );
+  const after = (await copied())!.offers[f.sirloinItem]!;
+  expect(after.variants.map(({ unitPrice }) => unitPrice)).toEqual(["5.00"]);
+  expect(without(after, "variants")).toEqual(before);
 });

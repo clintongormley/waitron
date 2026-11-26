@@ -1521,26 +1521,23 @@ test.each([
   },
 );
 
-test.each([false, true])(
-  "the %s range-width amount has room for its text at double browser text size",
-  async (range) => {
-    const rootStyle = document.documentElement.getAttribute("style");
-    onTestFinished(() => {
-      if (rootStyle === null) document.documentElement.removeAttribute("style");
-      else document.documentElement.setAttribute("style", rootStyle);
-    });
-    document.documentElement.style.fontSize = "32px";
-    const shown = range ? "1000.00 – 9999.99" : "9999.99";
-    const { input } = await mountPrice(
-      `<wt-price-input label="Price" placeholder="${shown}" style="display:inline-block;${range ? "--wt-price-field-width:var(--wt-price-range-field-width)" : ""}"></wt-price-input>`,
-    );
-    expect(getComputedStyle(input).fontSize).toBe("32px");
-    const context = document.createElement("canvas").getContext("2d")!;
-    context.font = getComputedStyle(input).font;
-    const content = contentBox(input);
-    expect(context.measureText(shown).width).toBeLessThanOrEqual(content.right - content.left);
-  },
-);
+test("the amount has room for its text at double browser text size", async () => {
+  const rootStyle = document.documentElement.getAttribute("style");
+  onTestFinished(() => {
+    if (rootStyle === null) document.documentElement.removeAttribute("style");
+    else document.documentElement.setAttribute("style", rootStyle);
+  });
+  document.documentElement.style.fontSize = "32px";
+  const shown = "9999.99";
+  const { input } = await mountPrice(
+    `<wt-price-input label="Price" placeholder="${shown}" style="display:inline-block"></wt-price-input>`,
+  );
+  expect(getComputedStyle(input).fontSize).toBe("32px");
+  const context = document.createElement("canvas").getContext("2d")!;
+  context.font = getComputedStyle(input).font;
+  const content = contentBox(input);
+  expect(context.measureText(shown).width).toBeLessThanOrEqual(content.right - content.left);
+});
 
 test.each([
   ["en-GB", "12.50", false],

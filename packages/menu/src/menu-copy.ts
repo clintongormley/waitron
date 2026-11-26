@@ -2,6 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import { menus, menuItems, newId, sectionMembers, sections, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
+import { dropMenuPricesOfProductsWithVariants } from "./menu-removal.js";
 import { insertMenu, type Menu } from "./operations.js";
 import { sectionPatchValues } from "./sections.js";
 import { copyMenuItemChoices, copySetMenuLines } from "./set-menus.js";
@@ -9,7 +10,8 @@ import "./errors.js";
 
 /**
  * A new menu holding the source's working copy as stored: its sections, their members, its details,
- * its menu items and their variant prices. Nothing published or scheduled is copied, and nothing
+ * its menu items and their variant prices, less an ordinary menu's own price on a product with an
+ * Active variant (`menu_item.has_variants`). Nothing published or scheduled is copied, and nothing
  * outside the menu is changed to point at the copy. A member naming a section another menu owns (an
  * include, or a shortcut reached through one) keeps naming it.
  */
@@ -70,6 +72,7 @@ export async function duplicateMenu(
     await tx
       .insert(menuItems)
       .values(batch.map((item) => ({ ...item, id: itemIds.get(item.id)!, menuId: copy.id })));
+  await dropMenuPricesOfProductsWithVariants(tx, copy.id);
   await copyMenuItemChoices(tx, itemIds, details.kind === "set_menu");
   if (details.kind === "set_menu") await copySetMenuLines(tx, sourceMenuId, copy.id);
   return copy;

@@ -48,12 +48,12 @@ const rows: MenuPriceRow[] = [
     menuItemId: "mi-lemonade",
     combined: combinedFixture(
       "p-lemonade",
-      "2.50",
+      "3.00",
       [
         { variantId: "v-small", price: null },
         { variantId: "v-large", price: "3.75" },
       ],
-      "2.50",
+      null,
       "3.00",
       { "v-large": "3.40" },
     ),
@@ -61,8 +61,8 @@ const rows: MenuPriceRow[] = [
     name: "Lemonade",
     categoryId: "c-drinks",
     placements: [["s-drinks"], ["s-drinks", "s-beer"]],
-    override: "2.50",
-    effectivePrice: "2.50",
+    override: null,
+    effectivePrice: "3.00",
     available: true,
     variants: [
       { variantId: "v-small", price: null, available: true },
@@ -118,9 +118,15 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     const keys = ["mi-burger", "mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large"];
     for (const key of keys) {
       const tr = root.querySelector(`tr[data-row-key="${key}"]`)!;
-      expect(tr.querySelector('wt-price-input[name="price-override"]'), key).not.toBeNull();
+      // A product with variants shows its price as text, with no field of its own.
+      expect(tr.querySelector('wt-price-input[name="price-override"]') === null, key).toBe(
+        key === "mi-lemonade",
+      );
       expect(tr.querySelector('td[data-pinned="end"] wt-row-actions'), key).not.toBeNull();
     }
+    expect(
+      root.querySelector('tr[data-row-key="mi-lemonade"] [part~="derived-price"]')!.textContent,
+    ).toBe("3,00\u00a0€ – 3,75\u00a0€");
     const smallCell = root.querySelector('tr[data-row-key="mi-lemonade:v-small"] td')!;
     await expect.element(page.elementLocator(smallCell)).toHaveAccessibleName("Lemonade Small");
     expect(root.querySelector('tr[data-row-key="mi-burger"] [part~="clash"]')).not.toBeNull();
@@ -128,6 +134,31 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector('[data-test="show-clashes"]')).not.toBeNull(),
     );
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible product row with variants showing its variants' clash as text, with no field", async () => {
+    const lemonadeRow = rows[1]!;
+    const { el, host } = await mount(theme, {
+      rows: [
+        {
+          ...lemonadeRow,
+          override: null,
+          combined: {
+            ...lemonadeRow.combined,
+            variants: lemonadeRow.combined.variants.map((v, at) =>
+              at === 0 ? { ...v, price: { ...clash, level: "variant" } } : v,
+            ),
+          },
+        } as MenuPriceRow,
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const tr = table.shadowRoot!.querySelector('tr[data-row-key="mi-lemonade"]')!;
+    expect(tr.querySelector("wt-price-input")).toBeNull();
+    expect(tr.querySelector('[part~="derived-price"]')!.textContent).toBe("—");
+    expect(tr.querySelector('[part~="clash"]')!.getAttribute("aria-hidden")).toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -145,14 +176,23 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
   });
 
   it("draws a set price bold and an inherited one as a muted placeholder", async () => {
-    const { el, host } = await mount(theme, {});
+    const lager: MenuPriceRow = {
+      ...rows[0]!,
+      menuItemId: "mi-lager",
+      productId: "p-lager",
+      name: "Lager",
+      combined: combinedFixture("p-lager", "2.50", [], "2.50", "2.00"),
+      override: "2.50",
+      effectivePrice: "2.50",
+    };
+    const { el, host } = await mount(theme, { rows: [...rows, lager] });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     await table.updateComplete;
     const input = (key: string) =>
       table
         .shadowRoot!.querySelector(`wt-price-input[data-row="${key}"]`)!
         .shadowRoot!.querySelector("input")!;
-    const set = input("mi-lemonade");
+    const set = input("mi-lager");
     const inherited = input("mi-burger");
     expect(Number(getComputedStyle(set).fontWeight)).toBeGreaterThan(
       Number(getComputedStyle(inherited).fontWeight),
@@ -225,7 +265,7 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const field = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
-      'wt-price-input[data-row="mi-lemonade"]',
+      'wt-price-input[data-row="mi-burger"]',
     )!;
     field.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value: "-1" }, bubbles: true, composed: true }),

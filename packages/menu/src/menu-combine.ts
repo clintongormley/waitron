@@ -39,13 +39,10 @@ export function combineOffer(input: CombineInput): CombinedOffer {
     moneyEqual,
   );
   const price = own(input.own.price, otherwisePrice);
-  const parent = (
-    setting: Setting<Decimal>,
-    otherwise: Setting<Decimal> | null,
-  ): Setting<Decimal> =>
+  const parent = (setting: Setting<Decimal>): Setting<Decimal> =>
     setting.state === "clash"
       ? setting
-      : { state: "decided", value: setting.value, source: { kind: "parent" }, otherwise };
+      : { state: "decided", value: setting.value, source: { kind: "parent" }, otherwise: null };
   const variants = product.variants.map((variant) => {
     const override = input.own.variants.find((v) => v.variantId === variant.variantId);
     const variantCandidates: Candidate<Decimal>[] = [];
@@ -61,9 +58,7 @@ export function combineOffer(input: CombineInput): CombinedOffer {
         variantCandidates.push(includedCandidate(i, includedVariant.price));
     }
     const fallback =
-      variantCandidates.length > 0
-        ? resolve(variantCandidates, moneyEqual)
-        : parent(price, input.own.price === null ? null : parent(otherwisePrice, null));
+      variantCandidates.length > 0 ? resolve(variantCandidates, moneyEqual) : parent(price);
     const variantPrice = own(override?.price ?? null, fallback);
     return {
       variantId: variant.variantId,

@@ -82,12 +82,12 @@ const lemonade: MenuPriceRow = {
   menuItemId: "mi-lemonade",
   combined: combinedFixture(
     "p-lemonade",
-    "2.50",
+    "3.00",
     [
       { variantId: "v-small", price: null },
       { variantId: "v-large", price: "3.75" },
     ],
-    "2.50",
+    null,
     "3.00",
     { "v-large": "3.40" },
   ),
@@ -95,8 +95,8 @@ const lemonade: MenuPriceRow = {
   name: "Lemonade",
   categoryId: "c-drinks",
   placements: [["s-fav"], ["s-drinks"]],
-  override: "2.50",
-  effectivePrice: "2.50",
+  override: null,
+  effectivePrice: "3.00",
   available: true,
   variants: [
     { variantId: "v-small", price: null, available: true },
@@ -115,6 +115,14 @@ const lager: MenuPriceRow = {
   available: true,
   variants: [],
 };
+/** Lager at this menu's own 2.50: a stored price on a product without variants. */
+const pricedLager: MenuPriceRow = {
+  ...lager,
+  combined: combinedFixture("p-lager", "2.50", [], "2.50", "2.00"),
+  override: "2.50",
+  effectivePrice: "2.50",
+};
+const withPricedLager = { rows: [burger, lemonade, pricedLager] };
 
 async function mount(props: Partial<MenuPricesTable> = {}): Promise<MenuPricesTable> {
   const { el } = await mountWidget<MenuPricesTable>("dashboard-menu-prices-table", {
@@ -289,24 +297,98 @@ function button(el: MenuPricesTable, name: "save" | "cancel" = "save") {
 // Spanish writes a no-break space (U+00A0) before the sign, spelled out here rather than taken from
 // the formatter the table calls. Read with textContent, which keeps it.
 it.each([
-  { locale: "en-GB", burger: "€12.00", lemonade: "€3.00 – €3.75" },
-  { locale: "es-ES", burger: "12,00\u00a0€", lemonade: "3,00\u00a0€ – 3,75\u00a0€" },
+  { locale: "en-GB", burger: "€12.00" },
+  { locale: "es-ES", burger: "12,00\u00a0€" },
 ])(
-  "draws every row's price override field in $locale, and names the inherited price in its hint the way $locale writes it",
+  "draws every price override field in $locale, and names the inherited price in its hint the way $locale writes it",
   async (want) => {
     setLocale(want.locale);
     try {
       const el = await mount();
-      for (const key of ["mi-burger", "mi-lemonade", "mi-lager"])
+      for (const key of ["mi-burger", "mi-lager"])
         expect(override(el, key).locale, key).toBe(want.locale);
       const hint = (key: string) =>
         override(el, key).shadowRoot!.querySelector("[data-hint]")!.textContent;
       expect(hint("mi-burger")).toBe(
         t("menu_prices.override_help").replace("{price}", want.burger),
       );
-      expect(hint("mi-lemonade")).toBe(
-        t("menu_prices.override_help_range").replace("{range}", want.lemonade),
+    } finally {
+      setLocale("es-ES");
+    }
+  },
+);
+
+/** Tonic, sold through its one variant, whose price on this menu is its own 2.40. */
+const tonicProduct = {
+  id: "p-tonic",
+  name: "Tonic",
+  variants: [variant("v-tonic-bottle", "Bottle", "2.20")],
+} as unknown as Product;
+const tonic: MenuPriceRow = {
+  menuItemId: "mi-tonic",
+  combined: combinedFixture(
+    "p-tonic",
+    "2.00",
+    [{ variantId: "v-tonic-bottle", price: "2.40" }],
+    null,
+    "2.00",
+    { "v-tonic-bottle": "2.20" },
+  ),
+  productId: "p-tonic",
+  name: "Tonic",
+  categoryId: "c-drinks",
+  placements: [["s-drinks"]],
+  override: null,
+  effectivePrice: "2.00",
+  available: true,
+  variants: [{ variantId: "v-tonic-bottle", price: "2.40", available: true }],
+};
+
+/** The price a product with variants shows as text in place of a field. */
+const derivedPrice = (el: MenuPricesTable, key: string) =>
+  cell(el, "override", key).querySelector('[part~="derived-price"]');
+
+/** A row's price field, or, on a product with variants, the price it shows as text. */
+const priceBox = (el: MenuPricesTable, key: string): Element =>
+  override(el, key) ?? derivedPrice(el, key)!;
+
+// The owner's decision: a product with variants charges what its variants charge, so its row shows
+// that price or range as text and offers no price of its own.
+it.each([
+  {
+    locale: "en-GB",
+    lemonade: "€3.00 – €3.75",
+    tonic: "€2.40",
+    note: "Variant overrides",
+  },
+  {
+    locale: "es-ES",
+    lemonade: "3,00 € – 3,75 €",
+    tonic: "2,40 €",
+    note: "Precios propios en las variantes",
+  },
+])(
+  "shows a product with variants its price or range as text, with no field, while its variants and a product without variants keep theirs ($locale)",
+  async (want) => {
+    setLocale(want.locale);
+    try {
+      const el = await mount({
+        rows: [burger, { ...lemonade, override: null }, tonic],
+        products: [lemonadeProduct, tonicProduct],
+      });
+      expect(cell(el, "override", "mi-lemonade").querySelector("wt-price-input")).toBeNull();
+      expect(cell(el, "override", "mi-tonic").querySelector("wt-price-input")).toBeNull();
+      expect(derivedPrice(el, "mi-lemonade")!.textContent).toBe(want.lemonade);
+      expect(derivedPrice(el, "mi-tonic")!.textContent).toBe(want.tonic);
+      // The note that the variants carry this menu's prices stays beside the text.
+      expect(text(cell(el, "override", "mi-tonic").querySelector('[part~="price-note"]'))).toBe(
+        want.note,
       );
+      expect(override(el, "mi-burger")).not.toBeNull();
+      toggleOf(el, "mi-lemonade")!.click();
+      await table(el).updateComplete;
+      expect(override(el, "mi-lemonade:v-small")).not.toBeNull();
+      expect(override(el, "mi-lemonade:v-large").value).toBe("3.75");
     } finally {
       setLocale("es-ES");
     }
@@ -314,29 +396,21 @@ it.each([
 );
 
 it.each([
-  { locale: "en-GB", sign: "€", range: "€3.00 – €3.75" },
-  { locale: "es-ES", sign: "€", range: "3,00\u00a0€ – 3,75\u00a0€" },
+  { locale: "en-GB", sign: "€" },
+  { locale: "es-ES", sign: "€" },
 ])(
-  "gives every row's field, a variant's too, the locale $locale, drawing the euro sign in it, and names the range in the hint the way $locale writes it",
-  async ({ locale, sign, range }) => {
+  "gives every field, a variant's too, the locale $locale, drawing the euro sign in it",
+  async ({ locale, sign }) => {
     setLocale(locale);
     try {
       const el = await mount();
       toggleOf(el, "mi-lemonade")!.click();
       await table(el).updateComplete;
-      for (const key of [
-        "mi-burger",
-        "mi-lemonade",
-        "mi-lemonade:v-small",
-        "mi-lemonade:v-large",
-        "mi-lager",
-      ]) {
+      for (const key of ["mi-burger", "mi-lemonade:v-small", "mi-lemonade:v-large", "mi-lager"]) {
         const input = override(el, key);
         expect(input.locale, key).toBe(locale);
         expect(input.shadowRoot!.querySelector('[part~="currency"]')!.textContent, key).toBe(sign);
       }
-      const hint = override(el, "mi-lemonade").shadowRoot!.querySelector("[data-hint]")!;
-      expect(hint.textContent).toBe(t("menu_prices.override_help_range").replace("{range}", range));
     } finally {
       setLocale("es-ES");
     }
@@ -344,17 +418,16 @@ it.each([
 );
 
 it.each([
-  { locale: "en-GB", range: "3.00 – 3.75", single: "12.00" },
-  { locale: "es-ES", range: "3,00 – 3,75", single: "12,00" },
+  { locale: "en-GB", single: "12.00" },
+  { locale: "es-ES", single: "12,00" },
 ])(
-  "writes an inherited range's placeholder with $locale's decimal mark, as a single price's is",
-  async ({ locale, range, single }) => {
+  "writes an inherited price's placeholder with $locale's decimal mark",
+  async ({ locale, single }) => {
     setLocale(locale);
     try {
       const el = await mount();
       const shown = (key: string) =>
         override(el, key).shadowRoot!.querySelector("input")!.getAttribute("placeholder");
-      expect(shown("mi-lemonade")).toBe(range);
       expect(shown("mi-burger")).toBe(single);
     } finally {
       setLocale("es-ES");
@@ -425,15 +498,12 @@ it("lists each product once with its price override, and where it appears by the
   const placements = [...row(el, "mi-lemonade")!.querySelectorAll("[part~=placement]")].map(text);
   expect(placements).toEqual(["Favourites", "Drinks"]);
   expect(column(el, "category")).toEqual(["", "", "Brews"]);
-  const keys = ["mi-burger", "mi-lemonade", "mi-lager"];
-  expect(keys.map((key) => override(el, key).value)).toEqual(["", "2.50", ""]);
-  // Lemonade left blank would charge its variants' prices: 3.00 for the small, following the
-  // product's own price, and the large's 3.75 on this menu.
-  expect(keys.map((key) => override(el, key).placeholder)).toEqual([
-    "12,00",
-    "3,00 – 3,75",
-    "2,00",
-  ]);
+  const keys = ["mi-burger", "mi-lager"];
+  expect(keys.map((key) => override(el, key).value)).toEqual(["", ""]);
+  expect(keys.map((key) => override(el, key).placeholder)).toEqual(["12,00", "2,00"]);
+  // Lemonade charges its variants' prices: 3.00 for the small, following the product's own price,
+  // and the large's 3.75 on this menu.
+  expect(derivedPrice(el, "mi-lemonade")!.textContent).toBe("3,00\u00a0€ – 3,75\u00a0€");
 });
 
 it("puts each placement on its own line and paints the notes muted, through the table's parts", async () => {
@@ -905,15 +975,15 @@ it("sends nothing for an Enter that confirms an input method's text (key code 22
 
 it("compares by amount, so 2.5 typed over 2.50 sends nothing, and keeps each variant's typed text on that variant when the variants are read back in another order", async () => {
   const reversed = { ...lemonade, variants: [...lemonade.variants].reverse() };
-  const el = await mount({ rows: [burger, reversed, lager] });
+  const el = await mount({ rows: [burger, reversed, pricedLager] });
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
   const heard = priceSaves(el);
-  await typeIn(el, "mi-lemonade", "2.5");
-  await press(el, "mi-lemonade", "Enter");
+  await typeIn(el, "mi-lager", "2.5");
+  await press(el, "mi-lager", "Enter");
   expect(heard).not.toHaveBeenCalled();
   await typeIn(el, "mi-lemonade:v-large", "4.00");
-  el.rows = [burger, lemonade, lager];
+  el.rows = [burger, lemonade, pricedLager];
   await el.updateComplete;
   await table(el).updateComplete;
   expect(override(el, "mi-lemonade:v-small").value).toBe("");
@@ -923,34 +993,32 @@ it("compares by amount, so 2.5 typed over 2.50 sends nothing, and keeps each var
 it.each(["-1", "2.555", "abc", "007", "2,5,5"])(
   "says nothing about %j until Save, then marks the field and rechecks edits",
   async (value) => {
-    const el = await mount();
+    const el = await mount(withPricedLager);
     const save = priceSaves(el);
-    await typeIn(el, "mi-lemonade", value);
-    expect(override(el, "mi-lemonade").error).toBe("");
+    await typeIn(el, "mi-lager", value);
+    expect(override(el, "mi-lager").error).toBe("");
     expect(button(el).disabled).toBe(false);
     button(el).click();
 
-    await vi.waitFor(() =>
-      expect(override(el, "mi-lemonade").error).toBe(t("editor.price_invalid")),
-    );
+    await vi.waitFor(() => expect(override(el, "mi-lager").error).toBe(t("editor.price_invalid")));
     expect(actions(el).error).toBe(t("form.fix_fields"));
-    expect(override(el, "mi-lemonade").shadowRoot!.activeElement).toBe(
-      override(el, "mi-lemonade").shadowRoot!.querySelector("input"),
+    expect(override(el, "mi-lager").shadowRoot!.activeElement).toBe(
+      override(el, "mi-lager").shadowRoot!.querySelector("input"),
     );
     expect(button(el).disabled).toBe(true);
     expect(save).not.toHaveBeenCalled();
 
-    await typeIn(el, "mi-lemonade", "3.00");
+    await typeIn(el, "mi-lager", "3.00");
     await table(el).updateComplete;
-    expect(override(el, "mi-lemonade").error).toBe("");
+    expect(override(el, "mi-lager").error).toBe("");
     expect(button(el).disabled).toBe(false);
-    await typeIn(el, "mi-lemonade", "-3");
+    await typeIn(el, "mi-lager", "-3");
     await table(el).updateComplete;
-    expect(override(el, "mi-lemonade").error).toBe(t("editor.price_invalid"));
-    await press(el, "mi-lemonade", "Escape");
+    expect(override(el, "mi-lager").error).toBe(t("editor.price_invalid"));
+    await press(el, "mi-lager", "Escape");
     await table(el).updateComplete;
-    expect(override(el, "mi-lemonade").value).toBe("2.50");
-    expect(override(el, "mi-lemonade").error).toBe("");
+    expect(override(el, "mi-lager").value).toBe("2.50");
+    expect(override(el, "mi-lager").error).toBe("");
     expect(button(el).disabled).toBe(true);
   },
 );
@@ -969,7 +1037,9 @@ it("opens a collapsed invalid variant without marking its product", async () => 
   await vi.waitFor(() =>
     expect(override(el, "mi-lemonade:v-small").error).toBe(t("editor.price_invalid")),
   );
-  expect(override(el, "mi-lemonade").error).toBe("");
+  expect(text(cell(el, "override", "mi-lemonade"))).toBe(
+    `3,00 € – 3,75 €${t("menu_prices.variant_overrides")}`,
+  );
   expect(actions(el).error).toBe(t("form.fix_fields"));
   expect(save).not.toHaveBeenCalled();
 });
@@ -990,18 +1060,18 @@ it("keeps the search and names a filtered invalid price in the footer", async ()
 });
 
 it("Cancel restores prices and feedback, leaving Save quiet", async () => {
-  const el = await mount();
+  const el = await mount(withPricedLager);
   const save = priceSaves(el);
   await typeIn(el, "mi-burger", "9.00");
-  await typeIn(el, "mi-lemonade", "-2");
+  await typeIn(el, "mi-lager", "-2");
   button(el).click();
   await vi.waitFor(() => expect(actions(el).error).toBe(t("form.fix_fields")));
   button(el, "cancel").click();
   await el.updateComplete;
   await table(el).updateComplete;
   expect(override(el, "mi-burger").value).toBe("");
-  expect(override(el, "mi-lemonade").value).toBe("2.50");
-  expect(override(el, "mi-lemonade").error).toBe("");
+  expect(override(el, "mi-lager").value).toBe("2.50");
+  expect(override(el, "mi-lager").error).toBe("");
   expect(actions(el).error).toBe("");
   expect(button(el).disabled).toBe(true);
   expect(button(el).variant).toBe("secondary");
@@ -1032,22 +1102,86 @@ it("opens a collapsed variant on a named refusal and clears only its error when 
 });
 
 it("keeps what was typed when the rows are read again", async () => {
-  const el = await mount();
-  await typeIn(el, "mi-lemonade", "2.90");
-  el.rows = [burger, { ...lemonade, override: "2.60" }, lager];
+  const el = await mount(withPricedLager);
+  await typeIn(el, "mi-lager", "2.90");
+  el.rows = [burger, lemonade, { ...pricedLager, override: "2.60" }];
   await el.updateComplete;
   await table(el).updateComplete;
-  expect(override(el, "mi-lemonade").value).toBe("2.90");
+  expect(override(el, "mi-lager").value).toBe("2.90");
 });
 
 it("shows a stored price read again while the field holds nothing typed", async () => {
-  const el = await mount();
-  await typeIn(el, "mi-lemonade", "2.90");
-  await press(el, "mi-lemonade", "Escape");
-  el.rows = [burger, { ...lemonade, override: "2.60" }, lager];
+  const el = await mount(withPricedLager);
+  await typeIn(el, "mi-lager", "2.90");
+  await press(el, "mi-lager", "Escape");
+  el.rows = [burger, lemonade, { ...pricedLager, override: "2.60" }];
   await el.updateComplete;
   await table(el).updateComplete;
-  expect(override(el, "mi-lemonade").value).toBe("2.60");
+  expect(override(el, "mi-lager").value).toBe("2.60");
+});
+
+describe("a product that gains its first variant while a price is typed for it", () => {
+  /** Lemonade before another manager adds its first variant: a product with a field of its own. */
+  const plainLemonade: MenuPriceRow = {
+    ...lemonade,
+    combined: combinedFixture("p-lemonade", "3.00"),
+    variants: [],
+  };
+
+  it("sends only the prices still in a field, and keeps the other typed price", async () => {
+    const el = await mount({ rows: [burger, plainLemonade, lager] });
+    const heard = priceSaves(el);
+    await typeIn(el, "mi-lemonade", "3.20");
+    await typeIn(el, "mi-lager", "2.90");
+    el.rows = [burger, lemonade, lager];
+    await el.updateComplete;
+    await table(el).updateComplete;
+    expect(derivedPrice(el, "mi-lemonade")).not.toBeNull();
+    expect(override(el, "mi-lager").value).toBe("2.90");
+    button(el).click();
+    await vi.waitFor(() => expect(heard).toHaveBeenCalledOnce());
+    expect(heard.mock.calls[0]![0].map(({ key }) => key)).toEqual(["mi-lager"]);
+  });
+
+  it("leaves Save and Cancel quiet once the only typed price has no field", async () => {
+    const el = await mount({ rows: [burger, plainLemonade, lager] });
+    const heard = priceSaves(el);
+    const unsent = vi.fn();
+    el.addEventListener("price-draft-change", (event) =>
+      unsent((event as CustomEvent<boolean>).detail),
+    );
+    await typeIn(el, "mi-lemonade", "3.20");
+    expect(button(el).disabled).toBe(false);
+    el.rows = [burger, lemonade, lager];
+    await el.updateComplete;
+    await table(el).updateComplete;
+    expect(button(el).disabled).toBe(true);
+    expect(button(el, "cancel").disabled).toBe(true);
+    expect(unsent).toHaveBeenLastCalledWith(false);
+    button(el).click();
+    await el.updateComplete;
+    expect(heard).not.toHaveBeenCalled();
+    expect(actions(el).error).toBe("");
+  });
+
+  it("drops the refusal named on the field that went", async () => {
+    const el = await mount({ rows: [burger, plainLemonade, lager] });
+    priceSaves(el, { "mi-lemonade": { reason: "Price changed elsewhere", namesField: true } });
+    await typeIn(el, "mi-lemonade", "3.20");
+    button(el).click();
+    await vi.waitFor(() =>
+      expect(override(el, "mi-lemonade").error).toBe("Price changed elsewhere"),
+    );
+    el.rows = [burger, lemonade, lager];
+    await el.updateComplete;
+    await table(el).updateComplete;
+    expect(actions(el).error).toBe("");
+    expect(button(el).disabled).toBe(true);
+    el.rows = [burger, plainLemonade, lager];
+    await el.updateComplete;
+    await table(el).updateComplete;
+    expect(override(el, "mi-lemonade").error).toBe("");
+  });
 });
 
 it("names a variant the product list does not hold as missing, in its row and its field's label", async () => {
@@ -1062,27 +1196,24 @@ it("names a variant the product list does not hold as missing, in its row and it
 });
 
 it("redraws the table for a keystroke only when it changes what the table shows", async () => {
-  const el = await mount();
-  toggleOf(el, "mi-lemonade")!.click();
-  await table(el).updateComplete;
-  const burger = override(el, "mi-burger").shadowRoot!.querySelector("input")!;
-  const lemonade = override(el, "mi-lemonade").shadowRoot!.querySelector("input")!;
-  await userEvent.fill(burger, "11");
-  await userEvent.fill(lemonade, "3.10");
+  const el = await allPrices(await mount({ rows: [burger, clashRow(lager)] }));
+  const burgerInput = override(el, "mi-burger").shadowRoot!.querySelector("input")!;
+  const lagerInput = override(el, "mi-lager").shadowRoot!.querySelector("input")!;
+  await userEvent.fill(burgerInput, "11");
   await el.updateComplete;
   await table(el).updateComplete;
   const draws = vi.spyOn(table(el) as unknown as { render(): unknown }, "render");
-  await userEvent.type(burger, "5");
+  await userEvent.type(burgerInput, "5");
   await el.updateComplete;
   await table(el).updateComplete;
   expect(override(el, "mi-burger").value).toBe("115");
   expect(draws).not.toHaveBeenCalled();
-  // A variant following its product shows the product's typed price.
-  await userEvent.fill(lemonade, "3.20");
+  // A price typed into a clashing field drops the clash sentence under it.
+  await userEvent.fill(lagerInput, "3.20");
   await el.updateComplete;
   await table(el).updateComplete;
   expect(draws).toHaveBeenCalled();
-  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("3,20");
+  expect(cell(el, "override", "mi-lager").querySelector("[part~=clash]")).toBeNull();
 });
 
 it("puts the stored price back on Escape after typing that redrew nothing", async () => {
@@ -1098,31 +1229,13 @@ it("puts the stored price back on Escape after typing that redrew nothing", asyn
   }
 });
 
-it("shows the price typed for a product as a following variant's placeholder, and the inherited one once emptied", async () => {
-  const el = await mount();
-  toggleOf(el, "mi-lemonade")!.click();
-  await table(el).updateComplete;
-  await typeIn(el, "mi-lemonade", "2.80");
-  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2,80");
-  await typeIn(el, "mi-lemonade", "");
-  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("3,00");
-});
-
-it("treats an unfinished product price as no change for its variants' hints", async () => {
-  const el = await mount();
-  toggleOf(el, "mi-lemonade")!.click();
-  await table(el).updateComplete;
-  await typeIn(el, "mi-lemonade", "2.");
-  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2,50");
-});
-
 it("restores the stored price on Escape, and sends nothing", async () => {
-  const el = await mount();
+  const el = await mount(withPricedLager);
   const heard = priceSaves(el);
-  await typeIn(el, "mi-lemonade", "9.99");
-  expect(override(el, "mi-lemonade").value).toBe("9.99");
-  await press(el, "mi-lemonade", "Escape");
-  expect(override(el, "mi-lemonade").value).toBe("2.50");
+  await typeIn(el, "mi-lager", "9.99");
+  expect(override(el, "mi-lager").value).toBe("9.99");
+  await press(el, "mi-lager", "Escape");
+  expect(override(el, "mi-lager").value).toBe("2.50");
   expect(heard).not.toHaveBeenCalled();
 });
 
@@ -1165,18 +1278,18 @@ describe("variants", () => {
     },
   ] as unknown as Product[];
 
-  /** Sets its own menu price and a menu price on two of its variants. */
+  /** Sets a menu price on two of its variants. */
   const wine: MenuPriceRow = {
     menuItemId: "mi-wine",
     combined: combinedFixture(
       "p-wine",
-      "13.00",
+      "10.00",
       [
         { variantId: "v-glass", price: "7.00" },
         { variantId: "v-bottle", price: null },
         { variantId: "v-carafe", price: "15.00" },
       ],
-      "13.00",
+      null,
       "10.00",
       { "v-glass": "6.00", "v-bottle": null, "v-carafe": "14.00" },
     ),
@@ -1184,8 +1297,8 @@ describe("variants", () => {
     name: "Wine",
     categoryId: "c-drinks",
     placements: [["s-drinks"]],
-    override: "13.00",
-    effectivePrice: "13.00",
+    override: null,
+    effectivePrice: "10.00",
     available: true,
     variants: [
       { variantId: "v-glass", price: "7.00", available: true },
@@ -1318,8 +1431,8 @@ describe("variants", () => {
     expect(cells("name")).toEqual(["Glass", "Bottle", "Carafe"]);
     const fields = variants.map((rowKey) => override(el, rowKey));
     expect(fields.map((field) => field.value)).toEqual(["7.00", "", "15.00"]);
-    // The bottle has no price of its own, so blank it follows the wine's 13.00 on this menu.
-    expect(fields.map((field) => field.placeholder)).toEqual(["6,00", "13,00", "14,00"]);
+    // The bottle has no price of its own, so blank it follows the wine's own 10.00.
+    expect(fields.map((field) => field.placeholder)).toEqual(["6,00", "10,00", "14,00"]);
     expect(cells("placements")).toEqual(["", "", ""]);
     expect(cells("category")).toEqual(["", "", ""]);
     // Both names are plain text: no window opens behind either.
@@ -1351,9 +1464,9 @@ describe("variants", () => {
       ...wine,
       combined: combinedFixture(
         "p-wine",
-        "13.00",
+        "10.00",
         wine.variants.map((v) => (v.variantId === "v-glass" ? { ...v, price: null } : v)),
-        "13.00",
+        null,
         "10.00",
         { "v-glass": "6.00", "v-carafe": "14.00" },
       ),
@@ -1366,12 +1479,14 @@ describe("variants", () => {
     expect(override(el, "mi-wine:v-carafe").value).toBe("15.00");
   });
 
-  it("offers a product sold as its variants the range of its variants' inherited prices", async () => {
+  it("shows a product sold as its variants the range of its variants' prices as text", async () => {
     const el = await mountVariants();
-    expect(override(el, "mi-wine").value).toBe("13.00");
-    expect(["mi-juice", "mi-tea", "mi-burger"].map((key) => override(el, key).placeholder)).toEqual(
-      ["3,50 – 5,00", "2,40", "12,00"],
-    );
+    // Wine's bottle follows the product's own 10.00, between its glass's 7.00 and its carafe's
+    // 15.00 on this menu.
+    expect(
+      ["mi-wine", "mi-juice", "mi-tea"].map((key) => derivedPrice(el, key)!.textContent),
+    ).toEqual(["7,00\u00a0€ – 15,00\u00a0€", "3,50\u00a0€ – 5,00\u00a0€", "2,40\u00a0€"]);
+    expect(override(el, "mi-burger").placeholder).toBe("12,00");
   });
 
   it("shows one price, not a range, when the variants' prices are the same amount", async () => {
@@ -1397,17 +1512,18 @@ describe("variants", () => {
         },
       ],
     });
-    expect(override(el, "mi-juice").placeholder).toBe("5,0");
+    expect(derivedPrice(el, "mi-juice")!.textContent).toBe("5,00\u00a0€");
   });
 
   it("sorts a range by its low end, as an amount", async () => {
     const el = await mountVariants({ rows: [wine, juice, tea, cider, burger] });
     await sortBy(el, "override");
-    // By the high end the cider (4.00 – 4.50) would come before the juice (3.50 – 5.00).
-    expect(shown(el)).toEqual(["mi-tea", "mi-juice", "mi-cider", "mi-burger", "mi-wine"]);
+    // By the high end the cider (4.00 – 4.50) would come before the juice (3.50 – 5.00), and the
+    // burger (12.00) before the wine (7.00 – 15.00).
+    expect(shown(el)).toEqual(["mi-tea", "mi-juice", "mi-cider", "mi-wine", "mi-burger"]);
     await sortBy(el, "override");
     // Descending.
-    expect(shown(el)).toEqual(["mi-wine", "mi-burger", "mi-cider", "mi-juice", "mi-tea"]);
+    expect(shown(el)).toEqual(["mi-burger", "mi-wine", "mi-cider", "mi-juice", "mi-tea"]);
   });
 
   it("keeps the variants under their product in the product's order under every sort", async () => {
@@ -1469,21 +1585,26 @@ describe("variants", () => {
     expect(shown(el)).toEqual(["mi-burger", ...pizzaLines]);
   });
 
-  it("says a product's menu prices are on its variants when only they have one", async () => {
-    const el = await mountVariants();
-    expect(column(el, "override")).toEqual([
+  it("says a product's menu prices are on its variants when they have one", async () => {
+    const el = await mountVariants({ rows: [wine, juice, tea, cider, burger] });
+    expect(
+      shown(el).map((key) => text(cell(el, "override", key).querySelector('[part~="price-note"]'))),
+    ).toEqual([
+      t("menu_prices.variant_overrides"),
+      t("menu_prices.variant_overrides"),
+      t("menu_prices.variant_overrides"),
       "",
-      t("menu_prices.variant_overrides"),
-      t("menu_prices.variant_overrides"),
       "",
     ]);
-    expect(override(el, "mi-wine").value).toBe("13.00");
   });
 
   it("keeps exactly the products it marks with a menu price under the Overridden only filter", async () => {
     const el = await mountVariants({ rows: [wine, juice, tea, cider, burger, steak] });
+    // A product row is marked by a price in its field or by the note that its variants set one.
     const unmarked = shown(el).filter(
-      (key) => override(el, key).value === "" && visibleText(cell(el, "override", key)) === "",
+      (key) =>
+        (override(el, key)?.value ?? "") === "" &&
+        cell(el, "override", key).querySelector('[part~="price-note"]') === null,
     );
     expect(unmarked).toEqual(["mi-cider", "mi-burger"]);
     await choose(el, "override", "overridden");
@@ -1538,7 +1659,7 @@ describe("variants", () => {
     const el = await mountVariants();
     await search(el, "glass");
     expect(shown(el)).toEqual(["mi-wine", "mi-wine:v-glass"]);
-    for (const term of ["7.00", "7,00", "700", "13.00", "13,00"]) {
+    for (const term of ["7.00", "7,00", "700", "10.00", "10,00"]) {
       await search(el, term);
       expect(shown(el), term).toEqual([]);
     }
@@ -1594,71 +1715,6 @@ describe("variants", () => {
     await table(again).updateComplete;
     expect(headers(again)).toEqual(["name", "override", "placements", "category", "available", ""]);
   });
-
-  it.each([
-    ["en-GB", "1000.00 – 9999.99"],
-    ["es-ES", "1000,00 – 9999,99"],
-  ])("fits the longest range placeholder whole inside the field (%s)", async (locale, shown) => {
-    setLocale(locale);
-    try {
-      const wide = {
-        ...juice,
-        combined: combinedFixture(
-          "p-juice",
-          "4.00",
-          [
-            { variantId: "v-juice-small", price: "1000.00" },
-            { variantId: "v-juice-large", price: "9999.99" },
-          ],
-          null,
-          "4.00",
-          { "v-juice-small": "3.00", "v-juice-large": "5.00" },
-        ),
-        variants: [
-          { variantId: "v-juice-small", price: "1000.00", available: true },
-          { variantId: "v-juice-large", price: "9999.99", available: true },
-        ],
-      };
-      const el = await mount({ rows: [wide], products });
-      const input = override(el, "mi-juice").shadowRoot!.querySelector("input")!;
-      expect(input.placeholder).toBe(shown);
-      const style = getComputedStyle(input);
-      const context = document.createElement("canvas").getContext("2d")!;
-      // Measure the text in the placeholder's own font.
-      context.font = getComputedStyle(input, "::placeholder").font;
-      const room =
-        input.getBoundingClientRect().width -
-        parseFloat(style.borderLeftWidth) -
-        parseFloat(style.borderRightWidth) -
-        parseFloat(style.paddingLeft) -
-        parseFloat(style.paddingRight);
-      expect(context.measureText(input.placeholder).width).toBeLessThanOrEqual(room);
-    } finally {
-      setLocale("es-ES");
-    }
-  });
-
-  it("fits the longest range placeholder whole inside the field in a larger, wider font, beyond phone width", async () => {
-    const width = window.innerWidth,
-      height = window.innerHeight;
-    onTestFinished(() => page.viewport(width, height));
-    await page.viewport(1280, 800);
-    await vi.waitFor(() => expect(window.innerWidth).toBe(1280));
-    const el = await mount({ rows: [rangedRow("1000.00", "9999.99")] });
-    const host = el.parentElement!;
-    const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
-    expect(family).not.toBe("");
-    host.style.setProperty("--wt-font-family", `Verdana, ${family}`);
-    host.style.setProperty("--wt-font-size-md", "var(--wt-font-size-xl)");
-    // Connected again once the font is set, as a table drawn in that font from the start would be.
-    el.remove();
-    host.append(el);
-    expect(textFit(override(el, "mi-ranged")).shown).toBe("1000,00 – 9999,99");
-    await vi.waitFor(() => {
-      const fit = textFit(override(el, "mi-ranged"));
-      expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
-    });
-  });
 });
 
 const drinksSource = {
@@ -1681,7 +1737,7 @@ const clashPrice = {
 function clashRow(source = lager, price = clashPrice): MenuPriceRow {
   return { ...source, combined: { ...source.combined, price } };
 }
-/** Lemonade at its own 2.50, its small variant's sources disagreeing at variant level. */
+/** Lemonade, its small variant's sources disagreeing at variant level. */
 function variantClashRow(price = clashPrice): MenuPriceRow {
   return {
     ...lemonade,
@@ -1753,6 +1809,7 @@ it.each(["en-GB", "es-ES"])(
       });
       toggleOf(el, "mi-lemonade")!.click();
       await table(el).updateComplete;
+      await fieldWidthSettled(el);
       expect(text(row(el, "mi-lager")!.querySelector('[part="name"]'))).toBe(long);
       expect(text(row(el, "mi-lemonade:v-small")!.querySelector('[part="variant-name"]'))).toBe(
         longVariant,
@@ -1761,6 +1818,9 @@ it.each(["en-GB", "es-ES"])(
         .shadowRoot.querySelector<HTMLElement>(".scroll")!
         .getBoundingClientRect();
       for (const key of ["mi-lager", "mi-lemonade:v-small"]) {
+        // Clear of the Save bar, which stays at the foot of the window.
+        row(el, key)!.scrollIntoView({ block: "center", inline: "nearest" });
+        await frame();
         const field = override(el, key).getBoundingClientRect();
         expect(field.left, key).toBeGreaterThanOrEqual(scroller.left - 0.5);
         expect(field.right, key).toBeLessThanOrEqual(scroller.right + 0.5);
@@ -1788,7 +1848,7 @@ it.each(["en-GB", "es-ES"])(
         expect(box.left, key).toBeGreaterThanOrEqual(priceCell.left - 0.5);
         expect(box.right, key).toBeLessThanOrEqual(priceCell.right + 0.5);
         expect(box.width, key).toBeLessThanOrEqual(
-          override(el, key).getBoundingClientRect().width + 0.5,
+          priceBox(el, key).getBoundingClientRect().width + 0.5,
         );
       }
       const root = document.documentElement;
@@ -1803,9 +1863,50 @@ const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => r
 
 /** The line boxes a node's text is drawn across: a word broken mid-way spans two. */
 function linesOf(node: Element): number {
+  return lineBoxes(node).length;
+}
+
+function lineBoxes(node: Element): DOMRect[] {
   const range = document.createRange();
   range.selectNodeContents(node);
+  return [...range.getClientRects()];
+}
+
+/** The line boxes the first `words` in a node's text are drawn across. */
+function linesOfWords(node: Element, words: string): number {
+  const text = [...node.childNodes].find((child) => child.nodeType === Node.TEXT_NODE)!;
+  const start = text.textContent!.indexOf(words);
+  expect(start, `"${words}" in "${text.textContent}"`).toBeGreaterThanOrEqual(0);
+  const range = document.createRange();
+  range.setStart(text, start);
+  range.setEnd(text, start + words.length);
   return range.getClientRects().length;
+}
+
+/** Once a drawn field's width, its sign's included, has been measured into --field-width. */
+async function fieldWidthSettled(el: MenuPricesTable): Promise<void> {
+  const field = table(el).shadowRoot.querySelector("wt-price-input")!;
+  await vi.waitFor(() =>
+    expect(el.style.getPropertyValue("--field-width")).toBe(
+      `${field.getBoundingClientRect().width}px`,
+    ),
+  );
+  await frame();
+  await frame();
+}
+
+/** The width of a price field drawn on its own beside the table, as the table's fields are drawn. */
+async function plainFieldWidth(el: MenuPricesTable, locale: string): Promise<number> {
+  const field = document.createElement("wt-price-input");
+  Object.assign(field, { label: "Price", hideLabel: true, locale });
+  field.setAttribute("fixed-unit", "");
+  field.style.display = "inline-block";
+  el.parentElement!.append(field);
+  onTestFinished(() => field.remove());
+  await field.updateComplete;
+  await frame();
+  await frame();
+  return field.getBoundingClientRect().width;
 }
 
 /** At a phone's width, 390 px unless given, once the row menu's column has been measured into
@@ -1837,6 +1938,7 @@ async function atPhoneWidth(
     host.append(el);
   }
   await vi.waitFor(() => expect(el.style.getPropertyValue("--actions-width")).not.toBe(""));
+  if (table(el).shadowRoot.querySelector("wt-price-input")) await fieldWidthSettled(el);
   try {
     await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(true));
   } catch (error) {
@@ -1875,8 +1977,7 @@ async function atPhoneWidth(
         table: box(grid),
         scroll: box(grid.shadowRoot.querySelector(".scroll")),
         actionsWidth: el.style.getPropertyValue("--actions-width"),
-        nameHeadingWidth: el.style.getPropertyValue("--name-heading-width"),
-        rangeTextWidth: el.style.getPropertyValue("--range-text-width"),
+        fieldWidth: el.style.getPropertyValue("--field-width"),
       })}`;
     }
     throw error;
@@ -1887,7 +1988,7 @@ async function atPhoneWidth(
 }
 
 it.each(["en-GB", "es-ES"])(
-  "keeps ordinary one-word names whole beside the row menu at phone width while no field shows a range, with each field wholly left of it (%s)",
+  "keeps ordinary one-word names whole beside the row menu at phone width, with each field and shown price wholly left of it (%s)",
   async (locale) => {
     const el = await atPhoneWidth(locale);
     toggleOf(el, "mi-lemonade")!.click();
@@ -1905,8 +2006,148 @@ it.each(["en-GB", "es-ES"])(
       expect(linesOf(name), `${key} "${text(name)}" ${name.getBoundingClientRect().width}px`).toBe(
         1,
       );
-      expect(override(el, key).getBoundingClientRect().right, key).toBeLessThanOrEqual(
+      expect(priceBox(el, key).getBoundingClientRect().right, key).toBeLessThanOrEqual(
         pinnedCell(el, key).getBoundingClientRect().left + 0.5,
+      );
+    }
+    // Lemonade's range, as the server sends it, is drawn on one line too.
+    const range = derivedPrice(el, "mi-lemonade")!;
+    expect(range.textContent).toBe(
+      t("menu_prices.range")
+        .replace("{low}", formatMoney("3.00", locale))
+        .replace("{high}", formatMoney("3.75", locale)),
+    );
+    expect(linesOf(range)).toBe(1);
+    // Every field is as wide as a field showing one price, though Lemonade shows a range as text.
+    const plain = await plainFieldWidth(el, locale);
+    for (const key of ["mi-burger", "mi-lemonade:v-small", "mi-lemonade:v-large"])
+      expect(override(el, key).getBoundingClientRect().width, key).toBeCloseTo(plain, 0);
+    const root = document.documentElement;
+    expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth);
+  },
+);
+
+/** Rioja crianza and Sangria are sold as variants, Rioja's showing a range and a variant of its
+ * own price on this menu; Patatas bravas has its own price on this menu. */
+const tapasBar = (() => {
+  const wine = [
+    ["v-glass-100", "Glass 100 ml", null],
+    ["v-glass-125", "Glass 125 ml", null],
+    ["v-glass-150", "Glass 150 ml", "4.00"],
+    ["v-bottle", "Bottle 750 ml", "18.00"],
+  ] as const;
+  const jugs = [
+    ["v-half-jug", "Half jug", null],
+    ["v-jug", "Jug", "14.00"],
+  ] as const;
+  const product = (
+    id: string,
+    name: string,
+    variants: readonly (readonly [string, string, string | null])[],
+  ) =>
+    ({
+      ...lemonadeProduct,
+      id,
+      name,
+      variants: variants.map(([variantId, variantName, price]) =>
+        variant(variantId, variantName, price),
+      ),
+    }) as unknown as Product;
+  const plain = (id: string, name: string, price: string, own: string | null, section: string) => ({
+    ...burger,
+    menuItemId: `mi-${id}`,
+    productId: `p-${id}`,
+    name,
+    placements: [[section]],
+    combined: combinedFixture(`p-${id}`, own ?? price, [], own, price),
+    override: own,
+    effectivePrice: own ?? price,
+  });
+  const ofVariants = (
+    id: string,
+    name: string,
+    price: string,
+    variants: readonly (readonly [string, string, string | null])[],
+    own: Record<string, string>,
+  ): MenuPriceRow => ({
+    ...plain(id, name, price, null, "s-wine"),
+    combined: combinedFixture(
+      `p-${id}`,
+      price,
+      variants.map(([variantId]) => ({ variantId, price: own[variantId] ?? null })),
+      null,
+      price,
+      Object.fromEntries(variants.map(([variantId, , at]) => [variantId, at])),
+    ),
+    variants: variants.map(([variantId]) => ({
+      variantId,
+      price: own[variantId] ?? null,
+      available: variantId !== "v-bottle",
+    })),
+  });
+  return {
+    sections: [
+      ["s-wine", "Wine"],
+      ["s-tapas", "Tapas"],
+    ].map(([id, internalName]) => ({ ...sections[0]!, id: id!, internalName: internalName! })),
+    products: [product("p-rioja", "Rioja crianza", wine), product("p-sangria", "Sangria", jugs)],
+    rows: [
+      ofVariants("rioja", "Rioja crianza", "3.50", wine, { "v-glass-125": "5.00" }),
+      ofVariants("sangria", "Sangria", "8.00", jugs, {}),
+      plain("bravas", "Patatas bravas", "6.50", "7.00", "s-tapas"),
+      plain("croquettes", "Ham croquettes", "8.50", null, "s-tapas"),
+    ],
+  };
+})();
+
+// At phone width the name, price and row-menu columns fill the table's box, so the columns after
+// the price start under the pinned row menu, reached by scrolling, rather than a sliver of the next
+// one showing beside it.
+it.each([
+  ["en-GB", "the tapas bar"],
+  ["es-ES", "the tapas bar"],
+  ["en-GB", "short names only"],
+  ["es-ES", "short names only"],
+  ["en-GB", "a long name"],
+])(
+  "starts the columns after the price under the row menu at phone width (%s, %s)",
+  async (locale, rows) => {
+    const props =
+      rows === "the tapas bar"
+        ? tapasBar
+        : rows === "short names only"
+          ? { rows: [burger, lager] }
+          : { rows: [{ ...burger, name: "Unfiltered craft wheat beer from cask" }, lemonade] };
+    const el = await atPhoneWidth(locale, props);
+    if (rows === "the tapas bar") {
+      toggleOf(el, "mi-rioja")!.click();
+      await table(el).updateComplete;
+      await frame();
+      await frame();
+      for (const [key, part] of [
+        ["mi-rioja", "name"],
+        ["mi-rioja:v-bottle", "variant-name"],
+        ["mi-bravas", "name"],
+        ["mi-croquettes", "name"],
+      ]) {
+        const name = row(el, key!)!.querySelector(`[part="${part}"]`)!;
+        expect(linesOf(name), `${key} "${text(name)}"`).toBe(1);
+      }
+    }
+    const pinned = table(el)
+      .shadowRoot.querySelector('thead th[data-pinned="end"]')!
+      .getBoundingClientRect().left;
+    const keys = headers(el);
+    const price = keys.indexOf("override");
+    expect(keys[price + 1]).toBe("placements");
+    const rowsSeen = table(el).shadowRoot.querySelectorAll("thead tr, tbody tr");
+    expect(rowsSeen.length).toBe(rows === "the tapas bar" ? 9 : 3);
+    for (const tr of rowsSeen) {
+      const cells = [...tr.children].filter((node) => !node.hasAttribute("data-pinned"));
+      const label = tr.getAttribute("data-row-key") ?? "heading";
+      expect(cells[price]!.getBoundingClientRect().right, label).toBeCloseTo(pinned, 0);
+      expect(cells[price + 1]!.getBoundingClientRect().left, label).toBeGreaterThanOrEqual(
+        pinned - 0.5,
       );
     }
     const root = document.documentElement;
@@ -1914,49 +2155,62 @@ it.each(["en-GB", "es-ES"])(
   },
 );
 
-it.each(["en-GB", "es-ES"])(
-  "fits a typical range placeholder whole inside the field at phone width (%s)",
-  async (locale) => {
-    const ranged: MenuPriceRow = {
-      ...lemonade,
-      menuItemId: "mi-ranged",
-      override: null,
-      combined: combinedFixture(
-        "p-lemonade",
-        "12.50",
-        [
-          { variantId: "v-small", price: "12.50" },
-          { variantId: "v-large", price: "15.00" },
-        ],
-        null,
-        "12.50",
-        { "v-small": "12.50", "v-large": "15.00" },
-      ),
-      variants: [
-        { variantId: "v-small", price: "12.50", available: true },
-        { variantId: "v-large", price: "15.00", available: true },
-      ],
-    };
-    const el = await atPhoneWidth(locale, { rows: [ranged] });
-    const input = override(el, "mi-ranged").shadowRoot!.querySelector("input")!;
-    expect(input.placeholder).toBe(locale === "es-ES" ? "12,50 – 15,00" : "12.50 – 15.00");
-    const style = getComputedStyle(input);
-    const context = document.createElement("canvas").getContext("2d")!;
-    context.font = getComputedStyle(input, "::placeholder").font;
-    const room =
-      input.getBoundingClientRect().width -
-      parseFloat(style.borderLeftWidth) -
-      parseFloat(style.borderRightWidth) -
-      parseFloat(style.paddingLeft) -
-      parseFloat(style.paddingRight);
-    expect(context.measureText(input.placeholder).width).toBeLessThanOrEqual(room);
-    expect(override(el, "mi-ranged").getBoundingClientRect().right).toBeLessThanOrEqual(
-      pinnedCell(el, "mi-ranged").getBoundingClientRect().left + 0.5,
-    );
+// English draws a field's sign before its amount and Spanish after it, the amount then at the
+// field's end.
+it.each([
+  ["en-GB", 1280],
+  ["es-ES", 1280],
+  ["en-GB", 390],
+  ["es-ES", 390],
+])(
+  "lines up a product's shown price with the prices in its variants' fields, as wide as a field showing one price (%s, %i px)",
+  async (locale, viewport) => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    setLocale(locale);
+    onTestFinished(async () => {
+      setLocale("es-ES");
+      await page.viewport(width, height);
+    });
+    await page.viewport(viewport, 844);
+    await vi.waitFor(() => expect(window.innerWidth).toBe(viewport));
+    // The 12.50 – 15.00 range is wider than a field less its padding, so it reaches into the cell's
+    // padding on the side away from the sign.
+    const el = await mount({ rows: [burger, lemonade, lager, rangedRow("12.50", "15.00")] });
+    toggleOf(el, "mi-lemonade")!.click();
+    await table(el).updateComplete;
+    await fieldWidthSettled(el);
+    const plain = await plainFieldWidth(el, locale);
+    for (const [product, low, high] of [
+      ["mi-lemonade", "3.00", "3.75"],
+      ["mi-ranged", "12.50", "15.00"],
+    ]) {
+      const shown = derivedPrice(el, product!)!;
+      expect(shown.textContent).toBe(
+        t("menu_prices.range")
+          .replace("{low}", formatMoney(low!, locale))
+          .replace("{high}", formatMoney(high!, locale)),
+      );
+      // A field's width holds Lemonade's range on one line; the wider range may break, as at phone
+      // width, but only between its prices: where it breaks depends on the font.
+      if (product === "mi-lemonade" && viewport > 390) expect(linesOf(shown), product).toBe(1);
+      for (const price of [formatMoney(low!, locale), formatMoney(high!, locale)])
+        expect(linesOfWords(shown, price), `${product} ${price}`).toBe(1);
+      for (const key of ["mi-burger", "mi-lemonade:v-small", "mi-lemonade:v-large", "mi-lager"]) {
+        const field = override(el, key);
+        expect(field.getBoundingClientRect().width, key).toBeCloseTo(plain, 0);
+        const sign = field.shadowRoot!.querySelector('[part~="currency"]')!.getBoundingClientRect();
+        for (const line of lineBoxes(shown)) {
+          if (locale === "es-ES")
+            expect(line.right, `${product} ${key}`).toBeCloseTo(sign.right, 0);
+          else expect(line.left, `${product} ${key}`).toBeCloseTo(sign.left, 0);
+        }
+      }
+    }
   },
 );
 
-/** A product row with two variants priced `low` and `high`, so its empty field shows the range. */
+/** A product row with two variants priced `low` and `high`, so it shows the range. */
 function rangedRow(low: string, high: string): MenuPriceRow {
   return {
     ...lemonade,
@@ -2000,13 +2254,13 @@ function textFit(field: HTMLElementTagNameMap["wt-price-input"]) {
   };
 }
 
-/** Scrolls the table's box from its start until the row's field ends at the pinned row menu. */
+/** Scrolls the table's box from its start until the row's price ends at the pinned row menu. */
 async function scrollClearOfMenu(el: MenuPricesTable, key: string): Promise<HTMLElement> {
   const scroller = table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
   scroller.scrollLeft = 0;
   await frame();
   const under =
-    override(el, key).getBoundingClientRect().right -
+    priceBox(el, key).getBoundingClientRect().right -
     pinnedCell(el, key).getBoundingClientRect().left;
   scroller.scrollLeft = Math.max(0, Math.ceil(under));
   await frame();
@@ -2028,34 +2282,42 @@ function expectMenuReachable(el: MenuPricesTable, key: string): void {
   ).toBe(true);
 }
 
-// Where `fits` is false the field may start under the pinned row menu, the table's box scrolling
-// sideways under it: once scrolled until the field ends at the menu, the whole field is in view.
+// Where `fits` is false a price may start under the pinned row menu, the table's box scrolling
+// sideways under it: once scrolled until the price ends at the menu, the whole price is in view.
 it.each([
-  ["en-GB", 320, "12.50", "15.00", "12.50 – 15.00", "", false],
-  ["es-ES", 320, "12.50", "15.00", "12,50 – 15,00", "", false],
-  ["en-GB", 390, "1000.00", "9999.99", "1000.00 – 9999.99", "", true],
-  ["es-ES", 390, "1000.00", "9999.99", "1000,00 – 9999,99", "", true],
-  ["en-GB", 320, "12.50", "15.00", "12.50 – 15.00", "Verdana", false],
-  ["es-ES", 320, "12.50", "15.00", "12,50 – 15,00", "Verdana", false],
-  ["es-ES", 390, "1000.00", "9999.99", "1000,00 – 9999,99", "Verdana", true],
+  ["en-GB", 320, "12.50", "15.00", "", false],
+  ["es-ES", 320, "12.50", "15.00", "", false],
+  ["en-GB", 390, "1000.00", "9999.99", "", true],
+  ["es-ES", 390, "1000.00", "9999.99", "", true],
+  ["en-GB", 320, "12.50", "15.00", "Verdana", false],
+  ["es-ES", 320, "12.50", "15.00", "Verdana", false],
+  ["es-ES", 390, "1000.00", "9999.99", "Verdana", true],
 ])(
-  "shows a range placeholder whole in the field, left of the row menu, at phone width (%s, %i px, %s – %s shown as %s, font %s)",
-  async (locale, viewport, low, high, shown, font, fits) => {
+  "shows a product's range as text, breaking it only between its prices, and its variants' prices whole in their fields, left of the row menu, at phone width (%s, %i px, %s – %s, font %s)",
+  async (locale, viewport, low, high, font, fits) => {
     const el = await atPhoneWidth(locale, { rows: [rangedRow(low, high)] }, viewport, font);
     toggleOf(el, "mi-ranged")!.click();
     await table(el).updateComplete;
     await frame();
     await frame();
     const keys = ["mi-ranged", "mi-ranged:v-small", "mi-ranged:v-large"];
-    expect(textFit(override(el, "mi-ranged")).shown).toBe(shown);
-    for (const key of keys) {
+    const range = derivedPrice(el, "mi-ranged")!;
+    expect(range.textContent).toBe(
+      t("menu_prices.range")
+        .replace("{low}", formatMoney(low, locale))
+        .replace("{high}", formatMoney(high, locale)),
+    );
+    for (const price of [formatMoney(low, locale), formatMoney(high, locale)])
+      expect(linesOfWords(range, price), price).toBe(1);
+    expectMenuReachable(el, "mi-ranged");
+    for (const key of keys.slice(1)) {
       const fit = textFit(override(el, key));
       expect(fit.needed, `${key} ${JSON.stringify(fit)}`).toBeLessThanOrEqual(fit.room);
       expectMenuReachable(el, key);
     }
     for (const key of keys) {
       const scroller = fits ? null : await scrollClearOfMenu(el, key);
-      const field = override(el, key).getBoundingClientRect();
+      const field = priceBox(el, key).getBoundingClientRect();
       const menu = pinnedCell(el, key).getBoundingClientRect();
       expect(field.right, key).toBeLessThanOrEqual(menu.left + 0.5);
       if (scroller !== null)
@@ -2065,38 +2327,6 @@ it.each([
     }
   },
 );
-
-async function typeAndDraw(el: MenuPricesTable, key: string, value: string) {
-  await typeIn(el, key, value);
-  await table(el).updateComplete;
-  await frame();
-}
-
-it.each(["", "Verdana"])(
-  "widens a field whose stored price is cleared, so the range it then shows is whole at 320 px (font %s)",
-  async (font) => {
-    const el = await atPhoneWidth(
-      "es-ES",
-      { rows: [{ ...rangedRow("12.50", "15.00"), override: "13.00" }] },
-      320,
-      font,
-    );
-    const stored = override(el, "mi-ranged").getBoundingClientRect().width;
-    await typeAndDraw(el, "mi-ranged", "");
-    const fit = textFit(override(el, "mi-ranged"));
-    expect(fit.shown).toBe("12,50 – 15,00");
-    expect(fit.needed, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
-    expect(override(el, "mi-ranged").getBoundingClientRect().width).toBeGreaterThan(stored);
-  },
-);
-
-it("keeps a field that shows a range as wide while a price is typed into it at 320 px", async () => {
-  const el = await atPhoneWidth("es-ES", { rows: [rangedRow("12.50", "15.00")] }, 320);
-  const width = () => override(el, "mi-ranged").getBoundingClientRect().width;
-  const empty = width();
-  await typeAndDraw(el, "mi-ranged", "1");
-  expect(width()).toBe(empty);
-});
 
 it.each([
   ["en-GB", ""],
@@ -2185,8 +2415,8 @@ it.each(["product", "variant"])(
 );
 
 it("shows a clashing product's stored price, takes native typing, and restores the stored price on Escape", async () => {
-  const el = await mount({ rows: [clashRow(lemonade)] });
-  const key = "mi-lemonade";
+  const el = await mount({ rows: [clashRow(pricedLager)] });
+  const key = "mi-lager";
   expect(override(el, key).value).toBe("2.50");
   const field = override(el, key);
   await field.updateComplete;
@@ -2213,23 +2443,23 @@ it.each(["", "-1", "abc"])(
   },
 );
 
-it("offers one labelled price override field per product and per variant, the inherited price as a blank one's placeholder", async () => {
+it("offers one labelled price override field per product without variants and per variant, the inherited price as a blank one's placeholder", async () => {
   setLocale("en-GB");
   try {
-    const el = await mount();
+    const el = await mount(withPricedLager);
     toggleOf(el, "mi-lemonade")!.click();
     await table(el).updateComplete;
+    expect(override(el, "mi-lemonade")).toBeNull();
     const want = [
       ["mi-burger", "Price override for Burger", "", "12.00"],
-      ["mi-lemonade", "Price override for Lemonade, set on this menu", "2.50", "3.00 – 3.75"],
-      ["mi-lemonade:v-small", "Price override for Lemonade — Small", "", "2.50"],
+      ["mi-lemonade:v-small", "Price override for Lemonade — Small", "", "3.00"],
       [
         "mi-lemonade:v-large",
         "Price override for Lemonade — Large, set on this menu",
         "3.75",
         "3.40",
       ],
-      ["mi-lager", "Price override for Lager", "", "2.00"],
+      ["mi-lager", "Price override for Lager, set on this menu", "2.50", "2.00"],
     ];
     for (const [key, label, value, placeholder] of want) {
       const input = override(el, key!);
@@ -2242,9 +2472,6 @@ it("offers one labelled price override field per product and per variant, the in
     expect(hintOf(override(el, "mi-burger"))).toBe(
       "Leave it empty to use the inherited price, €12.00.",
     );
-    expect(hintOf(override(el, "mi-lemonade"))).toBe(
-      "Leave it empty to use the inherited prices, €3.00 – €3.75.",
-    );
   } finally {
     setLocale("es-ES");
   }
@@ -2256,11 +2483,11 @@ const innerLabel = (field: HTMLElement) =>
   field.shadowRoot!.querySelector("input")!.getAttribute("aria-label");
 
 it("marks a price this menu sets as overriding and names it set on this menu; an inherited one is neither", async () => {
-  const el = await mount();
+  const el = await mount(withPricedLager);
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
   const want: [string, string, boolean][] = [
-    ["mi-lemonade", "Lemonade", true],
+    ["mi-lager", "Lager", true],
     ["mi-lemonade:v-large", "Lemonade — Large", true],
     ["mi-burger", "Burger", false],
     ["mi-lemonade:v-small", "Lemonade — Small", false],
@@ -2274,7 +2501,7 @@ it("marks a price this menu sets as overriding and names it set on this menu; an
 });
 
 it("a price typed into an inherited field is drawn as set but named plainly until it is stored; Escape, malformed text and a cleared field put the look back", async () => {
-  const el = await mount();
+  const el = await mount(withPricedLager);
   await typeIn(el, "mi-burger", "4.00");
   expect([override(el, "mi-burger").overriding, override(el, "mi-burger").label]).toEqual([
     true,
@@ -2287,12 +2514,12 @@ it("a price typed into an inherited field is drawn as set but named plainly unti
   ]);
   await typeIn(el, "mi-burger", "abc");
   expect(override(el, "mi-burger").overriding).toBe(false);
-  await typeIn(el, "mi-lemonade", "");
-  expect([override(el, "mi-lemonade").overriding, override(el, "mi-lemonade").label]).toEqual([
+  await typeIn(el, "mi-lager", "");
+  expect([override(el, "mi-lager").overriding, override(el, "mi-lager").label]).toEqual([
     false,
-    setLabel("Lemonade"),
+    setLabel("Lager"),
   ]);
-  el.rows = [{ ...burger, override: "4.00" }, lemonade, lager];
+  el.rows = [{ ...burger, override: "4.00" }, lemonade, pricedLager];
   await el.updateComplete;
   await table(el).updateComplete;
   expect(override(el, "mi-burger").label).toBe(setLabel("Burger"));
@@ -2370,10 +2597,8 @@ it.each([
     setLocale(locale);
     try {
       const el = await mount({ rows: [variantClashRow()] });
-      const input = override(el, "mi-lemonade");
-      expect(input.placeholder).toBe("—");
-      expect(input.placeholder).not.toBe(t("menu_prices.clash_placeholder"));
-      expect(hintOf(input)).toBe(words);
+      expect(override(el, "mi-lemonade")).toBeNull();
+      expect(derivedPrice(el, "mi-lemonade")!.textContent).toBe("—");
       expect(text(cell(el, "override", "mi-lemonade").querySelector("[part~=clash]"))).toBe(words);
       toggleOf(el, "mi-lemonade")!.click();
       await table(el).updateComplete;
@@ -2426,9 +2651,13 @@ describe.each(["en-GB", "es-ES"] as const)("the clash spelled out (%s)", (locale
     expect(hintOf(override(el, "mi-lemonade:v-small"))).not.toBe(words.prices);
   });
 
-  it("names each clashing variant and its places' prices on its product's row", async () => {
+  it("names each clashing variant and its places' prices on its product's row, as text a screen reader hears, beside no field", async () => {
     const el = await mount({ rows: [variantClashRow()] });
-    await expectClashSentence(el, "mi-lemonade", words.variants);
+    const priceCell = cell(el, "override", "mi-lemonade");
+    expect(priceCell.querySelector("wt-price-input")).toBeNull();
+    const sentence = priceCell.querySelector("[part~=clash]")!;
+    expect(text(sentence)).toBe(words.variants);
+    expect(sentence.getAttribute("aria-hidden")).toBeNull();
   });
 
   it("says where no single price was decided", async () => {
@@ -2456,40 +2685,6 @@ it("drops a product's clash sentence once this menu's saved price decides it, an
   await table(el).updateComplete;
   expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
   expect(override(el, "mi-lager").placeholder).toBe(t("menu_prices.clash_placeholder"));
-});
-
-it("marks a product whose saved price settled the clash a following variant charges once its field is emptied, so the clash shows with the product closed", async () => {
-  const settled = {
-    state: "decided",
-    value: "2.20",
-    source: { kind: "own" },
-    otherwise: clashPrice,
-  };
-  const row = {
-    ...lemonade,
-    override: "2.20",
-    combined: {
-      ...lemonade.combined,
-      price: settled,
-      variants: lemonade.combined.variants.map((v, at) =>
-        at === 0
-          ? { ...v, price: { ...settled, source: { kind: "parent" }, level: "product" } }
-          : v,
-      ),
-    },
-  } as MenuPriceRow;
-  const el = await mount({ rows: [row] });
-  expect(clashMarker(el, "mi-lemonade")).toBe("");
-  await typeIn(el, "mi-lemonade", "");
-  await table(el).updateComplete;
-  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].prices);
-  toggleOf(el, "mi-lemonade")!.click();
-  await table(el).updateComplete;
-  expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
-  await typeIn(el, "mi-lemonade", "2.80");
-  await table(el).updateComplete;
-  expect(clashMarker(el, "mi-lemonade")).toBe("");
-  expect(clashMarker(el, "mi-lemonade:v-small")).toBe("");
 });
 
 it("drops a product's clash sentence while a price is typed for it, and not for text that is no price", async () => {
@@ -2536,7 +2731,7 @@ it("drops a variant's clash sentence once this menu's saved price decides it, an
   expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
 });
 
-it("names its variants' clash on a product whose own clashing price is never sold, before and after a price is typed for it", async () => {
+it("names its variants' clash on a product whose own clashing price is never sold", async () => {
   const el = await mount({
     rows: [
       {
@@ -2548,49 +2743,11 @@ it("names its variants' clash on a product whose own clashing price is never sol
   });
   // Its own price is never sold: each variant's price comes from its variant's own sources.
   expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].variants);
-  expect(override(el, "mi-lemonade").placeholder).toBe("—");
+  expect(derivedPrice(el, "mi-lemonade")!.textContent).toBe("—");
   await allPrices(el);
   toggleOf(el, "mi-lemonade")!.click();
   await table(el).updateComplete;
   expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
-  await typeIn(el, "mi-lemonade", "2.80");
-  await table(el).updateComplete;
-  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].variants);
-  expect(override(el, "mi-lemonade").placeholder).toBe("—");
-});
-
-it("shows a variant following its clashing product the price typed for the product, and the clash again once that field is emptied", async () => {
-  setLocale("en-GB");
-  try {
-    const source = {
-      ...lemonade,
-      override: null,
-      combined: {
-        ...lemonade.combined,
-        price: clashPrice,
-        variants: lemonade.combined.variants.map((v, at) =>
-          at === 0 ? { ...v, price: { ...clashPrice, level: "product" } } : v,
-        ),
-      },
-    } as MenuPriceRow;
-    const el = await mount({ rows: [source] });
-    toggleOf(el, "mi-lemonade")!.click();
-    await table(el).updateComplete;
-    const variant = "mi-lemonade:v-small";
-    expect(override(el, variant).placeholder).toBe("Set a price");
-    expect(clashMarker(el, variant)).toBe(clashSentences["en-GB"].prices);
-    await typeIn(el, "mi-lemonade", "2.80");
-    await table(el).updateComplete;
-    expect(override(el, variant).placeholder).toBe("2.80");
-    expect(hintOf(override(el, variant))).toBe("Leave it empty to use the inherited price, €2.80.");
-    expect(clashMarker(el, variant)).toBe("");
-    await typeIn(el, "mi-lemonade", "");
-    await table(el).updateComplete;
-    expect(override(el, variant).placeholder).toBe("Set a price");
-    expect(clashMarker(el, variant)).toBe(clashSentences["en-GB"].prices);
-  } finally {
-    setLocale("es-ES");
-  }
 });
 
 /** Runs `body` with the test frame at a desktop width, where the whole table fits the window. */
@@ -2607,7 +2764,7 @@ async function atDesktopWidth(body: () => Promise<void>): Promise<void> {
 }
 
 it.each(["en-GB", "es-ES"])(
-  "puts a row's notes under its field, so no note widens the column and every field lines up (%s)",
+  "puts a row's notes under its field or shown price, so no note widens the column and every field and shown price lines up (%s)",
   async (locale) => {
     setLocale(locale);
     try {
@@ -2618,14 +2775,16 @@ it.each(["en-GB", "es-ES"])(
         const box = table(el).shadowRoot.querySelector<HTMLElement>(".scroll")!;
         expect(box.scrollWidth).toBeLessThanOrEqual(box.clientWidth);
         const right = (key: string) => override(el, key).getBoundingClientRect().right;
-        expect(right("mi-lemonade")).toBeCloseTo(right("mi-burger"), 0);
+        const left = (key: string) => priceBox(el, key).getBoundingClientRect().left;
+        // A shown price starts where the fields do; the fields also end together.
+        expect(left("mi-lemonade")).toBeCloseTo(left("mi-burger"), 0);
         expect(right("mi-lager")).toBeCloseTo(right("mi-burger"), 0);
         for (const [key, part] of [
           ["mi-lemonade", "clash"],
           ["mi-lager", "clash"],
         ] as const) {
           const note = cell(el, "override", key).querySelector<HTMLElement>(`[part~=${part}]`)!;
-          const field = override(el, key).getBoundingClientRect();
+          const field = priceBox(el, key).getBoundingClientRect();
           const under = note.getBoundingClientRect();
           expect(under.top, key).toBeGreaterThanOrEqual(field.bottom);
           expect(under.left, key).toBeGreaterThanOrEqual(field.left - 0.5);
@@ -3026,19 +3185,32 @@ it("uses the server's variant price and fallback even when the menu differs", as
   await table(el).updateComplete;
   expect(override(el, "mi-lemonade:v-small").placeholder).toBe("8,00");
 });
-it("gives a variant following its product this menu's price as its placeholder, and the product the range its variants would take", async () => {
-  const el = await mount({ rows: [lemonade] });
+it("gives a variant following its product the product's price as its placeholder, and the product the range its variants take as text", async () => {
+  const unpriced: MenuPriceRow = {
+    ...lemonade,
+    override: null,
+    combined: combinedFixture(
+      "p-lemonade",
+      "3.00",
+      [
+        { variantId: "v-small", price: null },
+        { variantId: "v-large", price: "3.75" },
+      ],
+      null,
+      "3.00",
+      { "v-large": "3.40" },
+    ),
+  };
+  const el = await mount({ rows: [unpriced] });
   table(el)
     .shadowRoot.querySelector<HTMLButtonElement>(
       'tr[data-row-key="mi-lemonade"] button.tree-toggle',
     )!
     .click();
   await table(el).updateComplete;
-  // The small follows the product's price on this menu, which is this menu's own 2.50.
-  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2,50");
-  // With the product's field blank the small would follow the product's own 3.00, which is what
-  // the product's placeholder, 3,00 – 3,75, counts.
-  expect(override(el, "mi-lemonade").placeholder).toBe("3,00 – 3,75");
+  // The small follows the product's own 3.00, which the product's range counts.
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("3,00");
+  expect(derivedPrice(el, "mi-lemonade")!.textContent).toBe("3,00\u00a0€ – 3,75\u00a0€");
 });
 
 it("names the included menu's price, not the product's own, as what a blank field inherits", async () => {
@@ -3069,30 +3241,18 @@ it("names the included menu's price, not the product's own, as what a blank fiel
 });
 
 it.each(["en-GB", "es-ES"])(
-  "shows a product's own price in its field, and, without one, says its menu prices are on its variants (%s)",
+  "shows a product with variants the range its variants charge, not its own price, and says its menu prices are on its variants (%s)",
   async (locale) => {
     setLocale(locale);
     try {
       const priced = {
         ...lemonade,
-        override: "4.00",
         variants: [
           { variantId: "v-small", price: null, available: true },
           { variantId: "v-large", price: "14.00", available: true },
         ],
         combined: {
           ...lemonade.combined,
-          price: {
-            state: "decided",
-            value: "4.00",
-            source: { kind: "own" },
-            otherwise: {
-              state: "decided",
-              value: "3.00",
-              source: { kind: "product" },
-              otherwise: null,
-            },
-          },
           variants: [
             {
               variantId: "v-small",
@@ -3120,11 +3280,17 @@ it.each(["en-GB", "es-ES"])(
           ],
         },
       } as MenuPriceRow;
+      // The small charges the 6.00 the product sets for it and the large this menu's 14.00: never
+      // the product's own 3.00.
+      const range = t("menu_prices.range")
+        .replace("{low}", eur("6.00"))
+        .replace("{high}", eur("14.00"));
       const el = await mount({ rows: [priced] });
-      expect(override(el, "mi-lemonade").value).toBe("4.00");
-      const aggregate = await mount({ rows: [{ ...priced, override: null }] });
-      const aggregateCell = cell(aggregate, "override", "mi-lemonade");
-      expect(visibleText(aggregateCell)).toBe(t("menu_prices.variant_overrides"));
+      expect(override(el, "mi-lemonade")).toBeNull();
+      expect(text(derivedPrice(el, "mi-lemonade"))).toBe(range);
+      expect(text(cell(el, "override", "mi-lemonade").querySelector('[part~="price-note"]'))).toBe(
+        t("menu_prices.variant_overrides"),
+      );
     } finally {
       setLocale("es-ES");
     }
@@ -3152,15 +3318,15 @@ describe("without a switch of the menu's own", () => {
       expect(body.querySelector(`[name="offered-${id}"]`), id).toBeNull();
     expect(body.querySelector("wt-combobox")).toBeNull();
     const heard = priceSaves(el);
-    await typeIn(el, "mi-lemonade", "2.80");
+    await typeIn(el, "mi-lager", "2.80");
     await typeIn(el, "mi-lemonade:v-large", "4.00");
     await press(el, "mi-lemonade:v-large", "Enter");
     expect(heard).toHaveBeenCalledExactlyOnceWith([
       {
-        key: "mi-lemonade",
-        menuItemId: "mi-lemonade",
+        key: "mi-lager",
+        menuItemId: "mi-lager",
         variantId: null,
-        name: "Lemonade",
+        name: "Lager",
         price: "2.80",
       },
       {
@@ -3175,12 +3341,9 @@ describe("without a switch of the menu's own", () => {
 
   it("counts a variant's own price toward the product's inherited range", async () => {
     const el = await mount({ rows: [lemonade] });
-    // The large's 3.75 on this menu is above the 3.00 the small inherits with the product blank.
-    expect(hintOf(override(el, "mi-lemonade"))).toBe(
-      t("menu_prices.override_help_range").replace(
-        "{range}",
-        t("menu_prices.range").replace("{low}", eur("3.00")).replace("{high}", eur("3.75")),
-      ),
+    // The large's 3.75 on this menu is above the 3.00 the small inherits from the product.
+    expect(text(derivedPrice(el, "mi-lemonade"))).toBe(
+      t("menu_prices.range").replace("{low}", eur("3.00")).replace("{high}", eur("3.75")),
     );
   });
 });
@@ -3221,27 +3384,6 @@ describe("the clash message and the Clashes filter", () => {
       price: { state: "decided", value: "2.20", source: { kind: "own" }, otherwise: clashPrice },
     } as MenuPriceRow["combined"],
   };
-  /** Lemonade with no price of this menu's own, its clash followed by both its variants, as
-   * `combineOffer` builds it. */
-  function followedClashRow(): MenuPriceRow {
-    const followed = { ...clashPrice, level: "product" };
-    return {
-      ...lemonade,
-      override: null,
-      combined: {
-        productId: "p-lemonade",
-        price: clashPrice,
-        variants: [
-          { variantId: "v-small", price: followed },
-          { variantId: "v-large", price: followed },
-        ],
-      },
-      variants: [
-        { variantId: "v-small", price: null, available: true },
-        { variantId: "v-large", price: null, available: true },
-      ],
-    } as MenuPriceRow;
-  }
   const message = (el: MenuPricesTable) =>
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="clash-message"]');
 
@@ -3264,10 +3406,10 @@ describe("the clash message and the Clashes filter", () => {
       start: ["mi-lager"],
     },
     {
-      kind: "a product whose two variants follow its clash",
-      rows: () => [burger, followedClashRow()],
+      kind: "two clashing products without variants",
+      rows: () => [clashRow(burger), clashRow(lager)],
       count: 2,
-      start: ["mi-lemonade"],
+      start: ["mi-burger", "mi-lager"],
     },
     {
       kind: "a variant clash on one variant",
@@ -3311,12 +3453,6 @@ describe("the clash message and the Clashes filter", () => {
     const el = await mount({ rows: [burger, variantClashRow()] });
     await expand(el, "mi-lemonade");
     expect(shown(el)).toEqual(["mi-lemonade", "mi-lemonade:v-small"]);
-  });
-
-  it("under Clashes keeps both variants that follow their product's clash, once it is opened", async () => {
-    const el = await mount({ rows: [burger, followedClashRow()] });
-    await expand(el, "mi-lemonade");
-    expect(shown(el)).toEqual(["mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large"]);
   });
 
   it("says nothing and starts on all prices, offering no Clashes, on a load without a clash", async () => {
@@ -3475,14 +3611,26 @@ describe("the clash message and the Clashes filter", () => {
   });
 
   it("moves focus from Show clashes, which goes, to the first clashing row's field", async () => {
+    const el = await mount({ rows: [burger, clashRow(lager)] });
+    await choose(el, "override", "");
+    await el.updateComplete;
+    showClashes(el)!.focus();
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(table(el).shadowRoot.activeElement).not.toBeNull());
+    expect(shown(el)).toEqual(["mi-lager"]);
+    expect(table(el).shadowRoot.activeElement).toBe(override(el, "mi-lager"));
+  });
+
+  it("opens the first clashing product's variants from Show clashes and focuses its clashing variant's field", async () => {
     const el = await mount({ rows: [burger, variantClashRow(), clashRow(lager)] });
     await choose(el, "override", "");
     await el.updateComplete;
     showClashes(el)!.focus();
     await userEvent.keyboard("{Enter}");
     await vi.waitFor(() => expect(table(el).shadowRoot.activeElement).not.toBeNull());
-    expect(shown(el)[0]).toBe("mi-lemonade");
-    expect(table(el).shadowRoot.activeElement).toBe(override(el, "mi-lemonade"));
+    // Lemonade, first, has no field of its own: its Small, which clashes, is opened instead.
+    expect(shown(el)).toEqual(["mi-lemonade", "mi-lemonade:v-small", "mi-lager"]);
+    expect(table(el).shadowRoot.activeElement).toBe(override(el, "mi-lemonade:v-small"));
   });
 
   it("moves focus from Show clashes to the search box when the search leaves no clashing row", async () => {
@@ -3590,7 +3738,7 @@ describe("the clash message and the Clashes filter", () => {
     expect(text(message(one))).toBe(
       "1 precio tiene un conflicto. Resuélvelo antes de poder publicar esta carta.",
     );
-    const two = await mount({ rows: [burger, followedClashRow()] });
+    const two = await mount({ rows: [clashRow(burger), clashRow(lager)] });
     expect(text(message(two))).toBe(
       "2 precios tienen conflictos. Resuélvelos antes de poder publicar esta carta.",
     );
@@ -3766,7 +3914,7 @@ it("A462 default Price overrides retains variants after closing and reopening th
   toggle().click();
   await table(el).updateComplete;
   expect(row(el, "mi-lemonade:v-small")).not.toBeNull();
-  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2,50");
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("3,00");
   toggle().click();
   await table(el).updateComplete;
   expect(row(el, "mi-lemonade:v-small")).toBeNull();
@@ -3774,7 +3922,7 @@ it("A462 default Price overrides retains variants after closing and reopening th
   await table(el).updateComplete;
   expect(row(el, "mi-lemonade:v-small")).not.toBeNull();
   expect(row(el, "mi-lemonade:v-large")).not.toBeNull();
-  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("2,50");
+  expect(override(el, "mi-lemonade:v-small").placeholder).toBe("3,00");
 });
 
 describe("names holding replacement patterns or another placeholder", () => {

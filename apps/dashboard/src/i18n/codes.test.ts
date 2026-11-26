@@ -371,6 +371,13 @@ it("has English and Spanish copy for the two refusals that keep variants out of 
   }
 });
 
+it("has English and Spanish copy for a menu price refused on a product with variants", () => {
+  const code = "menu_item.has_variants";
+  expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
+  expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
+});
+
 it("has English and Spanish copy for a bucket Save refused while the venue has a standby", () => {
   const code = "backup.spare_stream_active";
   expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));

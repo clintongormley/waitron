@@ -27,7 +27,7 @@ import {
 } from "./menu-schedule.js";
 import { menuDocumentHash } from "./menu-document.js";
 import { assertPatchReviewed, readPatchDraft } from "./menu-patch-draft.js";
-import { updateProduct } from "./operations.js";
+import { updateMenuItem, updateProduct } from "./operations.js";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { writeContentLanguages } from "./content-languages.js";
 
@@ -77,10 +77,21 @@ async function lemonadeItem(menuId = f.lunch): Promise<string> {
   return app((tx) => offerOf(tx, menuId, f.lemonade));
 }
 
+async function soupItem(): Promise<string> {
+  return app((tx) => offerOf(tx, f.lunch, f.soup));
+}
+
+/** A price patch on Soup, a dish without variants. */
 async function priceChange(price: string) {
   return [
-    { target: { kind: "offer", menuItemId: await lemonadeItem() }, field: "price", value: price },
+    { target: { kind: "offer", menuItemId: await soupItem() }, field: "price", value: price },
   ];
+}
+
+/** A price patch on Lager, which Lunch prices at 3.80 of its own. */
+async function lagerPriceChange(price: string) {
+  const menuItemId = await app((tx) => offerOf(tx, f.lunch, f.lager));
+  return [{ target: { kind: "offer", menuItemId }, field: "price", value: price }];
 }
 
 function patch(baseVersionId: string, changes: unknown, at = NOW, menuId = f.lunch) {
@@ -151,14 +162,17 @@ async function scheduleRow(versionId: string) {
 
 beforeEach(async () => {
   f = await menusFixture(fx.db);
+  await app(async (tx) =>
+    updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lager), { grossPrice: "3.80" }),
+  );
   v1 = (await publish(f.lunch)).versionId;
 });
 
 describe("patchLiveMenu", () => {
   it("puts the patch live at once under the next number", async () => {
-    const item = await lemonadeItem();
+    const item = await app((tx) => offerOf(tx, f.lunch, f.lager));
     const later = new Date(NOW.getTime() + 60_000);
-    const result = await patch(v1, await priceChange("5.5"), later);
+    const result = await patch(v1, await lagerPriceChange("5.5"), later);
     expect(result).toEqual({ versionId: expect.any(String), number: 2, requeued: [] });
 
     const live = await app((tx) => readLiveMenu(tx, f.lunch, later));
@@ -176,6 +190,35 @@ describe("patchLiveMenu", () => {
       .from(menuReleases)
       .where(sql`${menuReleases.menuId} = ${f.lunch} and ${menuReleases.state} = 'live'`);
     expect(pointer).toMatchObject({ versionId: result.versionId, activatesAt: later });
+  });
+
+  it("prices a dish whose live copy has no variants, though its product has gained one since", async () => {
+    const item = await app((tx) => offerOf(tx, f.lunch, f.lager));
+    await app((tx) =>
+      setProductVariants(
+        tx,
+        f.lager,
+        [
+          {
+            name: "Pint",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "5.00",
+            available: true,
+          },
+        ],
+        "en",
+      ),
+    );
+    const result = await patch(v1, await lagerPriceChange("5.5"));
+    const live = await app((tx) => readLiveMenu(tx, f.lunch));
+    expect(live!.versionId).toBe(result.versionId);
+    expect(live!.document.offers[item]).toMatchObject({
+      unitPrice: "5.50",
+      grossPrice: "5.50",
+      variants: [],
+    });
   });
 
   it("readLiveMenu answers nothing for a menu never published, and the clock's live version", async () => {
@@ -377,10 +420,11 @@ describe("patchLiveMenu", () => {
       ).toEqual([]);
       const item = await lemonadeItem();
       const target = { kind: "offer", menuItemId: item };
+      const soup = { kind: "offer", menuItemId: await soupItem() };
       await refuses(
         () =>
           patch(v1, [
-            { target, field: "price", value: "5.5" },
+            { target: soup, field: "price", value: "5.5" },
             { target, field: "image", value: picture },
           ]),
         {
@@ -393,14 +437,15 @@ describe("patchLiveMenu", () => {
 
   it("takes a picture away without asking the library", async () => {
     const item = await lemonadeItem();
-    const target = { kind: "offer", menuItemId: item };
+    const soup = await soupItem();
     const result = await patch(v1, [
-      { target, field: "image", value: null },
-      { target, field: "price", value: "5.5" },
+      { target: { kind: "offer", menuItemId: item }, field: "image", value: null },
+      { target: { kind: "offer", menuItemId: soup }, field: "price", value: "5.5" },
     ]);
     expect(result.number).toBe(2);
     const live = await app((tx) => readLiveMenu(tx, f.lunch));
-    expect(live!.document.offers[item]).toMatchObject({ image: null, unitPrice: "5.50" });
+    expect(live!.document.offers[item]).toMatchObject({ image: null });
+    expect(live!.document.offers[soup]).toMatchObject({ unitPrice: "5.50" });
   });
 
   it("merges translations against the venue's saved content languages", async () => {
@@ -784,7 +829,7 @@ describe("declarations", () => {
     await setSoup("5.50");
     const { versionId: queued } = await queue(day(8));
     const readsWaiting = async (price: string) => {
-      const changes = await priceChange(price);
+      const changes = await lagerPriceChange(price);
       return (
         await statements(async (tx) => {
           await patchLiveMenu(tx, f.lunch, v1, changes, ANA, {
@@ -798,8 +843,8 @@ describe("declarations", () => {
         (text) => /"menu_versions"\."document"/.test(text) && /"activates_at" > \?/.test(text),
       );
     };
-    expect(await readsWaiting("2.80")).toBe(false);
-    expect(await readsWaiting("2.90")).toBe(true);
+    expect(await readsWaiting("3.80")).toBe(false);
+    expect(await readsWaiting("3.90")).toBe(true);
   });
 
   it("readPatchDraft lists no queued version that is due but not yet settled", async () => {

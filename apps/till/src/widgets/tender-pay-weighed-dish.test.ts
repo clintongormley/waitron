@@ -34,7 +34,6 @@ const hamWithVariants: TillProduct = {
       id: "v-iberico",
       name: "Ibérico",
       unitPrice: "30.00",
-      unitPriceDifference: "20.00",
       available: true,
     },
     {
@@ -42,7 +41,6 @@ const hamWithVariants: TillProduct = {
       id: "v-serrano",
       name: "Serrano",
       unitPrice: "10.00",
-      unitPriceDifference: null,
       available: true,
     },
   ],
