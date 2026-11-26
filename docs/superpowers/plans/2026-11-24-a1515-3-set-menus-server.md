@@ -1207,7 +1207,7 @@ dropped, 3b is rewritten as 3b1 and 3b2, 3c is one pull request, and PR 4 is no 
 | --- | --- | --- |
 | 3a. A dish's own comp or discount (`feat/a1515-3-dish-adjustments`) | Comping or discounting a dish of a set menu takes it out of the set menu, charges it à la carte less the comp or discount, and works out the rest again. Before saving, the till shows what the bill goes to. A discounted dish moves and is paid for on its own, with its discount. An extra given away leaves its dish in its set menu. No schema change, no venue reset. | 2c; D32 answered by the owner before it lands |
 | 3b1. A set menu's comp or discount (`feat/a1515-3-menu-adjustments`) | A comp or discount on a set menu takes off its price and its supplements, and the set menu stays as it is while it holds it; a second one replaces the first; some of its dishes cancelled, moved or paid for alone take the discount off; the whole set menu moved or paid for, by its row or by choosing every one of its dishes, keeps it; previews say so and write nothing; a free takeaway set menu can be refunded. Resets venues. | 3a |
-| 3b2. Saying when a discount came off (`feat/a1515-3-discount-notices`) | Changing a discounted dish's extras, or its variant in a held order's save, takes its discount off; every bill answers a notice for each discount that came off, with what to give it again on (drawn by the till in A1515-4); the report leaves out a discount that came off. No schema change. | 3b1 |
+| 3b2. Saying when a discount came off (`feat/a1515-3-discount-notices`) | Changing a discounted dish's extras, or its variant in a held order's save, takes its discount off; every bill answers a notice for each discount that came off, with what to give it again on (drawn by the till in A1515-4); the report leaves out a discount that came off. Resets venues: _2026-11-26, at finish review, an index on `adjustment_endings(working_order_id)` was added for the notice read (watcher, "WATCHER 2026-11-26 21:42")._ | 3b1 |
 | 3c. A whole-bill discount as the set menus change (`feat/a1515-3-bill-discounts`) | A bill discounted as a whole keeps working out its set menus; each dish keeps its own part; a dish ordered later pays full price. | 3b2 |
 
 3a, 3b1 and 3b2 are written out below; 3c is one page, given its task steps against `main` as 3b2
@@ -1826,7 +1826,7 @@ price once that is given back (the list price cleared once the price is back at 
 ending and the rows it gives back, then writes exactly what `endingRestores` answers, and refuses
 `adjustment.not_standing` when it would give nothing back. Modify
 `packages/db/src/schema/adjustments/adjustments.ts` (`reapplies_adjustment_id`, a foreign key to
-its own `id`, for 3b2, so only 3b1 resets venues).
+its own `id`, for 3b2, so only 3b1 resets venues). _2026-11-26: 3b2 resets venues too, for the index its finish review added._
 
 The new append-only table goes everywhere `adjustment_lines` is named (CLAUDE.md §3: a new
 append-only table travels in its set's migration descriptor and the manifest):
@@ -2085,7 +2085,8 @@ with the bill again (D53). Every bill answers a notice for each discount that ca
 when its set menu broke up: what it was, where, why, and what to give it again on; giving it again
 through the comp window names the notice and clears it (D54). The adjustments report leaves out a
 discount that came off (D55). The till draws the notice in A1515-4 (another lane); this PR is what
-it reads. No schema change.
+it reads. _2026-11-26, at finish review: an index on `adjustment_endings(working_order_id)` was added
+for the notice read, so 3b2 resets venues (watcher, "WATCHER 2026-11-26 21:42")._
 
 _2026-11-26, at finish review: only the changed dish's share of the discount comes off, and another
 portion it covers keeps its share; a notice's amount is what came off that bill, not what the
@@ -2185,7 +2186,7 @@ adjustment with an ending; `readEntryRows`, `:323`, still lists it). Test:
   variante de un plato con descuento, el descuento se quita." _2026-11-26, at finish review:_ the
   sentence went in the comps section instead, covering comps and a variant changed in a parked
   order, and saying it comes off that dish; the till does not show the notice until A1515-4.
-- [ ] PR body: no schema change; D53–D56 as cleared; what A1515-4 reads. Commit
+- [ ] PR body: first line "Resets venues: …" (the finish-review index); D53–D56 as cleared; what A1515-4 reads. Commit
   `git commit -s -m "Record what is left of A1515-3 after 3b"`.
 
 ### PR 3c — A whole-bill discount as the set menus change (`feat/a1515-3-bill-discounts`)
