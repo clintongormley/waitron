@@ -4,7 +4,7 @@ import { repeat } from "lit/directives/repeat.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
   saveActionState,
   type DraftScope,
 } from "@waitron/ui";
@@ -28,7 +28,7 @@ interface Row {
 }
 
 let nextKey = 0;
-const rowOf = (machine: OtherCardMachine): Row => ({ key: `row-${nextKey++}`, ...machine });
+const newKey = () => `row-${nextKey++}`;
 const sameRow = (a: Row, b: Row) => a.id === b.id && a.name === b.name && a.paysInto === b.paysInto;
 const sameRows = (a: readonly Row[], b: readonly Row[]) =>
   a.length === b.length && a.every((row, index) => sameRow(row, b[index]!));
@@ -104,17 +104,19 @@ export class OtherCardMachinesPanel extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  @property({ type: Boolean }) sumUpConnected = false;
+  /** Undefined while it is not known whether SumUp is connected. */
+  @property({ attribute: false }) sumUpConnected?: boolean;
   @state() private draft?: Row[];
   @state() private saving = false;
-  @state() private attempted = false;
   @state() private refusals: Record<string, string> = {};
   @state() private readError = "";
   @state() private saveError = "";
   #revision = 0;
   #baseline: Row[] = [];
+  #latest?: OtherCardMachinesView;
   #scope?: DraftScope<Row[]>;
   #generation = 0;
+  readonly #feedback = new FormFeedback(this);
   #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -134,15 +136,22 @@ export class OtherCardMachinesPanel extends LitElement {
     this.#generation++;
     this.#scope?.dispose();
     this.#scope = undefined;
-    this.draft = undefined;
-    this.saving = this.attempted = false;
+    this.draft = this.#latest = undefined;
+    this.saving = false;
+    this.#feedback.reset();
     this.refusals = {};
     this.readError = this.saveError = "";
     super.disconnectedCallback();
   }
 
+  #take(view: OtherCardMachinesView): OtherCardMachinesView {
+    if (this.#latest === undefined || view.revision >= this.#latest.revision) this.#latest = view;
+    return this.#latest;
+  }
+
   #received(view: OtherCardMachinesView): void {
-    if (this.draft !== undefined && view.revision < this.#revision) return;
+    const latest = this.#take(view);
+    if (latest !== view) return;
     this.readError = "";
     if (!this.saving && !this.#scope?.isDirty()) this.#resetDraft(view);
     else if (
@@ -155,10 +164,14 @@ export class OtherCardMachinesPanel extends LitElement {
   }
 
   #resetDraft(view: OtherCardMachinesView): void {
+    const keys = new Map(this.draft?.map((row) => [row.id, row.key]));
     this.#revision = view.revision;
-    this.#baseline = view.otherCardMachines.map(rowOf);
+    this.#baseline = view.otherCardMachines.map((machine) => ({
+      key: keys.get(machine.id) ?? newKey(),
+      ...machine,
+    }));
     this.draft = this.#baseline.map((row) => ({ ...row }));
-    this.attempted = false;
+    this.#feedback.reset();
     this.refusals = {};
     if (this.#scope === undefined) {
       const { scope } = draftScopeFor<Row[]>(this, {
@@ -177,41 +190,41 @@ export class OtherCardMachinesPanel extends LitElement {
     this.#scope.commit(this.draft);
   }
 
-  #edit(rows: Row[], changedKey?: string): void {
+  #edit(rows: Row[], refusalKey?: string): void {
     if (this.saving) return;
     this.draft = rows;
     this.saveError = "";
-    if (changedKey !== undefined && changedKey in this.refusals)
-      this.refusals = Object.fromEntries(
-        Object.entries(this.refusals).filter(([key]) => key !== changedKey),
-      );
+    if (refusalKey !== undefined) this.#feedback.dismiss(refusalKey);
     this.#scope?.changed();
+    if (!this.#scope?.isDirty() && this.#latest) this.#resetDraft(this.#latest);
   }
 
   #update(key: string, change: Partial<Row>): void {
     this.#edit(
       this.draft!.map((row) => (row.key === key ? { ...row, ...change } : row)),
-      key,
+      "name" in change ? key : undefined,
     );
   }
 
   #add(): void {
-    this.#edit([...this.draft!, { key: `row-${nextKey++}`, name: "", paysInto: "other" }]);
+    this.#edit([...this.draft!, { key: newKey(), name: "", paysInto: "other" }]);
   }
 
   #remove(key: string): void {
-    this.#edit(this.draft!.filter((row) => row.key !== key));
+    this.#edit(
+      this.draft!.filter((row) => row.key !== key),
+      key,
+    );
   }
 
   async #save(): Promise<void> {
     const draft = this.draft;
     if (draft === undefined || this.saving || saveActionState(this.#scope).unchanged) return;
-    this.attempted = true;
+    this.#feedback.press();
     this.refusals = {};
     this.saveError = "";
     if (Object.keys(nameChecks(draft)).length > 0) {
-      await this.updateComplete;
-      await focusFirstInvalid(this.shadowRoot!.querySelector("section")!);
+      await this.#feedback.focus(this.renderRoot);
       return;
     }
     this.saving = true;
@@ -225,7 +238,7 @@ export class OtherCardMachinesPanel extends LitElement {
       });
       if (generation !== this.#generation) return;
       this.#scope?.commit(draft);
-      this.#resetDraft(saved);
+      this.#resetDraft(this.#take(saved));
       this.api.liveData?.invalidate([{ type: "settings.payments" }]);
     } catch (error) {
       if (generation !== this.#generation) return;
@@ -241,9 +254,9 @@ export class OtherCardMachinesPanel extends LitElement {
     const row = named ? draft[Number(named[1])] : undefined;
     if (code === "management.request_invalid" && row !== undefined) {
       this.refusals = { [row.key]: t("other_card_machines.name_refused") };
+      this.#feedback.newRefusal();
       this.saving = false;
-      await this.updateComplete;
-      await focusFirstInvalid(this.shadowRoot!.querySelector("section")!);
+      await this.#feedback.focus(this.renderRoot);
       return;
     }
     this.saveError = code;
@@ -252,7 +265,7 @@ export class OtherCardMachinesPanel extends LitElement {
       const view = await this.api.getOtherCardMachines();
       if (generation !== this.#generation) return;
       const before = this.#baseline;
-      this.#resetDraft(view);
+      this.#resetDraft(this.#take(view));
       this.draft = this.#merge(draft, before);
       this.#scope?.changed();
       this.saveError = "other_card_machines.refreshed";
@@ -263,17 +276,27 @@ export class OtherCardMachinesPanel extends LitElement {
 
   #merge(draft: readonly Row[], before: readonly Row[]): Row[] {
     const latest = new Map(this.#baseline.map((row) => [row.id, row]));
-    const known = new Set(before.map((row) => row.id));
+    const original = new Map(before.map((row) => [row.id, row]));
     const merged = draft.flatMap((row): Row[] => {
-      if (row.id === undefined) return [row];
+      const was = row.id === undefined ? undefined : original.get(row.id);
+      if (was === undefined) return [row];
+      const renamed = row.name !== was.name;
+      const moved = row.paysInto !== was.paysInto;
       const current = latest.get(row.id);
-      if (current === undefined) return [];
-      const original = before.find((old) => old.id === row.id);
-      return [original !== undefined && sameRow(original, row) ? { ...current } : row];
+      if (current === undefined)
+        return renamed || moved ? [{ key: row.key, name: row.name, paysInto: row.paysInto }] : [];
+      return [
+        {
+          ...current,
+          key: row.key,
+          name: renamed ? row.name : current.name,
+          paysInto: moved ? row.paysInto : current.paysInto,
+        },
+      ];
     });
     return [
       ...merged,
-      ...this.#baseline.filter((row) => !known.has(row.id)).map((r) => ({ ...r })),
+      ...this.#baseline.filter((row) => !original.has(row.id)).map((r) => ({ ...r })),
     ];
   }
 
@@ -314,7 +337,7 @@ export class OtherCardMachinesPanel extends LitElement {
         }}
       ></wt-combobox>
       ${
-        row.paysInto === "connected_account" && !this.sumUpConnected
+        row.paysInto === "connected_account" && this.sumUpConnected === false
           ? html`<p class="muted">${t("other_card_machines.not_connected_note")}</p>`
           : nothing
       }
@@ -333,8 +356,8 @@ export class OtherCardMachinesPanel extends LitElement {
 
   override render() {
     const draft = this.draft;
-    const checks = draft !== undefined && this.attempted ? nameChecks(draft) : {};
-    const errors = { ...this.refusals, ...checks };
+    const checks = draft !== undefined && this.#feedback.attempted ? nameChecks(draft) : {};
+    const errors = { ...this.#feedback.remaining(this.refusals), ...checks };
     const action = saveActionState(this.#scope);
     return html`<section aria-labelledby="other-card-machines-heading">
       <h2 id="other-card-machines-heading">${t("other_card_machines.heading")}</h2>

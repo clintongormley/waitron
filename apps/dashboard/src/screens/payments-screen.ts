@@ -2580,7 +2580,11 @@ export class PaymentsScreen extends LitElement {
       ></dashboard-payments-settings>
       <dashboard-other-card-machines
         .api=${this.api}
-        .sumUpConnected=${this.providers?.some((p) => p.providerId === "sumup" && p.state === "connected") ?? false}
+        .sumUpConnected=${
+          this.providers === undefined || this.#listQueries.failing("listPaymentProviders")
+            ? undefined
+            : this.providers.some((p) => p.providerId === "sumup" && p.state === "connected")
+        }
       ></dashboard-other-card-machines>
       ${this.#renderProviderChoice()} ${this.#renderPairReader()}
       ${keyed(this.#discoveryVersion, this.#renderDiscovery())}

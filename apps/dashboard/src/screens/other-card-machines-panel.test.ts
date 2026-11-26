@@ -243,6 +243,158 @@ it("keeps the edit and asks for a check when someone else changed the list", asy
   });
 });
 
+function refuseAsOutOfDate(r: ReturnType<typeof rig>, latest: OtherCardMachinesView) {
+  r.api.saveOtherCardMachines.mockImplementationOnce(async () => {
+    r.state.view = latest;
+    throw { code: "settings.out_of_date", params: { revision: latest.revision } };
+  });
+}
+const refreshed = () =>
+  page.getByText("The list changed while you were editing. Check it and save again.");
+
+it("keeps another manager's change to a field of a machine this manager renamed", async () => {
+  const r = rig();
+  refuseAsOutOfDate(r, {
+    otherCardMachines: [
+      { id: "m1", name: "Bar terminal", paysInto: "connected_account" },
+      { id: "m2", name: "Terrace", paysInto: "other" },
+    ],
+    revision: 5,
+  });
+  const { api } = await mount(r);
+  await nameField(row("Bar terminal")).fill("Bar");
+  await save().click();
+  await expect.element(refreshed()).toBeVisible();
+  await save().click();
+  await vi.waitFor(() => expect(api.saveOtherCardMachines).toHaveBeenCalledTimes(2));
+  expect(api.saveOtherCardMachines.mock.calls[1]![0]).toEqual({
+    otherCardMachines: [
+      { id: "m1", name: "Bar", paysInto: "connected_account" },
+      { id: "m2", name: "Terrace", paysInto: "other" },
+    ],
+    revision: 5,
+  });
+});
+
+it("keeps a machine renamed here that someone else removed, as a new machine", async () => {
+  const r = rig();
+  refuseAsOutOfDate(r, {
+    otherCardMachines: [{ id: "m1", name: "Bar terminal", paysInto: "other" }],
+    revision: 5,
+  });
+  const { api } = await mount(r);
+  await row("Bar terminal").getByRole("button", { name: "Remove" }).click();
+  await nameField(row("Terrace")).fill("Terrace 2");
+  await save().click();
+  await expect.element(refreshed()).toBeVisible();
+  await expect.element(nameField(row("Terrace 2"))).toHaveValue("Terrace 2");
+  await expect.element(page.getByRole("group", { name: "Bar terminal" })).not.toBeInTheDocument();
+  await save().click();
+  await vi.waitFor(() => expect(api.saveOtherCardMachines).toHaveBeenCalledTimes(2));
+  expect(api.saveOtherCardMachines.mock.calls[1]![0]).toEqual({
+    otherCardMachines: [{ name: "Terrace 2", paysInto: "connected_account" }],
+    revision: 5,
+  });
+});
+
+it("shows the newest list once the manager undoes their edit", async () => {
+  const { api, liveData, state } = await mount();
+  await nameField(row("Terrace")).fill("Terrace 2");
+  state.view = { otherCardMachines: [{ id: "m1", name: "Bar", paysInto: "other" }], revision: 4 };
+  liveData.invalidate([{ type: "settings.payments" }]);
+  await vi.waitFor(() => expect(api.getOtherCardMachines).toHaveBeenCalledTimes(2));
+  await expect.element(nameField(row("Terrace 2"))).toHaveValue("Terrace 2");
+  await nameField(row("Terrace 2")).fill("Terrace");
+  await expect.element(nameField(row("Bar"))).toHaveValue("Bar");
+  await expect.element(page.getByRole("group", { name: "Terrace" })).not.toBeInTheDocument();
+  await expect.element(save()).toBeDisabled();
+});
+
+it("keeps the newest revision when a reload after a refused save answers an older one", async () => {
+  const r = rig();
+  const { api, liveData, state } = await mount(r);
+  await nameField(row("Terrace")).fill("Terrace 2");
+  state.view = {
+    otherCardMachines: [
+      ...stored.otherCardMachines,
+      { id: "m3", name: "Patio", paysInto: "other" },
+    ],
+    revision: 5,
+  };
+  liveData.invalidate([{ type: "settings.payments" }]);
+  await vi.waitFor(() => expect(api.getOtherCardMachines).toHaveBeenCalledTimes(2));
+  api.getOtherCardMachines.mockResolvedValueOnce({ ...structuredClone(stored), revision: 4 });
+  api.saveOtherCardMachines.mockRejectedValueOnce({
+    code: "settings.out_of_date",
+    params: { revision: 5 },
+  });
+  await save().click();
+  await expect.element(refreshed()).toBeVisible();
+  await expect.element(nameField(row("Patio"))).toHaveValue("Patio");
+  await save().click();
+  await vi.waitFor(() => expect(api.saveOtherCardMachines).toHaveBeenCalledTimes(2));
+  expect(api.saveOtherCardMachines.mock.calls[1]![0]).toEqual({
+    otherCardMachines: [
+      { id: "m1", name: "Bar terminal", paysInto: "other" },
+      { id: "m2", name: "Terrace 2", paysInto: "connected_account" },
+      { id: "m3", name: "Patio", paysInto: "other" },
+    ],
+    revision: 5,
+  });
+});
+
+it("keeps keyboard focus in a name field when only the revision moves", async () => {
+  const { el, api, liveData, state } = await mount();
+  await nameField(row("Terrace")).click();
+  const focused = el.shadowRoot!.activeElement;
+  expect(focused?.getAttribute("name")).toBe("name-1");
+  state.view = { ...state.view, revision: 4 };
+  liveData.invalidate([{ type: "settings.payments" }]);
+  await vi.waitFor(() => expect(api.getOtherCardMachines).toHaveBeenCalledTimes(2));
+  await el.updateComplete;
+  expect(el.shadowRoot!.activeElement).toBe(focused);
+  await nameField(row("Terrace")).fill("Terrace 2");
+  await save().click();
+  await vi.waitFor(() => expect(api.saveOtherCardMachines).toHaveBeenCalledTimes(1));
+  expect(api.saveOtherCardMachines.mock.calls[0]![0].revision).toBe(4);
+});
+
+function refuseSecondName(r: ReturnType<typeof rig>) {
+  r.api.saveOtherCardMachines.mockRejectedValueOnce({
+    code: "management.request_invalid",
+    params: { field: "otherCardMachines.1.name" },
+  });
+}
+const nameRefusal = "Use a name of up to 60 characters that no other machine has.";
+const fixFields = () => page.getByText("Correct the highlighted fields to continue.");
+
+it("clears a refused name's correction message when its machine is removed", async () => {
+  const r = rig();
+  refuseSecondName(r);
+  await mount(r);
+  await nameField(row("Terrace")).fill("Terrace 2");
+  await save().click();
+  await expect.element(fixFields()).toBeVisible();
+  await row("Terrace 2").getByRole("button", { name: "Remove" }).click();
+  await expect.element(fixFields()).not.toBeInTheDocument();
+  await expect.element(page.getByText(nameRefusal)).not.toBeInTheDocument();
+});
+
+it("keeps a refused name marked while only where its payments go changes", async () => {
+  const r = rig();
+  refuseSecondName(r);
+  const { el } = await mount(r);
+  await nameField(row("Terrace")).fill("Terrace 2");
+  await save().click();
+  await expect.element(row("Terrace 2").getByText(nameRefusal)).toBeVisible();
+  el.shadowRoot!.querySelector("wt-combobox[name='paysInto-1']")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "other" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  await expect.element(row("Terrace 2").getByText(nameRefusal)).toBeVisible();
+  await expect.element(fixFields()).toBeVisible();
+});
+
 it("shows Spanish wording", async () => {
   const r = rig();
   setLocale("es");

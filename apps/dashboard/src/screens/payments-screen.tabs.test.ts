@@ -260,3 +260,35 @@ it.each([
     );
   },
 );
+
+it("says nothing about SumUp's connection while the provider read is pending or failed", async () => {
+  let reject!: (reason: unknown) => void;
+  const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+    api: api([reader], {
+      listPaymentProviders: vi.fn(
+        () =>
+          new Promise<PaymentProviderRow[]>((_resolve, no) => {
+            reject = no;
+          }),
+      ),
+      getOtherCardMachines: vi.fn().mockResolvedValue({
+        otherCardMachines: [{ id: "m1", name: "Terrace", paysInto: "connected_account" }],
+        revision: 0,
+      }),
+    }),
+    panels: [],
+  });
+  const root = el.shadowRoot!;
+  await vi.waitFor(() =>
+    expect(
+      root.querySelector("dashboard-other-card-machines")?.shadowRoot?.querySelector("wt-input"),
+    ).not.toBeNull(),
+  );
+  const machines = root.querySelector("dashboard-other-card-machines")!;
+  await machines.updateComplete;
+  expect(machines.shadowRoot!.textContent).not.toContain("SumUp is not connected");
+  reject({ code: "server.internal" });
+  await vi.waitFor(() => expect(root.querySelector("[role=alert]")).not.toBeNull());
+  await machines.updateComplete;
+  expect(machines.shadowRoot!.textContent).not.toContain("SumUp is not connected");
+});
