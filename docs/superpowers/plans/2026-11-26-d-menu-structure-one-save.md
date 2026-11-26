@@ -1,0 +1,20 @@
+# Menu Structure table and Save implementation plan
+
+[Menu editor redesign, delivery 2(d)](../specs/2026-11-24-menu-editor-redesign-design.md#delivery)
+
+A manager can arrange and price an ordinary menu in Structure, save it in one press, and review the saved changes before publishing. Use the save request from #4338 and the ordinary-menu variant rules from #4390. Price overrides and retirement of its requests belong to 2(e). Home page and publishing keep their own workflows.
+
+## Draft and Save
+
+- Add `menu-structure-draft.ts` beside the table. Start from the saved Structure tree and its explicit prices. Keep IDs on moves and assign UUIDs on additions. Stage all adds, moves, removals and section or folder edits through the existing menus, pickers and dialogs. Use the same Remove for single and selected rows and confirm only when a removed section has contents. Only write this menu's owned lists, folder overrides and explicit prices.
+- Wire `saveMenuStructure(id, input)` in `api/menu-api.ts` and the screen's draft in `screens/menus-screen.ts`. Use `draftScopeFor`, `saveActionState` and a fixed `wt-form-actions` bar. Cancel confirms and restores the latest saved state. Navigation asks before leaving dirty Structure. Review and publish is outlined while dirty and offers Save and review or Keep editing. Open Preview only after Save succeeds. Keep the draft on a refusal and locate its row or field from the submitted array index, with a bar message for errors without a field. Name dropped items from the submitted draft. Commit the draft on success, then refresh through `MenuReadController` using the write revision and show refresh failures as read failures.
+
+## Table and prices
+
+- Add prices to the existing coordinated menu read in `apps/server/src/menu-api.ts`, `api/menu-api.ts` and `api/live-queries.ts` so Structure can take the owned arrangement and its complete explicit prices from one read. Use the same passive Structure and prices reads for each directly included menu in the draft. Replace its read-only children and price sources when it refreshes. The product library already supplies names, photos, availability and base and variant prices. Keep owned changes while those reads refresh. Use existing `combineOffer` to recalculate the range, inherited price and clashes from the draft's own placements and distinct direct includes. One price per product or variant drives all its placements and names the other paths while edited.
+- Rework `widgets/menu-structure-table.ts` and extract price cells and row presentation below the file cap. Reuse its tree, reorder and search, `wt-price-input`, the in-place product editor and Preview's photo and icon treatment, including the root and variants. Show Name, Price and pinned actions with the counts and Unavailable labels from the spec. Add the five filters and match variant names. Keep grips in normal view and desktop Select, swap them for checkboxes in phone Select, and keep Move…, Remove and Done together. Keep section links and return focus.
+
+## Checks and delivery
+
+- Start with failing cases in `menus-screen.structure-draft.unsaved.test.ts` for no early write, one complete Save, Cancel and tab leave, Save and review, and a refusal or a dropped row. In `menu-structure-draft.test.ts`, check a moved ID, duplicate placements sharing a price, and a clash that changes when an unsaved include or its live price changes. Extend `menu-structure-table.test.ts` for variant search, phone Select and an included dish with an editable price but a fixed placement. Check the new read part alongside the existing combined-read route cases in `apps/server/src/menu-api.test.ts`.
+- Rewrite the affected English and Spanish Products guide sections, the Structure paragraphs in `docs/developers/design-system.md` and the pointer in `docs/backlog/menu.md`. Show the watcher the approved screenshot matrix at 1440 and 390 px before landing and wait for the owner's recorded answer. Expect about 950 added production lines and 430 added test lines, with immediate-write code and its obsolete expectations removed.
