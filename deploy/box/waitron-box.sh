@@ -296,7 +296,7 @@ network_monitor() {
 }
 
 main() {
-  local instance line rc arrived rest target requester reply node read_limit=701
+  local instance line rc arrived rest target requester reply node storage_host read_limit=701
   if [ "${1:-}" = --network-monitor ]; then network_monitor; fi
   if [ "${1:-}" = --network-change ]; then
     umask 077
