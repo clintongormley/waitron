@@ -1,4 +1,4 @@
-import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
+import { type Decimal, MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
 import type { GroupRelease } from "../api/kitchen-api.js";
 import type { TillCourse } from "../api/device-session-api.js";
@@ -184,10 +184,16 @@ export function panelTotal(
   ownLines: readonly OrderLine[],
   placedPrice?: (line: OrderLine) => string | undefined,
 ): string {
-  const drafts = ownLines.map((line) => {
-    if (line.setMenuId === undefined) return lineGross(line);
-    const unitPrice = placedPrice?.(line) ?? "0.00";
-    return lineGross({ ...line, product: { ...line.product, unitPrice } });
-  });
+  const drafts = ownLines.map((line) => draftLinePrice(line, placedPrice));
   return toScale(sumDecimals([decimal(storedTotal), ...drafts]), MONEY_SCALE);
+}
+
+/** A draft row's price; the panel total adds exactly these, so a row and the total agree. */
+export function draftLinePrice(
+  line: OrderLine,
+  placedPrice?: (line: OrderLine) => string | undefined,
+): Decimal {
+  if (line.setMenuId === undefined) return lineGross(line);
+  const unitPrice = placedPrice?.(line) ?? "0.00";
+  return lineGross({ ...line, product: { ...line.product, unitPrice } });
 }
