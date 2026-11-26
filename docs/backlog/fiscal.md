@@ -276,7 +276,8 @@ basis is recorded in [verifactu-findings.md §10.1](../compliance/verifactu-find
 _2026-11-23: every box has a fourth series, `full_corrective` (default code `FR`), for correctives of
 full invoices. A replacement takes it when the invoice it replaces names a customer and `corrective`
 otherwise, and core refuses the wrong series before a number is taken
-(`packages/core/src/record-replacement.ts`); a correction by differences refuses any invoice naming a customer
+(`packages/core/src/record-replacement.ts`). A correction by differences takes `full_corrective` when Give money
+back files an R1 against a full invoice (CORRECT-FULL-INVOICE PR 2a); any other refuses an invoice naming a customer
 (`packages/core/src/correction-eligibility.ts`) and stays on `corrective`. The basis is the second half of adviser answer 1.14 (15 November; B8 in
 [the answers](../compliance/2026-11-15-adviser-answers.md))._
 
@@ -298,7 +299,9 @@ country), name and address, a separate full-invoice
 series, taxpayer domicile, filed receipt data and replay, original/duplicate printing, delivery
 status and retry, staff handover confirmation, invoice lookup, and reporting. Paper and till
 omit the venue address when an F1 shows its filed taxpayer domicile; phone/email and the
-F2/absent-domicile controls remain. Automatic F1 credit/refund/cancellation is refused.
+F2/absent-domicile controls remain. Give money back on an F1 files an R1 by differences (CORRECT-FULL-INVOICE
+PR 2a); cancelling a whole F1 and reopening one to split it are still refused, and a dish's money given back
+with Cancel and refund still goes back with no corrective until PR 2b.
 
 The owner approved the historical-export fixture's current artifact
 refusal, including its could-not-open operator advice; provenance, HTTP400/domain-error,
@@ -316,8 +319,11 @@ the existing recipient checks and F1 series selection remain in place.
 
 **Next action:** complete the physical 58/80 mm paper and QR checks, the asesor's
 manual-remedy confirmation and current business-invoice delivery qualification as separate work.
-Future structured B2B integration has its own entry above. F3 conversion and F1's
-R1–R4 correction path remain separate decisions.
+Future structured B2B integration has its own entry above. F3 conversion remains a separate
+decision. F1's correction path is CORRECT-FULL-INVOICE ([plan](../superpowers/plans/2026-11-25-correct-full-invoice.md)): PR 1 and PR 2a are built;
+PR 2b (a cancelled dish's money), PR 3 (blank quantity and unit price on a line given back in part),
+PR 4a and 4b (the corrective goes out the way the original went, staff's choice stored and tried
+again) and PR 5 (staff can change it on the till) are still to come.
 
 ## When the business e-invoicing regime starts
 
@@ -1192,7 +1198,8 @@ approval's "goodwill refunds stay money-only" with no objection (O5, "WATCHER 20
 A tip given back on its own stays open, up to what is left of it: the owner's "Yes" (O2, 14:17).
 Where Correct invoice refuses for good (another box's ticket, one replaced by a full invoice, no
 filing record, a full invoice naming a customer, records that need
-checking), Refund a payment stays open; where it only waits (a filing refused, stopped or held,
+checking; since 2026-11-26 a full invoice naming a customer is corrected with an R1 unless the tax
+agency refused it with no fix, CORRECT-FULL-INVOICE PR 2a), Refund a payment stays open; where it only waits (a filing refused, stopped or held,
 another refund pending, the clock), Refund a payment waits too for that money: the watcher's call (O7, "WATCHER
 2026-11-23 14:55"). The owner landed #4192 on 2026-11-24 with O7 to O9 listed as the watcher's calls, and
 the same day approved one Give money back that picks the right way by itself
