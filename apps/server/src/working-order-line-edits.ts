@@ -796,17 +796,15 @@ export async function applyLineEdits(
     }
     if (change.action === "change") {
       for (const line of [parent, ...kept.map(({ child }) => child)]) {
-        const sent = line.ticket?.sentOrderNumber ?? null;
+        const ticket = line.ticket;
+        if (ticket === null) continue;
+        keepMadeHere.set(line.id, { madeHere: ticket.madeHere, stationId: ticket.stationId });
+        const sent = ticket.sentOrderNumber;
         if (sent !== null) keepSentNumber.set(sent, [...(keepSentNumber.get(sent) ?? []), line.id]);
-        if (line.ticket?.firedAt != null) keepReleased.add(line.id);
-        else if (line.ticket?.requestedAt != null)
-          keepRequestedAt.set(line.id, line.ticket.requestedAt);
+        if (ticket.firedAt !== null) keepReleased.add(line.id);
+        else if (ticket.requestedAt !== null) keepRequestedAt.set(line.id, ticket.requestedAt);
       }
       if (parent.ticket !== null) {
-        keepMadeHere.set(parent.id, {
-          madeHere: parent.ticket.madeHere,
-          stationId: parent.ticket.stationId,
-        });
         await tx.delete(ticketItems).where(eq(ticketItems.id, parent.ticket.id));
         keepStations.set(parent.id, parent.ticket.stationId);
       }

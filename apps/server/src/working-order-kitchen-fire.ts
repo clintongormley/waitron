@@ -194,14 +194,14 @@ interface DishKitchenPlace {
    *  held group. */
   initiated: boolean;
 }
-/** What an edit's re-send keeps of each deleted record's phase (D22): a released record stays
- *  released, and a Requested one keeps its first request time while it comes back Requested. */
-interface KeptPhase {
+/** A reissued item stays released if it already was, or keeps its first request time while requested. */
+interface KeptKitchenState {
+  keepMadeHere?: ReadonlyMap<string, { madeHere: boolean; stationId: string }>;
   keepReleased?: ReadonlySet<string>;
   keepRequestedAt?: ReadonlyMap<string, string>;
 }
 function keptStamps(
-  keep: KeptPhase,
+  keep: KeptKitchenState,
   lineId: string,
   input: Parameters<typeof requestStamps>[0],
 ): ReturnType<typeof requestStamps> {
@@ -222,7 +222,7 @@ export async function insertSplitExtras(
   dishes: readonly DishKitchenPlace[],
   routing: RoutingOnce,
   keepAllergies?: ReadonlyMap<string, TicketAllergyCopy>,
-  keepPhase: KeptPhase = {},
+  keep: KeptKitchenState = {},
 ): Promise<
   {
     workingOrderLineId: string;
@@ -310,8 +310,9 @@ export async function insertSplitExtras(
     if (decision?.kind !== "made") return [];
     const dish = byDish.get(extra.parentLineId!)!;
     if (decision.stationId === dish.stationId) return [];
-    const here = madeHere.has(decision.stationId);
-    const stamps = keptStamps(keepPhase, extra.id, {
+    const here =
+      keep.keepMadeHere?.get(extra.id)?.madeHere !== false && madeHere.has(decision.stationId);
+    const stamps = keptStamps(keep, extra.id, {
       at: routing.at.toISOString(),
       initiated: dish.initiated,
       madeHere: here,
@@ -417,10 +418,9 @@ export async function fireLines(
   options: {
     unroutable?: "skip";
     keepStations?: ReadonlyMap<string, string>;
-    keepMadeHere?: ReadonlyMap<string, { madeHere: boolean; stationId: string }>;
     keepAllergies?: ReadonlyMap<string, TicketAllergyCopy>;
     routing?: RoutingOnce;
-  } & KeptPhase = {},
+  } & KeptKitchenState = {},
 ): Promise<FireableLine[]> {
   const routing = options.routing ?? routingOnce(tx, new Date());
   const now = routing.at;

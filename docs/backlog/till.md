@@ -714,12 +714,6 @@ the owner's redesign.
 Queued as SETTLED-SMALL (lane F), in two or three pull requests by screen. Some are the owner's own
 answers; where an entry says a rule is read across, the owner was not asked that point.
 
-- **A692. Editing a sent dish keeps its extras' "made here" choice**, as it keeps the dish's: the
-  owner's "Keep what was sent" (2026-11-17, A1416), read across by the watcher. Today
-  `insertSplitExtras` (`apps/server/src/working-order-kitchen-fire.ts`) routes the extras afresh from
-  the sending device's made-here stations, so an extra a station already received can come back as
-  made on the spot. The fifth case in `apps/server/src/sent-order-number.test.ts` relies on that and
-  will change.
 - **The extras form's picker lists variants**: the owner's decision that a variant can be an extra
   (2026-09-24), read across to the picker by the watcher, not an answer. Today it lists top-level products
   only (`listProducts`).
@@ -908,6 +902,10 @@ here is asked or built before that. They were separate entries, many of them que
   sending cannot block the order. A save naming a different answer is a change, as through Change
   dish (`updateOrderLine`): the kitchen gets a recall and a new ticket, or the save is refused once
   the dish is started or served, or when its station refuses changes after sending.
+
+- **An extra already sent to a station stays kitchen work when the editing till makes that
+  station’s work here (A692, watcher decision, 2026-11-26).** The watcher extended the owner's
+  A1416 options decision to the work a station already received.
 
 - **A parked dish not yet sent keeps a recorded options answer the menu no longer matches (lane B,
   2026-11-18; kept by the watcher 2026-11-24, not asked).** The till asks staff to choose for each new

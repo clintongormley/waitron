@@ -188,7 +188,13 @@ async function transfer(
 }
 
 /** Changes the note on the bill's line of `name`, as the till's line edit does. */
-async function editNote(billId: string, name: string, note: string, cfg = v.cfg) {
+async function editNote(
+  billId: string,
+  name: string,
+  note: string,
+  cfg = v.cfg,
+  extras?: Parameters<typeof updateOrderLine>[4]["extras"],
+) {
   const { revision } = await billRow(v, billId);
   await inTx(v, (tx) =>
     updateOrderLine(
@@ -196,7 +202,7 @@ async function editNote(billId: string, name: string, note: string, cfg = v.cfg)
       cfg,
       billId,
       lineOf(billId, name),
-      { portionLineNos: [], note },
+      { portionLineNos: [], note, ...(extras === undefined ? {} : { extras }) },
       revision,
       OPERATOR,
     ),
@@ -539,7 +545,7 @@ describe("the order number an edited dish was sent under", () => {
     expect(kitchenItems(b26)).toEqual([{ name: "Burger", quantity: 1000, sent: n28 }]);
   });
 
-  it("is not given to an edited moved dish's extra when the editing device makes it on the spot", async () => {
+  it("is kept on a sent extra when the editing device makes extras at that station on the spot", async () => {
     const { partyId, bills } = await party("Mesa edit 5", 2);
     const [b27, b28] = bills as [string, string];
     await send(partyId, b28, [{ name: "Caña", cheese: 1 }], "fire");
@@ -548,6 +554,25 @@ describe("the order number an edited dish was sent under", () => {
     expect(madeHereOf(b27, "Cheese")).toEqual([false]);
 
     await editNote(b27, "Caña", "bien fría", madeHereCfg);
+
+    expect(madeHereOf(b27, "Caña")).toEqual([false]);
+    expect(madeHereOf(b27, "Cheese")).toEqual([false]);
+    expect(kitchenItems(b27)).toEqual([
+      { name: "Caña", quantity: 1000, sent: n28 },
+      { name: "Cheese", quantity: 1000, sent: n28 },
+    ]);
+  });
+
+  it("is not given to a new extra that the editing device makes on the spot", async () => {
+    const { partyId, bills } = await party("Mesa edit 6", 2);
+    const [b27, b28] = bills as [string, string];
+    await send(partyId, b28, [{ name: "Caña" }], "fire");
+    const n28 = await numberOf(b28);
+    await merge(partyId, b27, b28);
+
+    await editNote(b27, "Caña", "bien fría", madeHereCfg, [
+      { listId: cheese.listId, picks: [{ productId: cheese.productId, quantity: 1 }] },
+    ]);
 
     expect(madeHereOf(b27, "Caña")).toEqual([false]);
     expect(madeHereOf(b27, "Cheese")).toEqual([true]);

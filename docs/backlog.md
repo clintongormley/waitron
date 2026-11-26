@@ -599,7 +599,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Small till and floor wording fixes** (bundle of 1, size S). [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
 - **SETTLED-SMALL. Small answers the owner gave, and rules read across from them, not built yet** — queued (lane F):
-  Extras keep "made here" (A692), and the extras form lists variants.
+  The extras form lists variants.
   [Detail](backlog/till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet)
 
 - **The till's top bar: loose ends (A395, #1435; A425).** Its scrolling strip is kept by the watcher 2026-11-24, not asked. [Detail](backlog/till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
