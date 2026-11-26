@@ -40,6 +40,7 @@ export const floorScreenFooterStyles = css`
   .screen[data-floor-footer] .actions > wt-help-tooltip {
     inset-block-start: var(--wt-space-2);
     inset-inline-end: var(--wt-space-2);
+    z-index: 1;
   }
   .screen[data-floor-footer] .map {
     flex: 1;
@@ -94,7 +95,7 @@ export const floorBarStyles = css`
     font-weight: var(--wt-font-weight-bold);
     text-align: start;
   }
-  .floor-bar [data-test="more-menu"]::part(trigger) {
+  .floor-bar .floor-menu::part(trigger) {
     min-inline-size: calc(var(--wt-tap-min) + var(--wt-space-1));
   }
   .floor-bar [slot="badge"] {
@@ -151,21 +152,21 @@ export const floorBarStyles = css`
   .floor-bar details[open] > summary.settings-heading::after {
     content: "⌄" / "";
   }
-  .floor-bar [data-test="more-menu"] wt-button::part(button) {
+  .floor-bar .floor-menu wt-button::part(button) {
     min-block-size: var(--wt-tap-min);
     padding-inline: var(--wt-space-4);
   }
   .floor-bar [data-floor-zone] {
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
   }
-  .floor-bar [data-test="more-menu"] wt-button:not([data-clock-action="out"]) {
+  .floor-bar .floor-menu wt-button:not([data-clock-action="out"]) {
     inline-size: 100%;
   }
-  .floor-bar [data-test="more-menu"] wt-button:not([data-clock-action="out"])::part(button) {
+  .floor-bar .floor-menu wt-button:not([data-clock-action="out"])::part(button) {
     border-block-end: 1px solid var(--wt-color-border);
     border-radius: 0;
   }
-  .floor-bar [data-test="more-menu"] wt-button:not([data-clock-action="out"])::part(button)::after {
+  .floor-bar .floor-menu wt-button:not([data-clock-action="out"])::part(button)::after {
     content: "›" / "";
     margin-inline-start: auto;
     color: var(--wt-color-text-muted);
@@ -174,7 +175,7 @@ export const floorBarStyles = css`
     margin-inline-start: auto;
     color: var(--wt-color-text-muted);
   }
-  .floor-bar [data-test="more-menu"] wt-button:has([data-floor-count])::part(button)::after {
+  .floor-bar .floor-menu wt-button:has([data-floor-count])::part(button)::after {
     margin-inline-start: 0;
   }
   .floor-operator {

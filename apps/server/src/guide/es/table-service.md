@@ -567,16 +567,16 @@ botón sigue resaltado sin el ✎ hasta que sales, y entonces desaparece, mientr
 que sales con platos aún sin enviar conserva su botón con ✎. Si
 otra persona se queda con tu cuenta, deja de contar como tuya: al momento en la mesa en la que
 estás, y en cualquier otra mesa cuando Sala vuelva a actualizar sus mesas. Cuando hay más botones
-de los que caben, deslízalos hacia un lado. Un borde difuminado indica dónde hay más. En una
-tableta con la sala en pantalla ancha, **Sala** aparece primero. Con un teclado, usa las flechas
+de los que caben, deslízalos hacia un lado. Un borde difuminado indica dónde hay más. En un
+móvil o una tableta con la sala en pantalla ancha, **Sala** aparece primero. Con un teclado, usa las flechas
 izquierda y derecha para pasar de **Sala** a tus mesas. Inicio abre **Sala** y Fin abre la última
 mesa. En una pantalla estrecha, usa Tab para llegar al botón de una mesa y Enter para abrirla.
 
 Elige **Sala** después de una mesa para abrir su zona, si este dispositivo la muestra. En una
 pantalla estrecha, toca el nombre de la zona abajo para cambiar de zona. Abre **Más** (☰) abajo
 para fichar, cambiar el plano de hoy, buscar cuentas, gestionar el efectivo, consultar tu
-jornada, pedir ayuda o abrir los ajustes. En una tableta con la sala en pantalla ancha, abre
-**Más** arriba para encontrar **Equipo**, **Idioma** y **Tema** en **Ajustes**.
+jornada, pedir ayuda o abrir los ajustes. En un móvil o una tableta con la sala en pantalla ancha,
+abre **Más** arriba para encontrar **Equipo**, **Idioma** y **Tema** en **Ajustes**.
 
 ## Tomar un pedido en un móvil {#phone-order}
 

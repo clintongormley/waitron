@@ -18,7 +18,7 @@ export class TillFloorZoneMenu extends LitElement {
     baseStyles,
     css`
       :host([embedded]) {
-        display: contents;
+        position: absolute;
       }
 
       wt-row-actions[hidden] {
@@ -56,7 +56,7 @@ export class TillFloorZoneMenu extends LitElement {
   @property({ attribute: false }) tables: TableState[] = [];
   /** Below the till's phone width the List/Map toggle lives here, above a heading for the zone's items. */
   @property({ type: Boolean }) phone = false;
-  @property({ type: Boolean }) embedded = false;
+  @property({ type: Boolean, reflect: true }) embedded = false;
   @property() view: "map" | "list" = "map";
   /** Whether this device may change this zone's plan today; without it only a phone's toggle is offered. */
   @property({ type: Boolean }) canChangeToday = false;

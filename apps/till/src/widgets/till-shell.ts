@@ -1256,7 +1256,7 @@ export class TillShell extends LitElement {
       html`<wt-button
         icon=${inFloorMenu ? nothing : { in: "menu-clock-in", out: "menu-logout", "break-start": "menu-start-break", "break-end": "menu-end-break" }[kind]}
         data-clock-action=${kind}
-        variant=${disabled || inFloorMenu ? "secondary" : "primary"}
+        variant=${disabled || (inFloorMenu && kind === "out") ? "secondary" : "primary"}
         .disabled=${disabled}
         @click=${() => this.#emit("clock-action", { action: kind })}
         >${label}</wt-button
@@ -1418,6 +1418,7 @@ export class TillShell extends LitElement {
     const items = this.#items(true);
     const pending = this.transferCount !== undefined && this.transferCount > 0;
     return html`<wt-row-actions
+      class="floor-menu"
       data-test="more-menu"
       icon="hamburger"
       .iconSize=${"lg"}

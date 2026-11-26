@@ -3057,7 +3057,9 @@ describe("a handheld's zones", () => {
       await vi.waitFor(() => {
         const map = floor(el).shadowRoot!.querySelector("wt-floor-map")!.getBoundingClientRect();
         const bar = floorBar(el)!.getBoundingClientRect();
+        const body = shell(el).shadowRoot!.querySelector("main.body")!.getBoundingClientRect();
         expect(map.height).toBeGreaterThan(600);
+        expect(map.top).toBeCloseTo(body.top, 0);
         expect(bar.top - map.bottom).toBeLessThanOrEqual(16);
       });
     });
