@@ -230,6 +230,12 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     treatment: "Not carried: each box retains its own full-disk sale stop",
   },
   {
+    item: "stop-mark.json",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Each box uses the restart mark it wrote locally",
+  },
+  {
     item: "backup-room-note.json",
     where: "state",
     class: "source-only",
