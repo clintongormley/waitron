@@ -1,4 +1,4 @@
-import { openPartyMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { billChoiceText, openPartyMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -118,7 +118,7 @@ const shadow = (el: TillTableOrderScreen) => el.shadowRoot!;
 const row = (el: TillTableOrderScreen, id: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-bill-switcher] [data-switch-bill="${id}"]`);
 const rowText = (el: TillTableOrderScreen, id: string, part: "label" | "owes") =>
-  row(el, id)!.querySelector(`.bill-row-${part}`)!.textContent!.trim();
+  billChoiceText(row(el, id)!, part === "owes" ? "value" : "label");
 const paid = () => `${t("table.bill_paid")} ✓`;
 
 /** The bill-requested chip, read where the table screen draws it: the status pin's details. */
@@ -175,8 +175,8 @@ describe("till-table-order-screen: the party's bills", () => {
     });
 
     expect(
-      [...shadow(el).querySelectorAll("[data-switch-bill] .bill-row-label")].map((name) =>
-        name.textContent!.trim(),
+      [...shadow(el).querySelectorAll("[data-switch-bill]")].map((option) =>
+        billChoiceText(option, "label"),
       ),
     ).toEqual([
       t("floor.unsent_bill").replace("{n}", "1"),
@@ -199,7 +199,11 @@ describe("till-table-order-screen: the party's bills", () => {
 
     expect(row(el, "wo-check")!.querySelector("[data-bill-main]")).toBeNull();
     expect(row(el, "wo-tab")!.querySelector("[data-bill-main]")).toBeNull();
-    expect(shadow(el).querySelector("[data-bill-switcher]")!.textContent).not.toContain(
+    const picker = shadow(el).querySelector("[data-bill-switcher]")!;
+    const labels = [...picker.querySelectorAll("[data-switch-bill]")].map((option) =>
+      billChoiceText(option, "label"),
+    );
+    expect([picker.textContent, ...labels].join(" ")).not.toContain(
       locale === "en" ? "New orders" : "Pedidos nuevos",
     );
   });

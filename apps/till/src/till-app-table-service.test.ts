@@ -4536,7 +4536,7 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
   const switcher = (el: TillApp) =>
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-bill-switcher]")!;
   const closedLabel = (el: TillApp) =>
-    switcher(el).querySelector("[data-bill-switcher-label]")!.textContent!.trim();
+    switcher(el).shadowRoot!.querySelector("button")!.getAttribute("aria-label");
   const rows = (el: TillApp) =>
     [...switcher(el).querySelectorAll<HTMLElement>("[data-switch-bill]")].map((row) =>
       row.getAttribute("data-switch-bill"),
@@ -4577,7 +4577,7 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     expect(createPartyBill).toHaveBeenCalledOnce();
     expect(createPartyBill).toHaveBeenCalledWith("v-2", 3);
     expect(tableOrder(el)!.orderId).toBe("wo-new");
-    expect(closedLabel(el)).toBe(`Cuenta 2 · ${euros("0.00")} · 2 de 2`);
+    expect(closedLabel(el)).toBe(`Cuentas: Cuenta 2 · ${euros("0.00")} · 2 de 2`);
     expect(await nextSavedBill(el)).toBe("wo-new");
   });
 
@@ -4633,7 +4633,7 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     await choose(el, '[data-switch-bill="wo-9"]');
 
     expect(tableOrder(el)!.orderId).toBe("wo-9");
-    expect(closedLabel(el)).toBe(`Cuenta 3 · ${euros("12.00")} · 3 de 3`);
+    expect(closedLabel(el)).toBe(`Cuentas: Cuenta 3 · ${euros("12.00")} · 3 de 3`);
     expect(await nextSavedBill(el)).toBe("wo-9");
   });
 
@@ -4649,7 +4649,7 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     await choose(el, '[data-switch-bill="wo-8"]');
 
     expect(tableOrder(el)!.orderId).toBe("wo-8");
-    expect(closedLabel(el)).toBe("Cuenta 2 · Pagada ✓ · 2 de 2");
+    expect(closedLabel(el)).toBe("Cuentas: Cuenta 2 · Pagada · 2 de 2");
     const store = tableOrder(el)!.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!
       .store as unknown as { billStatus: string; editsLocked: boolean };
     expect({ billStatus: store.billStatus, locked: store.editsLocked }).toEqual({
@@ -4667,7 +4667,7 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     });
     await toTableOrder(el);
     await choose(el, '[data-switch-bill="wo-8"]');
-    expect(closedLabel(el)).toBe(`Cuenta 2 · ${euros("12.00")} · 2 de 2`);
+    expect(closedLabel(el)).toBe(`Cuentas: Cuenta 2 · ${euros("12.00")} · 2 de 2`);
 
     gone = true;
     vi.mocked(api.setPartyName).mockRejectedValueOnce({
@@ -4680,7 +4680,7 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBe("wo-7");
-    expect(closedLabel(el)).toBe(`Cuenta 1 · ${euros("9.00")}`);
+    expect(closedLabel(el)).toBe(`Cuentas: Cuenta 1 · ${euros("9.00")}`);
   });
 
   type Created = { billId: string; revision: number };
@@ -4928,7 +4928,7 @@ describe("A803 new bill: the switcher's + New bill and switching bills", () => {
     expect(tableOrder(el)!.orderId).toBe("wo-7");
     const trigger = switcher(el).querySelector<HTMLElement>('[slot="trigger"]')!;
     expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe(
-      `Cuenta 1 · ${euros("12.00")} · 1 de 2 ▾ Cuenta 2 sin enviar`.replace(/\s+/g, " "),
+      `Cuenta 1 ${euros("12.00")} 1 de 2 Cuenta 2 sin enviar`.replace(/\s+/g, " "),
     );
     expect(
       switcher(el)

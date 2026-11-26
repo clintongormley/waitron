@@ -567,8 +567,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   tables on the floor, ☰, the kitchen screens) and changes parts of pass 1 (§3, §4, §6, §7, §8 say
   "(pass 2)"). Phone first, layout by screen width, one order screen
   for counter and tables, full-screen panels instead of dialogs, a guest-facing bill with a tip
-  question. The bill picker opens at the bottom on narrow screens and shows where the current
-  bill sits in the list. The narrow floor has the zone chooser, Map/List and ☰ at the bottom.
+  question. The bill picker shows the current bill’s position beside its amount and uses the
+  shared sheet on narrow screens. The narrow floor has the zone chooser, Map/List and ☰ at the
+  bottom.
   The zone and More sheets dock against that bar, and More uses shared action rows.
   The table name opens the shared action sheet with Finish table at the end.
   The remaining order and payment screens use the

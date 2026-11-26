@@ -1241,26 +1241,19 @@ case opens a real table.
 order header to open its bottom sheet at every width. The status pin opens table details.
 The bill picker, Eat here / Take away control and bill actions follow the table controls.
 
-- **The switcher** is a `wt-row-actions` drawn whenever the screen has a party. Below the screen’s
-  side-by-side width it opens a bottom sheet named by its visible heading. At wider widths, it
-  opens by the trigger. Scroll the list to reach **+ New bill**. Its trigger part has a 1px
-  `--wt-color-border` edge, `--wt-radius-md` corners and `--wt-color-surface`. The closed label is
-  “Bill 1 · €38.50” for one bill or “Bill 2 · Clint · €54.00 · 2 of 3” for several. The position counts
-  the visible rows in number order. A settled bill shows “Paid” with an `aria-hidden` ✓ or
-  “Deferred payment” if it was deferred. An unnumbered bill reads “Bill”. With no bill on screen,
-  the label reads “Bills”. The list is a `role="menu"` of
-  `menuitemradio` rows in number order, `aria-checked` on the bill on screen, whose background
-  differs from the open list's and an unchecked row's in both themes. Each row holds the bill's
-  short label, what it owes, "€5.00 over" for a bill paid over its total, or "Paid ✓" ("Deferred
-  payment" for a bill closed that way), and one line per person with unsent dishes on it ("Ana has
-  an unsent order: 3 items"). When another shown bill than the one on screen holds the signed-in
-  person's unsent dishes (A797 slice 11), the closed trigger adds, after its ▾, the `floor-unsent`
-  icon (`aria-hidden`) and "Bill 2 unsent", or "2 bills unsent" for two or more, which may wrap
-  below while the label and ▾ stay on one line; the `label` gains " · Bill 2 unsent"; and each such
-  row's head shows the icon and "Unsent" after its label. The till's floor read keeps them
-  current: it carries the party's unsent drafts, and showing another bill reads the floor again. **+ New bill** is always the last item, with one bill, several or
-  none; while one is being made it is `aria-disabled` and a tap sends nothing. Choosing the bill on
-  screen sends nothing; choosing another sends `switch-bill` with its id.
+- **The switcher** is a `wt-row-actions` drawn whenever the screen has a party. The outlined trigger
+  has a 44 px minimum height, a bold bill name, a muted amount or payment status, and a smaller
+  muted position before the down chevron. The position counts the visible bills in number order.
+  A settled bill shows “Paid” with an `aria-hidden` ✓, or “Deferred payment” if it was deferred.
+  An unnumbered bill reads “Bill”. With no bill on screen, the label reads “Bills”.
+  Below the side-by-side width, the list opens in the shared menu sheet with its table or party
+  heading. At wider widths it opens by the trigger. The menu uses native `menuitemradio` buttons
+  with shared `wt-menu-row` content, leading teal check on the current bill, and amounts aligned
+  at the trailing edge. The sheet gives each bill at least 56 px and divides the rows with a line.
+  A bill with unsent dishes shows one line per editor. The picker adds an unsent hint on its own
+  line when another bill holds the signed-in person's unsent dishes, and marks that bill “Unsent”.
+  Scroll to reach **+ New bill** at the foot. While a bill is being made the action is
+  `aria-disabled` and sends nothing. Choose another bill to send `switch-bill` with its id.
 - **A vanished bill.** When a bills read no longer holds the bill on screen, the screen shows the
   lowest-numbered bill still owing, else the lowest-numbered listed bill, and a `role="status"` line
   says "Bill 2 is no longer at this table. Now showing Bill 1." Choosing another bill or opening another table

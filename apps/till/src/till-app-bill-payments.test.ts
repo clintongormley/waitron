@@ -2,7 +2,10 @@ import { deferred } from "../test/clock-app.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { TillApi as RealTillApi } from "./api/client.js";
 import { ServerRouter, withServerTarget } from "./api/server-router.js";
-import { openTableMenu } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  billChoiceText,
+  openTableMenu,
+} from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import type { TillFindBillDialog } from "./widgets/find-bill-dialog.js";
 import {
@@ -4394,7 +4397,7 @@ describe("till-app: a change refused on a bill that holds money", () => {
       ...order.shadowRoot!.querySelectorAll<HTMLElement>("[data-bill-switcher] [data-switch-bill]"),
     ].map((row) => ({
       bill: row.dataset.switchBill,
-      owes: text(row.querySelector(".bill-row-owes")),
+      owes: billChoiceText(row, "value"),
     }));
 
   /** The table open on the partly paid bill, with how often each read had run by then. */

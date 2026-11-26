@@ -85,6 +85,13 @@ export async function closePartyMenu(el: TillTableOrderScreen): Promise<void> {
   expect(popup.matches(":popover-open")).toBe(false);
 }
 
+export function billChoiceText(row: Element, part: "label" | "value"): string {
+  const menuRow = row.querySelector("wt-menu-row")!;
+  const text = menuRow.shadowRoot!.querySelector(`.${part}`)?.textContent?.trim() ?? "";
+  const paidMark = part === "value" ? row.querySelector("[data-paid-mark]")?.textContent : "";
+  return text + (paidMark ?? "");
+}
+
 const billSwitcher = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector("[data-bill-switcher]")!;
 

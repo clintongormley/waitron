@@ -649,16 +649,16 @@ dará, y deja escribirlos cuando eliges nombres personalizados; **Añadir mesa u
 
 Es habitual que los clientes paguen por separado: dos parejas en una misma mesa, o alguien que paga
 sus propias bebidas. Cada uno tiene entonces su propia cuenta en la mesa. El selector de cuentas,
-arriba en la pantalla de la mesa, indica qué cuenta está en pantalla, como **Cuenta 1 · 38,50 €**, o
-**Cuenta 2 · Clint · 54,00 € · 2 de 3** cuando es la segunda de tres cuentas. Aparece aunque la mesa tenga una sola
-cuenta, así que una segunda cuenta está siempre a un toque.
+arriba en la pantalla de la mesa, muestra la cuenta abierta y su importe. Si hay varias cuentas,
+a la derecha ves la posición de la cuenta abierta en la lista. **2 de 3** indica que estás en la
+segunda cuenta.
 
 En el mostrador, usa **Pedidos aparcados** para recuperar o descartar la cuenta de una mesa.
 Descartar su última cuenta deja la mesa ocupada con una cuenta nueva y vacía. Para liberar la mesa,
 usa **Cerrar mesa**.
 
 Toca el selector para ver las cuentas de la mesa por orden de número. En una pantalla estrecha,
-la lista se abre desde abajo. Cada fila muestra el número y
+la lista se abre desde abajo. La marca verde azulada indica qué cuenta tienes abierta. Cada fila muestra el número y
 el nombre de la cuenta, lo que queda por pagar, lo que se pagó de más, por ejemplo **5,00 € de
 más**, o **Pagada ✓** (**Pago aplazado** si se cerró como pago aplazado), y una línea como **Ana tiene un
 pedido sin enviar: 3 artículos** por cada persona con platos sin enviar en esa cuenta. Cuando otra
