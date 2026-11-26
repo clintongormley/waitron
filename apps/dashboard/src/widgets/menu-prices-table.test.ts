@@ -2063,7 +2063,11 @@ it.each([
           .replace("{low}", formatMoney(low!, locale))
           .replace("{high}", formatMoney(high!, locale)),
       );
-      if (viewport > 390) expect(linesOf(shown), product).toBe(1);
+      // A field's width holds Lemonade's range on one line; the wider range may break, as at phone
+      // width, but only between its prices: where it breaks depends on the font.
+      if (product === "mi-lemonade" && viewport > 390) expect(linesOf(shown), product).toBe(1);
+      for (const price of [formatMoney(low!, locale), formatMoney(high!, locale)])
+        expect(linesOfWords(shown, price), `${product} ${price}`).toBe(1);
       for (const key of ["mi-burger", "mi-lemonade:v-small", "mi-lemonade:v-large", "mi-lager"]) {
         const field = override(el, key);
         expect(field.getBoundingClientRect().width, key).toBeCloseTo(plain, 0);
