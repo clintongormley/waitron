@@ -26,6 +26,7 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
+import { setMadeHere } from "./testing/made-here-fixture.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { fireGroup } from "./order-group-release.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -133,12 +134,14 @@ async function removeFirst(venue: Venue) {
 }
 
 describe("editing split-off extras", () => {
-  it("recalls and resends a changed fired burger and its chips at their stations", async () => {
+  it.each([false, true])("recalls and resends fired work (Fryer made here: %s)", async (here) => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await addTabRound(tx, venue.cfg, id, [line(venue, "burger", "1", 1)]);
       const old = (await state(tx, id)).items;
+      if (here) await setMadeHere(tx, venue.cfg.origin.deviceId, [venue.stations.fryer]);
+      venue.cfg.sendingDeviceId = venue.cfg.origin.deviceId;
       await edit(tx, venue, 1, { portionLineNos: [], note: "No salt" });
       const current = await state(tx, id);
       expect(current.items.map((item) => item.id)).not.toContain(
@@ -148,8 +151,10 @@ describe("editing split-off extras", () => {
         [venue.stations.fryer, venue.stations.grill].sort(),
       );
       expect((await slips(tx, venue.printers.grill)).join("\n")).toContain("RECALLED");
-      expect((await slips(tx, venue.printers.fryer)).join("\n")).toContain("RECALLED");
-      expect((await slips(tx, venue.printers.fryer)).at(-1)).toContain("CHIPS");
+      const fryer = await slips(tx, venue.printers.fryer);
+      expect(fryer.join("\n")).toContain("RECALLED");
+      expect(fryer.at(-1)).toContain("CHIPS");
+      expect(fryer.at(-1)).not.toContain("RECALLED");
     });
   });
 

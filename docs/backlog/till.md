@@ -911,8 +911,9 @@ here is asked or built before that. They were separate entries, many of them que
   dish (`updateOrderLine`): the kitchen gets a recall and a new ticket, or the save is refused once
   the dish is started or served, or when its station refuses changes after sending.
 
-- **An extra already sent to a station stays kitchen work when another till edits the dish (A692,
-  watcher, 2026-11-26).** The watcher extended the A1416 rule to the work a station already received.
+- **An extra already sent to a station stays kitchen work when the editing till makes it on the
+  spot (A692, watcher, 2026-11-26).** The watcher extended the A1416 rule to the work a station
+  already received.
 
 - **A parked dish not yet sent keeps a recorded options answer the menu no longer matches (lane B,
   2026-11-18; kept by the watcher 2026-11-24, not asked).** The till asks staff to choose for each new
