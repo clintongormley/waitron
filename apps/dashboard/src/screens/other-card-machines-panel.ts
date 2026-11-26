@@ -116,6 +116,7 @@ export class OtherCardMachinesPanel extends LitElement {
   #latest?: OtherCardMachinesView;
   #scope?: DraftScope<Row[]>;
   #generation = 0;
+  #discards = 0;
   readonly #feedback = new FormFeedback(this);
   #queries = new DashboardQueries(
     this,
@@ -180,6 +181,7 @@ export class OtherCardMachinesPanel extends LitElement {
         snapshot: (rows) => rows.map((row) => ({ ...row })),
         equal: sameRows,
         restore: () => {
+          this.#discards++;
           this.saveError = "";
           this.#resetDraft(this.#latest!);
         },
@@ -228,6 +230,7 @@ export class OtherCardMachinesPanel extends LitElement {
     }
     this.saving = true;
     const generation = this.#generation;
+    const discards = this.#discards;
     try {
       const saved = await this.api.saveOtherCardMachines({
         otherCardMachines: draft.map(({ id, name, paysInto }) =>
@@ -241,7 +244,8 @@ export class OtherCardMachinesPanel extends LitElement {
       this.api.liveData?.invalidate([{ type: "settings.payments" }]);
     } catch (error) {
       if (generation !== this.#generation) return;
-      await this.#refused(error, draft, generation);
+      if (discards === this.#discards) await this.#refused(error, draft, generation);
+      else if (codeOf(error) === "settings.out_of_date") await this.#reload(generation);
     } finally {
       if (generation === this.#generation) this.saving = false;
     }
@@ -270,6 +274,15 @@ export class OtherCardMachinesPanel extends LitElement {
       this.saveError = "other_card_machines.refreshed";
     } catch (refreshError) {
       if (generation === this.#generation) this.saveError = codeOf(refreshError);
+    }
+  }
+
+  async #reload(generation: number): Promise<void> {
+    try {
+      const view = await this.api.getOtherCardMachines();
+      if (generation === this.#generation) this.#resetDraft(this.#take(view));
+    } catch (error) {
+      if (generation === this.#generation) this.saveError = codeOf(error);
     }
   }
 

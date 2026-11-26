@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi } from "../api/client.js";
 import type { PaymentProviderRow, ReaderRow } from "../api/payments-api.js";
@@ -291,4 +292,31 @@ it("says nothing about SumUp's connection while the provider read is pending or 
   await vi.waitFor(() => expect(root.querySelector("[role=alert]")).not.toBeNull());
   await machines.updateComplete;
   expect(machines.shadowRoot!.textContent).not.toContain("SumUp is not connected");
+});
+
+it("drops the SumUp note when a later provider read fails", async () => {
+  const liveData = new LiveData();
+  const listPaymentProviders = vi
+    .fn()
+    .mockResolvedValueOnce([{ providerId: "sumup", state: "not_connected", canUnpair: false }])
+    .mockRejectedValue({ code: "server.internal" });
+  const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+    api: api([reader], {
+      liveData,
+      listPaymentProviders,
+      getOtherCardMachines: vi.fn().mockResolvedValue({
+        otherCardMachines: [{ id: "m1", name: "Terrace", paysInto: "connected_account" }],
+        revision: 0,
+      }),
+    } as Partial<DashboardApi>),
+    panels: [],
+  });
+  const root = el.shadowRoot!;
+  const note = () =>
+    root.querySelector("dashboard-other-card-machines")?.shadowRoot?.textContent ?? "";
+  await vi.waitFor(() => expect(note()).toContain("SumUp is not connected"));
+  liveData.refresh();
+  await vi.waitFor(() => expect(listPaymentProviders).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(root.querySelector("[role=alert]")).not.toBeNull());
+  await vi.waitFor(() => expect(note()).not.toContain("SumUp is not connected"));
 });

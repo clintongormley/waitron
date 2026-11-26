@@ -31,6 +31,7 @@ let stored = {
   revision: 0,
 };
 let getOtherCardMachines = vi.fn(async () => structuredClone(stored));
+let saveOtherCardMachines = vi.fn();
 afterEach(() => {
   liveData = new LiveData();
   stored = {
@@ -38,6 +39,7 @@ afterEach(() => {
     revision: 0,
   };
   getOtherCardMachines = vi.fn(async () => structuredClone(stored));
+  saveOtherCardMachines = vi.fn();
 });
 
 async function leaveWith(choice: "keep" | "discard", whileEditing?: () => Promise<void>) {
@@ -45,6 +47,7 @@ async function leaveWith(choice: "keep" | "discard", whileEditing?: () => Promis
     api: {
       liveData,
       getOtherCardMachines,
+      saveOtherCardMachines,
     } as unknown as DashboardApi,
   });
   const name = page.getByRole("textbox", { name: "Name" });
@@ -92,5 +95,36 @@ it("shows the newest list when the manager discards after it changed during thei
   await expect.element(names.nth(0)).toHaveValue("Bar terminal");
   await expect.element(names.nth(1)).toHaveValue("Patio");
   await expect.element(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  expect(el.leave.coordinator.isDirty()).toBe(false);
+});
+
+it("does not bring back a discarded edit when the save sent before the discard is out of date", async () => {
+  let refuse!: () => void;
+  saveOtherCardMachines.mockImplementationOnce(
+    () =>
+      new Promise((_saved, refused) => {
+        refuse = () => {
+          stored = {
+            otherCardMachines: [
+              { id: "m1", name: "Bar terminal", paysInto: "other" },
+              { id: "m2", name: "Patio", paysInto: "other" },
+            ],
+            revision: 1,
+          };
+          refused({ code: "settings.out_of_date", params: { revision: 1 } });
+        };
+      }),
+  );
+  const save = page.getByRole("button", { name: "Save", exact: true });
+  const { el, leaving } = await leaveWith("discard", async () => {
+    await save.click();
+    await vi.waitFor(() => expect(saveOtherCardMachines).toHaveBeenCalledTimes(1));
+  });
+  expect(await leaving).not.toBe("kept");
+  refuse();
+  const names = page.getByRole("textbox", { name: "Name" });
+  await expect.element(names.nth(1)).toHaveValue("Patio");
+  await expect.element(names.nth(0)).toHaveValue("Bar terminal");
+  await expect.element(save).toBeDisabled();
   expect(el.leave.coordinator.isDirty()).toBe(false);
 });
