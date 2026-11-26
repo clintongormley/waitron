@@ -363,7 +363,8 @@ stub(
 // prints WT_APT_STDOUT on standard output when a case sets it.
 // `timeout` and `gtimeout` drop the limit and run the rest. `dpkg-query` answers `installed`, so no
 // case reaches a real one on a Linux machine, and `not-installed` with status 1 for libatomic1 when
-// WT_LIBATOMIC_MISSING=1 and for bluez when WT_BLUEZ_MISSING=1.
+// WT_LIBATOMIC_MISSING=1 and for bluez when WT_BLUEZ_MISSING=1. An unknown firmware-realtek
+// package exits 1 with no status on stdout.
 stub(
   "apt-get",
   `n=$(cat "\${WT_LOG}.apt" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.apt"
@@ -377,8 +378,14 @@ stub(
   `case "\${@: -1}" in
   libatomic1) [ "\${WT_LIBATOMIC_MISSING}" = 1 ] && { echo not-installed; exit 1; } ;;
   bluez) [ "\${WT_BLUEZ_MISSING}" = 1 ] && { echo not-installed; exit 1; } ;;
+  firmware-realtek) [ "\${WT_REALTEK_FIRMWARE_MISSING}" = 1 ] && exit 1 ;;
 esac
 echo installed`,
+);
+stub(
+  "apt-cache",
+  `[ "$*" = 'policy firmware-realtek' ] && [ "\${LC_ALL}" = C ] || exit 97
+printf '%s\\n' "\${WT_FIRMWARE_POLICY}"`,
 );
 stub("timeout", `shift; exec "$@"`);
 stub("gtimeout", `shift; exec "$@"`);
@@ -2496,6 +2503,86 @@ describe("waitron.sh install and a host without BlueZ", () => {
     ).toHaveLength(3);
     expect(r.stderr.split("\n").filter((l) => l.startsWith(warning))).toHaveLength(1);
     expect(loggedCalls(sb)).not.toContain("systemctl enable --now bluetooth");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
+  });
+});
+
+describe("waitron.sh installs Debian Realtek firmware", () => {
+  const candidate =
+    "firmware-realtek:\n  Installed: (none)\n  Candidate: 20250410-2\n  Version table:\n     20250410-2 500";
+  const installFirmware = /^apt-get .* install -y --no-install-recommends firmware-realtek$/;
+
+  function firmwareHost(id = "debian") {
+    const sb = sandbox({ systemd: true });
+    writeFileSync(join(sb.root, "etc/os-release"), `ID=${id}\nID_LIKE=debian\n`);
+    return sb;
+  }
+
+  it.each(["fresh install", "checked upgrade"])("installs missing firmware on a %s", (mode) => {
+    const sb = firmwareHost();
+    if (mode === "checked upgrade") installedBox(sb);
+    const r = run(sb, ["install", "my-branch"], {
+      WT_REALTEK_FIRMWARE_MISSING: "1",
+      WT_FIRMWARE_POLICY: candidate,
+      WAITRON_SH_REFRESHED: "1",
+    });
+    expect(r.status, r.stderr).toBe(0);
+    const calls = loggedCalls(sb).filter((call) => /^(apt-get|apt-cache) /.test(call));
+    expect(calls).toEqual([
+      expect.stringMatching(/^apt-get .* update$/),
+      "apt-cache policy firmware-realtek",
+      expect.stringMatching(installFirmware),
+    ]);
+  });
+
+  it.each([
+    { id: "debian", missing: "0" },
+    { id: "ubuntu", missing: "1" },
+  ])("skips apt on $id with firmware missing = $missing", ({ id, missing }) => {
+    const sb = firmwareHost(id);
+    const r = run(sb, ["install"], {
+      WT_REALTEK_FIRMWARE_MISSING: missing,
+      WT_FIRMWARE_POLICY: candidate,
+    });
+    expect(r.status, r.stderr).toBe(0);
+    expect(loggedCalls(sb).filter((call) => /^(apt-get|apt-cache) /.test(call))).toEqual([]);
+  });
+
+  it.each([
+    { cause: "no package in the index", policy: "", updates: "0", installFail: "", attempts: 0 },
+    {
+      cause: "no candidate",
+      policy: "firmware-realtek:\n  Installed: (none)\n  Candidate: (none)\n  Version table:",
+      updates: "0",
+      installFail: "",
+      attempts: 0,
+    },
+    { cause: "update failure", policy: candidate, updates: "3", installFail: "", attempts: 0 },
+    {
+      cause: "install failure",
+      policy: candidate,
+      updates: "0",
+      installFail: "firmware-realtek",
+      attempts: 3,
+    },
+  ])("warns and starts Waitron after $cause", ({ policy, updates, installFail, attempts }) => {
+    const sb = firmwareHost();
+    const r = run(sb, ["install"], {
+      WT_REALTEK_FIRMWARE_MISSING: "1",
+      WT_FIRMWARE_POLICY: policy,
+      WT_APT_FAIL: updates,
+      WT_APT_INSTALL_FAIL: installFail,
+    });
+    expect(r.status, r.stderr).toBe(0);
+    expect(
+      r.stderr
+        .split("\n")
+        .filter((line) =>
+          /could not install firmware-realtek.*network.*non-free-firmware/.test(line),
+        ),
+    ).toHaveLength(1);
+    expect(r.stderr).toContain("run 'sudo apt update' and 'sudo apt install firmware-realtek'");
+    expect(loggedCalls(sb).filter((call) => installFirmware.test(call))).toHaveLength(attempts);
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
   });
 });

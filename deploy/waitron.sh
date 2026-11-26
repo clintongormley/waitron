@@ -267,6 +267,21 @@ ensure_bluez() {
   as_root systemctl enable --now bluetooth || true
 }
 
+ensure_realtek_firmware() {
+  local os_release="${WAITRON_TEST_HOST_ROOT:-}/etc/os-release"
+  command -v apt-get >/dev/null 2>&1 && [ -r "$os_release" ] || return 0
+  if ! (unset ID; . "$os_release" && [ "${ID:-}" = debian ]); then
+    return 0
+  fi
+  [ "$(dpkg-query -W -f '${db:Status-Status}' firmware-realtek 2>/dev/null)" != installed ] || return 0
+  # Keep apt_get's fatal exit inside the subshell because Bluetooth firmware is optional.
+  if ! (apt_get update \
+    && LC_ALL=C apt-cache policy firmware-realtek | grep -E '^[[:space:]]*Candidate:[[:space:]]+[0-9]' >/dev/null \
+    && apt_get install -y --no-install-recommends firmware-realtek); then
+    echo "waitron.sh: could not install firmware-realtek for Realtek Bluetooth adapters. Check the network and enable non-free-firmware in Debian's APT sources, then run 'sudo apt update' and 'sudo apt install firmware-realtek'." >&2
+  fi
+}
+
 # 2c. On the owner's box (BlueZ 5.82, 2026-09-29) bluetoothd's autopair plugin answered a PIN-1234
 #     printer's PIN request with 0000 before any agent was asked; bluetoothd's retry then went over
 #     Low Energy, which that printer refuses, so it never paired. With the plugin off the agent was
@@ -1167,6 +1182,7 @@ cmd_checked_install() (
   {
     load_print_agent_apparmor "$sha"
     ensure_bluez
+    ensure_realtek_firmware
     disable_bluetooth_autopair
     enable_time_sync
     install_box_service "$sha"
@@ -1309,6 +1325,7 @@ cmd_install() (
   fetch_box_files "$source_ref"
   load_print_agent_apparmor "$source_ref"
   ensure_bluez
+  ensure_realtek_firmware
   disable_bluetooth_autopair
   enable_time_sync
   install_box_service "$source_ref"

@@ -10,6 +10,11 @@ Una impresora Bluetooth debe estar antes en modo de emparejamiento. Elige **Empa
 junto a ella, introduce su PIN y vuelve a elegir **Emparejar y añadir**. Si es una impresora nueva, se
 abre el diálogo del nombre: elige **Añadir**.
 
+Si tu servidor con Debian no detecta un adaptador Bluetooth USB TP-Link UB500, ejecuta
+`sudo apt update` y `sudo apt install firmware-realtek` en el servidor. El paquete está en
+el componente `non-free-firmware` de Debian. Desconecta el adaptador, vuelve a conectarlo y
+elige **Añadir impresora** de nuevo.
+
 Si no aparece una impresora de red, abre **Comprobar una dirección conocida**, escribe su dirección
 IP y elige **Conectar**. Cuando Waitron la encuentre, elige **Añadir** si aparece esa opción o
 **Cerrar** para salir de la búsqueda.
