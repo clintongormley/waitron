@@ -186,6 +186,11 @@ export interface PagePrinterRow {
   agentId: string | null;
   agentName: string | null;
 }
+export interface PagePrinterJobSummary {
+  id: string;
+  pendingJobs: number;
+  lastPrintAt: string | null;
+}
 /** An office printer's test page, held by the server for a few minutes only. */
 export interface PageTestPage {
   id: string;
@@ -281,7 +286,7 @@ export interface PrintJobRow {
   attempts: number;
   lastError: string | null;
   waitReason?: "printer.not_visible";
-  kind?: "a4";
+  kind?: "a4" | "drawer";
   pageDocument?: "invoice" | "receipt" | null;
   printerHold?: string | null;
   createdAt: string;
@@ -362,6 +367,10 @@ export class PrintingApi extends BackupApi {
   }
   listPagePrinters(): Promise<PagePrinterRow[]> {
     return this.#request<PagePrinterRow[]>("/management-api/page-printers", "GET");
+  }
+
+  listPagePrinterSummaries(): Promise<PagePrinterJobSummary[]> {
+    return this.#request("/management-api/page-printers?jobSummary=1", "GET");
   }
   /** Adds the printer, enables the disabled one at that queue, or moves the active one to this agent. */
   registerPagePrinter(

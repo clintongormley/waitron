@@ -825,6 +825,7 @@ describe("remote agents with an aged print queue", () => {
       expect(rows.find((row) => row.id === job.jobId)).toMatchObject({
         status: "failed",
         attempts: 0,
+        kind: "drawer",
         lastError: "print_job.drawer_outcome_unknown",
         canResend: false,
       });

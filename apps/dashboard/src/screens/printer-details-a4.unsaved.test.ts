@@ -33,6 +33,7 @@ class A4DetailsLeaveApp extends LitElement {
     listPrinterProfiles: async () => [],
     listPrinterStationNames: async () => [],
     listDiscoveredPrinters: async () => [],
+    listPagePrinterSummaries: async () => [],
     listPagePrinters: vi
       .fn()
       .mockResolvedValue([row(), row({ id: "pp2", name: "Back office", host: "10.0.0.57" })]),

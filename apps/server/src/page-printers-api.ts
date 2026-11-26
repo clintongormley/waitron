@@ -31,6 +31,7 @@ import {
   type PagePrinterDiscovery,
 } from "./page-printers.js";
 import type { PageTestPages } from "./page-test-pages.js";
+import { readPrinterJobSummaries } from "./printer-job-summaries.js";
 
 /** The IPP queue a discovery entry's office report names, as reported by one agent. */
 export interface PagePrinterQueue {
@@ -89,23 +90,36 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
   app.get("/management-api/page-printers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) => listPagePrinters(tx));
-      return c.json(
-        rows.map((row) => ({
-          id: row.id,
-          name: row.name,
-          host: row.host,
-          port: row.port,
-          resourcePath: row.resourcePath,
-          documentFormat: row.documentFormat,
-          supportedFormats: row.supportedFormats,
-          media: row.media,
-          resolutionDpi: row.resolutionDpi,
-          active: row.active,
-          agentId: row.agentId,
-          agentName: row.agentName,
-        })),
-      );
+      const jobSummary = c.req.query("jobSummary") === "1";
+      const rows = await gated(sessionId, async (tx) => {
+        const printers = await listPagePrinters(tx);
+        const summaries =
+          jobSummary && printers.length > 0 ? await readPrinterJobSummaries(tx, "a4") : undefined;
+        return printers.map((row) => {
+          const summary = summaries?.get(row.id);
+          return {
+            id: row.id,
+            name: row.name,
+            host: row.host,
+            port: row.port,
+            resourcePath: row.resourcePath,
+            documentFormat: row.documentFormat,
+            supportedFormats: row.supportedFormats,
+            media: row.media,
+            resolutionDpi: row.resolutionDpi,
+            active: row.active,
+            agentId: row.agentId,
+            agentName: row.agentName,
+            ...(jobSummary
+              ? {
+                  pendingJobs: summary?.pendingJobs ?? 0,
+                  lastPrintAt: summary?.lastPrintAt ?? null,
+                }
+              : {}),
+          };
+        });
+      });
+      return c.json(rows);
     }),
   );
 

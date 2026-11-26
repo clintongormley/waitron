@@ -48,7 +48,7 @@ import {
   printerProfileAssignment,
   type EquipmentProfileAssignment,
 } from "../widgets/equipment-profile-picker.js";
-import { PageTestPages, pageFailureReason } from "../widgets/page-test-pages.js";
+import { PageTestPages } from "../widgets/page-test-pages.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
 import {
   equipmentLabelItems,
@@ -66,7 +66,14 @@ import type { StringKey } from "../i18n/strings.js";
 import { dashboardPath } from "../navigation.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { a4Choices, jobStatusName, transportName } from "../i18n/domain.js";
-import { holdReason } from "../i18n/a4-holds.js";
+import {
+  ENDED_BY_SERVER,
+  JOB_STATUSES,
+  jobErrorMessage,
+  jobReason,
+  jobStatus,
+  jobWaitMessage,
+} from "./printer-job-status.js";
 import { formatIsoMinute, formatRecentMinute } from "../date-utils.js";
 import { settingsCardStyles, settingsRows, type SettingsRow } from "../widgets/settings-card.js";
 import {
@@ -91,10 +98,10 @@ import type {
   DiscoveredPrinter,
   OfficePrinterReport,
   PagePrinterEntry,
+  PagePrinterJobSummary,
   PagePrinterRow,
   PrintAgentRow,
   PrintJobRow,
-  PrintJobStatus,
   PrintJobPreview,
   A4PrintJobPreview,
   PrintPaperWidth,
@@ -231,8 +238,6 @@ function hasErrors(errors: DetailEditErrors): boolean {
   return Object.values(errors).some((error) => error !== "");
 }
 
-const JOB_STATUSES: readonly PrintJobStatus[] = ["queued", "printing", "done", "failed", "unknown"];
-
 function pageSize(media: PagePrinterRow["media"]): string {
   return t(
     media === "iso_a4_210x297mm"
@@ -288,36 +293,6 @@ interface PrinterDraft {
   transport: PrintTransport;
   localKey?: string;
   pollId?: string;
-}
-
-/** The `last_error` codes of a job the server ended itself, setting its attempts to the cap. */
-const ENDED_BY_SERVER = new Set(["printer.deleted", "print_job.moved", "receipt.out_of_date"]);
-
-const LOCALIZED_JOB_REASONS = new Set([
-  ...ENDED_BY_SERVER,
-  "print_job.drawer_expired",
-  "print_job.drawer_outcome_unknown",
-]);
-
-const jobReason = (lastError: string): string =>
-  LOCALIZED_JOB_REASONS.has(lastError) ? codeMessage(lastError) : lastError;
-
-function jobWaitMessage(job: PrintJobRow): string | undefined {
-  if (job.waitReason !== undefined) return codeMessage(job.waitReason);
-  if (job.printerHold == null) return undefined;
-  if (job.printerHold === "paper_out")
-    return fill("printers.job_paper_out", { printer: job.printerName });
-  const reason = holdReason(job.printerHold);
-  return reason === undefined
-    ? undefined
-    : fill("printers.job_held", { printer: job.printerName, reason });
-}
-
-function jobErrorMessage(job: PrintJobRow): string | undefined {
-  if (job.lastError === null) return undefined;
-  if (job.kind === "a4" && job.lastError === "switched")
-    return t("printers.job_switched_to_receipt");
-  return job.kind === "a4" ? pageFailureReason(job.lastError) : jobReason(job.lastError);
 }
 
 const refusalParams = (error: unknown) =>
@@ -573,7 +548,8 @@ export class PrintersScreen extends LitElement {
       wt-data-table::part(job-failed)::before {
         background: var(--wt-color-danger);
       }
-      wt-data-table::part(job-unknown)::before {
+      wt-data-table::part(job-unknown)::before,
+      wt-data-table::part(job-held)::before {
         background: var(--wt-color-warning);
       }
       wt-data-table::part(job-printing)::before {
@@ -937,6 +913,7 @@ export class PrintersScreen extends LitElement {
   @state() private agents: PrintAgentRow[] = [];
   @state() private printers: Printer[] = [];
   @state() private pagePrinters: PagePrinterRow[] = [];
+  @state() private pagePrinterSummaries = new Map<string, PagePrinterJobSummary>();
   /** `#pagePrinterReads` when the live query last delivered, so a one-off read begun earlier is dropped. */
   #pagePrinterLiveAt = 0;
   #pagePrinterReads = 0;
@@ -1461,6 +1438,9 @@ export class PrintersScreen extends LitElement {
           this.#pagePrintersReady = true;
           this.#restorePrinterTarget();
           this.#pagePrinterLiveAt = ++this.#pagePrinterReads;
+        }),
+        this.#queries.watch("listPagePrinterSummaries", [], (rows) => {
+          this.pagePrinterSummaries = new Map(rows.map((row) => [row.id, row]));
         }),
         this.#queries.watch("pairingMode", [], (pairing) => {
           this.pairing = pairing;
@@ -4199,21 +4179,32 @@ export class PrintersScreen extends LitElement {
         key: "pending",
         choosable: "shown",
         label: t("printers.pending_jobs"),
-        sortValue: (r) => (r.kind === "receipt" ? r.printer.pendingJobs : null),
+        sortValue: (r) =>
+          r.kind === "receipt"
+            ? r.printer.pendingJobs
+            : (this.pagePrinterSummaries.get(r.row.id)?.pendingJobs ?? null),
         cell: (r) =>
           r.kind === "receipt"
             ? r.printer.pendingJobs
-            : html`<span data-test=${`page-printer-pending-${r.row.id}`}>—</span>`,
+            : html`<span data-test=${`page-printer-pending-${r.row.id}`}
+                >${this.pagePrinterSummaries.get(r.row.id)?.pendingJobs ?? "—"}</span
+              >`,
       },
       {
         key: "lastPrint",
         choosable: "shown",
         label: t("printers.last_print"),
-        sortValue: (r) => (r.kind === "receipt" ? r.printer.lastPrintAt : null),
-        cell: (r) =>
+        sortValue: (r) =>
           r.kind === "receipt"
-            ? this.#timestamp(r.printer.lastPrintAt)
-            : html`<span data-test=${`page-printer-last-print-${r.row.id}`}>—</span>`,
+            ? r.printer.lastPrintAt
+            : (this.pagePrinterSummaries.get(r.row.id)?.lastPrintAt ?? null),
+        cell: (r) => {
+          if (r.kind === "receipt") return this.#timestamp(r.printer.lastPrintAt);
+          const summary = this.pagePrinterSummaries.get(r.row.id);
+          return html`<span data-test=${`page-printer-last-print-${r.row.id}`}
+            >${summary === undefined ? "—" : this.#timestamp(summary.lastPrintAt)}</span
+          >`;
+        },
       },
       {
         key: "actions",
@@ -4392,8 +4383,13 @@ export class PrintersScreen extends LitElement {
   #jobColumnKey = "";
   #jobColumnList: DataTableColumn<PrintJobRow>[] = [];
 
+  #jobPrinter(j: PrintJobRow): Printer | PagePrinterRow | undefined {
+    const printers = j.kind === "a4" ? this.pagePrinters : this.printers;
+    return printers.find((printer) => printer.id === j.printerId);
+  }
+
   #jobPrinterName(j: PrintJobRow): string {
-    return this.printers.find((p) => p.id === j.printerId)?.name ?? j.printerName;
+    return this.#jobPrinter(j)?.name ?? j.printerName;
   }
 
   #jobColumns(): DataTableColumn<PrintJobRow>[] {
@@ -4425,7 +4421,7 @@ export class PrintersScreen extends LitElement {
           options: printerOptions,
         },
         cell: (j) => {
-          const printer = this.printers.find((p) => p.id === j.printerId);
+          const printer = this.#jobPrinter(j);
           return html`<span data-test=${`job-row-${j.id}`}
               >${
                 printer
@@ -4465,16 +4461,19 @@ export class PrintersScreen extends LitElement {
           multiple: {
             countLabel: (count) => fill("printers.filter_status_count", { count: String(count) }),
           },
-          value: (j) => j.status,
+          value: jobStatus,
           options: JOB_STATUSES.map((status) => ({ value: status, label: jobStatusName(status) })),
         },
         searchValue: (j) =>
-          [jobStatusName(j.status), jobErrorMessage(j) ?? "", jobWaitMessage(j) ?? ""].join(" "),
+          [jobStatusName(jobStatus(j)), jobErrorMessage(j) ?? "", jobWaitMessage(j) ?? ""].join(
+            " ",
+          ),
         cell: (j) => {
+          const status = jobStatus(j);
           const waiting = jobWaitMessage(j);
           const error = jobErrorMessage(j);
-          return html`<span part=${`job-status job-${j.status}`} data-test=${`job-status-${j.id}`}
-              >${jobStatusName(j.status)}</span
+          return html`<span part=${`job-status job-${status}`} data-test=${`job-status-${j.id}`}
+              >${jobStatusName(status)}</span
             >${error === undefined ? nothing : html`<p part="job-reason" data-test=${`job-error-${j.id}`}>${error}</p>`}${waiting === undefined ? nothing : html`<p part="job-reason" data-test=${`job-wait-${j.id}`}>${waiting}</p>`}`;
         },
       },
@@ -4511,7 +4510,7 @@ export class PrintersScreen extends LitElement {
         key: "preview",
         label: t("printers.actions"),
         cell: (j) =>
-          j.kind === "a4" && j.pageDocument !== "invoice"
+          j.kind === "drawer" || (j.kind === "a4" && j.pageDocument !== "invoice")
             ? nothing
             : html`<div part="job-actions">
                 <wt-button data-test=${`view-job-${j.id}`} @click=${() => void this.#viewJob(j.id)}

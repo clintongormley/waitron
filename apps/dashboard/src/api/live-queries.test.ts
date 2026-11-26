@@ -9,7 +9,7 @@ it("quiets only the audited database queries while connected", () => {
   const expected = `listMenus getMenuStructure getMenuStructures getMenuPrices getMenuHome
     listCategories getCategory listLibraryProducts listProducts listUnits listOptionLists getOptionList
     listExtraLists getExtraList getVenueTheme listThemes listPrinters listPrinterProfiles
-    listPrinterStationNames listPagePrinters listPrinterStations getPrinterDeleteImpact listReaders
+    listPrinterStationNames listPagePrinters listPagePrinterSummaries listPrinterStations getPrinterDeleteImpact listReaders
     listReaderHolders getProfileReaders listHeldPayments getDailyClose getSalesPeriod getCategorySales
     getDrawerCloses getReportPrinters getOrderPrinters listOrderStaff listStaff listStaffPage getStaffRoster getProfile
     listPendingAbsences listPendingSwaps getRoster listMySwaps listMyAbsences listDeviceProfiles

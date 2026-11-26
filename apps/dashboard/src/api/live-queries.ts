@@ -89,6 +89,7 @@ export const QUERY_DEPENDENCIES = {
   listPrinterProfiles: ["device_profiles", "departments"],
   listPrinterStationNames: ["kitchen_stations"],
   listPagePrinters: ["printers", "print_agents"],
+  listPagePrinterSummaries: ["printers", "print_jobs"],
   getPagePrinterDeleteImpact: ["printers", "invoice_deliveries", "devices", "device_profiles"],
   getPrinterDeleteImpact: [
     "printers",
@@ -501,6 +502,7 @@ export const QUIET_WHILE_CONNECTED: ReadonlySet<DashboardQueryName> = new Set([
   "listPrinterProfiles",
   "listPrinterStationNames",
   "listPagePrinters",
+  "listPagePrinterSummaries",
   "listPrinterStations",
   "getPrinterDeleteImpact",
   "listReaders",

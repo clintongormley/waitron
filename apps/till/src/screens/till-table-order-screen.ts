@@ -3180,6 +3180,10 @@ export class TillTableOrderScreen extends LitElement {
     `;
   }
 
+  repositionMenus(): void {
+    for (const menu of this.renderRoot.querySelectorAll("wt-row-actions")) menu.reposition();
+  }
+
   #floorBackButton(): TemplateResult | typeof nothing {
     return this.embedded
       ? nothing

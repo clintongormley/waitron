@@ -116,6 +116,7 @@ const PRINT_TRANSPORT_NAMES: NameTable = {
 const PRINT_JOB_STATUS_NAMES: NameTable = {
   queued: { en: "Queued", es: "En cola" },
   printing: { en: "Printing", es: "Imprimiendo" },
+  held: { en: "Held", es: "En espera" },
   done: { en: "Done", es: "Hecho" },
   failed: { en: "Failed", es: "Fallido" },
   unknown: { en: "May have printed", es: "Puede haberse impreso" },

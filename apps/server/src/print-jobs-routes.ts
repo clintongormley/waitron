@@ -252,6 +252,7 @@ export function mountPrintJobsRoutes(
             return {
               ...job,
               ...where,
+              ...(kind === "drawer" ? { kind } : {}),
               ...(unseen && (isWaiting({ ...job, kind }) || job.status === "printing")
                 ? { waitReason: "printer.not_visible" as const }
                 : {}),

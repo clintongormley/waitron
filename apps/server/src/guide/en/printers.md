@@ -100,7 +100,9 @@ shows the invoice printed, choose **Reprint** to send a marked copy to any activ
 printer. If printing failed or the queue says **May have printed**, check the printer and use
 **Orders** to send the invoice again.
 
-If an A4 job says the printer is out of paper, add paper and let the job finish.
+If an A4 job says **Held** because the printer is out of paper, add paper and let the job finish.
+Check **Pending jobs** and **Last print time** in the **Printers** tab to see what is waiting and
+when the printer last finished a job.
 
 Drawer commands cannot be resent. If the till shows **Drawer didn’t open**, check the printer’s
 power and connection, then use **Open drawer** if you still need it open. If no result was

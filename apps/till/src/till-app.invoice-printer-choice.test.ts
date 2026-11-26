@@ -279,6 +279,7 @@ it.each([null, bar])(
     };
     getInvoiceDeliveries.mockResolvedValue(completed);
     await vi.waitFor(() => expect(part(el, "delivery-status")?.textContent).toBe("Printed on A4."));
+    expect(part(el, "refresh-receipt")).toBeNull();
     expect(part(el, "invoice-printer-toggle")?.textContent).toContain(
       selected === null ? "Office · A4" : "Bar · receipt paper",
     );
