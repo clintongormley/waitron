@@ -4,7 +4,12 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { BucketOperation } from "./errors.js";
 import type { ObjectStore } from "./object-store.js";
-import { CONFLICT_ATTEMPTS, DELETE_CONCURRENCY, createS3ObjectStore } from "./s3-store.js";
+import {
+  CONFLICT_ATTEMPTS,
+  DELETE_CONCURRENCY,
+  createS3FolderStore,
+  createS3ObjectStore,
+} from "./s3-store.js";
 import type { BucketConfig } from "./s3-store.js";
 import { silentBucket } from "./testing/silent-bucket.js";
 
@@ -109,7 +114,7 @@ const BYTES = new TextEncoder().encode("{}");
 function storeOver(responses: Scripted[], config: BucketConfig = CONFIG) {
   const net = network(responses);
   const waits: number[] = [];
-  const store = createS3ObjectStore(config, {
+  const store = createS3FolderStore(config, {
     requestHandler: net.handler,
     sleep: async (ms) => {
       waits.push(ms);
@@ -353,26 +358,30 @@ describe("list", () => {
     ]);
   });
 
-  it("refuses a folder listed outside the requested prefix without exposing its name", async () => {
-    const { store } = storeOver([
-      { status: 200, headers: xml, body: listing(folder("elsewhere/gen-10-node/")) },
-    ]);
-    expect(await rejection(store.listFolders("gen-"))).toEqual({
-      code: "backup.stream_name_invalid",
-      params: { field: "listedKey", value: "other" },
-    });
-  });
-
-  it.each([folder("waitron/gen-10-node"), entry("waitron/gen-10-node/opened.json")])(
-    "refuses an incomplete folder listing (%s)",
+  it.each([folder("elsewhere/gen-10-node/"), entry("elsewhere/gen-10-node")])(
+    "refuses an entry outside the requested prefix without exposing its name (%s)",
     async (body) => {
       const { store } = storeOver([{ status: 200, headers: xml, body: listing(body) }]);
       expect(await rejection(store.listFolders("gen-"))).toEqual({
-        code: "backup.stream_request_failed",
-        params: { operation: "list", key: "gen-", status: 200, name: "IncompleteListing" },
+        code: "backup.stream_name_invalid",
+        params: { field: "listedKey", value: "other" },
       });
     },
   );
+
+  it.each([
+    folder("waitron/gen-10-node"),
+    folder("waitron/gen-10-node/nested/"),
+    "<CommonPrefixes><Wrong>waitron/gen-10-node/</Wrong></CommonPrefixes>",
+    entry("waitron/gen-10-node/opened.json"),
+    "<Contents><LastModified>2026-09-23T10:00:00.000Z</LastModified></Contents>",
+  ])("refuses an incomplete folder listing (%s)", async (body) => {
+    const { store } = storeOver([{ status: 200, headers: xml, body: listing(body) }]);
+    expect(await rejection(store.listFolders("gen-"))).toEqual({
+      code: "backup.stream_request_failed",
+      params: { operation: "list", key: "gen-", status: 200, name: "IncompleteListing" },
+    });
+  });
 
   it.each([
     ["another folder under the configured root", "waitron/venues/v2/a"],

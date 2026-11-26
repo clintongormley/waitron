@@ -5,7 +5,7 @@ export type {
   StoreCall,
   StoredObject,
 } from "./object-store.js";
-export { CONFLICT_ATTEMPTS, createS3ObjectStore } from "./s3-store.js";
+export { CONFLICT_ATTEMPTS, createS3FolderStore, createS3ObjectStore } from "./s3-store.js";
 export type { S3ObjectStore } from "./s3-store.js";
 export { createBucketClient, nameOf, statusOf } from "./s3-client.js";
 export { createS3FileStore } from "./s3-file-store.js";

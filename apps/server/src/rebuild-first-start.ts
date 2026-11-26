@@ -17,7 +17,7 @@ import { isMembershipDocument, verifyMembershipDocument } from "@waitron/members
 import { codeOf } from "@waitron/server-kit";
 import { AppError, isAppError } from "@waitron/shared";
 import {
-  createS3ObjectStore,
+  createS3FolderStore,
   parseGenerationName,
   readPointer,
   type BucketConfig,
@@ -217,7 +217,7 @@ export async function readBucketTerm(
   try {
     const settings = await readStreamSettings(db, ring);
     if (settings === null) return null;
-    const store = (options.openStore ?? createS3ObjectStore)(settings.bucket);
+    const store = (options.openStore ?? createS3FolderStore)(settings.bucket);
     const reading = new AbortController();
     const bound = new AbortController();
     try {

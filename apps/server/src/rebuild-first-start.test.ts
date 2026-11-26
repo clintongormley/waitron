@@ -668,7 +668,7 @@ describe("readBucketTerm", () => {
         operation: "list",
         key: "gen-",
         status: 403,
-        errorName: "AccessDenied",
+        name: "AccessDenied",
       });
       const listing: S3ObjectStore =
         failure === "refused listing"

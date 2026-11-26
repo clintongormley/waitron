@@ -78,6 +78,13 @@ export interface S3ObjectStore extends ObjectStore {
 export function createS3ObjectStore(
   config: BucketConfig,
   options: S3ObjectStoreOptions = {},
+): ObjectStore {
+  return createS3FolderStore(config, options);
+}
+
+export function createS3FolderStore(
+  config: BucketConfig,
+  options: S3ObjectStoreOptions = {},
 ): S3ObjectStore {
   const client = createBucketClient(config, options);
   const wait = options.sleep ?? abortableSleep;

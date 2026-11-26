@@ -3,7 +3,8 @@
 > **26 November 2026:** The [Lane H slice 2 plan](2026-11-26-h-a1418-restore-bucket-term.md)
 > uses Task 6's bucket term floor. For this slice it preserves the existing first-start failure
 > path, including for an unusable term. The draft's hard stop and wait for an unreadable bucket
-> require a separate decision.
+> require a separate decision. Later S3 checks can use `S3ObjectStore.listFolders` to get names
+> without requesting each file.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Implementers are dispatched as `subagent_type: "implementer"`.
 
