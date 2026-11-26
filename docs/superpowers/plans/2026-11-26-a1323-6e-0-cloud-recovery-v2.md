@@ -36,24 +36,27 @@ pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.
 ## Qualify the candidate before landing
 
 Ask the watcher to coordinate with lane G. Use the owner's test Cloud with snapshot admission
-scoped to one disposable preproduction venue for the duration of the trial. Record the venue,
-Cloud image and deployed revision, the way admission was scoped, and its removal afterward.
-Confirm that deployment contains Cloud #1382 (`46e77bf820c2a10121dcb9c0a2d0a32d234bd6b8`) and
-that its named `pointId` approval gives setup an `info` reply. Keep ordinary admission gated.
+scoped to one disposable preproduction venue. Confirm that Cloud’s deployed revision contains
+#1382 (`46e77bf820c2a10121dcb9c0a2d0a32d234bd6b8`) and named approval returns `info`.
+Have lane G pin the checker to the same candidate for that venue. If its verifier is shared, use
+an isolated test deployment. Record the venue, Cloud image and revision, and scoped checker and
+admission settings. Remove the trial settings afterward. D451’s release gates apply.
 
-Build and pin the PR candidate image by digest. Record its source revision, release provenance,
-runtime fingerprint and complete target from `/app/backup-verification.js` using `/app/drizzle`.
+Before the trial, build and pin a candidate image with release provenance. Record its digest,
+source, runtime fingerprint and complete target from `/app/backup-verification.js` using `/app/drizzle`.
 Capture and verify a snapshot of the disposable source with a known sale. Record the current
 verification attempt and archive digest, and confirm that Cloud has no recoverable continuous
 source for the venue and setup has no bucket kit. Match the bundled target digest against the
 setup request and the Cloud verification. Keep the verifier’s `activation: "not_attempted"`
-receipt. Stop the disposable source and use its own master key, this snapshot’s source-bound
-preparation, and setup’s isolation confirmations. Restore through setup. After restart, find the
-known sale and fresh fiscal allocation. Record the local `reported` phase, Cloud’s `restored`
-acknowledgment for the same request and point, and elapsed time against Cloud’s expiry.
+receipt. Stop the source and use its master key, setup’s Cloud-source recovery preparation
+for the selected snapshot, and setup’s isolation confirmations. After restoring and restarting,
+find the known sale and fresh fiscal allocation. Require local `reported` and Cloud `restored`
+for the same request and point before approval expires. An expired trial needs a fresh run.
 [Release procedure](../../operations/backup-verifier-release.md)
 
 Expect about 40 production and 155 test lines added. The chooser, Cloud UI, fiscal authority and
 placement are outside this PR. Update `docs/backlog.md`, `docs/backlog/box.md` and
-`docs/developers/conventions-data.md` from the trial evidence. Run finish-branch with two Claude
-reviews. The owner lands this restore change. The chooser waits for this PR and watcher clearance.
+`docs/developers/conventions-data.md` with the exact tested source and digest, and the refusal
+of saved v1 setup sessions. Verify that later branch edits touch only docs and qualify every
+different image separately. Run finish-branch with two Claude reviews. The owner lands this
+restore change. The chooser waits for this PR and watcher clearance.
