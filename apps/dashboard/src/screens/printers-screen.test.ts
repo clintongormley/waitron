@@ -374,6 +374,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listPrinterProfiles: vi.fn().mockResolvedValue(printerProfiles),
     listPrinterStationNames: vi.fn().mockResolvedValue([]),
     listPagePrinters: vi.fn().mockResolvedValue([] as PagePrinterRow[]),
+    listPagePrinterSummaries: vi.fn().mockResolvedValue([]),
     registerPagePrinter: vi.fn().mockResolvedValue({ id: "pp9", outcome: "created" }),
     ...overrides,
   } as unknown as DashboardApi;
@@ -6072,11 +6073,15 @@ it("shows office printer holds and allows viewing uncertain invoice pages", asyn
     lastError: null,
   };
   const held = { ...office, id: "held-page", status: "printing", printerHold: "paper_out" };
+  const queued = { ...held, id: "queued-page", status: "queued" };
+  const printing = { ...held, id: "printing-page", printerHold: null };
   const failed = { ...office, id: "failed-page", status: "failed", lastError: "printer_refused" };
   const switched = { ...failed, id: "switched-page", lastError: "switched" };
   const uncertain = { ...office, id: "uncertain-page", status: "unknown", printerHold: null };
   const liveData = new LiveData();
-  const listRecentJobs = vi.fn().mockResolvedValue([held, failed, switched, uncertain]);
+  const listRecentJobs = vi
+    .fn()
+    .mockResolvedValue([held, queued, printing, failed, switched, uncertain]);
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi({ liveData, listRecentJobs }),
   });
@@ -6084,6 +6089,28 @@ it("shows office printer holds and allows viewing uncertain invoice pages", asyn
   expect(text(el, "[data-test=job-wait-held-page]")).toBe(
     "Back office is out of paper. Add paper and it will print.",
   );
+  expect(text(el, "[data-test=job-status-held-page]")).toBe("Held");
+  expect(text(el, "[data-test=job-status-queued-page]")).toBe("Held");
+  expect(text(el, "[data-test=job-status-printing-page]")).toBe("Printing");
+  const dot = (id: string) =>
+    getComputedStyle(q(el, `[data-test=job-status-${id}]`)!, "::before").backgroundColor;
+  expect(dot("held-page")).not.toBe(dot("printing-page"));
+  const table = q(el, "[data-test=jobs-table]")!;
+  const search = table.shadowRoot!.querySelector<HTMLInputElement>(".table-search")!;
+  search.value = "Held";
+  search.dispatchEvent(new Event("input"));
+  await flush(el);
+  expect(q(el, "[data-test=job-row-held-page]")).not.toBeNull();
+  expect(q(el, "[data-test=job-row-printing-page]")).toBeNull();
+  search.value = "";
+  search.dispatchEvent(new Event("input"));
+  const filter = table.shadowRoot!.querySelector<HTMLElement>('[data-filter="status"]')!;
+  await chooseOptions(filter, ["held"]);
+  await flush(el);
+  expect(q(el, "[data-test=job-row-queued-page]")).not.toBeNull();
+  expect(q(el, "[data-test=job-row-printing-page]")).toBeNull();
+  await chooseOptions(filter, []);
+  await flush(el);
   expect(text(el, "[data-test=job-status-uncertain-page]")).toBe("May have printed");
   expect(text(el, "[data-test=job-error-failed-page]")).toBe("the printer refused it");
   expect(text(el, "[data-test=job-error-switched-page]")).toBe("Switched to a receipt printer");
@@ -6102,6 +6129,17 @@ it("shows office printer holds and allows viewing uncertain invoice pages", asyn
   liveData.invalidate([{ type: "print_jobs", id: "held-page" }]);
   await vi.waitFor(() => expect(text(el, "[data-test=job-status-held-page]")).toBe("Done"));
   expect(q(el, "[data-test=job-wait-held-page]")).toBeNull();
+});
+
+it("offers a printout for a document beside a drawer command without a preview", async () => {
+  const drawer = { ...jobs[0]!, id: "drawer", kind: "drawer" as const };
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+    api: stubApi({ listRecentJobs: vi.fn().mockResolvedValue([jobs[1], drawer]) }),
+  });
+  await flush(el);
+  expect(q(el, "[data-test=job-row-drawer]")).not.toBeNull();
+  expect(q(el, "[data-test=view-job-j2]")).not.toBeNull();
+  expect(q(el, "[data-test=view-job-drawer]")).toBeNull();
 });
 
 it("distinguishes job statuses with coloured dots while preserving the status text", async () => {
@@ -13442,6 +13480,47 @@ describe("one table for every printer", () => {
     expect(inDetails(el, "[data-test=printer-status]")).not.toBeNull();
   });
 
+  it("opens an existing office printer from its Print Queue row", async () => {
+    const officeJob = {
+      ...jobs[0]!,
+      id: "office-job",
+      printerId: "pp2",
+      printerName: "Old name",
+      kind: "a4" as const,
+      pageDocument: "invoice" as const,
+    };
+    const { el } = await mountTable({
+      listRecentJobs: vi
+        .fn()
+        .mockResolvedValue([officeJob, { ...officeJob, id: "removed-job", printerId: "removed" }]),
+    });
+    await selectTab(el, "queue");
+    expect(textOf(el, "[data-test=job-printer-office-job]")).toBe("Back office");
+    expect(textOf(el, "[data-test=job-printer-removed-job]")).toBe("Old name");
+    expect(q(el, "[data-test=job-printer-removed-job]")!.localName).toBe("span");
+    await userEvent.click(q(el, "[data-test=job-printer-office-job]")!);
+    await vi.waitFor(() => expect(detailsHeading(el)).toBe("Back office"));
+  });
+
+  it("refreshes the office printer totals after a job changes without re-reading its record", async () => {
+    const liveData = new LiveData();
+    const lastPrintAt = new Date(2026, 10, 25, 18, 15, 24).toISOString();
+    const listPagePrinterSummaries = vi
+      .fn()
+      .mockResolvedValue([{ ...PAGE_ROWS[0], pendingJobs: 1, lastPrintAt: null }]);
+    const { el, api } = await mountTable({ liveData, listPagePrinterSummaries });
+    const pending = () => textOf(el, "[data-test=page-printer-pending-pp1]");
+    const printed = () => textOf(el, "[data-test=page-printer-last-print-pp1]");
+    expect(pending()).toBe("1");
+    expect(printed()).toBe(t("printers.last_seen_never"));
+    const reads = vi.mocked(api.listPagePrinters).mock.calls.length;
+    listPagePrinterSummaries.mockResolvedValue([{ ...PAGE_ROWS[0], pendingJobs: 0, lastPrintAt }]);
+    liveData.invalidate([{ type: "print_jobs", id: "a4-job" }]);
+    await vi.waitFor(() => expect(pending()).toBe("0"));
+    expect(printed()).toContain("18:15");
+    expect(api.listPagePrinters).toHaveBeenCalledTimes(reads);
+  });
+
   it("keeps the row menu in a pinned actions column for both kinds", async () => {
     const { el } = await mountTable();
     expect(table(el).columns.at(-1)).toMatchObject({ key: "actions", pinned: "end" });
@@ -14890,6 +14969,7 @@ describe("searching and filtering the printer tables", () => {
       t("printers.filter_status_all"),
       jobStatusName("queued"),
       jobStatusName("printing"),
+      jobStatusName("held"),
       jobStatusName("done"),
       jobStatusName("failed"),
       jobStatusName("unknown"),

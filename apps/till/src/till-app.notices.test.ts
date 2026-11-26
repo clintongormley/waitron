@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import type {
   DeviceEquipment,
   DeviceEquipmentRead,
@@ -197,6 +197,41 @@ describe("a poll beside an open order", () => {
     vi.useRealTimers();
     cleanupWidgets();
   });
+
+  it.each([1280, 390])(
+    "keeps the bill picker anchored when a paper-out notice arrives at %i px",
+    async (width) => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      onTestFinished(() => page.viewport(viewport.width, viewport.height));
+      await page.viewport(width, 800);
+      const paperOut: StaffNotice = {
+        owner: "office-invoices",
+        key: "back-office:held",
+        code: "invoice_delivery.office_print",
+        severity: "warning",
+        params: { printer: "Back office", reason: "held", hold: "paper_out" },
+      };
+      const getDeviceEquipment = vi.fn().mockResolvedValue(withNotices([]));
+      const { el } = await mountOrderApp({ getDeviceEquipment });
+      const order = await openOrderTable(el);
+      const switcher = order.shadowRoot!.querySelector<HTMLElement>("[data-bill-switcher]")!;
+      const trigger = switcher.shadowRoot!.querySelector("button")!;
+      await userEvent.click(trigger);
+      const popup = switcher.shadowRoot!.querySelector("[popover]")!;
+      expect(popup.matches(":popover-open")).toBe(true);
+      getDeviceEquipment.mockResolvedValue(withNotices([paperOut]));
+      await poll(el);
+      expect(strip(el).words).toContain("Back office");
+      const back = order.shadowRoot!.querySelector("[data-back]")!;
+      const notice = strip(el).drawn!;
+      expect(popup.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        trigger.getBoundingClientRect().bottom,
+      );
+      expect(back.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        notice.getBoundingClientRect().bottom,
+      );
+    },
+  );
 
   it("brings changed notices and leaves the order screen and its draft line in place", async () => {
     const getDeviceEquipment = vi

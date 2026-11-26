@@ -33,7 +33,8 @@ without an unnecessary Check print status button.
   `apps/server/src/guide/{en,es}/printers.md` for the new printer action and hold label.
   Keep the backlog's historical record of the real-box session. Check English and Spanish,
   light and dark, phone and desktop. Send a representative before and after for each
-  changed surface to the watcher for the owner’s landing decision.
+  changed surface to the watcher for the watcher’s visual check. The 09:20 clearance permits landing after that check for fixes
+  that match the neighbouring controls.
 
 Use existing job states, delivery facts and printer details. Dispatch, retries, drawer execution,
 test pages and A1588's preview navigation are outside this change. Expect about 100–150 lines of

@@ -24,7 +24,6 @@ import {
   type CreatePrinterInput,
   createPrinter,
   listPrinters,
-  MAX_DELIVERY_ATTEMPTS,
   type UpdatePrinterInput,
   updatePrinter,
   enqueuePrintJob,
@@ -40,9 +39,10 @@ import {
   requireBodyUuid,
 } from "@waitron/server-kit";
 import { AppError, steadyNow } from "@waitron/shared";
-import { sql, and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Hono } from "hono";
 import { readPrinterHolders } from "./device-equipment.js";
+import { readPrinterJobSummaries } from "./printer-job-summaries.js";
 import { formatEquipmentLabel } from "./equipment-label.js";
 import type { PrintApiDeps, PrintPermissionGate } from "./print-api-deps.js";
 import { run, runEquipmentLabel } from "./print-api-errors.js";
@@ -199,34 +199,15 @@ export function mountPrintPrintersRoutes(
       const rows = await gated(sessionId, async (tx) => {
         const configured = await listPrinters(tx);
         const holders = await readPrinterHolders(tx);
-        // Aggregated over the full history, unlike the job list's bounded completed history.
-        // `max(delivered_at)` is the latest instant only because every writer stores the canonical
-        // `toISOString()` spelling.
-        const summaries = await tx.execute<{
-          printer_id: string;
-          pending_jobs: number;
-          last_print_at: string | null;
-          last_print_agent_id: string | null;
-        }>(sql`
-          select printer_id,
-            cast(count(*) filter (where status in ('queued', 'printing')
-              or (kind = 'document' and status = 'failed' and attempts < ${MAX_DELIVERY_ATTEMPTS})) as int) as pending_jobs,
-            max(delivered_at) as last_print_at,
-            (select latest.claimed_by from print_jobs latest
-              where latest.printer_id = jobs.printer_id and latest.delivered_at is not null
-              order by latest.delivered_at desc, latest.id desc limit 1) as last_print_agent_id
-          from print_jobs jobs
-          group by printer_id`);
-        const byPrinter = new Map(summaries.rows.map((row) => [row.printer_id, row]));
+        const byPrinter = await readPrinterJobSummaries(tx);
         return configured.map((printer) => {
           const summary = byPrinter.get(printer.id);
           return {
             ...printer,
             holder: holders.get(printer.id) ?? null,
-            pendingJobs: summary?.pending_jobs ?? 0,
-            lastPrintAgentId: summary?.last_print_agent_id ?? null,
-            lastPrintAt:
-              summary?.last_print_at == null ? null : new Date(summary.last_print_at).toISOString(),
+            pendingJobs: summary?.pendingJobs ?? 0,
+            lastPrintAgentId: summary?.lastPrintAgentId ?? null,
+            lastPrintAt: summary?.lastPrintAt ?? null,
           };
         });
       });

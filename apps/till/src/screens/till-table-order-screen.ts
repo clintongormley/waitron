@@ -3180,6 +3180,12 @@ export class TillTableOrderScreen extends LitElement {
     `;
   }
 
+  repositionBillPicker(): void {
+    this.renderRoot
+      .querySelector<HTMLElementTagNameMap["wt-row-actions"]>("[data-bill-switcher]")
+      ?.reposition();
+  }
+
   #floorBackButton(): TemplateResult | typeof nothing {
     return this.embedded
       ? nothing

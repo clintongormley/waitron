@@ -236,6 +236,7 @@ function stubApi(pairingOpen = false, overrides: Partial<DashboardApi> = {}): Da
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     renewPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
+    listPagePrinterSummaries: async () => [],
     listPagePrinters: vi.fn().mockResolvedValue([]),
     listPrinterProfiles: vi.fn().mockResolvedValue(printerProfiles),
     listPrinterStationNames: vi.fn().mockResolvedValue([]),
@@ -602,6 +603,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
               },
             }),
           ]),
+          listPagePrinterSummaries: async () => [],
           listPagePrinters: vi
             .fn()
             .mockResolvedValue([
@@ -1464,6 +1466,7 @@ describe.each(["light", "dark"] as const)("A4 printers in the printers table (%s
         ends: [],
         removes: [],
       })),
+      listPagePrinterSummaries: async () => [],
       listPagePrinters: vi.fn().mockResolvedValue(OFFICE_ROWS),
       updatePagePrinter:
         state === "rename refused by the server"

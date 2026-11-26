@@ -106,7 +106,9 @@ Si la cola indica que la factura se imprimió, elige **Reimprimir** para enviar 
 cualquier impresora de tickets o A4 activa. Si la impresión falló o la cola indica **Puede haberse
 impreso**, revisa la impresora y usa **Pedidos** para volver a enviar la factura.
 
-Si un trabajo en A4 indica que falta papel, añade papel y deja que termine.
+Si un trabajo en A4 está **En espera** porque falta papel, añade papel y deja que termine.
+Consulta **Trabajos pendientes** y **Última impresión** en la pestaña **Impresoras** para ver qué
+queda por imprimir y cuándo terminó el último trabajo.
 
 Las órdenes del cajón no se pueden reenviar. Si el TPV muestra **El cajón no se abrió**, comprueba
 la alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún necesitas abrirlo. Si no se recibió

@@ -5,9 +5,15 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, printers, stationPrinterPairs, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  printers,
+  printJobs,
+  stationPrinterPairs,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue } from "@waitron/db/testing/seed.js";
+import { seedCashSale, seedVenue } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -470,6 +476,33 @@ describe("page-printer management routes", () => {
         agentName: null,
       },
     ]);
+  });
+
+  it("adds the held count and latest completed time to the requested office printer summary", async () => {
+    const app = mountApp();
+    const { id } = await onePrinter(app, "10.61.7.3");
+    const idle = await insertA4Printer(suite.db, { name: "Idle", host: "10.61.7.4" });
+    const earlier = "2026-11-25T18:13:36.000Z";
+    const latest = "2026-11-25T18:15:24.000Z";
+    await withTransaction(suite.db, async (tx) => {
+      const { saleId } = await seedCashSale(tx);
+      const job = { printerId: id, saleId, kind: "a4", pageDocument: "invoice" } as const;
+      await tx.insert(printJobs).values([
+        { ...job, status: "done", deliveredAt: latest },
+        { ...job, status: "printing", printerHold: "paper_out" },
+        { ...job, status: "done", deliveredAt: earlier },
+      ]);
+    });
+    const res = await send(app, "GET", "/management-api/page-printers?jobSummary=1", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id, pendingJobs: 1, lastPrintAt: latest }),
+        expect.objectContaining({ id: idle, pendingJobs: 0, lastPrintAt: null }),
+      ]),
+    );
   });
 
   it("re-points an active printer to a new agent's fresh entry at its address, under the same id", async () => {

@@ -72,6 +72,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       }),
       joinRequests: async () => [],
       listDiscoveredPrinters: async () => [],
+      listPagePrinterSummaries: async () => [],
       listPagePrinters: async () => [],
       updateAgent: async () => {},
       ...overrides,

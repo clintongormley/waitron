@@ -2129,9 +2129,11 @@ it("reads, registers and changes office printers on the page-printer routes, and
     agentId: "a1",
     agentName: "Office agent",
   };
+  const summary = { ...row, pendingJobs: 1, lastPrintAt: null };
   const fetchImpl = vi
     .fn()
     .mockResolvedValueOnce(jsonResponse([row]))
+    .mockResolvedValueOnce(jsonResponse([summary]))
     .mockResolvedValueOnce(jsonResponse({ id: "pp1", outcome: "repointed" }))
     .mockResolvedValueOnce(emptyResponse())
     .mockResolvedValueOnce(
@@ -2143,6 +2145,7 @@ it("reads, registers and changes office printers on the page-printer routes, and
   const api = new DashboardApi("", fetchImpl);
   expect("setInvoicePrinter" in api).toBe(false);
   expect(await api.listPagePrinters()).toEqual([row]);
+  expect(await api.listPagePrinterSummaries()).toEqual([summary]);
   const entry = { agentId: "a2", host: "10.0.0.56", port: 631, path: "/ipp/print" };
   expect(await api.registerPagePrinter({ ...entry, name: "Office" })).toEqual({
     id: "pp1",
@@ -2153,6 +2156,7 @@ it("reads, registers and changes office printers on the page-printer routes, and
   await api.deletePagePrinter("pp1");
   expect(callsOf(fetchImpl)).toEqual([
     ["/management-api/page-printers", "GET", undefined],
+    ["/management-api/page-printers?jobSummary=1", "GET", undefined],
     ["/management-api/page-printers", "POST", { ...entry, name: "Office" }],
     ["/management-api/page-printers/pp1", "PATCH", { name: "Back office" }],
     ["/management-api/page-printers/pp1/delete-impact", "GET", undefined],
