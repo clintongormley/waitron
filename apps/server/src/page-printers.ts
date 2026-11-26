@@ -151,7 +151,7 @@ export async function readPagePrinterDeleteImpact(
       ),
     );
   const choosing = await tx
-    .select({ id: devices.id, name: devices.label })
+    .select({ id: devices.id, name: devices.label, active: devices.active })
     .from(devices)
     .where(eq(devices.invoicePrinterId, id));
   const profiles = (await readProfilesListingPrinter(tx, id))
@@ -162,7 +162,10 @@ export async function readPagePrinterDeleteImpact(
       isDefault: lists.invoice?.defaultId === id,
     }));
   const removes = [
-    named("device_invoice", choosing),
+    named(
+      "device_invoice",
+      choosing.map(({ id, name, active }) => ({ id, name, ...(active ? {} : { deleted: true }) })),
+    ),
     named("profile_invoice", profiles),
     named(
       "profile_invoice_default",

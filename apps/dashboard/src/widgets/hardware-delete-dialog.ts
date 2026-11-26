@@ -1,6 +1,6 @@
 import type { DeleteImpact } from "@waitron/shared";
 import { html, type ReactiveControllerHost, type TemplateResult } from "lit";
-import { type DeleteDialogCopy } from "@waitron/ui";
+import type { DeleteDialogCopy, DeleteDialogSummaryCopy } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
 import type { DashboardApi } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -19,6 +19,7 @@ interface HardwareDeleteActions {
   beforeDeleted?(id: string): Promise<unknown> | undefined;
   onDeleted(id: string): void | Promise<void>;
   retryCode?: string;
+  pauseImpactDuringDelete?: boolean;
 }
 
 export class HardwareDeleteDialog {
@@ -41,6 +42,10 @@ export class HardwareDeleteDialog {
 
   get target(): string | null {
     return this.#opening?.id ?? null;
+  }
+
+  get targetName(): string | undefined {
+    return this.#impact?.target.name;
   }
 
   get submitting(): boolean {
@@ -67,12 +72,14 @@ export class HardwareDeleteDialog {
     this.host.requestUpdate();
   }
 
-  retryImpact(): void {
+  retryImpact(showLoading = true): void {
     const opening = this.#opening;
     if (!opening || this.#submitting) return;
-    this.#loading = true;
-    this.#readError = "";
-    this.host.requestUpdate();
+    if (showLoading) {
+      this.#loading = true;
+      this.#readError = "";
+      this.host.requestUpdate();
+    }
     void this.#queries
       .watch(opening.query, [opening.id], (impact) => {
         this.#impact = impact;
@@ -102,6 +109,7 @@ export class HardwareDeleteDialog {
     if (opening?.id !== id || this.#submitting) return;
     this.#submitting = true;
     this.#actionError = "";
+    if (this.actions.pauseImpactDuringDelete) this.#queries.release(opening.query);
     this.host.requestUpdate();
     try {
       await this.actions.send(id, this.#impact);
@@ -116,6 +124,7 @@ export class HardwareDeleteDialog {
         this.retryImpact();
       } else {
         this.#actionError = codeMessage(code);
+        if (this.actions.pauseImpactDuringDelete) this.retryImpact(false);
       }
       return;
     }
@@ -126,7 +135,7 @@ export class HardwareDeleteDialog {
     await this.actions.onDeleted(id);
   }
 
-  render(testId: string, copy: DeleteDialogCopy): TemplateResult {
+  render(testId: string, copy: DeleteDialogCopy | DeleteDialogSummaryCopy): TemplateResult {
     return html`<wt-delete-dialog
       data-test=${testId}
       .open=${this.#opening !== null}

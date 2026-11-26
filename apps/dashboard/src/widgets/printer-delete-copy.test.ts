@@ -1,209 +1,114 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { DeleteImpactItem } from "@waitron/shared";
-import { es } from "../i18n/strings.js";
+import type { DeleteImpact, DeleteImpactItem } from "@waitron/shared";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { printerDeleteCopy } from "./printer-delete-copy.js";
 
 const before = currentLocale();
 afterEach(() => setLocale(before));
 
-const ana = { id: "d-ana", name: "Handheld Ana" };
-const bar = { id: "d-bar", name: "Bar till" };
-const waiters = { id: "dp-waiters", name: "Waiters" };
-const item = (key: string, targets = [ana], count = targets.length): DeleteImpactItem => ({
+const clint = { id: "d-clint", name: "Clint" };
+const handheld = { id: "p-handheld", name: "Handheld" };
+const bar = { id: "d-bar", name: "Bar" };
+const pass = { id: "d-pass", name: "Pass" };
+const inactive = { id: "d-old", name: "Old till", deleted: true };
+const item = (key: string, targets = [clint], count = targets.length): DeleteImpactItem => ({
   key,
   count,
   targets,
 });
+const impact = (removes: DeleteImpactItem[] = [], ends: DeleteImpactItem[] = []): DeleteImpact => ({
+  target: { id: "p1", name: "BlueTooth Printer" },
+  refusals: [],
+  removes,
+  ends,
+});
 
-describe("a printer's delete dialog copy, in English", () => {
-  it("words the dialog's fixed text", () => {
+describe("printer delete confirmation", () => {
+  it.each([
+    [
+      "en",
+      "Delete BlueTooth Printer?",
+      "It will be unpaired, and removed from Clint and the Handheld profile.",
+    ],
+    [
+      "es",
+      "¿Eliminar BlueTooth Printer?",
+      "Se desvinculará y se quitará de Clint y del perfil Handheld.",
+    ],
+  ])(
+    "names the printer and each affected device and profile once in %s",
+    (locale, heading, sentence) => {
+      setLocale(locale);
+      const copy = printerDeleteCopy("BlueTooth Printer", true);
+      expect(copy.heading).toBe(heading);
+      expect(
+        copy.summary(
+          impact([
+            item("device_receipt"),
+            item("device_cash_drawer_default"),
+            item("profile_receipt", [handheld]),
+            item("profile_receipt_default", [handheld]),
+          ]),
+        ),
+      ).toEqual({ sentence, ends: [] });
+    },
+  );
+
+  it.each([
+    [[clint, bar, pass, inactive], "It will be removed from Clint, Bar, and Pass."],
+    [
+      [clint, bar, pass, { id: "d-office", name: "Office" }, inactive],
+      "It will be removed from 4 devices.",
+    ],
+  ] as const)(
+    "names up to three active A4 device assignments, then counts them",
+    (targets, sentence) => {
+      setLocale("en");
+      const affected = impact([item("device_invoice", [...targets])]);
+      expect(printerDeleteCopy("Office").summary(affected).sentence).toBe(sentence);
+    },
+  );
+
+  it.each([
+    [false, ""],
+    [true, "It will be unpaired."],
+  ])(
+    "has no assignments to name when every assigned device is switched off",
+    (bluetooth, sentence) => {
+      setLocale("en");
+      expect(
+        printerDeleteCopy("Receipt", bluetooth).summary(
+          impact([item("device_receipt", [inactive])]),
+        ),
+      ).toEqual({ sentence, ends: [] });
+    },
+  );
+
+  it("names the holder of a portable printer without calling it work that ends", () => {
     setLocale("en");
-    const copy = printerDeleteCopy();
-    expect([
-      copy.heading,
-      copy.ends,
-      copy.removes,
-      copy.irreversible,
-      copy.confirm,
-      copy.cancel,
-    ]).toEqual([
-      "Delete printer?",
-      "Work that ends",
-      "Assignments that are removed",
-      "History and printer settings are kept. Assignments and ended work are not restored. Add it again to use it.",
-      "Delete",
-      "Cancel",
-    ]);
-    expect(copy.refusals).not.toBe("");
-    expect(copy.retry).not.toBe("");
-    expect(copy.loading).toBe("Checking what changes…");
+    expect(printerDeleteCopy("Portable").summary(impact([], [item("portable_holder")]))).toEqual({
+      sentence: "It will be removed from Clint.",
+      ends: [],
+    });
   });
 
   it.each([
-    [item("print_jobs", [], 4), "4 pending print jobs"],
-    [item("print_jobs", [], 1), "1 pending print job"],
-    [item("invoice_receipts", [], 2), "2 unprinted invoice receipts"],
-    [item("invoice_receipts", [], 1), "1 unprinted invoice receipt"],
-    [item("portable_holder"), "Handheld Ana stops carrying it"],
-  ])("words the work %j ends", (ended, line) => {
+    [[item("print_jobs", [], 3), item("invoice_receipts", [], 1)], "3 pending print jobs"],
+    [[item("print_jobs", [], 0), item("invoice_receipts", [], 1)], "1 unprinted invoice receipt"],
+    [[item("invoice_a4", [], 2)], "2 pending A4 invoice print jobs"],
+  ])("shows one work line for the jobs the printer will stop", (jobs, line) => {
     setLocale("en");
-    expect(printerDeleteCopy().item(ended)).toBe(line);
+    expect(printerDeleteCopy("Office").summary(impact([], jobs)).ends).toEqual([line]);
   });
 
-  it.each([
-    [item("device_receipt", [bar, ana]), "Receipt printer of 2 devices: Bar till, Handheld Ana"],
-    [item("device_payment_slip"), "Payment slip printer of 1 device: Handheld Ana"],
-    [item("device_cash_drawer"), "Cash drawer of 1 device: Handheld Ana"],
-    [item("profile_receipt", [waiters]), "Receipt printer in 1 profile: Waiters"],
-    [item("profile_payment_slip", [waiters]), "Payment slip printer in 1 profile: Waiters"],
-    [item("profile_cash_drawer", [waiters]), "Cash drawer in 1 profile: Waiters"],
-    [item("profile_receipt_default", [waiters]), "Default receipt printer of 1 profile: Waiters"],
-    [
-      item("profile_payment_slip_default", [waiters]),
-      "Default payment slip printer of 1 profile: Waiters",
-    ],
-    [item("profile_cash_drawer_default", [waiters]), "Default cash drawer of 1 profile: Waiters"],
-    [item("device_receipt_default", [bar]), "Default receipt printer used by 1 device: Bar till"],
-    [
-      item("device_payment_slip_default", [bar, ana]),
-      "Default payment slip printer used by 2 devices: Bar till, Handheld Ana",
-    ],
-    [item("device_cash_drawer_default", [bar]), "Default cash drawer used by 1 device: Bar till"],
-    [item("device_invoice"), "Invoice printer of 1 device: Handheld Ana"],
-    [item("profile_invoice", [waiters]), "Invoice printer in 1 profile: Waiters"],
-    [item("profile_invoice_default", [waiters]), "Default invoice printer of 1 profile: Waiters"],
-    [item("device_invoice_default", [bar]), "Default invoice printer used by 1 device: Bar till"],
-    [item("station_printers", [{ id: "s-grill", name: "Grill" }]), "Prints for 1 station: Grill"],
-  ])("words the setting %j removes, naming each target", (removed, line) => {
+  it("words a refusal with the code's message and any named targets", () => {
     setLocale("en");
-    expect(printerDeleteCopy().item(removed)).toBe(line);
-  });
-});
-
-describe("a printer's delete dialog copy, in Spanish", () => {
-  it("words the dialog's fixed text", () => {
-    setLocale("es");
-    const copy = printerDeleteCopy();
-    expect([
-      copy.heading,
-      copy.ends,
-      copy.removes,
-      copy.irreversible,
-      copy.confirm,
-      copy.cancel,
-    ]).toEqual([
-      "¿Eliminar la impresora?",
-      "Trabajo que finaliza",
-      es["printers.delete_assignments"],
-      es["printers.delete_retained"],
-      "Eliminar",
-      "Cancelar",
-    ]);
-    expect(copy.loading).toBe("Comprobando qué cambia…");
-  });
-
-  it.each([
-    [item("print_jobs", [], 4), "4 trabajos de impresión pendientes"],
-    [item("print_jobs", [], 1), "1 trabajo de impresión pendiente"],
-    [item("invoice_receipts", [], 2), "2 recibos de factura sin imprimir"],
-    [item("invoice_receipts", [], 1), "1 recibo de factura sin imprimir"],
-    [item("portable_holder"), "Handheld Ana deja de llevarla"],
-    [
-      item("device_receipt", [bar, ana]),
-      "Impresora de tickets de 2 dispositivos: Bar till, Handheld Ana",
-    ],
-    [item("device_cash_drawer"), "Cajón de 1 dispositivo: Handheld Ana"],
-    [item("profile_payment_slip", [waiters]), "Impresora de justificantes en 1 perfil: Waiters"],
-    [item("profile_cash_drawer_default", [waiters]), "Cajón predeterminado de 1 perfil: Waiters"],
-    [item("device_invoice"), "Impresora de facturas de 1 dispositivo: Handheld Ana"],
-    [
-      item("profile_invoice_default", [waiters]),
-      "Impresora de facturas predeterminada de 1 perfil: Waiters",
-    ],
-    [
-      item("device_receipt_default", [bar]),
-      "Impresora de tickets predeterminada que usa 1 dispositivo: Bar till",
-    ],
-    [
-      item("device_receipt_default", [bar, ana]),
-      "Impresora de tickets predeterminada que usan 2 dispositivos: Bar till, Handheld Ana",
-    ],
-    [
-      item("station_printers", [{ id: "s-grill", name: "Grill" }]),
-      "Imprime para 1 estación: Grill",
-    ],
-  ])("words %j", (each, line) => {
-    setLocale("es");
-    expect(printerDeleteCopy().item(each)).toBe(line);
-  });
-});
-
-describe.each(["en", "es"])("every fixed item key has its own wording (%s)", (locale) => {
-  const keys = [
-    "print_jobs",
-    "invoice_receipts",
-    "portable_holder",
-    ...["receipt", "payment_slip", "cash_drawer", "invoice"].flatMap((role) => [
-      `device_${role}`,
-      `profile_${role}`,
-      `profile_${role}_default`,
-      `device_${role}_default`,
-    ]),
-    "station_printers",
-  ];
-
-  it("no line shows a key or a target's id, and no two keys share a line", () => {
-    setLocale(locale);
-    const copy = printerDeleteCopy();
-    const lines = keys.map((key) => copy.item(item(key, [{ id: "0b6e-uuid", name: "Named" }], 3)));
-    for (const [index, line] of lines.entries()) {
-      expect(line).not.toContain(keys[index]);
-      expect(line).not.toContain("0b6e-uuid");
-      expect(line).not.toContain("_");
-    }
-    expect(new Set(lines).size).toBe(keys.length);
-  });
-
-  it("a key it does not know still shows its count and names, never the key", () => {
-    setLocale(locale);
-    const line = printerDeleteCopy().item(item("future_link", [ana], 1));
-    expect(line).toContain("Handheld Ana");
-    expect(line).toContain("1");
-    expect(line).not.toContain("future_link");
-  });
-
-  it("a key it does not know is worded so it fits under either heading", () => {
-    setLocale(locale);
-    const copy = printerDeleteCopy();
-    expect(copy.item(item("future_link", [ana, bar], 2))).toBe("Handheld Ana, Bar till (2)");
-    expect(copy.item(item("future_count", [], 3))).toBe("(3)");
-  });
-});
-
-describe("a refusal, should a printer ever answer one", () => {
-  it("words its code and names what it names, or the code alone", () => {
-    setLocale("en");
-    const copy = printerDeleteCopy();
-    expect(copy.refusal({ code: "printer.not_found", params: {}, targets: [ana, bar] })).toBe(
-      "That printer no longer exists: Handheld Ana, Bar till",
+    const copy = printerDeleteCopy("Receipt");
+    expect(copy.refusal({ code: "printer.not_found", params: {}, targets: [clint, bar] })).toBe(
+      "That printer no longer exists: Clint, Bar",
     );
     expect(copy.refusal({ code: "printer.not_found", params: {}, targets: [] })).toBe(
       "That printer no longer exists",
     );
-    expect(copy.refusal({ code: "printer.deleted", params: {}, targets: [ana] })).toBe(
-      "The printer was deleted, so this job will not be retried: Handheld Ana",
-    );
   });
-});
-
-it.each([
-  ["en", "deleted"],
-  ["es", "eliminado"],
-])("marks the deleted device beside its affected setting in %s", (locale, mark) => {
-  setLocale(locale);
-  const target = { ...ana, deleted: true };
-  const line = printerDeleteCopy().item(item("device_receipt", [target, bar]));
-  expect(line).toContain(`Handheld Ana (${mark}), Bar till`);
-  expect(line).not.toContain(`Bar till (${mark})`);
 });

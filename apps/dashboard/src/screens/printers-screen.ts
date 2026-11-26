@@ -58,7 +58,7 @@ import {
 import "../widgets/print-job-reprint-dialog.js";
 import { holderText } from "../i18n/equipment.js";
 import { HardwareDeleteDialog } from "../widgets/hardware-delete-dialog.js";
-import { printerDeleteCopy } from "../widgets/printer-delete-copy.js";
+import { deleteAgentCopy, printerDeleteCopy } from "../widgets/printer-delete-copy.js";
 import { relativeTime } from "../widgets/relative-time.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
@@ -1302,7 +1302,7 @@ export class PrintersScreen extends LitElement {
   #labelWindow: EquipmentLabelWindow = "qr";
 
   #deleteIsPage = false;
-  #deleteIsBluetooth = false;
+  #deletePrinter = { name: "", bluetooth: false };
   @state() private everyStationId: string | null = null;
   @state() private everyStationSending = false;
   @state() private everyStationRefusal: string | null = null;
@@ -1312,6 +1312,7 @@ export class PrintersScreen extends LitElement {
   #everyStationOpening = 0;
   readonly #deleteDialog = new HardwareDeleteDialog(this, () => this.api, {
     notFound: ["printer.not_found", "page_printer.not_found"],
+    pauseImpactDuringDelete: true,
     send: (id) =>
       this.#deleteIsPage ? this.api.deletePagePrinter(id) : this.#deleteReceiptPrinter(id),
     onGone: (id, source) => {
@@ -2974,7 +2975,7 @@ export class PrintersScreen extends LitElement {
       .impact=${{ target: { id: agent.id, name: agent.name }, refusals: [], ends: [], removes: [] }}
       .submitting=${this.submitting}
       .actionError=${this.errorKey ? this.#bluetoothRefusal(this.errorKey) : ""}
-      .copy=${{ ...printerDeleteCopy(), heading: t("printers.delete_agent_heading"), irreversible: t("printers.delete_agent_hint") }}
+      .copy=${deleteAgentCopy()}
       .opener=${this.#agentDeleteOpener}
       @wt-delete-confirm=${(event: CustomEvent<{ id: string }>) => {
         event.stopPropagation();
@@ -5566,9 +5567,13 @@ export class PrintersScreen extends LitElement {
 
   // ── Delete ───────────────────────────────────────────────────────────────────────────────────────
 
-  #openDelete(p: { id: string; transport?: string }, opener: HTMLElement, page = false): void {
+  #openDelete(
+    p: { id: string; name: string; transport?: string },
+    opener: HTMLElement,
+    page = false,
+  ): void {
     this.#deleteIsPage = page;
-    this.#deleteIsBluetooth = !page && p.transport === "bluetooth";
+    this.#deletePrinter = { name: p.name, bluetooth: !page && p.transport === "bluetooth" };
     this.#deleteDialog.open(
       p.id,
       opener,
@@ -5620,12 +5625,6 @@ export class PrintersScreen extends LitElement {
     this.#openDelete(p, opener);
   }
 
-  /**
-   * Ends everything still open on a printer that no longer exists — its delete dialog, its Put on
-   * every station dialog, its details window and the form in it, its calibration wizard and its
-   * label — without asking to keep their drafts, and drops its row. `refuse` says so where something
-   * was open on it.
-   */
   #printerGone(id: string, refuse: boolean, focusTo?: HTMLElement | null): void {
     const ours = this.#deleteDialog.submitting && this.#deleteDialog.target === id;
     let open = false;
@@ -5719,7 +5718,7 @@ export class PrintersScreen extends LitElement {
           : html`${this.#renderTestPageSent()}${this.#renderEveryStationNotice()}${this.#preview.job ? nothing : reprinted}${this.#renderPairedAgain()}${this.errorKey ? html`<p class="error" role="alert">${this.#bluetoothRefusal(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
-      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#deleteDialog.render("delete-printer-dialog", printerDeleteCopy(this.#deleteIsPage, this.#deleteIsBluetooth))}${this.#renderEveryStationDialog()}
+      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#deleteDialog.render("delete-printer-dialog", printerDeleteCopy(this.#deleteDialog.targetName ?? this.#deletePrinter.name, this.#deletePrinter.bluetooth))}${this.#renderEveryStationDialog()}
       ${
         this.profileAssignment && this.addingPagePrinter === null
           ? html`<dashboard-equipment-profile-picker

@@ -21,8 +21,8 @@ If a network printer is not found, open **Check a known address**, type its IP a
 **Connect**. When Waitron finds it, choose **Add** if offered or **Close** to leave the search.
 
 To remove a receipt or station printer, choose **Delete** in its row menu or details. The
-confirmation lists the assignments removed and work ended. To use it again, choose **Add a
-printer**, then **Add** beside it. A recognised printer keeps its name and calibration, so you
+confirmation shows where the printer will be removed and any pending print jobs that will stop.
+To use it again, choose **Add a printer**, then **Add** beside it. A recognised printer keeps its name and calibration, so you
 do not need to name or calibrate it again. Choose its profiles and assign its devices and prep stations again.
 
 **Delete** also asks each box that reports the Bluetooth printer paired to unpair it. Put the
@@ -58,9 +58,8 @@ Choose **Calibrate printer** if you need to measure the paper or test the drawer
 printer's row menu, **Print test page** prints a sample receipt with the venue's header but a
 made-up business name and tax number, in the venue's receipt language, marked as a test and not
 an invoice. For an A4 printer, use **Edit** to rename it or **Print test page** to check it.
-To remove it, choose **Delete** in
-its row menu. The confirmation lists the assignments removed and work ended. To use it again,
-choose **Add a printer**, then **Add** beside it and **Add** again. It keeps its saved
+To remove it, choose **Delete** in its row menu. Check where the printer will be removed and
+whether any pending A4 invoice jobs will stop. To use it again, choose **Add a printer**, then **Add** beside it and **Add** again. It keeps its saved
 name and settings. Assign its devices and device profiles again.
 
 After importing a configuration, find its A4 printers with **Add a printer** and add them again.

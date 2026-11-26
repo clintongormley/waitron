@@ -1,50 +1,47 @@
-import type { DeleteImpactItem, DeleteImpactRefusal, PrinterDeleteImpact } from "@waitron/shared";
-import { encodePathSegment, type DeleteDialogCopy } from "@waitron/ui";
+import type { DeleteImpact, DeleteImpactRefusal, PrinterDeleteImpact } from "@waitron/shared";
+import {
+  encodePathSegment,
+  type DeleteDialogCopy,
+  type DeleteDialogSummaryCopy,
+} from "@waitron/ui";
 import { codeMessage } from "../i18n/codes.js";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { countedDeleteLine, deleteTargetNames } from "./delete-copy-lines.js";
 
-type Counted =
-  | "printers.delete_jobs"
-  | "printers.delete_invoice_a4"
-  | "printers.delete_invoice_receipts"
-  | "printers.delete_device_choice"
-  | "printers.delete_device_default"
-  | "printers.delete_profile_role"
-  | "printers.delete_profile_default"
-  | "printers.delete_stations";
-
-const ROLES = [
-  ["receipt", "printers.delete_role_receipt", "printers.delete_default_receipt"],
-  ["payment_slip", "printers.delete_role_payment_slip", "printers.delete_default_payment_slip"],
-  ["cash_drawer", "printers.delete_role_cash_drawer", "printers.delete_default_cash_drawer"],
-  ["invoice", "printers.delete_role_invoice", "printers.delete_default_invoice"],
+const TARGETS = [
+  ["device_", "printers.delete_device_name", "printers.delete_device_count"],
+  ["profile_", "printers.delete_profile_name", "printers.delete_profile_count"],
+  ["station_", "printers.delete_station_name", "printers.delete_station_count"],
 ] as const;
 
-function line(key: Counted, item: DeleteImpactItem, role = ""): string {
-  return countedDeleteLine(key, item, { role });
+const JOBS = [
+  ["print_jobs", "printers.delete_jobs"],
+  ["invoice_receipts", "printers.delete_invoice_receipts"],
+  ["invoice_a4", "printers.delete_invoice_a4"],
+] as const;
+
+function assignmentNames(impact: DeleteImpact): string[] {
+  const holder = impact.ends.find(({ key }) => key === "portable_holder");
+  return TARGETS.flatMap(([prefix, nameKey, countKey]) => {
+    const targets = impact.removes
+      .filter(({ key }) => key.startsWith(prefix))
+      .flatMap(({ targets }) => targets);
+    if (prefix === "device_" && holder) targets.push(...holder.targets);
+    const names = new Map(
+      targets.filter(({ deleted }) => !deleted).map(({ id, name }) => [id, name]),
+    );
+    return names.size > 3
+      ? [fill(countKey, { count: String(names.size) })]
+      : [...names.values()].map((name) => fill(nameKey, { name }));
+  });
 }
 
-function itemLine(item: DeleteImpactItem): string {
-  const { key } = item;
-  if (key === "print_jobs") return line("printers.delete_jobs", item);
-  if (key === "invoice_a4") return line("printers.delete_invoice_a4", item);
-  if (key === "invoice_receipts") return line("printers.delete_invoice_receipts", item);
-  if (key === "portable_holder")
-    return fill("printers.delete_holder", { names: deleteTargetNames(item.targets) });
-  if (key === "station_printers") return line("printers.delete_stations", item);
-  for (const [role, word, defaultWord] of ROLES) {
-    if (key === `device_${role}`) return line("printers.delete_device_choice", item, t(word));
-    if (key === `device_${role}_default`)
-      return line("printers.delete_device_default", item, t(defaultWord));
-    if (key === `profile_${role}`) return line("printers.delete_profile_role", item, t(word));
-    if (key === `profile_${role}_default`)
-      return line("printers.delete_profile_default", item, t(defaultWord));
+function endLines(impact: DeleteImpact): string[] {
+  for (const [key, wording] of JOBS) {
+    const item = impact.ends.find((item) => item.key === key && item.count > 0);
+    if (item) return [countedDeleteLine(wording, item)];
   }
-  return fill("printers.delete_unknown", {
-    names: deleteTargetNames(item.targets),
-    count: String(item.count),
-  }).trim();
+  return [];
 }
 
 function refusalLine(refusal: DeleteImpactRefusal): string {
@@ -53,24 +50,43 @@ function refusalLine(refusal: DeleteImpactRefusal): string {
   return named ? `${message.replace(/\.$/, "")}: ${named}` : message;
 }
 
-/** The printer delete dialog's words, in the language the screen shows now. */
-export function printerDeleteCopy(page = false, bluetooth = false): DeleteDialogCopy {
+function deleteDialogWords() {
   return {
-    heading: t("printers.delete_heading"),
     refusals: t("printers.delete_refusals"),
     ends: t("printers.delete_ends"),
-    removes: t("printers.delete_assignments"),
-    irreversible: [
-      t("printers.delete_retained"),
-      ...(page ? [t("printers.page_printer_readd")] : []),
-      ...(bluetooth ? [t("printers.delete_bluetooth")] : []),
-    ].join(" "),
     cancel: t("action.cancel"),
     confirm: t("action.delete"),
     retry: t("printers.delete_retry"),
     loading: t("printers.delete_loading"),
-    item: itemLine,
     refusal: refusalLine,
+  };
+}
+
+export function deleteAgentCopy(): DeleteDialogCopy {
+  return {
+    ...deleteDialogWords(),
+    heading: t("printers.delete_agent_heading"),
+    removes: t("printers.delete_removes"),
+    irreversible: t("printers.delete_agent_hint"),
+    item: () => "",
+  };
+}
+
+export function printerDeleteCopy(name: string, bluetooth = false): DeleteDialogSummaryCopy {
+  return {
+    ...deleteDialogWords(),
+    heading: fill("printers.delete_named", { name }),
+    summary: (impact) => {
+      const names = assignmentNames(impact);
+      const targets = new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(names);
+      let sentence = "";
+      if (targets)
+        sentence = fill(bluetooth ? "printers.delete_unpair_remove" : "printers.delete_remove", {
+          targets,
+        });
+      else if (bluetooth) sentence = t("printers.delete_unpair_only");
+      return { sentence, ends: endLines(impact) };
+    },
     alternative: (impact: PrinterDeleteImpact) => {
       const drawer = impact.drawerClose;
       if (!drawer) return undefined;

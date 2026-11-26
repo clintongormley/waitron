@@ -6120,13 +6120,13 @@ and clock warnings stay because they describe current configuration. Voids and c
 while the reason is the venue's last Void reason, or its last one asking for a note.
 
 **A confirmed Delete asks with `wt-delete-dialog`.** The screen reads the record's `DeleteImpact`
-and hands it over with its own `DeleteDialogCopy`. The dialog first names the record, in bold,
-from the impact's `target.name`, so it names nothing while `impact` is null. It then lists what
-refuses the delete, then the work it ends, then the settings it removes, one line each written by
-the copy's `refusal` or `item` (names are drawn as text), leaves out an empty group, and ends with
-the copy's `irreversible` sentence. Its Delete is `secondary` and disabled while `impact` is null, while
-`loading`, while `readError` is set or while the impact has any refusal; otherwise it is `danger`
-and enabled. While its own delete is sent (`submitting`) it stays `danger`, disabled and busy, and
+and supplies the wording. With `DeleteDialogCopy`, the dialog shows the impact's name in bold once
+it loads, lists any refusals, work that ends and settings removed, then shows the
+`irreversible` sentence. With `DeleteDialogSummaryCopy`, the screen puts the name in the heading
+from the start. The body uses one optional summary sentence and the work lines in place of the
+separate name, settings list and final sentence. Both forms show any refusals and guidance supplied by the screen.
+Delete is `secondary` and disabled with a null `impact`, during `loading`, with a set `readError` or
+with any refusal in the impact. Otherwise it is `danger` and enabled. While its own delete is sent (`submitting`) it stays `danger`, disabled and busy, and
 Cancel and Escape do nothing. The screen owns the requests: it sets `submitting` inside its
 `wt-delete-confirm` listener, reads again on `wt-delete-retry`, and closes the dialog itself after a
 delete succeeds. A failed read goes in `readError` and a refused delete in `actionError`, which

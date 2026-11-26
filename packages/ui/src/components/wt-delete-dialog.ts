@@ -9,20 +9,14 @@ import "./wt-button.js";
 import "./wt-form-actions.js";
 import "./wt-spinner.js";
 
-/** Every fixed word the dialog shows, in the screen's language; the record's own name comes from the
- * impact's `target.name`. `item` and `refusal` write one whole line each, names included; the dialog
- * adds no words of its own. */
-export type DeleteDialogCopy = {
+type DeleteDialogWords = {
   heading: string;
   refusals: string;
   ends: string;
-  removes: string;
-  irreversible: string;
   cancel: string;
   confirm: string;
   retry: string;
   loading: string;
-  item: (item: DeleteImpactItem) => string;
   refusal: (item: DeleteImpactRefusal) => string;
   alternative?: (impact: DeleteImpact) =>
     | {
@@ -36,10 +30,16 @@ export type DeleteDialogCopy = {
     | undefined;
 };
 
-/** Asks before deleting a record, naming it and showing what refuses the delete, the work it ends
- * and the settings it removes. The parent reads the impact, sends the delete and closes the dialog;
- * it sets `submitting` inside its `wt-delete-confirm` listener, which is what stops a second press
- * sending a second delete. */
+export type DeleteDialogCopy = DeleteDialogWords & {
+  removes: string;
+  irreversible: string;
+  item: (item: DeleteImpactItem) => string;
+};
+
+export type DeleteDialogSummaryCopy = DeleteDialogWords & {
+  summary: (impact: DeleteImpact) => { sentence: string; ends: string[] };
+};
+
 @customElement("wt-delete-dialog")
 export class WtDeleteDialog extends LitElement {
   static override styles = [
@@ -48,6 +48,11 @@ export class WtDeleteDialog extends LitElement {
       .target {
         margin: 0 0 var(--wt-space-3);
         font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
+      }
+
+      .summary {
+        margin: 0 0 var(--wt-space-3);
         overflow-wrap: anywhere;
       }
 
@@ -108,7 +113,7 @@ export class WtDeleteDialog extends LitElement {
   @property() readError = "";
   @property() actionError = "";
   /** Until it is set nothing is drawn, so no unnamed dialog can open. */
-  @property({ attribute: false }) copy?: DeleteDialogCopy;
+  @property({ attribute: false }) copy?: DeleteDialogCopy | DeleteDialogSummaryCopy;
   @property({ attribute: false }) opener: HTMLElement | null = null;
 
   @query("wt-modal") private modal!: WtModal;
@@ -181,10 +186,34 @@ export class WtDeleteDialog extends LitElement {
     </section>`;
   }
 
+  private impactDetails(copy: DeleteDialogCopy | DeleteDialogSummaryCopy, impact: DeleteImpact) {
+    if ("summary" in copy) {
+      const { sentence, ends } = copy.summary(impact);
+      return html`
+        ${sentence ? html`<p class="summary">${sentence}</p>` : nothing}
+        ${this.group("ends", copy.ends, ends)}
+      `;
+    }
+    return html`
+      ${this.group(
+        "ends",
+        copy.ends,
+        impact.ends.map((item) => copy.item(item)),
+      )}
+      ${this.group(
+        "removes",
+        copy.removes,
+        impact.removes.map((item) => copy.item(item)),
+      )}
+      <p class="irreversible" data-irreversible>${copy.irreversible}</p>
+    `;
+  }
+
   override render() {
     const { copy, impact } = this;
     if (!copy) return nothing;
     const ready = this.ready;
+    const compact = "summary" in copy;
     const alternative = impact && copy.alternative?.(impact);
     const message = [this.readError, this.actionError].filter((each) => each !== "").join(" ");
     const status = this.loading
@@ -199,7 +228,7 @@ export class WtDeleteDialog extends LitElement {
         .dismissible=${!this.submitting}
         @wt-close=${this.onModalClose}
       >
-        ${impact ? html`<p class="target" data-target>${impact.target.name}</p>` : nothing}
+        ${impact && !compact ? html`<p class="target" data-target>${impact.target.name}</p>` : nothing}
         <p class="status" role="status">${status}</p>
         ${
           impact
@@ -209,17 +238,7 @@ export class WtDeleteDialog extends LitElement {
                   copy.refusals,
                   impact.refusals.map((each) => copy.refusal(each)),
                 )}
-                ${this.group(
-                  "ends",
-                  copy.ends,
-                  impact.ends.map((each) => copy.item(each)),
-                )}
-                ${this.group(
-                  "removes",
-                  copy.removes,
-                  impact.removes.map((each) => copy.item(each)),
-                )}
-                <p class="irreversible" data-irreversible>${copy.irreversible}</p>
+                ${this.impactDetails(copy, impact)}
                 ${
                   alternative
                     ? html`

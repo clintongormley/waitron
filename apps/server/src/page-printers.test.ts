@@ -398,7 +398,10 @@ describe("listing and renaming page printers", () => {
 });
 
 describe("deleting a page printer", () => {
-  it("clears only its device choices and profile defaults and reports what Delete removes", async () => {
+  it.each([
+    [true, undefined],
+    [false, true],
+  ])("reports and clears its choices (active device: %s)", async (active, deleted) => {
     const v = await venue();
     const office = await register(entry(v.agentOne));
     const other = await register(entry(v.agentOne, { host: "192.0.2.41" }));
@@ -409,12 +412,13 @@ describe("deleting a page printer", () => {
     });
     await suite.db
       .update(devices)
-      .set({ invoicePrinterId: office.id })
+      .set({ active, invoicePrinterId: office.id })
       .where(eq(devices.id, deviceId));
     await setPrinterListsForTest(suite.db, profile!.id, {
       invoice: { ids: [office.id, other.id], defaultId: office.id },
     });
     const impact = await withTransaction(suite.db, (tx) => deletePagePrinter(tx, office.id));
+    expect(impact.removes[0]?.targets[0]?.deleted).toBe(deleted);
     expect(impact).toMatchObject({
       target: { id: office.id, name: "Back office" },
       refusals: [],
