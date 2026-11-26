@@ -147,7 +147,7 @@ declare module "@waitron/shared" {
      * own. */
     "menu_item.variant_not_allowed": { productId: string };
     /** An ordinary menu was given its own price for a product sold through its Active variants. */
-    "menu_item.has_variants": { menuItemId: string };
+    "menu_item.has_variants": { menuItemId: string; productId: string };
     /** A variant field is malformed or a submitted variant identity is duplicated. */
     "product.variant_invalid": { field: string };
     /** A submitted variant identity is not a variant of the product or, in a menu's variant prices,

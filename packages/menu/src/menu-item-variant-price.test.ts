@@ -119,7 +119,7 @@ describe("the menu price writers", () => {
       app((tx) => updateMenuItem(tx, f.lunch, f.lunchWine, { grossPrice: "7.00" })),
     ).rejects.toMatchObject({
       code: "menu_item.has_variants",
-      params: { menuItemId: f.lunchWine },
+      params: { menuItemId: f.lunchWine, productId: f.wine },
     });
     expect(await stored(f.lunch, f.wine)).toBeNull();
 
@@ -128,7 +128,7 @@ describe("the menu price writers", () => {
       app((tx) =>
         addProductToMenu(tx, { menuId: other.id, productId: f.wine, grossPrice: "7.00" }),
       ),
-    ).rejects.toMatchObject({ code: "menu_item.has_variants" });
+    ).rejects.toMatchObject({ code: "menu_item.has_variants", params: { productId: f.wine } });
     expect(await stored(other.id, f.wine)).toBeUndefined();
   });
 

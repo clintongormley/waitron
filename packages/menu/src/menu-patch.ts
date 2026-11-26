@@ -189,7 +189,7 @@ function locate(
   let located: Located;
   switch (target.kind) {
     case "offer": {
-      // A dish sold through its variants is priced on them: the live copy decides, as it sells.
+      // A price change is refused when the live copy lists variants.
       const offers = offersOf(target.menuItemId).filter(
         (offer) => field !== "price" || offer.variants.length === 0,
       );

@@ -655,13 +655,11 @@ A variant's own price may be blank. On a menu it is charged the first price that
    they disagree, the menu has a clash to settle;
 3. else its parent's own price.
 
-An ordinary menu never prices a product with an Active variant itself. `writeMenuItemSettings`
-(`packages/menu/src/operations.ts`) refuses a price for one with `menu_item.has_variants`; saving
-a variant list holding an Active variant (`writeProductVariants`, `packages/menu/src/variants.ts`)
-clears the product's price on every ordinary menu, deleted ones included (`dropProductMenuPrices`,
-`packages/menu/src/menu-removal.ts`); an import clears it
-(`dropMenuPricesOfProductsWithVariants`); and `offersOn` reads a price still in the table as null.
-A set menu's price on such a dish is its supplement and stays.
+An ordinary menu never prices a product with an Active variant itself. Such a price is refused
+with `menu_item.has_variants`. One already stored is cleared on every ordinary menu, deleted ones
+included, when the product's variant list is saved with an Active variant, and on import; a
+duplicated menu stores none; and the menu's offers read one still in the table as blank. A set
+menu's price on such a dish is its supplement and stays.
 
 A menu may leave any product's price blank (`menu_items.gross_price` is nullable), which means the
 product's own price. A menu's Price overrides tab shows the price a blank field inherits as its

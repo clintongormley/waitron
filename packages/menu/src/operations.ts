@@ -437,7 +437,9 @@ export async function addProductToMenu(
     .where(and(eq(menuItems.menuId, input.menuId), eq(menuItems.productId, input.productId)));
   // Just placed on the root, so reached: `updateMenuItem`'s reachability check would only repeat it.
   if (input.grossPrice !== undefined)
-    await writeMenuItemSettings(tx, input.menuId, row!.id, { grossPrice: input.grossPrice });
+    await writeMenuItemSettings(tx, input.menuId, row!.id, input.productId, {
+      grossPrice: input.grossPrice,
+    });
   const [written] = await tx
     .select(MENU_ITEM_COLUMNS)
     .from(menuItems)
@@ -452,16 +454,17 @@ export async function updateMenuItem(
   menuItemId: string,
   patch: { grossPrice?: string | null },
 ): Promise<void> {
-  if ((await reachableMenuItem(tx, menuItemId, menuId)) === undefined)
-    throw new AppError("menu_item.not_found", { menuId, menuItemId });
+  const reached = await reachableMenuItem(tx, menuItemId, menuId);
+  if (reached === undefined) throw new AppError("menu_item.not_found", { menuId, menuItemId });
   await assertMenuWritable(tx, menuId);
-  await writeMenuItemSettings(tx, menuId, menuItemId, patch);
+  await writeMenuItemSettings(tx, menuId, menuItemId, reached.productId, patch);
 }
 
 async function writeMenuItemSettings(
   tx: Transaction,
   menuId: string,
   menuItemId: string,
+  productId: string,
   patch: { grossPrice?: string | null },
 ): Promise<void> {
   const { grossPrice } = patch;
@@ -473,14 +476,12 @@ async function writeMenuItemSettings(
       : menu?.kind === "set_menu"
         ? setMenuSurchargeCents(grossPrice)
         : stringToCents(grossPrice);
-  if (cents !== null && menu?.kind !== "set_menu") {
-    const [item] = await tx
-      .select({ productId: menuItems.productId })
-      .from(menuItems)
-      .where(eq(menuItems.id, menuItemId));
-    if ((await parentsWithActiveVariants(tx, [item!.productId])).size > 0)
-      throw new AppError("menu_item.has_variants", { menuItemId });
-  }
+  if (
+    cents !== null &&
+    menu?.kind !== "set_menu" &&
+    (await parentsWithActiveVariants(tx, [productId])).size > 0
+  )
+    throw new AppError("menu_item.has_variants", { menuItemId, productId });
   await tx.update(menuItems).set({ grossPrice: cents }).where(eq(menuItems.id, menuItemId));
   await touchSetMenu(tx, menuId);
 }

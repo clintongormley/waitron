@@ -176,7 +176,7 @@ sending the request; Cancel creates nothing.
 `PATCH /management-api/menus/:id/items/:itemId` returns 204. Set `grossPrice` to a price or
 null. Null clears this menu's price so the combined menu can supply it; omitting it keeps the saved
 value. On a menu other than a set menu, a price for a product with an Active variant answers
-`menu_item.has_variants` (400, `menuItemId`). The retired `active` and `offered` fields are refused with `management.request_invalid`
+`menu_item.has_variants` (400, `menuItemId` and `productId`). The retired `active` and `offered` fields are refused with `management.request_invalid`
 (400, `field: "active"` or `field: "offered"`), whatever their value. An item no longer reached by
 this menu answers `menu_item.not_found` (404). Publish again to change what the till sells.
 
