@@ -722,8 +722,6 @@ the owner's redesign.
 Queued as SETTLED-SMALL (lane F), in two or three pull requests by screen. Some are the owner's own
 answers; where an entry says a rule is read across, the owner was not asked that point.
 
-- **The table's part-payment button reads "Take the rest"**, as the counter's does (Task 15, #956): the
-  owner's concise-text rule, read across by the watcher, not an answer.
 - **A692. Editing a sent dish keeps its extras' "made here" choice**, as it keeps the dish's: the
   owner's "Keep what was sent" (2026-11-17, A1416), read across by the watcher. Today
   `insertSplitExtras` (`apps/server/src/working-order-kitchen-fire.ts`) routes the extras afresh from
@@ -1685,9 +1683,6 @@ payment belongs to the table, so no payment is lost.
     waiting until Finish table.
 
 - **Task 15 (#956, several payments on the till).** Open:
-  - The table's button is labelled with the whole sentence "Part of
-    this bill is already paid: take the rest as a bill payment", while the counter's says "Take
-    the rest". Queued under SETTLED-SMALL (lane F): "Take the rest" on both.
   - Giving money back after the invoice stays out of scope for `BillPaymentView` (bill payments
     design §6).
 
