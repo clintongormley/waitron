@@ -106,6 +106,18 @@ test("Clear all over a multi-select filter with an initial choice reports the al
   expect(changes).toEqual([{ status: ["off", "paused"] }, { status: [] }]);
 });
 
+test("restores the remembered rows on a table leaving a temporary filter", async () => {
+  const el = await peopleTable({ viewKey: "people.temporary", columns: [name, statusColumn({})] });
+  el.chooseFilter("status", ["off"]);
+  el.chooseFilter("status", ["paused"], { remember: false });
+  await el.updateComplete;
+  expect(shownKeys(el)).toEqual(["3"]);
+
+  el.restoreFilter("status");
+  await el.updateComplete;
+  expect(shownKeys(el)).toEqual(["2"]);
+});
+
 test("a stored multi-select choice holding a value that is not text is ignored whole", async () => {
   sessionStorage.setItem("people.mixed", JSON.stringify({ filters: { status: [1, "off"] } }));
   const el = await peopleTable({

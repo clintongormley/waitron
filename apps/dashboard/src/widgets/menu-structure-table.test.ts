@@ -339,7 +339,9 @@ it.each([false, true])(
     const key = variantId ? `m-burger/${variantId}` : "m-burger";
     const clash = (rowKey: string) => row(el, rowKey)!.querySelector('[part="structure-clash"]');
     if (variantId) {
-      expect(clash("m-burger")?.textContent ?? "").toContain("Double portion:");
+      expect(clash("m-burger")?.textContent).toBe(
+        "Double portion: €3.00 in this menu's sections, €4.00 in Wines.",
+      );
       expect(row(el, "m-burger")!.querySelector("wt-price-input")).toBeNull();
       await el.setExpanded("m-burger", true);
     }

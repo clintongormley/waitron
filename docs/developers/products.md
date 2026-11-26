@@ -670,10 +670,8 @@ its own (`addProductToMenu` refuses one with `menu_item.variant_not_allowed`, an
 one as a member with `menu_section.membership_invalid`). A menu stores something
 for a variant only to override its price there: a `menu_item_variant_overrides` row, keyed by the
 parent's menu row and the variant, holds that menu's price, and saving the price blank deletes the
-row. Saving one size's price on a menu writes that size's row alone (`setMenuVariantPrice`,
-`packages/menu/src/variants.ts`), while `setMenuVariants` replaces the row of every Active size
-at once. A deleted size holds no price override: deleting it removes its override on every menu, and
-`setMenuVariantPrice` refuses one with `product.variant_not_found`. The table's
+row. Structure saves variant prices with the other changes in the draft. Deleting a variant
+clears its price overrides across menus. The table's
 `menu_item_variant_overrides_overrides_ck` refuses a row with no price.
 
 ### Active and Available

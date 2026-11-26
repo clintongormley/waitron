@@ -31,6 +31,15 @@ import { tableHeadingStyles } from "./wt-data-table-heading.js";
 import { tableMessage, tableMessageStyles } from "./wt-data-table-message.js";
 import { FilterExpansion, visibleTree } from "./wt-data-table-filter-expansion.js";
 import { mergeColumnOrder } from "./wt-data-table-column-order.js";
+import {
+  copyChoices,
+  filterChoice,
+  isFilterChoice,
+  persistTableView,
+  sameChoices,
+  sameValues,
+  type FilterChoice,
+} from "./wt-data-table-view.js";
 
 registerIcons({
   "table-filter": "M1 2h14v1.5L10 9v5l-4 1.5V9L1 3.5z",
@@ -108,42 +117,6 @@ function repeatKeys(keys: readonly string[]): (_item: unknown, index: number) =>
  * over the whole screen: the panel is seven `--wt-tap-min` steps wide, so at this width and above
  * the rows beside it stay wider than NARROW_TABLE_WIDTH at the default tokens. */
 const SIDE_FILTERS_WIDTH = 768;
-
-type FilterChoice = string | string[];
-
-function isFilterChoice(value: unknown): value is FilterChoice {
-  return (
-    typeof value === "string" ||
-    (Array.isArray(value) && value.every((each) => typeof each === "string"))
-  );
-}
-
-function sameValues(a: readonly string[], b: readonly string[]): boolean {
-  const right = new Set(b);
-  return new Set(a).size === right.size && a.every((value) => right.has(value));
-}
-
-/** The lists are copied so a listener cannot change the table's own filter state through them. */
-function copyChoices(choices: Record<string, FilterChoice>): Record<string, FilterChoice> {
-  return Object.fromEntries(
-    Object.entries(choices).map(([key, value]) => [
-      key,
-      typeof value === "string" ? value : [...value],
-    ]),
-  );
-}
-
-function sameChoices(a: Record<string, FilterChoice>, b: Record<string, FilterChoice>): boolean {
-  const keys = Object.keys(a);
-  return (
-    keys.length === Object.keys(b).length &&
-    keys.every((key) => {
-      const [left, right] = [a[key]!, b[key]];
-      if (typeof left === "string" || typeof right === "string") return left === right;
-      return right !== undefined && sameValues(left, right);
-    })
-  );
-}
 
 interface Searched<Row> {
   inputs: readonly unknown[];
@@ -1029,6 +1002,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
    * rows only while its column offers it (see #activeValues), and #judgeFilters removes what its
    * column's options no longer include. */
   @state() private filterSelections: Record<string, FilterChoice> = {};
+  readonly #temporaryFilters = new Map<string, FilterChoice | undefined>();
   /** A filter must not let disappearing or returning rows resize the headings. */
   private filterColumnWidths: number[] | null = null;
   private filterHostWidth: number | null = null;
@@ -1438,7 +1412,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
       if (seeded) this.collapsed = next;
     }
-    if (changed.has("viewKey")) this.#restored = false;
+    if (changed.has("viewKey")) {
+      for (const key of this.#temporaryFilters.keys()) this.restoreFilter(key);
+      this.#restored = false;
+    }
     if (changed.has("viewKey") || changed.has("columns")) {
       this.#restoreView();
       if (this.#judgeFilters()) this.#persistView();
@@ -1873,17 +1850,26 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return options.some((option) => option.value === initial) ? [initial!] : [];
   }
 
-  #chooseFilter(column: DataTableColumn<Row>, values: readonly string[]): void {
-    const stored = this.filterSelections[column.key];
+  #chooseFilter(column: DataTableColumn<Row>, values: readonly string[], remember = true): void {
+    const key = column.key;
+    const stored = this.filterSelections[key];
+    const wasTemporary = remember && this.#temporaryFilters.delete(key);
     if (
       sameValues(values, this.#activeValues(column)) &&
       (values.length > 0 || stored === undefined || stored.length === 0)
-    )
+    ) {
+      if (wasTemporary) this.#persistView();
       return;
+    }
+    if (!remember && !this.#temporaryFilters.has(key)) this.#temporaryFilters.set(key, stored);
     const widths = this.filterColumnWidths ?? this.#currentColumnWidths();
-    const next = { ...this.filterSelections };
-    if (values.length === 0 && column.filter?.initial === undefined) delete next[column.key];
-    else next[column.key] = column.filter?.multiple ? [...values] : (values[0] ?? "");
+    const choice =
+      values.length === 0 && column.filter?.initial === undefined
+        ? undefined
+        : column.filter?.multiple
+          ? [...values]
+          : (values[0] ?? "");
+    const next = filterChoice(this.filterSelections, key, choice);
     this.filterSelections = next;
     this.filterColumnWidths = widths;
     if (widths) this.#hostObserver.observe(this);
@@ -1913,9 +1899,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
       this.sortKey = defaultSortKey;
       this.sortDirection = "ascending";
     }
-    const filters = { ...this.filterSelections };
-    delete filters[key];
-    this.filterSelections = filters;
+    this.#temporaryFilters.delete(key);
+    this.filterSelections = filterChoice(this.filterSelections, key, undefined);
     this.#persistView();
   }
 
@@ -1927,7 +1912,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
         .filter((column) => column.filter?.initial !== undefined)
         .map((column): [string, FilterChoice] => [column.key, column.filter?.multiple ? [] : ""]),
     );
-    if (sameChoices(next, this.filterSelections)) return;
+    if (sameChoices(next, this.filterSelections) && this.#temporaryFilters.size === 0) return;
+    this.#temporaryFilters.clear();
     this.filterSelections = next;
     this.filterColumnWidths = widths;
     if (widths) this.#hostObserver.observe(this);
@@ -2010,19 +1996,15 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #persistView(): void {
-    if (!this.viewKey) return;
-    try {
-      sessionStorage.setItem(
-        this.viewKey,
-        JSON.stringify({
-          sortKey: this.sortKey,
-          sortDirection: this.sortDirection,
-          filters: this.filterSelections,
-        }),
-      );
-    } catch {
-      // The remembered view is a convenience; the table works without it.
-    }
+    persistTableView(
+      this.viewKey,
+      {
+        sortKey: this.sortKey,
+        sortDirection: this.sortDirection,
+        filters: this.filterSelections,
+      },
+      this.#temporaryFilters,
+    );
   }
 
   #shownRows(): readonly Row[] {
@@ -2588,13 +2570,20 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Chooses these values on the column's filter as the person choosing them would, so the choice
    * is reported and remembered: only the values it offers now, one on a single-choice filter, and
    * none chosen (all) when given none. One or more values, none of which it offers, leave it alone,
-   * as does a column without a filter. */
-  chooseFilter(key: string, values: readonly string[]): void {
+   * as does a column without a filter. A temporary choice leaves the remembered view alone. */
+  chooseFilter(key: string, values: readonly string[], { remember = true } = {}): void {
     const column = this.columns.find((candidate) => candidate.key === key);
     const options = this.#offered(key);
     const offered = values.filter((value) => options?.some((option) => option.value === value));
     if (!column?.filter || (values.length > 0 && offered.length === 0)) return;
-    this.#chooseFilter(column, column.filter?.multiple ? offered : offered.slice(0, 1));
+    this.#chooseFilter(column, column.filter.multiple ? offered : offered.slice(0, 1), remember);
+  }
+
+  /** Restores the earlier choice if this column still holds a temporary filter. */
+  restoreFilter(key: string): void {
+    const previous = this.#temporaryFilters.get(key);
+    if (this.#temporaryFilters.delete(key))
+      this.filterSelections = filterChoice(this.filterSelections, key, previous);
   }
 
   /** The order the table draws these rows in when they share a parent. */

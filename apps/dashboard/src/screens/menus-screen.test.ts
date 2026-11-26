@@ -1766,6 +1766,8 @@ describe("the menus list's Status column and its changes link", () => {
       const el = await listed(clashing());
       await userEvent.click(clashLink(el, "menu-lunch")!);
       await vi.waitFor(() => expect(location.pathname).toBe(CLASHES("menu-lunch")));
+      const tree = () => structure(el)?.shadowRoot?.querySelector("wt-data-table");
+      await vi.waitFor(() => expect(tree()?.filterValues("price")).toEqual(["clashes"]));
       expect(opens()).toEqual([CLASHES("menu-lunch")]);
     });
   });
@@ -9415,6 +9417,44 @@ it.each(["link", "keyboard", "address", "retry"])(
     await vi.waitFor(() => expect(rowOf(el, "m-burger")).not.toBeNull());
   },
 );
+
+it.each([{ remembered: [] }, { remembered: ["own"] }])(
+  "restores the remembered price filter $remembered after visiting a clash link",
+  async ({ remembered }) => {
+    const client = api();
+    const el = await mountLunch(client);
+    const priceTable = (screen: MenusScreen) =>
+      structure(screen)?.shadowRoot?.querySelector("wt-data-table");
+    await vi.waitFor(() => expect(priceTable(el)?.columns.length).toBeGreaterThan(0));
+    priceTable(el)!.chooseFilter("price", remembered);
+
+    const destination = `${LUNCH_PATH}/filter/clashes`;
+    await visit(el, destination, "Lunch Menu");
+    await vi.waitFor(() => expect(priceTable(el)?.filterValues("price")).toEqual(["clashes"]));
+    priceTable(el)!.chooseFilter("available", ["yes"]);
+
+    cleanupWidgets();
+    const reopened = await mount(client, destination);
+    await vi.waitFor(() =>
+      expect(priceTable(reopened)?.filterValues("price")).toEqual(["clashes"]),
+    );
+    await visit(reopened, DINNER_PATH, "Dinner Menu");
+    await vi.waitFor(() => {
+      expect(priceTable(reopened)?.filterValues("price")).toEqual(remembered);
+      expect(priceTable(reopened)?.filterValues("available")).toEqual(["yes"]);
+    });
+  },
+);
+
+it("remembers a manual price choice made after following a clash link", async () => {
+  const el = await mount(api(), `${LUNCH_PATH}/filter/clashes`);
+  const priceTable = () => structure(el)?.shadowRoot?.querySelector("wt-data-table");
+  await vi.waitFor(() => expect(priceTable()?.filterValues("price")).toEqual(["clashes"]));
+  priceTable()!.chooseFilter("price", ["own"]);
+  await vi.waitFor(() => expect(location.pathname).toBe(LUNCH_PATH));
+  await visit(el, DINNER_PATH, "Dinner Menu");
+  await vi.waitFor(() => expect(priceTable()?.filterValues("price")).toEqual(["own"]));
+});
 
 it.each([
   ["/menus/filter/clashes", "/menus"],

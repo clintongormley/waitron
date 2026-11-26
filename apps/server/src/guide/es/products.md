@@ -276,8 +276,8 @@ Deja vacío el precio de una carta para que lo decidan esas contribuciones. Por 
 la cerveza a 3,00 € y Noche incluye solo la cerveza de Bebidas, Noche cobra 3,00 €. Si Noche también
 pone esa cerveza en una sección propia al precio del producto, 2,80 €, los precios no coinciden. Fija
 el precio de la cerveza en Noche para resolver ese desacuerdo antes de publicar. En **Estructura**,
-el conflicto muestra qué precios discrepan. Despliega el plato para fijar el precio en la fila de
-la variante afectada.
+el conflicto muestra qué precios discrepan. Si el plato tiene variantes, despliégalo para fijar el
+precio en la fila de la variante afectada.
 
 ## Declara los alérgenos y la aptitud dietética directamente {#allergens}
 
@@ -365,8 +365,8 @@ Arrastra una fila por su control para moverla. Para mover o quitar varias filas 
 Escribe un precio junto a un plato para fijarlo en esta carta. Despliega un plato con variantes
 para fijar el precio de cada una. Borra el precio que has escrito para usar el habitual. Si cambias
 un precio, se aplica en todos los sitios de esta carta donde aparezca el plato o la variante.
-Pulsa el enlace de conflictos de precio en Cartas o **Elegir un precio** en Vista previa para
-abrir Estructura con el filtro **Con conflictos** seleccionado.
+Pulsa el enlace de conflictos en la lista de Cartas o en el encabezado de la carta, o elige
+**Elegir un precio** en Vista previa, para abrir Estructura con el filtro **Con conflictos**.
 
 Elige **Guardar** al pie de Estructura para guardar la organización y los precios juntos. Elige
 **Cancelar** y confirma para volver a la carta guardada.

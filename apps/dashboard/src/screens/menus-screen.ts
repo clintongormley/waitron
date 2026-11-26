@@ -152,7 +152,8 @@ const STATUS_ORDER = ["unpublished", "changed", "current", "loading", "failed"];
 function liveWords(status: MenuStatus, now: () => Date) {
   const { label, live } = statusWords(status, now);
   if (live === null) return label;
-  return html`${live.version} · <span class="time">${live.time}</span>`;
+  return html`<span class="version">${live.version} ·</span>
+    <span class="time">${live.time}</span>`;
 }
 
 function tabAddress(menuId: string, tab: Tab): string {
@@ -293,6 +294,20 @@ export class MenusScreen extends LitElement {
       @media (width <= 440px) {
         wt-tabs::part(tab) {
           padding-inline: var(--wt-space-2);
+        }
+      }
+      @media (360px <= width <= 640px) {
+        .heading:has(.review-publish) {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          align-items: start;
+        }
+        .heading:has(.review-publish) .title {
+          grid-column: 1 / -1;
+        }
+        .heading-status .version,
+        .review-publish {
+          white-space: nowrap;
         }
       }
       .selection-bar {
@@ -856,6 +871,7 @@ export class MenusScreen extends LitElement {
     this.#clashAddress = active;
     this.#filterClashes = active;
     if (active) this.requestUpdate();
+    else this.#structurePriceTable()?.restoreFilter("price");
   }
 
   #structurePriceTable() {
@@ -879,7 +895,7 @@ export class MenusScreen extends LitElement {
       table === this.#structurePriceTable()
     ) {
       this.#filterClashes = false;
-      table.chooseFilter("price", ["clashes"]);
+      table.chooseFilter("price", ["clashes"], { remember: false });
     }
   }
 
@@ -2835,6 +2851,7 @@ export class MenusScreen extends LitElement {
     )
       return nothing;
     return html`<wt-button
+      class="review-publish"
       data-test="review-publish"
       variant=${dirty ? "secondary" : "primary"}
       .disabled=${this.#structureSave.saving}
@@ -2960,8 +2977,6 @@ export class MenusScreen extends LitElement {
           } else if (!leftToBrowser(event)) {
             event.preventDefault();
             this.#rewriteStructureAddress(this.#url.read("section"), "clashes");
-            this.#filterClashes = true;
-            this.requestUpdate();
           }
         }}
         >${waits}</a

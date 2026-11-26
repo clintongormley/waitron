@@ -690,6 +690,39 @@ describe("the menu editor's heading", () => {
     );
   }
 
+  it.each(["en", "es-ES"])(
+    "puts Review and publish beside the live version below the title at 390 px in %s",
+    async (locale) => {
+      setLocale(locale);
+      const el = await onPhone("Casa Delgado");
+      el.now = () => new Date("2026-09-26T10:43:00.000Z");
+      await el.updateComplete;
+      await vi.waitFor(() => expect(q(el, '[data-test="review-publish"]')).not.toBeNull());
+      const name = q(el, "h1")!.getBoundingClientRect();
+      const review = q<HTMLElement>(el, '[data-test="review-publish"]')!;
+      const action = review.getBoundingClientRect();
+      const live = q(el, '[data-test="menu-status"]')!.getBoundingClientRect();
+      expect(action.top).toBeGreaterThanOrEqual(name.bottom);
+      expect(action.left).toBeGreaterThan(live.right);
+      expect(action.top).toBeLessThan(live.bottom);
+      expect(action.right).toBeLessThanOrEqual(window.innerWidth);
+      expect(action.height).toBe(44);
+      const version = q(el, ".heading-status .version")!;
+      const time = q(el, ".heading-status .time")!;
+      const lines = (element: Element) =>
+        new Set(Array.from(element.getClientRects(), (rect) => rect.top)).size;
+      expect(lines(version)).toBe(1);
+      expect(lines(time)).toBe(1);
+      if (locale === "es-ES")
+        expect(time.getBoundingClientRect().top).toBeGreaterThan(
+          version.getBoundingClientRect().top,
+        );
+      q(el, "wt-relative-time")!.shadowRoot!.querySelector("button")!.focus();
+      await userEvent.keyboard("{Tab}");
+      expect(el.shadowRoot!.activeElement).toBe(review);
+    },
+  );
+
   it.each(["Lunch", "The weekend brunch and late lunch menu served on the terrace until four"])(
     "puts the status under %s inside a phone's width",
     async (name) => {

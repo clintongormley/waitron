@@ -5786,9 +5786,10 @@ normal muted text. A click on the parent link with a modifier key is left to the
 
 **The menu and set menu editors put the parent link beside the name.** The row is as tall as its
 list heading when its contents fit. The menu editor shows its live version and when it went live,
-or **Unpublished**. These words wrap below the title on a phone. A changed live menu adds a warning
-dot and **Unpublished changes**. A menu with changes to publish offers **Review and publish** in
-the heading. It is outlined while the current tab has edits to save or a Save is sending.
+or **Unpublished**. A changed live menu adds a warning dot and **Unpublished changes**. A menu
+with changes to publish offers **Review and publish**. At 390 px, the title gets its own row.
+Below it, the publication status and time wrap beside the button, with the version phrase and
+the time each kept together. It is outlined while the current tab has edits to save or a Save is sending.
 The tabs are **Structure**, **Device home page** and **Preview**. At phone width the tabs use
 smaller horizontal padding so the labels fit side by side at 390 px. On Preview, the heading offers
 **Publish later** and **Publish now** when each action is available. Both are disabled when changes
@@ -5843,8 +5844,8 @@ disabled, and "Reload" is primary (owner, 2026-11-25).
 
 Each **Choose a price** link in Preview opens Structure with **Clashes** selected, including in a
 new tab. An address ending in `/filter/clashes` applies the filter once after the table loads.
-Changing or clearing the price filter removes that segment from the address. The table remembers
-the new choice through refreshes and ordinary tab changes.
+The link's filter is temporary. Leaving the menu restores the previous price choice. Changing
+or clearing the price filter removes the address segment and remembers your choice.
 
 Preview keeps publication notices and the links to menus that include this one directly below
 the editor heading. Put the Changes pane on the left and the proposed menu on the right. Below

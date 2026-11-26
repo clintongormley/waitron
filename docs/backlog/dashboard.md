@@ -470,8 +470,7 @@ From A176 (an empty table shows a proper empty box, with the screen's Add button
 - **The Payments screen's readers table gets no button** (kept as deliberate, owner, 2026-10-17),
   because "Add reader" sits beside each
   connected provider (none, one or several), so there is no single Add to put there, and the list
-  is pre-filtered by status; and the menu prices table on a menu's Price overrides tab gets none
-  either, because its rows come from "Add products" on the Structure tab.
+  is pre-filtered by status.
 
 ### Save follows changes (A331)
 

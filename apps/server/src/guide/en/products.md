@@ -339,8 +339,8 @@ rows. Choose a section row and copy the address if you need to link back to that
 
 Enter a price beside a dish to set its price on this menu. Expand a dish with variants to price
 each one. Clear an entered price to use the usual price. A price you change applies everywhere
-the dish or variant appears on this menu. Choose **Price clashes** on the Menus list or
-**Choose a price** in Preview to open Structure with **Clashes** selected.
+the dish or variant appears on this menu. Choose the clash link on the Menus list or the menu heading,
+or choose **Choose a price** in Preview, to open Structure filtered to clashes.
 
 Choose **Save** at the bottom of Structure to keep the arrangement and prices together. Choose
 **Cancel** and confirm to go back to the saved menu.

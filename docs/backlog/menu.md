@@ -664,15 +664,11 @@ From "Extras and Options — deliberate limits, and what is left open"
   published menu with the dish's unit, so a change reaches the till and the server at the next
   publish.
 
-From A344 (#1375, a menu's Price overrides tab shows its clashes):
+From A344 (#1375, the original clash filter):
 
-- Decided as built: a filter choice the person made earlier in the browser tab (the table keeps
-  one for every menu) wins over starting on Clashes; the red line still gives the count. Under
-  Clashes a product that clashes itself stays folded until opened, as the table folds any row
-  that matches a filter in its own right. Once a load has had no clash, a clash that comes back
-  (Undo, a live re-read) does not switch the filter back to Clashes. Update, 2026-11-22: the
-  [Save bar](../developers/design-system.md#a-value-saved-from-its-own-table-row) replaced Undo.
-  A live re-read still follows the same rule.
+- The 2e menu editor uses the Structure price filter. A clash link sets Clashes for its destination
+  and the previous price choice returns on leaving. A filter you choose yourself is remembered
+  across menus. A live re-read keeps the current choice.
 
 From A294 (#1300, the Products and Structure trees show drag grips only in a mode):
 
