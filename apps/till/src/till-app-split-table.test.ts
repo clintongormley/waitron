@@ -6,7 +6,7 @@ import type { Draft, SplitSources } from "./api/drafts-api.js";
 import type { BillBalance } from "./api/payments-api.js";
 import type { TabLine } from "./api/kitchen-api.js";
 import { codeMessage } from "./i18n/codes.js";
-import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
 import { formatMoney } from "@waitron/shared";
 import { partyBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import type { TillApp } from "./till-app.js";
@@ -5612,7 +5612,11 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         expect(refusal(el)!.textContent).toContain(
           t("table.split_taken", "es-ES").replace("{who}", "Luis"),
         );
-        expect(splitButton(el).textContent!.trim()).toBe(t("table.split_confirm", "es-ES"));
+        expect(splitButton(el).textContent!.trim()).toBe(
+          fill(t("table.split_confirm", "es-ES"), {
+            table: fill(t("floor.table_title", "es-ES"), { table: "5" }),
+          }),
+        );
         expect(api.splitTable).not.toHaveBeenCalled();
       });
 

@@ -385,6 +385,9 @@ describe("till-split-picker", () => {
     expect(header(el, "b1").getBoundingClientRect().left).toBe(
       rowTick(el, "b1", "h1").getBoundingClientRect().left,
     );
+    const bill = q<HTMLElement>(el, "[data-split-header]")!.getBoundingClientRect();
+    const bounds = el.getBoundingClientRect();
+    expect([bill.left, bill.right]).toEqual([bounds.left, bounds.right]);
   });
 
   it("a stepper's + that makes the bill whole, leaving the row no stepper, moves focus to that row's tick", async () => {

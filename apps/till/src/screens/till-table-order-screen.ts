@@ -6188,16 +6188,20 @@ export class TillTableOrderScreen extends LitElement {
     const party = this.party!;
     const targets = party.tableIds.flatMap((id) => {
       const row = this.tables.find((candidate) => candidate.id === id);
-      return row === undefined
-        ? []
-        : [
-            tableChoice(row, t("table.this_party"), (event) => {
-              if (!this.#actionControlCurrent(event)) return;
-              this.splitTableId = id;
-              this.#openSplitPick(id);
-              this.#actionScope?.changed();
-            }),
-          ];
+      if (row === undefined) return [];
+      const seats = row.today?.seats;
+      const hint =
+        seats == null
+          ? t("floor.seats_not_set")
+          : countText(seats, "floor.seats", "floor.seats_one");
+      return [
+        tableChoice(row, hint, (event) => {
+          if (!this.#actionControlCurrent(event)) return;
+          this.splitTableId = id;
+          this.#openSplitPick(id);
+          this.#actionScope?.changed();
+        }),
+      ];
     });
     const context = this.#partyScope(party);
     return tableActionStep(
@@ -6591,7 +6595,7 @@ export class TillTableOrderScreen extends LitElement {
     const readFailed = sources === undefined && this.splitRead === "failed";
     const heading = {
       title: t("table.action_split_table"),
-      subtitle: leaving,
+      subtitle: row === undefined ? "" : detailsHeading(row, null),
       label: fill(t("table.split_pick_heading"), {
         table: leaving,
         party: this.#partyScope(party),
@@ -6711,7 +6715,7 @@ export class TillTableOrderScreen extends LitElement {
               ?disabled=${sources === undefined || holding || (this.splitAttempted && countsBad)}
               @click=${(event: Event) => void this.#confirmSplitPick(event)}
             >
-              ${t("table.split_confirm")}
+              ${row === undefined ? heading.title : fill(t("table.split_confirm"), { table: heading.subtitle })}
             </wt-button>`
       }
     </wt-foot-button-bar>`;

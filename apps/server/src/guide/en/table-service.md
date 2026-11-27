@@ -825,7 +825,7 @@ Choose **Review** to check your dishes and destination, then choose **Move** aga
 
 When some of a party move to a table of their own, tap the table name, choose **Split the table** and
 tap the table that leaves. Tick what goes with it: whole bills, or single dishes from any bill. Set
-each table's guests, then choose **Split**.
+each table's guests, then confirm at the bottom. The button names the table that leaves.
 
 ## Move a bill or split a table with dishes on hold {#held-dishes-move}
 

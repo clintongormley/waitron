@@ -312,7 +312,7 @@ describe("Split a table's panel", () => {
       await expect.poll(() => box().left).toBeCloseTo(0, 0);
       expect(box().right).toBeCloseTo(390, 0);
       const top = q<HTMLElementTagNameMap["wt-top-bar"]>(el, "[data-split-pick] wt-top-bar")!;
-      expect(top.subtitle).toContain("T8");
+      expect(top.subtitle).toBe("Table T8");
       expect(split(el).getBoundingClientRect().width).toBeGreaterThan(350);
       expect(split(el).getBoundingClientRect().bottom).toBeLessThanOrEqual(844);
       expect(textOf(el, "[data-split-takes]")).toContain("€2.00");
@@ -332,11 +332,13 @@ describe("Split a table's panel", () => {
   });
 
   it.each([
-    ["en-GB", "T8 leaves García (T7, T8)", "Split"],
+    ["en-GB", "T8 leaves García (T7, T8)", "Split off Table T8"],
     [
       "es-ES",
       fill(t("table.split_pick_heading", "es-ES"), { table: "T8", party: "García (T7, T8)" }),
-      t("table.split_confirm", "es-ES"),
+      fill(t("table.split_confirm", "es-ES"), {
+        table: fill(t("floor.table_title", "es-ES"), { table: "T8" }),
+      }),
     ],
   ])(
     "names its heading and Split in %s, and the heading has focus",
@@ -383,7 +385,20 @@ describe("Split a table's panel", () => {
   });
 
   it("the list step's heading names the party, and it lists the party's tables", async () => {
-    const el = await mountScreen();
+    const today = {
+      placement: null,
+      fixed: false,
+      takenOff: false,
+      joinId: null,
+      joinSeats: null,
+      zoneRevision: 1,
+    };
+    const el = await mountScreen({
+      tables: [
+        table("t7", { today: { ...today, seats: 4 } }),
+        table("t8", { today: { ...today, seats: 1 } }),
+      ],
+    });
     await click(el, "[data-move-split]");
     await click(el, '[data-action="split-table"]');
 
@@ -391,15 +406,15 @@ describe("Split a table's panel", () => {
       q<HTMLElementTagNameMap["wt-full-screen-panel"]>(el, "[data-split-table]")!.bodyLabel,
     ).toBe("Split a table off García (T7, T8):");
     for (const [id, name] of [
-      ["t7", "T7"],
-      ["t8", "T8"],
+      ["t7", "T7 4 seats"],
+      ["t8", "T8 1 seat"],
     ]) {
       const tile = q(el, `wt-choice-tile[data-target="${id}"]`);
       expect(tile).not.toBeNull();
       await expect
         .element(
           page.elementLocator(tile!).getByRole("button", {
-            name: `${name} These guests`,
+            name,
           }),
         )
         .toBeVisible();
@@ -417,7 +432,7 @@ describe("Split a table's panel", () => {
       .element(
         page
           .elementLocator(q(el, '[data-target="t8"]')!)
-          .getByRole("button", { name: "Window These guests" }),
+          .getByRole("button", { name: "Window Seats not set" }),
       )
       .toBeVisible();
     expect(

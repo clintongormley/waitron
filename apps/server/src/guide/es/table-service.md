@@ -868,7 +868,7 @@ destino y vuelve a elegir **Mover**.
 
 Cuando parte de un grupo pasa a una mesa propia, toca el nombre de la mesa, elige **Separar la
 mesa** y toca la mesa que se separa. Marca lo que se lleva: cuentas enteras o platos sueltos de cualquier cuenta.
-Indica los comensales de cada mesa y elige **Separar**.
+Indica los comensales de cada mesa y confirma con el botón que lleva el nombre de la mesa que se separa.
 
 ## Mover una cuenta o separar una mesa con platos en espera {#held-dishes-move}
 
