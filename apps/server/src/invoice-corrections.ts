@@ -1,7 +1,6 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { findAdjustmentReason } from "@waitron/adjustments";
 import {
-  correctionTargetFor,
   formatInvoiceNumber,
   previewCorrectionAmounts,
   readCorrectableLines,
@@ -270,19 +269,6 @@ export async function readCorrectableNow(
       : { tenders, lines, amounts: { refundable, correctable: 0 }, waiting: null, fullInvoice };
   await backend.refuseUntilRecordable(tx, reading);
   return { tenders, lines, amounts, waiting: null, fullInvoice };
-}
-
-/** Whether the regime's admission marks invoice `saleId` a full invoice, reading that alone; where
- * it does not, {@link readCorrectableNow} answers `fullInvoice: false` too. */
-export async function admittedAsFullInvoice(
-  tx: Transaction,
-  backend: FiscalBackend,
-  nodeId: DeviceRequestConfig["nodeId"],
-  saleId: SaleId,
-): Promise<boolean> {
-  if (backend.correctionAdmissionFor === undefined) return false;
-  const target = await correctionTargetFor(tx, saleId);
-  return (await backend.correctionAdmissionFor(tx, target, nodeId)).fullInvoice === true;
 }
 
 /** What correcting `selection.gross` off the invoice would file, and the money still refundable on it. */

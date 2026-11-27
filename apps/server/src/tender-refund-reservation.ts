@@ -4,6 +4,7 @@ import {
   readCancelsForRefund,
   readCancelsStillOwed,
 } from "@waitron/adjustments";
+import { admittedAsFullInvoice } from "@waitron/core";
 import {
   adjustmentRefunds,
   invoiceCorrectionRefunds,
@@ -29,12 +30,13 @@ import {
 import { invalid } from "./bill-allocation.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
 import {
+  AS_ADMITTED,
   checkCorrectionLeg,
   linkRefundToCorrection,
   refuseWhileCorrectionOpen,
   type CorrectionRead,
 } from "./invoice-correction-legs.js";
-import { admittedAsFullInvoice, readCorrectableNow } from "./invoice-corrections.js";
+import { readCorrectableNow } from "./invoice-corrections.js";
 import { fingerprint } from "./parties.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { matchTenderRefundCapture } from "./tender-refund-capture.js";
@@ -171,7 +173,8 @@ async function refuseBeyondPlainRoom(
   owed: number,
 ): Promise<void> {
   const sale = brandSaleId(saleId);
-  if (upTo <= owed && !(await admittedAsFullInvoice(tx, fiscal.backend, nodeId, sale))) return;
+  if (upTo <= owed && !(await admittedAsFullInvoice(tx, fiscal.backend, sale, nodeId, AS_ADMITTED)))
+    return;
   const room = (amounts: { refundable: number; correctable: number }, fullInvoice: boolean) =>
     (fullInvoice ? 0 : owed) + amounts.refundable - amounts.correctable;
   // The read runs its clock check only once `upTo` is past the room, so a refusal it throws is this

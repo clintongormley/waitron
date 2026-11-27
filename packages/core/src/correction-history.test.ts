@@ -26,6 +26,7 @@ import { seedDevice } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin } from "@waitron/identity";
 import { eq, sql } from "drizzle-orm";
 import {
+  admittedAsFullInvoice,
   correctionLinesFor,
   previewCorrectionAmounts,
   readCorrectableLines,
@@ -733,6 +734,22 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
       code: "sale.correction_unsupported",
       params: { saleId: full.saleId },
     });
+  });
+
+  it("answers the kind alone as the preview decides it, without its refusals", async () => {
+    const kindOf = (saleId: SaleId, kind: { fullInvoice?: true | "as_admitted" }) =>
+      withTransaction(suite.db, (tx) => admittedAsFullInvoice(tx, backend, saleId, nodeId, kind));
+    const full = await sellFull();
+    backend.setCorrectionAdmission({
+      eligible: false,
+      reason: "filing_refused",
+      fullInvoice: true,
+    });
+    expect(await kindOf(full.saleId, { fullInvoice: "as_admitted" })).toBe(true);
+    expect(await kindOf(full.saleId, {})).toBe(false);
+    backend.setCorrectionAdmission(admitted);
+    expect(await kindOf(full.saleId, { fullInvoice: "as_admitted" })).toBe(false);
+    expect(await kindOf(full.saleId, FULL)).toBe(true);
   });
 
   it("with as_admitted, tells kindSeen the kind before refusing an admission that waits", async () => {
