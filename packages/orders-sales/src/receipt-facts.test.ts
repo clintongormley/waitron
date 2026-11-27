@@ -1055,8 +1055,7 @@ describe("a full invoice of a divided set menu", () => {
 });
 
 // Owner's answer 4 (correct-full-invoice design §6): a line given back only in part prints its
-// amount without a quantity or a unit price; a whole line keeps its quantity, and on a full
-// invoice's corrective its unit price.
+// amount without a quantity or a unit price.
 describe("a corrective holding a whole line and a line given back in part", () => {
   it("leaves the quantity and unit price off the part row of a full invoice's table", () => {
     const [table] = receiptFigures(correctiveWithPartLine("R1")).sections;

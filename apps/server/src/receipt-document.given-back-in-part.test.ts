@@ -8,8 +8,7 @@ import { printedLines } from "./testing/decode-ticket.js";
 import { correctiveWithPartLine } from "./testing/receipt-cases.js";
 
 // Owner's answer 4 (correct-full-invoice design §6): on both papers a line given back only in part
-// prints its amount with no quantity and no unit price; a whole line keeps its quantity, and on a
-// full invoice's corrective its unit price.
+// prints its amount with no quantity and no unit price.
 const names = { croquetas: { "es-ES": "Croquetas", "en-GB": "Croquettes" }, paella: "Paella" };
 
 const LOCALES = ["es-ES", "en-GB"] as const;
