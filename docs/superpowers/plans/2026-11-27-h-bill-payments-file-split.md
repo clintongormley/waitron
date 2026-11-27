@@ -1,62 +1,55 @@
 # Split Server bill payments by job
 
-Lane H’s `SPLIT-SERVER-FILES` asks “**Remaining file:** `apps/server/src/bill-payments.ts`. Write a
-one-page plan for this file.” The owner wants “these enormous files should be broken down into
-smaller bites” and “a typical rule is no more than 1000 lines”. Ship the whole split in one PR.
-Cloud has its own plan. Before building, get the Lane H plan review and watcher clearance,
-recheck the earlier `OVERPAID-BILLS` hold with the watcher (the item is still in `docs/backlog.md`),
-and check this map again on the resulting main.
+Give each payment job a file under 1,000 lines in one PR. Lane H’s `SPLIT-SERVER-FILES`
+assigns `bill-payments.ts` under the owner’s 24 November file-size request. Keep the pieces in
+Server with their existing dependencies. Cloud has a separate plan. Get watcher clearance and
+confirm that `OVERPAID-BILLS` has landed before refreshing the map and building.
 
 ## Declaration map
 
-Ranges are in `apps/server/src/bill-payments.ts` at `5cc7bf033a`. Take every declaration starting in each range, with its comments and overloads. Estimates include room for imports.
+Each range is in `apps/server/src/bill-payments.ts` at `5cc7bf033a`. Move whole declarations with their comments and overloads. The estimates include imports.
 
 | File under `apps/server/src/` | Job and source lines | Lines |
 | --- | --- | ---: |
-| `bill-payment-rows.ts` | Read payments, refunds and money held, check excess, link cards to invoices. 320–674, 739–777, 794–833, 1326–1335. | ~520 |
-| `bill-balance.ts` | Build the bill balance and payment/refund views. 233–298, 676–732, 781–791, 839–959, 2708–2713. | ~325 |
-| `bill-payment-types.ts` | Shared payment requests, dependencies and results. 173–232, 300–314. | ~85 |
-| `bill-payment-settlement.ts` | Issue advances and invoices, record or fail payment, return items after a failed charge. 966–1319, 2121–2411. | ~750 |
-| `bill-payment-failures.ts` | Classify clock and charged-but-unrecorded failures. 2027–2095. | ~90 |
+| `bill-payment-rows.ts` | Read payment and refund rows, guard held money, link cards to invoices. 320–674, 739–777, 794–833, 1326–1335. | ~520 |
+| `bill-balance.ts` | Build balances and payment/refund views. 233–298, 676–732, 781–791, 839–959, 2708–2713. | ~325 |
+| `bill-payment-types.ts` | Shared requests, dependencies and results. 173–232, 300–314. | ~85 |
+| `bill-payment-settlement.ts` | Issue advances and invoices, record or fail payments, return dishes after a failed charge. 966–1319, 2121–2411. | ~750 |
+| `bill-payment-failures.ts` | Classify clock and recording failures. 2027–2095. | ~90 |
 | `bill-payments.ts` | Prepare and replay payments, take cash and hand-keyed cards, close zero bills. 316–318, 1337–2015. | ~780 |
-| `bill-reader-payment.ts` | Track live reader payments, reserve, collect and finish. 2019–2024, 2098–2118, 2414–2705. | ~370 |
+| `bill-reader-payment.ts` | Track, reserve, collect and finish live reader payments. 2019–2024, 2098–2118, 2414–2705. | ~370 |
 
-The declaration check gives 74–685 lines per file before imports. Keep every function whole,
-including `issueOrSettleWhenFullyPaid` (1072–1272). Reuse `bill-payment-money`, `bill-advances`,
-`bill-payment-fingerprint` and `payment-slip-print`. `working-order-invoice` and `advance-taken-off`
-import card links and issued-bill money from rows. `close-of-day` imports clock refusal from
-failures. Check for cycles among the pieces, including type imports. Record the existing round
-trip through `bill-advances`, `receipt-guests` and `parties` that returns to the rows file.
+Reuse `bill-payment-money`, `bill-advances`, `bill-payment-fingerprint` and `payment-slip-print`.
+`issueOrSettleWhenFullyPaid` (1072–1272) and its transaction boundaries move whole. Keep fiscal
+code, schema, public signatures, behavior and assertions as they are.
 
 ## Move and verify
 
-- Run `node scripts/move-ts-declarations.mjs scripts/bill-payments-split.json` with
-  `apps/server/tsconfig.json`, following `scripts/working-order-split.json`. Verify identical
-  bodies and comments and the same signatures after formatting. Preserve transaction boundaries,
-  fiscal code, schema, contracts and assertions. Fix type markers and `./errors.js` imports.
-  Replace the `retryShapeOf` re-export with a direct import at its caller. Repoint the dynamic
-  import in `bill-refunds.card.test.ts` and audit mocks and spies. `boot.disk-full-wiring.test.ts`
-  and `handover-stepdown.real.test.ts` mock the API and loop respectively. Move the `movedItemsBack`
-  savepoint allowance to settlement in `scripts/no-bare-transaction.test.ts`. Remove the old cap
-  from `scripts/product-file-size-limits.json` and run `scripts/product-file-size.test.ts` with
-  new files staged.
-- Move the five whole test groups at lines 591–873 of `bill-payments.test.ts`. The groups at 743
-  and 783 go to `bill-payment-settlement.test.ts`, the other three to `bill-payment-rows.test.ts`.
-  Move the setup from `afterEach` through `take` (except `tillInvoicePrinter`) and `codeOf` through
-  `insertPayment` to `testing/bill-payments.test-support.ts`. Keep one `useVenueDb` and the timer
-  hook per suite, and keep receipt and full-payment integration cases in place. Give only the shared
-  fixture a counted English guard entry in `packages/db/src/english-only.ts` for its moved literals.
-  Compare discovered names and assertion text. Budget ~1,850 product lines moved plus ~250–400
-  import lines, ~280 test and ~250 setup lines moved plus test import edits, and ~160–200 map lines.
-  Use the existing mover as shipped.
-- The #4238 rehearsal moved `working-order` declarations. Replay the bill-payment map on #4423’s
-  parent `76f6a98c8b` and tip `c4b842bd3d` in disposable checkouts, matching names to each revision.
-  Apply the moved-tree delta and verify the edited `readBillBalance` and `movedItemsBack` bodies
-  against the tip. Typecheck and run `pay-for-items.sent.test.ts`. Recheck open branches before the
-  PR and name any overlap. [Replay procedure](2026-11-24-working-order-file-split.md#carry-an-open-branch-across-the-split)
+- Run `node scripts/move-ts-declarations.mjs scripts/bill-payments-split.json` with the Server
+  tsconfig and the `scripts/working-order-split.json` pattern. Repoint imports, including
+  `retryShapeOf` to its definition and the dynamic import in `bill-refunds.card.test.ts`.
+  Remove `testing/bill-payment-fixture.ts`’s wildcard re-export. Keep its own wrappers and
+  import `closeZeroBill` and `getBillBalance` directly in the five fixture consumers that
+  use the forwarded names. Keep `bill-payments.test.ts` together because it tests payment
+  flows across pieces. Scan mocks, update live source pointers in Till and the data guide,
+  fix type imports and add `./errors.js` at throwing sites. List newly exported helpers in the PR.
+- After all edits, use a one-off TypeScript parse of the base and final files to compare every
+  declaration’s body bytes and signature tokens, allowing export modifiers. Walk relative
+  imports, including type imports, and reject cycles among the seven pieces. Record the existing
+  path from rows through `bill-advances`, `receipt-guests` and `parties` back to rows. Move the
+  `movedItemsBack` savepoint entry in `scripts/no-bare-transaction.test.ts` and remove the old
+  cap in `scripts/product-file-size-limits.json`. Run both guards with new files staged. Budget
+  ~1,850 product lines moved, ~250–400 import lines across roughly 100 consumers, ~160–200 map
+  lines, and test import edits with zero moved test bodies or new test cases.
+- The existing mover preserved the edited bodies of `readBillBalance` and `movedItemsBack`
+  byte for byte from #4423’s original fork `c2f1ded67e0` and PR head `a38ed89723` into their
+  proposed files. Recheck open branches before the PR. Rehearse the complete map on an overlap
+  or those same revisions. Apply the moved-tree delta including retained code and test edits.
+  Compare all declarations with the pre-move tip and other files with its diff, allowing import
+  rewrites. Drop one changed hunk in the disposable tree and verify the comparison catches it.
+  Run `pay-for-items.sent.test.ts` for #4423. [Replay steps](2026-11-24-working-order-file-split.md#carry-an-open-branch-across-the-split)
 - Run Server typecheck, the changed guards and suites, `bill-payments*.test.ts`,
   `counter-bill-payments.test.ts`, `pay-for-items*.test.ts`, `card-charged-not-recorded.test.ts`,
   `close-of-day.test.ts`, `clock-unconfirmed-gate.test.ts` and `till-api.fiscal-sale-paths.test.ts`.
-  Run the unchanged menu checks `till-api.sell-published.test.ts` (Server) and
-  `till-app-menu-refresh.test.ts` (Till), and fiscal `write-path.e2e.test.ts` (golden huella) and
-  `inmutabilidad.test.ts` in `@waitron/fiscal-verifactu`. Require current-head CI.
+  Run the unchanged `till-api.sell-published.test.ts`, `till-app-menu-refresh.test.ts`, fiscal
+  `write-path.e2e.test.ts` and `inmutabilidad.test.ts`. Require current-head CI.
