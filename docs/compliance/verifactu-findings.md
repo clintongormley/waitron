@@ -944,6 +944,11 @@ extension to a *rectificativa* rests on the identity-linkage argument above — 
 not a verbatim FAQ sentence about rectificativas. Confirm with the asesor if a cross-SIF rectificativa
 is ever issued in anger.
 
+> **2026-11-27, A1614:** a box now corrects an invoice an earlier box (or an earlier installation of
+> this box) issued, judged by its filing status like its own: accepted is correctable, and while AEAT
+> has not answered it the correction waits (`filing_pending`). The owner took this reading on
+> 26 November; [asesor-questions.md](asesor-questions.md) R4 still puts it to the asesor.
+
 ---
 
 ## 14. Factura simplificada content — per-item VAT is not required; the ticket needs the date, per-rate base, QR and legend (added 2026-08-05)

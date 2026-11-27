@@ -1210,6 +1210,9 @@ refund of money Correct invoice could give back is refused before the terminal s
 (2026-11-26: a full invoice naming a customer is corrected with an R1 unless the tax agency refused it
 with no fix, which Refund a payment keeps open; while the business has no registered address, Refund a
 payment waits until it is added. CORRECT-FULL-INVOICE PR 2a.)
+(2026-11-27, A1614: another box's ticket is no longer refused for good. It is judged by its filing
+like this box's own, and while the tax agency has not answered it Correct invoice waits
+(`filing_pending`), so Refund a payment waits too for that money.)
 
 ### Money given back is shared by menu price (owner and watcher, 2026-11-23)
 
