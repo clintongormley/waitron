@@ -305,7 +305,7 @@ export class CustomerMenuPage extends LitElement {
       }
       header h2 {
         margin: 0;
-        font-size: calc(1.4 * var(--wt-font-size-xl));
+        font-size: calc(1.65 * var(--wt-font-size-xl));
       }
       search {
         display: grid;
@@ -386,9 +386,14 @@ export class CustomerMenuPage extends LitElement {
         color: var(--wt-color-primary-text);
         font-weight: var(--wt-font-weight-bold);
       }
-      .section-title,
+      .section-title {
+        font-size: calc(1.4 * var(--wt-font-size-lg));
+      }
       h3 {
         font-size: var(--wt-font-size-lg);
+      }
+      section section > .section-title {
+        font-size: var(--wt-font-size-md);
       }
       .members {
         display: grid;
@@ -485,7 +490,8 @@ export class CustomerMenuPage extends LitElement {
         color: var(--wt-color-primary-text);
       }
       .description,
-      .declarations {
+      .declarations,
+      .dish .declarations wt-icon {
         color: var(--wt-color-text-muted);
       }
       .description,
@@ -555,6 +561,25 @@ export class CustomerMenuPage extends LitElement {
         }
         .dish {
           grid-template-columns: minmax(0, 1fr);
+        }
+        .dish-heading {
+          display: flex;
+          flex-wrap: wrap;
+          column-gap: var(--wt-space-2);
+          align-items: baseline;
+        }
+        .dish-name {
+          flex: 1 1 50%;
+        }
+        .dish-heading > .price {
+          margin-block-start: 0;
+          margin-inline-start: auto;
+          font-size: var(--wt-font-size-lg);
+          text-align: end;
+        }
+        .dish-heading > .description {
+          flex-basis: 100%;
+          order: 1;
         }
         img {
           grid-row: 1;
@@ -833,10 +858,14 @@ export class CustomerMenuPage extends LitElement {
               if (image !== null) firstPhoto = false;
               return html`<div class="dish">
                 <div>
-                  ${this.#entryName(member)} ${declarations(member, words)}
-                  ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
-                  ${hasCautionedChoice(member, this.excluded) ? html`<p class="description" lang=${words.language}>${words.text.checkChoices}</p>` : nothing}
-                  <p class="price">${dishPrice(member, menu.language)}</p>
+                  <div class="dish-heading">
+                    <div class="dish-name">
+                      ${this.#entryName(member)} ${declarations(member, words)}
+                    </div>
+                    ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
+                    ${hasCautionedChoice(member, this.excluded) ? html`<p class="description" lang=${words.language}>${words.text.checkChoices}</p>` : nothing}
+                    <p class="price">${dishPrice(member, menu.language)}</p>
+                  </div>
                 </div>
                 ${
                   image === null

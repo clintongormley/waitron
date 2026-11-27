@@ -275,6 +275,7 @@ describe("the customer menu Online preview", () => {
       const back = page.getByRole("button", { name: "Back to menu" });
 
       await expect.element(filters, { timeout: 1500 }).toBeVisible();
+      await page.getByRole("radio", { name: "Computer" }).click();
       const customer = customerPage(el)!;
       customer.setAttribute("data-theme", theme);
       await customer.updateComplete;
@@ -303,7 +304,12 @@ describe("the customer menu Online preview", () => {
       await expect.element(set).toBeVisible();
       await expect.element(page.getByRole("link", { name: "Bakery" })).not.toBeInTheDocument();
       await expect.element(page.getByRole("status")).toHaveTextContent(/^$/);
-      await expect.element(page.getByText("Check the choices for allergens.")).toBeVisible();
+      const caution = page.getByText("Check the choices for allergens.");
+      await expect.element(caution).toBeVisible();
+      const price = dish.element().closest(".dish")!.querySelector(".price")!;
+      expect(caution.element().getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        price.getBoundingClientRect().bottom,
+      );
       await expectNoA11yViolations(host);
 
       await dish.click();
@@ -547,11 +553,25 @@ describe("the customer menu Online preview", () => {
     const breadDeclarations = bread.closest(".dish")!.querySelector(".declarations")!;
     expect(breadDeclarations.textContent?.trim()).toBe("");
     expect(bread.getBoundingClientRect().left).toBeGreaterThan(pepper.getBoundingClientRect().left);
+    const dish = pepper.closest(".dish")!;
+    const priceLabel = dish.querySelector(".price")!;
+    expect(getComputedStyle(priceLabel).fontSize).toBe(getComputedStyle(pepper).fontSize);
+    const price = document.createRange();
+    price.selectNodeContents(priceLabel);
+    const photo = dish.querySelector("img")!;
+    const dishPriceBox = price.getBoundingClientRect();
+    const nameBox = pepper.getBoundingClientRect();
+    expect(dishPriceBox.top).toBeLessThan(nameBox.bottom);
+    expect(dishPriceBox.left).toBeGreaterThan(nameBox.right);
+    expect(dishPriceBox.right).toBeCloseTo(photo.getBoundingClientRect().right, 0);
     await page.getByRole("radio", { name: "Phone" }).click();
     await vi.waitFor(() => {
       expect(bread.getBoundingClientRect().left).toBe(pepper.getBoundingClientRect().left);
       expect(bread.getBoundingClientRect().top).toBeGreaterThan(pepper.getBoundingClientRect().top);
     });
+    expect(price.getBoundingClientRect().top).toBeGreaterThan(
+      dish.querySelector(".description")!.getBoundingClientRect().bottom,
+    );
     try {
       await page.viewport(360, 800);
       const priceBox = setPrice.getBoundingClientRect();
@@ -635,6 +655,49 @@ describe("the customer menu Online preview", () => {
     },
   );
 
+  it("distinguishes the menu title, main sections and nested sections on the Phone preview", async () => {
+    await open(() => Response.json(publishedSections()));
+    await page.getByRole("radio", { name: "Phone" }).click();
+    const title = page.getByRole("heading", { name: "Lunch for guests", exact: true });
+    const parent = page.getByRole("heading", { name: "From the oven", exact: true }).first();
+    const nested = page.getByRole("heading", { name: "Vegetables", exact: true });
+    await expect.element(nested).toBeVisible();
+    const parentSize = parseFloat(getComputedStyle(parent.element()).fontSize);
+    const titleRatio = parseFloat(getComputedStyle(title.element()).fontSize) / parentSize;
+    expect(titleRatio).toBeGreaterThanOrEqual(1.4);
+    expect(titleRatio).toBeLessThanOrEqual(1.5);
+    const dish = page.getByText("Roast pepper", { exact: true }).element();
+    expect(parentSize).toBeGreaterThanOrEqual(1.35 * parseFloat(getComputedStyle(dish).fontSize));
+    expect(parseFloat(getComputedStyle(nested.element()).fontSize)).toBeLessThan(parentSize);
+  });
+
+  it("paints allergen and diet icons in the same muted colour as the dish description", async () => {
+    const preview = published();
+    const section = preview.menu.members[1]!;
+    if (section.kind !== "section") throw new Error("Expected a section");
+    const pepper = section.members[0]!;
+    if (pepper.kind !== "product") throw new Error("Expected a dish");
+    pepper.allergens = { gluten: { kinds: ["wheat"] } };
+    pepper.dietary = ["vegan"];
+    const { el } = await open(() => Response.json(preview));
+    const allergen = page.getByRole("img", { name: "Cereals containing gluten (Wheat)" });
+    const diet = page.getByRole("img", { name: "Vegan" });
+    await expect.element(allergen).toBeVisible();
+    await expect.element(diet).toBeVisible();
+    const description = page.getByText("Wood-fired with olive oil", { exact: true }).first();
+    const muted = getComputedStyle(description.element()).color;
+    const dish = page.getByText("Roast pepper", { exact: true }).element();
+    expect(muted).not.toBe(getComputedStyle(dish).color);
+    expect(getComputedStyle(allergen.element()).color).toBe(muted);
+    expect(getComputedStyle(diet.element()).color).toBe(muted);
+
+    await page.getByRole("button", { name: "Roast pepper", exact: true }).click();
+    await expect.element(page.getByRole("heading", { name: "Dietary declarations" })).toBeVisible();
+    const detail = customerPage(el)!.shadowRoot!.querySelector(".detail")!;
+    const detailDiet = detail.querySelector("div.declarations wt-icon[name='diet-vegan']")!;
+    expect(getComputedStyle(detailDiet).color).toBe(getComputedStyle(detail).color);
+  });
+
   it("searches displayed dish and set-menu names without losing focus or the allergen key", async () => {
     await open(() => Response.json(publishedSections()));
     const search = page.getByRole("searchbox", { name: "Search dishes" });
@@ -703,7 +766,8 @@ describe("the customer menu Online preview", () => {
     async (width, size, surface) => {
       const viewport = [innerWidth, innerHeight] as const;
       try {
-        await page.viewport(width, 800);
+        // Keep the measured document jump clear of the end, even with compact price rows.
+        await page.viewport(width, surface === "document" ? 650 : 800);
         const { el, host } = await open(() => Response.json(publishedSections()));
         if (surface !== "document") {
           host.style.cssText += "height: 700px; container-type: size; overflow-y: auto;";
@@ -804,6 +868,54 @@ describe("the customer menu Online preview", () => {
       expect(host.scrollTop).toBe(0);
     } finally {
       await page.viewport(...viewport);
+    }
+  });
+
+  it("keeps a short price beside a long name and wraps a large range in the narrow Computer preview", async () => {
+    await page.viewport(390, 844);
+    try {
+      const preview = published();
+      if (preview.state !== "published") throw new Error("Expected a published menu");
+      const section = preview.menu.members[1]!;
+      if (section.kind !== "section") throw new Error("Expected a section");
+      const dish = section.members[0]!;
+      if (dish.kind !== "product") throw new Error("Expected a dish");
+      dish.name = "Wood-roasted peppers with confit garlic";
+      dish.price = { min: "1234.50", max: "2345.00" };
+      dish.unit = "kg";
+      section.members.push({
+        ...dish,
+        name: "Wood-roasted peppers with olive oil",
+        price: { min: "6.50", max: "6.50" },
+        unit: "",
+        allergens: { milk: {} },
+      });
+      await open(() => Response.json(preview));
+      await page.getByRole("radio", { name: "Computer" }).click();
+      const name = page.getByText(dish.name, { exact: true }).element();
+      const card = name.closest(".dish")!;
+      expect(card.closest("article")!.getBoundingClientRect().width).toBe(720);
+      const price = document.createRange();
+      price.selectNodeContents(card.querySelector(".price")!);
+      expect(price.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        name.getBoundingClientRect().bottom,
+      );
+      expect(price.getBoundingClientRect().right).toBeCloseTo(
+        card.querySelector("img")!.getBoundingClientRect().right,
+        0,
+      );
+      const short = page
+        .getByText("Wood-roasted peppers with olive oil", { exact: true })
+        .element();
+      const shortCard = short.closest(".dish")!;
+      price.selectNodeContents(shortCard.querySelector(".price")!);
+      expect(price.getBoundingClientRect().top).toBeLessThan(short.getClientRects()[0]!.bottom);
+      expect(price.getBoundingClientRect().right).toBeCloseTo(
+        shortCard.querySelector("img")!.getBoundingClientRect().right,
+        0,
+      );
+    } finally {
+      await page.viewport(1280, 768);
     }
   });
 

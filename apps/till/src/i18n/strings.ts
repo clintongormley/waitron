@@ -3615,9 +3615,9 @@ export const es: Record<StringKey, string> = {
   "equipment.taken": "{device} se ha llevado {item}",
   "equipment.taken_person": "{device} ({person}) se ha llevado {item}",
   "equipment.close": "Cerrar",
-  "equipment.picked_up": "Has recogido {item}",
-  "equipment.picked_up_receipt_only": "Has recogido {item} para tickets",
-  "equipment.picked_up_slip_only": "Has recogido {item} para justificantes de pago",
+  "equipment.picked_up": "Ahora usas {item}",
+  "equipment.picked_up_receipt_only": "Ahora usas {item} para tickets",
+  "equipment.picked_up_slip_only": "Ahora usas {item} para justificantes de pago",
   "equipment.no_printer_role":
     "No se ha seleccionado ninguna función de impresora. Elige una en Equipo.",
   "equipment.no_pickup_role":

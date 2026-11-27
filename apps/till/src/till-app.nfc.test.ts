@@ -619,7 +619,7 @@ describe("NFC throughout the till", () => {
   });
   it.each([
     ["en-GB", "Picked up Portable reader"],
-    ["es-ES", "Has recogido Portable reader"],
+    ["es-ES", es["equipment.picked_up"].replace("{item}", "Portable reader")],
   ])(
     "announces a successful pickup in %s without leaving the current screen",
     async (locale, message) => {

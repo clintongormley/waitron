@@ -412,11 +412,11 @@ publish, check the version and publication time in the menu heading.
 
 ## Check the published customer menu {#customer-menu}
 
-Open **Customer menu** and choose **Phone** or **Computer** to check the published layout. Use
-**Language** to check the words for each content language. Use **Search dishes** to find a dish
-or set menu by name, or choose a section to jump to it. Open **Allergies and diets** to select
-allergens to exclude or choose a diet. Open a dish or set menu to see which choices are marked.
-Find the allergen key below the dishes.
+Open **Customer menu**. Choose **Computer** to check prices beside dish names or **Phone** to
+review the list. Use **Language** to check the words for each content language. Use **Search dishes**
+to find a dish or set menu by name, or choose a section to jump to it. Open **Allergies and diets**
+to select allergens to exclude or choose a diet. Open a dish or set menu to see which choices are
+marked. Find the allergen key below the dishes.
 Open a dish to check its variants, options and extras. Check the dish's **Allergens** and
 **Dietary declarations**. Check an extra's allergen icons beside its name and look for that
 extra in **Allergens**. Look below each variant for its declarations.

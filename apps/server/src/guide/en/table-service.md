@@ -943,8 +943,9 @@ If the profile's card reader says **Free to choose**, select **Inherit** on the 
 that will take payments with it. If another device holds it, Equipment shows which one.
 
 Where **Scan** is offered for a receipt printer, payment slip printer or card reader, use its
-Waitron label instead of the list. Choosing equipment carried by another device from a list asks
-you to confirm **Take it**; scanning takes it over without asking, so check which item you scan.
+Waitron label instead of the list. Check the label before scanning because your device starts
+using the equipment without asking. When the till says it is using a card reader, check its name.
+If you use the list to choose equipment another device carries, confirm **Take it**.
 
 ## Switch this device's profile {#device-profile}
 
