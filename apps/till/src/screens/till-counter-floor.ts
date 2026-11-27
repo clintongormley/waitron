@@ -7,8 +7,9 @@ import { t } from "../i18n/t.js";
 import { liveGate } from "../state/live-gate.js";
 import "../widgets/counter-waiting.js";
 
-function readyToHandOver({ canHandOver, counts }: CounterWaitingOrder): boolean {
+function readyToHandOver({ status, canHandOver, counts }: CounterWaitingOrder): boolean {
   return (
+    status === "settled" &&
     canHandOver &&
     counts.ordered > 0 &&
     counts.waiting === 0 &&
@@ -49,7 +50,7 @@ export class TillCounterFloor extends LitElement {
   ];
 
   @property({ attribute: false }) live?: TillLiveConnection;
-  @property({ attribute: false }) refresh?: (left: () => boolean) => void;
+  @property({ attribute: false }) refresh?: () => void;
   @property({ type: String }) zoneId = "";
   @property({ attribute: false }) waiting: CounterWaitingOrder[] = [];
   @property({ type: Boolean }) canEditKitchenNote = false;
@@ -72,8 +73,8 @@ export class TillCounterFloor extends LitElement {
   override updated(changed: PropertyValues<this>): void {
     if (!this.isConnected || (this.#watch !== undefined && !changed.has("live"))) return;
     this.#watch?.stop();
-    const run = () => this.refresh?.(() => this.#watch !== watch || !this.isConnected);
-    const watch = liveGate(this.live, {
+    const run = () => this.refresh?.();
+    this.#watch = liveGate(this.live, {
       types: [
         "working_orders",
         "working_order_lines",
@@ -88,7 +89,6 @@ export class TillCounterFloor extends LitElement {
       quietWhileConnected: true,
       run,
     });
-    this.#watch = watch;
     if (!this.live?.up) run();
   }
 

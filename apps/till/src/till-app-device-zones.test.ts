@@ -868,8 +868,7 @@ it("opens a counter's floor and moves food to Ready as the kitchen finishes it",
       status: "placed",
       serviceMode: "ticket_then_pay",
       settledAt: null,
-      collectedAt: "2026-11-27T09:04:00.000Z",
-      canHandOver: false,
+      counts: { ...row.counts, waiting: 0, ready: 2 },
     };
     const retrievePlacedOrder = vi.fn().mockResolvedValue({
       ...sent,
@@ -903,6 +902,11 @@ it("opens a counter's floor and moves food to Ready as the kitchen finishes it",
     await vi.waitFor(() =>
       expect(page.getByRole("button", { name: "New order" }).query()).not.toBeNull(),
     );
+    await vi.waitFor(() =>
+      expect(
+        page.getByRole("button", { name: /Sent soup.*Sent, not paid/ }).query(),
+      ).not.toBeNull(),
+    );
     await expect.element(page.getByRole("button", { name: /Pickup cake/ })).toBeVisible();
     await page.getByRole("button", { name: /Pickup cake/ }).click();
     await expect.element(page.getByText("1 × Cake", { exact: true })).toBeVisible();
@@ -917,12 +921,37 @@ it("opens a counter's floor and moves food to Ready as the kitchen finishes it",
         readyAt: new Date().toISOString(),
       },
     ]);
+    const readsBeforeChange = listCounterWaiting.mock.calls.length;
     stream.event("change", JSON.stringify([{ type: "ticket_items" }]));
+    await vi.waitFor(() =>
+      expect(listCounterWaiting.mock.calls.length).toBeGreaterThan(readsBeforeChange),
+    );
     await expect.element(page.getByRole("heading", { name: "Ready to hand over" })).toBeVisible();
+    const writeRead = Promise.withResolvers<(typeof sent)[]>();
+    const liveRead = Promise.withResolvers<(typeof sent)[]>();
+    listCounterWaiting
+      .mockImplementationOnce(() => writeRead.promise)
+      .mockImplementationOnce(() => liveRead.promise);
+    const readsBeforeHandOver = listCounterWaiting.mock.calls.length;
     await page.getByRole("button", { name: "Handed over #41 Pickup cake", exact: true }).click();
     await vi.waitFor(() =>
       expect(markCollected).toHaveBeenCalledWith("paid", expect.any(String), expect.any(Object)),
     );
+    await vi.waitFor(() =>
+      expect(listCounterWaiting).toHaveBeenCalledTimes(readsBeforeHandOver + 1),
+    );
+    stream.event("change", JSON.stringify([{ type: "ticket_items" }]));
+    await vi.waitFor(() =>
+      expect(listCounterWaiting).toHaveBeenCalledTimes(readsBeforeHandOver + 2),
+    );
+    await page.getByRole("button", { name: "New order", exact: true }).click();
+    await vi.waitFor(() =>
+      expect(counter(el)?.shadowRoot?.querySelector("till-counter-floor")).toBeNull(),
+    );
+    writeRead.resolve([sent]);
+    liveRead.resolve([sent]);
+    await vi.waitFor(() => expect(shell(el).waitingCount).toBe(1));
+    await page.getByRole("button", { name: "Back to Counter" }).click();
     await expect
       .element(page.getByRole("heading", { name: "Ready to hand over" }))
       .not.toBeInTheDocument();

@@ -3498,6 +3498,7 @@ describe("till-app", () => {
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     expect(counter(el)).not.toBeNull();
+    expect(counter(el)!.shadowRoot!.querySelector("till-counter-floor")).toBeNull();
   });
 
   it.each([{ status: 503 }, new TypeError("Network unavailable")])(

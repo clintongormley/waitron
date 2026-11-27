@@ -23901,7 +23901,7 @@ export class TillApp extends LitElement {
         .counterWaiting=${this.counterWaiting}
         .counterFloor=${this.showCounterFloor}
         .live=${this.#live}
-        .refreshWaiting=${(left: () => boolean) => void this.#refreshList("waiting", "refresh.waiting", TABLE_REQUEST_LIMIT_MS, left)}
+        .refreshWaiting=${() => void this.#refreshList("waiting", "refresh.waiting", TABLE_REQUEST_LIMIT_MS)}
         .tables=${this.tables}
         .zones=${this.zones}
         .invoiceLocale=${this.invoiceLocale}

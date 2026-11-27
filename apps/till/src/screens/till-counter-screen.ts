@@ -239,7 +239,7 @@ export class TillCounterScreen extends LitElement {
   @property() selectedServiceZoneId = "";
   @property({ type: Boolean }) counterFloor = false;
   @property({ attribute: false }) live?: TillLiveConnection;
-  @property({ attribute: false }) refreshWaiting?: (left: () => boolean) => void;
+  @property({ attribute: false }) refreshWaiting?: () => void;
   @state() private floorBasket = false;
   @property({ attribute: false }) orderList: "parked" | "waiting" | null = null;
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
