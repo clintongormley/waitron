@@ -56,16 +56,25 @@ export function renderMenuWarnings(
           ${fill("menu_preview.extra_portion_precision", { list: warning.listName, product: warning.name, amount: `${warning.portion} ${localizedName(warning.abbreviation)}`.trim(), precision: String(warning.precision) })}
         </li>`;
       if (warning.kind === "allergens_unreviewed") {
-        const products = warning.products.map(
-          (product) =>
-            html`<li>
-              <a
-                href=${`/products/product/${encodeURIComponent(product.id)}`}
-                @click=${(event: MouseEvent) => openProduct(event, product.id)}
-                >${staffPresentationName({ name: product.parentName ?? product.name, variantName: product.parentName === null ? null : product.name })}</a
-              >
-            </li>`,
-        );
+        const products = warning.products.map((product) => {
+          const name = staffPresentationName({
+            name: product.parentName ?? product.name,
+            variantName: product.parentName === null ? null : product.name,
+          });
+          const label = product.extraOn
+            ? fill("menu_preview.allergens_extra_on", {
+                name,
+                dishes: conjunctionList(product.extraOn),
+              })
+            : name;
+          return html`<li>
+            <a
+              href=${`/products/product/${encodeURIComponent(product.id)}`}
+              @click=${(event: MouseEvent) => openProduct(event, product.id)}
+              >${label}</a
+            >
+          </li>`;
+        });
         return compact
           ? products
           : html`<li>

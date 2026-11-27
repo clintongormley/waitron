@@ -54,9 +54,13 @@ export function filterCustomerMenu(
     }
     if (query && !member.name.toLocaleLowerCase(language).includes(query)) return [];
     if (member.kind === "set_menu") return [member];
-    if (diet && !expandDietaryDeclarations(member.dietary).some((label) => label === diet))
+    if (
+      (diet && !expandDietaryDeclarations(member.dietary).some((label) => label === diet)) ||
+      (diet === "no_fish" && Object.hasOwn(member.allergens ?? {}, "fish"))
+    ) {
+      hidden++;
       return [];
-    if (diet === "no_fish" && Object.hasOwn(member.allergens ?? {}, "fish")) return [];
+    }
     const caution = dishCaution(member, excluded);
     if (caution) {
       hidden++;

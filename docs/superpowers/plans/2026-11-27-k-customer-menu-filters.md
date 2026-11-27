@@ -51,3 +51,8 @@ menu rules in §3 and describes them as a filter on declarations.
 hidden for lack of review when recording the unreviewed default extra as empty would make the
 dish appear. The watcher replied at 05:08, “filters: yes to both changes, keep the advisory.” Use the
 same diet rules as the till and keep the advisory under the declarations in picture 18.
+
+**Visual review follow-up, 27 November.** The watcher's 08:00 note in Lane K's `questions.md`
+includes diet exclusions in the hidden count. Count each placement once after search and report
+the subset hidden for lack of allergen review. In staff Preview, label an extra with the dishes
+that offer it and verify that each counted product is reachable.

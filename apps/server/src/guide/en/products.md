@@ -295,9 +295,9 @@ end of the list's search box; in **Customise**, select the eye beside each colum
 Their filters work while the columns are hidden.
 
 Before you publish now or schedule a menu, the confirmation lists offered dishes, active
-variants and extras whose allergens are unreviewed. Select a name to open that product's own page. You can
-still publish or schedule: the warning asks you to check the declarations, rather than refusing
-the publication. Cancelling the scheduled confirmation keeps the date and time you entered.
+variants and extras whose allergens are unreviewed. An extra lists the dishes that offer it.
+Select a name to open that product's own page. You can still publish or schedule after reading
+the warning. Cancelling the scheduled confirmation keeps the date and time you entered.
 
 While someone at the till uses **Filter** to hide an allergen, unreviewed dishes and sizes are
 hidden too. Review the declarations for each size you sell, or choose **Contains none of the 14**,

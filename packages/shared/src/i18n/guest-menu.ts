@@ -59,7 +59,7 @@ noFilteredDishes|No dishes match these filters.|Ningún plato coincide con estos
 noDishesSearchAndFilters|No dishes match your search and filters.|Ningún plato coincide con tu búsqueda y tus filtros.|Cap plat coincideix amb la teva cerca i els teus filtres.|Ningún prato coincide coa túa busca e os teus filtros.
 hiddenDish|{hidden} dish hidden|{hidden} plato oculto|{hidden} plat amagat|{hidden} prato oculto
 hiddenDishes|{hidden} dishes hidden|{hidden} platos ocultos|{hidden} plats amagats|{hidden} pratos ocultos
-hiddenUnreviewed|, including {unreviewed} the restaurant hasn’t checked for allergens yet.|. El restaurante aún tiene que revisar los alérgenos de {unreviewed}.|. El restaurant encara ha de revisar els al·lèrgens de {unreviewed}.|. O restaurante aínda ten que revisar os alérxenos de {unreviewed}.
+hiddenUnreviewed|: {unreviewed} not yet checked for allergens.|: {unreviewed} sin revisión de alérgenos.|: {unreviewed} sense revisió d’al·lèrgens.|: {unreviewed} sen revisión de alérxenos.
 dietAllergyAdvice|If you have an allergy, use Exclude allergens and ask staff.|Si tienes una alergia, usa Excluir alérgenos y pregunta al personal.|Si tens una al·lèrgia, fes servir Exclou al·lèrgens i pregunta al personal.|Se tes unha alerxia, usa Excluír alérxenos e pregunta ao persoal.
 askAboutAllergens|Ask staff about allergens, even when no icons appear.|Pregunta al personal por los alérgenos, aunque no veas iconos.|Pregunta al personal pels al·lèrgens, encara que no vegis icones.|Pregunta ao persoal polos alérxenos, aínda que non vexas iconas.
 askAboutSetMenu|Ask staff about the choices in this set menu.|Pregunta al personal por las opciones de este menú.|Pregunta al personal per les opcions d’aquest menú.|Pregunta ao persoal polas opcións deste menú.

@@ -26,6 +26,7 @@ const WARNINGS: MenuPreview["warnings"] = [
     products: [
       { id: "bread /?", name: "Staff bread <b>", parentName: null },
       { id: "large", name: "Staff large", parentName: "Staff soup" },
+      { id: "salad", name: "Salad", parentName: null, extraOn: ["Staff bread", "Staff soup"] },
     ],
   },
 ];
@@ -54,7 +55,7 @@ function q(el: MenuPreviewPanel, selector: string) {
 }
 async function openAllergenWarnings(el: MenuPreviewPanel) {
   const fold = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
-    'wt-disclosure[heading="2 products with allergens not yet reviewed"]',
+    'wt-disclosure[heading="3 products with allergens not yet reviewed"]',
   )!;
   fold.open = true;
   await fold.updateComplete;
@@ -73,7 +74,7 @@ describe("allergen publish warnings", () => {
     const { el } = await mount();
     const headings = [...el.shadowRoot!.querySelectorAll("wt-disclosure")];
     expect(headings.map(({ heading, open }) => [heading, open])).toEqual([
-      ["2 products with allergens not yet reviewed", false],
+      ["3 products with allergens not yet reviewed", false],
       ["1 missing device home page shortcut", false],
       ["1 extra with a portion to check", false],
     ]);
@@ -82,6 +83,7 @@ describe("allergen publish warnings", () => {
     expect(links.map((a) => [a.textContent!.trim(), a.getAttribute("href")])).toEqual([
       ["Staff bread <b>", "/products/product/bread%20%2F%3F"],
       ["Staff soup (Staff large)", "/products/product/large"],
+      ["Salad (extra on Staff bread and Staff soup)", "/products/product/salad"],
     ]);
     expect(section.querySelector("b")).toBeNull();
     const published = vi.fn();

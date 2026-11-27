@@ -579,7 +579,13 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   }
 
   const hash = menuDocumentHash(mine.document);
-  const unreviewed = new Map(mine.unreviewed.map((product) => [product.id, product]));
+  type UnreviewedProduct = Extract<
+    MenuPreview["warnings"][number],
+    { kind: "allergens_unreviewed" }
+  >["products"][number];
+  const unreviewed = new Map<string, UnreviewedProduct>(
+    mine.unreviewed.map((product) => [product.id, product]),
+  );
   const precisionWarnings: MenuPreview["warnings"] = [];
   const warned = new Set<string>();
   for (const offer of [
@@ -589,17 +595,20 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     for (const list of offer.offeredModifiers) {
       if (list.kind !== "extras") continue;
       for (const item of list.items) {
-        const key = `${list.id}:${item.productId}`;
-        if (warned.has(key)) continue;
-        warned.add(key);
-        if (item.addAllergens === null && !unreviewed.has(item.productId)) {
+        if (item.addAllergens === null) {
           const { name, variantName } = item.presentation;
-          unreviewed.set(item.productId, {
+          const product = unreviewed.get(item.productId) ?? {
             id: item.productId,
             name: variantName ?? name,
             parentName: variantName === null ? null : name,
-          });
+          };
+          const dishes = (product.extraOn ??= []);
+          if (!dishes.includes(offer.name)) dishes.push(offer.name);
+          unreviewed.set(item.productId, product);
         }
+        const key = `${list.id}:${item.productId}`;
+        if (warned.has(key)) continue;
+        warned.add(key);
         const portion = item.portion ?? "1.000";
         const significantPlaces = (portion.split(".")[1] ?? "").replace(/0+$/, "").length;
         if (significantPlaces <= (item.unit?.precision ?? 0)) continue;

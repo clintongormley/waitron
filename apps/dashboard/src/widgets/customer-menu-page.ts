@@ -794,6 +794,7 @@ export class CustomerMenuPage extends LitElement {
     } = filterCustomerMenu(menu.members, query, menu.language, this.diet, this.excluded);
     const sections = visible.filter(({ member }) => member.kind === "section");
     const filtered = this.excluded.length > 0 || this.diet !== "";
+    const filterNotice = hidden > 0 || this.excluded.length > 0;
     const noResults =
       (filtered && dishes === 0) || (!filtered && query.length > 0 && visible.length === 0);
     const emptyMessage = !filtered
@@ -942,9 +943,9 @@ export class CustomerMenuPage extends LitElement {
         <div
           role="status"
           lang=${words.language}
-          class=${classMap({ "filter-summary": this.excluded.length > 0, "no-results": noResults })}
+          class=${classMap({ "filter-summary": filterNotice, "no-results": noResults })}
         >
-          ${noResults && this.excluded.length ? html`<p>${emptyMessage}</p>` : noResults ? emptyMessage : nothing}
+          ${noResults ? (filterNotice ? html`<p>${emptyMessage}</p>` : emptyMessage) : nothing}
           ${hidden ? html`<p>${hiddenSummary}${unreviewed ? unreviewedSummary : "."}</p>` : nothing}
           ${this.excluded.length ? html`<p>${words.text.askAboutAllergens}</p>` : nothing}
         </div>

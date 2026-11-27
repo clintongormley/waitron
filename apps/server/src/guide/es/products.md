@@ -318,9 +318,9 @@ final de la búsqueda de la lista; en **Personalizar**, pulsa el ojo junto a cad
 **Listo**. Sus filtros funcionan aunque las columnas estén ocultas.
 
 Antes de publicar ahora o de programar una carta, la confirmación muestra los platos, las variantes
-activas y los extras ofrecidos cuyos alérgenos están sin revisar. Selecciona un nombre para abrir la página propia
-de ese producto. Aun así puedes publicar o programar: el aviso te pide que compruebes las
-declaraciones, no rechaza la publicación. Si cancelas la confirmación de programación, se conservan la
+activas y los extras ofrecidos cuyos alérgenos están sin revisar. Junto a cada extra aparecen los
+platos que lo ofrecen. Selecciona un nombre para abrir la página de ese producto. Puedes publicar o
+programar después de leer el aviso. Si cancelas la confirmación de programación, se conservan la
 fecha y la hora que introdujiste.
 
 Mientras alguien en la caja usa **Filtros** para ocultar un alérgeno, también se ocultan los platos

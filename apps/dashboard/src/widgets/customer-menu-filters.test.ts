@@ -89,7 +89,7 @@ it("hides dishes served with a default extra that declares an exclusion or lacks
   expect(result.unreviewed).toBe(2);
 });
 
-it("counts placements after name and diet matching, keeping nonempty sections and set menus", () => {
+it("counts diet and allergen exclusions once per matching placement", () => {
   const bread = dish("House bread", { allergens: null, dietary: ["vegan"] });
   const clear = dish("Garden bread", { dietary: ["vegan"] });
   const set: GuestMember = { kind: "set_menu", name: "Bread lunch", price: "20.00", lines: [] };
@@ -113,7 +113,7 @@ it("counts placements after name and diet matching, keeping nonempty sections an
       { member: { kind: "section", name: "Garden", members: [clear] }, sectionId: "section-3" },
       { member: set, sectionId: "section-4" },
     ],
-    hidden: 2,
+    hidden: 3,
     unreviewed: 2,
     dishes: 1,
   });
@@ -154,4 +154,5 @@ it("hides a dish with declared fish when No fish is selected", () => {
     filterCustomerMenu(menu, "", "en", diet, []).entries.map(({ member }) => member.name);
   expect(namesFor("no_fish")).toEqual(["Fresh pasta"]);
   expect(namesFor("no_meat")).toEqual(["Fish sauce noodles", "Fresh pasta"]);
+  expect(filterCustomerMenu(menu, "", "en", "no_fish", []).hidden).toBe(1);
 });

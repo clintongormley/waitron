@@ -310,9 +310,7 @@ describe("the customer menu Online preview", () => {
       const notice = page.getByRole("status").filter({ hasText: "1 dish hidden" });
       await expect
         .element(notice, { timeout: 1500 })
-        .toHaveTextContent(
-          "1 dish hidden, including 1 the restaurant hasn’t checked for allergens yet.",
-        );
+        .toHaveTextContent("1 dish hidden: 1 not yet checked for allergens.");
       expect(parseFloat(getComputedStyle(notice.element()).paddingBlockEnd)).toBeGreaterThanOrEqual(
         12,
       );
@@ -354,6 +352,7 @@ describe("the customer menu Online preview", () => {
       await close.click();
       const empty = page.getByRole("status").filter({ hasText: "No dishes match these filters." });
       await expect.element(empty).toBeVisible();
+      await expect.element(empty).toHaveTextContent("2 dishes hidden.");
       expect(parseFloat(getComputedStyle(empty.element()).marginBlockStart)).toBeGreaterThan(0);
       await expect.element(set).toBeVisible();
 
