@@ -143,13 +143,13 @@ la cuenta o al imprimirla con **Imprimir la cuenta** se emite la factura; al reg
 ido sin pagar también se emite y queda pendiente de pago. Una cuenta que sigue abierta al terminar
 el día de trabajo se emite entonces.
 
-**Factura completa** está en la zona de cobro de la cuenta, debajo del pedido, y en el menú **⋮**,
-bajo el nombre de la cuenta; las dos abren el mismo formulario para la cuenta en pantalla. Ninguna
-aparece cuando la cuenta ya está pagada o ya se ha emitido su factura. Convertir una cuenta pagada
-en factura completa sería corregir una factura ya emitida, y Waitron todavía no ofrece esa
-corrección. Cuando ya has elegido un cliente, su nombre y su identificador aparecen debajo de
-**Factura completa**, en la zona de cobro. Al juntar cuentas, o al mover todos los platos a otra
-cuenta, la caja pregunta antes de cambiar el cliente de una factura completa.
+Abre **Factura completa** desde la zona de cobro, debajo del pedido, o desde **⋮** junto al selector
+de cuentas. Ambas opciones abren el mismo formulario para la cuenta en pantalla hasta que cobres
+la cuenta entera o se emita su factura. Convertir una cuenta pagada en factura completa sería
+corregir una factura ya emitida, y Waitron todavía no ofrece esa corrección. Cuando ya has elegido
+un cliente, su nombre y su identificador aparecen debajo de **Factura completa**, en la zona de
+cobro. Al juntar cuentas, o al mover todos los platos a otra cuenta, la caja pregunta antes de
+cambiar el cliente de una factura completa.
 
 ¿Has guardado una factura completa por error? Vuelve a abrir **Factura completa** y elige
 **Factura simplificada en su lugar**. Cuando la cuenta ya está impresa o tiene un pago, sigue
@@ -530,7 +530,7 @@ va con ella, y la cuenta y la estación saben siempre qué hamburguesa es cuál.
 Mientras los platos son iguales sigues viendo una sola fila, **2 × Hamburguesa**, en la cuenta y en
 **Enviado**. La fila se separa en cuanto un plato cambia, por ejemplo cuando se sirve una hamburguesa
 o se le aplica un descuento. Al tocar una fila en **Enviado** se marca entera como servida; **Marcar
-servido** en los detalles de la fila pregunta cuántos. [**Mover platos…**](table-service.md#move-dishes) te deja
+servido** en los detalles de la fila pregunta cuántos. [**Mover platos**](table-service.md#move-dishes) te deja
 elegir cuántos platos de una fila pasan a otra cuenta, cada uno con sus extras. **Descuento** y
 **Cancelar** actúan sobre la fila y te dejan elegir cuántos de sus platos. **Cambiar plato**, en los
 detalles de la fila, cambia todos los platos de la fila y permite aumentar la cantidad.
@@ -633,7 +633,7 @@ Una invitación o un descuento en un menú cubre su precio y sus suplementos, no
 Si se anulan, se mueven o se pagan aparte algunos de sus platos, el descuento se quita; si mueves o
 pagas todos, se va con ellos.
 
-Para pasar un menú a otra cuenta, abre **Mover platos…** y selecciona el menú. Sus platos se
+Para pasar un menú a otra cuenta, abre **Mover platos** y selecciona el menú. Sus platos se
 mueven con él.
 
 En el **Mostrador**, elige **Para llevar** y añade los platos desde cualquier carpeta: la
@@ -690,9 +690,10 @@ de la mesa en la parte superior para volver a la misma cuenta. Usa **Atrás** en
 de **Mover a otra mesa**, **Unir mesas** o **Separar la mesa** para volver al paso anterior. Si
 cambiaste algún campo, puedes seguir editando o descartar los cambios.
 
-Abre **⋮** junto al selector para ver las acciones de la cuenta que tienes en pantalla. Desde ahí
-puedes imprimirla, introducir los datos de la factura completa, mover platos o cambiar la cuenta.
-Cuando una acción requiere una elección, se abre junto al pedido. Pulsa **Atrás** para volver.
+Pulsa **⋮** junto al selector para abrir el panel de acciones de la cuenta que tienes en pantalla.
+Comprueba el nombre y el saldo de la cuenta en la parte superior. Si necesitas introducir los datos
+de la factura, elige **Factura completa** antes de **Imprimir la cuenta**. Cuando una acción
+requiere una elección, se abre junto al pedido. Pulsa **Atrás** para volver.
 
 Unir una mesa, o mover clientes a otra, conserva todas las cuentas: las que llegan toman los
 siguientes números del grupo que las recibe. Para juntar dos cuentas, abre la cuenta que debe
@@ -792,7 +793,7 @@ Una cuenta impresa no admite más platos. Si los clientes piden algo más, ponlo
 nueva**.
 
 Si después los clientes quieren pagar por separado, abre **⋮** y elige **Reabrir cuenta**. Esto
-anula el ticket y reabre la cuenta, lista para [**Mover platos…**](table-service.md#move-dishes).
+anula el ticket y reabre la cuenta, lista para [**Mover platos**](table-service.md#move-dishes).
 Lo ya pagado cuenta para ella.
 Si **Reabrir cuenta** muestra platos sin servir, elige **Marcar como servidos** para los que
 llegaron. Cuando algo de la cuenta ya se ha servido y no se ha pagado nada, **Parar estos platos y
@@ -838,7 +839,7 @@ posteriores no aparezcan en él.
 ## Mover platos a otra cuenta {#move-dishes}
 
 Cuando un cliente decide pagar sus propias bebidas, pasa esos platos a una cuenta suya. Abre el menú
-**⋮** y elige **Mover platos…**. Está disponible en una cuenta de mesa que sigue abierta, aunque
+**⋮** y elige **Mover platos**. Está disponible en una cuenta de mesa que sigue abierta, aunque
 parte de ella ya esté pagada.
 
 El panel, con la cuenta como título, por ejemplo **Mover platos de Cuenta 1**, muestra los platos

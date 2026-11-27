@@ -535,7 +535,7 @@ it.each([
   ['[data-switch-bill="other"]', "switch-bill", { workingOrderId: "other" }],
   ["[data-new-bill]", "new-bill", {}],
 ])(
-  "A803 switcher: %s with Move dishes… open and nothing chosen sends at once, asking nothing",
+  "A803 switcher: %s with Move dishes open and nothing chosen sends at once, asking nothing",
   async (selector, type, detail) => {
     const { app, screen } = await mount();
     await click(screen, `[data-bill-switcher] ${selector}`);

@@ -74,7 +74,7 @@ describe.each(["en", "es"] as const)("the bill footer in %s", (locale) => {
           });
           await openTableMenu(el);
           const discount = q("[data-table-menu] [data-discount-bill]")!;
-          expect(discount.textContent).toContain(t("table.discount_bill"));
+          expect(discount.querySelector("wt-menu-row")!.label).toContain(t("table.discount_bill"));
           expect(discount.checkVisibility()).toBe(true);
           const rect = discount.getBoundingClientRect();
           expect(rect.height).toBeGreaterThanOrEqual(44);

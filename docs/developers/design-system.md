@@ -1243,7 +1243,7 @@ case opens a real table.
 
 **Table screen: table actions, bill switcher and bill actions.** Tap the table name in the
 order header to open its bottom sheet at every width. The status pin opens table details.
-The bill picker, Eat here / Take away control and bill actions follow the table controls.
+The bill picker and its actions sit together before the Eat here / Take away control.
 
 - **The switcher** is a `wt-row-actions` drawn whenever the screen has a party. The outlined trigger
   has a 44 px minimum height, a bold bill name, a muted amount or payment status, and a smaller
@@ -1278,11 +1278,13 @@ The bill picker, Eat here / Take away control and bill actions follow the table 
   table has its own outlined button at the end. An unseated table offers Move and Join.
   The sheet fills a narrow display. On a wide display it starts at the order column’s left edge
   and ends at the display’s right edge. The whole display dims while the sheet is open.
-- **Bill actions** open from the ⋮ beside the switcher when a current bill is shown. The group
-  lists Name this bill, then for an open bill Move dishes and Merge bills, then Move this bill,
-  Comp the bill, Record unpaid departure, Full invoice and Print the bill, as allowed by its
-  state. Receipt copy, Nothing was served and Reopen bill appear where they apply. Print the
-  bill and Receipt copy require this device to be able to print the document.
+- **Bill actions** open in the shared menu sheet from the ⋮ beside the switcher. The 44 px square
+  button uses the large icon size. The grab handle and heading stay visible while the rows scroll.
+  The heading names the current bill and its balance or status. The rows are Print the bill, Full invoice,
+  Move dishes, Merge bills, Move this bill, Name this bill, Comp the bill and Record unpaid
+  departure, as the bill's state allows. Receipt copy appears near the top when offered. Nothing
+  was served and Reopen bill appear at the end when offered. Print the bill and Receipt copy
+  require this device to be able to print the document.
 - **The action panel.** A menu choice that needs a picker opens it beside the order. The
   heading takes focus and scrolls into view. Back and Escape close the panel and return focus
   to the menu that opened it. Escape closes an open list first. Naming and guests windows
@@ -6502,7 +6504,7 @@ one in a unit with no decimals; a weighed or measured line, and a line no portio
 always stand alone.
 
 On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
-many members; Move station takes every member; Change dish changes every member; Move dishes… picks the row's first members whole
+many members; Move station takes every member; Change dish changes every member; Move dishes picks the row's first members whole
 ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
 or a count of it. Fire now releases every member of the row with its extras in one group.
 Finish table keeps a cancellation for each dish and groups the slips according to the station's
@@ -6550,7 +6552,7 @@ Spec: §4 and §14.4 of `docs/superpowers/specs/2026-11-26-till-handheld-redesig
 
 ### The dish picker
 
-Move dishes… draws the bill's dishes through `till-portion-picker`
+Move dishes draws the bill's dishes through `till-portion-picker`
 (`apps/till/src/widgets/portion-picker.ts`), which draws rows from the selection model
 (`pickGroups` and `pickRows`, `apps/till/src/state/portion-selection.ts`) and emits `portion-picks` with the picked
 line ids; the screen keeps the picks in its action draft scope, so leaving with picks or a chosen destination asks first. A
@@ -6594,7 +6596,7 @@ Split a table draws every open and presented bill of the party, in number order,
 (`apps/till/src/widgets/split-picker.ts`), which holds no picks of its own: the selection model
 (`apps/till/src/state/split-selection.ts`) gives each change, the widget emits `split-picks`, and the
 screen hands the selection back and keeps it in its action draft scope. Each bill's dishes are this
-same `till-portion-picker`, with these additions. Here and in Move dishes…, a set menu and each
+same `till-portion-picker`, with these additions. Here and in Move dishes, a set menu and each
 dish of one have a row of their own, never a counted row, and a set menu holding dishes is marked with
 their names (`table.move_dishes_includes`).
 

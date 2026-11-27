@@ -3721,7 +3721,9 @@ describe("till-table-order-screen", () => {
       >("till-table-status");
       expect(status!.party).toBe(p1);
       expect(status!.tables).toBe(tables);
-      expect(status!.nextElementSibling!.hasAttribute("data-bill-switcher")).toBe(true);
+      expect(
+        status!.nextElementSibling!.firstElementChild!.hasAttribute("data-bill-switcher"),
+      ).toBe(true);
     });
 
     it("on a phone-wide screen in Spanish, a long status pin keeps each head button on one line", async () => {
@@ -3934,9 +3936,11 @@ describe("till-table-order-screen", () => {
       it("lists The counter and every other table with its condition, under the bill it moves", async () => {
         const { el } = await mount(onCheck());
         await toMenu(el);
-        expect(el.shadowRoot!.querySelector('[data-action="move-bill"]')!.textContent!.trim()).toBe(
-          t("table.action_move_bill"),
-        );
+        expect(
+          el
+            .shadowRoot!.querySelector('[data-action="move-bill"] wt-menu-row')!
+            .getAttribute("label"),
+        ).toBe(t("table.action_move_bill"));
         click(el, '[data-action="move-bill"]');
         await el.updateComplete;
 
@@ -4870,13 +4874,13 @@ describe("till-table-order-screen", () => {
           }),
         );
 
-      it("offers Name this bill, first under the bill on screen, for the bill on screen at a table", async () => {
+      it("offers Name this bill in the action sheet for the bill on screen at a table", async () => {
         const { el } = await mount(onCheck());
         await openTableMenu(el);
 
         const action = el.shadowRoot!.querySelector('[data-action="name-bill"]')!;
-        expect(action.textContent!.trim()).toBe(t("table.action_name_bill"));
-        expect(el.shadowRoot!.querySelector("[data-table-menu-bill] wt-button")).toBe(action);
+        expect(action.querySelector("wt-menu-row")!.label).toBe(t("table.action_name_bill"));
+        expect(action.closest("[data-table-menu-bill]")).not.toBeNull();
       });
 
       it("does not offer Name this bill for a counter order", async () => {
@@ -5188,7 +5192,7 @@ describe("till-table-order-screen", () => {
       );
     });
 
-    it("offers no Move dishes…, Split by item, Transfer items or Merge bills for an order that belongs to no party", async () => {
+    it("offers no Move dishes, Split by item, Transfer items or Merge bills for an order that belongs to no party", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4" });
       await toMenu(el);
 
@@ -5201,9 +5205,9 @@ describe("till-table-order-screen", () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
       await toMenu(el);
 
-      expect(el.shadowRoot!.querySelector('[data-action="merge"]')!.textContent!.trim()).toBe(
-        t("table.action_merge_bills"),
-      );
+      expect(
+        el.shadowRoot!.querySelector('[data-action="merge"] wt-menu-row')!.getAttribute("label"),
+      ).toBe(t("table.action_merge_bills"));
     });
 
     it("merges into the bill on screen from Bill 1 when the bill on screen was split off", async () => {

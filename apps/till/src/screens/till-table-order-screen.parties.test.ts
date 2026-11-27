@@ -341,7 +341,7 @@ describe("till-table-order-screen: Nothing was served", () => {
     const asked = capture(el, "cancel-credit-bill");
 
     const action = menu(el).querySelector<HTMLElement>("[data-cancel-credit]")!;
-    expect(action.textContent!.trim()).toBe(t("cancel_credit.action"));
+    expect(action.querySelector("wt-menu-row")!.label).toBe(t("cancel_credit.action"));
     action.click();
 
     expect(asked).toEqual([{ workingOrderId: "wo-invoiced" }]);

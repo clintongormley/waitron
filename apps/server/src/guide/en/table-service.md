@@ -135,12 +135,12 @@ saved choice lets the bill grow above the simplified-invoice limit. Paying the t
 or printing it with **Print the bill** issues the invoice; recording an unpaid departure also issues
 it, leaving the amount unpaid. A bill still open when the business day ends is issued then.
 
-**Full invoice** is in the bill's payment area below the order, and in the **⋮** menu under the
-bill's name; both open the same form for the bill on screen. Neither is offered once the bill is
-paid or an invoice has been issued for it. Turning a paid bill into a full invoice would correct an
-invoice already issued, and Waitron does not offer that correction yet. Once a customer is chosen,
-their name and identifier show under the payment area's **Full invoice**. Merging bills, or
-moving every dish to another bill, asks before a full invoice's customer would change.
+Open **Full invoice** from the payment area below the order or from **⋮** beside the bill switcher.
+Both open the same form for the bill on screen until you collect full payment or issue its invoice.
+Turning a paid bill into a full invoice would correct an invoice already issued, and Waitron does
+not offer that correction yet. Once a customer is chosen, their name and identifier show under
+the payment area's **Full invoice**. Merging bills, or moving every dish to another bill, asks
+before a full invoice's customer would change.
 
 Saved a full invoice by mistake? Open **Full invoice** again and choose **Simplified invoice
 instead**. Once the bill is printed or has taken a payment, it stays a full invoice.
@@ -505,7 +505,7 @@ with it, and the bill and the station agree on which burger is which.
 While the dishes are the same you still see one row, **2 × Burger**, on the bill and in **Sent**. A
 row parts as soon as one dish differs, for example once one burger is served or comped. Tapping a
 row in **Sent** marks all of it served; **Mark served** in the row's details asks how many.
-[**Move dishes…**](table-service.md#move-dishes) lets you choose how many of a row go to another bill, each with
+[**Move dishes**](table-service.md#move-dishes) lets you choose how many of a row go to another bill, each with
 its own extras. **Comp** and **Void** work on the row and let you choose how many of its dishes.
 **Change dish**, in the row's details, changes every dish of the row and lets you increase its
 count. To reduce the count, use **Void…**, which opens **Cancel item**. Choose **Fire now** in
@@ -600,7 +600,7 @@ A comp or discount on a set menu covers its price and its supplements, not paid 
 of its dishes are cancelled, moved or paid for on their own, the discount comes off; moving or
 paying for all of them takes it along.
 
-To move a set menu to another bill, open **Move dishes…** and select the set menu. Its dishes move
+To move a set menu to another bill, open **Move dishes** and select the set menu. Its dishes move
 with it.
 
 At the **Counter**, choose **Take away**, then add the dishes from any folder: the bill groups
@@ -653,9 +653,10 @@ return to the same bill. Use **Back** at the top of **Move to another table**, *
 **Split the table** to go back a step. If you changed a field, you can keep editing or discard the
 changes.
 
-Open **⋮** beside the bill switcher for actions on the bill you are viewing. Use it to print the
-bill, enter full invoice details, move dishes or change the bill itself. When an action needs a
-choice, it opens beside the order. Choose **Back** to return.
+Tap **⋮** beside the bill switcher to open the action sheet for the bill you are viewing. Check
+the bill name and balance at the top. Choose **Full invoice** before **Print the bill** if you need
+to enter invoice details. When an action needs a choice, it opens beside the order. Choose **Back**
+to return.
 
 Joining a table, or moving guests onto one, keeps every bill: the bills that arrive take the
 receiving party's next numbers. To put two bills together, open the bill that should receive the
@@ -752,7 +753,7 @@ dish that may not come before you print.
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.
 
 If the guests then want to pay separately, open **⋮** and choose **Reopen bill**. This
-cancels the existing receipt and reopens the bill, ready for [**Move dishes…**](table-service.md#move-dishes).
+cancels the existing receipt and reopens the bill, ready for [**Move dishes**](table-service.md#move-dishes).
 Money already paid counts towards it.
 If **Reopen bill** lists dishes not yet served, choose **Mark served** for any that came. Once
 something on the bill has been served and nothing has been paid, **Stop these dishes and reopen**
@@ -796,7 +797,7 @@ alert before marking it handled; later payments may not be listed there.
 ## Move dishes to another bill {#move-dishes}
 
 When one guest decides to pay for their own drinks, move those dishes onto a bill of their own. Open
-the **⋮** menu and choose **Move dishes…**. It is there for a table's bill that is still open, even
+the **⋮** menu and choose **Move dishes**. It is there for a table's bill that is still open, even
 when part of it is paid.
 
 The panel, headed with the bill, such as **Move dishes from Bill 1**, lists the bill's dishes, each

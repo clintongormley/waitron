@@ -4,6 +4,7 @@ import "@waitron/ui/src/components/wt-menu-row.js";
 import { actionChoiceStyles } from "@waitron/ui/src/components/wt-row-actions.js";
 import { decimal, formatMoney, TABLE_SEPARATOR } from "@waitron/shared";
 import type { PartyBill, TableParty } from "../api/floor-api.js";
+import type { StringKey } from "../i18n/strings.js";
 import { countText, currentLocale, fill, named, t } from "../i18n/t.js";
 import { billLabel, billNumberLabel, shownBills } from "../state/bill-state.js";
 
@@ -196,26 +197,57 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
   </wt-row-actions>`;
 }
 
+export function billActionRow(
+  key: StringKey,
+  choose: (event: Event) => void,
+  {
+    action,
+    hook,
+    disabled = false,
+    direct = false,
+  }: {
+    action?: string;
+    hook?: "discount" | "invoice" | "receipt" | "cancel-credit" | "reopen";
+    disabled?: boolean;
+    direct?: boolean;
+  },
+): TemplateResult {
+  return html`<button
+    type="button"
+    data-row-choice
+    data-action=${action ?? nothing}
+    ?data-record-departure=${action === "left-unpaid"}
+    ?data-discount-bill=${hook === "discount"}
+    ?data-choose-bill-invoice=${hook === "invoice"}
+    ?data-bill-receipt=${hook === "receipt"}
+    ?data-cancel-credit=${hook === "cancel-credit"}
+    ?data-split-after-print=${hook === "reopen"}
+    ?disabled=${disabled}
+    @click=${choose}
+  >
+    <wt-menu-row label=${t(key)} ?chevron=${!direct} divider></wt-menu-row>
+  </button>`;
+}
+
 export function billActions(
-  heading: string,
+  bill: PartyBill,
   items: readonly (TemplateResult | typeof nothing)[],
+  place: () => void,
 ): TemplateResult {
   return html`<wt-row-actions
-    class="table-menu"
+    class="bill-menu table-action-sheet"
     data-table-menu
-    align="end"
-    opens-below
+    bottom-sheet
+    sheet-variant="menu"
+    iconSize="lg"
     label=${t("table.bill_actions")}
+    sheet-heading=${`${billLabel(bill)} · ${owes(bill)}`}
+    @wt-row-actions-toggle=${(event: CustomEvent<{ open: boolean }>) => {
+      (event.currentTarget as HTMLElement).toggleAttribute("data-open", event.detail.open);
+      if (event.detail.open) place();
+    }}
   >
-    <div
-      class="table-menu-group"
-      data-table-menu-bill
-      role="group"
-      aria-labelledby="table-menu-bill"
-    >
-      <span id="table-menu-bill" class="table-menu-heading">${heading}</span>
-      ${items}
-    </div>
+    <div data-table-menu-bill>${items}</div>
   </wt-row-actions>`;
 }
 
@@ -313,10 +345,28 @@ export const billControlStyles = css`
     margin-inline: var(--wt-space-2) var(--wt-space-4);
     padding-block-end: var(--wt-space-1);
   }
-  .table-menu-group {
+  .bill-menu {
+    flex: none;
+  }
+  .bill-menu::part(trigger) {
+    box-sizing: border-box;
+    width: var(--wt-tap-min);
+    height: var(--wt-tap-min);
+    border: var(--wt-field-line-width) solid var(--wt-color-border);
+    border-radius: var(--wt-radius-md);
+    background: var(--wt-color-surface);
+  }
+  .bill-menu [data-table-menu-bill] {
     display: flex;
     flex-direction: column;
-    gap: var(--wt-space-1);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-block-end: var(--wt-space-5);
+  }
+  .bill-menu [data-row-choice]:disabled {
+    color: var(--wt-color-text-muted);
+    background: transparent;
+    cursor: not-allowed;
   }
   .table-menu-heading {
     padding: var(--wt-space-1) var(--wt-space-4);

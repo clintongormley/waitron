@@ -1065,7 +1065,7 @@ describe("A803 move dishes app:", () => {
     ]);
   });
 
-  it("a refusal leaves the source bill on screen with the panel closed, and opening Move dishes… again starts with nothing picked over the re-read balance", async () => {
+  it("a refusal leaves the source bill on screen with the panel closed, and opening Move dishes again starts with nothing picked over the re-read balance", async () => {
     const getBillBalance = vi
       .fn()
       .mockResolvedValueOnce(balance())

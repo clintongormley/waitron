@@ -204,7 +204,7 @@ describe("a poll beside an open order", () => {
 
   it.each([
     ["till", 1280, "[data-bill-switcher]", "anchored"],
-    ["till", 1280, "[data-table-menu]", "anchored"],
+    ["till", 1280, "[data-table-menu]", "bottom sheet"],
     ["tablet-landscape", 1024, "[data-bill-switcher]", "anchored"],
     ["phone-portrait", 390, "[data-bill-switcher]", "bottom sheet"],
   ] as const)(
