@@ -515,8 +515,33 @@ it("holds the next start only after a complete shutdown download and confirmatio
   }
 }, 30_000);
 
-it("keeps the deliberate shutdown hold across starts until an administrator carries on", async () => {
+it.each([false, true])("keeps the shutdown hold across starts (paired: %s)", async (paired) => {
   const { cfg } = await setupVenue(suite.db);
+  const confirmedBySpare = vi.fn(async () => ({
+    result: "proceed" as const,
+    successorNodeId: null,
+    hasCountedPeer: true,
+  }));
+  if (paired) {
+    const ring = loadKeyRing(TRADING_BOOT_KEY_ENV);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, cfg.nodeId);
+    await writeNodeMembership(
+      suite.db,
+      buildNextMembershipDocument({
+        heldDocument: null,
+        nodes: [
+          { nodeId: cfg.nodeId, contactUrl: "https://main.example", standing: "serving-primary" },
+          {
+            nodeId: "00000000-0000-4000-8000-000000000034",
+            contactUrl: "https://spare.example",
+            standing: "serving-secondary",
+          },
+        ],
+        signerNodeId: cfg.nodeId,
+        signerPrivateKey: await readNodeIdentityKey(suite.node, ring, cfg.nodeId),
+      }),
+    );
+  }
   let started: Awaited<ReturnType<typeof startServer>>;
   let mark: string;
   await withTradingBootServer(
@@ -531,6 +556,7 @@ it("keeps the deliberate shutdown hold across starts until an administrator carr
           boxHost: synchronisedBoxHost(),
           waitingStart: { secure: () => true },
           previousStop: { restart: false, heartbeatAt },
+          ...(paired ? { peerCheck: confirmedBySpare } : {}),
         };
         const first = await startServer(env, env, seams);
         try {
@@ -544,6 +570,7 @@ it("keeps the deliberate shutdown hold across starts until an administrator carr
       httpPort,
     },
     async (base) => {
+      if (paired) expect(confirmedBySpare).toHaveBeenCalledTimes(2);
       const status = await fetch(`${base}/api/node`);
       expect(await status.json()).toMatchObject({ acceptingSales: false });
       const page = await fetch(base, { headers: { "Accept-Language": "en" } });

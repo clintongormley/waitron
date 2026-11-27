@@ -332,6 +332,7 @@ export class StreamHost {
   #supervisor: StreamSupervisor | undefined;
   /** The link to the spare's store, while the running supervisor streams through it. */
   #pipe: StorePipe | undefined;
+  #pairedTarget: { link: PairLink; term: number } | undefined;
   #outageSince: string | undefined;
   /** Set when the settings are stored but no supervisor could start, so the status can say why. */
   #notStarted: StreamNotStarted | undefined;
@@ -495,11 +496,13 @@ export class StreamHost {
           return;
         }
         this.#pipe = pipe;
+        this.#pairedTarget = link === null ? undefined : { link, term: membership.body.term };
         bucket = spareStoreBucket(pipe.loopbackUrl, pair.accessKeyId, pair.secretAccessKey);
       }
       const venueDbPath = join(this.#deps.venueDir, VENUE_FILE);
       const supervisor = new StreamSupervisor({
         preserveBucketProblemSince: this.#pipe !== undefined,
+        prepareShutdownSync: this.#pairedTarget !== undefined,
         litestreamBin: this.#deps.litestreamBin,
         venueDbPath,
         configDir: join(this.#deps.stateDir, STREAM_DIR),
@@ -528,6 +531,24 @@ export class StreamHost {
       log("error", "stream.start_failed", { errorCode: codeOf(error) });
       this.#notStartedFor("start_failed");
     }
+  }
+
+  async checkShutdownUpload(peerNodeId: string, signal: AbortSignal): Promise<boolean> {
+    const supervisor = this.#supervisor;
+    const target = this.#pairedTarget;
+    if (supervisor === undefined || target?.link.peerNodeId !== peerNodeId) return false;
+    return supervisor.checkShutdownUpload(signal, async () => {
+      const [link, membership] = await Promise.all([
+        this.#streamingLink(),
+        readNodeMembership(this.#deps.db),
+      ]);
+      return (
+        this.#supervisor === supervisor &&
+        this.#deps.isPrimary() &&
+        isDeepStrictEqual(link, target.link) &&
+        membership?.body.term === target.term
+      );
+    });
   }
 
   async #loadSentPointers(): Promise<void> {
@@ -597,6 +618,7 @@ export class StreamHost {
     const pipe = this.#pipe;
     this.#supervisor = undefined;
     this.#pipe = undefined;
+    this.#pairedTarget = undefined;
     this.#outageSince = undefined;
     if (supervisor !== undefined) {
       // Litestream's last writes on stopping travel through the pipe, so it closes after.
@@ -609,6 +631,7 @@ export class StreamHost {
   async #closePipe(): Promise<void> {
     const pipe = this.#pipe;
     this.#pipe = undefined;
+    this.#pairedTarget = undefined;
     await pipe?.close();
   }
 

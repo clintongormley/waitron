@@ -20,7 +20,7 @@ import {
 import { CommitLog } from "./freshness.js";
 import { PROBE_PREFIX } from "./probe.js";
 import { createS3ObjectStore, type BucketConfig } from "./s3-store.js";
-import { FakeLitestream } from "./testing/fake-litestream.js";
+import { FakeChild, FakeLitestream } from "./testing/fake-litestream.js";
 import { ManualClock } from "./testing/manual-clock.js";
 import { silentBucket } from "./testing/silent-bucket.js";
 import { SwitchableStore } from "./testing/switchable-store.js";
@@ -64,6 +64,7 @@ interface HarnessOptions {
   streamId?: string;
   bucket?: BucketConfig;
   version?: string;
+  sync?: (args: readonly string[], env: Readonly<Record<string, string>>) => FakeChild;
   versionExitCode?: number | null;
   versionHangs?: boolean;
   /** What successive fold-backs report, or throw; `true` once the list runs out. */
@@ -154,7 +155,9 @@ async function harness(options: HarnessOptions = {}) {
     now: clock.now,
     monotonic: clock.monotonic,
     log: (level, event, fields) => logs.push({ level, event, fields }),
+    prepareShutdownSync: options.sync !== undefined,
     spawn: (bin, args, env) => {
+      if (args[0] === "sync" && options.sync !== undefined) return options.sync(args, env);
       if (options.replicateThrows === true && args[0] === "replicate") {
         throw new Error("spawn refused its arguments");
       }
@@ -232,6 +235,56 @@ async function streaming(options: HarnessOptions = {}) {
   await h.clock.until(() => h.supervisor.status().state === "streaming");
   return { ...h, generation };
 }
+
+describe("checking the spare's upload before shutdown", () => {
+  it.each([
+    [0, { txid: 9, replica_txid: 10 }, true],
+    [0, { txid: 9, replica_txid: 8 }, false],
+    [0, { txid: 0, replica_txid: 0 }, false],
+    [0, { txid: 9 }, false],
+    [0, "invalid response", false],
+    [1, "request timed out", false],
+  ])(
+    "checks the committed and uploaded positions (exit %s, %j)",
+    async (code, output, expected) => {
+      const h = await streaming({
+        sync(args, env) {
+          const result =
+            typeof output === "string"
+              ? output
+              : JSON.stringify({
+                  db_path: args.at(-1),
+                  duration_ms: 12,
+                  ...output,
+                });
+          const command = new FakeChild(args, env, result, []);
+          command.exit(code);
+          return command;
+        },
+      });
+      await expect(h.supervisor.checkShutdownUpload(new AbortController().signal)).resolves.toBe(
+        expected,
+      );
+    },
+  );
+
+  it("stops the sync command when the administrator cancels", async () => {
+    let command: FakeChild | undefined;
+    const h = await streaming({
+      sync(args, env) {
+        command = new FakeChild(args, env, "", []);
+        return command;
+      },
+    });
+    const controller = new AbortController();
+    const checked = h.supervisor.checkShutdownUpload(controller.signal);
+    expect(command).toBeDefined();
+    controller.abort();
+    await expect(checked).resolves.toBe(false);
+    await expect(command!.exited).resolves.toBeNull();
+    expect(h.supervisor.status().state).toBe("streaming");
+  });
+});
 
 /**
  * Sends each call `pick` chooses, until `answering` is set, through the real S3 store to a bucket

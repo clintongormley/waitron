@@ -83,9 +83,13 @@ export function litestreamEnv(
  * - The path and the address are double-quoted YAML scalars (JSON's escaping is valid there), so a
  *   `:` or `#` in either cannot change the structure.
  */
-export function litestreamConfig(input: { dbPath: string; replicaUrl: string }): string {
+export function litestreamConfig(input: {
+  dbPath: string;
+  replicaUrl: string;
+  socket?: string;
+}): string {
   for (const [field, value] of Object.entries(input)) {
-    if (value.includes("$")) throw new AppError("backup.stream_config_unsafe", { field });
+    if (value?.includes("$")) throw new AppError("backup.stream_config_unsafe", { field });
   }
   return [
     `access-key-id: '\${${ENV_ACCESS_KEY_ID}}'`,
@@ -97,6 +101,9 @@ export function litestreamConfig(input: { dbPath: string; replicaUrl: string }):
     "l0-retention-check-interval: 5m",
     `shutdown-timeout: ${LITESTREAM_SHUTDOWN_TIMEOUT_MS}ms`,
     "",
+    ...(input.socket === undefined
+      ? []
+      : ["socket:", "  enabled: true", `  path: ${JSON.stringify(input.socket)}`, ""]),
     "dbs:",
     `  - path: ${JSON.stringify(input.dbPath)}`,
     "    replica:",

@@ -72,7 +72,7 @@ describe("a spare joins a main box that does not file with Veri*Factu", () => {
   });
 
   it(
-    "a spare is refused while the main box copies to a bucket, then joins over the venue's network and starts as a mirror holding the main box's sale",
+    "a spare is refused while the main box copies to a bucket, then joins over the venue's network and receives the final update before the main box can shut down",
     async (ctx) => {
       if (!litestream.ok || !versitygw.ok) {
         if (REQUIRED) {

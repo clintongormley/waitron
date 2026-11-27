@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -18,6 +19,7 @@ import {
 import {
   KILL_GRACE_MS,
   readCommandLine,
+  checkReplicatedPosition,
   spawnLitestream,
   type ChildHandle,
   type SpawnFn,
@@ -89,6 +91,7 @@ type StreamCore = Omit<StreamStatus, "lagMs" | "lastConfirmedUploadAt">;
 export interface SupervisorDeps {
   litestreamBin: string;
   preserveBucketProblemSince?: boolean;
+  prepareShutdownSync?: boolean;
   onStateChange?: () => void;
   /** Absolute path of `venue.db`. */
   venueDbPath: string;
@@ -239,6 +242,8 @@ function failureFields(error: unknown): FailureFields {
  */
 export const steadyMs = (): number => Number(process.hrtime.bigint()) / 1e6;
 
+type ShutdownReplica = { socket: string; stopped: AbortController };
+
 interface Keeper {
   stop(): Promise<void>;
 }
@@ -273,6 +278,7 @@ export class StreamSupervisor {
   #controller: AbortController | undefined;
   #run: Promise<void> = Promise.resolve();
   #keeper: Keeper | undefined;
+  #shutdownReplica: ShutdownReplica | undefined;
   /** Settles once every Litestream a pause, a failure or stop() began stopping has exited. */
   #retiring: Promise<void> = Promise.resolve();
   #versionExit: Promise<unknown> = Promise.resolve();
@@ -320,6 +326,33 @@ export class StreamSupervisor {
       lagMs: this.#lagWith(this.#newestUploadAt).lagMs,
       lastConfirmedUploadAt: this.#newestUploadAt?.toISOString() ?? null,
     };
+  }
+
+  async checkShutdownUpload(
+    signal: AbortSignal,
+    sameTarget: () => Promise<boolean> = async () => true,
+  ): Promise<boolean> {
+    const replica = this.#shutdownReplica;
+    const generation = this.#status.generation;
+    if (replica === undefined || this.#keeper === undefined || this.#status.state !== "streaming")
+      return false;
+    const checked = await checkReplicatedPosition(
+      this.#spawn,
+      this.#deps.litestreamBin,
+      this.#deps.configDir,
+      replica.socket,
+      this.#deps.venueDbPath,
+      AbortSignal.any([signal, replica.stopped.signal]),
+    );
+    return (
+      checked &&
+      (await sameTarget()) &&
+      this.#shutdownReplica === replica &&
+      this.#keeper !== undefined &&
+      this.#status.generation === generation &&
+      this.#status.state === "streaming" &&
+      !signal.aborted
+    );
   }
 
   /** Schedules the work and returns: nothing here waits for the bucket. */
@@ -1043,22 +1076,31 @@ export class StreamSupervisor {
     const { bucket, configDir, venueDbPath } = this.#deps;
     await mkdir(configDir, { recursive: true, mode: 0o700 });
     const configPath = join(configDir, CONFIG_FILE);
-    await writeFile(
-      configPath,
-      litestreamConfig({
-        dbPath: venueDbPath,
-        replicaUrl: replicaUrl(bucket, generation),
-      }),
-      { mode: 0o600 },
-    );
+    const url = replicaUrl(bucket, generation);
+    const prepare = async () => {
+      const replica = this.#deps.prepareShutdownSync
+        ? { socket: `sync-${randomBytes(8).toString("hex")}.sock`, stopped: new AbortController() }
+        : undefined;
+      await writeFile(
+        configPath,
+        litestreamConfig({ dbPath: venueDbPath, replicaUrl: url, socket: replica?.socket }),
+        { mode: 0o600 },
+      );
+      return replica;
+    };
+    const replica = await prepare();
     // Litestream's own record of what it has uploaded describes the PREVIOUS generation; left in
     // place, it fills the new one from that position onwards and no full copy is ever written there.
     if (fresh) await rm(litestreamMetaDir(venueDbPath), { recursive: true, force: true });
     signal.throwIfAborted();
-    this.#keeper = this.#keep(configPath);
+    this.#keeper = this.#keep(configPath, replica, prepare);
   }
 
-  #keep(configPath: string): Keeper {
+  #keep(
+    configPath: string,
+    replica: ShutdownReplica | undefined,
+    prepare: () => Promise<ShutdownReplica | undefined>,
+  ): Keeper {
     const wake = new AbortController();
     const pidPath = join(this.#deps.configDir, PID_FILE);
     let current: ChildHandle | undefined;
@@ -1066,9 +1108,23 @@ export class StreamSupervisor {
       let attempt = 0;
       while (!wake.signal.aborted) {
         const startedAt = this.#deps.now().getTime();
-        current = this.#spawn(this.#deps.litestreamBin, replicateArgs(configPath), this.#env);
-        if (current.pid !== undefined) await this.#recordPid(pidPath, current.pid);
-        const code = await current.exited;
+        let code: number | null;
+        try {
+          // Resolve the socket relative to the private config directory to fit sockaddr_un.
+          const cwd = replica === undefined ? undefined : this.#deps.configDir;
+          current = this.#spawn(this.#deps.litestreamBin, replicateArgs(configPath), this.#env, {
+            cwd,
+          });
+          this.#shutdownReplica = replica;
+          if (current.pid !== undefined) await this.#recordPid(pidPath, current.pid);
+          code = await current.exited;
+        } finally {
+          this.#shutdownReplica = undefined;
+          if (replica !== undefined) {
+            replica.stopped.abort();
+            await rm(join(this.#deps.configDir, replica.socket), { force: true });
+          }
+        }
         if (wake.signal.aborted) return;
         if (this.#deps.now().getTime() - startedAt >= HEALTHY_RUN_MS) attempt = 0;
         const delay = RESTART_BACKOFF_MS[Math.min(attempt, RESTART_BACKOFF_MS.length - 1)]!;
@@ -1079,6 +1135,7 @@ export class StreamSupervisor {
           restartInMs: delay,
         });
         await this.#sleep(delay, wake.signal);
+        if (replica !== undefined && !wake.signal.aborted) replica = await prepare();
       }
     })().catch((error: unknown) => {
       // Not awaited: failing stops this keeper, and its stop() waits for this loop.

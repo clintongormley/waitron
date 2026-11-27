@@ -57,7 +57,7 @@ describe("spawnLitestream", () => {
   });
 
   it("settles a child that ignores SIGTERM, by SIGKILL after the grace", async () => {
-    const child = spawnLitestream(stubborn, [], {}, 200);
+    const child = spawnLitestream(stubborn, [], {}, { killGraceMs: 200 });
     // Signalled before the trap is installed, the stub dies of SIGTERM and nothing escalates.
     await expect.poll(() => child.output()).toContain("ready");
     const started = performance.now();
@@ -93,7 +93,12 @@ describe("spawnLitestream", () => {
   });
 
   it("reads a running process's command line, and null for a PID nothing holds", async () => {
-    const child = spawnLitestream(waiting, ["replicate", "-config", "/tmp/x.yml"], {}, 200);
+    const child = spawnLitestream(
+      waiting,
+      ["replicate", "-config", "/tmp/x.yml"],
+      {},
+      { killGraceMs: 200 },
+    );
     try {
       await expect
         .poll(() => readCommandLine(child.pid!))

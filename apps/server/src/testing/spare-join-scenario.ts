@@ -2,6 +2,7 @@
 // provisions its box, but with no bucket copy or recovery key until the test switches them on while
 // M is down, and S starts from an empty state folder, so it boots in setup mode.
 // `spare-join.e2e.test.ts` runs it against versitygw.
+import { PAIRED_SHUTDOWN_MS, pairedShutdownScenario } from "./paired-shutdown-scenario.js";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
@@ -135,6 +136,7 @@ export const SPARE_JOIN_SCENARIO_MS =
   COPY_WAIT_MS +
   MIRROR_WAIT_MS +
   ENROL_MS +
+  PAIRED_SHUTDOWN_MS +
   UNTIMED_MS;
 
 export const SPARE_JOIN_PHASES = [
@@ -149,6 +151,7 @@ export const SPARE_JOIN_PHASES = [
   "loopback-only",
   "backup-settings",
   "spare-print-agent",
+  "paired-shutdown",
 ] as const;
 export type SpareJoinPhase = (typeof SPARE_JOIN_PHASES)[number];
 export type SpareJoinEvent = StageEvent<SpareJoinPhase>;
@@ -688,6 +691,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
   };
   /** The log's lines from `from` on, so a line written before a phase cannot satisfy it. */
   const linesSince = (from: number): LogLine[] => logSoFar().slice(from);
+  const shutdown = await pairedShutdownScenario(scratch, fixture.litestreamBin);
   try {
     clock.begin("probe");
     const migrationsRoot = await copyMigrations(scratch);
@@ -723,6 +727,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     // The host's time service is synchronised, so M's start is not held for its time.
     const boxM = new TestBox(dirsM, portM, boxEnv(dirsM, portM), {
       boxHost: synchronisedBoxHost(),
+      stream: { spawn: shutdown.spawn },
       spareSettings: { checkMs: SETTINGS_CHECK_MS, retryMs: SETTINGS_RETRY_MS },
     });
     boxes.push(boxM);
@@ -1001,6 +1006,16 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     const pullBody = (await pulled.json()) as { nodeId?: unknown; jobs?: unknown };
     expect(pulled.status, JSON.stringify(pullBody)).toBe(200);
     expect(pullBody).toMatchObject({ nodeId: m.nodeId, jobs: [] });
+    clock.begin("paired-shutdown");
+    await shutdown.run({
+      url: urlM,
+      headers: await managementHeaders(urlM, boxM.origin, viaM),
+      firstRowIn,
+      via: viaM,
+      stateDir: dirsM.state,
+      venueDir: dirsM.venue,
+      signal,
+    });
     clock.end("ok");
   } catch (error) {
     clock.end("failed");
@@ -1011,6 +1026,7 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     signal?.removeEventListener("abort", onAbort);
     if (abortClose !== undefined) failures.push(...(await abortClose));
     failures.push(...(await closeAll()));
+    await shutdown.close().catch((error: unknown) => failures.push(error));
     adoption?.restore();
     for (const held of retained) {
       if (held.server.listening) await held.close().catch((error: unknown) => failures.push(error));

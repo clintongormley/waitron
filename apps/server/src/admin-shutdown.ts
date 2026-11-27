@@ -19,6 +19,11 @@ export type ShutdownArchive = {
   remove(): Promise<void>;
 };
 
+type ShutdownCheck = {
+  archive?: ShutdownArchive;
+  checkSpare?: (signal: AbortSignal) => Promise<void>;
+};
+
 export type ShutdownDecision = "retry" | "shut-down-anyway";
 
 export async function waitForShutdownDrain(
@@ -40,7 +45,7 @@ export async function waitForShutdownDrain(
 }
 
 export function createAdminShutdown(deps: {
-  check(signal: AbortSignal): Promise<void | ShutdownArchive>;
+  check(signal: AbortSignal): Promise<void | ShutdownCheck>;
   save(): Promise<void>;
   clear(): Promise<void>;
   pauseDuties?(): { settled: Promise<void>; drainRefunds(): Promise<unknown>; resume(): void };
@@ -53,6 +58,8 @@ export function createAdminShutdown(deps: {
     duties?: ReturnType<NonNullable<typeof deps.pauseDuties>>;
     drained: boolean;
     checked: boolean;
+    checkSpare?: ShutdownCheck["checkSpare"];
+    spareCheckPending?: boolean;
     saving: boolean;
     markMayExist: boolean;
     archive?: ShutdownArchive;
@@ -90,7 +97,7 @@ export function createAdminShutdown(deps: {
     return { phase: "download", name: archive.name, bytes: archive.bytes, delivered, errorCode };
   }
 
-  function run(current: Attempt, checkBackup: boolean): void {
+  function run(current: Attempt, action: "check" | "confirm" | "unchecked"): void {
     current.state = { phase: "checking" };
     const { signal } = current.controller;
     current.settled = (async () => {
@@ -106,9 +113,11 @@ export function createAdminShutdown(deps: {
           current.drained = true;
         }
         signal.throwIfAborted();
-        if (checkBackup) {
+        if (action === "check" && !current.spareCheckPending) {
           current.checked = false;
-          current.archive = (await deps.check(signal)) ?? undefined;
+          const result = await deps.check(signal);
+          current.archive = result?.archive;
+          current.checkSpare = result?.checkSpare;
           current.checked = true;
           if (current.archive !== undefined) {
             current.state = downloadState(current.archive, false);
@@ -116,17 +125,27 @@ export function createAdminShutdown(deps: {
           }
         }
         signal.throwIfAborted();
+        if (action !== "unchecked" && current.checkSpare !== undefined) {
+          current.spareCheckPending = true;
+          await current.checkSpare(signal);
+          current.spareCheckPending = false;
+        }
+        signal.throwIfAborted();
         current.saving = true;
         current.markMayExist = true;
         await deps.save();
         await current.archive?.remove();
         current.archive = undefined;
-        current.state = current.checked ? { phase: "ready" } : { phase: "ready", checked: false };
+        current.state =
+          current.checked && !current.spareCheckPending
+            ? { phase: "ready" }
+            : { phase: "ready", checked: false };
       } catch (error) {
         const errorCode = codeOf(error);
-        current.state = current.archive
-          ? downloadState(current.archive, current.delivered, errorCode)
-          : { phase: "paused", errorCode };
+        current.state =
+          current.archive && !current.spareCheckPending
+            ? downloadState(current.archive, current.delivered, errorCode)
+            : { phase: "paused", errorCode };
       } finally {
         current.saving = false;
       }
@@ -162,13 +181,13 @@ export function createAdminShutdown(deps: {
         delivered: false,
       };
       attempt = current;
-      run(current, true);
+      run(current, "check");
     },
     resolvePaused(decision: ShutdownDecision): void {
       const current = attempt;
       if (closing || current?.state.phase !== "paused" || current.cancelling !== undefined)
         throw new AppError("box.shutdown_in_progress", {});
-      run(current, decision === "retry");
+      run(current, decision === "retry" ? "check" : "unchecked");
     },
     async beginDownload(name: string) {
       const { current, archive } = pendingDownload(name);
@@ -205,7 +224,7 @@ export function createAdminShutdown(deps: {
       const { current } = pendingDownload(name);
       if (!current.delivered || current.transfer !== undefined)
         throw new AppError("box.shutdown_in_progress", {});
-      run(current, false);
+      run(current, "confirm");
     },
     async cancel(): Promise<void> {
       const current = attempt;

@@ -466,6 +466,7 @@ declare module "@waitron/shared" {
      */
     "server.shutdown_failed": { errorCode: string };
     "box.shutdown_in_progress": Record<string, never>;
+    "box.shutdown_spare_unchecked": Record<string, never>;
     "box.shutdown_unavailable": Record<string, never>;
     /**
      * Shutdown did not finish within the deadline, so the process is exiting anyway (a box restarts

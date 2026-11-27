@@ -4110,6 +4110,8 @@ async function bootServer(
     config,
     runner: jobRunner,
     backup: backupSupervisor,
+    streamHost,
+    readSpare: () => spareFollow?.status() ?? Promise.resolve(null),
     readBoxEnv: () => loadBoxEnv(base, config.stateDir),
     workforceEnabled,
     now,
