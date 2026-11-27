@@ -557,10 +557,10 @@ describe("which cancels a corrective's money pays", () => {
     const saleId = await fixture.saleOf(venue, billId);
     const { correctionId } = await press(saleId, ask("goodwill", "19.00"));
     await cancel(billId, 1);
-    // Another box's receipt: a refusal Finish ends a receipt's give-back over.
+    // A voided receipt: a refusal Finish ends a receipt's give-back over.
     const spy = vi
       .spyOn(venue.backend, "correctionAdmissionFor")
-      .mockResolvedValue({ eligible: false, reason: "wrong_node" } as never);
+      .mockResolvedValue({ eligible: false, reason: "voided" } as never);
     onTestFinished(() => spy.mockRestore());
     const finished = await send(
       venue.app,
