@@ -478,6 +478,50 @@ describe("opening a row near the window's foot", () => {
     expect(note(el, 8).getBoundingClientRect().bottom).toBeLessThanOrEqual(top);
   });
 
+  it.each([
+    [390, 844, 844, 390],
+    [844, 390, 390, 844],
+  ])(
+    "on a handheld turned from %i × %i to %i × %i, the opened box's foot stops just above the bar",
+    async (fromWidth, fromHeight, toWidth, toHeight) => {
+      await page.viewport(fromWidth, fromHeight);
+      const draft = new DraftStore();
+      draft.loadFrom(
+        "draft",
+        many.map((product) => ({ product, quantity: "2", place: { kind: "fire" } })),
+      );
+      const { el, host } = await mount({
+        products: many,
+        menus: menuOf(many),
+        draftStore: draft,
+        handheld: true,
+      });
+      host.style.width = "100vw";
+      host.style.height = "100vh";
+      host.style.overflowY = "auto";
+      await resized(el);
+      await showView(el, "order", { ifShown: true, scripted: true });
+      await settled(el);
+      await resized(el);
+      await page.viewport(toWidth, toHeight);
+      await resized(el);
+      await showView(el, "order", { ifShown: true, scripted: true });
+      await settled(el);
+      await resized(el);
+      const docked = el.shadowRoot!.querySelector(".draft-bar")!.closest("[data-order-dock]");
+      expect(docked !== null).toBe(toWidth < toHeight);
+      host.scrollTop = 0;
+      await scrollSettled(host);
+      await lastShowing(el, host, 8);
+      await tapRow(el, 8);
+      await scrollSettled(host);
+      const box = row(el, 8).closest(".entry")!.getBoundingClientRect();
+      const top = barTop(el);
+      expect(box.bottom).toBeLessThanOrEqual(top + 0.5);
+      expect(box.bottom).toBeGreaterThanOrEqual(top - 1.5);
+    },
+  );
+
   it("a row whose opened box already shows whole does not move the list", async () => {
     const { el, host } = await inWindow(1024, 768);
     await tapRow(el, 0);

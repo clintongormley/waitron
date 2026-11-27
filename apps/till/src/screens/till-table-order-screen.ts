@@ -1557,9 +1557,11 @@ export class TillTableOrderScreen extends LitElement {
   #resizing?: ResizeObserver;
   #barSizing?: ResizeObserver;
   #sizedBar?: HTMLElement;
+  #sizedBarHolder?: HTMLElement;
   #sizedBarShown = false;
   #dockSizing?: ResizeObserver;
   #sizedDock?: HTMLElement;
+  #sizedDockHolder?: HTMLElement;
   #sizedDockShown = false;
   /** Where browsing was scrolled when Order was shown, put back on Menu. */
   #browsingScroll?: { scroller: Element; top: number };
@@ -2718,7 +2720,9 @@ export class TillTableOrderScreen extends LitElement {
     });
     if (bar !== this.#sizedBar) {
       if (this.#sizedBar !== undefined) this.#barSizing.unobserve(this.#sizedBar);
+      this.#sizedBarHolder?.style.removeProperty("--draft-bar-size");
       this.#sizedBar = bar;
+      this.#sizedBarHolder = bar?.parentElement ?? undefined;
       if (bar !== undefined) this.#barSizing.observe(bar);
     }
     if (bar !== undefined) barSize(bar, bar.getBoundingClientRect().height);
@@ -2738,8 +2742,9 @@ export class TillTableOrderScreen extends LitElement {
     });
     if (dock !== this.#sizedDock) {
       if (this.#sizedDock !== undefined) this.#dockSizing.unobserve(this.#sizedDock);
-      this.#sizedDock?.parentElement?.style.removeProperty("--order-dock-size");
+      this.#sizedDockHolder?.style.removeProperty("--order-dock-size");
       this.#sizedDock = dock;
+      this.#sizedDockHolder = dock?.parentElement ?? undefined;
       if (dock !== undefined) this.#dockSizing.observe(dock);
     }
     if (dock !== undefined) dockSize(dock, dock.getBoundingClientRect().height);
