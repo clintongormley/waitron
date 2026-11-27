@@ -967,7 +967,7 @@ the pick list is widened without the mapping.
 
 ## Correcting a paid invoice: what A802 left open
 
-Staff correct part of a paid invoice from **Give money back** on a past receipt (A802, the
+Staff correct part of a paid invoice from **Refund** on a past receipt (A802, the
 [design](../superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md) and the
 [reshape plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a802-reshape.md); how it runs is the
 [owner's decision](#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12)). Left open by
