@@ -940,7 +940,7 @@ describe("a lost answer", () => {
     return { el, api, dialog };
   }
 
-  it("after Make a new master key, reads the status again and warns that the only copy of the key may be on a pack the person does not have", async () => {
+  it("after Make a new master key, reads the status again and says the box kept the current master key", async () => {
     const { el, api } = await lose({ masterKey: true });
     expect(api.getRecoveryPackStatus).toHaveBeenCalledOnce();
     const lost = words(el.shadowRoot!.querySelector("[data-test=lost]"));

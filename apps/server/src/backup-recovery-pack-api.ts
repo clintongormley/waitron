@@ -489,8 +489,6 @@ export function mountBackupRecoveryPackMakeApi(
     await takeBackupKey(waiting, bytes);
   }
 
-  /** After the commit: a failure here leaves the status saying the backup key is not from the
-   * current master key. */
   async function takeBackupKey(waiting: WaitingMasterKey, masterKey: Uint8Array): Promise<void> {
     try {
       await changeBackupKey(

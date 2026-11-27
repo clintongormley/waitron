@@ -542,7 +542,7 @@ describe("a made pack", () => {
     },
   );
 
-  it("Make a new master key answers the master key it saved", async () => {
+  it("Make a new master key answers the key that its confirm saves", async () => {
     const f = fixture();
     const response = await f.make(true);
     const { masterKey, masterKeyName: name } = shownMasterKey(response);
