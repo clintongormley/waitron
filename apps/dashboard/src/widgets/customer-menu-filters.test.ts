@@ -140,3 +140,18 @@ it.each([
   );
   expect(result.entries.map(({ member }) => member.name)).toEqual(expected);
 });
+
+it("hides a dish with declared fish when No fish is selected", () => {
+  const menu = [
+    dish("Fish sauce noodles", {
+      dietary: ["no_fish", "no_meat"],
+      allergens: { fish: {} },
+      variants: [choice({})],
+    }),
+    dish("Fresh pasta", { dietary: ["no_fish", "no_meat"] }),
+  ];
+  const namesFor = (diet: string) =>
+    filterCustomerMenu(menu, "", "en", diet, []).entries.map(({ member }) => member.name);
+  expect(namesFor("no_fish")).toEqual(["Fresh pasta"]);
+  expect(namesFor("no_meat")).toEqual(["Fish sauce noodles", "Fresh pasta"]);
+});

@@ -56,6 +56,7 @@ export function filterCustomerMenu(
     if (member.kind === "set_menu") return [member];
     if (diet && !expandDietaryDeclarations(member.dietary).some((label) => label === diet))
       return [];
+    if (diet === "no_fish" && Object.hasOwn(member.allergens ?? {}, "fish")) return [];
     const caution = dishCaution(member, excluded);
     if (caution) {
       hidden++;

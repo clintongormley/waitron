@@ -592,6 +592,14 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
         const key = `${list.id}:${item.productId}`;
         if (warned.has(key)) continue;
         warned.add(key);
+        if (item.addAllergens === null && !unreviewed.has(item.productId)) {
+          const { name, variantName } = item.presentation;
+          unreviewed.set(item.productId, {
+            id: item.productId,
+            name: variantName ?? name,
+            parentName: variantName === null ? null : name,
+          });
+        }
         const portion = item.portion ?? "1.000";
         const significantPlaces = (portion.split(".")[1] ?? "").replace(/0+$/, "").length;
         if (significantPlaces <= (item.unit?.precision ?? 0)) continue;

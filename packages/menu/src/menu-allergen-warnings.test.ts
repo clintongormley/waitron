@@ -29,7 +29,7 @@ const unknown = (id: string, name: string, parentName: string | null = null) => 
 const warnings = async (f: MenusFixture) => (await app((tx) => previewMenu(tx, f.lunch))).warnings;
 
 describe("unreviewed offered allergens", () => {
-  it("warns once for offered unreviewed products and their effective active variants", async () => {
+  it("warns once for offered unreviewed products, their effective active variants and extras", async () => {
     const f = await menusFixture(fx.db);
     const inactive = await app(async (tx) => {
       await updateProduct(tx, f.lemonade, { allergens: null, available: false });
@@ -71,10 +71,18 @@ describe("unreviewed offered allergens", () => {
     expect(await warnings(f)).toEqual([
       {
         kind: "allergens_unreviewed",
-        products: [unknown(f.lemonade, "Lemonade"), unknown(f.large, "Large", "Lemonade")],
+        products: [
+          unknown(f.lemonade, "Lemonade"),
+          unknown(f.large, "Large", "Lemonade"),
+          unknown(f.extraLemon, "Extra lemon"),
+        ],
       },
     ]);
     await app((tx) => updateProduct(tx, f.lemonade, { allergens: {} }));
+    expect(await warnings(f)).toEqual([
+      { kind: "allergens_unreviewed", products: [unknown(f.extraLemon, "Extra lemon")] },
+    ]);
+    await app((tx) => updateProduct(tx, f.extraLemon, { allergens: {} }));
     expect(await warnings(f)).toEqual([]);
     expect(JSON.stringify(await warnings(f))).not.toContain(inactive);
   });

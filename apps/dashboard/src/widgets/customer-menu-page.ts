@@ -314,14 +314,29 @@ export class CustomerMenuPage extends LitElement {
         display: grid;
         gap: var(--wt-space-3);
       }
+      .diet-advice {
+        margin: 0;
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
       .filter-actions {
         display: flex;
         flex-wrap: wrap;
         justify-content: flex-end;
         gap: var(--wt-space-2);
       }
+      .filter-summary {
+        margin-block: var(--wt-space-4);
+        padding: var(--wt-space-4);
+        background: var(--wt-color-surface);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-lg);
+      }
       .filter-summary p {
-        margin: var(--wt-space-1) 0;
+        margin: 0;
+      }
+      .filter-summary p + p {
+        margin-block-start: var(--wt-space-2);
       }
       .choice-caution {
         grid-column: 1 / -1;
@@ -371,7 +386,7 @@ export class CustomerMenuPage extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
-      .no-results {
+      .no-results:not(.filter-summary) {
         margin-block-start: calc(var(--wt-space-2) + var(--wt-space-3));
       }
       header + [role="status"] + .members {
@@ -742,6 +757,7 @@ export class CustomerMenuPage extends LitElement {
             this.diet = event.detail.value;
           }}
         ></wt-combobox>
+        <p class="diet-advice">${text.dietAllergyAdvice}</p>
       </div>
       <div slot="footer" class="filter-actions">
         <wt-button
@@ -786,9 +802,14 @@ export class CustomerMenuPage extends LitElement {
         ? words.text.noDishesSearchAndFilters
         : words.text.noFilteredDishes;
     const number = new Intl.NumberFormat(words.language);
-    const hiddenSummary = words.text
-      .hiddenDishes!.replace("{hidden}", number.format(hidden))
-      .replace("{unreviewed}", number.format(unreviewed));
+    const hiddenSummary = words.text[hidden === 1 ? "hiddenDish" : "hiddenDishes"]!.replace(
+      "{hidden}",
+      number.format(hidden),
+    );
+    const unreviewedSummary = words.text.hiddenUnreviewed!.replace(
+      "{unreviewed}",
+      number.format(unreviewed),
+    );
     const money = (value: string) => formatMoney(value, menu.language);
     let firstPhoto = true;
 
@@ -923,13 +944,9 @@ export class CustomerMenuPage extends LitElement {
           lang=${words.language}
           class=${classMap({ "filter-summary": this.excluded.length > 0, "no-results": noResults })}
         >
-          ${noResults ? emptyMessage : nothing}
-          ${
-            this.excluded.length
-              ? html`<p>${hiddenSummary}</p>
-                  <p>${words.text.askAboutAllergens}</p>`
-              : nothing
-          }
+          ${noResults && this.excluded.length ? html`<p>${emptyMessage}</p>` : noResults ? emptyMessage : nothing}
+          ${hidden ? html`<p>${hiddenSummary}${unreviewed ? unreviewedSummary : "."}</p>` : nothing}
+          ${this.excluded.length ? html`<p>${words.text.askAboutAllergens}</p>` : nothing}
         </div>
         ${members(visible, 3)} ${legend(words)} ${this.#filterDialog(words)}
       </div>

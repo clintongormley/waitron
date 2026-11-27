@@ -294,8 +294,8 @@ Grey means it follows its parent. The Allergens filter uses the same status. The
 end of the list's search box; in **Customise**, select the eye beside each column, then **Done**.
 Their filters work while the columns are hidden.
 
-Before you publish now or schedule a menu, the confirmation lists offered dishes and active
-variants whose allergens are unreviewed. Select a name to open that product's own page. You can
+Before you publish now or schedule a menu, the confirmation lists offered dishes, active
+variants and extras whose allergens are unreviewed. Select a name to open that product's own page. You can
 still publish or schedule: the warning asks you to check the declarations, rather than refusing
 the publication. Cancelling the scheduled confirmation keeps the date and time you entered.
 
