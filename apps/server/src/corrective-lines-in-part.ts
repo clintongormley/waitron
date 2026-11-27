@@ -6,7 +6,7 @@ type CorrectiveRow = Pick<typeof saleLines.$inferSelect, "id" | "lineGross" | "c
 /**
  * The ids of a corrective's rows given back in part: minus the row's stored gross differs from
  * the stored gross of the line it corrects. A row naming no line, as a replacement's do, or with
- * no stored gross on either side, is whole.
+ * no stored gross, is whole.
  */
 export async function correctiveLinesInPart(
   tx: Transaction,
@@ -26,10 +26,7 @@ export async function correctiveLinesInPart(
   const grossOf = new Map(corrected.map((line) => [line.id, line.lineGross]));
   return new Set(
     named
-      .filter((row) => {
-        const gross = grossOf.get(row.correctsLineId!);
-        return typeof gross === "number" && -row.lineGross! !== gross;
-      })
+      .filter((row) => -row.lineGross! !== grossOf.get(row.correctsLineId!))
       .map((row) => row.id),
   );
 }
