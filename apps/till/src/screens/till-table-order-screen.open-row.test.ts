@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtStepper } from "@waitron/ui";
 import { DraftStore, DraftSync } from "../state/draft-sync.js";
@@ -6,7 +6,16 @@ import type { TillBasket } from "../widgets/basket.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import { cleanupWidgets, draftServer } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import { beer, burger, flan, ham, mount, resized } from "./till-table-order-screen.test-helpers.js";
+import {
+  beer,
+  burger,
+  flan,
+  ham,
+  menuOf,
+  mount,
+  resized,
+  showView,
+} from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { OrderLine } from "../state/working-order.js";
 
@@ -386,3 +395,104 @@ it("a step pressed after its dish leaves the order, before the redraw, does noth
   expect(quantity).not.toHaveBeenCalled();
   expect(draft.lines.map((line) => line.quantity)).toEqual(["1"]);
 });
+
+describe("opening a row near the window's foot", () => {
+  const many = Array.from({ length: 20 }, (_, n) => ({
+    ...beer,
+    id: `dish-${n}`,
+    menuItemId: `offer-dish-${n}`,
+    name: `Dish ${n}`,
+  }));
+
+  async function inWindow(width: number, height: number) {
+    const draft = new DraftStore();
+    draft.loadFrom(
+      "draft",
+      many.map((product) => ({ product, quantity: "2", place: { kind: "fire" } })),
+    );
+    const { el, host } = await mount({
+      products: many,
+      menus: menuOf(many),
+      draftStore: draft,
+    });
+    host.style.width = `${width}px`;
+    host.style.height = `${height}px`;
+    host.style.overflowY = "auto";
+    await resized(el);
+    await showView(el, "order", { ifShown: true, scripted: true });
+    await settled(el);
+    await resized(el);
+    host.scrollTop = 0;
+    await scrollSettled(host);
+    return { el, host };
+  }
+
+  const barTop = (el: TillTableOrderScreen) =>
+    el.shadowRoot!.querySelector(".draft-bar")!.getBoundingClientRect().top;
+
+  /** Scrolls the list so the row's line ends just above the bar, as the last one showing. */
+  async function lastShowing(el: TillTableOrderScreen, host: HTMLElement, index: number) {
+    // The bar's top moved after a first scroll here, so a second pass measures it again.
+    for (let pass = 0; pass < 2; pass++) {
+      host.scrollTop += row(el, index).getBoundingClientRect().bottom - barTop(el) + 1;
+      await scrollSettled(host);
+    }
+    expect(row(el, index).getBoundingClientRect().bottom).toBeLessThanOrEqual(barTop(el));
+    expect(row(el, index + 1).getBoundingClientRect().top).toBeGreaterThan(barTop(el) - 2);
+  }
+
+  it.each([
+    [1024, 768],
+    [390, 700],
+    [844, 390],
+  ])(
+    "at %i × %i the opened box's foot, Note included, stops just above the bar",
+    async (width, height) => {
+      const { el, host } = await inWindow(width, height);
+      const index = 8;
+      await lastShowing(el, host, index);
+      const before = host.scrollTop;
+      await tapRow(el, index);
+      await scrollSettled(host);
+      const box = row(el, index).closest(".entry")!.getBoundingClientRect();
+      const top = barTop(el);
+      expect(host.scrollTop).toBeGreaterThan(before);
+      expect(box.bottom).toBeLessThanOrEqual(top + 0.5);
+      expect(box.bottom).toBeGreaterThanOrEqual(top - 1.5);
+      expect(note(el, index).getBoundingClientRect().bottom).toBeLessThanOrEqual(top);
+    },
+  );
+
+  it("where the box is taller than the list shows, its foot wins over its line", async () => {
+    setLocale("es");
+    const { el, host } = await inWindow(844, 240);
+    await lastShowing(el, host, 8);
+    await tapRow(el, 8);
+    await scrollSettled(host);
+    const box = row(el, 8).closest(".entry")!.getBoundingClientRect();
+    const top = barTop(el);
+    expect(box.height).toBeGreaterThan(top - host.getBoundingClientRect().top);
+    expect(box.top).toBeLessThan(host.getBoundingClientRect().top);
+    expect(box.bottom).toBeLessThanOrEqual(top + 0.5);
+    expect(box.bottom).toBeGreaterThanOrEqual(top - 1.5);
+    expect(note(el, 8).getBoundingClientRect().bottom).toBeLessThanOrEqual(top);
+  });
+
+  it("a row whose opened box already shows whole does not move the list", async () => {
+    const { el, host } = await inWindow(1024, 768);
+    await tapRow(el, 0);
+    await scrollSettled(host);
+    expect(host.scrollTop).toBe(0);
+  });
+});
+
+/** Waits until the scroll area has stopped moving, so a smooth reveal has finished. */
+async function scrollSettled(host: HTMLElement): Promise<void> {
+  let still = 0;
+  let last = host.scrollTop;
+  for (let frame = 0; frame < 300 && still < 10; frame++) {
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+    still = host.scrollTop === last ? still + 1 : 0;
+    last = host.scrollTop;
+  }
+}

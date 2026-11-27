@@ -25,16 +25,20 @@ export class OpenDraftRow implements ReactiveController {
   readonly #host: ReactiveControllerHost & HTMLElement;
   readonly #inFlight: () => boolean;
   readonly #current: () => WorkingOrderStore | null;
+  readonly #scroller: () => Element;
 
-  /** `current` is the order the screen shows now, which a control drawn earlier may no longer be. */
+  /** `current` is the order the screen shows now, which a control drawn earlier may no longer be;
+   * `scroller` is the area the order scrolls in. */
   constructor(
     host: ReactiveControllerHost & HTMLElement,
     inFlight: () => boolean,
     current: () => WorkingOrderStore | null,
+    scroller: () => Element,
   ) {
     this.#host = host;
     this.#inFlight = inFlight;
     this.#current = current;
+    this.#scroller = scroller;
     host.addController(this);
   }
 
@@ -53,7 +57,34 @@ export class OpenDraftRow implements ReactiveController {
         ? undefined
         : { store, line, generation: store.loadGeneration };
     this.#host.requestUpdate();
+    // The basket sends the tap from itself.
+    if (this.#opened !== undefined)
+      void this.#reveal(event.composedPath()[0] as TillBasket, store, line);
   };
+
+  /** Brings the opened box's foot above the bar at the scroll area's foot, which the row's
+   * `scroll-margin-block-end` measures. Where the box is taller than the area, its foot wins. */
+  async #reveal(basket: TillBasket, store: WorkingOrderStore, line: OrderLine): Promise<void> {
+    await this.#host.updateComplete;
+    await basket.updateComplete;
+    await basket.querySelector<WtStepper>("wt-stepper")?.updateComplete;
+    if (this.line(store) !== line) return;
+    const box = basket.renderRoot
+      .querySelector(`[data-draft-row="${store.lines.indexOf(line)}"]`)
+      ?.closest<HTMLElement>(".entry");
+    if (box == null) return;
+    const scroller = this.#scroller();
+    const foot =
+      scroller === document.scrollingElement
+        ? innerHeight
+        : scroller.getBoundingClientRect().top + scroller.clientTop + scroller.clientHeight;
+    const margin = Number.parseFloat(getComputedStyle(box).scrollMarginBlockEnd);
+    if (box.getBoundingClientRect().bottom > foot - margin)
+      box.scrollIntoView({
+        block: "end",
+        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+      });
+  }
 
   close(): void {
     this.#opened = undefined;

@@ -26,6 +26,7 @@ class OpenedRowHost extends LitElement {
     this,
     () => false,
     () => this.store,
+    () => document.scrollingElement!,
   );
   override render() {
     return html`<till-basket

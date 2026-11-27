@@ -2057,6 +2057,7 @@ export class TillTableOrderScreen extends LitElement {
     this,
     () => this.groupCommandBusy,
     () => this.#draftStore,
+    () => this.#scroller(),
   );
   #draftEpoch = 0;
   @state() private draftDragging = false;
