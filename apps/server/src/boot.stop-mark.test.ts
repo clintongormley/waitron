@@ -398,9 +398,11 @@ it.each([
             expect(await (await health()).json()).toMatchObject({ shutdown: { phase: "stalled" } });
           else
             await vi.waitFor(async () =>
-              expect((await (await health()).json()).shutdown.failedDestination).toBe(
-                join(stateDir, "copies"),
-              ),
+              expect((await (await health()).json()).shutdown).toMatchObject({
+                phase: "paused",
+                errorCode: "backup.archive_invalid",
+                failedDestination: join(stateDir, "copies"),
+              }),
             );
           const rows = () =>
             suite.db
