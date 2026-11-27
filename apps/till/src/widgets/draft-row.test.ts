@@ -250,6 +250,8 @@ describe("a new dish's compact row", () => {
       );
       render(draftSelectBox(false), lead);
       expect(getComputedStyle(box).borderColor).toBe(tokenColour(host, "--wt-color-border"));
+      // Unticked, the box is a border only, so a tinted row shows through it.
+      expect(getComputedStyle(box).backgroundColor).toBe("rgba(0, 0, 0, 0)");
       expect(box.querySelector("wt-icon")).toBeNull();
       expect(lead.textContent!.trim()).toBe("");
       const chevron = end.querySelector("wt-icon")!;
@@ -276,20 +278,24 @@ describe("a new dish's compact row", () => {
     try {
       const { el } = await rows([
         { product: steak, quantity: "2" },
-        { product: hake, quantity: "1" },
+        { product: product("croquettes", "Croquettes"), quantity: "1" },
       ]);
-      // The phone's row width; under 360 the empty column gives way (the next case).
-      el.style.width = "374px";
       const end = document.createElement("button");
       end.slot = "end-0";
       end.className = "draft-row-split";
       render(draftSplitChevron(), end);
       el.append(end);
-      await el.updateComplete;
-      const prices = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".draft-row-price")];
-      expect(prices).toHaveLength(2);
-      const [withSplit, withoutSplit] = prices.map((price) => price.getBoundingClientRect().right);
-      expect(Math.abs(withSplit! - withoutSplit!)).toBeLessThan(0.5);
+      // The phone's row width, then the order panel's measured width beside the menu at 800×1280.
+      for (const width of ["374px", "273.6px"]) {
+        el.style.width = width;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const prices = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".draft-row-price")];
+        expect(prices).toHaveLength(2);
+        const [withSplit, withoutSplit] = prices.map(
+          (price) => price.getBoundingClientRect().right,
+        );
+        expect(Math.abs(withSplit! - withoutSplit!), width).toBeLessThan(0.5);
+      }
     } finally {
       document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
         (sheet) => sheet !== draftRowSlotStyles.styleSheet,
@@ -297,13 +303,13 @@ describe("a new dish's compact row", () => {
     }
   });
 
-  it("gives a row with no split control its end column back in a narrow order panel", async () => {
+  it("keeps a one-word name on one line in the order panel beside the menu at 800×1280", async () => {
     const { el } = await rows([
       { product: product("croquettes", "Croquettes"), quantity: "1" },
       { product: product("gazpacho", "Gazpacho"), quantity: "1" },
     ]);
-    // The order panel beside the menu at 800×1280.
-    el.style.width = "260px";
+    // The order panel's measured width beside the menu at 800×1280.
+    el.style.width = "273.6px";
     await new Promise((resolve) => requestAnimationFrame(resolve));
     const names = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".product-name")];
     expect(names.map((name) => [name.textContent, name.getClientRects().length])).toEqual([

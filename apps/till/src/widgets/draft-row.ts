@@ -186,18 +186,12 @@ export const draftRowStyles = css`
     grid-column: 1 / -1;
     grid-template-columns: ${LEAD_WIDTH} minmax(0, 1fr) var(--wt-tap-min);
     grid-template-rows: 1fr auto;
+    column-gap: 0;
     align-items: center;
     min-height: calc(var(--wt-tap-min) + var(--wt-space-2));
     background: var(--wt-color-surface);
     /* Drawn inside the row, so the selection and split targets reach its full height. */
     box-shadow: inset 0 -1px 0 var(--wt-color-border);
-  }
-  /* In a narrow order panel the empty end column would squeeze names into pieces, so it holds only
-     the split control there, and prices line up only where the panel is wider. */
-  @container (width < 360px) {
-    :host .order-lines > .entry.draft-row {
-      grid-template-columns: ${LEAD_WIDTH} minmax(0, 1fr) auto;
-    }
   }
   :host .order-lines > .entry.draft-row[data-last-added] {
     background: var(--wt-color-surface-lifted);
@@ -223,10 +217,10 @@ export const draftRowStyles = css`
       minmax(calc(var(--wt-space-5) + var(--wt-space-1)), max-content) minmax(0, 1fr)
       auto;
     align-items: center;
-    gap: var(--wt-space-2);
+    column-gap: 0;
     min-height: var(--wt-tap-min);
     margin: 0;
-    padding: var(--wt-space-1) var(--wt-space-1) var(--wt-space-1) 0;
+    padding: var(--wt-space-1) 0;
     border: 0;
     background: transparent;
     color: var(--wt-color-text);
@@ -263,6 +257,7 @@ export const draftRowStyles = css`
     color: var(--wt-color-text-muted);
   }
   .draft-row-price {
+    margin-inline-start: var(--wt-space-1);
     font-size: var(--wt-font-size-md);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
@@ -325,7 +320,7 @@ export const draftRowSlotStyles = css`
     height: var(--wt-space-5);
     border: 2px solid var(--wt-color-border);
     border-radius: calc(var(--wt-radius-sm) * 1.5);
-    background: var(--wt-color-surface);
+    background: transparent;
   }
   .draft-select-box[data-ticked] {
     border-color: var(--wt-color-primary);
