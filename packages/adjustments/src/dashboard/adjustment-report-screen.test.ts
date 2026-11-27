@@ -155,7 +155,7 @@ describe("the adjustment report", () => {
   it("says which bills are counted and what the rate measures", async () => {
     const el = await mount(fakeApi());
     expect(text(part(el, "intro"))).toBe(
-      "Counts the voids and comps on the bills opened on these business days. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
+      "Counts the voids and comps on the bills opened on these business days. A comp or discount that came off counts only for what still stands, and not at all once it all came off, though the list still shows it. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
     );
   });
 

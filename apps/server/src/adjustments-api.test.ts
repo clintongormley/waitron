@@ -1323,6 +1323,24 @@ describe("the route's own rules", () => {
     expect(await recordedOn(billId)).toEqual([]);
   });
 
+  it("refuses a reapplies that is no id, rides on a cancel, or names no notice on the bill", async () => {
+    const { billId } = await billWith(venue, [{ name: "Bottle" }]);
+    const lineId = await lineIdOf(venue, billId, 1);
+    for (const [body, path] of [
+      [{ lineId, action: "comp", reapplies: "notice-1" }, ""],
+      [{ lineId, action: "cancel", reapplies: randomUUID() }, "/preview"],
+      [{ lineId, action: "comp", reapplies: randomUUID() }, ""],
+      [{ lineId, action: "comp", reapplies: randomUUID() }, "/preview"],
+    ] as const) {
+      const answer = await post(billId, body, { path });
+      expect([answer.status, answer.json]).toEqual([
+        400,
+        { code: "management.request_invalid", params: { field: "reapplies" } },
+      ]);
+    }
+    expect(await recordedOn(billId)).toEqual([]);
+  });
+
   it("asks for a session on every route", async () => {
     const { billId } = await billWith(venue, [{ name: "Bottle" }]);
     for (const [method, path] of [

@@ -65,6 +65,9 @@ function parseAsk(
   if (quantity !== undefined && typeof quantity !== "string") throw invalid("quantity");
   if (percentBp !== undefined && typeof percentBp !== "number") throw invalid("percentBp");
   const amount = optionalMoney(body.amount, "amount");
+  const reapplies =
+    body.reapplies === undefined ? undefined : requireBodyUuid(body.reapplies, "reapplies");
+  if (reapplies !== undefined && action === "cancel") throw invalid("reapplies");
   if (
     note !== undefined &&
     note !== null &&
@@ -85,6 +88,7 @@ function parseAsk(
     ...(amount === undefined ? {} : { amount: decimal(amount) }),
     note: typeof note === "string" ? note : null,
     operatorId,
+    ...(reapplies === undefined ? {} : { reapplies: reapplies.toLowerCase() }),
   };
 }
 

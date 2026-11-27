@@ -1207,7 +1207,7 @@ dropped, 3b is rewritten as 3b1 and 3b2, 3c is one pull request, and PR 4 is no 
 | --- | --- | --- |
 | 3a. A dish's own comp or discount (`feat/a1515-3-dish-adjustments`) | Comping or discounting a dish of a set menu takes it out of the set menu, charges it à la carte less the comp or discount, and works out the rest again. Before saving, the till shows what the bill goes to. A discounted dish moves and is paid for on its own, with its discount. An extra given away leaves its dish in its set menu. No schema change, no venue reset. | 2c; D32 answered by the owner before it lands |
 | 3b1. A set menu's comp or discount (`feat/a1515-3-menu-adjustments`) | A comp or discount on a set menu takes off its price and its supplements, and the set menu stays as it is while it holds it; a second one replaces the first; some of its dishes cancelled, moved or paid for alone take the discount off; the whole set menu moved or paid for, by its row or by choosing every one of its dishes, keeps it; previews say so and write nothing; a free takeaway set menu can be refunded. Resets venues. | 3a |
-| 3b2. Saying when a discount came off (`feat/a1515-3-discount-notices`) | Changing a discounted dish's extras, or its variant in a held order's save, takes its discount off; every bill answers a notice for each discount that came off, with what to give it again on (drawn by the till in A1515-4); the report leaves out a discount that came off. No schema change. | 3b1 |
+| 3b2. Saying when a discount came off (`feat/a1515-3-discount-notices`) | Changing a discounted dish's extras, or its variant in a held order's save, takes its discount off; every bill answers a notice for each discount that came off, with what to give it again on (drawn by the till in A1515-4); the report leaves out a discount that came off. Resets venues: _2026-11-26, at finish review, an index on `adjustment_endings(working_order_id)` was added for the notice read (watcher, "WATCHER 2026-11-26 21:42")._ | 3b1 |
 | 3c. A whole-bill discount as the set menus change (`feat/a1515-3-bill-discounts`) | A bill discounted as a whole keeps working out its set menus; each dish keeps its own part; a dish ordered later pays full price. | 3b2 |
 
 3a, 3b1 and 3b2 are written out below; 3c is one page, given its task steps against `main` as 3b2
@@ -1379,7 +1379,7 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   bill's further drop (`regrouped`, `:1106-1127`, what `removeFromLine` answers "beyond the removed
   part's own charge", `working-order-removal.ts:104-106`) are both read with the discount gone. Free
   on a Soup and Hake Daily (0.00), the Hake cancelled: the Free ends (14.00), the cancel records
-  8.00, the bill is 6.00, and the notice offers Free on the Soup. Free on a Soup and Sirloin Daily
+  8.00, the bill is 6.00, and the notice offers Free on the Soup (_2026-11-26: superseded by D54's 20:07 note: a set menu's notice names no place and stays until the bill closes._). Free on a Soup and Sirloin Daily
   (0.00), the Sirloin cancelled: the Free ends (Daily 14.00, Sirloin 5.00), the cancel records 13.00
   and the bill is 6.00; planned before the ending it would record 8.00 and lose the Sirloin's 5.00
   (worked out by hand). Worked the other way round, the cancel's drop would be −6.00, which
@@ -1462,20 +1462,38 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   `dish_paid_alone`) that no later comp or discount on that bill gives again
   (`adjustments.reapplies_adjustment_id`); not for one replaced or a set menu cancelled whole (rule
   C: "Cancelled: the discount goes with it"), and not once nothing it covered is left on the bill (a
-  set menu whose dishes are then cancelled one by one ends as one cancelled whole). It says what came
+  set menu whose dishes are then cancelled one by one ends as one cancelled whole; _2026-11-26: superseded by D54's 20:07 note: a set menu's notice names no place and stays until the bill closes._). It says what came
   off (kind, percentage, amount, reason), where (the dish or set menu) and why (which dish, and what
   happened), and what to give it again on: the dish, for a change of extras; the new line, for a
   change of variant; for a set menu, the set menu its remaining dishes now share, else the one dish
-  left, else nothing, and staff use the comp window. The amount on the new price is what the comp
+  left, else nothing, and staff use the comp window (_2026-11-26: superseded by D54's 20:07 note: a set menu's notice names no place and stays until the bill closes._). The amount on the new price is what the comp
   window's preview answers for the same terms there (3a's preview, D33). No Dismiss: it goes when
   the bill closes. Recommended. Alternatives: a Dismiss (a column that changes, on an otherwise
   append-only record); or offering it again on the whole bill when the dishes are spread over
-  several places.
+  several places. _2026-11-26, while building 3b2:_ nothing records which dishes were in a set menu
+  once its discount ends, so a set menu's notice offers no place (`reapplyOn` null; staff pick it in
+  the comp window) and stays until the bill closes, even once its other dishes are gone (the
+  watcher, lane B `questions.md`, "WATCHER 2026-11-26 20:07"). A notice also goes once its bill is
+  paid or abandoned, and a dish's notice once its line leaves the bill. _2026-11-26, after the second
+  finish review:_ a dish's ending stays on its notice until a comp or discount naming it takes
+  something off that dish or its extras, so giving it again on one dish leaves the others' shares on
+  the notice; a set menu's goes once any one names it.
 - **D55. The adjustments report leaves out a discount that came off.** Its total is "What the bills
   actually lost" (`AdjustmentTally.reduction`, `packages/adjustments/src/reports.ts:45-46`): a 50%
   Daily (7.00) whose Hake is then cancelled counts the cancel's 8.00 (D48), the difference between
   the Daily's 14.00 and the Soup's 6.00; counting both says 15.00. The drill-down still lists it.
-  Alternative: count every one as recorded, as today.
+  Alternative: count every one as recorded, as today. _2026-11-26, at finish review:_ a change of
+  extras or variant ends only the changed dish's share of its own comp or discount, so its other
+  portions keep theirs; a notice's amount is what came off that bill; a dish's notice is given
+  again only on that dish; and the report counts what still stands of a discount partly ended,
+  leaving out only one ended whole. _2026-11-26, after the second finish review:_ removing an extra
+  ends the dish's own discount over the extra too, though the edit has already deleted its row, so a
+  Soup with Bread at 50% (3.75) whose Bread is removed counts nothing in the report and its notice
+  says 3.75 came off; a comp given on the removed extra alone ends nothing and stays counted, as a
+  cancelled dish's comp does. _2026-11-26, after the third finish review:_ one edit over several
+  portions records an ending for each changed dish, with only that dish's rows and removed extras,
+  so giving it again on one portion leaves the notice for the others, offered on the one with the
+  lowest line number.
 - **D56 (3c). A dish's part of a whole-bill discount stays through a change of its extras,** with
   no notice: it is the bill's discount, not the dish's; the dish keeps its price and the new extra
   pays full price, as today (`working-order-line-edits.ts:443-446`). A cancelled, moved or
@@ -1814,7 +1832,7 @@ price once that is given back (the list price cleared once the price is back at 
 ending and the rows it gives back, then writes exactly what `endingRestores` answers, and refuses
 `adjustment.not_standing` when it would give nothing back. Modify
 `packages/db/src/schema/adjustments/adjustments.ts` (`reapplies_adjustment_id`, a foreign key to
-its own `id`, for 3b2, so only 3b1 resets venues).
+its own `id`, for 3b2, so only 3b1 resets venues). _2026-11-26: 3b2 resets venues too, for the index its finish review added._
 
 The new append-only table goes everywhere `adjustment_lines` is named (CLAUDE.md §3: a new
 append-only table travels in its set's migration descriptor and the manifest):
@@ -2073,7 +2091,14 @@ with the bill again (D53). Every bill answers a notice for each discount that ca
 when its set menu broke up: what it was, where, why, and what to give it again on; giving it again
 through the comp window names the notice and clears it (D54). The adjustments report leaves out a
 discount that came off (D55). The till draws the notice in A1515-4 (another lane); this PR is what
-it reads. No schema change.
+it reads. _2026-11-26, at finish review: an index on `adjustment_endings(working_order_id)` was added
+for the notice read, so 3b2 resets venues (watcher, "WATCHER 2026-11-26 21:42")._
+
+_2026-11-26, at finish review: only the changed dish's share of the discount comes off, and another
+portion it covers keeps its share; a notice's amount is what came off that bill, not what the
+discount took off when given; a dish's notice is given again only on a line it came off; and the
+report counts what still stands of a partly ended discount, leaving out only one wholly given
+back._
 
 **What the server provides for A1515-4:** on every bill in the party read (`parties.ts:650`) and the
 counter order read (`working-order-held-read.ts:497`), `discountNotices?: { adjustmentId; why;
@@ -2125,18 +2150,18 @@ no adjustment on that bill names in `reapplies_adjustment_id`, with the ended ad
 percentage, recorded reduction, reason and line name); `apps/server/src/discount-notices.ts`
 (`reapplyOn`: the ending's `line_id` for a change of extras or variant; for a set menu, the set-menu
 row its dishes still on the bill now share, else the one dish left, else null; and no notice at
-all once nothing it covered is left on the bill); `parties.ts:650` and
+all once nothing it covered is left on the bill; _2026-11-26: superseded by D54's 20:07 note: a set menu's notice names no place and stays until the bill closes._); `parties.ts:650` and
 `working-order-held-read.ts:497` (answer it); `apps/server/src/adjustments-api.ts` (`parseAsk`,
 `:52-90`, takes `reapplies`: an adjustment with an ending recorded on this bill whose notice is
 open, else `management.request_invalid`; `applyAdjustment` records it); `apps/till/src/api/client.ts`
 and `packages/shared` (the types only).
 
 - [ ] **Tests first** (`apps/server/src/discount-notices.test.ts`): after Task 3b1.3a's 50% case, one
-  notice (`dish_cancelled`, "Hake", on "Daily menu", 50%, 7.00, `reapplyOn` the Soup), and the
+  notice (`dish_cancelled`, "Hake", on "Daily menu", 50%, 7.00, `reapplyOn` the Soup; _2026-11-26: superseded by D54's 20:07 note: a set menu's notice names no place and stays until the bill closes._), and the
   preview of 50% on the Soup answers 3.00 off; applied with `reapplies`, the notice is gone. After
   Task 3b2.1's first case: `extras_changed` on the Soup, and 50% previews 3.75 off 7.50; after its
   variant case, `variant_changed` with `reapplyOn` the new line. Free on a Soup and Hake Daily, the
-  Hake cancelled (a notice offering Free on the Soup), then the Soup cancelled: no notice. The
+  Hake cancelled (a notice offering Free on the Soup), then the Soup cancelled: no notice (_2026-11-26: superseded by D54's 20:07 note: a set menu's notice names no place and stays until the bill closes._). The
   Sirloin of a 10% Daily moved alone to another bill: the notice is on the source, not on the bill
   it went to; the whole Daily moved, then its Sirloin cancelled there: the notice is on that bill,
   and `reapplies` naming it is accepted there and refused on the bill it was given on. A
@@ -2164,8 +2189,10 @@ adjustment with an ending; `readEntryRows`, `:323`, still lists it). Test:
 - [ ] `docs/backlog/menu.md`, A1515: 3b done; left 3c and piece 4, whose till draws the notice
   (A1515-4). The guide's Set menus sentence from Task 3b1.5 gains, in both languages: "If you change
   a discounted dish's extras or variant, its discount comes off." / "Si cambias los extras o la
-  variante de un plato con descuento, el descuento se quita."
-- [ ] PR body: no schema change; D53–D56 as cleared; what A1515-4 reads. Commit
+  variante de un plato con descuento, el descuento se quita." _2026-11-26, at finish review:_ the
+  sentence went in the comps section instead, covering comps and a variant changed in a parked
+  order, and saying it comes off that dish; the till does not show the notice until A1515-4.
+- [ ] PR body: first line "Resets venues: …" (the finish-review index); D53–D56 as cleared; what A1515-4 reads. Commit
   `git commit -s -m "Record what is left of A1515-3 after 3b"`.
 
 ### PR 3c — A whole-bill discount as the set menus change (`feat/a1515-3-bill-discounts`)

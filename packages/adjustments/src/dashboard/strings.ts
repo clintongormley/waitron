@@ -103,7 +103,7 @@ const en = {
   "nav.adjustment_report": "Adjustment report",
   "adjustment_report.title": "Adjustment report",
   "adjustment_report.intro":
-    "Counts the voids and comps on the bills opened on these business days. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
+    "Counts the voids and comps on the bills opened on these business days. A comp or discount that came off counts only for what still stands, and not at all once it all came off, though the list still shows it. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
   "adjustment_report.from": "From",
   "adjustment_report.to": "To",
   "adjustment_report.range_backwards": "Choose a first day on or before the last day.",
@@ -271,7 +271,7 @@ const es: Record<keyof typeof en, string> = {
   "nav.adjustment_report": "Informe de ajustes",
   "adjustment_report.title": "Informe de ajustes",
   "adjustment_report.intro":
-    "Cuenta las cancelaciones y descuentos de las cuentas abiertas en estas jornadas. La tasa de cada persona es lo que descontaron sus propios ajustes, en proporción a las ventas que se le atribuyen a precios anteriores a cualquier ajuste.",
+    "Cuenta las cancelaciones y descuentos de las cuentas abiertas en estas jornadas. Una invitación o un descuento que se quitó cuenta solo por lo que sigue aplicado, y nada si se quitó entero, aunque la lista lo sigue mostrando. La tasa de cada persona es lo que descontaron sus propios ajustes, en proporción a las ventas que se le atribuyen a precios anteriores a cualquier ajuste.",
   "adjustment_report.from": "Desde",
   "adjustment_report.to": "Hasta",
   "adjustment_report.range_backwards": "Elige un primer día igual o anterior al último.",

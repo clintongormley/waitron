@@ -30,6 +30,7 @@ import {
   type BillSetMenuState,
   type Dining,
   type ServedSetMenuCopy,
+  type DiscountNotice,
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
@@ -52,6 +53,7 @@ import { refuseTakenOff } from "./floor-today-table.js";
 import { readCorrectiveNumbers, readPartyTables } from "./orders-list.js";
 import { readIssuedSales } from "./sale-due.js";
 import { readBillsSetMenus } from "./set-menu-bill.js";
+import { discountNoticesOf, readBillsDiscountNotices } from "./discount-notices.js";
 import "./errors.js";
 
 /** A staged delivery choice as a bill shows it: who staged it stays on the server. */
@@ -93,6 +95,8 @@ export function storedBillRecipient(row: {
 export interface PartyBill {
   workingOrderId: string;
   setMenus: BillSetMenuState;
+  /** Absent when it has no open notice (D54). */
+  discountNotices?: DiscountNotice[];
   setMenuCopies: ServedSetMenuCopy[];
   revision: number;
   invoiceType: "F1" | "F2";
@@ -652,6 +656,12 @@ export async function readPartyBills(
     bills.map((bill) => bill.workingOrderId),
     "published",
   );
+  const notices = await readBillsDiscountNotices(
+    tx,
+    bills.flatMap(({ workingOrderId, status }) =>
+      status === "open" || status === "placed" ? [workingOrderId] : [],
+    ),
+  );
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);
     const choice = choiceByBill.get(bill.workingOrderId)!;
@@ -688,6 +698,7 @@ export async function readPartyBills(
       ...(bill.deferred === undefined ? {} : { deferred: bill.deferred }),
       ...(choice.reopenedFrom === null ? {} : { reopenedFrom: choice.reopenedFrom }),
       ...dinings.get(bill.workingOrderId)!,
+      ...discountNoticesOf(notices, bill.workingOrderId),
     };
   });
 }

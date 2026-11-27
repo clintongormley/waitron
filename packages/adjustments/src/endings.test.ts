@@ -1,5 +1,6 @@
+import { DatabaseSync } from "node:sqlite";
 import { eq } from "drizzle-orm";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   adjustmentEndings,
   adjustmentLines,
@@ -14,7 +15,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { decimal, stringToThousandths } from "@waitron/shared";
-import { endAdjustment, endingRestores } from "./endings.js";
+import { endAdjustment, endingRestores, readDiscountNotices } from "./endings.js";
 import { policySnapshotOf } from "./policy.js";
 import { recordAdjustment } from "./record.js";
 import { seedReason, seedWorkingOrder } from "../test/seed.js";
@@ -353,5 +354,259 @@ describe("ending a comp or discount", () => {
 
     expect(checkFailed(refused.error, "adjustment_endings_why_ck")).toBe(true);
     expect(refused.price).toEqual([{ unit: 1440 }]);
+  });
+});
+
+describe("ending a comp or discount on some of its rows", () => {
+  it("gives back only the named Hake, leaving the other Hake's share standing until a later ending names it", async () => {
+    const order = await seedWorkingOrder(db);
+    const edited = await discountedHakes(order, "1");
+    const other = await discountedHakes(order, "1");
+    const adjustmentId = await tenPercentOff(order, edited, "1");
+    await db
+      .insert(adjustmentLines)
+      .values({ adjustmentId, lineId: other, reduction: 160, quantity: stringToThousandths("1") });
+    const endOn = (lineId: string) =>
+      withTransaction(db, (tx) =>
+        endAdjustment(tx, {
+          adjustmentId,
+          workingOrderId: order,
+          why: "extras_changed",
+          dishName: "Hake",
+          lineId,
+          lineIds: [lineId],
+        }),
+      );
+
+    expect(
+      await withTransaction(db, (tx) =>
+        endingRestores(tx, {
+          workingOrderId: order,
+          adjustmentIds: [adjustmentId],
+          lineIds: [edited],
+        }),
+      ),
+    ).toEqual([
+      { lineId: edited, unitPriceGross: 1600, lineTotal: 1600, listUnitPriceGross: null },
+    ]);
+    await endOn(edited);
+    expect(await priceOf(edited)).toEqual({
+      unitPriceGross: 1600,
+      lineTotal: 1600,
+      listUnitPriceGross: null,
+    });
+    expect(await priceOf(other)).toEqual({
+      unitPriceGross: 1440,
+      lineTotal: 1440,
+      listUnitPriceGross: 1600,
+    });
+
+    await endOn(other);
+    expect(await priceOf(other)).toEqual({
+      unitPriceGross: 1600,
+      lineTotal: 1600,
+      listUnitPriceGross: null,
+    });
+    const ended = (await endingsOf(adjustmentId)).map(({ lineId }) => lineId);
+    expect(ended).toHaveLength(2);
+    expect(ended).toEqual(expect.arrayContaining([edited, other]));
+    await expect(endOn(other)).rejects.toMatchObject({ code: "adjustment.not_standing" });
+  });
+});
+
+describe("ending a comp or discount over rows the change removed", () => {
+  it("gives back what it took off a named row no longer on any bill, not off one still on it, and ends one whose only rows left are removed", async () => {
+    const order = await seedWorkingOrder(db);
+    const dish = await discountedHakes(order, "1");
+    const adjustmentId = await tenPercentOff(order, dish, "1");
+    const [removed, kept] = [await discountedHakes(order, "1"), await discountedHakes(order, "1")];
+    await db.insert(adjustmentLines).values(
+      [removed, kept].map((lineId) => ({
+        adjustmentId,
+        lineId,
+        reduction: 160,
+        quantity: stringToThousandths("1"),
+      })),
+    );
+    const alone = await tenPercentOff(order, await discountedHakes(order, "1"), "1");
+    const [aloneLine] = await db
+      .select({ lineId: adjustmentLines.lineId })
+      .from(adjustmentLines)
+      .where(eq(adjustmentLines.adjustmentId, alone));
+    for (const lineId of [removed, aloneLine!.lineId]) {
+      await db.delete(workingOrderLines).where(eq(workingOrderLines.id, lineId));
+    }
+    const end = (id: string, lineIds: string[], removedLineIds: string[]) =>
+      withTransaction(db, (tx) =>
+        endAdjustment(tx, {
+          adjustmentId: id,
+          workingOrderId: order,
+          why: "extras_changed",
+          dishName: "Hake",
+          lineId: dish,
+          lineIds,
+          removedLineIds,
+        }),
+      );
+
+    await end(adjustmentId, [dish], [removed, kept]);
+    await end(alone, [], [aloneLine!.lineId]);
+
+    const givenBack = new Map(
+      (await withTransaction(db, (tx) => readDiscountNotices(tx, [order]))).map((one) => [
+        one.adjustmentId,
+        one.givenBack,
+      ]),
+    );
+    expect(givenBack.get(adjustmentId)).toBe("3.20");
+    expect(givenBack.get(alone)).toBe("1.60");
+    expect(await priceOf(kept)).toEqual({
+      unitPriceGross: 1440,
+      lineTotal: 1440,
+      listUnitPriceGross: 1600,
+    });
+    await expect(end(alone, [], [aloneLine!.lineId])).rejects.toMatchObject({
+      code: "adjustment.not_standing",
+    });
+  });
+});
+
+describe("the notices a bill answers", () => {
+  it("answers an ending a change caused on its own bill, not a replacement, and not once a comp or discount on that bill gives it again", async () => {
+    const order = await seedWorkingOrder(db);
+    const other = await seedWorkingOrder(db);
+    const moved = await tenPercentOff(order, await discountedHakes(order, "1"), "1");
+    const replaced = await amountOff(order, await discountedHakes(order, "1"), 200);
+    const given = await tenPercentOff(order, await discountedHakes(order, "1"), "1");
+    for (const [adjustmentId, why] of [
+      [moved, "dish_moved"],
+      [replaced, "replaced"],
+      [given, "dish_cancelled"],
+    ] as const) {
+      await withTransaction(db, (tx) =>
+        endAdjustment(tx, { adjustmentId, workingOrderId: order, why, dishName: "Hake" }),
+      );
+    }
+    const reason = await seedReason(db);
+    await withTransaction(db, (tx) =>
+      recordAdjustment(tx, {
+        workingOrderId: order,
+        line: null,
+        quantity: null,
+        reason: {
+          id: reason.id,
+          name: reason.name,
+          policy: policySnapshotOf(reason, { maxBillComp: null }),
+        },
+        action: "discount_amount",
+        percentBp: null,
+        beforeAmount: decimal("16.00"),
+        afterAmount: decimal("15.00"),
+        reduction: decimal("1.00"),
+        nominalValue: decimal("16.00"),
+        requestedBy: WAITER,
+        approvedBy: null,
+        note: null,
+        reappliesAdjustmentId: given,
+      }),
+    );
+
+    const notices = await withTransaction(db, (tx) => readDiscountNotices(tx, [order, other]));
+
+    expect(notices).toEqual([
+      expect.objectContaining({
+        workingOrderId: order,
+        adjustmentId: moved,
+        why: "dish_moved",
+        dishName: "Hake",
+        lineId: null,
+        action: "discount_percent",
+        percentBp: 1000,
+        givenBack: "1.60",
+        lineName: "Hake",
+      }),
+    ]);
+    expect(await withTransaction(db, (tx) => readDiscountNotices(tx, []))).toEqual([]);
+  });
+
+  it("answers what each ending gave back: one of two Hakes split onto another bill gives back 1.60 of 3.20, and a row since gone counts whole", async () => {
+    const first = await seedWorkingOrder(db);
+    const second = await seedWorkingOrder(db);
+    const stayed = await discountedHakes(first, "2");
+    const adjustmentId = await tenPercentOff(first, stayed, "2");
+    await db
+      .update(workingOrderLines)
+      .set({ quantity: stringToThousandths("1"), lineTotal: 1440 })
+      .where(eq(workingOrderLines.id, stayed));
+    const moved = await discountedHakes(second, "1");
+    await db
+      .insert(adjustmentLines)
+      .values({ adjustmentId, lineId: moved, reduction: 320, quantity: stringToThousandths("2") });
+    for (const workingOrderId of [second, first]) {
+      await withTransaction(db, (tx) =>
+        endAdjustment(tx, { adjustmentId, workingOrderId, why: "dish_moved", dishName: "Hake" }),
+      );
+    }
+    const byBill = (rows: { workingOrderId: string; givenBack: string }[]) =>
+      [...rows].sort((a, b) => a.workingOrderId.localeCompare(b.workingOrderId));
+    const givenBack = async () =>
+      byBill(
+        (await withTransaction(db, (tx) => readDiscountNotices(tx, [first, second]))).map(
+          ({ workingOrderId, givenBack }) => ({ workingOrderId, givenBack }),
+        ),
+      );
+    expect(await givenBack()).toEqual(
+      byBill([
+        { workingOrderId: second, givenBack: "1.60" },
+        { workingOrderId: first, givenBack: "1.60" },
+      ]),
+    );
+
+    await db.delete(workingOrderLines).where(eq(workingOrderLines.id, stayed));
+
+    expect(await givenBack()).toEqual(
+      byBill([
+        { workingOrderId: second, givenBack: "1.60" },
+        { workingOrderId: first, givenBack: "3.20" },
+      ]),
+    );
+    const untouched = await seedWorkingOrder(db);
+    expect(await withTransaction(db, (tx) => readDiscountNotices(tx, [untouched]))).toEqual([]);
+  });
+
+  it("finds a bill's endings through the bill index, not by reading every ending", async () => {
+    const order = await seedWorkingOrder(db);
+    const plans: string[] = [];
+    const prepare = DatabaseSync.prototype.prepare;
+    const spy = vi.spyOn(DatabaseSync.prototype, "prepare").mockImplementation(function (
+      this: DatabaseSync,
+      text,
+    ) {
+      const statement = prepare.call(this, text);
+      if (!text.includes('from "adjustment_endings"')) return statement;
+      const all = statement.all;
+      statement.all = (...parameters: unknown[]) => {
+        const explain = prepare.call(this, `explain query plan ${text}`);
+        const plan = Reflect.apply(all, explain, parameters) as { detail: string }[];
+        plans.push(...plan.map((row) => String(row.detail)));
+        return Reflect.apply(all, statement, parameters);
+      };
+      return statement;
+    });
+    try {
+      await withTransaction(db, (tx) => readDiscountNotices(tx, [order]));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(plans.some((d) => d.startsWith("SCAN adjustment_endings"))).toBe(false);
+    // `json_each` is the list of bill ids the call passes in, not a stored table.
+    expect(plans.filter((d) => d.startsWith("SCAN") && !d.startsWith("SCAN json_each"))).toEqual(
+      [],
+    );
+    expect(
+      plans.some((d) =>
+        d.startsWith("SEARCH adjustment_endings USING INDEX adjustment_endings_working_order_idx"),
+      ),
+    ).toBe(true);
   });
 });

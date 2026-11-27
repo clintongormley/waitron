@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8b226e48-79c3-4d04-8812-6003b2917a27",
+  "id": "ad497d96-93ff-4c3b-9745-89c6bb9189e2",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -16218,6 +16218,13 @@
           "name": "adjustment_endings_adjustment_idx",
           "columns": [
             "adjustment_id",
+            "working_order_id"
+          ],
+          "isUnique": false
+        },
+        "adjustment_endings_working_order_idx": {
+          "name": "adjustment_endings_working_order_idx",
+          "columns": [
             "working_order_id"
           ],
           "isUnique": false

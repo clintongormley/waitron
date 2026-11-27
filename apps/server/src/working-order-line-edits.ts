@@ -24,6 +24,7 @@ import { eq, inArray, or, sql, and } from "drizzle-orm";
 import { readBillExcess, assertLinesKeptExcess } from "./bill-payments.js";
 import { readStationChanges, refuseChangesAfterSending } from "./changes-after-sending.js";
 import { requireMakeAtStation } from "./dead-ends.js";
+import { endRepricedDishDiscounts, type VariantSwap } from "./dish-discount-ending.js";
 import { copyAllergyWorkingTicks, refreshKitchenAllergyClashes } from "./kitchen-allergy.js";
 import { initiatedAt, requestedItem } from "./kitchen-phase.js";
 import { hasUngroupedHoldPaper } from "./kitchen-ticket-paper.js";
@@ -113,8 +114,10 @@ import { clampServed } from "./working-order-serving.js";
  * ones, as plan D10 rules:
  *
  * - A stored line keeps its gross price, names and the other facts it was added with; only what the
- *   edit adds is priced now — a new line, and an extra added to a line. A note or an options answer
- *   carries no price. A kept extra is matched by list, product and quantity.
+ *   edit adds is priced now — a new line, and an extra added to a line — except that a dish's own
+ *   comp or discount gives its share back when its extras change or a basket save swaps its
+ *   variant ({@link endRepricedDishDiscounts}). A note or an options answer carries no price. A
+ *   kept extra is matched by list, product and quantity.
  * - A line with no ticket item, or a held one, is changed in place, except that units
  *   added to one a comp or a discount repriced go on a new line, priced now (ruling R12), and any
  *   other whole portion rises by copies of itself in its cohort (a measured one rises in place). A
@@ -146,6 +149,8 @@ export async function applyLineEdits(
     edits: { parent: EditableParent; intent: LineIntent }[];
     removed: EditableParent[];
     fresh: RequestedLine[];
+    /** Removed lines each replaced by a fresh line of the same menu item at another variant. */
+    swaps?: VariantSwap[];
     /** Refuse a lower count where a removal would be refused, rather than take it. */
     refuseSentDrop?: true;
     /** A sent line keeps its options answers while the edit names none it does not hold: a rename
@@ -371,6 +376,7 @@ export async function applyLineEdits(
     expand: true,
   }));
   const raised: RequestedLine[] = [];
+  const extrasChangedIds: string[] = [];
   const resent: string[] = [];
   let chargesUnchanged = plan.removed.length === 0 && plan.fresh.length === 0;
   const portionOf = await readGrowingPortions(
@@ -432,6 +438,7 @@ export async function applyLineEdits(
             defaultLanguage,
           );
     const extrasChanged = extras.added.length > 0 || extras.removed.length > 0;
+    if (extrasChanged) extrasChangedIds.push(parent.id);
     const changed =
       intent.note !== parent.note ||
       (parent.sentAt === null &&
@@ -441,7 +448,8 @@ export async function applyLineEdits(
       optionSnapshots !== parent.optionSnapshots ||
       extrasChanged;
     if (!changed && rise === 0) return;
-    // A stored line keeps its unit price, so its extras and its quantity move what it charges; its
+    // A stored line keeps its unit price (bar a dish's own comp or discount, which gives that dish's
+    // share back once its extras change), so its extras and its quantity move what it charges; its
     // options answer is filed on the sale line, and a card at the reader files the answer it priced.
     if (extrasChanged || rise !== 0 || optionSnapshots !== parent.optionSnapshots)
       chargesUnchanged = false;
@@ -1154,6 +1162,21 @@ export async function applyLineEdits(
     changes
       .filter((change) => change.addedAt !== null || change.removedChildren.length > 0)
       .map((change) => change.parent.id),
+  );
+  await endRepricedDishDiscounts(
+    tx,
+    orderId,
+    extrasChangedIds,
+    new Map(
+      changes.map(({ parent, removedChildren }) => [
+        parent.id,
+        removedChildren.map(({ id }) => id),
+      ]),
+    ),
+    (plan.swaps ?? []).map(({ fromId, freshIndex }) => ({
+      fromId,
+      toId: groups[freshIndex]!.rows[0]!.id!,
+    })),
   );
   if (plan.removed.length > 0) {
     const removedIds = plan.removed.map((parent) => parent.id);

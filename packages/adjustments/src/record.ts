@@ -52,6 +52,8 @@ export interface NewAdjustment {
   preparationStarted?: boolean | null;
   refundHandoff?: boolean;
   refundValue?: Decimal | null;
+  /** The ended comp or discount this one gives again. */
+  reappliesAdjustmentId?: string | null;
 }
 
 /** Writes one adjustment row and returns its id. */
@@ -86,6 +88,7 @@ export async function recordAdjustment(tx: Transaction, row: NewAdjustment): Pro
       preparationStarted: row.preparationStarted ?? null,
       refundHandoff: row.refundHandoff ?? false,
       refundValue: row.refundValue == null ? null : decimalToCents(row.refundValue),
+      reappliesAdjustmentId: row.reappliesAdjustmentId ?? null,
     })
     .returning({ id: adjustments.id });
   return written!.id;

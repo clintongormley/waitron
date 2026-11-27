@@ -1,8 +1,22 @@
-import { and, eq, gt, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  exists,
+  gt,
+  inArray,
+  isNull,
+  notExists,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import {
   adjustmentEndingLines,
   adjustmentEndings,
   adjustmentLines,
+  adjustments,
   insertInChunks,
   workingOrderLines,
   type AdjustmentEndingWhy,
@@ -10,16 +24,20 @@ import {
 } from "@waitron/db";
 import {
   AppError,
+  DISCOUNT_NOTICE_WHYS,
   addDecimal,
   centsToDecimal,
   compareDecimal,
+  decimal,
   decimalToCents,
   divideDecimal,
   MONEY_SCALE,
   multiplyDecimal,
   sumDecimals,
   thousandthsToDecimal,
+  type AdjustmentAction,
   type Decimal,
+  type DiscountNoticeWhy,
 } from "@waitron/shared";
 import { nearestWeighedUnitPrice } from "./spread.js";
 
@@ -52,10 +70,14 @@ interface Taken {
   list: number | null;
 }
 
-async function standingOn(
-  tx: Transaction,
-  query: { workingOrderId: string; adjustmentIds: readonly string[] },
-): Promise<Taken[]> {
+/** Which bill, which comps or discounts, and, when named, which of the bill's rows alone. */
+interface EndingQuery {
+  workingOrderId: string;
+  adjustmentIds: readonly string[];
+  lineIds?: readonly string[];
+}
+
+async function standingOn(tx: Transaction, query: EndingQuery): Promise<Taken[]> {
   if (query.adjustmentIds.length === 0) return [];
   return tx
     .select({
@@ -79,6 +101,12 @@ async function standingOn(
           sql`(select value from json_each(${JSON.stringify(query.adjustmentIds)}))`,
         ),
         eq(workingOrderLines.workingOrderId, query.workingOrderId),
+        query.lineIds === undefined
+          ? undefined
+          : inArray(
+              workingOrderLines.id,
+              sql`(select value from json_each(${JSON.stringify(query.lineIds)}))`,
+            ),
         gt(adjustmentLines.reduction, 0),
         isNull(adjustmentEndingLines.id),
       ),
@@ -185,21 +213,51 @@ async function restoresOf(
 }
 
 /**
- * What each row now on `workingOrderId` that `adjustmentIds` took something off, and has not given
- * back, would cost once they give it back. Writes nothing.
+ * What each row now on `workingOrderId` (of `lineIds` alone, when named) that `adjustmentIds` took
+ * something off, and has not given back, would cost once they give it back. Writes nothing.
  */
 export async function endingRestores(
   tx: Transaction,
-  query: { workingOrderId: string; adjustmentIds: readonly string[] },
+  query: EndingQuery,
 ): Promise<EndingRestore[]> {
   return restoresOf(tx, await standingOn(tx, query), query.adjustmentIds);
+}
+
+/** The `adjustment_lines` rows of `adjustmentId` not yet given back whose line, one of `lineIds`,
+ * is no longer on any bill. */
+async function standingOnGone(
+  tx: Transaction,
+  adjustmentId: string,
+  lineIds: readonly string[],
+): Promise<string[]> {
+  if (lineIds.length === 0) return [];
+  const rows = await tx
+    .select({ id: adjustmentLines.id })
+    .from(adjustmentLines)
+    .leftJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
+    .leftJoin(adjustmentEndingLines, eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id))
+    .where(
+      and(
+        eq(adjustmentLines.adjustmentId, adjustmentId),
+        inArray(
+          adjustmentLines.lineId,
+          sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
+        ),
+        isNull(workingOrderLines.id),
+        gt(adjustmentLines.reduction, 0),
+        isNull(adjustmentEndingLines.id),
+      ),
+    );
+  return rows.map(({ id }) => id);
 }
 
 /**
  * Ends `adjustmentId` on `workingOrderId`: records the ending and each row it gives back, then
  * writes exactly what {@link endingRestores} answers. A row is given back once, wherever it moves
  * after; an ending that would give nothing back is refused `adjustment.not_standing`. `lineId` is
- * the line a notice offers it again on.
+ * the line a notice offers it again on; `lineIds`, when named, are the only rows it gives back, so
+ * the rest of the bill keeps its share. `removedLineIds` are rows the change ending it has just
+ * deleted from the bill: what it took off them is given back too, with nothing to restore.
  */
 export async function endAdjustment(
   tx: Transaction,
@@ -209,11 +267,18 @@ export async function endAdjustment(
     why: AdjustmentEndingWhy;
     dishName: string;
     lineId?: string;
+    lineIds?: readonly string[];
+    removedLineIds?: readonly string[];
   },
 ): Promise<void> {
-  const { adjustmentId, workingOrderId } = ending;
-  const taken = await standingOn(tx, { workingOrderId, adjustmentIds: [adjustmentId] });
-  if (taken.length === 0) {
+  const { adjustmentId, workingOrderId, lineIds } = ending;
+  const taken = await standingOn(tx, {
+    workingOrderId,
+    adjustmentIds: [adjustmentId],
+    ...(lineIds === undefined ? {} : { lineIds }),
+  });
+  const gone = await standingOnGone(tx, adjustmentId, ending.removedLineIds ?? []);
+  if (taken.length === 0 && gone.length === 0) {
     throw new AppError("adjustment.not_standing", { adjustmentId, workingOrderId });
   }
   const restores = await restoresOf(tx, taken, [adjustmentId]);
@@ -230,9 +295,152 @@ export async function endAdjustment(
   await insertInChunks(
     tx,
     adjustmentEndingLines,
-    taken.map((one) => ({ endingId: written!.id, adjustmentLineId: one.adjustmentLineId })),
+    [...taken.map(({ adjustmentLineId }) => adjustmentLineId), ...gone].map((adjustmentLineId) => ({
+      endingId: written!.id,
+      adjustmentLineId,
+    })),
   );
   for (const { lineId, ...price } of restores) {
     await tx.update(workingOrderLines).set(price).where(eq(workingOrderLines.id, lineId));
   }
+}
+
+const NOTHING = decimal("0.00");
+
+/**
+ * What each of `endingIds` gave back, in money, reckoned from each row's recorded reduction (taken
+ * off the quantity its line held then) at the quantity the row holds now, not the quantity it held
+ * when the ending was written; a row no longer on any bill counts whole.
+ */
+export async function givenBackBy(
+  tx: Transaction,
+  endingIds: readonly string[],
+): Promise<Map<string, Decimal>> {
+  if (endingIds.length === 0) return new Map();
+  const rows = await tx
+    .select({
+      endingId: adjustmentEndingLines.endingId,
+      reduction: adjustmentLines.reduction,
+      quantityThen: adjustmentLines.quantity,
+      quantity: workingOrderLines.quantity,
+    })
+    .from(adjustmentEndingLines)
+    .innerJoin(adjustmentLines, eq(adjustmentLines.id, adjustmentEndingLines.adjustmentLineId))
+    .leftJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
+    .where(
+      inArray(
+        adjustmentEndingLines.endingId,
+        sql`(select value from json_each(${JSON.stringify(endingIds)}))`,
+      ),
+    );
+  const byEnding = new Map(endingIds.map((id) => [id, NOTHING]));
+  for (const row of rows) {
+    const back = divideDecimal(
+      multiplyDecimal(
+        centsToDecimal(row.reduction),
+        thousandthsToDecimal(row.quantity ?? row.quantityThen),
+      ),
+      thousandthsToDecimal(row.quantityThen),
+      MONEY_SCALE,
+    );
+    byEnding.set(row.endingId, addDecimal(byEnding.get(row.endingId)!, back));
+  }
+  return byEnding;
+}
+
+/** An ending a bill answers a notice for, with the comp or discount that ended. */
+export interface EndedDiscount {
+  workingOrderId: string;
+  adjustmentId: string;
+  why: DiscountNoticeWhy;
+  dishName: string;
+  /** The line the ending offers it again on; null for a set menu's. */
+  lineId: string | null;
+  action: AdjustmentAction;
+  percentBp: number | null;
+  /** What this ending gave back ({@link givenBackBy}). */
+  givenBack: Decimal;
+  reasonId: string;
+  lineName: string | null;
+}
+
+const later = alias(adjustments, "later");
+const laterLine = alias(adjustmentLines, "later_line");
+const laterRow = alias(workingOrderLines, "later_row");
+
+/**
+ * Each ending recorded on one of `billIds` because of a change (D54), oldest first, but for one a
+ * comp or discount on the same bill gives again: one naming its adjustment in
+ * `reapplies_adjustment_id` that, for an ending offered on a line, took something off that dish or
+ * its extras. An ending gives back every row it finds of its dish, so no later ending of the same
+ * adjustment names a dish a reapplication had already covered.
+ */
+export async function readDiscountNotices(
+  tx: Transaction,
+  billIds: readonly string[],
+): Promise<EndedDiscount[]> {
+  if (billIds.length === 0) return [];
+  const rows = await tx
+    .select({
+      endingId: adjustmentEndings.id,
+      workingOrderId: adjustmentEndings.workingOrderId,
+      adjustmentId: adjustmentEndings.adjustmentId,
+      why: adjustmentEndings.why,
+      dishName: adjustmentEndings.dishName,
+      lineId: adjustmentEndings.lineId,
+      action: adjustments.action,
+      percentBp: adjustments.percentBp,
+      reasonId: adjustments.reasonId,
+      lineName: adjustments.lineName,
+    })
+    .from(adjustmentEndings)
+    .innerJoin(adjustments, eq(adjustments.id, adjustmentEndings.adjustmentId))
+    .where(
+      and(
+        inArray(
+          adjustmentEndings.workingOrderId,
+          sql`(select value from json_each(${JSON.stringify(billIds)}))`,
+        ),
+        inArray(adjustmentEndings.why, [...DISCOUNT_NOTICE_WHYS]),
+        notExists(
+          tx
+            .select({ id: later.id })
+            .from(later)
+            .where(
+              and(
+                eq(later.workingOrderId, adjustmentEndings.workingOrderId),
+                eq(later.reappliesAdjustmentId, adjustmentEndings.adjustmentId),
+                or(
+                  isNull(adjustmentEndings.lineId),
+                  exists(
+                    tx
+                      .select({ id: laterLine.id })
+                      .from(laterLine)
+                      .innerJoin(laterRow, eq(laterRow.id, laterLine.lineId))
+                      .where(
+                        and(
+                          eq(laterLine.adjustmentId, later.id),
+                          eq(
+                            sql`coalesce(${laterRow.parentLineId}, ${laterRow.id})`,
+                            adjustmentEndings.lineId,
+                          ),
+                        ),
+                      ),
+                  ),
+                ),
+              ),
+            ),
+        ),
+      ),
+    )
+    .orderBy(asc(adjustmentEndings.endedAt), asc(adjustmentEndings.id));
+  const givenBack = await givenBackBy(
+    tx,
+    rows.map(({ endingId }) => endingId),
+  );
+  return rows.map(({ endingId, ...row }) => ({
+    ...row,
+    why: row.why as DiscountNoticeWhy,
+    givenBack: givenBack.get(endingId)!,
+  }));
 }

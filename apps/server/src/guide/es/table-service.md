@@ -21,6 +21,9 @@ personal** permite hasta un 50% de descuento por artículo antes de pedir autori
 
 Si una invitación deja la cuenta a cero, Waitron la cierra y emite la factura en el momento. Entrega esa factura al cliente.
 
+Si cambias los extras de un plato con invitación o descuento, o su variante en un pedido aparcado,
+la invitación o el descuento se quita de ese plato.
+
 ## Repartir una cuenta del mostrador {#counter-part-payments}
 
 Pulsa **Cobrar** para cobrar toda o parte de una cuenta del mostrador. Empiezas con **Toda la cuenta**

@@ -8,6 +8,7 @@ import type {
 } from "@waitron/module";
 import type {
   BillSetMenuState,
+  DiscountNotice,
   ServedSetMenuCopy,
   Dining,
   JoinSide,
@@ -132,6 +133,8 @@ export interface BillSetMenusReply {
 export interface PartyBill {
   setMenus?: BillSetMenuState;
   setMenuCopies?: ServedSetMenuCopy[];
+  /** Absent when it has no open notice (D54). */
+  discountNotices?: DiscountNotice[];
   workingOrderId: string;
   revision: number;
   /** The bill's own way, whatever its department now says. */

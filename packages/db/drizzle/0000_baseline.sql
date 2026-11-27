@@ -2472,6 +2472,7 @@ CREATE TABLE `adjustment_endings` (
 );
 --> statement-breakpoint
 CREATE INDEX `adjustment_endings_adjustment_idx` ON `adjustment_endings` (`adjustment_id`,`working_order_id`);--> statement-breakpoint
+CREATE INDEX `adjustment_endings_working_order_idx` ON `adjustment_endings` (`working_order_id`);--> statement-breakpoint
 CREATE TABLE `departments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,

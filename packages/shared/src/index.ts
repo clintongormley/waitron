@@ -560,9 +560,12 @@ export type { KitchenAllergyBlock, KitchenNoteChange } from "./kitchen-notice-ty
 export {
   REASON_KINDS,
   ADJUSTMENT_ACTIONS,
+  DISCOUNT_NOTICE_WHYS,
   type ReasonKind,
   type AdjustmentAction,
   type AdjustmentPolicySnapshot,
+  type DiscountNotice,
+  type DiscountNoticeWhy,
 } from "./adjustment-policy-types.js";
 
 export {
