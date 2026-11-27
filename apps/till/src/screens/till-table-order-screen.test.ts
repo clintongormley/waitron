@@ -3770,8 +3770,21 @@ describe("till-table-order-screen", () => {
         .click();
       await el.updateComplete;
     }
+    const targetHeading = "[data-target-picker] :is(h2, [data-action-heading])";
     const click = (el: TillTableOrderScreen, selector: string) =>
       el.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
+
+    async function closePicker(el: TillTableOrderScreen) {
+      const panel = el.shadowRoot!.querySelector("wt-dialog[data-action-panel]")!;
+      const closed = new Promise((resolve) =>
+        panel.addEventListener("wt-close", resolve, { once: true }),
+      );
+      await userEvent.click(
+        page.elementLocator(panel).getByRole("button", { name: t("action.back") }),
+      );
+      await closed;
+      await el.updateComplete;
+    }
 
     /** The ids the open target picker offers, in order. */
     const targetIds = (el: TillTableOrderScreen) =>
@@ -3919,7 +3932,7 @@ describe("till-table-order-screen", () => {
         click(el, '[data-action="move-bill"]');
         await el.updateComplete;
 
-        expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+        expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
           t("table.move_bill_heading").replace("{bill}", scope),
         );
         expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t9"]);
@@ -3982,7 +3995,7 @@ describe("till-table-order-screen", () => {
         });
         await toMoveBill(el);
 
-        expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+        expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
           t("table.move_bill_heading").replace("{bill}", () => "Ana · Bill 2 · {into}"),
         );
       });
@@ -4085,7 +4098,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="move"]');
       await el.updateComplete;
 
-      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+      expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
         t("table.move_guests_heading").replace("{party}", "Ana (Table 4)"),
       );
       expect(targetIds(el)).toEqual(["t6", "t7", "t9"]);
@@ -4178,7 +4191,7 @@ describe("till-table-order-screen", () => {
       await toMenu(el);
       click(el, '[data-action="join"]');
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+      expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
         t("table.join_heading").replace("{party}", "Ana (Table 4)"),
       );
 
@@ -4205,8 +4218,8 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       expect(targetIds(el)).toEqual(["t6", "t7", "t9"]);
 
-      click(el, "[data-action-back]");
-      await el.updateComplete;
+      await closePicker(el);
+      await toMenu(el);
       click(el, '[data-action="move"]');
       await el.updateComplete;
       expect(targetIds(el)).toEqual(["t4", "t5", "t6", "t7", "t9"]);
@@ -4235,8 +4248,8 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       expect(targetIds(el)).toEqual(["t6"]);
 
-      click(el, "[data-action-back]");
-      await el.updateComplete;
+      await closePicker(el);
+      await toMenu(el);
       click(el, '[data-action="move"]');
       await el.updateComplete;
       expect(targetIds(el)).toEqual(["t6", "t7", "t9"]);
@@ -4578,8 +4591,8 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
       expect(targetIds(el)).toEqual(["t2", "t10", "t1", "t3", "t20"]);
 
-      click(el, "[data-action-back]");
-      await el.updateComplete;
+      await closePicker(el);
+      await toMenu(el);
       click(el, '[data-action="join"]');
       await el.updateComplete;
       expect(targetIds(el)).toEqual(["t1", "t3", "t20"]);
@@ -4624,7 +4637,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="move"]');
       await el.updateComplete;
 
-      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+      expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
         t("table.move_guests_heading").replace("{party}", "Ana (Table 4, Terrace)"),
       );
       expect(target(el, "t9")!.querySelector(".target-label")!.textContent).toBe("Window");
@@ -4666,7 +4679,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="move"]');
       await el.updateComplete;
 
-      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+      expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
         t("table.move_guests_heading").replace("{party}", "García birthday"),
       );
       expect(target(el, "t5")!.querySelector(".target-label")!.textContent).toBe("Table 5");
@@ -5143,7 +5156,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="merge"]');
       await el.updateComplete;
 
-      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+      expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
         t("table.merge_into").replace(
           "{bill}",
           t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"),
@@ -5187,7 +5200,7 @@ describe("till-table-order-screen", () => {
       el.bills = [];
       await el.updateComplete;
 
-      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+      expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
         t("table.actions_title"),
       );
     });
@@ -5224,8 +5237,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="move"]');
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("[data-target-picker]")).not.toBeNull();
-      click(el, "[data-action-back]");
-      await el.updateComplete;
+      await closePicker(el);
       expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });

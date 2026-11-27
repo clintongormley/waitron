@@ -19470,16 +19470,16 @@ export class TillApp extends LitElement {
 
   readonly #relocationPrompts = new WeakMap<object, Promise<TableRelocation | null>>();
 
-  async #onRelocationOpen(event: Event): Promise<void> {
+  async #onRelocationOpen(event: CustomEvent<TableRelocationOpenDetail>): Promise<void> {
     event.preventDefault();
-    const { verb, table, prompt, ready } = (event as CustomEvent<TableRelocationOpenDetail>).detail;
+    const { verb, table, prompt, ready, refused } = event.detail;
     const ids =
       verb === "move-bill"
         ? this.activeTabId === undefined
           ? []
           : [this.activeTabId]
         : this.partyBills.map((bill) => bill.workingOrderId);
-    const pending = this.#relocationEdits(ids, table?.party ?? null);
+    const pending = this.#relocationEdits(ids, table?.party ?? null, refused);
     this.#relocationPrompts.set(prompt, pending);
     const asked = await pending;
     if (asked !== null && this.#billCompositionUnchanged(asked.source)) ready();
@@ -19488,6 +19488,7 @@ export class TillApp extends LitElement {
   async #relocationEdits(
     sourceIds: string[],
     target: SeatedRead = null,
+    refused?: (message: string) => void,
   ): Promise<TableRelocation | null> {
     const source = this.#billComposition(sourceIds);
     if (source === null) return null;
@@ -19497,16 +19498,12 @@ export class TillApp extends LitElement {
         await this.#savesOutFor(target.id);
         if (!this.#billCompositionUnchanged(source)) return null;
         const snapshot = await source.api.listDrafts(target.id);
-        destination = snapshot.billEdits.map(
-          ({ billId, editorVersion, draftId, draftRevision }) => ({
-            billId,
-            editorVersion,
-            draftId,
-            draftRevision,
-          }),
-        );
+        destination = snapshot.billEdits.map(expectedEditOf);
       } catch {
-        if (this.#billCompositionCurrent(source)) this.errorKey = "table.reread_failed";
+        if (this.#billCompositionCurrent(source)) {
+          if (refused) refused(t("table.reread_failed"));
+          else this.errorKey = "table.reread_failed";
+        }
         return null;
       }
     }
@@ -19515,7 +19512,8 @@ export class TillApp extends LitElement {
       a.billId < b.billId ? -1 : a.billId > b.billId ? 1 : 0,
     );
     if (new Set(expectedEdits.map((edit) => edit.billId)).size !== expectedEdits.length) {
-      this.errorKey = { code: "draft.out_of_date" };
+      if (refused) refused(codeMessage("draft.out_of_date"));
+      else this.errorKey = { code: "draft.out_of_date" };
       return null;
     }
     return { source, destination, expectedEdits, target };
@@ -20422,6 +20420,7 @@ export class TillApp extends LitElement {
       open === null
         ? nothing
         : html`<till-finish-table-dialog
+              .panelInset=${this.renderRoot.querySelector("till-table-order-screen")?.orderPaneInset ?? 0}
               .dishes=${open.dishes}
               .refunds=${open.refunds}
               .freeItems=${open.freeItems}
@@ -24961,7 +24960,7 @@ export class TillApp extends LitElement {
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
         @order-pane-resized=${() => {
-          if (this.allergyDialog?.mode === "edit") this.requestUpdate();
+          if (this.finishingTable || this.allergyDialog?.mode === "edit") this.requestUpdate();
         }}
         @edit-party-allergy=${(event: Event) => {
           event.stopPropagation();
@@ -24995,7 +24994,7 @@ export class TillApp extends LitElement {
           this.changeRefusal = null;
           if (!event.detail.shown) this.errorKey = { sentDishRefused: refusal.banner };
         }}
-        @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}
+        @table-relocation-open=${(event: CustomEvent<TableRelocationOpenDetail>) => void this.#onRelocationOpen(event)}
         @move-guests=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveGuests(event))}
         @move-bill=${(event: Event) =>
           void this.#ownBillsChange((hold) => this.#onMoveBill(event, hold))}

@@ -5,7 +5,7 @@ import type { AdjustmentReason } from "../api/payments-api.js";
 import type { UnservedDish } from "../api/finish-table-types.js";
 import { es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { panelBackButton, cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./finish-table-dialog.js";
 import { dialogOpenUnder } from "./track-dialog.js";
 
@@ -47,6 +47,7 @@ function dish(lineId: string, stage: "held" | "fired" | "started" = "held"): Uns
   };
 }
 type Dialog = LitElement & {
+  panelInset: number;
   dishes: UnservedDish[];
   refunds: Record<string, string>;
   freeItems: Record<string, string[]>;
@@ -77,7 +78,9 @@ const root = (el: Dialog) => el.shadowRoot!;
 const button = (el: Dialog) =>
   root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button[data-confirm]")!;
 async function click(el: Dialog, selector: string) {
-  await userEvent.click(page.elementLocator(root(el).querySelector<HTMLElement>(selector)!));
+  await userEvent.click(
+    page.elementLocator(panelBackButton(root(el).querySelector<HTMLElement>(selector)!)),
+  );
   await el.updateComplete;
 }
 async function reason(el: Dialog, id = "house") {
@@ -107,7 +110,7 @@ function collect(el: Dialog) {
 it("lists the entire unserved set with known preparation and waits for a reason", async () => {
   const el = await mount();
   expect(el.shadowRoot?.textContent ?? "").toContain("Flan");
-  expect(root(el).querySelector("wt-dialog")!.heading).toBe("3 dishes not served");
+  expect(root(el).querySelector("wt-top-bar")!.heading).toBe("3 dishes not served");
   expect(root(el).textContent).toContain("Croquetas");
   const rows = root(el).querySelectorAll("[data-dish]");
   expect(rows).toHaveLength(2);
@@ -140,17 +143,12 @@ it("offers the counter collection under Back and the main action", async () => {
   for (const refundAtTill of [false, true]) {
     const el = await mount({ refundAtTill });
     await reason(el);
+    expect(root(el).querySelector("wt-top-bar")!.backLabel).toBe("Back");
     expect(
-      [...root(el).querySelectorAll("wt-button")].map((row) =>
-        row.hasAttribute("data-close")
-          ? "back"
-          : row.hasAttribute("data-confirm")
-            ? "main"
-            : row.hasAttribute("data-collect")
-              ? "collect"
-              : "?",
+      [...root(el).querySelectorAll("wt-foot-button-bar wt-button")].map((row) =>
+        row.hasAttribute("data-confirm") ? "main" : "collect",
       ),
-    ).toEqual(["back", "main", "collect"]);
+    ).toEqual(["main", "collect"]);
     cleanupWidgets();
   }
 });
@@ -594,8 +592,14 @@ it("offers no collection when no dish has a kitchen ticket", async () => {
   await el.updateComplete;
   expect(collectButton(el)).not.toBeNull();
 });
-it("puts the collection on its own row, under the form's message", async () => {
-  const el = await mount({ defaultReasonId: "house" });
+it("keeps Back at the top and the collection below the main action and message", async () => {
+  const el = await mount({ defaultReasonId: "house", panelInset: 100 });
+  const dialog = root(el).querySelector("wt-dialog")!;
+  await dialog.updateComplete;
+  const panel = dialog.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+  expect(panel.top).toBeCloseTo(0, 0);
+  expect(panel.left).toBeCloseTo(100, 0);
+  expect(panel.right).toBeCloseTo(innerWidth, 0);
   el.refusal = "Try again";
   await el.updateComplete;
   const actions = root(el).querySelector("wt-form-actions")!;
@@ -606,8 +610,8 @@ it("puts the collection on its own row, under the form's message", async () => {
   const back = box("[data-close]");
   const collectBox = box("[data-collect]");
   expect(collectBox.top).toBeGreaterThanOrEqual(main.bottom);
-  expect(collectBox.width).toBeGreaterThan(main.width);
-  expect(Math.round(collectBox.left)).toBe(Math.round(back.left));
+  expect(Math.round(collectBox.width)).toBe(Math.round(main.width));
+  expect(Math.round(collectBox.left)).toBe(Math.round(main.left));
   expect(Math.round(collectBox.right)).toBe(Math.round(main.right));
   const message = [...actions.shadowRoot!.querySelectorAll<HTMLElement>("*")].find(
     (node) => node.children.length === 0 && node.textContent?.trim() === "Try again",
@@ -615,7 +619,7 @@ it("puts the collection on its own row, under the form's message", async () => {
   expect(message).toBeDefined();
   const text = message.getBoundingClientRect();
   expect(text.bottom).toBeLessThanOrEqual(main.top);
-  expect(text.bottom).toBeLessThanOrEqual(back.top);
+  expect(back.bottom).toBeLessThanOrEqual(text.top);
   expect(text.top).toBeLessThan(collectBox.top);
 });
 it("shows the collection as the request in flight, not the main action", async () => {
@@ -658,7 +662,7 @@ it("shows the main action as the request in flight after a cancel", async () => 
 it("localises the unserved total and dish quantity in Spanish", async () => {
   setLocale("es-ES");
   const el = await mount({ dishes: [{ ...dish("flan"), quantity: "0.500" }] });
-  expect(root(el).querySelector("wt-dialog")!.heading).toContain("0,5");
+  expect(root(el).querySelector("wt-top-bar")!.heading).toContain("0,5");
   expect(root(el).querySelector(".name")!.textContent).toContain("0,5 × Flan");
 });
 

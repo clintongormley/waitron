@@ -1043,3 +1043,9 @@ export function rgbContrast(a: string, b: string): number {
   const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (light! + 0.05) / (dark! + 0.05);
 }
+
+export function panelBackButton(back: HTMLElement): HTMLElement {
+  return back.matches("wt-top-bar")
+    ? back.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!
+    : back;
+}

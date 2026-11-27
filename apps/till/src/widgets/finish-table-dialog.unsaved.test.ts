@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { panelBackButton, cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { UnservedDish } from "../api/finish-table-types.js";
 import type { AdjustmentReason } from "../api/payments-api.js";
@@ -76,7 +76,7 @@ async function mount() {
   return { app, form };
 }
 const close = (form: TillFinishTableDialog) =>
-  form.shadowRoot!.querySelector<HTMLElement>("[data-close]")!.click();
+  panelBackButton(form.shadowRoot!.querySelector<HTMLElement>("[data-close]")!).click();
 const unload = () => {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);

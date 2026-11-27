@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { panelBackButton, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { PartyBill, TableParty, TableState } from "../api/floor-api.js";
 import type { TabLine } from "../api/kitchen-api.js";
@@ -117,7 +117,7 @@ function unload() {
   return event.defaultPrevented;
 }
 async function click(screen: TillTableOrderScreen, selector: string) {
-  screen.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
+  panelBackButton(screen.shadowRoot!.querySelector<HTMLElement>(selector)!).click();
   await screen.updateComplete;
 }
 async function mount(verb: "split-table" | "merge" | "move-dishes" = "move-dishes") {
@@ -351,7 +351,9 @@ it("departed Move dishes controls cannot change or submit a replacement flow", a
   const oldTick = picker.shadowRoot!.querySelector<HTMLElement>('[data-pick="line-1"]')!;
   const oldTarget = screen.shadowRoot!.querySelector<HTMLElement>('[data-move-dishes-to="other"]')!;
   const oldConfirm = screen.shadowRoot!.querySelector<HTMLElement>("[data-move-dishes-confirm]")!;
-  const oldBack = screen.shadowRoot!.querySelector<HTMLElement>("[data-action-back]")!;
+  const oldBack = panelBackButton(
+    screen.shadowRoot!.querySelector<HTMLElement>("[data-action-back]")!,
+  );
   await moveToOther(screen);
   await click(screen, "[data-table-menu]");
   await click(screen, '[data-action="move-dishes"]');

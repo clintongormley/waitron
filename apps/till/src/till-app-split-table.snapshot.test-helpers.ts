@@ -1,3 +1,4 @@
+import { panelBackButton } from "./widgets/test-helpers.js";
 import { expect, vi } from "vitest";
 import type { PartyBill } from "./api/floor-api.js";
 import type { SplitSources } from "./api/drafts-api.js";
@@ -122,7 +123,7 @@ export const tickBox = (el: TillApp, billId: string) =>
   picker(el)!.shadowRoot!.querySelector<HTMLInputElement>(`[data-split-tick="${billId}"]`);
 
 export async function press(el: TillApp, selector: string): Promise<void> {
-  q(el, selector)!.click();
+  panelBackButton(q(el, selector)!).click();
   await flush(el);
 }
 

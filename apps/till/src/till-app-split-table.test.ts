@@ -10,7 +10,7 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { formatMoney } from "@waitron/shared";
 import { partyBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import type { TillApp } from "./till-app.js";
-import { cleanupWidgets } from "./widgets/test-helpers.js";
+import { panelBackButton, cleanupWidgets } from "./widgets/test-helpers.js";
 import type { TillSplitPicker } from "./widgets/split-picker.js";
 import type { TillBillRefundDialog } from "./widgets/bill-refund-dialog.js";
 import {
@@ -176,7 +176,7 @@ const q = <T extends HTMLElement = HTMLElement>(el: TillApp, selector: string) =
   tableOrder(el)!.shadowRoot!.querySelector<T>(selector);
 
 async function press(el: TillApp, selector: string): Promise<void> {
-  q(el, selector)!.click();
+  panelBackButton(q(el, selector)!).click();
   await flush(el);
 }
 
@@ -631,7 +631,8 @@ describe("till-app: the read behind Split a table's panel", () => {
 
       describe("what a read behind the panel leaves", () => {
         const lost = () => new TypeError("Failed to fetch");
-        const heading = (el: TillApp) => q(el, "[data-split-pick] h2")!.textContent ?? "";
+        const heading = (el: TillApp) =>
+          q(el, "[data-split-pick] [data-action-heading]")!.textContent ?? "";
 
         it("Split stays primary while the first bill's reads are out, and a press goes to the server", async () => {
           fakeTimers();
@@ -2429,9 +2430,8 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
           }),
         },
       );
-      expect(q(el, "[data-split-pick]")!.getBoundingClientRect().height).toBeGreaterThan(
-        innerHeight,
-      );
+      const body = q(el, "[data-split-pick]")!.shadowRoot!.querySelector('[part="body"]')!;
+      expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
       await expect
         .poll(() => shownAboveRow(el, refusal(el)!) && onScreen(splitButton(el)))
         .toBe(true);
@@ -3847,7 +3847,8 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
     describe("rows and revisions after a refusal", () => {
       const lost = () => new TypeError("Failed to fetch");
-      const heading = (el: TillApp) => q(el, "[data-split-pick] h2")!.textContent ?? "";
+      const heading = (el: TillApp) =>
+        q(el, "[data-split-pick] [data-action-heading]")!.textContent ?? "";
       const atRevision = (revision: number) => {
         const later = party({ tableIds: ["t4", "t5"], billCount: 2, revision });
         return [table("t4", "4", later), table("t5", "5", later), table7];
@@ -4988,12 +4989,11 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
       expect(tickBox(el, "b2").checked).toBe(false);
       expect(footRefusal(el)).toBe(t("table.take_over_changed"));
-      const foot = [...q(el, "[data-split-refusal]")!.parentElement!.children];
-      expect(foot.indexOf(refusal(el)!)).toBeLessThan(
-        foot.indexOf(q(el, "[data-split-take-over-refusal]")!),
-      );
-      expect(foot.indexOf(q(el, "[data-split-take-over-refusal]")!)).toBeLessThan(
-        foot.indexOf(bottom(el)),
+      const splitMessage = refusal(el)!.getBoundingClientRect();
+      const takeOverMessage = q(el, "[data-split-take-over-refusal]")!.getBoundingClientRect();
+      expect(splitMessage.bottom).toBeLessThanOrEqual(takeOverMessage.top);
+      expect(takeOverMessage.bottom).toBeLessThanOrEqual(
+        splitButton(el).getBoundingClientRect().top,
       );
       expect(splitButton(el).disabled).toBe(false);
 

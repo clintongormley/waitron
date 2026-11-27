@@ -3029,9 +3029,8 @@ after a refused split fails, no bill shows held and Split stays enabled. When th
 someone else's unsent order, the next press sends nothing and the foot says `table.split_taken` with
 the name the refusal carried, until a read shows the bill's state has moved on.
 
-A refused split comes back with the foot brought into view, the sentence and Split together on
-screen, and a refused take-over's line does the same. If the read after that refusal draws more rows above it, the
-foot follows that one answer, unless the waiter has touched the screen since. After `party.out_of_date`, if the read that
+The Split panel keeps Back at the top and its message and Split at the foot while the rows scroll.
+After `party.out_of_date`, if the read that
 brings the panel's rows fails or passes that limit, the foot says `table.split_updated_elsewhere` rather than that the table was
 reloaded; once a later read brings the rows, it goes back to the refusal's own sentence.
 

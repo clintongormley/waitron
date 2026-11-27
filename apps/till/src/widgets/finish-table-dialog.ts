@@ -1,6 +1,7 @@
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
+import { styleMap } from "lit/directives/style-map.js";
 import { addDecimal, compareDecimal, decimal, formatMoney } from "@waitron/shared";
 import {
   baseStyles,
@@ -14,6 +15,9 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-foot-button-bar.js";
+import "@waitron/ui/src/components/wt-full-screen-panel.js";
+import "@waitron/ui/src/components/wt-top-bar.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { AdjustmentReason } from "../api/payments-api.js";
 import type { FinishCancellation, UnservedDish } from "../api/finish-table-types.js";
@@ -38,6 +42,9 @@ export class TillFinishTableDialog extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-3);
+      }
+      .body {
+        padding: var(--wt-space-4);
       }
       .dish {
         border-bottom: 1px solid var(--wt-color-border);
@@ -67,14 +74,8 @@ export class TillFinishTableDialog extends LitElement {
         accent-color: var(--wt-color-primary);
         flex: none;
       }
-      .finish-footer {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        flex: 1 1 auto;
-      }
-      .finish-footer wt-button[data-collect] {
-        width: 100%;
+      .finish-footer wt-form-actions {
+        padding-inline: var(--wt-space-4);
       }
       .required,
       .error {
@@ -82,6 +83,7 @@ export class TillFinishTableDialog extends LitElement {
       }
     `,
   ];
+  @property({ attribute: false }) panelInset = 0;
   @property({ attribute: false }) dishes: UnservedDish[] = [];
   @property({ attribute: false }) refunds: Record<string, string> = {};
   /** Each free item holding a share of the price paid, by line id, with the paid dishes of its bill
@@ -108,7 +110,8 @@ export class TillFinishTableDialog extends LitElement {
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason) =>
     !this.#busy() &&
-    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+    (this.#leave === undefined ||
+      (await this.#leave.request({ scopes: [this], reason, proceed() {} })) === "proceeded");
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -353,13 +356,25 @@ export class TillFinishTableDialog extends LitElement {
     const disabled = this.#busy() || this.reasonsLoading || this.collectPending || !this.#valid();
     const collecting = this.#collecting();
     const cancelling = this.#busy() && !collecting;
-    return html`<wt-dialog
-      ${trackDialog()}
-      .open=${this.active}
-      .heading=${t("finish_table.unserved").replace("{n}", () => quantityText(count))}
-      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
-      @wt-close=${(event: Event) => this.#close(event)}
-    >
+    const title = t("finish_table.unserved").replace("{n}", () => quantityText(count));
+    const message = [
+      invalidReason || invalidNote || invalidPreparation || serverField !== null
+        ? t("form.fix_fields")
+        : "",
+      serverField === null && !this.refusalCleared ? this.refusal : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const content = html`<wt-full-screen-panel body-label=${title}>
+      <section slot="header">
+        <wt-top-bar
+          data-close
+          .heading=${title}
+          .backLabel=${t("action.back")}
+          .backDisabled=${this.#busy()}
+          @wt-back=${() => void this.renderRoot.querySelector<WtDialog>("wt-dialog")!.requestClose("navigation")}
+        ></wt-top-bar>
+      </section>
       <div
         class="body"
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector<HTMLElement>("[data-confirm]"))}
@@ -481,22 +496,8 @@ export class TillFinishTableDialog extends LitElement {
         }
       </div>
       <div slot="footer" class="finish-footer">
-        <wt-form-actions
-          .error=${[invalidReason || invalidNote || invalidPreparation || serverField !== null ? t("form.fix_fields") : "", serverField === null && !this.refusalCleared ? this.refusal : ""].filter(Boolean).join(" ")}
-        >
-          <wt-button
-            slot="cancel"
-            data-close
-            variant="secondary"
-            .disabled=${this.#busy()}
-            @click=${() => {
-              if (this.isConnected && this.active && !this.#busy())
-                void this.renderRoot
-                  .querySelector<WtDialog>("wt-dialog")!
-                  .requestClose("navigation");
-            }}
-            >${t("action.back")}</wt-button
-          >
+        <wt-form-actions .error=${message}></wt-form-actions>
+        <wt-foot-button-bar>
           <wt-button
             data-confirm
             variant=${disabled && !cancelling ? "secondary" : "danger"}
@@ -511,20 +512,35 @@ export class TillFinishTableDialog extends LitElement {
                 : t("table.cancel_line")
             }</wt-button
           >
-        </wt-form-actions>
-        ${
-          this.#collectable()
-            ? html`<wt-button
-                data-collect
-                variant="secondary"
-                .disabled=${this.#busy() || (this.confirmationLocked && !this.collectPending)}
-                .loading=${collecting}
-                @click=${() => this.#collect()}
-                >${t("finish_table.collect")}</wt-button
-              >`
-            : nothing
-        }
+          ${
+            this.#collectable()
+              ? html`<wt-button
+                  data-collect
+                  variant="secondary"
+                  .disabled=${this.#busy() || (this.confirmationLocked && !this.collectPending)}
+                  .loading=${collecting}
+                  @click=${() => this.#collect()}
+                  >${t("finish_table.collect")}</wt-button
+                >`
+              : nothing
+          }
+        </wt-foot-button-bar>
       </div>
+    </wt-full-screen-panel>`;
+    return this.#panel(title, content);
+  }
+
+  #panel(title: string, content: TemplateResult): TemplateResult {
+    return html`<wt-dialog
+      ${trackDialog()}
+      full-screen
+      .open=${this.active}
+      .ariaLabel=${title}
+      style=${styleMap({ "--wt-dialog-inset-inline-start": `${this.panelInset}px` })}
+      .beforeClose=${this.#beforeClose}
+      @wt-close=${(event: Event) => this.#close(event)}
+    >
+      ${content}
     </wt-dialog>`;
   }
 }

@@ -33,6 +33,7 @@ import {
   currentContentLanguages,
   floorChipStyles,
   formatDecimalInput,
+  formMessage,
   formMessageStyles,
   Gestures,
   inNumberOrder,
@@ -54,6 +55,7 @@ import {
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
+import { tableActionPanel, tableActionPanelStyles, tableActionStep } from "./table-action-panel.js";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
@@ -342,6 +344,7 @@ export interface TableRelocationOpenDetail {
   table: TableState | null;
   prompt: object;
   ready: () => void;
+  refused?: (message: string) => void;
 }
 
 export type SplitTableDetail = {
@@ -619,9 +622,6 @@ function stationAllowsChange(row: TabLine): boolean {
   );
 }
 
-const isAnswer = (read: SplitSources | "failed" | null): read is SplitSources =>
-  read !== null && read !== "failed";
-
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) changeAvailability?: ChangeAvailability;
@@ -681,23 +681,19 @@ export class TillTableOrderScreen extends LitElement {
     priceWasStyles,
     billControlStyles,
     tablePartyMenuStyles,
+    tableActionPanelStyles,
     billMoneyNoticeStyles,
     guestsStepperStyles,
     formMessageStyles,
     floorChipStyles,
     css`
-      .actions[data-split-pick],
       .split-lines {
         display: flex;
         flex-direction: column;
       }
-      .actions[data-split-pick] {
-        gap: var(--wt-space-4);
-      }
       .split-lines {
         gap: var(--wt-space-2);
       }
-      .split-lines h2,
       .split-summary,
       .split-note {
         margin: 0;
@@ -2582,11 +2578,10 @@ export class TillTableOrderScreen extends LitElement {
     this.#sentChangeSeed = undefined;
   }
 
-  override updated(changed: PropertyValues<this>): void {
+  override updated(): void {
     this.#placeOrderPanels();
     this.#refocusMenu();
     this.#placeStepFocus();
-    if (changed.has("splitRead")) this.#returnToSplitFoot();
     this.#watchAutomaticRouting();
     this.#sizeDraftBar();
     this.#sizeOrderDock();
@@ -2635,6 +2630,15 @@ export class TillTableOrderScreen extends LitElement {
     this.#drawnStep = this.actionStep;
   }
 
+  get #tableActionCanOpen(): boolean {
+    // A new panel waits behind an editor. An already open panel keeps its draft underneath it.
+    const editing = this.naming !== null || this.billNaming !== null || this.counting !== null;
+    return (
+      !editing ||
+      this.renderRoot.querySelector<WtDialog>("[data-table-action-dialog]")?.open === true
+    );
+  }
+
   #placeStepFocus(): void {
     const focus = this.#stepFocus;
     this.#stepFocus = undefined;
@@ -2645,47 +2649,22 @@ export class TillTableOrderScreen extends LitElement {
     if (focus !== "step") return;
     const panel = this.renderRoot.querySelector<HTMLElement>("[data-action-panel]");
     if (panel === null) return;
-    panel.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
-    // A refusal is said at the foot, beside Split, which a tall panel's top leaves below the window.
-    const foot = this.#splitFootDue ? panel.querySelector("wt-form-actions") : null;
-    this.#splitFootDue = false;
-    if (foot !== null) this.#awaitSplitFootRows();
-    void this.#scrollIntoViewOnceDrawn(panel).then(() =>
-      foot?.scrollIntoView({ block: "nearest" }),
-    );
-  }
-
-  /** The read after a refusal can draw rows above a foot just brought into view. It follows that
-   * one answer, unless the waiter has touched the screen since. */
-  #awaitSplitFootRows(): void {
-    this.#splitFootRows?.abort();
-    const touched = new AbortController();
-    for (const type of ["pointerdown", "wheel", "touchstart", "keydown"])
-      this.addEventListener(type, () => touched.abort(), {
-        capture: true,
-        passive: true,
-        signal: touched.signal,
+    if (panel.hasAttribute("data-table-action-dialog")) {
+      if (!this.#tableActionCanOpen) {
+        this.#stepFocus = "step";
+        return;
+      }
+      const dialog = panel as WtDialog;
+      void dialog.updateComplete.then(() => {
+        if (dialog.open && dialog.isConnected)
+          dialog
+            .querySelector<HTMLElement>("[data-action-heading]")
+            ?.focus({ preventScroll: true });
       });
-    this.#splitFootRows = touched;
-  }
-
-  #returnToSplitFoot(): void {
-    const awaiting = this.#splitFootRows;
-    if (awaiting === undefined || awaiting.signal.aborted || !isAnswer(this.splitRead)) return;
-    awaiting.abort();
-    const panel = this.renderRoot.querySelector<HTMLElement>("[data-action-panel]");
-    const foot = panel?.querySelector("wt-form-actions");
-    if (panel == null || foot == null) return;
-    const picker = panel.querySelector("till-split-picker");
-    void (async () => {
-      await picker?.updateComplete;
-      await Promise.all(
-        [...(picker?.shadowRoot?.querySelectorAll("till-portion-picker") ?? [])].map(
-          (rows) => rows.updateComplete,
-        ),
-      );
-      if (foot.isConnected) foot.scrollIntoView({ block: "nearest" });
-    })();
+      return;
+    }
+    panel.querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
+    void this.#scrollIntoViewOnceDrawn(panel);
   }
 
   /** The step's buttons draw after the screen does, and only then does the panel have its height. */
@@ -2709,8 +2688,6 @@ export class TillTableOrderScreen extends LitElement {
 
   #drawnStep: ActionStep = "closed";
   #stepFocus?: "step" | "menu";
-  #splitFootDue = false;
-  #splitFootRows?: AbortController;
 
   /** Copies the draft bar's height to `--draft-bar-size` on `.round-bar`, the bar's parent, from
    * which the basket's lines inherit it. Measured at once when the bar is drawn or shown, because
@@ -6009,6 +5986,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #closeActions(): void {
     this.#relocationPrompt = null;
+    this.relocationRefusal = "";
     this.#retireActions();
     this.actionStep = "closed";
     this.actionVerb = null;
@@ -6024,6 +6002,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #chooseVerb(verb: ActionVerb): void {
     this.#relocationPrompt = null;
+    this.relocationRefusal = "";
     this.actionVerb = verb;
     if (verb === "move-dishes") {
       this.moveDishesPicks = new Set();
@@ -6056,14 +6035,23 @@ export class TillTableOrderScreen extends LitElement {
     proceed: (prompt: object) => void,
   ): void {
     const prompt = {};
+    const step = this.actionStep;
+    const action = this.actionVerb;
     this.#relocationPrompt = prompt;
+    this.relocationRefusal = "";
+    const current = () =>
+      this.isConnected &&
+      this.#relocationPrompt === prompt &&
+      this.actionStep === step &&
+      this.actionVerb === action;
     const ready = () => {
-      if (!this.isConnected || this.#relocationPrompt !== prompt || this.actionVerb !== verb)
-        return;
-      proceed(prompt);
+      if (current()) proceed(prompt);
+    };
+    const refused = (message: string) => {
+      if (current()) this.relocationRefusal = message;
     };
     const opening = new CustomEvent<TableRelocationOpenDetail>("table-relocation-open", {
-      detail: { verb, table, prompt, ready },
+      detail: { verb, table, prompt, ready, ...(verb === "move-bill" ? {} : { refused }) },
       bubbles: true,
       composed: true,
       cancelable: true,
@@ -6213,11 +6201,11 @@ export class TillTableOrderScreen extends LitElement {
             },
           ];
     });
-    return html`<section class="actions" data-split-table>
-      <h2 tabindex="-1">
-        ${t("table.split_table_heading").replace("{party}", () => this.#partyScope(party))}
-      </h2>
-      <div class="action-options">
+    const heading = fill(t("table.split_table_heading"), { party: this.#partyScope(party) });
+    return tableActionStep(
+      "split-table",
+      heading,
+      html`<div class="action-options">
         ${targets.map(
           (target) =>
             html`<wt-button
@@ -6231,9 +6219,9 @@ export class TillTableOrderScreen extends LitElement {
               ${target.name}
             </wt-button>`,
         )}
-      </div>
-      ${this.#backButton()}
-    </section>`;
+      </div>`,
+      this.busy,
+    );
   }
 
   #openSplitPick(tableId: string): void {
@@ -6255,7 +6243,6 @@ export class TillTableOrderScreen extends LitElement {
     this.splitTakeOverMessage = null;
     this.splitAsking = false;
     this.#splitPrompt = undefined;
-    this.#splitFootRows?.abort();
     this.#splitAnswered = undefined;
     this.#splitRows = undefined;
     this.#splitDrawn = undefined;
@@ -6336,7 +6323,6 @@ export class TillTableOrderScreen extends LitElement {
     };
     this.#splitObserved = null;
     this.#stepFocus = "step";
-    this.#splitFootDue = true;
   }
 
   /** A panel with no rows drawn yet may be holding a refused selection, so it is compared with the
@@ -6446,6 +6432,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #leaveSplitQuestion(): void {
     this.splitAsking = false;
+    this.relocationRefusal = "";
     this.#relocationPrompt = null;
     this.actionVerb = null;
   }
@@ -6614,19 +6601,17 @@ export class TillTableOrderScreen extends LitElement {
       parseGuestCount(this.splitStaying) === undefined ||
       parseGuestCount(this.splitLeaving) === undefined;
     const readFailed = sources === undefined && this.splitRead === "failed";
-    return html`<section class="actions" data-split-pick>
-      <div class="split-lines">
-        <h2 tabindex="-1">
-          ${fill(t("table.split_pick_heading"), { table: leaving, party: this.#partyScope(party) })}
-        </h2>
-        ${
-          sources?.length === 0 || readFailed
-            ? nothing
-            : html`<p class="split-note" data-split-hint>
-                ${fill(t("table.split_pick_hint"), { table: leaving, kept })}
-              </p>`
-        }
-      </div>
+    const heading = fill(t("table.split_pick_heading"), {
+      table: leaving,
+      party: this.#partyScope(party),
+    });
+    const body = html` ${
+        sources?.length === 0 || readFailed
+          ? nothing
+          : html`<p class="split-note" data-split-hint>
+              ${fill(t("table.split_pick_hint"), { table: leaving, kept })}
+            </p>`
+      }
       ${
         sources === undefined
           ? nothing
@@ -6645,7 +6630,9 @@ export class TillTableOrderScreen extends LitElement {
                 }}
                 @split-bills-gone=${(event: Event) => {
                   event.stopPropagation();
-                  this.renderRoot.querySelector<HTMLElement>("[data-split-pick] h2")?.focus();
+                  this.renderRoot
+                    .querySelector<HTMLElement>("[data-split-pick] [data-action-heading]")
+                    ?.focus();
                 }}
                 @split-take-over=${(event: CustomEvent<SplitTakeOverDetail>) => {
                   event.stopPropagation();
@@ -6675,7 +6662,8 @@ export class TillTableOrderScreen extends LitElement {
         this.splitAsking && sources !== undefined
           ? this.#splitQuestion(sources, leaving, kept)
           : nothing
-      }
+      }`;
+    const messages = html`<div class="table-action-message">
       ${
         message === null
           ? nothing
@@ -6696,6 +6684,9 @@ export class TillTableOrderScreen extends LitElement {
               ${this.splitTakeOverMessage}
             </p>`
       }
+      ${formMessage(this.relocationRefusal)}
+    </div>`;
+    const actions = html`<wt-foot-button-bar>
       <wt-form-actions
         .error=${
           readFailed
@@ -6705,7 +6696,6 @@ export class TillTableOrderScreen extends LitElement {
               : ""
         }
       >
-        ${this.#backButton("cancel")}
         ${
           this.splitAsking
             ? html`<wt-button
@@ -6734,7 +6724,8 @@ export class TillTableOrderScreen extends LitElement {
               </wt-button>`
         }
       </wt-form-actions>
-    </section>`;
+    </wt-foot-button-bar>`;
+    return tableActionStep("split-pick", heading, body, this.busy, html`${messages}${actions}`);
   }
 
   #splitQuestion(sources: readonly SplitSource[], leaving: string, kept: string): TemplateResult {
@@ -6771,7 +6762,6 @@ export class TillTableOrderScreen extends LitElement {
     if (!this.#actionControlCurrent(event)) return;
     const table = this.tables.find((row) => row.id === this.splitTableId);
     if (table === undefined) return;
-    this.actionVerb = "move";
     this.#prepareRelocation("move", table, (prompt) => {
       this.#retireActions();
       this.#sendTableAction("move", table, prompt);
@@ -6881,9 +6871,60 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** The step a ⋮ item opened, beside the order, while one is open. */
+  @state() private relocationRefusal = "";
+
+  readonly #beforeTableActionClose = async (reason: LeaveReason): Promise<boolean> => {
+    if (this.busy) return false;
+    if (this.splitAsking) {
+      this.#leaveSplitQuestion();
+      void this.#focusOnceDrawn("[data-split-confirm]");
+      return false;
+    }
+    const opening = this.#actionOpening;
+    const step = this.actionStep;
+    if (this.#actionScope) {
+      const result = await this.#actionLeave!.request({
+        scopes: [this.#actionId],
+        reason,
+        proceed() {},
+      });
+      if (result !== "proceeded") return false;
+    }
+    if (
+      !this.isConnected ||
+      this.busy ||
+      opening !== this.#actionOpening ||
+      step !== this.actionStep
+    )
+      return false;
+    this.#relocationPrompt = null;
+    this.relocationRefusal = "";
+    if (step !== "split-table-pick") return true;
+    this.#actionBackNow();
+    this.#actionScope?.changed();
+    this.#watchActions();
+    return false;
+  };
+
   #actionPanel(): TemplateResult | typeof nothing {
     if (this.actionStep === "closed") return nothing;
+    if (
+      this.actionStep === "split-table" ||
+      this.actionStep === "split-table-pick" ||
+      (this.actionStep === "pick" && (this.actionVerb === "move" || this.actionVerb === "join"))
+    ) {
+      return tableActionPanel(
+        this.#tableActionCanOpen,
+        this.#beforeTableActionClose,
+        (event) => {
+          if (event.target !== event.currentTarget) return;
+          event.stopPropagation();
+          this.#closeActions();
+          this.#stepFocus = "menu";
+        },
+        this.#actionSection(),
+      );
+    }
     return html`<aside
       class="action-panel"
       data-action-panel
@@ -7012,8 +7053,10 @@ export class TillTableOrderScreen extends LitElement {
     const panels = this.renderRoot.querySelectorAll<HTMLElement & { panelInset: number }>(
       "[data-order-panel]",
     );
-    if (menu === null && panels.length === 0) return;
+    const actions = this.renderRoot.querySelector<WtDialog>("[data-table-action-dialog]");
+    if (menu === null && panels.length === 0 && actions === null) return;
     const inset = this.orderPaneInset;
+    actions?.style.setProperty("--wt-dialog-inset-inline-start", `${inset}px`);
     menu?.style.setProperty("--wt-party-menu-left", `${inset}px`);
     for (const panel of panels) panel.panelInset = inset;
   }
@@ -7169,30 +7212,41 @@ export class TillTableOrderScreen extends LitElement {
     const toCounter =
       this.actionVerb === "move-bill" && this.#mayEnterZone(this.counterZoneId || null);
     const targets = this.#tableTargets();
+    const heading = this.#tablePickerHeading();
+    const body = html`${
+      targets.length === 0 && !toCounter
+        ? html`<p class="empty">${t("table.no_other_tables")}</p>`
+        : html`<div class="action-options">
+            ${
+              toCounter
+                ? html`<wt-button
+                    class="target"
+                    data-target="counter"
+                    variant="secondary"
+                    @click=${() => this.#moveBillToCounter()}
+                  >
+                    <span class="target-label">${t("table.to_counter")}</span>
+                  </wt-button>`
+                : nothing
+            }
+            ${targets.map((table) =>
+              tableTarget(table, this.party?.id, (picked) => this.#pickTable(picked)),
+            )}
+          </div>`
+    }`;
+    if (this.actionVerb !== "move-bill")
+      return tableActionStep(
+        "target",
+        heading,
+        body,
+        this.busy,
+        this.relocationRefusal === ""
+          ? nothing
+          : html`<div class="table-action-message">${formMessage(this.relocationRefusal)}</div>`,
+      );
     return html`<section class="actions" data-target-picker>
-      <h2 tabindex="-1">${this.#tablePickerHeading()}</h2>
-      ${
-        targets.length === 0 && !toCounter
-          ? html`<p class="empty">${t("table.no_other_tables")}</p>`
-          : html`<div class="action-options">
-              ${
-                toCounter
-                  ? html`<wt-button
-                      class="target"
-                      data-target="counter"
-                      variant="secondary"
-                      @click=${() => this.#moveBillToCounter()}
-                    >
-                      <span class="target-label">${t("table.to_counter")}</span>
-                    </wt-button>`
-                  : nothing
-              }
-              ${targets.map((table) =>
-                tableTarget(table, this.party?.id, (picked) => this.#pickTable(picked)),
-              )}
-            </div>`
-      }
-      ${this.#backButton()}
+      <h2 tabindex="-1">${heading}</h2>
+      ${body} ${this.#backButton()}
     </section>`;
   }
 

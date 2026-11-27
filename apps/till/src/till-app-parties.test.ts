@@ -11482,6 +11482,27 @@ describe("till-app: table relocation editing observations", () => {
     },
   );
 
+  it("keeps a failed Join destination read beside the choices", async () => {
+    const read = observations();
+    const { el } = await mountApp({
+      listDrafts: async (partyId: string) => {
+        if (partyId === "v7") throw new Error("Destination unavailable");
+        return read(partyId);
+      },
+    });
+    const order = await openPartyTable(el);
+    const root = order.shadowRoot!;
+    await openPartyMenu(order);
+    await userEvent.click(root.querySelector<HTMLElement>('[data-action="join"]')!);
+    await userEvent.click(root.querySelector<HTMLElement>('[data-target="t7"]')!);
+
+    await expect
+      .poll(() => root.querySelector("[data-action-panel] [role=alert]")?.textContent?.trim())
+      .toBe(t("table.reread_failed"));
+    expect(banner(el)).toBeNull();
+    expect(api.joinTables).not.toHaveBeenCalled();
+  });
+
   const destinationConflict = {
     billId: "wo-7",
     editorId: "luis",

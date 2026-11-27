@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { panelBackButton, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { TillPartyNameDialog } from "../widgets/party-name-dialog.js";
 import type { TillSplitPicker } from "../widgets/split-picker.js";
@@ -164,7 +164,7 @@ async function settled(screen: TillTableOrderScreen): Promise<void> {
     await each.updateComplete;
 }
 async function click(screen: TillTableOrderScreen, selector: string): Promise<void> {
-  q(screen, selector)!.click();
+  panelBackButton(q(screen, selector)!).click();
   await settled(screen);
 }
 async function tick(screen: TillTableOrderScreen, billId: string): Promise<void> {
@@ -184,14 +184,7 @@ async function typeCount(screen: TillTableOrderScreen, side: Side, value: string
 const pressSplit = (screen: TillTableOrderScreen) => click(screen, "[data-split-confirm]");
 const pressBack = (screen: TillTableOrderScreen) => click(screen, "[data-action-back]");
 async function pressEscape(screen: TillTableOrderScreen): Promise<void> {
-  q(screen, "[data-action-panel]")!.dispatchEvent(
-    new KeyboardEvent("keydown", {
-      key: "Escape",
-      bubbles: true,
-      composed: true,
-      cancelable: true,
-    }),
-  );
+  await userEvent.keyboard("{Escape}");
   await settled(screen);
 }
 
@@ -615,7 +608,7 @@ describe("Split a table's panel out of the page", () => {
     await tick(screen, "other");
     await typeCount(screen, "leaving", "2");
     const oldSplit = q(screen, "[data-split-confirm]")!;
-    const oldBack = q(screen, "[data-action-back]")!;
+    const oldBack = panelBackButton(q(screen, "[data-action-back]")!);
     const oldTick = tickBox(screen, "main");
     const oldInput = nativeCount(screen, "leaving");
     const oldStep = stepper(screen, "staying").shadowRoot!.querySelector<HTMLElement>(
@@ -644,7 +637,7 @@ describe("Split a table's panel out of the page", () => {
   it("a panel's old controls cannot change the panel opened after it", async () => {
     const { app, screen } = await mount();
     const oldSplit = q(screen, "[data-split-confirm]")!;
-    const oldBack = q(screen, "[data-action-back]")!;
+    const oldBack = panelBackButton(q(screen, "[data-action-back]")!);
     const oldTick = tickBox(screen, "main");
     const oldInput = nativeCount(screen, "leaving");
     await pressBack(screen);
@@ -995,7 +988,7 @@ describe("Split a table's panel and a late refusal", () => {
     return { ...opened, told };
   }
   const heading = (screen: TillTableOrderScreen) =>
-    q(screen, "[data-split-pick] h2")!.textContent!.trim();
+    q(screen, "[data-split-pick] [data-action-heading]")!.textContent!.trim();
   async function refuse(screen: TillTableOrderScreen) {
     screen.splitRefusal = refusal;
     await settled(screen);
@@ -1066,6 +1059,26 @@ describe("Split a table's panel and a late refusal", () => {
     expect(unload()).toBe(false);
   });
 
+  it.each([
+    ["guestsRefusal", "party-guests"],
+    ["nameRefusal", "party-name"],
+    ["billNameRefusal", "bill-name"],
+  ])("keeps the Split draft after a late %s", async (field, widget) => {
+    const { screen } = await mount();
+    await tick(screen, "other");
+    const panel = q<HTMLElementTagNameMap["wt-dialog"]>(screen, "wt-dialog[data-action-panel]")!;
+    Object.assign(screen, {
+      [field]: { value: "3", name: "Ana", billId: "main", message: "Refused" },
+    });
+    await settled(screen);
+    const editor = q<LitElement>(screen, `till-${widget}-dialog`)!;
+    await editor.updateComplete;
+    expect(editor.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+    expect(panel.open).toBe(true);
+    expect(whole(screen)).toEqual(["other"]);
+    expect(unload()).toBe(true);
+  });
+
   it("a typed name survives a reopen behind its window, which keeps focus and its keys", async () => {
     const { el: app } = await mountWidget<SplitTableLeaveApp>("split-table-leave-test-app", {});
     const screen = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
@@ -1116,7 +1129,9 @@ describe("Split a table's panel and a late refusal", () => {
     await new Promise((resolve) => requestAnimationFrame(resolve));
 
     expect(q(screen, "[data-split-confirm]")!.hasAttribute("disabled")).toBe(true);
-    expect(screen.shadowRoot!.activeElement).toBe(q(screen, "[data-split-pick] h2"));
+    expect(screen.shadowRoot!.activeElement).toBe(
+      q(screen, "[data-split-pick] [data-action-heading]"),
+    );
   });
 
   it("a panel holding work out of the page stays, and the app is told once it is put back", async () => {

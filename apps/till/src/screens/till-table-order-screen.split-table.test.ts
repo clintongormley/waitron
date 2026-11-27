@@ -3,13 +3,14 @@ import { page, userEvent } from "vitest/browser";
 import { html } from "lit";
 import type { PartyAllergyRead } from "@waitron/module";
 import { decimal, formatMoney } from "@waitron/shared";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { panelBackButton, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import type { TillSplitPicker } from "../widgets/split-picker.js";
 import "./till-table-order-screen.js";
 import type {
   SplitRefusal,
   SplitTableDetail,
+  TableRelocationOpenDetail,
   TillTableOrderScreen,
 } from "./till-table-order-screen.js";
 import type { TableParty, TableState } from "../api/floor-api.js";
@@ -155,7 +156,8 @@ const q = <T extends HTMLElement = HTMLElement>(el: TillTableOrderScreen, select
   el.shadowRoot!.querySelector<T>(selector);
 
 async function click(el: TillTableOrderScreen, selector: string): Promise<void> {
-  q(el, selector)!.click();
+  const control = q(el, selector)!;
+  panelBackButton(control).click();
   await el.updateComplete;
 }
 
@@ -252,10 +254,9 @@ describe("Split a table's panel at phone width", () => {
       bottom(el).updateComplete,
     ]);
     expect(window.innerWidth).toBe(390);
-    // Scrolled to the end, so the held row rests where the panel lays it out.
-    scrollTo(0, document.documentElement.scrollHeight);
-
     const section = q(el, "[data-split-pick]")!;
+    const body = section.shadowRoot!.querySelector<HTMLElement>('[part="body"]')!;
+    body.scrollTop = body.scrollHeight;
     const token = (name: string) => parseFloat(getComputedStyle(section).getPropertyValue(name));
     const box = (part: Element) => part.getBoundingClientRect();
     const hint = q(el, "[data-split-hint]")!;
@@ -290,6 +291,33 @@ describe("Split a table's panel at phone width", () => {
 });
 
 describe("Split a table's panel", () => {
+  it("opens above a long order and keeps the Split action visible when resized to a phone", async () => {
+    const viewport = [innerWidth, innerHeight] as const;
+    await page.viewport(1280, 800);
+    try {
+      const lines = Array.from({ length: 24 }, (_, n) => dish(`dish-${n}`, n + 1, "2.00"));
+      const el = await mountScreen({ lines, splitRead: read({ b1: lines }, { b1: "48.00" }) });
+      await toPanel(el);
+      const panel = q(el, "[data-action-panel]")!;
+      const box = () =>
+        panel.shadowRoot?.querySelector("dialog")?.getBoundingClientRect() ??
+        panel.getBoundingClientRect();
+      expect(box().top).toBeCloseTo(0, 0);
+      expect(box().left).toBeGreaterThan(0);
+      expect(box().right).toBeCloseTo(1280, 0);
+      expect(split(el).getBoundingClientRect().bottom).toBeLessThanOrEqual(800);
+      await pickDish(el, "b1", "dish-0");
+
+      await page.viewport(390, 844);
+      await expect.poll(() => box().left).toBeCloseTo(0, 0);
+      expect(box().right).toBeCloseTo(390, 0);
+      expect(split(el).getBoundingClientRect().bottom).toBeLessThanOrEqual(844);
+      expect(textOf(el, "[data-split-takes]")).toContain("€2.00");
+    } finally {
+      await page.viewport(...viewport);
+    }
+  });
+
   it("tapping a table opens the pick step and tells the app, with a prompt", async () => {
     const el = await mountScreen();
     const opened = heard<{ tableId: string; prompt: object }>(el, "split-table-open");
@@ -318,7 +346,7 @@ describe("Split a table's panel", () => {
       await userEvent.click(q(el, '[data-target="t8"]')!);
       await settled(el);
 
-      const h2 = q(el, "[data-split-pick] h2")!;
+      const h2 = q(el, "[data-split-pick] [data-action-heading]")!;
       expect(h2.textContent!.trim()).toBe(heading);
       expect(el.shadowRoot!.activeElement).toBe(h2);
       expect(split(el).textContent!.trim()).toBe(action);
@@ -331,7 +359,7 @@ describe("Split a table's panel", () => {
     });
     await toPanel(el);
 
-    expect(q(el, "[data-split-pick] h2")!.textContent!.trim()).toBe(
+    expect(q(el, "[data-split-pick] [data-action-heading]")!.textContent!.trim()).toBe(
       "Window leaves García (T7, Window)",
     );
     expect(stepper(el, "leaving").label).toBe("Guests at Window");
@@ -354,7 +382,7 @@ describe("Split a table's panel", () => {
     await click(el, "[data-move-split]");
     await click(el, '[data-action="split-table"]');
 
-    expect(q(el, "[data-split-table] h2")!.textContent!.trim()).toBe(
+    expect(q(el, "[data-split-table] [data-action-heading]")!.textContent!.trim()).toBe(
       "Split a table off García (T7, T8):",
     );
     expect(q(el, '[data-target="t7"]')!.textContent!.trim()).toBe("T7");
@@ -369,7 +397,7 @@ describe("Split a table's panel", () => {
     await click(el, '[data-action="split-table"]');
 
     expect(q(el, '[data-target="t8"]')!.textContent!.trim()).toBe("Window");
-    expect(q(el, "[data-split-table] h2")!.textContent!.trim()).toBe(
+    expect(q(el, "[data-split-table] [data-action-heading]")!.textContent!.trim()).toBe(
       "Split a table off García (T7, Window):",
     );
   });
@@ -848,7 +876,7 @@ describe("Split a table's panel", () => {
     [
       "Escape",
       async (el: TillTableOrderScreen) => {
-        q(el, "[data-split-pick] h2")!.focus();
+        q(el, "[data-split-pick] [data-action-heading]")!.focus();
         await userEvent.keyboard("{Escape}");
         await el.updateComplete;
       },
@@ -1166,22 +1194,22 @@ describe("Split a table's panel", () => {
         const el = await mountScreen();
         await toPanel(el);
         await focusThenBusy(el, "input");
-        const back = q(el, "[data-action-back]")!;
-        back.focus();
+        const heading = q(el, "[data-action-heading]")!;
+        heading.focus();
 
         el.busy = false;
         await el.updateComplete;
         await stepper(el, "leaving").updateComplete;
         await new Promise((resolve) => requestAnimationFrame(resolve));
 
-        expect(focused(el)).toBe(back);
+        expect(focused(el)).toBe(heading);
       });
 
       it("a busy till with focus off the counts moves nothing when it is free", async () => {
         const el = await mountScreen();
         await toPanel(el);
-        const back = q(el, "[data-action-back]")!;
-        back.focus();
+        const heading = q(el, "[data-action-heading]")!;
+        heading.focus();
 
         el.busy = true;
         await el.updateComplete;
@@ -1189,7 +1217,7 @@ describe("Split a table's panel", () => {
         await el.updateComplete;
         await stepper(el, "leaving").updateComplete;
 
-        expect(focused(el)).toBe(back);
+        expect(focused(el)).toBe(heading);
       });
     });
 
@@ -1741,7 +1769,7 @@ describe("A803 split: reopening with a refusal", () => {
   it("reopen: the panel takes focus when a refusal brings it back", async () => {
     const { el, prompt } = await sentOnce();
     await refuse(el, reopenedAt({ prompt }));
-    expect(focused(el)?.matches("[data-split-pick] h2")).toBe(true);
+    expect(focused(el)?.matches("[data-split-pick] [data-action-heading]")).toBe(true);
   });
 
   it("reopen: focus goes to the table name after Split", async () => {
@@ -1759,12 +1787,12 @@ describe("A803 split: reopening with a refusal", () => {
     const { el, prompt } = await sentOnce();
     await refuse(el, reopenedAt({ prompt }));
 
-    await userEvent.click(q(el, "[data-action-back]")!);
+    await userEvent.click(panelBackButton(q(el, "[data-action-back]")!));
     await settled(el);
     expect(q(el, "[data-split-table]")).not.toBeNull();
-    expect(focused(el)?.matches("[data-split-table] h2")).toBe(true);
+    expect(focused(el)?.matches("[data-split-table] [data-action-heading]")).toBe(true);
 
-    await userEvent.click(q(el, "[data-action-back]")!);
+    await userEvent.click(panelBackButton(q(el, "[data-action-back]")!));
     await settled(el);
 
     expect(inPanel(el)).toBe(false);
@@ -2059,11 +2087,11 @@ describe("A803 split: Everything ticked", () => {
   });
 
   it.each([
-    ["Back", (el: TillTableOrderScreen) => q(el, "[data-action-back]")!.click()],
+    ["Back", (el: TillTableOrderScreen) => panelBackButton(q(el, "[data-action-back]")!).click()],
     [
       "Escape",
       (el: TillTableOrderScreen) =>
-        q(el, "[data-action-panel]")!.dispatchEvent(
+        q(el, "[data-action-heading]")!.dispatchEvent(
           new KeyboardEvent("keydown", {
             key: "Escape",
             bubbles: true,
@@ -2077,9 +2105,23 @@ describe("A803 split: Everything ticked", () => {
     split(el).click();
     await settled(el);
 
+    el.addEventListener(
+      "table-relocation-open",
+      (event) => {
+        event.preventDefault();
+        (event as CustomEvent<TableRelocationOpenDetail>).detail.refused!(
+          "Cannot read destination",
+        );
+      },
+      { once: true },
+    );
+    q(el, "[data-split-move-guests]")!.click();
+    await settled(el);
+    expect(q(el, "[data-split-pick]")!.textContent).toContain("Cannot read destination");
     press(el);
     await settled(el);
 
+    expect(q(el, "[data-split-pick]")!.textContent).not.toContain("Cannot read destination");
     expect(q(el, "[data-split-question]")).toBeNull();
     expect(q(el, "[data-split-pick]")).not.toBeNull();
     expect(split(el)).not.toBeNull();
@@ -2645,7 +2687,7 @@ describe("A803 split: a read and a selected bill", () => {
     it("a read and a selected bill: focus anywhere else stays where it is", async () => {
       const { el } = await selected();
       const back = q(el, "[data-action-back]")!;
-      back.focus();
+      panelBackButton(back).focus();
 
       el.partyDrafts = [draft("b1", "ana", "Ana")];
       await settled(el);
@@ -3150,6 +3192,6 @@ describe("Split a table's panel when a read leaves no bill", () => {
     tick.focus();
     el.splitRead = read({}, {});
     await settled(el);
-    await expect.poll(() => el.shadowRoot!.activeElement?.localName).toBe("h2");
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(q(el, "[data-action-heading]"));
   });
 });
