@@ -93,3 +93,12 @@ describe.each(["light", "dark"] as const)("AEAT certificate card accessibility (
     await expectNoA11yViolations(host);
   });
 });
+
+test("keeps a gap between the header's two buttons", async () => {
+  const el = await card("light", view({}));
+  const [action, diagnose] = [
+    "wt-button[data-test=certificate-action]",
+    "wt-button[data-test=certificate-diagnose]",
+  ].map((selector) => el.shadowRoot!.querySelector(selector)!.getBoundingClientRect());
+  expect(diagnose!.left - action!.right).toBeGreaterThanOrEqual(4);
+});
