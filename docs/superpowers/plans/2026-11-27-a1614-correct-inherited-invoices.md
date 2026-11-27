@@ -1,6 +1,7 @@
 # A1614 — correct an invoice a previous main box issued
 
-Status: PLAN FOR APPROVAL (lane B, 2026-11-27). Fiscal: the owner lands it. Read against main 4d89be4919.
+Status: PLAN FOR APPROVAL (lane B, 2026-11-27). Fiscal: the owner lands it. Read against main 4d89be4919;
+read once by a fresh reader (no Critical; two Important and four Minor findings, all taken in below).
 
 ## What staff can do when it lands
 
@@ -46,21 +47,32 @@ we will file it, so we can issue a correction regardless".
    unusable stay refused.
 2. **D1 — wait while another chain's original is unanswered.** If the original's newest version is
    on a chain other than the issuing box's current one (`currentSif`) and is still `pendiente` or
-   `enviando`, admission answers a new waiting reason, `filing_pending`. On the box's own chain a
+   `enviando`, admission answers a new waiting reason, `filing_pending`. The issuing box's open
+   installation is read inside the admission query and only for a waiting original, so no answer
+   about an accepted or refused invoice can change, and the read cannot throw (`currentSif` would
+   throw `sif.not_registered`, `registro-sif.ts:33-34`). On the box's own chain a
    waiting original stays admitted as today (the queue sends the original first: it keeps order
    within a chain, `drain.ts:650,664-672`). This is the rule Cancel and credit already uses for
    another chain, an earlier installation on this box included (`fiscal.original_unanswered`,
    `backend.ts:510-519`, plan `2026-11-25-cancel-unserved.md` §2): nothing orders a corrective on
    one chain behind its original on another, and a waiting original can still end refused or held.
-   The wait normally lasts minutes, because this box files the inherited record itself.
+   The wait normally lasts minutes, because this box files the inherited record itself, and a
+   record left "being sent" goes back to waiting whatever its box (`drain.ts:543-551`). What AEAT
+   does with a corrective that reaches it before its original I have not found out.
 3. **The server waits on `filing_pending`.** `refusesForGood` treats it like `filing_refused` (a
    wait, not a plain refund). Remove `wrong_node` from `NEVER_FILEABLE` and the `otherBox` branch in
-   `correction-history.ts`.
+   `correction-history.ts`. The automatic finish (`invoice-correction-alerts.ts:185-226`) raises no
+   `invoice_correction.filing_refused` error alert for `filing_pending`: it files nothing and
+   leaves the correction to the sweep that retries open corrections (`:109-121`), which files it
+   once the original is answered.
 4. **Till words.** Remove the three `wrong_node` sentences (`apps/till/src/i18n/codes.ts:1130,1507,1532`)
-   and add `filing_pending` beside `filing_refused` in the same three maps, English and Spanish:
-   "This invoice is still being sent to the tax agency, so it cannot be corrected yet. Press Check
-   again in a few minutes." (receipt and full-invoice variants in the money-back maps). No guide text
-   names the old refusal (searched `apps/server/src/guide/`).
+   and add `filing_pending` beside `filing_refused` in the four places that word it, English and
+   Spanish: the Correct invoice map (`:1130`'s), the two Money back under way maps (`:1507`, `:1532`,
+   receipt and full invoice), and Give money back's own sentence (`giveBackReasonMessage`,
+   `:1469-1492`), which, like its `filing_refused` one, also says that money for cancelled dishes and
+   overpayment can still go back now. Gist: "This receipt is still being sent to the tax agency, so
+   it cannot be corrected yet. Press Check again in a few minutes." No guide text names the old
+   refusal (searched `apps/server/src/guide/`).
 5. **Comments and docs.** `packages/core/src/record-correction.ts:53-61` says to confirm with the
    asesor "before a real cross-node caller is wired": replace that clause with a one-line pointer to
    the owner's decision of 26 Nov (A1614) and asesor question R4
@@ -79,7 +91,8 @@ we will file it, so we can issue a correction regardless".
 - Server: Give money back on an inherited accepted ticket files a corrective on this box's chain
   naming the original's number (replaces the plain-refund cases in `give-back.test.ts:640-643`,
   `:961-967`, `:1139`); an inherited full invoice likewise (`full-invoice-correctives.test.ts:265-271`);
-  `filing_pending` waits, then files once the original is accepted; Close after a takeover
+  `filing_pending` waits, then files once the original is accepted; the automatic finish on a
+  `filing_pending` correction raises no alert, and the sweep files it after acceptance; Close after a takeover
   (`invoice-corrections.test.ts:1577-1610`) now files instead of keeping refunds.
 - Also changing as pins of `wrong_node`: `correction-history.test.ts:582-596,689-700`,
   `invoice-corrections.test.ts:1022-1028`, `advance-corrections.test.ts:857-883`,
@@ -97,15 +110,20 @@ we will file it, so we can issue a correction regardless".
   admitted as `queued`. Recommended, because it is the same risk and the same one-line test.
 - **D3:** no check that the original's node is in this box's handover history. Every record in the
   venue's database is the venue's. A refused inherited record whose fix this box cannot apply
-  (`record-remedy.ts:51-57`) would leave its correction waiting; I believe no real switch produces
-  one, so nothing is built for it.
+  (`isInHistory`, `record-remedy.ts:50-57`, would be one call) would leave its correction waiting; I
+  believe no real switch produces one, so it is not added.
 - **D4:** corrections already closed with refunds kept, and plain refunds already listed for the
   accountant, stay as they are (no venue is live).
+- **D5 — left out:** Cancel and credit's corrective and Pay for items' credit after a printed bill
+  (`creditWholeInvoice`, `cancel-credit.ts:84-133`) never ask admission and never refused another
+  box's receipt; they refuse only a refused original (`refuseCreditOf`, `backend.ts:465-478`), not one
+  another chain has not had answered. This item does not change them; making them wait too would be
+  a separate item.
 - **Out of scope:** the deferred close after a switch (`deferred-close.ts:105,131`, `other_node`),
   pending the owner's answer.
 
 ## Size
 
-One pull request, about 2.5 hours: about 40 production lines changed, about 300 test lines changed
+One pull request, about 3 hours: about 50 production lines changed, about 300 test lines changed
 or added. No schema change, no venue reset. Two Codex run-it angles (fiscal); the owner lands.
 Branch `feat/a1614-correct-inherited-invoices`.
