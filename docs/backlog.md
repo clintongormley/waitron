@@ -238,7 +238,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 - **A1270. Verify the fake AEAT's invoice-date comparison at midnight** (size S, needs the owner's certificate). [Detail](backlog/fiscal.md#a1270-verify-the-fake-aeats-invoice-date-comparison-at-midnight)
 
-- **A1571. What AEAT's answers to real certificates change** (left open by A888's session, 2026-11-25; important, size M, fiscal). A Mac's certificate export is refused, AEAT's refusal of a certificate is shown as an unexplained failure, and a wrong certificate type passes the check.
+- **A1571. What AEAT's answers to real certificates change** (left open by A888's session, 2026-11-25; important, size M, fiscal). A Mac's certificate export is refused, and a wrong certificate type passes the check.
   [Detail](backlog/fiscal.md#a1571-what-aeats-answers-to-real-certificates-change)
 
 - **Structured B2B invoices before the applicable 2027 or 2028 date.** Establish the issuer's threshold and recipient scope, then build structured exchange and required reporting. Current paper/email qualification stays separate.
