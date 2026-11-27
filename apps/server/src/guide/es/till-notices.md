@@ -58,7 +58,7 @@ decir **Comprobar la hora** en su lugar, como se explica más abajo.
 
 **Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora (0
 de 2 por ahora) · Comprobar la hora** es rojo. Cuando el servidor arranca sin la hora de internet,
-los cobros esperan. Vuelven a funcionar solos en cuanto dos cajas o terminales están encendidos y
+los cobros esperan. Vuelven a funcionar solos en cuanto dos cajas o terminales de mano están encendidos y
 conectados, aunque estén en la pantalla de inicio de sesión, y coinciden con la hora del servidor.
 Si no, usa **Comprobar la hora**: mantén la hora del servidor si es correcta, o usa la de este
 dispositivo si lo es esa. La pantalla de inicio de sesión y las páginas de fichaje y de asistencia muestran las mismas palabras, sin
@@ -111,7 +111,7 @@ ofrece **Acceso de administrador**. Elige a alguien con **Gestionar servidores**
 introduzca su PIN para ajustar la hora desde esa caja.
 
 **La hora de este dispositivo es incorrecta · Corrígela en los ajustes del dispositivo** es ámbar: el
-servidor mantiene su hora por internet, y el reloj de este terminal se aleja de ella más de un minuto.
+servidor mantiene su hora por internet, y el reloj de este dispositivo se aleja de ella más de un minuto.
 
 **Queda poco espacio en el servidor · Consulta Estado del servidor en el panel** es ámbar. El trabajo se sigue guardando,
 pero se está acabando el espacio. Libera espacio antes de que se acabe, en
@@ -126,22 +126,22 @@ encargado**.
 **Impresora «Cocina» no imprime · desde 21:16** es ámbar. Una comanda enviada a esa impresora a
 las 21:16 lleva dos minutos o más sin imprimirse, o el servidor ha dejado de intentar enviarla. El
 aviso de una impresora de estación aparece en todas las cajas registradoras y todos los terminales de
-camarero; el de cualquier otra impresora, solo en los que imprimen en ella sus recibos, sus
+camarero; el de cualquier otra impresora, solo en los que imprimen en ella sus tickets, sus
 justificantes de pago o sus facturas completas. Revisa el papel, la corriente y el cable de la
 impresora. El aviso desaparece cuando la impresora imprime algo que se le envió después de esa
 comanda. Si el servidor dejó de intentar enviar alguna comanda, las cajas muestran entonces
 **Impresora «Cocina» no pudo imprimir un ticket · Vuelve a imprimirlo** en ámbar hasta que se
-imprima una reimpresión (una comanda desde la mesa, un recibo desde su venta) o un reenvío desde
-**Impresoras**. Un recibo original que no se imprimió también se vuelve a intentar por sí solo cada
+imprima una reimpresión (una comanda desde la mesa, un ticket desde su venta) o un reenvío desde
+**Impresoras**. Un ticket original que no se imprimió también se vuelve a intentar por sí solo cada
 10 minutos aproximadamente durante un día después de la venta, así que para imprimirlo ya, abre su
 venta y pulsa **Reintentar original** en lugar de imprimir una copia.
 
-**El servidor necesita atención · Consulta Estado del servidor en el panel** es un aviso para el que este terminal no tiene
+**El servidor necesita atención · Consulta Estado del servidor en el panel** es un aviso para el que este dispositivo no tiene
 texto, quizá de una versión más reciente del servidor.
 
 Si una acción dice **No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.**,
 avisa al encargado y espera a que se libere espacio antes de reintentarlo. Que se rechace la
-impresión de un recibo o justificante, o la apertura del cajón, no anula un pago; no lo cobres otra
+impresión de un ticket o justificante, o la apertura del cajón, no anula un pago; no lo cobres otra
 vez. Si el mensaje dice que se ha cobrado la tarjeta, sigue sus instrucciones de recuperación en
 lugar de volver a cobrar.
 

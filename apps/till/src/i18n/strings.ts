@@ -2634,7 +2634,7 @@ export const es: Record<StringKey, string> = {
     "El proveedor de pagos aún no puede hacer esta devolución. Puedes iniciar una nueva devolución más tarde.",
   "give_back.title": "Devolución",
   "give_back.loading": "Leyendo el ticket…",
-  "give_back.read_failed": "No se pudo leer el ticket. No ha cambiado nada.",
+  "give_back.read_failed": "No se pudo cargar el ticket. No ha cambiado nada.",
   "give_back.what_for": "¿Por qué se devuelve?",
   "give_back.dishes": "Un plato",
   "give_back.dishes_hint": "Algo que pidieron no llegó o no estaba bien. Tú marcas los platos.",
@@ -2682,7 +2682,7 @@ export const es: Record<StringKey, string> = {
   "give_back.terminal_record": "Registrar la devolución",
   "give_back.sending": "Devolviendo el dinero…",
   "give_back.approvers_failed":
-    "No se pudo leer quién puede aprobarlo. No se ha devuelto nada. Pulsa Devolver para intentarlo de nuevo.",
+    "No se pudo cargar la lista de personas que pueden aprobarlo. No se ha devuelto nada. Pulsa Devolver para intentarlo de nuevo.",
   "give_back.nothing_given": "No se ha devuelto nada.",
   "give_back.storage":
     "Este dispositivo no pudo guardar la devolución antes de enviarla. No se ha devuelto nada. Cierra esta ventana y, en otro dispositivo que cobre, abre Devolución en el ticket.",
@@ -2734,7 +2734,7 @@ export const es: Record<StringKey, string> = {
   "give_back.uw_card_failed":
     "La compañía de la tarjeta no hizo la devolución, así que ese dinero no se ha devuelto. Pulsa el botón de la tarjeta para intentarlo de nuevo o devuélvelo de otra forma.",
   "give_back.uw_approvers_failed":
-    "No se pudo cargar quién puede aprobarlo. No ha cambiado nada. Vuelve a pulsar el mismo botón para intentarlo de nuevo.",
+    "No se pudo cargar la lista de personas que pueden aprobarlo. No ha cambiado nada. Vuelve a pulsar el mismo botón para intentarlo de nuevo.",
   "give_back.uw_close": "Cerrar",
   "give_back.uw_card_waiting":
     "Una devolución anterior a tarjeta en este ticket sigue esperando respuesta, así que no se ha enviado nada. Pulsa Comprobar de nuevo antes de devolver más a una tarjeta.",
@@ -2862,8 +2862,8 @@ export const es: Record<StringKey, string> = {
   "attendance.overtaken":
     "Un cambio posterior ha sustituido esta solicitud. Consulta su historial.",
   "attendance.uncertain":
-    "Se ha perdido la respuesta. Vuelve a consultar si tu respuesta se ha registrado antes de enviarla otra vez.",
-  "attendance.stale": "Tus horas han cambiado. Vuelve a consultarlas antes de responder.",
+    "Se ha perdido la respuesta. Pulsa Reintentar para comprobar si tu respuesta se ha registrado antes de enviarla otra vez.",
+  "attendance.stale": "Tus horas han cambiado. Vuelve a cargarlas antes de responder.",
   "attendance.fix_hours": "Corregir mis horas",
   "attendance.retry_read": "Reintentar",
   "clock.in": "Fichar entrada",
@@ -3074,7 +3074,7 @@ export const es: Record<StringKey, string> = {
   "invoice.print_not_queued": "El original no se ha enviado a una impresora.",
   "invoice.print_checking": "Consultando la impresión del original…",
   "invoice.print_status_failed":
-    "No se pudo consultar la impresión del original. Vuelve a comprobarla.",
+    "No se pudo comprobar la impresión del original. Vuelve a comprobarla.",
   "invoice.not_delivered": "Factura completa no entregada",
   "invoice.may_not_be_delivered": "Puede que la factura completa no se haya entregado",
   "invoice.delivered": "Factura completa entregada",
@@ -3370,7 +3370,7 @@ export const es: Record<StringKey, string> = {
   "kitchen_screen.pass": "Pase",
   "kitchen_screen.pass_display": "Pantalla de pase",
   "kitchen_screen.pass_monitor": "Pantalla de pase (solo lectura)",
-  "kitchen_screen.read_failed": "No se pudo consultar la pantalla. Reintentando…",
+  "kitchen_screen.read_failed": "No se pudo cargar la pantalla. Reintentando…",
   "kitchen_screen.none":
     "Esta pantalla aún no tiene nada que mostrar. Elige una pantalla en su perfil en el panel, en Perfiles de dispositivo.",
   "kitchen_screen.unavailable": "Esta pantalla ya no está disponible: {screen}",
@@ -3871,7 +3871,7 @@ export const es: Record<StringKey, string> = {
   "table.group_held_since": "En espera desde las {time}, por {name}",
   "table.group_held_since_unnamed": "En espera desde las {time}",
   "table.current_orders_unread":
-    "No se pudieron leer los pedidos en curso, así que no se puede marcar nada como servido. Vuelve a abrir la mesa para reintentarlo.",
+    "No se pudieron cargar los pedidos en curso, así que no se puede marcar nada como servido. Vuelve a abrir la mesa para reintentarlo.",
   "table.row_served": "Servido",
   "table.row_preparing": "En preparación",
   "table.row_served_of": "{served} de {quantity} servidos",
@@ -3885,9 +3885,9 @@ export const es: Record<StringKey, string> = {
   "table.reminder_snooze": "Posponer {n} min",
   "table.reminder_clear_snooze": "Cancelar posponer",
   "table.print_problem": "Problema de impresión",
-  "table.print_problem_detail": "Un ticket de estación no se ha impreso: {stations}",
+  "table.print_problem_detail": "Una comanda de estación no se ha impreso: {stations}",
   "table.print_problem_reprint": "Reimprimir",
-  "table.print_problem_sent": "Tickets de estación enviados a imprimir de nuevo: {stations}",
+  "table.print_problem_sent": "Comandas de estación enviadas a imprimir de nuevo: {stations}",
   "table.group_earlier": "Adelantar",
   "table.group_later": "Retrasar",
   "table.group_fire": "Marchar",
@@ -4029,7 +4029,7 @@ export const es: Record<StringKey, string> = {
   "table.split_anyway_note": "Separar igualmente deja {kept} con una cuenta vacía.",
   "table.split_anyway_note_paid": "Separar igualmente deja {kept} sin nada que pagar.",
   "table.split_read_failed":
-    "No se pudieron leer las cuentas de esta mesa. Elige Atrás e inténtalo de nuevo.",
+    "No se pudieron cargar las cuentas de esta mesa. Elige Atrás e inténtalo de nuevo.",
   "table.split_bill_part_paid": "{amount} pagados",
   "table.split_take_over_first": "Toma el pedido para marcar esta cuenta.",
   "table.split_taken": "Toma los platos sin enviar de {who} antes de separar.",
@@ -4151,9 +4151,9 @@ export const es: Record<StringKey, string> = {
   "table.draft_recount": "El pedido de esta mesa ha cambiado. Revísalo y vuelve a enviarlo.",
   "table.draft_save_failed":
     "Tu último cambio en un pedido no se ha guardado. Abre su mesa para revisarlo.",
-  "table.draft_read_failed": "No se pudo leer el pedido de esta mesa. Vuelve a abrir la mesa.",
+  "table.draft_read_failed": "No se pudo cargar el pedido de esta mesa. Vuelve a abrir la mesa.",
   "table.reread_failed":
-    "El pedido se actualizó, pero no se pudo volver a leer la mesa. Vuelve a abrir la mesa para comprobar sus importes.",
+    "El pedido se actualizó, pero no se pudo volver a cargar la mesa. Vuelve a abrir la mesa para comprobar sus importes.",
   "table.split_updated_elsewhere": "Otra persona ha actualizado la mesa. Intenta Separar de nuevo.",
   "dining.eat_in": "Para tomar aquí",
   "dining.takeaway": "Para llevar",
@@ -4314,7 +4314,7 @@ export const es: Record<StringKey, string> = {
     "Hubo movimientos de efectivo tras el recuento. Revisa la retirada antes de finalizar.",
   "drawer_close.reopen": "El cajón o su recuento ha cambiado. Vuelve a abrir Cerrar cajón.",
   "drawer_close.failed": "No se pudo guardar el cierre de cajón. Inténtalo de nuevo.",
-  "drawer_close.read_failed": "No se pudo leer el cajón. Vuelve a abrir Cerrar cajón.",
+  "drawer_close.read_failed": "No se pudo cargar el cajón. Vuelve a abrir Cerrar cajón.",
   "drawer.error": "No se pudo abrir el cajón, inténtalo de nuevo",
   "staff_notice.print_job.drawer_expired": "El cajón no se abrió",
   "drawer.not_attached": "Esta impresora no tiene un cajón conectado",
@@ -4334,7 +4334,7 @@ export const es: Record<StringKey, string> = {
   "held.discard_holds_money":
     "Este pedido aún tiene dinero de un pago. Devuélvelo antes de descartar el pedido",
   "held.reread_failed":
-    "No se pudo volver a leer el pedido. Apárcalo y recupéralo para comprobarlo.",
+    "No se pudo volver a cargar el pedido. Apárcalo y recupéralo para comprobarlo.",
   "held.changed_elsewhere":
     "Este pedido se ha cambiado en otro dispositivo. Se ha vuelto a cargar: revísalo y repite tu cambio",
   "held.sent_dish_served":
@@ -4464,7 +4464,7 @@ export const es: Record<StringKey, string> = {
   "deferred_close.close": "Cerrar cuenta",
   "deferred_close.unserved": "Marca todos los platos como servidos o cancélalos primero",
   "deferred_close.orders_unread":
-    "No se pudieron leer los pedidos en curso, así que la caja no puede comprobar que todos los platos estén servidos. Vuelve a abrir la mesa para reintentarlo.",
+    "No se pudieron cargar los pedidos en curso, así que la caja no puede comprobar que todos los platos estén servidos. Vuelve a abrir la mesa para reintentarlo.",
   "deferred_close.counter_full_invoice":
     "En el mostrador solo se puede cerrar como pago aplazado con factura simplificada. Cobra aquí en su lugar.",
   "deferred_close.payment_unconfirmed":
@@ -4652,7 +4652,8 @@ export const es: Record<StringKey, string> = {
   "bill_refund.terminal_no_pin":
     "Esta tarjeta se cobró en un datáfono aparte, así que Waitron no puede devolverla por sí mismo. Devuelve primero {amount} en ese datáfono y luego confírmalo aquí.",
   "bill_refund.terminal_done": "Devuelto en el datáfono",
-  "bill_refund.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
+  "bill_refund.approvers_failed":
+    "No se pudo cargar la lista de personas que pueden aprobarlo. Inténtalo de nuevo.",
   "bill_refund.unconfirmed":
     "La devolución no obtuvo respuesta, así que puede que se haya hecho. Revisa los pagos de esta cuenta antes de volver a intentarlo.",
   "departure.record": "Registrar salida sin pagar",
@@ -4668,7 +4669,8 @@ export const es: Record<StringKey, string> = {
   "departure.approval_next":
     "Si tú no puedes registrarlo, a continuación lo aprueba un responsable o encargado con su PIN.",
   "departure.confirm": "Registrar {amount} sin pagar",
-  "departure.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
+  "departure.approvers_failed":
+    "No se pudo cargar la lista de personas que pueden aprobarlo. Inténtalo de nuevo.",
   "departure.unconfirmed":
     "La salida no obtuvo respuesta, así que puede que se haya registrado. Revisa esta cuenta antes de volver a intentarlo.",
   "cancel_credit.action": "No se sirvió nada",
@@ -4681,7 +4683,8 @@ export const es: Record<StringKey, string> = {
     "Si tú no puedes anular ventas, a continuación lo aprueba alguien que pueda con su PIN.",
   "cancel_credit.confirm": "No se sirvió nada",
   "cancel_credit.keep": "Mantener la cuenta",
-  "cancel_credit.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
+  "cancel_credit.approvers_failed":
+    "No se pudo cargar la lista de personas que pueden aprobarlo. Inténtalo de nuevo.",
   "cancel_credit.unconfirmed":
     "La cancelación no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
   "cancel_credit.refused_payments":

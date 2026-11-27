@@ -898,7 +898,7 @@ describe("the sentence when party.out_of_date's table could not be read again (t
     );
     setLocale("es-ES");
     expect(t("table.reread_failed")).toBe(
-      "El pedido se actualizó, pero no se pudo volver a leer la mesa. Vuelve a abrir la mesa para comprobar sus importes.",
+      "El pedido se actualizó, pero no se pudo volver a cargar la mesa. Vuelve a abrir la mesa para comprobar sus importes.",
     );
   });
 });

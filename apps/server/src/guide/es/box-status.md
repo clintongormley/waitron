@@ -91,7 +91,7 @@ Cuando no pasa nada, cada fila dice:
 - **Espacio en disco**: cuánto espacio queda libre del total, y cuánto ocupan la base de datos,
   las copias guardadas en el servidor, los registros de actividad y el resto del disco. El resto del
   disco incluye unos 8 MB que el servidor guarda en reserva para poder arrancar y quitar, con el disco
-  lleno, lo que ya no necesita. Tras un arranque que usó ese espacio, los terminales siguen parados
+  lleno, lo que ya no necesita. Tras un arranque que usó ese espacio, las cajas siguen paradas
   hasta que quedan libres unos 24 MB y el servidor ha vuelto a apartar los 8 MB.
 
 Consulta **Última actualización ofrecida** para ver cuándo terminó el intento y si el servidor
@@ -248,7 +248,7 @@ Si ves la ventana roja en el panel, pulsa **Abrir Estado del servidor**. Si ves 
 como encargado**, úsalo para abrir el inicio de sesión del encargado. Si la caja te da un enlace a
 **Comprobar pagos con tarjeta**, puedes seguirlo durante la parada.
 
-Pulsa **Liberar** para liberar espacio. En cuanto hay espacio suficiente, los terminales vuelven a
+Pulsa **Liberar** para liberar espacio. En cuanto hay espacio suficiente, las cajas vuelven a
 poder guardar por sí solos; no hace falta reiniciar nada.
 
 Después de pulsar **Liberar**, esta página y la campana de avisos del mismo panel vuelven a leer
@@ -278,7 +278,7 @@ supervisada, espera a que vuelva a arrancar con la versión anterior.
 
 Con **Gestionar servidores** (Admin de forma predeterminada), puedes ajustar la hora desde tu propio dispositivo o aprobar el ajuste en una caja. El personal puede seguir confirmándola desde una caja mientras el arranque espera.
 
-Si el reloj marca una fecha anterior al 28 de octubre de 2024, los terminales muestran
+Si el reloj marca una fecha anterior al 28 de octubre de 2024, las cajas muestran
 **No se pueden registrar ventas: la hora del servidor es incorrecta**, y la campana también lo dice,
 con la fecha que marca el reloj del servidor. Entonces nada puede confirmar la hora.
 La salida es poner la hora bien. Si el [servicio de hora](box-status.md#clock-service) del servidor
@@ -306,7 +306,7 @@ Poner la hora puede cerrar tu sesión en el panel de gestión. Cuando el reloj s
 hora, en cualquier sentido, termina toda sesión del panel que se estaba usando justo antes, así que
 el diálogo añade **Vuelve a iniciar sesión para seguir.** Un paso menor hacia delante acorta, en lo
 que mide el paso, el tiempo que una sesión del panel puede quedarse sin usar antes de terminar; un
-paso menor hacia atrás no termina ninguna sesión. Las cajas y los terminales siguen con su sesión
+paso menor hacia atrás no termina ninguna sesión. Las cajas y los terminales de mano siguen con su sesión
 iniciada.
 
 Si el servidor se niega a poner su reloj en hora, el diálogo dice por qué encima de sus botones. Por
@@ -340,11 +340,11 @@ actualización, **Reiniciar el servidor** o a mano.
 
 Aquí se llama arranque al tiempo que va desde que el servidor arranca hasta que el reloj deja de
 parar los cobros. En el medio minuto siguiente al arranque, más o menos, cuando el servidor ha
-visto que no puede confirmar su hora por sí mismo, cada caja y terminal con alguien con la sesión iniciada, fuera de las páginas de fichaje y de asistencia, termina su línea roja de
+visto que no puede confirmar su hora por sí mismo, cada caja y terminal de mano con alguien con la sesión iniciada, fuera de las páginas de fichaje y de asistencia, termina su línea roja de
 la hora con **Comprobar la hora** en lugar de **Consulta Estado del servidor en el panel**. En un servidor cuyo reloj marca
 una fecha anterior al 28 de octubre de 2024, o en uno que no envía registros a Hacienda, lo hace en
 la siguiente consulta de la caja, en unos 15 segundos. Cualquier empleado con la sesión iniciada en la caja puede pulsarlo; no necesita ningún
-permiso. La [guía de avisos del terminal](till-notices.md#notices) explica qué muestra el diálogo
+permiso. La [guía de avisos de la caja](till-notices.md#notices) explica qué muestra el diálogo
 de la caja y qué hace cada botón.
 
 La caja envía su propia hora. Cuando está a más de un minuto de la del servidor, **Este dispositivo**
@@ -380,7 +380,7 @@ la hora de las mismas maneras.
 
 El servidor confirma su hora por sí solo en cuanto su [servicio de hora](box-status.md#clock-service)
 contacta con un servidor de hora por internet, o, salvo si espera por una venta
-rechazada o por una nueva instalación fiscal, en cuanto dos cajas o terminales encendidos y conectados coinciden con su reloj, aunque
+rechazada o por una nueva instalación fiscal, en cuanto dos cajas o terminales de mano encendidos y conectados coinciden con su reloj, aunque
 estén en la pantalla de inicio de sesión.
 
 Con **Gestionar servidores** puedes confirmarla antes en esta página.
@@ -426,18 +426,18 @@ una hora que ya es correcta.
 Un servidor no puede saber por sí solo que su reloj está mal, así que lo compara con otros relojes.
 Las cajas registradoras y los terminales de camarero envían su propia hora al servidor cada 15
 segundos, más o menos, mientras hay alguien con la sesión iniciada en ellos o mientras muestran la
-pantalla de inicio de sesión. Las pantallas de estación no envían la suya. Una caja o un terminal que
+pantalla de inicio de sesión. Las pantallas de estación no envían la suya. Una caja o un terminal de mano que
 funciona en el propio servidor no cuenta, y los dispositivos con una misma dirección de red cuentan
 como uno.
 
 Mientras el servicio de hora del servidor mantiene su reloj en hora por internet, el servidor se fía
-de su propio reloj: una caja o un terminal con la sesión iniciada que se aleja de él más de un minuto
+de su propio reloj: una caja o un terminal de mano con la sesión iniciada que se aleja de él más de un minuto
 muestra **La hora de este dispositivo es incorrecta · Corrígela en los ajustes del dispositivo**, y la
 campana no avisa por la hora de los dispositivos.
 
 Si no, cuando dos o más dispositivos coinciden entre sí en que el reloj del servidor va desviado más de un
 minuto, la campana avisa a las personas que pueden gestionar el sistema: **2 dispositivos coinciden en que marcan 2026-10-23 21:40, pero el servidor marca 2026-10-23
-21:10. Comprueba la fecha y la hora del servidor en Estado del servidor.** El personal de los terminales
+21:10. Comprueba la fecha y la hora del servidor en Estado del servidor.** El personal de las cajas
 no ve nada de esto.
 
 Los dispositivos nunca ponen la hora

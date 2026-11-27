@@ -57,7 +57,7 @@ Como administrador, elige **Desactivar** o **Activar** en el menú de la fila de
 y elige **Reiniciar el servidor** cuando puedas pausar el servicio. Comprueba y repite cualquier envío a la estación interrumpido por el reinicio.
 
 Antes de desactivar Pagos, desactiva todos los proveedores de tarjeta; elimina o desvincula sus lectores primero.
-Tras reiniciar, puedes seguir cobrando en efectivo y registrando tarjetas cobradas en un terminal independiente.
+Tras reiniciar, puedes seguir cobrando en efectivo y registrando tarjetas cobradas en un datáfono independiente.
 Los pagos anteriores, reembolsos y comprobaciones de pagos siguen disponibles. Para volver a añadir lectores,
 activa Pagos, reinicia y activa el proveedor.
 

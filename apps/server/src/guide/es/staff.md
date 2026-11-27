@@ -226,7 +226,7 @@ vacío para desactivar el cierre automático. Guarda para aplicar el ajuste en l
 estación abiertas. El nuevo plazo empieza cuando la pantalla recibe el cambio.
 
 Si cambias el tiempo de inactividad, el fichaje o las pantallas disponibles en
-un perfil de dispositivo, el TPV aplica el cambio cuando no tiene ningún pedido abierto. Cuando el TPV
+un perfil de dispositivo, la caja aplica el cambio cuando no tiene ningún pedido abierto. Cuando la caja
 reciba la nueva pantalla de inicio, cierra la sesión y vuelve a iniciarla para
 abrirla.
 

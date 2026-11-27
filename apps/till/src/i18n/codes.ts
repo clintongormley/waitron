@@ -91,7 +91,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "device_zones.changed": {
     en: "These zone choices changed. Read them again before saving.",
-    es: "Estas selecciones de zonas han cambiado. Vuelve a consultarlas antes de guardar.",
+    es: "Estas selecciones de zonas han cambiado. Vuelve a cargarlas antes de guardar.",
   },
   "tab.portions_too_many": {
     en: `At most ${PORTIONS_AT_ONCE} of one dish can be added at a time. Lower it to ${PORTIONS_AT_ONCE}, then add the rest.`,
@@ -123,7 +123,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "attendance.not_pending": {
     en: "This question no longer needs an answer. Read your hours again.",
-    es: "Esta pregunta ya no necesita respuesta. Vuelve a consultar tus horas.",
+    es: "Esta pregunta ya no necesita respuesta. Vuelve a cargar tus horas.",
   },
   "correction.not_pending": {
     en: "This request has changed. Read its latest history before responding.",
@@ -135,7 +135,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "correction.target_not_found": {
     en: "This time entry could not be found. Read your hours again.",
-    es: "No se ha encontrado este fichaje. Vuelve a consultar tus horas.",
+    es: "No se ha encontrado este fichaje. Vuelve a cargar tus horas.",
   },
   "attendance.state_changed": {
     en: "Your clock changed. Check its latest state and try again.",
@@ -1258,24 +1258,6 @@ const NAMED_STATION_MESSAGES = {
   },
 };
 
-/** Every table above, for guards that read the till's wording. */
-export const CODE_TABLES: Readonly<Record<string, unknown>> = {
-  CODE_MESSAGES,
-  DEFERRED_INELIGIBLE,
-  CORRECTION_NOT_ADMITTED,
-  FREE_ITEM_WITH_DISH,
-  FREE_ITEM_AT_FINISH,
-  TAKEN_OFF_NOTHING_LEFT,
-  TAKEN_OFF_NOT_FULLY_PAID,
-  TAKEN_OFF_REOPEN_BILL,
-  MONEY_SHORT_NOTHING_LEFT,
-  MONEY_SHORT_ADVANCES,
-  DINING_FIXED,
-  SEATED_BELOW_ADVANCES,
-  SEATED_BELOW_ADVANCES_UNPRICED,
-  NAMED_STATION_MESSAGES,
-};
-
 export function listDishNames(names: readonly string[], locale: string): string {
   return new Intl.ListFormat(pickLocale({ en: "en-GB", es: "es-ES" }, locale)).format(names);
 }
@@ -1554,3 +1536,27 @@ export function giveBackFilingMessage(
     return pickLocale(GIVE_BACK_NOT_RECORDED_BY_CODE[code]!, locale);
   return pickLocale(GIVE_BACK_NOT_RECORDED_NOW[full ? "fullInvoice" : "receipt"], locale);
 }
+
+/** Every table in this file, for guards that read the till's wording. */
+export const CODE_TABLES: Readonly<Record<string, unknown>> = {
+  CODE_MESSAGES,
+  DEFERRED_INELIGIBLE,
+  CORRECTION_NOT_ADMITTED,
+  FREE_ITEM_WITH_DISH,
+  FREE_ITEM_AT_FINISH,
+  TAKEN_OFF_NOTHING_LEFT,
+  TAKEN_OFF_NOT_FULLY_PAID,
+  TAKEN_OFF_REOPEN_BILL,
+  MONEY_SHORT_NOTHING_LEFT,
+  MONEY_SHORT_ADVANCES,
+  DINING_FIXED,
+  SEATED_BELOW_ADVANCES,
+  SEATED_BELOW_ADVANCES_UNPRICED,
+  NAMED_STATION_MESSAGES,
+  GIVE_BACK_CHAIN_UNSOUND,
+  GIVE_BACK_NEVER_RECORDED,
+  FULL_INVOICE_NEVER_RECORDED,
+  GIVE_BACK_NOT_RECORDED_BY_CODE,
+  GIVE_BACK_RECORDS_NEED_CHECKING,
+  GIVE_BACK_NOT_RECORDED_NOW,
+};

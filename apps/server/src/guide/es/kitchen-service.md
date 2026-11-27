@@ -15,7 +15,7 @@ Para cobrar toda la cuenta o una parte en una mesa, abre **Cobrar** y usa la [ve
 
 Para repartir un cobro del mostrador entre varias personas, sigue [Repartir una cuenta del mostrador](table-service.md#counter-part-payments).
 
-Después del último pago, sigue [Elegir documentos después de cobrar](table-service.md#settlement-document) para imprimir o enviar un recibo por correo.
+Después del último pago, sigue [Elegir documentos después de cobrar](table-service.md#settlement-document) para imprimir o enviar un ticket por correo.
 
 ## Elige la estación de una caja registradora {#device-station}
 
@@ -26,10 +26,10 @@ pantallas de cocina. Configura cada caja registradora por separado, aunque compa
 
 ## Reintenta un envío de mostrador si se pierde la respuesta {#counter-send-retry}
 
-Si el terminal no puede confirmar un envío de mostrador, reinténtalo sin cambiar la cesta. Si el
-primer envío ya llegó al servidor, el reintento devuelve su resultado original y el terminal
+Si la caja no puede confirmar un envío de mostrador, inténtalo de nuevo sin cambiar la cesta. Si el
+primer envío ya llegó al servidor, el reintento devuelve su resultado original y la caja
 continúa con el pedido enviado. No añade otra comanda de estación ni otro resguardo con el número
-de recogida. Si el servidor no tiene espacio en disco, el reintento se rechaza y el terminal dice
+de recogida. Si el servidor no tiene espacio en disco, el reintento se rechaza y la caja dice
 que no se ha guardado, aunque el primer envío ya llegara al servidor.
 
 ## Lee la copia de alergias junto al plato {#allergy-copies}
@@ -158,7 +158,7 @@ estaciones y zonas de servicio que tiene asignadas; un plato de otra estación e
 se muestra atenuado, salvo si el pase oculta los platos de otras estaciones (consulta
 [Trabaja en el pase](kitchen-service.md#pass-screen)).
 
-Tú decides cuándo pedir la preparación desde el terminal; no hay un modo de marcha para todo el
+Tú decides cuándo pedir la preparación desde la caja; no hay un modo de marcha para todo el
 local. Cada estación de preparación fija si su pantalla de estación avanza la preparación un plato cada vez
 o toda la comanda a la vez, en **Marcado en la pantalla** al editarla en **Estaciones de preparación**. En la
 pantalla de estación, una tarjeta de una estación que avanza toda la comanda muestra **Toda la
@@ -259,12 +259,12 @@ que se muestran y las plegadas, para cada tablero, incluso después de reiniciar
 tarjetas de una columna oculta siguen contando en la fila. Con todas las columnas ocultas, la fila y
 **Columnas** siguen ahí, para que puedas mostrar una de nuevo.
 
-Cada tarjeta lleva la nota para la estación de su pedido y cualquier problema de impresión. En un
-terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pedido está pagado y
+Cada tarjeta lleva la nota para la estación de su pedido y cualquier problema de impresión. En una
+caja, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pedido está pagado y
 pendiente de recoger; una pantalla de estación en la que nadie inicia sesión no muestra ninguno de los
 dos.
 
-Si falla un ticket de corrección de un plato, pulsa **Reimprimir** en el terminal para ver qué
+Si falla un ticket de corrección de un plato, pulsa **Reimprimir** en la caja para ver qué
 platos quedan en el pedido. El problema de impresión desaparece cuando el nuevo ticket sale en
 la misma impresora de esa estación. Si la tarjeta ya no aparece, abre **Impresoras** y pulsa
 **Reimprimir** en el ticket que falló para reenviarlo a su impresora original. Los tickets de
@@ -332,9 +332,9 @@ atenuados. Usa **Columnas** en el pase para elegir y ordenar sus columnas.
 
 En cada tarjeta en **En curso**, toca **Listo** para marcar como listos sus platos enviados en todas
 las estaciones, también los que oculta este pase. El botón cubre toda la tarjeta, incluidos los
-pedidos de mostrador y los platos sin orden de plato. Los platos en espera o esperando al pase se quedan
+pedidos de mostrador y los platos sin orden del plato. Los platos en espera o esperando al pase se quedan
 como están. **Marchar** y **Listo** requieren **Lleva el pase** en el perfil del dispositivo.
-En un terminal, una tarjeta que no está en espera ofrece además **Reimprimir** por cada una de sus cuentas.
+En una caja, una tarjeta que no está en espera ofrece además **Reimprimir** por cada una de sus cuentas.
 
 Una pantalla de pase (solo lectura) muestra el mismo tablero para mirarlo, sin **Marchar**, botones de
 listo ni **Reimprimir**. En el perfil del dispositivo, elige **Pase** o **Pantalla de pase (solo
@@ -365,8 +365,8 @@ con esta guía. El resto de la pantalla funciona como siempre mientras la ayuda 
 
 La ayuda se desactiva sola dos minutos después de la última vez que se tocó la pantalla, y una
 página de la guía abierta desde una nota se cierra con ella. Toca **Ayuda** otra vez para desactivarla
-antes. Las pantallas **Estaciones** y **Pase** de un terminal muestran las mismas marcas, salvo **Todo
-junto** y **Por estación**; allí la ayuda se desactiva cuando el terminal se bloquea.
+antes. Las pantallas **Estaciones** y **Pase** de una caja muestran las mismas marcas, salvo **Todo
+junto** y **Por estación**; allí la ayuda se desactiva cuando la caja se bloquea.
 
 ## Los platos iguales comparten fila {#identical-dishes}
 
@@ -384,12 +384,12 @@ Los platos al peso siempre se imprimen uno a uno.
 
 Para elegir cuándo recibe cada estación sus últimos pedidos de un periodo, abre [Periodos](opening-hours.md#periods). En **Estaciones de preparación** → **Rutas**, añade una ruta para el periodo. Después, usa **Resto del día y tras últimos pedidos** para elegir la estación fuera de los periodos de la lista.
 
-En el terminal, un plato sin enviar cuyo periodo acabó antes en el mismo día de servicio muestra un
+En la caja, un plato sin enviar cuyo periodo acabó antes en el mismo día de servicio muestra un
 signo de aviso y **Ha terminado Almuerzo**. Cuando lo envías desde una mesa, o cobras, envías o
-aparcas el pedido en el mostrador, el terminal muestra esos platos. Consulta con la estación que los
+aparcas el pedido en el mostrador, la caja muestra esos platos. Consulta con la estación que los
 prepara en el periodo indicado. **La estación acepta — enviar** los envía y **Quitarlos** los quita
 del pedido. Al aparcar, el botón dice **La estación acepta — guardar**. La misma ventana se abre
-cuando el servidor encuentra un plato así antes de que el terminal lo haya marcado.
+cuando el servidor encuentra un plato así antes de que la caja lo haya marcado.
 
 Un plato guardado antes de que acabara su periodo en un pedido aparcado del mostrador pregunta
 lo mismo cuando haces el pedido tras el periodo; **No enviarlos** lo deja sin enviar. Un extra añadido a un plato aparcado
@@ -399,7 +399,7 @@ plato.
 Añadir un extra a un plato ya enviado después de que acabe su periodo abre la misma ventana:
 **La estación acepta — enviar** añade el extra y **No añadirlos** deja el plato como estaba.
 
-Si el terminal dice que ha terminado el periodo de un plato sin mostrar una lista, revisa el
+Si la caja dice que ha terminado el periodo de un plato sin mostrar una lista, revisa el
 pedido y quita los platos de periodos terminados antes de volver a enviarlo.
 
 Un plato que también vende el periodo en curso no se marca y se envía como siempre. Un plato que
@@ -418,9 +418,9 @@ pasar una cuenta a una mesa, lleva la marca sin «aceptado»: `** TRAS ALMUERZO 
 Cada departamento fija si enviar un plato así necesita un encargado, o el PIN de un encargado,
 con **PIN de encargado para enviar tras acabar el periodo** en **Orden de platos y estaciones**, en su pestaña
 **Servicio** del panel. Desactivado, quien puede enviar lo confirma con la estación. Si está activado y
-quien envía no es encargado, el terminal pide el PIN de un encargado tras **La estación acepta**.
+quien envía no es encargado, la caja pide el PIN de un encargado tras **La estación acepta**.
 
-## Pide la preparación desde el terminal {#request-cooking}
+## Pide la preparación desde la caja {#request-cooking}
 
 En un local nuevo en España, Pica pica y Entradas empiezan sin espera; Platos principales y
 Postres quedan en espera para más tarde. Elige el orden de plato de cada producto y organiza los platos de
@@ -505,7 +505,7 @@ Para cambiar las palabras fijas de los tickets de estación y los comprobantes d
 cambia el idioma predeterminado en **Idiomas del contenido**, dentro de **Productos y cartas**. Con español como
 predeterminado, las cabeceras salen en español; con otros idiomas, salen en inglés hasta que esté
 disponible su traducción de estación. Sin un idioma del contenido guardado, el papel sale en inglés.
-El panel y los recibos tienen sus propias opciones de idioma.
+El panel y los tickets tienen sus propias opciones de idioma.
 
 El siguiente ticket, corrección o reimpresión de estación usa el predeterminado guardado al momento.
 Cambiarlo no imprime nada por sí solo. Reenviar un trabajo fallido conserva su texto original.

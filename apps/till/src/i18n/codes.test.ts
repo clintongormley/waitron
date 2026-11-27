@@ -894,7 +894,7 @@ it.each([
   [
     "device_zones.changed",
     "These zone choices changed. Read them again before saving.",
-    "Estas selecciones de zonas han cambiado. Vuelve a consultarlas antes de guardar.",
+    "Estas selecciones de zonas han cambiado. Vuelve a cargarlas antes de guardar.",
   ],
 ])("explains device zone refusal %s", (code, en, es) => {
   expect(codeMessage(code, "en")).toBe(en);

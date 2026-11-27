@@ -663,42 +663,80 @@ function spanishCodeMessages(value: unknown, at: string): [string, string][] {
   );
 }
 
+// Weaker than its name: it reads as text only `es` in strings.ts, `helpEs` and the tables in
+// `CODE_TABLES`, not Spanish written inline in codes.ts's message functions or in components, nor
+// the guide pages.
 describe("the till's Spanish uses one word per thing (design §7.18)", () => {
-  // Reads the till's catalogue in strings.ts, its Spanish help text and codes.ts's CODE_TABLES.
+  const texts: [string, string][] = [
+    ...Object.entries(es),
+    ...Object.entries(helpEs).map(([key, text]): [string, string] => [`help:${key}`, text]),
+    ...spanishCodeMessages(CODE_TABLES, "codes"),
+  ];
+  // The dashboard's own tab name, quoted as the dashboard shows it.
+  const prose = (text: string) => text.replace(/\{[^}]*\}/g, "").replace(/pestaña Recibos/g, "");
+
   const KITCHEN_STATION_COMANDA_KEYS = new Set<string>([
     "station.bump_ticket",
     "station.whole_ticket",
     "station.printer_down",
     "move_station.refused.ticket.made_here",
+    "table.print_problem_detail",
+    "table.print_problem_sent",
     "help:help.kitchen.card",
   ]);
   const PHYSICAL_READ_KEYS = new Set<string>(["equipment.nfc_read_error"]);
-  const dropped: [RegExp, (key: string) => boolean][] = [
-    [/(?<!\p{L})recibos?(?!\p{L})/iu, () => false],
-    [/(?<!\p{L})comandas?(?!\p{L})/iu, (key) => KITCHEN_STATION_COMANDA_KEYS.has(key)],
-    [/(?<!\p{L})TPV(?!\p{L})/u, () => false],
-    [/(?<!\p{L})terminal(?! de camarero| de mano)/iu, () => false],
-    [/intentar de nuevo/iu, () => false],
-    [/volver a consultar/iu, () => false],
-    [/reinténtalo/iu, () => false],
-    [/no se han? podido (volver a )?(cargar|consultar)/iu, () => false],
-    [/no se han? podido (volver a )?leer/iu, (key) => PHYSICAL_READ_KEYS.has(key)],
-    [/orden de plato/iu, () => false],
+  const NONE = new Set<string>();
+  const dropped: [RegExp, ReadonlySet<string>][] = [
+    [/(?<!\p{L})recibos?(?!\p{L})/iu, NONE],
+    [/(?<!\p{L})comandas?(?!\p{L})/iu, KITCHEN_STATION_COMANDA_KEYS],
+    [/(?<!\p{L})tpv(?!\p{L})/iu, NONE],
+    [/(?<!\p{L})terminal(es)?(?!\p{L})(?! de camarero| de mano)/iu, NONE],
+    [/intentar de nuevo/iu, NONE],
+    [/(?<!\p{L})(vuelve|volver) a consultar/iu, NONE],
+    [/reinténtalo/iu, NONE],
+    [/no se han? podido (volver a )?(cargar|consultar)/iu, NONE],
+    [/no se (pudo|pudieron) (volver a )?consultar/iu, NONE],
+    [/no se (pudo|pudieron|han? podido) (volver a )?leer/iu, PHYSICAL_READ_KEYS],
+    [/orden de plato/iu, NONE],
   ];
 
+  it("reads the catalogue, the help text and the codes' tables, nested and refund tables included", () => {
+    const keys = texts.map(([key]) => key);
+    expect(keys).toContain("table.draft_read_failed");
+    expect(keys).toContain("help:help.kitchen.card");
+    expect(keys).toContain("codes.CODE_MESSAGES.server.internal");
+    expect(keys).toContain("codes.DEFERRED_INELIGIBLE.prior_payment");
+    expect(keys).toContain("codes.GIVE_BACK_NEVER_RECORDED.replaced");
+    expect(keys).toContain("codes.GIVE_BACK_RECORDS_NEED_CHECKING.receipt");
+  });
+
+  it("allows each exception only where it still says its word", () => {
+    const byKey = new Map(texts);
+    const stale = dropped.flatMap(([word, allowed]) =>
+      [...allowed].filter((key) => !word.test(prose(byKey.get(key) ?? ""))),
+    );
+    expect(stale).toEqual([]);
+  });
+
   it("says none of the dropped words", () => {
-    const texts: [string, string][] = [
-      ...Object.entries(es),
-      ...Object.entries(helpEs).map(([key, text]): [string, string] => [`help:${key}`, text]),
-      ...spanishCodeMessages(CODE_TABLES, "codes"),
-    ];
-    const offenders = texts.flatMap(([key, text]) => {
-      // The dashboard's own tab name, quoted as the dashboard shows it.
-      const prose = text.replace(/\{[^}]*\}/g, "").replace(/pestaña Recibos/g, "");
-      return dropped
-        .filter(([word, allowed]) => word.test(prose) && !allowed(key))
-        .map(([word]) => `${key} (${String(word)}): ${text}`);
-    });
+    const offenders = texts.flatMap(([key, text]) =>
+      dropped
+        .filter(([word, allowed]) => word.test(prose(text)) && !allowed.has(key))
+        .map(([word]) => `${key} (${String(word)}): ${text}`),
+    );
     expect(offenders).toEqual([]);
+  });
+
+  it.each([
+    ["Imprime el ticket en la caja.", true],
+    ["Terminales de camarero y terminal de mano", true],
+    ["XTPVplus", true],
+    ["No se pudo cargar el pedido.", true],
+    ["Abre el tpv.", false],
+    ["Abre el terminal.", false],
+    ["No se pudieron leer los pedidos.", false],
+    ["Vuelve a consultar tus horas.", false],
+  ])("judges %j as allowed: %s", (text, allowed) => {
+    expect(dropped.some(([word]) => word.test(prose(text)))).toBe(!allowed);
   });
 });
