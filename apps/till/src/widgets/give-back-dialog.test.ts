@@ -3,7 +3,7 @@ import { deferred } from "../../test/clock-app.js";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import { codeMessage, giveBackReasonMessage } from "../i18n/codes.js";
+import { codeMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
 import { guideHref } from "../help-guide.js";
 import { formatMoney } from "@waitron/shared";
@@ -145,7 +145,7 @@ describe("the choice", () => {
   });
 
   it("shows a choice that must wait unavailable with its one line, and the others work at once", async () => {
-    const refused = { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } };
+    const refused = { code: "sale.correction_not_admitted", params: { reason: "missing" } };
     const { el } = await mount(
       withView({
         choices: { ...VIEW.choices, goodwill: { available: false, reason: refused } },
@@ -155,7 +155,7 @@ describe("the choice", () => {
     expect(goodwill.tagName).not.toBe("WT-CHOICE-ROW");
     expect(goodwill.getAttribute("aria-disabled")).toBe("true");
     expect(text(root(el).querySelector("[data-choice-reason=goodwill]"))).toBe(
-      "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
+      "This invoice has no filing record, so it cannot be corrected.",
     );
     await choose(el, "goodwill");
     expect(root(el).querySelector("[data-purpose]")).toBeNull();
@@ -163,22 +163,7 @@ describe("the choice", () => {
     expect(text(root(el).querySelector("[data-purpose]"))).toBe("Extra paid on top of the bill");
   });
 
-  it("on a full invoice, names it in a choice's wait and hands that on to Money back under way", async () => {
-    const refused = { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } };
-    const { el } = await mount(
-      withView({
-        choices: { ...VIEW.choices, goodwill: { available: false, reason: refused } },
-      }),
-    );
-    el.fullInvoice = true;
-    await el.updateComplete;
-    expect(text(root(el).querySelector("[data-choice-reason=goodwill]"))).toBe(
-      giveBackReasonMessage("sale.correction_not_admitted", "en", {
-        reason: "filing_refused",
-        fullInvoice: true,
-      }),
-    );
-
+  it("on a full invoice, hands that on to Money back under way", async () => {
     const opened = await mount(withView({ underWay: UNDER_WAY }));
     opened.el.fullInvoice = true;
     await opened.el.updateComplete;
@@ -219,8 +204,8 @@ describe("the choice", () => {
     }
   });
 
-  it("says on a dish line held by a refused receipt what can still go back", async () => {
-    const refused = { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } };
+  it("says on a dish line that must wait why", async () => {
+    const refused = { code: "sale.correction_not_admitted", params: { reason: "missing" } };
     const { el } = await mount(
       withView({
         lines: VIEW.lines.map((line) =>
@@ -230,7 +215,7 @@ describe("the choice", () => {
     );
     await choose(el, "dishes");
     expect(text(root(el).querySelector("[data-line-reason=croquetas]"))).toBe(
-      "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
+      "This invoice has no filing record, so it cannot be corrected.",
     );
   });
 
@@ -2294,13 +2279,13 @@ describe("sending", () => {
     const api = fakeGiveBackApi();
     api.giveBack.mockRejectedValueOnce({
       code: "sale.correction_not_admitted",
-      reason: "filing_refused",
+      reason: "missing",
       status: 409,
     });
     const el = await press(api);
     await vi.waitFor(() =>
       expect(bottom(el)).toBe(
-        codeMessage("sale.correction_not_admitted", "en", { reason: "filing_refused" }),
+        codeMessage("sale.correction_not_admitted", "en", { reason: "missing" }),
       ),
     );
     expect(root(el).querySelector("[data-outcome]")).toBeNull();

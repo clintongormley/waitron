@@ -356,21 +356,6 @@ describe("ending it", () => {
       expect(shown(none.el, "finish")).toBe(false);
     }
     expect(new Set(english).size).toBe(reasons.length);
-    expect(
-      giveBackFilingMessage("sale.correction_not_admitted", "en", { reason: "filing_refused" }),
-    ).toBe(
-      "The tax agency refused this receipt, or sending it to the agency is on hold, so the refund cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
-    );
-    const pending = {
-      refusal: "sale.correction_not_admitted",
-      reason: "filing_pending",
-      closable: false,
-    };
-    const waiting = await mount({ ...OPEN, moneyBack: "2.00", fileNow: pending });
-    expect(text(root(waiting.el).querySelector("[data-file-refusal]"))).toBe(
-      "This receipt is still being sent to the tax agency, so the refund cannot be recorded on it yet. Press Check again in a few minutes.",
-    );
-    expect(shown(waiting.el, "finish")).toBe(false);
 
     setLocale("es");
     const fileNow = {
@@ -384,7 +369,7 @@ describe("ending it", () => {
       `${giveBackFilingMessage("sale.correction_not_admitted", "es", { reason: "voided" })} ${es["give_back.uw_finish_unrecorded"]}`,
     );
     for (const code of ["sale.correction_not_admitted", "invoice_correction.chain_unsound"])
-      for (const reason of [...reasons, "filing_refused", "filing_pending", "missing"]) {
+      for (const reason of [...reasons, "missing"]) {
         const words = giveBackFilingMessage(code, "es", { reason });
         expect(words).not.toMatch(/rectific/i);
         expect(words).not.toContain("equipo");
@@ -392,25 +377,10 @@ describe("ending it", () => {
       }
   });
 
-  it("on a full invoice refused with no fix, says Finish ends it and the money then goes on the accountant's list", async () => {
+  it("on a full invoice it cannot record the refund on for now, says so and offers Check again, not Finish", async () => {
     const fileNow = {
       refusal: "sale.correction_not_admitted",
-      reason: "refused_no_fix",
-      closable: true,
-    };
-    const { el } = await mount({ ...OPEN, moneyBack: "2.00", fileNow });
-    el.fullInvoice = true;
-    await el.updateComplete;
-    expect(shown(el, "finish")).toBe(true);
-    expect(text(root(el).querySelector("[data-file-refusal]"))).toBe(
-      "The tax agency refused this full invoice and Waitron cannot fix that. Once this refund ends, the money refunded goes in Download for accountant (XLSX), on the dashboard's Sales & takings page. Press Finish to end this refund. The money already refunded stays refunded.",
-    );
-  });
-
-  it("on a full invoice refused or held, says so and offers Check again, not Finish", async () => {
-    const fileNow = {
-      refusal: "sale.correction_not_admitted",
-      reason: "filing_refused",
+      reason: "missing",
       closable: false,
     };
     const { el } = await mount({ ...OPEN, moneyBack: "6.05", left: "0.00", fileNow });
@@ -420,7 +390,7 @@ describe("ending it", () => {
     expect(shown(el, "check")).toBe(true);
     expect(text(root(el).querySelector("[data-file-refusal]"))).toBe(
       giveBackFilingMessage("sale.correction_not_admitted", "en", {
-        reason: "filing_refused",
+        reason: "missing",
         fullInvoice: true,
       }),
     );
@@ -436,7 +406,7 @@ describe("ending it", () => {
       left: "4.05",
       fileNow: {
         refusal: "sale.correction_not_admitted",
-        reason: "filing_refused",
+        reason: "missing",
         closable: false,
       },
     };
@@ -452,8 +422,8 @@ describe("ending it", () => {
     expect(root(held.el).querySelector("till-supervisor-override-dialog")).toBeNull();
     expect(button(held.el, "check").disabled).toBe(false);
 
-    const noFix = { ...waiting.fileNow, reason: "refused_no_fix", closable: true };
-    const closes = await mount({ ...waiting, fileNow: noFix });
+    const closable = { ...waiting.fileNow, reason: "voided", closable: true };
+    const closes = await mount({ ...waiting, fileNow: closable });
     for (const name of ["cash", "card", "finish"])
       expect(button(closes.el, name).disabled).toBe(false);
     press(closes.el, "cash");

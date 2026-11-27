@@ -305,6 +305,8 @@ Open: which records need ten years.
 
   > **2026-11-27:** on a full invoice naming a customer, money still owed on a dish cancelled after payment now goes on the same corrective invoice, and while the box's records need checking it waits instead of coming back with no corrective (PR 2b of the same plan). Money given back on one the tax agency refused with nothing Waitron can fix still comes back with no corrective.
 
+  > **2026-11-27, A1619:** money given back no longer waits for the tax agency's answer to the ticket, nor is held back by a refusal of it: on this box's tickets or another box's, refused, held or not yet answered, it goes through a corrective invoice at once, including on a full invoice refused with nothing Waitron can fix ([plan](../superpowers/plans/2026-11-27-a1619-corrections-never-wait-for-aeat.md)).
+
 ## Part 2: Español
 
 **1. Cuándo se expide el tique de la mesa** (a partir de sus respuestas 1.1, 1.3, 1.4 y 1.8)
@@ -468,6 +470,8 @@ Nota: ____
   > **27-11-2026, A1614:** un tique presentado por otro servidor de Waitron ya no está entre los tiques que Waitron no puede rectificar: se juzga por el estado de su presentación como los del propio servidor, así que, cuando la Agencia Tributaria lo ha aceptado, el dinero que se devuelve por cortesía o por un plato pasa por una factura rectificativa que presenta el servidor en uso; mientras la Agencia no ha respondido, ese dinero espera.
 
   > **27-11-2026:** en una factura completa a nombre de un cliente, el dinero pendiente de un plato cancelado después del pago pasa ahora por la misma factura rectificativa, y mientras hay que revisar los registros del servidor espera en lugar de devolverse sin rectificativa (PR 2b del mismo plan). El dinero devuelto en una factura que la Agencia Tributaria rechazó sin nada que Waitron pueda corregir se sigue devolviendo sin rectificativa.
+
+  > **27-11-2026, A1619:** el dinero devuelto ya no espera la respuesta de la Agencia Tributaria al tique, ni lo detiene un rechazo: en los tiques de este servidor o de otro, rechazados, detenidos o aún sin respuesta, pasa en el momento por una factura rectificativa, también en una factura completa rechazada sin nada que Waitron pueda corregir ([plan](../superpowers/plans/2026-11-27-a1619-corrections-never-wait-for-aeat.md)).
 
 Nota: ____
 

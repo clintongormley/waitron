@@ -949,6 +949,26 @@ is ever issued in anger.
 > has not answered it the correction waits (`filing_pending`). The owner asked for this on
 > 26 November and the watcher cleared the design on 27 November; [asesor-questions.md](asesor-questions.md) R4 still puts it to the asesor.
 
+> **2026-11-27, A1619:** that wait is gone. A correction, a refund or a credit no longer waits for
+> AEAT's answer to the original, nor is stopped by a refusal of it, on this box's chain or another's
+> (the owner's decision; [plan](../superpowers/plans/2026-11-27-a1619-corrections-never-wait-for-aeat.md)).
+> What the sources say about a corrective naming an invoice AEAT does not hold, narrowly:
+>
+> - Developer FAQ v1.3, §17, p.36 ([copy](sources/FAQs-Desarrolladores-v1.3-2025-12-04.pdf)), case
+>   2.a (an error the invoicing rules make you fix with a corrective), when AEAT refused the
+>   original's record: «ese RF rechazado no figuraría jamás en los sistemas de la AEAT (aunque
+>   constaría un rechazo)… dichas situaciones de error se dan por solucionadas en este caso cuando se
+>   reciba/n correctamente RF de la/s nueva/s factura/s rectificativa/s de la factura errónea
+>   original». The FAQ says nothing about a corrective for any other reason (money given back as
+>   goodwill or for a dish) on a refused or unanswered invoice: it neither allows nor forbids it.
+> - AEAT's validation rules (`Validaciones_Errores_Veri-Factu.pdf` v1.2.2, §3.1.3 item 4, p.8) give
+>   the whole rule for `FacturasRectificadas` as «El NIF del campo IDEmisorFactura debe estar
+>   identificado. Sólo podrá incluirse esta agrupación (no es obligatoria) si TipoFactura es igual a
+>   "R1", "R2", "R3", "R4" o "R5"». No rule there checks that the corrected invoice is held by AEAT.
+> - AEAT's test service took a credit naming an invoice it had refused with `1161` as `Correcto`
+>   (verifactu run 37286368370, 2026-10-05; §16). Test system only; production was not tried, and no
+>   run sent a corrective before its original arrived.
+
 ---
 
 ## 14. Factura simplificada content — per-item VAT is not required; the ticket needs the date, per-rate base, QR and legend (added 2026-08-05)

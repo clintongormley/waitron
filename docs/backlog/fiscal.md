@@ -1187,23 +1187,23 @@ approval's "goodwill refunds stay money-only" with no objection (O5, "WATCHER 20
 A tip given back on its own stays open, up to what is left of it: the owner's "Yes" (O2, 14:17).
 Where Correct invoice refuses for good (another box's ticket, one replaced by a full invoice, no
 filing record, records that need checking, and, until 2026-11-26, a full invoice naming a
-customer), Refund a payment stays open; where it only waits (a filing refused, stopped or held,
-another refund pending, the clock), Refund a payment waits too for that money: the watcher's call (O7, "WATCHER
+customer), Refund a payment stays open; where it only waits (another refund pending, the clock),
+Refund a payment waits too for that money: the watcher's call (O7, "WATCHER
 2026-11-23 14:55"). The owner landed #4192 on 2026-11-24 with O7 to O9 listed as the watcher's calls, and
 the same day approved one Give money back that picks the right way by itself
 ([plan](../superpowers/plans/2026-11-24-give-money-back.md)), so none of them is asked again. A refund naming no dishes counts against cancelled dishes still
 owed and is capped by them, the PIN rule unchanged: the watcher's call (O8, 14:55). A hand-keyed card
 refund of money Correct invoice could give back is refused before the terminal step: the watcher's clearance of the lane's change (2026-11-23 22:51).
 [Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
-(2026-11-26: a full invoice naming a customer is corrected with an R1 unless the tax agency refused it
-with no fix, which Refund a payment keeps open; while the business has no registered address, Refund a
-payment waits until it is added. CORRECT-FULL-INVOICE PR 2a.)
-(2026-11-27, A1614: another box's ticket is no longer refused for good. It is judged by its filing
-like this box's own, and while the tax agency has not answered it Correct invoice waits
-(`filing_pending`), so Refund a payment waits too for that money.)
+(2026-11-26: a full invoice naming a customer is corrected with an R1; while the business has no
+registered address, Refund a payment waits until it is added. CORRECT-FULL-INVOICE PR 2a.)
+(2026-11-27, A1614: another box's ticket is no longer refused for good.)
 (2026-11-27: on a full invoice the cancels' money goes on the corrective too, so Refund a payment
 refuses it whether or not it names the cancel, and waits while the box's records need checking.
 CORRECT-FULL-INVOICE PR 2b.)
+(2026-11-27, A1619: Correct invoice no longer waits for, or is stopped by, the tax agency's answer to
+the original, on this box's tickets or another box's, so neither does Refund a payment
+([plan](../superpowers/plans/2026-11-27-a1619-corrections-never-wait-for-aeat.md)).)
 
 ### Money given back is shared by menu price (owner and watcher, 2026-11-23)
 
@@ -1265,13 +1265,15 @@ the reopened bill, except a dish the kitchen had started or finished, which keep
 (watcher, 22:42). On the till, that dish's sent-dish window offers **Comp…**, as for any dish cancelled with its charge kept, which takes the charge off with a reason (A1599). An extra of that dish the kitchen had not started comes off. The stop is not offered on a bill holding a payment, one given back in full included.
 A dish held in an unsent group is stopped without being fired; D4 still applies to **Mark served**._
 
-_2026-11-26: **Reopen bill**, **Pay for items** on a printed bill and a cancel that files a corrective
-refuse a receipt whose current version AEAT refused and that nothing replaced
-(`fiscal.original_refused`, by the filing queue's own test through the seat's `refuseCreditOf`):
-the corrective would be filed against a receipt AEAT refused, after which Fiscal filing's replacement is
-refused (`sale.replacement_not_first`) (watcher, lane L `questions.md`, 16:37)._
-(2026-11-27, A1614 D5: they also refuse while a version on another chain is unanswered or held,
-`fiscal.original_unanswered`.)
+_2026-11-27, A1619: **Reopen bill**, **Pay for items** on a printed bill and a cancel that files a
+corrective file their credit at once, whatever AEAT has answered about the receipt, on this box's
+chain or another's (the owner's answer, D1 and D2 of the
+[plan](../superpowers/plans/2026-11-27-a1619-corrections-never-wait-for-aeat.md), retiring the
+watcher's 26 November rule). Until A1619 PR 2, Fiscal filing's replacement of such a receipt is
+then refused (`sale.replacement_not_first`, `packages/core/src/record-replacement.ts`). **Nothing
+was served**, which cancels the receipt rather than correcting it, still refuses both
+(`fiscal.original_refused`, `fiscal.original_unanswered`, `packages/fiscal-verifactu/src/backend.ts`'s
+`recordVoid`)._
 
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
 

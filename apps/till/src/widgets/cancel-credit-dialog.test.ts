@@ -616,16 +616,18 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
     expect(asked).toEqual([]);
   });
 
-  it.each(["sale.correction_unsupported", "working_order.not_placed"])(
-    "says %s in its own sentence above the action",
-    async (code) => {
-      const el = await mount({ mode: "split", refusal: { code } });
+  it.each([
+    "sale.correction_unsupported",
+    "working_order.not_placed",
+    "fiscal.original_refused",
+    "fiscal.original_unanswered",
+  ])("says %s in its own sentence above the action", async (code) => {
+    const el = await mount({ mode: "split", refusal: { code } });
 
-      expect(actions(el).error).toBe(codeMessage(code));
-      expect(actions(el).error).not.toBe(codeMessage("some.unmapped_code"));
-      expect(unservedBox(el)).toBeNull();
-    },
-  );
+    expect(actions(el).error).toBe(codeMessage(code));
+    expect(actions(el).error).not.toBe(codeMessage("some.unmapped_code"));
+    expect(unservedBox(el)).toBeNull();
+  });
 
   it("says the dishes are not served even when the refusal lists none", async () => {
     const el = await mount({ mode: "split", refusal: { code: "bill.unserved_dishes" } });
@@ -653,10 +655,6 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
     [
       "authorization.not_permitted",
       "The person who approved this cannot issue corrective receipts and invoices. Choose someone who can.",
-    ],
-    [
-      "fiscal.original_refused",
-      "AEAT refused this receipt, so the bill cannot be reopened. Take payment.",
     ],
   ])("words %s for a split, not for a cancel", async (code, sentence) => {
     const el = await mount({ mode: "split", refusal: { code } });
@@ -717,10 +715,6 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
     [
       "network",
       "Reabrir cuenta no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
-    ],
-    [
-      "fiscal.original_refused",
-      "La AEAT rechazó este ticket, así que la cuenta no se puede reabrir. Cóbrala.",
     ],
   ])("words %s in Spanish", async (code, sentence) => {
     setLocale("es");
