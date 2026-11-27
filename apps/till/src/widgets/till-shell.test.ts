@@ -2126,7 +2126,7 @@ describe("till-shell above phone width", () => {
           });
           await settle(el);
           const button = el.shadowRoot!.querySelector<HTMLElement>(
-            "header .till-strip > [data-open-transfers]",
+            "header .till-strip [data-open-transfers]",
           )!;
           expect(button.textContent!.trim()).toBe(short);
           expect(t("department_transfer.short")).toBe(short);
@@ -2348,7 +2348,7 @@ describe("till-shell above phone width", () => {
         expect(rest).toEqual([]);
         expect(status!.getAttribute("data-test")).toBe("department-transfers");
         expect(status!.parentElement).toBe(
-          el.shadowRoot!.querySelector("header .till-strip > [data-open-transfers]"),
+          el.shadowRoot!.querySelector("header .till-strip [data-open-transfers]"),
         );
         expect(status!.getBoundingClientRect().width).toBeGreaterThan(1);
         expect(status!.getAttribute("aria-label")).toBe(

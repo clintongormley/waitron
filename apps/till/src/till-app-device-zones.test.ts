@@ -776,9 +776,13 @@ it("opens the chosen narrow-floor counter after retrying a scoped offer read", a
   await pageAt(390, 844);
   try {
     const chosen = selection(["room", "bar", "shop"], "room");
+    const counterName = "Upstairs counter beside the terrace and the private dining room";
+    const namedZones = chosen.zones.map((zone) =>
+      zone.id === "shop" ? { ...zone, name: counterName } : zone,
+    );
     const hidden = { ...zones[0]!, id: "patio", name: "Patio counter" };
     const { el, api } = await mount(
-      { ...chosen, zones: [...chosen.zones, hidden] },
+      { ...chosen, zones: [...namedZones, hidden] },
       {
         listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers("bar")),
         listZoneOffers: vi
@@ -787,7 +791,7 @@ it("opens the chosen narrow-floor counter after retrying a scoped offer read", a
       },
     );
     const chooser = await openZoneChooser(el);
-    const shop = page.getByRole("menuitem", { name: "Shop", exact: true });
+    const shop = page.getByRole("menuitem", { name: counterName, exact: true });
     expect(shop.query()).not.toBeNull();
     expect(page.getByRole("menuitem", { name: "Patio counter" }).query()).toBeNull();
     shell(el).dispatchEvent(
@@ -812,7 +816,22 @@ it("opens the chosen narrow-floor counter after retrying a scoped offer read", a
     await shop.click();
     await vi.waitFor(() => expect(counter(el)?.selectedServiceZoneId).toBe("shop"));
     expect(api.listZoneOffers.mock.calls).toEqual([["shop"], ["shop"]]);
-    await page.getByRole("button", { name: "Floor", exact: true }).click();
+    const floor = page.getByRole("button", { name: "Floor", exact: true });
+    const floorButton = floor.element();
+    const { left, right, top, height } = floorButton.getBoundingClientRect();
+    const root = shell(el).shadowRoot!;
+    expect(root.elementFromPoint(left + 2, top + height / 2), "Floor's leading edge").toBe(
+      floorButton,
+    );
+    expect(root.elementFromPoint(right - 2, top + height / 2), "Floor's trailing edge").toBe(
+      floorButton,
+    );
+    const counterTrigger = page.getByRole("button", { name: `Counter: ${counterName}` }).element();
+    const label = root.querySelector<HTMLElement>("[data-counter-zones] [slot=trigger] span")!;
+    expect(counterTrigger.getBoundingClientRect().right).toBeLessThanOrEqual(left);
+    expect(label.scrollWidth).toBeGreaterThan(label.clientWidth);
+    expect(getComputedStyle(label).textOverflow).toBe("ellipsis");
+    await floor.click();
     await vi.waitFor(() => expect(zoneChooser(el)?.label).toBe("Room"));
   } finally {
     await resetPage();
