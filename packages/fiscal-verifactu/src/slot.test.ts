@@ -242,7 +242,7 @@ describe("FISCAL_SLOT.provisioningSecret", () => {
   it("validate throws setup.request_invalid on a malformed blob and writes nothing", async () => {
     let error: unknown;
     try {
-      await secret.validate({ ...goodCert, certKind: "bogus" });
+      await secret.validate({ ...goodCert, certKind: "bogus" }, { taxId: "89890001K" });
     } catch (e) {
       error = e;
     }

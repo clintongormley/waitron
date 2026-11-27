@@ -12,6 +12,7 @@ const certificate = {
   passphrase: candidate.passphrase,
   certKind: "sello",
 };
+const taxId = "89890001K";
 const email = {
   server: "smtp.example.test",
   port: 587,
@@ -24,7 +25,12 @@ const email = {
 describe("first setup publication settings", () => {
   it("validates production settings without losing the certificate or SMTP authentication", async () => {
     expect(
-      await parseFirstSetupSettings(contribution, "production", { aeatCert: certificate, email }),
+      await parseFirstSetupSettings(
+        contribution,
+        "production",
+        { aeatCert: certificate, email },
+        taxId,
+      ),
     ).toMatchObject({
       required: true,
       aeatCert: certificate,
@@ -44,17 +50,36 @@ describe("first setup publication settings", () => {
     [{ aeatCert: certificate, email: { ...email, extra: true } }, "setup.request_invalid"],
   ])("refuses invalid production settings %# before publication", async (settings, code) => {
     await expect(
-      parseFirstSetupSettings(contribution, "production", settings),
+      parseFirstSetupSettings(contribution, "production", settings, taxId),
     ).rejects.toThrowError(expect.objectContaining({ code }));
   });
 
+  it("refuses a certificate issued to another tax number than the venue's", async () => {
+    await expect(
+      parseFirstSetupSettings(
+        contribution,
+        "production",
+        { aeatCert: certificate, email },
+        "B12345674",
+      ),
+    ).rejects.toMatchObject({
+      code: "setup.certificate_refused",
+      params: {
+        field: "pfxBase64",
+        reason: "other_taxpayer",
+        certificateTaxId: "89890001K",
+        taxId: "B12345674",
+      },
+    });
+  });
+
   it("keeps certificate-free preproduction settings independent from production", async () => {
-    expect(await parseFirstSetupSettings(contribution, "preproduction", {})).toMatchObject({
+    expect(await parseFirstSetupSettings(contribution, "preproduction", {}, taxId)).toMatchObject({
       required: false,
       email: undefined,
     });
     await expect(
-      parseFirstSetupSettings(contribution, "preproduction", { aeatCert: certificate }),
+      parseFirstSetupSettings(contribution, "preproduction", { aeatCert: certificate }, taxId),
     ).rejects.toThrowError(expect.objectContaining({ code: "setup.request_invalid" }));
   });
 });
@@ -63,9 +88,9 @@ it.each([
   { aeatCert: certificate, email, extra: true },
   { aeatCert: certificate, email: { ...email, password: "x".repeat(65537) } },
 ])("rejects settings outside the publication envelope %#", async (settings) => {
-  await expect(parseFirstSetupSettings(contribution, "production", settings)).rejects.toThrowError(
-    expect.objectContaining({ code: "setup.request_invalid" }),
-  );
+  await expect(
+    parseFirstSetupSettings(contribution, "production", settings, taxId),
+  ).rejects.toThrowError(expect.objectContaining({ code: "setup.request_invalid" }));
 });
 
 it.each([
@@ -105,7 +130,7 @@ it("waits for a refused asynchronous secret check before returning publication s
   };
   await expect(
     Promise.resolve().then(() =>
-      parseFirstSetupSettings(asynchronous, "production", { aeatCert: certificate, email }),
+      parseFirstSetupSettings(asynchronous, "production", { aeatCert: certificate, email }, taxId),
     ),
   ).rejects.toMatchObject({ code: "setup.certificate_refused" });
 });

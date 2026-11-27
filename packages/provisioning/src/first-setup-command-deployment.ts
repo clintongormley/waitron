@@ -129,6 +129,7 @@ export function createFirstSetupCommandDeployment(options: {
         selection.contribution,
         state.frozen.environment,
         path ? await readFirstSetupSettings(path) : {},
+        state.frozen.request.taxId,
       );
       let storedEnvironment: Record<string, string | undefined> = {};
       try {

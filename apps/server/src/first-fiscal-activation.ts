@@ -78,7 +78,7 @@ export async function firstFiscalPayload(
   if (required) {
     if (body.aeatCert === undefined)
       throw new AppError("setup.provisioning_secret_required", { module: contribution.id });
-    await secret!.validate(body.aeatCert);
+    await secret!.validate(body.aeatCert, { taxId: state.frozen.request.taxId });
   } else if (body.aeatCert !== undefined)
     throw new AppError("setup.request_invalid", { field: "aeatCert" });
   if (
