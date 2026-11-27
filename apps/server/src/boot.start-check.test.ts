@@ -37,7 +37,7 @@ import { mountStreamApi } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { StreamHost, writeStreamSettings } from "./stream-host.js";
-import { holdRecoveryKey, USABLE_RECOVERY_KEY } from "./testing/recovery-key.js";
+import { HELD_BACKUP_KEY, holdRecoveryKey, USABLE_RECOVERY_KEY } from "./testing/recovery-key.js";
 import { rememberCheckedAddressesIn } from "./mirror-bundle-fetch.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { ALL_MODULES } from "./modules.js";
@@ -416,7 +416,7 @@ describe("the start check on a real start", () => {
               log: () => {},
               now: () => new Date(),
               isPrimary: () => true,
-              readRecoveryKey: async () => recoveryKey,
+              readRecoveryKey: async () => ({ key: recoveryKey, numbered: HELD_BACKUP_KEY }),
               refreshSealedState: async () => "sealed",
               store: bucket,
               spawn: litestream.spawn,

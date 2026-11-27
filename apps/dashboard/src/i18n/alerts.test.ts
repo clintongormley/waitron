@@ -368,6 +368,15 @@ it("points the disk warning at the Box status page, in three sentences, in both 
   expect(es).toContain(t("nav.box_status", "es-ES"));
 });
 
+it.each([
+  ["en-GB", "Change the backup key"],
+  ["es-ES", "Cambiar la clave de las copias"],
+])("points owners to the backup key change for a stopped bucket copy in %s", (locale, action) => {
+  expect(alertMessage("backup.stream_stopped", { numberedKeyRequired: true }, locale)).toContain(
+    action,
+  );
+});
+
 describe("the copy when it goes to the standby box, not the owner's bucket", () => {
   const CHECK_EN =
     "Check that the standby box is switched on and connected to the restaurant's network.";

@@ -106,7 +106,11 @@ function streamAlerts(
   if (stream.reason === FIRST_START_PENDING) return [];
   const stopped = streamAlert({
     code: "backup.stream_stopped",
-    params: { reason: stream.reason, ...spare },
+    params: {
+      reason: stream.reason,
+      ...spare,
+      ...(stream.reason === "numbered_key_required" ? { numberedKeyRequired: true } : {}),
+    },
     since: stream.stateSince,
   });
   if (!("lagMs" in stream)) return [stopped];

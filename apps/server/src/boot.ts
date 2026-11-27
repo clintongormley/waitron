@@ -518,7 +518,12 @@ import {
   sealedStateJob,
   type SealedStateStatus,
 } from "./sealed-state.js";
-import { loadBackupSettings, loadRecoveryKey, loadUsableBackupKey } from "./backup-config.js";
+import {
+  loadBackupSettings,
+  loadNumberedBackupKey,
+  loadRecoveryKey,
+  loadUsableBackupKey,
+} from "./backup-config.js";
 import { readArchiveSettingsWithMeta } from "./archive-settings.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import { recordStartDeletions } from "./start-backup-room-record.js";
@@ -3679,7 +3684,13 @@ async function bootServer(
     now,
     isPrimary: () => holders.singletonRole.current === "primary",
     mayStream: () => firstStart.mayStream,
-    readRecoveryKey,
+    readRecoveryKey: async () => {
+      const env = await loadBoxEnv(base, config.stateDir);
+      const numbered = loadNumberedBackupKey(env);
+      if (numbered !== undefined) return { key: numbered.key, numbered };
+      const key = loadRecoveryKey(env);
+      return key === undefined ? undefined : { key };
+    },
     refreshSealedState: () => sealedState.refresh(),
     ...(storeLookup === undefined ? {} : { storeLookup }),
     ...seams.stream,

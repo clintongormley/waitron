@@ -652,6 +652,21 @@ describe("backupAlertSource and the bucket copy", () => {
     ]);
   });
 
+  it("tells the dashboard when a bucket copy needs a numbered backup key", async () => {
+    const notStarted: StreamView = {
+      state: "off",
+      reason: "numbered_key_required",
+      stateSince: "2026-09-15T11:20:00.000Z",
+    };
+    const alerts = await src(configured, none, () => notStarted).read(ctx);
+    expect(alerts).toMatchObject([
+      {
+        code: "backup.stream_stopped",
+        params: { reason: "numbered_key_required", numberedKeyRequired: true },
+      },
+    ]);
+  });
+
   it("raises nothing for a copy that was stopped on purpose, and backup.disabled with no archive", async () => {
     for (const reason of ["stopped", null]) {
       const off = stream({ state: "off", reason });

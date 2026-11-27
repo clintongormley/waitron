@@ -1915,7 +1915,7 @@ declare module "@waitron/shared" {
      * pinned Litestream cannot run, it could not start, or it refused for a reason with no wording
      * of its own. `reason` is the status's short tag. Built as data by the backups alert source,
      * never thrown. */
-    "backup.stream_stopped": { reason: string | null; toSpare?: true };
+    "backup.stream_stopped": { reason: string | null; toSpare?: true; numberedKeyRequired?: true };
     /** This node's last attempt to rewrite its sealed state row failed, so the row a rebuild reads
      * is out of date or missing. `errorCode` is the failure's cause, `unknown` when unnamed. Built
      * as data by the sealed-state alert source, never thrown. */
