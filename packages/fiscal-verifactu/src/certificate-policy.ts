@@ -45,7 +45,7 @@ function element(der: Buffer, at: number, limit: number): Element {
   let start = at + 2;
   if (length > 0x7f) {
     const count = length & 0x7f;
-    if (count === 0 || count > 4) throw new Malformed();
+    if (count === 0 || count > 4 || start + count > limit) throw new Malformed();
     length = 0;
     for (let i = 0; i < count; i++) length = length * 256 + der[start + i]!;
     start += count;

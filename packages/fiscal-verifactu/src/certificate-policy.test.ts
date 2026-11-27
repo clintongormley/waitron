@@ -43,6 +43,12 @@ interface Outline {
   tbsTag?: number;
   /** Raw bytes placed in tbsCertificate before its extensions. */
   tbsBefore?: Buffer;
+  /** Raw bytes placed in tbsCertificate after its extensions. */
+  tbsAfter?: Buffer;
+  /** The tag of the list inside the extensions' [3] wrapper. */
+  extensionsTag?: number;
+  /** Raw bytes placed in the [3] wrapper after that list. */
+  extensionsAfter?: Buffer;
 }
 
 function tlv(tag: number, content: Buffer): Buffer {
@@ -58,9 +64,8 @@ function tlv(tag: number, content: Buffer): Buffer {
 
 const der = (node: Asn1) => Buffer.from(toDer(node).getBytes(), "binary");
 
-/** A certificate's outline: the reader walks structure only, so no signature is needed. */
-function certificate(extensions: Asn1[] | null, outline: Outline = {}): Buffer {
-  const tbs = tlv(
+function tbsCertificate(extensions: Asn1[] | null, outline: Outline): Buffer {
+  return tlv(
     outline.tbsTag ?? 0x30,
     Buffer.concat([
       der(create(Class.CONTEXT_SPECIFIC, 0, true, [integer(2)])),
@@ -69,13 +74,24 @@ function certificate(extensions: Asn1[] | null, outline: Outline = {}): Buffer {
       outline.tbsBefore ?? Buffer.alloc(0),
       extensions === null
         ? Buffer.alloc(0)
-        : der(create(Class.CONTEXT_SPECIFIC, 3, true, [seq(extensions)])),
+        : tlv(
+            0xa3,
+            Buffer.concat([
+              tlv(outline.extensionsTag ?? 0x30, Buffer.concat(extensions.map(der))),
+              outline.extensionsAfter ?? Buffer.alloc(0),
+            ]),
+          ),
+      outline.tbsAfter ?? Buffer.alloc(0),
     ]),
   );
+}
+
+/** A certificate's outline: the reader walks structure only, so no signature is needed. */
+function certificate(extensions: Asn1[] | null, outline: Outline = {}): Buffer {
   return tlv(
     outline.certificateTag ?? 0x30,
     Buffer.concat([
-      tbs,
+      tbsCertificate(extensions, outline),
       der(seq([oid("1.2.840.113549.1.1.11")])),
       der(create(0, Type.BITSTRING, false, "\x00")),
     ]),
@@ -131,10 +147,17 @@ describe("certificateKind", () => {
     expect(certificateKind(certificate(null, { tbsBefore }))).toBe("representante");
   });
 
-  it("skips the other fields of tbsCertificate, whatever their length's form", () => {
-    const long = der(octets("\x00".repeat(200)));
-    expect(long[1]).toBe(0x81);
-    const cert = certificate([extension("2.5.29.32", policies([QCP_L]))], { tbsBefore: long });
+  it.each([
+    [0, [0x04, 0x00]],
+    [127, [0x04, 0x7f]],
+    [128, [0x04, 0x81, 0x80]],
+    [255, [0x04, 0x81, 0xff]],
+    [256, [0x04, 0x82, 0x01, 0x00]],
+    [300, [0x04, 0x82, 0x01, 0x2c]],
+  ])("skips another tbsCertificate field holding %i bytes", (size, header) => {
+    const field = der(octets("\x00".repeat(size)));
+    expect([...field.subarray(0, header.length)]).toEqual(header);
+    const cert = certificate([extension("2.5.29.32", policies([QCP_L]))], { tbsBefore: field });
     expect(certificateKind(cert)).toBe("sello");
   });
 
@@ -219,9 +242,21 @@ describe("certificateKind", () => {
         "a five-byte length before the extensions",
         { tbsBefore: Buffer.from([0x04, 0x85, 0, 0, 0, 0, 1, 0]) },
       ],
+      ["its extensions in a set", { extensionsTag: 0x31 }],
+      ["a byte after its extensions' sequence", { extensionsAfter: Buffer.from([0x00]) }],
     ])("an otherwise sealed certificate with %s", (_label, outline: Outline) => {
       const cert = certificate([extension("2.5.29.32", policies([QCP_L]))], outline);
       expect(certificateKind(cert)).toBe("representante");
+    });
+
+    it.each([
+      ["a lone tag byte", [0x04]],
+      ["a length whose bytes run past the end", [0x04, 0x82, 0x01]],
+    ])("an otherwise sealed certificate whose last bytes are %s", (_label, last) => {
+      const tbs = tbsCertificate([extension("2.5.29.32", policies([QCP_L]))], {
+        tbsAfter: Buffer.from(last),
+      });
+      expect(certificateKind(tlv(0x30, tbs))).toBe("representante");
     });
   });
 });
