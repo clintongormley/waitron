@@ -619,19 +619,25 @@ it("keeps both queue labels at full width when a narrow Floor scrolls", async ()
       waitingCount: 456,
     });
     el.append(document.createElement("till-floor-screen"));
-    const strip = () => el.shadowRoot!.querySelector<HTMLElement>(".head .till-strip");
+    const floorStrip = () => {
+      expect(el.shadowRoot!.querySelector("[data-floor-bar]")).not.toBeNull();
+      const row = el.shadowRoot!.querySelector<HTMLElement>(".head > .till-strip");
+      expect(row).not.toBeNull();
+      return row!;
+    };
     const widths = (row: HTMLElement) => {
       const buttons = [...row.querySelectorAll("[data-counter-orders]")];
       expect(buttons).toHaveLength(2);
       return buttons.map((button) => button.getBoundingClientRect().width);
     };
-    await vi.waitFor(() => expect(strip()).not.toBeNull());
-    const fullWidths = widths(strip()!);
+    const fullWidths = widths(await vi.waitFor(floorStrip));
 
     await page.viewport(320, 844);
-    await vi.waitFor(() => expect(strip()).not.toBeNull());
-    expect(widths(strip()!)).toEqual(fullWidths);
-    expect(strip()!.scrollWidth).toBeGreaterThan(strip()!.clientWidth);
+    await vi.waitFor(() => {
+      const strip = floorStrip();
+      expect(widths(strip)).toEqual(fullWidths);
+      expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+    });
   } finally {
     await page.viewport(width, height);
   }
