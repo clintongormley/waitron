@@ -115,15 +115,15 @@ describe("verifactu_sending_state migration", () => {
   });
 
   it.each([
-    ["a revision without a date", "'revision-a'", "null"],
-    ["a date without a revision", "null", "'2026-07-21T00:00:00.000Z'"],
-  ])("refuses a certificate refusal mark with %s", async (_name, revision, at) => {
+    ["a fingerprint without a date", "'AB:CD'", "null"],
+    ["a date without a fingerprint", "null", "'2026-07-21T00:00:00.000Z'"],
+  ])("refuses a certificate refusal mark with %s", async (_name, fingerprint, at) => {
     const error = await captureError(async () =>
       suite.db.execute(
         sql.raw(`
           insert into verifactu_sending_state
-            (id, proximo_envio_en, tiempo_espera_seg, certificate_refused_revision, certificate_refused_at)
-          values (1, '2026-07-21T00:00:00Z', 60, ${revision}, ${at})
+            (id, proximo_envio_en, tiempo_espera_seg, certificate_refused_fingerprint, certificate_refused_at)
+          values (1, '2026-07-21T00:00:00Z', 60, ${fingerprint}, ${at})
         `),
       ),
     );

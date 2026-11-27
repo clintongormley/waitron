@@ -4,12 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer } from "@waitron/db/testing/seed.js";
-import {
-  credentialRevision,
-  getCredential,
-  loadKeyRing,
-  putCredential,
-} from "@waitron/credentials";
+import { credentialRevision, getCredential, loadKeyRing } from "@waitron/credentials";
 import { hasCode, isAppError } from "@waitron/shared";
 import type { TrustedClock } from "@waitron/fiscal";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -17,6 +12,7 @@ import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { makeAuthority } from "../test/certificate-fixtures.js";
 import { seedTaxpayerNodeSif, TAXPAYER_A } from "../test/fixtures.js";
 import { mtlsFetch } from "./aeat-transport.js";
+import { recordInstall } from "./certificate-record.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
 import { VerifactuBackend } from "./backend.js";
 import { FISCAL_SLOT, makeVerifactuBackend } from "./slot.js";
@@ -357,7 +353,7 @@ describe("the fiscal readiness rejection reader", () => {
       );
     });
     const before = await suite.db.execute(sql`select * from verifactu_records order by id`);
-    expect(await FISCAL_SLOT.readinessRejections?.(suite.db)).toEqual([
+    expect(await FISCAL_SLOT.readinessRejections?.(suite.db, seeded.nodeId)).toEqual([
       { code: "1161", message: "Importe total incorrecto" },
     ]);
     expect(await suite.db.execute(sql`select * from verifactu_records order by id`)).toEqual(
@@ -366,43 +362,47 @@ describe("the fiscal readiness rejection reader", () => {
   });
 
   it("does not manufacture details when no rejection was saved", async () => {
-    await seedPendingEnvios(suite.db, { count: 1 });
-    expect(await FISCAL_SLOT.readinessRejections?.(suite.db)).toEqual([]);
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    expect(await FISCAL_SLOT.readinessRejections?.(suite.db, seeded.nodeId)).toEqual([]);
   });
 
-  async function vaultAndMark(markedRevision?: string): Promise<void> {
-    const ring = loadKeyRing({
-      WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
-      WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    });
-    const revision = await withTransaction(suite.db, async (tx) => {
-      await putCredential(tx, ring, {
+  async function installAndMark(nodeId: string, markedFingerprint: string): Promise<void> {
+    await withTransaction(suite.db, (tx) =>
+      recordInstall(tx, {
+        nodeId,
+        installedAt: new Date("2026-10-01T09:00:00.000Z"),
+        source: "setup",
         personId: null,
-        purpose: "fiscal.aeat",
-        value: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
-      });
-      return credentialRevision(tx, { purpose: "fiscal.aeat" });
-    });
+        kind: "sello",
+        fingerprint: "AA:01",
+        organisation: "WAITRON SL",
+        taxId: null,
+        issuer: null,
+        validFrom: new Date("2026-01-01T00:00:00Z"),
+        validUntil: new Date("2028-01-01T00:00:00Z"),
+        checkedEndpoint: null,
+        checkedAt: null,
+      }),
+    );
     await suite.db.execute(sql`
       insert into verifactu_sending_state
-        (id, proximo_envio_en, tiempo_espera_seg, certificate_refused_revision, certificate_refused_at)
-      values (1, '2026-10-24T22:30:00.000Z', 0, ${markedRevision ?? revision},
-        '2026-10-24T22:30:00.000Z')
+        (id, proximo_envio_en, tiempo_espera_seg, certificate_refused_fingerprint, certificate_refused_at)
+      values (1, '2026-10-24T22:30:00.000Z', 0, ${markedFingerprint}, '2026-10-24T22:30:00.000Z')
     `);
   }
 
-  it("names AEAT's refusal of the certificate the vault holds", async () => {
-    await seedPendingEnvios(suite.db, { count: 1 });
-    await vaultAndMark();
-    expect(await FISCAL_SLOT.readinessRejections?.(suite.db)).toEqual([
+  it("names AEAT's refusal of the installed certificate", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await installAndMark(seeded.nodeId, "AA:01");
+    expect(await FISCAL_SLOT.readinessRejections?.(suite.db, seeded.nodeId)).toEqual([
       { code: "fiscal.certificate_not_accepted", message: null },
     ]);
   });
 
-  it("ignores a refusal of a certificate the vault no longer holds", async () => {
-    await seedPendingEnvios(suite.db, { count: 1 });
-    await vaultAndMark("an-earlier-revision");
-    expect(await FISCAL_SLOT.readinessRejections?.(suite.db)).toEqual([]);
+  it("ignores a refusal of a certificate no longer installed", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    await installAndMark(seeded.nodeId, "BB:02");
+    expect(await FISCAL_SLOT.readinessRejections?.(suite.db, seeded.nodeId)).toEqual([]);
   });
 });
 

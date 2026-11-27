@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Agent, errors as undiciErrors, fetch as undiciFetch } from "undici";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { credentialRevision, loadKeyRing, putCredential } from "@waitron/credentials";
+import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
 import type { Cabecera, EnvioRegistro } from "@waitron/verifactu";
 import {
@@ -15,6 +15,7 @@ import {
   readCertMaterial,
 } from "./aeat-transport.js";
 import type { CertKind, CertMaterial } from "./aeat-transport.js";
+import { openCertificate } from "./certificate-open.js";
 import {
   mintMtlsMaterial,
   startMtlsServer,
@@ -202,9 +203,9 @@ describe("the resolved client over a real client-certificate handshake", () => {
   });
 });
 
-describe("aeatClientResolver names the revision it read", () => {
+describe("aeatClientResolver names the certificate it sends with", () => {
   it.each([false, true])(
-    "carries the vault's revision with the client, observing authority time=%s",
+    "as the install opener fingerprints it, observing authority time=%s",
     async (observing) => {
       await provision("sello");
       const resolver = aeatClientResolver({
@@ -218,13 +219,35 @@ describe("aeatClientResolver names the revision it read", () => {
         ...(observing ? { observeAuthorityTime: () => {} } : {}),
       });
       const client = await resolver.resolve();
-      const revision = await withTransaction(suite.db, (tx) =>
-        credentialRevision(tx, { purpose: "fiscal.aeat" }),
-      );
-      expect(revision).not.toBeNull();
-      expect(client.certificateRevision).toBe(revision);
+      const opened = await openCertificate(material.clientPfx, material.clientPassphrase);
+      if (!opened.ok) throw new Error(`the fixture did not open: ${opened.reason}`);
+      expect(client.certificateFingerprint?.()).toBe(opened.details.fingerprint);
     },
   );
+
+  it("names none when the vault's file does not open", async () => {
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, ring, {
+        personId: null,
+        purpose: "fiscal.aeat",
+        value: {
+          pfxBase64: material.clientPfx.toString("base64"),
+          passphrase: "not-the-passphrase",
+          certKind: "sello",
+        },
+      }),
+    );
+    const resolver = aeatClientResolver({
+      db: suite.db,
+      ring,
+      endpointFor: () => "https://example.test/soap",
+      fetchFor: () => ({
+        fetch: (() => Promise.reject(new Error("not this test's subject"))) as typeof fetch,
+        close: () => Promise.resolve(),
+      }),
+    });
+    expect((await resolver.resolve()).certificateFingerprint?.()).toBeNull();
+  });
 });
 
 describe("aeatClientResolver lifetime", () => {

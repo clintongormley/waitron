@@ -18,11 +18,11 @@ import type {
   VerifactuClient,
   RegistroAlta,
 } from "@waitron/verifactu";
-import { certificateNotAccepted } from "./certificate-check.js";
+import type { DrainClient } from "./aeat-transport.js";
 import {
+  certificateNotAccepted,
   clearCertificateRefusal,
   markCertificateRefused,
-  type DrainClient,
 } from "./certificate-refusal.js";
 import { recordConflictEvidence, type ConflictComparison } from "./conflict-evidence.js";
 import type { FacturaParams, LineaParams, Operacion } from "./errors.js";
@@ -405,14 +405,14 @@ async function drainDue(
         now,
         batch.map((row) => row.id),
       );
+      const refused = certificateNotAccepted(error)
+        ? (client.certificateFingerprint?.() ?? null)
+        : null;
       await countOnCommit(db, result, async (tx, counts) => {
         await openTechnicalIncident(tx, environment, failure.now, [
           ...new Set([...failure.ids, ...batch.map((row) => row.id)]),
         ]);
-        const revision = client.certificateRevision;
-        if (revision != null && certificateNotAccepted(error)) {
-          await markCertificateRefused(tx, revision, now);
-        }
+        if (refused !== null) await markCertificateRefused(tx, refused, now);
         await backoffBatch(tx, batch, now, counts);
       });
       forgetTechnicalFailure(db, environment, failure);

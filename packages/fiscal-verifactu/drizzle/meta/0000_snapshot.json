@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ad83e9b5-c161-4403-ab5e-bf5a5f8c43ef",
+  "id": "4997741d-1554-4bc3-a17f-fda3acdd446c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "declaraciones_responsables": {
@@ -1020,8 +1020,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "certificate_refused_revision": {
-          "name": "certificate_refused_revision",
+        "certificate_refused_fingerprint": {
+          "name": "certificate_refused_fingerprint",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -1046,7 +1046,7 @@
         },
         "verifactu_sending_state_certificate_refused_ck": {
           "name": "verifactu_sending_state_certificate_refused_ck",
-          "value": "(\"verifactu_sending_state\".\"certificate_refused_revision\" is null) = (\"verifactu_sending_state\".\"certificate_refused_at\" is null)"
+          "value": "(\"verifactu_sending_state\".\"certificate_refused_fingerprint\" is null) = (\"verifactu_sending_state\".\"certificate_refused_at\" is null)"
         }
       }
     },

@@ -3,14 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { afterEach, expect, it, vi } from "vitest";
-import { credentialRevision, loadKeyRing, putCredential } from "@waitron/credentials";
-import { withTransaction } from "@waitron/db";
+import { loadKeyRing } from "@waitron/credentials";
 import { AppError } from "@waitron/shared";
 import { enabledModules } from "@waitron/module";
 import { drain } from "@waitron/fiscal-verifactu";
 import { venueFiscalSelection, type VenueRequest } from "@waitron/provisioning";
 import type { RegistroAlta, RegistroAnulacion, VerifactuClient } from "@waitron/verifactu";
-import { createClient } from "@waitron/verifactu";
+import { aeatClientResolver } from "@waitron/fiscal-verifactu/src/aeat-transport.js";
+import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { createFakeAeat, keyOf } from "@waitron/verifactu/testing";
 import { ALL_MODULES } from "./modules.js";
 import { submitFiscalReadiness } from "./fiscal-readiness-runner.js";
@@ -112,13 +112,7 @@ it("reports a sample whose certificate AEAT refused as rejected, naming the cert
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
   });
   const now = new Date(Date.now() + 60_000);
-  // What mtlsFetch throws when AEAT redirects the certificate to its refusal page.
-  const refused = createClient({
-    endpoint: "https://example.test/soap",
-    fetch: async () => {
-      throw new AppError("fiscal.certificate_not_accepted", { page: "erro4011.html" });
-    },
-  });
+  const certificate = makeAuthority().issue();
 
   const result = await submitFiscalReadiness({
     stateDir,
@@ -127,35 +121,33 @@ it("reports a sample whose certificate AEAT refused as rejected, naming the cert
     contribution: {
       ...selected.contribution!,
       activationReadiness: "accepted-test-submission" as const,
-      provisioningSecret: {
-        required: () => true,
-        validate: () => {},
-        seal: ({ db }) =>
-          withTransaction(db, async (tx) => {
-            await putCredential(tx, ring, {
-              personId: null,
-              purpose: "fiscal.aeat",
-              value: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
-            });
-          }),
-      },
-      drain: ({ db, environment, skipRetryMs }, at) =>
+      drain: ({ db, ring: sampleRing, environment, skipRetryMs }, at) =>
         drain(
           {
             db,
             environment,
             skipRetryMs,
-            resolveClient: async () => ({
-              ...refused,
-              certificateRevision: await withTransaction(db, (tx) =>
-                credentialRevision(tx, { purpose: "fiscal.aeat" }),
-              ),
-            }),
+            resolveClient: aeatClientResolver({
+              db,
+              ring: sampleRing,
+              endpointFor: () => "https://example.test/soap",
+              // What mtlsFetch throws when AEAT redirects the certificate to its refusal page.
+              fetchFor: () => ({
+                fetch: async () => {
+                  throw new AppError("fiscal.certificate_not_accepted", { page: "erro4011.html" });
+                },
+                close: async () => {},
+              }),
+            }).resolve,
           },
           at,
         ),
     },
-    secret: undefined,
+    secret: {
+      pfxBase64: certificate.pfx.toString("base64"),
+      passphrase: certificate.passphrase,
+      certKind: "sello",
+    },
     ring,
     readinessInput: {
       requirement: "accepted-test-submission",

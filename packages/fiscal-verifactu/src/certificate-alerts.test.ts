@@ -1,5 +1,3 @@
-import { randomBytes } from "node:crypto";
-import { credentialRevision, loadKeyRing, putCredential } from "@waitron/credentials";
 import { nodes, withTransaction } from "@waitron/db";
 import { sql } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -155,32 +153,19 @@ describe("certificateAlerts", () => {
 });
 
 describe("the installed certificate AEAT refused", () => {
-  async function vaultAndMark(markedRevision?: string): Promise<void> {
-    const ring = loadKeyRing({
-      WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
-      WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    });
-    const revision = await withTransaction(suite.db, async (tx) => {
-      await putCredential(tx, ring, {
-        personId: null,
-        purpose: "fiscal.aeat",
-        value: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
-      });
-      return credentialRevision(tx, { purpose: "fiscal.aeat" });
-    });
+  async function markRefused(fingerprint: string): Promise<void> {
     // 00:30 Madrid on 25 Oct: the venue's day differs from the UTC one.
     await suite.db.execute(sql`
       insert into verifactu_sending_state
-        (id, proximo_envio_en, tiempo_espera_seg, certificate_refused_revision, certificate_refused_at)
-      values (1, '2026-10-24T22:30:00.000Z', 0, ${markedRevision ?? revision},
-        '2026-10-24T22:30:00.000Z')
+        (id, proximo_envio_en, tiempo_espera_seg, certificate_refused_fingerprint, certificate_refused_at)
+      values (1, '2026-10-24T22:30:00.000Z', 0, ${fingerprint}, '2026-10-24T22:30:00.000Z')
     `);
   }
 
-  it("raises an error since AEAT first refused the certificate the vault holds", async () => {
+  it("raises an error since AEAT first refused the installed certificate", async () => {
     await seedTaxpayerNodeSif(suite.db);
     await install(TAXPAYER_A.nodeId, "sello", new Date("2028-01-01T00:00:00Z"));
-    await vaultAndMark();
+    await markRefused(`fp-${TAXPAYER_A.nodeId}-sello`);
     await expect(alertsAt("2026-10-26T10:00:00Z")).resolves.toEqual([
       {
         key: "fiscal.certificate_not_accepted",
@@ -193,10 +178,10 @@ describe("the installed certificate AEAT refused", () => {
     ]);
   });
 
-  it("raises nothing once the vault holds another revision", async () => {
+  it("raises nothing for a refusal of a certificate no longer installed", async () => {
     await seedTaxpayerNodeSif(suite.db);
     await install(TAXPAYER_A.nodeId, "sello", new Date("2028-01-01T00:00:00Z"));
-    await vaultAndMark("an-earlier-revision");
+    await markRefused("fp-an-earlier-certificate");
     await expect(alertsAt("2026-10-26T10:00:00Z")).resolves.toEqual([]);
   });
 });

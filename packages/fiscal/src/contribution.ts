@@ -197,8 +197,11 @@ export interface FiscalContribution {
   hasNonproductionRecords?(db: Database): Promise<boolean>;
   /** Saved authority refusals from the isolated readiness sample, without changing its records;
    * `code` is the authority's error number, or `fiscal.certificate_not_accepted` when the authority
-   * refused the certificate itself. */
-  readinessRejections?(db: Database): Promise<{ code: string | null; message: string | null }[]>;
+   * refused the certificate `nodeId`'s latest install names. */
+  readinessRejections?(
+    db: Database,
+    nodeId: string,
+  ): Promise<{ code: string | null; message: string | null }[]>;
   /** The SALE-PATH backend: it records locally and never contacts an authority — nothing external
    * may block a sale. */
   makeBackend(deps: FiscalBackendDeps): FiscalBackend;

@@ -3,6 +3,7 @@ import { firstCodeInCauseChain } from "@waitron/shared";
 import type { CertKind, CertMaterial, AeatTransport } from "./aeat-transport.js";
 import { localDate } from "./certificate-dates.js";
 import { normaliseTaxId } from "./certificate-file.js";
+import { certificateNotAccepted } from "./certificate-refusal.js";
 
 export type CheckRefusal =
   | { reason: "unreachable" }
@@ -20,27 +21,20 @@ export interface CheckTransport {
 
 export type CheckResult = { ok: true; endpoint: string } | ({ ok: false } & CheckRefusal);
 
-const NOT_ACCEPTED = "fiscal.certificate_not_accepted";
 // Only 4112 has been measured (A1571): HTTP 200, faultcode `env:Client`.
-const REFUSED_FAULT = /^Codigo\[(4112)\]\./;
+const REFUSED_FAULT = /^Codigo\[4112\]\./;
 const UNREACHABLE_CODES = new Set(["ENOTFOUND", "ECONNREFUSED"]);
 // Measured in the A795 design (P3b): a refused client certificate surfaces as `UND_ERR_SOCKET`
 // over TLS 1.3 and `ECONNRESET` over TLS 1.2.
 const CLOSED_CODES = new Set(["UND_ERR_SOCKET", "ECONNRESET"]);
 
-/** Whether `mtlsFetch`'s refusal of the certificate is somewhere in `error`'s cause chain. */
-export function certificateNotAccepted(error: unknown): boolean {
-  return firstCodeInCauseChain(error, (code) => code === NOT_ACCEPTED) !== null;
-}
-
 function classify(error: unknown, timedOut: boolean, taxId: string): CheckRefusal {
   if (!(error instanceof VerifactuTransportError)) return { reason: "check_failed" };
   if (error.kind === "soap") {
-    const refused = REFUSED_FAULT.exec(error.faultReason ?? "");
-    if (refused !== null) {
+    if (REFUSED_FAULT.test(error.faultReason ?? "")) {
       return {
         reason: "aeat_refused",
-        details: { codigo: refused[1]!, taxpayerNif: normaliseTaxId(taxId) },
+        details: { codigo: "4112", taxpayerNif: normaliseTaxId(taxId) },
       };
     }
     return {

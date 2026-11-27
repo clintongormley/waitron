@@ -28,7 +28,7 @@ it("new flow state defaults to no open technical incident", async () => {
       proximo_envio_en: "2026-07-21T00:00:00.000Z",
       tiempo_espera_seg: 60,
       technical_incident_token: null,
-      certificate_refused_revision: null,
+      certificate_refused_fingerprint: null,
       certificate_refused_at: null,
     },
   ]);
@@ -65,7 +65,7 @@ it("keeps the interruption across flow upserts and retains row evidence after re
       technical_incident_token: expect.stringMatching(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
       ),
-      certificate_refused_revision: null,
+      certificate_refused_fingerprint: null,
       certificate_refused_at: null,
     },
   ]);

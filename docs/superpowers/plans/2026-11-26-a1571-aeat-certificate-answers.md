@@ -43,13 +43,15 @@ number in details follows `other_taxpayer`, `certificate-install.ts:151`). Only 
 so another number keeps today's raw-fault sentence.
 
 **Task 4. The installed certificate refused.** `verifactu_sending_state` (one row per venue, travels
-with `venue.db` as the vault's one certificate does) gains `certificate_refused_revision` and
-`certificate_refused_at`. The drain reads the vault's credential revision with the material; when
-a failure's cause chain carries the code, the failure transaction (after `openTechnicalIncident`,
-which creates the row) stores that revision and the pass's own `now`, keeping the first date while
-the revision is unchanged; an accepted answer (`persistResponse`) clears both. The card and the new
-alert compare the stored revision with the vault's current one (`certificate-card.ts:69` already
-reads it), so a new install hides the mark at once and a takeover's clocks cannot matter. Card:
+with `venue.db` as the vault's one certificate does) gains `certificate_refused_fingerprint` and
+`certificate_refused_at`. When a failure's cause chain carries the code, the drain takes the
+fingerprint of the certificate it sent with (the transport opens the decrypted file with
+`openCertificateFile`, which the install's opener runs too), and the failure transaction (after `openTechnicalIncident`, which creates the row) stores it
+and the pass's own `now`, keeping the first date while the fingerprint is unchanged; an accepted
+answer (`persistResponse`) clears both. The card and the new alert compare the stored fingerprint
+with the latest install record's, so a new install hides the mark at once, a takeover's clocks
+cannot matter, and rotating the vault key, which re-encrypts the same certificate, keeps it. (The
+vault's credential revision was the first choice, and rotation changes it; 2026-11-27.) Card:
 "AEAT did not accept this certificate on {date}. Install a new one." in place of the days-left
 line. Alert `fiscal.certificate_not_accepted` (error, `venue-settings`, since the date) from
 `certificateAlerts`, guarded by `scripts/ongoing-alert-codes.test.ts`, wording EN/ES in
@@ -59,8 +61,8 @@ accepted send or a new install, not when nothing is waiting to send. Schema chan
 fiscal-verifactu's starting migration is rebuilt (`migration-baseline rebuild`); **venues reset**
 (PR's first line).
 
-**Task 5. Setup's first fiscal test says it.** `readinessRejections` reads the mark in the sample
-database the readiness drain used, so `fiscal-readiness-runner.ts:144-157` answers `rejected` with
+**Task 5. Setup's first fiscal test says it.** `readinessRejections`, given the sample's node, reads
+the mark in the sample database the readiness drain used, so `fiscal-readiness-runner.ts:144-157` answers `rejected` with
 a certificate refusal instead of `uncertain`; setup words it as Task 2 does, EN/ES.
 
 Guide EN/ES: `apps/server/src/guide/{en,es}/aeat-certificate.md` gains one sentence under its

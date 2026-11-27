@@ -26,7 +26,7 @@ export interface CertificateCard {
     source: "setup" | "dashboard";
     installedByName: string | null;
     lastAcceptedAt: string | null;
-    /** Present only while AEAT's refusal names the revision the vault holds now. */
+    /** Present only while AEAT's refusal names this install's certificate. */
     notAcceptedAt?: string;
   };
 }
@@ -81,7 +81,7 @@ export async function readCertificateCard(
     }
     const installedByName = row.personId === null ? null : await deps.nameOf(tx, row.personId);
     const lastAccepted = await lastAcceptedSince(tx, row.installedAt);
-    const notAcceptedAt = await certificateRefusedAt(tx, revision);
+    const notAcceptedAt = await certificateRefusedAt(tx, row.fingerprint);
     return {
       revision,
       timeZone,

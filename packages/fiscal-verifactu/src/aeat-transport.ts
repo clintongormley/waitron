@@ -2,11 +2,12 @@ import { Agent, fetch as undiciFetch } from "undici";
 import { AppError, isAppError } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
-import { credentialRevision, getCredential } from "@waitron/credentials";
+import { getCredential } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
 import { SOAP_ENDPOINTS, SOAP_ENDPOINTS_SELLO, createClient } from "@waitron/verifactu";
+import type { VerifactuClient } from "@waitron/verifactu";
 import type { FiscalDutyDeps, FiscalDutyLog } from "@waitron/fiscal";
-import type { DrainClient } from "./certificate-refusal.js";
+import { openCertificateFile } from "./certificate-file.js";
 import "./errors.js";
 
 /** The two FNMT certificate kinds this host routes on. `CertKind` is derived from this array, so
@@ -57,19 +58,22 @@ export function certMaterialFrom(
 }
 
 export async function readCertMaterial(db: Database, ring: KeyRing): Promise<CertMaterial> {
-  return (await readCertMaterialAndRevision(db, ring)).material;
+  const payload = await withTransaction(db, (tx) =>
+    getCredential(tx, ring, { purpose: "fiscal.aeat" }),
+  );
+  return certMaterialFrom(payload, { purpose: "fiscal.aeat" });
 }
 
-/** One read, so the revision names the material that was decrypted. */
-async function readCertMaterialAndRevision(
-  db: Database,
-  ring: KeyRing,
-): Promise<{ material: CertMaterial; revision: string | null }> {
-  const { payload, revision } = await withTransaction(db, async (tx) => ({
-    payload: await getCredential(tx, ring, { purpose: "fiscal.aeat" }),
-    revision: await credentialRevision(tx, { purpose: "fiscal.aeat" }),
-  }));
-  return { material: certMaterialFrom(payload, { purpose: "fiscal.aeat" }), revision };
+/** A drain's client. `certificateFingerprint` names the certificate it sends with, as an install
+ * record's `fingerprint` names it, or null when the file does not open; it is read only after AEAT
+ * refuses the certificate. */
+export type DrainClient = VerifactuClient & {
+  readonly certificateFingerprint?: () => string | null;
+};
+
+function fingerprintOf(material: CertMaterial): string | null {
+  const opened = openCertificateFile(material.pfx, material.passphrase);
+  return opened.ok ? opened.details.fingerprint : null;
 }
 
 /**
@@ -175,18 +179,17 @@ export function aeatClientResolver(deps: TransportDeps, log?: FiscalDutyLog): Cl
   const open: AeatTransport[] = [];
   return {
     resolve: async () => {
-      const { material, revision } = await readCertMaterialAndRevision(deps.db, deps.ring);
+      const material = await readCertMaterial(deps.db, deps.ring);
       const transport = deps.fetchFor(material);
       open.push(transport);
       const client = createClient({
         endpoint: deps.endpointFor(material.certKind),
         fetch: transport.fetch,
       });
-      if (deps.observeAuthorityTime === undefined) {
-        return { ...client, certificateRevision: revision };
-      }
+      const certificateFingerprint = () => fingerprintOf(material);
+      if (deps.observeAuthorityTime === undefined) return { ...client, certificateFingerprint };
       return {
-        certificateRevision: revision,
+        certificateFingerprint,
         consultar: (header, filter) => client.consultar(header, filter),
         submit: async (header, records) => {
           const sentAt = new Date();

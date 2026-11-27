@@ -451,7 +451,7 @@ is refused with `fiscal.certificate_changed` (409). The next filing pass reads t
 so no restart is needed.
 
 `waitron-credentials set --purpose fiscal.aeat` still writes the certificate, but it records no
-install. The dashboard card, the expiry alerts and the reminder emails read the latest install
+install. The dashboard card, the certificate alerts and the reminder emails read the latest install
 record, so after a write from the command line they go on describing the previous certificate. Use
 the dashboard unless you have no other way in.
 

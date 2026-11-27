@@ -1,6 +1,5 @@
 import { eq, isNull, ne, or } from "drizzle-orm";
 import { tableExists } from "@waitron/db";
-import { credentialRevision } from "@waitron/credentials";
 import { hasCode, isAppError } from "@waitron/shared";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
@@ -9,7 +8,7 @@ import { VerifactuBackend } from "./backend.js";
 import { runningIdentity } from "./software-identity.js";
 import { aeatClientResolver, aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { certificateAlerts } from "./certificate-alerts.js";
-import { certificateRefusedAt } from "./certificate-refusal.js";
+import { currentCertificateRefusedAt } from "./certificate-refusal.js";
 import { queueReminders, currentReminderInstall, wordReminder } from "./certificate-reminders.js";
 import { readCertificateCard } from "./certificate-card.js";
 import { installCertificate } from "./certificate-install.js";
@@ -58,11 +57,8 @@ export const FISCAL_SLOT: FiscalContribution = {
       .limit(1);
     return rows.length > 0;
   },
-  readinessRejections: async (db) => {
-    const refused = await certificateRefusedAt(
-      db,
-      await credentialRevision(db, { purpose: "fiscal.aeat" }),
-    );
+  readinessRejections: async (db, nodeId) => {
+    const refused = await currentCertificateRefusedAt(db, nodeId);
     const rejected = await db
       .select({
         code: verifactuSubmissions.codigoError,

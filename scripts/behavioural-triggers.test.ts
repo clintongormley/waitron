@@ -706,7 +706,7 @@ it("keeps the sending gate while the drainer can update its wait and clear an in
       proximo_envio_en: next,
       tiempo_espera_seg: 90,
       technical_incident_token: null,
-      certificate_refused_revision: null,
+      certificate_refused_fingerprint: null,
       certificate_refused_at: null,
     },
   ]);
