@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -6,7 +5,7 @@ import {
   type BillDiscountLine,
   type PendingBillDiscount,
 } from "@waitron/adjustments";
-import { workingOrderLines } from "@waitron/db";
+import { menus, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { gatherBillDiscountInputs, readBillDiscounts } from "./bill-discounts-read.js";
@@ -40,8 +39,8 @@ beforeAll(() => {
   worked = vi.mocked(workOutBillDiscounts);
 });
 
-/** The bill's lines as PR 1 takes them, read here column by column; a bound line's group is any
- * string, which the cases compare between lines. */
+/** The bill's lines as `workOutBillDiscounts` takes them, read here column by column; a bound
+ * line's group is any string, which the cases compare between lines. */
 async function linesOf(billId: string): Promise<BillDiscountLine[]> {
   const rows = await inTx(venue, (tx) =>
     tx
@@ -115,6 +114,9 @@ async function twoBills() {
   });
   const firstLines = await linesOf(first.billId);
   const secondLines = await linesOf(second.billId);
+  const [daily] = await inTx(venue, (tx) =>
+    tx.insert(menus).values({ name: "Daily" }).returning({ id: menus.id }),
+  );
   const held = await inTx(venue, async (tx) => ({
     firstBill: await holdDiscount(tx, venue, { workingOrderId: first.billId, position: 1 }),
     firstDish: await holdDiscount(tx, venue, {
@@ -130,7 +132,7 @@ async function twoBills() {
     }),
     secondSetMenu: await holdDiscount(tx, venue, {
       workingOrderId: second.billId,
-      setMenuId: randomUUID(),
+      setMenuId: daily!.id,
       setMenuName: "Daily",
       position: 3,
     }),
@@ -167,6 +169,59 @@ describe("gatherBillDiscountInputs and readBillDiscounts", () => {
         (await filedTogether(bill)).map((ids) => ids.sort()),
       );
     }
+  });
+
+  it("keeps apart bound portions the invoice files apart for their list price", async () => {
+    const { billId } = await billWith(venue, [{ name: "Burger", quantity: "3" }]);
+    const [none, same, other] = await linesOf(billId);
+    // One portion's list price equals its price, which filing reads as none; another's differs.
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ listUnitPriceGross: same!.unit })
+        .where(eq(workingOrderLines.id, same!.id));
+      await tx
+        .update(workingOrderLines)
+        .set({ listUnitPriceGross: other!.unit + 100 })
+        .where(eq(workingOrderLines.id, other!.id));
+    });
+    await inTx(venue, (tx) => holdDiscount(tx, venue, { workingOrderId: billId, ...twoEuros }));
+
+    const inputs = await inTx(venue, (tx) => gatherBillDiscountInputs(tx, [billId]));
+    expect(await filedTogether(billId)).toEqual([[none!.id, same!.id], [other!.id]]);
+    // Groups match filed rows only while grouped portions share a price, as all three do here.
+    expect(sameGroup(inputs.get(billId)!.lines).map((ids) => ids.sort())).toEqual(
+      (await filedTogether(billId)).map((ids) => ids.sort()),
+    );
+  });
+
+  it("keeps bound portions in one group once a discount has stamped one's list price", async () => {
+    const { billId } = await billWith(venue, [{ name: "Burger", quantity: "2" }]);
+    const [, discounted] = await linesOf(billId);
+    // As a discount leaves it: the list price stamped at the old price, the price lowered.
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ listUnitPriceGross: discounted!.unit, unitPriceGross: discounted!.unit / 2 })
+        .where(eq(workingOrderLines.id, discounted!.id)),
+    );
+    await inTx(venue, (tx) => holdDiscount(tx, venue, { workingOrderId: billId, ...twoEuros }));
+
+    const inputs = await inTx(venue, (tx) => gatherBillDiscountInputs(tx, [billId]));
+    expect(sameGroup(inputs.get(billId)!.lines)).toHaveLength(1);
+  });
+
+  it("answers a bill named twice once, at its first place", async () => {
+    const { first, second } = await twoBills();
+    const plain = await billWith(venue, [{ name: "Steak" }]);
+    const inputs = await inTx(venue, (tx) => gatherBillDiscountInputs(tx, [second, first, second]));
+    expect([...inputs.keys()]).toEqual([second, first]);
+    worked.mockClear();
+    const answers = await inTx(venue, (tx) =>
+      readBillDiscounts(tx, [first, plain.billId, first, plain.billId]),
+    );
+    expect([...answers.keys()]).toEqual([first, plain.billId]);
+    expect(worked).toHaveBeenCalledTimes(1);
   });
 
   it("finds a dish's discount on the bill its line moved to", async () => {
@@ -219,7 +274,7 @@ describe("gatherBillDiscountInputs and readBillDiscounts", () => {
     });
   });
 
-  it("answers each bill what PR 1's working-out answers on that bill's input", async () => {
+  it("answers each bill what workOutBillDiscounts answers on that bill's input", async () => {
     const { first, second } = await twoBills();
     const inputs = await inTx(venue, (tx) => gatherBillDiscountInputs(tx, [first, second]));
     const answers = await inTx(venue, (tx) => readBillDiscounts(tx, [first, second]));

@@ -14,6 +14,7 @@ import {
   tsString,
 } from "../columns.js";
 import { persons } from "../identity/persons.js";
+import { menus } from "../menus.js";
 import { workingOrderLines, workingOrders } from "../orders.js";
 import type { AdjustmentPolicySnapshot } from "@waitron/shared";
 
@@ -32,7 +33,6 @@ export const billDiscounts = table(
     workingOrderId: id("working_order_id"),
     lineId: id("line_id"),
     setMenuLineId: id("set_menu_line_id"),
-    // No foreign key: the menu can be deleted while the bill is open; `set_menu_name` names it.
     setMenuId: id("set_menu_id"),
     setMenuName: label("set_menu_name"),
     action: billDiscountAction("action").notNull(),
@@ -71,6 +71,11 @@ export const billDiscounts = table(
       name: "bill_discounts_set_menu_line_fk",
     }).onDelete("set null"),
     foreignKey({
+      columns: [t.setMenuId],
+      foreignColumns: [menus.id],
+      name: "bill_discounts_set_menu_fk",
+    }),
+    foreignKey({
       columns: [t.sharedFrom],
       foreignColumns: [t.id],
       name: "bill_discounts_shared_from_fk",
@@ -88,11 +93,17 @@ export const billDiscounts = table(
     index("bill_discounts_working_order_idx").on(t.workingOrderId),
     index("bill_discounts_line_idx").on(t.lineId),
     index("bill_discounts_set_menu_line_idx").on(t.setMenuLineId),
+    index("bill_discounts_set_menu_idx").on(t.setMenuId),
     index("bill_discounts_shared_from_idx").on(t.sharedFrom),
     index("bill_discounts_requested_by_idx").on(t.requestedBy),
     index("bill_discounts_approved_by_idx").on(t.approvedBy),
     check("bill_discounts_action_ck", enumCheck(t.action)),
     check("bill_discounts_origin_ck", enumCheck(t.origin)),
+    check("bill_discounts_reason_name_ck", sql`length(trim(${t.reasonName})) > 0`),
+    check(
+      "bill_discounts_position_ck",
+      sql`typeof(${t.position}) = 'integer' and ${t.position} >= 0`,
+    ),
     // A set menu's row keeps its menu's id and name once the grouping deleted its line.
     check(
       "bill_discounts_target_ck",
@@ -107,16 +118,27 @@ export const billDiscounts = table(
       "bill_discounts_value_ck",
       sql`(${t.action} = 'comp' and ${t.percentBp} is null and ${t.amount} is null)
         or (${t.action} = 'discount_percent' and ${t.amount} is null
-          and ${t.percentBp} is not null and ${t.percentBp} between 1 and 10000)
+          and typeof(${t.percentBp}) = 'integer' and ${t.percentBp} between 1 and 10000)
         or (${t.action} = 'discount_amount' and ${t.percentBp} is null
-          and ${t.amount} is not null and ${t.amount} > 0)`,
+          and typeof(${t.amount}) = 'integer' and ${t.amount} > 0)`,
+    ),
+    check(
+      "bill_discounts_bill_level_ck",
+      sql`${t.lineId} is not null or ${t.setMenuId} is not null
+        or ${t.action} in ('discount_percent', 'discount_amount')`,
     ),
     check(
       "bill_discounts_shared_from_ck",
       sql`(${t.origin} = 'given'
           and ${t.sharedFromBillName} is null and ${t.sharedFromPercentBp} is null)
         or (${t.origin} = 'bill_share' and ${t.sharedFromBillName} is not null
-          and (${t.sharedFromPercentBp} is null or ${t.sharedFromPercentBp} between 1 and 10000))`,
+          and (${t.sharedFromPercentBp} is null
+            or (typeof(${t.sharedFromPercentBp}) = 'integer'
+              and ${t.sharedFromPercentBp} between 1 and 10000)))`,
+    ),
+    check(
+      "bill_discounts_share_ck",
+      sql`${t.origin} = 'given' or (${t.lineId} is not null and ${t.action} = 'discount_amount')`,
     ),
   ],
 );

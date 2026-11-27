@@ -1,4 +1,5 @@
-import { eq, inArray, or, sql } from "drizzle-orm";
+import { eq, getTableColumns, inArray, sql } from "drizzle-orm";
+import { unionAll } from "drizzle-orm/sqlite-core";
 import { billDiscounts, workingOrderLines, type Transaction } from "@waitron/db";
 
 /** A discount to hold on an open bill until its invoice (plan A1621 D3). */
@@ -28,7 +29,7 @@ export async function deletePendingDiscounts(
 
 /**
  * Every discount held on `billIds`: each bill's own rows and the rows on its lines, bill by bill in
- * `billIds`' order, each bill's by position, rows at one position by id.
+ * the order each bill first appears in `billIds`, each bill's by position, rows at one position by id.
  */
 export async function readPendingDiscounts(
   tx: Transaction,
@@ -36,20 +37,22 @@ export async function readPendingDiscounts(
 ): Promise<PendingDiscount[]> {
   if (billIds.length === 0) return [];
   const bills = sql`(select value from json_each(${JSON.stringify(billIds)}))`;
-  const rows = await tx
-    .select({
-      row: billDiscounts,
-      billId: sql<string>`coalesce(${billDiscounts.workingOrderId}, ${workingOrderLines.workingOrderId})`,
-    })
-    .from(billDiscounts)
-    .leftJoin(workingOrderLines, eq(workingOrderLines.id, billDiscounts.lineId))
-    .where(
-      or(
-        inArray(billDiscounts.workingOrderId, bills),
-        inArray(workingOrderLines.workingOrderId, bills),
-      ),
-    );
-  const order = new Map(billIds.map((id, at) => [id, at]));
+  const columns = getTableColumns(billDiscounts);
+  const rows = await unionAll(
+    tx
+      .select({ row: columns, billId: sql<string>`${billDiscounts.workingOrderId}` })
+      .from(billDiscounts)
+      .where(inArray(billDiscounts.workingOrderId, bills)),
+    tx
+      .select({ row: columns, billId: sql<string>`${workingOrderLines.workingOrderId}` })
+      .from(workingOrderLines)
+      .innerJoin(billDiscounts, eq(billDiscounts.lineId, workingOrderLines.id))
+      .where(inArray(workingOrderLines.workingOrderId, bills)),
+  );
+  const order = new Map<string, number>();
+  billIds.forEach((id, at) => {
+    if (!order.has(id)) order.set(id, at);
+  });
   return rows
     .map(({ row, billId }) => ({ ...row, billId }))
     .sort(
@@ -79,6 +82,7 @@ export async function moveShare(
   cents: number,
   to: string | NewShare,
 ): Promise<string> {
+  if (to === from) throw new RangeError(`discount ${from} cannot move into itself`);
   const held = await amountOf(tx, from);
   if (!Number.isSafeInteger(cents) || cents <= 0 || cents > held) {
     throw new RangeError(`discount ${from} holds ${held}, not ${cents} to move`);

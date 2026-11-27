@@ -198,7 +198,10 @@ Recommendations, each with why. None changes what the owner decided, except wher
   write; set for a bill or set-menu target); `line_id` (a dish or extra; foreign key, deleted with its
   line); `set_menu_line_id` (foreign key, set to null when the grouping deletes the row, as
   `working_order_lines.set_menu_line_id` already is, `packages/db/src/schema/orders.ts:439-443`);
-  `set_menu_id` and `set_menu_name` (to name it once its row is gone); `action` (`comp`,
+  `set_menu_id` and `set_menu_name` (to name it once its row is gone; `set_menu_id` references
+  `menus` with no delete action, as `working_order_lines.set_menu_id` does: product code only
+  deactivates a menu, `packages/menu/src/delete.ts`, and the one hard delete is the configuration
+  import at first setup); `action` (`comp`,
   `discount_percent`, `discount_amount`, today's names, so crystallising maps one to one);
   `percent_bp`; `amount`; `origin` (`given` or `bill_share`, D8); `shared_from` (the row an amount
   share was split from, so a declined card can give it back, D10; a foreign key to this table set to

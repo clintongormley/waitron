@@ -8,6 +8,7 @@ import {
   type WorkedBill,
 } from "@waitron/adjustments";
 import { workingOrderLines, type Transaction } from "@waitron/db";
+import { decimal } from "@waitron/shared";
 import { canonical } from "./adjustment-rows.js";
 import { storedLineColumns, toStoredLines, type StoredOrderLine } from "./stored-order-lines.js";
 
@@ -23,18 +24,24 @@ function targetOf(row: PendingDiscount): PendingBillDiscount["target"] {
   return { kind: "bill" };
 }
 
-/** What filing compares of a line but its price, its list price and its quantity
- * (`projectPortionSale`'s row key, those three left out). */
+/** What `projectPortionSale` compares of a line, but its price, its quantity and its dish, with the
+ * list price a discount would stamp (`list ?? price`), so the group is the same before and after
+ * any discount. */
 function filedFields({ identity, locked }: StoredOrderLine): string {
   return canonical({
-    identity: { ...identity, id: null, listUnitGross: null },
+    identity: {
+      ...identity,
+      id: null,
+      listUnitGross: identity.listUnitGross ?? decimal(locked.grossUnitPrice),
+    },
     locked: { ...locked, grossUnitPrice: null, quantity: null, parentLineNo: null },
   });
 }
 
 /**
- * Each of `billIds` that holds a discount, with its lines and its discounts in the order given. A
- * bill holding none is left out, having cost the one read of every bill's discounts.
+ * Each of `billIds` that holds a discount, once and in the order it first appears, with its lines
+ * and its discounts. A bill holding none is left out, having cost the one read of every bill's
+ * discounts.
  */
 export async function gatherBillDiscountInputs(
   tx: Transaction,
@@ -113,7 +120,7 @@ export async function readBillDiscounts(
 ): Promise<Map<string, WorkedBill>> {
   const inputs = await gatherBillDiscountInputs(tx, billIds);
   return new Map(
-    billIds.map((billId) => {
+    [...new Set(billIds)].map((billId) => {
       const input = inputs.get(billId);
       return [
         billId,

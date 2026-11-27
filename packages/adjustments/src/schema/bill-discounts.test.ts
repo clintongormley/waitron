@@ -6,6 +6,8 @@ import {
   captureError,
   checkFailed,
   CORE_MIGRATIONS,
+  FOREIGN_KEY_VIOLATION,
+  isRefusal,
   menus,
   menuVersions,
   workingOrderLines,
@@ -159,12 +161,13 @@ describe("A1621 bill_discounts: a discount held on an open bill until its invoic
 
   it("pairs each action with its percentage or amount", async () => {
     const order = await bill();
+    const line = await burger(order);
     const value = "bill_discounts_value_ck";
-    await give({ workingOrderId: order, action: "comp", percentBp: null });
+    await give({ lineId: line, action: "comp", percentBp: null });
     await give({ workingOrderId: order, action: "discount_amount", percentBp: null, amount: 1 });
     await give({ workingOrderId: order, percentBp: 10000 });
-    await refusedBy({ workingOrderId: order, action: "comp" }, value);
-    await refusedBy({ workingOrderId: order, action: "comp", percentBp: null, amount: 100 }, value);
+    await refusedBy({ lineId: line, action: "comp" }, value);
+    await refusedBy({ lineId: line, action: "comp", percentBp: null, amount: 100 }, value);
     await refusedBy({ workingOrderId: order, percentBp: null }, value);
     await refusedBy({ workingOrderId: order, percentBp: 0 }, value);
     await refusedBy({ workingOrderId: order, percentBp: 10001 }, value);
@@ -175,6 +178,70 @@ describe("A1621 bill_discounts: a discount held on an open bill until its invoic
       value,
     );
     await refusedBy({ workingOrderId: order, action: "discount_amount", amount: 100 }, value);
+  });
+
+  it("refuses a fraction of a cent, of a basis point or of a position", async () => {
+    const order = await bill();
+    const line = await burger(order);
+    const value = "bill_discounts_value_ck";
+    await refusedBy(
+      { workingOrderId: order, action: "discount_amount", percentBp: null, amount: 0.5 },
+      value,
+    );
+    await refusedBy({ workingOrderId: order, percentBp: 1234.5 }, value);
+    await refusedBy(
+      {
+        lineId: line,
+        action: "discount_amount",
+        percentBp: null,
+        amount: 100,
+        origin: "bill_share",
+        sharedFromBillName: "Table 4",
+        sharedFromPercentBp: 1234.5,
+      },
+      "bill_discounts_shared_from_ck",
+    );
+    await give({ workingOrderId: order, position: 0 });
+    await refusedBy({ workingOrderId: order, position: 1.5 }, "bill_discounts_position_ck");
+    await refusedBy({ workingOrderId: order, position: -1 }, "bill_discounts_position_ck");
+  });
+
+  it("takes Free on a dish or a set menu, never on the whole bill", async () => {
+    const order = await bill();
+    const { lineId, menuId } = await setMenuRow(order);
+    const free = { action: "comp", percentBp: null } as const;
+    await give({
+      ...free,
+      workingOrderId: order,
+      setMenuLineId: lineId,
+      setMenuId: menuId,
+      setMenuName: "Daily",
+    });
+    await give({ ...free, workingOrderId: order, setMenuId: menuId, setMenuName: "Daily" });
+    await refusedBy({ ...free, workingOrderId: order }, "bill_discounts_bill_level_ck");
+  });
+
+  it("refuses a blank reason name", async () => {
+    const order = await bill();
+    const named = "bill_discounts_reason_name_ck";
+    await refusedBy({ workingOrderId: order, reasonName: "" }, named);
+    await refusedBy({ workingOrderId: order, reasonName: "  " }, named);
+  });
+
+  it("names a set menu that is a menu, and keeps that menu while its discount is held", async () => {
+    const order = await bill();
+    const missing = await captureError(() =>
+      give({ workingOrderId: order, setMenuId: randomUUID(), setMenuName: "Daily" }),
+    );
+    expect(isRefusal(missing, FOREIGN_KEY_VIOLATION)).toBe(true);
+    const [held, free] = await db
+      .insert(menus)
+      .values([{ name: "Daily" }, { name: "Weekend" }])
+      .returning({ id: menus.id });
+    await give({ workingOrderId: order, setMenuId: held!.id, setMenuName: "Daily" });
+    const kept = await captureError(() => db.delete(menus).where(eq(menus.id, held!.id)));
+    expect(isRefusal(kept, FOREIGN_KEY_VIOLATION)).toBe(true);
+    await db.delete(menus).where(eq(menus.id, free!.id));
   });
 
   it("refuses an unknown action or origin", async () => {
@@ -214,6 +281,23 @@ describe("A1621 bill_discounts: a discount held on an open bill until its invoic
     );
     await refusedBy({ ...share, sharedFromBillName: "Table 4" }, shared);
     await refusedBy({ ...share, sharedFromPercentBp: 1000 }, shared);
+  });
+
+  it("takes a share of a bill only as an amount on a dish", async () => {
+    const order = await bill();
+    const line = await burger(order);
+    const { menuId } = await setMenuRow(order);
+    const share = { origin: "bill_share", sharedFromBillName: "Table 4" } as const;
+    const amount = { action: "discount_amount", percentBp: null, amount: 100 } as const;
+    const shape = "bill_discounts_share_ck";
+    await give({ ...share, ...amount, lineId: line });
+    await refusedBy({ ...share, ...amount, workingOrderId: order }, shape);
+    await refusedBy(
+      { ...share, ...amount, workingOrderId: order, setMenuId: menuId, setMenuName: "Daily" },
+      shape,
+    );
+    await refusedBy({ ...share, lineId: line }, shape);
+    await refusedBy({ ...share, lineId: line, action: "comp", percentBp: null }, shape);
   });
 
   it("removes a dish's discount with the dish", async () => {
@@ -292,6 +376,7 @@ describe("A1621 bill_discounts: a discount held on an open bill until its invoic
         "approved_by",
         "line_id",
         "requested_by",
+        "set_menu_id",
         "set_menu_line_id",
         "shared_from",
         "working_order_id",

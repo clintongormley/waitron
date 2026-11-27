@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { beforeAll, describe, expect, it } from "vitest";
+import type { Query } from "drizzle-orm";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   withTransaction,
@@ -83,12 +84,40 @@ async function give(row: Partial<NewPendingDiscount>): Promise<string> {
 const amountOff = (amount: number) =>
   ({ action: "discount_amount", percentBp: null, amount }) as const;
 
+// Every statement, raw or built, reaches SQLite through the session's `prepareQuery`.
+type Session = { prepareQuery(query: Query, ...rest: unknown[]): { all(): unknown } };
+
+/** The plan of the one statement `readPendingDiscounts` sends. */
+async function planOfRead(billIds: readonly string[]): Promise<string[]> {
+  return inTx(async (tx) => {
+    const session = (tx as unknown as { session: Session }).session;
+    const prepare = vi.spyOn(session, "prepareQuery");
+    let sent: Query[];
+    try {
+      await readPendingDiscounts(tx, billIds);
+      sent = prepare.mock.calls.map(([query]) => query);
+    } finally {
+      prepare.mockRestore();
+    }
+    expect(sent).toHaveLength(1);
+    const rows = session
+      .prepareQuery(
+        { sql: `explain query plan ${sent[0]!.sql}`, params: sent[0]!.params },
+        undefined,
+        "all",
+        false,
+      )
+      .all() as { detail: string }[];
+    return rows.map((row) => row.detail);
+  });
+}
+
 async function held(billIds: readonly string[]) {
   const rows = await inTx((tx) => readPendingDiscounts(tx, billIds));
   return rows.map(({ id, billId, amount, sharedFrom }) => ({ id, billId, amount, sharedFrom }));
 }
 
-describe("pending-discounts: the one writer of bill_discounts", () => {
+describe("pending-discounts: the store's writer of bill_discounts", () => {
   it("reads each bill's own rows and its lines' rows, in the order given, and no other bill's", async () => {
     const first = await bill();
     const second = await bill();
@@ -111,6 +140,32 @@ describe("pending-discounts: the one writer of bill_discounts", () => {
     const ids = ["f", "a", "c"].map((digit) => `${digit.repeat(8)}-0000-4000-8000-000000000000`);
     for (const id of ids) await give({ id, workingOrderId: order });
     expect((await held([order])).map(({ id }) => id)).toEqual([ids[1], ids[2], ids[0]]);
+  });
+
+  it("reads one bill's rows through the bill's and its lines' indexes, never the whole table", async () => {
+    const order = await bill();
+    expect(await planOfRead([order])).toEqual([
+      "COMPOUND QUERY",
+      "LEFT-MOST SUBQUERY",
+      "SEARCH bill_discounts USING INDEX bill_discounts_working_order_idx (working_order_id=?)",
+      "LIST SUBQUERY 1",
+      "SCAN json_each VIRTUAL TABLE INDEX 1:",
+      "UNION ALL",
+      "SEARCH working_order_lines USING INDEX working_order_lines_line_no_key (working_order_id=?)",
+      "LIST SUBQUERY 3",
+      "SCAN json_each VIRTUAL TABLE INDEX 1:",
+      "SEARCH bill_discounts USING INDEX bill_discounts_line_idx (line_id=?)",
+    ]);
+  });
+
+  it("reads each row once, since no row may name both a bill and a line on it", async () => {
+    const order = await bill();
+    const dish = await burger(order);
+    const both = await give({ workingOrderId: order, lineId: dish }).catch((e: unknown) => e);
+    expect(String((both as Error).cause ?? both)).toContain("bill_discounts_target_ck");
+    const ofBill = await give({ workingOrderId: order });
+    const ofDish = await give({ lineId: dish, position: 2 });
+    expect((await held([order])).map(({ id }) => id)).toEqual([ofBill, ofDish]);
   });
 
   it("reads nothing for no bills", async () => {
@@ -189,6 +244,30 @@ describe("pending-discounts: the one writer of bill_discounts", () => {
       { id: percent, billId: order, amount: null, sharedFrom: null },
       { id: amount, billId: order, amount: 500, sharedFrom: null },
       { id: other, billId: order, amount: 500, sharedFrom: null },
+    ]);
+  });
+
+  it("refuses a move of part or all of an amount into itself, leaving the row as it was", async () => {
+    const order = await bill();
+    const amount = await give({ workingOrderId: order, ...amountOff(500) });
+    const unchanged = [{ id: amount, billId: order, amount: 500, sharedFrom: null }];
+    for (const cents of [100, 500]) {
+      const error = await inTx((tx) => moveShare(tx, amount, cents, amount)).catch(
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(RangeError);
+      expect(await held([order])).toEqual(unchanged);
+    }
+  });
+
+  it("reads a bill named twice once, at its first place", async () => {
+    const first = await bill();
+    const second = await bill();
+    const ofFirst = await give({ workingOrderId: first });
+    const ofSecond = await give({ workingOrderId: second });
+    expect(await held([first, second, first])).toEqual([
+      { id: ofFirst, billId: first, amount: null, sharedFrom: null },
+      { id: ofSecond, billId: second, amount: null, sharedFrom: null },
     ]);
   });
 });
