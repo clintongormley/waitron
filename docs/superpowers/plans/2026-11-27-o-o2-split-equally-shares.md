@@ -150,9 +150,9 @@ size rule); the receipt questions. Lane P's finish review says "ready for the ow
 
 ## Review and landing
 
-O2a and O2b-1 take the full `/finish-branch` wave with two Codex run-it reviews: O2a moves the
-division every share is charged with, O2b-1 changes where the guests sent come from. O2b-2 changes
-no request and takes the light path, the plan read and Codex run-it seat included. **Lane O lands
+All three take the full `/finish-branch` wave with two Codex run-it reviews, as every payment PR
+in this lane does: O2a moves the division every share is charged with, O2b-1 changes where the
+guests sent come from, and O2b-2 changes what a waiter sees while charging a share. **Lane O lands
 all three**: none changes how a receipt or invoice is issued (request shape at line 774 and the
 server's allocation unchanged). Each leaves `main` working: after O2a nothing staff see changes;
 after O2b-1 Start leads to today's Table Pay.
