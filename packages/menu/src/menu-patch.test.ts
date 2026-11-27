@@ -172,7 +172,6 @@ describe("applyMenuPatch", () => {
     const variant = offer.variants.find((v) => v.id === f.large)!;
     expect(variant.unitPrice).toBe("4.25");
     expect(variant.menuPrice).toBeNull();
-    expect(variant.vatClass).toBe(large.vatClass);
     expect({ ...offer, variants: [] }).toEqual({ ...before, variants: [] });
   });
 

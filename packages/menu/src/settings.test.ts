@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, products, settings, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, settings, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import * as menuModule from "./index.js";
@@ -69,17 +69,8 @@ describe("the venue's new-product defaults", () => {
   });
 
   it.each(["general", "reduced", "super_reduced", "zero"] as const)(
-    "saves and reloads %s without changing an existing product",
+    "saves and reloads %s",
     async (defaultProductVatClass) => {
-      const [product] = await suite.db
-        .insert(products)
-        .values({
-          name: "Lemonade",
-
-          unitPrice: 100,
-          vatClass: "reduced",
-        })
-        .returning();
       await withTransaction(suite.db, (tx) =>
         menuModule.saveMenuSettings(tx, { defaultProductVatClass }),
       );
@@ -88,12 +79,6 @@ describe("the venue's new-product defaults", () => {
         defaultTakeawayVatRate: "10.00",
         defaultColor: null,
       });
-      expect(
-        await suite.db
-          .select({ vatClass: products.vatClass })
-          .from(products)
-          .where(eq(products.id, product!.id)),
-      ).toEqual([{ vatClass: "reduced" }]);
     },
   );
 

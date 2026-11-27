@@ -1247,7 +1247,7 @@ export interface VenueServiceContribution {
       unitName: Readonly<Record<string, string>>;
       unitPrecision: number;
       hardwareUnit: "kg" | "g" | "mg" | null;
-      vatClass: string;
+      vatClass?: string;
     }[]
   >;
   /** Each line's offer is looked up in `offers`, the zone's offers the lines were priced from; one

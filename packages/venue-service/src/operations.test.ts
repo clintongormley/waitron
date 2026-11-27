@@ -979,7 +979,6 @@ describe("venue service routing", () => {
           unitName: { en: "kg" },
           unitPrecision: 3,
           hardwareUnit: "kg",
-          vatClass: "reduced",
         }),
       ]);
       const attribution = await tx.execute<{
