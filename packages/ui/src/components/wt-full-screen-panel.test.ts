@@ -22,6 +22,7 @@ const SHEET_TOKENS = [
   "--wt-menu-sheet-handle-height: 6px",
   "--wt-color-surface-sunken: rgb(4, 5, 6)",
   "--wt-duration-move: 9s",
+  "--wt-space-4: 23px",
 ].join(";");
 
 async function mountPanel(attributes: string): Promise<WtFullScreenPanel> {
@@ -41,6 +42,14 @@ async function mountPanel(attributes: string): Promise<WtFullScreenPanel> {
 
 const handleOf = (panel: WtFullScreenPanel) =>
   panel.shadowRoot!.querySelector<HTMLElement>("[data-handle]");
+
+function riseOf(panel: WtFullScreenPanel) {
+  const animations = panel.getAnimations() as CSSTransition[];
+  return animations.map((rise) => ({
+    property: rise.transitionProperty,
+    path: (rise.effect as KeyframeEffect).getKeyframes().map((frame) => frame.translate),
+  }));
+}
 
 test("a rising panel has rounded top corners, square bottom ones and an upward shadow", async () => {
   const panel = await mountPanel("rising");
@@ -121,8 +130,22 @@ test("a rising panel rises from below on first draw", async () => {
   const look = getComputedStyle(panel);
   expect(look.transitionProperty).toBe("translate");
   expect(look.transitionDuration).toBe("9s");
-  const rise = panel.getAnimations().map((a) => (a as CSSTransition).transitionProperty);
-  expect(rise).toEqual(["translate"]);
+  expect(riseOf(panel)).toEqual([{ property: "translate", path: ["0px 23px", "0px"] }]);
+  panel.getAnimations()[0]!.finish();
+  expect(getComputedStyle(panel).translate).toBe("0px");
+  expect(panel.getAnimations()).toEqual([]);
+});
+
+test("a rising panel rises again each time it is shown after being hidden", async () => {
+  await commands.emulateReducedMotion("no-preference");
+  const panel = await mountPanel("rising");
+  for (const animation of panel.getAnimations()) animation.finish();
+  panel.hidden = true;
+  expect(getComputedStyle(panel).display).toBe("none");
+  expect(panel.getAnimations()).toEqual([]);
+  panel.hidden = false;
+  expect(getComputedStyle(panel).display).toBe("grid");
+  expect(riseOf(panel)).toEqual([{ property: "translate", path: ["0px 23px", "0px"] }]);
 });
 
 test("a rising panel does not move when reduced motion is asked for", async () => {
