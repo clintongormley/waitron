@@ -2040,9 +2040,6 @@ The shared table groups Search and Customise on the final line at 640 px or less
 The table measures its own width, including a search forwarded through slots, so a narrow list
 inside a wide page follows the same rule. Customise stays last in the drawn order and in Tab order.
 
-Style a column's header cell by its `column-<key>` part, its sort button by `column-sort-<key>`,
-and its text label by `column-heading-<key>`. Products uses these parts to align Price with
-the amounts without moving the sort indicator into their space.
 Guards: the "Tab follows" and A462 Customise cases in
 `packages/ui/src/components/wt-data-table.test.ts` and
 `apps/dashboard/src/widgets/product-browser.test.ts`.
@@ -2051,6 +2048,10 @@ has no such attribute. Assigning or removing a forwarded search in an existing t
 width tracking too. Guards: the hidden-table, forwarded-slot and "only while it is searchable"
 cases in `packages/ui/src/components/wt-data-table.test.ts`, and the phone-width search-and-Customise
 case in `wt-data-table.a11y.test.ts`.
+
+Style a column's header cell by its `column-<key>` part, its sort button by `column-sort-<key>`,
+and its text label by `column-heading-<key>`. Products uses these parts to align Price with
+the amounts without moving the sort indicator into their space.
 
 Each section retains the `wt-combobox` choices its column's `filter` descriptor supplies. Its
 "all" row is shown as a chosen value while its empty string means no filter. A filter with
