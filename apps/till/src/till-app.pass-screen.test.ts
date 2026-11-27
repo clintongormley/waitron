@@ -160,9 +160,9 @@ describe("A773 pass screen: app", () => {
     ["station", [], []],
     ["pass", [], []],
     ["pass_monitor", [], []],
-    ["pass", ["show-expo"], [], false],
+    ["pass", ["show-station", "show-expo"], [], false],
   ] as const)(
-    "offers the narrow floor kitchen rows for %s with %j",
+    "offers the narrow floor kitchen rows for %s with %j: %j",
     async (kind, capabilities, rows, screenAvailable = true) => {
       const viewport = [innerWidth, innerHeight] as const;
       onTestFinished(() => page.viewport(...viewport));

@@ -572,6 +572,19 @@ it("walks from the last floor zone to the kitchen action with the arrow key", as
   }
 });
 
+it("still announces pending transfers with a floor chooser board open", async () => {
+  setLocale("en-GB");
+  const { el } = await mountWidget<TillShell>("till-shell", {
+    formFactor: "phone-portrait",
+    floorKitchenOpen: true,
+    transferCount: 1,
+  });
+  const announcement = el.shadowRoot!.querySelector(
+    '[role="status"][data-test="department-transfers-status"]',
+  );
+  expect(announcement?.textContent).toBe("Transfers (1 pending)");
+});
+
 it("shows the active language in the joined floor menu choice and gives Log out no arrow", async () => {
   setLocale("en-GB");
   await page.viewport(390, 844);
