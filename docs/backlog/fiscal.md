@@ -970,9 +970,9 @@ A802 slice 5b (#3108):
   2026-10-18): once A802 lands, a refund of cancelled dishes files their partial R5 in the same
   step. §3.8.1 there has a worked example: €5.50 back at 10% is an R5 of −€5.50, base −€5.00, VAT
   −€0.50. When this lands, the refund suites whose setups refund a named cancel (Task 7 of the
-  goodwill plan) start filing correctives, so their counts of filed records change. Still open for
-  receipts: on a full invoice naming a customer, the cancelled dish's money goes on the R1 that Give
-  money back files (CORRECT-FULL-INVOICE PR 2b).
+  goodwill plan) start filing correctives, so their counts of filed records change. This stays open
+  for receipts. On a full invoice naming a customer, the cancelled dish's money goes on the R1 that
+  Give money back files (CORRECT-FULL-INVOICE PR 2b).
 
 Also open, from before A802:
 
@@ -1201,6 +1201,9 @@ payment waits until it is added. CORRECT-FULL-INVOICE PR 2a.)
 (2026-11-27, A1614: another box's ticket is no longer refused for good. It is judged by its filing
 like this box's own, and while the tax agency has not answered it Correct invoice waits
 (`filing_pending`), so Refund a payment waits too for that money.)
+(2026-11-27: on a full invoice the cancels' money goes on the corrective too, so Refund a payment
+refuses it whether or not it names the cancel, and waits while the box's records need checking.
+CORRECT-FULL-INVOICE PR 2b.)
 
 ### Money given back is shared by menu price (owner and watcher, 2026-11-23)
 

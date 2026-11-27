@@ -171,7 +171,7 @@ Whether covered dishes may also be left off a full invoice: "it can, confirmed" 
 - **A deposit kept after a no-show.** A €40 deposit for a booking has its own ticket: €36.36 plus €3.64 VAT at 10%. The guests don't come and the venue keeps the €40 as compensation, which is outside VAT (DGT V0839-20). But reducing VAT already declared requires refunding it to the customer (LIVA 89.Cinco.b). *Does the venue issue a corrective removing the €3.64, though it refunds nothing, or does the deposit's ticket stand?*
 - **Money given back as goodwill.** A guest complains after paying €62 and the manager gives €10 back. You said (1.5) that a price reduction after the ticket "will, where applicable, require" a corrective invoice (LIVA 80.Uno.2.º). *Is the corrective required here, or may the venue give the money back without one and go on declaring VAT on €62?*
 - **Goodwill money back on a bill with two VAT rates** (added 21 November). If everything eaten in is at 10% (question 12), this happens only on a takeaway bill, such as a bottle of wine at €12.00 (21%) and a cheese at €8.00 (4%). The customer complains and the manager gives €5.00 back. We plan to split the €5.00 across the bill in proportion to the menu prices, as your answer 1.10 does for a free item: −€3.00 on the wine (−€2.48 base, −€0.52 VAT) and −€2.00 on the cheese (−€1.92 base, −€0.08 VAT). *If a corrective is required (the point above), is splitting by menu price right, or must the venue say which items the money comes off? And, to confirm the point above: is the corrective required at all, or may the venue give the money back without one, leaving VAT declared on the full price, and list the refund for its accountant?*
-- **Money given back on a full invoice** (added 25 November; built on 26 November except for a dish cancelled after payment). When money goes back on a full invoice naming a business, Waitron will issue a corrective full invoice filed as R1 by differences: for goodwill or a complaint (LIVA 80.Uno.2.º), and also for a dish that never came, which we read as part of the sale being undone (LIVA 80.Dos) rather than as an invoice that was simply wrong (R4). *Is R1 right for both?*
+- **Money given back on a full invoice** (added 25 November; built on 26 November, and for a dish cancelled after payment on 27 November). When money goes back on a full invoice naming a business, Waitron will issue a corrective full invoice filed as R1 by differences: for goodwill or a complaint (LIVA 80.Uno.2.º), and also for a dish that never came, which we read as part of the sale being undone (LIVA 80.Dos) rather than as an invoice that was simply wrong (R4). *Is R1 right for both?*
 
 **The owner's answers, 18 November 2026** (quoted as written; the adviser will come back with more details):
 
@@ -303,6 +303,8 @@ Open: which records need ten years.
 
   > **2026-11-27, A1614:** a ticket filed by another Waitron box is no longer among the tickets Waitron cannot correct: it is judged by its filing status like the box's own, so once the tax agency has accepted it, money given back as goodwill or for a dish goes through a corrective invoice filed by the box now in use; until the agency has answered it, that money waits.
 
+  > **2026-11-27:** on a full invoice naming a customer, money still owed on a dish cancelled after payment now goes on the same corrective invoice, and while the box's records need checking it waits instead of coming back with no corrective (PR 2b of the same plan). Money given back on one the tax agency refused with nothing Waitron can fix still comes back with no corrective.
+
 ## Part 2: Español
 
 **1. Cuándo se expide el tique de la mesa** (a partir de sus respuestas 1.1, 1.3, 1.4 y 1.8)
@@ -361,7 +363,7 @@ Nota: ____
 - **Una señal retenida cuando el cliente no se presenta.** Una señal de 40 € por una reserva tiene su propio tique: 36,36 € de base y 3,64 € de cuota al 10 %. Los clientes no se presentan y el local retiene los 40 € como indemnización, que no está sujeta (DGT V0839-20). Pero, para minorar el IVA ya repercutido, el art. 89.Cinco.b LIVA exige reintegrar la cuota al cliente. *¿Expide el local una rectificativa que anule los 3,64 €, aunque no devuelve nada, o se mantiene el tique de la señal?*
 - **Una devolución de cortesía.** Un cliente se queja después de pagar 62 € y el encargado le devuelve 10 €. Nos indicó (1.5) que una rebaja posterior al tique requiere, en su caso, una factura rectificativa (LIVA art. 80.Uno.2.º). *¿Es obligatoria aquí la rectificativa, o puede el local devolver el dinero sin ella y seguir declarando el IVA sobre los 62 €?*
 - **Una devolución de cortesía en una cuenta con dos tipos de IVA** (añadida el 21 de noviembre). Si todo lo que se consume en el local tributa al 10 % (pregunta 12), esto solo ocurre en una cuenta para llevar, por ejemplo una botella de vino de 12,00 € (21 %) y un queso de 8,00 € (4 %). El cliente se queja y el encargado le devuelve 5,00 €. Proponemos repartir los 5,00 € entre la cuenta en proporción a los precios de carta, como hace su respuesta 1.10 con un producto gratuito: −3,00 € en el vino (−2,48 € de base, −0,52 € de cuota) y −2,00 € en el queso (−1,92 € de base, −0,08 € de cuota). *Si la rectificativa es obligatoria (punto anterior), ¿es correcto repartir por precio de carta, o debe indicar el local qué productos se rebajan? Y, para confirmar el punto anterior: ¿es obligatoria la rectificativa, o puede el local devolver el dinero sin ella, manteniendo declarado el IVA sobre el precio completo, y anotar la devolución para su gestor?*
-- **Una devolución en una factura completa** (añadida el 25 de noviembre; hecha el 26 de noviembre salvo para un plato cancelado después del pago). Cuando se devuelva dinero de una factura completa a nombre de una empresa, Waitron expedirá una factura rectificativa completa registrada como R1 por diferencias: por cortesía o queja (LIVA art. 80.Uno.2.º) y también por un plato que no llegó, que entendemos como una operación que queda en parte sin efecto (LIVA art. 80.Dos) y no como una factura simplemente errónea (R4). *¿Es correcta la R1 en ambos casos?*
+- **Una devolución en una factura completa** (añadida el 25 de noviembre; hecha el 26 de noviembre, y para un plato cancelado después del pago el 27 de noviembre). Cuando se devuelva dinero de una factura completa a nombre de una empresa, Waitron expedirá una factura rectificativa completa registrada como R1 por diferencias: por cortesía o queja (LIVA art. 80.Uno.2.º) y también por un plato que no llegó, que entendemos como una operación que queda en parte sin efecto (LIVA art. 80.Dos) y no como una factura simplemente errónea (R4). *¿Es correcta la R1 en ambos casos?*
 
 Nota: ____
 
@@ -464,6 +466,8 @@ Nota: ____
   > **26-11-2026:** una factura completa a nombre de un cliente ya no está entre los tiques que Waitron no puede rectificar: el dinero que se devuelve por cortesía o por un plato pasa ahora por una factura rectificativa a nombre del mismo cliente (PR 2a de [docs/superpowers/plans/2026-11-25-correct-full-invoice.md](../superpowers/plans/2026-11-25-correct-full-invoice.md)). El dinero pendiente de un plato cancelado después del pago se sigue devolviendo sin rectificativa, como en un tique, igual que el devuelto en una factura que la Agencia Tributaria rechazó sin nada que Waitron pueda corregir; el fichero para el gestor recoge ambos.
 
   > **27-11-2026, A1614:** un tique presentado por otro servidor de Waitron ya no está entre los tiques que Waitron no puede rectificar: se juzga por el estado de su presentación como los del propio servidor, así que, cuando la Agencia Tributaria lo ha aceptado, el dinero que se devuelve por cortesía o por un plato pasa por una factura rectificativa que presenta el servidor en uso; mientras la Agencia no ha respondido, ese dinero espera.
+
+  > **27-11-2026:** en una factura completa a nombre de un cliente, el dinero pendiente de un plato cancelado después del pago pasa ahora por la misma factura rectificativa, y mientras hay que revisar los registros del servidor espera en lugar de devolverse sin rectificativa (PR 2b del mismo plan). El dinero devuelto en una factura que la Agencia Tributaria rechazó sin nada que Waitron pueda corregir se sigue devolviendo sin rectificativa.
 
 Nota: ____
 
@@ -579,7 +583,8 @@ the full-invoice corrective design
 ([2026-11-25-correct-full-invoice-design.md](../superpowers/specs/2026-11-25-correct-full-invoice-design.md),
 section 3; the watcher, lane L `questions.md`, "WATCHER 2026-11-25 09:41"). Filing R1 for a dish that
 never came is lane L's best guess, not the owner's words. Copy it into the shared Google Doc before
-sending.
+sending. The 27 November notes under question 6, and the dates in its full-invoice point, were added
+in both parts with PR 2b of the full-invoice corrective plan; copy them too.
 
 Question 2's point on guests who split the bill after it was printed was marked answered in both parts
 on 25 November, on the owner's words of that day (lane L `questions.md`, "WATCHER 2026-11-25 11:55";
