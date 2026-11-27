@@ -49,8 +49,9 @@ export function lineGross(
 const weighed = (row: Pick<SpreadRow, "unitPrecision">) => (row.unitPrecision ?? 0) > 0;
 
 /**
- * The dishes a set-menu row's comp or discount covers with it (set-menus design of 24 November, section 6; A1515-3 plan D49): those placed
- * in it that are charged, which is what their supplements are; their paid extras are not covered.
+ * The dishes a set-menu row's comp or discount covers with it (set-menus design of 24 November,
+ * section 6; A1515-3 plan D49): those placed in it that are charged, which is what their
+ * supplements are; their paid extras are not covered.
  */
 export function coveredBySetMenu<R extends { setMenuLineId: string | null; unit: number }>(
   menuId: string,

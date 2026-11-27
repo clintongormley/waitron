@@ -611,13 +611,16 @@ The assertion that fails if the behaviour is deleted: each example's per-line fi
 **Changed test checks.** None.
 
 **Checks to run.** `pnpm --filter @waitron/adjustments exec vitest run`, `pnpm --filter
-@waitron/server exec vitest run src/adjustments-apply.test.ts src/set-menu-adjustments.test.ts`,
+@waitron/server exec vitest run src/adjustments-apply.test.ts src/set-menu-adjustments.test.ts
+src/bill-discounts-filing.test.ts`,
 `pnpm --filter @waitron/adjustments test:coverage` (98/98/98/95), golden huella, `inmutabilidad`,
 `scripts/product-file-size.test.ts`.
 
 **Files.** `packages/adjustments/src/bill-discounts.ts` (new), its test (new),
 `packages/adjustments/src/index.ts`, `apps/server/src/adjustments-apply.ts`,
-`apps/server/src/adjustment-rows.ts`, `apps/server/src/set-menu-adjustment.ts`, `docs/backlog/menu.md`.
+`apps/server/src/adjustment-rows.ts`, `apps/server/src/set-menu-adjustment.ts`,
+`apps/server/src/adjustment-bill-total.ts`, `apps/server/src/bill-discounts-filing.test.ts` (new),
+`docs/backlog/menu.md`.
 
 **Tasks.** 1.1 the module with the order and target rules and their tests; 1.2 moving the helpers
 out of `adjustments-apply.ts`, `adjustments-apply.test.ts` green.
