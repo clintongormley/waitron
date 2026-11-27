@@ -766,6 +766,8 @@ part is redesigned before landing, not shipped on assumption:
   carry `organizationIdentifier` and `O` (§3.3, §3.5 step 6);
 - whether files exported by FNMT's own procedure, by the browsers the export guides cover and by the
   Mac keychain use RC2 (§3.5 step 2); if they do, the guides say how to export with AES.
+  *(Dated note, 2026-11-27: A1571 PR 2 took the other remedy: the box opens such a file and stores
+  an AES copy.)*
 
 ---
 

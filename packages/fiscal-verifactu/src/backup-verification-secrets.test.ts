@@ -423,7 +423,7 @@ it.each([
   ["by the sealer alone", unvalidated, RC2_SIGNED_CANDIDATE],
   ["by the sealer alone", unvalidated, MAC_ACCENTED_CANDIDATE],
 ])(
-  "passes a Mac export sealed %s, keeping the certificate's fingerprint %#",
+  "passes an old-encryption or macOS file sealed %s, keeping the certificate's fingerprint %#",
   async (_label, check, mac) => {
     await capture(await check({ ...mac, certKind: "sello" }));
     expect(await verify()).toEqual(result("passed"));

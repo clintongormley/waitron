@@ -104,9 +104,9 @@ export async function validateSetupAeatCert(raw: unknown, venue: { taxId: string
 
 /**
  * Seal a venue's AEAT certificate into the `fiscal.aeat` vault purpose. Re-checks the blob's
- * shape, because `putCredential` accepts any non-empty `certKind` and `pfxBase64`. An
- * old-encryption file is sealed rewritten, because the backup verifier and filing open the vault
- * copy with plain Node.
+ * shape, because `putCredential` accepts any non-empty `certKind` and `pfxBase64`. A file the
+ * opener rewrites (old encryption, or a macOS export under a passphrase outside ASCII) is sealed
+ * rewritten, because the backup verifier and filing open the vault copy with plain Node.
  */
 export async function sealAeatSecret(
   deps: { db: Database; ring: KeyRing; nodeId: string; now?: () => Date },
