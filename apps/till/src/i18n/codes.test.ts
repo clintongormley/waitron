@@ -1264,6 +1264,22 @@ it("says in Money back under way that the business's registered address is missi
   );
 });
 
+it("says in Money back under way that the box's records need checking, so the rest of a full invoice's refund waits", () => {
+  expect(
+    giveBackFilingMessage("invoice_correction.chain_unsound", "en", { fullInvoice: true }),
+  ).toBe(
+    "The box's receipt and invoice records need checking, so the rest cannot be refunded or recorded on this full invoice yet. Money already refunded stays refunded. Press Check again once they have been checked.",
+  );
+  expect(
+    giveBackFilingMessage("invoice_correction.chain_unsound", "es", { fullInvoice: true }),
+  ).toBe(
+    "Hay que revisar los registros de tickets y facturas del servidor, así que lo que queda aún no se puede devolver ni registrar en esta factura completa. El dinero ya devuelto queda devuelto. Pulsa Comprobar de nuevo cuando se hayan revisado.",
+  );
+  expect(giveBackFilingMessage("invoice_correction.chain_unsound", "en", {})).toBe(
+    "The refund cannot be recorded on this receipt now, so Finish is not offered. Press Check again to see whether that has changed.",
+  );
+});
+
 it("says the box's receipt and invoice records need checking, naming cancelled dishes on a full invoice in Give money back", () => {
   const receipt = {
     en: "The box's receipt and invoice records need checking, so dishes or goodwill cannot be refunded or recorded now. Money already refunded stays refunded.",

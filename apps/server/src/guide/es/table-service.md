@@ -445,7 +445,8 @@ devolución**; un responsable o encargado aprueba registrarla con su PIN. Consul
 Después de **Cancelar y devolver**, o de **Cerrar mesa** con platos marcados, la ventana se abre en
 **Un plato**, rellenada con los platos cancelados, su importe y el motivo de la cancelación. En un
 ticket, la aprobación de la cancelación cubre ese dinero, así que no se pide otro PIN salvo que
-devuelvas más. En una factura completa a nombre de un cliente no lo cubre: salvo que tengas
+devuelvas más. En una factura completa a nombre de un cliente, la aprobación de la cancelación no
+cubre el dinero que va en una factura rectificativa: salvo que tengas
 **Devolver pagos** y también **Emitir tickets y facturas rectificativos**, un responsable o
 encargado lo aprueba con su PIN.
 Mantén la ventana abierta para aprovecharla: una que abras después desde el recibo no viene

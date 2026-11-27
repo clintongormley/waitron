@@ -47,9 +47,10 @@ AEAT. Nothing simpler meets the ask.
   invoice is delivered before the money goes back (it starts on the way the original was), and the
   end screen says "A corrective invoice for Acme Foods SL (−€10.00) is printing." Against a receipt it
   says "A corrective receipt (−€10.00) is printing."_
-  _2026-11-27 (PR 2b, plan D4, the watcher's): after Cancel and refund on a full invoice the window
-  asks a PIN unless the person holds both Refund payments and Issue corrective receipts and
-  invoices; a ticket's asks none._
+  _2026-11-27 (PR 2b, plan D4, the watcher's): after Cancel and refund on a full invoice, money that
+  goes on the corrective asks a PIN unless the person holds both Refund payments and Issue
+  corrective receipts and invoices; on a ticket the cancel's approval covers the cancelled dishes'
+  money alone._
 - **The customer** receives a corrective full invoice (section 4), delivered the way the original
   full invoice was (question 1). _2026-11-25: unless staff choose another way (answer 1)._
 - **The accountant:** the refund no longer appears on the "Refunds with no corrective" sheet,

@@ -1573,6 +1573,13 @@ const GIVE_BACK_NOT_RECORDED_BY_CODE: Record<string, { en: string; es: string }>
   },
 };
 
+/** Money back under way's words while a full invoice's give-back waits for the box's records to be
+ * checked. */
+const FULL_INVOICE_RECORDS_NEED_CHECKING = {
+  en: "The box's receipt and invoice records need checking, so the rest cannot be refunded or recorded on this full invoice yet. Money already refunded stays refunded. Press Check again once they have been checked.",
+  es: "Hay que revisar los registros de tickets y facturas del servidor, así que lo que queda aún no se puede devolver ni registrar en esta factura completa. El dinero ya devuelto queda devuelto. Pulsa Comprobar de nuevo cuando se hayan revisado.",
+};
+
 /** Any other refusal of recording: Finish is not offered while it holds. */
 const GIVE_BACK_NOT_RECORDED_NOW = {
   receipt: {
@@ -1600,6 +1607,8 @@ export function giveBackFilingMessage(
     if (Object.hasOwn(GIVE_BACK_NEVER_RECORDED, reason))
       return pickLocale(GIVE_BACK_NEVER_RECORDED[reason]!, locale);
   }
+  if (full && code === "invoice_correction.chain_unsound")
+    return pickLocale(FULL_INVOICE_RECORDS_NEED_CHECKING, locale);
   if (Object.hasOwn(GIVE_BACK_NOT_RECORDED_BY_CODE, code))
     return pickLocale(GIVE_BACK_NOT_RECORDED_BY_CODE[code]!, locale);
   return pickLocale(GIVE_BACK_NOT_RECORDED_NOW[full ? "fullInvoice" : "receipt"], locale);

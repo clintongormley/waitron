@@ -59,8 +59,7 @@ export interface GiveBackLine extends Availability {
    * of `back` a card refund still waits on the card company for. */
   cancelled: { quantity: string; owed: string; back: string; waiting: string } | null;
   /** The cancels on this dish whose money is not all given back yet: those a give-back of the
-   * dish names, and the ones `fromCancel` must equal for the cancels' approval to cover it on a
-   * receipt (D9). */
+   * dish names, and the ones `fromCancel` must equal for the cancels' approval to cover it (D9). */
   cancelIds: string[];
   /** The cancelled dish's line this extra's line is given back with; such a line is never ticked
    * itself, and its `left` is counted on the dish's. */
