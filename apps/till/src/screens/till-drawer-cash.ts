@@ -63,13 +63,44 @@ export class TillDrawerCash extends LitElement {
         text-align: center;
       }
 
+      wt-amount-block {
+        padding-block-start: var(--wt-space-1);
+        font-weight: var(--wt-font-weight-normal);
+      }
+
+      wt-amount-block::part(amount) {
+        font-size: calc(2 * var(--wt-font-size-xl));
+        font-weight: bolder;
+      }
+
       .amount-error {
         color: var(--wt-color-danger);
       }
 
       till-numeric-pad {
+        --wt-action-weight: var(--wt-font-weight-normal);
         --wt-till-keypad-row-height: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
         margin-block-start: auto;
+      }
+
+      till-numeric-pad::part(pad) {
+        gap: calc(var(--wt-space-2) - var(--wt-space-1) / 2);
+      }
+
+      till-numeric-pad::part(key) {
+        font-size: var(--wt-font-size-lg);
+      }
+
+      [data-cash-feedback] {
+        max-inline-size: var(--wt-till-chooser-dialog-width);
+        margin-inline: auto;
+        padding-inline: var(--wt-space-4);
+      }
+
+      wt-foot-button-bar > wt-button {
+        inline-size: 100%;
+        max-inline-size: calc(var(--wt-till-chooser-dialog-width) - 2 * var(--wt-space-4));
+        justify-self: center;
       }
     `,
   ];
@@ -296,7 +327,6 @@ export class TillDrawerCash extends LitElement {
               @pad-enter=${() => {
                 if (available) void this.#save();
               }}
-              @pad-escape=${this.#close}
             ></till-numeric-pad>
           </form>
           <div slot="footer">

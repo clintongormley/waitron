@@ -3372,8 +3372,14 @@ export class TillApp extends LitElement {
           .opensDrawer=${dialog.opensDrawer}
           .opener=${dialog.opener}
           @drawer-cash-dismiss=${dismiss}
-          @drawer-cash-saved=${() =>
-            this.renderRoot.querySelector<WtToast>("[data-drawer-key-toast]")?.show()}
+          @drawer-cash-saved=${() => {
+            const toast = this.renderRoot.querySelector<WtToast>("[data-drawer-key-toast]");
+            if (toast === null) return;
+            toast.message = t(
+              dialog.opensDrawer ? "drawer_close.key_if_needed" : "drawer_close.use_key",
+            );
+            toast.show();
+          }}
         ></till-drawer-cash>`
       : html`<till-drawer-close
           .api=${this.api}
@@ -24643,7 +24649,6 @@ export class TillApp extends LitElement {
           class="equipment-toast"
           data-drawer-key-toast
           tone="info"
-          .message=${t("drawer_entry.key_if_needed")}
           close-label=${t("equipment.close")}
         ></wt-toast>
         <wt-toast

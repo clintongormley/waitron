@@ -1840,18 +1840,17 @@ export const en = {
   "drawer_entry.add_amount": "Add {amount}",
   "drawer_entry.take_amount": "Take out {amount}",
   "drawer_entry.opens_drawer": " · opens the drawer",
-  "drawer_entry.key_if_needed": "If the drawer stays shut, use the key",
   "drawer_entry.failed": "Could not save the cash entry. Try again.",
-  "drawer_entry.reopen": "The drawer changed. Close this window and open Cash in or out again.",
+  "drawer_entry.reopen": "The drawer changed. Go back and open Cash in or out again.",
   "drawer_entry.reused":
-    "This entry was already submitted with different details. Close this window and open Cash in or out again.",
+    "This entry was already submitted with different details. Go back and open Cash in or out again.",
   "drawer_entry.permission":
     "Your role cannot record cash in this drawer. Log out and sign in with the Open cash drawers permission.",
   "drawer_close.title": "Close drawer",
   "drawer_close.permission":
     "Your role cannot close this drawer. Log out and sign in with the Open cash drawers permission.",
   "drawer_close.use_key": "Open the drawer with the key.",
-  "drawer_close.key_if_needed": "If the drawer stays shut, open it with the key.",
+  "drawer_close.key_if_needed": "If the drawer stays shut, use the key.",
   "drawer_close.counted": "Cash counted",
   "drawer_close.expected": "Expected cash",
   "drawer_close.difference": "Difference",
@@ -4311,19 +4310,18 @@ export const es: Record<StringKey, string> = {
   "drawer_entry.add_amount": "Añadir {amount}",
   "drawer_entry.take_amount": "Retirar {amount}",
   "drawer_entry.opens_drawer": " · abre el cajón",
-  "drawer_entry.key_if_needed": "Si el cajón sigue cerrado, usa la llave",
   "drawer_entry.failed": "No se pudo guardar el movimiento. Inténtalo de nuevo.",
   "drawer_entry.reopen":
-    "El cajón ha cambiado. Cierra esta ventana y vuelve a abrir Entrada o salida de efectivo.",
+    "El cajón ha cambiado. Vuelve atrás y abre Entrada o salida de efectivo de nuevo.",
   "drawer_entry.reused":
-    "Este movimiento ya se envió con otros datos. Cierra esta ventana y vuelve a abrir Entrada o salida de efectivo.",
+    "Este movimiento ya se envió con otros datos. Vuelve atrás y abre Entrada o salida de efectivo de nuevo.",
   "drawer_entry.permission":
     "Tu rol no permite registrar efectivo en este cajón. Cierra sesión e inicia sesión con el permiso Abrir cajones.",
   "drawer_close.title": "Cerrar cajón",
   "drawer_close.permission":
     "Tu rol no puede cerrar este cajón. Cierra sesión y vuelve a entrar con el permiso Abrir cajones.",
   "drawer_close.use_key": "Abre el cajón con la llave.",
-  "drawer_close.key_if_needed": "Si el cajón sigue cerrado, ábrelo con la llave.",
+  "drawer_close.key_if_needed": "Si el cajón sigue cerrado, usa la llave.",
   "drawer_close.counted": "Efectivo contado",
   "drawer_close.expected": "Efectivo esperado",
   "drawer_close.difference": "Diferencia",

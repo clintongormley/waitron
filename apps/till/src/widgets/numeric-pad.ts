@@ -167,14 +167,21 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
       ? html`<span aria-hidden="true">${glyph}</span><span class="sr-only">${label}</span>`
       : glyph;
     return html`
-      <wt-button class="key" data-key=${key} @click=${(event: Event) => this.#press(key, event)}>
+      <wt-button
+        class="key"
+        exportparts="button:key"
+        data-key=${key}
+        @click=${(event: Event) => this.#press(key, event)}
+      >
         ${content}
       </wt-button>
     `;
   }
 
   override render() {
-    return html`<div class="pad">${this.#keys().map((padKey) => this.#renderKey(padKey))}</div>`;
+    return html`<div class="pad" part="pad">
+      ${this.#keys().map((padKey) => this.#renderKey(padKey))}
+    </div>`;
   }
 }
 

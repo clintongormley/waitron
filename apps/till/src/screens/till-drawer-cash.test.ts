@@ -113,7 +113,7 @@ it.each([
     expect(
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-toast"]>("[data-drawer-key-toast]")
         ?.message,
-    ).toBe(es["drawer_entry.key_if_needed"]);
+    ).toBe(opensDrawer ? es["drawer_close.key_if_needed"] : es["drawer_close.use_key"]);
     expect(bodies).toEqual([
       {
         printerId: "bar",
@@ -147,12 +147,15 @@ it("marks the reason after an invalid Save and uses the same submission on a ret
   expect(input(el, "reason")).toBe(reason.shadowRoot!.activeElement);
   expect(action(el, "save").disabled).toBe(true);
   expect(saveDrawerEntry).not.toHaveBeenCalled();
+  const reportedSaved = vi.fn();
+  el.addEventListener("drawer-cash-saved", reportedSaved);
   await userEvent.fill(input(el, "reason"), "Change");
   await userEvent.click(action(el, "save"));
   await expect
     .poll(() => el.shadowRoot!.querySelector("[data-cash-feedback]")?.textContent)
     .toContain("Try again");
   expect(action(el, "save").disabled).toBe(false);
+  expect(reportedSaved).not.toHaveBeenCalled();
   const closed = new Promise<Event>((resolve) =>
     el.addEventListener("drawer-cash-dismiss", resolve, { once: true }),
   );
