@@ -10,6 +10,11 @@ export const customerMenuPageStyles = [
     }
     article {
       --menu-padding: var(--wt-space-4);
+      --wt-menu-heading-color: var(--wt-color-primary-text);
+      --wt-menu-heading-font: var(--wt-font-family);
+      --wt-menu-heading-weight: initial;
+      --wt-menu-entry-weight: var(--wt-font-weight-bold);
+      --wt-menu-current-section-text: var(--wt-color-primary-text);
       background: var(--wt-color-bg);
       color: var(--wt-color-text);
       font-family: var(--wt-font-family);
@@ -91,7 +96,7 @@ export const customerMenuPageStyles = [
     }
     nav a[aria-current] {
       border-block-end-color: var(--wt-color-primary);
-      color: var(--wt-color-primary-text);
+      color: var(--wt-menu-current-section-text);
       font-weight: var(--wt-font-weight-bold);
     }
     @media (forced-colors: active) {
@@ -115,8 +120,19 @@ export const customerMenuPageStyles = [
     .menu-title,
     .section-title {
       margin: 0 0 var(--wt-space-4);
-      color: var(--wt-color-primary-text);
-      font-weight: var(--wt-font-weight-bold);
+      color: var(--wt-menu-heading-color);
+    }
+    .menu-title,
+    .section-title,
+    .subheading {
+      font-family: var(--wt-menu-heading-font);
+    }
+    .menu-title,
+    .section-title {
+      font-weight: var(--wt-menu-heading-weight, var(--wt-font-weight-bold));
+    }
+    .subheading {
+      font-weight: var(--wt-menu-heading-weight, revert);
     }
     .section-title {
       font-size: calc(1.4 * var(--wt-font-size-lg));
@@ -158,7 +174,7 @@ export const customerMenuPageStyles = [
     .entry-name,
     .set-price {
       font-size: var(--wt-font-size-lg);
-      font-weight: var(--wt-font-weight-bold);
+      font-weight: var(--wt-menu-entry-weight);
     }
     .entry-name {
       background: transparent;
@@ -230,7 +246,7 @@ export const customerMenuPageStyles = [
     }
     .detail .subheading {
       margin: var(--wt-space-4) 0 var(--wt-space-2);
-      color: var(--wt-color-primary-text);
+      color: var(--wt-menu-heading-color);
     }
     .description,
     .declarations,

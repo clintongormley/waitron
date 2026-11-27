@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath, URL } from "node:url";
 import { chromium } from "playwright";
 import { preview } from "vite";
-import { photoReference, published } from "./published-menu.ts";
+import { menuAppearances, photoReference, published } from "./published-menu.ts";
 
 const template = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 const slot = '<script type="application/json" id="customer-menu-data">';
@@ -18,6 +18,7 @@ const snapshot = {
   address: "lunch",
   defaultLanguage: "en",
   photos: "large",
+  appearance: menuAppearances.dark,
   menu: published().menu,
   photoUrls: { [photoReference]: photoUrl },
 };
@@ -66,6 +67,13 @@ try {
     .getByRole("heading", { level: 1, name: "Lunch for guests" })
     .waitFor();
   await page.getByRole("button", { name: "Roast pepper" }).waitFor();
+  const article = page.locator("customer-menu-page article");
+  assert.equal(
+    await article.evaluate(
+      (node) => node.ownerDocument.defaultView.getComputedStyle(node).backgroundColor,
+    ),
+    "rgb(31, 41, 40)",
+  );
   assert.deepEqual(
     await page
       .locator('link[rel="icon"], link[rel="apple-touch-icon"]')

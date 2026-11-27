@@ -1,5 +1,22 @@
 import type { CustomerMenuPreview, PublicGuestMenu } from "@waitron/shared";
 
+export const menuAppearances = {
+  light: {
+    pageColor: "#fbf7ef",
+    textColor: "#2b211b",
+    headingColor: "#8c2f1b",
+    headingFont: "serif",
+    textFont: "system",
+  },
+  dark: {
+    pageColor: "#1f2928",
+    textColor: "#f5f1e7",
+    headingColor: "#f5b995",
+    headingFont: "system",
+    textFont: "serif",
+  },
+} as const;
+
 export const photoReference = `${"a".repeat(64)}.webp`;
 
 export function published(

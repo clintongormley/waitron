@@ -1,8 +1,9 @@
 import type { PublicGuestMenu } from "@waitron/shared";
+import { contrastRatio, hexToRgb } from "@waitron/ui-core/theme";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
-import { published, publishedSections } from "../test/published-menu.js";
+import { menuAppearances, published, publishedSections } from "../test/published-menu.js";
 import "./customer-menu-page.js";
 
 const noResults = "No dishes match your search.";
@@ -18,7 +19,7 @@ async function openMenu(
   host.id = "renderer-test";
   const customer = document.createElement("customer-menu-page");
   customer.menu = menu;
-  customer.theme = theme;
+  customer.appearance = theme === "dark" ? menuAppearances.dark : undefined;
   customer.standalone = standalone;
   customer.photoSource = () => photo;
   if (canvas) {
@@ -39,6 +40,102 @@ afterEach(async () => {
 });
 
 describe("Customer menu page", () => {
+  it("uses the supplied heading and text fonts independently and clears them with the style", async () => {
+    const { customer } = await openMenu(published().menu);
+    const article = customer.shadowRoot!.querySelector("article")!;
+    const title = article.querySelector("h2")!;
+    const section = article.querySelector(".section-title")!;
+    const fallbackFont = getComputedStyle(article).fontFamily;
+    expect.soft(getComputedStyle(article).backgroundColor).toBe("rgb(247, 247, 248)");
+    expect.soft(getComputedStyle(article).color).toBe("rgb(35, 31, 32)");
+
+    customer.appearance = menuAppearances.light;
+    await customer.updateComplete;
+    expect.soft(getComputedStyle(title).fontFamily).toContain("Georgia");
+    expect.soft(getComputedStyle(section).fontFamily).toBe(getComputedStyle(title).fontFamily);
+    expect.soft(getComputedStyle(section).fontWeight).toBe("400");
+    expect.soft(getComputedStyle(title).fontWeight).toBe("400");
+    expect.soft(getComputedStyle(article).fontFamily).toBe(fallbackFont);
+
+    customer.appearance = menuAppearances.dark;
+    await customer.updateComplete;
+    expect.soft(getComputedStyle(title).fontFamily).toBe(fallbackFont);
+    expect.soft(getComputedStyle(title).fontWeight).toBe("600");
+    expect.soft(getComputedStyle(article).fontFamily).toContain("Georgia");
+    expect.soft(getComputedStyle(article.querySelector(".entry-name")!).fontWeight).toBe("500");
+
+    customer.appearance = { headingFont: "serif" };
+    await customer.updateComplete;
+    expect.soft(getComputedStyle(title).fontFamily).toContain("Georgia");
+    expect.soft(getComputedStyle(article).fontFamily).toBe(fallbackFont);
+    expect.soft(getComputedStyle(article).backgroundColor).toBe("rgb(247, 247, 248)");
+    expect.soft(getComputedStyle(article).color).toBe("rgb(35, 31, 32)");
+
+    customer.appearance = { textFont: "serif" };
+    await customer.updateComplete;
+    expect.soft(getComputedStyle(title).fontFamily).toBe(fallbackFont);
+    expect.soft(getComputedStyle(article).fontFamily).toContain("Georgia");
+
+    customer.appearance = undefined;
+    await customer.updateComplete;
+    expect(getComputedStyle(title).fontFamily).toBe(fallbackFont);
+  });
+  it("uses regular serif detail headings and keeps the built-in weight for system headings", async () => {
+    const { customer } = await openMenu(published().menu);
+    await page.getByRole("button", { name: "Roast pepper", exact: true }).click();
+    const heading = page.getByRole("heading", { name: "Cooking", exact: true }).element();
+    expect.soft(getComputedStyle(heading).fontWeight).toBe("700");
+    customer.appearance = menuAppearances.light;
+    await customer.updateComplete;
+    expect(getComputedStyle(heading).fontWeight).toBe("400");
+  });
+
+  it("keeps the chosen heading ink and derives a contrasting action colour", async () => {
+    const { customer } = await openMenu(published().menu);
+    const article = customer.shadowRoot!.querySelector("article")!;
+    const defaultAction = getComputedStyle(article).getPropertyValue("--wt-color-primary").trim();
+    customer.appearance = { ...menuAppearances.light, headingColor: "#d6d4d0" };
+    await customer.updateComplete;
+    const action = getComputedStyle(article).getPropertyValue("--wt-color-primary").trim();
+    expect(getComputedStyle(article.querySelector("h2")!).color).toBe("rgb(214, 212, 208)");
+    expect.soft(action).not.toBe("#d6d4d0");
+    expect(action).not.toBe(defaultAction);
+    expect(contrastRatio(action, "#fbf7ef")).toBeGreaterThanOrEqual(3);
+    const accent = `rgb(${hexToRgb(action)
+      .map((channel) => Math.round(channel * 255))
+      .join(", ")})`;
+    expect.soft(getComputedStyle(article.querySelector(".set-menu")!).borderTopColor).toBe(accent);
+    const selected = article.querySelector("nav [aria-current=location]")!;
+    expect(getComputedStyle(selected).borderBlockEndColor).toBe(accent);
+  });
+
+  it.each(["light", "dark"] as const)(
+    "makes secondary menu text warm and readable in %s",
+    async (scheme) => {
+      const { customer } = await openMenu(published().menu);
+      customer.appearance = menuAppearances[scheme];
+      await customer.updateComplete;
+      const description = customer.shadowRoot!.querySelector(".description")!;
+      const channels = getComputedStyle(description).color.match(/\d+/g)!.map(Number);
+      expect.soft(channels[0]).toBeGreaterThan(channels[2]!);
+      const hex = `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+      expect(contrastRatio(hex, menuAppearances[scheme].pageColor)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it("paints the light menu's fields, pills and cards with its page colour", async () => {
+    const { customer } = await openMenu(published().menu);
+    customer.appearance = menuAppearances.light;
+    await customer.updateComplete;
+    const article = customer.shadowRoot!.querySelector("article")!;
+    const search = article.querySelector("wt-input")!.shadowRoot!.querySelector(".field")!;
+    const filters = article.querySelector(".filter-button")!.shadowRoot!.querySelector("button")!;
+    const setMenu = article.querySelector(".set-menu")!;
+    expect.soft(getComputedStyle(search).backgroundColor).toBe("rgb(251, 247, 239)");
+    expect.soft(getComputedStyle(filters).backgroundColor).toBe("rgb(251, 247, 239)");
+    expect(getComputedStyle(setMenu).backgroundColor).toBe("rgb(251, 247, 239)");
+  });
+
   it("centres the standalone menu on computer screens and keeps its page edge unframed", async () => {
     await page.viewport(1440, 900);
     const { customer } = await openMenu(published().menu, "light", true);
@@ -557,6 +654,8 @@ describe("Customer menu page", () => {
     "keeps the standalone menu and its details accessible in %s",
     async (theme) => {
       const { customer, host } = await openMenu(published().menu, theme, true);
+      customer.appearance = menuAppearances[theme];
+      await customer.updateComplete;
       const canvas = customer.shadowRoot!.querySelector<HTMLElement>("article")!;
       await expectNoA11yViolations(host);
       await page.getByRole("button", { name: "Roast pepper", exact: true }).click();

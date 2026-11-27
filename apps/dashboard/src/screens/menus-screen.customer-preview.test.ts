@@ -1,4 +1,9 @@
-import { photoReference, published, publishedSections } from "@waitron/customer-menu/testing";
+import {
+  menuAppearances,
+  photoReference,
+  published,
+  publishedSections,
+} from "@waitron/customer-menu/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { MenuStatus } from "@waitron/shared";
@@ -688,11 +693,12 @@ describe("the customer menu Online preview", () => {
     "keeps every preview state accessible in %s",
     async (theme) => {
       const first = gate<Response>();
+      const pageTheme = theme === "light" ? "dark" : "light";
       const preview = vi
         .fn<() => Response | Promise<Response>>()
         .mockReturnValueOnce(first.promise)
         .mockReturnValueOnce(Response.json({ state: "unpublished" }))
-        .mockReturnValue(Response.json(published()));
+        .mockReturnValue(Response.json({ ...published(), appearance: menuAppearances[pageTheme] }));
       const { el, host } = await open(preview, theme);
       await expect.element(page.getByText("Loading the published menu…")).toBeVisible();
       await expectNoA11yViolations(host);
@@ -707,14 +713,15 @@ describe("the customer menu Online preview", () => {
       await page.getByRole("tab", { name: "Customer menu" }).click();
       await expect.element(page.getByRole("heading", { name: "Lunch for guests" })).toBeVisible();
       const customer = customerPage(el)!;
-      const pageTheme = theme === "light" ? "dark" : "light";
-      customer.setAttribute("data-theme", pageTheme);
       const canvas = customer.shadowRoot!.querySelector<HTMLElement>("article")!;
-      await vi.waitFor(() =>
-        expect(getComputedStyle(canvas).color).toBe(
-          pageTheme === "dark" ? "rgb(236, 238, 242)" : "rgb(35, 31, 32)",
-        ),
-      );
+      const style = getComputedStyle(canvas);
+      expect.soft(style.colorScheme).toBe(pageTheme);
+      expect
+        .soft(style.backgroundColor)
+        .toBe(pageTheme === "dark" ? "rgb(31, 41, 40)" : "rgb(251, 247, 239)");
+      expect
+        .soft(style.color)
+        .toBe(pageTheme === "dark" ? "rgb(245, 241, 231)" : "rgb(43, 33, 27)");
       await expectNoA11yViolations(host);
     },
   );

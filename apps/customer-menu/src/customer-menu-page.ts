@@ -4,6 +4,7 @@ import {
   MEDIA_FILENAME,
   formatMoney,
   guestMenuWords,
+  type CustomerMenuAppearance,
   type CustomerMenuPhotoSize,
   type GuestChoice,
   type GuestDeclarations,
@@ -17,9 +18,11 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { LitElement, html, nothing, type TemplateResult } from "lit";
+import { LitElement, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import type { DirectiveResult } from "lit/directive.js";
+import { styleMap } from "lit/directives/style-map.js";
 import { html as staticHtml, literal, type StaticValue } from "lit/static-html.js";
+import { resolveMenuAppearance } from "./customer-menu-appearance.js";
 import { customerMenuPageStyles } from "./customer-menu-page-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { choiceCaution, filterCustomerMenu, hasCautionedChoice } from "./customer-menu-filters.js";
@@ -299,13 +302,14 @@ export class CustomerMenuPage extends LitElement {
   ) => string | DirectiveResult | undefined;
   @property({ reflect: true }) photos: CustomerMenuPhotoSize = "large";
   @property({ attribute: false }) defaultLanguage = "en";
-  @property({ attribute: "data-theme" }) theme: "light" | "dark" = "light";
+  @property({ attribute: false }) appearance?: CustomerMenuAppearance;
 
   @state() private query = "";
   @state() private excluded: string[] = [];
   @state() private diet = "";
   @state() private filtersOpen = false;
   @state() private detail?: OpenDetail;
+  #paint = resolveMenuAppearance();
   #source?: Element | Document;
   #jumpedAt?: number;
   #resize = new ResizeObserver(() => this.#watchScroll());
@@ -430,6 +434,10 @@ export class CustomerMenuPage extends LitElement {
     >
       ${member.name}
     </button>`;
+  }
+
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("appearance")) this.#paint = resolveMenuAppearance(this.appearance);
   }
 
   protected override updated(): void {
@@ -599,7 +607,11 @@ export class CustomerMenuPage extends LitElement {
       </div>`;
     const photo = detail?.member.kind === "product" ? detail.member.image : null;
     const detailImage = this.#photo(photo);
-    return html`<article lang=${menu.language} data-theme=${this.theme}>
+    return html`<article
+      lang=${menu.language}
+      data-theme=${this.#paint.scheme}
+      style=${styleMap(this.#paint.tokens)}
+    >
       ${
         detail
           ? html`<div class="detail" data-detail>

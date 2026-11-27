@@ -142,7 +142,7 @@ brief dark page instead. Measured by loading each `index.html` in Playwright's C
 and reading the centre pixel: `rgb(255,255,255)` without the line, `rgb(18,18,18)` with it, and
 `rgb(247,247,248)` with it plus `data-theme="light"` and `colors.css` on the page. Guard:
 `scripts/color-scheme-meta.test.ts`, weaker than its name: reads text. The customer menu declares
-`light` for its initial built-in palette.
+`light` before its snapshot loads. The snapshot's page colour selects the scheme after mount.
 
 **Every rule in the token layer — the `prefers-color-scheme` block and both `data-theme` blocks —
 is wrapped in `:where(...)`, which contributes zero specificity.** `data-theme` still wins over
@@ -6229,11 +6229,14 @@ Customer menu shows the published Online preview. On a wide editor, Computer fit
 Settings. In the narrow editor, Computer can scroll inside the preview to show its wider layout.
 Phone uses the narrower canvas. The language picker changes the content and
 its price formatting. Search matches displayed dish and set-menu names. Top-level section links
-remain visible while scrolling and underline the current section. The canvas has its own theme
-root so the dashboard theme does not set the customer page’s colours.
-The dashboard preview and `apps/customer-menu` share the same renderer. The standalone app uses the
-built-in light palette, carries the language in the address and draws its content without the preview frame.
-The dark screenshot fixture selects the dark palette through `data-theme` on the document.
+remain visible while scrolling and underline the current section. The preview and
+`apps/customer-menu` share a renderer that accepts page, text and heading colours and separate
+typefaces for headings and text. The page colour also fills the menu's cards and fields. The heading
+colour supplies the accent from which the renderer derives the section underline, set-menu border
+and control colours. The page colour sets the canvas's light or dark scheme, independently of the
+dashboard. A menu with no appearance or an unsupported colour or typeface uses Waitron's built-in
+light palette. An unspecified heading or text typeface follows Waitron's own. The standalone app
+carries the language in the address and draws without the preview frame.
 Dish and set-menu names open details inside the canvas. The heading takes focus on open.
 The **Menu** button restores the search, filters, scroll position and focus on the name that
 opened the details. **Allergies and diets** sits beside search and opens a dialog with a

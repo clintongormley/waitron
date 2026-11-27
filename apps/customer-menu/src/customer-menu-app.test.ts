@@ -5,6 +5,8 @@ import {
   type CustomerMenuPhotoSize,
   type PublicGuestMenu,
 } from "@waitron/shared";
+import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
+import { menuAppearances } from "../test/published-menu.js";
 import { mountCustomerMenu } from "./main.js";
 import "./main.css";
 
@@ -34,6 +36,7 @@ function openMenu(
   photos: CustomerMenuPhotoSize,
   photoUrls: Record<string, string>,
   published = menu,
+  appearance?: unknown,
 ) {
   const data = document.createElement("script");
   data.type = "application/json";
@@ -44,6 +47,7 @@ function openMenu(
     photos,
     menu: published,
     photoUrls,
+    appearance,
   });
   const main = document.createElement("main");
   main.id = "customer-menu";
@@ -52,12 +56,14 @@ function openMenu(
   return main;
 }
 
-afterEach(() => {
+const viewport = [innerWidth, innerHeight] as const;
+afterEach(async () => {
   document.querySelector("#customer-menu")?.remove();
   document.querySelector("#customer-menu-data")?.remove();
   document.documentElement.lang = "en";
-  delete document.documentElement.dataset.theme;
+  document.documentElement.style.removeProperty("color-scheme");
   document.title = "";
+  if (innerWidth !== viewport[0] || innerHeight !== viewport[1]) await page.viewport(...viewport);
 });
 
 it("reads the published snapshot into the page's main heading and language links", async () => {
@@ -96,12 +102,52 @@ it.each([
   expect(main.firstElementChild?.shadowRoot?.querySelector("img")).toBeNull();
 });
 
-it("opens a single-language snapshot in the fixture palette without a language chooser", async () => {
-  document.documentElement.dataset.theme = "dark";
+it("opens a single-language snapshot in the built-in light palette without a language chooser", async () => {
   const main = openMenu("none", {}, { ...menu, language: "es", languages: ["es"] });
   await expect.element(page.getByRole("heading", { level: 1 })).toBeVisible();
   expect(document.documentElement.lang).toBe("es");
   expect(main.querySelector("details")).toBeNull();
   const article = main.firstElementChild!.shadowRoot!.querySelector("article")!;
-  expect(getComputedStyle(article).color).toBe("rgb(236, 238, 242)");
+  expect.soft(getComputedStyle(article).color).toBe("rgb(35, 31, 32)");
+  expect(getComputedStyle(document.documentElement).colorScheme).toBe("light");
 });
+
+it.each([
+  { name: "a null style", appearance: null },
+  { name: "an unsupported page colour", appearance: { pageColor: "#abc" } },
+  { name: "a page colour given as a list", appearance: { pageColor: ["#ffffff"] } },
+  { name: "an unsupported font", appearance: { ...menuAppearances.dark, textFont: "display" } },
+])(
+  "opens the menu in the built-in palette when the snapshot contains $name",
+  async ({ appearance }) => {
+    const main = openMenu("none", {}, menu, appearance);
+    const customer = main.querySelector("customer-menu-page")!;
+    await customer.updateComplete;
+    const article = customer.shadowRoot!.querySelector("article")!;
+    expect(article.querySelector("h1")).toHaveTextContent("Lunch for guests");
+    expect.soft(getComputedStyle(article).backgroundColor).toBe("rgb(247, 247, 248)");
+    expect(getComputedStyle(document.documentElement).colorScheme).toBe("light");
+  },
+);
+
+it.each(["light", "dark"] as const)(
+  "opens the language chooser in the published %s style",
+  async (scheme) => {
+    await page.viewport(390, 900);
+    const longTitle = { ...menu, name: "Lunch for our guests today" };
+    const root = openMenu("none", {}, longTitle, menuAppearances[scheme]);
+    const heading = page.getByRole("heading", { level: 1, name: longTitle.name });
+    await expect.element(heading).toBeVisible();
+    expect.soft(getComputedStyle(document.documentElement).colorScheme).toBe(scheme);
+    expect
+      .soft(getComputedStyle(heading.element()).color)
+      .toBe(scheme === "light" ? "rgb(140, 47, 27)" : "rgb(245, 185, 149)");
+    await page.getByText("EN", { exact: true }).click();
+    await expect.element(page.getByRole("link", { name: "English" })).toBeVisible();
+    const chooser = page.getByRole("navigation", { name: "Languages" }).element();
+    const bounds = chooser.getBoundingClientRect();
+    expect.soft(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(innerWidth);
+    await expectNoA11yViolations(root);
+  },
+);
