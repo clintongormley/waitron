@@ -11,6 +11,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { blurAll, cleanupWidgets, measured, mountWidget, type Theme } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
 import type { OwnSetMenuOffers } from "../state/set-menus.js";
+import { burger as tableBurger } from "../screens/till-table-order-screen.test-helpers.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/menu-api.js";
 
@@ -461,14 +462,20 @@ describe("set-menu folders", () => {
     const declared = (allergens: TillProduct["allergens"], variants = false) => {
       const dish = { ...daily.offers[1]!, allergens: allergens ?? null };
       if (!variants) return dish;
+      const offeredModifiers = tableBurger.offeredModifiers!.map((list) =>
+        list.kind === "options"
+          ? list
+          : { ...list, items: list.items.map((item) => ({ ...item, available: true })) },
+      );
+      const withChoices = { ...dish, offeredModifiers };
       const rare = {
-        ...dish,
+        ...withChoices,
         id: "rare",
         name: "Rare",
         menuPrice: null,
         pricingUnit: "each" as const,
       };
-      return { ...dish, variants: [rare], variantCountsAs: { rare: "main" } };
+      return { ...withChoices, variants: [rare], variantCountsAs: { rare: "main" } };
     };
     const none = declared({});
     /** Only Daily's recorded version answers, as a till's own offers do. */
@@ -506,7 +513,7 @@ describe("set-menu folders", () => {
       expect(store.lines[0]!.product.allergens).toEqual({ milk: {} });
     });
 
-    it("reaches the variants in choices kept open while no menu is chosen", async () => {
+    it("keeps a folder dish’s choices when its open picker receives an offer correction", async () => {
       const { el, store, tapDish } = await mountCorrectedFolder(declared({}, true), true);
       await tapDish();
       const picker = root(el).querySelector("till-modifier-picker")!;
@@ -520,9 +527,21 @@ describe("set-menu folders", () => {
       await picker.updateComplete;
 
       expect(picker.product.variants![0]!.allergens).toEqual({ milk: {} });
-      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      const fields = picker.shadowRoot!;
+      await userEvent.click(fields.querySelector("#label-list-cooked-label-rare")!);
+      await userEvent.click(fields.querySelector('[data-test="pick-list-extras-p-bacon-inc"]')!);
+      const note = fields
+        .querySelector('[data-test="line-note"]')!
+        .shadowRoot!.querySelector("textarea")!;
+      await userEvent.fill(note, "No salt");
+      await userEvent.click(fields.querySelector(".confirm")!);
       expect(store.lines).toMatchObject([
-        { product: { variantId: "rare", allergens: { milk: {} } } },
+        {
+          product: { variantId: "rare", allergens: { milk: {} } },
+          options: [{ listId: "list-cooked", labelId: "label-rare" }],
+          extras: [{ listId: "list-extras", productId: "p-bacon", price: "1.00", quantity: 2 }],
+          note: "No salt",
+        },
       ]);
     });
   });
