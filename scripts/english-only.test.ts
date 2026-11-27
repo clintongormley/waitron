@@ -286,6 +286,7 @@ describe("the lists", () => {
       "apps/server/scripts/bench/measure.ts",
       "apps/server/scripts/bench/trading-day.test.ts",
       "apps/server/scripts/receipt-look.ts",
+      "apps/server/src/aeat-midnight-date.preprod.test.ts",
       "apps/server/src/first-setup-start-again-hour.test.ts",
       "apps/server/src/guide-box-word.test.ts",
       "apps/server/src/invoice-corrections.test.ts",

@@ -53,6 +53,7 @@ const REAL_HOLIDAY_NAMES =
  * findings, not to which lines hold them.
  */
 export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
+  "apps/server/src/aeat-midnight-date.preprod.test.ts": { reason: VERIFACTU_NAMES, findings: 14 },
   "apps/server/src/upgrade-sale.test.ts": {
     reason: VERIFACTU_NAMES,
     findings: 3,
