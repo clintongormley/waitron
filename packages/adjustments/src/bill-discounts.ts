@@ -518,8 +518,9 @@ function linePiece(subjects: readonly Subject[]): Piece {
 /**
  * `subjects`, every part of the bill, as the rows the bill files, each spread as one row and handed
  * to its members by ordinal. Bound portions left at two prices file apart, and so do their extras,
- * each rounded on its own; where that would make the bill file other than the spread's rows, every
- * bound row the spread split is held at one price and the discount spread again.
+ * each rounded on its own; where the bill would file other than the spread's rows, every bound row
+ * the spread split is held at one price and the discount spread again, until they agree or no bound
+ * row is left split.
  */
 function filedPiece(subjects: readonly Subject[]): Piece {
   const groups = filedRows(subjects);

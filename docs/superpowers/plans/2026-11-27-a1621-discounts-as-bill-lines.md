@@ -1259,10 +1259,9 @@ discount given after a part payment that would take the bill below its money is 
   total and the invoice both come to 4.47, and a further 4.48 off is cut down to the 4.47 left,
   never refused. Today's
   comp window shows 4.48 here while the invoice files 4.47, and refuses a further 4.48 with
-  `adjustment.exceeds_amount`; PR 1's calculator gives 4.47 (`bill-discounts-filing.test.ts`). The same file's two bills
-  where splitting bound portions would refile their extras higher ("keeps a bound pair at one
-  price…", "leaves a bound dish as it is…") run through the comp window too: no discount raises
-  the invoice.
+  `adjustment.exceeds_amount`; PR 1's calculator gives 4.47 (`bill-discounts-filing.test.ts`). The same file's bill where
+  splitting a bound pair would refile its extras higher ("keeps a bound pair at one price…") runs
+  through the comp window too, and the invoice falls by what the bill shows.
 
 **Changed test checks** (about 30; each listed in the pull request): the whole-bill groups of
 `adjustments-apply.test.ts` (`:813` "a bill discount with a weighed line", `:875`, `:928`, and the
@@ -1371,7 +1370,7 @@ sentence (`table-service.md:18-19`).
 the Daily and rejoins it when the discount is removed; two Hakes in a row, 10% on the row, then one
 moved: each keeps 10%; the per-dish floor still asks for a PIN at the same limits; on a Counter
 order placed unpaid, removing the Hake's discount puts it back in the Daily (the assertion that fails
-if Remove's regroup is refused on a placed order).
+if Remove's regroup is refused on a placed order). The bill in `bill-discounts-filing.test.ts` where a bound dish's own discount would refile its extras higher ("leaves a bound dish as it is…") runs through the comp window too, and the invoice falls by what the bill shows.
 
 **Changed test checks** (about 60, the largest set): `adjustments-apply.test.ts`'s line groups
 (`:316` "a comp" for its discount cases, `:667`, `:791`, `:1291`, `:1350`, `:2007`, `:2412`,

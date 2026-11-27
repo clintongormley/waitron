@@ -344,6 +344,35 @@ describe("workOutBillDiscounts against the rows projectPortionSale files", () =>
     expect(worked(result.discounts, "half")).toMatchObject({ holds: "yes", takes: 0, lines: [] });
   });
 
+  it("leaves bound portions apart where one price would refile their extras higher", () => {
+    const { result, filed } = workedAndFiled(
+      [
+        { ...steak("d1", 1, 100, 1), list: 101 },
+        steak("d2", 2, 101, 2),
+        measured("s1", 3, "Sauce", 1003, 125)("d1"),
+        measured("o1", 4, "Oil", 1003, 125)("d1"),
+        measured("s2", 5, "Sauce", 1003, 125)("d2"),
+        measured("o2", 6, "Oil", 1003, 125)("d2"),
+      ],
+      [
+        {
+          ...discount("share", { kind: "line", lineId: "d2" }, { amount: 1 }, 1),
+          origin: "bill_share",
+        },
+      ],
+    );
+    const rows = [
+      "d1 1.000@1.00 = 1.00",
+      "s1 0.125@10.03 = 1.25",
+      "o1 0.125@10.03 = 1.25",
+      "d2 1.000@1.01 = 1.01",
+      "s2 0.125@10.03 = 1.25",
+      "o2 0.125@10.03 = 1.25",
+    ];
+    expect(filed).toEqual([rows, rows]);
+    expect(worked(result.discounts, "share")).toMatchObject({ holds: "yes", takes: 0, lines: [] });
+  });
+
   it("moves bound extras' price where their filed row takes a cent neither extra's total loses", () => {
     const dish = (id: string, lineNo: number, ordinal: number): Spec => ({
       id,
