@@ -1989,8 +1989,9 @@ declare module "@waitron/shared" {
         | "fields_invalid"
         | "host_failed";
     };
-    /** The network and screen routes already have as many requests open to the box's host service
-     * as they allow, so this one was not sent. */
+    /** The routes that ask the box's host service (network, screen, and the USB drive list and
+     * release) already have as many requests open as they allow, so this one was not sent; or the
+     * host answered `busy` to a storage list or release. */
     "box_host.busy": Record<string, never>;
     /** The box's host service answered `busy` to a scan, join or forget. */
     "box_network.busy": Record<string, never>;

@@ -113,7 +113,7 @@ describe("listDriveBackups", () => {
     const listed = await listDriveBackups([drive("sda1"), drive("sdb1")], { root, log });
     expect(listed.files.map((file) => file.drive)).toEqual(["sdb1"]);
     expect(log.mock.calls).toEqual([
-      ["warn", "drives.folder_unreadable", { drive: "sda1", code: "ENOTDIR" }],
+      ["warn", "drives.folder_unreadable", { drive: "sda1", errno: "ENOTDIR" }],
     ]);
   });
 });
@@ -483,7 +483,9 @@ describe("releaseDrives", () => {
       places: { taken: 0 },
       log,
     });
-    expect(log).toHaveBeenCalledWith("warn", "drives.release_failed", { code: "box_host.busy" });
+    expect(log).toHaveBeenCalledWith("warn", "drives.release_failed", {
+      errorCode: "box_host.busy",
+    });
   });
 
   it("logs without asking when both host places are taken", async () => {
@@ -491,6 +493,8 @@ describe("releaseDrives", () => {
     const log = vi.fn();
     await releaseDrives({ host: { storageRelease }, places: { taken: 2 }, log });
     expect(storageRelease).not.toHaveBeenCalled();
-    expect(log).toHaveBeenCalledWith("warn", "drives.release_failed", { code: "box_host.busy" });
+    expect(log).toHaveBeenCalledWith("warn", "drives.release_failed", {
+      errorCode: "box_host.busy",
+    });
   });
 });

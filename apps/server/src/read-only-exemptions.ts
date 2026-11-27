@@ -120,7 +120,7 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     path: "/api/node/handover/emergency/drives",
     boxes: ["mirror"],
     authenticates:
-      "own-origin HTTPS and a fresh node.manage sign-in or switch proof, checked before the box's host is asked to mount the USB drives; it writes nothing in the venue (handover-emergency-api.ts)",
+      "own-origin HTTPS and a fresh node.manage sign-in or switch proof, checked before the box's host is asked to mount the USB drives (handover-emergency-api.ts)",
   },
   {
     method: "POST",

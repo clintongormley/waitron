@@ -5789,6 +5789,9 @@ helper retains its 512 MiB limit. Recovery checks the start reserve before downl
 a private file under `scratch/restore`. The browser's preview, recovery stage and
 restore routes stream ciphertext into a private 0700 folder and 0600 file under `scratch/restore`, with a
 4 GiB input ceiling, a counted multipart overhead budget and the start's free-space reserve.
+A JSON body naming a file on a USB drive is read where it lies by preview and stage, and copied by
+restore into its own `drive-<uuid>` folder under `scratch/restore` after a free-space check of the
+file plus the start's reserve, with no size ceiling.
 They share the provisioning latch through receipt and validation; a restore keeps it until restart.
 The file validator authenticates ciphertext before decoding it. Publication moves and flushes the
 archive before writing the durable restore marker; input cleanup removes the upload folder.
@@ -5800,7 +5803,7 @@ Node's original receiving limits. Progress is read from socket byte counts witho
 body; backpressure that stops transport reads counts as no progress. A completed body stops the
 receive check; an early response with an incomplete body does not. Client upload failures explain
 retrying over a cable or the venue network. The unused archive-preparation and emergency handover paths retain their
-256 MiB buffered reader. `setup-archive-upload.test.ts` exercises a real Node receiving timeout;
+256 MiB buffered reader for uploads; the emergency switch reads a drive file in place. `setup-archive-upload.test.ts` exercises a real Node receiving timeout;
 `restore-full-disk.e2e.test.ts` exercises refusal and cleanup on its small filesystem.
 Capture reservations still use uncompressed estimates; a nearly full box may refuse a backup
 or prune older ones even when its compressed copy would fit. Raw uploads inherit the file

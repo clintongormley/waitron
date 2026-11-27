@@ -1,3 +1,4 @@
+import { codeOf } from "@waitron/server-kit";
 import { AppError, isAppError } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { createReadStream, createWriteStream, type Dirent } from "node:fs";
@@ -95,7 +96,7 @@ async function entriesOf(dir: string, drive: string, log: Logger): Promise<Diren
   try {
     return await readdir(dir, { withFileTypes: true });
   } catch (error) {
-    log("warn", "drives.folder_unreadable", { drive, code: errnoOf(error) ?? "unexpected" });
+    log("warn", "drives.folder_unreadable", { drive, errno: errnoOf(error) ?? null });
     return [];
   }
 }
@@ -207,8 +208,8 @@ export async function resolveDriveFile(
 }
 
 /** Runs `work`, which reads the drive file at `path` where it lies, and answers a read that a
- * pulled stick broke as `restore.drive_file_unreadable`. An error naming another path keeps its
- * own answer. With no path it only runs. */
+ * pulled stick broke as `restore.drive_file_unreadable`, including an error that names no path.
+ * An error naming another path keeps its own answer. With `path` unset (an upload) it only runs. */
 export async function readingDriveFile<T>(
   path: string | undefined,
   work: () => Promise<T>,
@@ -218,8 +219,8 @@ export async function readingDriveFile<T>(
     return await work();
   } catch (error) {
     if (isAppError(error) || !UNREADABLE.has(errnoOf(error) ?? "")) throw error;
-    // A read of the open file names no path, and a pulled stick can stay mounted with its details
-    // cached, so no path counts as the stick's.
+    // A read of an already-open file names no path, and a pulled stick can stay mounted with its
+    // details cached, so an error naming no path counts as the stick's.
     const named = (error as { path?: unknown }).path;
     throw named === undefined || named === path ? unreadable() : error;
   }
@@ -362,7 +363,8 @@ export function receiveRestoreArchive(stagingDir: string, root?: string): Receiv
       : receiveSetupArchive(request, stagingDir, options);
 }
 
-/** Never throws: a drive left mounted read-only harms nothing, and the next list clears it. */
+/** Never throws: a drive left mounted read-only harms nothing, and stays mounted only until a
+ * release, a list that finds it gone, or a reboot. */
 export async function releaseDrives(deps: {
   host: Pick<BoxHostRequests, "storageRelease">;
   places: HostPlaces;
@@ -376,10 +378,9 @@ export async function releaseDrives(deps: {
     );
     deps.log("info", "drives.released", { released });
   } catch (error) {
-    deps.log(
-      "warn",
-      "drives.release_failed",
-      isAppError(error) ? { code: error.code, ...error.params } : { code: "unexpected" },
-    );
+    deps.log("warn", "drives.release_failed", {
+      errorCode: codeOf(error),
+      ...(isAppError(error) ? error.params : {}),
+    });
   }
 }
