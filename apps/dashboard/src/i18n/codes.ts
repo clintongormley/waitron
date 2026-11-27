@@ -1811,8 +1811,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Waitron no pudo confirmar que el servidor de reserva recibió la última actualización.",
   },
   "box.shutdown_bucket_unchecked": {
-    en: "Waitron could not confirm that the bucket received the final update. Check the bucket connection and choose Retry check.",
-    es: "Waitron no pudo confirmar que el bucket recibió la última actualización. Comprueba la conexión con el bucket y elige Volver a comprobar.",
+    en: "Waitron could not confirm that the bucket received the final update. Check the connection and choose Retry check. To restart the bucket copy or change its settings, choose Cancel and resume work, then open Backups.",
+    es: "Waitron no pudo confirmar que el bucket recibió la última actualización. Comprueba la conexión y elige Volver a comprobar. Para reiniciar la copia en el bucket o cambiar sus ajustes, elige Cancelar y reanudar el trabajo y abre Copias de seguridad.",
   },
   "box.shutdown_unavailable": {
     en: "Checked shutdown needs the main box with Cloud off. If this box has a joined spare, keep it connected for checked shutdown or open Servers to hand over. Turn on saved backups with at least one destination, or download a copy with a numbered backup key if there are no saved backup settings.",

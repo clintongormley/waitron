@@ -1217,6 +1217,11 @@ it.each([
     "Checked shutdown needs the main box with Cloud off. If this box has a joined spare, keep it connected for checked shutdown or open Servers to hand over. Turn on saved backups with at least one destination, or download a copy with a numbered backup key if there are no saved backup settings.",
     "Para apagar con comprobación, usa el servidor principal con Cloud desactivado. Si este servidor tiene uno de reserva vinculado, mantenlo conectado para apagar con comprobación o abre Servidores para hacer el traspaso. Activa las copias guardadas con al menos un destino o descarga una copia con una clave numerada si no hay ajustes de copia guardados.",
   ],
+  [
+    "box.shutdown_bucket_unchecked",
+    "Waitron could not confirm that the bucket received the final update. Check the connection and choose Retry check. To restart the bucket copy or change its settings, choose Cancel and resume work, then open Backups.",
+    "Waitron no pudo confirmar que el bucket recibió la última actualización. Comprueba la conexión y elige Volver a comprobar. Para reiniciar la copia en el bucket o cambiar sus ajustes, elige Cancelar y reanudar el trabajo y abre Copias de seguridad.",
+  ],
 ])("explains the shutdown refusal %s in both languages", (code, english, spanish) => {
   expect(codeMessage(code, "en")).toBe(english);
   expect(codeMessage(code, "es")).toBe(spanish);
