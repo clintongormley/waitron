@@ -22045,6 +22045,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
         permissions: [],
       });
       await flush(el);
+      await startCounterBasket(el);
       const reads = listCounterWaiting.mock.calls.length;
       settle(read);
       await flush(el);
@@ -23842,6 +23843,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     await flush(el);
     await flush(el);
     await flush(el);
+    await startCounterBasket(el);
     expect(tenderPay(el).activeReaders).toEqual([]);
 
     oldAnswer(equipmentOn("held", R1));
@@ -23931,6 +23933,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     await flush(el);
     const reads = getDeviceEquipment.mock.calls.length;
     expect(reads).toBeGreaterThanOrEqual(2);
+    await startCounterBasket(el);
     expect(tenderPay(el).activeReaders).toEqual([]);
 
     getDeviceEquipment.mockRejectedValue(new TypeError("Failed to fetch"));
