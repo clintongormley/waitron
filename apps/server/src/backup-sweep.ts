@@ -208,6 +208,28 @@ type BackupRunDeps = Omit<BackupSweepDeps, "schedule" | "sleep" | "jitterSeed" |
   checkSavedArchive?: CheckSavedArchive;
 };
 
+type DownloadCapture = Pick<
+  BackupRunDeps,
+  | "nodeId"
+  | "db"
+  | "node"
+  | "modules"
+  | "environment"
+  | "resolvers"
+  | "stateDir"
+  | "venueDir"
+  | "stagingDir"
+  | "backupKey"
+  | "archive"
+  | "stagingEstimateBytes"
+  | "stagingTurn"
+  | "statfs"
+  | "signal"
+  | "log"
+  | "now"
+  | "buildManifest"
+> & { downloadPath: string };
+
 export async function runOnce(deps: BackupRunDeps): Promise<void> {
   const stage = () => stageBackup(deps);
   const deliver = deps.stagingTurn
@@ -218,7 +240,22 @@ export async function runOnce(deps: BackupRunDeps): Promise<void> {
   await deliver?.();
 }
 
-async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) | undefined> {
+export function captureBackupDownload(deps: DownloadCapture): Promise<number> {
+  const stage = () => {
+    deps.signal.throwIfAborted();
+    return stageBackup(deps);
+  };
+  return deps.stagingTurn ? deps.stagingTurn.runBackup(stage) : stage();
+}
+
+type DeliverStagedBackup = () => Promise<void>;
+function stageBackup(deps: BackupRunDeps): Promise<DeliverStagedBackup | undefined>;
+function stageBackup(deps: DownloadCapture): Promise<number>;
+async function stageBackup(
+  deps: BackupRunDeps | DownloadCapture,
+): Promise<number | DeliverStagedBackup | undefined> {
+  const downloadPath = "downloadPath" in deps ? deps.downloadPath : undefined;
+  const delivery = "downloadPath" in deps ? undefined : deps;
   const now = deps.now ?? (() => new Date());
   const nowMs = now().getTime();
   const buildBackupManifest = deps.buildManifest ?? buildManifest;
@@ -231,9 +268,11 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
   let encryptedDir: string | undefined;
   const budget = new ArchiveReadBudget();
   const reportDeleted = (deleted: readonly DeletableArchive[]) =>
-    reportArchivesDeleted(deps.onArchivesDeleted, deleted, now(), deps.log);
+    reportArchivesDeleted(delivery?.onArchivesDeleted, deleted, now(), deps.log);
   try {
-    const held = await readClockStepHold(deps.latestClockStep, nowMs, deps.retainDays, deps.log);
+    const held = delivery
+      ? await readClockStepHold(delivery.latestClockStep, nowMs, delivery.retainDays, deps.log)
+      : undefined;
     // Collected before the copy, so a broken state folder fails the tick without copying the
     // whole database.
     const [manifestRead, partsRead] = await Promise.allSettled([
@@ -271,19 +310,19 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
     if (deps.stagingEstimateBytes) {
       let installationStart: Promise<Date | null> | undefined;
       const installationStartedAt = () =>
-        (installationStart ??= installationStartOrNull(deps.installationStartedAt, deps.log));
+        (installationStart ??= installationStartOrNull(delivery?.installationStartedAt, deps.log));
       const estimate = await deps.stagingEstimateBytes();
-      const onDisk = await localFoldersOnDisk(deps);
+      const onDisk = delivery ? await localFoldersOnDisk(delivery) : { folders: [], copies: 0 };
       copies = onDisk.copies;
       room = (neededBytes) =>
         makeRoom({
           nodeId: deps.nodeId,
           neededBytes,
-          floorBytes: deps.spaceFloorBytes ?? START_FREE_SPACE_FLOOR,
-          aimBytes: deps.spaceAimBytes ?? SPACE_LOW_BYTES,
+          floorBytes: delivery?.spaceFloorBytes ?? START_FREE_SPACE_FLOOR,
+          aimBytes: delivery?.spaceAimBytes ?? SPACE_LOW_BYTES,
           dir: deps.stagingDir,
           statfs: deps.statfs,
-          folders: deps.checkSavedArchive ? [] : onDisk.folders,
+          folders: delivery?.checkSavedArchive ? [] : onDisk.folders,
           reason: "backup_room",
           outOfReach: "floor",
           installationStartedAt,
@@ -292,15 +331,15 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
           log: deps.log,
           onDeleted: reportDeleted,
         });
-      const boxCiphertext = deps.backends.length === 0 ? 0 : estimate;
+      const boxCiphertext = downloadPath || delivery?.backends.length ? estimate : 0;
       await room(
         estimate +
           boxCiphertext +
           estimate * copies +
-          ((await deps.cloud?.target.roomNeeded(estimate)) ?? 0),
+          ((await delivery?.cloud?.target.roomNeeded(estimate)) ?? 0),
       );
     }
-    if (deps.cloud) {
+    if (delivery?.cloud) {
       cloudCopyDir = await mkdtemp(join(deps.stateDir, SCRATCH_DIR, "cloud-copy-"));
       staged = join(cloudCopyDir, dumpName);
     }
@@ -308,7 +347,7 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
     dumped = true;
     await chmod(staged, 0o600);
     const stagedSize =
-      deps.stagingEstimateBytes || deps.cloud || deps.checkSavedArchive
+      downloadPath || deps.stagingEstimateBytes || delivery?.cloud || delivery?.checkSavedArchive
         ? (await stat(staged)).size
         : 0;
     if (deps.stagingEstimateBytes) await checkStagingSpace(deps, stagedSize);
@@ -319,9 +358,12 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
       ...metadata.slice(1).map((entry) => ({ kind: "bytes" as const, entry })),
     ];
     let ciphertext: string | undefined;
-    if (deps.backends.length > 0) {
-      encryptedDir = await mkdtemp(join(deps.stagingDir, BACKUP_ENCRYPT_DIR_PREFIX));
-      ciphertext = join(encryptedDir, "artifact");
+    if (downloadPath || delivery?.backends.length) {
+      if (downloadPath) ciphertext = downloadPath;
+      else {
+        encryptedDir = await mkdtemp(join(deps.stagingDir, BACKUP_ENCRYPT_DIR_PREFIX));
+        ciphertext = join(encryptedDir, "artifact");
+      }
       await encryptArtifactFileUnderBackupKey(
         compressArchive(packArchiveStream(entries), deps.signal),
         ciphertext,
@@ -331,11 +373,6 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
       // The encrypted file can be larger than the estimate; each folder copy on the disk writes it
       // whole before its rename.
       if (room && copies > 0) await room((await stat(ciphertext)).size * copies);
-    }
-    const key = backupArchiveKey(stamp, { nodeId: deps.nodeId });
-    if (deps.outcomes?.runStopped) {
-      delete deps.outcomes.runStopped;
-      deps.onRunStoppedChanged?.();
     }
     // WBA1 has a 9-byte header and 12 bytes of length fields per entry.
     const plaintextBytes = entries.reduce(
@@ -347,6 +384,12 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
           : Buffer.byteLength(entry.entry.name) + entry.entry.bytes.length),
       9,
     );
+    if ("downloadPath" in deps) return plaintextBytes;
+    const key = backupArchiveKey(stamp, { nodeId: deps.nodeId });
+    if (deps.outcomes?.runStopped) {
+      delete deps.outcomes.runStopped;
+      deps.onRunStoppedChanged?.();
+    }
     const check = deps.checkSavedArchive;
     const savedDigest = check && (await digestFile(ciphertext!, deps.signal));
     // Every destination call has settled before `finally` removes the ciphertext they read.
@@ -481,20 +524,20 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
     };
   } catch (err) {
     // Setup failures stop the run before it can store an archive.
-    if (!deps.signal.aborted && deps.outcomes) {
+    if (!deps.signal.aborted && delivery?.outcomes) {
       const code = codeOf(err);
       const at = stamp.toISOString();
-      const previous = deps.outcomes.runStopped;
-      deps.outcomes.runStopped = {
+      const previous = delivery.outcomes.runStopped;
+      delivery.outcomes.runStopped = {
         code,
         at,
         since: previous?.code === code ? previous.since : at,
       };
       if (isAppError(err) && hasCode(err, "backup.staging_space_low")) {
         const { neededBytes, availableBytes } = err.params;
-        deps.outcomes.runStopped.sizes = { neededBytes, availableBytes };
+        delivery.outcomes.runStopped.sizes = { neededBytes, availableBytes };
       }
-      deps.onRunStoppedChanged?.();
+      delivery.onRunStoppedChanged?.();
     }
     throw err;
   } finally {

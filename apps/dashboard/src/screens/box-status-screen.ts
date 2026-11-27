@@ -305,7 +305,8 @@ export class BoxStatusScreen extends LitElement {
   @state() private confirmingClock = false;
   /** The Clock row's confirmation refusal; the next press clears it. */
   @state() private clockConfirmError = "";
-  @state() private shutdownConfirmation: "start" | "shut-down-anyway" | null = null;
+  @state() private shutdownConfirmation:
+    "start" | "shut-down-anyway" | { name: string; bytes: number } | null = null;
   @state() private shutdownBusy = false;
   @state() private shutdownStaff: ShutdownStaffMember[] = [];
   @state() private shutdownError = "";
@@ -1072,8 +1073,8 @@ export class BoxStatusScreen extends LitElement {
     }
   }
 
-  async #shutdown(action: "start" | "cancel" | ShutdownDecision): Promise<void> {
-    const available = this.health?.shutdown?.available ?? false;
+  async #shutdown(action: "start" | "cancel" | ShutdownDecision | { name: string }): Promise<void> {
+    const previous = this.health?.shutdown;
     if (this.shutdownBusy) return;
     this.shutdownBusy = true;
     this.shutdownError = "";
@@ -1082,9 +1083,18 @@ export class BoxStatusScreen extends LitElement {
         ? this.api.cancelBoxShutdown()
         : action === "start"
           ? this.api.startBoxShutdown()
-          : this.api.resolveBoxShutdown(action));
+          : typeof action === "object"
+            ? this.api.confirmBoxShutdownDownload(action.name)
+            : this.api.resolveBoxShutdown(action));
       if (this.health !== null)
-        this.health = { ...this.health, shutdown: { ...status, available } };
+        this.health = {
+          ...this.health,
+          shutdown: {
+            ...status,
+            available: previous?.available ?? false,
+            downloadOnly: previous?.downloadOnly,
+          },
+        };
       this.shutdownConfirmation = null;
       this.api.liveData.refresh();
     } catch (error) {
@@ -1104,6 +1114,7 @@ export class BoxStatusScreen extends LitElement {
       return nothing;
     const phase = status.phase;
     const anyway = this.shutdownConfirmation === "shut-down-anyway";
+    const file = typeof this.shutdownConfirmation === "object" ? this.shutdownConfirmation : null;
     return html`<section class="box-restart">
       <h2>${t("box_status.shutdown.title")}</h2>
       <p role="status" data-test="box-shutdown-status">
@@ -1114,7 +1125,7 @@ export class BoxStatusScreen extends LitElement {
               ? ""
               : t(`box_status.shutdown.${phase}`)
         }
-        ${phase === "paused" ? codeMessage(status.errorCode) : nothing}
+        ${(phase === "paused" || phase === "download") && status.errorCode ? codeMessage(status.errorCode) : nothing}
       </p>
       ${
         phase === "idle"
@@ -1152,7 +1163,28 @@ export class BoxStatusScreen extends LitElement {
           : nothing
       }
       ${
-        phase === "checking" || phase === "paused"
+        phase === "download"
+          ? html`<p>
+                <a
+                  href=${`/api/box/shutdown/download/${encodeURIComponent(status.name)}`}
+                  download=${status.name}
+                  >${t("box_status.shutdown.download_backup")}</a
+                >
+              </p>
+              <wt-button
+                variant=${status.delivered ? "primary" : "secondary"}
+                data-test="box-shutdown-backup-saved"
+                ?disabled=${this.shutdownBusy || !status.delivered}
+                @click=${() => {
+                  this.shutdownError = "";
+                  this.shutdownConfirmation = { name: status.name, bytes: status.bytes };
+                }}
+                >${t("box_status.shutdown.backup_saved")}</wt-button
+              >`
+          : nothing
+      }
+      ${
+        phase === "checking" || phase === "paused" || phase === "download"
           ? html`
               <wt-button
                 variant="secondary"
@@ -1172,28 +1204,36 @@ export class BoxStatusScreen extends LitElement {
       <wt-dialog
         .open=${this.shutdownConfirmation !== null}
         .dismissible=${!this.shutdownBusy}
-        heading=${t(anyway ? "box_status.shutdown.anyway_question" : "box_status.shutdown.question")}
+        heading=${t(file ? "box_status.shutdown.saved_question" : anyway ? "box_status.shutdown.anyway_question" : "box_status.shutdown.question")}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
           this.shutdownConfirmation = null;
         }}
       >
         ${
-          anyway
-            ? html`<p>${t("box_status.shutdown.anyway_warning")}</p>`
-            : html`<p>${t("box_status.shutdown.what")}</p>
-                ${this.canMakeRecoveryPack ? html`<p><a href="/backup?recovery-pack=make">${t("recovery_pack.make")}</a></p>` : nothing}
-                ${
-                  this.shutdownStaff.length === 0
-                    ? nothing
-                    : html`
-                        <p>${t("box_status.shutdown.clock_out_first")}</p>
-                        <ul>
-                          ${this.shutdownStaff.map(({ displayName, state }) => html`<li>${displayName} (${t(state === "working" ? "box_status.shutdown.working" : "clock.on_break")})</li>`)}
-                        </ul>
-                      `
-                }
-                <p>${t("box_status.shutdown.password_reason")}</p>`
+          file
+            ? html`<p>
+                  ${fill("box_status.shutdown.check_file", { name: file.name, bytes: file.bytes.toLocaleString(currentLocale()) })}
+                </p>
+                <p>${t("box_status.shutdown.keys")}</p>`
+            : anyway
+              ? html`<p>${t("box_status.shutdown.anyway_warning")}</p>`
+              : html`<p>
+                    ${t(status.downloadOnly ? "box_status.shutdown.download_what" : "box_status.shutdown.what")}
+                  </p>
+                  ${status.downloadOnly ? html`<p>${t("box_status.shutdown.keys")}</p>` : nothing}
+                  ${this.canMakeRecoveryPack ? html`<p><a href="/backup?recovery-pack=make">${t("recovery_pack.make")}</a></p>` : nothing}
+                  ${
+                    this.shutdownStaff.length === 0
+                      ? nothing
+                      : html`
+                          <p>${t("box_status.shutdown.clock_out_first")}</p>
+                          <ul>
+                            ${this.shutdownStaff.map(({ displayName, state }) => html`<li>${displayName} (${t(state === "working" ? "box_status.shutdown.working" : "clock.on_break")})</li>`)}
+                          </ul>
+                        `
+                  }
+                  <p>${t("box_status.shutdown.password_reason")}</p>`
         }
         <wt-form-actions slot="footer" .error=${this.shutdownError}>
           <wt-button
@@ -1212,7 +1252,7 @@ export class BoxStatusScreen extends LitElement {
               const action = this.shutdownConfirmation;
               if (action !== null) void this.#shutdown(action);
             }}
-            >${t(anyway ? "box_status.shutdown.anyway" : "box_status.shutdown.title")}</wt-button
+            >${t(file ? "box_status.shutdown.backup_saved" : anyway ? "box_status.shutdown.anyway" : "box_status.shutdown.title")}</wt-button
           >
         </wt-form-actions>
       </wt-dialog>

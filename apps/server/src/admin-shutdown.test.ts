@@ -1,6 +1,13 @@
+import { getRequestListener } from "@hono/node-server";
+import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
+import { createServer, get, type IncomingMessage } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
 import { createAdminShutdown } from "./admin-shutdown.js";
+import { streamShutdownDownload } from "./admin-shutdown-download.js";
+import { retainHttpListener } from "./testing/retained-http-listener.js";
 
 it.each(["request", "job"])("can cancel while an admitted %s is still running", async (kind) => {
   let release!: () => void;
@@ -215,3 +222,159 @@ it("clears a partly written shutdown hold when cancelling after a failed save", 
     await shutdown.close();
   }
 });
+
+it("holds sales until the named archive is delivered and the administrator confirms it", async () => {
+  let marked = false;
+  let removed = false;
+  const name = "final-backup.wbackup";
+  const shutdown = createAdminShutdown({
+    check: async () => ({
+      name,
+      path: "/private/checked-archive",
+      bytes: 123,
+      remove: async () => {
+        removed = true;
+      },
+    }),
+    save: async () => {
+      marked = true;
+    },
+    clear: async () => {},
+  });
+  const app = new Hono();
+  app.use("*", shutdown.middleware);
+  app.post("/sale", (c) => c.body(null, 204));
+  try {
+    shutdown.start();
+    await vi.waitFor(() =>
+      expect(shutdown.status()).toEqual({ phase: "download", name, bytes: 123, delivered: false }),
+    );
+    expect((await app.request("/sale", { method: "POST" })).status).toBe(503);
+    const interrupted = await shutdown.beginDownload(name);
+    interrupted.finish(false);
+    expect(() => shutdown.confirmDownload(name)).toThrow(
+      expect.objectContaining({ code: "box.shutdown_in_progress" }),
+    );
+    const active = await shutdown.beginDownload(name);
+    const started = vi.fn();
+    const retry = shutdown.beginDownload(name);
+    void retry.then(started, started);
+    await Promise.resolve();
+    const startedBeforeClose = started.mock.calls.length;
+    active.finish(false);
+    const transfer = await retry.catch(() => undefined);
+    transfer?.finish(true);
+    expect(startedBeforeClose).toBe(0);
+    expect(transfer).toBeDefined();
+    const repeat = await shutdown.beginDownload(name);
+    try {
+      expect(() => shutdown.confirmDownload(name)).toThrow(
+        expect.objectContaining({ code: "box.shutdown_in_progress" }),
+      );
+    } finally {
+      repeat.finish(false);
+    }
+    expect(() => shutdown.confirmDownload("earlier-backup.wbackup")).toThrow(
+      expect.objectContaining({ code: "box.shutdown_in_progress" }),
+    );
+    expect(marked).toBe(false);
+    shutdown.confirmDownload(name);
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready" }));
+    expect({ marked, removed }).toEqual({ marked: true, removed: true });
+  } finally {
+    await shutdown.close();
+  }
+});
+
+it("waits for an interrupted download to close before removing the archive and reopening sales", async () => {
+  const name = "final-backup.wbackup";
+  let removed = false;
+  const shutdown = createAdminShutdown({
+    check: async () => ({
+      name,
+      path: "/private/checked-archive",
+      bytes: 123,
+      remove: async () => {
+        removed = true;
+      },
+    }),
+    save: async () => {},
+    clear: async () => {},
+  });
+  const app = new Hono();
+  app.use("*", shutdown.middleware);
+  app.post("/sale", (c) => c.body(null, 204));
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("download"));
+    const transfer = await shutdown.beginDownload(name);
+    const cancelling = shutdown.cancel();
+    try {
+      expect(transfer.signal.aborted).toBe(true);
+      expect((await app.request("/sale", { method: "POST" })).status).toBe(503);
+      expect(removed).toBe(false);
+    } finally {
+      transfer.finish(false);
+      await cancelling;
+    }
+    expect(removed).toBe(true);
+    expect((await app.request("/sale", { method: "POST" })).status).toBe(204);
+  } finally {
+    await shutdown.close();
+  }
+});
+
+it.each(["cancels", "retries"] as const)(
+  "closes the paused download when the administrator %s",
+  async (action) => {
+    const name = "checked.backup.enc";
+    const bytes = 32 * 1024 * 1024;
+    const folder = await mkdtemp(join(tmpdir(), "waitron-cancel-download-"));
+    const path = join(folder, name);
+    const shutdown = createAdminShutdown({
+      check: async () => ({ name, path, bytes, remove: async () => {} }),
+      save: async () => {},
+      clear: async () => {},
+    });
+    const app = new Hono();
+    app.get("/download", async (c) =>
+      streamShutdownDownload(c, await shutdown.beginDownload(name)),
+    );
+    const server = createServer(getRequestListener(app.fetch));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await writeFile(path, "Checked backup");
+      await truncate(path, bytes);
+      const held = await retainHttpListener("127.0.0.1", server);
+      shutdown.start();
+      await vi.waitFor(() => expect(shutdown.status().phase).toBe("download"));
+      const answer = await new Promise<IncomingMessage>((resolve, reject) => {
+        get(`http://${held.host}:${held.port}/download`, { agent: false }, resolve).once(
+          "error",
+          reject,
+        );
+      });
+      const closed = new Promise<void>((resolve) => answer.once("close", resolve));
+      if (action === "cancels") await shutdown.cancel();
+      else {
+        const retry = await fetch(`http://${held.host}:${held.port}/download`);
+        const bytesReceived = (await retry.arrayBuffer()).byteLength;
+        expect(retry.status).toBe(200);
+        expect(bytesReceived).toBe(bytes);
+        await vi.waitFor(() =>
+          expect(shutdown.status()).toMatchObject({ phase: "download", delivered: true }),
+        );
+      }
+      answer.resume();
+      await closed;
+      expect(answer.complete).toBe(false);
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+      server.closeAllConnections();
+      await shutdown.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(folder, { force: true, recursive: true });
+    }
+  },
+);

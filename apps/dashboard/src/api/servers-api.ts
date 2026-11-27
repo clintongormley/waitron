@@ -200,7 +200,8 @@ export interface BoxUpgradeSettings extends BoxUpgradeSettingsEdit {
 export type ShutdownStatus =
   | { phase: "idle" | "checking" }
   | { phase: "ready"; checked?: false }
-  | { phase: "paused"; errorCode: string };
+  | { phase: "paused"; errorCode: string }
+  | { phase: "download"; name: string; bytes: number; delivered: boolean; errorCode?: string };
 
 export type ShutdownStaffMember = { displayName: string; state: "working" | "on_break" };
 
@@ -221,7 +222,7 @@ export interface BoxHealth {
   filing: boolean;
   outbox: { lastAcceptedAt: string | null; waiting: number; awaitingCertificate: boolean } | null;
   stream: StreamStatusView;
-  shutdown?: ShutdownStatus & { available: boolean };
+  shutdown?: ShutdownStatus & { available: boolean; downloadOnly?: true };
   spare?: SpareFollowView | null;
   lastOfferedUpgrade?: {
     attemptId: string;
@@ -481,6 +482,9 @@ export class ServersApi extends PrintingApi {
   }
   resolveBoxShutdown(decision: ShutdownDecision): Promise<ShutdownStatus> {
     return this.#request("/api/box/shutdown", "PATCH", { decision });
+  }
+  confirmBoxShutdownDownload(name: string): Promise<ShutdownStatus> {
+    return this.#request("/api/box/shutdown", "PATCH", { decision: "backup-saved", name });
   }
   cancelBoxShutdown(): Promise<ShutdownStatus> {
     return this.#request("/api/box/shutdown", "DELETE", {});

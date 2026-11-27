@@ -1218,6 +1218,8 @@ Not in any track until the standalone primary is done.
   A1557 (2026-11-20) added [the shared backup operation](../apps/server/src/backup-supervisor.ts)
   for scheduled and manual backups. A standalone main box with one saved destination and no
   streaming can now take a checked final copy and wait for an administrator at its next start.
+  With no saved destination and a numbered backup key, an administrator can download the checked
+  final copy and confirm saving it before the box records the next-start hold.
   If that backup check fails, an administrator can retry, cancel or explicitly shut down with
   an unchecked copy. The remaining shutdown work adds a choice to keep waiting on stalled uploads
   once measured, more destinations and appliance power-off.

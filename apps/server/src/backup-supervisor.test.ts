@@ -38,6 +38,7 @@ import { gunzipSync } from "node:zlib";
 import { decryptArtifactUnderBackupKey } from "./artifact-cipher.js";
 import { decryptBackupFile, readArtifactFileHeader } from "./artifact-cipher-file.js";
 import { makeMasterKey } from "@waitron/credentials";
+import { prepareShutdownDownload } from "./admin-shutdown-backup.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { heldBackupKey } from "./testing/backup-key.js";
 import { unpackArchive } from "./backup-archive.js";
@@ -317,6 +318,40 @@ it("rehearses placement of its saved shutdown archive and clears the private cop
     await sup.stop();
   }
 });
+
+it.each(["damaged ciphertext", "insufficient rehearsal space"] as const)(
+  "removes the candidate download after %s",
+  async (failure) => {
+    const stateDir = await makeStateDir();
+    await expect(
+      prepareShutdownDownload(
+        "checked.backup.enc",
+        async (path) => {
+          await writeFile(path, "damaged archive");
+          return 512;
+        },
+        {
+          stateDir,
+          signal: new AbortController().signal,
+          recoveryKey: STRONG_KEY_1,
+          modules: ALL_MODULES,
+          migrationsRoot: null,
+          environment: "preproduction",
+          log: () => {},
+          ...(failure === "insufficient rehearsal space"
+            ? { statfs: async () => ({ bavail: 0, frsize: 1 }) }
+            : {}),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code:
+        failure === "insufficient rehearsal space"
+          ? "backup.staging_space_low"
+          : "backup.archive_invalid",
+    });
+    expect(await readdir(join(stateDir, "scratch", "restore"))).toEqual([]);
+  },
+);
 
 describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
   it("publishes settings, uploaded archives and destination outcomes", async () => {

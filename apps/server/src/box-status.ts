@@ -10,6 +10,7 @@ import {
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { SHUTDOWN_PATH, type AdminShutdown } from "./admin-shutdown.js";
+import { streamShutdownDownload } from "./admin-shutdown-download.js";
 import type { readShutdownStaff } from "./admin-shutdown-duties.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import type { SpareFollowView } from "./spare-follow.js";
@@ -24,6 +25,7 @@ import {
   readJsonBody,
   requireEnum,
   requireManagementSession,
+  requireString,
 } from "@waitron/server-kit";
 import type { JobView } from "./job-runner.js";
 import type { Logger } from "./logger.js";
@@ -112,7 +114,10 @@ export type BoxStatusDeps = {
   now: () => Date;
   tlsCertPath: string | undefined;
   readBackup: (() => Promise<BackupStatus>) | undefined;
-  shutdown?: Pick<AdminShutdown, "status" | "start" | "resolvePaused" | "cancel"> & {
+  shutdown?: Pick<
+    AdminShutdown,
+    "status" | "start" | "resolvePaused" | "cancel" | "beginDownload" | "confirmDownload"
+  > & {
     available(): Promise<boolean>;
     readStaff: () => ReturnType<typeof readShutdownStaff>;
   };
@@ -168,14 +173,27 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         return c.json(shutdown.status(), 202);
       }),
     );
+    app.get(`${SHUTDOWN_PATH}/download/:name`, (c) =>
+      run(c, log, async () => {
+        requireNodeOperationHttps(c);
+        await authorize(c);
+        if (c.req.raw.method === "HEAD") return c.body(null, 405, { Allow: "GET" });
+        return streamShutdownDownload(c, await shutdown.beginDownload(c.req.param("name")));
+      }),
+    );
     app.patch(SHUTDOWN_PATH, (c) =>
       run(c, log, async () => {
         requireNodeOperationHttps(c);
         await authorize(c);
-        const body = await readJsonBody<{ decision?: unknown } | null>(c);
-        shutdown.resolvePaused(
-          requireEnum(body?.decision, "decision", ["retry", "shut-down-anyway"]),
-        );
+        const body = await readJsonBody<{ decision?: unknown; name?: unknown } | null>(c);
+        const decision = requireEnum(body?.decision, "decision", [
+          "retry",
+          "shut-down-anyway",
+          "backup-saved",
+        ]);
+        if (decision === "backup-saved")
+          shutdown.confirmDownload(requireString(body?.name, "name"));
+        else shutdown.resolvePaused(decision);
         return c.json(shutdown.status(), 202);
       }),
     );

@@ -190,6 +190,52 @@ it("requires confirmation before switching off with an unchecked backup", async 
   );
 });
 
+it("mentions both restore keys before pausing work for a downloadable backup", async () => {
+  const { el } = await mount(
+    stubApi({}, health({ shutdown: { phase: "idle", available: true, downloadOnly: true } })),
+  );
+  el.canCheckClock = true;
+  await el.updateComplete;
+  await userEvent.click(q(el, '[data-test="box-shutdown"]')!);
+  const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
+  expect(text(confirm.closest("wt-dialog"))).toContain("encryption key and master key");
+});
+
+it("shows the checked download and asks the administrator to confirm the named file and keys", async () => {
+  const name = "waitron-final.backup.enc";
+  const bytes = 1234;
+  const download = { phase: "download", name, bytes, delivered: false, available: true } as const;
+  const getBoxHealth = vi.fn().mockResolvedValue(health({ shutdown: download }));
+  const confirmBoxShutdownDownload = vi.fn(async () => {
+    getBoxHealth.mockResolvedValue(health({ shutdown: { phase: "ready", available: true } }));
+    return { phase: "ready" } as const;
+  });
+  const api = stubApi({ getBoxHealth, confirmBoxShutdownDownload });
+  const { el } = await mount(api);
+  el.canCheckClock = true;
+  await el.updateComplete;
+
+  const link = q(el, "a[download]");
+  expect(link?.getAttribute("href")).toBe(`/api/box/shutdown/download/${name}`);
+  expect(q(el, '[data-test="box-shutdown-cancel"]')).not.toBeNull();
+  const saved = () => q(el, '[data-test="box-shutdown-backup-saved"]')!;
+  expect(saved().hasAttribute("disabled")).toBe(true);
+  getBoxHealth.mockResolvedValue(health({ shutdown: { ...download, delivered: true } }));
+  api.liveData.refresh();
+  await vi.waitFor(() => expect(saved().hasAttribute("disabled")).toBe(false));
+  await userEvent.click(saved());
+  const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
+  const dialog = text(confirm.closest("wt-dialog"));
+  expect(dialog).toContain(name);
+  expect(dialog).toContain(bytes.toLocaleString("en"));
+  expect(dialog).toContain("encryption key and master key");
+  await userEvent.click(confirm);
+  await vi.waitFor(() => expect(confirmBoxShutdownDownload).toHaveBeenCalledWith(name));
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="box-shutdown-status"]'))).toBe("Safe to switch off"),
+  );
+});
+
 it("lists clocked-in staff before confirmation and offers the recovery pack with permission", async () => {
   const { el } = await mount(
     stubApi(

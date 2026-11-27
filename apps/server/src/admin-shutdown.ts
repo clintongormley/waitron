@@ -9,7 +9,15 @@ export const SHUTDOWN_PATH = "/api/box/shutdown";
 export type ShutdownStatus =
   | { phase: "idle" | "checking" }
   | { phase: "ready"; checked?: false }
-  | { phase: "paused"; errorCode: string };
+  | { phase: "paused"; errorCode: string }
+  | { phase: "download"; name: string; bytes: number; delivered: boolean; errorCode?: string };
+
+export type ShutdownArchive = {
+  name: string;
+  path: string;
+  bytes: number;
+  remove(): Promise<void>;
+};
 
 export type ShutdownDecision = "retry" | "shut-down-anyway";
 
@@ -32,7 +40,7 @@ export async function waitForShutdownDrain(
 }
 
 export function createAdminShutdown(deps: {
-  check(signal: AbortSignal): Promise<void>;
+  check(signal: AbortSignal): Promise<void | ShutdownArchive>;
   save(): Promise<void>;
   clear(): Promise<void>;
   pauseDuties?(): { settled: Promise<void>; drainRefunds(): Promise<unknown>; resume(): void };
@@ -47,6 +55,9 @@ export function createAdminShutdown(deps: {
     checked: boolean;
     saving: boolean;
     markMayExist: boolean;
+    archive?: ShutdownArchive;
+    delivered: boolean;
+    transfer?: { abort: () => void; settled: Promise<void> };
     cancelling?: Promise<void>;
   };
   let attempt: Attempt | undefined;
@@ -71,6 +82,14 @@ export function createAdminShutdown(deps: {
     }
   };
 
+  function downloadState(
+    archive: ShutdownArchive,
+    delivered: boolean,
+    errorCode?: string,
+  ): ShutdownStatus {
+    return { phase: "download", name: archive.name, bytes: archive.bytes, delivered, errorCode };
+  }
+
   function run(current: Attempt, checkBackup: boolean): void {
     current.state = { phase: "checking" };
     const { signal } = current.controller;
@@ -89,20 +108,42 @@ export function createAdminShutdown(deps: {
         signal.throwIfAborted();
         if (checkBackup) {
           current.checked = false;
-          await deps.check(signal);
+          current.archive = (await deps.check(signal)) ?? undefined;
           current.checked = true;
+          if (current.archive !== undefined) {
+            current.state = downloadState(current.archive, false);
+            return;
+          }
         }
         signal.throwIfAborted();
         current.saving = true;
         current.markMayExist = true;
         await deps.save();
+        await current.archive?.remove();
+        current.archive = undefined;
         current.state = current.checked ? { phase: "ready" } : { phase: "ready", checked: false };
       } catch (error) {
-        current.state = { phase: "paused", errorCode: codeOf(error) };
+        const errorCode = codeOf(error);
+        current.state = current.archive
+          ? downloadState(current.archive, current.delivered, errorCode)
+          : { phase: "paused", errorCode };
       } finally {
         current.saving = false;
       }
     })();
+  }
+
+  function pendingDownload(name: string) {
+    const current = attempt;
+    const archive = current?.archive;
+    if (
+      closing ||
+      current?.state.phase !== "download" ||
+      archive?.name !== name ||
+      current.controller.signal.aborted
+    )
+      throw new AppError("box.shutdown_in_progress", {});
+    return { current, archive };
   }
 
   return {
@@ -118,6 +159,7 @@ export function createAdminShutdown(deps: {
         checked: false,
         saving: false,
         markMayExist: false,
+        delivered: false,
       };
       attempt = current;
       run(current, true);
@@ -128,6 +170,43 @@ export function createAdminShutdown(deps: {
         throw new AppError("box.shutdown_in_progress", {});
       run(current, decision === "retry");
     },
+    async beginDownload(name: string) {
+      const { current, archive } = pendingDownload(name);
+      const previous = current.transfer;
+      if (previous !== undefined) {
+        previous.abort();
+        await previous.settled;
+        if (pendingDownload(name).current !== current || current.transfer !== undefined)
+          throw new AppError("box.shutdown_in_progress", {});
+      }
+      const controller = new AbortController();
+      const signal = AbortSignal.any([current.controller.signal, controller.signal]);
+      let settle!: () => void;
+      const settled = new Promise<void>((resolve) => (settle = resolve));
+      const transfer = { abort: () => controller.abort(), settled };
+      current.transfer = transfer;
+      return {
+        name: archive.name,
+        path: archive.path,
+        bytes: archive.bytes,
+        signal,
+        finish(complete: boolean) {
+          if (current.transfer !== transfer) return;
+          current.transfer = undefined;
+          if (complete && !signal.aborted) {
+            current.delivered = true;
+            current.state = downloadState(archive, true);
+          }
+          settle();
+        },
+      };
+    },
+    confirmDownload(name: string): void {
+      const { current } = pendingDownload(name);
+      if (!current.delivered || current.transfer !== undefined)
+        throw new AppError("box.shutdown_in_progress", {});
+      run(current, false);
+    },
     async cancel(): Promise<void> {
       const current = attempt;
       if (current === undefined) return;
@@ -137,7 +216,10 @@ export function createAdminShutdown(deps: {
       current.controller.abort();
       current.cancelling = (async () => {
         await current.settled;
+        await current.transfer?.settled;
         if (closing) return;
+        await current.archive?.remove();
+        current.archive = undefined;
         if (current.markMayExist) await deps.clear();
         if (closing) return;
         current.duties?.resume();
@@ -152,6 +234,8 @@ export function createAdminShutdown(deps: {
       attempt?.controller.abort();
       await attempt?.settled;
       await attempt?.cancelling;
+      await attempt?.transfer?.settled;
+      await attempt?.archive?.remove();
     },
   };
 }
