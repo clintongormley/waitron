@@ -14,9 +14,9 @@ all reports are re-exports or type declarations. Keep the packer's byte fallback
 
 Set the UI matrix in `.github/workflows/mutation.yml` to 39 jobs. Set the data-table entry
 in `scripts/mutation-shard.mjs` to 14 ranges, for 28 dedicated jobs in all. Pack the same 107
-whole files over 11 jobs. On the rebased tree the recorded weights peak at 8,231 seconds for the
-old whole-file layout and 3,535 for the new layout. The floor map gets its own job. Keep each
-job's 50-minute limit and the aggregate's 90% floor.
+whole files over 11 jobs. Scoring the old assignments on the rebased tree with the refreshed
+weights gives a peak of 8,231 seconds. Repacking gives 6,181 across six jobs and 3,535 across 11
+jobs. The floor map gets its own job. Keep each job's 50-minute limit and the aggregate's 90% floor.
 
 The watcher cleared the repack and shorter data-table ranges at 10:37 CET on 27 November.
 Matching report durations to the current source put the heaviest of 13 ranges at 6,053–6,569

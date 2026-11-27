@@ -1575,9 +1575,10 @@ inside the limit has not yet been measured.
 the table from its 30 reports and the complete reports from
 [45943691418](https://github.com/clintongormley/waitron/actions/runs/45943691418) and
 [45786406477](https://github.com/clintongormley/waitron/actions/runs/45786406477) let 11 whole-file
-jobs replace six. Replaying the selector on the candidate with the refreshed weights put the old
-whole-file peak at 8,231 summed seconds and the new peak at 3,535. The floor map accounts for the
-new peak. These sums rank work. The manual workflow run measures elapsed time.
+jobs replace six. Scoring the old job assignments with the refreshed weights gives a peak of
+8,231 summed seconds. Repacking with the refreshed weights gives a peak of 6,181 across six jobs
+and 3,535 across 11 jobs. The floor map accounts for the new peak. These sums rank work. The
+manual workflow run measures elapsed time.
 
 The 39 jobs include 14 data-table ranges, up from 12. The Stryker 10.1.1 instrumenter on the
 3,500-line source emits 3,080 mutations for the whole file, 3,057 across 12 ranges and 3,063
