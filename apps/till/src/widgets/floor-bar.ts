@@ -106,12 +106,15 @@ export const floorBarStyles = css`
     }
   }
   @media (orientation: landscape) {
+    .floor-controls {
+      margin-block-end: calc(-1 * max(0px, var(--wt-page-padding, 0px) - var(--wt-space-2)));
+    }
     .floor-bar {
       isolation: isolate;
     }
     .floor-bar::after {
       inset: calc(-1 * var(--wt-field-line-width)) calc(-1 * var(--wt-page-padding, 0px))
-        calc(-1 * var(--wt-page-padding, 0px));
+        calc(-1 * min(var(--wt-page-padding, 0px), var(--wt-space-2)));
       z-index: -1;
       border-block-start: inherit;
     }
@@ -155,8 +158,15 @@ export const floorBarStyles = css`
     align-items: center;
     gap: var(--wt-space-2);
   }
+  .floor-zone-trigger [aria-hidden] {
+    font-size: var(--wt-font-size-md);
+  }
   .floor-bar .floor-menu::part(trigger) {
     min-inline-size: calc(var(--wt-tap-min) + var(--wt-space-1));
+  }
+  .floor-menu wt-icon[slot="trigger"] {
+    inline-size: var(--wt-font-size-xl);
+    block-size: var(--wt-font-size-xl);
   }
   .floor-bar [slot="badge"] {
     inset-block-start: calc(-1 * var(--wt-space-1));
@@ -241,6 +251,7 @@ export const floorBarStyles = css`
     min-block-size: var(--wt-tap-min);
     justify-content: start;
     background: var(--wt-color-tab-warning-tint);
+    border-color: transparent;
     font-size: calc((3 * var(--wt-font-size-md) + var(--wt-font-size-lg)) / 4);
     font-weight: var(--wt-font-weight-normal);
     text-align: start;
@@ -268,12 +279,12 @@ export function floorMoreSheet(count: number | undefined, contents: TemplateResu
     class="floor-menu"
     data-test="more-menu"
     icon="hamburger"
-    .iconSize=${"lg"}
     bottom-sheet
     sheet-variant="menu"
     focus-sheet
     label=${pending ? countText(count, "shell.more_transfers", "shell.more_transfers_one") : t("shell.more")}
   >
+    <wt-icon slot="trigger" aria-hidden="true" name="hamburger"></wt-icon>
     ${pending ? html`<wt-count-badge slot="badge" tone="warning" .count=${count}></wt-count-badge>` : nothing}
     ${contents}
   </wt-row-actions>`;
