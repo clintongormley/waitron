@@ -13,14 +13,14 @@ sets the rules. The watcher wrote in Lane K's `questions.md` at 04:16 on 27 Nove
   In `apps/server/src/menu-api.test.ts`, check that the preview keeps a published extra's default
   and declarations after a draft edit. Only the preview response gains a field.
 - [ ] **Filter the list.** Add `apps/dashboard/src/widgets/customer-menu-filters.ts` and its sibling
-  test. Match one chosen diet against the dish's published labels. When excluding whole allergen
+  test. Match one chosen diet against the dish's published labels, using the shared diet rules below. When excluding whole allergen
   groups, hide an unreviewed dish (`null`, distinct from reviewed `{}`) and a plain dish that
   declares a selected group. A dish with variants needs one reviewed variant whose declaration is
   clear of every selected group. Hide either kind if an extra served by default declares a selected
-  group. Count menu entries hidden by allergens after search and diet, including repeated placements.
+  group or its declaration needs review. Count menu entries hidden by allergens after search and diet, including repeated placements.
   Count an entry as unreviewed if it would appear once its unknown dish or variant declarations
   were recorded as empty. Test parent `null` with reviewed variants, mixed and crossed
-  variants, reviewed versus unknown extras, exact diet labels and both counts before implementing.
+  variants, reviewed versus unknown extras, shared diet rules and both counts before implementing.
 - [ ] **Show choices and scope.** In `apps/dashboard/src/widgets/customer-menu-page.ts`, put the
   filter button by search as in mock 18. Use `wt-button`, `wt-dialog` and `wt-combobox` with Clear
   and Close. Keep selections in memory. Remove empty sections and their links. With an allergen
@@ -42,12 +42,12 @@ change calls for two run-it reviews. Online settings, styles, print, customer ac
 and uploaded fonts follow.
 
 **Scope for the watcher to clear.** Set menus show all published choices. Diet matches the dish's
-own declaration, and missing extra reviews get a mark. Required groups can need several portions,
+own declaration. Optional extras with missing reviews get a mark. Required groups can need several portions,
 as `apps/till/src/menu-filter.ts` accounts for. Checking whether a full order can be put together
 would need that capacity rule and the extras of set-menu choices. This slice follows the published
 menu rules in §3 and describes them as a filter on declarations.
 
-**Watcher clearance, 27 November at 05:08, Lane K `questions.md`.** Use the till's diet implications
-on the dish's own labels. Hide dishes served with an unreviewed default extra and count them as
-unreviewed if recording that extra as empty would let the dish appear. Keep the ask-staff advisory
-under the declarations in picture 18.
+**Watcher clearance, 27 November, Lane K `questions.md`.** The 05:04 proposal counts a dish as
+hidden for lack of review when recording the unreviewed default extra as empty would make the
+dish appear. The watcher replied at 05:08, “filters: yes to both changes, keep the advisory.” Use the
+same diet rules as the till and keep the advisory under the declarations in picture 18.

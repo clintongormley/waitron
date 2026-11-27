@@ -68,6 +68,7 @@ it("hides dishes served with a default extra that declares an exclusion or lacks
       withExtra("Default", true, { nuts: { kinds: ["almonds"] } }, { allergens: null }),
       withExtra("Optional", false, { nuts: { kinds: ["almonds"] } }),
       withExtra("Unknown default", true, null),
+      withExtra("Unknown default with a reviewed variant", true, null, { variants: [choice({})] }),
       withExtra("Unknown default on a dish that declares nuts", true, null, {
         allergens: { nuts: { kinds: ["almonds"] } },
       }),
@@ -84,8 +85,8 @@ it("hides dishes served with a default extra that declares an exclusion or lacks
     "Unknown optional",
     "Reviewed default",
   ]);
-  expect(result.hidden).toBe(3);
-  expect(result.unreviewed).toBe(1);
+  expect(result.hidden).toBe(4);
+  expect(result.unreviewed).toBe(2);
 });
 
 it("counts placements after name and diet matching, keeping nonempty sections and set menus", () => {
