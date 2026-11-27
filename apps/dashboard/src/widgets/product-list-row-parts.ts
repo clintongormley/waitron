@@ -24,7 +24,7 @@ export const productRowStyles = css`
     /* A variant follows its parent's full-width toggle with a small indent. */
     padding-inline-start: calc(
       var(--wt-tap-min) - var(--products-toggle-overhang) - var(--tree-arrow-width) +
-        var(--wt-space-1)
+        var(--wt-space-2)
     );
   }
   wt-data-table:not([narrow])::part(name-stack) {

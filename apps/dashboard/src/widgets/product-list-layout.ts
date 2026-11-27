@@ -8,7 +8,7 @@ export const productListLayoutStyles = css`
     --tree-arrow-width: calc(var(--wt-tap-min) - var(--wt-space-2));
   }
   wt-data-table[narrow] {
-    --tree-arrow-width: calc(var(--wt-tap-min) - var(--wt-space-1));
+    --tree-arrow-width: calc(var(--wt-tap-min) - var(--wt-space-2));
     --wt-table-cell-padding-inline: 0px;
   }
   wt-data-table[narrow][data-list] {

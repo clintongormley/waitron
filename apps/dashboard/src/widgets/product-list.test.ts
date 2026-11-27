@@ -4144,7 +4144,7 @@ describe("a product's variants in the list", () => {
           expect(
             text.getBoundingClientRect().left - productName.getBoundingClientRect().left,
             key,
-          ).toBeCloseTo(width === 390 ? 4 : 16, 0);
+          ).toBeCloseTo(width === 390 ? 8 : 16, 0);
           expect(getComputedStyle(name).fontWeight).toBe("400");
           expect(getComputedStyle(productName).fontWeight).toBe("400");
           const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
