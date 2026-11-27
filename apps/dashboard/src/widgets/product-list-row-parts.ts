@@ -60,6 +60,10 @@ export const productRowStyles = css`
   wt-data-table[data-phone]::part(availability-switch) {
     --wt-switch-track-offset: calc(var(--wt-tap-min) - var(--wt-space-6));
   }
+  wt-data-table[data-phone]::part(column-actions)::before,
+  wt-data-table[data-phone]::part(products-cell)::before {
+    inset-inline-start: calc(var(--wt-space-2) - var(--wt-table-cell-padding-inline));
+  }
   wt-data-table[data-phone]::part(unavailable-label) {
     display: inline;
     border: 0;
@@ -132,6 +136,7 @@ export const productRowStyles = css`
   }
   wt-data-table[narrow]::part(column-sort-price) {
     flex-direction: row-reverse;
+    align-items: baseline;
   }
   wt-data-table[narrow]::part(price-layout) {
     display: flex;

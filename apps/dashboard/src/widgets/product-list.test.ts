@@ -1670,7 +1670,7 @@ describe("product-list", () => {
       expect
         .soft(labelBox.top)
         .toBeGreaterThanOrEqual(ham.querySelector("strong")!.getBoundingClientRect().bottom);
-      const checkUnit = () => {
+      const checkPriceAndSwitch = (view: "list" | "tree") => {
         const cell = cellUnder(root, "ham", t("product.price"));
         const amount = cell.querySelector('[data-test="price"]')!.getBoundingClientRect();
         const unit = cell.querySelector('[data-test="price-unit"]')!.getBoundingClientRect();
@@ -1679,12 +1679,24 @@ describe("product-list", () => {
           .shadowRoot!.querySelector(".track")!;
         const heading = document.createRange();
         heading.selectNodeContents(root.querySelector('[part~="column-heading-price"]')!);
+        const nameHeading = document.createRange();
+        nameHeading.selectNodeContents(root.querySelector('[part~="column-heading-name"]')!);
+        const actions = cellUnder(root, "ham", t("staff.actions"));
+        const divider =
+          actions.getBoundingClientRect().left +
+          Number.parseFloat(getComputedStyle(actions, "::before").insetInlineStart);
         expect.soft(unit.left).toBeGreaterThan(amount.right);
         expect.soft(unit.top).toBeLessThan(amount.bottom);
         expect.soft(track.getBoundingClientRect().left - unit.right).toBeGreaterThanOrEqual(12);
         expect.soft(heading.getBoundingClientRect().right).toBeCloseTo(unit.right, 0);
+        expect
+          .soft(heading.getBoundingClientRect().top, `${view} Price heading`)
+          .toBeCloseTo(nameHeading.getBoundingClientRect().top, 0);
+        expect
+          .soft(divider - track.getBoundingClientRect().right, `${view} switch gap`)
+          .toBeCloseTo(8, 0);
       };
-      checkUnit();
+      checkPriceAndSwitch("list");
 
       el.view = "tree";
       await el.updateComplete;
@@ -1703,7 +1715,7 @@ describe("product-list", () => {
         .toBeGreaterThanOrEqual(scroller.getBoundingClientRect().left);
       toggle.click();
       await table.updateComplete;
-      checkUnit();
+      checkPriceAndSwitch("tree");
       for (const key of ["coffee", "coffee:single", "coffee:double"]) {
         const cell = nameCell(key);
         const name =
