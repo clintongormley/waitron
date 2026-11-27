@@ -79,6 +79,7 @@ export interface AttendanceInbox {
   items: CorrectionItem[];
   timeZone: string;
 }
+/** Approval covers the effective clock entries. Pending requests, proposals and disputes are reported separately. */
 export interface DayApproval {
   status: "pending" | "approved";
   digest: string;

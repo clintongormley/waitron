@@ -142,6 +142,45 @@ describe("computeEntryHash", () => {
     ).toBe(createHash("sha256").update(canonical, "utf8").digest("hex").toUpperCase());
   });
 
+  it("keeps the stored hash of an automatic clock-out written before day approvals", () => {
+    const entry = content({
+      entryKind: "out",
+      recordedByPersonId: null,
+      capturedBySource: "dashboard",
+      capturedByDeviceId: null,
+      extension: {
+        authorKind: "automatic",
+        direction: null,
+        missingEntryKind: null,
+        respondsToEntryId: null,
+        payPeriodClosureId: null,
+      },
+    });
+    expect(computeEntryHash(entry)).toBe(
+      "C8AE45B0FEC775132844B8ACE8F1E89A7F6EC82E681067DE5B95D574CE13395F",
+    );
+  });
+
+  it("includes the approval digest in the stored hash of a day approval", () => {
+    const entry = content({
+      entryKind: "day_approval",
+      capturedBySource: "dashboard",
+      capturedByDeviceId: null,
+      extension: {
+        selfApproved: true,
+        authorKind: "manager",
+        direction: null,
+        missingEntryKind: null,
+        respondsToEntryId: null,
+        payPeriodClosureId: null,
+        approvalDigest: "A".repeat(64),
+      },
+    });
+    expect(computeEntryHash(entry)).toBe(
+      "CDD860E82F3150574D4059EC2B1EAD1793801A61A0F90C64C25082F9595F625A",
+    );
+  });
+
   it("commits to the event instant, not its string form — the same instant hashes identically", () => {
     const asZulu = computeEntryHash(content({ eventAt: "2026-01-05T09:00:00Z" }));
     const asOffset = computeEntryHash(content({ eventAt: "2026-01-05T10:00:00+01:00" }));
