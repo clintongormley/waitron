@@ -189,19 +189,20 @@ const POINTER: StreamPointer = {
  * at `lastChangeAt` on the bucket's clock. The bucket's clock then reads NOW.
  */
 async function bucket(
-  opts: { lastChangeAt?: Date; signWith?: string; streamId?: string } = {},
+  opts: {
+    lastChangeAt?: Date;
+    signWith?: string;
+    streamId?: string;
+    pointer?: Partial<StreamPointer>;
+  } = {},
 ): Promise<MemoryObjectStore> {
   let clock = opts.lastChangeAt ?? new Date(NOW.getTime() - 60 * 60_000);
   const store = createMemoryObjectStore({ now: () => clock });
   const streamId = opts.streamId ?? T.streamId;
-  await writePointer(
-    store,
-    streamId,
-    signPointer({ ...POINTER, streamId }, opts.signWith ?? signer.privateKey),
-    null,
-  );
+  const body = { ...POINTER, ...opts.pointer, streamId };
+  await writePointer(store, streamId, signPointer(body, opts.signWith ?? signer.privateKey), null);
   await store.put(
-    `${generationPrefix(GENERATION)}ltx/0/0000000000000001.ltx`,
+    `${generationPrefix(body.generation)}ltx/0/0000000000000001.ltx`,
     Uint8Array.from([1]),
   );
   clock = NOW;
@@ -1444,25 +1445,43 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     }
   };
 
-  it("refuses a different bucket folder after the owner reviewed the same venue", async () => {
-    const store = await numberedBucket();
-    const deps = await masterKeyDeps(store);
-    const preview = await prepareStreamRestore(deps);
-    await preview.discard();
-    const changed = {
-      ...deps,
-      bucket: { ...deps.bucket, prefix: "replacement" },
-      selectedSourceId: preview.sourceId,
-      stagingDir: join(deps.stateDir, "scratch/restore"),
-      modules: [],
-      environment: "preproduction" as const,
-      venueConfirmed: VENUE.taxId,
-    };
-    await expect(stageStreamRestore(changed)).rejects.toMatchObject({
-      code: "restore.stream_copy_changed",
-    });
-    expect(await leftovers(deps.stateDir)).toEqual([]);
-  });
+  it.each(["bucket folder", "backup run", "signing key"] as const)(
+    "refuses a different %s after the owner reviewed the same venue",
+    async (changedFact) => {
+      const store = await numberedBucket();
+      const deps = await masterKeyDeps(store);
+      const preview = await prepareStreamRestore(deps);
+      await preview.discard();
+      let replacement = store;
+      if (changedFact === "backup run") {
+        replacement = await bucket({
+          pointer: { generation: `gen-0-${T.nodeId}-20260923T090001Z` },
+        });
+      }
+      if (changedFact === "signing key") {
+        const nextSigner = generateNodeKeyPair();
+        replacement = await bucket({
+          pointer: { recovery: { ...POINTER.recovery!, signerPublicKey: nextSigner.publicKey } },
+          signWith: nextSigner.privateKey,
+        });
+      }
+      const changed = {
+        ...deps,
+        bucket:
+          changedFact === "bucket folder" ? { ...deps.bucket, prefix: "replacement" } : deps.bucket,
+        openStore: () => replacement,
+        selectedSourceId: preview.sourceId,
+        stagingDir: join(deps.stateDir, "scratch/restore"),
+        modules: [],
+        environment: "preproduction" as const,
+        venueConfirmed: VENUE.taxId,
+      };
+      await expect(stageStreamRestore(changed)).rejects.toMatchObject({
+        code: "restore.stream_copy_changed",
+      });
+      expect(await leftovers(deps.stateDir)).toEqual([]);
+    },
+  );
 
   it("saves the selected stream database's administrator verifier before discarding the validation copy", async () => {
     const deps = await stageDeps({

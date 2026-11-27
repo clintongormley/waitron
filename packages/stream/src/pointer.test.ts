@@ -136,6 +136,19 @@ describe("readPointer", () => {
     ["generation", JSON.stringify({ body: { ...body(), nodeId: OTHER_NODE }, signature: "s" })],
     ["generation", JSON.stringify({ body: { ...body(), term: 3 }, signature: "s" })],
     ["written_at", JSON.stringify({ body: { ...body(), writtenAt: "yesterday" }, signature: "s" })],
+    [
+      "recovery",
+      JSON.stringify({
+        body: body({
+          recovery: {
+            signerPublicKey: KEYS.publicKey,
+            keyNumber: 2,
+            masterKeyId: "0123456789abcdeZ",
+          },
+        }),
+        signature: "s",
+      }),
+    ],
     ["other_venue", JSON.stringify({ body: { ...body(), streamId: "loc-2" }, signature: "s" })],
   ])("refuses a stored pointer as %s", async (reason, stored) => {
     const store = createMemoryObjectStore();
