@@ -145,7 +145,7 @@ describe("certificate diagnosis parent", () => {
     ],
   ] as const)("checks %s", async (_label, source, kind, endpoint) => {
     const f = await parentFixture(suite.db, false);
-    // A representative's file saved as a seal, as the old type selector allowed.
+    // A representative's file saved as a seal.
     await withTransaction(suite.db, async (tx) => {
       await putCredential(tx, f.deps.ring, {
         personId: null,
