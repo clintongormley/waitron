@@ -1214,8 +1214,8 @@ it.each([
   ],
   [
     "box.shutdown_unavailable",
-    "Checked shutdown needs a standalone main box with streaming and Cloud turned off and a numbered backup key. Turn on saved backups with at least one destination, or download a copy if there are no saved backup settings.",
-    "El apagado con comprobación requiere un servidor principal sin servidor de reserva, con la copia continua y Cloud desactivados y una clave de copia numerada. Activa las copias guardadas con al menos un destino o descarga una copia si no hay ajustes de copia guardados.",
+    "Checked shutdown needs the main box with Cloud off. Keep its joined spare connected, or turn off the bucket copy on a standalone box. Turn on saved backups with at least one destination, or download a copy with a numbered backup key if there are no saved backup settings.",
+    "Para apagar con comprobación, usa el servidor principal con Cloud desactivado. Mantén conectado su servidor de reserva vinculado o desactiva la copia en el bucket si solo hay un servidor. Activa las copias guardadas con al menos un destino o descarga una copia con una clave numerada si no hay ajustes de copia guardados.",
   ],
 ])("explains the shutdown refusal %s in both languages", (code, english, spanish) => {
   expect(codeMessage(code, "en")).toBe(english);
