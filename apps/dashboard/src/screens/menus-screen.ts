@@ -15,6 +15,7 @@ import {
 } from "@waitron/dashboard-kit";
 import { ref } from "lit/directives/ref.js";
 import { ifDefined } from "lit/directives/if-defined.js";
+import { guard } from "lit/directives/guard.js";
 import {
   baseStyles,
   ChangeObserver,
@@ -100,7 +101,7 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { HOME_ORDERS } from "@waitron/shared";
 import { dashboardPath, leftToBrowser, menuClashesAddress } from "../navigation.js";
 import { MenuListLayout, menuListStyles, type ListLayout } from "./menu-list-layout.js";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { menuEditorHeading, menuEditorHeadingStyles } from "./menu-editor-heading.js";
@@ -3294,12 +3295,12 @@ export class MenusScreen extends LitElement {
         data-test="menu-tabs"
         label=${name || t("menus.title")}
         .value=${this.view}
-        .items=${[
+        .items=${guard([currentLocale()], () => [
           { key: "structure", label: t("menus.tab_structure") },
           { key: "home", label: t("menus.tab_home") },
           { key: "preview", label: t("menus.tab_preview") },
           { key: "customer-menu", label: t("menus.tab_customer_menu") },
-        ]}
+        ])}
         @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
           if (event.target !== event.currentTarget || !isTab(event.detail.value)) return;
           if (navigationGuardFor(window)) {

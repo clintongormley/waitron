@@ -4,8 +4,8 @@ import { countOf } from "./count-text.js";
 export const structureRowStyles = css`
   wt-data-table {
     --tree-arrow-width: calc(var(--wt-space-4) + var(--wt-space-1));
-    --structure-arrow-offset: var(--wt-space-4);
-    --structure-arrow-slot: calc(var(--tree-arrow-width) - var(--structure-arrow-offset));
+    --arrow-offset: var(--wt-space-4);
+    --structure-arrow-slot: max(var(--wt-space-1), var(--tree-arrow-width) - var(--arrow-offset));
     --wt-table-cell-padding-inline: var(--wt-space-1);
     --structure-media-size: calc(var(--wt-space-6) + var(--wt-space-1));
     --structure-grip-width: calc(var(--wt-space-6) - var(--wt-field-line-width-active));
@@ -13,14 +13,15 @@ export const structureRowStyles = css`
   }
   wt-data-table[narrow] {
     --tree-arrow-width: var(--wt-space-4);
-    --structure-arrow-offset: var(--wt-space-2);
+    --arrow-offset: var(--wt-space-2);
     --structure-media-size: calc(var(--wt-space-6) - var(--wt-field-line-width-active));
     --structure-grip-width: calc(var(--wt-space-5) + var(--wt-field-line-width-active));
     --structure-media-gap: var(--wt-space-1);
     --structure-amount-width: calc(var(--wt-price-field-width) - var(--wt-space-5));
   }
-  :host([reordering]) wt-data-table {
+  :host([reordering]) wt-data-table:not([narrow]) {
     --structure-root-inset: var(--wt-space-4);
+    --arrow-offset: var(--wt-space-5);
   }
   :host([reordering]) wt-data-table[narrow]:not([data-selecting]) {
     --structure-root-inset: calc(var(--wt-space-4) + var(--wt-space-1));
@@ -56,7 +57,7 @@ export const structureRowStyles = css`
   }
   wt-data-table::part(tree-indent) {
     justify-content: start;
-    margin-inline-start: calc(-1 * var(--structure-arrow-offset));
+    margin-inline-start: calc(-1 * var(--arrow-offset));
   }
   wt-data-table::part(structure-root-toggle) {
     inline-size: var(--wt-tap-min);
@@ -88,6 +89,7 @@ export const structureRowStyles = css`
   }
   wt-data-table:not([narrow])::part(structure-folder-setting)::after {
     content: " ·";
+    padding-inline-start: var(--wt-space-1);
   }
   wt-data-table::part(thumb-frame),
   wt-data-table::part(thumb-placeholder),

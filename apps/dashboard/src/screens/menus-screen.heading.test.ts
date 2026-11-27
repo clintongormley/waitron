@@ -720,6 +720,9 @@ describe("the menu editor's heading", () => {
       await userEvent.keyboard("{End}");
       const customerTab = page.getByRole("tab", { name: t("menus.tab_customer_menu") });
       expect(tabs.shadowRoot!.activeElement).toBe(customerTab.element());
+      el.requestUpdate();
+      await el.updateComplete;
+      await tabs.updateComplete;
       await vi.waitFor(() => {
         expect(customerTab.element().getBoundingClientRect().right).toBeLessThanOrEqual(
           strip.getBoundingClientRect().right + 1,

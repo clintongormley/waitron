@@ -773,7 +773,10 @@ it("the row says whether the include is a folder or shown directly", async () =>
   const el = await mount({ nodes: [...lunchNodes(), wines()] });
   const setting = item(el, "folder-setting-included-wine");
   expect(setting.textContent!.trim()).toBe(t("menus.include_as_folder"));
-  expect(getComputedStyle(setting, "::after").content).toBe('" ·"');
+  expect(getComputedStyle(setting, "::after")).toMatchObject({
+    content: '" ·"',
+    paddingInlineStart: "4px",
+  });
   expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
 
   const cava: MenuStructureNode = {
@@ -1140,7 +1143,7 @@ it.each(
       const first = rows[0]!.name.left;
       const step = rows.find(({ level }) => level === 3)!.name.left - first;
       expect(step).toBeCloseTo(width === 390 ? 12 : 18, 0);
-      const rootOffset = reordering ? (width === 390 ? 8 : 16) : 0;
+      const rootOffset = reordering ? 8 : 0;
       expect(first - root).toBeCloseTo(step + rootOffset, 0);
       for (const { key, level, name } of rows)
         expect(name.left, key).toBeCloseTo(first + (level - 2) * step, 0);
@@ -1177,7 +1180,7 @@ it("puts the menu arrow over the grip column and the section arrow immediately a
   const section = arrow("m-drinks");
   expect(middle(arrow("root"))).toBeCloseTo(handle, -1);
   expect(middle(section) - handle).toBeGreaterThan(15);
-  expect(middle(section) - handle).toBeLessThanOrEqual(35);
+  expect(middle(section) - handle).toBeLessThanOrEqual(29);
   const picture = pieces(el, "m-drinks").media!;
   expect(picture.left - section.getBoundingClientRect().right).toBeLessThanOrEqual(14);
 });
