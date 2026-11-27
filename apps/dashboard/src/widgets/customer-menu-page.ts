@@ -457,6 +457,13 @@ export class CustomerMenuPage extends LitElement {
       .detail div.declarations {
         column-gap: var(--wt-space-4);
       }
+      .detail .declarations wt-icon[name^="allergen-"] {
+        color: inherit;
+      }
+      .choices .declarations {
+        margin-inline-start: var(--wt-space-1);
+        vertical-align: text-bottom;
+      }
       .choices {
         padding: 0;
         list-style: none;

@@ -281,9 +281,28 @@ describe("the customer menu Online preview", () => {
     expect(extraName.contains(allergen.element())).toBe(true);
     const summaryEntry = page.getByText("Almond dressing: Almonds", { exact: true });
     await expect.element(summaryEntry).toBeVisible();
-    await expect
-      .element(summaryEntry.getByRole("img", { name: "Nuts", exact: true }), { timeout: 1000 })
-      .toBeVisible();
+    const summaryIcon = summaryEntry.getByRole("img", { name: "Nuts", exact: true });
+    await expect.element(summaryIcon, { timeout: 1000 }).toBeVisible();
+    const muted = getComputedStyle(summaryEntry.element()).color;
+    const extraGlyph = allergen.element().shadowRoot!.querySelector("path")!;
+    const summaryGlyph = summaryIcon.element().shadowRoot!.querySelector("path")!;
+    expect.soft(getComputedStyle(extraGlyph).fill).toBe(muted);
+    expect.soft(getComputedStyle(summaryGlyph).fill).toBe(muted);
+    expect.soft(muted).not.toBe(getComputedStyle(extraName).color);
+    const baseline = document.createElement("span");
+    baseline.style.cssText = "display:inline-block;width:0;height:0";
+    allergen.element().parentElement!.before(baseline);
+    const glyph = extraGlyph.getBoundingClientRect();
+    const line = baseline.getBoundingClientRect();
+    expect.soft(Math.abs(glyph.bottom - line.bottom)).toBeLessThanOrEqual(1.5);
+    const name = Array.from(extraName.childNodes).find((node) =>
+      node.textContent?.includes("Almond dressing"),
+    )!;
+    const nameRange = document.createRange();
+    nameRange.selectNodeContents(name);
+    const gap = glyph.left - nameRange.getBoundingClientRect().right;
+    expect.soft(gap).toBeGreaterThanOrEqual(8);
+    expect(gap).toBeLessThanOrEqual(12);
     expect(sides.textContent).toContain("Vegetarian");
   });
 
