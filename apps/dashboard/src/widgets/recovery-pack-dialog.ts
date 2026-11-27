@@ -490,7 +490,7 @@ export class RecoveryPackDialog extends LitElement {
         refusal === null
           ? ""
           : refusal.keyName === null
-            ? t("recovery_pack_dialog.no_master_key")
+            ? t("master_key_refusal.no_master_key")
             : words.wrongKey(refusal.keyName)
       }
       @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {

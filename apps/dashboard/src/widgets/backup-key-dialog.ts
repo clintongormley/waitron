@@ -300,7 +300,7 @@ export class BackupKeyDialog extends LitElement {
           this.keyRefusal === null
             ? ""
             : this.keyRefusal.keyName === null
-              ? t("backup_key_dialog.no_master_key")
+              ? t("master_key_refusal.no_master_key")
               : words.wrongKey(this.keyRefusal.keyName)
         }
         @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {

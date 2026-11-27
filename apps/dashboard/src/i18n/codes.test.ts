@@ -925,14 +925,14 @@ it("names Print the recovery pack and Make a new master key, never an old action
   );
 });
 
-it("words a master key that is not the current one, the backup key dialog's no-master-key line, and a backup key held too short", () => {
+it("words a master key that is not the current one, the no-master-key refusal both key dialogs share, and a backup key held too short", () => {
   expect(codeMessage("promotion.break_glass_invalid", "en")).toBe(
     "That is not the current master key. Check the recovery pack and type it again.",
   );
   expect(codeMessage("promotion.break_glass_invalid", "es")).toBe(
     "Esa no es la clave maestra actual. Revisa el paquete de recuperación y vuelve a escribirla.",
   );
-  expect(es["backup_key_dialog.no_master_key"]).toBe(
+  expect(es["master_key_refusal.no_master_key"]).toBe(
     "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",
   );
   expect(codeMessage("backup.recovery_key_too_short", "en")).toBe(

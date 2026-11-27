@@ -232,7 +232,7 @@ it.each([
     "en-GB",
     "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
   ],
-  ["es-ES", es["backup_key_dialog.no_master_key"]],
+  ["es-ES", es["master_key_refusal.no_master_key"]],
 ] as const)(
   "a refusal with no key name says the venue has no master key yet (%s)",
   async (locale, sentence) => {
