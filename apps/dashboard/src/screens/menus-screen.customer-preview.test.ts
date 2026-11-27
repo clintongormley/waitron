@@ -288,60 +288,76 @@ describe("the customer menu Online preview", () => {
   });
 
   it.each([
-    ["Phone", "Phone"],
-    ["Computer", "Computer"],
-    ["Phone", "Computer"],
-  ] as const)("returns to the exact dish and search from %s to %s", async (size, returnSize) => {
-    const viewport = [innerWidth, innerHeight] as const;
-    try {
-      await page.viewport(390, 800);
-      const answer = published();
-      const oven = answer.menu.members[1]!;
-      if (oven.kind !== "section") throw new Error("Expected the oven section");
-      const pepper = oven.members[0]!;
-      if (pepper.kind !== "product") throw new Error("Expected a dish");
-      oven.members = Array.from({ length: 26 }, (_, i) => ({
-        ...pepper,
-        image: null,
-        description: `Dish number ${i + 1}`,
-      }));
-      const { el, host } = await open(() => Response.json(answer));
-      host.style.cssText += "height: 700px; container-type: size; overflow-y: auto;";
-      await page.getByRole("radio", { name: size }).click();
-      const search = page.getByRole("searchbox", { name: "Search dishes" });
-      await search.fill("roast");
-      const searchInput = search.element();
-      const dish = page.getByRole("button", { name: "Roast pepper", exact: true }).nth(18);
-      await expect.element(dish, { timeout: 1000 }).toBeVisible();
-      const customer = customerPage(el)!;
-      const scroller = size === "Phone" ? host : customer.parentElement!;
-      const button = dish.element();
-      button.focus();
-      const top = scroller.scrollTop;
-      expect(top).toBeGreaterThan(300);
-      await userEvent.keyboard("{Enter}");
-      const heading = page.getByRole("heading", { name: "Roast pepper", exact: true });
-      await expect.element(heading).toBeVisible();
-      expect(customer.shadowRoot!.activeElement).toBe(heading.element());
-      expect(heading.element().parentElement?.querySelector("p")?.textContent).toBe(
-        "Dish number 19",
-      );
-      expect(searchInput).not.toBeVisible();
-      expect(scroller.scrollTop).toBeLessThan(top);
-      if (size !== returnSize) await page.getByRole("radio", { name: returnSize }).click();
-      await page.getByRole("button", { name: "Back to menu" }).click();
-      await expect.element(search).toHaveValue("roast");
-      if (size === returnSize) expect(scroller.scrollTop).toBe(top);
-      const buttonBox = button.getBoundingClientRect();
-      const windowBox = host.getBoundingClientRect();
-      expect(buttonBox.top).toBeGreaterThanOrEqual(windowBox.top - 1);
-      expect(buttonBox.bottom).toBeLessThanOrEqual(windowBox.bottom + 1);
-      expect(customer.shadowRoot!.activeElement).toBe(button);
-      expect(location.pathname + location.hash).toBe(address);
-    } finally {
-      await page.viewport(...viewport);
-    }
-  });
+    ["Phone", "Phone", 700],
+    ["Computer", "Computer", 700],
+    ["Phone", "Computer", 700],
+    ["Phone", "Phone", 540],
+  ] as const)(
+    "returns to the same dish from %s to %s at %i px high",
+    async (size, returnSize, height) => {
+      const viewport = [innerWidth, innerHeight] as const;
+      try {
+        await page.viewport(390, 800);
+        const answer = published();
+        const oven = answer.menu.members[1]!;
+        if (oven.kind !== "section") throw new Error("Expected the oven section");
+        const pepper = oven.members[0]!;
+        if (pepper.kind !== "product") throw new Error("Expected a dish");
+        oven.members = Array.from({ length: 26 }, (_, i) => ({
+          ...pepper,
+          image: null,
+          description: `Dish number ${i + 1}`,
+        }));
+        const { el, host } = await open(() => Response.json(answer));
+        host.style.cssText += "height: 700px; container-type: size; overflow-y: auto;";
+        await page.getByRole("radio", { name: size }).click();
+        const search = page.getByRole("searchbox", { name: "Search dishes" });
+        await search.fill("roast");
+        const searchInput = search.element();
+        const dish = page.getByRole("button", { name: "Roast pepper", exact: true }).nth(20);
+        await expect.element(dish, { timeout: 1000 }).toBeVisible();
+        const customer = customerPage(el)!;
+        const scroller = size === "Phone" ? host : customer.parentElement!;
+        const button = dish.element();
+        const dishAtCentre = () => {
+          const { left, top, width, height } = button.getBoundingClientRect();
+          return customer.shadowRoot!.elementFromPoint(left + width / 2, top + height / 2);
+        };
+        button.scrollIntoView({ block: "center", inline: "center" });
+        button.focus({ preventScroll: true });
+        if (height < 700)
+          scroller.scrollTop +=
+            button.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom + 20;
+        const top = scroller.scrollTop;
+        const left = scroller.scrollLeft;
+        expect(top).toBeGreaterThan(0);
+        if (size === "Computer") expect(left).toBeGreaterThan(0);
+        expect(dishAtCentre() === button).toBe(true);
+        await userEvent.keyboard("{Enter}");
+        const heading = page.getByRole("heading", { name: "Roast pepper", exact: true });
+        await expect.element(heading).toBeVisible();
+        expect(customer.shadowRoot!.activeElement).toBe(heading.element());
+        expect(heading.element().parentElement?.querySelector("p")?.textContent).toBe(
+          "Dish number 21",
+        );
+        expect(searchInput).not.toBeVisible();
+        expect(scroller.scrollTop).toBeLessThan(top);
+        host.style.height = `${height}px`;
+        if (size !== returnSize) await page.getByRole("radio", { name: returnSize }).click();
+        await page.getByRole("button", { name: "Back to menu" }).click();
+        await expect.element(search).toHaveValue("roast");
+        if (size === returnSize && height === 700) {
+          expect(scroller.scrollTop).toBe(top);
+          expect(scroller.scrollLeft).toBe(left);
+        }
+        expect(dishAtCentre() === button).toBe(true);
+        expect(customer.shadowRoot!.activeElement).toBe(button);
+        expect(location.pathname + location.hash).toBe(address);
+      } finally {
+        await page.viewport(...viewport);
+      }
+    },
+  );
 
   it("searches displayed dish and set-menu names without losing focus or the allergen key", async () => {
     await open(() => Response.json(publishedSections()));

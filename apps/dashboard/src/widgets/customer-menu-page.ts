@@ -23,10 +23,8 @@ type MenuEntry = Exclude<GuestMember, { kind: "section" }>;
 type OpenDetail = {
   member: MenuEntry;
   button: HTMLElement;
-  scroller?: Element | null;
   top: number;
   left: number;
-  width: number;
 };
 
 function matchingMember(member: GuestMember, query: string, language: string): GuestMember | null {
@@ -499,10 +497,8 @@ export class CustomerMenuPage extends LitElement {
     this.detail = {
       member,
       button: event.currentTarget as HTMLElement,
-      scroller,
       top: scroller?.scrollTop ?? 0,
       left: scroller?.scrollLeft ?? 0,
-      width: this.clientWidth,
     };
     await this.updateComplete;
     const heading = this.renderRoot.querySelector<HTMLElement>(".detail h2")!;
@@ -514,11 +510,16 @@ export class CustomerMenuPage extends LitElement {
     heading.focus({ preventScroll: true });
   }
 
-  async #closeDetail({ button, scroller, top, left, width }: OpenDetail): Promise<void> {
+  async #closeDetail({ button, top, left }: OpenDetail): Promise<void> {
     this.detail = undefined;
     await this.updateComplete;
-    if (scroller === this.#scroller() && width === this.clientWidth) scroller?.scrollTo(left, top);
-    else button.scrollIntoView({ block: "nearest", inline: "nearest" });
+    this.#scroller()?.scrollTo(left, top);
+    const box = button.getBoundingClientRect();
+    const hit = this.shadowRoot!.elementFromPoint(
+      box.left + box.width / 2,
+      box.top + box.height / 2,
+    );
+    if (hit !== button) button.scrollIntoView({ block: "center", inline: "nearest" });
     button.focus({ preventScroll: true });
   }
 
