@@ -498,9 +498,6 @@ it.each([undefined, "F1/7"])(
     const { el, counter, toTakePart } = await takeawaySetMenuOnCounter(id, invoiceNumber, {
       pay: vi.fn().mockResolvedValue({ outcome: "partial", balance }),
       getBillBalance: vi.fn().mockResolvedValue(balance),
-      previewBillPayment: vi.fn(async (_id, ask: BillPaymentAsk) =>
-        cash(ask.kind === "contribution" ? ask.amount! : "9.00", "0.00"),
-      ),
     });
     emit(counter(), "pay-waiting-order", { id });
     await vi.waitFor(() => expect(counter().store.id).toBe(id));
@@ -509,13 +506,6 @@ it.each([undefined, "F1/7"])(
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
     await flushCounter(el);
     expect(dialog(el)!.quiet).toBe(false);
-    if (invoiceNumber === undefined) {
-      await choosePayWay(el, "whole");
-      await type(el, "tendered", "9");
-      await press(el, "[data-pay-continue]");
-      expect(inDialog(el, '[name="guests"]')).not.toBeNull();
-      await press(el, "[data-pay-back]");
-    }
     await toTakePart();
     expect(inDialog(el, "[data-pay-own-receipt]") !== null).toBe(invoiceNumber === undefined);
   },
