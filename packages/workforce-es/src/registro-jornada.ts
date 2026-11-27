@@ -60,7 +60,7 @@ export interface RegistroDeJornada {
 export interface EntradaJornada {
   entryId: string;
   personId: string;
-  tipo: WorkforceEntryKind;
+  tipo: Exclude<WorkforceEntryKind, "day_approval">;
   tipoEntradaFaltante: ClockEntryKind | null;
   direccionCorreccion: "worker_request" | "manager_proposal" | null;
   estadoCorreccion: CorrectionStatus | null;
@@ -120,30 +120,33 @@ function historyForPeriod(record: TimeRecord, periodo: Period): EntradaJornada[]
         a.entry.sequenceNo - b.entry.sequenceNo ||
         a.entry.entryId.localeCompare(b.entry.entryId),
     )
-    .map((row) => {
+    .flatMap((row) => {
       const e = row.entry;
-      return {
-        entryId: e.entryId,
-        personId: e.personId,
-        tipo: e.entryKind,
-        tipoEntradaFaltante: e.extension?.missingEntryKind ?? null,
-        direccionCorreccion: e.extension?.direction ?? null,
-        estadoCorreccion: e.correctionStatus ?? null,
-        instante: localWallClock(e.eventAt, e.offsetMinutes),
-        offsetMinutes: e.offsetMinutes,
-        autor: row.author,
-        motivo: e.correctionReason ?? null,
-        corrigeEntradaId: e.correctsEntryId ?? null,
-        respondeEntradaId: e.extension?.respondsToEntryId ?? null,
-        efectiva: row.effective,
-        automatica: row.author.kind === "automatic",
-        sinConfirmar: !row.confirmed,
-        confirmadaPorTrabajador: row.confirmedByWorker,
-        autoaprobada: row.selfApproved,
-        corregida: row.corrected,
-        disputada: row.disputed,
-        periodosCerrados: [...row.closedPeriodIds],
-      };
+      if (e.entryKind === "day_approval") return [];
+      return [
+        {
+          entryId: e.entryId,
+          personId: e.personId,
+          tipo: e.entryKind,
+          tipoEntradaFaltante: e.extension?.missingEntryKind ?? null,
+          direccionCorreccion: e.extension?.direction ?? null,
+          estadoCorreccion: e.correctionStatus ?? null,
+          instante: localWallClock(e.eventAt, e.offsetMinutes),
+          offsetMinutes: e.offsetMinutes,
+          autor: row.author,
+          motivo: e.correctionReason ?? null,
+          corrigeEntradaId: e.correctsEntryId ?? null,
+          respondeEntradaId: e.extension?.respondsToEntryId ?? null,
+          efectiva: row.effective,
+          automatica: row.author.kind === "automatic",
+          sinConfirmar: !row.confirmed,
+          confirmadaPorTrabajador: row.confirmedByWorker,
+          autoaprobada: row.selfApproved,
+          corregida: row.corrected,
+          disputada: row.disputed,
+          periodosCerrados: [...row.closedPeriodIds],
+        },
+      ];
     });
 }
 

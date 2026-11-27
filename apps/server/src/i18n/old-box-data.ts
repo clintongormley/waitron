@@ -143,6 +143,7 @@ export const OLD_BOX_DATA_WORDS = {
       break_end: "Break end",
       correction: "Correction",
       confirmation: "Confirmation",
+      day_approval: "Day approval",
     } satisfies Record<EntryKind, string>,
     correctionStatuses: {
       requested: "Requested",
@@ -287,6 +288,7 @@ export const OLD_BOX_DATA_WORDS = {
       break_end: "Fin de pausa",
       correction: "Corrección",
       confirmation: "Confirmación",
+      day_approval: "Aprobación del día",
     } satisfies Record<EntryKind, string>,
     correctionStatuses: {
       requested: "Solicitado",

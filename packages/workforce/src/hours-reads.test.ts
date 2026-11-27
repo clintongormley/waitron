@@ -218,6 +218,37 @@ it("records approval without changing the times or re-queuing automatic clock wo
   });
 });
 
+it("keeps a correction draft valid when another day is approved", async () => {
+  await shift();
+  const { end } = await shift("2026-01-06");
+  const before = await read();
+  const expectedRevision = await f.run((tx) => readAttendanceRevision(tx, f.personId));
+  await approveDay(before.days[4]!.approval!.digest);
+
+  const answer = await f.run((tx) =>
+    api.executeAttendanceCommand(tx, {
+      nodeId: f.nodeId,
+      requestedByPersonId: f.personId,
+      authorizedByPersonId: f.personId,
+      origin: f.event("").origin,
+      command: {
+        action: "request",
+        questionId: null,
+        reason: "I left later",
+        changes: [{ target: { entryId: end }, at: "2026-01-06T18:00:00Z", offsetMinutes: 0 }],
+        commandId: newId(),
+        expectedRevision,
+      },
+      now,
+    }),
+  );
+  expect((await f.entries()).at(-1)).toMatchObject({
+    id: answer.entryIds[0],
+    correctionStatus: "requested",
+    correctsEntryId: end,
+  });
+});
+
 it("requires a fresh approval when another shift completes on the same day", async () => {
   await shift();
   const first = (await read()).days[4]!.approval!;
@@ -249,7 +280,7 @@ it("keeps a midnight retime out of the earlier day's approval", async () => {
   expect(hours.days[5]).toMatchObject({ workedMinutes: 180, approval: { status: "pending" } });
 });
 
-it("lets only an administrator approve their own finished day", async () => {
+it("requires the self-approval permission to approve your own finished day", async () => {
   await shift("2026-01-05", f.manager);
   const approval = (await read(undefined, f.manager)).days[4]!.approval!;
   await expect(

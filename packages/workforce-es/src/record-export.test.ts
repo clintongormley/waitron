@@ -20,6 +20,8 @@ import {
   WORKFORCE_MIGRATIONS,
   WORKFORCE_PERMISSIONS,
   WorkforceBackend,
+  approveAttendanceDay,
+  readAttendanceDay,
   closePayPeriod,
   employments,
   type TimeRecord,
@@ -126,6 +128,32 @@ async function request(
     }),
   );
 }
+
+it("keeps day approvals out of the current and frozen clock event exports", async () => {
+  await day();
+  const before = await doc();
+  const scope = { personId: worker, date: "2026-01-05" };
+  const { approval } = await run((tx) => readAttendanceDay(tx, scope));
+  await run((tx) =>
+    approveAttendanceDay(tx, {
+      ...scope,
+      actorPersonId: manager,
+      nodeId,
+      origin,
+      digest: approval!.digest,
+      now: new Date("2026-01-05T18:00:00Z"),
+    }),
+  );
+  await close();
+  const after = await doc();
+  const history = cells(after, "history");
+  expect(history.map((row) => row.entryId)).toEqual(
+    cells(before, "history").map((row) => row.entryId),
+  );
+  expect(cells(after, "frozen-history").map((row) => row.entryId)).toEqual(
+    history.map((row) => row.entryId),
+  );
+});
 
 it("keeps automatic ends counted and worker acknowledgment separate", async () => {
   const target = await day(true);

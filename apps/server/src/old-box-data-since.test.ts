@@ -1001,6 +1001,39 @@ describe("the old box's Working hours tab", () => {
     ]);
   });
 
+  it("labels a returned day approval in English and Spanish", async () => {
+    const worker = await namedPerson("Marta Ruiz");
+    const manager = await namedPerson("Luis Gil");
+    const approval = await clocked(worker, CUTOFF, {
+      entryKind: "day_approval",
+      recordedByPersonId: manager,
+      extension: {
+        authorKind: "manager",
+        direction: null,
+        missingEntryKind: null,
+        respondsToEntryId: null,
+        payPeriodClosureId: null,
+        approvalDigest: "A".repeat(64),
+      },
+    });
+    const en = sheet(await build({ kind: "all" }), OLD_BOX_DATA_WORDS.en.hoursSheet)!;
+    const es = sheet(await build({ kind: "all" }, "es"), OLD_BOX_DATA_WORDS.es.hoursSheet)!;
+
+    expect(row(en, 3)).toEqual([
+      "Marta Ruiz",
+      "Day approval",
+      shown(CUTOFF - MINUTE),
+      shown(CUTOFF),
+      "",
+      "",
+      "",
+      approval,
+    ]);
+    expect(row(es, 3)[1]).toBe(OLD_BOX_DATA_WORDS.es.entryKinds.day_approval);
+    expect(row(es, 3)[1]).toBeTruthy();
+    expect(row(es, 3)[1]).not.toBe(row(en, 3)[1]);
+  });
+
   it("a correction names the entry it corrects, its status and reason", async () => {
     const en = OLD_BOX_DATA_WORDS.en;
     const marta = await namedPerson("Marta Ruiz");
