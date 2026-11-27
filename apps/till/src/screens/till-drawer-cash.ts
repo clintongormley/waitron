@@ -59,8 +59,20 @@ export class TillDrawerCash extends LitElement {
         gap: var(--wt-space-2);
       }
 
+      wt-choice-tile {
+        position: relative;
+      }
+
       wt-choice-tile::part(label) {
+        padding-inline: var(--wt-font-size-xl);
         text-align: center;
+      }
+
+      wt-choice-tile::part(check) {
+        position: absolute;
+        inset-inline-end: var(--wt-space-3);
+        inset-block-start: 50%;
+        translate: 0 -50%;
       }
 
       wt-amount-block {
@@ -322,6 +334,7 @@ export class TillDrawerCash extends LitElement {
             ></wt-input>
             <till-numeric-pad
               ascending
+              .disabled=${this.busy}
               .value=${this.draft.amount}
               @wt-change=${(event: Change) => this.#fieldChanged("amount", event)}
               @pad-enter=${() => {

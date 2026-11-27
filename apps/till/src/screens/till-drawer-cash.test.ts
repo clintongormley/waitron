@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { deferred } from "../../test/clock-app.js";
 import { mountEquipmentApp, signIn, till } from "../../test/equipment-app.js";
 import { TillApi } from "../api/client.js";
 import { es } from "../i18n/strings.js";
@@ -88,6 +89,15 @@ it.each([
     expect(bar.subtitle).toBe(es["drawer_entry.printer"].replace("{printer}", "Bar"));
     if (!opensDrawer) expect(dialog.shadowRoot!.textContent).toContain(es["drawer_close.use_key"]);
     await choose(dialog, 1);
+    for (const tile of dialog.shadowRoot!.querySelectorAll("wt-choice-tile")) {
+      const text = document.createRange();
+      text.selectNodeContents(tile.shadowRoot!.querySelector('[part="label"]')!);
+      const labelBox = text.getBoundingClientRect();
+      const tileBox = tile.getBoundingClientRect();
+      expect(
+        Math.abs(labelBox.left + labelBox.width / 2 - tileBox.left - tileBox.width / 2),
+      ).toBeLessThan(1);
+    }
     const firstPadKey = dialog
       .shadowRoot!.querySelector("till-numeric-pad")!
       .shadowRoot!.querySelector("[data-key]");
@@ -130,10 +140,11 @@ it.each([
 
 it("marks the reason after an invalid Save and uses the same submission on a retry", async () => {
   setLocale("en-GB");
+  const pending = deferred<{ id: string; printerId: string }>();
   const saveDrawerEntry = vi
     .fn()
     .mockRejectedValueOnce(new Error("network"))
-    .mockResolvedValue({ id: "entry", printerId: "bar" });
+    .mockReturnValueOnce(pending.promise);
   const { el } = await mountWidget<HTMLElementTagNameMap["till-drawer-cash"]>("till-drawer-cash", {
     api: { saveDrawerEntry },
     printerId: "bar",
@@ -161,6 +172,11 @@ it("marks the reason after an invalid Save and uses the same submission on a ret
     el.addEventListener("drawer-cash-dismiss", resolve, { once: true }),
   );
   await userEvent.click(action(el, "save"));
+  expect(action(el, "save").loading).toBe(true);
+  const pad = el.shadowRoot!.querySelector("till-numeric-pad")!;
+  const keys = [...pad.shadowRoot!.querySelectorAll("wt-button")];
+  expect(keys.filter((key) => key.disabled)).toHaveLength(keys.length);
+  pending.resolve({ id: "entry", printerId: "bar" });
   expect(await closed).toBeInstanceOf(CustomEvent);
   expect(saveDrawerEntry.mock.calls).toEqual([
     [

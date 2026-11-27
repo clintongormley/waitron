@@ -98,6 +98,7 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
 
   @property() mode: "decimal" | "pin" = "decimal";
   @property({ type: Boolean }) ascending = false;
+  @property({ type: Boolean }) disabled = false;
 
   #unregister?: () => void;
 
@@ -120,6 +121,7 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
 
   /** A key the keyboard router hands this pad, the one in front. */
   receiveKey(input: PadInput, event: KeyboardEvent): void {
+    if (this.disabled) return;
     if (input.kind === "key") this.#press(input.key, event);
     else
       this.dispatchEvent(
@@ -171,6 +173,7 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
         class="key"
         exportparts="button:key"
         data-key=${key}
+        .disabled=${this.disabled}
         @click=${(event: Event) => this.#press(key, event)}
       >
         ${content}
