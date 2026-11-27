@@ -4,6 +4,7 @@ import type { CorrectionAdmission } from "@waitron/fiscal";
 import type { NodeId, SaleId } from "@waitron/shared";
 import type { FilingCaseCause, FilingCaseEvidence } from "./filing-cases.js";
 import { putRightFor } from "./put-right.js";
+import { openSifId } from "./registro-sif.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 
@@ -23,8 +24,9 @@ const FILING: Record<string, Filing | undefined> = {
  * unless it is `voided`, `filing_versions_unusable` or about a sale with no records. Any other
  * submission state, including one this code does not know, refuses. A full invoice AEAT refused
  * waits (`filing_refused`) only while its open case has a fix the Fiscal filing page offers
- * (`putRightFor`); otherwise it is `refused_no_fix`. `issuingNodeId` is the box that would issue
- * the correction.
+ * (`putRightFor`); otherwise it is `refused_no_fix`. An original on a chain other than the open
+ * installation of `issuingNodeId`, the box that would issue the correction, waits while AEAT has
+ * not answered it (`filing_pending`).
  */
 export async function correctionAdmissionFor(
   tx: Transaction,
@@ -37,7 +39,7 @@ export async function correctionAdmissionFor(
       tipoRegistro: verifactuRecords.tipoRegistro,
       tipoFactura: verifactuRecords.tipoFactura,
       tipoRectificativa: verifactuRecords.tipoRectificativa,
-      nodeId: verifactuRecords.nodeId,
+      sifId: verifactuRecords.sifId,
       correctsRegistroId: verifactuRecords.correctsRegistroId,
       numSerieFactura: verifactuRecords.numSerieFactura,
       fechaExpedicionFactura: verifactuRecords.fechaExpedicionFactura,
@@ -66,11 +68,18 @@ export async function correctionAdmissionFor(
   const byReplacement = alta.tipoRectificativa === "S";
   const full = alta.tipoFactura === "F1" || (alta.tipoFactura === "R4" && byReplacement);
   const marked = full ? { fullInvoice: true as const } : {};
-  if (alta.nodeId !== issuingNodeId) return { eligible: false, reason: "wrong_node", ...marked };
   if (!full && alta.tipoFactura !== "F2" && !(alta.tipoFactura === "R5" && byReplacement)) {
     return { eligible: false, reason: "not_simplified" };
   }
   const { estado } = alta;
+  // Nothing orders a corrective on this chain behind its original on another, so it waits for
+  // AEAT's answer; on this chain the queue files the original first.
+  if (estado === null || estado === "pendiente" || estado === "enviando") {
+    const open = await openSifId(tx, issuingNodeId);
+    if (open !== undefined && alta.sifId !== open) {
+      return { eligible: false, reason: "filing_pending", ...marked };
+    }
+  }
   if (estado === null) return { eligible: false, reason: "missing", ...marked };
   const filing = FILING[estado];
   if (filing === undefined) {

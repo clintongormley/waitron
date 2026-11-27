@@ -579,20 +579,23 @@ it.each([
   });
 });
 
-it("refuses a full invoice another box issued as another box's, without fullInvoice", async () => {
-  const { saleId } = await sellSteak();
-  backend.setCorrectionAdmission({ eligible: false, reason: "wrong_node", fullInvoice: true });
+it.each(["wrong_node", "filing_pending"] as const)(
+  "refuses a full invoice the regime answers %s for as not simplified, without fullInvoice",
+  async (reason) => {
+    const { saleId } = await sellSteak();
+    backend.setCorrectionAdmission({ eligible: false, reason, fullInvoice: true });
 
-  for (const read of [
-    () => preview(saleId),
-    () => withTransaction(suite.db, (tx) => readCorrectableLines(tx, backend, saleId, nodeId)),
-  ]) {
-    expect(await captureError(read)).toMatchObject({
-      code: "sale.correction_not_admitted",
-      params: { reason: "wrong_node" },
-    });
-  }
-});
+    for (const read of [
+      () => preview(saleId),
+      () => withTransaction(suite.db, (tx) => readCorrectableLines(tx, backend, saleId, nodeId)),
+    ]) {
+      expect(await captureError(read)).toMatchObject({
+        code: "sale.correction_not_admitted",
+        params: { reason: "not_simplified" },
+      });
+    }
+  },
+);
 
 describe("a full invoice's correction, asked for with fullInvoice", () => {
   const FULL = { fullInvoice: true } as const;
@@ -686,7 +689,7 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
     });
   });
 
-  it.each(["filing_refused", "refused_no_fix", "wrong_node"] as const)(
+  it.each(["filing_refused", "refused_no_fix", "filing_pending"] as const)(
     "refuses a full invoice the regime answers %s for, with that reason",
     async (reason) => {
       const { saleId } = await sellFull();

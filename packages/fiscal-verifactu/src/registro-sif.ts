@@ -16,6 +16,16 @@ export interface SifRegistration {
   revocadoEn: Date | null;
 }
 
+/** The id of `nodeId`'s open installation, or `undefined` when it has none. */
+export async function openSifId(tx: Transaction, nodeId: NodeId): Promise<string | undefined> {
+  const [row] = await tx
+    .select({ id: verifactuIdentities.id })
+    .from(verifactuIdentities)
+    .where(and(eq(verifactuIdentities.nodeId, nodeId), isNull(verifactuIdentities.revocadoEn)))
+    .limit(1);
+  return row?.id;
+}
+
 export async function currentSif(tx: Transaction, nodeId: NodeId): Promise<SifRegistration> {
   const [row] = await tx
     .select({
