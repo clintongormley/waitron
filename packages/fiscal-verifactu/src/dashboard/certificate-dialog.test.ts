@@ -363,7 +363,7 @@ describe("dashboard-aeat-certificate-dialog", () => {
       "E5 closed",
       { outcome: "refused", reason: "closed" },
       "bottom",
-      "AEAT closed the connection, so it may have refused this certificate. The current certificate is unchanged. Check the certificate type, then try again.",
+      "AEAT closed the connection, so it may have refused this certificate. The current certificate is unchanged. Try again, or choose another certificate.",
     ],
     [
       "AEAT's refusal page",
@@ -395,19 +395,19 @@ describe("dashboard-aeat-certificate-dialog", () => {
       "an HTTP error",
       { outcome: "refused", reason: "aeat_http", details: { status: 503 } },
       "bottom",
-      "AEAT answered with HTTP error 503. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
+      "AEAT answered with HTTP error 503. The current certificate is unchanged. Check the internet connection or choose another file. Select Save to check again, or Cancel to stop.",
     ],
     [
       "anything else",
       { outcome: "refused", reason: "check_failed" },
       "bottom",
-      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
+      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file. Select Save to check again, or Cancel to stop.",
     ],
     [
       "a reason this copy does not know",
       { outcome: "refused", reason: "something_new" },
       "bottom",
-      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
+      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file. Select Save to check again, or Cancel to stop.",
     ],
   ];
 
@@ -834,8 +834,8 @@ describe("certificate check self-service choices", () => {
         } else {
           expect(sentence).toBe(
             refusal.reason === "aeat_http"
-              ? "La AEAT ha respondido con el error HTTP 403. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar."
-              : "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
+              ? "La AEAT ha respondido con el error HTTP 403. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo. Pulsa Guardar para repetir la comprobación o Cancelar para parar."
+              : "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
           );
         }
         expect(fileField(dialog).files[0]?.name).toBe("bar-lucia-2026.p12");
@@ -879,7 +879,7 @@ describe("certificate check self-service choices", () => {
       if (language === "en") expect(actions(dialog).error).toContain("or Cancel to stop.");
       else {
         expect(actions(dialog).error).toBe(
-          "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
+          "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
         );
       }
       const close = closed(dialog);

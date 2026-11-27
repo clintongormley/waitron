@@ -45,8 +45,8 @@ Si la configuración se detuvo después de crear las series de facturas, pulsa *
 Instalar un certificado sustituto pide la [confirmación de identidad compartida](staff.md#account-access).
 
 Si al sustituir un certificado aparece un error HTTP o un fallo inesperado en la comprobación,
-el certificado actual sigue instalado. Comprueba la conexión a internet o elige otro archivo o
-tipo de certificado en el diálogo. Pulsa **Guardar** para repetir la comprobación. Pulsa
+el certificado actual sigue instalado. Comprueba la conexión a internet o elige otro archivo en el
+diálogo. Pulsa **Guardar** para repetir la comprobación. Pulsa
 **Cancelar** para parar sin sustituir el certificado actual. El código HTTP por sí solo no indica si esperar ayudará.
 
 Si la ficha del certificado dice que la AEAT no aceptó el certificado, los registros fiscales
@@ -62,15 +62,14 @@ no determinan por sí solos por qué ha fallado la solicitud.
 ## Elige qué vas a inspeccionar {#diagnosis-source}
 
 Elige **Certificado instalado** para inspeccionar el material guardado actualmente en este servidor,
-o **Sustitución elegida, sin instalar** para el archivo, la contraseña y el tipo que elijas aquí.
+o **Sustitución elegida, sin instalar** para el archivo y la contraseña que elijas aquí.
 Confirma el origen y pulsa **Volver a leer**. Esta acción comprueba el material seleccionado
 localmente, sin enviar una consulta de red. No sustituye tu archivo por el certificado instalado.
 
 El **Registro de instalación guardado** describe una instalación anterior. Su tipo y su fecha no
 son datos actuales verificados hasta que el panel indique que el material actual coincide con ese
 registro. Tras una inspección local satisfactoria, puedes ver el entorno configurado, la etiqueta
-del destino y el tipo del material actual. Un sello y un certificado de representante pueden usar
-destinos distintos; cambiar el tipo aquí no cambia el entorno configurado del servidor.
+del destino y el tipo del material actual.
 
 ## Identifícate al realizar la acción {#diagnosis-authority}
 
@@ -103,7 +102,7 @@ Vuelve a abrir el diagnóstico, confirma el origen e inspecciona antes de compro
 certificado instalado y los registros fiscales. **Copiar datos observados** copia un resumen limitado
 del diagnóstico cuando lo eliges; excluye el archivo, la contraseña y los datos de identidad del certificado.
 
-Usa **Sustituir certificado** o **Cambiar archivo o tipo** para volver al editor separado.
+Usa **Sustituir certificado** o **Cambiar archivo** para volver al editor separado.
 Solo **Guardar**, en ese editor, puede instalar una sustitución tras realizar sus propias comprobaciones.
 Este panel no repara la configuración de red del servidor ni un rechazo externo persistente.
 Su evidencia te ayuda a elegir el siguiente paso, pero otra comprobación idéntica no es una reparación.

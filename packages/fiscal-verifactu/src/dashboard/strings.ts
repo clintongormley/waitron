@@ -13,7 +13,7 @@ const en = {
   "aeat_certificate.diagnosis.revision_changed":
     "The installed certificate changed. Stop and reload the saved card, then reopen diagnosis and confirm the source. Nothing was changed by this check.",
   "aeat_certificate.diagnosis.reload_card": "Stop and reload saved card",
-  "aeat_certificate.diagnosis.edit": "Edit selected file or type",
+  "aeat_certificate.diagnosis.edit": "Edit selected file",
   "aeat_certificate.diagnosis.sign_in": "Sign in with permission to manage the system",
   "aeat_certificate.diagnosis.authority":
     "Sign in to inspect this certificate. Sign-in can change the dashboard account. You will need to choose the file and enter its passphrase again.",
@@ -142,7 +142,7 @@ const en = {
   "aeat_certificate.refused.unreachable":
     "Waitron could not reach AEAT. The current certificate is unchanged. Check the internet connection, then try again.",
   "aeat_certificate.refused.closed":
-    "AEAT closed the connection, so it may have refused this certificate. The current certificate is unchanged. Check the certificate type, then try again.",
+    "AEAT closed the connection, so it may have refused this certificate. The current certificate is unchanged. Try again, or choose another certificate.",
   "aeat_certificate.refused.not_accepted":
     "AEAT did not accept this certificate. The current certificate is unchanged. Choose another certificate, or Cancel to stop.",
   "aeat_certificate.refused.aeat_refused":
@@ -150,9 +150,9 @@ const en = {
   "aeat_certificate.refused.aeat_fault":
     "AEAT answered with an error: {faultCode} {faultReason}. The current certificate is unchanged.",
   "aeat_certificate.refused.aeat_http":
-    "AEAT answered with HTTP error {status}. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
+    "AEAT answered with HTTP error {status}. The current certificate is unchanged. Check the internet connection or choose another file. Select Save to check again, or Cancel to stop.",
   "aeat_certificate.refused.check_failed":
-    "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
+    "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file. Select Save to check again, or Cancel to stop.",
   "nav.fiscal_filing": "Fiscal filing",
   "fiscal_filing.title": "Fiscal filing",
   "fiscal_filing.intro":
@@ -409,7 +409,7 @@ const es: Record<AeatCertificateKey, string> = {
   "aeat_certificate.diagnosis.revision_changed":
     "El certificado instalado ha cambiado. Para y recarga la ficha guardada; después, abre el diagnóstico y confirma el origen. Esta comprobación no ha cambiado nada.",
   "aeat_certificate.diagnosis.reload_card": "Parar y recargar la ficha guardada",
-  "aeat_certificate.diagnosis.edit": "Cambiar archivo o tipo",
+  "aeat_certificate.diagnosis.edit": "Cambiar archivo",
   "aeat_certificate.diagnosis.sign_in": "Iniciar sesión con permiso para gestionar el sistema",
   "aeat_certificate.diagnosis.authority":
     "Inicia sesión para inspeccionar este certificado. Esto puede cambiar la cuenta del panel. Tendrás que elegir de nuevo el archivo e introducir su contraseña.",
@@ -542,7 +542,7 @@ const es: Record<AeatCertificateKey, string> = {
   "aeat_certificate.refused.unreachable":
     "Waitron no ha podido contactar con la AEAT. El certificado actual no cambia. Comprueba la conexión a internet y vuelve a intentarlo.",
   "aeat_certificate.refused.closed":
-    "La AEAT ha cerrado la conexión, así que puede haber rechazado este certificado. El certificado actual no cambia. Comprueba el tipo de certificado y vuelve a intentarlo.",
+    "La AEAT ha cerrado la conexión, así que puede haber rechazado este certificado. El certificado actual no cambia. Vuelve a intentarlo o elige otro certificado.",
   "aeat_certificate.refused.not_accepted":
     "La AEAT no ha aceptado este certificado. El certificado actual no cambia. Elige otro certificado o pulsa Cancelar para parar.",
   "aeat_certificate.refused.aeat_refused":
@@ -550,9 +550,9 @@ const es: Record<AeatCertificateKey, string> = {
   "aeat_certificate.refused.aeat_fault":
     "La AEAT ha respondido con un error: {faultCode} {faultReason}. El certificado actual no cambia.",
   "aeat_certificate.refused.aeat_http":
-    "La AEAT ha respondido con el error HTTP {status}. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
+    "La AEAT ha respondido con el error HTTP {status}. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
   "aeat_certificate.refused.check_failed":
-    "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
+    "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
   "nav.fiscal_filing": "Remisión a la AEAT",
   "fiscal_filing.title": "Remisión a la AEAT",
   "fiscal_filing.intro":

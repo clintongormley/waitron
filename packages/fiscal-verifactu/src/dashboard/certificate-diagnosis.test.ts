@@ -363,6 +363,7 @@ it("native source/file/passphrase edits invalidate evidence without substituting
   await panel.updateComplete;
   expect(panel.shadowRoot!.querySelector("[name=diagnosis-certificate-kind]")).toBeNull();
   expect(panel.candidate).not.toHaveProperty("certKind");
+  expect(q(panel, "diagnosis-edit").textContent?.trim()).toBe("Edit selected file");
   await click(panel, "diagnosis-confirm");
   await click(panel, "diagnosis-inspect");
   await vi.waitFor(() => expect(q(panel, "diagnosis-copy")).not.toBeNull());
