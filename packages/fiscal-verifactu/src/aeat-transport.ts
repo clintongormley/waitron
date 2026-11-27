@@ -101,13 +101,44 @@ export function mtlsFetch(material: CertMaterial, ca?: string): AeatTransport {
     },
   });
   return {
-    fetch: ((input, init) =>
-      undiciFetch(
+    fetch: (async (input, init) => {
+      const response = await undiciFetch(
         input as string,
-        { ...init, dispatcher } as Parameters<typeof undiciFetch>[1],
-      ) as unknown as Promise<Response>) as typeof globalThis.fetch,
+        {
+          ...init,
+          dispatcher,
+          redirect: "manual",
+        } as Parameters<typeof undiciFetch>[1],
+      );
+      const page = refusalPage(response);
+      if (page !== null) {
+        await response.body?.cancel();
+        throw new AppError("fiscal.certificate_not_accepted", { page });
+      }
+      return response as unknown as Response;
+    }) as typeof globalThis.fetch,
     close: () => dispatcher.close(),
   };
+}
+
+const REFUSAL_PAGES = new Set(["erro4011.html", "erro4033.html"]);
+
+function refusalPage(response: {
+  status: number;
+  url: string;
+  headers: { get(name: string): string | null };
+}): string | null {
+  if (response.status < 300 || response.status > 399) return null;
+  const location = response.headers.get("location");
+  if (location === null) return null;
+  let target: URL;
+  try {
+    target = new URL(location, response.url);
+  } catch {
+    return null;
+  }
+  const page = target.pathname.split("/").pop() ?? "";
+  return REFUSAL_PAGES.has(page) ? page : null;
 }
 
 export interface TransportDeps {

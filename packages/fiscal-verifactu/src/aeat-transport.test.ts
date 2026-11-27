@@ -1,3 +1,5 @@
+import { createServer as createHttpsServer } from "node:https";
+import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Agent, errors as undiciErrors, fetch as undiciFetch } from "undici";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
@@ -383,6 +385,135 @@ describe("aeatClientResolver lifetime", () => {
     await transport.fetch(server.origin);
     await transport.close();
     await expect(transport.fetch(server.origin)).rejects.toThrow();
+  });
+});
+
+describe("mtlsFetch and AEAT's redirects", () => {
+  // AEAT answers a certificate it will not take with a 302 to one of two error pages.
+  let redirector: { origin: string; close: () => Promise<void> } | undefined;
+
+  beforeAll(async () => {
+    const httpsServer = createHttpsServer(
+      {
+        key: material.serverKeyPem,
+        cert: material.serverCertPem,
+        ca: material.caPem,
+        requestCert: true,
+        rejectUnauthorized: true,
+      },
+      (req, res) => {
+        const url = new URL(req.url ?? "/", "https://127.0.0.1");
+        const to = url.searchParams.get("to");
+        if (url.pathname === "/redirect" && to !== null) {
+          res.writeHead(302, { Location: to, "Content-Type": "text/html" });
+          res.end("<html>moved</html>");
+          return;
+        }
+        if (url.pathname === "/bare") {
+          res.writeHead(307);
+          res.end();
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end(`<html>page ${url.pathname}</html>`);
+      },
+    );
+    await new Promise<void>((resolve) => httpsServer.listen(0, "127.0.0.1", resolve));
+    const { port } = httpsServer.address() as AddressInfo;
+    redirector = {
+      origin: `https://127.0.0.1:${port}`,
+      close: () =>
+        new Promise<void>((resolve, reject) => {
+          httpsServer.closeAllConnections();
+          httpsServer.close((error) => (error ? reject(error) : resolve()));
+        }),
+    };
+  });
+
+  afterAll(async () => {
+    if (redirector !== undefined) await redirector.close();
+  });
+
+  const certMaterial = (): CertMaterial => ({
+    pfx: material.clientPfx,
+    passphrase: material.clientPassphrase,
+    certKind: "representante",
+  });
+
+  const redirectTo = (location: string) =>
+    `${redirector!.origin}/redirect?to=${encodeURIComponent(location)}`;
+
+  it.each([
+    ["/static_files/common/internet/dep/aplicaciones/es/aeat/erro4011.html", "erro4011.html"],
+    ["/static_files/common/internet/dep/aplicaciones/es/aeat/erro4033.html", "erro4033.html"],
+    ["https://www1.agenciatributaria.gob.es/static_files/erro4011.html", "erro4011.html"],
+    ["/static_files/erro4033.html?lang=es&code=1", "erro4033.html"],
+    ["erro4011.html", "erro4011.html"],
+  ])("throws fiscal.certificate_not_accepted for a redirect to %s", async (location, page) => {
+    const transport = mtlsFetch(certMaterial(), material.caPem);
+    try {
+      const error = await captureError(() =>
+        transport.fetch(redirectTo(location), { method: "POST", body: "x" }),
+      );
+      expect(isAppError(error) && error.code).toBe("fiscal.certificate_not_accepted");
+      expect(isAppError(error) && error.params).toEqual({ page });
+    } finally {
+      await transport.close();
+    }
+  });
+
+  it("refuses the error page even when the caller asks to follow redirects", async () => {
+    const transport = mtlsFetch(certMaterial(), material.caPem);
+    try {
+      const error = await captureError(() =>
+        transport.fetch(redirectTo("/static_files/erro4011.html"), { redirect: "follow" }),
+      );
+      expect(isAppError(error) && error.code).toBe("fiscal.certificate_not_accepted");
+    } finally {
+      await transport.close();
+    }
+  });
+
+  it.each(["/static_files/erro4011.html.bak", "https://[erro4011.html"])(
+    "hands any other redirect back as the redirect's own answer (%s)",
+    async (location) => {
+      const transport = mtlsFetch(certMaterial(), material.caPem);
+      try {
+        const response = await transport.fetch(redirectTo(location));
+        expect(response.status).toBe(302);
+        expect(response.headers.get("location")).toBe(location);
+      } finally {
+        await transport.close();
+      }
+    },
+  );
+
+  it("hands back a redirect status that names no Location", async () => {
+    const transport = mtlsFetch(certMaterial(), material.caPem);
+    try {
+      const response = await transport.fetch(`${redirector!.origin}/bare`);
+      expect(response.status).toBe(307);
+    } finally {
+      await transport.close();
+    }
+  });
+
+  it("control: without manual redirects, undici follows to the error page and answers 200", async () => {
+    const dispatcher = new Agent({
+      connect: {
+        pfx: material.clientPfx,
+        passphrase: material.clientPassphrase,
+        ca: material.caPem,
+      },
+    });
+    try {
+      const response = await undiciFetch(redirectTo("/static_files/erro4011.html"), { dispatcher });
+      expect(response.status).toBe(200);
+      expect(response.url).toBe(`${redirector!.origin}/static_files/erro4011.html`);
+      expect(await response.text()).toContain("erro4011.html");
+    } finally {
+      await dispatcher.close();
+    }
   });
 });
 

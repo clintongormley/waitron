@@ -388,6 +388,12 @@ describe("dashboard-aeat-certificate-dialog", () => {
       "AEAT closed the connection, so it may have refused this certificate. The current certificate is unchanged. Check the certificate type, then try again.",
     ],
     [
+      "AEAT's refusal page",
+      { outcome: "refused", reason: "not_accepted" },
+      "bottom",
+      "AEAT did not accept this certificate. The current certificate is unchanged. Choose another certificate, or Cancel to stop.",
+    ],
+    [
       "a SOAP fault",
       {
         outcome: "refused",
@@ -610,6 +616,22 @@ describe("dashboard-aeat-certificate-dialog", () => {
     );
     expect(text(save(dialog))).toBe("Guardar");
   });
+
+  it.each([
+    [
+      { outcome: "refused", reason: "not_accepted" },
+      "La AEAT no ha aceptado este certificado. El certificado actual no cambia. Elige otro certificado o pulsa Cancelar para parar.",
+    ],
+  ] satisfies Array<[InstallAnswerView, string]>)(
+    "says AEAT's refusal in Spanish (%o)",
+    async (answer, sentence) => {
+      setLocale("es");
+      const { dialog } = await open({ install: async () => answer });
+      await filled(dialog);
+      await press(dialog);
+      await vi.waitFor(() => expect(actions(dialog).error).toBe(sentence));
+    },
+  );
 
   it("on installed closes, and the card shows the installed line and reads again", async () => {
     const renewed = view({ revision: "rev-2" });

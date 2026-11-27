@@ -395,6 +395,12 @@ declare module "@waitron/shared" {
     /** Thrown by the Retry now route (./routes.ts) on a box that does not file records now. */
     "fiscal.not_filing": Record<string, never>;
 
+    /**
+     * Thrown inside `mtlsFetch` (./aeat-transport.ts) when AEAT redirects to one of the error pages
+     * it answers a certificate it will not accept with; `page` is that page's file name.
+     */
+    "fiscal.certificate_not_accepted": { page: string };
+
     /** `installCertificate` (./certificate-install.ts): another install changed the vault after the
      * dialog read the card. */
     "fiscal.certificate_changed": Record<string, never>;

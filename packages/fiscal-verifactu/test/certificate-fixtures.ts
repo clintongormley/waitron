@@ -249,6 +249,7 @@ export async function startAnsweringServer(
   answer: {
     status: number;
     body: string;
+    headers?: Record<string, string>;
     maxVersion?: "TLSv1.2" | "TLSv1.3";
     hold?: Promise<void>;
     onRequest?: () => void;
@@ -271,7 +272,10 @@ export async function startAnsweringServer(
     answer.onRequest?.();
     (answer.hold ?? Promise.resolve()).then(
       () => {
-        res.writeHead(answer.status, { "Content-Type": "text/xml; charset=utf-8" });
+        res.writeHead(answer.status, {
+          "Content-Type": "text/xml; charset=utf-8",
+          ...answer.headers,
+        });
         res.end(answer.body);
       },
       (error: unknown) => res.destroy(error instanceof Error ? error : undefined),

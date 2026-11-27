@@ -6,6 +6,7 @@ import { localDate } from "./certificate-dates.js";
 export type CheckRefusal =
   | { reason: "unreachable" }
   | { reason: "closed" }
+  | { reason: "not_accepted" }
   | { reason: "aeat_fault"; details: { faultCode: string; faultReason: string } }
   | { reason: "aeat_http"; details: { status: number } }
   | { reason: "check_failed" };
@@ -17,6 +18,7 @@ export interface CheckTransport {
 
 export type CheckResult = { ok: true; endpoint: string } | ({ ok: false } & CheckRefusal);
 
+const NOT_ACCEPTED = "fiscal.certificate_not_accepted";
 const UNREACHABLE_CODES = new Set(["ENOTFOUND", "ECONNREFUSED"]);
 // Measured in the A795 design (P3b): a refused client certificate surfaces as `UND_ERR_SOCKET`
 // over TLS 1.3 and `ECONNRESET` over TLS 1.2.
@@ -31,6 +33,9 @@ function classify(error: unknown, timedOut: boolean): CheckRefusal {
     };
   }
   if (error.kind === "http") return { reason: "aeat_http", details: { status: error.status! } };
+  if (firstCodeInCauseChain(error, (code) => code === NOT_ACCEPTED) !== null) {
+    return { reason: "not_accepted" };
+  }
   if (timedOut) return { reason: "unreachable" };
   const code = firstCodeInCauseChain(
     error,
