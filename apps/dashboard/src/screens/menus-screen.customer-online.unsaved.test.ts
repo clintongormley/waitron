@@ -153,7 +153,8 @@ it("keeps Spanish photo choices on one line beside the preview", async () => {
   await page.viewport(900, 800);
   setLocale("es");
   const { host } = await open();
-  host.style.setProperty("--wt-font-size-sm", "15px");
+  host.style.setProperty("--wt-font-size-sm", "20px");
+  host.style.setProperty("--wt-font-family", "monospace");
   for (const size of ["none", "small", "large"] as const) {
     const name = t(`customer_menu.photos_${size}`);
     const choice = page.getByRole("radio", {
@@ -162,12 +163,17 @@ it("keeps Spanish photo choices on one line beside the preview", async () => {
     });
     await expect.element(choice).toBeVisible();
     await vi.waitFor(() => {
+      const button = choice.element();
       const text = document.createRange();
-      text.selectNodeContents(choice.element());
+      text.selectNodeContents(button);
       const tops = Array.from(text.getClientRects())
         .filter((rect) => rect.width > 0)
         .map((rect) => rect.top);
       expect(new Set(tops).size, name).toBe(1);
+      const group = (button.getRootNode() as ShadowRoot).host;
+      expect(button.getBoundingClientRect().right).toBeLessThanOrEqual(
+        group.parentElement!.getBoundingClientRect().right + 1,
+      );
     });
   }
 });

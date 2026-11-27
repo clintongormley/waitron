@@ -63,7 +63,14 @@ export const menuOnlineStyles = css`
   }
   @container online-editor (inline-size > 760px) {
     .online-workspace {
-      grid-template-columns: minmax(248px, 1fr) minmax(0, 3fr);
+      grid-template-columns: minmax(min-content, 1fr) minmax(0, 3fr);
+    }
+    wt-segmented-control[name="customer-menu-photos"] {
+      inline-size: max-content;
+    }
+    wt-segmented-control[name="customer-menu-photos"]::part(button) {
+      min-inline-size: max-content;
+      white-space: nowrap;
     }
     .online-view,
     .online-settings .unpublished-link {
