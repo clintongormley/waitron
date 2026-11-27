@@ -1,7 +1,7 @@
 # CORRECT-FULL-INVOICE: giving money back on a full invoice files a corrective full invoice
 
 Status: cleared by the watcher 2026-11-25 15:52 with changes, all made here (last section). Give money
-back's PR 3 landed as #4344 (`c19dad836f`); PR 0 landed as #4363 and PR 1 as #4391; PR 2a is built on `feat/correct-full-invoice-give-back`. Design:
+back's PR 3 landed as #4344 (`c19dad836f`); PR 0 landed as #4363 and PR 1 as #4391; PR 2a landed as #4448; PR 3 is built on `feat/correct-full-invoice-part-lines`. Design:
 [2026-11-25-correct-full-invoice-design.md](../specs/2026-11-25-correct-full-invoice-design.md), with the
 owner's answers at the end of its section 6. FISCAL: the owner lands every pull request.
 
