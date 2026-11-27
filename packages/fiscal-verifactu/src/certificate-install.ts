@@ -33,6 +33,7 @@ export const CERTIFICATE_REFUSAL_REASONS = [
   "unreachable",
   "closed",
   "not_accepted",
+  "aeat_refused",
   "aeat_fault",
   "aeat_http",
   "check_failed",

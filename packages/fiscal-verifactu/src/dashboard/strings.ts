@@ -144,6 +144,8 @@ const en = {
     "AEAT closed the connection, so it may have refused this certificate. The current certificate is unchanged. Check the certificate type, then try again.",
   "aeat_certificate.refused.not_accepted":
     "AEAT did not accept this certificate. The current certificate is unchanged. Choose another certificate, or Cancel to stop.",
+  "aeat_certificate.refused.aeat_refused":
+    "AEAT refused this certificate for {taxpayerNif} ({codigo}).",
   "aeat_certificate.refused.aeat_fault":
     "AEAT answered with an error: {faultCode} {faultReason}. The current certificate is unchanged.",
   "aeat_certificate.refused.aeat_http":
@@ -541,6 +543,8 @@ const es: Record<AeatCertificateKey, string> = {
     "La AEAT ha cerrado la conexión, así que puede haber rechazado este certificado. El certificado actual no cambia. Comprueba el tipo de certificado y vuelve a intentarlo.",
   "aeat_certificate.refused.not_accepted":
     "La AEAT no ha aceptado este certificado. El certificado actual no cambia. Elige otro certificado o pulsa Cancelar para parar.",
+  "aeat_certificate.refused.aeat_refused":
+    "La AEAT ha rechazado este certificado para el NIF {taxpayerNif} ({codigo}).",
   "aeat_certificate.refused.aeat_fault":
     "La AEAT ha respondido con un error: {faultCode} {faultReason}. El certificado actual no cambia.",
   "aeat_certificate.refused.aeat_http":

@@ -165,6 +165,33 @@ describe("checkWithAuthority", () => {
     });
   });
 
+  const faultBody = (faultstring: string) =>
+    `<?xml version="1.0"?><env:Envelope xmlns:env="http://schemas.xmlsoap.org/soap/envelope/"><env:Body><env:Fault><faultcode>env:Client</faultcode><faultstring>${faultstring}</faultstring></env:Fault></env:Body></env:Envelope>`;
+
+  it("reports aeat_refused with AEAT's number and the venue's tax number for a 4112 fault", async () => {
+    const server = await serve({
+      status: 200,
+      body: faultBody("Codigo[4112].El titular del certificado debe ser Obligado Emisión."),
+    });
+    await expect(check(transportTo(server.origin))).resolves.toEqual({
+      ok: false,
+      reason: "aeat_refused",
+      details: { codigo: "4112", taxpayerNif: "89890001K" },
+    });
+  });
+
+  it.each(["Codigo[4102].El XML no cumple el esquema.", "Codigo[4112]", "x Codigo[4112]."])(
+    "keeps the raw fault for a fault AEAT numbered otherwise (%s)",
+    async (faultstring) => {
+      const server = await serve({ status: 200, body: faultBody(faultstring) });
+      await expect(check(transportTo(server.origin))).resolves.toEqual({
+        ok: false,
+        reason: "aeat_fault",
+        details: { faultCode: "env:Client", faultReason: faultstring },
+      });
+    },
+  );
+
   it("reports aeat_fault with empty details for a fault that names neither", async () => {
     const emptyFault =
       '<?xml version="1.0"?><env:Envelope xmlns:env="http://schemas.xmlsoap.org/soap/envelope/"><env:Body><env:Fault></env:Fault></env:Body></env:Envelope>';
