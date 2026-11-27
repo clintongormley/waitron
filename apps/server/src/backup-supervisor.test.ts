@@ -20,7 +20,7 @@ import { existsSync } from "node:fs";
 import * as store from "@waitron/store";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   openVenueDatabase,
@@ -39,6 +39,7 @@ import { decryptArtifactUnderBackupKey } from "./artifact-cipher.js";
 import { decryptBackupFile, readArtifactFileHeader } from "./artifact-cipher-file.js";
 import { makeMasterKey } from "@waitron/credentials";
 import { prepareShutdownDownload } from "./admin-shutdown-backup.js";
+import * as placement from "./backup-data-placement.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { heldBackupKey } from "./testing/backup-key.js";
 import { unpackArchive } from "./backup-archive.js";
@@ -276,6 +277,18 @@ it.each(["failed upload", "damaged copy"] as const)(
 
 it("rehearses placement of its saved shutdown archive and clears the private copy", async () => {
   const folder = await makeDestDir();
+  const { sup, restoreScratch, outcomes } = await shutdownSupervisor([folder]);
+  try {
+    await sup.runForShutdown(new AbortController().signal, null);
+    expect(await listArchives(folder)).toHaveLength(1);
+    expect(outcomes.failed.has("primary")).toBe(false);
+    expect(await readdir(restoreScratch)).toEqual([]);
+  } finally {
+    await sup.stop();
+  }
+});
+
+async function shutdownSupervisor(folders: string[]) {
   const stateDir = await makeStateDir();
   const venueDir = await makeVenueDir();
   const venue = await openVenueDatabase(venueDir);
@@ -295,8 +308,11 @@ it("rehearses placement of its saved shutdown archive and clears the private cop
   const outcomes: BackupOutcomeHolder = {
     failed: new Map([["primary", { at: new Date().toISOString() }]]),
   };
+  const backends = folders.map(
+    (folder, index) => new LocalFsBackend(index ? `d${index}` : "primary", folder),
+  );
   const sup = new BackupSupervisor({
-    buildConfig: async () => localFsConfig([folder], STRONG_KEY_1),
+    buildConfig: async () => ({ ...localFsConfig(folders, STRONG_KEY_1), retain: 1 }),
     readSingletonRole: () => "primary",
     venueDir,
     modules: ALL_MODULES,
@@ -305,18 +321,140 @@ it("rehearses placement of its saved shutdown archive and clears the private cop
     nodeId: BACKUP_NODE_ID,
     jitterSeed: "shutdown",
     outcomes,
+    buildBackend: (dest) => backends.find((backend) => backend.id === dest.id)!,
     readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
     log: () => {},
   });
-  try {
-    await sup.reload();
-    await sup.runForShutdown(new AbortController().signal, null);
-    expect(await listArchives(folder)).toHaveLength(1);
-    expect(outcomes.failed.has("primary")).toBe(false);
-    expect(await readdir(join(stateDir, "scratch", "restore"))).toEqual([]);
-  } finally {
-    await sup.stop();
-  }
+  await sup.reload();
+  return { sup, backends, restoreScratch: join(stateDir, "scratch", "restore"), outcomes };
+}
+
+describe("multi-destination shutdown", () => {
+  it("checks both saved copies with one rehearsal and cleans up before the next read", async () => {
+    const folders = [await makeDestDir(), await makeDestDir()];
+    const {
+      sup,
+      backends: [first, second],
+      restoreScratch,
+    } = await shutdownSupervisor(folders);
+    const place = vi.spyOn(placement, "placeBackupData");
+    const get = second!.getFile.bind(second!);
+    const secondRead = vi
+      .spyOn(second!, "getFile")
+      .mockImplementation(async (key, output, call) => {
+        expect(await readdir(restoreScratch)).toEqual([basename(dirname(output))]);
+        expect(place).toHaveBeenCalledTimes(1);
+        await get(key, output, call);
+      });
+    const firstRead = vi.spyOn(first!, "getFile");
+    try {
+      await sup.runForShutdown(new AbortController().signal, null);
+      const [key] = await listArchives(folders[0]!);
+      expect(key).toBeDefined();
+      expect(await listArchives(folders[1]!)).toEqual([key]);
+      expect(firstRead).toHaveBeenCalledWith(key, expect.any(String), expect.anything());
+      expect(secondRead).toHaveBeenCalledWith(key, expect.any(String), expect.anything());
+      expect(await readFile(join(folders[1]!, key!))).toEqual(
+        await readFile(join(folders[0]!, key!)),
+      );
+      expect(place).toHaveBeenCalledTimes(1);
+      expect(await readdir(restoreScratch)).toEqual([]);
+    } finally {
+      await sup.stop();
+    }
+  });
+
+  it("refuses a second destination's upload failure and keeps earlier copies across retries", async () => {
+    const folders = [await makeDestDir(), await makeDestDir()];
+    const {
+      sup,
+      backends: [first, second],
+    } = await shutdownSupervisor(folders);
+    const refused = new AppError("backup.destination_timed_out", { timeoutMs: 10 });
+    const readBack = vi.spyOn(first!, "getFile");
+    try {
+      await sup.runNow();
+      const previous = await listArchives(folders[0]!);
+      expect(previous).toHaveLength(1);
+      vi.spyOn(second!, "putFile").mockRejectedValue(refused);
+      for (const count of [2, 3]) {
+        await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toBe(refused);
+        const archives = await listArchives(folders[0]!);
+        expect(archives).toEqual(expect.arrayContaining(previous));
+        expect(archives).toHaveLength(count);
+      }
+      expect(await listArchives(folders[1]!)).toEqual(previous);
+      expect(readBack).not.toHaveBeenCalled();
+    } finally {
+      await sup.stop();
+    }
+  });
+
+  it.each([0, 1])("refuses same-length corruption at destination %i", async (index) => {
+    const { sup, backends, restoreScratch } = await shutdownSupervisor([
+      await makeDestDir(),
+      await makeDestDir(),
+    ]);
+    const backend = backends[index]!;
+    const get = backend.getFile.bind(backend);
+    vi.spyOn(backend, "getFile").mockImplementation(async (key, output, call) => {
+      await get(key, output, call);
+      const bytes = await readFile(output);
+      bytes[0] = bytes[0]! ^ 1;
+      await writeFile(output, bytes);
+    });
+    try {
+      await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toMatchObject({
+        code: "backup.archive_invalid",
+        params: { reason: "read_back_mismatch" },
+      });
+      expect(await readdir(restoreScratch)).toEqual([]);
+    } finally {
+      await sup.stop();
+    }
+  });
+
+  it("cancels during the second read and lets it settle before cleaning up", async () => {
+    const {
+      sup,
+      backends: [, second],
+      restoreScratch,
+    } = await shutdownSupervisor([await makeDestDir(), await makeDestDir()]);
+    const reading = gate<string>();
+    const cancelled = gate();
+    vi.spyOn(second!, "getFile").mockImplementation(async (_key, output, { signal }) => {
+      await writeFile(output, "partial download");
+      const abort = () => cancelled.entered();
+      signal!.addEventListener("abort", abort, { once: true });
+      try {
+        reading.entered(output);
+        await cancelled.released;
+        signal!.throwIfAborted();
+      } finally {
+        signal!.removeEventListener("abort", abort);
+      }
+    });
+    const controller = new AbortController();
+    const shutdown = sup.runForShutdown(controller.signal, null);
+    try {
+      const output = await Promise.race([
+        reading.reached,
+        shutdown.then(() => {
+          throw new Error("Read was skipped");
+        }),
+      ]);
+      controller.abort();
+      await cancelled.reached;
+      expect(await readFile(output, "utf8")).toBe("partial download");
+      cancelled.release();
+      await expect(shutdown).rejects.toMatchObject({ code: "backup.destination_cancelled" });
+      expect(await readdir(restoreScratch)).toEqual([]);
+    } finally {
+      cancelled.release();
+      await shutdown.catch(() => {});
+      await sup.stop();
+    }
+  });
 });
 
 it.each(["damaged ciphertext", "insufficient rehearsal space"] as const)(

@@ -58,22 +58,26 @@ export async function rehearseShutdownBackup(
   input: RehearsalInput & { destinationTimeoutMs: number },
 ): Promise<void> {
   const { signal } = input;
-  signal.throwIfAborted();
-  const root = await shutdownScratch(input.stateDir);
-  try {
-    // The read-back and compressed plaintext coexist with the decoded archive and its extraction.
-    const neededBytes = START_FREE_SPACE_FLOOR + 2 * (archive.bytes + archive.plaintextBytes);
-    await requireSpace(root, neededBytes, input.statfs);
-    const artifactPath = join(root, "saved");
-    await withDestinationCall(signal, input.destinationTimeoutMs, (call) =>
-      archive.backend.getFile(archive.key, artifactPath, call),
-    );
-    const read = await digestFile(artifactPath, signal);
-    if (read.sha256 !== archive.sha256 || read.bytes !== archive.bytes)
-      throw new AppError("backup.archive_invalid", { reason: "read_back_mismatch" });
-    await checkAndPlace(artifactPath, root, input);
-  } finally {
-    await rm(root, { force: true, recursive: true });
+  for (const [index, backend] of archive.backends.entries()) {
+    signal.throwIfAborted();
+    const root = await shutdownScratch(input.stateDir);
+    try {
+      // The first read also needs space for decryption and extraction during the rehearsal.
+      const neededBytes =
+        index === 0 ? 2 * (archive.bytes + archive.plaintextBytes) : archive.bytes;
+      await requireSpace(root, START_FREE_SPACE_FLOOR + neededBytes, input.statfs);
+      const artifactPath = join(root, "saved");
+      await withDestinationCall(signal, input.destinationTimeoutMs, (call) =>
+        backend.getFile(archive.key, artifactPath, call),
+      );
+      const read = await digestFile(artifactPath, signal);
+      if (read.sha256 !== archive.sha256 || read.bytes !== archive.bytes)
+        throw new AppError("backup.archive_invalid", { reason: "read_back_mismatch" });
+      // Identical ciphertext gives the same restore input at every destination.
+      if (index === 0) await checkAndPlace(artifactPath, root, input);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   }
 }
 
