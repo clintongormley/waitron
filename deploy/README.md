@@ -879,7 +879,8 @@ command against it treat that entrypoint differently:
   `--master-key-file <path>`, where `<path>` is a text file holding the key or the venue's
   recovery pack PDF when it holds the key. That file must be visible inside the container and
   readable by the image's user, as for the bucket form's file below, or the command stops with
-  `cannot read master key file: <path>`. Giving both is refused, and the key itself is never a
+  `cannot read the master key file`, without naming the path, so a key pasted in its place is
+  not printed. Giving both is refused, and the key itself is never a
   command-line value. A master key that is not the backup's stops the command with
   `promotion.break_glass_invalid` and the date of the master key the backup needs. A Waitron
   Cloud copy opens instead with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`; that variable

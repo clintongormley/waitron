@@ -121,12 +121,25 @@ describe("waitron-restore restore <file> and the master key", () => {
     expect(restore).not.toHaveBeenCalled();
   });
 
-  it("names a master key file it cannot read", async () => {
+  const UNREADABLE_KEY_FILE =
+    "cannot read the master key file: give a readable file holding the master key, or the recovery pack PDF";
+
+  it("refuses a master key file it cannot read", async () => {
     const path = await backupFile();
     const keyFile = join(dir, "missing.txt");
     const { code, out, restore } = await run(["restore", path, "--master-key-file", keyFile], {});
     expect(code).toBe(1);
-    expect(out).toEqual([`cannot read master key file: ${keyFile}`]);
+    expect(out).toEqual([UNREADABLE_KEY_FILE]);
+    expect(restore).not.toHaveBeenCalled();
+  });
+
+  it("never prints a master key pasted after --master-key-file in place of a path", async () => {
+    const path = await backupFile();
+    const pasted = encodeMasterKeyCode(makeMasterKey());
+    const { code, out, restore } = await run(["restore", path, "--master-key-file", pasted], {});
+    expect(code).toBe(1);
+    expect(out).toEqual([UNREADABLE_KEY_FILE]);
+    expect(out.some((line) => line.includes(pasted))).toBe(false);
     expect(restore).not.toHaveBeenCalled();
   });
 

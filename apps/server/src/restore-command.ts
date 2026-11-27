@@ -326,7 +326,9 @@ async function readMasterKey(
   try {
     source = await sourceText(await readFile(masterKeyFile), "masterKey");
   } catch {
-    deps.out(`cannot read master key file: ${masterKeyFile}`);
+    deps.out(
+      "cannot read the master key file: give a readable file holding the master key, or the recovery pack PDF",
+    );
     return null;
   }
   if ("refused" in source) {
