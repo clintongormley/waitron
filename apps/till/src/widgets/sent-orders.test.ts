@@ -409,6 +409,25 @@ it("labels companions by bill without a price or line action, and fires the whol
   expect(calls).toEqual([{ groupId: "g" }]);
 });
 
+it("draws another bill's dish as a band of the track colour in full-strength text", async () => {
+  const el = await mount(
+    current(
+      [],
+      [
+        group("g", [
+          row("own", { released: false }),
+          row("guest", { workingOrderId: "b2", released: false }),
+        ]),
+      ],
+    ),
+  );
+  el.style.setProperty("--wt-color-track", "rgb(1, 2, 3)");
+  el.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
+  const companion = find(el, "[data-companion=guest]");
+  expect(getComputedStyle(companion).backgroundColor).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(companion.querySelector(".row-more")!).color).toBe("rgb(4, 5, 6)");
+});
+
 it("uses only the supplied reminder to show due/snooze/fire above the sections", async () => {
   const data = current([], [group("g", [row("held", { released: false })])]);
   data.reminder = { groupId: "g", dueAt: new Date(now).toISOString() };
