@@ -1897,12 +1897,12 @@ describe("a Restaurant profile in its own zones", () => {
       tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, restPlaced)),
     );
     const waiting = await send(restaurant, "GET", "/api/orders/counter-waiting");
-    const ids = (waiting.body as unknown as { id: string }[]).map((order) => order.id);
-    expect(ids).toContain(restPlaced);
-    expect(ids).not.toContain(deliPlaced);
+    const orders = waiting.body as unknown as { id: string; zoneId: string | null }[];
+    expect(orders.find((order) => order.id === restPlaced)).toMatchObject({ zoneId: f.bar });
+    expect(orders.map((order) => order.id)).not.toContain(deliPlaced);
     const all = await send(plain, "GET", "/api/orders/counter-waiting");
-    expect((all.body as unknown as { id: string }[]).map((order) => order.id)).toContain(
-      deliPlaced,
+    expect(all.body).toContainEqual(
+      expect.objectContaining({ id: deliPlaced, zoneId: f.deliCounter }),
     );
   });
 

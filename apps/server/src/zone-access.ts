@@ -129,12 +129,27 @@ export async function visibleOrders<T extends { id: string }>(
   deps: { db: Database },
   session: { device: { deviceProfileId: string } },
   orders: readonly T[],
-  { atPickup = false }: { atPickup?: boolean } = {},
 ): Promise<T[]> {
   const scope = await readZoneScope(deps.db, session.device.deviceProfileId);
   if (scope === null) return [...orders];
-  const ids = orders.map((order) => order.id);
-  const pickup = atPickup ? await pickupZones(deps.db, ids) : new Map<string, string>();
-  const zones = await VENUE_SERVICE.findOrderZones(deps.db, ids);
-  return orders.filter((order) => inScope(scope, pickup.get(order.id) ?? zones.get(order.id)));
+  const zones = await VENUE_SERVICE.findOrderZones(
+    deps.db,
+    orders.map(({ id }) => id),
+  );
+  return orders.filter((order) => inScope(scope, zones.get(order.id)));
+}
+
+export async function visiblePickupOrders<T extends { id: string }>(
+  deps: { db: Database },
+  session: { device: { deviceProfileId: string } },
+  orders: readonly T[],
+): Promise<(T & { zoneId: string | null })[]> {
+  const scope = await readZoneScope(deps.db, session.device.deviceProfileId);
+  const ids = orders.map(({ id }) => id);
+  const pickup = await pickupZones(deps.db, ids);
+  const recorded = await VENUE_SERVICE.findOrderZones(deps.db, ids);
+  return orders.flatMap((order) => {
+    const zoneId = pickup.get(order.id) ?? recorded.get(order.id) ?? null;
+    return inScope(scope, zoneId) ? [{ ...order, zoneId }] : [];
+  });
 }

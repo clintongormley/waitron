@@ -21,7 +21,7 @@ import {
 import { departments, setDepartmentSalePolicyField } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -66,7 +66,7 @@ import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import type { OrderFlow } from "./testing/bill-payment-fixture.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { getHeldOrder, listHeldOrders } from "./working-order-held-read.js";
-import { cancelPlacedOrder, markCollected } from "./working-order-counter.js";
+import { cancelPlacedOrder, listCounterWaiting, markCollected } from "./working-order-counter.js";
 import { listStationQueue } from "./working-order-station-queue.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { parkOrder } from "./working-order-open.js";
@@ -2361,6 +2361,34 @@ describe("advanceTicketItem / listStationQueue (ticket prep surface)", () => {
 
     await asVenue((tx) => advanceTicketItem(tx, item!, "preparing"));
     expect(await ticketStateOf(id)).toBe("preparing");
+  });
+
+  it("dates Counter readiness from the latest ready kitchen part", async () => {
+    const { cfg, coffee, water, zoneId } = await modeVenue("ticket_then_pay");
+    const id = randomUUID();
+    await payFreshCounterInCash(
+      { admission: testTradingAdmission(), db: suite.db, backend, clock },
+      cfg,
+      await paymentOperator(cfg, OPERATOR),
+      id,
+      { zoneId, lines: [coffee, water].map(({ menuItemId }) => ({ menuItemId, quantity: "1" })) },
+      "3.50",
+    );
+    const [first, second] = await ticketItemIdsFor(id);
+    const at = Date.now() + 1_000;
+    vi.useFakeTimers({ toFake: ["Date"], now: at });
+    try {
+      for (const item of [second!, first!]) {
+        await asVenue((tx) => advanceTicketItem(tx, item, "preparing"));
+        await asVenue((tx) => advanceTicketItem(tx, item, "ready"));
+        vi.setSystemTime(Date.now() + 1_000);
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(await listCounterWaiting({ db: suite.db })).toContainEqual(
+      expect.objectContaining({ id, readyAt: new Date(at + 1_000).toISOString() }),
+    );
   });
 
   it("advanceTicketItem refuses to put a Ready item back to preparing once its order is collected", async () => {
