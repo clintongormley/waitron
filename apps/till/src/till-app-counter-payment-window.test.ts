@@ -1088,6 +1088,59 @@ it("keeps the current Counter amount when the previous choice answers late", asy
   expect(api.takeBillPayment).not.toHaveBeenCalled();
 });
 
+function redrawSavedCounterBasket(el: TillApp): void {
+  const { store } = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  store.adoptSaved([...store.lines], store.revision + 1);
+  el.requestUpdate();
+}
+
+it("checks the reloaded Counter basket while an earlier quote is out", async () => {
+  let answer!: (preview: ReturnType<typeof cash>) => void;
+  const held = new Promise<ReturnType<typeof cash>>((resolve) => (answer = resolve));
+  const previewBillPayment = vi
+    .fn()
+    .mockReturnValueOnce(held)
+    .mockResolvedValue(cash("12.00", "0.00"));
+  const { el } = await sentWaitingOrder(() => "no", { previewBillPayment });
+  await expect.poll(() => previewBillPayment.mock.calls.length).toBe(1);
+  redrawSavedCounterBasket(el);
+  answer(cash("40.00", "0.00"));
+  await expect.poll(() => text(inDialog(el, "[data-quiet-pay-amount]"))).toBe(money("12.00"));
+  expect(previewBillPayment).toHaveBeenCalledTimes(2);
+});
+
+it("drops Charge after the Counter basket reloads during the kitchen check", async () => {
+  let finish!: () => void;
+  const held = new Promise<void>((resolve) => (finish = resolve));
+  const askOrderDeadEnds = vi.fn(async () => {
+    await held;
+    return { sends: false, deadEnds: [], stations: [] };
+  });
+  const { el, api } = await sentWaitingOrder(() => "no", {
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      cardProvider: "simulator",
+      capabilities: [...till.capabilities, "integrated-card-payment"],
+    }),
+    previewBillPayment: vi.fn().mockResolvedValue({ ...cash("35.00", "0.00"), charged: "35.00" }),
+    askOrderDeadEnds,
+  });
+  await expect.poll(() => inDialog(el, "[data-quiet-pay-card]")?.disabled).toBe(false);
+  const before = dialog(el)!.checkedQuote!.request.context;
+  await press(el, "[data-quiet-pay-card]");
+  expect(askOrderDeadEnds).toHaveBeenCalledOnce();
+  redrawSavedCounterBasket(el);
+  finish();
+  await expect
+    .poll(() => {
+      const refreshed = dialog(el)?.checkedQuote?.request.context;
+      return refreshed !== undefined && refreshed !== before;
+    })
+    .toBe(true);
+  expect(api.previewBillPayment).toHaveBeenCalledTimes(2);
+  expect(api.takeBillPayment).not.toHaveBeenCalled();
+});
+
 const waitingShown = (el: TillApp) =>
   el
     .shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!

@@ -119,7 +119,13 @@ export async function readTablePayQuote(
     cashPreview = answer.preview;
     refusal ??= answer.refusal;
   }
-  return { request, ...checked, cash: cashPreview, refusal, revisions };
+  return {
+    request,
+    ...checked,
+    cash: cashPreview,
+    refusal,
+    revisions: surface === "table" ? revisions : {},
+  };
 }
 
 export function sameCardAllocation(a: AllocationPreview | null, b: AllocationPreview): boolean {

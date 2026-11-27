@@ -68,14 +68,16 @@ it("looks up the Counter Items bill edit once even when Cash needs its own previ
     .spyOn(api, "previewItemPayment")
     .mockRejectedValueOnce({ code: "bill.tip_not_allowed" })
     .mockResolvedValue({ total: "12.00", applied: "12.00", tip: "0.00", change: null });
-  const quote = await readTablePayQuote(api, billId, items, null, {}, "counter");
+  const rememberedTable = { partyId: "table-party", expectedPartyRevision: 3 };
+  const quote = await readTablePayQuote(api, billId, items, null, rememberedTable, "counter");
 
   expect(lookup.mock.calls.map(([id]) => id)).toEqual([billId]);
   expect(read.mock.calls.map(([id, ask]) => [id, ask])).toEqual([
     [billId, { method: "card", picks: [{ lineId: "dish" }], addedTip: "2.00" }],
     [billId, { method: "card", picks: [{ lineId: "dish" }] }],
   ]);
-  expect(quote).toMatchObject({ preview: null, cash: { total: "12.00" }, revisions: {} });
+  expect(quote).toMatchObject({ preview: null, cash: { total: "12.00" } });
+  expect(quote.revisions).toEqual({});
 });
 
 it("shows a failed Counter Items edit lookup as unread without making a tender preview", async () => {

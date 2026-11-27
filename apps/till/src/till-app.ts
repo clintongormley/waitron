@@ -22596,7 +22596,7 @@ export class TillApp extends LitElement {
       open.billId,
       request,
       this.#billPayEdit(open),
-      open.surface === "table" ? this.#billRevisions() : {},
+      this.#billRevisions(),
       open.surface,
       () => current(this.#billPayingNow(open.id)),
     );
