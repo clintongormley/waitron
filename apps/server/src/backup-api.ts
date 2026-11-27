@@ -522,9 +522,9 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   );
 
   // A key change writes backup key N+1 of the venue's master key (1 when `backup.env` names no
-  // number; refused when the number it names is not a key number) to `backup.env`, then stores the held settings unchanged
-  // under a new revision and reloads. With no readable record and nothing loaded, only the key file
-  // changes.
+  // number; refused when the number it names is not a key number) to `backup.env`, then stores the
+  // held settings unchanged under a new revision and reloads. With no readable record and nothing
+  // loaded, only the key file changes.
   app.post("/api/backup/rotate", (c) =>
     run(c, log, async () => {
       const personId = await authorize(c);
