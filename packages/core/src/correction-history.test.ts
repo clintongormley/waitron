@@ -742,11 +742,7 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
     const kindOf = (saleId: SaleId, kind: { fullInvoice?: true | "as_admitted" }) =>
       withTransaction(suite.db, (tx) => admittedAsFullInvoice(tx, backend, saleId, nodeId, kind));
     const full = await sellFull();
-    backend.setCorrectionAdmission({
-      eligible: false,
-      reason: "filing_refused",
-      fullInvoice: true,
-    });
+    backend.setCorrectionAdmission({ eligible: false, reason: "missing", fullInvoice: true });
     expect(await kindOf(full.saleId, { fullInvoice: "as_admitted" })).toBe(true);
     expect(await kindOf(full.saleId, {})).toBe(false);
     backend.setCorrectionAdmission(admitted);
@@ -826,7 +822,7 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
     expect(reads).not.toHaveBeenCalled();
   });
 
-  it("with as_admitted, tells kindSeen the kind before refusing an admission that waits", async () => {
+  it("with as_admitted, tells kindSeen the kind before refusing an admission", async () => {
     const seen: boolean[] = [];
     const read = (saleId: SaleId) =>
       captureError(() =>
@@ -838,15 +834,17 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
         ),
       );
     const full = await sellFull();
-    backend.setCorrectionAdmission({
-      eligible: false,
-      reason: "filing_refused",
-      fullInvoice: true,
+    backend.setCorrectionAdmission({ eligible: false, reason: "missing", fullInvoice: true });
+    expect(await read(full.saleId)).toMatchObject({
+      code: "sale.correction_not_admitted",
+      params: { reason: "missing" },
     });
-    expect(await read(full.saleId)).toMatchObject({ params: { reason: "filing_refused" } });
     const receipt = await sellSteak();
-    backend.setCorrectionAdmission({ eligible: false, reason: "filing_refused" });
-    expect(await read(receipt.saleId)).toMatchObject({ params: { reason: "filing_refused" } });
+    backend.setCorrectionAdmission({ eligible: false, reason: "missing" });
+    expect(await read(receipt.saleId)).toMatchObject({
+      code: "sale.correction_not_admitted",
+      params: { reason: "missing" },
+    });
     expect(seen).toEqual([true, false]);
   });
 });

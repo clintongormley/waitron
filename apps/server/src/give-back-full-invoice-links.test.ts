@@ -195,6 +195,26 @@ function readerLeg(saleId: string, correctionId: string, amount: string, submiss
 
 const correctivesOf = (saleId: string) => correctiveRecordsOf(venue.db, saleId);
 
+/** AEAT refuses the sale's filing, and Close still refuses to end its open give-back unrecorded:
+ * the corrective can still be filed. */
+async function refusedStaysOpen(saleId: string, correctionId: string) {
+  await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+  expect(
+    await send(
+      venue.app,
+      adminCookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/close`,
+      {},
+    ),
+  ).toEqual({
+    status: 409,
+    json: { code: "invoice_correction.still_correctable", params: { correctionId } },
+  });
+  expect(correctivesOf(saleId)).toEqual([]);
+  expect(linksOf(saleId)).toEqual([]);
+}
+
 describe("a full invoice's corrective pays its dishes' cancels (section 5)", () => {
   it("goodwill on a cancelled Tarta pays its cancel what the corrective takes off it", async () => {
     const { billId, saleId } = await fullInvoiceOf(["Tarta", "Octopus"], { cash: "38.00" });
@@ -434,23 +454,17 @@ describe("links of a corrective given back over two payments", () => {
     expect(refundCountOf(saleId)).toBe(refunds + 1);
   });
 
-  it("ended unrecorded, links the money back to the cancel and does not offer it again", async () => {
+  it("on a full invoice AEAT refused, Close keeps the give-back open, and the leg that completes it files one R1 linking both legs to the cancel", async () => {
     const { saleId, cancelId, correctionId } = await cashLegBack();
-    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
-    const finished = await send(
-      venue.app,
-      adminCookie,
-      "POST",
-      `/api/invoice-corrections/${correctionId}/close`,
-      {},
-    );
-    expect(finished.status, JSON.stringify(finished.json)).toBe(200);
-    expect(finished.json).toMatchObject({ state: "closed", correctiveSaleId: null });
-    expect(correctivesOf(saleId)).toEqual([]);
+    await refusedStaysOpen(saleId, correctionId);
+    const leg = await readerLeg(saleId, correctionId, "8.00", randomUUID());
+    expect(leg).toMatchObject({ status: 200, json: { state: "completed" } });
+    expect(correctivesOf(saleId)).toEqual([r1(-1800)]);
     expect(linksOf(saleId)).toEqual([
       { cancel: cancelId, method: "cash", refund: 1000, amount: 1000 },
+      { cancel: cancelId, method: "card", refund: 800, amount: 800 },
     ]);
-    expect(await shown(saleId, "18.00")).toEqual({ left: "8.00", owed: "8.00", back: "10.00" });
+    expect(await shown(saleId, "18.00")).toEqual({ left: "0.00", owed: "0.00", back: "18.00" });
   });
 });
 
@@ -496,20 +510,6 @@ describe("which cancels a corrective's money pays", () => {
     return { billId, saleId: await fixture.saleOf(venue, billId), paellaLine: paella!.lineNo };
   }
 
-  /** AEAT refuses the sale's filing for good, and Finish ends its open give-back unrecorded. */
-  async function finishRefused(saleId: string, correctionId: string) {
-    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
-    const finished = await send(
-      venue.app,
-      adminCookie,
-      "POST",
-      `/api/invoice-corrections/${correctionId}/close`,
-      {},
-    );
-    expect(finished.status, JSON.stringify(finished.json)).toBe(200);
-    expect(finished.json).toMatchObject({ state: "closed", correctiveSaleId: null });
-  }
-
   it("counts a cancelled dish's priced extra in what goodwill takes off it", async () => {
     const { billId, saleId, paellaLine } = await paellaWithAioliInvoice();
     const cancelId = await cancel(billId, paellaLine);
@@ -521,7 +521,7 @@ describe("which cancels a corrective's money pays", () => {
     expect(await shown(saleId, "18.50")).toEqual({ left: "10.75", owed: "10.75", back: "10.75" });
   });
 
-  it("ended unrecorded with another dish ticked, pays nothing to the cancelled dish", async () => {
+  it("on a full invoice AEAT refused with another dish ticked, the R1 its last leg files pays nothing to the cancelled dish", async () => {
     const { billId, saleId } = await fullInvoiceOf(
       ["Tarta", "Octopus"],
       { cash: "10.00" },
@@ -530,12 +530,15 @@ describe("which cancels a corrective's money pays", () => {
     await cancel(billId, 1);
     const octopus = await lineOf(saleId, "20.00");
     const { correctionId } = await press(saleId, ask("dishes", "20.00", { lineIds: [octopus.id] }));
-    await finishRefused(saleId, correctionId!);
+    await refusedStaysOpen(saleId, correctionId!);
+    const leg = await readerLeg(saleId, correctionId!, "10.00", randomUUID());
+    expect(leg).toMatchObject({ status: 200, json: { state: "completed" } });
+    expect(correctivesOf(saleId)).toEqual([r1(-2000)]);
     expect(linksOf(saleId)).toEqual([]);
     expect(await shown(saleId, "18.00")).toEqual({ left: "18.00", owed: "18.00", back: "0.00" });
   });
 
-  it("ended unrecorded on goodwill, which names no dish, pays the cancelled dish's cancel", async () => {
+  it("on a full invoice AEAT refused, goodwill, which names no dish, pays the cancelled dish's cancel what the R1 its last leg files takes off the dish", async () => {
     const { billId, saleId } = await fullInvoiceOf(
       ["Tarta", "Octopus"],
       { cash: "10.00" },
@@ -543,11 +546,14 @@ describe("which cancels a corrective's money pays", () => {
     );
     const cancelId = await cancel(billId, 1);
     const { correctionId } = await press(saleId, ask("goodwill", "19.00"));
-    await finishRefused(saleId, correctionId!);
+    await refusedStaysOpen(saleId, correctionId!);
+    const leg = await readerLeg(saleId, correctionId!, "9.00", randomUUID());
+    expect(leg).toMatchObject({ status: 200, json: { state: "completed" } });
+    expect(correctivesOf(saleId)).toEqual([r1(-1900)]);
     expect(linksOf(saleId)).toEqual([
-      { cancel: cancelId, method: "cash", refund: 1000, amount: 1000 },
+      { cancel: cancelId, method: "cash", refund: 1000, amount: 900 },
     ]);
-    expect(await shown(saleId, "18.00")).toEqual({ left: "8.00", owed: "8.00", back: "10.00" });
+    expect(await shown(saleId, "18.00")).toEqual({ left: "9.00", owed: "9.00", back: "9.00" });
   });
 
   it("on a receipt, ended unrecorded, links nothing to a cancel made between the legs", async () => {
