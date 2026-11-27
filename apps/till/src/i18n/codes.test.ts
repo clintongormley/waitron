@@ -1204,8 +1204,8 @@ it("names a full invoice, not a receipt, in Give money back's and Money back und
     [
       "giveBackReasonMessage",
       "filing_refused",
-      "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
-      "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
+      "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes, cancelled dishes or goodwill cannot be refunded; the extra paid on top can.",
+      "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos, de platos cancelados o por cortesía no se puede devolver; lo pagado de más, sí.",
     ],
     [
       "giveBackFilingMessage",
@@ -1261,6 +1261,15 @@ it("says in Money back under way that the business's registered address is missi
     giveBackFilingMessage("fiscal.taxpayer_domicile_missing", "es", { fullInvoice: true }),
   ).toBe(
     "Falta el domicilio fiscal del negocio, así que el dinero devuelto aún no se puede registrar en esta factura completa. Añádelo en el panel, en Ajustes del local › Datos del local. Después pulsa Comprobar de nuevo.",
+  );
+});
+
+it("says the box's receipt and invoice records need checking, true of a receipt and a full invoice", () => {
+  expect(codeMessage("invoice_correction.chain_unsound", "en")).toBe(
+    "The box's receipt and invoice records need checking, so dishes or goodwill cannot be refunded or recorded now. Money already refunded stays refunded.",
+  );
+  expect(codeMessage("invoice_correction.chain_unsound", "es")).toBe(
+    "Hay que revisar los registros de tickets y facturas del servidor, así que ahora no se puede devolver ni registrar dinero de platos o por cortesía. El dinero ya devuelto queda devuelto.",
   );
 });
 

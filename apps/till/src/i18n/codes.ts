@@ -530,8 +530,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor.",
   },
   "invoice_correction.chain_unsound": {
-    en: "The box's receipt records need checking, so dishes or goodwill cannot be refunded or recorded now. Money already refunded stays refunded.",
-    es: "Hay que revisar los registros de tickets del servidor, así que ahora no se puede devolver ni registrar dinero de platos o por cortesía. El dinero ya devuelto queda devuelto.",
+    en: "The box's receipt and invoice records need checking, so dishes or goodwill cannot be refunded or recorded now. Money already refunded stays refunded.",
+    es: "Hay que revisar los registros de tickets y facturas del servidor, así que ahora no se puede devolver ni registrar dinero de platos o por cortesía. El dinero ya devuelto queda devuelto.",
   },
   "sale.correction_amount_invalid": {
     en: "Enter an amount above zero and no more than is left to refund on this receipt for the dishes chosen or as goodwill.",
@@ -1465,15 +1465,14 @@ function zoneAdmissionMessage(reason: unknown, locale: string): string {
   return pickLocale({ en: en[key], es: es[key] }, locale);
 }
 
-/** In Give money back a refused or held filing holds back only money for dishes and goodwill. */
 const GIVE_BACK_FILING_REFUSED = {
   receipt: {
     en: "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
     es: "La Agencia Tributaria rechazó este ticket, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
   },
   fullInvoice: {
-    en: "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
-    es: "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
+    en: "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes, cancelled dishes or goodwill cannot be refunded; the extra paid on top can.",
+    es: "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos, de platos cancelados o por cortesía no se puede devolver; lo pagado de más, sí.",
   },
 };
 

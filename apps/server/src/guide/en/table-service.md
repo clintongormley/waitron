@@ -423,9 +423,11 @@ refund**; a supervisor or manager approves recording it with their PIN. See
 [Refund a card payment on a separate terminal](table-service.md#separate-terminal).
 
 After **Cancel and refund**, or **Finish table** with dishes ticked, the window opens on **A
-dish**, filled in with the cancelled dishes, their amount and the cancel's reason. The cancel's
-approval covers that money, so no new PIN is asked unless you refund more. Keep the window open
-to use it: one opened later from the receipt is not filled in.
+dish**, filled in with the cancelled dishes, their amount and the cancel's reason. On a receipt, the
+cancel's approval covers that money, so no new PIN is asked unless you refund more. On a full
+invoice naming a customer it does not: if you cannot both give refunds and issue corrective
+invoices, a supervisor or manager approves it with their PIN. Keep the window open to use it: one
+opened later from the receipt is not filled in.
 
 When a card refund waits for the card company, choose **Check again** to ask it about that refund,
 and **Refund the rest** when the window offers it. If you cannot give refunds yourself, a
@@ -747,8 +749,8 @@ nothing prints yet: the till lists them under **Not served yet:**. If the guests
 choose **Mark served** where it shows, then **Print the bill** again. Otherwise choose **Print
 anyway**: a dish that then never comes is refunded after payment with
 [Refund from a receipt](table-service.md#give-money-back). On a full invoice naming a customer,
-a refund for a cancelled dish is not taken off the invoice, so on one of those take off any
-dish that may not come before you print.
+that refund issues a corrective invoice, so on one of those take off any dish that may not come
+before you print.
 
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.
 
