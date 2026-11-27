@@ -8,20 +8,20 @@ bucket copy do not move those archives.
 
 The **Recovery pack** card at the top of **Backups** makes one PDF holding the restore codes for
 the bucket copy and bucket archives, and the recovery key for archives in a folder: see [Make a new recovery pack](recovery-document.md). Keep the pack secret and off
-the box, outside the bucket. Keep earlier packs and keys for archives made before a replacement:
-changing the backup key does not re-encrypt older files. After **Change the backup key**, or
+the box, outside the bucket. Keep earlier packs while you keep backups made before **Make a new master key**: a backup file
+opens with the master key that was current when it was made. After **Change the backup key**, or
 the bucket copy or archive settings on **Backups**, the card says the pack is out of date; make a new one.
 
 If **Change the backup key** reports that the box could not record the change, the new key is already in use: make a new recovery pack. See the [archive settings reference](../../apps/server/README.md)
-and [restore procedures](../developers/offline-fiscal-restore.md) for the separate archive
-recovery keys.
+and [restore procedures](../developers/offline-fiscal-restore.md).
 
 ## Recover from an interrupted first setup
 
 Choose **Recover from backup** on the repair page: it deletes the failed setup as Start again does,
 and after the box restarts **Reconnect** opens "Join or recover an existing restaurant", where you
 restore as on a new box ([procedure](hour-recovery.md#recover-while-first-setup-is-blocked)). Keep
-the selected copy's master key and its recovery key or source credentials ready. A backup file
+the selected copy's master key ready and, for a bucket or Cloud copy, its recovery pack, kit or
+Cloud login. A backup file
 carries two databases, the venue's (`db.dump`) and the old box's own (`node.dump`), and a file
 without `node.dump` is refused (`restore.archive_incomplete`, `apps/server/src/restore.ts`).
 

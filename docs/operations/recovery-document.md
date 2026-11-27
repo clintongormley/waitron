@@ -45,7 +45,7 @@ fresh identity just to obtain another pack.
 
 ## Change the backup key
 
-Choose **Change the backup key** on the card and type the master key, or choose the recovery pack PDF. New backups then use the next backup key, which a box you removed can't read. A wrong master key changes nothing. Then choose **Make recovery pack** and keep the new pack: restoring a backup made after the change needs it.
+Choose **Change the backup key** on the card and type the master key, or choose the recovery pack PDF. New backups then use the next backup key, which a box you removed can't read. A wrong master key changes nothing. Then choose **Make recovery pack** and keep the new pack: restoring your bucket copy after the change needs it. Backup files from before and after the change open with your master key.
 
 ## Implementation references
 

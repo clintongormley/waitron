@@ -282,8 +282,8 @@ run the production selector.
 
 Configure backup destinations, schedule and retention on the dashboard's **Backups** screen.
 Backups previously configured in `deploy/.env` stop until you configure them there. Keep the old recovery
-key from `deploy/.env` to open existing archives. The dashboard stores its recovery key in
-`backup.env`; keep each key with your recovery documents.
+key from `deploy/.env` to open existing archives. The dashboard keeps its backup key in
+`backup.env`; the backups it makes open with the master key in your recovery pack.
 
 The compose project is named `waitron`. On a developer machine that is also running the repository's
 dev stack (`docker-compose.yml`, started by `wa-wt`, which sets `COMPOSE_PROJECT_NAME=waitron`) the

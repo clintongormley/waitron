@@ -89,7 +89,7 @@ async function type(el: BackupKeyDialog, text: string) {
 describe.each([
   [
     "en-GB",
-    "New backups will use backup key 4. A box you removed can't read them.",
+    "New backups will use backup key 4. A box you removed can't read them. Older backups still open with your master key.",
     "Change the backup key",
     "Cancel",
   ],
@@ -115,6 +115,23 @@ describe.each([
     expect(button(el, "change-backup-key")!.disabled).toBe(false);
   });
 });
+
+it.each([
+  [
+    "en-GB",
+    "New backups will use backup key 4. A box you removed can't read them. Older backups still open with your master key.",
+  ],
+  ["es-ES", es["backup_key_dialog.text"].replace("{number}", "4")],
+] as const)(
+  "the Change the backup key dialog says older backups open with the master key (%s)",
+  async (locale, text) => {
+    setLocale(locale);
+    const { el } = await open(stubApi(vi.fn()));
+    const intro = words(el.shadowRoot!.querySelector("[data-test=intro]"));
+    expect(intro).toBe(text);
+    expect(intro.split(". ")).toHaveLength(3);
+  },
+);
 
 it("Change the backup key sends the typed master key and shows 'Backups now use backup key N+1.'", async () => {
   const rotate = vi.fn().mockResolvedValue(ANSWER);

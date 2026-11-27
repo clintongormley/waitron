@@ -2,7 +2,7 @@
 
 Choose a usable archive, bucket copy or Waitron Cloud backup, then find the recovery pack that
 holds that copy's master key. A pack made with a newer master key does not open an older
-backup. Keep the archive password or Cloud login separate from the master key.
+backup. A backup file opens with that master key; keep your Cloud login separate from it.
 
 ## Switch a running box after an invoice identity conflict
 
@@ -116,7 +116,9 @@ page goes back to choosing the backup and sends nothing"). Once the series are m
 read.
 
 There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last-hour question and
-offers no clock confirmation while the internet time service vouches for the clock"). Enter the master key, tick both statements and "These details are correct.", in any order, and
+offers no clock confirmation while the internet time service vouches for the clock"). Enter the master key (for a backup
+file the page uses the one typed with the file, and asks here only when the copy needs a different
+master key), tick both statements and "These details are correct.", in any order, and
 press **Proceed**. The invoice series is the code at the start of every invoice number; recovery
 creates new ones so the box never repeats the old box's. Until **Proceed** the page sends nothing
 to the box (the same file's "the key, both statements and the details tick send nothing until

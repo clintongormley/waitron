@@ -64,8 +64,8 @@ Si el propio registro de configuración está dañado, la página puede ofrecer 
 Cuando se ha borrado la configuración, el servidor se reinicia. Después de **Recuperar desde una
 copia**, **Reconectar** abre «Unirse a un restaurante existente o recuperarlo», donde eliges
 **Restaurar desde una copia de seguridad** o **Restaurar desde mi bucket**, como en un servidor nuevo;
-restaurar necesita la clave de cifrado de copias (para un archivo de copia) o el kit de recuperación
-(para tu bucket), y la clave maestra de esa copia. Después de
+restaurar necesita la clave maestra de esa copia y, para tu bucket, el paquete de recuperación o
+el kit. Después de
 **Empezar de nuevo**, **Reconectar** abre «Configura este servidor», donde eliges cómo configurar
 este servidor. Si se recarga la página antes de pulsar **Reconectar**, no recuerda cuál
 elegiste y abre su primera pantalla. Si esa pantalla pregunta «¿Es segura esta página?», elige ahí
@@ -116,8 +116,8 @@ de reserva](servers.md#hand-over) e [Iniciar aquí si ha fallado el servidor pri
 Un servidor nuevo no puede unirse a un principal que ya no está: en ese caso, elige una opción de
 restauración.
 
-Para un archivo de copia, elígelo en **Archivo de copia de seguridad**, introduce la clave que lo
-abre en **Clave de cifrado de copias** y elige su **Entorno de la copia**. Para tu bucket, elige tu
+Para un archivo de copia, elígelo en **Archivo de copia de seguridad**, escribe su clave maestra en
+**Clave maestra** o elige el paquete de recuperación que la contiene, y elige su **Entorno de la copia**. Para tu bucket, elige tu
 paquete de recuperación o archivo del kit en **Paquete de recuperación o archivo del kit**, o pega
 el kit en **Kit de recuperación**, y elige el **Entorno** en el que funcionaba el servidor anterior. Si
 el paquete se hizo antes de que el servidor tuviera copia en el bucket, no es un paquete de
@@ -145,7 +145,7 @@ Mantén separados producción y preproducción. Si el manifiesto está dañado o
 copia completa. Si el formato no es compatible, instala una versión de Waitron que lo admita antes
 de volver a intentarlo.
 
-Usa la **Clave de cifrado de copias** para abrir un archivo cifrado. Para una copia en el bucket o en Cloud, usa el kit del bucket o la aprobación de Cloud. Necesitas la clave maestra que estaba en vigor cuando se hizo la copia elegida. Conserva también el paquete anterior si contiene esa clave.
+Un archivo de copia se abre con la clave maestra que estaba en vigor cuando se hizo. Para una copia en el bucket o en Cloud, usa el kit del bucket o la aprobación de Cloud. Conserva también el paquete anterior si contiene esa clave.
 
 En un servidor de prueba restaurado desde Waitron Cloud, si **Servicios Cloud** dice que no se puede
 leer la solicitud guardada de reconexión, elige **Obtener una nueva solicitud de reconexión** y pide
@@ -158,10 +158,13 @@ vez. Elige **Descargar**, **Imprimir** o **Copiar**, guarda el paquete o la clav
 **Continuar**. Abre **Copias de seguridad** desde el aviso del
 panel para configurar tus copias.
 
-Bajo la revisión, en «Recuperar este servidor», elige con **Elegir el PDF del paquete de recuperación** el paquete de
+Para una copia en el bucket o en Cloud, bajo la revisión, en «Recuperar este servidor», elige con **Elegir el PDF del paquete de recuperación** el paquete de
 recuperación que tenga la clave maestra de esta copia, o escanea su código QR de la clave maestra con
 **Escanear el paquete de recuperación**; o escribe la clave maestra impresa en él en
-**Clave maestra**. Un paquete con una clave maestra más nueva no abre una copia anterior.
+**Clave maestra**. Un paquete con una clave maestra más nueva no abre una copia anterior. Para un
+archivo de copia, se usa la clave maestra que escribiste arriba. Si la copia que contiene necesita
+otra clave maestra, aparece ahí un segundo campo **Clave maestra** con la fecha de la clave que
+necesita.
 Marca «El servidor anterior se ha apagado.», «Soy la única persona recuperando este local.» y
 «Estos datos son correctos.».
 

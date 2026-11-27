@@ -1748,7 +1748,7 @@ export const en = {
     "Backups still use a backup key from the old master key. Change the backup key.",
   "recovery_pack.change_backup_key": "Change the backup key",
   "backup_key_dialog.text":
-    "New backups will use backup key {number}. A box you removed can't read them.",
+    "New backups will use backup key {number}. A box you removed can't read them. Older backups still open with your master key.",
   "backup_key_dialog.done": "Backups now use backup key {number}.",
   "backup_key_dialog.saved_not_loaded":
     "Saved, but the box could not load the new settings. Reload the page.",
@@ -6610,7 +6610,7 @@ export const es: Record<StringKey, string> = {
     "Las copias siguen usando la clave de las copias hecha con la clave maestra anterior. Cambia la clave de las copias.",
   "recovery_pack.change_backup_key": "Cambiar la clave de las copias",
   "backup_key_dialog.text":
-    "Las copias nuevas usarán la clave de las copias número {number}. Un servidor que hayas quitado no podrá leerlas.",
+    "Las copias nuevas usarán la clave de las copias número {number}. Un servidor que hayas quitado no podrá leerlas. Las copias anteriores se siguen abriendo con tu clave maestra.",
   "backup_key_dialog.done": "Las copias usan ahora la clave número {number}.",
   "backup_key_dialog.saved_not_loaded":
     "Guardada, pero el servidor no ha podido cargar los ajustes nuevos. Recarga la página.",

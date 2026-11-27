@@ -30,9 +30,9 @@ one reserved by phone, or the [emergency procedure](emergency-recovery.md) when 
 cannot be established. Neither route needs a Cloud subscription. Downloading a bucket or
 managed-Cloud copy still needs its source connection.
 
-Keep three things separate: the archive encryption key opens the archive; the selected backup's
-named node recovery key authenticates recovery; current outside evidence authorises the new
-fiscal identity. Keep older named keys while you retain their backups. Keeping the existing
+Keep two things separate: the selected backup's master key opens a backup file and authenticates
+recovery (a bucket or Cloud copy opens with its own source credentials); current outside evidence
+authorises the new fiscal identity. Keep older master keys while you retain their backups. Keeping the existing
 node and location identifiers still requires a fresh fiscal allocation after a cold restore.
 
 ## Make the outside evidence available to the container
@@ -97,7 +97,7 @@ entry, a different taxpayer, an altered signed value or consumption for another 
 
 For emergency recovery, prepare `current.json` using the
 [emergency confirmation format](emergency-recovery.md). Put the matching emergency request in
-the form. The box draws the actual identity later, after checking the selected node key and
+the form. The box draws the actual identity later, after checking the selected backup's master key and
 rereading that outside confirmation. The request download therefore contains no generated
 identity or activation result.
 
