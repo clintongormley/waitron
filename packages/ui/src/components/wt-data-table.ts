@@ -30,6 +30,7 @@ import {
 import { tableHeadingStyles } from "./wt-data-table-heading.js";
 import { tableMessage, tableMessageStyles } from "./wt-data-table-message.js";
 import { FilterExpansion, visibleTree } from "./wt-data-table-filter-expansion.js";
+import { tableFilterStyles } from "./wt-data-table-filter-styles.js";
 import { mergeColumnOrder } from "./wt-data-table-column-order.js";
 import {
   copyChoices,
@@ -163,6 +164,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   static override styles = [
     baseStyles,
     tableHeadingStyles,
+    tableFilterStyles,
     css`
       .visually-hidden {
         ${visuallyHiddenStyles}
@@ -457,12 +459,6 @@ export class WtDataTable<Row = unknown> extends LitElement {
       .table-search:focus-visible {
         border-color: var(--wt-color-primary);
         outline: none;
-      }
-
-      .table-filters {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
       }
 
       .filters-clear-all,

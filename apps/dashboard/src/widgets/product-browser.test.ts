@@ -3,6 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { registerIcons } from "@waitron/ui";
 import { chooseOption, chooseOptions } from "@waitron/ui/src/test-helpers.js";
+import { TEXT_130_SHEET } from "@waitron/ui/test/venue-theme-fixture.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { cleanupWidgets, dialogClosed, dialogMessageOf, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -4919,12 +4920,13 @@ it("A461 keeps the selection when a filter is chosen in the panel beside the row
   }
 });
 
-it("shows each filter's whole choice in the panel beside the rows, in Spanish", async () => {
-  const { page } = await import("vitest/browser");
+it.each(["100%", "130%"])("shows each Spanish filter's whole choice at %s", async (size) => {
   const width = window.innerWidth,
     height = window.innerHeight;
   await page.viewport(1280, 720);
   setLocale("es");
+  const previousSheets = document.adoptedStyleSheets;
+  if (size === "130%") document.adoptedStyleSheets = [...previousSheets, TEXT_130_SHEET];
   try {
     const el = await mountBrowser();
     const table = await tableOf(el);
@@ -4938,9 +4940,17 @@ it("shows each filter's whole choice in the panel beside the rows, in Spanish", 
     expect(values.map((value) => value.textContent!.trim())).toContain(
       es["product.filter_ordering_all"],
     );
-    for (const value of values)
-      expect(value.scrollWidth, value.textContent!.trim()).toBeLessThanOrEqual(value.clientWidth);
+    for (const value of values) {
+      const choice = value.textContent!.trim();
+      expect(value.scrollWidth, choice).toBeLessThanOrEqual(value.clientWidth);
+      expect(value.scrollHeight, choice).toBeLessThanOrEqual(value.clientHeight);
+      const textBounds = value.getBoundingClientRect();
+      const triggerBounds = value.closest(".trigger")!.getBoundingClientRect();
+      expect(textBounds.top, choice).toBeGreaterThanOrEqual(triggerBounds.top);
+      expect(textBounds.bottom, choice).toBeLessThanOrEqual(triggerBounds.bottom);
+    }
   } finally {
+    document.adoptedStyleSheets = previousSheets;
     await page.viewport(width, height);
     setLocale("en-GB");
   }
