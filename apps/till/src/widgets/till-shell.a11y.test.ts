@@ -104,7 +104,7 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
     [390, "es-ES"],
     [1280, "es-ES"],
   ] as const)(
-    "A738 till bar and the expanded Testing section pass accessibility checks at %i in %s",
+    "A738 till bar and its Testing section at %i in %s have no violations",
     async (width, locale) => {
       const original = currentLocale();
       setLocale(locale);

@@ -1113,6 +1113,16 @@ it("puts orders outside the shown counters and table map in Other orders", async
         billName: "Off-map table",
       },
       { ...parkedOrder, id: "hidden", orderNumber: 56, zoneId: "shop", label: "Hidden counter" },
+      {
+        ...seated,
+        id: "hidden-seat",
+        orderNumber: 57,
+        partyId: "hidden-counter-party",
+        zoneId: "shop",
+        tableLabel: "Seat 4",
+        billName: "Hidden seat",
+        counter: true,
+      },
     ]),
     listCounterWaiting: vi
       .fn()
@@ -1138,10 +1148,11 @@ it("puts orders outside the shown counters and table map in Other orders", async
     sentRow.element().getBoundingClientRect().top,
   );
   expect(
-    other.getByRole("heading", { name: "Other orders · 3", exact: true }).query(),
+    other.getByRole("heading", { name: "Other orders · 4", exact: true }).query(),
   ).not.toBeNull();
   expect(other.getByRole("button", { name: /^#56 · Hidden counter.*Shop/ }).query()).not.toBeNull();
   expect(other.getByRole("button", { name: /Unassigned pie.*No zone/ }).query()).not.toBeNull();
+  expect(other.getByRole("button", { name: /Seat 4.*Hidden seat.*Shop/ }).query()).not.toBeNull();
   expect(page.getByRole("button", { name: /Visible table/ }).query()).toBeNull();
   expect(other.getByRole("button", { name: /Counter seat/ }).query()).toBeNull();
   await page.getByRole("button", { name: /Counter seat/ }).click();

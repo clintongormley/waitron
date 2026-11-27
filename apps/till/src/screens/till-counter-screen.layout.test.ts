@@ -530,7 +530,7 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
   });
 });
 
-it("keeps a usable basket and payment controls when many orders are held", async () => {
+it("keeps the basket and payment controls usable after opening New order with many parked orders", async () => {
   const grid = await mountCounter(1280, 800);
   const counter = grid as TillCounterScreen;
   counter.store.clear();

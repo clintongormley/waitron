@@ -21142,11 +21142,16 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     return { ...mounted, c };
   }
 
-  const pressPay = (el: TillApp, id: string) =>
-    emit(rowOf(el, id) ?? counter(el)!, "pay-waiting-order", {
+  const dispatchPay = (source: Element, screen: TillCounterScreen, id: string) =>
+    emit(source, "pay-waiting-order", {
       id,
-      serviceMode: counter(el)!.counterWaiting.find((order) => order.id === id)?.serviceMode,
+      serviceMode: screen.counterWaiting.find((order) => order.id === id)?.serviceMode,
     });
+  const pressPay = (el: TillApp, id: string) => {
+    const row = rowOf(el, id);
+    expect(row, `Waiting row for ${id}`).toBeDefined();
+    dispatchPay(row!, counter(el)!, id);
+  };
   const placedRead = (id: string) => ({
     zoneId: null,
     kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 2 },
@@ -21283,7 +21288,8 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
         await flush(el);
         expect(currentApi.placeOrder).not.toHaveBeenCalled();
       }
-      pressPay(el, "wo-sent");
+      if (saved === "while the till was on another order") dispatchPay(c, c, "wo-sent");
+      else pressPay(el, "wo-sent");
       await flush(el);
       expect(tenderPay(el).stage).toBe("collect");
       expect(c.store.total).toBe("3.00");
@@ -21800,7 +21806,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
 
-    pressPay(el, "wo-sent");
+    dispatchPay(c, c, "wo-sent");
     emit(c, "counter-bill-pay", {});
     await flush(el);
     read.answer(placedRead("wo-sent"));
@@ -22020,7 +22026,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
       const own = c.store.id;
       await el.updateComplete;
 
-      pressPay(el, "wo-sent");
+      dispatchPay(c, c, "wo-sent");
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       read.answer(placedRead("wo-sent"));
@@ -22332,7 +22338,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     const id = c.store.id;
     await el.updateComplete;
 
-    pressPay(el, "wo-sent");
+    dispatchPay(c, c, "wo-sent");
     await discardBasketChanges(el);
 
     expect(c.store.id).toBe(id);
@@ -22354,7 +22360,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     emit(c, "place-order");
     await flush(el);
 
-    pressPay(el, "wo-sent");
+    dispatchPay(c, c, "wo-sent");
     await flush(el);
 
     expect(retrievePlacedOrder).not.toHaveBeenCalled();
@@ -27789,7 +27795,7 @@ describe("A767 sign-in and held-order recovery", () => {
     const c = await toCounter(el);
     const id = c.store.id;
     listWorkingOrders.mockResolvedValue([heldRow(id), heldRow("wo-2")]);
-    c.shadowRoot!.querySelector<HTMLElement>(".screen > div > wt-button")!.click();
+    await page.getByRole("button", { name: t("counter.floor_back"), exact: true }).click();
     await flush(el);
     expect(parkedList(el)!.orders.map((order) => order.id)).toEqual([id, "wo-2"]);
     Object.assign(el, { heldOrders: [heldRow(c.store.id), heldRow("wo-2")] });
