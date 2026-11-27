@@ -7,6 +7,7 @@ import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixture
 import { addProducts, createProduct, menuItems, requireMenuRoot } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { saleId as brandSaleId, seriesId as brandSeriesId, type SaleId } from "@waitron/shared";
+import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { correctiveLinesInPart } from "./corrective-lines-in-part.js";
@@ -202,6 +203,18 @@ describe("a corrective row given back", () => {
       .where(eq(sales.id, correctiveId));
     expect(corrective).toEqual({ seriesPurpose: "full_corrective", customer: BAR_SOL.taxId });
     expect(await inPart(correctiveId)).toEqual(both(["Paella", "Burger", "Flan"]));
+  });
+
+  it("in a corrective of more rows than one statement may bind, each as its own gross says", async () => {
+    const { rows } = await paidBill([{ menuItemId: venue.item("Paella"), quantity: "1" }], "20.00");
+    const paella = rows[0]!;
+    const many = Array.from({ length: SQL_VARIABLE_LIMIT + 1 }, (_, i) => ({
+      id: `row-${i}`,
+      correctsLineId: paella.id,
+      lineGross: i % 2 === 0 ? -paella.lineGross! : -682,
+    }));
+    const expected = new Set(many.filter((_, i) => i % 2 === 1).map((row) => row.id));
+    expect(await inTx(venue, (tx) => correctiveLinesInPart(tx, many))).toEqual(expected);
   });
 });
 
