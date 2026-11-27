@@ -24,7 +24,7 @@ import { downloadArchive, type DownloadedArchive } from "./archive-download.js";
 import { decodeArchiveRecoveryPack, type ArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { readArtifactFileHeader } from "./artifact-cipher-file.js";
 import { DEFAULT_DESTINATION_TIMEOUT_MS } from "./backup-config.js";
-import { openingKeyFor } from "./backup-file-key.js";
+import { headerOpeningKey } from "./backup-file-key.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
 import { boundObjectStore } from "./bounded-store.js";
 import { deploymentEnvironment, resolveConfigDir, type DeploymentEnvironment } from "./config.js";
@@ -93,7 +93,7 @@ const clock = (): Date => new Date();
 /**
  * Each restore form words these as one message of its own. A version 1 file names no key, so a
  * wrong key and a damaged file are not told apart there. A version 2 file's header names its master
- * key's id, which anyone can compute from a candidate key, and `openingKeyFor` refuses a key that
+ * key's id, which anyone can compute from a candidate key, and `headerOpeningKey` refuses a key that
  * does not match it before decrypting; a refusal here under a matching key is a damaged file.
  */
 const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
@@ -154,25 +154,23 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   }
 
   // The master key from a file also authorises the restore, as WAITRON_MASTER_KEY would.
-  const keyed: CommandDeps =
-    masterKeyFile === undefined
-      ? deps
-      : { ...deps, env: { ...deps.env, WAITRON_MASTER_KEY: masterKey } };
-  const resolved = await resolveRestoreTarget(keyed);
+  const authorising = masterKeyFile === undefined ? envMasterKey(deps) : masterKey;
+  const resolved = await resolveRestoreTarget(deps, authorising);
   if (typeof resolved === "number") return resolved;
   const { target, hold } = resolved;
   try {
     deps.out(COLD_RESTORE_NOTICE);
     const restored = await restoreArtifact(
-      keyed,
+      deps,
       target,
       artifactPath,
       opening.key,
+      authorising,
       oldBoxGone,
       soleRecovery,
       {
         keyDoesNotOpen: opening.underMasterKey
-          ? "restore failed: the backup file is damaged, or was changed after it was made; choose another backup"
+          ? BACKUP_FILE_DAMAGED
           : "restore failed: wrong recovery key or corrupt artifact",
       },
     );
@@ -196,13 +194,14 @@ async function restoreArtifact(
   target: RestoreTarget,
   artifactPath: string,
   recoveryKey: string,
+  masterKey: string | undefined,
   oldBoxGone: boolean,
   soleRecovery: boolean,
   words: { keyDoesNotOpen: string },
 ): Promise<boolean> {
   try {
     const withModuleOperations = soleRecovery
-      ? await archiveRecoveryRunner(deps, target, artifactPath, recoveryKey, oldBoxGone)
+      ? await archiveRecoveryRunner(deps, target, artifactPath, recoveryKey, masterKey, oldBoxGone)
       : target.withModuleOperations;
     await (deps.restore ?? restoreFromArtifactFile)({
       ...target,
@@ -239,6 +238,9 @@ async function restoreArtifact(
  */
 const RESTORE_DISK_FULL =
   "restore failed: the disk filled during the restore; free some space and run it again";
+
+const BACKUP_FILE_DAMAGED =
+  "restore failed: the backup file is damaged, or was changed after it was made; choose another backup";
 
 type ParsedArgs =
   | {
@@ -305,6 +307,10 @@ function parseArgs(argv: readonly string[]): ParsedArgs | null {
     : null;
 }
 
+function envMasterKey(deps: CommandDeps): string | undefined {
+  return readVariable(deps.env, "WAITRON_MASTER_KEY");
+}
+
 /**
  * The master key's text from `--master-key-file` (a text file, or the recovery pack PDF's
  * `masterKey`) or `WAITRON_MASTER_KEY`; `undefined` when neither is given, `null` once a refusal
@@ -314,7 +320,7 @@ async function readMasterKey(
   deps: CommandDeps,
   masterKeyFile: string | undefined,
 ): Promise<string | undefined | null> {
-  const fromEnv = readVariable(deps.env, "WAITRON_MASTER_KEY");
+  const fromEnv = envMasterKey(deps);
   if (masterKeyFile === undefined) return isUnset(fromEnv) ? undefined : fromEnv;
   if (!isUnset(fromEnv)) {
     deps.out(
@@ -348,30 +354,27 @@ async function fileOpeningKey(
   masterKey: string | undefined,
   cloudKey: string | undefined,
 ): Promise<{ key: string; underMasterKey: boolean } | { refused: string }> {
-  const version = await readArtifactFileHeader(artifactPath).then(
-    (header) => header.version,
-    () => undefined,
-  );
-  if (version === 2) {
+  const header = await readArtifactFileHeader(artifactPath).catch(() => undefined);
+  if (header?.version === 2) {
     if (masterKey === undefined)
       return {
         refused:
           "restore failed: this backup file opens with the master key; set WAITRON_MASTER_KEY or give --master-key-file",
       };
     try {
-      return { key: await openingKeyFor({ artifactPath }, masterKey), underMasterKey: true };
+      return { key: headerOpeningKey(header, masterKey), underMasterKey: true };
     } catch (err) {
       return {
         refused: hasCode(err as AppError, "promotion.break_glass_invalid")
           ? sharedRefusal(err)
-          : "restore failed: the backup file is damaged, or was changed after it was made; choose another backup",
+          : BACKUP_FILE_DAMAGED,
       };
     }
   }
   if (isUnset(cloudKey))
     return {
       refused:
-        version === 1
+        header?.version === 1
           ? "restore failed: this file is a Waitron Cloud copy, which opens with its recovery key; set WAITRON_BACKUP_RECOVERY_KEY to it"
           : "restore failed: this file is not a Waitron backup file, or it is damaged; choose another backup",
     };
@@ -398,6 +401,7 @@ type RestoreTarget = Pick<
  */
 async function resolveRestoreTarget(
   deps: CommandDeps,
+  masterKey: string | undefined,
 ): Promise<{ target: RestoreTarget; hold: VenueLock } | number> {
   let environment: DeploymentEnvironment;
   let withModuleOperations = deps.withModuleOperations;
@@ -408,7 +412,7 @@ async function resolveRestoreTarget(
       withModuleOperations = createRecoveryRestoreRunner(
         ALL_MODULES,
         await readRecoveryOperationFile(path),
-        readVariable(deps.env, "WAITRON_MASTER_KEY"),
+        masterKey,
       );
     }
   } catch (err) {
@@ -475,13 +479,22 @@ async function archiveRecoveryRunner(
   target: RestoreTarget,
   artifactPath: string,
   recoveryKey: string,
+  masterKey: string | undefined,
   oldBoxGone: boolean,
 ): Promise<RestoreOperationRunner> {
   const path = readVariable(deps.env, "WAITRON_RECOVERY_OPERATION_FILE");
   const operation = await readRecoveryOperationFile(path ?? "");
   const copy = await validateArtifactFile({ ...target, artifactPath, recoveryKey });
   try {
-    return await selectedRecoveryRunner(deps, target, copy, operation, oldBoxGone, copy.sourceId);
+    return await selectedRecoveryRunner(
+      deps,
+      target,
+      copy,
+      operation,
+      masterKey,
+      oldBoxGone,
+      copy.sourceId,
+    );
   } finally {
     await copy.discard();
   }
@@ -492,6 +505,7 @@ async function selectedRecoveryRunner(
   target: RestoreTarget,
   copy: ValidatedArtifact,
   operation: RecoveryOperationInput,
+  masterKey: string | undefined,
   oldBoxGone: boolean,
   sourceId: string,
 ): Promise<RestoreOperationRunner> {
@@ -499,7 +513,7 @@ async function selectedRecoveryRunner(
     ...target,
     copy,
     operation,
-    secret: readVariable(deps.env, "WAITRON_MASTER_KEY"),
+    secret: masterKey,
     context: { selectedSourceId: sourceId, oldBoxGone, soleRecovery: true },
     readBoot: deps.readBoot,
   });
@@ -647,7 +661,8 @@ async function runBucketRestore(
     );
     return 1;
   }
-  const resolved = await resolveRestoreTarget(deps);
+  const masterKey = envMasterKey(deps);
+  const resolved = await resolveRestoreTarget(deps, masterKey);
   if (typeof resolved === "number") return resolved;
   const { target, hold } = resolved;
   try {
@@ -672,6 +687,7 @@ async function runBucketRestore(
                   await readRecoveryOperationFile(
                     readVariable(deps.env, "WAITRON_RECOVERY_OPERATION_FILE") ?? "",
                   ),
+                  masterKey,
                   oldBoxGone,
                   sourceId,
                 ),
@@ -787,7 +803,8 @@ async function runPackRestore(
     );
     return 1;
   }
-  const resolved = await resolveRestoreTarget(deps);
+  const masterKey = envMasterKey(deps);
+  const resolved = await resolveRestoreTarget(deps, masterKey);
   if (typeof resolved === "number") return resolved;
   const { target, hold } = resolved;
   try {
@@ -812,6 +829,7 @@ async function runPackRestore(
         target,
         downloaded.path,
         pack.recoveryKey,
+        masterKey,
         oldBoxGone,
         soleRecovery,
         {
