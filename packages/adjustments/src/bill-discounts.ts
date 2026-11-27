@@ -1,6 +1,7 @@
 import {
   centsToDecimal,
   compareDecimal,
+  decimal,
   decimalToCents,
   decimalToThousandths,
   divideDecimal,
@@ -162,12 +163,13 @@ export function zeroedRows<M extends Measured>(subjects: readonly M[]): PricedSh
     .filter(({ row }) => row.unit !== 0)
     .map((member) => ({
       member,
-      rows: [{ quantity: thousandthsToDecimal(member.quantity), unitGross: centsToDecimal(0) }],
+      rows: [{ quantity: thousandthsToDecimal(member.quantity), unitGross: decimal("0") }],
       reduction: lineGross(member.row, member.quantity),
     }));
 }
 
-/** A line of an open bill, as stored; `portion` names the filed row a bound portion belongs to. */
+/** A line of an open bill, as stored; `portion` names the filed row a bound portion, or an extra
+ * of one, belongs to (an extra's ordinal is not read). */
 export interface BillDiscountLine extends PricedLine {
   setMenuRole: "set_menu" | "dish" | null;
   setMenuLineId: string | null;
@@ -387,16 +389,23 @@ export function workOutBillDiscounts(
       const results = spreadReaching(subjects.map(spreadLineOf), discount);
       return subjects.map((member) => ({ member, ...results.get(member.row.id)! }));
     }
+    // A filed row of extras lists them in their dishes' line order (`projectPortionSale`), and
+    // hands its prices out in that order: an extra carries no ordinal of its own.
+    const dishLineNo = ({ row }: Subject) =>
+      row.parentLineId === null ? row.lineNo : lineOf(row.parentLineId).lineNo;
+    const ordinal = ({ row }: Subject) => (row.parentLineId === null ? row.portion!.ordinal : 0);
     const groups = new Map<string, Subject[]>();
-    for (const subject of subjects) {
+    const filing = [...subjects].sort(
+      (a, b) => dishLineNo(a) - dishLineNo(b) || a.row.lineNo - b.row.lineNo,
+    );
+    for (const subject of filing) {
       const key = subject.row.portion?.group ?? `line:${subject.row.id}`;
       groups.set(key, [...(groups.get(key) ?? []), subject]);
     }
     const results = spreadReaching([...groups.values()].map(filedRowLine), discount);
     return [...groups.values()].flatMap((group) =>
       handOutRows(
-        // Only a bound portion's group holds more than one line.
-        [...group].sort((a, b) => a.row.portion!.ordinal - b.row.portion!.ordinal),
+        [...group].sort((a, b) => ordinal(a) - ordinal(b)),
         results.get(group[0]!.row.id)!.rows,
       ),
     );

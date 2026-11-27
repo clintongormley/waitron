@@ -445,6 +445,22 @@ describe("workOutBillDiscounts: bound portions", () => {
     );
     expect(rowsOf(worked(result, "one"))).toEqual({ p2: ["1000@999"] });
   });
+
+  it("files bound portions' extras in their dishes' order, whatever their own line numbers", () => {
+    const sauce = (id: string, lineNo: number, parent: string) =>
+      line(id, lineNo, 1000, { parentLineId: parent, portion: { group: "sauce", ordinal: 0 } });
+    const result = workOutBillDiscounts(
+      [
+        line("d1", 1, 0, { portion: { group: "croquettes", ordinal: 1 } }),
+        line("d2", 2, 0, { portion: { group: "croquettes", ordinal: 2 } }),
+        sauce("e2", 3, "d2"),
+        sauce("e1", 4, "d1"),
+      ],
+      [amount("one", bill, 1, 1)],
+    );
+    // The sauces' filed row is d1's then d2's, so d1's keeps the higher of its two prices.
+    expect(rowsOf(worked(result, "one"))).toEqual({ e2: ["1000@999"] });
+  });
 });
 
 describe("filedRowLine", () => {
