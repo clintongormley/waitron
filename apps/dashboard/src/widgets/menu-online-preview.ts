@@ -181,6 +181,7 @@ export class MenuOnlinePreview extends LitElement {
       <customer-menu-page
         class=${this.size}
         .menu=${this.answer.menu}
+        .appearance=${this.answer.appearance}
         .photos=${this.photos}
         .photoSource=${previewPhoto}
         .defaultLanguage=${this.defaultLanguage}

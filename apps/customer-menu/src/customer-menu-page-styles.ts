@@ -10,6 +10,8 @@ export const customerMenuPageStyles = [
     }
     article {
       --menu-padding: var(--wt-space-4);
+      --wt-menu-heading-color: var(--wt-color-primary-text);
+      --wt-menu-heading-font: var(--wt-font-family);
       background: var(--wt-color-bg);
       color: var(--wt-color-text);
       font-family: var(--wt-font-family);
@@ -115,8 +117,13 @@ export const customerMenuPageStyles = [
     .menu-title,
     .section-title {
       margin: 0 0 var(--wt-space-4);
-      color: var(--wt-color-primary-text);
+      color: var(--wt-menu-heading-color);
       font-weight: var(--wt-font-weight-bold);
+    }
+    .menu-title,
+    .section-title,
+    .subheading {
+      font-family: var(--wt-menu-heading-font);
     }
     .section-title {
       font-size: calc(1.4 * var(--wt-font-size-lg));
@@ -230,7 +237,7 @@ export const customerMenuPageStyles = [
     }
     .detail .subheading {
       margin: var(--wt-space-4) 0 var(--wt-space-2);
-      color: var(--wt-color-primary-text);
+      color: var(--wt-menu-heading-color);
     }
     .description,
     .declarations,

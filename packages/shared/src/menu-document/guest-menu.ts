@@ -51,8 +51,17 @@ export interface PublicGuestMenu {
   members: GuestMember[];
 }
 
+export interface CustomerMenuAppearance {
+  readonly pageColor?: string;
+  readonly textColor?: string;
+  readonly headingColor?: string;
+  readonly headingFont?: "system" | "serif";
+  readonly textFont?: "system" | "serif";
+}
+
 export type CustomerMenuPreview =
-  { state: "unpublished" } | { state: "published"; menu: PublicGuestMenu };
+  | { state: "unpublished" }
+  | { state: "published"; menu: PublicGuestMenu; appearance?: CustomerMenuAppearance };
 
 export const CUSTOMER_MENU_PHOTO_SIZES = ["none", "small", "large"] as const;
 export type CustomerMenuPhotoSize = (typeof CUSTOMER_MENU_PHOTO_SIZES)[number];

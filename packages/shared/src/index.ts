@@ -596,6 +596,7 @@ export {
   publicGuestMenu,
   CUSTOMER_MENU_PHOTO_SIZES,
   isCustomerMenuAddress,
+  type CustomerMenuAppearance,
   type CustomerMenuOnlineSettings,
   type CustomerMenuPhotoSize,
   type CustomerMenuPreview,

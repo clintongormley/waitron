@@ -1,9 +1,11 @@
 import {
   contentLanguageDisplayName,
   guestMenuWords,
+  type CustomerMenuAppearance,
   type CustomerMenuPhotoSize,
   type PublicGuestMenu,
 } from "@waitron/shared";
+import { menuColorScheme } from "./customer-menu-appearance.js";
 import "./customer-menu-page.js";
 
 interface CustomerMenuSnapshot {
@@ -12,24 +14,26 @@ interface CustomerMenuSnapshot {
   photos: CustomerMenuPhotoSize;
   menu: PublicGuestMenu;
   photoUrls: Record<string, string>;
+  appearance?: CustomerMenuAppearance;
 }
 
 export function mountCustomerMenu(doc: Document): void {
   const data = doc.getElementById("customer-menu-data")?.textContent;
   const main = doc.getElementById("customer-menu");
   if (!data || !main) return;
-  const { address, defaultLanguage, photos, menu, photoUrls } = JSON.parse(
+  const { address, defaultLanguage, photos, menu, photoUrls, appearance } = JSON.parse(
     data,
   ) as CustomerMenuSnapshot;
   doc.documentElement.lang = menu.language;
   doc.title = menu.name;
+  doc.documentElement.style.colorScheme = menuColorScheme(appearance?.pageColor);
 
   const page = doc.createElement("customer-menu-page");
   page.standalone = true;
   page.menu = menu;
   page.defaultLanguage = defaultLanguage;
   page.photos = photos;
-  page.theme = doc.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  page.appearance = appearance;
   page.photoSource = (reference) => photoUrls[reference];
 
   if (menu.languages.length > 1) {

@@ -5,6 +5,8 @@ import {
   type CustomerMenuPhotoSize,
   type PublicGuestMenu,
 } from "@waitron/shared";
+import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
+import { menuAppearances } from "../test/published-menu.js";
 import { mountCustomerMenu } from "./main.js";
 import "./main.css";
 
@@ -34,6 +36,7 @@ function openMenu(
   photos: CustomerMenuPhotoSize,
   photoUrls: Record<string, string>,
   published = menu,
+  appearance?: (typeof menuAppearances)[keyof typeof menuAppearances],
 ) {
   const data = document.createElement("script");
   data.type = "application/json";
@@ -44,6 +47,7 @@ function openMenu(
     photos,
     menu: published,
     photoUrls,
+    appearance,
   });
   const main = document.createElement("main");
   main.id = "customer-menu";
@@ -56,7 +60,7 @@ afterEach(() => {
   document.querySelector("#customer-menu")?.remove();
   document.querySelector("#customer-menu-data")?.remove();
   document.documentElement.lang = "en";
-  delete document.documentElement.dataset.theme;
+  document.documentElement.style.removeProperty("color-scheme");
   document.title = "";
 });
 
@@ -96,12 +100,28 @@ it.each([
   expect(main.firstElementChild?.shadowRoot?.querySelector("img")).toBeNull();
 });
 
-it("opens a single-language snapshot in the fixture palette without a language chooser", async () => {
-  document.documentElement.dataset.theme = "dark";
+it("opens a single-language snapshot in the built-in light palette without a language chooser", async () => {
   const main = openMenu("none", {}, { ...menu, language: "es", languages: ["es"] });
   await expect.element(page.getByRole("heading", { level: 1 })).toBeVisible();
   expect(document.documentElement.lang).toBe("es");
   expect(main.querySelector("details")).toBeNull();
   const article = main.firstElementChild!.shadowRoot!.querySelector("article")!;
-  expect(getComputedStyle(article).color).toBe("rgb(236, 238, 242)");
+  expect.soft(getComputedStyle(article).color).toBe("rgb(35, 31, 32)");
+  expect(getComputedStyle(document.documentElement).colorScheme).toBe("light");
 });
+
+it.each(["light", "dark"] as const)(
+  "opens the language chooser in the published %s style",
+  async (scheme) => {
+    const root = openMenu("none", {}, menu, menuAppearances[scheme]);
+    const heading = page.getByRole("heading", { level: 1, name: "Lunch for guests" });
+    await expect.element(heading).toBeVisible();
+    expect.soft(getComputedStyle(document.documentElement).colorScheme).toBe(scheme);
+    expect
+      .soft(getComputedStyle(heading.element()).color)
+      .toBe(scheme === "light" ? "rgb(133, 43, 37)" : "rgb(245, 185, 149)");
+    await page.getByText("EN", { exact: true }).click();
+    await expect.element(page.getByRole("link", { name: "English" })).toBeVisible();
+    await expectNoA11yViolations(root);
+  },
+);
