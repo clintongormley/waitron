@@ -83,6 +83,7 @@ describe("the read-only exemption list", () => {
       ["POST", "/api/node/backup-settings", ["mirror"]],
       ["POST", "/api/node/enrol-self", ["mirror"]],
       ["POST", "/api/node/handover/emergency/backup", ["mirror"]],
+      ["POST", "/api/node/handover/emergency/drives", ["mirror"]],
       ["POST", "/api/node/handover/emergency/followed", ["mirror"]],
       ["POST", "/api/node/handover/emergency/passkey-challenge", ["mirror"]],
     ]);

@@ -1,4 +1,5 @@
 import { gzipSync } from "node:zlib";
+import { createHostPlaces } from "./box-host-api.js";
 import * as freeSpace from "./free-bytes.js";
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
@@ -156,6 +157,10 @@ function service(
             ),
           ),
         );
+      },
+      drives: {
+        requests: { storageList: vi.fn(), storageRelease: vi.fn() },
+        places: createHostPlaces(),
       },
       ...backupDeps(),
       ...overrides,

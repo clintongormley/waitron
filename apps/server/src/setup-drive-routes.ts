@@ -2,9 +2,8 @@ import { createErrorBoundary, type Logger } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { Hono } from "hono";
 import { openingKeyFor } from "./backup-file-key.js";
-import { askHost } from "./box-host-api.js";
 import {
-  listDriveBackups,
+  listHostDriveBackups,
   readDriveJson,
   SETUP_DRIVE_LIST_BODY_MAX,
 } from "./drive-backup-files.js";
@@ -37,18 +36,14 @@ export function mountSetupDriveRoutes(
     runDriveList(c, log, async () => {
       c.header("Cache-Control", "no-store");
       assertOwnerTransport(c);
-      const host = deps.hostRequests;
-      const places = deps.hostPlaces;
-      if (host === undefined || places === undefined) throw new AppError("setup.not_ready", {});
+      const host = deps.driveHost;
+      if (host === undefined) throw new AppError("setup.not_ready", {});
       if (!c.req.header("content-type")?.toLowerCase().startsWith("application/json"))
         invalidRequest("body");
       const body = await readDriveJson(c.req.raw, SETUP_DRIVE_LIST_BODY_MAX);
       if (typeof body !== "object" || body === null || Array.isArray(body)) invalidRequest("body");
       if (Object.keys(body).length > 0) invalidRequest("body");
-      const { drives } = await askHost(places, () => host.storageList({ source: "server" }), {
-        busy: "box_host.busy",
-      });
-      return c.json(await listDriveBackups(drives, { root: deps.drivesRoot, log }), 200);
+      return c.json(await listHostDriveBackups(host, { root: deps.drivesRoot, log }), 200);
     }),
   );
 

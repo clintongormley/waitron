@@ -3,6 +3,7 @@ import { TLSSocket } from "node:tls";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { Hono } from "hono";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { backupArchiveKey } from "./backup-keys.js";
@@ -39,10 +40,10 @@ async function fixture(
   const app = new Hono();
   mountSetup(
     app,
-    { environment: "preproduction", hostRequests: host, hostPlaces: places, drivesRoot: root },
+    { environment: "preproduction", driveHost: { requests: host, places }, drivesRoot: root },
     () => {},
   );
-  return { app, host, places, name };
+  return { app, host, places, name, root };
 }
 
 it("the drive list needs the owner's transport and asks the host as the server", async () => {
@@ -137,4 +138,33 @@ it("is unavailable when the box has no host requests", async () => {
   const response = await app.request(PATH, LIST, tls());
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+});
+
+it("the drive list answers while setup's one-at-a-time queue is held", async () => {
+  const { root, host, places } = await fixture();
+  const coordinator = createFirstSetupCoordinator();
+  const app = new Hono();
+  mountSetup(
+    app,
+    {
+      environment: "preproduction",
+      driveHost: { requests: host, places },
+      drivesRoot: root,
+      firstSetup: { coordinator, assertOtherAllowed: async () => {} },
+    },
+    () => {},
+  );
+  let release!: () => void;
+  const held = coordinator.run(() => new Promise<void>((resolve) => (release = resolve)));
+  try {
+    const answer = await Promise.race([
+      Promise.resolve(app.request(PATH, LIST, tls())).then((response) => response.status),
+      new Promise((resolve) => setTimeout(() => resolve("waited"), 2000)),
+    ]);
+    expect(answer).toBe(200);
+    expect(host.storageList).toHaveBeenCalledOnce();
+  } finally {
+    release();
+    await held;
+  }
 });

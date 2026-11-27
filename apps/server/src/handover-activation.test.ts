@@ -1,4 +1,5 @@
 import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
+import { createHostPlaces } from "./box-host-api.js";
 import { runBoxEmailDuty } from "./testing/box-email-duty.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { Socket } from "node:net";
@@ -304,6 +305,10 @@ async function emergencySpare(gate = true) {
     rpId: "box.test",
     credentialKeyRing: TOTP_KEY_RING,
     fetch: exchange,
+    drives: {
+      requests: { storageList: vi.fn(), storageRelease: vi.fn() },
+      places: createHostPlaces(),
+    },
     backup: {
       readBackupKey: async () => undefined,
       environment: "preproduction" as const,

@@ -43,6 +43,12 @@ export interface DriveBackupList {
   readonly files: readonly DriveBackupFile[];
 }
 
+/** The box's host and the places every host route shares; boot makes one of each. */
+export interface DriveHost<Calls extends "storageList" | "storageRelease" = "storageList"> {
+  requests: Pick<BoxHostRequests, Calls>;
+  places: HostPlaces;
+}
+
 export interface ResolvedDriveFile {
   readonly path: string;
   readonly size: number;
@@ -144,6 +150,19 @@ export async function listDriveBackups(
       a.path.localeCompare(b.path),
   );
   return { drives, files: found };
+}
+
+/** Asks the host, as the server, to mount the drives, then lists their backup files. */
+export async function listHostDriveBackups(
+  host: DriveHost,
+  options: { root?: string; log: Logger },
+): Promise<DriveBackupList> {
+  const { drives } = await askHost(
+    host.places,
+    () => host.requests.storageList({ source: "server" }),
+    { busy: "box_host.busy" },
+  );
+  return listDriveBackups(drives, options);
 }
 
 function checkedName(file: unknown, code: InvalidCode): { drive: string; segments: string[] } {

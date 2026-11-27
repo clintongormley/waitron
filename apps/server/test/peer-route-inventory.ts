@@ -1,4 +1,5 @@
-// A null budget names a route that reads no body, is local-only, or uses the existing upload reader.
+// A null budget names a route that reads no body, is local-only, uses the existing upload reader,
+// or caps its JSON in `readDriveJson` (`drive-backup-files.ts`).
 export const PEER_ROUTES: readonly (readonly [string, string, number | null])[] = [
   ["GET", "/api/node", null],
   ["GET", "/api/node/main", null],
@@ -24,6 +25,7 @@ export const PEER_ROUTES: readonly (readonly [string, string, number | null])[] 
   ["POST", "/api/node/handover/emergency/preview", 1048576],
   ["POST", "/api/node/handover/emergency/declare", 1048576],
   ["POST", "/api/node/handover/emergency/backup", null],
+  ["POST", "/api/node/handover/emergency/drives", null],
   ["POST", "/api/node/handover/emergency/followed", 65536],
   ["POST", "/api/node/handover/emergency/passkey-challenge", null],
   ["POST", "/management-api/handover", 1048576],

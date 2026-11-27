@@ -1,4 +1,5 @@
 import { Socket } from "node:net";
+import { createHostPlaces } from "./box-host-api.js";
 import { TLSSocket } from "node:tls";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -141,6 +142,10 @@ function service(
       rpId: "spare.example",
       credentialKeyRing: TOTP_KEY_RING,
       passwordThrottle: createPasswordThrottle(),
+      drives: {
+        requests: { storageList: vi.fn(), storageRelease: vi.fn() },
+        places: createHostPlaces(),
+      },
       follow: { stopForSwitch, progress: () => seen, restart, migrationsRoot: null },
       fetch: async (_url, init) => {
         asked();

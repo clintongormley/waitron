@@ -1,4 +1,5 @@
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createHostPlaces } from "./box-host-api.js";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -439,6 +440,10 @@ async function emergencyTakeover(
     credentialKeyRing: TOTP_KEY_RING,
     fetch: async () => {
       throw Object.assign(new Error("switched off"), { code: "ECONNREFUSED" });
+    },
+    drives: {
+      requests: { storageList: vi.fn(), storageRelease: vi.fn() },
+      places: createHostPlaces(),
     },
     backup: {
       readBackupKey: async () => undefined,
@@ -961,6 +966,10 @@ describe("a controlled handover to the joined spare, then the old box back by em
         credentialKeyRing: TOTP_KEY_RING,
         fetch: async () => {
           throw Object.assign(new Error("switched off"), { code: "ECONNREFUSED" });
+        },
+        drives: {
+          requests: { storageList: vi.fn(), storageRelease: vi.fn() },
+          places: createHostPlaces(),
         },
         backup: {
           readBackupKey: async () => undefined,

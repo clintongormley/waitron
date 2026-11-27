@@ -1505,8 +1505,7 @@ async function bootServer(
         releaseDrives:
           seams.releaseDrives ??
           (() => releaseDrives({ host: localHostRequests, places: hostPlaces, log })),
-        hostRequests: localHostRequests,
-        hostPlaces,
+        driveHost: { requests: localHostRequests, places: hostPlaces },
         drivesRoot: seams.drivesRoot,
         stageRecovery: recoveryPreparation.stage,
         discardStagedRecovery: recoveryPreparation.discard,
@@ -4462,6 +4461,7 @@ async function bootServer(
         uploadLimit: MAX_RESTORE_UPLOAD_BYTES,
         restart,
       },
+      drives: { requests: localHostRequests, places: hostPlaces, root: seams.drivesRoot },
     },
     log,
   );
