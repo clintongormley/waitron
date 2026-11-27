@@ -251,16 +251,23 @@ it("offers Keep waiting while an upload is stalled", async () => {
   expect(resolveBoxShutdown).toHaveBeenCalledExactlyOnceWith("keep-waiting");
 });
 
-it("names the master key before pausing work for backups at saved destinations", async () => {
-  const { el } = await mount(stubApi({}, health({ shutdown: { phase: "idle", available: true } })));
-  el.canCheckClock = true;
-  await el.updateComplete;
-  await userEvent.click(q(el, '[data-test="box-shutdown"]')!);
-  const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
-  expect(text(confirm.closest("wt-dialog"))).toContain(
-    "You need the backup and the master key to restore.",
-  );
-});
+it.each([
+  ["en", "You need the backup and the master key to restore."],
+  ["es", "Necesitas la copia de seguridad y la clave maestra para restaurarla."],
+] as const)(
+  "names the master key before pausing work for backups at saved destinations (%s)",
+  async (locale, line) => {
+    setLocale(locale);
+    const { el } = await mount(
+      stubApi({}, health({ shutdown: { phase: "idle", available: true } })),
+    );
+    el.canCheckClock = true;
+    await el.updateComplete;
+    await userEvent.click(q(el, '[data-test="box-shutdown"]')!);
+    const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
+    expect(text(confirm.closest("wt-dialog"))).toContain(line);
+  },
+);
 
 it("names the master key before pausing work for a downloadable backup", async () => {
   const { el } = await mount(
