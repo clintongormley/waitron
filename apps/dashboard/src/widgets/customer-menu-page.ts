@@ -10,6 +10,7 @@ import {
   type PublicGuestMenu,
 } from "@waitron/shared";
 import { applyTokens, baseStyles, NUTRITION_ICONS, registerIcons } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
@@ -79,11 +80,18 @@ function declarations({ allergens, dietary }: GuestDeclarations, { language, tex
   </span>`;
 }
 
-function writtenDeclarations({ allergens, dietary }: GuestDeclarations, words: Words) {
-  const labels = [
-    ...allergenLabels(allergens, words).map(({ label }) => label),
-    ...dietary.map((diet) => words.text[diet]!),
+function declarationLabels({ allergens, dietary }: GuestDeclarations, words: Words) {
+  return [
+    ...allergenLabels(allergens, words).map(({ code, label }) => ({
+      icon: `allergen-${code}`,
+      label,
+    })),
+    ...dietary.map((diet) => ({ icon: `diet-${diet}`, label: words.text[diet]! })),
   ];
+}
+
+function writtenDeclarations(value: GuestDeclarations, words: Words) {
+  const labels = declarationLabels(value, words).map(({ label }) => label);
   return labels.length
     ? html`<span class="description" lang=${words.language}>${labels.join(", ")}</span>`
     : nothing;
@@ -101,6 +109,22 @@ function unitRate(unit: string) {
   return unit === "" ? "" : `/${unit}`;
 }
 
+function dishPrice(
+  { price: { min, max }, unit }: Extract<MenuEntry, { kind: "product" }>,
+  language: string,
+) {
+  const minimum = formatMoney(min, language);
+  return `${min === max ? minimum : `${minimum}–${formatMoney(max, language)}`}${unitRate(unit)}`;
+}
+
+function choiceRow(name: string, price: string, value: GuestDeclarations, words: Words) {
+  return html`<li>
+    <span>${name}</span>
+    ${price ? html`<span class="choice-price">${price}</span>` : nothing}
+    ${writtenDeclarations(value, words)}
+  </li>`;
+}
+
 function detailContent(member: MenuEntry, words: Words, language: string) {
   const money = (value: string) => formatMoney(value, language);
   if (member.kind === "set_menu") {
@@ -112,14 +136,14 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
           html`<h3>${courseLabel(line, language)}</h3>
             ${
               line.choices.length
-                ? html`<ul class="choices">
-                    ${line.choices.map(
-                      (choice) =>
-                        html`<li>
-                          <span>${choice.name}</span>
-                          ${choice.price === "0.00" ? nothing : html`<strong>+${money(choice.price)}</strong>`}
-                          ${writtenDeclarations(choice, words)}
-                        </li>`,
+                ? html`<ul class="choices" role="list">
+                    ${line.choices.map((choice) =>
+                      choiceRow(
+                        choice.name,
+                        choice.price === "0.00" ? "" : `+ ${money(choice.price)}`,
+                        choice,
+                        words,
+                      ),
                     )}
                   </ul>`
                 : nothing
@@ -133,43 +157,44 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
         ? ` · ${quantity.format(Number(value.portion))} ${value.unit}`
         : "";
     const rate = value.portion === undefined ? unitRate(value.unit) : "";
-    return html`<li>
-      ${value.name}${size} ${money(value.price)}${rate} ${writtenDeclarations(value, words)}
-    </li>`;
+    return choiceRow(`${value.name}${size}`, `${money(value.price)}${rate}`, value, words);
   };
+  const labels = declarationLabels(member, words);
   return html`
-    ${
-      member.image && MEDIA_FILENAME.test(member.image)
-        ? html`<img src=${liveMediaImage(member.image, "display")} alt="" />`
-        : nothing
-    }
+    <p class="set-price"><strong>${dishPrice(member, language)}</strong></p>
     ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
     ${
       member.variants.length
-        ? nothing
-        : html`<p class="price">${money(member.price.min)}${unitRate(member.unit)}</p>`
-    }
-    ${writtenDeclarations(member, words)}
-    ${
-      member.variants.length
         ? html`<h3 lang=${words.language}>${words.text.variants}</h3>
-            <ul class="choices">
+            <ul class="choices" role="list">
               ${member.variants.map(choice)}
             </ul>`
         : nothing
     }
     ${member.modifiers.map((group) => {
-      const items =
-        group.kind === "options"
-          ? group.labels.map((label) => html`<li>${label}</li>`)
-          : group.items.map(choice);
-      return items.length
+      if (group.kind === "options") {
+        return group.labels.length
+          ? html`<h3>${group.name}</h3>
+              <p class="description">${group.labels.join(" · ")}</p>`
+          : nothing;
+      }
+      return group.items.length
         ? html`<h3>${group.name}</h3>
-            <ul class="choices">
-              ${items}
+            <ul class="choices" role="list">
+              ${group.items.map(choice)}
             </ul>`
         : nothing;
     })}
+    ${
+      labels.length
+        ? html`<div lang=${words.language}>
+            <h3>${words.text.allergens}</h3>
+            <div class="declarations">
+              ${labels.map(({ icon, label }) => html`<span><wt-icon name=${icon} aria-hidden="true"></wt-icon>${label}</span>`)}
+            </div>
+          </div>`
+        : nothing
+    }
   `;
 }
 
@@ -196,11 +221,12 @@ export class CustomerMenuPage extends LitElement {
         container-type: inline-size;
       }
       article {
+        --menu-padding: var(--wt-space-4);
         background: var(--wt-color-bg);
         color: var(--wt-color-text);
         font-family: var(--wt-font-family);
         font-size: var(--wt-font-size-md);
-        padding: var(--wt-space-4);
+        padding: var(--menu-padding);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-lg);
         overflow-wrap: anywhere;
@@ -306,8 +332,7 @@ export class CustomerMenuPage extends LitElement {
         font-size: var(--wt-font-size-lg);
         font-weight: var(--wt-font-weight-bold);
       }
-      .entry-name,
-      .back {
+      .entry-name {
         background: transparent;
         border: 0;
         padding: 0;
@@ -317,18 +342,16 @@ export class CustomerMenuPage extends LitElement {
         cursor: pointer;
       }
       .entry-name:hover,
-      .entry-name:focus-visible,
-      .back {
+      .entry-name:focus-visible {
         text-decoration: underline;
       }
-      .entry-name:focus-visible,
-      .back:focus-visible {
+      .entry-name:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
       .back {
-        font-size: inherit;
-        margin-block-end: var(--wt-space-4);
+        --wt-action-text: var(--wt-color-primary-text);
+        --wt-action-radius: var(--wt-radius-full);
       }
       img {
         display: block;
@@ -337,13 +360,35 @@ export class CustomerMenuPage extends LitElement {
         object-fit: cover;
         border-radius: var(--wt-radius-md);
       }
-      .detail img {
-        inline-size: min(100%, 480px);
+      .detail-lead {
+        margin-block-end: var(--wt-space-4);
+      }
+      .detail-lead:has(img) {
+        position: relative;
+        margin-block-start: calc(-1 * var(--menu-padding));
+        margin-inline: calc(-1 * var(--menu-padding));
+      }
+      .detail-lead:has(img) .back {
+        position: absolute;
+        inset-block-start: var(--menu-padding);
+        inset-inline-start: var(--menu-padding);
+      }
+      .detail-lead img {
+        inline-size: 100%;
+        max-block-size: 320px;
         aspect-ratio: 4 / 3;
-        margin-block-end: var(--wt-space-3);
+        border-radius: calc(var(--wt-radius-lg) - 1px) calc(var(--wt-radius-lg) - 1px) 0 0;
+      }
+      .detail h2 {
+        font-size: calc(1.4 * var(--wt-font-size-xl));
+        margin-block-end: var(--wt-space-1);
+      }
+      .detail .set-price {
+        margin: 0;
       }
       .detail h3 {
         margin: var(--wt-space-4) 0 var(--wt-space-2);
+        color: var(--wt-color-primary-text);
       }
       .description,
       .declarations {
@@ -363,10 +408,21 @@ export class CustomerMenuPage extends LitElement {
         gap: var(--wt-space-1);
       }
       .choices {
-        padding-inline-start: var(--wt-space-4);
+        padding: 0;
+        list-style: none;
       }
-      .choices li + li {
-        margin-block-start: var(--wt-space-1);
+      .choices li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: var(--wt-space-3);
+        padding-block: var(--wt-space-2);
+        border-block-end: 1px solid var(--wt-color-border);
+      }
+      .choices .description {
+        grid-column: 1;
+      }
+      .choice-price {
+        text-align: end;
       }
       footer {
         border-block-start: 1px solid var(--wt-color-border);
@@ -381,7 +437,7 @@ export class CustomerMenuPage extends LitElement {
       }
       @container (min-width: 640px) {
         article {
-          padding: var(--wt-space-6);
+          --menu-padding: var(--wt-space-6);
         }
         header {
           grid-template-columns: minmax(0, 1fr) minmax(0, 24ch);
@@ -504,7 +560,7 @@ export class CustomerMenuPage extends LitElement {
     const heading = this.renderRoot.querySelector<HTMLElement>(".detail h2")!;
     if (scroller) {
       const edge = this.#source instanceof Document ? 0 : scroller.getBoundingClientRect().top;
-      scroller.scrollTop += heading.getBoundingClientRect().top - edge;
+      scroller.scrollTop += heading.parentElement!.getBoundingClientRect().top - edge;
       scroller.scrollLeft = 0;
     }
     heading.focus({ preventScroll: true });
@@ -590,7 +646,6 @@ export class CustomerMenuPage extends LitElement {
                 <strong class="set-price">${money(member.price)}</strong>
               </div>`;
             case "product": {
-              const { min, max } = member.price;
               const image = member.image && MEDIA_FILENAME.test(member.image) ? member.image : null;
               const eager = firstPhoto && image !== null;
               if (image !== null) firstPhoto = false;
@@ -598,9 +653,7 @@ export class CustomerMenuPage extends LitElement {
                 <div>
                   ${this.#entryName(member)} ${declarations(member, words)}
                   ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
-                  <p class="price">
-                    ${min === max ? money(min) : `${money(min)}–${money(max)}`}${unitRate(member.unit)}
-                  </p>
+                  <p class="price">${dishPrice(member, menu.language)}</p>
                 </div>
                 ${
                   image === null
@@ -617,19 +670,25 @@ export class CustomerMenuPage extends LitElement {
           }
         })}
       </div>`;
+    const photo = detail?.member.kind === "product" ? detail.member.image : null;
+    const detailImage = photo && MEDIA_FILENAME.test(photo) ? photo : null;
     return html`<article lang=${menu.language} data-theme=${this.theme}>
       ${
         detail
           ? html`<div class="detail" data-detail>
+              <div class="detail-lead">
+                ${detailImage ? html`<img src=${liveMediaImage(detailImage, "display")} alt="" />` : nothing}
+                <wt-button
+                  class="back"
+                  variant=${detailImage ? "secondary" : "ghost"}
+                  icon="chevron-left"
+                  lang=${words.language}
+                  aria-label=${words.text.backToMenu!}
+                  @click=${() => void this.#closeDetail(detail)}
+                  >${words.text.menu}</wt-button
+                >
+              </div>
               <h2 tabindex="-1">${detail.member.name}</h2>
-              <button
-                type="button"
-                class="back"
-                lang=${words.language}
-                @click=${() => void this.#closeDetail(detail)}
-              >
-                ${words.text.backToMenu}
-              </button>
               ${detailContent(detail.member, words, menu.language)}
             </div>`
           : nothing

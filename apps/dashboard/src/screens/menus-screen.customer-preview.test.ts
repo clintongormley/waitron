@@ -337,7 +337,7 @@ describe("the customer menu Online preview", () => {
         const heading = page.getByRole("heading", { name: "Roast pepper", exact: true });
         await expect.element(heading).toBeVisible();
         expect(customer.shadowRoot!.activeElement).toBe(heading.element());
-        expect(heading.element().parentElement?.querySelector("p")?.textContent).toBe(
+        expect(heading.element().parentElement?.querySelector("p.description")?.textContent).toBe(
           "Dish number 21",
         );
         expect(searchInput).not.toBeVisible();
@@ -665,13 +665,27 @@ describe("the customer menu Online preview", () => {
       expect(detailText()).toContain("Wood-fired with olive oil");
       expect(detailText()).toContain("Large €8.50 Cereals containing gluten (Wheat), Vegan");
       expect(detailText()).toContain("Almond dressing · 0.2 kg €1.00 Nuts (Almonds), Vegetarian");
-      expect([...dish.querySelectorAll("li")].map((item) => item.textContent?.trim())).toEqual(
-        expect.arrayContaining(["Wood-fired", "Roasted"]),
-      );
-      expect(detailText()).toContain("Fish");
-      expect(dish.querySelector("img")).toBeVisible();
+      const cooking = page.getByRole("heading", { name: "Cooking", exact: true }).element();
+      expect.soft(cooking.nextElementSibling?.textContent?.trim()).toBe("Wood-fired · Roasted");
+      expect
+        .soft(getComputedStyle(cooking).color)
+        .toBe(getComputedStyle(dish.querySelector("h2")!).color);
+      const allergens = page.getByRole("heading", { name: "Allergens", exact: true });
+      await expect.element(allergens, { timeout: 1000 }).toBeVisible();
+      expect(allergens.element().nextElementSibling?.textContent?.trim()).toBe("Fish");
+      const photo = dish.querySelector("img")!;
+      const name = dish.querySelector("h2")!.getBoundingClientRect();
+      const image = photo.getBoundingClientRect();
+      const back = page.getByRole("button", { name: "Back to menu" });
+      const pill = back.element().getBoundingClientRect();
+      expect(photo).toBeVisible();
+      expect.soft(image.bottom).toBeLessThanOrEqual(name.top);
+      expect.soft(image.width).toBeCloseTo(canvas.clientWidth, 0);
+      expect.soft(pill.top).toBeGreaterThan(image.top);
+      expect.soft(pill.bottom).toBeLessThan(image.bottom);
+      expect.soft(dish.querySelector("strong")?.textContent).toBe("€6.50–€8.50");
       await expectNoA11yViolations(host);
-      await page.getByRole("button", { name: "Back to menu" }).click();
+      await back.click();
       await page.getByRole("button", { name: "Two courses", exact: true }).click();
       await expect.element(page.getByText("€18.50 per person", { exact: true })).toBeVisible();
       await expect
@@ -684,10 +698,14 @@ describe("the customer menu Online preview", () => {
       const included = page.getByText("Side salad", { exact: true });
       await expect.element(included).toBeVisible();
       expect(included.element().closest("li")!.textContent?.trim()).toBe("Side salad");
-      const surcharge = page.getByText("+€2.50", { exact: true });
+      const surcharge = page.getByText("+ €2.50", { exact: true });
       await expect.element(surcharge).toBeVisible();
-      expect(surcharge.element().closest("li")!.textContent?.replace(/\s+/g, " ").trim()).toBe(
-        "Noodles (Large) +€2.50 Eggs",
+      const row = surcharge.element().closest("li")!;
+      expect(row.textContent?.replace(/\s+/g, " ").trim()).toBe("Noodles (Large) + €2.50 Eggs");
+      expect(getComputedStyle(row).borderBottomWidth).toBe("1px");
+      expect(surcharge.element().getBoundingClientRect().right).toBeCloseTo(
+        row.getBoundingClientRect().right,
+        0,
       );
       const dessert = page.getByRole("heading", { name: "Dessert", exact: true });
       await expect.element(dessert).toBeVisible();

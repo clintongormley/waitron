@@ -46,6 +46,8 @@ keyLanguage|Key in English|Leyenda en español|Llegenda en català|Lenda en gale
 key|Allergen key|Leyenda de alérgenos|Llegenda d’al·lèrgens|Lenda de alérxenos
 diet|Dietary declarations|Declaraciones dietéticas|Declaracions dietètiques|Declaracións dietéticas
 backToMenu|Back to menu|Volver a la carta|Torna a la carta|Volver á carta
+menu|Menu|Carta|Carta|Carta
+allergens|Allergens|Alérgenos|Al·lèrgens|Alérxenos
 variants|Variants|Variantes|Variants|Variantes
 perPerson|{price} per person|{price} por persona|{price} per persona|{price} por persoa
 `
