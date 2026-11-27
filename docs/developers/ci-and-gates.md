@@ -423,8 +423,8 @@ A full server is reported before diagnostic reads; every old unassigned planning
 seen there gets only `server full`, including marked runs and retries. Failed diagnostic
 reads on these skipped paths are reported without enabling recovery or failing the pass.
 Excluded-run diagnostic reads follow the eligible rescue loop, using the same run inventory.
-If a check after cancellation refuses a retry, its skip line includes `post-cancel verification`
-and the reason, alongside the original run, attempt and planner job IDs.
+If a check after cancellation refuses a retry that still needs intervention, its skip line gives
+the `post-cancel verification` reason alongside the original run, attempt and planner job IDs.
 
 An absent line does not establish that a job could be recovered. Only owned PR runs in
 the queued/running CI inventory and queued unassigned self-hosted `changes` jobs are

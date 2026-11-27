@@ -506,16 +506,13 @@ export async function recoverServer(options) {
       continue;
     }
     const path = `/repos/${repository}/actions/runs/${run.id}`;
+    let retryRefusal;
     const eligible = async (cancelled = false) => {
       const current = await request(path);
       const skip = (reason) => {
-        if (plannersOnly)
-          plannerSkip(
-            options,
-            run,
-            run.plannerJobs,
-            cancelled ? `post-cancel verification: ${reason}` : reason,
-          );
+        if (!plannersOnly) return;
+        if (cancelled) retryRefusal = reason;
+        else plannerSkip(options, run, run.plannerJobs, reason);
       };
       if (
         current.id !== run.id ||
@@ -640,6 +637,7 @@ export async function recoverServer(options) {
               options.report?.(`Cancelled PR run ${run.id} is obsolete; not retried.`);
               continue;
             }
+            plannerSkip(options, run, run.plannerJobs, `post-cancel verification: ${retryRefusal}`);
             throw new Error(
               "Current-head PR identity or work could not be verified after cancellation",
             );
