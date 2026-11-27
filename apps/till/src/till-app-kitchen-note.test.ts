@@ -1445,10 +1445,11 @@ it("opens the Waiting note from its real row action and returns focus after Canc
     listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
     getKitchenNote: vi.fn().mockResolvedValue(waitingSnapshot),
   });
-  emit(el.shadowRoot!.querySelector("till-shell")!, "show-counter-orders", { kind: "waiting" });
-  await flush(el);
-  const grid = counter(el);
-  const waiting = grid.shadowRoot!.querySelector("till-counter-waiting")!;
+  const floor = counter(el).shadowRoot!.querySelector("till-counter-floor")!;
+  const waiting = [...floor.shadowRoot!.querySelectorAll("till-counter-waiting")].find((list) =>
+    list.orders.some((order) => order.id === waitingOrder.id),
+  )!;
+  await userEvent.click(waiting.shadowRoot!.querySelector("button.summary")!);
   const button = waiting.shadowRoot!.querySelector<HTMLElement>("[data-waiting-kitchen-note]");
   expect(button).not.toBeNull();
   await userEvent.click(page.elementLocator(button!));

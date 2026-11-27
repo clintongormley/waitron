@@ -3448,7 +3448,6 @@ export class TillApp extends LitElement {
   @state() private operatorPersonId = "";
   @state() private staff: StaffMember[] = [];
   @state() private showCounterFloor = false;
-  @state() private counterOrderList: "parked" | "waiting" | null = null;
   @state() private heldOrders: HeldOrderSummary[] = [];
   @state() private counterWaiting: CounterWaitingOrder[] = [];
   @state() private findingBill = false;
@@ -4297,7 +4296,7 @@ export class TillApp extends LitElement {
   readonly #onHistory = (): void => {
     if (this.#writingUrl || !this.#inShell()) return;
     const key = this.#requestedTab();
-    if (key !== undefined) this.#onTabSelect(key, true);
+    if (key !== undefined) this.#onTabSelect(key, true, true, key === "counter");
   };
 
   override firstUpdated(): void {
@@ -6144,8 +6143,6 @@ export class TillApp extends LitElement {
       this.#counterDefaultMenuId,
     );
     if (retainedZone === undefined) this.#selectMenu(menuId);
-    this.showCounterFloor = false;
-    this.counterOrderList = null;
     this.#selectFilters(EMPTY_MENU_FILTERS);
     this.operatorName = displayName;
     this.#loginPending = false;
@@ -6185,6 +6182,8 @@ export class TillApp extends LitElement {
       true,
       true,
     );
+    this.showCounterFloor =
+      this.activeTabKey === "counter" && !offerLoadFailed && this.#canOpenCounterFloor();
     this.#setScreen(landsOnFloor ? "floor" : "counter");
     if (switched) this.#writeUrl({ "till-view": null, "till-station": null }, true);
     else this.#restoreDestination();
@@ -6529,11 +6528,7 @@ export class TillApp extends LitElement {
       // The zone the counter is already on changes no service area, so it acts as the Counter tab.
       if (zoneId === this.counterServiceZoneId) {
         if (this.errorKey === "service_zone.basket_active") this.errorKey = undefined;
-        if (
-          this.activeTabKey !== "counter" ||
-          this.drill !== undefined ||
-          this.counterOrderList !== null
-        )
+        if (this.activeTabKey !== "counter" || this.drill !== undefined)
           this.#onTabSelect("counter");
         return;
       }
@@ -12734,8 +12729,7 @@ export class TillApp extends LitElement {
     const tab = this.#resolveScreen(key);
     if (tab === undefined) return;
     key = tab;
-    this.showCounterFloor = counterFloor && !this.#counterHasItems && !this.#counterOrderInFlight();
-    this.counterOrderList = null;
+    this.showCounterFloor = key === "counter" && counterFloor && this.#canOpenCounterFloor();
     this.#dismissStationChoices();
     const wasShowingOrder = this.#tableMenuActive();
     const wasLoadingOrder = this.tableOpening && this.#orderScreenShown();
@@ -13570,12 +13564,7 @@ export class TillApp extends LitElement {
    * open overlay first. Slice 11, D6–D7: either shows the bill {@link barBillToOpen} names, if any. */
   #onOpenBarTable({ tableId, held }: { tableId: string; held: boolean }): void {
     if (held) {
-      if (
-        this.#activeTab() === this.#tableOrderTabKey() &&
-        this.drill === undefined &&
-        this.counterOrderList === null
-      )
-        return;
+      if (this.#activeTab() === this.#tableOrderTabKey() && this.drill === undefined) return;
       this.#requestLeave(() => {
         this.#onTabSelect("order");
         return this.#showHeldBarBill(tableId);
@@ -23863,8 +23852,19 @@ export class TillApp extends LitElement {
     return this.stage === "order" ? this.counterLines : null;
   }
 
+  #canOpenCounterFloor(): boolean {
+    return this.formFactor === "till" && this.counterServiceZoneId !== "";
+  }
+
+  readonly #refreshCounterFloorOrders = (): void => {
+    void this.#refreshList("held", "refresh.held", TABLE_REQUEST_LIMIT_MS);
+    void this.#refreshList("waiting", "refresh.waiting", TABLE_REQUEST_LIMIT_MS);
+    if (this.#deviceNavigation()?.floorZoneIds.length) void this.#pollFloor();
+  };
+
   #tabBody(tab: BuiltInScreen): TemplateResult | typeof nothing {
     if (tab === "counter") {
+      const navigation = this.#deviceNavigation();
       const bill = this.#currentCounterSetMenuBill;
       const copies = this.#counterOffers.ordering(bill);
       return html`<till-counter-screen
@@ -23895,12 +23895,14 @@ export class TillApp extends LitElement {
         .selectedServiceZoneId=${this.counterServiceZoneId}
         .diningChoice=${this.counterDiningChoice?.orderId === this.#store.id ? this.counterDiningChoice.choice : null}
         .selectedFilters=${this.selectedFilters}
-        .orderList=${this.counterOrderList}
         .heldOrders=${this.heldOrders}
         .counterWaiting=${this.counterWaiting}
         .counterFloor=${this.showCounterFloor}
         .live=${this.#live}
-        .refreshWaiting=${() => void this.#refreshList("waiting", "refresh.waiting", TABLE_REQUEST_LIMIT_MS)}
+        .refreshFloorOrders=${this.#refreshCounterFloorOrders}
+        .counterZoneIds=${navigation?.counterZoneIds ?? []}
+        .floorZoneIds=${navigation?.floorZoneIds ?? []}
+        .tablesAnswered=${this.tablesAnswered}
         .tables=${this.tables}
         .zones=${this.zones}
         .invoiceLocale=${this.invoiceLocale}
@@ -25308,27 +25310,9 @@ export class TillApp extends LitElement {
                           .selectedCounterZoneId=${this.counterServiceZoneId}
                           .showCounter=${this.formFactor !== "till" || (this.#deviceNavigation()?.counterZoneIds.length ?? 0) > 0}
                           .showFloor=${this.formFactor !== "till" || (this.#deviceNavigation()?.floorZoneIds.length ?? 0) > 0}
-                          .parkedCount=${this.heldOrders.filter((order) => order.id !== this.#store.id).length}
-                          .waitingCount=${this.counterWaiting.length}
-                          .activeOrderList=${this.counterOrderList}
                           .testingKitchen=${this.#testingKitchen()}
                           .floorKitchenRows=${floorKitchenRows(this.profileKitchenScreen, this.#affordanceList)}
                           .floorKitchenOpen=${this.drill?.fromFloorChooser ?? false}
-                          @show-counter-orders=${(
-                            event: CustomEvent<{ kind: "parked" | "waiting" }>,
-                          ) => {
-                            const kind = event.detail.kind;
-                            if (
-                              (kind !== "parked" && kind !== "waiting") ||
-                              this.formFactor !== "till" ||
-                              !this.#deviceNavigation()?.counterZoneIds.length
-                            )
-                              return;
-                            this.#requestLeave(() => {
-                              this.#onTabSelect("counter");
-                              this.counterOrderList = kind;
-                            });
-                          }}
                           .operatorName=${this.operatorName}
                           .legalName=${this.issuer?.venueName ?? ""}
                           .clockAvailable=${this.#clocking !== undefined && !this.#clockAccessLost}
@@ -25362,7 +25346,6 @@ export class TillApp extends LitElement {
                             if (
                               e.detail.screen === this.activeTabKey &&
                               this.drill === undefined &&
-                              this.counterOrderList === null &&
                               (!e.detail.counterFloor || this.showCounterFloor)
                             )
                               return;

@@ -715,8 +715,12 @@ function emit(source: Element, type: string, detail?: unknown): void {
 }
 
 async function showCounterList(el: TillApp, kind: "parked" | "waiting") {
-  emit(shell(el)!, "show-counter-orders", { kind });
+  emit(shell(el)!, "screen-select", { screen: "counter" });
   await flush(el);
+  const grid = counter(el)!;
+  grid.counterFloor = false;
+  grid.orderList = kind;
+  await grid.updateComplete;
 }
 
 async function openMore(el: TillApp) {

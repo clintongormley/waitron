@@ -6322,14 +6322,9 @@ D5–D6.) A theme pick applies at once and never asks about unsaved work, unlike
 the till. The dashboard banner's lockup (`wt-waitron-lockup`) follows the choice through the theme's
 tokens.
 
-A till keeps Counter, Floor, Parked, Waiting, Transfers and Pass on a permanent, horizontally
-scrollable strip, subject to the device and person's permissions. Parked, Waiting and Transfers
-carry their counts. Waiting draws attention while nonempty and stops when empty; reduced motion
-removes the animation. The Help switch, the operator and More remain reachable while the strip scrolls. Selecting
-Parked or Waiting changes the Counter menu-side view while keeping its basket. Returning to
-Counter restores the menu. An order already in the basket is excluded from the Parked view and count.
-Strip controls draw their keyboard focus ring inside their edges so scrolling does not clip it;
-Waiting leaves its attention border visible outside that ring.
+A till keeps Counter, Floor, Transfers and Pass on a horizontally scrollable strip, subject to
+the device and person's permissions. Transfers shows its pending count. Help, the operator and More
+stay reachable while the strip scrolls. Strip controls draw keyboard outlines inside their edges.
 While a venue logo is in use and has loaded, it is drawn first in the bar (`wt-venue-logo`,
 `size="bar"`, alt the legal name, no fallback) while every strip control fits beside it; otherwise
 the box stays in the page, out of the row and hidden, so it keeps its image and its retry. Nothing
@@ -6450,8 +6445,7 @@ Zones on this device lets a till or a handheld show a subset of the profile's pe
 choose the starting zone. On the narrow floor, tap the zone and choose **Choose zones for this
 phone…**. Elsewhere, open ☰ and find **Zones on this device** in Settings. These choices stay with the device and profile across operators and
 restarts. A display choice grants no permission. On a narrow till, the floor's zone chooser lists
-the selected counter zones by name beneath the table zones. A counter row opens Counter. The
-Parked and Waiting shortcuts stay above the floor. The till header outside the narrow floor gives
+the selected counter zones by name beneath the table zones. A counter row opens Counter. The till header outside the narrow floor gives
 Counter one tab for one counter zone or a checked list for several. At phone width, Counter and
 Floor share a row above the scrolling shortcuts. The shortcut row fades at an edge
 with more buttons to scroll to. Long labels on the Counter list’s button end in an ellipsis.
@@ -7071,14 +7065,14 @@ Discard opens a held order when its sent dishes still need cancellation. A kept 
 
 
 Keep the order visually separate from the menu, using the surface and border tokens. The basket
-scrolls inside its card; total and payment controls take the space they need below it. Parked
-orders and Waiting each replace the menu-side content when selected, rather than following the
-product grid. Tapping an order expands its recorded staff names, quantities, extras and note;
-a second tap collapses it. Its action buttons act independently of expansion.
+scrolls inside its card. Total and payment controls take the space they need below it.
 
-Choosing a counter opens its floor. Show orders ready to hand over above a full-width New order,
-then the counter’s other sent orders. A sent row expands to show its dishes and actions. Back to
-Counter returns from the basket to the chosen counter, through the draft prompt when needed.
+Choosing a counter, or signing in with a counter as the starting zone, opens its floor. Show orders
+ready to hand over above a full-width New order, then the counter’s open orders. A parked row
+retrieves the order on one tap and has a separate actions menu. Sent orders and seated bills expand
+to show their dishes and actions. Other orders lists work outside the counters and tables this till
+shows. Hide the section when it is empty. Back to Counter returns from the basket to the chosen
+counter through the draft prompt when needed.
 
 Counter and table Order share a last-added strip in the layout flow after the menu. It must leave
 the final product row uncovered. Adding a dish while the order is in view, including merging into an

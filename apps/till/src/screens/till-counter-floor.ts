@@ -2,10 +2,13 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, TickingClock } from "@waitron/ui";
 import type { TillLiveConnection } from "../api/live-connection.js";
-import type { CounterWaitingOrder } from "../api/orders-api.js";
+import type { FloorZone, TableState } from "../api/floor-api.js";
+import type { CounterWaitingOrder, HeldOrderSummary } from "../api/orders-api.js";
 import { t } from "../i18n/t.js";
+import { listedTables } from "../state/floor-map.js";
 import { liveGate } from "../state/live-gate.js";
 import "../widgets/counter-waiting.js";
+import "../widgets/held-orders.js";
 
 function readyToHandOver({ status, canHandOver, counts }: CounterWaitingOrder): boolean {
   return (
@@ -52,7 +55,13 @@ export class TillCounterFloor extends LitElement {
   @property({ attribute: false }) live?: TillLiveConnection;
   @property({ attribute: false }) refresh?: () => void;
   @property({ type: String }) zoneId = "";
+  @property({ attribute: false }) counterZoneIds: readonly string[] = [];
+  @property({ attribute: false }) floorZoneIds: readonly string[] = [];
   @property({ attribute: false }) waiting: CounterWaitingOrder[] = [];
+  @property({ attribute: false }) parked: HeldOrderSummary[] = [];
+  @property({ attribute: false }) tables: TableState[] = [];
+  @property({ type: Boolean }) tablesAnswered = false;
+  @property({ attribute: false }) zones: FloorZone[] = [];
   @property({ type: Boolean }) canEditKitchenNote = false;
   @property({ type: Boolean }) canMoveStation = false;
 
@@ -84,6 +93,8 @@ export class TillCounterFloor extends LitElement {
         "order_drafts",
         "order_draft_lines",
         "bill_payments",
+        "party_tables",
+        "dining_tables",
       ],
       intervalMs: 15_000,
       quietWhileConnected: true,
@@ -103,10 +114,37 @@ export class TillCounterFloor extends LitElement {
     ></till-counter-waiting>`;
   }
 
+  #parkedRows(orders: HeldOrderSummary[]) {
+    return orders.length === 0
+      ? nothing
+      : html`<till-held-orders
+          floor
+          .orders=${orders}
+          .tables=${this.tables}
+          .zones=${this.zones}
+        ></till-held-orders>`;
+  }
+
   override render() {
     const current = this.waiting.filter(({ zoneId }) => zoneId === this.zoneId);
     const ready = current.filter(readyToHandOver);
     const open = current.filter((order) => !readyToHandOver(order));
+    const parked = this.parked.filter(({ zoneId }) => zoneId === this.zoneId);
+    const mappedParties = new Set(
+      listedTables(this.tables).flatMap(({ zoneId, party }) =>
+        zoneId !== null && this.floorZoneIds.includes(zoneId) && party !== null ? [party.id] : [],
+      ),
+    );
+    const shownCounter = (zoneId: string | null) =>
+      zoneId !== null && this.counterZoneIds.includes(zoneId);
+    const otherWaiting = this.waiting.filter(({ zoneId }) => !shownCounter(zoneId));
+    const otherParked = this.parked.filter(
+      ({ zoneId, partyId }) =>
+        !shownCounter(zoneId) &&
+        (partyId === null || !mappedParties.has(partyId)) &&
+        (this.tablesAnswered || zoneId === null || !this.floorZoneIds.includes(zoneId)),
+    );
+    const openCount = open.length + parked.length;
     return html`
       ${
         ready.length === 0
@@ -123,10 +161,18 @@ export class TillCounterFloor extends LitElement {
         >
       </div>
       ${
-        open.length === 0
+        openCount === 0
           ? nothing
-          : html`<h2>${t("counter.floor_open")} · ${open.length}</h2>
-              ${this.#rows(open)}`
+          : html`<h2>${t("counter.floor_open")} · ${openCount}</h2>
+              ${this.#rows(open)}${this.#parkedRows(parked)}`
+      }
+      ${
+        otherWaiting.length + otherParked.length === 0
+          ? nothing
+          : html`<section data-other-orders>
+              <h2>${t("counter.floor_other")}</h2>
+              ${this.#rows(otherWaiting)}${this.#parkedRows(otherParked)}
+            </section>`
       }
     `;
   }

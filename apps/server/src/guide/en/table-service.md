@@ -335,12 +335,12 @@ Cancel its sent dishes before discarding it. If you keep a cancelled dish's char
 
 ## Move a parked order to a table {#move-parked-order}
 
-In **Parked orders**, choose **Move to table** and pick a table. If an unsent order at that table
+On **Counter**, open the actions menu beside a parked order, choose **Move to table** and pick a table. If an unsent order at that table
 blocks the move, choose **Take over draft** for each bill listed. Close the message, then choose
 the table again.
 
 Use up to 40 characters if you name an order when you park it. After moving it, look for the same
-name beside its new table or counter in **Parked orders**.
+name when you reopen it at its new table or counter.
 
 ## Cancel a dish on a paid bill {#cancel-paid-dish}
 
@@ -390,14 +390,13 @@ open its **Refund** window, filled in. When there is only one receipt, it opens 
 When the guests will wait and take their food from the counter, choose **They'll collect it at the
 counter** instead. It is offered when at least one of the dishes has a station ticket. Nothing is
 cancelled or refunded. Dishes held back go to the station now, each bill whose food still to come
-has a station ticket becomes a paid order waiting at the counter, and the table finishes. Open
-**Waiting orders** on the first active counter in the sale's department. Look for **Counter** on
-the pass and in **Waiting orders**. Choose **Handed over** on the order marked **Paid, not handed
+has a station ticket becomes a paid order waiting at the counter, and the table finishes. Open the first active counter in the sale's department. Look for **Counter** on
+the pass and for the order on **Counter**. Choose **Handed over** on the order marked **Paid, not handed
 over** when the guests collect it. From the table till you can still find its receipt in **Find a
 bill**. If the department has no active counter, use **Collect** on the order in **Stations**.
 
 If you move a presented bill to the counter by hand, take payment in the table's zone. After
-payment, check **Waiting orders** at the first active counter in zone order, even if you used a
+payment, check the first active counter in zone order, even if you used a
 till at a different counter.
 
 ## Refund from a receipt {#give-money-back}
@@ -613,8 +612,7 @@ To move a set menu to another bill, open **Move dishes** and select the set menu
 with it.
 
 At the **Counter**, choose **Take away**, then add the dishes from any folder: the bill groups
-them into set menus as it does at a table. To add dishes later, find the bill in **Parked
-orders** and choose **Retrieve**.
+them into set menus as it does at a table. To add dishes later, tap the parked order under **Open orders**.
 
 ## Give a table a short name {#short-names}
 
@@ -636,7 +634,7 @@ Each of them gets a bill of their own at the table. The bill switcher, at the to
 screen, shows the current bill and its amount. If the table has several bills, the number on the
 right shows where the current bill sits in the list. **2 of 3** means you are on the second bill.
 
-At the counter, use **Parked orders** to retrieve or discard a table's bill. Discarding its last
+On **Counter**, open the bill to retrieve or discard it. Discarding its last
 bill leaves a seated table with a fresh empty bill. To free the table, use **Finish table**.
 
 Tap the switcher to list the table's bills in number order. On a narrow screen, the list opens
@@ -982,12 +980,12 @@ floor, tap the current zone at the bottom, then **Choose zones for this phone…
 open **More** (☰), then choose **Zones on this device** under **Settings**. Tick **Show** for each
 zone you want, choose the one that **Opens first**, and tap **Save**.
 
-On a till with the zone button at the bottom, tap it and pick a counter by name to open **Counter**.
-When you pick a counter, tap **Handed over** for an order under **Ready to hand over** or **New order**
-to start a basket. Tap an order under **Open orders** to see its dishes and actions. From the
-basket, tap **Back to Counter**. Tap **Floor** to return to the tables. Use **Parked orders** or
-**Waiting** in the header to reopen an order across counters.
-On a narrow Counter screen, swipe the shortcuts sideways to see more.
+If your till opens on a counter zone, you start on **Counter**. From a narrow table floor,
+tap the zone button and choose the counter by name. Tap **Handed over** beside a ready order, or
+**New order** to start a basket. Under **Open orders**, tap a parked order to retrieve it. Tap a
+sent order or a seated bill to see its dishes and actions. Use **Other orders** when you cannot
+reach the order from a counter or table this till shows. Tap **Back to Counter** from the basket
+or **Floor** to return to the tables.
 A phone or tablet has no Counter, so its Floor shows every zone you chose. Until you save a choice,
 a phone or tablet opens where it always has. After that it opens on your **Opens first** zone.
 After you open a table, see [Get back to your tables with unsent dishes](table-service.md#unsent-tables).
@@ -1031,12 +1029,12 @@ a contribution. For an equal share, enter how many people are still to pay, incl
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
 Choosing every dish pays the whole bill. If the card is declined or you choose **Cancel payment**,
 check this bill for the dishes before trying again. If they are on a separate bill, pay that bill
-from the table's bill switcher or from **Parked orders** at the Counter.
+from the table's bill switcher or from **Other orders** when the table is outside this till's floor.
 While their card is still out, the till that
 took it shows **Being paid on** and the number of their bill; do not charge those dishes again.
 On a printed bill, **Items** cancels the existing receipt and reopens the bill. On a Counter order
 already sent to the kitchen with no receipt yet, **Items** puts the chosen dishes on a bill of their
-own, which **Waiting orders** shows with the order's number in brackets. Once such an order is moved to a table, it is
+own. On **Counter**, its row shows the order's number in brackets. Once such an order is moved to a table, it is
 paid with **An amount**, **Split equally** or **Whole bill**, not by item; when its bill is
 presented for collection, choose **Pay in parts** to see those choices.
 

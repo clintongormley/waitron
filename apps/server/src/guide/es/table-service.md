@@ -353,12 +353,12 @@ cancelado, cobra la cuenta.
 
 ## Pasar un pedido aparcado a una mesa {#move-parked-order}
 
-En **Pedidos aparcados**, elige **Pasar a mesa** y selecciona una mesa. Si un pedido sin enviar de
+En **Mostrador**, abre el menú de acciones junto al pedido aparcado, elige **Pasar a mesa** y selecciona una mesa. Si un pedido sin enviar de
 esa mesa bloquea el traslado, elige **Tomar el pedido** en cada cuenta indicada. Cierra el aviso
 y vuelve a elegir la mesa.
 
 Si das un nombre al pedido al aparcarlo, usa hasta 40 caracteres. Tras moverlo, busca el mismo
-nombre junto a su nueva mesa o el mostrador en **Pedidos aparcados**.
+nombre cuando lo abras en su nueva mesa o mostrador.
 
 ## Cancelar un plato de una cuenta pagada {#cancel-paid-dish}
 
@@ -411,14 +411,14 @@ Si los clientes van a esperar y recoger la comida en el mostrador, elige **Lo re
 mostrador**. Aparece cuando al menos uno de los platos tiene ticket de estación. No se cancela ni se
 devuelve nada. Los platos en espera pasan ahora a la estación, cada cuenta cuyos platos por llegar
 tienen ticket de estación pasa a ser un pedido pagado que espera en el mostrador, y la mesa se
-cierra. Abre **Pedidos pendientes** en el primer mostrador activo del departamento de la venta.
-Busca **Mostrador** en el pase y en **Pedidos pendientes**. Elige **Entregado** en el pedido
+cierra. Abre el primer mostrador activo del departamento de la venta.
+Busca **Mostrador** en el pase y el pedido en **Mostrador**. Elige **Entregado** en el pedido
 marcado **Pagado, sin entregar** cuando lo recojan. Desde la caja de la mesa, puedes encontrar su
 ticket en **Buscar cuenta**. Si el departamento no tiene mostrador activo, elige **Entregar** en
 el pedido en **Estaciones**.
 
 Si mueves manualmente al mostrador una cuenta que ya has presentado, cobra en la zona de la mesa.
-Una vez cobrada, abre **Pedidos pendientes** en el primer mostrador activo según el orden de
+Una vez cobrada, abre el primer mostrador activo según el orden de
 las zonas, aunque hayas usado una caja en otro mostrador.
 
 ## Devolución desde un recibo {#give-money-back}
@@ -650,7 +650,7 @@ mueven con él.
 
 En el **Mostrador**, elige **Para llevar** y añade los platos desde cualquier carpeta: la
 cuenta los agrupa en menús igual que en una mesa. Para añadir platos después, busca la cuenta
-en **Pedidos aparcados** y pulsa **Recuperar**.
+en **Pedidos abiertos** y tócalo para recuperarlo.
 
 ## Dar a una mesa un nombre corto {#short-names}
 
@@ -673,7 +673,7 @@ arriba en la pantalla de la mesa, muestra la cuenta abierta y su importe. Si hay
 a la derecha ves la posición de la cuenta abierta en la lista. **2 de 3** indica que estás en la
 segunda cuenta.
 
-En el mostrador, usa **Pedidos aparcados** para recuperar o descartar la cuenta de una mesa.
+En **Mostrador**, abre la cuenta para recuperarla o descartarla.
 Descartar su última cuenta deja la mesa ocupada con una cuenta nueva y vacía. Para liberar la mesa,
 usa **Cerrar mesa**.
 
@@ -1039,13 +1039,14 @@ pantalla estrecha, toca el nombre de la zona abajo y elige **Elegir zonas para e
 En las demás pantallas, abre **Más** (☰) y elige **Zonas en este dispositivo** en **Ajustes**.
 Marca **Mostrar** en cada zona que quieras, elige la que **Abre primero** y toca **Guardar**.
 
-Si el botón de zona está abajo en la caja, tócalo y elige un mostrador por su nombre para abrir
-**Mostrador**. Al elegir un mostrador, toca **Entregado** junto a un pedido de **Listos para
-entregar**, o **Nuevo pedido** para empezar una cesta. Toca un pedido de **Pedidos abiertos**
-para ver sus platos y acciones. Desde la cesta, toca **Volver al mostrador**. Toca **Sala** para
-volver a las mesas. Usa **Pedidos aparcados** o **En espera** en la barra para volver a abrir
-un pedido de cualquier mostrador. En una pantalla estrecha de Mostrador, desliza los accesos directos
-hacia un lado para ver más. Un móvil o una tableta no tiene Mostrador, así que su Sala muestra
+Si la caja abre en una zona de mostrador, empiezas en **Mostrador**. Desde una sala en una
+pantalla estrecha, toca el botón de zona y elige el mostrador por su nombre. Toca **Entregado**
+junto a un pedido listo o **Nuevo pedido** para empezar una cesta. En **Pedidos abiertos**, toca
+un pedido aparcado para recuperarlo. Toca un pedido enviado o una cuenta de una mesa para ver
+sus platos y acciones. Usa **Otros pedidos** cuando no puedas abrir el pedido desde un mostrador
+o una mesa que muestre esta caja. Toca **Volver al mostrador** desde la cesta o **Sala** para
+volver a las mesas.
+Un móvil o una tableta no tiene Mostrador, así que su Sala muestra
 todas las zonas que has elegido. Hasta que guardas una elección, un móvil o una tableta se abre donde siempre.
 Después se abre en tu zona de **Abre primero**. Tras abrir una mesa, mira
 [Volver a tus mesas con platos sin enviar](table-service.md#unsent-tables).
@@ -1091,11 +1092,11 @@ personas quedan por pagar, incluida esta. Para artículos, elige los platos y aj
 si solo se pagan algunos. Si eliges todos los platos, se cobra toda la cuenta. Si la tarjeta se
 rechaza o pulsas **Cancelar cobro**, comprueba si los platos están en esta cuenta antes de volver a
 cobrar. Si están en otra cuenta, cóbrala desde el selector de cuentas de la mesa o desde
-**Pedidos aparcados** en Mostrador. Mientras su
+**Otros pedidos** si la mesa no está en la sala de esta caja. Mientras su
 tarjeta sigue en curso, la caja que la cobró muestra **Se está cobrando en la**
 y el número de su cuenta; no vuelvas a cobrar esos platos. En una cuenta impresa, **Artículos**
 anula el ticket y reabre la cuenta. En un pedido de mostrador ya enviado a cocina y aún sin
-ticket, **Artículos** pasa los platos elegidos a una cuenta propia, que **Pedidos pendientes**
+ticket, **Artículos** pasa los platos elegidos a una cuenta propia, que **Mostrador**
 muestra con el número del pedido entre paréntesis. Si ese pedido se pasa después a una mesa, se cobra con **Una cantidad**,
 **Dividir a partes iguales** o **Toda la cuenta**, no por artículos; cuando su cuenta está
 presentada para su cobro, elige **Cobrar por partes** para ver esas opciones.

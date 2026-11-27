@@ -76,8 +76,6 @@ const handheld: Partial<TillShell> = {
   formFactor: "phone-portrait",
   activeScreen: "floor",
   operatorName: "Ana",
-  parkedCount: 2,
-  waitingCount: 1,
   loadLocales,
 };
 
@@ -87,8 +85,7 @@ const till: Partial<TillShell> = {
   formFactor: "till",
   activeScreen: "counter",
   operatorName: LONG_NAME,
-  parkedCount: 2,
-  waitingCount: 1,
+  transferAvailable: true,
   loadLocales,
 };
 

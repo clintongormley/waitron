@@ -59,14 +59,15 @@ it("opens the counter's checked zone list and emits one selection under a real c
 
 it("fades the Counter shortcuts only where more buttons can be scrolled into view", async () => {
   const { innerWidth: width, innerHeight: height } = window;
-  await page.viewport(390, 844);
+  await page.viewport(320, 844);
   try {
     const { el } = await mountWidget<TillShell>("till-shell", {
       formFactor: "till",
       activeScreen: "counter",
-      operatorName: "Ana Martinez",
-      parkedCount: 1,
-      waitingCount: 2,
+      operatorName: "Ana Martinez Fernández",
+      transferAvailable: true,
+      transferCount: 24,
+      affordances: ["expo"],
     });
     const strip = el.shadowRoot!.querySelector<HTMLElement>(".counter-shortcuts")!;
     const fadeWidth = (edge: "start" | "end") =>
@@ -599,45 +600,8 @@ it("aligns Counter choices with table zones and opens Shop once from the keyboar
       expect.objectContaining({ detail: { zoneId: "shop", counterFloor: true } }),
     );
     expect(chooser.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
-    expect(el.shadowRoot!.querySelectorAll(".head [data-counter-orders]")).toHaveLength(2);
+    expect(el.shadowRoot!.querySelector(".head [data-counter-orders]")).toBeNull();
     expect(el.shadowRoot!.querySelector(".head [data-counter-zones]")).toBeNull();
-  } finally {
-    await page.viewport(width, height);
-  }
-});
-
-it("keeps both queue labels at full width when a narrow Floor scrolls", async () => {
-  setLocale("es-ES");
-  const { innerWidth: width, innerHeight: height } = window;
-  await page.viewport(390, 844);
-  try {
-    const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
-      activeScreen: "floor",
-      showCounter: true,
-      parkedCount: 123,
-      waitingCount: 456,
-    });
-    el.append(document.createElement("till-floor-screen"));
-    const floorStrip = () => {
-      expect(el.shadowRoot!.querySelector("[data-floor-bar]")).not.toBeNull();
-      const row = el.shadowRoot!.querySelector<HTMLElement>(".head > .till-strip");
-      expect(row).not.toBeNull();
-      return row!;
-    };
-    const widths = (row: HTMLElement) => {
-      const buttons = [...row.querySelectorAll("[data-counter-orders]")];
-      expect(buttons).toHaveLength(2);
-      return buttons.map((button) => button.getBoundingClientRect().width);
-    };
-    const fullWidths = widths(await vi.waitFor(floorStrip));
-
-    await page.viewport(320, 844);
-    await vi.waitFor(() => {
-      const strip = floorStrip();
-      expect(widths(strip)).toEqual(fullWidths);
-      expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
-    });
   } finally {
     await page.viewport(width, height);
   }

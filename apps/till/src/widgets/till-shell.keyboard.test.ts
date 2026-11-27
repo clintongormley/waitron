@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { BUSY_COUNTER, cleanupWidgets, distance, mountWidget, paintedAt } from "./test-helpers.js";
+import { BUSY_COUNTER, cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 
@@ -84,32 +84,6 @@ it.each([
       last.scrollIntoView({ block: "nearest", inline: "end" });
       // Native scroll limits combine integer scroll/client sizes with fractional painted boxes.
       expectUnclippedOutline(last, 1);
-    } finally {
-      await page.viewport(before.width, before.height);
-    }
-  },
-);
-
-it.each(["light", "dark"] as const)(
-  "keeps Waiting's amber border visible under keyboard focus in %s",
-  async (theme) => {
-    const before = { width: innerWidth, height: innerHeight };
-    await page.viewport(1280, 800);
-    try {
-      const { el, host } = await mountWidget<TillShell>("till-shell", BUSY_COUNTER, theme);
-      const waiting = el.shadowRoot!.querySelector<HTMLElement>('[data-counter-orders="waiting"]')!;
-      waiting.style.animation = "none";
-      await userEvent.keyboard("{Tab}");
-      expect(waiting.matches(":focus-visible")).toBe(false);
-      const box = waiting.getBoundingClientRect();
-      const border = await paintedAt(host, box.left + box.width / 2, box.top + 0.25);
-      const fill = await paintedAt(host, box.left + 6, box.top + box.height / 2);
-      expect(distance(border, fill)).toBeGreaterThan(20);
-      waiting.focus();
-      expectUnclippedOutline(waiting);
-      expect(
-        distance(await paintedAt(host, box.left + box.width / 2, box.top + 0.25), border),
-      ).toBeLessThan(5);
     } finally {
       await page.viewport(before.width, before.height);
     }

@@ -103,44 +103,37 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
     [1280, "en-GB"],
     [390, "es-ES"],
     [1280, "es-ES"],
-  ] as const)(
-    "A738 counted till bar and Testing at %i in %s have no violations",
-    async (width, locale) => {
-      const original = currentLocale();
-      setLocale(locale);
-      try {
-        await atViewport(width, 844, async () => {
-          const { el, host } = await mountWidget<TillShell>(
-            "till-shell",
-            {
-              ...full,
-              parkedCount: 12,
-              waitingCount: 3,
-              activeOrderList: "waiting",
-              testingKitchen: true,
-            },
-            theme,
-          );
-          await expectNoA11yViolations(host);
-          const menu =
-            el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-              '[data-test="more-menu"]',
-            )!;
-          await menu.updateComplete;
-          await userEvent.click(menu.shadowRoot!.querySelector("button")!);
-          await expectNoA11yViolations(host);
-          await userEvent.click(menu.querySelector("summary")!);
-          await expectNoA11yViolations(host);
-          await userEvent.keyboard("{Escape}");
-          el.waitingCount = 0;
-          await el.updateComplete;
-          await expectNoA11yViolations(host);
-        });
-      } finally {
-        setLocale(original);
-      }
-    },
-  );
+  ] as const)("A738 till bar and Testing at %i in %s have no violations", async (width, locale) => {
+    const original = currentLocale();
+    setLocale(locale);
+    try {
+      await atViewport(width, 844, async () => {
+        const { el, host } = await mountWidget<TillShell>(
+          "till-shell",
+          {
+            ...full,
+            testingKitchen: true,
+          },
+          theme,
+        );
+        await expectNoA11yViolations(host);
+        const menu =
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+            '[data-test="more-menu"]',
+          )!;
+        await menu.updateComplete;
+        await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+        await expectNoA11yViolations(host);
+        await userEvent.click(menu.querySelector("summary")!);
+        await expectNoA11yViolations(host);
+        await userEvent.keyboard("{Escape}");
+        await el.updateComplete;
+        await expectNoA11yViolations(host);
+      });
+    } finally {
+      setLocale(original);
+    }
+  });
 
   it("kiosk mode (header-less body) has no violations", async () => {
     const { host } = await mountWidget<TillShell>(

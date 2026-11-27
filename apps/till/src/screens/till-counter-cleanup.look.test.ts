@@ -213,8 +213,6 @@ for (const kind of ["counter", "table"] as const)
               formFactor: "till",
               activeScreen: kind === "counter" ? "counter" : "order",
               operatorName: "Alex Morgan Smith Jones",
-              parkedCount: 12,
-              waitingCount: 3,
               transferAvailable: true,
               transferCount: 2,
               affordances: ["expo", "find-bill"],
@@ -374,11 +372,8 @@ for (const kind of ["counter", "table"] as const)
             await parkClosed;
             for (const list of ["parked", "waiting"] as const) {
               screen.orderList = list;
-              shell.activeOrderList = list;
               screen.heldOrders = [parked];
               screen.counterWaiting = [waiting];
-              shell.parkedCount = 1;
-              shell.waitingCount = 1;
               await screen.updateComplete;
               const widget = screen.shadowRoot!.querySelector(
                 list === "parked" ? "till-held-orders" : "till-counter-waiting",
@@ -394,8 +389,6 @@ for (const kind of ["counter", "table"] as const)
               await capture(list);
               screen.heldOrders = [];
               screen.counterWaiting = [];
-              shell.parkedCount = 0;
-              shell.waitingCount = 0;
               await screen.updateComplete;
               await capture(`${list}-empty`);
             }

@@ -239,7 +239,10 @@ export class TillCounterScreen extends LitElement {
   @property() selectedServiceZoneId = "";
   @property({ type: Boolean }) counterFloor = false;
   @property({ attribute: false }) live?: TillLiveConnection;
-  @property({ attribute: false }) refreshWaiting?: () => void;
+  @property({ attribute: false }) refreshFloorOrders?: () => void;
+  @property({ attribute: false }) counterZoneIds: readonly string[] = [];
+  @property({ attribute: false }) floorZoneIds: readonly string[] = [];
+  @property({ type: Boolean }) tablesAnswered = false;
   @state() private floorBasket = false;
   @property({ attribute: false }) orderList: "parked" | "waiting" | null = null;
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
@@ -542,11 +545,24 @@ export class TillCounterScreen extends LitElement {
   }
 
   override render() {
-    if (this.counterFloor && !this.floorBasket && this.stage === "order") {
+    if (
+      this.counterFloor &&
+      !this.floorBasket &&
+      !this.orderInFlight &&
+      this.stage === "order" &&
+      !this.store.persisted &&
+      this.store.lineCount === 0
+    ) {
       return html`<till-counter-floor
         .zoneId=${this.selectedServiceZoneId}
         .live=${this.live}
-        .refresh=${this.refreshWaiting}
+        .refresh=${this.refreshFloorOrders}
+        .counterZoneIds=${this.counterZoneIds}
+        .floorZoneIds=${this.floorZoneIds}
+        .parked=${this.heldOrders.filter((order) => order.id !== this.store.id)}
+        .tables=${this.tables}
+        .tablesAnswered=${this.tablesAnswered}
+        .zones=${this.zones}
         .waiting=${this.counterWaiting}
         .canEditKitchenNote=${this.canEditKitchenNote}
         .canMoveStation=${this.canMoveStation}

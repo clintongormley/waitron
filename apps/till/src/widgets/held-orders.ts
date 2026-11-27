@@ -1,3 +1,6 @@
+import { actionChoiceStyles } from "@waitron/ui/src/components/wt-row-actions.js";
+import { repeat } from "lit/directives/repeat.js";
+import { counterFloorRowStyles } from "./counter-floor-row-styles.js";
 import { orderLabel } from "./order-label.js";
 import { orderPreview, orderPreviewStyles } from "./order-preview.js";
 import { LitElement, css, html, nothing, type TemplateResult, type PropertyValues } from "lit";
@@ -47,6 +50,8 @@ export class TillHeldOrders extends LitElement {
     orderNumberStyles,
     orderCountStyles,
     helpAnchorStyles,
+    counterFloorRowStyles,
+    actionChoiceStyles,
     css`
       :host {
         display: block;
@@ -121,6 +126,10 @@ export class TillHeldOrders extends LitElement {
         gap: var(--wt-space-2);
       }
 
+      wt-row-actions.move {
+        margin-inline-end: var(--wt-space-2);
+      }
+
       .picker-empty {
         margin: 0;
         color: var(--wt-color-text-muted);
@@ -128,6 +137,7 @@ export class TillHeldOrders extends LitElement {
     `,
   ];
 
+  @property({ type: Boolean, reflect: true }) floor = false;
   @property({ attribute: false }) orders: HeldOrderSummary[] = [];
   /** The floor, which the app reads again when a picker opens. */
   @property({ attribute: false }) tables: TableState[] = [];
@@ -139,7 +149,8 @@ export class TillHeldOrders extends LitElement {
     const button = [...this.renderRoot.querySelectorAll<HTMLElement>(".move")].find(
       (candidate) => candidate.dataset.orderId === orderId,
     );
-    button?.shadowRoot?.querySelector<HTMLButtonElement>("button")?.focus();
+    if (button?.matches("wt-row-actions")) button.focus();
+    else button?.shadowRoot?.querySelector<HTMLButtonElement>("button")?.focus();
   }
 
   chooseMoveTableAgain(orderId: string): void {
@@ -247,59 +258,109 @@ export class TillHeldOrders extends LitElement {
   #row(order: HeldOrderSummary): TemplateResult {
     const scope = this.#scope(order);
     const label = heldLabel(order);
+    const parked = this.floor && order.partyId === null;
+    const expanded = this.expanded.has(order.id);
+    const actions = this.#actions(order, scope);
     return html`
-      <div class="order" @click=${(event: Event) => this.#togglePreview(event, order.id)}>
+      <div
+        class="order"
+        @click=${(event: Event) => {
+          if (!this.floor) this.#togglePreview(event, order.id);
+        }}
+      >
         <button
           type="button"
           class="summary"
-          aria-expanded=${String(this.expanded.has(order.id))}
-          aria-controls=${`preview-${order.id}`}
+          aria-expanded=${parked ? nothing : String(expanded)}
+          aria-controls=${parked ? nothing : `preview-${order.id}`}
+          @click=${(event: Event) => {
+            if (parked) this.#emit("retrieve-order", { id: order.id });
+            else if (this.floor) this.#togglePreview(event, order.id);
+          }}
         >
-          <span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
-          ${label ? html`<span class="label">${label}</span>` : nothing}
+          <span class="number"
+            >${orderNumber(order.orderNumber, order.formerNumbers)}${this.floor && label ? ` · ${label}` : nothing}</span
+          >
+          ${!this.floor && label ? html`<span class="label">${label}</span>` : nothing}
           <span class="meta">${this.#meta(order)}</span>
-          ${orderCounts(order.counts)} ${this.#signals(order)}
-        </button>
-        <div class="controls">
-          <wt-button
-            class="retrieve"
-            variant="primary"
-            aria-label=${`${t("held.retrieve")} ${scope}`}
-            @click=${() => this.#emit("retrieve-order", { id: order.id })}
-          >
-            ${t("held.retrieve")}
-          </wt-button>
           ${
-            order.partyId === null
-              ? html`<wt-button
-                  class="move"
-                  data-order-id=${order.id}
-                  variant="secondary"
-                  aria-label=${`${t("held.move_to_table")} ${scope}`}
-                  @click=${() => this.#openPicker(order)}
-                >
-                  ${t("held.move_to_table")}
-                </wt-button>`
-              : nothing
+            this.floor
+              ? html`<span class="state"
+                  >${parked ? t("counter.floor_parked") : t("counter.floor_open")}</span
+                >`
+              : html`${orderCounts(order.counts)} ${this.#signals(order)}`
           }
-          <wt-button
-            class="discard"
-            variant="danger"
-            aria-label=${`${t("held.discard")} ${scope}`}
-            @click=${() => this.#emit("discard-order", { id: order.id })}
-          >
-            ${t("held.discard")}
-          </wt-button>
-        </div>
-        <div
-          class="order-preview"
-          id=${`preview-${order.id}`}
-          ?hidden=${!this.expanded.has(order.id)}
-        >
-          ${this.expanded.has(order.id) ? orderPreview(order.items) : nothing}
+        </button>
+        ${parked ? this.#parkedActions(order, scope) : this.floor ? nothing : actions}
+        <div class="order-preview" id=${`preview-${order.id}`} ?hidden=${!expanded}>
+          ${expanded ? html`${orderPreview(order.items)}${this.floor ? actions : nothing}` : nothing}
         </div>
       </div>
     `;
+  }
+
+  #actions(order: HeldOrderSummary, scope: string): TemplateResult {
+    return html`
+      <div class="controls">
+        <wt-button
+          class="retrieve"
+          variant="primary"
+          aria-label=${`${t("held.retrieve")} ${scope}`}
+          @click=${() => this.#emit("retrieve-order", { id: order.id })}
+        >
+          ${t("held.retrieve")}
+        </wt-button>
+        ${
+          order.partyId === null
+            ? html`<wt-button
+                class="move"
+                data-order-id=${order.id}
+                variant="secondary"
+                aria-label=${`${t("held.move_to_table")} ${scope}`}
+                @click=${() => this.#openPicker(order)}
+              >
+                ${t("held.move_to_table")}
+              </wt-button>`
+            : nothing
+        }
+        <wt-button
+          class="discard"
+          variant="danger"
+          aria-label=${`${t("held.discard")} ${scope}`}
+          @click=${() => this.#emit("discard-order", { id: order.id })}
+        >
+          ${t("held.discard")}
+        </wt-button>
+      </div>
+    `;
+  }
+
+  #parkedActions(order: HeldOrderSummary, scope: string): TemplateResult {
+    return html`<wt-row-actions
+      class="move"
+      data-order-id=${order.id}
+      label=${`${t("table.bill_actions")} ${scope}`}
+      align="end"
+    >
+      <div role="menu">
+        <button
+          type="button"
+          role="menuitem"
+          data-row-choice
+          @click=${() => this.#openPicker(order)}
+        >
+          ${t("held.move_to_table")}
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          data-row-choice
+          @click=${() => this.#emit("discard-order", { id: order.id })}
+        >
+          ${t("held.discard")}
+        </button>
+      </div>
+    </wt-row-actions>`;
   }
 
   #picker(order: HeldOrderSummary): TemplateResult {
@@ -339,14 +400,22 @@ export class TillHeldOrders extends LitElement {
   override render() {
     const moving = this.moving;
     return html`
-      <div class="title-anchor help-anchor">
-        <h2 class="title">${t("held.title")}</h2>
-        ${helpBadge("help.counter.parked_orders", t("held.title"))}
-      </div>
+      ${
+        this.floor
+          ? nothing
+          : html`<div class="title-anchor help-anchor">
+              <h2 class="title">${t("held.title")}</h2>
+              ${helpBadge("help.counter.parked_orders", t("held.title"))}
+            </div>`
+      }
       ${
         this.orders.length === 0
           ? html`<p class="empty">${t("held.empty")}</p>`
-          : this.orders.map((order) => this.#row(order))
+          : repeat(
+              this.orders,
+              (order) => order.id,
+              (order) => this.#row(order),
+            )
       }
       ${moving === null ? nothing : this.#picker(moving)}
     `;

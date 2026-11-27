@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { commands, page, userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillShell } from "./till-shell.js";
@@ -8,90 +8,72 @@ import type { WtRowActions } from "@waitron/ui";
 afterEach(cleanupWidgets);
 
 it.each([
-  [390, "en-GB", "Parked orders", "Waiting"],
-  [1280, "en-GB", "Parked orders", "Waiting"],
-  [390, "es-ES", "Pedidos aparcados", "En espera"],
-  [1280, "es-ES", "Pedidos aparcados", "En espera"],
-] as const)(
-  "A738 keeps counted orders and primary actions on the bar at %i in %s",
-  async (width, locale, parked, waiting) => {
-    const before = { width: innerWidth, height: innerHeight, locale: currentLocale() };
-    await page.viewport(width, 844);
-    setLocale(locale);
-    try {
-      const { el } = await mountWidget<TillShell>("till-shell", {
-        formFactor: "till",
-        operatorName: "Alex Morgan Smith Jones",
-        parkedCount: 12,
-        waitingCount: 3,
-        transferAvailable: true,
-        transferCount: 2,
-        affordances: ["find-bill", "station", "expo", "schedule"],
-        canSwitchProfile: true,
-        loadLocales: async () => [{ code: "en-GB", label: "English" }],
-      });
-      const root = el.shadowRoot!;
-      const parkedButton = root.querySelector<HTMLButtonElement>('[data-counter-orders="parked"]');
-      expect(parkedButton?.textContent).toContain(parked);
-      expect(parkedButton?.textContent).toContain("12");
-      expect(root.querySelector('[data-counter-orders="waiting"]')?.textContent).toContain(waiting);
-      expect(root.querySelector('[data-counter-orders="waiting"]')?.textContent).toContain("3");
-      expect(root.querySelector(".till-strip [data-open-transfers]")).not.toBeNull();
-      expect(root.querySelector(".till-strip .expo")).not.toBeNull();
-      expect(root.querySelector(".session > .operator-menu")?.textContent).toContain(
-        "Alex Morgan Smith Jones",
-      );
-      const more = root.querySelector<WtRowActions>('[data-test="more-menu"]')!;
-      expect(more).not.toBeNull();
-      expect(more.querySelector(".find-bill")).not.toBeNull();
-      expect(more.querySelector(".schedule")).not.toBeNull();
-      expect(more.querySelector(".profile")).not.toBeNull();
-      expect(more.querySelector("wt-language-chooser")).not.toBeNull();
-      expect(more.querySelector(".settings")).not.toBeNull();
-      expect(more.querySelector(".logout")).not.toBeNull();
-      expect(root.querySelector(".equipment")).toBeNull();
-      expect(root.querySelector(".station")).toBeNull();
-      expect(root.querySelector(".allergens")).toBeNull();
-      const fired: unknown[] = [];
-      el.addEventListener("show-counter-orders", (event) =>
-        fired.push((event as CustomEvent).detail),
-      );
-      await userEvent.click(parkedButton!);
-      expect(fired).toEqual([{ kind: "parked" }]);
-      el.activeOrderList = "parked";
-      await el.updateComplete;
-      expect(parkedButton!.getAttribute("aria-pressed")).toBe("true");
-      await more.updateComplete;
-      const moreTrigger = more.shadowRoot!.querySelector("button")!;
-      const operator = root.querySelector<WtRowActions>(".operator-menu")!;
-      await operator.updateComplete;
-      for (const trigger of [moreTrigger, operator.shadowRoot!.querySelector("button")!]) {
-        const box = trigger.getBoundingClientRect();
-        expect(box.width).toBeGreaterThanOrEqual(44);
-        expect(box.left).toBeGreaterThanOrEqual(0);
-        expect(box.right).toBeLessThanOrEqual(innerWidth);
-      }
-      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
-      await userEvent.click(moreTrigger);
-      expect(more.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-      await userEvent.keyboard("{Escape}");
-      await vi.waitFor(() =>
-        expect(more.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false),
-      );
-      el.canSwitchProfile = false;
-      el.showCounter = false;
-      el.affordances = [];
-      await el.updateComplete;
-      expect(more.querySelector(".profile")).toBeNull();
-      expect(root.querySelector("[data-counter-orders]")).toBeNull();
-      expect(root.querySelector(".expo")).toBeNull();
-      expect(more.querySelector(".schedule")).toBeNull();
-    } finally {
-      setLocale(before.locale);
-      await page.viewport(before.width, before.height);
+  [390, "en-GB"],
+  [1280, "en-GB"],
+  [390, "es-ES"],
+  [1280, "es-ES"],
+] as const)("A738 keeps primary actions on the bar at %i in %s", async (width, locale) => {
+  const before = { width: innerWidth, height: innerHeight, locale: currentLocale() };
+  await page.viewport(width, 844);
+  setLocale(locale);
+  try {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      operatorName: "Alex Morgan Smith Jones",
+      transferAvailable: true,
+      transferCount: 2,
+      affordances: ["find-bill", "station", "expo", "schedule"],
+      canSwitchProfile: true,
+      loadLocales: async () => [{ code: "en-GB", label: "English" }],
+    });
+    const root = el.shadowRoot!;
+    expect(root.querySelector("[data-counter-orders]")).toBeNull();
+    expect(root.querySelector(".till-strip [data-open-transfers]")).not.toBeNull();
+    expect(root.querySelector(".till-strip .expo")).not.toBeNull();
+    expect(root.querySelector(".session > .operator-menu")?.textContent).toContain(
+      "Alex Morgan Smith Jones",
+    );
+    const more = root.querySelector<WtRowActions>('[data-test="more-menu"]')!;
+    expect(more).not.toBeNull();
+    expect(more.querySelector(".find-bill")).not.toBeNull();
+    expect(more.querySelector(".schedule")).not.toBeNull();
+    expect(more.querySelector(".profile")).not.toBeNull();
+    expect(more.querySelector("wt-language-chooser")).not.toBeNull();
+    expect(more.querySelector(".settings")).not.toBeNull();
+    expect(more.querySelector(".logout")).not.toBeNull();
+    expect(root.querySelector(".equipment")).toBeNull();
+    expect(root.querySelector(".station")).toBeNull();
+    expect(root.querySelector(".allergens")).toBeNull();
+    await more.updateComplete;
+    const moreTrigger = more.shadowRoot!.querySelector("button")!;
+    const operator = root.querySelector<WtRowActions>(".operator-menu")!;
+    await operator.updateComplete;
+    for (const trigger of [moreTrigger, operator.shadowRoot!.querySelector("button")!]) {
+      const box = trigger.getBoundingClientRect();
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(innerWidth);
     }
-  },
-);
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+    await userEvent.click(moreTrigger);
+    expect(more.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() =>
+      expect(more.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false),
+    );
+    el.canSwitchProfile = false;
+    el.showCounter = false;
+    el.affordances = [];
+    await el.updateComplete;
+    expect(more.querySelector(".profile")).toBeNull();
+    expect(root.querySelector("[data-counter-orders]")).toBeNull();
+    expect(root.querySelector(".expo")).toBeNull();
+    expect(more.querySelector(".schedule")).toBeNull();
+  } finally {
+    setLocale(before.locale);
+    await page.viewport(before.width, before.height);
+  }
+});
 
 it("A738 Kitchen is only inside Testing when both testing and capability allow it", async () => {
   const { el } = await mountWidget<TillShell>("till-shell", {
@@ -113,76 +95,6 @@ it("A738 Kitchen is only inside Testing when both testing and capability allow i
   el.affordances = [];
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-testing]")).toBeNull();
-});
-
-declare module "vitest/browser" {
-  interface BrowserCommands {
-    emulateReducedMotion: (reduced: boolean) => Promise<void>;
-  }
-}
-
-it("A738 Waiting attention stops when empty and respects reduced motion", async () => {
-  await commands.emulateReducedMotion(false);
-  try {
-    const { el } = await mountWidget<TillShell>("till-shell", { waitingCount: 2 });
-    const button = el.shadowRoot!.querySelector<HTMLButtonElement>(
-      '[data-counter-orders="waiting"]',
-    )!;
-    expect(button.textContent).toContain("2");
-    expect(getComputedStyle(button).animationName).not.toBe("none");
-    const status = button.querySelector('[role="status"]')!;
-    expect(status).not.toBeNull();
-    const changes: MutationRecord[] = [];
-    const observer = new MutationObserver((records) => changes.push(...records));
-    observer.observe(status, { childList: true, characterData: true, subtree: true });
-    try {
-      el.operatorName = "Other operator";
-      await el.updateComplete;
-      await Promise.resolve();
-      expect(changes).toEqual([]);
-      await commands.emulateReducedMotion(true);
-      expect(matchMedia("(prefers-reduced-motion: reduce)").matches).toBe(true);
-      expect(getComputedStyle(button).animationName).toBe("none");
-      await commands.emulateReducedMotion(false);
-      el.waitingCount = 0;
-      await el.updateComplete;
-      expect(button.textContent).toContain("0");
-      expect(getComputedStyle(button).animationName).toBe("none");
-    } finally {
-      observer.disconnect();
-    }
-  } finally {
-    await commands.emulateReducedMotion(false);
-  }
-});
-
-it("A738 Waiting pulses at the slow pulse token, 2 s by default", async () => {
-  await commands.emulateReducedMotion(false);
-  const { el } = await mountWidget<TillShell>("till-shell", { waitingCount: 2 });
-  const button = el.shadowRoot!.querySelector<HTMLButtonElement>(
-    '[data-counter-orders="waiting"]',
-  )!;
-  expect(getComputedStyle(button).animationName).toBe("waiting-attention");
-  expect(getComputedStyle(button).animationDuration).toBe("2s");
-  el.style.setProperty("--wt-duration-pulse-slow", "5000ms");
-  expect(getComputedStyle(button).animationDuration).toBe("5s");
-});
-
-it("A738 Waiting dims its border to the amber dim colour half-way, never to transparent", async () => {
-  await commands.emulateReducedMotion(false);
-  const { el } = await mountWidget<TillShell>("till-shell", { waitingCount: 2 });
-  el.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
-  el.style.setProperty("--wt-color-warning-pulse-dim", "rgb(7, 8, 9)");
-  el.style.setProperty("--wt-duration-pulse-slow", "2000ms");
-  const button = el.shadowRoot!.querySelector<HTMLButtonElement>(
-    '[data-counter-orders="waiting"]',
-  )!;
-  const [animation] = button.getAnimations();
-  animation!.pause();
-  animation!.currentTime = 1000;
-  expect(getComputedStyle(button).borderTopColor).toBe("rgb(7, 8, 9)");
-  animation!.currentTime = 0;
-  expect(getComputedStyle(button).borderTopColor).toBe("rgb(4, 5, 6)");
 });
 
 it("A738 Language choices remain reachable inside More and emit one selection", async () => {

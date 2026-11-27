@@ -175,7 +175,11 @@ const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
 const waitingList = (el: TillApp) =>
-  counter(el).shadowRoot!.querySelector<TillCounterWaiting>("till-counter-waiting");
+  [
+    ...counter(el)
+      .shadowRoot!.querySelector("till-counter-floor")!
+      .shadowRoot!.querySelectorAll<TillCounterWaiting>("till-counter-waiting"),
+  ].find((list) => list.orders.length > 0);
 const moveButton = (el: TillApp, id = "wo-paid") =>
   waitingList(el)?.shadowRoot!.querySelector<HTMLElement>(
     `[data-waiting-order="${id}"] [data-waiting-move-station]`,
@@ -198,8 +202,7 @@ async function signedIn(
   await flush(el);
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
-  emit(el.shadowRoot!.querySelector("till-shell")!, "show-counter-orders", { kind: "waiting" });
-  await flush(el);
+
   return el;
 }
 
@@ -208,6 +211,8 @@ async function openMove(
   props: Partial<TillApp> = {},
 ): Promise<TillApp> {
   const el = await signedIn(overrides, props);
+  waitingList(el)!.shadowRoot!.querySelector<HTMLButtonElement>(".summary")!.click();
+  await flush(el);
   moveButton(el)!.click();
   await flush(el);
   return el;
