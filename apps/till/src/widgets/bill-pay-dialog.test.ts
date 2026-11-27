@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { setHelpMode } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -14,6 +14,7 @@ import {
   twoReaderEquipment as equipmentWith,
 } from "../../test/pay-equipment-fixtures.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
+import type { TablePayQuoteRequest } from "../state/table-pay-quote.js";
 import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/payments-api.js";
 
 afterEach(cleanupWidgets);
@@ -73,7 +74,23 @@ const root = (el: TillBillPayDialog) => el.shadowRoot!;
 const text = (node: Element | ShadowRoot | null) =>
   (node?.textContent ?? "").replace(/\s+/g, " ").trim();
 const money = (amount: string) => formatMoney(amount, currentLocale());
-it("starts full-screen Pay with the amount and opens the server preview from Charge", async () => {
+async function showCardQuote(el: TillBillPayDialog, amount: string): Promise<TablePayQuoteRequest> {
+  const reads = capture<TablePayQuoteRequest>(el, "bill-pay-quote");
+  el.quoteContext = "table bill";
+  await expect.poll(() => reads.length).toBe(1);
+  const request = reads[0]!;
+  el.checkedQuote = {
+    request,
+    preview: { kind: "allocated", applied: amount, charged: amount, tip: "0.00", change: null },
+    cash: null,
+    refusal: null,
+    revisions: {},
+  };
+  await el.updateComplete;
+  return request;
+}
+
+it("starts full-screen Pay and charges the amount checked before the press", async () => {
   await page.viewport(390, 844);
   const el = await mount({
     quiet: true,
@@ -89,16 +106,58 @@ it("starts full-screen Pay with the amount and opens the server preview from Cha
   expect(root(el).querySelector('input[name="method"]')).toBeNull();
   const previews = capture<PayRequest>(el, "bill-pay-preview");
   const payments = capture(el, "bill-pay-confirm");
-  expect(text(root(el).querySelector("[data-quiet-pay-card]"))).toBe(`Charge ${money("120.00")}`);
-  await click(el, "[data-quiet-pay-card]");
-  expect(previews).toEqual([
-    {
-      choice: { kind: "whole" },
-      pay: { method: "card" },
-      card: { entry: "reader", simulationOutcome: "captured" },
-    },
-  ]);
+  const request = await showCardQuote(el, "117.00");
+  expect(request.asked).toEqual({
+    choice: { kind: "whole" },
+    pay: { method: "card" },
+    card: { entry: "reader", simulationOutcome: "captured" },
+  });
   expect(payments).toEqual([]);
+  const charge = root(el).querySelector("[data-quiet-pay-card]")!;
+  expect(text(charge)).toBe(`Charge ${money("117.00")}`);
+  await userEvent.click(charge);
+  expect(previews).toEqual([]);
+  expect(payments).toEqual([{ quote: el.checkedQuote }]);
+});
+
+it("gives the Guests field space below the ways to pay on a phone", async () => {
+  await page.viewport(390, 844);
+  onTestFinished(() => page.viewport(414, 896));
+  const el = await mount({ quiet: true, way: "whole", asksGuests: true, receiptGuests: 4 });
+  await showCardQuote(el, "120.00");
+
+  const guests = root(el).querySelector('[name="guests"]')!.getBoundingClientRect();
+  const ways = root(el).querySelector(".quiet-pay-ways")!.getBoundingClientRect();
+  expect(guests.top - ways.bottom).toBe(20);
+  expect(guests.left).toBe(ways.left);
+});
+
+it("keeps Edit tip plain under the pointer and outlined on keyboard focus", async () => {
+  await page.viewport(390, 844);
+  onTestFinished(() => page.viewport(414, 896));
+  const el = await mount({
+    quiet: true,
+    handheld: true,
+    way: "whole",
+    cardReader: "simulator",
+    takesReaderCard: true,
+  });
+  await click(el, "[data-quiet-pay-tip]");
+  await type(el, "cardTip", "12");
+  await click(el, "[data-quiet-pay-tip]");
+
+  const edit = root(el).querySelector("[data-quiet-pay-tip]")!.shadowRoot!.querySelector("button")!;
+  await userEvent.hover(edit);
+  expect.soft(getComputedStyle(edit).borderColor).toBe("rgba(0, 0, 0, 0)");
+  expect(getComputedStyle(edit).outlineStyle).toBe("none");
+
+  root(el)
+    .querySelector('[data-quiet-pay-way="whole"]')!
+    .shadowRoot!.querySelector("button")!
+    .focus();
+  await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
+  expect(edit.matches(":focus-visible")).toBe(true);
+  expect(getComputedStyle(edit).outlineStyle).toBe("solid");
 });
 
 it("chooses an amount, then opens the existing cash entry before asking for a preview", async () => {
@@ -139,21 +198,85 @@ it("rounds a three-person share up to the next cent", async () => {
   expect(text(root(el).querySelector("[data-quiet-pay-card]"))).toBe(`Charge ${money("33.34")}`);
 });
 
-it("asks for the server preview when Enter is pressed in the opening amount field", async () => {
+it("does not charge when Enter ends editing the amount on opening Pay", async () => {
   const el = await mount({ quiet: true, way: "contribution", cardReader: "simulator" });
-  const previews = capture<PayRequest>(el, "bill-pay-preview");
   await type(el, "amount", "40");
-  field(el, "amount")!
-    .shadowRoot!.querySelector("input")!
-    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+  const request = await showCardQuote(el, "40.00");
+  expect(request.asked.choice).toEqual({ kind: "contribution", amount: "40" });
+  const payments = capture(el, "bill-pay-confirm");
+  field(el, "amount")!.shadowRoot!.querySelector("input")!.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(payments).toEqual([]);
+});
+
+it("asks again when the bill changed while a payment action was busy", async () => {
+  const el = await mount({ quiet: true, way: "whole", cardReader: "simulator" });
+  await showCardQuote(el, "120.00");
+  const reads = capture<TablePayQuoteRequest>(el, "bill-pay-quote");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  onTestFinished(() => void vi.useRealTimers());
+
+  el.busy = true;
+  el.quoteContext = "changed bill";
   await el.updateComplete;
-  expect(previews).toEqual([
-    {
-      choice: { kind: "contribution", amount: "40" },
-      pay: { method: "card" },
-      card: { entry: "reader", simulationOutcome: "captured" },
-    },
-  ]);
+  await vi.runOnlyPendingTimersAsync();
+  expect(reads).toEqual([]);
+
+  el.busy = false;
+  await el.updateComplete;
+  await vi.runOnlyPendingTimersAsync();
+  expect(reads).toMatchObject([{ context: "changed bill" }]);
+});
+
+it("ignores the previous quote while the next contribution is waiting to be checked", async () => {
+  const el = await mount({ quiet: true, way: "contribution", cardReader: "simulator" });
+  await type(el, "amount", "30");
+  await showCardQuote(el, "30.00");
+  const previous = el.checkedQuote!;
+  el.checkedQuote = null;
+  await el.updateComplete;
+  const reads = capture<TablePayQuoteRequest>(el, "bill-pay-quote");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  onTestFinished(() => void vi.useRealTimers());
+
+  await type(el, "amount", "40");
+  el.checkedQuote = previous;
+  await el.updateComplete;
+  const charge =
+    root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-quiet-pay-card]")!;
+  expect(charge.disabled).toBe(true);
+  expect(text(charge)).toBe(`Charge ${money("40.00")}`);
+
+  await vi.runOnlyPendingTimersAsync();
+  expect(reads).toMatchObject([{ asked: { choice: { kind: "contribution", amount: "40" } } }]);
+});
+
+it("keeps the receipt guest field and holds both tenders while checking a changed card tip", async () => {
+  const el = await mount({
+    quiet: true,
+    way: "whole",
+    asksGuests: true,
+    receiptGuests: 4,
+    cardReader: "simulator",
+  });
+  await showCardQuote(el, "120.00");
+  const checked = el.checkedQuote!;
+  el.checkedQuote = { ...checked, cash: checked.preview };
+  await el.updateComplete;
+  const guests = () =>
+    root(el).querySelector<HTMLElementTagNameMap["wt-number-stepper"]>('[name="guests"]');
+  const tender = (method: "card" | "cash") =>
+    root(el).querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-quiet-pay-${method}]`);
+  expect(guests()?.value).toBe("4");
+  expect(tender("card")?.disabled).toBe(false);
+  expect(tender("cash")?.disabled).toBe(false);
+
+  await click(el, "[data-quiet-pay-tip]");
+  await type(el, "cardTip", "2");
+
+  expect(guests()?.value).toBe("4");
+  expect(tender("card")?.disabled).toBe(true);
+  expect(tender("cash")?.disabled).toBe(true);
 });
 
 it("leaves a tip entered for another card machine out of the opening amount when only that machine can take cards", async () => {
@@ -165,9 +288,10 @@ it("leaves a tip entered for another card machine out of the opening amount when
   expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("120.00"));
 });
 
-it("adds a staff tip to the opening total and removes it before asking for any charge", async () => {
+it("checks the amount again after Remove tip before starting Charge", async () => {
   const el = await mount({ quiet: true, way: "whole", cardReader: "simulator" });
   const previews = capture<PayRequest>(el, "bill-pay-preview");
+  const payments = capture(el, "bill-pay-confirm");
   await click(el, "[data-quiet-pay-tip]");
   await type(el, "cardTip", "12");
   expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("132.00"));
@@ -181,21 +305,48 @@ it("adds a staff tip to the opening total and removes it before asking for any c
   expect(text(root(el).querySelector("[data-quiet-pay-breakdown] span"))).toContain(money("12.00"));
   await click(el, "[data-quiet-pay-tip]");
   const breakdown = root(el).querySelector("[data-quiet-pay-breakdown]")!;
+  const quoteReads = capture<TablePayQuoteRequest>(el, "bill-pay-quote");
+  el.quoteContext = "table bill";
+  await expect.poll(() => quoteReads.length).toBe(1);
+  const withoutTip = {
+    kind: "allocated" as const,
+    applied: "120.00",
+    charged: "120.00",
+    tip: "0.00",
+    change: null,
+  };
+  el.checkedQuote = {
+    request: quoteReads[0]!,
+    preview: { ...withoutTip, tip: "12.00", charged: "132.00" },
+    cash: null,
+    refusal: null,
+    revisions: {},
+  };
+  await el.updateComplete;
+  const charge = button(el, "[data-quiet-pay-card]");
+  expect(text(charge)).toBe(`Charge ${money("132.00")}`);
+  expect(charge.disabled).toBe(false);
   await click(el, "[data-quiet-pay-tip]");
   expect(text(root(el).querySelector("[data-clear-card-tip]"))).toBe("Remove tip");
   await click(el, "[data-clear-card-tip]");
   expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("120.00"));
   expect(text(breakdown)).toBe("Enter tip");
-  expect(text(root(el).querySelector("[data-quiet-pay-card]"))).toBe(`Charge ${money("120.00")}`);
+  expect(text(charge)).toBe(`Charge ${money("120.00")}`);
+  expect(charge.disabled).toBe(true);
+  expect(payments).toEqual([]);
+  await expect.poll(() => quoteReads.length).toBe(2);
+  const request = quoteReads[1]!;
+  expect(request.asked).toEqual({
+    choice: { kind: "whole" },
+    pay: { method: "card" },
+    card: { entry: "reader", simulationOutcome: "captured" },
+  });
+  const untippedQuote = { ...el.checkedQuote!, request, preview: withoutTip };
+  el.checkedQuote = untippedQuote;
+  await el.updateComplete;
+  await userEvent.click(charge);
   expect(previews).toEqual([]);
-  await click(el, "[data-quiet-pay-card]");
-  expect(previews).toEqual([
-    {
-      choice: { kind: "whole" },
-      pay: { method: "card" },
-      card: { entry: "reader", simulationOutcome: "captured" },
-    },
-  ]);
+  expect(payments).toEqual([{ quote: untippedQuote }]);
 });
 
 it.each(["en", "es"] as const)("temporary balance explanation in %s", async (locale) => {
@@ -1407,7 +1558,8 @@ describe("till-bill-pay-dialog: a card already in progress", () => {
       cardReader: "stripe_terminal",
     });
     await type(el, "amount", "40");
-    if (!quiet) await pick(el, "method", "card");
+    if (quiet) await showCardQuote(el, "40.00");
+    else await pick(el, "method", "card");
     await click(el, start);
     await expect.poll(() => root(el).activeElement).toBe(button(el, "[data-pay-card-ask-take]"));
 
@@ -3848,6 +4000,34 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
     pay: { method: "cash", tendered: "35.00" },
   };
 
+  it.each([
+    ["open", "en", ""],
+    ["placed", "en", "This cancels the existing receipt and reopens the bill."],
+    ["placed", "es", "Esto anula el ticket y reabre la cuenta."],
+  ] as const)(
+    "shows the checked Items amount and the receipt warning for a %s bill in %s",
+    async (status, locale, warning) => {
+      setLocale(locale);
+      const el = await mount({
+        quiet: true,
+        cardReader: "simulator",
+        balance: balanceOf({ status }),
+      });
+      await pick(el, "line", "1");
+      await showCardQuote(el, "34.00");
+      const checked = el.checkedQuote!;
+      el.checkedQuote = { ...checked, preview: { ...checked.preview!, total: "34.00" } };
+      await el.updateComplete;
+
+      expect(root(el).querySelector("[data-quiet-pay-amount]")?.textContent?.trim()).toBe(
+        money("34.00"),
+      );
+      const notice = root(el).querySelector("[data-pay-own-bill]");
+      if (warning) expect(text(notice)).toBe(warning);
+      else expect(notice).toBeNull();
+    },
+  );
+
   it("asks no receipt guests and no own receipt for items", async () => {
     // Today's part payment of what is left asks the guests, and of less than that its own receipt.
     for (const outstanding of ["35.00", "120.00"]) {
@@ -3861,9 +4041,7 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
       });
       expect(root(el).querySelector('[name="guests"]')).toBeNull();
       expect(root(el).querySelector("[data-pay-own-receipt]")).toBeNull();
-      expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(
-        t("bill_pay.items_own_bill"),
-      );
+      expect(root(el).querySelector("[data-pay-own-bill]")).toBeNull();
       const confirmed = capture(el, "bill-pay-confirm");
       await click(el, "[data-pay-confirm]");
       expect(confirmed).toEqual([{}]);
@@ -3872,21 +4050,17 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
   });
 
   it("on a printed bill says only that this cancels the receipt and reopens the bill", async () => {
-    for (const [status, sentence] of [
-      ["placed", "This cancels the existing receipt and reopens the bill."],
-      ["open", t("bill_pay.items_own_bill")],
-    ] as const) {
-      const el = await mount({
-        balance: balanceOf({ status, outstanding: "120.00" }),
-        asked: itemsAsked,
-        preview: ownBill("35.00"),
-      });
-      expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(sentence);
-      cleanupWidgets();
-    }
+    const el = await mount({
+      balance: balanceOf({ status: "placed", outstanding: "120.00" }),
+      asked: itemsAsked,
+      preview: ownBill("35.00"),
+    });
+    expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(
+      "This cancels the existing receipt and reopens the bill.",
+    );
   });
 
-  it("on a bill sent with no receipt says the items move to a bill of their own, not that a receipt is cancelled", async () => {
+  it("shows no receipt warning on a bill sent with no receipt", async () => {
     for (const locale of ["en", "es"] as const) {
       setLocale(locale);
       onTestFinished(() => setLocale("en"));
@@ -3896,9 +4070,7 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
         asked: itemsAsked,
         preview: ownBill("35.00"),
       });
-      expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(
-        t("bill_pay.items_own_bill"),
-      );
+      expect(root(el).querySelector("[data-pay-own-bill]")).toBeNull();
       cleanupWidgets();
     }
   });

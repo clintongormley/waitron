@@ -19,6 +19,7 @@ import {
   press,
   resetBillPayDrafts,
   stubApi,
+  takeBillPaymentFromDialog,
   text,
   till,
   type,
@@ -52,7 +53,7 @@ afterEach(() => {
 });
 
 it.each(["30.00", "24.00"])(
-  "Whole confirms the current %s instead of its opening 27.00",
+  "Whole charges the checked %s instead of its opening 27.00",
   async (amount) => {
     const getBillBalance = vi
       .fn()
@@ -76,22 +77,22 @@ it.each(["30.00", "24.00"])(
     await openTable(el);
     await openDialog(el, "rest");
     getBillBalance.mockImplementation(() => new Promise(() => {}));
-    await choosePayMethod(el, "card");
     await type(el, "cardTip", "0");
-    await press(el, "[data-pay-continue]");
-    expect(previewBillPayment.mock.calls[0]?.[1]).toMatchObject({
-      kind: "share",
-      shareOf: 1,
-      addedTip: "0",
-    });
-    expect(text(inDialog(el, "[data-pay-scope]"))).toBe(
-      t("table.bill_to_pay").replace("{amount}", money(amount)),
+    await vi.waitFor(() =>
+      expect(previewBillPayment.mock.lastCall?.[1]).toMatchObject({
+        kind: "share",
+        shareOf: 1,
+        addedTip: "0",
+      }),
     );
-    expect(text(inDialog(el, "[data-pay-applied] dd"))).toBe(money(amount));
-    expect(text(inDialog(el, "[data-pay-charged] dd"))).toBe(money(amount));
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-quiet-pay-card]"))).toBe(`Charge ${money(amount)}`),
+    );
+    expect(text(inDialog(el, "[data-quiet-pay-amount]"))).toBe(money(amount));
     expect(inDialog(el, 'wt-number-stepper[name="guests"]')).not.toBeNull();
     expect(dialog(el)!.balance!.outstanding).toBe("27.00");
-    await press(el, "[data-pay-confirm]");
+    expect(takeBillPayment).not.toHaveBeenCalled();
+    await takeBillPaymentFromDialog(el);
     await vi.waitFor(() => expect(takeBillPayment).toHaveBeenCalled());
     expect(takeBillPayment.mock.calls[0]?.[1]).toMatchObject({
       kind: "share",
@@ -477,9 +478,7 @@ it("keeps a reader's pending outcome visible when its bill moves", async () => {
   stream.event("ready");
   await flush(el);
   await openDialog(el, "rest");
-  await choosePayMethod(el, "card");
-  await press(el, "[data-pay-continue]");
-  await press(el, "[data-pay-confirm]");
+  await takeBillPaymentFromDialog(el);
   expect(dialog(el)!.taken?.pending).toBe("120.00");
   getPartyBills.mockResolvedValue([billOf({ workingOrderId: "wo-9", billNumber: 2 })]);
   stream.event("change", '[{"type":"working_orders"}]');
@@ -596,8 +595,7 @@ it("keeps a handheld's earlier card watched after the next guest's preview and a
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   await openDialog(el, "contribution");
   await type(el, "amount", "40");
-  await press(el, "[data-pay-continue]");
-  await press(el, "[data-pay-confirm]");
+  await takeBillPaymentFromDialog(el);
   expect(dialog(el)!.taken?.pending).toBe("40.00");
   await press(el, "[data-pay-next]");
   await type(el, "amount", "10");

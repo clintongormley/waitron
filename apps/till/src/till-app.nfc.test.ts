@@ -26,7 +26,6 @@ import {
   inDialog,
   money,
   paymentOf,
-  press,
   equipmentItem,
   flush,
   SECOND_READER,
@@ -35,6 +34,7 @@ import {
   roleOf,
   showBillFooter,
   stubApi,
+  takeBillPaymentFromDialog,
   text,
   till,
 } from "../test/bill-pay-app.js";
@@ -984,8 +984,8 @@ describe("the pay sheet's NFC button", () => {
       takeBillPayment,
       setDeviceEquipment: vi.fn().mockResolvedValue(withThirdReader),
     });
-    await press(el, "[data-quiet-pay-card]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
+    await vi.waitFor(() => expect(takeBillPayment).toHaveBeenCalledOnce());
     const waiting = () =>
       inDialog(el, "till-card-waiting") as
         (HTMLElement & { updateComplete: Promise<unknown> }) | null;
@@ -994,7 +994,7 @@ describe("the pay sheet's NFC button", () => {
         .replace("{amount}", () => money("120.00"))
         .replace("{reader}", () => reader)
         .replace(/\s+/g, " ");
-    expect(waiting()).not.toBeNull();
+    await vi.waitFor(() => expect(waiting()).not.toBeNull());
 
     (await reader()).read(`waitron-equipment:reader:${READER_ID}`);
     await flush(el);
@@ -1014,10 +1014,11 @@ describe("the pay sheet's NFC button", () => {
     });
     await flush(el);
     expect(waiting()).toBeNull();
-    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(
-      t("bill_pay.retry_on_reader").replace("{reader}", () => "Lector 3"),
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.card_declined"));
+    await vi.waitFor(() =>
+      expect(text(inDialog(el, "[data-quiet-pay-card]"))).toBe(`Charge ${money("120.00")}`),
     );
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     const sent = takeBillPayment.mock.calls.map(([, request]) => request as BillPaymentRequest);
     expect(sent).toHaveLength(2);
     expect(sent[0]).toMatchObject({ readerId: "r2" });

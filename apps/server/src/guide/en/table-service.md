@@ -245,8 +245,8 @@ Use **Refresh printers** when none are listed, or **Cancel** to leave without pr
 ## Payment slips {#reader-slips}
 
 If the payer wants a slip, choose **Print payment slip** after you take their payment by cash,
-**Other card machine** or card reader. For a part payment, print it from the confirmation before
-taking the next payment. After the final payment, use **Customer document**. The button appears
+**Other card machine** or card reader. For a part payment, use the button on Pay when it shows the
+payment was received. After the final payment, use **Customer document**. The button appears
 when your device has a payment slip printer. A reader set to print its own slip handles that payment.
 A slip shows the payment and how it was made. For
 **Other card machine**, it includes the machine and operation number you entered.
@@ -1015,11 +1015,9 @@ For a full invoice, [set up the bill before paying](table-service.md#full-invoic
 Choose **Split equally** for one equal share, **Items** for particular dishes, or **An amount** for
 a contribution. For an equal share, enter how many people are still to pay, including this
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
-The chosen dishes move to a bill of their own, paid at once, with its own receipt; the rest stays
-on this bill. Choosing every dish pays the whole bill. If the card is declined or you choose
-**Cancel payment**, the dishes go back to this bill. If they cannot go back, for example because
-this bill was printed or paid while the card was out, they stay on a bill of their own, to be paid
-there: at a table it is listed in the bill switcher, and at the Counter under **Parked orders**.
+Choosing every dish pays the whole bill. If the card is declined or you choose **Cancel payment**,
+check this bill for the dishes before trying again. If they are on a separate bill, pay that bill
+from the table's bill switcher or from **Parked orders** at the Counter.
 While their card is still out, the till that
 took it shows **Being paid on** and the number of their bill; do not charge those dishes again.
 On a printed bill, **Items** cancels the existing receipt and reopens the bill. On a Counter order
@@ -1028,9 +1026,10 @@ own, which **Waiting orders** shows with the order's number in brackets. Once su
 paid with **An amount**, **Split equally** or **Whole bill**, not by item; when its bill is
 presented for collection, choose **Pay in parts** to see those choices.
 
-At a table, choose **Charge** to check a payment on a connected reader. Choose **Cash** or **Other card machine**
-to enter the payment details. At the Counter, choose the method and press **Continue**. Check the
-amounts on the confirmation, including any changes since you opened Pay.
+At a table, check **To pay** and answer any receipt questions on **Pay**. Choose **Charge** to start
+the connected reader, or **Cash** to enter what the guest handed over. Choose **Other card machine**
+to enter the details of a payment taken separately. At the Counter, choose the method, press
+**Continue** and check the amounts on the confirmation.
 
 **A bill paid more than it comes to.** A bill can take more than it comes to, for example a
 contribution followed by dishes paid on a bill of their own. It then says how much more and
@@ -1040,9 +1039,11 @@ that amount. If the venue takes tips, **Keep €5.00 as tip** keeps it as a tip 
 If the bill comes to €0.00, choose **Close** after you see the refund confirmation. Back on the
 bill, choose **Cash** or **Card** and **Confirm payment** for €0.00 to close it.
 
-**A receipt of their own.** When a guest pays part of a bill that has no invoice yet and is set
-for a receipt, not a full invoice, the confirmation asks whether they want their own receipt for that amount. **Yes** prints them a ticket
-of its own, and the table's receipt takes it off. **No** lists it on the table's receipt.
+**A receipt of their own.** When a guest pays part of a bill that has no invoice yet and is set for
+a receipt, ask whether they want their own receipt for that amount. On a table's Pay screen, answer before
+choosing **Charge** or **Cash**. For **Other card machine** or at the Counter, answer on the
+confirmation. **Yes** prints them a ticket of its own, and the table's receipt takes it off.
+**No** lists it on the table's receipt.
 To see which table's receipt took a part payment off, open its receipt in **Find a bill**.
 
 **Cash and change.** Choose **Cash** and enter the actual **Cash handed over**. The confirmation
@@ -1051,21 +1052,21 @@ whether to return all the change, leave all of it as a tip, or leave an amount. 
 again after choosing a tip, then press **Take payment** and give that change to the guest.
 
 **Card and reader.** At a table, use the contactless icon to open **Reader and printer**;
-use **Change** or scan its Waitron label if you are holding another one. At the Counter, choose
-from the card readers when a list is offered. Check the reader and the total before confirming.
+use **Change** or scan its Waitron label if you are holding another one. Check the amount on
+**Charge** before pressing it. At the Counter, choose from the card readers when a list is
+offered. Check the reader and the total on the confirmation.
 To use a separate machine, follow [Use another card machine](table-service.md#outside-card).
 
 If the venue takes tips and Waitron drives the reader, use **Enter tip** on the table’s Pay screen.
 To take it off before starting the payment, choose **Edit tip**, then **Remove tip**. For a
 separate card machine, enter the tip with the other payment details. At the Counter, enter
-**Tip on the card (optional)** before continuing. The confirmation separates **Paid off the bill**,
-**Tip** and **Charged on the card**.
+**Tip on the card (optional)** before continuing. The confirmation at the Counter or for
+**Other card machine** separates **Paid off the bill**, **Tip** and **Charged on the card**.
 An amount above what is still due becomes a tip, so check the full card charge with the guest before
 sending it. For example, a €50 card contribution towards €40 still due pays €40 off the bill and adds a €10
 tip. If the venue does not take tips, use the amount the refusal says can be charged.
 
-On a phone, the confirmation button names the amount and reader. Once you press it, the waiting
-panel shows that same amount and reader, with elapsed waiting time. Complete the card step on
+On a phone, the waiting panel shows the amount, reader and elapsed waiting time. Complete the card step on
 that reader and wait for the result. A spinning phone is not proof that the card failed.
 
 If the guest changes their mind while the SumUp reader waits for their card, choose

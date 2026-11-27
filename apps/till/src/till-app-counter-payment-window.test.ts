@@ -990,7 +990,7 @@ const waitingShown = (el: TillApp) =>
     .shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!
     .counterWaiting.map((row) => [row.orderNumber, row.status, row.total]);
 
-it("Items on a sent Counter order with no receipt says the dishes move to a bill of their own, not that a receipt is cancelled", async () => {
+it("Items shows no receipt warning on a sent Counter order with no receipt", async () => {
   const { el } = await sentWaitingOrder(() => "no", {
     previewItemPayment: vi
       .fn()
@@ -1002,9 +1002,7 @@ it("Items on a sent Counter order with no receipt says the dishes move to a bill
   await press(el, "[data-pay-continue]");
   await flush(el);
 
-  expect(inDialog(el, "[data-pay-own-bill]")?.textContent?.trim()).toBe(
-    t("bill_pay.items_own_bill"),
-  );
+  expect(inDialog(el, "[data-pay-own-bill]")).toBeNull();
 });
 
 it("paying Items on a sent Counter order lists Waiting again, with what is left and the paid part", async () => {

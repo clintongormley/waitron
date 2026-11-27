@@ -1,4 +1,5 @@
 import { billPayDialogStyles } from "./bill-pay-dialog-styles.js";
+import type { TablePayQuote, TablePayQuoteRequest } from "../state/table-pay-quote.js";
 import { paymentSlipButton, type PaymentSlipAction } from "./pay-equipment.js";
 import {
   outsideCardFields,
@@ -128,6 +129,7 @@ export interface PayRequest {
 export type BillPayConfirmDetail = ReceiptGuestsDetail & {
   readerId?: string;
   ownReceipt?: true;
+  quote?: TablePayQuote;
 };
 
 /** The payment just taken: the change it handed back, null for a card; for a card still at the
@@ -252,6 +254,8 @@ export class TillBillPayDialog extends LitElement {
    * confirmation. */
   @property({ attribute: false }) asked: PayRequest | null = null;
   @property({ attribute: false }) preview: AllocationPreview | null = null;
+  @property() quoteContext = "";
+  @property({ attribute: false }) checkedQuote: TablePayQuote | null = null;
   @property({ attribute: false }) refusal: PayRefusal | null = null;
   /** Set after each payment taken: the dialog says so and starts its form again. */
   @property({ attribute: false }) taken: PayTaken | null = null;
@@ -336,7 +340,10 @@ export class TillBillPayDialog extends LitElement {
   @state() private chosenReaderId?: string;
   @state() private simulationOutcome: "captured" | "declined" | "attempting" = "captured";
   get #shownRefusal(): PayRefusal | null {
-    return this.#feedback.shows("refusal") ? this.refusal : null;
+    return this.#feedback.shows("refusal")
+      ? (this.refusal ??
+          (this.#opening && !this.quietEntry ? (this.#openingQuote()?.refusal ?? null) : null))
+      : null;
   }
   /** The waiter's own guests value; undefined follows {@link receiptGuests}. */
   @state() private guestsEntry?: string;
@@ -345,6 +352,9 @@ export class TillBillPayDialog extends LitElement {
   @state() private rowOpen = false;
   @state() private quietEntry = false;
   @state() private quietTip = false;
+  #quoteKey = "";
+  #quotedRequest: TablePayQuoteRequest | null = null;
+  #quoteTimer?: ReturnType<typeof setTimeout>;
   /** The row's QR has put the camera in place of the body. */
   @state() private scanning = false;
   /** On a handheld, after a payment that leaves money owing: the sheet offers the next guest in
@@ -385,6 +395,8 @@ export class TillBillPayDialog extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    clearTimeout(this.#quoteTimer);
+    this.#quoteKey = "";
     this.#entry?.dispose();
     this.#tip?.dispose();
     this.#entry = undefined;
@@ -548,7 +560,7 @@ export class TillBillPayDialog extends LitElement {
         this.method = offered[0] ?? "card";
     } else if (changed.has("takesCash")) this.method = this.takesCash ? "cash" : "card";
     if (changed.has("amount")) this.typedAmountValue = this.amount;
-    if (changed.has("asked") && this.asked === null) this.ownReceipt = null;
+    if (!this.quiet && changed.has("asked") && this.asked === null) this.ownReceipt = null;
     const billBefore = (changed.get("balance") as BillBalance | null | undefined)?.workingOrderId;
     if (
       billBefore !== undefined &&
@@ -558,6 +570,7 @@ export class TillBillPayDialog extends LitElement {
       // Another bill's dishes carry other ids and numbers, so a choice from the bill left is not
       // carried across, and nothing chosen there is marked missing here.
       this.picks = new Map();
+      this.ownReceipt = null;
       this.#feedback.reset();
     }
     if (!this.busy && this.asked === null && !this.confirmationLocked) {
@@ -705,6 +718,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #startAgain(): void {
+    this.ownReceipt = null;
     this.picks = new Map();
     this.typedAmountValue = "";
     this.people = "";
@@ -761,13 +775,13 @@ export class TillBillPayDialog extends LitElement {
     }
   }
 
-  #request(): PayRequest {
+  #request(method = this.method): PayRequest {
     const choice = this.#choice();
-    if (this.method === "cash")
+    if (method === "cash")
       return { choice, pay: { method: "cash", tendered: typedAmount(this.tendered)! } };
     const tip = this.tipsEnabled ? typedAmount(this.cardTip) : null;
     const pay: PayMethod = tip === null ? { method: "card" } : { method: "card", addedTip: tip };
-    if (!this.#keyed(this.method)) return { choice, pay, card: this.#readerEntry() };
+    if (!this.#keyed(method)) return { choice, pay, card: this.#readerEntry() };
     const ref = this.externalRef.trim();
     return {
       choice,
@@ -824,7 +838,7 @@ export class TillBillPayDialog extends LitElement {
       : { entry: "reader", readerId: this.chosenReaderId };
   }
 
-  #ownErrors(): Map<Field, string> {
+  #ownErrors(method = this.method): Map<Field, string> {
     const errors = new Map<Field, string>();
     if (this.chosenWay === "items" && this.picks.size === 0)
       errors.set("lines", t("bill_pay.items_required"));
@@ -835,7 +849,7 @@ export class TillBillPayDialog extends LitElement {
     }
     if (this.chosenWay === "share" && !PEOPLE.test(this.people.trim()))
       errors.set("people", t("bill_pay.people_invalid"));
-    if (this.method === "cash") {
+    if (method === "cash") {
       const tendered = typedAmount(this.tendered);
       if (tendered === null || compareDecimal(decimal(tendered), decimal("0")) <= 0)
         errors.set("tendered", t("bill_pay.tendered_invalid"));
@@ -856,7 +870,7 @@ export class TillBillPayDialog extends LitElement {
           this.#shownRefusal,
           this.method,
           this.chosenWay,
-          this.preview !== null && this.#guestsShown(this.preview),
+          this.#receiptQuote() !== null && this.#guestsShown(this.#receiptQuote()!),
         );
   }
 
@@ -893,6 +907,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #changed(field: Field): void {
+    if (field === "amount" || field === "people" || field === "lines") this.ownReceipt = null;
     if (this.#refusalField() === field) this.#feedback.dismiss("refusal");
   }
 
@@ -937,6 +952,11 @@ export class TillBillPayDialog extends LitElement {
   #send(): void {
     this.askingSecondCard = false;
     this.#noTip();
+    if (this.#opening && !this.quietEntry) {
+      const quote = this.#openingQuote();
+      if (quote?.preview != null) void this.#take(quote.request.asked, quote.preview, null, quote);
+      return;
+    }
     this.#emit("bill-pay-preview", this.#request());
   }
 
@@ -969,8 +989,8 @@ export class TillBillPayDialog extends LitElement {
     </div>`;
   }
 
-  override render() {
-    const opening =
+  get #opening(): boolean {
+    return (
       this.quiet &&
       overpaidOf(this.balance) === null &&
       !this.showsRefundAcknowledgment &&
@@ -979,7 +999,63 @@ export class TillBillPayDialog extends LitElement {
       !this.confirmationLocked &&
       this.taken === null &&
       this.preview === null &&
-      !this.askingSecondCard;
+      !this.askingSecondCard
+    );
+  }
+
+  #quoteRequest(): TablePayQuoteRequest | null {
+    const errors = this.#ownErrors("card");
+    const invalidTip = errors.delete("cardTip");
+    const card = !invalidTip && (this.handheld ? this.takesReaderCard : this.cardReader !== "none");
+    if (
+      !this.quoteContext ||
+      !this.#owing() ||
+      errors.size > 0 ||
+      (!card && !this.takesCash) ||
+      (this.chosenWay === "items" && this.itemsBarred !== null)
+    )
+      return null;
+    return { context: this.quoteContext, asked: this.#request("card"), card, cash: this.takesCash };
+  }
+
+  #openingQuote(): TablePayQuote | null {
+    const quote = this.checkedQuote;
+    const request = this.#quoteRequest();
+    return quote !== null &&
+      request !== null &&
+      quote.request === this.#quotedRequest &&
+      this.#quoteKey === JSON.stringify(request)
+      ? quote
+      : null;
+  }
+
+  #receiptQuote(): AllocationPreview | null {
+    if (this.preview !== null || this.quietEntry) return this.preview;
+    const quote = this.checkedQuote;
+    return quote?.request.context === this.quoteContext &&
+      JSON.stringify(quote.request.asked.choice) === JSON.stringify(this.#choice())
+      ? (quote.preview ?? quote.cash)
+      : null;
+  }
+
+  override updated(): void {
+    if (this.busy || !this.#opening || this.quietEntry) return;
+    const request = this.#quoteRequest();
+    const key = request === null ? "" : JSON.stringify(request);
+    if (this.#quoteKey === key) return;
+    clearTimeout(this.#quoteTimer);
+    const wait = this.#quoteKey === "" ? 0 : 150;
+    this.#quoteKey = key;
+    this.#quotedRequest = request;
+    if (request !== null)
+      this.#quoteTimer = setTimeout(() => {
+        if (this.busy) this.#quoteKey = "";
+        else this.#emit("bill-pay-quote", request);
+      }, wait);
+  }
+
+  override render() {
+    const opening = this.#opening;
     const view = opening
       ? undefined
       : this.showsRefundAcknowledgment
@@ -1010,15 +1086,35 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #quietPay(): TemplateResult {
-    const base = this.#quietAmount();
+    const quote = this.#openingQuote();
+    const checked = this.quietEntry ? null : quote?.preview;
+    const cashChecked = this.quietEntry ? null : quote?.cash;
+    const receipt = this.#receiptQuote();
+    const guests = receipt !== null && this.#guestsShown(receipt);
+    const ownReceipt = receipt !== null && this.#ownReceiptAsked(receipt);
+    const receiptIncomplete =
+      (ownReceipt && this.ownReceipt === null) || (guests && this.#guestsInvalid());
+    const base = checked?.applied ?? cashChecked?.applied ?? this.#quietAmount();
     const card = this.handheld ? this.takesReaderCard : this.cardReader !== "none";
     const acceptsTip = this.quietEntry ? this.method !== "cash" : card;
-    const tip = this.tipsEnabled && acceptsTip ? typedMoney(this.cardTip) : null;
+    const tip =
+      this.tipsEnabled && acceptsTip
+        ? checked && compareDecimal(decimal(checked.tip), decimal("0")) > 0
+          ? checked.tip
+          : typedMoney(this.cardTip)
+        : null;
     const includingTip = (value: string) =>
       this.#money(tip === null ? value : moneyPlus(value, tip));
-    const amount = base === null ? "" : includingTip(base);
+    const amount =
+      checked?.charged != null
+        ? this.#money(checked.charged)
+        : base === null
+          ? ""
+          : includingTip(base);
     const reserved = this.balance?.reserved;
     const own = this.#feedback.attempted ? this.#ownErrors() : new Map<Field, string>();
+    if (guests && this.guestsAttempted && this.#guestsInvalid())
+      own.set("guests", t("seat.guest_count_invalid"));
     const errors = this.#fieldErrors(own);
     const manual = this.takesManualCard || (!this.handheld && this.cardReader === "none");
     return quietPay({
@@ -1072,11 +1168,16 @@ export class TillBillPayDialog extends LitElement {
               this.balance === null ? undefined : includingTip(this.balance.outstanding),
               (way) => {
                 this.chosenWay = way;
+                this.ownReceipt = null;
                 this.#shareRun = null;
                 this.#changedDraft();
               },
             )}
-            ${this.#wayFields(errors)} ${this.#deferred()} ${this.#payments()}
+            ${this.#wayFields(errors)}
+            ${receipt === null ? nothing : this.#itemsReceiptWarning(receipt)}
+            ${ownReceipt ? this.#ownReceiptChoice() : nothing}
+            ${guests ? this.#guests(errors.get("guests")) : nothing} ${this.#deferred()}
+            ${this.#payments()}
             ${!this.takesCash && (card || manual) ? html`<p class="muted cash-at-till">${t("tender.cash_at_till")}</p>` : nothing}
             ${card || manual || this.takesCash ? nothing : html`<p role="status">${t("bill_pay.no_method")}</p>`}`
       }`,
@@ -1106,7 +1207,8 @@ export class TillBillPayDialog extends LitElement {
               card: !card
                 ? undefined
                 : {
-                    disabled: !this.#owing() || this.#heldForEquipment("card"),
+                    disabled:
+                      checked == null || receiptIncomplete || this.#heldForEquipment("card"),
                     run: () => {
                       this.method = "card";
                       void this.#continue();
@@ -1114,7 +1216,10 @@ export class TillBillPayDialog extends LitElement {
                   },
               cash: !this.takesCash
                 ? undefined
-                : { disabled: !this.#canAsk(), run: () => this.#quietMethod("cash") },
+                : {
+                    disabled: cashChecked == null || receiptIncomplete,
+                    run: () => this.#quietMethod("cash"),
+                  },
               manual: !manual
                 ? undefined
                 : { disabled: !this.#canAsk(), run: () => this.#quietMethod("manual") },
@@ -1586,11 +1691,8 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #enter(event: KeyboardEvent, selector: string): void {
-    const target =
-      selector === "[data-pay-continue]"
-        ? `${selector}, [data-quiet-pay-card], [data-quiet-pay-cash], [data-quiet-pay-manual]`
-        : selector;
-    submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(target));
+    if (selector === "[data-pay-continue]" && this.#opening && !this.quietEntry) return;
+    submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(selector));
   }
 
   #input(
@@ -2056,7 +2158,12 @@ export class TillBillPayDialog extends LitElement {
 
   /** Takes the payment shown; with part of the change typed as a tip, first checks it and, when
    * it is not the tip shown, asks the server for the allocation with it. */
-  async #take(asked: PayRequest, preview: AllocationPreview, cash: Cash | null): Promise<void> {
+  async #take(
+    asked: PayRequest,
+    preview: AllocationPreview,
+    cash: Cash | null,
+    quote?: TablePayQuote,
+  ): Promise<void> {
     if (!this.isConnected || !this.#active || this.busy) return;
     const onReader = asked.card?.entry === "reader";
     if (this.#heldForEquipment(onReader ? "card" : "cash")) return;
@@ -2082,6 +2189,7 @@ export class TillBillPayDialog extends LitElement {
     this.#sent = reader === null ? null : sentCard(reader, preview.charged!);
     this.#sharePaying = asked.choice.kind === "share" ? asked.choice.shareOf : null;
     this.#emit("bill-pay-confirm", {
+      ...(quote === undefined ? {} : { quote }),
       ...this.#guestsDetail(guestsShown),
       ...(reader?.id === undefined ? {} : { readerId: reader.id }),
       ...(this.#ownReceiptAsked(preview) && this.ownReceipt === true
@@ -2097,7 +2205,7 @@ export class TillBillPayDialog extends LitElement {
       this.asksGuests &&
       !paysOnNewBill(preview) &&
       this.balance !== null &&
-      (this.asked?.choice.kind === "whole" ||
+      ((this.asked?.choice.kind ?? this.#choice().kind) === "whole" ||
         compareDecimal(decimal(preview.applied), decimal(this.balance.outstanding)) === 0)
     );
   }
@@ -2109,8 +2217,7 @@ export class TillBillPayDialog extends LitElement {
       !paysOnNewBill(preview) &&
       !this.confirmationLocked &&
       this.balance !== null &&
-      this.asked !== null &&
-      this.asked.choice.kind !== "whole" &&
+      (this.asked?.choice.kind ?? this.#choice().kind) !== "whole" &&
       compareDecimal(decimal(preview.applied), decimal(this.balance.outstanding)) < 0
     );
   }
@@ -2122,7 +2229,7 @@ export class TillBillPayDialog extends LitElement {
     ];
     return html`<fieldset class="choice" data-pay-own-receipt ?disabled=${this.busy}>
       <legend>
-        ${t("bill_pay.own_receipt")}<span class="required" aria-hidden="true">*</span>
+        ${t("bill_pay.own_receipt")}<span class="required" aria-hidden="true">&#8288;*</span>
       </legend>
       <div class="options">
         ${answers.map(({ value, answer, label }) =>
@@ -2165,6 +2272,12 @@ export class TillBillPayDialog extends LitElement {
     });
   }
 
+  #itemsReceiptWarning(preview: AllocationPreview): TemplateResult | typeof nothing {
+    if (!paysOnNewBill(preview) || this.balance?.status !== "placed" || this.sentWithoutReceipt)
+      return nothing;
+    return html`<p class="own-bill" data-pay-own-bill>${t("bill_pay.items_own_bill_printed")}</p>`;
+  }
+
   #confirmStep(asked: PayRequest, preview: AllocationPreview): SheetView {
     // A cash preview always carries its change, and a card's its charge.
     const cash: Cash | null =
@@ -2187,17 +2300,7 @@ export class TillBillPayDialog extends LitElement {
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
     const body = html`${outsideCardSummary(asked.card?.entry === "manual" ? asked.card : {})}
       <p class="scope" data-pay-scope>${this.#scope()}</p>
-      ${
-        this.#ownBill()
-          ? html`<p class="own-bill" data-pay-own-bill>
-              ${t(
-                this.balance?.status === "placed" && !this.sentWithoutReceipt
-                  ? "bill_pay.items_own_bill_printed"
-                  : "bill_pay.items_own_bill",
-              )}
-            </p>`
-          : nothing
-      }
+      ${this.#itemsReceiptWarning(preview)}
       <dl class="allocation">
         <div class=${cash === null ? "headline" : ""} data-pay-applied>
           <dt>${t("bill_pay.applied")}</dt>

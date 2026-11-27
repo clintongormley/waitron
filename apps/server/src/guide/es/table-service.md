@@ -261,8 +261,8 @@ o **Cancelar** para salir sin imprimir.
 ## Justificantes de pago {#reader-slips}
 
 Si quien paga quiere justificante, elige **Imprimir justificante de pago** después de cobrar en
-efectivo, con **Otro datáfono** o con lector de tarjetas. Si es un pago parcial, imprímelo desde
-la confirmación antes de cobrar el siguiente. Tras el último pago, usa **Documento para el cliente**.
+efectivo, con **Otro datáfono** o con lector de tarjetas. Si es un pago parcial, usa el botón en
+**Cobrar** cuando aparezca el pago recibido. Tras el último pago, usa **Documento para el cliente**.
 El botón aparece cuando tu dispositivo tiene impresora de justificantes. Si el lector imprime su
 propio justificante, el lector se encarga de ese pago. El justificante muestra el
 pago y cómo se hizo. Con **Otro datáfono**, incluye el datáfono y el número de operación que indicaste.
@@ -1071,12 +1071,10 @@ Para una factura completa, [prepara la cuenta antes de cobrar](table-service.md#
 queda. Elige **Dividir a partes iguales** para cobrar una parte igual, **Artículos** para platos
 concretos o **Una cantidad** para aportar un importe. Para una parte igual, indica cuántas
 personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
-si solo se pagan algunos. Los platos elegidos pasan a una cuenta propia, que se cobra en el acto y
-tiene su propio ticket; el resto se queda en esta cuenta. Si eliges todos los platos, se cobra
-toda la cuenta. Si la tarjeta se rechaza o pulsas **Cancelar cobro**, los platos vuelven a esta
-cuenta. Si no pueden volver, por ejemplo porque esta cuenta se imprimió o se cobró mientras la
-tarjeta estaba en curso, se quedan en una cuenta propia, para cobrarlos allí: en una mesa aparece
-en el selector de cuentas y, en **Mostrador**, en **Pedidos aparcados**. Mientras su
+si solo se pagan algunos. Si eliges todos los platos, se cobra toda la cuenta. Si la tarjeta se
+rechaza o pulsas **Cancelar cobro**, comprueba si los platos están en esta cuenta antes de volver a
+cobrar. Si están en otra cuenta, cóbrala desde el selector de cuentas de la mesa o desde
+**Pedidos aparcados** en Mostrador. Mientras su
 tarjeta sigue en curso, la caja que la cobró muestra **Se está cobrando en la**
 y el número de su cuenta; no vuelvas a cobrar esos platos. En una cuenta impresa, **Artículos**
 anula el ticket y reabre la cuenta. En un pedido de mostrador ya enviado a cocina y aún sin
@@ -1085,9 +1083,11 @@ muestra con el número del pedido entre paréntesis. Si ese pedido se pasa despu
 **Dividir a partes iguales** o **Toda la cuenta**, no por artículos; cuando su cuenta está
 presentada para su cobro, elige **Cobrar por partes** para ver esas opciones.
 
-En una mesa, pulsa **Cobrar** para revisar el pago con un lector conectado. Pulsa **Efectivo** u
-**Otro datáfono** para introducir los detalles. En Mostrador, elige la forma de pago y pulsa
-**Continuar**. Revisa los importes en la confirmación, incluidos los cambios desde que abriste Cobrar.
+En una mesa, comprueba **A pagar** y responde a las preguntas sobre el ticket en **Cobrar**.
+Pulsa **Cobrar** para iniciar el pago en el lector conectado o **Efectivo** para indicar cuánto te
+ha entregado el cliente. Pulsa **Otro datáfono** para introducir los datos de un pago realizado
+aparte. En Mostrador, elige la forma de pago, pulsa **Continuar** y comprueba los importes en la
+confirmación.
 
 **Una cuenta pagada de más.** Una cuenta puede recibir más de lo que suma, por ejemplo una
 aportación seguida de platos cobrados en una cuenta propia. Entonces indica cuánto de más y no
@@ -1099,8 +1099,10 @@ Si la cuenta suma 0,00 €, pulsa **Cerrar** cuando veas la confirmación de la 
 cuenta, elige **Efectivo** o **Tarjeta** y pulsa **Confirmar cobro** por 0,00 € para cerrarla.
 
 **Un ticket propio.** Cuando un cliente paga una parte de una cuenta que aún no tiene factura y que
-va con ticket, no con factura completa, la confirmación pregunta si quiere su propio ticket por ese importe. **Sí** le imprime un ticket
-propio, y el ticket de la mesa lo descuenta. **No** lo deja en el ticket de la mesa.
+va con ticket, pregúntale si quiere su propio ticket por ese importe. En una mesa, responde antes
+de elegir **Cobrar** o **Efectivo**. Con **Otro datáfono** o en Mostrador, responde en la confirmación.
+**Sí** le imprime un ticket propio, y el ticket de la mesa lo descuenta. **No** lo deja en el ticket
+de la mesa.
 Para ver qué ticket de la mesa descontó un pago parcial, abre su ticket en **Buscar cuenta**.
 
 **Efectivo y cambio.** Elige **Efectivo** e introduce el **Efectivo entregado** real. La
@@ -1109,22 +1111,22 @@ acepta propinas, elige entre devolver todo el cambio, dejarlo todo como propina 
 cantidad. Revisa el cambio después de elegir la propina, pulsa **Cobrar** y devuelve ese cambio.
 
 **Tarjeta y lector.** En una mesa, usa el icono sin contacto para abrir **Lector e impresora**. Usa
-**Cambiar** o escanea su etiqueta de Waitron si tienes otro en la mano. En Mostrador, elige el lector
-cuando se ofrezca una lista. Comprueba el lector y el total antes de
-confirmar. Para usar otra máquina, sigue [Usar otro datáfono](table-service.md#outside-card).
+**Cambiar** o escanea su etiqueta de Waitron si tienes otro en la mano. Revisa el importe del botón
+**Cobrar** antes de pulsarlo. En Mostrador, elige el lector cuando se ofrezca una lista y comprueba
+el lector y el total en la confirmación. Para usar otra máquina, sigue
+[Usar otro datáfono](table-service.md#outside-card).
 
 Si el local acepta propinas y Waitron controla el lector, pulsa **Introducir propina** en Cobrar.
 Para retirar la propina antes de iniciar el pago, pulsa **Editar propina** y luego **Quitar propina**.
-Con otro datáfono, introduce la propina con los demás datos del pago. En Mostrador, rellena **Propina con tarjeta (opcional)**
-antes de continuar. La confirmación separa **Se descuenta de la cuenta**,
-**Propina** y **Se cobra en la tarjeta**.
+Con otro datáfono, introduce la propina con los demás datos del pago. En Mostrador, rellena
+**Propina con tarjeta (opcional)** antes de continuar. La confirmación de Mostrador o de
+**Otro datáfono** separa **Se descuenta de la cuenta**, **Propina** y **Se cobra en la tarjeta**.
 Una cantidad superior a lo que queda se convierte en propina: confirma con el cliente el cargo
 completo antes de enviarlo. Por ejemplo, aportar 50 € con tarjeta cuando quedan 40 € descuenta
 40 € de la cuenta y añade 10 € de propina. Si el local no acepta propinas, usa el importe que el
 mensaje indica que se puede cobrar.
 
-En un teléfono, el botón de confirmación nombra el importe y el lector. Al pulsarlo, el panel de
-espera muestra ese mismo importe y lector, con el tiempo transcurrido. Completa el paso de la
+En un teléfono, el panel de espera muestra el importe, el lector y el tiempo transcurrido. Completa el paso de la
 tarjeta en ese lector y espera el resultado. Que el teléfono siga esperando no demuestra que el
 cobro haya fallado.
 
