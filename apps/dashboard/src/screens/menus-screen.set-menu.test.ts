@@ -149,6 +149,87 @@ it("shows only set menus, their prices and their offering menus on the new list"
   expect(client.readSetMenu).not.toHaveBeenCalled();
 });
 
+it("keeps the phone offering link available for opening in a separate tab", async () => {
+  const { innerWidth: width, innerHeight: height } = window;
+  await page.viewport(390, height);
+  onTestFinished(() => page.viewport(width, height));
+  await mount("/set-menus");
+  const guard = new NavigationGuard(window, {
+    isDirty: () => false,
+    request: async (proceed) => {
+      await proceed();
+      return "proceeded";
+    },
+  });
+  onTestFinished(() => guard.dispose());
+  const row = page.getByRole("row").filter({ hasText: "Daily menu" });
+  const link = row.getByRole("link", { name: "Lunch", exact: true });
+  await expect.element(row.getByText("Offered on", { exact: true })).toBeVisible();
+  await expect.element(link).toHaveAttribute("href", "/menus/menu/lunch/view/structure");
+  const push = vi.spyOn(history, "pushState");
+  onTestFinished(() => push.mockRestore());
+  const handledByApp: boolean[] = [];
+  const anchor = link.element();
+  anchor.addEventListener(
+    "click",
+    (event) => {
+      handledByApp.push(event.defaultPrevented);
+      event.preventDefault();
+    },
+    { once: true },
+  );
+  anchor.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, composed: true, cancelable: true, ctrlKey: true }),
+  );
+  expect(handledByApp).toEqual([false]);
+  expect(push).not.toHaveBeenCalled();
+  await link.click();
+  expect(new URL(guard.href).pathname).toBe("/menus/menu/lunch/view/structure");
+});
+
+it("retries the set menu removal check before deleting it from the list", async () => {
+  const client = {
+    ...api(),
+    getMenuDeleteImpact: vi
+      .fn<DashboardApi["getMenuDeleteImpact"]>()
+      .mockRejectedValueOnce({ code: "server.internal" })
+      .mockResolvedValue({
+        productCount: 1,
+        periods: [],
+        dependants: [{ id: "lunch", name: "Lunch" }],
+        defaultChoices: null,
+      }),
+    deleteMenu: vi.fn<DashboardApi["deleteMenu"]>(async () => {
+      client.listMenus.mockResolvedValue([menu]);
+    }),
+  };
+  await mount("/set-menus", client);
+  const actions = page.getByRole("button", { name: "Actions: Daily menu", exact: true });
+  const openDelete = async () => {
+    await actions.click();
+    await page.getByRole("button", { name: "Delete…", exact: true }).click();
+  };
+  const dialog = page.getByRole("dialog", { name: "Delete Daily menu" });
+  const confirm = page.getByRole("button", { name: "Delete", exact: true });
+  await openDelete();
+  await expect.element(dialog.getByText("Something went wrong, try again")).toBeVisible();
+  expect(confirm.elements()).toHaveLength(0);
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect.element(page.getByText("This menu has 1 product.")).toBeVisible();
+  await expect
+    .element(page.getByText("These menus will drop this set menu the next time you publish them:"))
+    .toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect.element(dialog).not.toBeInTheDocument();
+  await expect.element(actions).toBeVisible();
+
+  await openDelete();
+  await confirm.click();
+  await expect.element(dialog).not.toBeInTheDocument();
+  await expect.element(page.getByText("No set menus yet.")).toBeVisible();
+  expect(client.deleteMenu).toHaveBeenCalledExactlyOnceWith("daily", { replacements: {} });
+});
+
 it.each([
   ["/menus/menu/daily/view/prices", "/menus", "Menus"],
   ["/set-menus/menu/lunch", "/set-menus", "Set menus"],
