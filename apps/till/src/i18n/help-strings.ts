@@ -11,7 +11,7 @@ export const helpEn = {
   "help.deferred_close":
     "For a customer who pays the whole bill later, outside Waitron. Confirming closes the bill for good with its invoice, and records no payment. On the dashboard's Sales & takings page, choose Download for accountant (XLSX) to find these bills on their own sheet.",
   "help.payment":
-    "Choose an amount, an equal share, items, or the whole amount left. Split equally asks how many people are still to pay. After a part payment, go on to the next guest.",
+    "Choose an amount, an equal share, items, or the whole amount left. On a table, Split equally sets the guests with − and +, the first shares a cent more where the bill does not divide evenly; at the Counter it asks how many people are still to pay. After a part payment, go on to the next guest.",
   "help.give_money_back":
     "Refund a guest: for a dish, as goodwill, or the extra paid on top. If you close it before it is all refunded, find the receipt in Find a bill under Refunds under way; if it is not there, open Refund on the receipt again on this till.",
   "help.counter.park":
@@ -76,7 +76,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.deferred_close":
     "Para un cliente que paga toda la cuenta más tarde, fuera de Waitron. Al confirmar, la cuenta se cierra definitivamente con su factura y no se registra ningún pago. En la página Ventas y recaudación del panel, elige Descargar para tu gestor (XLSX) para ver estas cuentas en su propia hoja.",
   "help.payment":
-    "Elige una cantidad, una parte igual, artículos o todo lo que queda. Dividir a partes iguales pregunta cuántas personas quedan por pagar. Tras un pago parcial, sigue con el siguiente comensal.",
+    "Elige una cantidad, una parte igual, artículos o todo lo que queda. En una mesa, Dividir a partes iguales fija los comensales con − y +, y las primeras partes llevan un céntimo más si la cuenta no se divide exacta; en Mostrador pregunta cuántas personas quedan por pagar. Tras un pago parcial, sigue con el siguiente comensal.",
   "help.give_money_back":
     "Devuelve dinero a un cliente: por un plato, por cortesía o lo pagado de más. Si la cierras antes de que vuelva todo el dinero, busca el ticket en Buscar cuenta, en Devoluciones en curso; si no está, vuelve a abrir Devolución en el ticket en esta caja.",
   "help.counter.park":

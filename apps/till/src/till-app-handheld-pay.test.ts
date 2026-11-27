@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { formatEquipmentCode } from "@waitron/shared";
-import type { WtCombobox } from "@waitron/ui";
+import type { WtCombobox, WtShareList } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
@@ -33,6 +33,7 @@ import type { TillProduct } from "./api/menu-api.js";
 import type { TillPayEquipment } from "./widgets/pay-equipment.js";
 import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/presented-pay-dialog.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";
+import type { TillSplitEqually } from "./widgets/split-equally.js";
 import { FakeNdefReader, installNfc, PRINTER_ID, READER_ID } from "../test/equipment-nfc.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { cameraFilming } from "@waitron/ui/test/qr-camera.js";
@@ -3336,7 +3337,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       expect(inDialog(el, "wt-form-actions")!.error).toBe(
         t(state === "declined" ? "bill_pay.card_declined" : "bill_pay.payment_failed"),
       );
-      expect(guestsStillToPay(el)).toBeNull();
+      expect(await guestsStillToPay(el)).toBeNull();
       await tick(el, 3);
       expect(reads()).toBe(1);
     },
@@ -3493,10 +3494,41 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
 
       await tick(el);
 
-      expect(guestsStillToPay(el)).toBe(5);
+      expect(await guestsStillToPay(el)).toBe(5);
       expect(inDialog(el, "[data-pay-uncertain]")).toBeNull();
       expect(dialog(el)!.taken).toBeNull();
       expect(text(inDialog(el, "[data-pay-notice]"))).toBe(late("bill_pay.late_received"));
+    });
+
+    it("keeps who has paid when Split equally opens again from the share's Pay and from its ways", async () => {
+      const getBillBalance = vi.fn(async () => ownIs("pending"));
+      const { el } = await pendingShare(getBillBalance);
+      await press(el, "[data-pay-next]");
+      getBillBalance.mockResolvedValue(ownIs("received"));
+      await tick(el);
+      expect(dialog(el)!.taken).toBeNull();
+      const split = () => inDialog(el, "till-split-equally") as TillSplitEqually | null;
+      const rows = () =>
+        split()!
+          .shadowRoot!.querySelector<WtShareList>("wt-share-list")!
+          .shares.map(({ name, state }) => [name, state]);
+      const back = async (bar: Element) => {
+        bar.dispatchEvent(new CustomEvent("wt-back", { bubbles: true, composed: true }));
+        await flush(el);
+      };
+      const ticked = [
+        ["Guest 1", "paid"],
+        ["Guest 2", "due"],
+        ["Guest 3", "due"],
+      ];
+
+      await back(inDialog(el, "[data-quiet-pay] wt-top-bar")!);
+      expect(rows()).toEqual(ticked);
+      await back(split()!.shadowRoot!.querySelector("wt-top-bar")!);
+      expect(split()).toBeNull();
+      await press(el, '[data-quiet-pay-way="share"]');
+
+      expect(rows()).toEqual(ticked);
     });
 
     it("a second card at the reader keeps the first one watched: its decline is said beside the second's warning", async () => {
@@ -3516,7 +3548,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull();
       expect(dialog(el)!.refusal).toBeNull();
       await press(el, "[data-pay-next]");
-      expect(guestsStillToPay(el)).toBeNull();
+      expect(await guestsStillToPay(el)).toBeNull();
 
       getBillBalance.mockResolvedValue(bothAt("declined", { ...second, state: "received" }));
       await tick(el);
@@ -3555,7 +3587,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       expect(text(inDialog(el, "[data-pay-notice]"))).toBe(late("bill_pay.late_not_charged"));
       expect(text(inDialog(el, "[data-pay-next]"))).toBe(t("bill_pay.next"));
       await press(el, "[data-pay-next]");
-      expect(guestsStillToPay(el)).toBeNull();
+      expect(await guestsStillToPay(el)).toBeNull();
     });
   });
 

@@ -6705,7 +6705,7 @@ describe("till-app: a bill payment on the card reader", () => {
     received = true;
     emit(dialog(el)!, "bill-pay-close");
     await flush(el);
-    await openDialog(el, "share");
+    await openDialog(el, "contribution");
     expect(dialog(el)!.confirmationLocked).toBe(false);
     expect(inDialog(el, "wt-form-actions")!.error).toBe("");
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));

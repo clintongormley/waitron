@@ -77,6 +77,11 @@ export class ShareRun {
     this.#cards.delete(taken);
   }
 
+  /** The run's count chosen again, its guests paid kept; outside a run, nothing. */
+  regroup(of: number): void {
+    if (this.#of !== null) this.#of = of;
+  }
+
   end(): void {
     this.#of = null;
     this.#paid = [];

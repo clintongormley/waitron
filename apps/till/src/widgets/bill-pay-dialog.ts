@@ -66,6 +66,7 @@ import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
 import { nextShareLabel } from "./next-share-label.js";
+import { splitEquallyScreen, splitOpening, type SplitOpening } from "./split-equally-pay.js";
 import { currentLocale, fill, t, vatSplitText } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import type {
@@ -278,6 +279,9 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) itemsBarred: StringKey | null = null;
   /** A Counter bill with no receipt; read with a `placed` balance. */
   @property({ type: Boolean }) sentWithoutReceipt = false;
+  /** A Counter order: an equal share asks for the people still to pay as a typed count, where a
+   * table's Pay opens Split equally. */
+  @property({ type: Boolean }) counter = false;
   /** The printed bill this window paid from was credited, as the till words it; null if not. */
   @property({ attribute: false }) credited: string | null = null;
   /** Whether the venue takes tips; without them the dialog asks for and offers none. The app sets
@@ -363,6 +367,8 @@ export class TillBillPayDialog extends LitElement {
   /** On a handheld, after a payment that leaves money owing: the sheet offers the next guest in
    * place of the form. */
   @state() private nextOffered = false;
+  /** Split equally is open over the form. */
+  @state() private splitShown: SplitOpening | null = null;
   #rowWanted = false;
   /** Choosing another way or typing a count ends it. */
   #run = new ShareRun();
@@ -701,6 +707,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #startAgain(): void {
+    this.splitShown = null;
     this.ownReceipt = null;
     this.picks = new Map();
     this.typedAmountValue = "";
@@ -794,6 +801,8 @@ export class TillBillPayDialog extends LitElement {
 
   #canAsk(): boolean {
     if (this.chosenWay === "whole" && !this.#owing()) return false;
+    if (this.chosenWay === "share" && this.#splitsOnScreen && !PEOPLE.test(this.people.trim()))
+      return false;
     return !this.handheld || this.#methods().length > 0;
   }
 
@@ -847,14 +856,16 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #refusalField(): Field | null {
-    return this.#shownRefusal === null
-      ? null
-      : refusalField(
-          this.#shownRefusal,
-          this.method,
-          this.chosenWay,
-          this.#receiptQuote() !== null && this.#guestsShown(this.#receiptQuote()!),
-        );
+    const field =
+      this.#shownRefusal === null
+        ? null
+        : refusalField(
+            this.#shownRefusal,
+            this.method,
+            this.chosenWay,
+            this.#receiptQuote() !== null && this.#guestsShown(this.#receiptQuote()!),
+          );
+    return field === "people" && this.#splitsOnScreen ? null : field;
   }
 
   #refusalMessage(field: Field): string {
@@ -1038,7 +1049,8 @@ export class TillBillPayDialog extends LitElement {
   }
 
   override render() {
-    const opening = this.#opening;
+    const split = this.#splitScreen();
+    const opening = this.#opening || split !== null;
     const view = opening
       ? undefined
       : this.showsRefundAcknowledgment
@@ -1057,13 +1069,15 @@ export class TillBillPayDialog extends LitElement {
       @wt-close=${(event: Event) => this.#close(event)}
     >
       ${
-        view === undefined
-          ? this.#quietPay()
-          : html` <div class="body">
-                ${this.credited === null ? nothing : html`<p class="credited" role="status" data-pay-credited>${this.credited}</p>`}
-                ${view.body} ${this.#readerStopControl()}
-              </div>
-              ${view.actions}`
+        split !== null
+          ? split
+          : view === undefined
+            ? this.#quietPay()
+            : html` <div class="body">
+                  ${this.credited === null ? nothing : html`<p class="credited" role="status" data-pay-credited>${this.credited}</p>`}
+                  ${view.body} ${this.#readerStopControl()}
+                </div>
+                ${view.actions}`
       }
     </wt-dialog>`;
   }
@@ -1100,12 +1114,15 @@ export class TillBillPayDialog extends LitElement {
       own.set("guests", t("seat.guest_count_invalid"));
     const errors = this.#fieldErrors(own);
     const manual = this.takesManualCard || (!this.handheld && this.cardReader === "none");
+    const splitBack = this.#splitsOnScreen && this.chosenWay === "share" && this.#canAsk();
     return quietPay({
       title: t("action.pay"),
       subtitle: this.billName,
-      back: this.openingBack || this.tableName || t("action.back"),
-      wrapBack: this.openingBack !== "",
-      close: () => this.#requestClose(),
+      back: splitBack
+        ? t("bill_pay.way_share")
+        : this.openingBack || this.tableName || t("action.back"),
+      wrapBack: !splitBack && this.openingBack !== "",
+      close: () => (splitBack ? this.#openSplit() : this.#requestClose()),
       equipment: quietEquipmentButton(
         this.rowOpen,
         this.busy,
@@ -1152,6 +1169,7 @@ export class TillBillPayDialog extends LitElement {
               this.balance === null ? undefined : includingTip(this.balance.outstanding),
               (way) => {
                 if (way !== this.chosenWay) this.#run.end();
+                if (way === "share" && this.#splitsOnScreen) return this.#openSplit();
                 this.chosenWay = way;
                 this.ownReceipt = null;
                 this.#changedDraft();
@@ -1219,6 +1237,53 @@ export class TillBillPayDialog extends LitElement {
     const available = decimal(outstanding);
     if (this.chosenWay !== "share" || !PEOPLE.test(this.people.trim())) return available;
     return equalShare(available, Number(this.people.trim()));
+  }
+
+  get #splitsOnScreen(): boolean {
+    return this.quiet && !this.counter;
+  }
+
+  #openSplit(): void {
+    const people = this.people.trim();
+    this.splitShown = splitOpening(
+      this.balance,
+      this.receiptGuests,
+      this.#run,
+      PEOPLE.test(people) ? Number(people) : null,
+    );
+  }
+
+  /** `guests` counts the guests the record has paid, so the share is among the rest. */
+  #startSplit(guests: number): void {
+    this.#run.regroup(guests);
+    this.people = String(guests - this.#run.paidCount);
+    this.chosenWay = "share";
+    this.splitShown = null;
+    this.ownReceipt = null;
+    if (this.#shownRefusal?.field === "shareOf") this.#feedback.dismiss("refusal");
+    this.#changedDraft();
+  }
+
+  #splitScreen(): TemplateResult | null {
+    const opening = this.splitShown;
+    if (
+      opening === null ||
+      this.busy ||
+      this.preview !== null ||
+      this.nextOffered ||
+      this.confirmationLocked ||
+      this.showsRefundAcknowledgment ||
+      this.scanning ||
+      this.askingSecondCard
+    )
+      return null;
+    return splitEquallyScreen(
+      opening,
+      this.billName,
+      this.balance?.outstanding ?? "0.00",
+      () => (this.splitShown = null),
+      ({ guests }) => this.#startSplit(guests),
+    );
   }
 
   #quietMethod(method: "cash" | "manual"): void {
@@ -1690,7 +1755,19 @@ export class TillBillPayDialog extends LitElement {
     const own = this.#feedback.attempted ? this.#ownErrors() : new Map<Field, string>();
     const errors = this.#fieldErrors(own);
     const bottom = this.#bottomMessage(errors);
-    const body = html`<fieldset class="choice" data-pay-way ?disabled=${this.busy}>
+    const body = html`<fieldset
+        class="choice"
+        data-pay-way
+        ?disabled=${this.busy}
+        @click=${(event: Event) => {
+          if (
+            this.#splitsOnScreen &&
+            this.chosenWay === "share" &&
+            (event.target as Element).matches('input[name="way"][value="share"]')
+          )
+            this.#openSplit();
+        }}
+      >
         <legend class="help-anchor">
           ${t("bill_pay.way")}${helpBadge("help.payment", t("action.pay"), { guide: "table-service.pay-window" })}
         </legend>
@@ -1703,6 +1780,7 @@ export class TillBillPayDialog extends LitElement {
               this.chosenWay === way,
               () => {
                 if (way !== this.chosenWay) this.#run.end();
+                if (way === "share" && this.#splitsOnScreen) return this.#openSplit();
                 this.chosenWay = way;
               },
               (way === "whole" && this.balance === null) ||
@@ -1783,6 +1861,7 @@ export class TillBillPayDialog extends LitElement {
           { required: true, error: errors.get("amount"), submit: "[data-pay-continue]" },
         );
       case "share":
+        if (this.#splitsOnScreen) return nothing;
         return this.#input(
           "people",
           t("bill_pay.people"),

@@ -812,8 +812,8 @@ describe("till-bill-pay-dialog: its own checks", () => {
     ["contribution", "amount", "abc", "bill_pay.amount_invalid"],
     ["share", "people", "0", "bill_pay.people_invalid"],
     ["share", "people", "1.5", "bill_pay.people_invalid"],
-  ] as const)("refuses a %s %s of %s", async (way, name, value, key) => {
-    const el = await mount({ way });
+  ] as const)("refuses a %s %s of %s on Counter", async (way, name, value, key) => {
+    const el = await mount({ way, counter: true });
     await type(el, name, value);
     await type(el, "tendered", "10");
     await click(el, "[data-pay-continue]");
@@ -3000,14 +3000,14 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
     expect(root(el).querySelector<HTMLInputElement>('input[name="way"]:checked')!.value).toBe(
       "share",
     );
-    expect(guestsStillToPay(el)).toBe(2);
+    expect(await guestsStillToPay(el)).toBe(2);
     expect(next(el)).toBeNull();
     const asked = await pay(el, "20.80");
     expect(asked.choice).toEqual({ kind: "share", shareOf: 2 });
 
     expect(text(next(el))).toBe(nextShare(3, 3));
     await click(el, "[data-pay-next]");
-    expect(guestsStillToPay(el)).toBe(1);
+    expect(await guestsStillToPay(el)).toBe(1);
   });
 
   it("a count the waiter edits by hand starts a new run from that count", async () => {
@@ -3020,7 +3020,7 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
 
     expect(text(next(el))).toBe(nextShare(2, 4));
     await click(el, "[data-pay-next]");
-    expect(guestsStillToPay(el)).toBe(3);
+    expect(await guestsStillToPay(el)).toBe(3);
   });
 
   it("a change of way starts a new run", async () => {
@@ -3042,7 +3042,7 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
     await click(el, "[data-pay-next]");
     await pick(el, "way", "contribution");
     await pick(el, "way", "share");
-    expect(guestsStillToPay(el)).toBe(2);
+    expect(await guestsStillToPay(el)).toBe(2);
     await pay(el, "20.80");
 
     expect(text(next(el))).toBe(nextShare(2, 2));
@@ -3076,7 +3076,7 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
 
     expect(next(el)).toBeNull();
     expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
-    expect(guestsStillToPay(el)).toBeNull();
+    expect(await guestsStillToPay(el)).toBeNull();
     await splitAmong(el, 3);
     el.refunded = null;
     await pay(el, "41.60");
@@ -3125,7 +3125,7 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
 
     expect(next(el)).toBeNull();
     expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
-    expect(guestsStillToPay(el)).toBeNull();
+    expect(await guestsStillToPay(el)).toBeNull();
     expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(t("bill_pay.taken"));
   });
 
@@ -3189,7 +3189,7 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
     expect(root(el).querySelector<HTMLInputElement>('input[name="way"]:checked')!.value).toBe(
       "share",
     );
-    expect(guestsStillToPay(el)).toBe(2);
+    expect(await guestsStillToPay(el)).toBe(2);
   });
 
   it("a card in progress that is then received shows it taken, and the count of the next share again", async () => {
@@ -3223,7 +3223,7 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
       expect(actions(el).error).toBe(
         t(code === "declined" ? "bill_pay.card_declined" : "bill_pay.payment_failed"),
       );
-      expect(guestsStillToPay(el)).toBeNull();
+      expect(await guestsStillToPay(el)).toBeNull();
     },
   );
 
@@ -3314,7 +3314,7 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
 
     expect(next(el)).not.toBeNull();
     await click(el, "[data-pay-next]");
-    expect(guestsStillToPay(el)).toBeNull();
+    expect(await guestsStillToPay(el)).toBeNull();
   });
 
   it("a card in progress not charged leaves the count in a form already open", async () => {
@@ -3327,7 +3327,7 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
     el.cardEnded(pending, false);
     await el.updateComplete;
 
-    expect(guestsStillToPay(el)).toBe(2);
+    expect(await guestsStillToPay(el)).toBe(2);
   });
 
   it("a card not charged ends no run that did not count it in progress", async () => {
@@ -3357,7 +3357,7 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
 
     expect(text(next(el))).toBe(t("bill_pay.next"));
     await click(el, "[data-pay-next]");
-    expect(guestsStillToPay(el)).toBeNull();
+    expect(await guestsStillToPay(el)).toBeNull();
   });
 
   it("a card in progress outside a run of shares that is then declined says so on the form", async () => {
@@ -3414,7 +3414,7 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
 
     expect(next(el)).toBeNull();
     expect(root(el).querySelector("[data-pay-continue]")).not.toBeNull();
-    expect(guestsStillToPay(el)).toBeNull();
+    expect(await guestsStillToPay(el)).toBeNull();
     expect(root(el).querySelector("[data-pay-taken-reader]")).toBeNull();
     expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(t("bill_pay.taken"));
   });

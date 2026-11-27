@@ -2122,7 +2122,7 @@ export const en = {
   "split_equally.due": "to pay",
   "split_equally.paid": "paid",
   "split_equally.card": "card in progress",
-  "split_equally.note": "The first shares are a cent more, as the bill does not divide evenly.",
+  "split_equally.note": "Shares differ by a cent where the bill does not divide evenly.",
   "split_equally.start": "Start with {guest} · {amount}",
   "bill_pay.unconfirmed":
     "This payment could not be confirmed. Check again continues this same payment: if it was not recorded, it may charge the card or record the cash payment.",
@@ -4590,8 +4590,7 @@ export const es: Record<StringKey, string> = {
   "split_equally.due": "por pagar",
   "split_equally.paid": "pagado",
   "split_equally.card": "tarjeta en curso",
-  "split_equally.note":
-    "Las primeras partes llevan un céntimo más, porque la cuenta no se divide exacta.",
+  "split_equally.note": "Las partes difieren en un céntimo cuando la cuenta no se divide exacta.",
   "split_equally.start": "Empezar con {guest} · {amount}",
   "bill_pay.unconfirmed":
     "No se ha podido confirmar este cobro. Comprobar de nuevo continúa ese mismo cobro: si no estaba registrado, puede cobrar la tarjeta o registrar el efectivo.",

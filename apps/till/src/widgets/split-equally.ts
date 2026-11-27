@@ -67,6 +67,8 @@ export class TillSplitEqually extends LitElement {
   @property({ type: Boolean }) taken = false;
   /** The table's guest count, or the record's count when there is a record. */
   @property({ attribute: false }) startCount: number | null = null;
+  /** The count chosen before the share's Pay was opened; set, it is where the screen starts. */
+  @property({ attribute: false }) keptCount: number | null = null;
   /** The guests the record counts as paid, in order. */
   @property({ attribute: false }) paid: readonly PaidShare[] = [];
 
@@ -86,8 +88,15 @@ export class TillSplitEqually extends LitElement {
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     super.willUpdate(changed);
-    if (changed.has("startCount") || changed.has("paid") || changed.has("taken"))
-      this.count = this.taken && this.paid.length === 0 ? 2 : (this.startCount ?? this.#min);
+    if (
+      changed.has("startCount") ||
+      changed.has("keptCount") ||
+      changed.has("paid") ||
+      changed.has("taken")
+    )
+      this.count =
+        this.keptCount ??
+        (this.taken && this.paid.length === 0 ? 2 : (this.startCount ?? this.#min));
     this.count = Math.max(this.#min, Math.min(this.#max, this.count));
   }
 

@@ -118,6 +118,27 @@ describe("ShareRun", () => {
     expect(run.counts(taken)).toBe(false);
   });
 
+  it("keeps the guests paid when the count changes, and the next share continues it", () => {
+    const run = new ShareRun();
+    paidShare(run, 3, "24.44", {});
+    run.regroup(5);
+
+    expect(run.of).toBe(5);
+    expect(run.left).toBe(4);
+    paidShare(run, 4, "12.22", {});
+    expect(run.paid).toEqual([
+      { amount: "24.44", state: "received" },
+      { amount: "12.22", state: "received" },
+    ]);
+  });
+
+  it("starts no record when the count changes outside one", () => {
+    const run = new ShareRun();
+    run.regroup(4);
+
+    expect(run.of).toBeNull();
+  });
+
   it("hands out copies of the paid guests", () => {
     const run = new ShareRun();
     const taken = paidShare(run, 2, "36.65", card());

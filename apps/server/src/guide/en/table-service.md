@@ -1026,8 +1026,9 @@ For a full invoice, [set up the bill before paying](table-service.md#full-invoic
 
 **Choose what this guest pays.** Choose **Whole bill** to pay everything still due.
 Choose **Split equally** for one equal share, **Items** for particular dishes, or **An amount** for
-a contribution. For an equal share, enter how many people are still to pay, including this
-guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
+a contribution. For an equal share on a table, set the number of guests with − and +, then press
+**Start with Guest 1**; where the bill does not divide evenly, the first shares are a cent more.
+At the Counter, enter how many people are still to pay, including this guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
 Choosing every dish pays the whole bill. If the card is declined or you choose **Cancel payment**,
 check this bill for the dishes before trying again. If they are on a separate bill, pay that bill
 from the table's bill switcher.

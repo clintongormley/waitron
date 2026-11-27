@@ -79,7 +79,7 @@ describe("till-split-equally", () => {
   it("notes the extra cent only while the shares differ", async () => {
     const el = await mount({ startCount: 3 });
     expect(note(el)?.textContent?.trim()).toBe(
-      "The first shares are a cent more, as the bill does not divide evenly.",
+      "Shares differ by a cent where the bill does not divide evenly.",
     );
     await press(el, -1);
     expect(note(el)).toBeNull();
@@ -137,6 +137,13 @@ describe("till-split-equally", () => {
       ["Guest 1", "to pay", "€24.43", "due"],
       ["Guest 2", "to pay", "€24.43", "due"],
     ]);
+  });
+
+  it("starts at a count kept from before, whatever the bill holds", async () => {
+    expect(
+      stepper(await mount({ left: "48.86", taken: true, startCount: 4, keptCount: 5 })).value,
+    ).toBe(5);
+    expect(stepper(await mount({ startCount: 4, keptCount: 3 })).value).toBe(3);
   });
 
   it("with a record, starts at its count with the paid guests ticked", async () => {
