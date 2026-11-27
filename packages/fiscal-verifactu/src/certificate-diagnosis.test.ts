@@ -14,9 +14,14 @@ import {
   INSTALLED_AT,
   parentFixture,
   rawState,
+  revision,
 } from "../test/certificate-diagnosis-parent-fixtures.js";
+import { SIN_DATOS_BODY } from "../test/certificate-fixtures.js";
+import { TAXPAYER_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
+import { makeCertificateDiagnosisChild } from "./certificate-diagnosis-child.js";
 import { diagnoseCertificate } from "./certificate-diagnosis.js";
+import { recordInstall } from "./certificate-record.js";
 import { FISCAL_SLOT } from "./slot.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 120_000 });
@@ -83,7 +88,7 @@ describe("certificate diagnosis parent", () => {
     expect(runChild).toHaveBeenCalledTimes(1);
     expect(runChild.mock.calls[0]![0]).toEqual({
       operation: "inspect",
-      material: material(),
+      material: { ...material(), certKind: "sello" },
       rewriteOld: false,
       taxpayer: { legalName: "Waitron SL", taxId: "89890001K" },
       timeZone: "Europe/Madrid",
@@ -123,6 +128,77 @@ describe("certificate diagnosis parent", () => {
       await diagnoseCertificate(f.deps, { ...f.request, source: "candidate", ...material() }, NOW),
     ).toMatchObject({ category: "local-ready", association: "not-applicable" });
     expect(await rawState(suite.db)).toEqual(before);
+  });
+
+  it.each([
+    [
+      "the installed file at the vault's stored type",
+      "installed",
+      "sello",
+      "https://prewww10.aeat.es/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP",
+    ],
+    [
+      "a selected file at the type its policies name",
+      "candidate",
+      "representante",
+      "https://prewww1.aeat.es/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP",
+    ],
+  ] as const)("checks %s", async (_label, source, kind, endpoint) => {
+    const f = await parentFixture(suite.db, false);
+    // A representative's file saved as a seal, as the old type selector allowed.
+    await withTransaction(suite.db, async (tx) => {
+      await putCredential(tx, f.deps.ring, {
+        personId: null,
+        purpose: "fiscal.aeat",
+        value: { ...material(candidate), certKind: "sello" },
+      });
+      await recordInstall(tx, {
+        nodeId: TAXPAYER_A.nodeId,
+        installedAt: new Date(INSTALLED_AT),
+        source: "setup",
+        personId: null,
+        kind: "sello",
+        fingerprint: candidate.fingerprint,
+        validFrom: new Date("2026-01-01T00:00:00Z"),
+        validUntil: new Date("2027-01-01T00:00:00Z"),
+      });
+    });
+    const destinations: string[] = [];
+    const child = makeCertificateDiagnosisChild({
+      transport: (_material, options) => {
+        destinations.push(options.endpoint);
+        return {
+          fetch: async () => new Response(SIN_DATOS_BODY),
+          close: async () => {},
+          destroy: async () => {},
+          observation: () => ({ stage: "parse", category: "http-response", httpStatus: 200 }),
+        };
+      },
+    });
+    const result = await diagnoseCertificate(
+      {
+        ...f.deps,
+        runChild: async (input, signal) => ({
+          outcome: "completed",
+          value: await child(input, signal, () => {}),
+        }),
+      },
+      {
+        ...f.request,
+        operation: "check",
+        source,
+        expectedRevision: await revision(suite.db),
+        ...(source === "candidate" ? material(candidate) : {}),
+      },
+      NOW,
+    );
+    expect(destinations).toEqual([endpoint]);
+    expect(result).toMatchObject({
+      kind,
+      endpointLabel: `preproduction-${kind}`,
+      category: "query-completed",
+      association: source === "installed" ? "verified" : "not-applicable",
+    });
   });
 
   it.each(["permission", "session", "initial-revision"] as const)(
@@ -346,7 +422,10 @@ describe("certificate diagnosis parent", () => {
               return { outcome: "completed", value: { stage: "PRIVATE", httpStatus: "PRIVATE" } };
             if (outcome === "aborted") f.controller.abort();
             return f.deps.runChild(
-              { ...(input as object), material: { ...material(), passphrase: "WRONG SECRET" } },
+              {
+                ...(input as object),
+                material: { ...material(), certKind: "sello", passphrase: "WRONG SECRET" },
+              },
               signal,
             );
           },

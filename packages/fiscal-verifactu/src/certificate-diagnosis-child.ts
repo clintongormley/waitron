@@ -2,7 +2,7 @@ import { createClient, VerifactuTransportError } from "@waitron/verifactu";
 import { firstCodeInCauseChain } from "@waitron/shared";
 import type { DeploymentEnvironment } from "@waitron/db";
 import type { FiscalCertificateJson, FiscalCertificateSeat } from "@waitron/fiscal";
-import { aeatEndpointFor, type CertKind } from "./aeat-transport.js";
+import { aeatEndpointFor, isCertKind, type CertKind } from "./aeat-transport.js";
 import type { CheckTransport } from "./certificate-check.js";
 import { localDate } from "./certificate-dates.js";
 import { normaliseTaxId, openCertificateFile } from "./certificate-file.js";
@@ -16,7 +16,9 @@ import {
 
 export interface CertificateDiagnosisChildInput {
   operation: "inspect" | "check";
-  material: { pfxBase64: string; passphrase: string };
+  /** `certKind` is the vault's stored type, sent with the vault's copy alone: filing addresses AEAT
+   * by it. A selected file's type is read from its policies. */
+  material: { pfxBase64: string; passphrase: string; certKind?: CertKind };
   /** A selected file is opened as Save opens it; the vault's copy as filing does. */
   rewriteOld: boolean;
   taxpayer: { legalName: string; taxId: string };
@@ -126,7 +128,7 @@ export async function runCertificateDiagnosisChild(
     if (!opened.ok) return answer("local-finding", opened.reason);
     rewritten = opened.rewritten;
     openedFingerprint = opened.details.fingerprint;
-    kind = opened.details.kind;
+    kind = input.material.certKind ?? opened.details.kind;
     const now = Date.parse(input.startedAt);
     if (now >= opened.details.validUntil.getTime()) return answer("local-finding", "expired");
     if (now < opened.details.validFrom.getTime()) return answer("local-finding", "not_yet_valid");
@@ -201,7 +203,10 @@ function parseInput(raw: FiscalCertificateJson): CertificateDiagnosisChildInput 
     return invalid();
   if (
     (raw.operation !== "inspect" && raw.operation !== "check") ||
-    !fields(raw.material, ["pfxBase64", "passphrase"]) ||
+    !fields(
+      raw.material,
+      raw.rewriteOld ? ["pfxBase64", "passphrase"] : ["pfxBase64", "passphrase", "certKind"],
+    ) ||
     !fields(raw.taxpayer, ["legalName", "taxId"])
   )
     return invalid();
@@ -228,7 +233,8 @@ function parseInput(raw: FiscalCertificateJson): CertificateDiagnosisChildInput 
     typeof material.pfxBase64 !== "string" ||
     material.pfxBase64.length === 0 ||
     material.pfxBase64.length > 4 * Math.ceil(CERTIFICATE_MAX_BYTES / 3) ||
-    typeof material.passphrase !== "string"
+    typeof material.passphrase !== "string" ||
+    (!raw.rewriteOld && (typeof material.certKind !== "string" || !isCertKind(material.certKind)))
   )
     return invalid();
   const decoded = Buffer.from(material.pfxBase64, "base64");
@@ -243,6 +249,7 @@ function parseInput(raw: FiscalCertificateJson): CertificateDiagnosisChildInput 
     material: {
       pfxBase64: material.pfxBase64,
       passphrase: material.passphrase,
+      ...(raw.rewriteOld ? {} : { certKind: material.certKind as CertKind }),
     },
     rewriteOld: raw.rewriteOld,
     taxpayer: { legalName: raw.taxpayer.legalName, taxId: raw.taxpayer.taxId },

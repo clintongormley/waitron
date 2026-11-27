@@ -97,7 +97,7 @@ async function diagnoseBoundCertificate(
       throw new AppError("fiscal.certificate_request_invalid", { field: "body" });
     const timeZone = await venueTimeZone(deps.db);
     const latest = await latestInstall(deps.db, deps.nodeId);
-    let material = candidate;
+    let material: { pfxBase64: string; passphrase: string; certKind?: CertKind } | null = candidate;
     candidate = null;
     let finding: "missing" | "unusable" | null = null;
     let kind: CertKind | null = null;
@@ -107,7 +107,8 @@ async function diagnoseBoundCertificate(
         if (payload === null) finding = "missing";
         else {
           kind = storedKind(payload);
-          material = kind === null ? null : materialFrom(payload);
+          const stored = materialFrom(payload);
+          material = stored === null || kind === null ? null : { ...stored, certKind: kind };
           if (material === null) finding = "unusable";
         }
       } catch {

@@ -176,6 +176,55 @@ describe("isolated certificate work", () => {
   });
 
   it.each([
+    [
+      "sello",
+      second,
+      "https://prewww10.aeat.es/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP",
+    ],
+    [
+      "representante",
+      first,
+      "https://prewww1.aeat.es/wlpl/TIKE-CONT/ws/SistemaFacturacion/VerifactuSOAP",
+    ],
+  ] as const)(
+    "queries the vault's copy at its stored %s address, as filing does, whatever its policies name",
+    async (certKind, issued, endpoint) => {
+      const destinations: string[] = [];
+      const kinds: string[] = [];
+      const result = await run(
+        {
+          ...input,
+          rewriteOld: false,
+          material: {
+            pfxBase64: issued.pfx.toString("base64"),
+            passphrase: issued.passphrase,
+            certKind,
+          },
+        },
+        {
+          transport: (material, options) => {
+            destinations.push(options.endpoint);
+            kinds.push(material.certKind);
+            return {
+              fetch: async () => new Response(SIN_DATOS_BODY),
+              close: async () => {},
+              destroy: async () => {},
+              observation: () => ({ stage: "parse", category: "http-response", httpStatus: 200 }),
+            };
+          },
+        },
+      );
+      expect(destinations).toEqual([endpoint]);
+      expect(kinds).toEqual([certKind]);
+      expect(result).toMatchObject({
+        openedFingerprint: issued.fingerprint,
+        kind: certKind,
+        category: "query-completed",
+      });
+    },
+  );
+
+  it.each([
     [403, "secret body", "http-response"],
     [200, "broken secret XML", "reply-unparseable"],
     [500, SOAP_FAULT_BODY, "soap-fault"],
@@ -451,7 +500,11 @@ describe("isolated certificate work", () => {
   ])("finds %s in the vault, as filing would, without rewriting it", async (_, file, finding) => {
     const server = await serve(200, SIN_DATOS_BODY);
     const result = await run(
-      { ...input, rewriteOld: false, material: { ...input.material, ...file } },
+      {
+        ...input,
+        rewriteOld: false,
+        material: { ...input.material, ...file, certKind: "sello" },
+      },
       localTransport(server.origin),
     );
     expect(result.category).toBe("local-finding");
@@ -483,10 +536,11 @@ describe("isolated certificate work", () => {
       {
         ...input,
         operation: "inspect",
+        rewriteOld: false,
         material: {
-          ...input.material,
           pfxBase64: issued.pfx.toString("base64"),
           passphrase: "",
+          certKind: "sello",
         },
       },
       signal(),
@@ -494,7 +548,7 @@ describe("isolated certificate work", () => {
     );
     expect(output).toEqual({
       openedFingerprint: issued.fingerprint,
-      kind: "representante",
+      kind: "sello",
       completedAt: expect.any(String),
       stage: "complete",
       category: "local-ready",
@@ -636,6 +690,9 @@ describe("isolated certificate work", () => {
     { ...input, material: { ...input.material, certKind: null } },
     { ...input, material: { ...input.material, certKind: "other" } },
     { ...input, material: { ...input.material, certKind: "sello" } },
+    { ...input, rewriteOld: false },
+    { ...input, rewriteOld: false, material: { ...input.material, certKind: null } },
+    { ...input, rewriteOld: false, material: { ...input.material, certKind: "other" } },
   ];
   it.each(invalidEnvelopes)(
     "rejects malformed IPC %# without invoking native work",
