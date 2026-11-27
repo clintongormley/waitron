@@ -53,7 +53,7 @@ interface Seeded {
   coffeeId: string;
   waterId: string;
   hamId: string;
-  /** "Bacon" — each, 0.50 gross, reduced(10%). Sold only as another dish's extra here, so a child
+  /** "Bacon" — each, 0.50 gross. Sold only as another dish's extra here, so a child
    *  line's product id can never be mistaken for a dish's. */
   baconId: string;
   tableAId: string;

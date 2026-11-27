@@ -208,7 +208,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 }
 
 /**
- * A fresh chained venue and a one-`each`-product menu (1.50 gross, general/21 %), offered in
+ * A fresh chained venue and a one-`each`-product menu (1.50 gross), offered in
  * the counter zone under `orderFlow`.
  */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{

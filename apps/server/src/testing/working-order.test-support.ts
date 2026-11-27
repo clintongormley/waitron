@@ -75,7 +75,7 @@ interface SeededVenue {
   cfg: DeviceRequestConfig;
 
   menuId: string;
-  /** The `each`-priced "Espresso" product (VAT general/21%, category "ES drinks"). */
+  /** The `each`-priced "Espresso" product (category "ES drinks"). */
   coffeeId: string;
   /** A second `each` product with NO category, so its priced line carries `category: null`. */
   waterId: string;
@@ -674,7 +674,7 @@ export async function insertContextlessLines(
     })),
   );
 }
-/** Attach a fresh one-product extras list to `dishId`, priced 0.50 at the reduced rate — the shape a
+/** Attach a fresh one-product extras list to `dishId`, priced 0.50 — the shape a
  *  line's `extras: [{ listId, picks: [{ productId }] }]` picks from, for the child-line tests.
  *
  *  The extra's OWN allergens and dietary labels are declared on the PRODUCT the list offers; the
@@ -820,9 +820,9 @@ export async function storedRows(id: string) {
 // ---------------------------------------------------------------------------------------------------
 
 /**
- * "Wine by the glass" (reduced, category "Wines", course First, sulphites, vegan) on the venue's
+ * "Wine by the glass" (category "Wines", course First, sulphites, vegan) on the venue's
  * zone menu, with two variants: "125 ml" sets nothing but its staff name and price, so every other
- * field reads its parent's; "175 ml" sets its own customer and kitchen names, VAT, course,
+ * field reads its parent's; "175 ml" sets its own customer and kitchen names, course,
  * allergens and dietary declarations, so a reader of the parent's value gets it wrong. 175 ml also
  * still stores a category of its own ("Glasses"), which a variant never reads: its category is
  * always its parent's.

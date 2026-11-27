@@ -24,9 +24,6 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { parkOrder } from "./working-order-open.js";
 
-// Every read of an order's stored lines rates each line at the class for the order's way of selling
-// (A1522): a €1.80 cola is `reduced` served here and `general` taken away; a €4.00 cheese board is
-// `reduced` served here and `super_reduced` taken away.
 let venue: BillVenue;
 let counter: ZoneOffers;
 let tables: ZoneOffers;
@@ -137,7 +134,7 @@ const ICED_TEA_AT_ZERO = [{ rate: "0.00", base: "1.80", tax: "0.00" }];
 const EXPECTED_RATES: Record<Dining, number[]> = { takeaway: [2100, 400], eat_in: [1000, 1000] };
 
 describe("a parked order paid whole", () => {
-  it.each(["takeaway", "eat_in"] as const)("files each line %s at its class", async (dining) => {
+  it.each(["takeaway", "eat_in"] as const)("files each line %s at its rate", async (dining) => {
     const id = await parked(dining, [menu.cola, menu.cheeseBoard]);
     const sold = await cashPayment(venue, venue.cookie, id, "5.80");
     expect(sold.status).toBe(200);
@@ -201,7 +198,7 @@ describe("a takeaway bill paid in two amounts", () => {
 });
 
 describe("a takeaway tab closed by issuing its invoice unpaid", () => {
-  it("files each line at its takeaway class", async () => {
+  it("files each line at its takeaway rate", async () => {
     const tabId = await tab("takeaway", [menu.cola, menu.cheeseBoard]);
     await issueOrderInvoice(
       {

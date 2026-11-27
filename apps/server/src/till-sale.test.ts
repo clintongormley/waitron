@@ -162,8 +162,8 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 }
 
 /**
- * A fresh venue with a seeded menu: one `each` product (1.50 gross, general/21%) and one
- * `weight` product (24.90 €/kg, reduced/10%).
+ * A fresh venue with a seeded menu: one `each` product (1.50 gross) and one
+ * `weight` product (24.90 €/kg).
  */
 async function setupVenue(options: { variants?: boolean } = {}): Promise<{
   cfg: DeviceRequestConfig;
@@ -1103,13 +1103,12 @@ describe("ordering extras and options — parent + child lines", () => {
 
   /**
    * A fresh venue with these dishes and the extras and options lists they attach:
-   *  - "Hamburguesa" (each, 9.00 general) + extras "Extras" (min 0, max 3): Bacon 0.50 at the BACON
-   *    product's own reduced rate, Queso 0.75 at general.
-   *  - "Menú" (each, 12.00 general) + options "Tamaño" (Pequeño / Grande), which must be answered.
-   *  - "Jamón" (weight, 24.90 reduced), carrying "Extras" too — a pick on a weighed dish is what
+   *  - "Hamburguesa" (each, 9.00) + extras "Extras" (min 0, max 3): Bacon 0.50, Queso 0.75.
+   *  - "Menú" (each, 12.00) + options "Tamaño" (Pequeño / Grande), which must be answered.
+   *  - "Jamón" (weight, 24.90), carrying "Extras" too — a pick on a weighed dish is what
    *    `extras.unsupported_product` refuses, so the list has to be genuinely offered there.
-   *  - "Combo" (each, 8.00 general) + options "Salsa", whose "Alioli" label is withdrawn.
-   *  - "Plato" (each, 10.00 general) + extras "Guarnición" (min 2, max 3): Patatas 1.00, Ensalada 1.50.
+   *  - "Combo" (each, 8.00) + options "Salsa", whose "Alioli" label is withdrawn.
+   *  - "Plato" (each, 10.00) + extras "Guarnición" (min 2, max 3): Patatas 1.00, Ensalada 1.50.
    *
    * An extra's price is the LIST ITEM's, never the product's own — so every extra product is priced
    * 3.00 of itself, and a child line reading 3.00 would mean the offer was never read.
@@ -1782,9 +1781,9 @@ describe("ordering extras and options — parent + child lines", () => {
       workingOrderId,
     );
 
-    // Bacon is offered at 0.50 by the list but is a 3.00 product at its OWN reduced rate where the
-    // burger is general, so each column shows it came from the frozen pick. 0.50 gross at 10% is
-    // 0.45 net per unit, 0.91 for the two; the columns hold the stored whole numbers.
+    // Bacon is offered at 0.50 by the list but is a 3.00 product, so each column shows it came from
+    // the frozen pick. 0.50 gross at 10% is 0.45 net per unit, 0.91 for the two; the columns hold
+    // the stored whole numbers.
     const filed = await filedLinesOf(workingOrderId);
     expect(filed).toHaveLength(2);
     const child = filed.find((line) => line.parentLineId !== null)!;

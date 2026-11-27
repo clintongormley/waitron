@@ -8,7 +8,7 @@ import { sellingValuesOf, type TillProduct } from "../api/menu-api.js";
 
 const ROW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-// A gross-1.50 espresso at the general rate.
+// A gross-1.50 espresso.
 const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
@@ -19,7 +19,7 @@ const coffee: TillProduct = {
   allergens: null,
 };
 
-// A weight product priced per kg: 10.00/kg gross at the reduced rate.
+// A weight product priced per kg: 10.00/kg gross.
 const ham: TillProduct = {
   id: "jamon",
   name: "Jamón",

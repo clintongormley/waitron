@@ -138,7 +138,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 /**
  * Stand up a fresh chained venue + registered SIF, seed a menu and a staff
  * person with a known PIN, and read back the sellable products — one unit product
- * (1.50 gross, general/21%) and one kg product (24.90 €/kg, reduced/10%).
+ * (1.50 gross) and one kg product (24.90 €/kg).
  */
 async function setupVenue(): Promise<{
   cfg: TradingContext;

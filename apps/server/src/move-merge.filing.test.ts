@@ -99,7 +99,7 @@ interface SeededVenue {
 
 /**
  * Stand up a fresh chained venue + registered SIF (as the owner), then seed a menu and read
- * back two `each`/general(21%) products.
+ * back two `each` products.
  */
 async function setupVenue(): Promise<SeededVenue> {
   const venue = await applyVenue(

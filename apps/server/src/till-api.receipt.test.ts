@@ -182,7 +182,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
   };
 }
 
-/** Stand up a fresh chained venue + a one-`each`-product menu (1.50 gross, general/21 %), a
+/** Stand up a fresh chained venue + a one-`each`-product menu (1.50 gross), a
  *  staff person ("Cashier") and a supervisor ("Supervisor"), both with PIN "5555". The supervisor
  *  holds `cash.drawer`; the fixture removes the grant from the cashier’s role. */
 async function setupVenue(): Promise<{

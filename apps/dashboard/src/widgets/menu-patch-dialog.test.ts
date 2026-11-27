@@ -531,7 +531,7 @@ it("stages a kitchen name and a picture", async () => {
   expect(form(el).querySelector("dashboard-image-upload")!.image).toBe("media:soup");
 });
 
-/** Lunch with Soup charged Reduced served here and No tax taken away. */
+/** Lunch with Soup taken away at No tax. */
 function takeawayLunch(): MenuDocument {
   const document = lunch();
   document.offers["mi-soup"]!.takeawayVatClass = "zero";
