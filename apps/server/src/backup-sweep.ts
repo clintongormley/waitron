@@ -692,16 +692,24 @@ export function createBackupSchedule(
   function start(
     kind: ActiveBackupRun["kind"],
     signal: AbortSignal,
-    checkSavedArchive?: CheckSavedArchive,
-    onUploadTimeout?: FileUploadCall["onUploadTimeout"],
+    check?: Required<Pick<BackupRunDeps, "checkSavedArchive">> &
+      Pick<BackupRunDeps, "onUploadTimeout" | "onDestinationResult">,
   ): Promise<void> | undefined {
     if (active !== undefined) return;
     const startedAt = clockNow().toISOString();
     const settled = Promise.resolve()
       .then(() => {
-        if (checkSavedArchive) {
+        if (check) {
           signal.throwIfAborted();
-          return runOnce({ ...deps, signal, checkSavedArchive, onUploadTimeout });
+          return runOnce({
+            ...deps,
+            ...check,
+            signal,
+            onDestinationResult(result) {
+              deps.onDestinationResult?.(result);
+              check.onDestinationResult?.(result);
+            },
+          });
         }
         if (!signal.aborted) return tick({ ...deps, signal });
       })

@@ -11,8 +11,8 @@ the screen to say what happened when a backup cannot finish.
    `onDestinationResult` failures inside `runForShutdown`. In `backup-sweep.ts`, group the checked
    run’s existing `start` arguments into one options object with room for that observer. Compose it
    with the usual destination recorder for this invocation of `runOnce`. When the upload fails, use
-   the first failed result in the captured config order if its upload error code matches the refusal.
-   In `admin-shutdown-backup.ts`, report the destination id for a failed read-back or digest mismatch.
+   the first failed result in the captured config order. In `admin-shutdown-backup.ts`, report
+   the destination id for a failed read-back or digest mismatch.
    Leave cancellations, shared scratch space and restore rehearsal failures without a location.
    Resolve the id against the captured supervisor config and pass only the Backups display location
    (`dir` or `bucket/namespace`, from `destinationView`). Preserve the original rejection.
@@ -23,7 +23,8 @@ the screen to say what happened when a backup cannot finish.
    paused health type in `apps/dashboard/src/api/servers-api.ts`. In `screens/box-status-screen.ts`
    and `i18n/strings.ts`, add “The affected backup destination is {destination}.” as plain text in
    the current status region alongside the reason. Update both server `guide/{en,es}/box-status.md`
-   guides and the A1418 entry in `docs/backlog.md`. Stalled uploads, downloads, replica checks and
+   guides and the A1418 entry in `docs/backlog.md`. Tell readers that Box status names the first
+   failed upload and that Backups shows every destination's result. Stalled uploads, downloads, replica checks and
    appliance power-off are outside this slice.
 3. **Prove the wrong and right results.** In `apps/server/src/backup-supervisor.test.ts`, extend
    the two-destination upload and corruption cases to check the selected location and original reason.

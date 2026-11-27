@@ -184,7 +184,7 @@ it.each([
   });
   const checkedBackup = vi
     .spyOn(BackupSupervisor.prototype, "runForShutdown")
-    .mockImplementation(async (signal, _migrations, onUploadTimeout) => {
+    .mockImplementation(async (signal, _migrations, onUploadTimeout, onFailedDestination) => {
       signal.throwIfAborted();
       if (scenario === "stalled") {
         reachedCheck();
@@ -193,8 +193,10 @@ it.each([
       }
       if (scenario === "failed") {
         reachedCheck();
-        if (++failedChecks === 1)
+        if (++failedChecks === 1) {
+          onFailedDestination?.(join(stateDir, "copies"));
           throw new AppError("backup.archive_invalid", { reason: "read_back_mismatch" });
+        }
         throw new AppError("backup.destination_timed_out", { timeoutMs: 1_000 });
       }
       await new Promise<void>((resolve) => {
@@ -394,6 +396,16 @@ it.each([
         if (smtp) {
           if (scenario === "stalled")
             expect(await (await health()).json()).toMatchObject({ shutdown: { phase: "stalled" } });
+          else
+            await vi.waitFor(async () => {
+              expect(await (await health()).json()).toMatchObject({
+                shutdown: {
+                  phase: "paused",
+                  errorCode: "backup.archive_invalid",
+                  failedDestination: join(stateDir, "copies"),
+                },
+              });
+            });
           const rows = () =>
             suite.db
               .select({ params: incidents.params })
@@ -441,9 +453,11 @@ it.each([
             const health = await app.request("/api/box/health", {
               headers: { cookie: `waitron_management_session=${token}` },
             });
-            expect(await health.json()).toMatchObject({
+            const body = await health.json();
+            expect(body).toMatchObject({
               shutdown: { phase: "paused", errorCode: "backup.destination_timed_out" },
             });
+            expect(body.shutdown).not.toHaveProperty("failedDestination");
           });
           expect(await rows()).toEqual([{ params: pauseParams }]);
           if (scenario === "stalled")

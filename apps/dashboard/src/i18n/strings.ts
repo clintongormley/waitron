@@ -4827,6 +4827,7 @@ export const en = {
   "box_status.shutdown.checking":
     "Waiting for work to finish and checking the final backup. Leave the box on.",
   "box_status.shutdown.paused": "Shutdown is paused. Leave the box on while you decide.",
+  "box_status.shutdown.failed_destination": "The affected backup destination is {destination}.",
   "box_status.shutdown.retry": "Retry backup",
   "box_status.shutdown.stalled":
     "The backup upload timed out and work is paused. Choose Keep waiting before the backup expires.",
@@ -9789,6 +9790,8 @@ export const es: Record<StringKey, string> = {
     "Esperando a que termine el trabajo y comprobando la copia final. Deja el servidor encendido.",
   "box_status.shutdown.paused":
     "El apagado está en pausa. Deja el servidor encendido mientras decides.",
+  "box_status.shutdown.failed_destination":
+    "El destino de copia de seguridad afectado es {destination}.",
   "box_status.shutdown.retry": "Volver a hacer la copia",
   "box_status.shutdown.stalled":
     "Se agotó el tiempo de espera al enviar la copia y el trabajo está en pausa. Elige Seguir esperando antes de que caduque la copia.",

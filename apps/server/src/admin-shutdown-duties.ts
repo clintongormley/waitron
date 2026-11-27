@@ -116,7 +116,7 @@ export function adminShutdownDuties(deps: {
     return reportedPause.pending;
   }
   const shutdown = createAdminShutdown({
-    async check(signal, { attemptSignal, waitForUpload }) {
+    async check(signal, { attemptSignal, waitForUpload, reportFailedDestination }) {
       const dest = await destination();
       if (dest === undefined) throw new AppError("box.shutdown_unavailable", {});
       const { target, peerNodeId, stream } = dest;
@@ -129,11 +129,16 @@ export function adminShutdownDuties(deps: {
       try {
         let archive;
         if (target === "saved") {
-          await backup.runForShutdown(signal, config.migrationsRoot, async (uploadSignal) => {
-            const waiting = waitForUpload(uploadSignal);
-            const reporting = reportPause(null, attemptSignal);
-            await waiting.finally(() => reporting);
-          });
+          await backup.runForShutdown(
+            signal,
+            config.migrationsRoot,
+            async (uploadSignal) => {
+              const waiting = waitForUpload(uploadSignal);
+              const reporting = reportPause(null, attemptSignal);
+              await waiting.finally(() => reporting);
+            },
+            reportFailedDestination,
+          );
         } else archive = await backup.runForShutdownDownload(signal, target, config.migrationsRoot);
         return {
           archive,

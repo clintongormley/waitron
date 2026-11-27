@@ -422,8 +422,13 @@ describe("multi-destination shutdown", () => {
       const previous = await listArchives(folders[0]!);
       expect(previous).toHaveLength(1);
       vi.spyOn(second!, "putFile").mockRejectedValue(refused);
+      const failedDestination = vi.fn();
       for (const count of [2, 3]) {
-        await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toBe(refused);
+        failedDestination.mockClear();
+        await expect(
+          sup.runForShutdown(new AbortController().signal, null, undefined, failedDestination),
+        ).rejects.toBe(refused);
+        expect(failedDestination.mock.calls).toEqual([[folders[1]]]);
         const archives = await listArchives(folders[0]!);
         expect(archives).toEqual(expect.arrayContaining(previous));
         expect(archives).toHaveLength(count);
@@ -436,10 +441,11 @@ describe("multi-destination shutdown", () => {
   });
 
   it("reports the first failing destination in configuration order", async () => {
+    const folders = [await makeDestDir(), await makeDestDir()];
     const {
       sup,
       backends: [first, second],
-    } = await shutdownSupervisor([await makeDestDir(), await makeDestDir()]);
+    } = await shutdownSupervisor(folders);
     const firstError = new AppError("backup.destination_timed_out", { timeoutMs: 10 });
     const secondError = new AppError("backup.destination_object_too_large", { maxBytes: 1 });
     const failed: string[] = [];
@@ -453,7 +459,11 @@ describe("multi-destination shutdown", () => {
       throw secondError;
     });
     try {
-      await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toBe(firstError);
+      const failedDestination = vi.fn();
+      await expect(
+        sup.runForShutdown(new AbortController().signal, null, undefined, failedDestination),
+      ).rejects.toBe(firstError);
+      expect(failedDestination.mock.calls).toEqual([[folders[0]]]);
       expect(failed).toEqual(["second", "first"]);
     } finally {
       await sup.stop();
@@ -486,9 +496,11 @@ describe("multi-destination shutdown", () => {
       expect(firstRead).not.toHaveBeenCalled();
       rehearsalShortfall = 0;
       ciphertextShortfall = 1;
-      await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toMatchObject({
-        code: "backup.staging_space_low",
-      });
+      const failedDestination = vi.fn();
+      await expect(
+        sup.runForShutdown(new AbortController().signal, null, undefined, failedDestination),
+      ).rejects.toMatchObject({ code: "backup.staging_space_low" });
+      expect(failedDestination).not.toHaveBeenCalled();
       expect(firstRead).toHaveBeenCalledOnce();
       expect(secondRead).not.toHaveBeenCalled();
       firstRead.mockClear();
@@ -500,10 +512,8 @@ describe("multi-destination shutdown", () => {
   });
 
   it.each([0, 1])("refuses same-length corruption at destination %i", async (index) => {
-    const { sup, backends, restoreScratch } = await shutdownSupervisor([
-      await makeDestDir(),
-      await makeDestDir(),
-    ]);
+    const folders = [await makeDestDir(), await makeDestDir()];
+    const { sup, backends, restoreScratch } = await shutdownSupervisor(folders);
     const backend = backends[index]!;
     const get = backend.getFile.bind(backend);
     vi.spyOn(backend, "getFile").mockImplementation(async (key, output, call) => {
@@ -513,10 +523,14 @@ describe("multi-destination shutdown", () => {
       await writeFile(output, bytes);
     });
     try {
-      await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toMatchObject({
+      const failedDestination = vi.fn();
+      await expect(
+        sup.runForShutdown(new AbortController().signal, null, undefined, failedDestination),
+      ).rejects.toMatchObject({
         code: "backup.archive_invalid",
         params: { reason: "read_back_mismatch" },
       });
+      expect(failedDestination.mock.calls).toEqual([[folders[index]]]);
       expect(await readdir(restoreScratch)).toEqual([]);
     } finally {
       await sup.stop();

@@ -223,6 +223,7 @@ export interface BoxHealth {
   outbox: { lastAcceptedAt: string | null; waiting: number; awaitingCertificate: boolean } | null;
   stream: StreamStatusView;
   shutdown?: ShutdownStatus & {
+    failedDestination?: string;
     available: boolean;
     downloadOnly?: true;
     paired?: true;

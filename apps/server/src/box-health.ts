@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { isReceiptPrinter, printers, sales, type Database, type Transaction } from "@waitron/db";
-import type { ShutdownMode, ShutdownStatus } from "./admin-shutdown.js";
+import type { ShutdownView } from "./admin-shutdown.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { persons } from "@waitron/identity";
 import { cardReaders } from "@waitron/payments";
@@ -36,7 +36,7 @@ export interface BoxHealth {
   stream: StreamView;
   spare?: SpareFollowView | null;
   lastOfferedUpgrade?: LastOfferedUpgrade;
-  shutdown?: ShutdownStatus & ShutdownMode & { available: boolean };
+  shutdown?: ShutdownView & { available: boolean };
   clock: {
     authority: AuthorityClockStatus;
     sync: TimeHealth;

@@ -14,6 +14,8 @@ export type ShutdownStatus =
   | { phase: "paused"; errorCode: string }
   | { phase: "download"; name: string; bytes: number; delivered: boolean; errorCode?: string };
 
+export type ShutdownView = ShutdownStatus & ShutdownMode & { failedDestination?: string };
+
 export type ShutdownArchive = {
   name: string;
   path: string;
@@ -57,6 +59,7 @@ export function createAdminShutdown(deps: {
     context: {
       attemptSignal: AbortSignal;
       waitForUpload(uploadSignal: AbortSignal): Promise<void>;
+      reportFailedDestination(location: string): void;
     },
   ): Promise<void | ShutdownCheck>;
   save(): Promise<void>;
@@ -66,6 +69,7 @@ export function createAdminShutdown(deps: {
   const writers = new Set<Promise<void>>();
   type Attempt = {
     state: ShutdownStatus;
+    failedDestination?: string;
     mode: ShutdownMode;
     controller: AbortController;
     settled: Promise<void>;
@@ -122,6 +126,7 @@ export function createAdminShutdown(deps: {
     current.run = active;
     const attemptSignal = current.controller.signal;
     const signal = AbortSignal.any([attemptSignal, active.controller.signal]);
+    let failedDestination: string | undefined;
     async function waitForUpload(uploadSignal: AbortSignal): Promise<void> {
       const waitingSignal = AbortSignal.any([signal, uploadSignal]);
       waitingSignal.throwIfAborted();
@@ -159,7 +164,11 @@ export function createAdminShutdown(deps: {
         signal.throwIfAborted();
         if (action === "check" && !current.replicaCheckPending) {
           current.checked = false;
-          const result = await deps.check(signal, { attemptSignal, waitForUpload });
+          const result = await deps.check(signal, {
+            attemptSignal,
+            waitForUpload,
+            reportFailedDestination: (location) => (failedDestination = location),
+          });
           current.archive = result?.archive;
           current.checkReplica = result?.checkReplica;
           current.checked = true;
@@ -188,6 +197,7 @@ export function createAdminShutdown(deps: {
       } catch (error) {
         if (current.run !== active) return;
         const errorCode = codeOf(error);
+        current.failedDestination = failedDestination;
         current.state =
           current.archive && !current.replicaCheckPending
             ? downloadState(current.archive, current.delivered, errorCode)
@@ -218,8 +228,16 @@ export function createAdminShutdown(deps: {
   return {
     middleware,
     status: (): ShutdownStatus => attempt?.state ?? { phase: "idle" },
-    view: (): ShutdownStatus & ShutdownMode =>
-      attempt === undefined ? { phase: "idle" } : { ...attempt.state, ...attempt.mode },
+    view: (): ShutdownView =>
+      attempt === undefined
+        ? { phase: "idle" }
+        : {
+            ...attempt.state,
+            ...attempt.mode,
+            ...(attempt.state.phase === "paused" && attempt.failedDestination !== undefined
+              ? { failedDestination: attempt.failedDestination }
+              : undefined),
+          },
     start(mode: ShutdownMode = {}): void {
       if (attempt !== undefined || closing) throw new AppError("box.shutdown_in_progress", {});
       const current: Attempt = {

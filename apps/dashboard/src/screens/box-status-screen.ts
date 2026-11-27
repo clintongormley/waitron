@@ -229,6 +229,7 @@ export class BoxStatusScreen extends LitElement {
       }
       .box-restart > p {
         margin: 0 0 var(--wt-space-2);
+        overflow-wrap: anywhere;
       }
       .box-network {
         padding: var(--wt-space-3);
@@ -1138,6 +1139,13 @@ export class BoxStatusScreen extends LitElement {
                 )
         }
         ${(phase === "paused" || phase === "download") && status.errorCode ? codeMessage(status.errorCode) : nothing}
+        ${
+          phase === "paused" && status.failedDestination !== undefined
+            ? fill("box_status.shutdown.failed_destination", {
+                destination: status.failedDestination,
+              })
+            : nothing
+        }
       </p>
       ${
         phase === "idle"
