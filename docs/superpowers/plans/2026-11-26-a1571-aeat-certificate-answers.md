@@ -9,7 +9,7 @@ lands every pull request. Golden huella and `inmutabilidad` pass unedited. Fresh
 **When all three land:** a person installing a certificate AEAT will not take is told "AEAT did
 not accept this certificate", in the dashboard and in setup's first fiscal test; if AEAT stops
 taking the installed one, the certificate card says so and an alert names it; a certificate
-exported from a Mac's Keychain Access installs and files; nobody is asked the certificate's type;
+file exported by macOS's `security` command installs; nobody is asked the certificate's type;
 a representative AEAT will not let file for this company reads "AEAT refused this certificate for
 B12345678 (4112)".
 
@@ -104,6 +104,13 @@ installed" refusal unchanged by conversion. The pins that an RC2 file is refused
 not convert. Guides: the `old_encryption` sentence EN/ES drops "Export it again with AES"; the Mac
 steps stay. Backlog: the Mac bullet goes.
 
+(As built in PR 2, #4481, 2026-11-27. Task 7's contract change was dropped: every rewrite draws a
+fresh random salt, so a readiness binding on the rewritten bytes would refuse every Mac file at
+a production provision. `provisioningSecret.validate` returns nothing as before; setup's check opens the file
+with the rewrite allowed, the digest and the readiness binding read the file as sent, and
+`sealAeatSecret` stores the rewritten copy. Task 6 also rewrites a file macOS's `security` command
+exported under a passphrase outside ASCII, which Node refuses as a wrong passphrase.)
+
 ## PR 3. The type comes from the file (part 3)
 
 **Task 8. Read the policy.** The opener walks `certificatePolicies` (OID 2.5.29.32) in
@@ -119,10 +126,10 @@ Limit, stated at the check: a non-qualified seal (Camerfirma sells one) carries 
 as representative; the owner needs no seal (2026-11-25), and A853 owns seals.
 
 **Task 9. Nobody is asked.** The type field goes from setup's certificate page, the dashboard
-dialog and the diagnosis panel; the request bodies lose `certKind` and Task 7's seat fills it from
-the opened file; the vault, the install row and the card keep it. Consumers to trace (the plan
+dialog and the diagnosis panel; the request bodies lose `certKind` and it is filled from the opened
+file; the vault, the install row and the card keep it. Consumers to trace (the plan
 read counted 316 uses in 93 files, about 60 of them tests): beyond the obvious screens and routes,
-`purposes.ts:22`, `certificate-dates.ts` (reminder days depend on the kind), `slot.ts:49`,
+`purposes.ts:22`, `fiscal-readiness-input.ts:27`, `certificate-dates.ts` (reminder days depend on the kind), `slot.ts:49`,
 `certificate-diagnosis-contract.ts`, `dashboard/certificate-diagnosis*.ts`,
 `fiscal-certificate-api.ts`, `apps/server/README.md`, `WAITRON_CERT_CHECK_KIND` and
 `WAITRON_CERT_CHECK_ADDRESS_KIND` (the preproduction harness keeps choosing the address), the
