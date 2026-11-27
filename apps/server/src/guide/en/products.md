@@ -415,6 +415,8 @@ publish, check the version and publication time in the menu heading.
 Open **Customer menu** and choose **Phone** or **Computer** to check the published layout. Use
 **Language** to check the words for each content language. Use **Search dishes** to find a dish
 or set menu by name, or choose a section to jump to it. Find the allergen key below the dishes.
+Open a dish to check its variants, options, extras and declarations. Open a set menu to see
+the courses, choices and any supplements. Choose **Back to menu** to pick up where you left off.
 Customers cannot open this page yet. To review or publish your changes, switch to
 **Preview**.
 

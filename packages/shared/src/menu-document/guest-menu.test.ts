@@ -138,10 +138,126 @@ it("uses the published customer title, shows set-menu cards and leaves hidden st
         variants: [],
         modifiers: [],
       },
-      { kind: "set_menu", name: "Three courses", price: "18.50" },
-      { kind: "set_menu", name: "Seasonal menu", price: "20.00" },
+      { kind: "set_menu", name: "Three courses", price: "18.50", lines: [] },
+      { kind: "set_menu", name: "Seasonal menu", price: "20.00", lines: [] },
     ],
   });
+});
+
+it("projects set-menu choices from their published courses, supplements and declarations", () => {
+  const doc = document();
+  const placed = (menuItemId: string) => ({
+    kind: "product" as const,
+    menuItemId,
+    productId: menuItemId,
+  });
+  const choice = { ...offer, courseOverrideId: null, countsAsCourseId: "main", variants: [] };
+  doc.root.members = [{ kind: "set_menu", menuId: "fixed", name: "Staff placement" }];
+  doc.setMenus = {
+    fixed: {
+      name: "Lunch set",
+      changedAt: "2026-11-26T17:00:00.000Z",
+      terms: {
+        price: "18.50",
+        names: {},
+        lines: [
+          { id: "start", count: 2, courseIds: ["soup", "main"] },
+          { id: "end", count: 1, courseIds: ["dessert"] },
+        ],
+      },
+      courses: {
+        main: { name: "Mains", names: { en: "Main course" } },
+        soup: { name: "Soup course", names: { es: "Soup course ES" } },
+        dessert: { name: "Dessert", names: {} },
+      },
+      root: { members: ["bread", "soup", "staff"].map(placed) },
+      offers: {
+        soup: {
+          ...choice,
+          countsAsCourseId: null,
+          allergens: { milk: {} },
+          unitPrice: "2.50",
+          variants: [
+            {
+              ...offer,
+              id: "cup",
+              name: "Staff cup",
+              customerName: { en: "Cup" },
+              countsAsCourseId: "soup",
+              unitPrice: "2.50",
+              menuPrice: null,
+              pricingUnit: "each",
+              allergens: { gluten: { kinds: ["wheat"] } },
+            },
+            {
+              ...offer,
+              id: "sweet",
+              name: "Sweet",
+              customerName: null,
+              countsAsCourseId: "dessert",
+              unitPrice: "0.00",
+              menuPrice: null,
+              pricingUnit: "each",
+              dietaryDeclarations: ["vegan"],
+            },
+          ],
+        },
+        bread: {
+          ...choice,
+          name: "Grilled bread",
+          customerName: null,
+          ordering: "not_sold_separately",
+          unitPrice: "0.00",
+          unit: { ...unit, id: eachUnitId },
+          allergens: { nuts: { kinds: ["almonds"] } },
+        },
+        staff: { ...choice, ordering: "staff_only" },
+      },
+    },
+  };
+
+  expect(publicGuestMenu(doc, config, "es").members).toEqual([
+    {
+      kind: "set_menu",
+      name: "Lunch set",
+      price: "18.50",
+      lines: [
+        {
+          count: 2,
+          courses: ["Soup course ES", "Main course"],
+          choices: [
+            {
+              name: "Grilled bread",
+              price: "0.00",
+              unit: "",
+              allergens: { nuts: { kinds: ["almonds"] } },
+              dietary: [],
+            },
+            {
+              name: "Soup ES (Cup)",
+              price: "2.50",
+              unit: "ea",
+              allergens: { gluten: { kinds: ["wheat"] } },
+              dietary: [],
+            },
+          ],
+        },
+        {
+          count: 1,
+          courses: ["Dessert"],
+          choices: [
+            {
+              name: "Soup ES (Sweet)",
+              price: "0.00",
+              unit: "ea",
+              allergens: null,
+              dietary: ["vegan"],
+            },
+          ],
+        },
+      ],
+    },
+  ]);
 });
 it("resolves parent and variant names independently and prices each variant", () => {
   const dish: FrozenOffer = {
