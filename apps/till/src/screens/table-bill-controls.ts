@@ -232,9 +232,16 @@ export const billControlStyles = css`
   }
   .bill-switcher-menu {
     --wt-menu-row-height: var(--wt-tap-min);
+    --wt-bill-row-text-size: max(var(--wt-menu-row-label-size), var(--wt-font-size-md));
   }
   .bill-switcher:not([bottom-sheet]) .bill-switcher-menu {
-    --wt-menu-row-gap: var(--wt-space-3);
+    --wt-menu-row-gap: var(--wt-space-4);
+  }
+  .bill-switcher:not([bottom-sheet])::part(popup) {
+    max-inline-size: min(
+      calc(100vw - 2 * var(--wt-space-2)),
+      calc(2 * var(--wt-row-menu-min-width))
+    );
   }
   .bill-switcher[bottom-sheet] .bill-switcher-menu {
     --wt-menu-row-height: var(--wt-field-height);
@@ -249,6 +256,9 @@ export const billControlStyles = css`
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: 0;
+  }
+  .bill-switcher[bottom-sheet] .bill-switcher-menu [data-row-choice] {
+    padding-inline-end: var(--wt-space-1);
   }
   .bill-switcher-menu [data-switch-bill] {
     border-block-end-width: var(--wt-field-line-width);
@@ -266,9 +276,13 @@ export const billControlStyles = css`
   }
   .bill-switcher-menu wt-menu-row {
     --wt-menu-row-padding-start: var(--wt-space-2);
-    --wt-font-size-md: var(--wt-menu-row-label-size);
+    --wt-menu-row-label-size: var(--wt-bill-row-text-size);
+    --wt-font-size-md: var(--wt-bill-row-text-size);
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
+  }
+  .bill-switcher[bottom-sheet] .bill-switcher-menu wt-menu-row {
+    --wt-menu-row-padding-start: calc(var(--wt-space-2) + var(--wt-space-1) / 2);
   }
   .bill-switcher-menu wt-menu-row::part(trailing) {
     white-space: nowrap;
@@ -280,6 +294,12 @@ export const billControlStyles = css`
     --wt-action-native-icon-color: var(--wt-color-primary);
     margin-inline-start: var(--wt-menu-row-padding-start);
     color: var(--wt-action-native-icon-color);
+    inline-size: max(calc(var(--wt-space-4) + var(--wt-space-1)), var(--wt-font-size-lg));
+    block-size: max(calc(var(--wt-space-4) + var(--wt-space-1)), var(--wt-font-size-lg));
+  }
+  .bill-switcher-menu [data-row-check] {
+    scale: 1 1.05;
+    translate: 0 -1.25%;
   }
   .bill-switcher-menu [data-new-bill]:not([aria-disabled="true"]) {
     color: var(--wt-color-primary-text);

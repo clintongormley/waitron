@@ -233,22 +233,29 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     expect(seen).toEqual([]);
   });
 
-  it("keeps at least 12 px between a long bill name and its amount in the wide drop-down", async () => {
-    await pageAt(820, 1180);
+  it("keeps the wide drop-down under its trigger and the amount clear of a long name", async () => {
+    await pageAt(820, 1180, 130);
     try {
-      const billName = "Birthday celebration by the far window";
+      const billName = "W".repeat(40);
       const el = await mountScreen([...one, partyBill("wo-2", 2, "54.00", { billName })], "wo-1");
       const picker = switcher(el)!;
       await expect.poll(() => picker.hasAttribute("bottom-sheet")).toBe(false);
-      await userEvent.click(picker.shadowRoot!.querySelector("button")!);
+      const trigger = picker.shadowRoot!.querySelector("button")!;
+      await userEvent.click(trigger);
       const popup = picker.shadowRoot!.querySelector("[popover]")!;
       expect(popup.matches(":popover-open")).toBe(true);
       const row = picker.querySelector('[data-switch-bill="wo-2"] wt-menu-row')!.shadowRoot!;
-      const label = row.querySelector(".label")!.getBoundingClientRect();
-      const owes = row.querySelector(".value")!.getBoundingClientRect();
-      expect(owes.left - label.right).toBeGreaterThanOrEqual(12);
-      expect(label.top).toBeLessThan(owes.bottom);
-      expect(owes.right).toBeLessThan(popup.getBoundingClientRect().right);
+      const label = row.querySelector(".label")!;
+      const owes = row.querySelector(".value")!;
+      expect(getComputedStyle(label).fontSize).toBe("18px");
+      expect(getComputedStyle(owes).fontSize).toBe("18px");
+      const bounds = popup.getBoundingClientRect();
+      expect(bounds.left).toBeCloseTo(trigger.getBoundingClientRect().left);
+      expect(bounds.width).toBeLessThanOrEqual(384);
+      expect(
+        owes.getBoundingClientRect().left - label.getBoundingClientRect().right,
+      ).toBeGreaterThanOrEqual(16);
+      expect(owes.getBoundingClientRect().right).toBeLessThan(bounds.right);
     } finally {
       await resetPage();
     }
@@ -329,11 +336,14 @@ describe("A803 switcher: the table screen's bill switcher", () => {
       const row = current.querySelector("wt-menu-row")!.shadowRoot!.querySelector(".row")!;
       expect(getComputedStyle(row).fontSize).toBe("16px");
       expect(icon.getAttribute("name")).toBe("check");
-      expect(icon.getBoundingClientRect().right).toBeLessThan(
-        row.querySelector(".label")!.getBoundingClientRect().left,
-      );
-      expect(row.querySelector(".value")!.textContent).toBe("€54.00");
+      expect(icon.getBoundingClientRect().width).toBe(20);
+      const { left, right } = sheet.getBoundingClientRect();
+      expect(row.querySelector(".label")!.getBoundingClientRect().left - left).toBe(50);
+      const value = row.querySelector(".value")!;
+      expect(value.textContent).toBe("€54.00");
+      expect(right - value.getBoundingClientRect().right).toBe(20);
       const newBill = picker.querySelector("[data-new-bill]")!;
+      expect(newBill.getBoundingClientRect().height).toBe(56);
       expect(sheet.getBoundingClientRect().bottom - newBill.getBoundingClientRect().bottom).toBe(
         20,
       );
@@ -457,7 +467,6 @@ describe.each(["light", "dark"] as const)(
       expect(getComputedStyle(checked).backgroundColor).toBe(background(other));
       await userEvent.hover(host.querySelector<HTMLElement>(other)!);
       const hover = background(other);
-      // In a short window a row can open under the press that opened the sheet.
       await userEvent.hover(checked);
       expect(checked.matches(":hover")).toBe(true);
       expect(getComputedStyle(checked).backgroundColor).toBe(hover);

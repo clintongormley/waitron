@@ -998,6 +998,8 @@ When you supply a native button with its own role or checked state, include `act
 and give the button `data-row-choice`. Put a labelled `wt-menu-row` inside it, with `value`,
 `chevron` or `check` as needed. The inner row supplies the spacing and trailing marks. The outer
 button retains the action, its checked state and keyboard focus.
+Set `--wt-menu-row-gap` to change the space between the label and trailing content. Style the
+`trailing` part to keep a value together and the `check` part to paint its status mark.
 
 A `wt-combobox` panel opens below its field when it fits. Otherwise it uses the side with more
 room and scrolls its list within that room, leaving its field and search box visible. Filtering
@@ -1249,13 +1251,15 @@ The bill picker, Eat here / Take away control and bill actions follow the table 
   Below the side-by-side width, the list opens in the shared menu sheet with its table or party
   heading. At wider widths it opens by the trigger. The menu uses native `menuitemradio` buttons
   with shared `wt-menu-row` content, leading teal check on the current bill, and amounts aligned
-  at the trailing edge. The wide list gives the name and amount at least 12 px between them.
-  The list puts a muted check beside Paid and keeps the amount on one line. The sheet gives each
-  bill at least 56 px, divides the rows with a line and leaves at least 20 px below **+ New bill**.
+  at the trailing edge. The wide list caps its width and gives the name and amount at least 16 px
+  between them. The list follows the till's Text size setting, puts a muted check beside Paid and
+  keeps the amount on one line. The sheet gives each bill at least 56 px, divides the rows with a
+  line and leaves at least 20 px below **+ New bill**.
   A bill with unsent dishes shows one line per editor. The picker adds an unsent hint on its own
   line when another bill holds the signed-in person's unsent dishes, and marks that bill “Unsent”.
-  Scroll to reach **+ New bill** at the foot. While a bill is being made the action is
-  `aria-disabled` and sends nothing. Choose another bill to send `switch-bill` with its id.
+  **+ New bill** is always last. While a bill is being made the action is `aria-disabled` and sends
+  nothing. Choose another bill to send `switch-bill` with its id. Choosing the current bill sends
+  nothing.
 - **A vanished bill.** When a bills read no longer holds the bill on screen, the screen shows the
   lowest-numbered bill still owing, else the lowest-numbered listed bill, and a `role="status"` line
   says "Bill 2 is no longer at this table. Now showing Bill 1." Choosing another bill or opening another table

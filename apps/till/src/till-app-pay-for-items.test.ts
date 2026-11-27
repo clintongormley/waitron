@@ -31,7 +31,10 @@ import {
   vino,
 } from "../test/bill-pay-app.js";
 import { cancelReason, cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
-import { switchToBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  billChoiceText,
+  switchToBill,
+} from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { billLabel } from "./state/bill-state.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -218,9 +221,11 @@ describe("till-app: Pay for items on a bill of their own", () => {
     expect(switcher.querySelector('[data-switch-bill="wo-4"]')!.getAttribute("aria-checked")).toBe(
       "true",
     );
-    const newBill = switcher.querySelector('[data-switch-bill="wo-9"]');
-    expect(text(newBill)).toContain(t("table.bill_paid"));
-    expect(newBill!.querySelector("[data-paid-mark]")).not.toBeNull();
+    const newBill = switcher.querySelector('[data-switch-bill="wo-9"]')!;
+    expect(billChoiceText(newBill, "value")).toBe(t("table.bill_paid"));
+    expect(
+      newBill.querySelector("wt-menu-row")!.shadowRoot!.querySelector('[part="check"]'),
+    ).not.toBeNull();
   });
 
   it("the new bill's receipt offers the payment slip on the new bill", async () => {
@@ -2373,9 +2378,11 @@ describe("till-app: a bill paid more than it comes to", () => {
     expect(submissionId).toMatch(/^[0-9a-f-]{36}$/);
     expect(overpaid).toBe("5.00");
     expect(getPartyBills.mock.calls.length).toBeGreaterThan(reads);
-    const row = order.shadowRoot!.querySelector('[data-switch-bill="wo-4"]');
-    expect(text(row)).toContain(t("table.bill_paid"));
-    expect(row!.querySelector("[data-paid-mark]")).not.toBeNull();
+    const row = order.shadowRoot!.querySelector('[data-switch-bill="wo-4"]')!;
+    expect(billChoiceText(row, "value")).toBe(t("table.bill_paid"));
+    expect(
+      row.querySelector("wt-menu-row")!.shadowRoot!.querySelector('[part="check"]'),
+    ).not.toBeNull();
     expect(order.shadowRoot!.querySelector("[data-overpaid]")).toBeNull();
     expect(api.printReceipt).toHaveBeenCalledExactlyOnceWith("wo-4", { ifOwed: true });
   });
