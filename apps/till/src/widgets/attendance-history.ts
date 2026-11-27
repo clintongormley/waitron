@@ -66,7 +66,7 @@ function questionTime(
     }`;
 }
 
-function withHourArticle(key: StringKey, at: string, offset: number) {
+export function withHourArticle(key: StringKey, at: string, offset: number) {
   const one = storedAttendanceTime(at, offset).slice(11, 13) === "01";
   return t(key).replace("{plural}", one ? "" : "s");
 }

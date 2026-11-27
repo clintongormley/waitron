@@ -21,6 +21,7 @@ export function clockState(
     state,
     lastEntryId: id,
     firstClockIn,
+    shiftStart: null,
   };
 }
 export function deferred<T>() {

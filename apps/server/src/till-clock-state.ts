@@ -11,6 +11,7 @@ export interface TillClockState {
   state: TillClockStatus;
   lastEntryId: string | null;
   firstClockIn: boolean;
+  shiftStart: { eventAt: string; offsetMinutes: number } | null;
 }
 
 type LiveKind = "in" | "out" | "break_start" | "break_end";
@@ -32,7 +33,7 @@ export async function readTillClockState(
   tx: Transaction,
   scope: { personId: string },
   at: Date,
-): Promise<TillClockState> {
+): Promise<{ state: TillClockState; clockInAt: string | undefined }> {
   const clock = await readVenueClock(tx);
   const businessDay = businessDayAt(clock, at);
   const bounds = businessDayBounds(clock, businessDay);
@@ -50,12 +51,28 @@ export async function readTillClockState(
       ),
     )
     .limit(1);
-  const state = latest === undefined ? "out" : stateAfter[latest.entryKind as LiveKind];
+  const status = latest === undefined ? "out" : stateAfter[latest.entryKind as LiveKind];
+  const clockIn =
+    status === "out" ? undefined : await readLatestLiveEntry(tx, scope.personId, { kind: "in" });
+  // Reconciliation still uses the filtered clock-in. A later-dated correction from
+  // an earlier shift can win that read without belonging to the shift shown here.
+  let start = latest?.entryKind === "in" ? latest : undefined;
+  if (start === undefined && latest && clockIn) {
+    const precedes =
+      clockIn.nodeId === latest.nodeId
+        ? clockIn.sequenceNo < latest.sequenceNo
+        : clockIn.eventAt < latest.eventAt;
+    if (precedes) start = clockIn;
+  }
   return {
-    personId: scope.personId,
-    businessDay,
-    state,
-    lastEntryId: latest?.entryId ?? null,
-    firstClockIn: clockedIn === undefined,
+    state: {
+      personId: scope.personId,
+      businessDay,
+      state: status,
+      lastEntryId: latest?.entryId ?? null,
+      firstClockIn: clockedIn === undefined,
+      shiftStart: start ? { eventAt: start.eventAt, offsetMinutes: start.offsetMinutes } : null,
+    },
+    clockInAt: clockIn?.eventAt,
   };
 }

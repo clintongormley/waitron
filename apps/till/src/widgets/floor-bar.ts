@@ -1,11 +1,14 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import type { FloorCueIcon, ZoneTab } from "@waitron/ui";
+import type { TillClockState } from "../api/attendance-api.js";
 import type { TableState } from "../api/floor-api.js";
 import { helpBadgeLabel, helpText, type HelpKey } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
-import { countText, currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, fill, t } from "../i18n/t.js";
 import type { TillClockAction } from "../state/clocking.js";
 import { kindCue, kindWords, mapKinds, topTabKind, type MapKind } from "../state/floor-look.js";
+
+import { storedAttendanceTime, withHourArticle } from "./attendance-history.js";
 
 import "@waitron/ui/src/components/wt-menu-row.js";
 
@@ -229,11 +232,19 @@ export const floorBarStyles = css`
     color: var(--wt-color-on-primary);
     font-weight: var(--wt-font-weight-bold);
   }
-  .floor-operator .operator {
+  .floor-operator-person {
     flex: 1;
+    min-inline-size: 0;
+  }
+  .floor-operator .operator {
     font-size: var(--wt-floor-name-font-size);
     font-weight: bold;
     overflow-wrap: anywhere;
+  }
+  .floor-operator-start {
+    display: block;
+    color: var(--wt-color-text-muted);
+    font-size: calc((var(--wt-font-size-sm) + var(--wt-font-size-md)) / 2);
   }
   .floor-operator [data-clock-action] {
     width: auto;
@@ -373,6 +384,7 @@ export function floorOperatorLine(
   name: string,
   operator: TemplateResult,
   clockOut: TemplateResult | typeof nothing,
+  shiftStart: TillClockState["shiftStart"],
 ) {
   const initials = name
     .trim()
@@ -380,9 +392,23 @@ export function floorOperatorLine(
     .map((word) => Array.from(word)[0])
     .join("")
     .toLocaleUpperCase(currentLocale());
+  const start =
+    shiftStart === null
+      ? nothing
+      : html`<time class="floor-operator-start" datetime=${shiftStart.eventAt}
+          >${fill(
+            withHourArticle("clock.started_at", shiftStart.eventAt, shiftStart.offsetMinutes),
+            {
+              time: storedAttendanceTime(shiftStart.eventAt, shiftStart.offsetMinutes).slice(
+                11,
+                16,
+              ),
+            },
+          )}</time
+        >`;
   return html`<div class="floor-operator">
-    <span class="floor-operator-initials" aria-hidden="true">${initials}</span
-    >${operator}${clockOut}
+    <span class="floor-operator-initials" aria-hidden="true">${initials}</span>
+    <span class="floor-operator-person">${operator}${start}</span>${clockOut}
   </div>`;
 }
 

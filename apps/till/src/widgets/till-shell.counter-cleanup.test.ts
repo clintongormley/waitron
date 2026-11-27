@@ -245,6 +245,7 @@ it.each([390, 1280])(
           state: "working",
           lastEntryId: "entry",
           firstClockIn: false,
+          shiftStart: null,
         },
       });
       const operator = el.shadowRoot!.querySelector<HTMLElement>(".operator")!;

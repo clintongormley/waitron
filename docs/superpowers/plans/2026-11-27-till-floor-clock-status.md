@@ -1,12 +1,12 @@
 # Lane F · 2b · Till floor clock status
 
-**PLAN FOR APPROVAL.** On #4462 at `3bb441144eadc306658d99ed6c1e391ccb746e78`, using #4449’s shared actions. The watcher’s 26 November 20:45 note clears the pass-2 split and names the approved frame `aj` 1. The 27 November 03:07 note says “Plan 2b next (one page, Claude read, PLAN FOR APPROVAL), building on #4462's branch until it lands.” This clears planning. [Split](2026-11-26-till-handheld-redesign-pass-1.md) · [Design §§9.9 and 14.3](../specs/2026-11-26-till-handheld-redesign-design.md).
+**Cleared by the watcher on 27 November at 03:37.** On #4462 at `3bb441144eadc306658d99ed6c1e391ccb746e78`, using #4449’s shared actions. The watcher’s 26 November 20:45 note clears the pass-2 split and names the approved frame `aj` 1. The 27 November 03:07 note says “Plan 2b next (one page, Claude read, PLAN FOR APPROVAL), building on #4462's branch until it lands.” This clears planning. [Split](2026-11-26-till-handheld-redesign-pass-1.md) · [Design §§9.9 and 14.3](../specs/2026-11-26-till-handheld-redesign-design.md).
 
 ## Read the start of the open shift
 
 Add `shiftStart` to `TillClockState` in `apps/server/src/till-clock-state.ts` and `apps/till/src/api/attendance-api.ts`. It carries `eventAt` and `offsetMinutes`, or `null`. For a working or break state, move the existing `readLatestLiveEntry(tx, personId, { kind: "in" })` call into the state read. Return the filtered instant beside the state inside the server. `apps/server/src/attendance-discovery.ts` uses that instant to reconcile the same business day as before. `apps/server/src/till-clock-api.ts` sends only the state on GET and after each POST. Keep the existing first-clock-in and latest-entry checks, transactions, writes and permissions.
 
-If the latest live entry is an `in`, display its time. After a break starts or ends, display the filtered start only when it precedes that entry in the same box’s record sequence, or has an earlier instant if it came from another box. Otherwise leave the line blank. This keeps a later-dated clock-in from a previous shift off the new shift’s display. Leave the workforce lookup unchanged. The proposed label follows the live shift’s recorded time. My hours applies approved retimes. The watcher will settle which time to show and whether the label needs a date for an overnight shift before the build starts.
+If the latest live entry is an `in`, display its time. After a break starts or ends, display the filtered start only when it precedes that entry in the same box’s record sequence, or has an earlier instant if it came from another box. Otherwise leave the line blank. This keeps a later-dated clock-in from a previous shift off the new shift’s display. Leave the workforce lookup unchanged. The proposed label follows the live shift’s recorded time. My hours applies approved retimes. The watcher cleared the recorded time with no date, as drawn in frame `aj` 1.
 
 ## Show it in narrow floor More
 

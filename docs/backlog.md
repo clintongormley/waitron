@@ -577,6 +577,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   shared sheet on narrow screens. The narrow floor has the zone chooser, Map/List and ☰ at the
   bottom.
   The zone and More sheets dock against that bar, and More uses shared action rows.
+  More shows your clock-in time under your name, beside **Clock out**.
   The table name opens the shared action sheet with Finish table at the end.
   The remaining order and payment screens use the
   [shared panels and payment controls](developers/design-system.md#full-screen-panels-and-payment-controls).

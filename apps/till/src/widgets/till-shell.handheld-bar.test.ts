@@ -292,6 +292,7 @@ describe("a handheld's More on a short phone", () => {
           state: "working",
           lastEntryId: "entry",
           firstClockIn: false,
+          shiftStart: null,
         },
         affordances: ["find-bill", "schedule", "expo"],
         canSwitchProfile: true,

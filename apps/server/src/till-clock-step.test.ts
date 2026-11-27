@@ -174,6 +174,9 @@ describe("the till's clock across a backward step of the box's clock", () => {
     instant = new Date("2026-01-05T09:00:00Z");
     // The reconcile's state read and its clock-in read; the answer reuses the first.
     expect(await latestReads(() => request("state"))).toBe(2);
+    expect((await request("break-start", (await state()).lastEntryId)).status).toBe(200);
+    expect(await latestReads(() => request("state"))).toBe(2);
+    expect((await request("break-end", (await state()).lastEntryId)).status).toBe(200);
     const expected = (await state()).lastEntryId;
     // As above, then the clock-out's own check and the state after it.
     expect(await latestReads(() => request("out", expected))).toBe(4);

@@ -582,8 +582,8 @@ mesa. En una pantalla estrecha, usa Tab para llegar al botón de una mesa y Ente
 Elige **Sala** después de una mesa para abrir su zona, si este dispositivo la muestra. En una
 pantalla estrecha, toca el nombre de la zona abajo y busca la marca junto a tu zona actual. Toca
 otra zona para cambiar, o usa las flechas arriba y abajo y pulsa Enter. Abre **Más** (☰) en la misma barra para fichar, cambiar el plano de hoy,
-buscar cuentas, gestionar el efectivo, consultar tu jornada, pedir ayuda o abrir los ajustes. En un móvil o una tableta con la sala en pantalla ancha,
-abre **Más** arriba para encontrar **Equipo**, **Idioma** y **Tema** en **Ajustes**.
+buscar cuentas, gestionar el efectivo, consultar tu jornada, pedir ayuda o abrir los ajustes. La hora de entrada aparece debajo de tu nombre,
+junto a **Fichar salida**. En un móvil o una tableta con la sala en pantalla ancha, abre **Más** arriba para encontrar **Equipo**, **Idioma** y **Tema** en **Ajustes**.
 
 ## Tomar un pedido en un móvil {#phone-order}
 

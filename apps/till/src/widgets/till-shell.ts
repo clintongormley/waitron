@@ -1274,7 +1274,7 @@ export class TillShell extends LitElement {
       this.clockAvailable && state !== null && state.state !== "out"
         ? action("out", t("clock.out"))
         : nothing;
-    return html`${inFloorMenu ? floorOperatorLine(this.operatorName, this.#operatorName(), clockOut) : nothing}
+    return html`${inFloorMenu ? floorOperatorLine(this.operatorName, this.#operatorName(), clockOut, this.operatorName && clockOut !== nothing ? (state?.shiftStart ?? null) : null) : nothing}
     ${
       this.clockAvailable
         ? html`

@@ -7,6 +7,7 @@ import {
   mountWidget,
   expectNoA11yViolations,
 } from "./test-helpers.js";
+import type { TillClockState } from "../api/attendance-api.js";
 import type { ShellAffordance, TillShell } from "./till-shell.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import "./till-shell.js";
@@ -299,6 +300,7 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
         businessDay: "2026-11-26",
         state: "working",
         firstClockIn: false,
+        shiftStart: null,
         lastEntryId: "clock-in",
       },
       activeScreen: "floor",
@@ -355,7 +357,9 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     await expect.element(page.getByRole("button", { name: "Close the drawer" })).toBeVisible();
     expect(more().querySelector("wt-menu-row:not([action], [divider]):empty")).toBeNull();
     const person = more().querySelector(".operator")!;
-    expect(person.parentElement?.querySelector('[data-clock-action="out"]')).not.toBeNull();
+    expect(
+      person.closest(".floor-operator")?.querySelector('[data-clock-action="out"]'),
+    ).not.toBeNull();
     await expect.element(page.getByRole("button", { name: "Taken off 0" })).toBeVisible();
     await expect
       .element(page.getByRole("button", { name: "Back to the Dinner plan" }))
@@ -430,6 +434,73 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     await page.viewport(1280, 900);
   }
 });
+
+it.each([
+  ["en-GB", "working", "16:02", "Clocked in at 17:02", "Clock out"],
+  ["es-ES", "on_break", "00:02", "Entrada fichada a la 01:02", "Fichar salida"],
+  ["es-ES", "working", "16:02", "Entrada fichada a las 17:02", "Fichar salida"],
+] as const)(
+  "shows the recorded start in narrow Floor More (%s, %s, %s)",
+  async (locale, state, utcTime, label, action) => {
+    setLocale(locale);
+    await page.viewport(390, 844);
+    try {
+      const clockState: TillClockState = {
+        personId: "person",
+        businessDay: "2026-11-26",
+        state,
+        firstClockIn: false,
+        lastEntryId: "entry",
+        shiftStart: { eventAt: `2026-11-26T${utcTime}:00.000Z`, offsetMinutes: 60 },
+      };
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "phone-portrait",
+        operatorName: "Ana",
+        activeScreen: "floor",
+        clockAvailable: true,
+        clockState,
+      });
+      el.append(document.createElement("till-floor-screen"));
+      const more = () => el.shadowRoot!.querySelector<HTMLElement>(".floor-menu")!;
+      await vi.waitFor(() => expect(more()).not.toBeNull());
+      await userEvent.click(more().shadowRoot!.querySelector("button")!);
+      const start = page.getByText(label, { exact: true });
+      expect(start.elements(), `visible clock-in label: ${label}`).toHaveLength(1);
+      await expect.element(start).toBeVisible();
+      const name = more().querySelector(".operator-label")!;
+      expect(start.element().getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        name.getBoundingClientRect().bottom,
+      );
+      expect(getComputedStyle(start.element()).fontSize).toBe("13px");
+      const clockOut = page.getByRole("button", { name: action, exact: true });
+      expect(clockOut.elements()).toHaveLength(1);
+
+      for (const props of [
+        { clockAvailable: false },
+        { clockState: null },
+        { clockState: { ...clockState, state: "out", shiftStart: null } },
+        { clockState: { ...clockState, shiftStart: null } },
+      ] as const) {
+        Object.assign(el, { clockAvailable: true, clockState }, props);
+        await el.updateComplete;
+        expect(start.elements()).toHaveLength(0);
+      }
+      Object.assign(el, { clockState, operatorName: "" });
+      await el.updateComplete;
+      expect(start.elements()).toHaveLength(0);
+      el.operatorName = "Ana";
+      await el.updateComplete;
+      const onAction = vi.fn();
+      el.addEventListener("clock-action", onAction);
+      await clockOut.click();
+      expect(onAction).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ detail: { action: "out" } }),
+      );
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);
 
 it("shows the active language in the joined floor menu choice and gives Log out no arrow", async () => {
   setLocale("en-GB");
