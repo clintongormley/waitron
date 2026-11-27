@@ -396,8 +396,8 @@ declare module "@waitron/shared" {
     "fiscal.not_filing": Record<string, never>;
 
     /**
-     * Thrown inside `mtlsFetch` (./aeat-transport.ts) when AEAT redirects to one of the error pages
-     * it answers a certificate it will not accept with; `page` is that page's file name.
+     * Thrown inside `mtlsFetch` (./aeat-transport.ts) on a redirect to `page`, erro4011.html (certificate
+     * not verified) or erro4033.html (none arrived): docs/compliance/first-aeat-contact.md, 2026-11-25.
      */
     "fiscal.certificate_not_accepted": { page: string };
 

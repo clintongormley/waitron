@@ -389,7 +389,8 @@ describe("aeatClientResolver lifetime", () => {
 });
 
 describe("mtlsFetch and AEAT's redirects", () => {
-  // AEAT answers a certificate it will not take with a 302 to one of two error pages.
+  // AEAT's two certificate error pages: erro4011 (certificate not verified), erro4033 (none arrived).
+  // Receipt: docs/compliance/first-aeat-contact.md (2026-11-25).
   let redirector: { origin: string; close: () => Promise<void> } | undefined;
 
   beforeAll(async () => {
@@ -409,7 +410,15 @@ describe("mtlsFetch and AEAT's redirects", () => {
           res.end("<html>moved</html>");
           return;
         }
-        if (url.pathname === "/bare") {
+        if (url.pathname === "/big") {
+          res.writeHead(302, {
+            Location: "/static_files/erro4011.html",
+            "Content-Type": "text/html",
+          });
+          res.end(Buffer.alloc(5 * 1024 * 1024, "x"));
+          return;
+        }
+        if (url.pathname === "/bare/erro4011.html") {
           res.writeHead(307);
           res.end();
           return;
@@ -462,6 +471,21 @@ describe("mtlsFetch and AEAT's redirects", () => {
     }
   });
 
+  it("releases the connection after refusing a redirect with a large body", async () => {
+    const transport = mtlsFetch(certMaterial(), material.caPem);
+    const error = await captureError(() => transport.fetch(`${redirector!.origin}/big`));
+    expect(isAppError(error) && error.code).toBe("fiscal.certificate_not_accepted");
+    let timer: NodeJS.Timeout | undefined;
+    const closed = await Promise.race([
+      transport.close().then(() => "closed"),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve("hung"), 3_000);
+      }),
+    ]);
+    clearTimeout(timer);
+    expect(closed).toBe("closed");
+  });
+
   it("refuses the error page even when the caller asks to follow redirects", async () => {
     const transport = mtlsFetch(certMaterial(), material.caPem);
     try {
@@ -488,10 +512,10 @@ describe("mtlsFetch and AEAT's redirects", () => {
     },
   );
 
-  it("hands back a redirect status that names no Location", async () => {
+  it("hands back a redirect status that names no Location, even from a refusal page's address", async () => {
     const transport = mtlsFetch(certMaterial(), material.caPem);
     try {
-      const response = await transport.fetch(`${redirector!.origin}/bare`);
+      const response = await transport.fetch(`${redirector!.origin}/bare/erro4011.html`);
       expect(response.status).toBe(307);
     } finally {
       await transport.close();
