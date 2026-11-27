@@ -22,6 +22,10 @@ import { mountSetup } from "./setup-api.js";
 import { type SetupDeps } from "./setup-api-deps.js";
 import { resolveEmailDelivery } from "./email-delivery.js";
 import { createSetupOperationStore } from "./setup-operation.js";
+import { createFiscalReadinessStore } from "./fiscal-readiness.js";
+import { fiscalReadinessInput } from "./fiscal-readiness-runner.js";
+
+type FiscalSeatInput = Parameters<NonNullable<SetupDeps["assertFiscalReady"]>>[0];
 
 const SETUP_STATE_DIR = useSetupStateDir();
 
@@ -182,6 +186,59 @@ it("seals a Mac export so plain Node opens it while the readiness check reads th
       sql`select fingerprint from verifactu_certificates where node_id=${result.nodeId}`,
     ),
   ).toEqual([{ fingerprint: OPENSSL_SIGNED_FINGERPRINT }]);
+});
+
+it("provisions a Mac export in production after its accepted fiscal test, through the real readiness store", async () => {
+  const stateDir = mkdtempSync(join(tmpdir(), "setup-mac-readiness-"));
+  try {
+    const aeatCert = { ...MAC_ACCENTED_CANDIDATE, certKind: "sello" };
+    const submitted: unknown[] = [];
+    const readinessInput = ({ request, contribution, secret }: FiscalSeatInput) =>
+      fiscalReadinessInput({
+        venue: request.venue,
+        contribution,
+        secret,
+        moduleVersions: {},
+        applicationVersion: "test",
+      });
+    const made = mount({
+      environment: "production",
+      stateDir,
+      provision: async () => {
+        await stampDeployment(suite.db, "production");
+        return result;
+      },
+      runFiscalTest: async (input) =>
+        createFiscalReadinessStore(
+          stateDir,
+          async (submission) => {
+            submitted.push(submission.certificateFingerprint);
+            return { status: "accepted" };
+          },
+          ring.current.key,
+        ).run(readinessInput(input)),
+      assertFiscalReady: async (input) =>
+        createFiscalReadinessStore(
+          stateDir,
+          async () => ({ status: "uncertain" }),
+          ring.current.key,
+        ).assertReady(readinessInput(input)),
+    });
+    const tested = await post(made.app, { ...body(), aeatCert }, "/setup-api/fiscal-test");
+    expect(await tested.json()).toEqual({ status: "accepted", testedAt: expect.any(String) });
+    expect(submitted).toHaveLength(1);
+    const response = await post(made.app, { ...body(), aeatCert, email });
+    expect(await response.json()).toMatchObject({ provisioned: true });
+    expect(response.status).toBe(200);
+    const sealed = (await withTransaction(suite.db, (tx) =>
+      tryGetCredential(tx, ring, { purpose: "fiscal.aeat" }),
+    )) as typeof aeatCert;
+    expect(
+      openCertificateFile(Buffer.from(sealed.pfxBase64, "base64"), sealed.passphrase),
+    ).toMatchObject({ ok: true, details: { fingerprint: OPENSSL_SIGNED_FINGERPRINT } });
+  } finally {
+    rmSync(stateDir, { recursive: true, force: true });
+  }
 });
 
 describe("setup provision email credential", () => {
