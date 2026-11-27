@@ -298,73 +298,41 @@ describe("a full invoice another box issued", () => {
     expect(days.issuedOn).not.toBe(days.originalIssuedOn);
   });
 
-  it("while AEAT has not answered it, the leg completing files nothing and raises no alert; the sweep files one R1 once AEAT accepts it", async () => {
+  it("while AEAT has not answered it, the leg completing files one R1 on this box's chain at once, raising no alert", async () => {
     const { saleId, correctionId, refundId } = await readerLegUnanswered();
     const box = await takeOver(venue);
     providerMadeIt(refundId);
     await recoverTenderRefunds(refundDeps());
-    await sweep();
 
     expect(refundStates(saleId)).toEqual([{ applied: 1000, state: "completed" }]);
-    expect(correctivesOf(saleId)).toEqual([]);
-    expect(await correctionOf(correctionId)).toMatchObject({ state: "open" });
+    expect(correctivesOf(saleId)).toEqual([r1(-1000)]);
+    expect(await correctionOf(correctionId)).toMatchObject({ state: "filed" });
+    await filedOnChainOf(correctionId, box, saleId);
     expect(
       await venue.db
         .select({ code: incidents.code })
         .from(incidents)
         .where(eq(incidents.saleId, saleId)),
     ).toEqual([]);
-
-    await acceptedByAeat(venue.db, saleId);
-    await sweep();
-
-    expect(correctivesOf(saleId)).toEqual([r1(-1000)]);
-    expect(await correctionOf(correctionId)).toMatchObject({ state: "filed" });
-    await filedOnChainOf(correctionId, box, saleId);
   });
 });
 
-describe("a correction that can no longer be filed ends unrecorded", () => {
-  // `refusedByAeat` opens no filing case, so no fix is on offer whatever FULL_INVOICE_REPLACEMENT_ON
-  // says: the refusal is one with no fix (`refused_no_fix`).
-  it("opened while queued, a leg pending when AEAT refuses the invoice (1112) with no fix on offer: nothing filed, one alert, Finish ends it", async () => {
+describe("a correction on a full invoice AEAT refused with no fix on offer", () => {
+  it("opened while queued, a leg pending when AEAT refuses the invoice (1112): the leg completing files one R1, raising no alert", async () => {
     const { saleId, correctionId, refundId } = await readerLegUnanswered();
     await inTx(venue, (tx) => refusedByAeat(tx, saleId));
     providerMadeIt(refundId);
     await recoverTenderRefunds(refundDeps());
-    await sweep();
 
     expect(refundStates(saleId)).toEqual([{ applied: 1000, state: "completed" }]);
-    expect(correctivesOf(saleId)).toEqual([]);
+    expect(correctivesOf(saleId)).toEqual([r1(-1000)]);
+    expect(await correctionOf(correctionId)).toMatchObject({ state: "filed" });
     expect(
       await venue.db
-        .select({ code: incidents.code, params: incidents.params })
+        .select({ code: incidents.code })
         .from(incidents)
         .where(eq(incidents.saleId, saleId)),
-    ).toEqual([
-      {
-        code: "invoice_correction.filing_refused",
-        params: {
-          correctionId,
-          saleId,
-          moneyBack: "10.00",
-          refusal: "sale.correction_not_admitted",
-          fullInvoice: true,
-        },
-      },
-    ]);
-
-    const finished = await send(
-      venue.app,
-      adminCookie,
-      "POST",
-      `/api/invoice-corrections/${correctionId}/close`,
-      {},
-    );
-    expect(finished.status, JSON.stringify(finished.json)).toBe(200);
-    expect(finished.json).toMatchObject({ state: "closed", correctiveSaleId: null });
-    expect(correctivesOf(saleId)).toEqual([]);
-    expect(refundStates(saleId)).toEqual([{ applied: 1000, state: "completed" }]);
+    ).toEqual([]);
   });
 });
 

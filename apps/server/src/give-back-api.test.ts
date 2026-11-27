@@ -6,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { loginWithPin } from "@waitron/identity";
+import { AppError } from "@waitron/shared";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -112,12 +113,23 @@ describe("GET /api/transactions/:saleId/give-back and its preview", () => {
     expect(await rowCount()).toBe(before);
   });
 
-  it("answers a wait with 409 and its code, as the read shows it", async () => {
+  it("offers goodwill on a receipt AEAT refused, and answers a wait with 409 and its code, as the read shows it", async () => {
     const billId = await seated("Salad bowl");
     await payRest(billId, "20.00");
     const saleId = await restId(billId);
     await inTx(venue(), (tx) => refusedByAeat(tx, saleId));
-    const reason = { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } };
+    expect((await read(saleId)).json).toMatchObject({
+      choices: { goodwill: { available: true, reason: null } },
+    });
+    expect(await preview(saleId, { purpose: "goodwill", amount: "5.00" })).toMatchObject({
+      status: 200,
+      json: { parts: [{ kind: "correction", amount: "5.00", way: "cash", lineIds: [] }] },
+    });
+    const waiting = vi
+      .spyOn(venue().backend, "correctionAdmissionFor")
+      .mockRejectedValue(new AppError("clock.unconfirmed", {}));
+    onTestFinished(() => waiting.mockRestore());
+    const reason = { code: "clock.unconfirmed", params: {} };
     expect((await read(saleId)).json).toMatchObject({
       choices: { goodwill: { available: false, reason } },
     });

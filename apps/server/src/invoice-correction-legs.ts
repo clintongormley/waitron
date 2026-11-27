@@ -30,7 +30,6 @@ const NEVER_FILEABLE = new Set<ErrorParams["sale.correction_not_admitted"]["reas
   "replaced",
   "voided",
   "not_simplified",
-  "refused_no_fix",
 ]);
 
 /** Whether a filing's refusal is one no later attempt on this box gets past, so Close may end the

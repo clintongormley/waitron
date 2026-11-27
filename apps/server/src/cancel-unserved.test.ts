@@ -148,9 +148,14 @@ async function seatedWithLines(lines: (string | { name: string; extras: unknown[
 }
 
 /** The receipt refused by AEAT and replaced; answers the replacement's id. */
-function replacedAfterRefusal(saleId: SaleId): Promise<SaleId> {
+async function replacedAfterRefusal(saleId: SaleId): Promise<SaleId> {
+  await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+  return sendReplacement(saleId);
+}
+
+/** Fiscal filing's Send the replacement on the receipt `saleId`; answers the replacement's id. */
+function sendReplacement(saleId: SaleId): Promise<SaleId> {
   return inTx(venue, async (tx) => {
-    await refusedByAeat(tx, saleId);
     const session = await loginWithPin(tx, {
       deviceId: venue.deviceId,
       personId: venue.adminId,
@@ -592,7 +597,7 @@ describe("Nothing was served files the corrective, as before, on any other print
     expect(await voidsOf(saleId)).toEqual([]);
   });
 
-  it("one whose payment was given back in full and whose receipt another box issued, which waits for AEAT's answer, then is credited once AEAT accepts it", async () => {
+  it("one whose payment was given back in full and whose receipt another box issued, which AEAT has not answered, credited at once", async () => {
     const party = await seatedWith(venue, "Tarta");
     const paymentId = await fixture.payInCash(venue, party.tabId, "5.00");
     const givenBack = await send(
@@ -614,22 +619,14 @@ describe("Nothing was served files the corrective, as before, on any other print
     await takeOver(venue);
     const app = venue.appWith({});
 
-    const answer = await expectRefused(
-      party.tabId,
-      () => cancel(party.tabId, venue.supervisorTill, app),
-      { status: 409, code: "fiscal.original_unanswered" },
-    );
-    expect(answer.json.params).toEqual({ saleId });
-    expect(await fixture.creditsOf(venue, saleId)).toEqual([]);
-
-    await inTx(venue, (tx) => acceptedByAeat(tx, saleId));
     const credited = await cancel(party.tabId, venue.supervisorTill, app);
 
     expect(credited.status, JSON.stringify(credited.json)).toBe(200);
     expect(await fixture.creditsOf(venue, saleId)).toHaveLength(1);
+    expect(await voidsOf(saleId)).toEqual([]);
   });
 
-  it("one whose payment was given back in full and whose receipt AEAT refused, which is refused, writing no corrective", async () => {
+  it("one whose payment was given back in full and whose receipt AEAT refused, credited at once; Send the replacement then refuses it", async () => {
     const party = await seatedWith(venue, "Tarta");
     const paymentId = await fixture.payInCash(venue, party.tabId, "5.00");
     const givenBack = await send(
@@ -650,11 +647,15 @@ describe("Nothing was served files the corrective, as before, on any other print
     const saleId = await saleOf(party.tabId);
     await inTx(venue, (tx) => refusedByAeat(tx, saleId));
 
-    await expectRefused(party.tabId, () => cancel(party.tabId), {
-      status: 409,
-      code: "fiscal.original_refused",
+    const credited = await cancel(party.tabId);
+
+    expect(credited.status, JSON.stringify(credited.json)).toBe(200);
+    expect(await fixture.creditsOf(venue, saleId)).toHaveLength(1);
+    expect(await voidsOf(saleId)).toEqual([]);
+    await expect(sendReplacement(saleId)).rejects.toMatchObject({
+      code: "sale.replacement_not_first",
+      params: { saleId },
     });
-    expect(await fixture.creditsOf(venue, saleId)).toEqual([]);
   });
 
   it("one replaced after AEAT refused it, crediting the replacement", async () => {

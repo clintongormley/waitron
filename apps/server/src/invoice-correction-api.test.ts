@@ -1213,23 +1213,25 @@ describe("Refund a payment gives back only what Correct invoice would not take n
     });
   });
 
-  it("waits while the tax agency has refused the ticket's filing", async () => {
+  it("refuses it on a ticket the tax agency refused: Correct invoice corrects it", async () => {
     const saleId = await sold(["10.00"]);
     await inTx(venue, (tx) => refusedByAeat(tx, saleId));
-    await refusedWithNothingWritten(saleId, await cashOf(saleId), "10.00", {
-      code: "sale.correction_not_admitted",
-      params: { reason: "filing_refused" },
+    const tenderId = await cashOf(saleId);
+    await refusedWithNothingWritten(saleId, tenderId, "10.00", {
+      code: "tender.refund_needs_correction",
+      params: { tenderId },
     });
   });
 
-  it("waits while the tax agency has not answered a ticket another box filed", async () => {
+  it("refuses it on a ticket another box filed that the tax agency has not answered: Correct invoice corrects it", async () => {
     const saleId = await sold(["10.00"]);
     await takeOver(venue);
+    const tenderId = await cashOf(saleId);
     await refusedWithNothingWritten(
       saleId,
-      await cashOf(saleId),
+      tenderId,
       "10.00",
-      { code: "sale.correction_not_admitted", params: { reason: "filing_pending" } },
+      { code: "tender.refund_needs_correction", params: { tenderId } },
       "0.00",
       venue.appWith({}),
     );

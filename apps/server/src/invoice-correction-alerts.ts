@@ -13,7 +13,6 @@ import { authorizeApproval } from "@waitron/identity";
 import {
   AppError,
   centsToDecimal,
-  hasCode,
   jobOrigin,
   rawCentsToDecimal,
   saleId,
@@ -163,11 +162,6 @@ export function raiseCorrectionUnfinished(
   });
 }
 
-/** The filing waits for AEAT to answer an original on another chain; the sweep retries it. */
-function awaitsOriginalAnswer(error: AppError): boolean {
-  return hasCode(error, "sale.correction_not_admitted") && error.params.reason === "filing_pending";
-}
-
 /**
  * Files the open correction `correctionId` on its opening approval
  * (`{ invoiceCorrectionId }`), under the device that opened it, once its refunds have given all
@@ -175,8 +169,7 @@ function awaitsOriginalAnswer(error: AppError): boolean {
  * approver is still active and holds `sale.rectify`, and that the filing is not refused for a reason
  * Close could end the correction over; while either fails it attempts no filing. A refusal, there
  * or from the filing, files nothing, raises `invoice_correction.filing_refused` once per ticket
- * while it is open, and is not thrown; a filing waiting for AEAT to answer the original on another
- * chain (`filing_pending`) raises nothing.
+ * while it is open, and is not thrown.
  */
 export async function fileCorrectionAutomatically(
   deps: TenderRefundDeps,
@@ -211,7 +204,7 @@ export async function fileCorrectionAutomatically(
     if (!(error instanceof AppError)) throw error;
     refusal = error;
   }
-  if (refusal === null || awaitsOriginalAnswer(refusal)) return;
+  if (refusal === null) return;
   if (
     (await openAlert(deps.db, "invoice_correction.filing_refused", row.originalSaleId)).length > 0
   )
