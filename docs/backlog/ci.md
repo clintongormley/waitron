@@ -141,7 +141,7 @@ the service-status browser suite failed with Playwright's "Frame was detached" d
 whole-workspace run, and then passed on its own with no code change. The original log and screenshot were kept; the cause is unexplained, so retain them
 again on the next sighting rather than re-running to green.
 
-**Native Chromium startup exceeded its test budget once (PR #3686, 2026-11-17).**
+**The native reload case in the dashboard's live-connection test has failed twice (PR #3686, 2026-11-17; PR #4481, 2026-11-27).**
 Run [44177182245](https://github.com/clintongormley/waitron/actions/runs/44177182245),
 `test-dashboard (6)`, job `134372042174`: the native reload case at
 `apps/dashboard/test/live-connection-native.test.ts:127` reached its 20-second timeout before
@@ -156,6 +156,16 @@ has not been established. Logs, trace and history are retained in
 `native-failure-history-matches.json`, `native-reload-local.log`). Watcher 22:31 cleared one
 failed-job rerun on the same head; a pass is not a repair. A second occurrence needs a priority
 root-cause fix with its trace retained before retrying.
+
+Second sighting, PR #4481 (2026-11-27), run
+[46014545840](https://github.com/clintongormley/waitron/actions/runs/46014545840), `test-dashboard
+(6)`, job `140558838963`, head `7228e17566`: the same case (`live-connection-native.test.ts:128`)
+failed differently. `page.goto` itself hit its 3-second timeout (`withLivePage`, line 114) while
+Vite was scanning dependencies and four other browser test files in the shard were starting. The
+branch changes neither the test nor the dashboard code it loads. One rerun of the failed job passed;
+that is not a repair. The job log is kept at
+`~/waitron-campaign-c/receipts/a1571-pr2-native-reload-20261127/`; no trace was retained this time.
+This is the second occurrence, so the root-cause fix above is now due.
 
 ## Server shard 2 stalled once on a hosted runner (PR #2664, 2026-11-09)
 
