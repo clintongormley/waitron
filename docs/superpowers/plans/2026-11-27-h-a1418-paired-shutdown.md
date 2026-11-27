@@ -1,46 +1,44 @@
 # A1418 6C — Checked shutdown with a spare
 
-[Design §§3–4](../specs/2026-11-07-a1418-box-stop-intent-design.md#3-every-start) · [Slice map, item 6](2026-11-26-h-a1418-box-stop-intent.md)
+On a main box with a joined spare, **Check and shut down** drains work and checks the final backup.
+The spare stays on and sales wait for the main box to restart. **Hand over to the spare** opens
+**Servers** for the existing controlled handover and return of records. Both choices ship in one PR.
+[Design §§3–4](../specs/2026-11-07-a1418-box-stop-intent-design.md#3-every-start) ·
+[Slice map, item 6](2026-11-26-h-a1418-box-stop-intent.md)
 
-**Checkpoint for the watcher.** The watcher's 04:47 assignment in Lane H `questions.md` calls for
-the main box to offer controlled handover as its second choice. The first review found that a
-shortcut to Servers alone would leave checked shutdown unavailable on a pair. The second review
-found that the standard join creates a `streams` link and marks it `streaming` when it records the
-spare. The earlier handover test seeds membership without that link. See `issueMirrorBundle` in
-`apps/server/src/mirror-bundle-api.ts` and `recordSpare` in `apps/server/src/spare-join.ts`.
+**Qualification, 27 November.** The normal join test ran two box servers with Litestream 0.5.18
+and versitygw 1.8.0. An older upload completed after the final write committed. Both reported
+positions were 3 and lag was zero, but a fresh restore had the earlier write while upload 4 was held.
+`litestream sync -wait -json` timed out while held. After release it returned local and remote
+positions 5, the follower reached 5, and a fresh restore contained the final write. The join suite
+passed. Lane H receipts are `6c-probe-old-signal.log` and `6c-probe-sync.log`.
+[Pinned sync implementation](https://github.com/benbjohnson/litestream/blob/v0.5.18/store.go#L411-L459)
 
-## Smallest result to plan
+1. **Prove the upload.** In `packages/stream/src/{litestream,litestream-process,supervisor}.ts`,
+   give the paired sender a private Unix socket and call the pinned binary with `sync -wait -json`
+   after the shutdown drain. Accept a positive local position covered by the replica position.
+   `apps/server/src/stream-host.ts` checks that the same sender, spare, and stream generation still
+   apply when the call returns. A timed-out call leaves the check pending while the stream is
+   healthy and the administrator can cancel. A definite stream failure pauses with the existing
+   Retry and Shut down anyway choices. Measuring a no-progress interval stays with 1C. The stream
+   package’s `supervisor.test.ts` owns malformed or behind responses, timeout and cancellation.
+   `stream-host.test.ts` owns a changed sender or wrong destination.
+2. **Check shutdown.** `admin-shutdown-duties.ts` uses the current joined pair and the existing
+   drain and checked archive paths. Require sync and the saved backup check or confirmed download
+   before writing the existing mark. A failed sync cannot leave a staged download behind.
+   `spare-join.e2e.test.ts` and `testing/spare-join-scenario.ts` exercise a real join, a held final
+   upload, no mark while held, and a restore of the final write after checked completion.
+   `admin-shutdown.test.ts` owns Retry, Cancel and the unchecked choice.
+3. **Confirm the role on restart.** `boot-peer-check.ts` and `start-peer-check.ts` return positive
+   role evidence only from a fresh, signed reply from the joined spare that agrees with the current
+   trusted membership. `boot.ts` clears the existing paired mark on that evidence or completed
+   HTTPS peer carry-on. Silence, a stale chart and a timed-out wait keep the mark. Superseding chart
+   or operation evidence takes the existing stop path. `boot-peer-check.test.ts` proves the answer
+   cases, and `boot.stop-mark.test.ts` and `waiting-start.test.ts` prove whether start clears the mark.
+4. **Show both choices.** Feed paired eligibility through `box-health.ts` and the dashboard
+   `api/servers-api.ts`. Update `box-status-screen.ts`, English and Spanish strings and Box status
+   guides, and `docs/backlog.md`. `box-status-screen.test.ts` proves that handover opens Servers
+   and shutdown opens its confirmation. Run the unchanged controlled handover, fiscal and menu gates.
 
-On a main box streaming to its joined spare, an administrator can check a final backup and
-switch off the main box. The spare stays on. Sales stop until the main box restarts. **Servers**
-remains the way to hand over so the spare can sell. Both boxes stay connected for the transfer and
-the old box's return of records. Spare shutdown, reseeding, Cloud and appliance power-off are later
-work.
-
-First qualify how to prove the spare's store contains the final admitted writes. Use the normal
-join in `apps/server/src/testing/spare-join-scenario.ts` with the pinned Litestream and versitygw.
-Hold the spare's store behind a write that precedes shutdown. Compare the source and the data
-restored from the store before and after the transfer catches up, including one upload that starts
-before the final write. `packages/stream/src/freshness.ts` describes how upload timestamps can
-understate lag. `apps/server/src/spare-follow.ts` compares the latest applied and uploaded positions,
-which can agree while the source still has unsent writes. Use the experiment to choose the smallest
-signal that distinguishes those cases. Bring the signal and its evidence back before building.
-
-## Where the build would fit
-
-- `apps/server/src/admin-shutdown-duties.ts` would accept a streaming pair link to the joined spare
-  and reuse the shutdown gate and saved-copy or download check. Keep the hold behind the qualified
-  stream check. Keep Retry, Cancel and the explicit unchecked choice when progress stalls.
-- `apps/server/src/boot-peer-check.ts`, `start-peer-check.ts` and `boot.ts` would carry a positive
-  role confirmation from the existing signed peer check. Start under the existing stop rules if a
-  newer chart or operation shows a takeover. For a shutdown mark, only a verified matching current
-  role or a completed HTTPS peer carry-on clears it. A timeout alone leaves the hold in place.
-- `apps/dashboard/src/screens/box-status-screen.ts`, its English and Spanish wording and the two
-  Box status guides would show the shutdown and handover choices. Keep the existing Servers flow
-  and avoid a new handover eligibility check. Update `docs/backlog.md` with the delivery.
-
-Use the real join to test that the ordinary pair is eligible and that a delayed transfer holds the
-shutdown mark. The peer suites own matching, stale, silent and superseded replies. Dashboard tests
-own both choices. Keep the controlled handover E2E and Lane H fiscal and menu gates unchanged.
-The slice map allows 200–350 added production lines and 260–430 test lines. Re-estimate after the
-stream qualification, when the signal and the files that need it are known.
+Estimate 250–350 added product lines and 330–430 test lines. Spare shutdown, Cloud, and appliance
+power-off are later slices. Build test-first after the watcher clears the reviewed plan.
