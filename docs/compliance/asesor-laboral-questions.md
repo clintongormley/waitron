@@ -114,6 +114,46 @@ know the process if a business need ever arose.
 > **(b)** Si en el futuro se quisiera, ¿qué evaluación de impacto (DPIA) sería obligatoria antes de
 > activarla?
 
+### L8. A disagreement over a day's hours: is keeping both versions enough? (added 2026-11-27)
+
+**Why it matters.** The till redesign (owner, 2026-11-27) has a manager approve every finished day's
+clock-in and clock-out record: one the worker clocked, one Waitron ended automatically, and any
+change. A worker may correct their own times, which then wait for a manager; a manager may change
+them, with a reason, which goes to the worker; the worker accepts or disagrees, with a reason. When
+they do not agree, both versions stay, each with who wrote it, when and why, and the day is marked
+disputed in the record and the export. Waitron does not decide which is right. Until a manager
+approves it, a day counts in totals and the export as recorded, marked not approved (owner,
+2026-11-27).
+
+Our reading, not yet confirmed: no rule in force says how a record is corrected or a disagreement
+settled (research Q48.9 in [2026-11-06-adviser-labour.md](research/2026-11-06-adviser-labour.md));
+ET art. 34.9 only requires the daily record, kept four years and open to the worker, their
+representatives and the ITSS. The unapproved draft decree (arts. 2.2.b and 4.b) would record a
+disagreement without resolving it. That it is then settled outside Waitron, through the ITSS or a
+labour court with the record as evidence, is our belief and was not researched. The owner chose to
+build it this way and ask for confirmation.
+
+> En nuestro sistema, un responsable aprueba el registro de cada jornada (entrada, salida y pausas)
+> una vez terminada, tanto si lo fichó el trabajador como si el sistema cerró la jornada
+> automáticamente al faltar el fichaje de salida. El trabajador puede corregir sus propias horas (la
+> corrección queda pendiente de aprobación) y el responsable puede modificarlas indicando un motivo;
+> el trabajador acepta la modificación o manifiesta su desacuerdo, también con un motivo. Si no hay
+> acuerdo, se conservan ambas versiones, cada una con su autor, fecha y motivo, y la jornada consta
+> como «en desacuerdo» en el registro y en la exportación; el sistema no decide cuál es la correcta.
+> Mientras no se aprueba, la jornada cuenta en los totales y en la exportación tal como se registró,
+> marcada como «pendiente de aprobación».
+>
+> **(a)** ¿Cumple este tratamiento del desacuerdo con el art. 34.9 ET? ¿Exige alguna norma, criterio
+> de la Inspección de Trabajo o el convenio aplicable resolverlo de otro modo (por ejemplo, que
+> prevalezca una de las versiones o que intervenga la representación legal de los trabajadores)?
+>
+> **(b)** Si no hay acuerdo, ¿cómo se resuelve en la práctica (denuncia ante la Inspección de Trabajo,
+> reclamación ante el juzgado de lo social) y qué valor tiene un registro que conserva ambas versiones
+> con su autoría?
+>
+> **(c)** ¿Es correcto contar la jornada no aprobada tal como se registró, o debe excluirse de los
+> totales hasta su aprobación?
+
 ---
 
 ## BEFORE D3 (payroll export) — the one build dependency
