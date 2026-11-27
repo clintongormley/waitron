@@ -45,6 +45,8 @@ export type InputFieldDecoration = {
   end?: TemplateResult;
 };
 
+export type WtInputVariant = "filled" | "outlined";
+
 @customElement("wt-input")
 export class WtInput extends LitElement {
   // Delegates .focus() on the host to the inner <input> — a POS constantly needs to
@@ -94,6 +96,95 @@ export class WtInput extends LitElement {
       .visibility-status {
         ${visuallyHiddenStyles}
       }
+
+      /* A real border rather than a box-shadow, so the outline survives forced colours. The inline
+         padding gives back what a thicker border takes, so focus moves neither icon nor text. */
+      :host([variant="outlined"]) .field {
+        --wt-input-outline-width: var(--wt-field-line-width);
+        align-items: center;
+        gap: var(--wt-space-2);
+        height: var(--wt-tap-min);
+        min-height: 0;
+        padding-inline: calc(
+          var(--wt-space-3) + var(--wt-field-line-width) - var(--wt-input-outline-width)
+        );
+        border: var(--wt-input-outline-width) solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-bg);
+        box-shadow: none;
+        color: var(--wt-color-text-muted);
+      }
+
+      :host([variant="outlined"]) .field::after {
+        content: none;
+      }
+
+      :host([variant="outlined"]) .field:focus-within {
+        --wt-input-outline-width: var(--wt-field-line-width-active);
+        border-color: var(--wt-color-primary);
+        color: var(--wt-color-text);
+      }
+
+      :host([variant="outlined"]) .field[data-invalid] {
+        border-color: var(--wt-color-danger);
+      }
+
+      :host([variant="outlined"]) .field[data-disabled] {
+        border-style: dashed;
+        background: var(--wt-color-field-fill-disabled);
+      }
+
+      /* The transparent input runs under the border to the field's outer edge on both block sides,
+         so it stays a full tap target at every border width. Its inline padding stays: the end
+         action and the price field's currency sign reserve their room there. */
+      :host([variant="outlined"]) .field-control {
+        height: calc(100% + 2 * var(--wt-input-outline-width));
+        min-height: 0;
+        margin-block: calc(-1 * var(--wt-input-outline-width));
+        padding-block: 0;
+      }
+
+      :host([variant="outlined"]) .field:not([data-disabled]) .field-control {
+        color: var(--wt-color-text);
+      }
+
+      /* Reaching the outer edge at its end too, the input's end padding and the end action measure
+         from where they do in the filled field. */
+      :host([variant="outlined"]) .field > .field-control {
+        flex: 1 1 0;
+        width: auto;
+        margin-inline-end: calc(-1 * (var(--wt-space-3) + var(--wt-field-line-width)));
+        padding-inline-start: 0;
+      }
+
+      :host([variant="outlined"]) .end {
+        inset-block: calc(-1 * var(--wt-input-outline-width));
+        inset-inline-end: calc(var(--wt-space-1) - var(--wt-input-outline-width));
+      }
+
+      /* In the flow, so the inherited arrow follows the start icon instead of sitting on it. */
+      :host([variant="outlined"]) .field > .inherit-cue {
+        position: static;
+        order: -1;
+      }
+
+      ::slotted([slot="start"]) {
+        flex: none;
+        order: -2;
+        width: var(--wt-font-size-lg);
+        height: var(--wt-font-size-lg);
+        color: inherit;
+      }
+
+      @media (forced-colors: active) {
+        :host([variant="outlined"]) .field[data-invalid] {
+          --wt-input-outline-width: var(--wt-field-line-width-active);
+        }
+
+        :host([variant="outlined"]) .field[data-invalid]:focus-within {
+          --wt-input-outline-width: calc(2 * var(--wt-field-line-width-active));
+        }
+      }
     `,
   ];
 
@@ -125,6 +216,9 @@ export class WtInput extends LitElement {
   @property({ type: Boolean, reflect: true }) invalid = false;
   /** Names the input by `label` without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
+  /** Outlined is the search field look: it never draws its label, which still names the input, and
+   * shows a `start` slot before the text. */
+  @property({ reflect: true }) variant: WtInputVariant = "filled";
   /** Localized action and announcement text opts a password field into the fallback end action. */
   @property({ attribute: false }) passwordVisibility?: PasswordVisibilityText;
   @state() protected hasEnd = false;
@@ -229,7 +323,9 @@ export class WtInput extends LitElement {
       placeholder: inherited?.value ?? this.placeholder,
       type: this.type,
     });
-    const showLabel = this.label !== "" && !this.hideLabel;
+    const outlined = this.variant === "outlined";
+    const hideLabel = this.hideLabel || outlined;
+    const showLabel = this.label !== "" && !hideLabel;
     const passwordVisibility = this.visibilityText;
     const revealed = this.visibility === "shown";
     const hasEnd = !decoration?.endClass && (this.hasEnd || passwordVisibility || decoration?.end);
@@ -253,7 +349,7 @@ export class WtInput extends LitElement {
         placeholder=${decoration?.placeholder ?? inherited?.value ?? (this.placeholder || this.hint)}
         maxlength=${this.maxlength ?? nothing}
         step=${this.step ?? nothing}
-        aria-label=${this.hideLabel && this.label ? this.label : nothing}
+        aria-label=${hideLabel && this.label ? this.label : nothing}
         ?required=${this.required}
         ?disabled=${this.disabled}
         ?readonly=${this.readonly}
@@ -301,7 +397,7 @@ export class WtInput extends LitElement {
           ?data-disabled=${this.disabled}
           ?data-compact=${!showLabel}
         >
-          ${this.renderFieldContents(label, input, end)}
+          ${outlined ? html`<slot name="start"></slot>` : nothing}${this.renderFieldContents(label, input, end)}
         </div>
         <slot name="help"></slot>
       </div>

@@ -514,6 +514,25 @@ test.each(["en-GB", "es-ES"])(
   },
 );
 
+test.each(["en-GB", "es-ES"])(
+  "in the outlined look a %s sign stays clear of the text area",
+  async (locale) => {
+    const { el, input, currency } = await mountPrice(
+      `<wt-price-input variant="outlined" label="Price" unit="kg" locale="${locale}" value="9,00" style="width: 320px"></wt-price-input>`,
+    );
+    for (const focused of [false, true]) {
+      if (focused) el.focus();
+      await settled();
+      const sign = currency!.getBoundingClientRect();
+      const content = contentBox(input);
+      expect(sign.width).toBeGreaterThan(0);
+      expect(sign.right <= content.left || sign.left >= content.right, `focused: ${focused}`).toBe(
+        true,
+      );
+    }
+  },
+);
+
 test.each([
   ["en-GB", "before", "a unit button"],
   ["es-ES", "after", "a unit button"],
