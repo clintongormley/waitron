@@ -4,6 +4,7 @@ import {
   MEDIA_FILENAME,
   formatMoney,
   guestMenuWords,
+  type CustomerMenuPhotoSize,
   type GuestChoice,
   type GuestDeclarations,
   type GuestMember,
@@ -461,6 +462,10 @@ export class CustomerMenuPage extends LitElement {
         object-fit: cover;
         border-radius: var(--wt-radius-md);
       }
+      :host([photos="small"]) .dish img {
+        inline-size: min(60px, 18cqi);
+        aspect-ratio: 1;
+      }
       .detail-lead:has(img) {
         position: relative;
         margin-block-start: calc(-1 * var(--menu-padding));
@@ -477,6 +482,9 @@ export class CustomerMenuPage extends LitElement {
         max-block-size: 320px;
         aspect-ratio: 4 / 3;
         border-radius: calc(var(--wt-radius-lg) - 1px) calc(var(--wt-radius-lg) - 1px) 0 0;
+      }
+      :host([photos="small"]) .detail-lead img {
+        max-block-size: 160px;
       }
       .detail h2 {
         font-size: calc(1.4 * var(--wt-font-size-xl));
@@ -591,6 +599,7 @@ export class CustomerMenuPage extends LitElement {
   ];
 
   @property({ attribute: false }) menu?: PublicGuestMenu;
+  @property({ reflect: true }) photos: CustomerMenuPhotoSize = "large";
   @property({ attribute: false }) defaultLanguage = "en";
   @property({ attribute: "data-theme" }) theme: "light" | "dark" = "light";
 
@@ -853,7 +862,10 @@ export class CustomerMenuPage extends LitElement {
                 <strong class="set-price">${money(member.price)}</strong>
               </div>`;
             case "product": {
-              const image = member.image && MEDIA_FILENAME.test(member.image) ? member.image : null;
+              const image =
+                this.photos !== "none" && member.image && MEDIA_FILENAME.test(member.image)
+                  ? member.image
+                  : null;
               const eager = firstPhoto && image !== null;
               if (image !== null) firstPhoto = false;
               return html`<div class="dish">
@@ -883,7 +895,8 @@ export class CustomerMenuPage extends LitElement {
         })}
       </div>`;
     const photo = detail?.member.kind === "product" ? detail.member.image : null;
-    const detailImage = photo && MEDIA_FILENAME.test(photo) ? photo : null;
+    const detailImage =
+      this.photos !== "none" && photo && MEDIA_FILENAME.test(photo) ? photo : null;
     return html`<article lang=${menu.language} data-theme=${this.theme}>
       ${
         detail

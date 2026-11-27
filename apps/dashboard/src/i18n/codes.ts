@@ -10,6 +10,18 @@ import { en, es } from "./strings.js";
 
 // Add new codes with BOTH columns.
 export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>> = {
+  "customer_menu.address_invalid": {
+    en: "Use 1 to 63 lowercase letters, digits or hyphens. Start and end with a letter or digit.",
+    es: "Usa de 1 a 63 letras minúsculas, dígitos o guiones. Empieza y termina con una letra o un dígito.",
+  },
+  "customer_menu.address_taken": {
+    en: "Another menu already uses this address.",
+    es: "Otra carta ya usa esta dirección.",
+  },
+  "customer_menu.not_published": {
+    en: "Publish the menu from Preview before switching it on.",
+    es: "Publica la carta desde Vista previa antes de activarla.",
+  },
   "diet.invalid_contains_tag": {
     en: "Choose a valid dietary contains tag",
     es: "Elige una etiqueta dietética válida",

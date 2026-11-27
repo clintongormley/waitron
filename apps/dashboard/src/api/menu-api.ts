@@ -13,6 +13,7 @@ import type {
   MenuHomeSaveResult,
   MenuStatus,
   MenuPreview,
+  CustomerMenuOnlineSettings,
   CustomerMenuPreview,
   MemberRef,
   IncludeFolder,
@@ -225,6 +226,22 @@ export class MenuApi {
   }
   getMenuPreview(id: string): Promise<MenuPreview> {
     return this.#request<MenuPreview>(`/management-api/menus/${id}/preview`, "GET");
+  }
+  getCustomerOnlineSettings(id: string): Promise<CustomerMenuOnlineSettings> {
+    return this.#request(
+      `/management-api/menus/${encodeURIComponent(id)}/customer-online-settings`,
+      "GET",
+    );
+  }
+  saveCustomerOnlineSettings(
+    id: string,
+    value: CustomerMenuOnlineSettings,
+  ): Promise<CustomerMenuOnlineSettings> {
+    return this.#request(
+      `/management-api/menus/${encodeURIComponent(id)}/customer-online-settings`,
+      "PUT",
+      value,
+    );
   }
   getCustomerPreview(id: string, language: string): Promise<CustomerMenuPreview> {
     const query = language ? `?${new URLSearchParams({ language })}` : "";

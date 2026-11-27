@@ -170,6 +170,11 @@ async function open(
       "/management-api/categories": [],
       "/management-api/menu-settings": { defaultProductVatClass: "general", defaultColor: null },
       "/management-api/menus/lunch/structure": structure,
+      "/management-api/menus/lunch/customer-online-settings": {
+        enabled: false,
+        address: null,
+        photos: "large",
+      },
       "/management-api/menus/lunch/status": currentStatus,
       "/management-api/menus/lunch/preview": draft,
       "/management-api/menus/lunch/read": {
@@ -237,6 +242,31 @@ describe("the customer menu Online preview", () => {
       );
     } finally {
       pushed.mockRestore();
+    }
+  });
+
+  it.each(["light", "dark"] as const)("previews draft photo sizes in %s", async (theme) => {
+    const viewport = [innerWidth, innerHeight] as const;
+    await page.viewport(1280, 800);
+    try {
+      const { el, host } = await open(() => Response.json(published()), theme);
+      await expect.element(page.getByRole("heading", { name: "Lunch for guests" })).toBeVisible();
+      const photo = () => customerPage(el)?.shadowRoot?.querySelector(".dish img");
+      const width = () => photo()?.getBoundingClientRect().width ?? 0;
+      const large = width();
+      expect(large).toBeGreaterThan(0);
+      await page.getByRole("radio", { name: "Small", exact: true }).click();
+      await vi.waitFor(() => {
+        expect(width()).toBeGreaterThan(0);
+        expect(width()).toBeLessThan(large);
+      });
+      await page.getByRole("radio", { name: "None", exact: true }).click();
+      await vi.waitFor(() => expect(photo()).toBeNull());
+      await page.getByRole("button", { name: "Roast pepper", exact: true }).click();
+      expect(customerPage(el)?.shadowRoot?.querySelector(".detail img")).toBeNull();
+      await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(...viewport);
     }
   });
 
@@ -313,14 +343,15 @@ describe("the customer menu Online preview", () => {
       await expectNoA11yViolations(host);
 
       await dish.click();
+      const previewRegion = page.getByRole("region", { name: "Online preview" });
       for (const name of ["Large", "Almond dressing · 0.2 kg"]) {
-        expect(page.getByText(name, { exact: true }).element().closest("li")).toHaveTextContent(
-          "Contains a selected allergen",
-        );
+        expect(
+          previewRegion.getByText(name, { exact: true }).element().closest("li"),
+        ).toHaveTextContent("Contains a selected allergen");
       }
-      expect(page.getByText("Large", { exact: true }).element().closest("li")).toHaveTextContent(
-        "Cereals containing gluten (Wheat)",
-      );
+      expect(
+        previewRegion.getByText("Large", { exact: true }).element().closest("li"),
+      ).toHaveTextContent("Cereals containing gluten (Wheat)");
       await expectNoA11yViolations(host);
       await back.click();
       const dishControl = dish.element();
@@ -544,7 +575,11 @@ describe("the customer menu Online preview", () => {
     expect(Number(getComputedStyle(setPrice).fontWeight)).toBeGreaterThan(
       Number(getComputedStyle(summary).fontWeight),
     );
-    await expect.element(page.getByText("Large", { exact: true })).not.toBeInTheDocument();
+    await expect
+      .element(
+        page.getByRole("region", { name: "Online preview" }).getByText("Large", { exact: true }),
+      )
+      .not.toBeInTheDocument();
     await expect
       .element(page.getByText("Almond dressing", { exact: false }))
       .not.toBeInTheDocument();
