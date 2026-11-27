@@ -803,6 +803,7 @@ export async function storedRows(id: string) {
       quantity: workingOrderLines.quantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
       lineTotal: workingOrderLines.lineTotal,
+      vatClass: workingOrderLines.vatClass,
       note: workingOrderLines.note,
       extraListId: workingOrderLines.extraListId,
       sentAt: workingOrderLines.sentAt,

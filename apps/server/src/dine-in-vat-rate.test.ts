@@ -95,6 +95,7 @@ async function generalVenue() {
   const made = await inTx(venue, async (tx) => {
     await tillChoiceEverywhere(tx);
     const menu = await seedTakeawayProducts(tx);
+    await tx.update(products).set({ vatClass: "general" }).where(eq(products.id, menu.burger));
     await tx.update(products).set({ vatClass: "general" }).where(eq(products.id, menu.lemonSoda));
     await setTakeawayVatRate(tx, menu.lemonSoda, "21.00");
     const wine = await createProduct(tx, {
