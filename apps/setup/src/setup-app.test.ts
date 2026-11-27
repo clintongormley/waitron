@@ -25,7 +25,8 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { wizardApi } from "../test/first-setup-browser.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
-import { REVIEWED_CREDENTIALS, reviewBackup } from "./widgets/test-helpers.js";
+import { REVIEWED_CREDENTIALS, reviewBackup, typeMasterKey } from "./widgets/test-helpers.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import {
   APPROVED,
   JOIN_HANDLE,
@@ -6619,7 +6620,10 @@ describe("a recovery request refused because another setup holds the server", ()
     return { el, host, copy, calls };
   }
 
-  /** Fills the fiscal module's recovery form and presses Proceed, which stages and prepares. */
+  /**
+   * Fills the fiscal module's recovery form and presses Proceed, which stages and prepares. The
+   * form asks for the master key only where the restore screen does not.
+   */
   async function fillRecoveryHour(copy: LitElement) {
     await vi.waitFor(() =>
       expect(copy.shadowRoot!.querySelector("setup-recovery-allocation")).not.toBeNull(),
@@ -6628,13 +6632,8 @@ describe("a recovery request refused because another setup holds the server", ()
     await allocation.updateComplete;
     const entry = allocation.shadowRoot!.querySelector<LitElement>("vf-recovery-hour")!;
     await entry.updateComplete;
-    const key = entry.shadowRoot!.querySelector<LitElement>("wt-master-key-input")!;
-    await key.updateComplete;
-    const field = key.shadowRoot!.querySelector<LitElement>('[name="master-key"]')!;
-    await field.updateComplete;
-    const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    input.value = MASTER_KEY.replaceAll(" ", "").toLowerCase();
-    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    if (entry.shadowRoot!.querySelector("wt-master-key-input"))
+      await typeMasterKey(entry, MASTER_KEY.replaceAll(" ", "").toLowerCase());
     for (const name of [
       "recovery-old-box-stopped",
       "recovery-sole-operation",
@@ -6724,6 +6723,223 @@ describe("a recovery request refused because another setup holds the server", ()
       await reloadOntoHeldFirstSetup();
     },
   );
+  /** Every `wt-master-key-input` drawn under `root`, through every shadow root. */
+  const keyFields = (root: ParentNode): HTMLElement[] =>
+    [...root.querySelectorAll<HTMLElement>("*")].flatMap((node) => [
+      ...(node.localName === "wt-master-key-input" ? [node] : []),
+      ...(node.shadowRoot ? keyFields(node.shadowRoot) : []),
+    ]);
+  const fiscalEntry = (copy: LitElement) =>
+    copy
+      .shadowRoot!.querySelector<LitElement>("setup-recovery-allocation")!
+      .shadowRoot!.querySelector<LitElement>("vf-recovery-hour")!;
+  it.each(["archive", "bucket", "cloud"] as const)(
+    "a filing backup's %s restore asks for the master key once, and the fiscal form sends that key as nodeRecoverySecret",
+    async (source) => {
+      const prepareRecovery = vi.fn().mockRejectedValue({ code: "server.internal" });
+      const { host, copy } = await recoveryApp(source, "preparation", "server.internal", {
+        prepareRecovery,
+      });
+      if (source === "archive") {
+        await typeMasterKey(host, MASTER_KEY.replaceAll(" ", "").toLowerCase());
+        await (host as unknown as LitElement).updateComplete;
+        await copy.updateComplete;
+      }
+      copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+      await fillRecoveryHour(copy);
+      await vi.waitFor(() => expect(prepareRecovery).toHaveBeenCalled());
+      const entryFields = fiscalEntry(copy).shadowRoot!.querySelectorAll("wt-master-key-input");
+      if (source === "archive") {
+        expect(entryFields).toHaveLength(0);
+        expect(keyFields(host.shadowRoot!)).toEqual([
+          host.shadowRoot!.querySelector("[data-test=master-key]"),
+        ]);
+      } else expect(entryFields).toHaveLength(1);
+      expect(keyFields(host.shadowRoot!)).toHaveLength(1);
+      for (const [, request] of prepareRecovery.mock.calls)
+        expect((request as { nodeRecoverySecret: string }).nodeRecoverySecret).toBe(MASTER_KEY);
+    },
+  );
+  it.each([
+    [
+      "en-GB",
+      "en",
+      {
+        code: "promotion.break_glass_invalid",
+        params: { keyName: "2026-11-02 · QZJV" },
+        status: 403,
+      },
+    ],
+    [
+      "es-ES",
+      "es",
+      {
+        code: "promotion.break_glass_invalid",
+        params: { keyName: "2026-11-02 · QZJV" },
+        status: 403,
+      },
+    ],
+    [
+      "en-GB",
+      "en",
+      { code: "setup.request_invalid", params: { field: "nodeRecoverySecret" }, status: 400 },
+    ],
+  ] as const)(
+    "a wrong master key on a filing backup's restore shows under the restore screen's one field (%s, %s, %j)",
+    async (locale, words, refusal) => {
+      try {
+        const prepareRecovery = vi.fn().mockRejectedValue(refusal);
+        const { host, copy } = await recoveryApp("archive", "preparation", "server.internal", {
+          prepareRecovery,
+        });
+        setLocale(locale);
+        await typeMasterKey(host, MASTER_KEY.replaceAll(" ", "").toLowerCase());
+        await (host as unknown as LitElement).updateComplete;
+        await copy.updateComplete;
+        copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+        await fillRecoveryHour(copy);
+        await vi.waitFor(() => expect(prepareRecovery).toHaveBeenCalledTimes(1));
+        const field = host.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+          "[data-test=master-key]",
+        )!;
+        const expected =
+          refusal.code === "promotion.break_glass_invalid"
+            ? MASTER_KEY_FIELD_WORDS[words].wrongKey("2026-11-02 · QZJV")
+            : t("restore.preview_key_error");
+        await vi.waitFor(() => expect(field.error).toBe(expected));
+        expect(keyFields(host.shadowRoot!)).toEqual([field]);
+        const entry = fiscalEntry(copy);
+        await entry.updateComplete;
+        expect(
+          entry.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+            .error,
+        ).toBe("");
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+  /** A preparation route that answers the clock check and makes the series, after `refusals`. */
+  function preparing(...refusals: unknown[]) {
+    const instant = Date.now();
+    return vi.fn(
+      async (
+        _source: unknown,
+        request: { binding: unknown; nodeRecoverySecret: string; proposal: { action: string } },
+      ) => {
+        if (refusals.length > 0) throw refusals.shift();
+        const action = request.proposal.action;
+        if (action === "clock-challenge")
+          return { id: "challenge", boxInstantMs: instant, expiresInMs: 5000 };
+        if (action === "compare-clocks")
+          return {
+            id: "comparison",
+            clock: {
+              usable: ["box", "browser", "internet"].map((source) => ({
+                source,
+                lowerMs: instant,
+                upperMs: instant,
+              })),
+              unavailable: [],
+              secondClock: true,
+              disagreement: false,
+              releaseBlocked: false,
+              rangeBlocked: false,
+            },
+          };
+        return {
+          status: "selected",
+          identity: "0CSQW",
+          binding: request.binding,
+          input: {
+            allocation: {
+              installationIdentity: "0CSQW",
+              series: [{ code: "A-0CSQW", purpose: "standard" }],
+            },
+          },
+        };
+      },
+    );
+  }
+  const PAGE_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(3));
+  const NAMED = MASTER_KEY_FIELD_WORDS.en.wrongKey("2026-11-02 · QZJV");
+  /**
+   * The restore screen drawn again, as the shell draws it after a Restore refused because the
+   * copy's current master key is another one, then reviewed: the fiscal form's own key field.
+   */
+  async function askedForAnotherKey(prepareRecovery: ReturnType<typeof preparing>) {
+    const { host, copy } = await recoveryApp("archive", "preparation", "server.internal", {
+      prepareRecovery,
+    });
+    await typeMasterKey(host, PAGE_KEY.replaceAll(" ", "").toLowerCase());
+    const screen = host as unknown as SetupRestoreScreen;
+    screen.refusal = {};
+    screen.errorMessage = NAMED;
+    screen.invalidField = "nodeRecoverySecret";
+    await screen.updateComplete;
+    await copy.updateComplete;
+    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await vi.waitFor(() =>
+      expect(
+        copy
+          .shadowRoot!.querySelector<LitElement>("setup-recovery-allocation")
+          ?.shadowRoot?.querySelector("vf-recovery-hour"),
+      ).toBeTruthy(),
+    );
+    const entry = fiscalEntry(copy);
+    await entry.updateComplete;
+    const entryKey = entry.shadowRoot!.querySelector<LitElement>("wt-master-key-input");
+    expect(entryKey).not.toBeNull();
+    const entryField = entryKey!.shadowRoot!.querySelector<LitElement & { error: string }>(
+      '[name="master-key"]',
+    )!;
+    await entryField.updateComplete;
+    return { host, copy, screen, entry, entryField };
+  }
+  it("a filing backup's restore whose copy needs another master key asks for it in the fiscal form, and Restore sends that key as nodeRecoverySecret beside the file's master key", async () => {
+    const pageKey = PAGE_KEY;
+    const prepareRecovery = preparing();
+    const { host, copy, screen, entry, entryField } = await askedForAnotherKey(prepareRecovery);
+    expect(entryField.error).toBe(NAMED);
+    expect(keyFields(host.shadowRoot!)).toHaveLength(2);
+    await fillRecoveryHour(copy);
+    await vi.waitFor(() =>
+      expect((entry as unknown as { readCredentials(): unknown }).readCredentials()).not.toBeNull(),
+    );
+    const ack = host.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!;
+    ack.checked = true;
+    ack.dispatchEvent(new Event("change"));
+    await screen.updateComplete;
+    const requested = vi.fn();
+    host.addEventListener("restore-requested", (event) => {
+      event.stopPropagation();
+      requested((event as CustomEvent<{ request: unknown }>).detail.request);
+    });
+    host.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
+    await vi.waitFor(() => expect(requested).toHaveBeenCalledTimes(1));
+    const detail = requested.mock.calls[0]![0] as { masterKey: string; nodeRecoverySecret: string };
+    expect(detail.masterKey).toBe(pageKey);
+    expect(detail.nodeRecoverySecret).toBe(MASTER_KEY);
+    for (const [, request] of prepareRecovery.mock.calls)
+      expect((request as { nodeRecoverySecret: string }).nodeRecoverySecret).toBe(MASTER_KEY);
+  });
+  it("a refusal of the key the fiscal form asked for itself shows under that form's field, not the restore screen's", async () => {
+    const prepareRecovery = preparing({
+      code: "promotion.break_glass_invalid",
+      params: { keyName: "2026-11-09 · ABCD" },
+      status: 403,
+    });
+    const { host, copy, entryField } = await askedForAnotherKey(prepareRecovery);
+    await fillRecoveryHour(copy);
+    await vi.waitFor(() => expect(prepareRecovery).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(entryField.error).toBe(MASTER_KEY_FIELD_WORDS.en.wrongKey("2026-11-09 · ABCD")),
+    );
+    const screenField = host.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      "[data-test=master-key]",
+    )!;
+    expect(screenField.error).toBe("");
+  });
   it.each([
     ["archive", "preview", "Couldn't review this backup."],
     ["cloud", "preview", "Couldn't review this backup."],

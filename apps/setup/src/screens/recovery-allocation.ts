@@ -109,7 +109,12 @@ export class SetupRecoveryAllocation extends LitElement {
   }
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("errorMessage") || changed.has("refusedField")) this.refusalDismissed = false;
-    if (changed.has("preview") || changed.has("prepare") || changed.has("binding")) {
+    if (
+      changed.has("preview") ||
+      changed.has("prepare") ||
+      changed.has("binding") ||
+      changed.has("masterKey")
+    ) {
       this.#clear();
       const preview = this.preview;
       const contribution = SETUP_MODULES.find(
@@ -136,6 +141,7 @@ export class SetupRecoveryAllocation extends LitElement {
               },
               prepare: this.prepare,
               boxAddress: this.boxAddress,
+              masterKey: this.masterKey,
             })
           : undefined;
     }

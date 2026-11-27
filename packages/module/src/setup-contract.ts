@@ -38,6 +38,14 @@ export interface SetupContribution {
     binding: RecoveryOperationBinding;
     prepare(request: ModuleRecoveryPreparationRequest): Promise<unknown>;
     boxAddress?: string;
+    /**
+     * The master key the page already asked for, which also authorises this recovery. The entry
+     * then draws no key field, sends this key as `nodeRecoverySecret`, and leaves a refusal of it
+     * to the page, which sees it from `prepare` or from its own request. Once the entry's
+     * `refusedField` is `nodeRecoverySecret` (the copy wants another master key as its authority),
+     * the entry asks for that key itself and sends the one typed there.
+     */
+    masterKey?: string;
   }): ModuleRecoveryEntry;
   createPromotion?(context: ModulePromotionContext): ModulePromotionEntry;
   create(context: { locale: "en" | "es"; request: unknown; api: InitialSetupActions }): HTMLElement;

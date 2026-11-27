@@ -106,8 +106,23 @@ export class SetupRecoveryCopy extends LitElement {
     } catch (cause) {
       if (current()) {
         this.#endIfSetupConflict(cause);
-        if ((cause as ApiError | undefined)?.code === "restore.upload_interrupted")
-          this.error = "interrupted";
+        const error = cause as ApiError | undefined;
+        if (error?.code === "restore.upload_interrupted") this.error = "interrupted";
+        // A backup file's master key is typed on the screen around this one; a key the recovery
+        // form asked for itself stays the form's to show.
+        if (
+          this.#fileSource &&
+          request.nodeRecoverySecret === this.masterKey &&
+          (error?.code === "promotion.break_glass_invalid" ||
+            error?.params?.field === "nodeRecoverySecret")
+        )
+          this.dispatchEvent(
+            new CustomEvent("preview-refusal", {
+              detail: { field: "masterKey", cause: error },
+              bubbles: true,
+              composed: true,
+            }),
+          );
       }
       throw cause;
     }
@@ -259,6 +274,9 @@ export class SetupRecoveryCopy extends LitElement {
         composed: true,
       }),
     );
+  }
+  get #fileSource(): boolean {
+    return this.bucketKit === undefined && this.cloudPointId === undefined;
   }
   get #canReview(): boolean {
     return this.bucketKit !== undefined
@@ -440,11 +458,7 @@ export class SetupRecoveryCopy extends LitElement {
                   this.#invalidate();
                 }}
                 .preview=${preview}
-                .masterKey=${
-                  this.bucketKit === undefined && this.cloudPointId === undefined
-                    ? this.masterKey
-                    : undefined
-                }
+                .masterKey=${this.#fileSource ? this.masterKey : undefined}
                 .prepare=${this.#prepare}
                 .boxAddress=${this.boxAddress}
                 .errorMessage=${this.errorMessage}

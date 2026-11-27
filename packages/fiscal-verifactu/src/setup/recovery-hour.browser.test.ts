@@ -76,7 +76,7 @@ async function mount(
       throw new Error("unexpected proposal");
     },
   ),
-  extra: { boxAddress?: string } = {},
+  extra: { boxAddress?: string; masterKey?: string } = {},
 ) {
   const factory = FISCAL_SETUP.createRecovery;
   expect(factory, "the fiscal contribution offers an hour recovery form").toBeTypeOf("function");
@@ -542,6 +542,67 @@ it("keeps a refused named key beside its native field and leaves Proceed enabled
   const field = await keyInput(el);
   expect(field.error).toBe("Check the key for this backup.");
   expect(button(el, "compare").disabled).toBe(false);
+});
+it("draws its own master-key field when the page supplies no key", async () => {
+  const { el } = await mount();
+  expect(el.shadowRoot!.querySelectorAll("wt-master-key-input")).toHaveLength(1);
+});
+it("draws no master-key field when the page supplies the key, and sends that key on every request and in its credentials", async () => {
+  const { el, prepare } = await mount(undefined, { masterKey: MASTER_KEY });
+  expect(el.shadowRoot!.querySelector("wt-master-key-input")).toBeNull();
+  check(el, "recovery-old-box-stopped");
+  check(el, "recovery-sole-operation");
+  check(el, "recovery-details-confirmed");
+  await el.updateComplete;
+  await proceed(el);
+  await vi.waitFor(() => expect(el.readCredentials()?.nodeRecoverySecret).toBe(MASTER_KEY));
+  expect(actionsOf(prepare)).toEqual(["clock-challenge", "compare-clocks", "select"]);
+  for (const [request] of prepare.mock.calls)
+    expect((request as unknown as { nodeRecoverySecret: string }).nodeRecoverySecret).toBe(
+      MASTER_KEY,
+    );
+  expect(el.shadowRoot!.querySelector("wt-master-key-input")).toBeNull();
+});
+it("leaves a key refusal to the page's own field when the page supplies the key, and Proceed sends it again", async () => {
+  const { prepare } = scripted();
+  prepare.mockImplementationOnce(async () => {
+    throw REFUSED_KEY;
+  });
+  const { el } = await mount(prepare, { masterKey: MASTER_KEY });
+  check(el, "recovery-old-box-stopped");
+  check(el, "recovery-sole-operation");
+  check(el, "recovery-details-confirmed");
+  await el.updateComplete;
+  await proceed(el);
+  await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
+  expect(await proceedEnabled(el)).toBe(true);
+  const actions = el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
+    error: string;
+  };
+  expect(actions.error).toBe("");
+  expect(text(el)).not.toContain(WRONG_KEY);
+  await userEvent.click(button(el, "compare"));
+  await vi.waitFor(() => expect(selects(prepare)).toHaveLength(1));
+  await vi.waitFor(() => expect(el.readCredentials()?.nodeRecoverySecret).toBe(MASTER_KEY));
+});
+it("draws its own master-key field, with the page's named line, once the page says the copy needs another master key, and sends the key typed there", async () => {
+  const pageKey = encodeMasterKeyCode(new Uint8Array(16).fill(3));
+  const { el, prepare } = await mount(undefined, { masterKey: pageKey });
+  expect(el.shadowRoot!.querySelector("wt-master-key-input")).toBeNull();
+  el.refusedField = "nodeRecoverySecret";
+  el.errorMessage = WRONG_KEY;
+  await el.updateComplete;
+  expect(await keyFieldError(el)).toBe(WRONG_KEY);
+  await ready(el);
+  await vi.waitFor(() => expect(el.readCredentials()?.nodeRecoverySecret).toBe(MASTER_KEY));
+  for (const [request] of prepare.mock.calls)
+    expect((request as unknown as { nodeRecoverySecret: string }).nodeRecoverySecret).toBe(
+      MASTER_KEY,
+    );
+  el.refusedField = undefined;
+  el.errorMessage = undefined;
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-master-key-input")).not.toBeNull();
 });
 it("does not accept selected material for a different operation", async () => {
   const prepare = vi.fn(async (request: { proposal: unknown }) => {
