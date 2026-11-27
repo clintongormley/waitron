@@ -321,8 +321,8 @@ the existing recipient checks and F1 series selection remain in place.
 **Next action:** complete the physical 58/80 mm paper and QR checks, the asesor's
 manual-remedy confirmation and current business-invoice delivery qualification as separate work.
 Future structured B2B integration has its own entry above. F3 conversion remains a separate
-decision. F1's correction path is CORRECT-FULL-INVOICE ([plan](../superpowers/plans/2026-11-25-correct-full-invoice.md)): PR 1 and PR 2a are built;
-PR 2b (a cancelled dish's money), PR 3 (blank quantity and unit price on a line given back in part),
+decision. F1's correction path is CORRECT-FULL-INVOICE ([plan](../superpowers/plans/2026-11-25-correct-full-invoice.md)): PR 1, PR 2a and PR 3
+(a line given back in part prints with no quantity and no unit price) are built; PR 2b (a cancelled dish's money),
 PR 4a and 4b (the corrective goes out the way the original went, staff's choice stored and tried
 again) and PR 5 (staff can change it on the till) are still to come.
 
