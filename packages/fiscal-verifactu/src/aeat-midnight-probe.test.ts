@@ -168,14 +168,20 @@ describe("an outcome", () => {
 });
 
 describe("the verdict", () => {
-  it.each([refused, accepted, other])(
-    "says UTC when the Madrid date is refused, whatever own-offset got (%o)",
+  it.each([refused, other])(
+    "says UTC when the Madrid date is refused and own-offset was not accepted (%o)",
     (ownOffset) => {
       expect(verdict(outcomes(accepted, refused, ownOffset, refused))).toBe(
         "AEAT refused today's Madrid date at 00:10 Madrid: it compares in UTC, as the fake does",
       );
     },
   );
+
+  it("is inconclusive when the Madrid date is refused but the UTC-written one is accepted", () => {
+    expect(verdict(outcomes(accepted, refused, accepted, refused))).toBe(
+      "Inconclusive: control accepted, madrid-day 1112, own-offset accepted, future 1112",
+    );
+  });
 
   it("says Madrid when both spellings of the Madrid date are accepted", () => {
     expect(verdict(outcomes(accepted, accepted, accepted, refused))).toBe(

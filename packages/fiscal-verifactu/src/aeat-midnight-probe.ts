@@ -122,7 +122,6 @@ export function verdict(outcomes: Record<ProbeLabel, Outcome>): string {
     .join(" ");
   switch (shape) {
     case "accepted 1112 1112 1112":
-    case "accepted 1112 accepted 1112":
     case "accepted 1112 other 1112":
       return "AEAT refused today's Madrid date at 00:10 Madrid: it compares in UTC, as the fake does";
     case "accepted accepted accepted 1112":
