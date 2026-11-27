@@ -406,7 +406,7 @@ top, turn on **Refund the extra paid on top too** to refund it as well.
 
 Choose a **Reason**. A reason that needs a note, such as **Other**, asks you to type one.
 
-Under **How it is refunded**, choose cash or a card; each shows how much it can take. The window then
+Under **How to refund**, choose cash or a card; each shows how much it can take. The window then
 says what happens: in cash the cash drawer opens and you give the money to the customer, and a card
 is refunded through the card reader. If the chosen payment cannot take it all, the window says how
 much stays under way for the other payments.
