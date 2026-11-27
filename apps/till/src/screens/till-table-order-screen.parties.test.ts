@@ -119,7 +119,6 @@ const row = (el: TillTableOrderScreen, id: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-bill-switcher] [data-switch-bill="${id}"]`);
 const rowText = (el: TillTableOrderScreen, id: string, part: "label" | "owes") =>
   billChoiceText(row(el, id)!, part === "owes" ? "value" : "label");
-const paid = () => `${t("table.bill_paid")} ✓`;
 
 /** The bill-requested chip, read where the table screen draws it: the status pin's details. */
 async function requestedChip(el: TillTableOrderScreen): Promise<HTMLElement | null> {
@@ -154,7 +153,9 @@ describe("till-table-order-screen: the party's bills", () => {
     const el = await mountScreen();
 
     expect(shadow(el).querySelectorAll("[data-switch-bill]")).toHaveLength(2);
-    expect(rowText(el, "wo-tab", "owes")).toBe(paid());
+    expect(rowText(el, "wo-tab", "owes")).toBe(t("table.bill_paid"));
+    const paidRow = row(el, "wo-tab")!.querySelector("wt-menu-row")!.shadowRoot!;
+    expect(paidRow.querySelector('wt-icon[name="check"]')).not.toBeNull();
     expect(rowText(el, "wo-check", "owes")).toBe(money("30.00"));
     expect(shadow(el).querySelector("[data-party-outstanding]")!.textContent).toBe(money("30.00"));
   });

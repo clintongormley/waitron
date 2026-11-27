@@ -1249,7 +1249,9 @@ The bill picker, Eat here / Take away control and bill actions follow the table 
   Below the side-by-side width, the list opens in the shared menu sheet with its table or party
   heading. At wider widths it opens by the trigger. The menu uses native `menuitemradio` buttons
   with shared `wt-menu-row` content, leading teal check on the current bill, and amounts aligned
-  at the trailing edge. The sheet gives each bill at least 56 px and divides the rows with a line.
+  at the trailing edge. The wide list gives the name and amount at least 12 px between them.
+  The list puts a muted check beside Paid and keeps the amount on one line. The sheet gives each
+  bill at least 56 px, divides the rows with a line and leaves at least 20 px below **+ New bill**.
   A bill with unsent dishes shows one line per editor. The picker adds an unsent hint on its own
   line when another bill holds the signed-in person's unsent dishes, and marks that bill “Unsent”.
   Scroll to reach **+ New bill** at the foot. While a bill is being made the action is

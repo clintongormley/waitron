@@ -18,11 +18,8 @@ function owes(bill: PartyBill): string {
       });
 }
 
-/** The ✓ drawn after "Paid"; the word alone is what is read out. */
-function paidMark(bill: PartyBill | undefined): TemplateResult | typeof nothing {
-  return bill?.status === "settled" && bill.deferred !== true
-    ? html`<span data-paid-mark aria-hidden="true"> ✓</span>`
-    : nothing;
+function isPaid(bill: PartyBill | undefined): boolean {
+  return bill?.status === "settled" && bill.deferred !== true;
 }
 
 const unsentIcon = html`<wt-icon name="floor-unsent" aria-hidden="true"></wt-icon>`;
@@ -141,7 +138,13 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
           ${
             amount === undefined
               ? nothing
-              : html`<span class="bill-switcher-amount">${amount}${paidMark(shown)}</span>`
+              : html`<span class="bill-switcher-amount"
+                  >${amount}${
+                    isPaid(shown)
+                      ? html`<span data-paid-mark aria-hidden="true"> ✓</span>`
+                      : nothing
+                  }</span
+                >`
           }
         </span>
         ${
@@ -171,8 +174,7 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
             }}
           >
             <wt-icon data-row-check name="check" size="lg" aria-hidden="true"></wt-icon>
-            <wt-menu-row label=${billLabel(bill)} .value=${owes(bill)}>
-              ${paidMark(bill)}
+            <wt-menu-row label=${billLabel(bill)} .value=${owes(bill)} .check=${isPaid(bill)}>
             </wt-menu-row>
             ${billUnsentDetails(bill, party, marked.includes(bill))}
           </button>`,
@@ -231,8 +233,17 @@ export const billControlStyles = css`
   .bill-switcher-menu {
     --wt-menu-row-height: var(--wt-tap-min);
   }
+  .bill-switcher:not([bottom-sheet]) .bill-switcher-menu {
+    --wt-menu-row-gap: var(--wt-space-3);
+  }
   .bill-switcher[bottom-sheet] .bill-switcher-menu {
     --wt-menu-row-height: var(--wt-field-height);
+  }
+  .bill-switcher[bottom-sheet]::part(sheet) {
+    padding-block-end: max(
+      calc(var(--wt-space-4) + var(--wt-space-1)),
+      env(safe-area-inset-bottom)
+    );
   }
   .bill-switcher-menu [data-row-choice] {
     display: grid;
@@ -247,7 +258,7 @@ export const billControlStyles = css`
   .bill-switcher[bottom-sheet] [data-switch-bill] wt-menu-row {
     --wt-menu-row-height: calc(var(--wt-field-height) - var(--wt-field-line-width));
   }
-  .bill-switcher-menu [data-switch-bill][aria-checked="true"] {
+  .bill-switcher-menu [data-switch-bill][aria-checked="true"]:not(:hover, :active) {
     background: transparent;
   }
   .bill-switcher-menu [data-row-choice]:focus-visible {
@@ -255,9 +266,13 @@ export const billControlStyles = css`
   }
   .bill-switcher-menu wt-menu-row {
     --wt-menu-row-padding-start: var(--wt-space-2);
+    --wt-menu-row-check-color: var(--wt-color-text-muted);
     --wt-font-size-md: var(--wt-menu-row-label-size);
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
+  }
+  .bill-switcher-menu wt-menu-row::part(trailing) {
+    white-space: nowrap;
   }
   .bill-switcher-menu [data-row-choice] > wt-icon {
     --wt-action-native-icon-color: var(--wt-color-primary);

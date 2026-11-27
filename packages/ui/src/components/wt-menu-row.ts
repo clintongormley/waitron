@@ -23,7 +23,7 @@ export class WtMenuRow extends LitElement {
         display: flex;
         flex: 1 1 auto;
         align-items: center;
-        gap: var(--wt-space-2);
+        gap: var(--wt-menu-row-gap);
         min-width: var(--wt-tap-min);
         min-height: max(var(--wt-tap-min), var(--wt-menu-row-height));
         padding-block: 0;
@@ -66,7 +66,7 @@ export class WtMenuRow extends LitElement {
         flex: none;
       }
       .trailing wt-icon[name="check"] {
-        color: var(--wt-color-primary);
+        color: var(--wt-menu-row-check-color, var(--wt-color-primary));
       }
       .row ::slotted(*) {
         flex: none;
@@ -122,7 +122,7 @@ export class WtMenuRow extends LitElement {
     const label = html`<span class="label">${this.label}</span>`;
     const trailing =
       this.value !== "" || this.chevron || this.check
-        ? html`<span class="trailing">
+        ? html`<span class="trailing" part="trailing">
             ${this.value === "" ? nothing : html`<span class="value">${this.value}</span>`}
             ${this.chevron ? html`<wt-icon part="chevron" name="chevron-right" size="lg"></wt-icon>` : nothing}
             ${this.check ? html`<wt-icon name="check" size="lg"></wt-icon>` : nothing}

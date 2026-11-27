@@ -87,9 +87,7 @@ export async function closePartyMenu(el: TillTableOrderScreen): Promise<void> {
 
 export function billChoiceText(row: Element, part: "label" | "value"): string {
   const menuRow = row.querySelector("wt-menu-row")!;
-  const text = menuRow.shadowRoot!.querySelector(`.${part}`)?.textContent?.trim() ?? "";
-  const paidMark = part === "value" ? row.querySelector("[data-paid-mark]")?.textContent : "";
-  return text + (paidMark ?? "");
+  return menuRow.shadowRoot!.querySelector(`.${part}`)?.textContent?.trim() ?? "";
 }
 
 const billSwitcher = (el: TillTableOrderScreen) =>

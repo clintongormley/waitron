@@ -115,7 +115,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     expect(items(el)).toEqual([
       "Bill 1 €67.00",
       "Bill 2 · Clint €54.00 Ana has an unsent order: 3 items",
-      "Bill 3 Paid ✓",
+      "Bill 3 Paid",
       "New bill",
     ]);
     const current = switcher(el)!.querySelector('[data-switch-bill="wo-1"]')!;
@@ -141,6 +141,8 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     const trigger = switcher(el)!.querySelector<HTMLElement>('[slot="trigger"]')!;
     expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe("Bill 3 Deferred payment 2 of 2");
     expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Deferred payment", "New bill"]);
+    const deferred = switcher(el)!.querySelector('[data-switch-bill="wo-3"] wt-menu-row')!;
+    expect(deferred.shadowRoot!.querySelector('wt-icon[name="check"]')).toBeNull();
   });
 
   it("the switcher shows an overpaid bill's excess, not an amount owed", async () => {
@@ -161,13 +163,13 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     const trigger = switcher(el)!.querySelector<HTMLElement>('[slot="trigger"]')!;
     expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe("Bill 3 Paid ✓ 3 of 3");
     expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 3 · Paid · 3 of 3");
-    const marks = [...switcher(el)!.querySelectorAll<HTMLElement>("[data-paid-mark]")];
-    expect(
-      marks.map((mark) => [mark.textContent!.trim(), mark.getAttribute("aria-hidden")]),
-    ).toEqual([
-      ["✓", "true"],
-      ["✓", "true"],
-    ]);
+    expect(trigger.querySelector("[data-paid-mark]")!.getAttribute("aria-hidden")).toBe("true");
+    const row = switcher(el)!.querySelector('[data-switch-bill="wo-3"] wt-menu-row')!.shadowRoot!;
+    const tick = row.querySelector('wt-icon[name="check"]');
+    expect(tick?.shadowRoot?.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    expect(getComputedStyle(tick!).color).toBe(
+      getComputedStyle(row.querySelector(".value")!).color,
+    );
   });
 
   it("New bill is the last item with one bill and with three", async () => {
@@ -189,7 +191,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     const el = await mountScreen(merged, "wo-1");
 
     expect(closedLabel(el)).toBe("Bill 1 · €67.00 · 1 of 2");
-    expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Paid ✓", "New bill"]);
+    expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Paid", "New bill"]);
   });
 
   it("a table holding Bills 1 and 4 shows Bill 4 in position 2 of 2", async () => {
@@ -231,16 +233,25 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     expect(seen).toEqual([]);
   });
 
-  it("keeps a gap between the bill name and amount in the wide drop-down", async () => {
-    const el = await mountScreen(three, "wo-1");
-    el.style.width = "760px";
-    await expect.poll(() => switcher(el)!.hasAttribute("bottom-sheet")).toBe(false);
-    await userEvent.click(switcher(el)!.shadowRoot!.querySelector("button")!);
-    const row = switcher(el)!.querySelector("[data-switch-bill] wt-menu-row")!.shadowRoot!;
-    const label = row.querySelector(".label")!.getBoundingClientRect();
-    const owes = row.querySelector(".value")!.getBoundingClientRect();
-    expect(owes.left - label.right).toBeGreaterThanOrEqual(8);
-    expect(label.top).toBeLessThan(owes.bottom);
+  it("keeps at least 12 px between a long bill name and its amount in the wide drop-down", async () => {
+    await pageAt(820, 1180);
+    try {
+      const billName = "Birthday celebration by the far window";
+      const el = await mountScreen([...one, partyBill("wo-2", 2, "54.00", { billName })], "wo-1");
+      const picker = switcher(el)!;
+      await expect.poll(() => picker.hasAttribute("bottom-sheet")).toBe(false);
+      await userEvent.click(picker.shadowRoot!.querySelector("button")!);
+      const popup = picker.shadowRoot!.querySelector("[popover]")!;
+      expect(popup.matches(":popover-open")).toBe(true);
+      const row = picker.querySelector('[data-switch-bill="wo-2"] wt-menu-row')!.shadowRoot!;
+      const label = row.querySelector(".label")!.getBoundingClientRect();
+      const owes = row.querySelector(".value")!.getBoundingClientRect();
+      expect(owes.left - label.right).toBeGreaterThanOrEqual(12);
+      expect(label.top).toBeLessThan(owes.bottom);
+      expect(owes.right).toBeLessThan(popup.getBoundingClientRect().right);
+    } finally {
+      await resetPage();
+    }
   });
 
   it("keeps the amount and position readable beside a long name on a phone", async () => {
@@ -281,6 +292,24 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     }
   });
 
+  it("keeps the amount on one line beside a long name in the phone sheet", async () => {
+    await pageAt(390, 844);
+    try {
+      const billName = "W".repeat(40);
+      const el = await mountScreen([...one, partyBill("wo-2", 2, "1234.56", { billName })], "wo-1");
+      const picker = switcher(el)!;
+      await userEvent.click(picker.shadowRoot!.querySelector("button")!);
+      const row = picker.querySelector('[data-switch-bill="wo-2"] wt-menu-row')!.shadowRoot!;
+      const amount = row.querySelector(".value")!;
+      expect(amount.textContent).toBe("€1,234.56");
+      const text = document.createRange();
+      text.selectNodeContents(amount);
+      expect(text.getClientRects()).toHaveLength(1);
+    } finally {
+      await resetPage();
+    }
+  });
+
   it("paints a named, divided sheet with roomy rows on a phone", async () => {
     await pageAt(390, 844);
     try {
@@ -304,6 +333,10 @@ describe("A803 switcher: the table screen's bill switcher", () => {
         row.querySelector(".label")!.getBoundingClientRect().left,
       );
       expect(row.querySelector(".value")!.textContent).toBe("€54.00");
+      const newBill = picker.querySelector("[data-new-bill]")!;
+      expect(sheet.getBoundingClientRect().bottom - newBill.getBoundingClientRect().bottom).toBe(
+        20,
+      );
     } finally {
       await resetPage();
     }
@@ -420,12 +453,14 @@ describe.each(["light", "dark"] as const)(
 
       expect(popup.matches(":popover-open")).toBe(true);
       const checked = host.querySelector<HTMLElement>('[data-switch-bill="wo-2"]')!;
+      const other = '[data-switch-bill="wo-1"]';
+      expect(getComputedStyle(checked).backgroundColor).toBe(background(other));
+      await userEvent.hover(host.querySelector<HTMLElement>(other)!);
+      const hover = background(other);
       // In a short window a row can open under the press that opened the sheet.
       await userEvent.hover(checked);
       expect(checked.matches(":hover")).toBe(true);
-      expect(getComputedStyle(checked).backgroundColor).toBe(
-        background('[data-switch-bill="wo-1"]'),
-      );
+      expect(getComputedStyle(checked).backgroundColor).toBe(hover);
     });
   },
 );
