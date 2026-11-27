@@ -583,8 +583,10 @@ the full-invoice corrective design
 ([2026-11-25-correct-full-invoice-design.md](../superpowers/specs/2026-11-25-correct-full-invoice-design.md),
 section 3; the watcher, lane L `questions.md`, "WATCHER 2026-11-25 09:41"). Filing R1 for a dish that
 never came is lane L's best guess, not the owner's words. Copy it into the shared Google Doc before
-sending. The 27 November notes under question 6, and the dates in its full-invoice point, were added
-in both parts with PR 2b of the full-invoice corrective plan; copy them too.
+sending. The 27 November note naming PR 2b under question 14's goodwill point, and the dates in
+question 6's full-invoice point, were added in both parts with PR 2b of the full-invoice corrective
+plan; copy them too. The 27 November A1614 note beside it was added in both parts by #4471 (A1614);
+copy it too.
 
 Question 2's point on guests who split the bill after it was printed was marked answered in both parts
 on 25 November, on the owner's words of that day (lane L `questions.md`, "WATCHER 2026-11-25 11:55";
