@@ -380,7 +380,7 @@ export class WtDisclosure extends LitElement {
             @click=${this.onToggle}
           >
             <span class="heading">${this.heading}</span
-            ><wt-icon class="chevron" name="chevron-down"></wt-icon>
+            ><wt-icon class="chevron" part="chevron" name="chevron-down"></wt-icon>
             ${this.open || this.closing ? nothing : html`<span class=${this.summaryFades ? "summary-slot fade-in" : "summary-slot"} part="summary"><slot name="summary">${this.renderSummary()}</slot></span>`}
           </button>
           <slot name="help"></slot>

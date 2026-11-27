@@ -463,7 +463,7 @@ it("has English and Spanish copy for each Device Home Page code", () => {
 
 it.each(["en", "es"])("names the Device Home Page in a refused shortcut (%s)", (language) => {
   setLocale(language);
-  const name = language === "en" ? "device home page" : "página de inicio del dispositivo";
+  const name = language === "en" ? "device home page" : "pantalla inicial";
   expect(codeMessage("menu.shortcut_unreachable", language).toLowerCase()).toContain(name);
 });
 

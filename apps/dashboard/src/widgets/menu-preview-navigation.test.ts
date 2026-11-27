@@ -163,6 +163,7 @@ it("switches to Menu and focuses the revealed row when a phone user follows its 
   expect(q(el, '[data-test="changes-pane"]')!.getClientRects()).toHaveLength(0);
   await expect.poll(() => rows(view).activeElement).toBe(destination(view));
   expect(destination(view)?.textContent).toContain("Limonada");
+  expect(getComputedStyle(destination(view)!).outlineStyle).toBe("solid");
 });
 
 it("opens a moved product at its newly added occurrence rather than the first retained occurrence", async () => {
@@ -325,11 +326,11 @@ it.each(["reduce", "no-preference"] as const)(
     await commands.emulateReducedMotion(motion);
     onTestFinished(() => commands.emulateReducedMotion(null));
     const el = await mount([change()]);
-    el.style.setProperty("--wt-focus-ring", "2px solid rgb(123, 45, 67)");
+    el.style.setProperty("--wt-color-surface-lifted", "rgb(123, 45, 67)");
     const view = await follow(el);
     const node = destination(view)!;
-    expect(getComputedStyle(node).outlineColor).toBe("rgb(123, 45, 67)");
-    expect(getComputedStyle(node).outlineStyle).toBe("solid");
+    expect(getComputedStyle(node.closest("td")!).backgroundColor).toBe("rgb(123, 45, 67)");
+    expect(getComputedStyle(node).outlineStyle).toBe("none");
     const pane = q(el, '[data-test="document-pane"]')!.getBoundingClientRect();
     expect(node.getBoundingClientRect().top).toBeGreaterThanOrEqual(pane.top);
     expect(node.getBoundingClientRect().bottom).toBeLessThanOrEqual(pane.bottom);

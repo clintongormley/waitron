@@ -1,6 +1,6 @@
 import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import type { MenuTarget } from "@waitron/shared";
 import type { MenuDocument } from "../api/client.js";
@@ -149,9 +149,7 @@ it("fits the prices, names and fallback media at phone width and reveals the exa
   expect(row(el, "juice")?.querySelector('[data-test="price"]')?.textContent?.trim()).toBe(
     "€2.00–€3.00",
   );
-  expect(row(el, "juice")?.querySelector("wt-icon[name='prep-station']")).toBeInstanceOf(
-    HTMLElement,
-  );
+  expect(row(el, "juice")?.querySelector("wt-icon[name='cutlery']")).toBeInstanceOf(HTMLElement);
   expect(
     await el.reveal({
       kind: "product",
@@ -282,7 +280,7 @@ it("shows Structure's empty-menu explanation and clears the old snapshot when no
   expect(el.shadowRoot!.querySelector("wt-data-table")).toBeNull();
 });
 
-it("keeps Preview and Structure indents aligned, with their own row and photo sizes", async () => {
+it("keeps Preview and Structure indents aligned, with compact rows and pictures", async () => {
   const el = await mount();
   await toggle(el, "drinks");
   await toggle(el, "drinks/beer");
@@ -335,11 +333,11 @@ it("keeps Preview and Structure indents aligned, with their own row and photo si
   expect(getComputedStyle(a.querySelector(".tree-cell")!).paddingInlineStart).toBe(
     getComputedStyle(b.querySelector(".tree-cell")!).paddingInlineStart,
   );
-  expect(Math.abs(a.getBoundingClientRect().height - 69)).toBeLessThanOrEqual(3);
+  expect(a.getBoundingClientRect().height).toBeCloseTo(48, 0);
   expect(Math.abs(b.getBoundingClientRect().height - 49)).toBeLessThanOrEqual(3);
   const photo = a.querySelector<HTMLElement>("[part~='product-media']")!;
   const otherPhoto = b.querySelector<HTMLElement>("[part~='product-media']")!;
-  expect(photo.getBoundingClientRect()).toMatchObject({ width: 44, height: 44 });
+  expect(photo.getBoundingClientRect()).toMatchObject({ width: 36, height: 36 });
   expect(otherPhoto.getBoundingClientRect()).toMatchObject({ width: 36, height: 36 });
   await vi.waitFor(() =>
     expect(photo.querySelector("img")!.getAttribute("src")).toBe(
@@ -386,7 +384,7 @@ it("aligns the Preview section photo and Structure section swatch within their m
   const swatch = b.querySelector<HTMLElement>('[part~="color-swatch"]')!;
   const frame = a.querySelector<HTMLElement>('[part~="folder-frame"]')!;
   const otherFrame = b.querySelector<HTMLElement>('[part~="folder-frame"]')!;
-  expect(photo.getBoundingClientRect()).toMatchObject({ width: 44, height: 44 });
+  expect(photo.getBoundingClientRect()).toMatchObject({ width: 36, height: 36 });
   expect(swatch.getBoundingClientRect()).toMatchObject({ width: 36, height: 36 });
   expect(photo.getBoundingClientRect().left - frame.getBoundingClientRect().left).toBe(
     swatch.getBoundingClientRect().left - otherFrame.getBoundingClientRect().left,
@@ -554,10 +552,12 @@ it("keeps a revealed mark through content-language changes and drops it for a re
   expect(table(el).shadowRoot!.querySelector("[aria-current]")).toBeNull();
 });
 
-it("paints the revealed name with the shared focus outline", async () => {
+it("paints the shared outline when keyboard focus moves to the revealed name", async () => {
   const el = await mount(fixture(), "light");
-  await el.reveal(lagerTarget);
+  await userEvent.keyboard("{Shift}");
+  await el.reveal(lagerTarget, true);
   const marker = row(el, "drinks/beer/mi")!.querySelector<HTMLElement>('[aria-current="true"]')!;
+  expect(table(el).shadowRoot!.activeElement).toBe(marker);
   expect(getComputedStyle(marker).outlineStyle).toBe("solid");
   expect(getComputedStyle(marker).outlineWidth).toBe("2px");
   expect(getComputedStyle(marker).outlineColor).toBe("rgb(0, 115, 146)");

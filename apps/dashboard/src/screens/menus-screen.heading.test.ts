@@ -216,7 +216,7 @@ function modifiedClick(target: Element, modifier: (typeof MODIFIERS)[number]): v
 }
 
 describe("the menu editor's heading", () => {
-  it("puts a path landmark holding one link, Menus ›, beside the menu's name at normal text size in the link colour", async () => {
+  it("puts a path landmark holding one link, Menus ›, beside the menu's name at the same size in the link colour", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     onTestFinished(() => page.viewport(width, height));
@@ -238,7 +238,6 @@ describe("the menu editor's heading", () => {
     const style = getComputedStyle(link);
     expect(style.textDecorationLine).toContain("underline");
     expect(style.color).toBe(resolved(el, "--wt-color-primary-text"));
-    expect(style.fontSize).toBe(getComputedStyle(el).fontSize);
     expect(getComputedStyle(nav.querySelector(".sep")!).color).toBe(
       resolved(el, "--wt-color-primary-text"),
     );
@@ -247,6 +246,7 @@ describe("the menu editor's heading", () => {
     expect(headings).toHaveLength(1);
     const h1 = headings[0]!;
     expect(text(h1)).toBe("Lunch Menu");
+    expect(style.fontSize).toBe(getComputedStyle(h1).fontSize);
     expect(nav.contains(h1)).toBe(false);
     const a = nav.getBoundingClientRect();
     const b = h1.getBoundingClientRect();
@@ -438,6 +438,12 @@ describe("the menu editor's heading", () => {
       expect(a.right).toBeLessThanOrEqual(b.left);
       expect(a.top).toBeLessThan(b.bottom);
       expect(b.top).toBeLessThan(a.bottom);
+      if (width === 390) {
+        const heading = q(el, ".heading")!.getBoundingClientRect();
+        expect(a.left).toBeCloseTo(heading.left);
+        expect(b.right).toBeCloseTo(heading.right);
+        expect(a.width).toBeCloseTo(b.width);
+      }
       expect(q(el, '[data-test="review-publish"]')).toBeNull();
       const schedule = q(el, "dashboard-menu-preview")!.shadowRoot!.querySelector(
         "dashboard-menu-publications",
@@ -738,6 +744,24 @@ describe("the menu editor's heading", () => {
       }
       expect(new Set(buttons.map((button) => button.getBoundingClientRect().top)).size).toBe(1);
       for (const button of buttons) {
+        const label = button.querySelector(".label > span")!;
+        const range = document.createRange();
+        range.selectNodeContents(label);
+        expect(range.getClientRects().length, label.textContent).toBe(1);
+      }
+      if (locale === "es-ES") {
+        const home = page.getByRole("tab", { name: "Pantalla inicial", exact: true });
+        await home.click();
+        await vi.waitFor(() => {
+          expect(home.element().getBoundingClientRect().left).toBeGreaterThanOrEqual(
+            strip.getBoundingClientRect().left - 1,
+          );
+          expect(home.element().getBoundingClientRect().right).toBeLessThanOrEqual(
+            strip.getBoundingClientRect().right + 1,
+          );
+        });
+      }
+      for (const button of buttons) {
         expect(button.clientWidth).toBeGreaterThanOrEqual(44);
         expect(button.scrollWidth, button.innerText).toBeLessThanOrEqual(button.clientWidth);
       }
@@ -745,6 +769,9 @@ describe("the menu editor's heading", () => {
       await userEvent.keyboard("{End}");
       const customerTab = page.getByRole("tab", { name: t("menus.tab_customer_menu") });
       expect(tabs.shadowRoot!.activeElement).toBe(customerTab.element());
+      el.requestUpdate();
+      await el.updateComplete;
+      await tabs.updateComplete;
       await vi.waitFor(() => {
         expect(customerTab.element().getBoundingClientRect().right).toBeLessThanOrEqual(
           strip.getBoundingClientRect().right + 1,

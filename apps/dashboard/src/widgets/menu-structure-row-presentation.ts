@@ -3,22 +3,44 @@ import { countOf } from "./count-text.js";
 
 export const structureRowStyles = css`
   wt-data-table {
+    --tree-arrow-width: calc(var(--wt-space-4) + var(--wt-space-1));
+    --arrow-offset: var(--wt-space-4);
+    --structure-arrow-slot: max(var(--wt-space-1), var(--tree-arrow-width) - var(--arrow-offset));
+    --wt-table-cell-padding-inline: var(--wt-space-1);
     --structure-media-size: calc(var(--wt-space-6) + var(--wt-space-1));
     --structure-grip-width: calc(var(--wt-space-6) - var(--wt-field-line-width-active));
     --structure-media-gap: var(--wt-space-3);
   }
   wt-data-table[narrow] {
-    --tree-arrow-width: var(--wt-space-5);
+    --tree-arrow-width: var(--wt-space-4);
+    --arrow-offset: var(--wt-space-2);
     --structure-media-size: calc(var(--wt-space-6) - var(--wt-field-line-width-active));
     --structure-grip-width: calc(var(--wt-space-5) + var(--wt-field-line-width-active));
     --structure-media-gap: var(--wt-space-1);
     --structure-amount-width: calc(var(--wt-price-field-width) - var(--wt-space-5));
+  }
+  :host([reordering]) wt-data-table:not([narrow]) {
+    --structure-root-inset: var(--wt-space-4);
+    --arrow-offset: var(--wt-space-5);
+  }
+  :host([reordering]) wt-data-table[narrow]:not([data-selecting]) {
+    --structure-root-inset: calc(var(--wt-space-4) + var(--wt-space-1));
+  }
+  wt-data-table[data-selecting]:not([narrow]) {
+    --structure-root-inset: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
+  }
+  wt-data-table[data-selecting][narrow] {
+    --structure-root-inset: calc(var(--wt-space-5) + var(--wt-space-1));
+  }
+  :host([reordering]) wt-data-table[narrow]:not([data-selecting])::part(structure-member-cell) {
+    --structure-member-inset: var(--wt-space-3);
   }
   wt-data-table::part(toolbar-search) {
     flex-basis: 0;
   }
   wt-data-table::part(tree-cell) {
     align-items: center;
+    margin-inline-start: calc(-1 * var(--structure-member-inset, 0px));
   }
   wt-data-table::part(structure-cell) {
     padding-block: calc(var(--wt-space-1) / 2);
@@ -28,18 +50,46 @@ export const structureRowStyles = css`
     padding-block: var(--wt-space-1);
   }
   wt-data-table::part(tree-toggle) {
-    font-family: inherit;
-  }
-  wt-data-table[narrow]::part(tree-toggle) {
     inline-size: var(--tree-arrow-width);
     margin-inline-start: 0;
     padding-inline-start: 0;
+    font-family: inherit;
+  }
+  wt-data-table::part(tree-indent) {
+    justify-content: start;
+    margin-inline-start: calc(-1 * var(--arrow-offset));
+  }
+  wt-data-table::part(structure-root-toggle) {
+    inline-size: var(--wt-tap-min);
+    margin-inline-end: calc(var(--structure-arrow-slot) - var(--wt-tap-min));
+  }
+  :host([reordering]) wt-data-table::part(structure-root-toggle),
+  wt-data-table[data-selecting]::part(structure-root-toggle) {
+    position: relative;
+    inset-inline-start: calc(-1 * (var(--wt-tap-min) + var(--wt-space-1)));
+  }
+  wt-data-table::part(structure-root-toggle):focus-visible {
+    outline-offset: calc(-1 * var(--wt-focus-offset));
+  }
+  wt-data-table[data-selecting]::part(structure-root-toggle) {
+    padding-inline-end: var(--wt-space-3);
+  }
+  wt-data-table[data-selecting]:not([narrow])::part(structure-root-toggle) {
+    inset-inline-start: calc(-1 * (var(--wt-tap-min) + var(--wt-space-1) + var(--wt-space-5)));
   }
   wt-data-table::part(tree-heading),
   wt-data-table[narrow]::part(tree-heading) {
     margin-inline-start: calc(
-      var(--tree-arrow-width) + var(--structure-media-size) + var(--structure-media-gap)
+      var(--structure-arrow-slot) + var(--structure-media-size) +
+        var(--structure-media-gap) - var(--structure-root-inset, 0px)
     );
+  }
+  wt-data-table::part(structure-root-label) {
+    margin-inline-start: calc(-1 * var(--structure-root-inset, 0px));
+  }
+  wt-data-table:not([narrow])::part(structure-folder-setting)::after {
+    content: " ·";
+    padding-inline-start: var(--wt-space-1);
   }
   wt-data-table::part(thumb-frame),
   wt-data-table::part(thumb-placeholder),
@@ -82,12 +132,25 @@ export const structureRowStyles = css`
   }
   wt-data-table[narrow]::part(narrow-usual-price) {
     display: inline;
+    margin-inline-end: calc(-1 * var(--wt-space-1));
+  }
+  wt-data-table::part(structure-row-label) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--wt-space-2);
+  }
+  wt-data-table[narrow]::part(structure-row-label) {
+    flex-direction: column;
   }
   wt-data-table::part(section-name) {
     font-weight: var(--wt-font-weight-bold);
   }
   wt-data-table::part(read-only) {
     color: var(--wt-color-text-muted);
+  }
+  wt-data-table::part(read-only structure-product-name) {
+    color: var(--wt-color-text);
   }
   wt-data-table::part(structure-unavailable),
   wt-data-table::part(structure-clash) {
@@ -101,12 +164,14 @@ export const structureRowStyles = css`
     border-radius: var(--wt-radius-sm);
     max-inline-size: 100%;
     box-sizing: border-box;
+    white-space: nowrap;
   }
   wt-data-table::part(structure-price) {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     justify-items: end;
+    white-space: nowrap;
     gap: var(--wt-space-1);
   }
   wt-data-table[narrow]::part(structure-price) {

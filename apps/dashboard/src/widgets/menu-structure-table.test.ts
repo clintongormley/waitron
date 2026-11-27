@@ -739,6 +739,33 @@ it("keeps an included menu's contents in place and offers Open, Edit and Remove 
   expect(edits).toEqual([]);
 });
 
+it.each([1280, 390])(
+  "shows included product names in regular ink and lays out their notes at %i px",
+  async (width) => {
+    await page.viewport(width, 844);
+    const lager = { ...burgerWithVariants(), id: "p-lager", name: "Lager" };
+    const el = await mount({ nodes: [wines()], products: [lager] });
+    await toggle(el, "included-wine");
+    await toggle(el, "included-wine/wine-lager");
+    const dish = row(el, "included-wine/wine-lager")!.querySelector('[data-test="name"]')!;
+    const variant = row(el, "included-wine/wine-lager/v-regular")!.querySelector(
+      '[data-test="name"]',
+    )!;
+    expect(getComputedStyle(variant).color).toBe(getComputedStyle(table(el)).color);
+    expect(getComputedStyle(dish).color).toBe(getComputedStyle(variant).color);
+    await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(width === 390));
+    for (const key of ["included-wine", "included-wine/wine-lager"]) {
+      const tr = row(el, key)!;
+      const name = tr.querySelector('[data-test="name"]')!.getBoundingClientRect();
+      for (const note of tr.querySelectorAll('[part~="note"]')) {
+        const words = note.getBoundingClientRect();
+        if (width === 390) expect(words.top, key).toBeGreaterThanOrEqual(name.bottom - 1);
+        else expect(words.left, key).toBeGreaterThan(name.right);
+      }
+    }
+  },
+);
+
 it("offers Remove for a set menu and removes that placement", async () => {
   const el = await mount({
     menus: [{ id: "daily", name: "Daily menu", active: true, kind: "set_menu", setPrice: "14.00" }],
@@ -805,9 +832,12 @@ it("Edit sends wt-include-edit with the list's path and the member", async () =>
 
 it("the row says whether the include is a folder or shown directly", async () => {
   const el = await mount({ nodes: [...lunchNodes(), wines()] });
-  expect(item(el, "folder-setting-included-wine").textContent!.trim()).toBe(
-    t("menus.include_as_folder"),
-  );
+  const setting = item(el, "folder-setting-included-wine");
+  expect(setting.textContent!.trim()).toBe(t("menus.include_as_folder"));
+  expect(getComputedStyle(setting, "::after")).toMatchObject({
+    content: '" ·"',
+    paddingInlineStart: "4px",
+  });
   expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
 
   const cava: MenuStructureNode = {
@@ -1167,14 +1197,17 @@ it.each(
     try {
       await page.viewport(width, 844);
       const el = await mountDeep({ reordering, menuColor });
+      await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(width === 390));
       const rows = DEEP_ROWS.map((key) => ({ key, ...pieces(el, key) }));
       expect(row(el, "root")!.getAttribute("aria-level")).toBe("1");
-      // The menu's own row is level 1, and the same step separates it from its members.
       const root = rootNameLeft(el);
-      const step = rows.find(({ level }) => level === 3)!.name.left - rows[0]!.name.left;
-      expect(step).toBeGreaterThan(0);
+      const first = rows[0]!.name.left;
+      const step = rows.find(({ level }) => level === 3)!.name.left - first;
+      expect(step).toBeCloseTo(width === 390 ? 12 : 18, 0);
+      const rootOffset = reordering ? 8 : 0;
+      expect(first - root).toBeCloseTo(step + rootOffset, 0);
       for (const { key, level, name } of rows)
-        expect(name.left, key).toBeCloseTo(root + (level - 1) * step, 0);
+        expect(name.left, key).toBeCloseTo(first + (level - 2) * step, 0);
       for (const current of rows) {
         const twin = rows.find(
           (other) => other.level === current.level && other.key !== current.key,
@@ -1193,12 +1226,90 @@ it.each(
   },
 );
 
+it("puts the menu arrow over the grip column and the section arrow immediately after its grip", async () => {
+  const el = await mountDeep();
+  const middle = (element: Element | Range) => {
+    const rect = element.getBoundingClientRect();
+    return rect.left + rect.width / 2;
+  };
+  const arrow = (key: string) => {
+    const range = document.createRange();
+    range.selectNodeContents(row(el, key)!.querySelector(".tree-arrow, .tree-toggle")!);
+    return range;
+  };
+  const handle = middle(grip(el, "m-drinks"));
+  const section = arrow("m-drinks");
+  expect(middle(arrow("root"))).toBeCloseTo(handle, -1);
+  expect(middle(section) - handle).toBeGreaterThan(15);
+  expect(middle(section) - handle).toBeLessThanOrEqual(29);
+  const picture = pieces(el, "m-drinks").media!;
+  expect(picture.left - section.getBoundingClientRect().right).toBeLessThanOrEqual(14);
+});
+
+it.each(["browse", "reorder", "select"])(
+  "keeps the menu arrow's tap target and keyboard ring inside the table on desktop (%s)",
+  async (mode) => {
+    const el = await mountDeep({ reordering: mode === "reorder", selecting: mode === "select" });
+    const toggle = row(el, "root")!.querySelector<HTMLButtonElement>(".tree-toggle")!;
+    await userEvent.keyboard("{Shift}");
+    toggle.focus();
+    const style = getComputedStyle(toggle);
+    expect(style.outlineStyle).toBe("solid");
+    const box = toggle.getBoundingClientRect();
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    const ringLeft = box.left - parseFloat(style.outlineWidth) - parseFloat(style.outlineOffset);
+    const root = table(el).shadowRoot!;
+    expect(ringLeft).toBeGreaterThanOrEqual(
+      root.querySelector(".scroll")!.getBoundingClientRect().left,
+    );
+    if (mode === "select") {
+      const tick = row(el, "m-drinks")!
+        .querySelector("input[type=checkbox]")!
+        .getBoundingClientRect();
+      const arrow = document.createRange();
+      arrow.selectNodeContents(toggle);
+      const glyph = arrow.getBoundingClientRect();
+      expect(Math.abs(glyph.x + glyph.width / 2 - tick.x - tick.width / 2)).toBeLessThanOrEqual(8);
+    }
+  },
+);
+
+it.each([390, 1280])("shows an owned section count with its name at %i px", async (width) => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  onTestFinished(() => page.viewport(before.width, before.height));
+  await page.viewport(width, 844);
+  const el = await mountDeep();
+  await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(width === 390));
+  const tr = row(el, "m-drinks")!;
+  const name = tr.querySelector('[part~="section-name"]')!.getBoundingClientRect();
+  const count = tr.querySelector('[part~="note"]')!.getBoundingClientRect();
+  if (width === 390) {
+    expect(count.top).toBeGreaterThanOrEqual(name.bottom - 1);
+    const arrow = document.createRange();
+    arrow.selectNodeContents(tr.querySelector(".tree-arrow")!);
+    const gripBox = grip(el, "m-drinks").getBoundingClientRect();
+    const glyph = arrow.getBoundingClientRect();
+    const gap = glyph.left + glyph.width / 2 - gripBox.left - gripBox.width / 2;
+    expect(gap).toBeGreaterThanOrEqual(21);
+    expect(gap).toBeLessThanOrEqual(26);
+  } else {
+    expect(count.left).toBeGreaterThan(name.right);
+    expect(count.top).toBeLessThan(name.bottom);
+  }
+});
+
 it("puts a real grip on every top-level row, the included menu's too, and starts each name after the arrow and media slots", async () => {
   const el = await mountDeep();
   for (const key of ["m-burger", "m-drinks", "m-fav", "included-wine"]) {
     const tr = row(el, key)!;
     const handle = tr.querySelector('[part~="drag-grip"]')!;
     expect(handle.getBoundingClientRect().width, key).toBeGreaterThan(0);
+    const hitBox = handle.getBoundingClientRect();
+    const hit = table(el).shadowRoot!.elementFromPoint(
+      hitBox.right - 2,
+      hitBox.y + hitBox.height / 2,
+    );
+    expect(handle.contains(hit), key).toBe(true);
     expect(tr.querySelector('[part~="grip-space"]'), key).toBeNull();
     const arrow = tr
       .querySelector(".tree-arrow, .tree-toggle, .tree-spacer")!
@@ -1251,7 +1362,7 @@ it.each(
     ),
   ),
 )(
-  "draws the menu's own row no taller than a section's, its name level with its ⋮ ($width px, $mode, menu colour: $menuColor)",
+  "draws the menu's own row no taller than a section's, its name and count level with its ⋮ ($width px, $mode, menu colour: $menuColor)",
   async ({ width, mode, menuColor }) => {
     const before = { width: window.innerWidth, height: window.innerHeight };
     try {
@@ -1265,12 +1376,21 @@ it.each(
       expect(table(el).hasAttribute("narrow")).toBe(width === 390);
       const middle = (rect: DOMRect) => rect.top + rect.height / 2;
       const height = (key: string) => row(el, key)!.getBoundingClientRect().height;
-      const text = document.createRange();
-      text.selectNodeContents(inTable(el, '[data-test="root-name"]')!);
-      const name = middle(text.getBoundingClientRect());
+      const name = inTable(el, '[data-test="root-name"]')!.getBoundingClientRect();
+      const count = inTable(el, '[data-test="count-root"]')!.getBoundingClientRect();
+      const centre = (Math.min(name.top, count.top) + Math.max(name.bottom, count.bottom)) / 2;
       const menu = middle(inTable(el, '[data-test="actions-root"]')!.getBoundingClientRect());
       expect(height("root")).toBeLessThanOrEqual(height("m-drinks") + 1);
-      expect(Math.abs(name - menu)).toBeLessThanOrEqual(2);
+      expect(Math.abs(centre - menu)).toBeLessThanOrEqual(2);
+      if (mode !== "browsing") {
+        const arrow = document.createRange();
+        const root = row(el, "root")!;
+        arrow.selectNodeContents(root.querySelector(".tree-toggle")!);
+        const picture = root.querySelector('[part~="folder-frame"]')!.getBoundingClientRect();
+        const gap = picture.left - arrow.getBoundingClientRect().right;
+        expect(gap).toBeGreaterThanOrEqual(5);
+        expect(gap).toBeLessThanOrEqual(12);
+      }
     } finally {
       await page.viewport(before.width, before.height);
     }
@@ -2640,7 +2760,9 @@ describe("colour swatches", () => {
     for (const key of ["m-burger", "m-drinks"]) {
       const chip = chipOf(el, key);
       expect(getComputedStyle(chip).position, key).toBe("static");
-      expect(getComputedStyle(chip).backgroundColor, key).toBe("rgba(0, 0, 0, 0)");
+      expect(getComputedStyle(chip).backgroundColor, key).toBe(
+        key === "m-burger" ? "rgba(0, 0, 0, 0)" : "rgb(240, 241, 244)",
+      );
       expect(chip.hasAttribute("style"), key).toBe(false);
       expect(chip.part.contains("color-swatch"), key).toBe(true);
       expect(chip.part.contains("empty"), key).toBe(true);
@@ -2674,9 +2796,9 @@ describe("colour swatches", () => {
         const el = await mountColoured({ reordering, nodes: [...paintedLunch(), red] });
         await toggle(el, "included-wine");
         for (const [key, part, icon] of [
-          ["m-drinks", "swatch-button", "folder"],
+          ["m-drinks", "swatch-button", "folder-outline"],
           ["included-wine", "swatch-box", "section-menu"],
-          ["included-wine/wine-red", "swatch-box", "folder"],
+          ["included-wine/wine-red", "swatch-box", "folder-outline"],
         ] as const) {
           const swatch = swatchOf(el, key);
           expect(swatch.getAttribute("part"), key).toBe(part);
@@ -2747,7 +2869,7 @@ describe("colour swatches", () => {
     const sent = sentEvents(el);
     expect(getComputedStyle(chipOf(el, "m-drinks")).backgroundColor).toBe("rgb(170, 51, 0)");
     expect(chipOf(el, "m-fav").part.contains("empty")).toBe(true);
-    expect(chipOf(el, "m-fav").querySelector('wt-icon[name="folder"]')).not.toBeNull();
+    expect(chipOf(el, "m-fav").querySelector('wt-icon[name="folder-outline"]')).not.toBeNull();
     const swatch = swatchOf(el, "m-drinks");
     expect(swatch.tagName).toBe("BUTTON");
     expect(swatch.getAttribute("aria-label")).toBe(
@@ -2789,7 +2911,7 @@ describe("colour swatches", () => {
     await toggle(el, "included-wine/wine-red");
     const sent = sentEvents(el);
     for (const [key, colour] of [
-      ["included-wine", "rgba(0, 0, 0, 0)"],
+      ["included-wine", "rgb(240, 241, 244)"],
       ["included-wine/wine-red", "rgb(122, 31, 61)"],
       ["included-wine/wine-red/wine-rioja", "rgb(74, 42, 107)"],
     ] as const) {
@@ -4188,9 +4310,7 @@ describe("the menu's own row", () => {
     }
   });
 
-  // On a narrow table the counts are taken out of the flow, after a name that runs past the
-  // screen; held outside the table's scroll box, they would make the whole page scroll sideways.
-  it("keeps a long menu name's hidden counts inside the table's scroll box on a phone", async () => {
+  it("keeps a forced unwrapped menu name and its counts inside the table's scroll box on a phone", async () => {
     const before = { width: window.innerWidth, height: window.innerHeight };
     try {
       await page.viewport(390, 844);
@@ -4198,9 +4318,12 @@ describe("the menu's own row", () => {
       inTable(el, '[data-test="root-name"]')!.parentElement!.style.cssText =
         "white-space: nowrap; display: inline-block";
       await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(true));
+      const name = document.createRange();
+      name.selectNodeContents(inTable(el, '[data-test="root-name"]')!);
+      expect(name.getBoundingClientRect().right).toBeGreaterThan(window.innerWidth);
       const count = inTable(el, '[data-test="count-root"]')!;
-      expect(count.getBoundingClientRect().right).toBeGreaterThan(window.innerWidth);
       const scroll = table(el).shadowRoot!.querySelector(".scroll")!;
+      expect(scroll.contains(count)).toBe(true);
       expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
       expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     } finally {
@@ -4281,7 +4404,7 @@ describe("the menu's own row", () => {
   );
 
   it.each([390, 1280])(
-    "keeps the counts in the root row's text, visually hidden only on a narrow table (%i px)",
+    "shows the menu counts below its name on a phone and beside it on desktop (%i px)",
     async (width) => {
       const before = { width: window.innerWidth, height: window.innerHeight };
       try {
@@ -4291,13 +4414,14 @@ describe("the menu's own row", () => {
         const count = inTable(el, '[data-test="count-root"]')!;
         expect(row(el, "root")!.textContent).toContain(count.textContent!.trim());
         expect(count.textContent!.trim()).not.toBe("");
+        const name = inTable(el, '[data-test="root-name"]')!.getBoundingClientRect();
+        const bounds = count.getBoundingClientRect();
+        expect(bounds.width).toBeGreaterThan(1);
         if (width === 390) {
-          expect(getComputedStyle(count).display).not.toBe("none");
-          expect(getComputedStyle(count).clipPath).toBe("inset(50%)");
-          expect(count.getBoundingClientRect().width).toBe(1);
+          expect(bounds.top).toBeGreaterThanOrEqual(name.bottom - 1);
         } else {
-          expect(getComputedStyle(count).clipPath).toBe("none");
-          expect(count.getBoundingClientRect().width).toBeGreaterThan(1);
+          expect(bounds.left).toBeGreaterThan(name.right);
+          expect(bounds.top).toBeLessThan(name.bottom);
         }
       } finally {
         await page.viewport(before.width, before.height);
@@ -5019,18 +5143,11 @@ it.each(
         .querySelector('thead th[data-pinned="end"]')!
         .getBoundingClientRect().left;
       const toggle = root.querySelector('tr[data-row-key="root"] .tree-toggle')!;
-      expect(
-        toggle.getBoundingClientRect().left,
-        "root toggle stays inside its cell",
-      ).toBeGreaterThanOrEqual(toggle.closest("td")!.getBoundingClientRect().left);
-      expect(getComputedStyle(toggle.closest("td")!).paddingInlineStart).toBe(
-        width === 390 ? "4px" : "12px",
-      );
-      const treeCell = root.querySelector('[part~="tree-cell"]')!;
-      expect(
-        treeCell.children[1]!.getBoundingClientRect().left -
-          treeCell.closest("td")!.getBoundingClientRect().left,
-      ).toBe(width === 390 ? 28 : 56);
+      const rect = toggle.getBoundingClientRect();
+      expect(rect.width).toBeGreaterThanOrEqual(44);
+      expect(rect.left).toBeGreaterThanOrEqual(scroll.getBoundingClientRect().left);
+      const hit = root.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      expect(toggle.contains(hit)).toBe(true);
       const names = [...root.querySelectorAll('[data-test="name"], [data-test="root-name"]')];
       expect(names.length).toBeGreaterThan(2);
       if (width < 800) {

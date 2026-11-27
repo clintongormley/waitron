@@ -307,7 +307,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
   "menu.shortcut_unreachable": {
     en: "Only products and sections that are on this menu can be shortcuts on its Device Home Page.",
-    es: "Solo los productos y secciones que están en esta carta pueden ser accesos directos en su página de inicio del dispositivo.",
+    es: "Solo los productos y secciones que están en esta carta pueden ser accesos directos en su pantalla inicial.",
   },
   "menu.clashes_unresolved": {
     en: "Resolve the price clashes before publishing this menu.",

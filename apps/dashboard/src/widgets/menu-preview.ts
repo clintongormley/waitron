@@ -2,9 +2,14 @@ import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, ContentLanguageController, currentContentLanguages } from "@waitron/ui";
+import {
+  baseStyles,
+  ContentLanguageController,
+  currentContentLanguages,
+  visuallyHiddenStyles,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
-import "@waitron/ui/src/components/wt-card.js";
+import { cardFrameStyles } from "@waitron/ui/src/components/wt-card.js";
 import type { MenuView, MenuTarget } from "@waitron/shared";
 import { menuTargetKey } from "@waitron/menu/src/menu-navigation.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -141,6 +146,42 @@ export class MenuPreviewPanel extends LitElement {
       .blockers ul {
         display: grid;
         gap: var(--wt-space-4);
+      }
+      [data-test="changes"] ul {
+        list-style: none;
+        padding-inline-start: 0;
+      }
+      .warnings {
+        ${cardFrameStyles}
+        gap: 0;
+        padding: 0 var(--wt-space-3);
+      }
+      .warnings wt-disclosure + wt-disclosure {
+        border-block-start: 1px solid var(--wt-color-border);
+      }
+      .warnings h2 {
+        ${visuallyHiddenStyles}
+      }
+      .warnings wt-disclosure::part(section) {
+        padding-block: 0;
+      }
+      .warnings wt-disclosure::part(header) {
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        column-gap: var(--wt-space-2);
+      }
+      .warnings wt-disclosure::part(header)::before {
+        content: "";
+        inline-size: var(--wt-space-2);
+        block-size: var(--wt-space-2);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-warning);
+      }
+      .warnings wt-disclosure::part(chevron) {
+        grid-column: 3;
+        transform: rotate(-90deg);
+      }
+      .warnings wt-disclosure[open]::part(chevron) {
+        transform: none;
       }
       .blockers {
         border-inline-start: var(--wt-space-1) solid var(--wt-color-danger);
@@ -449,10 +490,10 @@ export class MenuPreviewPanel extends LitElement {
           })}
         </div>`,
       );
-    return html`<wt-card>
-      <h2 slot="header" id="changes-heading">${t("menu_preview.changes_heading")}</h2>
+    return html`<section>
+      <h2 id="changes-heading">${t("menu_preview.changes_heading")}</h2>
       ${body}
-    </wt-card>`;
+    </section>`;
   }
 
   #changeLink(change: MenuChange, name: string) {
@@ -487,10 +528,10 @@ export class MenuPreviewPanel extends LitElement {
     const { warnings, changes } = this.preview;
     const advisory = renderDeclarationsAdvisory(changes);
     if (warnings.length === 0 && advisory === nothing) return nothing;
-    return html`<wt-card>
-      <h2 slot="header">${t("menu_preview.warnings_heading")}</h2>
+    return html`<section class="warnings" aria-labelledby="warnings-heading">
+      <h2 id="warnings-heading">${t("menu_preview.warnings_heading")}</h2>
       ${advisory} ${renderFoldedMenuWarnings(warnings, this.menuName)}
-    </wt-card>`;
+    </section>`;
   }
 
   /** The whole menu, as the publish would make it live, or as it is live when there is nothing to

@@ -813,6 +813,55 @@ async function treeTable(props: Partial<WtDataTable<TreeRow>> = {}): Promise<WtD
   return el;
 }
 
+test.each(["list", "tree"])("washes each ticked %s row through its pinned cell", async (mode) => {
+  const el = mode === "tree" ? await treeTable() : await table();
+  el.columns = [
+    { key: "name", label: "Name", cell: (row: { name: string }) => row.name },
+    { key: "actions", label: "Actions", cell: () => "Edit", pinned: "end" },
+  ];
+  el.selectable = true;
+  const key = mode === "tree" ? "food" : "a";
+  el.selected = [key];
+  await el.updateComplete;
+  const root = el.shadowRoot!;
+  const tick = root.querySelector<HTMLInputElement>(`[data-test="select-${key}"]`)!;
+  const selected = tick.closest("tr")!;
+  const other = root.querySelector("tbody tr:not(:has(input:checked))")!;
+  const paint = (row: Element) =>
+    [...row.querySelectorAll("td")].map((cell) => getComputedStyle(cell).backgroundColor);
+  const painted = paint(selected);
+  expect(new Set(painted).size).toBe(1);
+  expect(painted[0]).not.toBe(paint(other).at(-1));
+  expect(painted[0]).not.toBe("rgba(0, 0, 0, 0)");
+
+  el.selected = [];
+  await el.updateComplete;
+  expect(paint(selected)).toEqual(paint(other));
+});
+
+test("a ticked row that opens still paints hover and focus across its pinned cell", async () => {
+  const el = await table({
+    selectable: true,
+    selected: ["a"],
+    rowClick: () => undefined,
+    columns: [columns[0]!, { key: "actions", label: "Actions", cell: () => "Edit", pinned: "end" }],
+  });
+  el.style.setProperty("--wt-color-surface-lifted", "rgb(11, 33, 55)");
+  const tick = el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-a"]')!;
+  const row = tick.closest("tr")!;
+  const pinned = row.querySelector('td[data-pinned="end"]')!;
+  const resting = getComputedStyle(pinned).backgroundColor;
+  onTestFinished(() => commands.parkPointer());
+  await userEvent.hover(row);
+  expect(getComputedStyle(pinned).backgroundColor).toBe("rgb(11, 33, 55)");
+  await commands.parkPointer();
+  expect(getComputedStyle(pinned).backgroundColor).toBe(resting);
+  await userEvent.keyboard("{Shift}");
+  row.querySelector<HTMLButtonElement>(".row-activate")!.focus();
+  await vi.waitFor(() => expect(getComputedStyle(pinned).backgroundColor).toBe("rgb(11, 33, 55)"));
+  expect(tick.checked).toBe(true);
+});
+
 test("tree mode nests children under parents in order", async () => {
   const el = await treeTable();
   const keys = [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) =>

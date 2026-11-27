@@ -86,3 +86,24 @@ it.each([
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   },
 );
+
+it("uses one compact warning line with a marker", async () => {
+  const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", {
+    preview: {
+      ...preview,
+      warnings: [
+        {
+          kind: "allergens_unreviewed",
+          products: [{ id: "lager", name: "Lager", parentName: null }],
+        },
+      ],
+    },
+  });
+  const warning = el.shadowRoot!.querySelector("wt-disclosure")!;
+  await warning.updateComplete;
+  const summary = warning.shadowRoot!.querySelector("button")!;
+  expect(warning.getBoundingClientRect().height).toBeLessThanOrEqual(48);
+  expect(getComputedStyle(warning.closest("section")!).borderTopStyle).toBe("solid");
+  expect(getComputedStyle(summary, "::before").content).not.toBe("none");
+  expect(summary.getAttribute("aria-expanded")).toBe("false");
+});
