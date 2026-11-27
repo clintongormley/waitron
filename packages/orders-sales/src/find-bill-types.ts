@@ -10,8 +10,6 @@ export type TransactionType =
 export type TenderMethod = "cash" | "card" | "voucher" | "deferred" | "other";
 /** `owed` and `counter` together ask for the bills either one names. */
 export type BillsQuery = FindBillQuery & {
-  zoneId?: string;
-  state?: BillState;
   owed?: true;
   counter?: true;
 };

@@ -16,7 +16,6 @@ import {
   deviceProfiles,
   kitchenStations,
   printers,
-  parties,
   printJobs,
   ticketItems,
   workingOrderLines,
@@ -27,7 +26,6 @@ import {
   floorZones,
 } from "@waitron/db";
 import { completeBillPayment } from "./bill-payments.js";
-import { lookUpBills } from "./bill-lookup-api.js";
 import { lookUpInvoices } from "./invoice-lookup-api.js";
 import { orderZoneCondition } from "./zone-access.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -88,7 +86,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  *
  * | Route                                                   | Zone from              | Case that fails without the gate                     |
  * | ------------------------------------------------------- | ---------------------- | ---------------------------------------------------- |
- * | GET /api/bills, /api/bills/:workingOrderId, /api/transactions, /api/find-bill/options | every original order; explicit zone query | find-bill-api.test.ts: "refuses a requested foreign zone and hides out-of-scope bills, counts, transactions and options"; allowed: "allows a legitimate bill with no recorded zone even when the permitted-zone set is empty" |
+ * | GET /api/bills, /api/bills/:workingOrderId, /api/transactions, /api/find-bill/options | every original order | find-bill-api.test.ts: "hides out-of-scope bills, transactions and options", "lists only its own zones' owed bills and counter orders"; allowed: "allows a legitimate bill with no recorded zone even when the permitted-zone set is empty" |
  * | GET /api/tender-refunds/:refundId/receipt | admitted session; original-sale zones | tender-refund-receipt-api.test.ts: "GET needs no payment or print capability while POST requires print-receipt", "checks every original source zone on read and reprint and admits the allowed case" |
  * | POST /api/tender-refunds/:refundId/reprint | print-receipt; original-sale zones | same refusal and allowed cases; document only, never drawer |
  * | GET /api/transactions/:saleId/receipt; POST /api/transactions/:saleId/reprint | every correction/substitution source order | transaction-receipt-api.test.ts: "a substitution uses its own receipt, and source-zone access checks all of its original bills"; allowed orderless controls in "reads paid and orderless original sales and a correction by their own identity" |
@@ -222,15 +220,13 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/working-orders/:id/close-deferred          | order, inside the write | refuses POST .../close-deferred                  |
  * | GET  /api/working-orders/:id/deferred-closure           | order                  | refuses GET .../deferred-closure                     |
  * | POST /api/working-orders/:id/adjustments, /preview      | order                  | refuses POST .../adjustments, /preview               |
- * | GET  /api/bills/lookup                                  | list, by order zone    | "shows a Deli bill to the Deli ...", "fills ... twenty Deli bills ..." |
  * | GET  /api/invoices/lookup                               | list, by order zone    | "shows a Deli invoice to the Deli ...", "fills ... twenty Deli invoices ..." |
  * | POST /api/device/orders/:id/ready | order, against the device's pass zones | refuses the display's POST /api/device/orders/:id/<verb> |
  * | POST /api/device/parties/:id/groups/:gid/ready | party, against the device's pass zones | refuses the display's POST /api/device/parties/:id/groups/:gid/<verb> |
  * | POST /api/device/pass-screen/release | party's zone, or bill's recorded or pickup zone | "A773 pass release" below |
  *
- * The bill lookup searches party names, delivery labels and table labels as well as numbers, and
- * the invoice lookup the customer's legal name, so both are filtered like the other lists, reading
- * on past the rows they hide until a page of twenty shows.
+ * The invoice lookup searches the customer's legal name as well as numbers, so it is filtered like
+ * the other lists, reading on past the rows it hides until a page of twenty shows.
  *
  * A kitchen display's pass levers (`/api/device/...`) read the order's or the party's zone as its
  * pass board does and check it against the zones of the device's pass screen, not a zone of the
@@ -1990,22 +1986,9 @@ describe("a Restaurant profile in its own zones", () => {
   });
 });
 
-describe("the bill and invoice lookups", () => {
+describe("the invoice lookup", () => {
   const ids = (body: Record<string, unknown>, key: string) =>
     (body[key] as { workingOrderId: string }[]).map((row) => row.workingOrderId);
-
-  /** A seated party named `name`, whose bill waits for payment. */
-  async function unpaidBill(tableId: string, menuItemId: string, name: string): Promise<string> {
-    const seated = await seatWithRound(tableId, menuItemId);
-    await inTx(v, async (tx) => {
-      await tx.update(parties).set({ name }).where(eq(parties.id, seated.partyId));
-      await tx
-        .update(workingOrders)
-        .set({ status: "placed" })
-        .where(eq(workingOrders.id, seated.tabId));
-    });
-    return seated.tabId;
-  }
 
   /** A seated party's bill, invoiced in full to `legalName` and paid. */
   async function invoiced(tableId: string, menuItemId: string, legalName: string): Promise<string> {
@@ -2103,30 +2086,6 @@ describe("the bill and invoice lookups", () => {
       )
     ).offerFor(v.productId("Water"));
 
-  it("shows a Deli bill to the Deli and to a profile with no department, never to the Restaurant", async () => {
-    const deliBill = await unpaidBill(
-      await inTx(
-        v,
-        async (tx) => (await createTable(tx, { label: "D7", zoneId: f.deliTables })).id,
-      ),
-      (
-        await inTx(v, (tx) =>
-          offerProducts(tx, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
-        )
-      ).offerFor(v.productId("Water")),
-      "Lookup Deli",
-    );
-    const restBill = await unpaidBill(await v.table("R7"), v.item("Water"), "Lookup Sala");
-    const as = async (cookie: string) => {
-      const answer = await send(cookie, "GET", "/api/bills/lookup?q=Lookup");
-      expect(answer.status).toBe(200);
-      return ids(answer.body, "bills");
-    };
-    expect(await as(restaurant)).toEqual([restBill]);
-    expect(await as(deli)).toEqual([deliBill]);
-    expect((await as(plain)).sort()).toEqual([deliBill, restBill].sort());
-  });
-
   it("shows a Deli invoice to the Deli and to a profile with no department, never to the Restaurant", async () => {
     const deliInvoice = await invoiced(
       await deliTable("D8"),
@@ -2158,25 +2117,7 @@ describe("the bill and invoice lookups", () => {
     expect(ids(answer.body, "invoices")).toEqual([restInvoice]);
   });
 
-  it("fills the Restaurant's page past twenty Deli bills that match first", async () => {
-    const restBill = await unpaidBill(await v.table("R8"), v.item("Water"), "Crowded Sala");
-    const deliItem = (
-      await inTx(v, (tx) =>
-        offerProducts(tx, { zone: { zoneId: f.deliTables }, orderStart: "table" }),
-      )
-    ).offerFor(v.productId("Water"));
-    for (let index = 0; index < 21; index++) {
-      const table = await inTx(
-        v,
-        async (tx) => (await createTable(tx, { label: `DC${index}`, zoneId: f.deliTables })).id,
-      );
-      await unpaidBill(table, deliItem, `Crowded Deli ${index}`);
-    }
-    const answer = await send(restaurant, "GET", "/api/bills/lookup?q=Crowded");
-    expect(ids(answer.body, "bills")).toEqual([restBill]);
-  });
-
-  it("reads one page, however many Deli bills and invoices the Restaurant's lookup hides", async () => {
+  it("reads one page, however many Deli invoices the Restaurant's lookup hides", async () => {
     const reads = (lookUp: (tx: Transaction) => Promise<unknown>) =>
       withTransaction(suite.db, async (tx) => {
         const spies = [
@@ -2192,9 +2133,6 @@ describe("the bill and invoice lookups", () => {
         }
       });
     const restaurantOnly = (tx: Transaction) => lookupScope(tx, restaurantProfile);
-    expect(await reads(async (tx) => lookUpBills(tx, "Crowded", await restaurantOnly(tx)))).toBe(
-      await reads(async (tx) => lookUpBills(tx, "Crowded Sala", await restaurantOnly(tx))),
-    );
     expect(await reads(async (tx) => lookUpInvoices(tx, "Packed", await restaurantOnly(tx)))).toBe(
       await reads(async (tx) => lookUpInvoices(tx, "Packed Sala", await restaurantOnly(tx))),
     );

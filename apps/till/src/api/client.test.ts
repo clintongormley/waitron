@@ -4723,16 +4723,6 @@ describe("TillApi: a seated party", () => {
     });
   });
 
-  it("lookUpBills encodes the query in the till GET", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ bills: [] }));
-    const result = await new TillApi("", fetchStub).lookUpBills("A/12 & Ruiz");
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/bills/lookup?q=A%2F12%20%26%20Ruiz",
-      expect.objectContaining({ method: "GET", credentials: "include" }),
-    );
-    expect(result).toEqual({ bills: [] });
-  });
-
   it("markTableCleared POSTs to the table's /cleared route with no body (empty 204 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 

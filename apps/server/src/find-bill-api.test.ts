@@ -20,6 +20,7 @@ import { endSessionsNotAdmitted } from "./device.js";
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 import {
   collect,
+  departed,
   parked,
   parkedBy,
   placedIssuedBill,
@@ -60,8 +61,6 @@ async function restrict(allowed: string[]) {
   });
 }
 type Options = {
-  zones: { id: string; name: string }[];
-  billStaff: { id: string; name: string }[];
   transactionStaff: { id: string; name: string }[];
 };
 
@@ -176,7 +175,7 @@ describe("Find a bill list routes", () => {
     ).toMatchObject(expected);
     expect(selected).toMatchObject({ status: 200, json: expected });
   });
-  it("serves authenticated pages and fresh selection while the legacy lookup remains static", async () => {
+  it("serves authenticated pages and fresh selection", async () => {
     const id = await parked(venue, "Small beer");
     const result = await get("/api/bills");
     expect(result.status).toBe(200);
@@ -184,14 +183,12 @@ describe("Find a bill list routes", () => {
       page: 0,
       pageSize: 50,
       total: 1,
-      openCount: 1,
       rows: [{ workingOrderId: id }],
     });
+    expect(result.json).not.toHaveProperty("openCount");
     const selected = await get(`/api/bills/${id.toUpperCase()}`);
     expect(selected.status).toBe(200);
     expect(selected.json).toMatchObject({ workingOrderId: id, total: "3.00" });
-    const legacy = await get("/api/bills/lookup?q=absent");
-    expect(legacy).toMatchObject({ status: 200, json: { bills: [] } });
     expect(await get(`/api/bills/${randomUUID()}`)).toMatchObject({
       status: 404,
       json: { code: "working_order.not_found" },
@@ -209,6 +206,7 @@ describe("Find a bill list routes", () => {
       rows: [{ workingOrderId: order, amount: "10.00" }],
       dates: null,
     });
+    expect(transactions.json).not.toHaveProperty("openCount");
     expect((await get("/api/find-bill/options")).status).toBe(200);
   });
 
@@ -271,7 +269,7 @@ describe("Find a bill list routes", () => {
     for (const path of [...paths, `/api/bills/${id}`]) expect((await get(path)).status).toBe(200);
   });
 
-  it("refuses a requested foreign zone and hides out-of-scope bills, counts, transactions and options", async () => {
+  it("hides out-of-scope bills, transactions and options", async () => {
     const own = await parked(venue, "Small beer");
     const foreign = await seatedWith(venue, "Tarta");
     await inTx(venue, (tx) =>
@@ -305,16 +303,12 @@ describe("Find a bill list routes", () => {
     expect((await collect(venue, issued, "10.00")).status).toBe(200);
     await restrict([venue.counterZone]);
     const ownPage = await get("/api/bills");
-    expect(ownPage).toMatchObject({ status: 200, json: { total: 2, openCount: 2 } });
+    expect(ownPage).toMatchObject({ status: 200, json: { total: 2 } });
     expect(
       (ownPage.json as { rows: { workingOrderId: string }[] }).rows
         .map((r) => r.workingOrderId)
         .sort(),
     ).toEqual([own, issued].sort());
-    expect(await get(`/api/bills?zoneId=${venue.zoneId}`)).toMatchObject({
-      status: 403,
-      json: { code: "service_zone.not_allowed" },
-    });
     expect(await get(`/api/bills/${foreign.tabId}`)).toMatchObject({
       status: 403,
       json: { code: "service_zone.not_allowed" },
@@ -325,29 +319,43 @@ describe("Find a bill list routes", () => {
     });
     const options = await get("/api/find-bill/options");
     expect(options.status).toBe(200);
-    expect((options.json as Options).zones.map((z) => z.id)).toEqual([venue.counterZone]);
-    expect((options.json as Options).billStaff.map((p) => p.id)).not.toContain(venue.supervisorId);
     expect((options.json as Options).transactionStaff.map((p) => p.id)).not.toContain(
       venue.supervisorId,
     );
     const transactions = await get("/api/transactions?preset=any");
     expect(transactions).toMatchObject({
       status: 200,
-      json: { total: 1, openCount: 2, rows: [{ workingOrderId: issued }] },
+      json: { total: 1, rows: [{ workingOrderId: issued }] },
     });
     await restrict([]);
     expect(await get("/api/bills")).toMatchObject({
       status: 200,
-      json: { rows: [], total: 0, openCount: 0 },
+      json: { rows: [], total: 0 },
     });
     expect(await get("/api/transactions?preset=any")).toMatchObject({
       status: 200,
-      json: { rows: [], total: 0, openCount: 0 },
+      json: { rows: [], total: 0 },
     });
     expect(await get("/api/find-bill/options")).toMatchObject({
       status: 200,
-      json: { zones: [], billStaff: [], transactionStaff: [] },
+      json: { transactionStaff: [] },
     });
+  });
+
+  it("lists only its own zones' owed bills and counter orders", async () => {
+    const own = await parked(venue, "Small beer");
+    const left = await departed(venue, "Tarta");
+    const owed = async () =>
+      new Set(
+        (
+          (await get("/api/bills?owed=true&counter=true")).json as {
+            rows: { workingOrderId: string }[];
+          }
+        ).rows.map((r) => r.workingOrderId),
+      );
+    expect(await owed()).toEqual(new Set([own, left.tabId]));
+    await restrict([venue.counterZone]);
+    expect(await owed()).toEqual(new Set([own]));
   });
 
   it("allows a legitimate bill with no recorded zone even when the permitted-zone set is empty", async () => {
@@ -363,7 +371,7 @@ describe("Find a bill list routes", () => {
     await restrict([]);
     expect(await get("/api/bills")).toMatchObject({
       status: 200,
-      json: { total: 1, openCount: 1, rows: [{ workingOrderId: id, zoneId: null }] },
+      json: { total: 1, rows: [{ workingOrderId: id, zoneId: null }] },
     });
     expect(await get(`/api/bills/${id}`)).toMatchObject({
       status: 200,
@@ -371,7 +379,7 @@ describe("Find a bill list routes", () => {
     });
   });
 
-  it("offers historical staff represented beyond the current page, including suspended staff", async () => {
+  it("offers historical staff represented beyond the current page, and filters bills by a suspended person", async () => {
     const old = await parkedBy(venue, venue.supervisorId, "Small beer");
     await inTx(venue, (tx) =>
       tx
@@ -397,10 +405,6 @@ describe("Find a bill list routes", () => {
     ).toBe(false);
     const options = await get("/api/find-bill/options");
     expect(options.status).toBe(200);
-    expect((options.json as Options).billStaff).toContainEqual({
-      id: venue.supervisorId,
-      name: "Sophia",
-    });
     expect((options.json as Options).transactionStaff).toContainEqual({
       id: venue.operatorId,
       name: "Anna",

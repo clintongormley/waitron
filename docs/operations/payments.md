@@ -37,8 +37,8 @@ to check the amount and record **Refunded** or **Put on a bill** with a manager 
 
 ## Print a refund acknowledgment
 
-Open a completed refund from the bill’s payments or, once invoiced, from **Transactions** in
-**Find a bill**. Choose **Print** for the first copy. For seven days, you can reprint it from
+Open a completed refund from the bill’s payments or, once invoiced, in **Find a bill**. Choose
+**Print** for the first copy. For seven days, you can reprint it from
 **Print Queue** on the dashboard. Choose **Older print jobs** to see past the latest 100.
 A bill refund keeps its payment reference after you issue the invoice. The first print uses the
 bill’s receipt language or the venue default. A refund from a receipt keeps the original

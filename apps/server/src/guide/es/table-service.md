@@ -202,6 +202,13 @@ el banco. Si [añades tu propio servidor de correo](email.md#set-up), Waitron en
 administrador con correo electrónico por cada cambio; si
 recibes uno por un cambio que nadie de tu personal ha hecho, revisa la cuenta enseguida.
 
+## Buscar cuenta {#find-a-bill}
+
+**Buscar cuenta** muestra las ventas terminadas, de la más reciente a la más antigua. Busca por
+número, mesa, nombre, últimas cifras de una tarjeta o un importe, como 80,52. Encima de las ventas,
+**Cuentas sin pagar** muestra las cuentas de clientes que se fueron sin pagar, y **Pedidos de
+mostrador**, los pedidos de mostrador aún sin terminar: elige uno para abrirlo.
+
 ## Elegir un documento y una impresora {#invoice-printer}
 
 Abre una venta en **Buscar cuenta** para revisar su ticket con el formato de papel de 80 mm.
@@ -210,8 +217,8 @@ El ticket se muestra en el idioma en que se emitió. Para una copia en papel, el
 simplificada muestra directamente sus impresoras de recibos. Ambas versiones de una factura
 completa conservan los datos del cliente registrados.
 
-Si una factura completa ligada a una cuenta puede haberse impreso, ábrela desde **Cuentas** o
-**Transacciones** y revisa primero la impresora de oficina indicada. Si no se ha impreso, pulsa
+Si una factura completa ligada a una cuenta puede haberse impreso, ábrela en **Buscar cuenta** y
+revisa primero la impresora de oficina indicada. Si no se ha impreso, pulsa
 **Volver a imprimir**. La ventana te muestra el resultado. Para enviarla a otra impresora, elige **Impresora de facturas**.
 
 En una caja con permiso para imprimir tickets, comprueba **Última dirección de correo** antes de
@@ -226,7 +233,7 @@ púlsalo. Elegir un documento o una impresora, actualizar la lista y volver atr�
 La copia sigue preguntando el idioma cuando hay más de uno; cancelar no imprime nada. Si la
 elección no se ha guardado, pulsa **Reintentar**; usa **Actualizar** si no se ha podido leer la lista.
 
-Para una factura completa antigua sin cuenta, ábrela en **Transacciones** y elige **Factura**.
+Para una factura completa antigua sin cuenta, ábrela en **Buscar cuenta** y elige **Factura**.
 Usa **Recibo** para una copia compacta cuando se haya completado un original. Si falla la impresión,
 comprueba el destino de **Reintentar original** o elige la impresora de recibos indicada en su lugar.
 
@@ -329,7 +336,7 @@ Si el proveedor de pagos aún no puede hacer la devolución, este intento no ha 
 Puedes cerrar la ventana e iniciar una nueva devolución más tarde.
 
 Cuando termine la devolución, elige **Ver justificante** junto a ella en los pagos de la cuenta.
-Después de facturar, puedes abrir la devolución desde **Transacciones** en **Buscar cuenta**.
+Después de facturar, puedes abrir la devolución en **Buscar cuenta**.
 Elige **Imprimir** para la primera copia. Puedes reimprimirla desde la **Cola de impresión** del panel durante siete días.
 
 ## Cancela un plato de una cuenta guardada del mostrador {#counter-cancel-item}
@@ -457,7 +464,7 @@ para preguntarle por esa devolución, y **Devolver el resto** cuando la ventana 
 puedes devolver dinero, un responsable o encargado aprueba la consulta con su PIN. Si la ventana dice
 que el servidor no respondió, elige **Enviar de nuevo**. **Comprobar de nuevo** y **Enviar de nuevo**
 nunca devuelven el mismo dinero dos veces. Un ticket rectificativo o una factura rectificativa que no se imprime
-solo se puede imprimir desde **Buscar cuenta**, en la pestaña **Transacciones**.
+solo se puede imprimir desde **Buscar cuenta**.
 
 Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **Buscar cuenta**, en
 **Devoluciones en curso**. Si no está, la devolución espera en esta caja: vuelve a abrir
@@ -748,7 +755,7 @@ elige un responsable o encargado y pídele que introduzca su PIN.
 Solo se detiene la comida pendiente de servir de esa cuenta, con tickets de cancelación para la
 estación. Las demás cuentas conservan su comida, así que puedes servir el postre de quien ya ha
 pagado. Se registra como pendiente lo que aún se debe de la cuenta; lo ya pagado se conserva. Cuando
-el cliente vuelva a pagar, abre la cuenta desde **Buscar cuenta** y cobra allí lo que falta. La
+el cliente vuelva a pagar, abre la cuenta en **Cuentas sin pagar**, en **Buscar cuenta**, y cobra allí lo que falta. La
 mesa sigue abierta mientras quede otra cuenta por cerrar o comida pagada por servir. Sirve lo que
 queda y elige **Cerrar mesa** cuando todos hayan terminado.
 

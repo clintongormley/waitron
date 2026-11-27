@@ -10,8 +10,6 @@ export type TransactionType =
 export type TenderMethod = "cash" | "card" | "voucher" | "deferred" | "other";
 /** `owed` and `counter` together ask for the bills either one names. */
 export type BillsQuery = FindBillQuery & {
-  zoneId?: string;
-  state?: BillState;
   owed?: true;
   counter?: true;
 };
@@ -27,13 +25,10 @@ export type FindBillPage<Row> = {
   total: number;
   page: number;
   pageSize: 50;
-  openCount: number;
 };
 export type DateWindow = { startAt: string; endAt: string; from: string; to: string } | null;
 export type FindBillOptions = {
   timeZone: string;
-  zones: { id: string; name: string }[];
-  billStaff: { id: string; name: string }[];
   transactionStaff: { id: string; name: string }[];
 };
 

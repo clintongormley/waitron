@@ -289,7 +289,7 @@ const en = {
     "The box's date, {server}, and the venue's date by this device's clock, {device}, differ. Choose Stop, then Refresh, and open this case again. If the dates still differ, check the time on the Box status page.",
   "fiscal_filing.put_right.replace.send": "Send the replacement",
   "fiscal_filing.put_right.replace.issued":
-    "Replacement issued. To print its original, open it on a till in Find a bill, on the Transactions tab, and choose Reprint. Later prints are copies.",
+    "Replacement issued. To print its original, open it on a till in Find a bill and choose Reprint. Later prints are copies.",
   "fiscal_filing.put_right.none.not-yet":
     "Waitron cannot put this one right yet. The case stays open.",
   "fiscal_filing.put_right.none.full-invoice":
@@ -691,7 +691,7 @@ const es: Record<AeatCertificateKey, string> = {
     "La fecha del servidor, {server}, y la del local según el reloj de este dispositivo, {device}, no coinciden. Elige Parar, después Actualizar, y vuelve a abrir este caso. Si las fechas siguen sin coincidir, revisa la hora en Estado del servidor.",
   "fiscal_filing.put_right.replace.send": "Enviar el rectificativo",
   "fiscal_filing.put_right.replace.issued":
-    "Rectificativo emitido. Para imprimir su original, ábrelo en una caja en Buscar cuenta, en la pestaña Transacciones, y elige Reimprimir. Las impresiones siguientes son copias.",
+    "Rectificativo emitido. Para imprimir su original, ábrelo en una caja en Buscar cuenta y elige Reimprimir. Las impresiones siguientes son copias.",
   "fiscal_filing.put_right.none.not-yet":
     "Waitron todavía no puede corregir este caso. El caso sigue abierto.",
   "fiscal_filing.put_right.none.full-invoice":

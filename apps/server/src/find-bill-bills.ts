@@ -37,7 +37,7 @@ type RawBill = {
   collection_status: BillRow["collectionStatus"];
 };
 
-export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
+function findBillsRelation(inZones?: OrderZoneCondition): SQL {
   const zone = VENUE_SERVICE.orderZoneIdSql(sql`wo.id`);
   const active = sql`l.quantity - coalesce(cancelled.quantity, 0)`;
   // The part payments the bill's own ticket took off: their money was paid on the bill but is not
@@ -115,8 +115,6 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
 
 function filtered(query: BillsQuery): SQL {
   const clauses = [sql`r.search_rank is not null`];
-  if (query.zoneId !== undefined) clauses.push(sql`r.zone_id = ${query.zoneId}`);
-  if (query.state !== undefined) clauses.push(sql`r.state = ${query.state}`);
   const kinds: SQL[] = [];
   // Owed: the guests left with the bill unpaid. Not `collection_status`, which a part payment
   // clears. A departure always issues the invoice and places the bill; cancelling the bill abandons
@@ -225,8 +223,8 @@ export async function readFindBills(
       from named r
     )`;
   const where = filtered(query);
-  const { rows: counts } = await tx.execute<{ total: number; open_count: number }>(sql`${ranked}
-    select (select count(*) from ranked r where ${where}) as total, (select count(*) from bills) as open_count`);
+  const { rows: counts } = await tx.execute<{ total: number }>(sql`${ranked}
+    select count(*) as total from ranked r where ${where}`);
   const key = sorts[query.sort.key] ?? sorts.openedAt!;
   const direction = query.sort.direction === "ascending" ? sql`asc` : sql`desc`;
   const { rows: raw } = await tx.execute<RawBill>(sql`${ranked}
@@ -235,7 +233,6 @@ export async function readFindBills(
   return {
     rows: await projectBills(tx, raw),
     total: counts[0]!.total,
-    openCount: counts[0]!.open_count,
     page: query.page,
     pageSize: 50,
   };

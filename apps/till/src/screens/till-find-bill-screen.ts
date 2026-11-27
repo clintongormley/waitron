@@ -7,24 +7,21 @@ import type { TillApi } from "../api/client.js";
 import type { OpenInvoiceCorrection } from "../api/invoice-correction-types.js";
 import type {
   BillRow,
-  BillsQuery,
   DateWindow,
   FindBillDates,
   FindBillOptions,
   TransactionRow,
   TransactionsQuery,
 } from "../api/find-bill-types.js";
-import { countText, currentLocale, t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import "@waitron/ui/src/components/wt-data-table.js";
-import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 
-type Tab = "bills" | "transactions";
-type Row = BillRow | TransactionRow;
+type Row = TransactionRow;
 type QueryDetail = {
   search: string;
   sortKey: string;
@@ -40,7 +37,6 @@ type View = {
   error: string;
 };
 const emptyView = (): View => ({ page: 0, rows: [], total: 0, loading: false, error: "" });
-const states = ["unpaid", "held", "part-paid", "paid-not-handed-over"] as const;
 const methods = ["cash", "card", "voucher", "deferred", "other"] as const;
 const types = [
   "sale",
@@ -103,22 +99,17 @@ export class TillFindBillScreen extends LitElement {
       .error {
         color: var(--wt-color-danger);
       }
-      wt-data-table::part(earlier) {
-        color: var(--wt-color-text-muted);
-        display: block;
-        font-size: var(--wt-font-size-sm);
-      }
       .chips {
         padding-block: var(--wt-space-2);
       }
-      .corrections {
+      .strip {
         display: flex;
         flex-direction: column;
         align-items: stretch;
         gap: var(--wt-space-2);
         margin-bottom: var(--wt-space-3);
       }
-      .correction-text {
+      .strip-text {
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -134,10 +125,8 @@ export class TillFindBillScreen extends LitElement {
   @property({ type: Boolean }) active = false;
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) backKey: "find_page.back" | "action.back" = "find_page.back";
-  @state() private tab: Tab = "bills";
   @state() private options?: FindBillOptions;
   @state() private optionsError = "";
-  @state() private openCount: number | null = null;
   @state() private dates: FindBillDates = { preset: "today" };
   @state() private dateFrom = "";
   @state() private dateTo = "";
@@ -146,7 +135,13 @@ export class TillFindBillScreen extends LitElement {
   @state() private corrections: OpenInvoiceCorrection[] = [];
   @state() private correctionsError = false;
   #correctionsController?: AbortController;
-  readonly #views: Record<Tab, View> = { bills: emptyView(), transactions: emptyView() };
+  @state() private owed: BillRow[] = [];
+  @state() private owedMore = false;
+  @state() private owedLoading = false;
+  @state() private owedError: "list" | "more" | null = null;
+  #owedPage = 0;
+  #owedController?: AbortController;
+  #view: View = emptyView();
   #controller?: AbortController;
   #optionsController?: AbortController;
   #generation = 0;
@@ -160,18 +155,25 @@ export class TillFindBillScreen extends LitElement {
       this.#optionsGeneration++;
       if (changed.has("api") && changed.get("api") !== undefined) {
         this.options = undefined;
-        for (const tab of ["bills", "transactions"] as const) this.#views[tab] = emptyView();
+        this.#view = emptyView();
         this.optionsError = "";
+        this.owed = [];
+        this.owedMore = false;
+        this.corrections = [];
       }
       if (this.active && this.api) {
         if (this.options) this.#read();
         else void this.#loadOptions();
       }
       void this.#loadCorrections();
+      void this.#loadOwed();
     }
   }
   override disconnectedCallback(): void {
     this.#correctionsController?.abort();
+    this.#owedController?.abort();
+    this.#owedController = undefined;
+    this.owedLoading = false;
     this.#cancel();
     this.#optionsController?.abort();
     this.#optionsGeneration++;
@@ -183,7 +185,132 @@ export class TillFindBillScreen extends LitElement {
       if (this.options) this.#read();
       else void this.#loadOptions();
       void this.#loadCorrections();
+      void this.#loadOwed();
     }
+  }
+  async #loadOwed(more = false): Promise<void> {
+    this.#owedController?.abort();
+    this.#owedController = undefined;
+    this.owedError = null;
+    this.owedLoading = false;
+    if (!this.active || !this.api) return;
+    const page = more ? this.#owedPage + 1 : 0;
+    const controller = (this.#owedController = new AbortController());
+    this.owedLoading = true;
+    try {
+      const result = await this.api.listBills(
+        {
+          q: "",
+          page,
+          sort: { key: "openedAt", direction: "descending" },
+          owed: true,
+          counter: true,
+        },
+        { signal: controller.signal },
+      );
+      if (controller !== this.#owedController) return;
+      const shown = new Set(more ? this.owed.map((row) => row.workingOrderId) : []);
+      this.owed = [
+        ...(more ? this.owed : []),
+        ...result.rows.filter((row) => !shown.has(row.workingOrderId)),
+      ];
+      this.#owedPage = page;
+      this.owedMore = (page + 1) * result.pageSize < result.total;
+    } catch {
+      if (controller !== this.#owedController) return;
+      this.owedError = more ? "more" : "list";
+      if (!more) {
+        this.owed = [];
+        this.owedMore = false;
+      }
+    } finally {
+      if (controller === this.#owedController) this.owedLoading = false;
+    }
+  }
+  #billText(row: BillRow, timeZone: string): string {
+    const place =
+      [
+        ...new Set(
+          [
+            row.tables.join(", ") || (row.partyId === null ? t("station.counter") : ""),
+            row.partyName,
+            row.label,
+          ].filter(Boolean),
+        ),
+      ].join(" · ") || `#${row.orderNumber}`;
+    const money = (value: string) => formatMoney(value, currentLocale());
+    if (row.partyId === null)
+      return `#${row.orderNumber} · ${place} · ${label(row.state)} · ${money(row.total)}`;
+    const left =
+      row.departedAt === null
+        ? []
+        : [
+            t("find_bill.left_on").replace(
+              "{date}",
+              new Date(row.departedAt).toLocaleDateString(currentLocale(), { timeZone }),
+            ),
+          ];
+    return [place, ...left, t("find_bill.owes").replace("{amount}", money(row.stillOwed))].join(
+      " · ",
+    );
+  }
+  #owedFailure() {
+    return html`<p role="alert" class="error">${label("load_failed")}</p>
+      <wt-button
+        variant="secondary"
+        data-owed-retry
+        @click=${() => void this.#loadOwed(this.owedError === "more")}
+        >${label("retry")}</wt-button
+      >`;
+  }
+  #billSections(timeZone: string) {
+    if (this.owedError === "list")
+      return html`<section class="strip" data-owed-error>
+        <h2>${label("unpaid_and_counter_orders")}</h2>
+        ${this.#owedFailure()}
+      </section>`;
+    const counter = this.owed.filter((row) => row.partyId === null);
+    return html`${this.#billSection(
+      this.owed.filter((row) => row.partyId !== null),
+      "owed",
+      t("find_bill.unpaid"),
+      timeZone,
+    )}${this.#billSection(counter, "counter", label("counter_orders"), timeZone)}${
+      this.owedError === "more"
+        ? html`<div class="strip">${this.#owedFailure()}</div>`
+        : this.owedMore
+          ? html`<div class="strip">
+              <wt-button
+                variant="secondary"
+                data-owed-more
+                ?loading=${this.owedLoading}
+                @click=${() => void this.#loadOwed(true)}
+                >${label("show_more")}</wt-button
+              >
+            </div>`
+          : nothing
+    }`;
+  }
+  #billSection(rows: BillRow[], attribute: string, heading: string, timeZone: string) {
+    if (rows.length === 0) return nothing;
+    return html`<section
+      class="strip"
+      ?data-owed=${attribute === "owed"}
+      ?data-counter-orders=${attribute === "counter"}
+    >
+      <h2>${heading}</h2>
+      ${rows.map(
+        (row) =>
+          html`<wt-button
+            variant="secondary"
+            align="start"
+            data-bill=${row.workingOrderId}
+            .disabled=${this.busy}
+            @click=${() => this.#emit("find-bill-open", { row })}
+            ><span class="strip-text">${this.#billText(row, timeZone)}</span></wt-button
+          >`,
+      )}
+    </section>`;
   }
   async #loadCorrections(): Promise<void> {
     this.#correctionsController?.abort();
@@ -215,7 +342,7 @@ export class TillFindBillScreen extends LitElement {
   }
   #correctionsList(timeZone: string) {
     if (this.corrections.length === 0 && !this.correctionsError) return nothing;
-    return html`<section class="corrections" data-corrections>
+    return html`<section class="strip" data-corrections>
       <h2>${label("corrections")}</h2>
       ${
         this.correctionsError
@@ -236,7 +363,7 @@ export class TillFindBillScreen extends LitElement {
             data-correction=${correction.id}
             .disabled=${this.busy}
             @click=${() => this.#emit("find-correction-open", { correction })}
-            ><span class="correction-text" data-correction-text
+            ><span class="strip-text" data-correction-text
               >${this.#correctionRow(correction, timeZone)}</span
             ></wt-button
           >`,
@@ -248,7 +375,7 @@ export class TillFindBillScreen extends LitElement {
     this.#controller?.abort();
     clearTimeout(this.#timer);
     this.#timer = undefined;
-    for (const view of Object.values(this.#views)) view.loading = false;
+    this.#view.loading = false;
   }
   async #loadOptions(): Promise<void> {
     const generation = ++this.#optionsGeneration;
@@ -264,22 +391,22 @@ export class TillFindBillScreen extends LitElement {
         this.optionsError = label("load_failed");
     }
   }
-  #query(tab: Tab, event: CustomEvent<QueryDetail>): void {
+  #query(event: CustomEvent<QueryDetail>): void {
     event.stopPropagation();
-    const view = this.#views[tab],
+    const view = this.#view,
       previous = view.query;
     view.query = event.detail;
     if (JSON.stringify(previous) === JSON.stringify(view.query)) return;
     view.page = 0;
-    if (tab !== this.tab || !this.active) return;
+    if (!this.active) return;
     this.#schedule(previous !== undefined && previous.search !== view.query.search);
   }
   #schedule(debounce = false): void {
     this.#cancel();
-    const view = this.#views[this.tab];
+    const view = this.#view;
     view.error = "";
     view.rows = [];
-    if (!this.active || !view.query || (this.dateInvalid && this.tab === "transactions")) {
+    if (!this.active || !view.query || this.dateInvalid) {
       this.requestUpdate();
       return;
     }
@@ -293,11 +420,9 @@ export class TillFindBillScreen extends LitElement {
     else void this.#read();
   }
   async #read(): Promise<void> {
-    const tab = this.tab,
-      view = this.#views[tab],
+    const view = this.#view,
       query = view.query;
-    if (!query || !this.active || !this.isConnected || (this.dateInvalid && tab === "transactions"))
-      return;
+    if (!query || !this.active || !this.isConnected || this.dateInvalid) return;
     this.#cancel();
     const generation = this.#generation;
     const controller = (this.#controller = new AbortController());
@@ -307,39 +432,23 @@ export class TillFindBillScreen extends LitElement {
     this.requestUpdate();
     const filter = (key: string) =>
       typeof query.filters[key] === "string" ? (query.filters[key] as string) : undefined;
-    const common = {
-      q: query.search,
-      page: view.page,
-      sort: {
-        key: query.sortKey || (tab === "bills" ? "openedAt" : "when"),
-        direction: query.sortKey ? query.sortDirection : ("descending" as const),
-      },
-      ...(filter("staff") ? { staffId: filter("staff") } : {}),
-    };
     try {
-      const result =
-        tab === "bills"
-          ? await this.api.listBills(
-              {
-                ...common,
-                ...(filter("zone") ? { zoneId: filter("zone") } : {}),
-                ...(filter("state") ? { state: filter("state") as BillsQuery["state"] } : {}),
-              },
-              { signal: controller.signal },
-            )
-          : await this.api.listTransactions(
-              {
-                ...common,
-                dates: this.dates,
-                ...(filter("method")
-                  ? { method: filter("method") as TransactionsQuery["method"] }
-                  : {}),
-                ...(filter("type") ? { type: filter("type") as TransactionsQuery["type"] } : {}),
-              },
-              { signal: controller.signal },
-            );
+      const result = await this.api.listTransactions(
+        {
+          q: query.search,
+          page: view.page,
+          sort: {
+            key: query.sortKey || "when",
+            direction: query.sortKey ? query.sortDirection : ("descending" as const),
+          },
+          ...(filter("staff") ? { staffId: filter("staff") } : {}),
+          dates: this.dates,
+          ...(filter("method") ? { method: filter("method") as TransactionsQuery["method"] } : {}),
+          ...(filter("type") ? { type: filter("type") as TransactionsQuery["type"] } : {}),
+        },
+        { signal: controller.signal },
+      );
       if (generation !== this.#generation || !this.active || !this.isConnected) return;
-      this.openCount = result.openCount;
       const last = Math.max(0, Math.ceil(result.total / 50) - 1);
       if (view.page > last) {
         view.total = result.total;
@@ -349,7 +458,7 @@ export class TillFindBillScreen extends LitElement {
       }
       view.rows = result.rows;
       view.total = result.total;
-      if ("dates" in result) this.resolved = result.dates;
+      this.resolved = result.dates;
     } catch {
       if (generation !== this.#generation || !this.active || !this.isConnected) return;
       view.error = label("load_failed");
@@ -359,12 +468,6 @@ export class TillFindBillScreen extends LitElement {
         this.requestUpdate();
       }
     }
-  }
-  #selectTab(event: CustomEvent<{ value: Tab }>): void {
-    event.stopPropagation();
-    this.#cancel();
-    this.tab = event.detail.value;
-    this.#read();
   }
   #setDates(preset: FindBillDates["preset"]): void {
     this.dates =
@@ -378,36 +481,34 @@ export class TillFindBillScreen extends LitElement {
       (!validDate(this.dateFrom) || !validDate(this.dateTo) || this.dateFrom > this.dateTo);
     if (this.dates.preset === "custom")
       this.dates = { preset: "custom", from: this.dateFrom, to: this.dateTo };
-    this.#views.transactions.page = 0;
+    this.#view.page = 0;
     this.#schedule();
   }
-  #clearFilters(tab: Tab, event: Event): void {
+  #clearFilters(event: Event): void {
     event.stopPropagation();
-    if (tab !== "transactions") return;
     this.dates = { preset: "any" };
     this.dateInvalid = false;
     this.resolved = null;
-    this.#views.transactions.page = 0;
+    this.#view.page = 0;
     const generation = this.#generation;
     void Promise.resolve()
-      .then(() => this.#grid(tab)?.updateComplete)
+      .then(() => this.#grid()?.updateComplete)
       .then(() => {
-        if (generation === this.#generation && this.active && this.tab === tab) this.#schedule();
+        if (generation === this.#generation && this.active) this.#schedule();
       });
   }
   #emit(name: string, detail: unknown = {}): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
-  #grid(tab: Tab): WtDataTable<Row> | null {
-    return this.shadowRoot?.querySelector(`wt-data-table[data-tab="${tab}"]`) ?? null;
+  #grid(): WtDataTable<Row> | null {
+    return this.shadowRoot?.querySelector<WtDataTable<Row>>("wt-data-table") ?? null;
   }
-  #columns(tab: Tab): DataTableColumn<Row>[] {
+  #columns(): DataTableColumn<Row>[] {
     const choices = (key: string, values: { value: string; label: string }[]) => ({
       label: label(key),
       allLabel: label(`any_${key}`),
       value: () => "",
       options: values,
-      preserveOrder: key === "state", // Bill lifecycle; other filters use labels.
     });
     const money = (value: string) => formatMoney(value, currentLocale());
     const column = (
@@ -419,84 +520,11 @@ export class TillFindBillScreen extends LitElement {
       label: label(key),
       cell,
       sortValue: () => "",
-      ...(key === (tab === "bills" ? "openedAt" : "when") ? {} : { choosable: "shown" }),
+      ...(key === "when" ? {} : { choosable: "shown" }),
       ...extra,
     });
     const options = this.options!;
-    if (tab === "bills") {
-      const cell = (read: (row: BillRow) => unknown) => (row: Row) => read(row as BillRow);
-      return [
-        column(
-          "openedAt",
-          cell(
-            (row) =>
-              html`${new Date(row.openedAt).toLocaleString(currentLocale(), { timeZone: options.timeZone })}${row.earlierDay ? html`<span part="earlier">${label("earlier")}</span>` : nothing}`,
-          ),
-        ),
-        column(
-          "tableName",
-          cell(
-            (row) =>
-              [
-                ...new Set(
-                  [
-                    row.tables.join(", ") || (row.partyId === null ? t("station.counter") : ""),
-                    row.partyName,
-                    row.label,
-                  ].filter(Boolean),
-                ),
-              ].join(" · ") || `#${row.orderNumber}`,
-          ),
-        ),
-        column(
-          "zone",
-          cell((row) => row.zoneName ?? "—"),
-          {
-            filter: choices(
-              "zone",
-              options.zones.map((o) => ({ value: o.id, label: o.name })),
-            ),
-          },
-        ),
-        column(
-          "staff",
-          cell((row) => row.staff.map((p) => p.name ?? "—").join(", ")),
-          {
-            filter: choices(
-              "staff",
-              options.billStaff.map((o) => ({ value: o.id, label: o.name })),
-            ),
-          },
-        ),
-        column(
-          "items",
-          cell((row) => row.itemCount),
-          { align: "end" },
-        ),
-        column(
-          "total",
-          cell((row) => money(row.total)),
-          { align: "end" },
-        ),
-        column(
-          "paid",
-          cell((row) => money(row.paid)),
-          { align: "end" },
-        ),
-        column(
-          "state",
-          cell((row) => label(row.state)),
-          {
-            filter: choices(
-              "state",
-              states.map((value) => ({ value, label: label(value) })),
-            ),
-          },
-        ),
-      ];
-    }
-    const cell = (read: (row: TransactionRow) => unknown) => (row: Row) =>
-      read(row as TransactionRow);
+    const cell = (read: (row: TransactionRow) => unknown) => read;
     return [
       column(
         "when",
@@ -612,18 +640,16 @@ export class TillFindBillScreen extends LitElement {
       >${text} ×</wt-button
     >`;
   }
-  #table(tab: Tab) {
-    const view = this.#views[tab],
-      columns = this.#columns(tab);
+  #table() {
+    const view = this.#view,
+      columns = this.#columns();
     const chips = Object.entries(view.query?.filters ?? {});
     return html`<wt-data-table
-      slot=${tab}
-      data-tab=${tab}
-      aria-label=${label(tab)}
-      viewKey=${`waitron.find-bill.${tab}`}
+      aria-label=${label("transactions")}
+      viewKey="waitron.find-bill.transactions"
       searchable
       searchLabel=${label("search")}
-      searchPlaceholder=${label(tab === "bills" ? "bill_search" : "transaction_search")}
+      searchPlaceholder=${label("transaction_search")}
       filtersLabel=${label("filters")}
       filteredColumnLabel=${label("filtered")}
       filtersClearAllLabel=${label("clear_all")}
@@ -645,20 +671,20 @@ export class TillFindBillScreen extends LitElement {
       nextPageLabel=${label("next")}
       .pageRangeLabel=${(from: number, to: number, total: number) => label("range").replace("{from}", from.toLocaleString(currentLocale())).replace("{to}", to.toLocaleString(currentLocale())).replace("{total}", total.toLocaleString(currentLocale()))}
       .serverPaging=${{ page: view.page, pageSize: 50, total: view.total }}
-      .externalFilterCount=${tab === "transactions" && this.dates.preset !== "any" ? 1 : 0}
+      .externalFilterCount=${this.dates.preset !== "any" ? 1 : 0}
       .rows=${view.rows}
       .columns=${columns}
-      .rowKey=${(row: Row) => ("workingOrderId" in row && !("saleId" in row) ? row.workingOrderId : (row as TransactionRow).transactionId)}
-      .sortKey=${tab === "bills" ? "openedAt" : "when"}
+      .rowKey=${(row: Row) => row.transactionId}
+      .sortKey=${"when"}
       sortDirection="descending"
-      .rowClickLabel=${() => label(tab === "bills" ? "open_bill" : "open_receipt")}
+      .rowClickLabel=${() => label("open_receipt")}
       .rowActivation=${() => (!view.loading && this.active && !this.busy ? "click" : "none")}
-      .rowClick=${(row: Row) => this.#emit(tab === "bills" ? "find-bill-open" : "find-transaction-open", { row })}
+      .rowClick=${(row: Row) => this.#emit("find-transaction-open", { row })}
       .loading=${view.loading}
       loadingMessage=${label("loading")}
       emptyMessage=${label("none")}
       errorMessage=${view.error}
-      @wt-query-change=${(event: CustomEvent<QueryDetail>) => this.#query(tab, event)}
+      @wt-query-change=${(event: CustomEvent<QueryDetail>) => this.#query(event)}
       @wt-page-change=${(event: CustomEvent<{ page: number }>) => {
         event.stopPropagation();
         if (!view.loading) {
@@ -666,12 +692,12 @@ export class TillFindBillScreen extends LitElement {
           this.#schedule();
         }
       }}
-      @wt-filters-clear=${(event: Event) => this.#clearFilters(tab, event)}
+      @wt-filters-clear=${(event: Event) => this.#clearFilters(event)}
     >
-      ${tab === "transactions" ? this.#dateControls() : nothing}
+      ${this.#dateControls()}
       <div slot="toolbar-bottom" class="chips">
-        ${tab === "transactions" && this.dates.preset !== "any" ? this.#chip("dates", `${label(this.dates.preset)}${!this.dateInvalid && this.resolved ? ` · ${this.resolved.from} – ${this.resolved.to}` : ""}`, label("remove_dates"), () => this.#setDates("any")) : nothing}
-        ${chips.map(([key, value]) => this.#chip(key, `${label(key)}: ${columns.find((c) => c.key === key)?.filter?.options.find((o) => o.value === value)?.label ?? value}`, label("remove_filter").replace("{filter}", label(key)), () => this.#grid(tab)?.chooseFilter(key, [])))}
+        ${this.dates.preset !== "any" ? this.#chip("dates", `${label(this.dates.preset)}${!this.dateInvalid && this.resolved ? ` · ${this.resolved.from} – ${this.resolved.to}` : ""}`, label("remove_dates"), () => this.#setDates("any")) : nothing}
+        ${chips.map(([key, value]) => this.#chip(key, `${label(key)}: ${columns.find((c) => c.key === key)?.filter?.options.find((o) => o.value === value)?.label ?? value}`, label("remove_filter").replace("{filter}", label(key)), () => this.#grid()?.chooseFilter(key, [])))}
         ${view.error ? html`<wt-button variant="secondary" @click=${() => this.#schedule()}>${label("retry")}</wt-button>` : nothing}
       </div>
     </wt-data-table>`;
@@ -689,24 +715,10 @@ export class TillFindBillScreen extends LitElement {
         <h1>${t("find_bill.title")}</h1>
       </header>
       ${this.options ? this.#correctionsList(this.options.timeZone) : nothing}
+      ${this.options ? this.#billSections(this.options.timeZone) : nothing}
       ${
         this.options
-          ? html`<wt-tabs
-              label=${t("find_bill.title")}
-              .items=${[
-                {
-                  key: "bills",
-                  label:
-                    this.openCount === null
-                      ? label("bills")
-                      : `${label("bills")} · ${countText(this.openCount, "find_page.open_count", "find_page.open_count_one")}`,
-                },
-                { key: "transactions", label: label("transactions") },
-              ]}
-              .value=${this.tab}
-              @wt-tab-change=${this.#selectTab}
-              >${this.#table("bills")}${this.#table("transactions")}</wt-tabs
-            >`
+          ? this.#table()
           : this.optionsError
             ? html`<p role="alert" class="error">${this.optionsError}</p>
                 <wt-button @click=${() => this.#loadOptions()}>${label("retry")}</wt-button>`

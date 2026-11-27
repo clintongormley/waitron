@@ -24,8 +24,6 @@ describe("Find a bill query", () => {
           sort: "total",
           direction: "ascending",
           staffId: uuid.toUpperCase(),
-          zoneId: uuid,
-          state: "part-paid",
         }),
       ),
     ).toEqual({
@@ -33,8 +31,6 @@ describe("Find a bill query", () => {
       page: 2,
       sort: { key: "total", direction: "ascending" },
       staffId: uuid,
-      zoneId: uuid,
-      state: "part-paid",
     });
     expect(
       parseTransactionsQuery(
@@ -89,10 +85,8 @@ describe("Find a bill query", () => {
   it.each([
     ["sort=when", "sort"],
     ["sort=", "sort"],
-    ["zoneId=bad", "zoneId"],
-    ["zoneId=", "zoneId"],
-    ["state=paid", "state"],
-    ["state=", "state"],
+    ["zoneId=" + uuid, "zoneId"],
+    ["state=unpaid", "state"],
     ["preset=today", "preset"],
     ["method=card", "method"],
   ])("rejects invalid Bills query %s", (query, field) => {

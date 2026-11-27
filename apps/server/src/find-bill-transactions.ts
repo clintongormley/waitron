@@ -1,7 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, rawCentsToDecimal, stringToCents } from "@waitron/shared";
-import { findBillsRelation } from "./find-bill-bills.js";
 import { resolveFindBillDates } from "./find-bill-dates.js";
 import type {
   DateWindow,
@@ -212,9 +211,6 @@ export async function readFindTransactions(
   const { rows: counts } = await tx.execute<{ total: number }>(
     sql`${ranked} select count(*) as total from ranked r where ${where}`,
   );
-  const { rows: open } = await tx.execute<{ total: number }>(
-    sql`${findBillsRelation(inZones)} select count(*) as total from bills`,
-  );
   const key = sorts[query.sort.key] ?? sorts.when!;
   const direction = query.sort.direction === "ascending" ? sql`asc` : sql`desc`;
   const { rows } = await tx.execute<RawTransaction>(sql`${ranked}
@@ -244,7 +240,6 @@ export async function readFindTransactions(
       amountMatch: row.amount_match,
     })),
     total: counts[0]!.total,
-    openCount: open[0]!.total,
     page: query.page,
     pageSize: 50,
     dates,

@@ -22,12 +22,9 @@ export type FindBillPage<Row> = {
   total: number;
   page: number;
   pageSize: 50;
-  openCount: number;
 };
 export type FindBillOptions = {
   timeZone: string;
-  zones: { id: string; name: string }[];
-  billStaff: { id: string; name: string }[];
   transactionStaff: { id: string; name: string }[];
 };
 

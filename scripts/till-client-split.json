@@ -521,7 +521,6 @@
           ],
           "FindBillApi": [
             "lookUpInvoices",
-            "lookUpBills",
             "listBills",
             "listTransactions",
             "getFindBill",

@@ -26385,7 +26385,7 @@ describe("A737 Find a bill page", () => {
       el.shadowRoot!.querySelector("till-find-bill-dialog")!.shadowRoot!.textContent,
     ).toContain("F/99");
   });
-  it("Find gate reports a party absent from the fresh floor without replacing the counter draft", async () => {
+  it("Find gate refuses a table bill it cannot collect without replacing the counter draft", async () => {
     const { el, view, counter } = await open({
       getFindBill: vi.fn().mockResolvedValue(billRow({ partyId: "departed-party" })),
       getTablesState: vi.fn().mockResolvedValue([]),
@@ -26399,62 +26399,6 @@ describe("A737 Find a bill page", () => {
     expect(counter.store.lines[0]!.quantity).toBe("2");
     expect(tableOrder(el)).toBeNull();
     expect(currentApi.getPartyBills).not.toHaveBeenCalled();
-  });
-  it("Find gate says to try again, not that the party is gone, when its own floor read fails", async () => {
-    const getTablesState = vi
-      .fn()
-      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-      .mockResolvedValue([]);
-    const { el, view, counter } = await open({
-      getFindBill: vi.fn().mockResolvedValue(billRow({ partyId: "departed-party" })),
-      getPartyBills: vi.fn(),
-    });
-    el.api.getTablesState = getTablesState;
-    counter.store.addProduct(coffee, "2");
-
-    emit(view, "find-bill-open", { row: billRow() });
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.open_failed")));
-    expect(el.shadowRoot!.textContent).not.toContain(t("held.stale"));
-    expect(pageOf(el)).toBe(view);
-    expect(view.busy).toBe(false);
-    expect(counter.store.lines[0]!.quantity).toBe("2");
-    expect(tableOrder(el)).toBeNull();
-
-    // The next attempt's read answers without the party, after the failure above.
-    emit(view, "find-bill-open", { row: billRow() });
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(t("held.stale")));
-    expect(el.shadowRoot!.textContent).not.toContain(t("held.open_failed"));
-    expect(getTablesState).toHaveBeenCalledTimes(2);
-    expect(view.busy).toBe(false);
-    expect(counter.store.lines[0]!.quantity).toBe("2");
-    expect(tableOrder(el)).toBeNull();
-    expect(currentApi.getPartyBills).not.toHaveBeenCalled();
-  });
-  it("Find gate ignores table discovery completed after Back", async () => {
-    let finish!: (tables: TableState[]) => void;
-    const { el, view, counter } = await open({
-      getFindBill: vi.fn().mockResolvedValue(billRow({ partyId: "v-2" })),
-      getPartyBills: vi.fn(),
-    });
-    const getTablesState = vi.fn(
-      () =>
-        new Promise<TableState[]>((done) => {
-          finish = done;
-        }),
-    );
-    el.api.getTablesState = getTablesState;
-    counter.store.addProduct(coffee, "2");
-    emit(view, "find-bill-open", { row: billRow() });
-    await vi.waitFor(() => expect(getTablesState).toHaveBeenCalledOnce());
-    emit(view, "find-bill-back");
-    await flush(el);
-    finish([openTable]);
-    await flush(el);
-    expect(pageOf(el)).toBeNull();
-    expect(tableOrder(el)).toBeNull();
-    expect(counter.store.lines[0]!.quantity).toBe("2");
-    expect(currentApi.getPartyBills).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.textContent).not.toContain(t("held.stale"));
   });
   it("Find gate keeps the draft when a paid bill's filed receipt read fails and allows retry", async () => {
     const getFiledTicket = vi
@@ -26652,16 +26596,7 @@ describe("A737 Find a bill page", () => {
     });
     counter.store.addProduct(coffee, "2");
     await view.updateComplete;
-    const tabs = view.shadowRoot!.querySelector("wt-tabs")!;
-    await userEvent.click(
-      page.elementLocator(
-        tabs.shadowRoot!.querySelector<HTMLElement>('[data-key="transactions"]')!,
-      ),
-    );
-    await flush(el);
-    const grid = view.shadowRoot!.querySelector<WtDataTable<unknown>>(
-      'wt-data-table[data-tab="transactions"]',
-    )!;
+    const grid = view.shadowRoot!.querySelector<WtDataTable<unknown>>("wt-data-table")!;
     await vi.waitFor(() => expect(grid.rows).toHaveLength(1));
     const search = grid.shadowRoot!.querySelector<HTMLInputElement>('input[type="search"]')!;
     await userEvent.fill(page.elementLocator(search), "0091 ");
@@ -26701,7 +26636,7 @@ describe("A737 Find a bill page", () => {
     emit(receipt, "back-to-find-bill");
     await flush(el);
     expect(pageOf(el)).toBe(view);
-    expect(view.shadowRoot!.querySelector('wt-data-table[data-tab="transactions"]')).toBe(grid);
+    expect(view.shadowRoot!.querySelector("wt-data-table")).toBe(grid);
     expect(counter.store.lines[0]!.quantity).toBe("2");
     await vi.waitFor(() =>
       expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ page: 1, q: "0091 " }),
@@ -27301,34 +27236,6 @@ describe("A737 Find a bill page", () => {
     },
   );
 
-  it("opens the selected party bill through the table's existing controls and retains a counter draft", async () => {
-    const getTabLines = vi
-      .fn<TillApi["getTabLines"]>()
-      .mockResolvedValue({ lines: [], revision: 0 });
-    const { el, view, counter } = await open({
-      getFindBill: vi
-        .fn()
-        .mockResolvedValue(
-          billRow({ workingOrderId: "wo-other", partyId: "v-2", state: "unpaid", paid: "0.00" }),
-        ),
-      getTablesState: vi.fn().mockResolvedValue([openTable]),
-      getPartyBills: vi
-        .fn()
-        .mockResolvedValue([
-          smallPartyBill,
-          { ...smallPartyBill, workingOrderId: "wo-other", billNumber: 2 },
-        ]),
-      getTabLines,
-    });
-    counter.store.addProduct(coffee, "1");
-    await flush(el);
-    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-other" }) });
-    await vi.waitFor(() => expect(tableOrder(el)?.orderId).toBe("wo-other"));
-    expect(getTabLines.mock.calls.map(([id]) => id)).toContain("wo-other");
-    expect(counter.store.lines[0]!.quantity).toBe("1");
-    expect(el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(false);
-    expect(currentApi.recordSale).not.toHaveBeenCalled();
-  });
   it("a placed uninvoiced counter order opens the existing collection stage", async () => {
     const retrievePlacedOrder = vi.fn().mockResolvedValue({
       zoneId: null,
@@ -27395,30 +27302,6 @@ describe("A737 Find a bill page", () => {
     expect(currentApi.collectOrder).not.toHaveBeenCalled();
   });
 
-  it("Back during a table offer read prevents that table from opening afterwards", async () => {
-    let finish!: (value: ZoneOffers) => void;
-    const listZoneOffers = vi.fn(
-      () =>
-        new Promise<ZoneOffers>((done) => {
-          finish = done;
-        }),
-    );
-    const { el, view } = await open({
-      getFindBill: vi.fn().mockResolvedValue(billRow({ partyId: "v-2", workingOrderId: "wo-7" })),
-      getTablesState: vi.fn().mockResolvedValue([openTable]),
-      getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
-      listZoneOffers,
-    });
-    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-7" }) });
-    await vi.waitFor(() => expect(listZoneOffers).toHaveBeenCalledTimes(1));
-    emit(view, "find-bill-back");
-    await flush(el);
-    finish(fixtureOffers({ menus: [defaultMenu], products: [coffee] }));
-    await flush(el);
-    expect(tableOrder(el)).toBeNull();
-    expect(pageOf(el)).toBeNull();
-    expect(currentApi.getTabLines).not.toHaveBeenCalled();
-  });
   it("Back aborts a pending placed-order read, which cannot replace a newer basket", async () => {
     let finish!: (value: object) => void;
     const retrievePlacedOrder = vi.fn<
@@ -27542,22 +27425,6 @@ describe("A737 Find a bill page", () => {
     await flush(el);
     expect(ticket(el)?.originalReceiptAvailable).toBe(false);
     expect(el.shadowRoot!.querySelector("till-find-bill-dialog")).toBeNull();
-  });
-  it("a handheld leaves Find a bill when its selected party bill opens", async () => {
-    const { el, view } = await open({
-      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: phoneFormFactor }),
-      getTablesState: vi.fn().mockResolvedValue([openTable]),
-      getPartyBills: vi.fn().mockResolvedValue([smallPartyBill]),
-      getFindBill: vi
-        .fn()
-        .mockResolvedValue(
-          billRow({ workingOrderId: "wo-7", partyId: "v-2", paid: "0.00", state: "unpaid" }),
-        ),
-    });
-    emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-7" }) });
-    await vi.waitFor(() => expect(tableOrder(el)?.orderId).toBe("wo-7"));
-    expect(shell(el)!.activeScreen).toBe("order");
-    expect(pageOf(el)).toBeNull();
   });
 });
 
@@ -28742,16 +28609,7 @@ describe("A737 post-invoice refund integration", () => {
       const { el, view, basket } = await open({ ...giving(), listTransactions });
       emit(ticket(el)!, "back-to-find-bill");
       await flush(el);
-      const tabs = view.shadowRoot!.querySelector("wt-tabs")!;
-      await userEvent.click(
-        page.elementLocator(
-          tabs.shadowRoot!.querySelector<HTMLElement>('[data-key="transactions"]')!,
-        ),
-      );
-      await flush(el);
-      const grid = view.shadowRoot!.querySelector<WtDataTable<unknown>>(
-        'wt-data-table[data-tab="transactions"]',
-      )!;
+      const grid = view.shadowRoot!.querySelector<WtDataTable<unknown>>("wt-data-table")!;
       await vi.waitFor(() => expect(grid.loading).toBe(false));
       await userEvent.click(
         page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>('[data-sort="amount"]')!),
@@ -28799,7 +28657,7 @@ describe("A737 post-invoice refund integration", () => {
       expect(giveBack(el)).toBeNull();
       emit(ticket(el)!, "back-to-find-bill");
       await flush(el);
-      expect(view.shadowRoot!.querySelector('wt-data-table[data-tab="transactions"]')).toBe(grid);
+      expect(view.shadowRoot!.querySelector("wt-data-table")).toBe(grid);
       await vi.waitFor(() => expect(listTransactions.mock.calls.at(-1)![0]).toEqual(before));
       expect(grid.serverPaging?.page).toBe(1);
       expect(search.value).toBe("0091 ");

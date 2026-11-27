@@ -43,8 +43,8 @@ Cuando la AEAT rechazó un registro por su descripción de la operación, el cas
 la AEAT junto a la descripción: corrígela ahí y elige **Enviar la subsanación**. Cuando la AEAT
 rechazó una factura simplificada porque su fecha era futura, indica el día en que se hizo de
 verdad la venta y elige **Enviar el rectificativo**: Waitron emite un ticket rectificativo que la
-sustituye, con fecha de hoy. No se imprime solo: en una caja, ábrelo en **Buscar cuenta**, en la
-pestaña **Transacciones**, y elige **Reimprimir**. Esa primera impresión es el original; las
+sustituye, con fecha de hoy. No se imprime solo: en una caja, ábrelo en **Buscar cuenta** y elige
+**Reimprimir**. Esa primera impresión es el original; las
 siguientes son copias. Solo un administrador puede enviar cualquiera de los dos; cualquier otra
 persona puede iniciar sesión como administrador desde el caso.
 

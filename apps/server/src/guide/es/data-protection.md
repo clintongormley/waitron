@@ -534,7 +534,7 @@ Esto es lo que el panel puede mostrarte.
   la persona en cada dispositivo, desde cuándo hasta cuándo, y sus inicios de sesión en el panel.
   Consulta [Descargar los datos de otra persona](staff.md#person-data).
 - En **Pedidos**, **Ver detalle** muestra las copias del recibo impresas desde **Pedidos** o desde
-  la pestaña **Transacciones** de la caja, con quién imprimió cada una. En una factura completa
+  **Buscar cuenta** en la caja, con quién imprimió cada una. En una factura completa
   también muestra cada vez que se imprimió o se envió por correo, con quién lo pidió cuando alguien
   lo hizo, y quién descargó su PDF. Si tienes permiso para enviar facturas por correo, puedes ver
   la dirección de cada intento de envío.

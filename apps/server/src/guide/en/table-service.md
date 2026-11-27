@@ -190,6 +190,12 @@ If you [add your own mail server](email.md#set-up), Waitron emails every adminis
 email address about each change; if you get one that
 nobody in your team made, check the account straight away.
 
+## Find a bill {#find-a-bill}
+
+**Find a bill** lists finished sales, newest first. Search by number, table, name, a card's last
+digits or an amount, such as 80.52. Above the sales, **Unpaid bills** lists bills guests left
+without paying, and **Counter orders** the counter orders not yet finished: choose one to open it.
+
 ## Choose a document and printer {#invoice-printer}
 
 Open a sale in **Find a bill** to check its receipt in the 80 mm paper layout. The receipt uses
@@ -197,7 +203,7 @@ the language it was issued in. For a paper copy, choose **Print/Reprint**. For a
 version or **Invoice** for the invoice layout. A simplified invoice goes straight to its receipt
 printers. Both versions of a full invoice keep the recorded customer details.
 
-If a full invoice linked to a bill may have printed, open it from **Bills** or **Transactions**
+If a full invoice linked to a bill may have printed, open it in **Find a bill**
 and check the named office printer first. If it did not print, choose **Print it again**. The
 window shows what happens next. Choose **Invoice printer** to send it to another printer.
 
@@ -213,7 +219,7 @@ it. Choosing a document or printer, refreshing the list and going back print not
 asks for its language when more than one is available; cancelling prints nothing. After a failed
 save, choose **Retry**; use **Refresh** if the list could not load.
 
-For an older full invoice with no bill, open it from **Transactions** and choose **Invoice**.
+For an older full invoice with no bill, open it in **Find a bill** and choose **Invoice**.
 Use **Receipt** for a compact copy once an original has completed. If printing fails, check the
 destination named by **Retry original** or choose the named receipt printer instead.
 
@@ -313,7 +319,7 @@ If the card provider cannot refund the payment yet, this attempt returned no mon
 You can close the window and start a new refund later.
 
 Once the refund is complete, choose **View acknowledgment** next to it in the bill’s payments.
-After invoicing, you can open the refund from **Transactions** in **Find a bill**.
+After invoicing, you can open the refund in **Find a bill**.
 Choose **Print** for the first copy. You can reprint it from the dashboard’s **Print Queue** for seven days.
 
 ## Cancel a dish on a saved Counter bill {#counter-cancel-item}
@@ -434,8 +440,7 @@ When a card refund waits for the card company, choose **Check again** to ask it 
 and **Refund the rest** when the window offers it. If you cannot give refunds yourself, a
 supervisor or manager approves asking with their PIN. If the window says the box did not answer,
 choose **Send again**. **Check again** and **Send again** never refund the same money twice. A
-corrective receipt or invoice that does not print by itself can be printed from **Find a bill**, on
-the **Transactions** tab.
+corrective receipt or invoice that does not print by itself can be printed from **Find a bill**.
 
 If you close the window before all the money is refunded, look for the receipt in **Find a bill**
 under **Refunds under way**. If it is not there, the refund is waiting on this till: open
@@ -710,7 +715,7 @@ supervisor or manager and ask them to enter their PIN.
 Only that bill’s unserved food is stopped, with cancellation slips for the station. The other bills
 keep their food, so you can still serve a paid guest’s dessert. What is still owed on the bill is
 recorded as unpaid; any amount already paid is kept. When the guest comes back to pay, open the bill
-from **Find a bill** and take the rest there. The table stays open while another bill needs closing
+under **Unpaid bills** in **Find a bill** and take the rest there. The table stays open while another bill needs closing
 or paid food still needs serving. Serve the remaining food, then choose **Finish table** when
 everyone has finished.
 

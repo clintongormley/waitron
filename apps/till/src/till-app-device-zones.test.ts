@@ -15,7 +15,7 @@ import {
   rgb,
   servedMenus,
 } from "./widgets/test-helpers.js";
-import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
+import { billOptions, listPage } from "../test/find-bill-fixtures.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -2176,34 +2176,6 @@ describe("a handheld's zones", () => {
       await vi.waitFor(() => expect(finishTable).toHaveBeenCalledOnce());
       await vi.waitFor(() => expect(floor(el)).not.toBeNull());
       expect(await activeTab(el)).toBe("garden");
-    });
-
-    it("opens as before when the Floor does not show that zone", async () => {
-      const garden = gardenTable();
-      const row = billRow({
-        workingOrderId: garden.party.openingBillId,
-        partyId: garden.party.id,
-        zoneId: "garden",
-      });
-      const { el } = await mountTables(selection(["bar", "room"], "room"), "phone-portrait", {
-        findBillOptions: vi.fn().mockResolvedValue(billOptions),
-        listInvoiceCorrections: vi.fn().mockResolvedValue([]),
-        listBills: vi.fn().mockResolvedValue(listPage([row])),
-        getFindBill: vi.fn().mockResolvedValue(row),
-      });
-      expect(await activeTab(el)).toBe("room");
-      shell(el).dispatchEvent(new CustomEvent("find-bill", { bubbles: true, composed: true }));
-      await vi.waitFor(() =>
-        expect(el.shadowRoot!.querySelector("till-find-bill-screen")).not.toBeNull(),
-      );
-      el.shadowRoot!.querySelector("till-find-bill-screen")!.dispatchEvent(
-        new CustomEvent("find-bill-open", { detail: { row }, bubbles: true, composed: true }),
-      );
-      await vi.waitFor(() => expect(orderScreen(el)?.draftStore).toBeTruthy());
-      await el.updateComplete;
-      await tapFloor(el);
-      expect(await activeTab(el)).toBe("room");
-      expect(location.pathname).not.toContain("garden");
     });
 
     it("forgets the zone at sign-out, for the next person and the same one", async () => {

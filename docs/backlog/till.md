@@ -1749,16 +1749,20 @@ shortcut to it draws an empty slot (`indexMenu`, `apps/till/src/widgets/menu-bro
 whose products are all sold out keeps its place, and its tile is not greyed; the products inside it
 are.
 
-### A737. Find a bill becomes a page with Bills and Transactions tabs
+### A737. Find a bill becomes a page listing finished sales
 
 Owner decision, 2026-10-15: replace the one-box Find a bill dialog with a full page, opened from
 ☰, with Back to the counter (board 4). [Part 1 (#1778)](https://github.com/clintongormley/waitron/pull/1778) covers the page, lists and receipt printing; the
-post-invoice Refund action belongs to Part 2. The approved page contract is:
+post-invoice Refund action belongs to Part 2. The approved page contract, with one list since
+2026-11-27 (R2b-1 of the [Find a bill plan](../superpowers/plans/2026-11-27-o-r2-find-a-bill.md);
+the [handheld design](../superpowers/specs/2026-11-26-till-handheld-redesign-design.md) §7.12:
+finished sales only), is:
 
-- **Bills** lists every order still open, newest first: opened, table or name, zone, staff, items,
-  total, paid so far, state (unpaid, held, part paid, paid not handed over; an order from an earlier
-  day marked). Filters: zone, staff, state. Tapping a row opens the order where it can be paid.
-- **Transactions** lists paid sales, full invoices and refunds, newest first, today by default:
+- **No tabs, and no list of every open order.** Above the sales, **Unpaid bills** lists the bills
+  guests left without paying and **Counter orders** the counter orders parked, presented, or paid
+  and not handed over; tapping one opens it where it can be paid or handed over. A seated table's
+  bill is reached from its table.
+- **The sales list** shows paid sales, full invoices and refunds, newest first, today by default:
   when, invoice number, type, table or name, method (card with its last four digits), staff,
   amount. Filters: dates, method, type, staff. Search reads invoice number, name, table and the
   card's last four digits. Tapping a row opens the receipt with Reprint, print in another language,

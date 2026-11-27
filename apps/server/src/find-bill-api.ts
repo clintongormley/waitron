@@ -1,9 +1,9 @@
 import type { Hono } from "hono";
-import { sql, type SQL } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { readVenueClock, withTransaction, type Transaction } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
-import { findBillsRelation, readFindBill, readFindBills } from "./find-bill-bills.js";
+import { readFindBill, readFindBills } from "./find-bill-bills.js";
 import { findTransactionsRelation, readFindTransactions } from "./find-bill-transactions.js";
 import { parseBillsQuery, parseTransactionsQuery } from "./find-bill-query.js";
 import type { FindBillOptions } from "./find-bill-types.js";
@@ -18,26 +18,12 @@ export async function readFindBillOptions(
   tx: Transaction,
   inZones?: OrderZoneCondition,
 ): Promise<FindBillOptions> {
-  const bills = findBillsRelation(inZones);
-  const choices = async (relation: SQL, select: SQL) =>
-    (await tx.execute<{ id: string; name: string }>(sql`${relation} ${select}`)).rows;
-  const zones = await choices(
-    bills,
-    sql`select distinct zone_id as id,zone_name as name from bills where zone_id is not null order by name,id`,
-  );
-  const billStaff = await choices(
-    bills,
-    sql`select distinct l.credited_to as id,coalesce(p.display_name,l.credited_to) as name
-    from bills b join working_order_lines l on l.working_order_id=b.id left join persons p on p.id=l.credited_to
-    where l.credited_to is not null order by name,id`,
-  );
-  const transactionStaff = await choices(
-    findTransactionsRelation(inZones),
-    sql`select distinct operator_id as id,coalesce(staff_name,operator_id) as name
+  const { rows: transactionStaff } = await tx.execute<{ id: string; name: string }>(
+    sql`${findTransactionsRelation(inZones)} select distinct operator_id as id,coalesce(staff_name,operator_id) as name
     from transactions where operator_id is not null order by name,id`,
   );
   const { timeZone } = await readVenueClock(tx);
-  return { timeZone, zones, billStaff, transactionStaff };
+  return { timeZone, transactionStaff };
 }
 
 export function mountFindBillApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
@@ -45,14 +31,9 @@ export function mountFindBillApi(app: Hono, deps: TillApiDeps, log: Logger, run:
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const query = parseBillsQuery(new URL(c.req.url).searchParams);
-      const result = await withTransaction(deps.db, async (tx) => {
-        if (query.zoneId !== undefined) await checkZones(tx, session, [{ zoneId: query.zoneId }]);
-        return readFindBills(
-          tx,
-          query,
-          await orderZoneCondition(tx, session.device.deviceProfileId),
-        );
-      });
+      const result = await withTransaction(deps.db, async (tx) =>
+        readFindBills(tx, query, await orderZoneCondition(tx, session.device.deviceProfileId)),
+      );
       return c.json(result);
     }),
   );

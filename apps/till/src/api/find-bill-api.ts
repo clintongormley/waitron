@@ -47,8 +47,6 @@ function findBillParams(query: BillsQuery | TransactionsQuery): string {
     if (query.method !== undefined) params.set("method", query.method);
     if (query.type !== undefined) params.set("type", query.type);
   } else {
-    if (query.zoneId !== undefined) params.set("zoneId", query.zoneId);
-    if (query.state !== undefined) params.set("state", query.state);
     if (query.owed === true) params.set("owed", "true");
     if (query.counter === true) params.set("counter", "true");
   }
@@ -85,14 +83,6 @@ export class FindBillApi extends DrawerApi {
   lookUpInvoices(q: string, options: ReadOptions = {}): Promise<{ invoices: InvoiceLookupRow[] }> {
     return this.#request<{ invoices: InvoiceLookupRow[] }>(
       `/api/invoices/lookup?q=${encodeURIComponent(q)}`,
-      "GET",
-      undefined,
-      options.signal,
-    );
-  }
-  lookUpBills(q: string, options: ReadOptions = {}): Promise<{ bills: BillLookupRow[] }> {
-    return this.#request<{ bills: BillLookupRow[] }>(
-      `/api/bills/lookup?q=${encodeURIComponent(q)}`,
       "GET",
       undefined,
       options.signal,
