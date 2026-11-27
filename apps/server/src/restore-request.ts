@@ -255,7 +255,8 @@ export interface StagingChecks {
 export async function stageRestoreRequest<R extends RestoreRequest>(
   stateDir: string,
   request: R,
-  validate?: (request: R) => Promise<StagingChecks | void>,
+  /** `authority` is the authority key of the request's typed master key, when it carries one. */
+  validate?: (request: R, authority: Buffer | undefined) => Promise<StagingChecks | void>,
 ): Promise<void> {
   if (request.kind === "stream" && "snapshotVerification" in request) cloudRecoveryUnavailable();
   const archiveId = () =>
@@ -297,13 +298,16 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
       variable: "WAITRON_RECOVERY_OPERATION_FILE",
       reason: "invalid_operation",
     });
-  const secret =
-    request.nodeRecoverySecret === undefined ? undefined : stagedForm(request.nodeRecoverySecret);
+  const authority =
+    request.nodeRecoverySecret === undefined
+      ? undefined
+      : stagedAuthority(request.nodeRecoverySecret);
+  const secret = authority?.toString("hex");
   if (secret !== undefined && recoveryOperation === undefined) invalidNodeKey();
   const context = recoveryContext(request.recoveryContext);
   if (context !== undefined && (secret === undefined || recoveryOperation === undefined))
     invalidRecoveryContext();
-  const checked = await validate?.(request);
+  const checked = await validate?.(request, authority);
   const keyName = secret === undefined ? null : (checked?.masterKeyName ?? null);
   if (secret !== undefined && recoveryOperation !== undefined) {
     assertSource(recoveryOperation, await archiveId());
@@ -774,12 +778,13 @@ async function adminVerifiersIn(query: BackupQuery): Promise<readonly string[]> 
   return hashes;
 }
 
-/** The setup page's checks on an archive before staging it, its authorisation key included;
- * answers what staging keeps of it. */
+/** The setup page's checks on an archive before staging it, `authority` (the typed master key's
+ * authority key) included; answers what staging keeps of it. */
 export async function validateArchiveForStaging(
   candidate: ArchiveRequest,
   deps: Pick<ValidationDeps, "stateDir" | "migrationsRoot" | "modules"> &
     Omit<Parameters<typeof refuseIfArchiveSourceLive>[0], "validated">,
+  authority: Buffer | undefined,
 ): Promise<StagingChecks> {
   const validation = {
     recoveryKey: candidate.recoveryKey,
@@ -796,12 +801,7 @@ export async function validateArchiveForStaging(
   try {
     await assertArchiveNotAhead(validated, deps);
     await refuseIfArchiveSourceLive({ ...deps, validated });
-    return await readStagingChecks(
-      validated.databasePath,
-      candidate.nodeRecoverySecret === undefined
-        ? undefined
-        : stagedAuthority(candidate.nodeRecoverySecret),
-    );
+    return await readStagingChecks(validated.databasePath, authority);
   } finally {
     await validated.discard();
   }

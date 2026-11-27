@@ -1,8 +1,8 @@
 import { access, cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { encodeMasterKeyCode } from "@waitron/shared";
-import { makeMasterKey } from "@waitron/credentials";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
+import { authorityKey, makeMasterKey } from "@waitron/credentials";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { invoiceSeries, nodes, openVenueDatabase, taxpayer, withTransaction } from "@waitron/db";
 import {
@@ -327,14 +327,18 @@ describe("the setup page staging an archive file", () => {
         environment: "preproduction",
         ...keyed,
       },
-      (candidate) =>
-        validateArchiveForStaging(candidate, {
-          stateDir,
-          migrationsRoot: null,
-          modules: ALL_MODULES,
-          oldBoxGone: true,
-          now: () => new Date(),
-        }),
+      (candidate, authority) =>
+        validateArchiveForStaging(
+          candidate,
+          {
+            stateDir,
+            migrationsRoot: null,
+            modules: ALL_MODULES,
+            oldBoxGone: true,
+            now: () => new Date(),
+          },
+          authority,
+        ),
     ).then(
       () => "staged" as const,
       (error: unknown) => ({ refusal: (error as { code?: string }).code ?? String(error) }),
@@ -424,6 +428,7 @@ describe("the setup page staging an archive file", () => {
           oldBoxGone: true,
           now: () => new Date(),
         },
+        authorityKey(decodeMasterKeyCode(typed)),
       ).then(
         () => undefined,
         (error: unknown) => error as { code: string; params: unknown },

@@ -1620,15 +1620,19 @@ async function bootServer(
             openStore: openBoundedBucket,
           }),
         stageRestore: (request, { oldBoxGone }) =>
-          stageRestoreRequest(config.stateDir, request, (candidate) =>
-            validateArchiveForStaging(candidate, {
-              stateDir: config.stateDir,
-              migrationsRoot: config.migrationsRoot,
-              modules: availableModules,
-              oldBoxGone,
-              now,
-              openStore: openBoundedBucket,
-            }),
+          stageRestoreRequest(config.stateDir, request, (candidate, authority) =>
+            validateArchiveForStaging(
+              candidate,
+              {
+                stateDir: config.stateDir,
+                migrationsRoot: config.migrationsRoot,
+                modules: availableModules,
+                oldBoxGone,
+                now,
+                openStore: openBoundedBucket,
+              },
+              authority,
+            ),
           ),
         stageReset: (operationId) => stageResetRequest(config.stateDir, operationId),
         stageBucketRestore: async (
