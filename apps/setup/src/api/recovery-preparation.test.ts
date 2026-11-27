@@ -34,7 +34,7 @@ it("sends the actual archive with separate backup and node credentials in multip
       {
         kind: "archive",
         artifact: new Blob(["encrypted copy"]),
-        recoveryKey: "archive password",
+        masterKey: "archive password",
         environment: "production",
       },
       input,
@@ -47,7 +47,7 @@ it("sends the actual archive with separate backup and node credentials in multip
   const form = init?.body as FormData;
   expect(await (form.get("artifact") as Blob).text()).toBe("encrypted copy");
   expect(JSON.parse(String(form.get("request")))).toEqual({
-    source: { kind: "archive", recoveryKey: "archive password", environment: "production" },
+    source: { kind: "archive", masterKey: "archive password", environment: "production" },
     preparation: input,
   });
 });
@@ -71,7 +71,7 @@ it.each(["archive", "cloud"])(
         ? {
             kind: "archive" as const,
             artifact: new Blob(["copy"]),
-            recoveryKey: "password",
+            masterKey: "password",
             environment: "production" as const,
           }
         : { kind: "cloud" as const, pointId: "selected-point" };

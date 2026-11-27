@@ -219,7 +219,7 @@ export type RecoveryPreparationSource =
   | {
       kind: "archive";
       artifact: Blob;
-      recoveryKey: string;
+      masterKey: string;
       environment: "production" | "preproduction";
     }
   | { kind: "bucket"; kit: string; environment: "production" | "preproduction" }
@@ -669,18 +669,20 @@ export class SetupApi {
   /** `oldBoxGone` answers `restore.stream_source_live`/`restore.stream_source_unchecked`. */
   async restore(
     artifact: Blob,
-    recoveryKey: string,
+    masterKey: string,
     environment: "production" | "preproduction",
     oldBoxGone: boolean,
     recovery: RecoveryRestoreCredentials,
   ): Promise<RestoreOutcome> {
     const form = new FormData();
     form.set("artifact", artifact, "backup.waitron");
-    form.set("recoveryKey", recoveryKey);
+    form.set("masterKey", masterKey);
     form.set("environment", environment);
     form.set("oldBoxGone", oldBoxGone ? "1" : "0");
     form.set("recoveryOperation", JSON.stringify(recovery.recoveryOperation));
-    form.set("nodeRecoverySecret", recovery.nodeRecoverySecret);
+    // The box takes the master key as the authorisation too when no separate one is sent.
+    if (recovery.nodeRecoverySecret !== masterKey)
+      form.set("nodeRecoverySecret", recovery.nodeRecoverySecret);
     if (recovery.recoveryContext !== undefined)
       form.set("recoveryContext", JSON.stringify(recovery.recoveryContext));
     const res = await upload(this.#fetchImpl, this.#baseUrl + "/setup-api/restore", {
@@ -726,14 +728,14 @@ export class SetupApi {
   /** Checks the backup once on the box, so the clock requests that follow carry only its id. */
   async stageRecovery(
     artifact: Blob,
-    recoveryKey: string,
+    masterKey: string,
     environment: "production" | "preproduction",
     eventId: string,
   ): Promise<{ stagedId: string }> {
     const form = new FormData();
     form.set(
       "request",
-      JSON.stringify({ eventId, source: { kind: "archive", recoveryKey, environment } }),
+      JSON.stringify({ eventId, source: { kind: "archive", masterKey, environment } }),
     );
     form.set("artifact", artifact);
     const response = await upload(this.#fetchImpl, this.#baseUrl + "/setup-api/recovery/stage", {
@@ -755,7 +757,7 @@ export class SetupApi {
 
   async previewRestore(
     artifact: Blob,
-    recoveryKey: string,
+    masterKey: string,
     environment: "production" | "preproduction",
   ): Promise<RecoveryBackupPreview> {
     const fetchImpl = this.#fetchImpl;
@@ -764,7 +766,7 @@ export class SetupApi {
       credentials: "include",
       headers: {
         "content-type": "application/octet-stream",
-        "x-waitron-recovery-key": recoveryKey,
+        "x-waitron-master-key": masterKey,
         "x-waitron-restore-environment": environment,
       },
       body: artifact,

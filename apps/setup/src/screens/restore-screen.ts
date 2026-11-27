@@ -139,7 +139,7 @@ export class SetupRestoreScreen extends LitElement {
     if (changed.has("invalidField")) this.feedback.newRefusal("field");
     if (changed.has("request") && this.request !== undefined) {
       this.artifact = this.request.artifact;
-      this.recoveryKey = this.request.recoveryKey;
+      this.recoveryKey = this.request.masterKey;
       this.environment = this.request.environment;
       // A request is only sent once the owner has ticked this.
       this.acknowledged = true;
@@ -247,7 +247,7 @@ export class SetupRestoreScreen extends LitElement {
     dispatchRestoreRequested(this, {
       ...credentials,
       artifact,
-      recoveryKey: this.recoveryKey,
+      masterKey: this.recoveryKey,
       environment: this.environment,
       oldBoxGone: this.#askingOldBox && this.oldBoxGone,
     });

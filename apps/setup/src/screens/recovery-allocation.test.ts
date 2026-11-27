@@ -148,7 +148,7 @@ it("forwards credentials from the archive screen after the operator's confirmati
   expect((await delivered).detail.request).toMatchObject({
     recoveryOperation: operation,
     nodeRecoverySecret: nodeKey,
-    recoveryKey: "archive-key",
+    masterKey: "archive-key",
   });
 });
 it("clears the key and public record when leaving or changing the selected copy", async () => {

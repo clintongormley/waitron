@@ -135,7 +135,7 @@ function restoreRequest(
   el: SetupApp,
   request: {
     artifact: File;
-    recoveryKey: string;
+    masterKey: string;
     environment: "production" | "preproduction";
     oldBoxGone?: boolean;
   },
@@ -1120,14 +1120,14 @@ describe("setup-app", () => {
     const el = await mountSetupApp(stubApi({ restore }));
     const request = {
       artifact: new File(["encrypted"], "waitron.backup"),
-      recoveryKey: "recovery-key",
+      masterKey: "recovery-key",
       environment: "production" as const,
     };
     restoreRequest(el, request);
     await flush(el);
     expect(restore).toHaveBeenCalledWith(
       request.artifact,
-      request.recoveryKey,
+      request.masterKey,
       request.environment,
       false,
       REVIEWED_CREDENTIALS,
@@ -1140,7 +1140,7 @@ describe("setup-app", () => {
     const el = await mountSetupApp(stubApi({ restore }));
     restoreRequest(el, {
       artifact: new File(["encrypted"], "waitron.backup"),
-      recoveryKey: "recovery-key",
+      masterKey: "recovery-key",
       environment: "production",
     });
     await flush(el);
@@ -2810,7 +2810,7 @@ describe("resetting a join that stopped partway", () => {
       (el: SetupApp) =>
         restoreRequest(el, {
           artifact: new File(["encrypted"], "waitron.backup"),
-          recoveryKey: "k",
+          masterKey: "k",
           environment: "production",
         }),
     ],
@@ -3605,7 +3605,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     );
     restoreRequest(el, {
       artifact: new File(["encrypted"], "waitron.backup"),
-      recoveryKey: "recovery-key",
+      masterKey: "recovery-key",
       environment: "production",
     });
     await flush(el);
@@ -3717,7 +3717,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       const el = await mountSetupApp(stubApi({ restore }));
       restoreRequest(el, {
         artifact: new File(["backup"], "venue.waitron-backup"),
-        recoveryKey: "recovery key",
+        masterKey: "recovery key",
         environment: "production",
       });
       await flush(el);
@@ -4561,6 +4561,11 @@ describe("restore from my bucket", () => {
       "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
     ],
     [
+      "backup.archive_key_invalid",
+      { input: "backup_key" },
+      "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
+    ],
+    [
       "backup.stream_restore_failed",
       { exitCode: 1, diskFull: false },
       "The copy could not be downloaded from the bucket. Check this box's internet connection and that the bucket still exists, then try again.",
@@ -4908,7 +4913,7 @@ describe("restore from my bucket", () => {
 describe("restoring a backup file whose old server may still be running", () => {
   const backup = {
     artifact: new File([Uint8Array.from([1])], "b.wbk"),
-    recoveryKey: "k",
+    masterKey: "k",
     environment: "production" as const,
   };
 
@@ -4966,9 +4971,15 @@ describe("restoring a backup file whose old server may still be running", () => 
     ["setup.request_invalid", { field: "artifact" }, "artifact", "Check the backup file."],
     [
       "setup.request_invalid",
-      { field: "recoveryKey" },
+      { field: "masterKey" },
       "recoveryKey",
       "Check the backup encryption key.",
+    ],
+    [
+      "promotion.break_glass_invalid",
+      { masterKeyId: "ab".repeat(16), keyNumber: 2, keyName: "2026-11-02 · QZJV" },
+      "recoveryKey",
+      "Wrong master key. Use the one dated 2026-11-02 · QZJV.",
     ],
     [
       "setup.request_invalid",
@@ -5488,6 +5499,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     ["recovery.passphrase_invalid", 422, cloudUnopenable],
     ["backup.artifact_invalid", 422, cloudUnopenable],
     ["backup.archive_invalid", 422, cloudUnopenable],
+    ["backup.archive_key_invalid", 422, cloudUnopenable],
     [
       "restore.environment_mismatch",
       409,
@@ -5805,7 +5817,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
 describe("an answer that arrives after the element is detached", () => {
   const backup = {
     artifact: new File(["encrypted"], "waitron.backup"),
-    recoveryKey: "recovery-key",
+    masterKey: "recovery-key",
     environment: "production" as const,
   };
   const configFile = new File(["encrypted"], "prepared.waitron-config");
@@ -6327,7 +6339,7 @@ describe("first setup owner refusals", () => {
           (el: SetupApp) =>
             restoreRequest(el, {
               artifact: new File([Uint8Array.from([1])], "b.wbk"),
-              recoveryKey: "k",
+              masterKey: "k",
               environment: "production",
             }),
         ],
@@ -6792,7 +6804,7 @@ describe("a finish refused while a clock step's note is unsaved", () => {
       const el = await mountSetupApp(stubApi({ restore: vi.fn().mockRejectedValue(refusal) }));
       restoreRequest(el, {
         artifact: new File(["encrypted"], "waitron.backup"),
-        recoveryKey: "recovery-key",
+        masterKey: "recovery-key",
         environment: "production",
       });
       await flush(el);

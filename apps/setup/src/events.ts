@@ -50,7 +50,7 @@ export function dispatchResetRequested(el: EventTarget): void {
 
 export interface RestoreRequestDetail extends RecoveryRestoreCredentials {
   artifact: File;
-  recoveryKey: string;
+  masterKey: string;
   environment: "production" | "preproduction";
   /** The owner answered the old-server question (#646). */
   oldBoxGone: boolean;

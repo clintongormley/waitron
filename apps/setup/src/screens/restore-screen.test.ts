@@ -222,7 +222,7 @@ describe("SetupRestoreScreen", () => {
     await expect(outcome).resolves.toEqual({
       ...REVIEWED_CREDENTIALS,
       artifact,
-      recoveryKey: "recovery-key",
+      masterKey: "recovery-key",
       environment: "production",
       oldBoxGone: false,
     });
@@ -312,7 +312,7 @@ describe("SetupRestoreScreen", () => {
       {
         ...REVIEWED_CREDENTIALS,
         artifact: BACKUP,
-        recoveryKey: "recovery-key",
+        masterKey: "recovery-key",
         environment: "preproduction",
         oldBoxGone: false,
       },
@@ -395,7 +395,7 @@ describe("SetupRestoreScreen", () => {
   it("comes back from a refusal with the backup, the key and the answers kept", async () => {
     const request: KeptRestoreRequest = {
       artifact: BACKUP,
-      recoveryKey: "recovery-key",
+      masterKey: "recovery-key",
       environment: "preproduction",
       oldBoxGone: false,
     };
@@ -426,7 +426,7 @@ describe("SetupRestoreScreen", () => {
   it("drops the old-server answer when a different backup file is chosen", async () => {
     const request: KeptRestoreRequest = {
       artifact: BACKUP,
-      recoveryKey: "recovery-key",
+      masterKey: "recovery-key",
       environment: "production",
       oldBoxGone: true,
     };
@@ -573,7 +573,7 @@ describe("SetupRestoreScreen", () => {
   describe("a refusal about one field", () => {
     const REQUEST: KeptRestoreRequest = {
       artifact: BACKUP,
-      recoveryKey: "recovery-key",
+      masterKey: "recovery-key",
       environment: "production",
       oldBoxGone: false,
     };

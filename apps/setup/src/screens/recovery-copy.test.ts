@@ -87,7 +87,7 @@ it("uploads the backup once and sends every clock and selection request as small
   const form = staged[0]!.init.body as FormData;
   expect(JSON.parse(form.get("request") as string)).toEqual({
     eventId: "event-1",
-    source: { kind: "archive", recoveryKey: "archive-key", environment: "preproduction" },
+    source: { kind: "archive", masterKey: "archive-key", environment: "preproduction" },
   });
   expect(await (form.get("artifact") as Blob).text()).toBe("encrypted-copy");
   const preparations = at(calls, "/setup-api/recovery/preparation");

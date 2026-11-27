@@ -181,7 +181,7 @@ it.each(["archive", "bucket", "cloud"] as const)(
     if (kind === "archive") {
       expect(stages[0]!.request).toEqual({
         eventId: credentials.recoveryOperation.binding.eventId,
-        source: { kind, recoveryKey: "archive password", environment: "production" },
+        source: { kind, masterKey: "archive password", environment: "production" },
       });
       expect(await stages[0]!.artifact.text()).toBe(await artifact.text());
     }

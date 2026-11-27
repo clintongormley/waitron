@@ -20,7 +20,7 @@ it("uploads the selected archive to preview without putting its key in the URL",
     credentials: "include",
     headers: {
       "content-type": "application/octet-stream",
-      "x-waitron-recovery-key": "archive-key",
+      "x-waitron-master-key": "archive-key",
       "x-waitron-restore-environment": "preproduction",
     },
     body: archive,

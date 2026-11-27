@@ -60,7 +60,7 @@ it.each(["archive", "bucket"])(
             kind === "archive"
               ? {
                   artifact: new File(["encrypted"], "copy.backup"),
-                  recoveryKey: "archive-key",
+                  masterKey: "archive-key",
                   environment: "production",
                   oldBoxGone: true,
                   ...credentials,
@@ -87,7 +87,7 @@ it.each(["archive", "bucket"])(
     expect(kept).toBeDefined();
     expect(kept!.nodeRecoverySecret).toBeUndefined();
     expect(kept!.recoveryOperation).toBeUndefined();
-    expect(kind === "archive" ? kept!.recoveryKey : kept!.kit).toBe(
+    expect(kind === "archive" ? kept!.masterKey : kept!.kit).toBe(
       kind === "archive" ? "archive-key" : "outside-bucket-kit",
     );
   },
@@ -136,7 +136,7 @@ it.each(["archive", "cloud"])(
             ? {
                 request: {
                   artifact: new File(["encrypted"], "copy.backup"),
-                  recoveryKey: "archive-key",
+                  masterKey: "archive-key",
                   environment: "production",
                   oldBoxGone: true,
                   ...credentials,
@@ -155,7 +155,8 @@ it.each(["archive", "cloud"])(
       expect(JSON.parse(body.get("recoveryOperation") as string)).toEqual(
         credentials.recoveryOperation,
       );
-      expect(body.get("recoveryKey")).toBe("archive-key");
+      expect(body.get("masterKey")).toBe("archive-key");
+      expect(body.has("recoveryKey")).toBe(false);
     } else expect(await request.json()).toMatchObject(credentials);
   },
 );
@@ -223,7 +224,7 @@ it.each(["archive", "bucket", "cloud"])(
                     kind === "archive"
                       ? {
                           artifact: new File(["encrypted"], "copy.backup"),
-                          recoveryKey: "archive password",
+                          masterKey: "archive password",
                           environment: "production",
                           ...common,
                         }
@@ -283,7 +284,7 @@ it.each(["archive", "bucket"])(
             ...(kind === "archive"
               ? {
                   artifact: new File(["encrypted"], "copy.backup"),
-                  recoveryKey: "archive password",
+                  masterKey: "archive password",
                 }
               : { kit: "private kit", venueConfirmed: null }),
           },
@@ -368,7 +369,7 @@ it.each([
                     kind === "archive"
                       ? {
                           artifact: new File(["encrypted"], "copy.backup"),
-                          recoveryKey: "archive password",
+                          masterKey: "archive password",
                           environment: "production",
                           ...common,
                         }
@@ -445,7 +446,7 @@ it.each(["archive", "bucket", "cloud"])(
                     kind === "archive"
                       ? {
                           artifact: new File(["encrypted"], "copy.backup"),
-                          recoveryKey: "archive password",
+                          masterKey: "archive password",
                           environment: "production",
                           ...common,
                         }

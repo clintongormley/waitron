@@ -519,9 +519,20 @@ const RESTORE_FIELD_PATHS: Record<string, RestoreField> = {
   recoveryOperation: "recoveryOperation",
   nodeRecoverySecret: "nodeRecoverySecret",
   artifact: "artifact",
-  recoveryKey: "recoveryKey",
+  masterKey: "recoveryKey",
   environment: "environment",
 };
+
+/** The master key that does not open the file is refused naming the file's key number; one that
+ * opens it but does not authorise the restore is refused without it. */
+function restoreRefusedField(
+  code: unknown,
+  params: Record<string, unknown> | undefined,
+): RestoreField | undefined {
+  return code === "promotion.break_glass_invalid" && params?.keyNumber !== undefined
+    ? "recoveryKey"
+    : refusedField(code, params, RESTORE_FIELD_CODES, RESTORE_FIELD_PATHS);
+}
 
 const BUCKET_FIELD_CODES: Record<string, BucketField> = {
   "promotion.break_glass_invalid": "nodeRecoverySecret",
@@ -585,6 +596,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
   "recovery.passphrase_invalid": "shell.bucket.unopenable",
   "backup.artifact_invalid": "shell.bucket.unopenable",
   "backup.archive_invalid": "shell.bucket.unopenable",
+  "backup.archive_key_invalid": "shell.bucket.unopenable",
   "backup.stream_restore_failed": "shell.bucket.restore_failed",
   "backup.stream_request_failed": "shell.bucket.request_failed",
   "restore.stream_disk_full": "shell.bucket.disk_full",
@@ -612,6 +624,7 @@ const CLOUD_ERROR_MESSAGES: Record<string, StringKey> = {
   "recovery.passphrase_invalid": "shell.cloud.unopenable",
   "backup.artifact_invalid": "shell.cloud.unopenable",
   "backup.archive_invalid": "shell.cloud.unopenable",
+  "backup.archive_key_invalid": "shell.cloud.unopenable",
   "restore.environment_mismatch": "shell.cloud.environment_mismatch",
 };
 
@@ -2289,7 +2302,7 @@ export class SetupApp extends LitElement {
     try {
       await this.api.restore(
         request.artifact,
-        request.recoveryKey,
+        request.masterKey,
         request.environment,
         request.oldBoxGone,
         recoveryCredentials(request),
@@ -2321,12 +2334,7 @@ export class SetupApp extends LitElement {
         this.restoreLiveSince = undefined;
         this.restoreLiveUnknown = true;
       } else {
-        this.restoreInvalidField = refusedField(
-          code,
-          params,
-          RESTORE_FIELD_CODES,
-          RESTORE_FIELD_PATHS,
-        );
+        this.restoreInvalidField = restoreRefusedField(code, params);
         const finishKey =
           manifestRefusalKey(code, params) ?? finishRefusalKey(error, "shell.clock_step_unsaved");
         this.restoreError =
