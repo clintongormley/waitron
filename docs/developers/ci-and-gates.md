@@ -1566,9 +1566,27 @@ finishes inside its 50-minute limit was not measured before landing.
 (head 8ce59dc1ce, with the new icon tests) still cancelled `mutation-ui` shard 30 at its 50-minute
 limit; its log reported 72 static mutants, and `wt-icon.ts`'s 53 drawings and the record holding them
 account for about 54. So `wt-icon.ts` is now a `HEAVY_FILES` entry
-in two line ranges, cut between two drawings, and ui runs 32 shards so the whole files keep six.
+in two line ranges, cut between two drawings, and that layout used 32 shards so the whole files kept six.
 The record itself spans both ranges, so its one mutant is in neither. Whether the new shards finish
 inside the limit has not yet been measured.
+
+**ui, 27 November 2026 (A1618).** Jobs 27 and 31 reached the 50-minute limit in
+[run 45962184332](https://github.com/clintongormley/waitron/actions/runs/45962184332). Refreshing
+the table from its 30 reports and the complete reports from
+[45943691418](https://github.com/clintongormley/waitron/actions/runs/45943691418) and
+[45786406477](https://github.com/clintongormley/waitron/actions/runs/45786406477) let 11 whole-file
+jobs replace six. On the same source tree, scoring the old job assignments with the refreshed
+weights gives a peak of 8,231 summed seconds. Repacking with the refreshed weights gives a peak
+of 6,181 across six jobs and 3,535 across 11 jobs. Eleven is the fewest whole-file jobs at which
+the floor map sets the peak on its own. These sums rank work. The manual workflow run measures
+elapsed time.
+
+The 39 jobs include 14 data-table ranges, up from 12. The Stryker 10.1.1 instrumenter on the
+3,500-line source emits 3,080 mutations for the whole file, 3,057 across 12 ranges and 3,063
+across 14. The new boundaries recover 20 and drop 14. Replaying matched report durations put the
+heaviest of the new ranges at 5,478–6,154 summed seconds across the three runs, compared with
+7,062–8,313 in their old jobs. The workflow still allows 50 minutes per shard and requires a
+combined score of at least 90%.
 
 **Why (A1309).** The nightly run 41392057587 (2026-11-02) failed: `mutation-db (10)` was cancelled
 by its 25-minute job limit at 390 of 391 mutants. Two things lay behind it.

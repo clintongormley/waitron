@@ -39,7 +39,7 @@ export const HEAVY_FILES = {
   db: {},
   ui: {
     "src/components/wt-combobox.ts": 4,
-    "src/components/wt-data-table.ts": 12,
+    "src/components/wt-data-table.ts": 14,
     "src/components/wt-dialog.ts": 6,
     "src/components/wt-floor-plan-canvas.ts": 2,
     "src/components/wt-icon.ts": 2,
