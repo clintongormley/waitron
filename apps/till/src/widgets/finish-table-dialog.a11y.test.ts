@@ -84,7 +84,7 @@ for (const locale of ["en-GB", "es-ES"]) {
         const root = el.shadowRoot!;
         const dialog = root.querySelector("wt-dialog")!;
         await dialog.updateComplete;
-        expect(root.querySelector("wt-top-bar")!.heading).toBe(
+        expect(root.querySelector("wt-top-bar")!.subtitle).toBe(
           locale === "en-GB" ? "4 dishes not served" : "4 platos sin servir",
         );
         await expectNoA11yViolations(host);

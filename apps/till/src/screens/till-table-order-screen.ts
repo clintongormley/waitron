@@ -6201,10 +6201,14 @@ export class TillTableOrderScreen extends LitElement {
             },
           ];
     });
-    const heading = fill(t("table.split_table_heading"), { party: this.#partyScope(party) });
+    const context = this.#partyScope(party);
     return tableActionStep(
       "split-table",
-      heading,
+      {
+        title: t("table.action_split_table"),
+        subtitle: context,
+        label: fill(t("table.split_table_heading"), { party: context }),
+      },
       html`<div class="action-options">
         ${targets.map(
           (target) =>
@@ -6601,10 +6605,14 @@ export class TillTableOrderScreen extends LitElement {
       parseGuestCount(this.splitStaying) === undefined ||
       parseGuestCount(this.splitLeaving) === undefined;
     const readFailed = sources === undefined && this.splitRead === "failed";
-    const heading = fill(t("table.split_pick_heading"), {
-      table: leaving,
-      party: this.#partyScope(party),
-    });
+    const heading = {
+      title: t("table.action_split_table"),
+      subtitle: leaving,
+      label: fill(t("table.split_pick_heading"), {
+        table: leaving,
+        party: this.#partyScope(party),
+      }),
+    };
     const body = html` ${
         sources?.length === 0 || readFailed
           ? nothing
@@ -6685,8 +6693,6 @@ export class TillTableOrderScreen extends LitElement {
             </p>`
       }
       ${formMessage(this.relocationRefusal)}
-    </div>`;
-    const actions = html`<wt-foot-button-bar>
       <wt-form-actions
         .error=${
           readFailed
@@ -6695,35 +6701,35 @@ export class TillTableOrderScreen extends LitElement {
               ? t("form.fix_fields")
               : ""
         }
-      >
-        ${
-          this.splitAsking
-            ? html`<wt-button
-                  data-split-anyway
-                  slot="secondary"
-                  variant="secondary"
-                  ?disabled=${countsBad}
-                  @click=${(event: Event) => void this.#confirmSplitPick(event, true)}
-                >
-                  ${t("table.split_anyway")}
-                </wt-button>
-                <wt-button
-                  data-split-move-guests
-                  variant="primary"
-                  @click=${(event: Event) => this.#splitMoveGuests(event)}
-                >
-                  ${t("table.action_move_guests")}
-                </wt-button>`
-            : html`<wt-button
-                data-split-confirm
-                variant=${sources === undefined || holding ? "secondary" : "primary"}
-                ?disabled=${sources === undefined || holding || (this.splitAttempted && countsBad)}
-                @click=${(event: Event) => void this.#confirmSplitPick(event)}
+      ></wt-form-actions>
+    </div>`;
+    const actions = html`<wt-foot-button-bar>
+      ${
+        this.splitAsking
+          ? html`<wt-button
+                data-split-anyway
+                variant="secondary"
+                ?disabled=${countsBad}
+                @click=${(event: Event) => void this.#confirmSplitPick(event, true)}
               >
-                ${t("table.split_confirm")}
+                ${t("table.split_anyway")}
+              </wt-button>
+              <wt-button
+                data-split-move-guests
+                variant="primary"
+                @click=${(event: Event) => this.#splitMoveGuests(event)}
+              >
+                ${t("table.action_move_guests")}
               </wt-button>`
-        }
-      </wt-form-actions>
+          : html`<wt-button
+              data-split-confirm
+              variant=${sources === undefined || holding ? "secondary" : "primary"}
+              ?disabled=${sources === undefined || holding || (this.splitAttempted && countsBad)}
+              @click=${(event: Event) => void this.#confirmSplitPick(event)}
+            >
+              ${t("table.split_confirm")}
+            </wt-button>`
+      }
     </wt-foot-button-bar>`;
     return tableActionStep("split-pick", heading, body, this.busy, html`${messages}${actions}`);
   }
@@ -7237,7 +7243,11 @@ export class TillTableOrderScreen extends LitElement {
     if (this.actionVerb !== "move-bill")
       return tableActionStep(
         "target",
-        heading,
+        {
+          title: t(this.actionVerb === "move" ? "table.action_move_guests" : "table.action_join"),
+          subtitle: this.party === null ? "" : this.#partyScope(this.party),
+          label: heading,
+        },
         body,
         this.busy,
         this.relocationRefusal === ""

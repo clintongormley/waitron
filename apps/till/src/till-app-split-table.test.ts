@@ -203,7 +203,8 @@ const onScreen = (control: HTMLElement) => {
 /** On screen and above the held Save row, not behind it. */
 const shownAboveRow = (el: TillApp, said: HTMLElement) => {
   const box = said.getBoundingClientRect();
-  return box.top >= 0 && box.bottom <= bottom(el).getBoundingClientRect().top;
+  const row = q(el, "[data-split-pick] wt-foot-button-bar")!;
+  return box.top >= 0 && box.bottom <= row.getBoundingClientRect().top;
 };
 
 function expectBlank(el: TillApp): void {
@@ -632,7 +633,7 @@ describe("till-app: the read behind Split a table's panel", () => {
       describe("what a read behind the panel leaves", () => {
         const lost = () => new TypeError("Failed to fetch");
         const heading = (el: TillApp) =>
-          q(el, "[data-split-pick] [data-action-heading]")!.textContent ?? "";
+          q<HTMLElementTagNameMap["wt-full-screen-panel"]>(el, "[data-split-pick]")!.bodyLabel;
 
         it("Split stays primary while the first bill's reads are out, and a press goes to the server", async () => {
           fakeTimers();
@@ -3848,7 +3849,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     describe("rows and revisions after a refusal", () => {
       const lost = () => new TypeError("Failed to fetch");
       const heading = (el: TillApp) =>
-        q(el, "[data-split-pick] [data-action-heading]")!.textContent ?? "";
+        q<HTMLElementTagNameMap["wt-full-screen-panel"]>(el, "[data-split-pick]")!.bodyLabel;
       const atRevision = (revision: number) => {
         const later = party({ tableIds: ["t4", "t5"], billCount: 2, revision });
         return [table("t4", "4", later), table("t5", "5", later), table7];

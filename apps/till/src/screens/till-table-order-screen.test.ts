@@ -3770,7 +3770,10 @@ describe("till-table-order-screen", () => {
         .click();
       await el.updateComplete;
     }
-    const targetHeading = "[data-target-picker] :is(h2, [data-action-heading])";
+    const targetHeading = (el: TillTableOrderScreen) =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-full-screen-panel"]>(
+        "wt-full-screen-panel[data-target-picker]",
+      )?.bodyLabel ?? el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim();
     const click = (el: TillTableOrderScreen, selector: string) =>
       el.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
 
@@ -3932,9 +3935,7 @@ describe("till-table-order-screen", () => {
         click(el, '[data-action="move-bill"]');
         await el.updateComplete;
 
-        expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
-          t("table.move_bill_heading").replace("{bill}", scope),
-        );
+        expect(targetHeading(el)).toBe(t("table.move_bill_heading").replace("{bill}", scope));
         expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t9"]);
         expect(target(el, "counter")!.textContent).toContain(t("table.to_counter"));
         expect(target(el, "t9")!.textContent).toContain(t("floor.free"));
@@ -3995,7 +3996,7 @@ describe("till-table-order-screen", () => {
         });
         await toMoveBill(el);
 
-        expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
+        expect(targetHeading(el)).toBe(
           t("table.move_bill_heading").replace("{bill}", () => "Ana · Bill 2 · {into}"),
         );
       });
@@ -4098,7 +4099,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="move"]');
       await el.updateComplete;
 
-      expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
+      expect(targetHeading(el)).toBe(
         t("table.move_guests_heading").replace("{party}", "Ana (Table 4)"),
       );
       expect(targetIds(el)).toEqual(["t6", "t7", "t9"]);
@@ -4191,9 +4192,7 @@ describe("till-table-order-screen", () => {
       await toMenu(el);
       click(el, '[data-action="join"]');
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
-        t("table.join_heading").replace("{party}", "Ana (Table 4)"),
-      );
+      expect(targetHeading(el)).toBe(t("table.join_heading").replace("{party}", "Ana (Table 4)"));
 
       click(el, '[data-target="t9"]');
       await el.updateComplete;
@@ -4637,7 +4636,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="move"]');
       await el.updateComplete;
 
-      expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
+      expect(targetHeading(el)).toBe(
         t("table.move_guests_heading").replace("{party}", "Ana (Table 4, Terrace)"),
       );
       expect(target(el, "t9")!.querySelector(".target-label")!.textContent).toBe("Window");
@@ -4679,7 +4678,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="move"]');
       await el.updateComplete;
 
-      expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
+      expect(targetHeading(el)).toBe(
         t("table.move_guests_heading").replace("{party}", "García birthday"),
       );
       expect(target(el, "t5")!.querySelector(".target-label")!.textContent).toBe("Table 5");
@@ -5156,7 +5155,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-action="merge"]');
       await el.updateComplete;
 
-      expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
+      expect(targetHeading(el)).toBe(
         t("table.merge_into").replace(
           "{bill}",
           t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"),
@@ -5200,9 +5199,7 @@ describe("till-table-order-screen", () => {
       el.bills = [];
       await el.updateComplete;
 
-      expect(el.shadowRoot!.querySelector(targetHeading)!.textContent!.trim()).toBe(
-        t("table.actions_title"),
-      );
+      expect(targetHeading(el)).toBe(t("table.actions_title"));
     });
 
     it("shows an empty-state when there are no other tables to move to", async () => {

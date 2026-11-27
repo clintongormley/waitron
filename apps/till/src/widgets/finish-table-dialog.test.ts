@@ -110,7 +110,7 @@ function collect(el: Dialog) {
 it("lists the entire unserved set with known preparation and waits for a reason", async () => {
   const el = await mount();
   expect(el.shadowRoot?.textContent ?? "").toContain("Flan");
-  expect(root(el).querySelector("wt-top-bar")!.heading).toBe("3 dishes not served");
+  expect(root(el).querySelector("wt-top-bar")!.subtitle).toBe("3 dishes not served");
   expect(root(el).textContent).toContain("Croquetas");
   const rows = root(el).querySelectorAll("[data-dish]");
   expect(rows).toHaveLength(2);
@@ -600,6 +600,9 @@ it("keeps Back at the top and the collection below the main action and message",
   expect(panel.top).toBeCloseTo(0, 0);
   expect(panel.left).toBeCloseTo(100, 0);
   expect(panel.right).toBeCloseTo(innerWidth, 0);
+  const top = root(el).querySelector("wt-top-bar")!;
+  expect(top.heading).toBe("Finish table");
+  expect(top.subtitle).toBe("3 dishes not served");
   el.refusal = "Try again";
   await el.updateComplete;
   const actions = root(el).querySelector("wt-form-actions")!;
@@ -662,7 +665,7 @@ it("shows the main action as the request in flight after a cancel", async () => 
 it("localises the unserved total and dish quantity in Spanish", async () => {
   setLocale("es-ES");
   const el = await mount({ dishes: [{ ...dish("flan"), quantity: "0.500" }] });
-  expect(root(el).querySelector("wt-top-bar")!.heading).toContain("0,5");
+  expect(root(el).querySelector("wt-top-bar")!.subtitle).toContain("0,5");
   expect(root(el).querySelector(".name")!.textContent).toContain("0,5 × Flan");
 });
 

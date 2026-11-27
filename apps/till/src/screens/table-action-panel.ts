@@ -17,17 +17,6 @@ export const tableActionPanelStyles = css`
   .table-action-message {
     padding-inline: var(--wt-space-4);
   }
-
-  wt-foot-button-bar wt-form-actions wt-button {
-    --wt-tap-min: var(--wt-foot-action-height);
-    --wt-action-font-size: var(--wt-font-size-lg);
-  }
-
-  [data-action-heading] {
-    display: block;
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
 `;
 
 export function tableActionPanel(
@@ -52,7 +41,7 @@ export function tableActionPanel(
 
 export function tableActionStep(
   kind: "target" | "split-table" | "split-pick",
-  heading: string,
+  heading: { title: string; subtitle: string; label: string },
   body: TemplateResult,
   busy: boolean,
   footer: TemplateResult | typeof nothing = nothing,
@@ -61,13 +50,17 @@ export function tableActionStep(
     ?data-target-picker=${kind === "target"}
     ?data-split-table=${kind === "split-table"}
     ?data-split-pick=${kind === "split-pick"}
-    .bodyLabel=${heading}
+    .bodyLabel=${heading.label}
   >
     ${keyed(
       kind,
       html`<section slot="header">
-        <wt-top-bar data-action-back .backLabel=${t("action.back")} .backDisabled=${busy}
-          ><span slot="title" data-action-heading tabindex="-1">${heading}</span></wt-top-bar
+        <wt-top-bar
+          data-action-back
+          .backLabel=${t("action.back")}
+          .backDisabled=${busy}
+          .subtitle=${heading.subtitle}
+          ><span slot="title" data-action-heading tabindex="-1">${heading.title}</span></wt-top-bar
         >
       </section>`,
     )}

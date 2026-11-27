@@ -2740,7 +2740,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
             emit(tableOrder(el)!, "finish-table");
             await flush(el, 8);
             const dialog = finishDialog(el)!;
-            expect(dialog.shadowRoot!.querySelector("wt-top-bar")!.heading).toBe(
+            expect(dialog.shadowRoot!.querySelector("wt-top-bar")!.subtitle).toBe(
               locale === "es" ? "2 platos sin servir" : "2 dishes not served",
             );
             await expectNoA11yViolations(dialog);

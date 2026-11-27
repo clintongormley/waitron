@@ -369,7 +369,8 @@ export class TillFinishTableDialog extends LitElement {
       <section slot="header">
         <wt-top-bar
           data-close
-          .heading=${title}
+          .heading=${t("table.finish")}
+          .subtitle=${title}
           .backLabel=${t("action.back")}
           .backDisabled=${this.#busy()}
           @wt-back=${() => void this.renderRoot.querySelector<WtDialog>("wt-dialog")!.requestClose("navigation")}

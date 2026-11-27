@@ -988,7 +988,7 @@ describe("Split a table's panel and a late refusal", () => {
     return { ...opened, told };
   }
   const heading = (screen: TillTableOrderScreen) =>
-    q(screen, "[data-split-pick] [data-action-heading]")!.textContent!.trim();
+    q<HTMLElementTagNameMap["wt-full-screen-panel"]>(screen, "[data-split-pick]")!.bodyLabel;
   async function refuse(screen: TillTableOrderScreen) {
     screen.splitRefusal = refusal;
     await settled(screen);

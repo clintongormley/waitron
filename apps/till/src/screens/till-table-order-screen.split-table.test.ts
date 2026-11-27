@@ -265,7 +265,7 @@ describe("Split a table's panel at phone width", () => {
     const keeps = q(el, "[data-split-keeps]")!;
     const note = q(el, "[data-split-new-bill-note]")!;
     const guests = q(el, ".split-counts")!;
-    const row = bottom(el);
+    const row = q(el, "wt-foot-button-bar")!;
     const stepButton = (step: string) =>
       stepper(el, "leaving").shadowRoot!.querySelector(`[data-step="${step}"]`)!;
 
@@ -311,6 +311,9 @@ describe("Split a table's panel", () => {
       await page.viewport(390, 844);
       await expect.poll(() => box().left).toBeCloseTo(0, 0);
       expect(box().right).toBeCloseTo(390, 0);
+      const top = q<HTMLElementTagNameMap["wt-top-bar"]>(el, "[data-split-pick] wt-top-bar")!;
+      expect(top.subtitle).toContain("T8");
+      expect(split(el).getBoundingClientRect().width).toBeGreaterThan(350);
       expect(split(el).getBoundingClientRect().bottom).toBeLessThanOrEqual(844);
       expect(textOf(el, "[data-split-takes]")).toContain("€2.00");
     } finally {
@@ -347,7 +350,9 @@ describe("Split a table's panel", () => {
       await settled(el);
 
       const h2 = q(el, "[data-split-pick] [data-action-heading]")!;
-      expect(h2.textContent!.trim()).toBe(heading);
+      expect(
+        q<HTMLElementTagNameMap["wt-full-screen-panel"]>(el, "[data-split-pick]")!.bodyLabel,
+      ).toBe(heading);
       expect(el.shadowRoot!.activeElement).toBe(h2);
       expect(split(el).textContent!.trim()).toBe(action);
     },
@@ -359,9 +364,9 @@ describe("Split a table's panel", () => {
     });
     await toPanel(el);
 
-    expect(q(el, "[data-split-pick] [data-action-heading]")!.textContent!.trim()).toBe(
-      "Window leaves García (T7, Window)",
-    );
+    expect(
+      q<HTMLElementTagNameMap["wt-full-screen-panel"]>(el, "[data-split-pick]")!.bodyLabel,
+    ).toBe("Window leaves García (T7, Window)");
     expect(stepper(el, "leaving").label).toBe("Guests at Window");
   });
 
@@ -382,9 +387,9 @@ describe("Split a table's panel", () => {
     await click(el, "[data-move-split]");
     await click(el, '[data-action="split-table"]');
 
-    expect(q(el, "[data-split-table] [data-action-heading]")!.textContent!.trim()).toBe(
-      "Split a table off García (T7, T8):",
-    );
+    expect(
+      q<HTMLElementTagNameMap["wt-full-screen-panel"]>(el, "[data-split-table]")!.bodyLabel,
+    ).toBe("Split a table off García (T7, T8):");
     expect(q(el, '[data-target="t7"]')!.textContent!.trim()).toBe("T7");
     expect(q(el, '[data-target="t8"]')!.textContent!.trim()).toBe("T8");
   });
@@ -397,9 +402,9 @@ describe("Split a table's panel", () => {
     await click(el, '[data-action="split-table"]');
 
     expect(q(el, '[data-target="t8"]')!.textContent!.trim()).toBe("Window");
-    expect(q(el, "[data-split-table] [data-action-heading]")!.textContent!.trim()).toBe(
-      "Split a table off García (T7, Window):",
-    );
+    expect(
+      q<HTMLElementTagNameMap["wt-full-screen-panel"]>(el, "[data-split-table]")!.bodyLabel,
+    ).toBe("Split a table off García (T7, Window):");
   });
 
   it("the hint names the tables that stay", async () => {
