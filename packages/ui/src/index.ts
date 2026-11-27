@@ -90,6 +90,8 @@ export type {
   FloorMapTap,
 } from "./components/wt-floor-map.js";
 export { WtSheet } from "./components/wt-sheet.js";
+export { WtCourseHeading } from "./components/wt-course-heading.js";
+export type { WtCourseHeadingMark } from "./components/wt-course-heading.js";
 export { buildZoneTabs, resolveActiveTabKey, snapRotation, toFloorTable } from "./floor.js";
 export type {
   FloorChip,

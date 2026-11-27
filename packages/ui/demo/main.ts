@@ -41,6 +41,7 @@ import "../src/components/wt-choice-row.js";
 import "../src/components/wt-floor-plan-canvas.js";
 import "../src/components/wt-floor-map.js";
 import "../src/components/wt-sheet.js";
+import "../src/components/wt-course-heading.js";
 import "../src/components/wt-toast.js";
 import "../src/components/wt-notice.js";
 import "../src/components/wt-banner.js";
@@ -202,6 +203,13 @@ const panel = (theme: "light" | "dark") => `
     <wt-sheet heading="Tables" style="margin-top: 16px">
       <p>Table 1 · Table 2 · Table 3</p>
     </wt-sheet>
+    <wt-course-heading mark="sent" mark-label="Sent" style="margin-top: 16px">
+      Drinks · fired 12 min ago
+    </wt-course-heading>
+    <wt-course-heading>
+      Mains · held
+      <wt-button slot="end" variant="secondary">Fire</wt-button>
+    </wt-course-heading>
     <div class="row" style="margin-top:16px; flex-direction:column; align-items:stretch">
       <wt-disclosure heading="Kitchen" summary="No options">
         <wt-input label="Kitchen note"></wt-input>
