@@ -1494,10 +1494,15 @@ it("ignores the certificate reply after the passphrase changes", async () => {
   clickStep(cert, "next");
   await expect.poll(() => inspections(requests)).toHaveLength(1);
   await userEvent.fill(nativeInput(cert, "passphrase"), "new passphrase");
-  releaseStale(Response.json({ taxId: "B12345674", legalName: "Stale" }));
+  releaseStale(
+    Object.assign(new Response(), {
+      text: async () => JSON.stringify({ taxId: "B12345674", legalName: "Stale" }),
+    }),
+  );
   await new Promise((resolve) => requestAnimationFrame(resolve));
   expect(cert.isConnected).toBe(true);
   expect(app.shadowRoot!.querySelector("[data-test=screen-venue]")).toBeNull();
+  expect(app.shadowRoot!.querySelector("wt-unsaved-changes")?.hasAttribute("open")).toBe(false);
   clickStep(cert, "next");
   const details = await screen(app, "venue");
   expect(nativeInput(details, "legalName").value).toBe("Current");
@@ -1551,4 +1556,65 @@ it("reselects Live and imports a different venue without carrying its earlier ce
   emit(app, "setup-advance");
   await screen(app, "cert");
   expect(inspections(requests)).toHaveLength(1);
+});
+
+it.each(["setup.attempt_conflict", "setup.attempt_uncertain", "setup.start_again_incomplete"])(
+  "offers the held setup recovery when certificate inspection returns %s",
+  async (code) => {
+    let held = false;
+    const { app, requests } = await mount({
+      intercept(path) {
+        if (path.endsWith("/certificate/inspect")) {
+          held = true;
+          return Response.json({ error: { code, params: {} } }, { status: 409 });
+        }
+        if (held && path.endsWith("/first-setup/status")) return Response.json({ claimed: true });
+      },
+    });
+    const cert = await certificateFirst(app);
+    await selectCertificate(cert, "held");
+    clickStep(cert, "next");
+    const owner = await screen(app, "first-owner");
+    await expect.poll(() => enabled(owner, "reconnect-first")).toBe(true);
+    const checked = requests.findIndex(({ path }) => path.endsWith("/certificate/inspect"));
+    expect(
+      requests.findIndex(
+        ({ path }, index) => index > checked && path.endsWith("/first-setup/status"),
+      ),
+    ).toBeGreaterThan(checked);
+    expect(claims(requests)).toEqual([]);
+
+    held = false;
+    owner.querySelector<HTMLElement>("[data-test=reconnect-first]")!.click();
+    const returned = await screen(app, "cert");
+    clickStep(returned, "back");
+    await screen(app, "admin");
+  },
+);
+
+it("keeps the name the owner typed when switching to Preparation", async () => {
+  const { app } = await mount({
+    intercept(path) {
+      if (path === "/setup-api/status")
+        return Response.json({
+          provisioned: false,
+          environment: "preproduction",
+          needs: ["venue"],
+        });
+      if (path.endsWith("/certificate/inspect"))
+        return Response.json({ taxId: venue.taxId, legalName: "Certificate Company" });
+    },
+  });
+  const cert = await certificateFirst(app);
+  await selectCertificate(cert, "live");
+  clickStep(cert, "next");
+  await screen(app, "venue");
+  emit(app, "setup-patch", { patch: { venue: { legalName: "Corrected Company" } } });
+  emit(app, "setup-goto", { screen: "mode" });
+  clickStep(await screen(app, "mode"), "choose-prepare");
+  clickStep(await screen(app, "admin"), "next");
+  const preparation = await screen(app, "venue");
+  expect(nativeInput(preparation, "taxId").value).toBe("");
+  expect(nativeInput(preparation, "taxId").readOnly).toBe(false);
+  expect(nativeInput(preparation, "legalName").value).toBe("Corrected Company");
 });

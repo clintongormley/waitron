@@ -1077,7 +1077,21 @@ export class SetupApp extends LitElement {
   }
 
   async #inspectCertificate(cert: AeatCertDraft, current: () => boolean): Promise<boolean> {
-    const identity = await this.api.inspectCertificate("ES-common", cert);
+    let identity: CertificateIdentity;
+    try {
+      identity = await this.api.inspectCertificate("ES-common", cert);
+    } catch (error) {
+      const { code } = (error ?? {}) as Partial<ApiError>;
+      if (
+        code !== "setup.attempt_conflict" &&
+        code !== "setup.attempt_uncertain" &&
+        code !== "setup.start_again_incomplete"
+      )
+        throw error;
+      if (current() && this.screen === "cert" && this.#certificateFirst)
+        await this.#reconnectFirstSetup();
+      return false;
+    }
     if (!current() || this.screen !== "cert" || !this.#certificateFirst) return false;
     const previous = this.#certificateIdentity;
     const venue = { ...this.draft.venue };
@@ -1111,7 +1125,7 @@ export class SetupApp extends LitElement {
     this.#certificateIdentity = undefined;
     const venue = { ...this.draft.venue };
     if (previous?.taxId) delete venue.taxId;
-    if (previous?.legalName) delete venue.legalName;
+    if (previous?.legalName && venue.legalName === previous.legalName) delete venue.legalName;
     const draft = { ...this.draft, venue };
     delete draft.aeatCert;
     this.draft = draft;
@@ -2057,7 +2071,9 @@ export class SetupApp extends LitElement {
             ? "role"
             : this.#afterWipe === "start-again"
               ? "mode"
-              : "venue";
+              : this.#checkingCertificateBeforeVenue && this.#certificateFirst
+                ? "cert"
+                : "venue";
         this.#afterWipe = undefined;
       }
     } catch (error) {
