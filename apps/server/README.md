@@ -394,8 +394,8 @@ Use `waitron-credentials` to provision and rotate credentials (`fiscal.aeat`,
 `--tenant` flag because one database holds one taxpayer. Run
 `waitron-credentials` with no arguments for its own usage text (`set` / `list` / `delete` /
 `rotate` — `packages/credentials/src/cli.ts`'s `USAGE` constant); there is no `get`, since that CLI
-never prints a decrypted credential. A `fiscal.aeat` certificate written with this CLI records no
-install; see
+never prints a decrypted credential. A `fiscal.aeat` certificate written with this CLI is stored
+as given and records no install; see
 ["Installing or replacing the AEAT certificate after setup"](#installing-or-replacing-the-aeat-certificate-after-setup)
 for what that leaves out of date.
 
@@ -437,7 +437,7 @@ The POST body carries `pfxBase64`, `passphrase`, `certKind` (`sello` or `represe
 (`installCertificate`, `packages/fiscal-verifactu/src/certificate-install.ts`):
 
 1. the file is at most 100 KiB;
-2. it opens with the passphrase, is not encrypted with the old RC2 scheme, and holds a private key;
+2. it opens with the passphrase and holds a private key;
 3. it is already valid and not yet expired;
 4. it is not the certificate already installed;
 5. the company tax ID it carries, when it carries one, is the taxpayer's;
@@ -450,8 +450,9 @@ under `fiscal.aeat` and records the install, unless the vault changed after the 
 is refused with `fiscal.certificate_changed` (409). The next filing pass reads the new certificate,
 so no restart is needed.
 
-`waitron-credentials set --purpose fiscal.aeat` still writes the certificate, but it records no
-install. The dashboard card, the certificate alerts and the reminder emails read the latest install
+`waitron-credentials set --purpose fiscal.aeat` still writes the certificate, but it stores the
+file as given, so a file exported by macOS (40-bit RC2, or a `security` export under a passphrase outside ASCII, which plain Node cannot open) must be
+installed through the dashboard or setup instead, and it records no install. The dashboard card, the certificate alerts and the reminder emails read the latest install
 record, so after a write from the command line they go on describing the previous certificate. Use
 the dashboard unless you have no other way in.
 

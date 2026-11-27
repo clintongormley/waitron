@@ -10,6 +10,11 @@ import {
   SIN_DATOS_BODY,
 } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { startDiagnosticServer } from "@waitron/fiscal-verifactu/test/certificate-diagnosis-fixtures.js";
+import {
+  MAC_ACCENTED_CANDIDATE,
+  OPENSSL_SIGNED_FINGERPRINT,
+  RC2_SIGNED_CANDIDATE,
+} from "@waitron/fiscal-verifactu/test/openssl-certificates.js";
 import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
 
 const run = promisify(execFile);
@@ -32,6 +37,7 @@ function input(certKind: "sello" | "representante", operation = "inspect") {
   return {
     operation,
     material: { pfxBase64: file.pfx.toString("base64"), passphrase: file.passphrase, certKind },
+    rewriteOld: true,
     taxpayer: { legalName: "PRIVATE TAXPAYER", taxId: "89890001K" },
     environment: "preproduction",
     timeZone: "Europe/Madrid",
@@ -108,9 +114,19 @@ describe("shipped certificate diagnosis entry", () => {
       ok: true,
       details: { fingerprint: first.fingerprint },
     });
-    expect(await readFile(join(root!, "certificate-open.js.NOTICES.txt"), "utf8")).toContain(
-      "Bundled npm package notices",
+    const rewritten = await host.openCertificate(
+      Buffer.from(RC2_SIGNED_CANDIDATE.pfxBase64, "base64"),
+      RC2_SIGNED_CANDIDATE.passphrase,
+      { rewriteOld: true },
     );
+    expect(rewritten).toMatchObject({
+      ok: true,
+      details: { fingerprint: OPENSSL_SIGNED_FINGERPRINT },
+      rewritten: expect.any(Buffer),
+    });
+    const notices = await readFile(join(root!, "certificate-open.js.NOTICES.txt"), "utf8");
+    expect(notices).toContain("Bundled npm package notices");
+    expect(notices).toContain("node-forge");
   });
 
   it("the declared provisioning build ships the child used by bundled validation", async () => {
@@ -183,6 +199,42 @@ describe("shipped certificate diagnosis entry", () => {
       }
     },
   );
+
+  it("inspects a selected macOS export rewritten by the composed real module", async () => {
+    const host = (await import(pathToFileURL(join(root!, "host.js")).href)) as {
+      createCertificateDiagnosisRunner: typeof createCertificateDiagnosisRunner;
+    };
+    const runner = host.createCertificateDiagnosisRunner({ fiscalId: "verifactu" });
+    const selected = input("sello");
+    try {
+      const answer = await runner.attempt(
+        async (child, abort) => ({
+          result: await child(
+            { ...selected, material: { ...selected.material, ...MAC_ACCENTED_CANDIDATE } },
+            abort,
+          ),
+        }),
+        new AbortController().signal,
+      );
+      expect(answer).toEqual({
+        result: {
+          outcome: "completed",
+          value: {
+            openedFingerprint: OPENSSL_SIGNED_FINGERPRINT,
+            kind: "sello",
+            completedAt: expect.any(String),
+            stage: "complete",
+            category: "local-ready",
+            httpStatus: null,
+            localFinding: null,
+          },
+        },
+      });
+      expect(await readFile(entry.pathname + ".NOTICES.txt", "utf8")).toContain("node-forge");
+    } finally {
+      await runner.stop();
+    }
+  });
 
   it("rejects an unknown module and caller-selected destinations through the production entry", async () => {
     for (const fiscalId of ["unknown", "verifactu"]) {

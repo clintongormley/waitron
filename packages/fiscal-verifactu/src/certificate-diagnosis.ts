@@ -127,6 +127,7 @@ async function diagnoseBoundCertificate(
         let input: FiscalCertificateJson = {
           operation: request.operation,
           material: read.material,
+          rewriteOld: request.source === "candidate",
           taxpayer: { legalName: read.taxpayer.legalName, taxId: read.taxpayer.taxId },
           timeZone: read.timeZone,
           environment: deps.environment,

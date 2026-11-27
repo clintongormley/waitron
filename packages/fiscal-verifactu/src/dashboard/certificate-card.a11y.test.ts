@@ -93,3 +93,18 @@ describe.each(["light", "dark"] as const)("AEAT certificate card accessibility (
     await expectNoA11yViolations(host);
   });
 });
+
+test.each([
+  ["side by side", "1200px", false],
+  ["wrapped onto two lines", "300px", true],
+] as const)("keeps a gap between the header's two buttons %s", async (_name, width, wrapped) => {
+  const el = await card("light", view({}));
+  host.style.width = width;
+  const [action, diagnose] = [
+    "wt-button[data-test=certificate-action]",
+    "wt-button[data-test=certificate-diagnose]",
+  ].map((selector) => el.shadowRoot!.querySelector(selector)!.getBoundingClientRect());
+  expect(diagnose!.top >= action!.bottom).toBe(wrapped);
+  const gap = wrapped ? diagnose!.top - action!.bottom : diagnose!.left - action!.right;
+  expect(gap).toBeGreaterThanOrEqual(4);
+});

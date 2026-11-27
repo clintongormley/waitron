@@ -6,6 +6,7 @@ import { aeatEndpointFor, isCertKind, type CertKind } from "./aeat-transport.js"
 import type { CheckTransport } from "./certificate-check.js";
 import { localDate } from "./certificate-dates.js";
 import { normaliseTaxId, openCertificateFile } from "./certificate-file.js";
+import { openOrRewrite, type RewrittenResult } from "./certificate-open-answer.js";
 import type { CertificateDiagnosisResult } from "./certificate-diagnosis-contract.js";
 import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
 import {
@@ -16,6 +17,8 @@ import {
 export interface CertificateDiagnosisChildInput {
   operation: "inspect" | "check";
   material: { pfxBase64: string; passphrase: string; certKind: CertKind };
+  /** A selected file is opened as Save opens it; the vault's copy as filing does. */
+  rewriteOld: boolean;
   taxpayer: { legalName: string; taxId: string };
   timeZone: string;
   environment: DeploymentEnvironment;
@@ -33,7 +36,7 @@ export interface CertificateDiagnosisChildOutput {
 }
 
 export interface CertificateDiagnosisChildOverrides {
-  open?: typeof openCertificateFile;
+  open?: (pfx: Buffer, passphrase: string) => RewrittenResult | Promise<RewrittenResult>;
   endpointFor?: CheckTransport["endpointFor"];
   transport?: typeof diagnosticTransport;
 }
@@ -114,10 +117,14 @@ export async function runCertificateDiagnosisChild(
   observe(observed);
   if (signal.aborted) return answer(categoryFor(null, signal, observed));
   const pfx = Buffer.from(input.material.pfxBase64, "base64");
+  let rewritten: Buffer | undefined;
   let transport: ReturnType<typeof diagnosticTransport> | undefined;
   try {
-    const opened = (overrides.open ?? openCertificateFile)(pfx, input.material.passphrase);
+    const open: NonNullable<CertificateDiagnosisChildOverrides["open"]> =
+      overrides.open ?? (input.rewriteOld ? openOrRewrite : openCertificateFile);
+    const opened = await open(pfx, input.material.passphrase);
     if (!opened.ok) return answer("local-finding", opened.reason);
+    rewritten = opened.rewritten;
     openedFingerprint = opened.details.fingerprint;
     kind = input.material.certKind;
     const now = Date.parse(input.startedAt);
@@ -135,7 +142,7 @@ export async function runCertificateDiagnosisChild(
     }
     const endpoint = (overrides.endpointFor ?? aeatEndpointFor(input.environment))(kind);
     transport = (overrides.transport ?? diagnosticTransport)(
-      { pfx, passphrase: input.material.passphrase, certKind: kind },
+      { pfx: rewritten ?? pfx, passphrase: input.material.passphrase, certKind: kind },
       { endpoint, signal, report: observe },
     );
     const [year, month] = localDate(new Date(input.startedAt), input.timeZone).split("-");
@@ -160,6 +167,7 @@ export async function runCertificateDiagnosisChild(
       }
     } finally {
       pfx.fill(0);
+      rewritten?.fill(0);
     }
   }
 }
@@ -178,7 +186,18 @@ function parseInput(raw: FiscalCertificateJson): CertificateDiagnosisChildInput 
   const invalid = () => {
     throw new TypeError("Invalid certificate diagnosis child input");
   };
-  if (!fields(raw, ["operation", "material", "taxpayer", "timeZone", "environment", "startedAt"]))
+  if (
+    !fields(raw, [
+      "operation",
+      "material",
+      "rewriteOld",
+      "taxpayer",
+      "timeZone",
+      "environment",
+      "startedAt",
+    ]) ||
+    typeof raw.rewriteOld !== "boolean"
+  )
     return invalid();
   if (
     (raw.operation !== "inspect" && raw.operation !== "check") ||
@@ -228,6 +247,7 @@ function parseInput(raw: FiscalCertificateJson): CertificateDiagnosisChildInput 
       passphrase: material.passphrase,
       certKind: material.certKind,
     },
+    rewriteOld: raw.rewriteOld,
     taxpayer: { legalName: raw.taxpayer.legalName, taxId: raw.taxpayer.taxId },
     environment: raw.environment,
     timeZone: raw.timeZone,

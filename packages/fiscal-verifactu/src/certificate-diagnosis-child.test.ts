@@ -1,10 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeAuthority, SIN_DATOS_BODY, SOAP_FAULT_BODY } from "../test/certificate-fixtures.js";
 import { startDiagnosticServer } from "../test/certificate-diagnosis-fixtures.js";
+import {
+  MAC_ACCENTED_CANDIDATE,
+  OPENSSL_AUTHORITY,
+  OPENSSL_SIGNED_FINGERPRINT,
+  RC2_SIGNED_CANDIDATE,
+} from "../test/openssl-certificates.js";
 import { aeatEndpointFor } from "./aeat-transport.js";
 import type { FiscalCertificateJson } from "@waitron/fiscal";
 import { diagnosticTransport } from "./certificate-diagnosis-transport.js";
 import { openCertificateFile } from "./certificate-file.js";
+import { openOrRewrite } from "./certificate-open-answer.js";
 import {
   makeCertificateDiagnosisChild,
   runCertificateDiagnosisChild,
@@ -26,6 +33,7 @@ const input: CertificateDiagnosisChildInput = {
     passphrase: first.passphrase,
     certKind: "sello",
   },
+  rewriteOld: true,
   taxpayer: { legalName: "PRIVATE TAXPAYER", taxId: "89890001K" },
   timeZone: "Europe/Madrid",
   environment: "preproduction",
@@ -401,6 +409,54 @@ describe("isolated certificate work", () => {
     expect(server.requests()).toBe(0);
   });
 
+  it.each([
+    ["an RC2 file", RC2_SIGNED_CANDIDATE],
+    ["a macOS export under a passphrase outside ASCII", MAC_ACCENTED_CANDIDATE],
+  ])("queries with %s selected as a replacement, rewritten as Save stores it", async (_, file) => {
+    const server = await startDiagnosticServer(OPENSSL_AUTHORITY, (_request, response) => {
+      response.writeHead(200);
+      response.end(SIN_DATOS_BODY);
+    });
+    servers.push(server);
+    const handed: boolean[] = [];
+    const result = await run(
+      { ...input, material: { ...input.material, ...file } },
+      {
+        endpointFor: () => server.origin,
+        transport: (material, options) => {
+          handed.push(openCertificateFile(material.pfx, material.passphrase).ok);
+          return diagnosticTransport(material, { ...options, ca: OPENSSL_AUTHORITY.caPem });
+        },
+      },
+    );
+    expect(result).toEqual({
+      openedFingerprint: OPENSSL_SIGNED_FINGERPRINT,
+      kind: "sello",
+      completedAt: expect.any(String),
+      stage: "complete",
+      category: "query-completed",
+      httpStatus: 200,
+      localFinding: null,
+    });
+    expect(handed).toEqual([true]);
+    expect(server.clientNames).toEqual(["RC2 SIGNED TEST"]);
+  });
+
+  it.each([
+    ["old_encryption for an RC2 file", RC2_SIGNED_CANDIDATE, "old_encryption"],
+    ["passphrase_wrong for a macOS export", MAC_ACCENTED_CANDIDATE, "passphrase_wrong"],
+  ])("finds %s in the vault, as filing would, without rewriting it", async (_, file, finding) => {
+    const server = await serve(200, SIN_DATOS_BODY);
+    const result = await run(
+      { ...input, rewriteOld: false, material: { ...input.material, ...file } },
+      localTransport(server.origin),
+    );
+    expect(result.category).toBe("local-finding");
+    expect(result.localFinding).toBe(finding);
+    expect(result.openedFingerprint).toBeNull();
+    expect(server.requests()).toBe(0);
+  });
+
   it("strictly opens a valid JSON child envelope through the factory", async () => {
     const value = { ...input, operation: "inspect" };
     const child = makeCertificateDiagnosisChild();
@@ -528,6 +584,23 @@ describe("isolated certificate work", () => {
     expect(first.pfx.some((byte) => byte !== 0)).toBe(true);
   });
 
+  it("zeros a rewritten copy after native work ends", async () => {
+    let copy: Buffer | undefined;
+    const result = await run(
+      { ...input, operation: "inspect", material: { ...input.material, ...RC2_SIGNED_CANDIDATE } },
+      {
+        open: async (pfx, passphrase) => {
+          const opened = await openOrRewrite(pfx, passphrase);
+          if (opened.ok) copy = opened.rewritten;
+          return opened;
+        },
+      },
+    );
+    expect(result.openedFingerprint).toBe(OPENSSL_SIGNED_FINGERPRINT);
+    expect(copy!.length).toBeGreaterThan(0);
+    expect(copy!.every((byte) => byte === 0)).toBe(true);
+  });
+
   const invalidEnvelopes: FiscalCertificateJson[] = [
     null,
     [],
@@ -582,6 +655,7 @@ describe("isolated certificate work", () => {
     { ...input, startedAt: "invalid" },
     { ...input, startedAt: "2026-02-30T00:00:00.000Z" },
     { ...input, endpoint: "https://caller.example" },
+    { ...input, rewriteOld: "true" },
   ])("rejects untrusted child envelope %# before opening", async (raw) => {
     const child = makeCertificateDiagnosisChild({
       open: () => {

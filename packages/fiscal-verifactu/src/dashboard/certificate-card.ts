@@ -84,6 +84,11 @@ export class AeatCertificateCard extends LitElement {
         justify-content: space-between;
         gap: var(--wt-space-2) var(--wt-space-3);
       }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
       h2 {
         margin: 0;
         font-size: var(--wt-font-size-lg);
@@ -313,7 +318,7 @@ export class AeatCertificateCard extends LitElement {
         <h2 id="aeat-certificate-title">${t("aeat_certificate.title")}</h2>
         ${
           state === "loaded"
-            ? html`<div>
+            ? html`<div class="actions">
                 ${this.#action(card!)}<wt-button
                   data-test="certificate-diagnose"
                   variant="secondary"

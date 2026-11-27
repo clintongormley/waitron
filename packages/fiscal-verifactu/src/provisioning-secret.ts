@@ -77,7 +77,7 @@ async function openSetupAeatCert(raw: unknown) {
   const refuse = (reason: string, field = "pfxBase64"): never => {
     throw new AppError("setup.certificate_refused", { field, reason });
   };
-  const opened = await openCertificate(pfx, cert.passphrase);
+  const opened = await openCertificate(pfx, cert.passphrase, { rewriteOld: true });
   if (!opened.ok) {
     return refuse(
       opened.reason,
@@ -113,14 +113,19 @@ export async function validateSetupAeatCert(raw: unknown, venue: { taxId: string
 
 /**
  * Seal a venue's AEAT certificate into the `fiscal.aeat` vault purpose. Re-checks the blob's
- * shape, because `putCredential` accepts any non-empty `certKind` and `pfxBase64`.
+ * shape, because `putCredential` accepts any non-empty `certKind` and `pfxBase64`. A file the
+ * opener rewrites (old encryption, or a file macOS's `security` command exported under a passphrase
+ * outside ASCII) is sealed rewritten, because the backup verifier and filing open the vault copy
+ * with plain Node.
  */
 export async function sealAeatSecret(
   deps: { db: Database; ring: KeyRing; nodeId: string; now?: () => Date },
   raw: unknown,
 ): Promise<void> {
   const cert = parseAeatCert(raw);
-  const opened = await openCertificate(Buffer.from(cert.pfxBase64, "base64"), cert.passphrase);
+  const opened = await openCertificate(Buffer.from(cert.pfxBase64, "base64"), cert.passphrase, {
+    rewriteOld: true,
+  });
   if (!opened.ok && opened.reason === "unavailable")
     throw new AppError("setup.certificate_refused", { field: "body", reason: "setup_stopped" });
 
@@ -129,7 +134,7 @@ export async function sealAeatSecret(
       personId: null,
       purpose: "fiscal.aeat",
       value: {
-        pfxBase64: cert.pfxBase64,
+        pfxBase64: (opened.ok && opened.rewritten?.toString("base64")) || cert.pfxBase64,
         passphrase: cert.passphrase,
         certKind: cert.certKind,
       },

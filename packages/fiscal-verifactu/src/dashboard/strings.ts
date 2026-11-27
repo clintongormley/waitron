@@ -131,7 +131,7 @@ const en = {
   "aeat_certificate.refused.unreadable":
     "Waitron cannot read this file. Choose the .pfx or .p12 file.",
   "aeat_certificate.refused.old_encryption":
-    "This file uses an old encryption. Export it again with current encryption (AES).",
+    "This file uses an old encryption. Export it again with current encryption.",
   "aeat_certificate.refused.no_private_key":
     "This file has no private key. Export it again with the private key.",
   "aeat_certificate.refused.passphrase_wrong": "This passphrase does not open the file.",
@@ -532,7 +532,7 @@ const es: Record<AeatCertificateKey, string> = {
   "aeat_certificate.refused.unreadable":
     "Waitron no puede leer este archivo. Elige el archivo .pfx o .p12.",
   "aeat_certificate.refused.old_encryption":
-    "Este archivo usa un cifrado antiguo. Vuelve a exportarlo con cifrado actual (AES).",
+    "Este archivo usa un cifrado antiguo. Vuelve a exportarlo con cifrado actual.",
   "aeat_certificate.refused.no_private_key":
     "Este archivo no tiene la clave privada. Vuelve a exportarlo con la clave privada.",
   "aeat_certificate.refused.passphrase_wrong": "Esta contraseña no abre el archivo.",

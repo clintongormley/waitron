@@ -868,10 +868,6 @@ Left open by A888's session with the owner on 2026-11-25 (A795's design
 [§8](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)). What was run, and
 its limits: [first-aeat-contact.md](../compliance/first-aeat-contact.md#2026-11-25--real-certificates-against-both-environments).
 
-- **A Mac's certificate export is refused** (`old_encryption`). macOS packs the certificate with
-  40-bit RC2, which the box's Node cannot open, and setup's and the dialog's own export guides send
-  Mac users to Keychain Access. The refusal says to export again with AES; whether Keychain Access
-  offers that was not checked. Either the box opens RC2 files or the Mac guide names a way that works.
 - **A wrong certificate type passes the live check.** AEAT's seal addresses answer a representative
   certificate's query. Setup and the dialog both start on company seal, so leaving it there goes
   unnoticed; whether a filing is accepted there is not known. Read the type from the certificate's

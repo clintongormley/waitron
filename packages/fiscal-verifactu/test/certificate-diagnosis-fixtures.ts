@@ -5,7 +5,7 @@ import type { TLSSocket } from "node:tls";
 import type { FixtureAuthority } from "./certificate-fixtures.js";
 
 export async function startDiagnosticServer(
-  authority: FixtureAuthority,
+  authority: Pick<FixtureAuthority, "caPem" | "serverKeyPem" | "serverCertPem">,
   answer: (request: HttpRequest, response: HttpResponse) => void,
 ) {
   const sockets = new Set<Socket>();

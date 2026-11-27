@@ -14,12 +14,19 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { BackupCheckUnavailable, type BackupVerificationContext } from "@waitron/module";
 import { openBackupQuery } from "@waitron/store";
 import { makeAuthority, type Candidate } from "../test/certificate-fixtures.js";
-import { KEY_ONLY_CANDIDATE, RC2_CANDIDATE } from "../test/openssl-certificates.js";
+import {
+  KEY_ONLY_CANDIDATE,
+  MAC_ACCENTED_CANDIDATE,
+  OPENSSL_SIGNED_FINGERPRINT,
+  RC2_CANDIDATE,
+  RC2_SIGNED_CANDIDATE,
+} from "../test/openssl-certificates.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedTaxpayers, TAXPAYER_A, TAXPAYER_B } from "../test/fixtures.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
 import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
 import { verifyBackupFiscalSecrets } from "./backup-verification-secrets.js";
+import { FISCAL_SLOT } from "./slot.js";
 
 const authority = makeAuthority();
 const candidate = authority.issue({ passphrase: "private-passphrase-sentinel" });
@@ -74,7 +81,7 @@ afterEach(async () => {
 function payload(cert = candidate) {
   return { pfxBase64: cert.pfx.toString("base64"), passphrase: cert.passphrase, certKind: "sello" };
 }
-async function capture(cert: Candidate | null = candidate) {
+async function capture(cert: Candidate | object | null = candidate) {
   await seedTaxpayers(suite.db);
   await seedPerson(suite.db, { id: HANDOVER_PERSON_ID });
   if (cert !== null) {
@@ -88,7 +95,7 @@ async function capture(cert: Candidate | null = candidate) {
     );
     await sealAeatSecret(
       { db: suite.db, ring, nodeId: TAXPAYER_A.nodeId, now: () => new Date(createdAt) },
-      payload(cert),
+      "pfx" in cert ? payload(cert as Candidate) : cert,
     );
   }
   entries = {
@@ -405,6 +412,28 @@ it("keeps a supported vault with unsupported PFX encryption unsupported", async 
   });
   expect(await verify()).toEqual(result("unsupported"));
 });
+const validated = async (raw: object) => {
+  await FISCAL_SLOT.provisioningSecret!.validate(raw, { taxId: "89890001K" });
+  return raw;
+};
+const unvalidated = async (raw: object) => raw;
+it.each([
+  ["after setup's validation", validated, RC2_SIGNED_CANDIDATE],
+  ["after setup's validation", validated, MAC_ACCENTED_CANDIDATE],
+  ["by the sealer alone", unvalidated, RC2_SIGNED_CANDIDATE],
+  ["by the sealer alone", unvalidated, MAC_ACCENTED_CANDIDATE],
+])(
+  "passes an old-encryption or macOS file sealed %s, keeping the certificate's fingerprint %#",
+  async (_label, check, mac) => {
+    await capture(await check({ ...mac, certKind: "sello" }));
+    expect(await verify()).toEqual(result("passed"));
+    expect(
+      suite.db.all<{ fingerprint: string }>(
+        sql`select fingerprint from verifactu_certificates where node_id=${TAXPAYER_A.nodeId} order by installed_at desc limit 1`,
+      )[0]?.fingerprint,
+    ).toBe(OPENSSL_SIGNED_FINGERPRINT);
+  },
+);
 it("checks the migrated credential instead of only the original", async () => {
   await capture();
   edit("after", (db) =>

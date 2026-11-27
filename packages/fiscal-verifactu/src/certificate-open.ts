@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { OpenResult } from "./certificate-file.js";
+import type { RewrittenResult } from "./certificate-open-answer.js";
+import type { CertificateDetails } from "./certificate-file.js";
 import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
 
 const unreadable = { ok: false, reason: "unreadable" } as const;
@@ -11,27 +12,37 @@ export function certificateSizeRefusal(
   passphrase: string,
 ): { ok: false; reason: "too_large" | "unreadable" } | undefined {
   if (pfx.length > CERTIFICATE_MAX_BYTES) return { ok: false, reason: "too_large" };
-  if (Buffer.byteLength(openerInput(pfx, passphrase)) > 256 * 1024) return unreadable;
+  if (Buffer.byteLength(openerInput(pfx, passphrase, false)) > 256 * 1024) return unreadable;
   return undefined;
 }
 
-function openerInput(pfx: Buffer, passphrase: string): string {
-  return JSON.stringify({ pfx: pfx.toString("base64"), passphrase });
+function openerInput(pfx: Buffer, passphrase: string, rewriteOld: boolean): string {
+  return JSON.stringify({ pfx: pfx.toString("base64"), passphrase, rewriteOld });
 }
 
+// The details, plus a rewritten file's base64.
+const OUTPUT_MAX_BYTES = 8192 + Math.ceil(CERTIFICATE_MAX_BYTES / 3) * 4;
+
+/**
+ * With `rewriteOld`, a file Node cannot open but node-forge can (old encryption, or a file macOS's
+ * `security` command exported under a passphrase outside ASCII) comes back rewritten with AES-256
+ * under the same passphrase, as `rewritten`; store those bytes, not the original, so every later
+ * reader opens it with plain Node.
+ */
 export async function openCertificate(
   pfx: Buffer,
   passphrase: string,
-): Promise<OpenResult | { ok: false; reason: "too_large" | "unavailable" }> {
+  options: { rewriteOld?: boolean } = {},
+): Promise<RewrittenResult | { ok: false; reason: "too_large" | "unavailable" }> {
   const refused = certificateSizeRefusal(pfx, passphrase);
   if (refused !== undefined) return refused;
-  const input = openerInput(pfx, passphrase);
+  const input = openerInput(pfx, passphrase, options.rewriteOld === true);
   const source = import.meta.url.endsWith(".ts");
   const entry = new URL(
     source ? "./certificate-open-entry.ts" : "./certificate-open.js",
     import.meta.url,
   );
-  return new Promise<OpenResult | typeof unavailable>((resolve) => {
+  return new Promise<RewrittenResult | typeof unavailable>((resolve) => {
     const child = spawn(
       process.execPath,
       [...(source ? ["--import", import.meta.resolve("tsx")] : []), fileURLToPath(entry)],
@@ -49,7 +60,7 @@ export async function openCertificate(
     const deadline = setTimeout(stop, 2_000);
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => {
-      if (Buffer.byteLength(output) + Buffer.byteLength(chunk) > 8192) stop();
+      if (Buffer.byteLength(output) + Buffer.byteLength(chunk) > OUTPUT_MAX_BYTES) stop();
       else output += chunk;
     });
     child.stdin.on("error", stop);
@@ -60,12 +71,18 @@ export async function openCertificate(
       clearTimeout(deadline);
       if (refused || code !== 0) return resolve(unavailable);
       try {
-        const result = JSON.parse(output) as OpenResult;
-        if (result.ok) {
-          result.details.validFrom = new Date(result.details.validFrom);
-          result.details.validUntil = new Date(result.details.validUntil);
-        }
-        resolve(result);
+        const result = JSON.parse(output) as
+          | Exclude<RewrittenResult, { ok: true }>
+          | { ok: true; details: CertificateDetails; rewritten?: string };
+        if (!result.ok) return resolve(result);
+        const { details, rewritten } = result;
+        details.validFrom = new Date(details.validFrom);
+        details.validUntil = new Date(details.validUntil);
+        resolve(
+          rewritten === undefined
+            ? { ok: true, details }
+            : { ok: true, details, rewritten: Buffer.from(rewritten, "base64") },
+        );
       } catch {
         resolve(unavailable);
       }

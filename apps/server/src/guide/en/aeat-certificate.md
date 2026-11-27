@@ -16,13 +16,14 @@ legal name. The certificate has no company field.
 ## Correct a refused file {#refusals}
 
 Setup checks the file before running the fiscal test or provisioning the venue. A wrong passphrase
-is explained under **Certificate passphrase**. A file that cannot be opened, uses old RC2
-encryption, has no private key, has expired, is not valid yet or is for another tax ID is
-explained under **Certificate file**.
+is explained under **Certificate passphrase**. A file that cannot be opened, uses old encryption,
+has no private key, has expired, is not valid yet or is for another tax ID is explained under
+**Certificate file**.
 
 Correct the passphrase or choose a replacement file, then select **Next**. Run the fiscal test
 when you reach it. For a file with no private key or old encryption, export the certificate again with its
 private key and modern encryption. The export instructions are on the certificate screen.
+If a file exported from a Mac is still refused and the certificate is also installed in Firefox, export it from Firefox instead.
 
 If the fiscal test says AEAT did not accept the certificate, select **Back**, choose another
 certificate and run the test again.

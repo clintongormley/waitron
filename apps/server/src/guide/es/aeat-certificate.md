@@ -17,12 +17,13 @@ escribe tu nombre legal. El certificado no tiene un campo para el nombre de la e
 
 La configuración comprueba el archivo antes de ejecutar la prueba fiscal o crear el local. Una
 contraseña incorrecta se explica bajo **Contraseña del certificado**. Si el archivo no se puede
-abrir, usa el antiguo cifrado RC2, no incluye la clave privada, ha caducado, aún no es válido o es
-de otro NIF, la explicación aparece bajo **Archivo del certificado**.
+abrir, usa un cifrado antiguo, no incluye la clave privada, ha caducado, aún no es válido o es de
+otro NIF, la explicación aparece bajo **Archivo del certificado**.
 
 Corrige la contraseña o elige otro archivo y pulsa **Siguiente**. Ejecuta la prueba fiscal al llegar a ese paso. Si falta
 la clave privada o el cifrado es antiguo, exporta de nuevo el certificado con su clave privada y un
 cifrado moderno. Las instrucciones de exportación están en la pantalla del certificado.
+Si un archivo exportado desde un Mac sigue rechazado y el certificado también está instalado en Firefox, expórtalo desde Firefox.
 
 Si la prueba fiscal dice que la AEAT no ha aceptado el certificado, pulsa **Volver**, elige otro
 certificado y repite la prueba.
