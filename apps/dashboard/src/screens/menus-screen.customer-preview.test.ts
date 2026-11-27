@@ -239,6 +239,48 @@ describe("the customer menu Online preview", () => {
     }
   });
 
+  it("puts dish allergens and diets under their own headings", async () => {
+    const preview = published();
+    const section = preview.menu.members[1]!;
+    if (section.kind !== "section") throw new Error("Expected the oven section");
+    const dish = section.members[0]!;
+    if (dish.kind !== "product") throw new Error("Expected a dish");
+    dish.allergens = { fish: {}, eggs: {} };
+    dish.dietary = ["halal"];
+    await open(() => Response.json(preview));
+    await page.getByRole("button", { name: dish.name, exact: true }).click();
+
+    const allergens = page.getByRole("heading", { name: "Allergens", exact: true });
+    const diets = page.getByRole("heading", { name: "Dietary declarations", exact: true });
+    const allergenLine = allergens.element().nextElementSibling!;
+    expect
+      .soft(Array.from(allergenLine.children, (entry) => entry.textContent?.trim()))
+      .toEqual(["Eggs", "Fish"]);
+    const [first, second] = Array.from(allergenLine.children);
+    const icon = first!.querySelector("wt-icon")!.getBoundingClientRect();
+    const label = document.createRange();
+    label.selectNode(first!.lastChild!);
+    const labelStart = label.getBoundingClientRect().left;
+    const betweenEntries =
+      second!.getBoundingClientRect().left - first!.getBoundingClientRect().right;
+    expect.soft(betweenEntries).toBeGreaterThanOrEqual(2 * (labelStart - icon.right));
+    await expect.element(diets, { timeout: 1000 }).toBeVisible();
+    expect(diets.element().nextElementSibling?.textContent?.trim()).toBe("Halal");
+  });
+
+  it.each(["House bread", "Two courses"])(
+    "lines up Menu with the photo-free %s heading",
+    async (entry) => {
+      await open(() => Response.json(published()));
+      await page.getByRole("button", { name: entry, exact: true }).click();
+
+      const title = page.getByRole("heading", { name: entry, exact: true }).element();
+      const menu = page.getByRole("button", { name: "Back to menu" }).element();
+      const chevron = menu.querySelector("wt-icon")!.getBoundingClientRect();
+      expect(Math.abs(chevron.left - title.getBoundingClientRect().left)).toBeLessThanOrEqual(2);
+    },
+  );
+
   it("shows a phone list and a computer grid with dish declarations and a set-menu summary", async () => {
     await page.viewport(1200, 800);
     await open(() => Response.json(published()));

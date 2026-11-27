@@ -449,7 +449,8 @@ Abre **Carta para clientes** y elige **Móvil** u **Ordenador** para comprobar e
 En **Idioma** puedes revisar el texto en cada idioma del contenido. Usa **Buscar platos** para
 encontrar un plato o menú por su nombre, o elige una sección para ir a ella. Debajo de los platos
 verás la leyenda de alérgenos. Abre un plato para comprobar sus variantes, opciones y extras.
-Busca las declaraciones del plato en **Alérgenos** y las de cada opción debajo de su nombre.
+Consulta **Alérgenos** y **Declaraciones dietéticas** para el plato. Las de cada opción aparecen
+debajo de su nombre.
 Abre un menú para ver los órdenes de plato, las opciones y los suplementos.
 Elige **Carta** para seguir donde estabas. Los clientes aún no pueden abrir esta
 página. Para revisar o publicar tus cambios, abre **Vista previa**.

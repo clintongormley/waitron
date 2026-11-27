@@ -81,19 +81,35 @@ function declarations({ allergens, dietary }: GuestDeclarations, { language, tex
 }
 
 function declarationLabels({ allergens, dietary }: GuestDeclarations, words: Words) {
-  return [
-    ...allergenLabels(allergens, words).map(({ code, label }) => ({
+  return {
+    allergens: allergenLabels(allergens, words).map(({ code, label }) => ({
       icon: `allergen-${code}`,
       label,
     })),
-    ...dietary.map((diet) => ({ icon: `diet-${diet}`, label: words.text[diet]! })),
-  ];
+    diets: dietary.map((diet) => ({ icon: `diet-${diet}`, label: words.text[diet]! })),
+  };
 }
 
 function writtenDeclarations(value: GuestDeclarations, words: Words) {
-  const labels = declarationLabels(value, words).map(({ label }) => label);
+  const { allergens, diets } = declarationLabels(value, words);
+  const labels = [...allergens, ...diets].map(({ label }) => label);
   return labels.length
     ? html`<span class="description" lang=${words.language}>${labels.join(", ")}</span>`
+    : nothing;
+}
+
+function detailDeclarations(
+  heading: string,
+  labels: { icon: string; label: string }[],
+  language: string,
+) {
+  return labels.length
+    ? html`<div lang=${language}>
+        <h3>${heading}</h3>
+        <div class="declarations">
+          ${labels.map(({ icon, label }) => html`<span><wt-icon name=${icon} aria-hidden="true"></wt-icon>${label}</span>`)}
+        </div>
+      </div>`
     : nothing;
 }
 
@@ -159,7 +175,7 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
     const rate = value.portion === undefined ? unitRate(value.unit) : "";
     return choiceRow(`${value.name}${size}`, `${money(value.price)}${rate}`, value, words);
   };
-  const labels = declarationLabels(member, words);
+  const { allergens, diets } = declarationLabels(member, words);
   return html`
     <p class="set-price"><strong>${dishPrice(member, language)}</strong></p>
     ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
@@ -185,16 +201,8 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
             </ul>`
         : nothing;
     })}
-    ${
-      labels.length
-        ? html`<div lang=${words.language}>
-            <h3>${words.text.allergens}</h3>
-            <div class="declarations">
-              ${labels.map(({ icon, label }) => html`<span><wt-icon name=${icon} aria-hidden="true"></wt-icon>${label}</span>`)}
-            </div>
-          </div>`
-        : nothing
-    }
+    ${detailDeclarations(words.text.allergens!, allergens, words.language)}
+    ${detailDeclarations(words.text.diet!, diets, words.language)}
   `;
 }
 
@@ -353,6 +361,9 @@ export class CustomerMenuPage extends LitElement {
         --wt-action-text: var(--wt-color-primary-text);
         --wt-action-radius: var(--wt-radius-full);
       }
+      .back[variant="ghost"] {
+        --wt-button-padding-inline: 0;
+      }
       img {
         display: block;
         inline-size: min(84px, 24cqi);
@@ -406,6 +417,9 @@ export class CustomerMenuPage extends LitElement {
         align-items: center;
         flex-wrap: wrap;
         gap: var(--wt-space-1);
+      }
+      .detail .declarations {
+        column-gap: var(--wt-space-2);
       }
       .choices {
         padding: 0;
