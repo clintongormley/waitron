@@ -458,6 +458,14 @@ describe("Table and bill actions", () => {
       await page.viewport(1280, 900);
       await expect.poll(orderLeft).toBeGreaterThan(0);
       await expect.poll(bounds).toEqual([orderLeft(), 1280, 900]);
+
+      await userEvent.keyboard("{Escape}");
+      await expect.poll(() => sheet.hasAttribute("data-open")).toBe(false);
+      await page.viewport(390, 844);
+      await expect.poll(() => el.orderPaneInset).toBe(0);
+      await userEvent.click(trigger);
+      expect(bounds()[0]).toBe(0);
+      await expect.poll(bounds).toEqual([0, 390, 844]);
     } finally {
       await page.viewport(1280, 900);
     }
