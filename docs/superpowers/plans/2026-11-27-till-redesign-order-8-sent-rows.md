@@ -33,12 +33,13 @@ opened and served on its own.
 
 Measured in `~/waitron-campaign-shared/mockups/2026-11-26-till-handheld-redesign/html/`.
 
-- **Course heading** (8-0), `af` 1 (`.ch`) and §14.2: small capitals, 13 bold, letter-spaced, muted,
-  padded 12 / 16 / 6, on the page background, the mark at the right. Letter spacing is built
-  `--wt-letter-spacing-caps` (0.04em, `packages/ui-core/src/tokens/structure.css:111`, as
-  `wt-sheet` and `wt-row-actions` use) against the drawn 0.03em. The “✓ Sent” mark, `af` 1 and
-  `d` 1 (`.pill.ok` in `base.css`): fully rounded, `check` before the word, 13 (§14.2;
-  `--wt-font-size-sm`); drawn padding 2–3 by 8–10 is built `--wt-space-1` by `--wt-space-2`.
+- **Course heading** (8-0), `af` 1 (`.ch`) and §14.2: uppercase, bold, letter-spaced, muted,
+  padded 12 / 16 / 6, on the page background, the mark at the right. Built at `--wt-font-size-sm`
+  (12) against `af` 1's drawn 13, and `--wt-font-weight-bold` (600, as `d` 1) against `af` 1's
+  700. Letter spacing is built `--wt-letter-spacing-caps` (0.04em, as `wt-row-actions`' sheet
+  heading uses) against the drawn 0.03em. The “✓ Sent” mark, `af` 1 and
+  `d` 1 (`.pill.ok` in `base.css`): fully rounded, `check` before the word, `--wt-font-size-sm`;
+  drawn padding 2 by 8 is built `--wt-space-1` by `--wt-space-2` (4 by 8; no 2px spacing token).
   “Today's quiet green” is `--wt-color-tab-ready-tint`, the ready tab's green (`design-system.md`,
   its token table), text `--wt-color-text`, the tick `--wt-color-success`: a listed difference from
   the drawn `#d7efe4` / `#12573e`.
@@ -200,8 +201,10 @@ Measured in `~/waitron-campaign-shared/mockups/2026-11-26-till-handheld-redesign
 **8-0**
 - New `wt-course-heading.test.ts`: the mark's background, text and tick paint their tokens, at
   `--wt-font-size-sm`; no mark draws none; the title and `end` slots; the heading level, default 3
-  and set. New `wt-course-heading.a11y.test.ts`: axe with and without the mark and with a button in
-  `end`, in light and dark. The file holds `ui`'s coverage bar (98/98/98/95) and mutation floor (90).
+  and set, and any level that is not a whole number from 1 to 6, or a removed `level` attribute,
+  drawing as 3. New `wt-course-heading.a11y.test.ts`: axe with and without the mark, each with and
+  without a button in `end`, in light and dark. New `wt-course-heading.forced-colors.test.ts`: in a
+  Windows contrast theme the mark keeps a drawn edge and its size. The file holds `ui`'s coverage bar (98/98/98/95) and mutation floor (90).
 
 **8a**
 - New `sent-sections.test.ts`: firing order; the ungrouped section last, with its own title; ready
@@ -249,7 +252,8 @@ Measured in `~/waitron-campaign-shared/mockups/2026-11-26-till-handheld-redesign
 
 ## Docs
 
-**8-0**: `design-system.md` gains `wt-course-heading` in the primitives table.
+**8-0**: `design-system.md` gains `wt-course-heading` in the primitives table and a line in its
+Forced colours list.
 
 **8a**, where the guides name the Sent box or its list: English and Spanish `kitchen-service.md`
 (English `:124` and `:129`, Spanish `:140` and `:145`; and English `:396–397`, Spanish `:430–432`,
@@ -296,7 +300,9 @@ heading, go to the watcher alone: it changes no screen, so lane P and the owner 
 800 × 1280. Each lists its differences against its frames and §14:
 
 - **8-0**: letter spacing 0.04em against the drawn 0.03em; the mark's tokens against the drawn
-  `#d7efe4` / `#12573e`.
+  `#d7efe4` / `#12573e`; and, cleared by the watcher on 2026-11-27 at 09:50, 12px text against
+  `af` 1's 13, weight 600 against its 700, the mark's 4 by 8 padding against the drawn 2 by 8,
+  and the shared 12px `check` icon against the drawn 14px stroked tick.
 - **8a**: **Serve all** in each fired heading, which no frame draws (decision 1; the owner can drop
   it at the picture OK); course names joined “Starters, Mains” against §4's “Mains + 1 starter”
   (decision 5); “Ready 3 min” bold in the warning colour; a part-served row reading “1 of 3
