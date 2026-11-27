@@ -10,6 +10,9 @@ const template = await readFile(new URL("../dist/index.html", import.meta.url), 
 const slot = '<script type="application/json" id="customer-menu-data">';
 assert.ok(template.includes(slot), "built menu must have a snapshot slot");
 const path = "/lunch/en";
+const icons = ["favicon.ico", "favicon.svg", "apple-touch-icon.png"].map(
+  (name) => `/_customer-menu/${name}`,
+);
 const photoUrl = "/fixture/roast-pepper.svg";
 const snapshot = {
   address: "lunch",
@@ -43,7 +46,8 @@ try {
     const url = new URL(request.url());
     if (request.method() === "GET" && url.origin === origin && url.search === "") {
       if (url.pathname === path) return route.fulfill({ contentType: "text/html", body: html });
-      if (url.pathname.startsWith("/_customer-menu/assets/")) return route.continue();
+      if (url.pathname.startsWith("/_customer-menu/assets/") || icons.includes(url.pathname))
+        return route.continue();
       if (url.pathname === photoUrl) {
         await releasePhoto.promise;
         return route.fulfill({
@@ -62,6 +66,17 @@ try {
     .getByRole("heading", { level: 1, name: "Lunch for guests" })
     .waitFor();
   await page.getByRole("button", { name: "Roast pepper" }).waitFor();
+  assert.deepEqual(
+    await page
+      .locator('link[rel="icon"], link[rel="apple-touch-icon"]')
+      .evaluateAll((links) => links.map((link) => link.getAttribute("href"))),
+    icons,
+  );
+  for (const icon of icons) {
+    const response = await page.request.get(origin + icon);
+    assert(response.ok(), icon);
+    assert.match(response.headers()["content-type"], /^image\//, icon);
+  }
   const photo = page.locator(`img[src="${photoUrl}"]`);
   await photo.waitFor();
   await photo.evaluate((image) => {

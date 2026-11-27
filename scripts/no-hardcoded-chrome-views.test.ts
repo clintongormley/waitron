@@ -4,12 +4,12 @@ import { describe, expect, it } from "vitest";
 import { sourceFilesIn } from "./no-till-as-issuer.mjs";
 
 /**
- * Contract: the styles of the dashboard's and the till's views, and of the screens modules add to
- * the dashboard, read colours and rem/em lengths from declared `--wt-*` tokens, as
+ * Contract: the styles of the dashboard, till and customer menu views, and of the screens modules
+ * add to the dashboard, read colours and rem/em lengths from declared `--wt-*` tokens, as
  * `packages/ui/src/no-hardcoded-chrome.test.ts` requires of the shared primitives.
  *
  * Weaker than its name. It reads the declaration values in each Lit `css` tagged template in every
- * non-test `.ts` on disk under `apps/dashboard/src`, `apps/till/src` and every
+ * non-test `.ts` on disk under `apps/customer-menu/src`, `apps/dashboard/src`, `apps/till/src` and every
  * `packages/<name>/src/dashboard` there is when it runs, skipping `sourceFilesIn`'s ignored
  * folders, and does not see: px sizes; styles outside a `css` tag (inline `style=` attributes,
  * `unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`,
@@ -26,6 +26,7 @@ const MODULE_DASHBOARDS = readdirSync(join(repoRoot, "packages"))
   .map((name) => `packages/${name}/src/dashboard`)
   .filter((dir) => statSync(join(repoRoot, dir), { throwIfNoEntry: false })?.isDirectory());
 const GROUPS: readonly (readonly [string, readonly string[]])[] = [
+  ["apps/customer-menu/src", ["apps/customer-menu/src"]],
   ["apps/dashboard/src", ["apps/dashboard/src"]],
   ["apps/till/src", ["apps/till/src"]],
   ["packages/*/src/dashboard", MODULE_DASHBOARDS],

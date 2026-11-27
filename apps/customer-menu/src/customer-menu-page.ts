@@ -293,7 +293,7 @@ export class CustomerMenuPage extends LitElement {
   static override styles = customerMenuPageStyles;
 
   @property({ attribute: false }) menu?: PublicGuestMenu;
-  @property({ type: Boolean }) standalone = false;
+  @property({ type: Boolean, reflect: true }) standalone = false;
   @property({ attribute: false }) photoSource?: (
     image: string,
   ) => string | DirectiveResult | undefined;
@@ -630,6 +630,7 @@ export class CustomerMenuPage extends LitElement {
             <wt-input
               name="dish-search"
               type="search"
+              variant="outlined"
               hide-label
               label=${words.text.searchDishes!}
               placeholder=${words.text.searchDishes!}

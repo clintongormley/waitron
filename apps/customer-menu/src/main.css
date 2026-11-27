@@ -37,11 +37,22 @@ body {
 }
 
 .menu-languages a {
-  color: var(--wt-color-primary-text);
+  gap: var(--wt-space-3);
+  color: inherit;
+  text-decoration: none;
+}
+
+.menu-languages a:is(:hover, :active) {
+  background: var(--wt-color-row-selected);
 }
 
 .menu-languages a[aria-current] {
   font-weight: var(--wt-font-weight-bold);
+}
+
+.menu-languages a[aria-current]::after {
+  margin-inline-start: auto;
+  content: "✓" / "";
 }
 
 .menu-languages :is(summary, a):focus-visible {

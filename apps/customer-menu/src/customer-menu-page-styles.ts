@@ -19,6 +19,12 @@ export const customerMenuPageStyles = [
       border-radius: var(--wt-radius-lg);
       overflow-wrap: anywhere;
     }
+    :host([standalone]) article {
+      min-block-size: 100dvb;
+      padding-inline: max(var(--menu-padding), calc((100% - 1040px) / 2));
+      border: 0;
+      border-radius: 0;
+    }
     header {
       display: grid;
       gap: var(--wt-space-3);
@@ -58,7 +64,6 @@ export const customerMenuPageStyles = [
       font-size: var(--wt-font-size-sm);
     }
     wt-input::part(field) {
-      border: 1px solid var(--wt-color-border);
       border-radius: var(--wt-radius-full);
       background: var(--wt-color-surface);
     }
@@ -160,7 +165,7 @@ export const customerMenuPageStyles = [
       border: 0;
       padding: 0;
       font-family: inherit;
-      color: var(--wt-color-primary-text);
+      color: inherit;
       text-align: start;
       cursor: pointer;
     }
@@ -187,6 +192,7 @@ export const customerMenuPageStyles = [
       aspect-ratio: 1;
       object-fit: cover;
       border-radius: var(--wt-radius-md);
+      background: var(--wt-color-field-fill);
     }
     :host([photos="small"]) .dish img {
       inline-size: min(60px, 18cqi);
@@ -208,6 +214,9 @@ export const customerMenuPageStyles = [
       max-block-size: 320px;
       aspect-ratio: 4 / 3;
       border-radius: calc(var(--wt-radius-lg) - 1px) calc(var(--wt-radius-lg) - 1px) 0 0;
+    }
+    :host([standalone]) .detail-lead img {
+      border-radius: 0;
     }
     :host([photos="small"]) .detail-lead img {
       max-block-size: 160px;
@@ -287,7 +296,7 @@ export const customerMenuPageStyles = [
         --menu-padding: var(--wt-space-6);
       }
       header {
-        grid-template-columns: minmax(0, 1fr) minmax(0, 44%);
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 44%);
         align-items: center;
       }
       .members {

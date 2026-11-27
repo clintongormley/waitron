@@ -40,7 +40,7 @@ describe("app icons resolve to the shared brand directory", () => {
   const apps = frontEnds();
 
   it("finds the front-ends", () => {
-    expect(apps.map((a) => a.app).sort()).toEqual(["dashboard", "setup", "till"]);
+    expect(apps.map((a) => a.app).sort()).toEqual(["customer-menu", "dashboard", "setup", "till"]);
   });
 
   it.each(apps)("$app links only to files that exist", ({ html }) => {

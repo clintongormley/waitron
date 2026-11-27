@@ -1,7 +1,12 @@
 import { afterEach, expect, it } from "vitest";
 import { page } from "vitest/browser";
-import type { CustomerMenuPhotoSize, PublicGuestMenu } from "@waitron/shared";
+import {
+  contentLanguageDisplayName,
+  type CustomerMenuPhotoSize,
+  type PublicGuestMenu,
+} from "@waitron/shared";
 import { mountCustomerMenu } from "./main.js";
+import "./main.css";
 
 const image = `${"a".repeat(64)}.webp`;
 const photoUrl = "/_customer-menu/photos/roast-pepper.webp";
@@ -64,11 +69,14 @@ it("reads the published snapshot into the page's main heading and language links
   expect(document.querySelector("details")?.open).toBe(false);
   await main.getByText("EN", { exact: true }).click();
   await expect
-    .element(main.getByRole("link", { name: "Español" }))
+    .element(main.getByRole("link", { name: contentLanguageDisplayName("es", "es") }))
     .toHaveAttribute("href", "/lunch/es");
   await expect
     .element(main.getByRole("link", { name: "English" }))
     .toHaveAttribute("aria-current", "page");
+  const current = main.getByRole("link", { name: "English" }).element();
+  expect.soft(getComputedStyle(current).textDecorationLine).toBe("none");
+  expect(getComputedStyle(current, "::after").content).toContain("✓");
   expect(document.title).toBe("Lunch for guests");
 });
 

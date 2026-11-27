@@ -39,6 +39,24 @@ afterEach(async () => {
 });
 
 describe("Customer menu page", () => {
+  it("centres the standalone menu on computer screens and keeps its page edge unframed", async () => {
+    await page.viewport(1440, 900);
+    const { customer } = await openMenu(published().menu, "light", true);
+    const article = customer.shadowRoot!.querySelector("article")!;
+    const header = article.querySelector("header")!.getBoundingClientRect();
+    expect.soft(getComputedStyle(article).borderTopWidth).toBe("0px");
+    expect.soft(getComputedStyle(article).borderTopLeftRadius).toBe("0px");
+    expect.soft(header.width).toBeGreaterThanOrEqual(1000);
+    expect.soft(header.width).toBeLessThanOrEqual(1100);
+    expect.soft(header.left).toBeCloseTo(innerWidth - header.right, 0);
+    const search = article.querySelector("wt-input")!.shadowRoot!.querySelector(".field")!;
+    expect.soft(getComputedStyle(search).boxShadow).toBe("none");
+    const dish = page.getByRole("button", { name: "Roast pepper", exact: true }).element();
+    expect.soft(getComputedStyle(dish).color).toBe(getComputedStyle(article).color);
+    const image = article.querySelector("img")!;
+    expect.soft(getComputedStyle(image).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  });
+
   it.each(["light", "dark"] as const)(
     "filters the published menu and marks choices in %s",
     async (theme) => {

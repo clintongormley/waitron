@@ -135,13 +135,14 @@ print frame the dashboard and setup share is one (`packages/ui/src/print-label.t
 its typeface, sizes and Bold weight from Waitron's own token file (`WAITRON_DEFAULTS.structure`),
 never from the page. A venue's text size, typeface and weights therefore do not reach paper.
 
-**Before any code runs, each app's `index.html` declares `<meta name="color-scheme" content="light
+**Before any code runs, each staff app's `index.html` declares `<meta name="color-scheme" content="light
 dark">`**, so a device set to dark paints the empty page dark rather than white. Once the tokens
 apply, the theme root's own `color-scheme` wins, so a saved Light choice on a dark device gets a
 brief dark page instead. Measured by loading each `index.html` in Playwright's Chromium set to dark
 and reading the centre pixel: `rgb(255,255,255)` without the line, `rgb(18,18,18)` with it, and
 `rgb(247,247,248)` with it plus `data-theme="light"` and `colors.css` on the page. Guard:
-`scripts/color-scheme-meta.test.ts`, weaker than its name: reads text.
+`scripts/color-scheme-meta.test.ts`, weaker than its name: reads text. The customer menu declares
+`light` for its initial built-in palette.
 
 **Every rule in the token layer — the `prefers-color-scheme` block and both `data-theme` blocks —
 is wrapped in `:where(...)`, which contributes zero specificity.** `data-theme` still wins over
@@ -6223,13 +6224,14 @@ Another tab drops that segment. Returning to Structure puts the remembered selec
 current address without a new history entry. Leaving a dirty Structure tab asks before discarding
 its draft.
 
-Customer menu shows the published Online preview. Phone and Computer change the width of the
-preview canvas, and the layout follows that canvas. The language picker changes the content and
+Customer menu shows the published Online preview. On a wide editor, Computer fits the column beside
+Settings. In the narrow editor, Computer can scroll inside the preview to show its wider layout.
+Phone uses the narrower canvas. The language picker changes the content and
 its price formatting. Search matches displayed dish and set-menu names. Top-level section links
 remain visible while scrolling and underline the current section. The canvas has its own theme
 root so the dashboard theme does not set the customer page’s colours.
-The dashboard preview and `apps/customer-menu` share the same renderer. The
-standalone app uses the built-in light palette and carries the language in the address.
+The dashboard preview and `apps/customer-menu` share the same renderer. The standalone app uses the
+built-in light palette, carries the language in the address and draws its content without the preview frame.
 The dark screenshot fixture selects the dark palette through `data-theme` on the document.
 Dish and set-menu names open details inside the canvas. The heading takes focus on open.
 The **Menu** button restores the search, filters, scroll position and focus on the name that

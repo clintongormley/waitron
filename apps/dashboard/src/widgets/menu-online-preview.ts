@@ -47,10 +47,15 @@ export class MenuOnlinePreview extends LitElement {
       wt-combobox {
         inline-size: min(100%, 16ch);
       }
-      @container (width < 720px) {
-        .canvas:has(.computer) {
-          overflow: auto;
-          max-block-size: calc(100cqb - var(--wt-space-4));
+      @container online-editor (inline-size <= 760px) {
+        .computer {
+          min-inline-size: 720px;
+        }
+        @container (width < 720px) {
+          .canvas:has(.computer) {
+            overflow: auto;
+            max-block-size: calc(100cqb - var(--wt-space-4));
+          }
         }
       }
       .canvas:focus-visible {
@@ -60,9 +65,6 @@ export class MenuOnlinePreview extends LitElement {
       .phone {
         max-inline-size: 390px;
         margin-inline: auto;
-      }
-      .computer {
-        min-inline-size: 720px;
       }
     `,
   ];

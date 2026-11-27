@@ -471,9 +471,10 @@ describe("the customer menu Online preview", () => {
   it("follows the Computer canvas when it becomes one pixel too narrow", async () => {
     const viewport = [innerWidth, innerHeight] as const;
     try {
-      await page.viewport(1200, 800);
+      await page.viewport(390, 800);
       const { el, host } = await open(() => Response.json(publishedSections()));
       host.style.cssText += "height: 700px; container-type: size; overflow-y: auto;";
+      await page.getByRole("radio", { name: "Computer" }).click();
       const first = page.getByRole("link", { name: "From the oven", exact: true }).first();
       await expect.element(first).toHaveAttribute("aria-current", "location");
       const canvas = customerPage(el)!.parentElement!;
@@ -491,6 +492,35 @@ describe("the customer menu Online preview", () => {
         .element(page.getByRole("link", { name: "Desserts and coffee" }), { timeout: 1000 })
         .toHaveAttribute("aria-current", "location");
       expect(host.scrollTop).toBe(0);
+    } finally {
+      await page.viewport(...viewport);
+    }
+  });
+
+  it("fits the Computer menu beside Settings when the wide dashboard has a narrow preview column", async () => {
+    const viewport = [innerWidth, innerHeight] as const;
+    try {
+      await page.viewport(1280, 800);
+      const { el } = await open(() => Response.json(published()));
+      await expect.element(page.getByRole("searchbox", { name: "Search dishes" })).toBeVisible();
+      const customer = customerPage(el)!;
+      const canvas = customer.parentElement!;
+      const preview = (canvas.getRootNode() as ShadowRoot).host as HTMLElement;
+      preview.style.inlineSize = "620px";
+      expect(canvas.scrollWidth).toBe(canvas.clientWidth);
+      expect(customer.getBoundingClientRect().right).toBeLessThanOrEqual(
+        canvas.getBoundingClientRect().right,
+      );
+      preview.style.inlineSize = "662px";
+      const searchHost = customer.shadowRoot!.querySelector("wt-input[type=search]")!;
+      const input = searchHost.shadowRoot!.querySelector("input")!;
+      const style = getComputedStyle(input);
+      const metrics = document.createElement("canvas").getContext("2d")!;
+      metrics.font = style.font;
+      const textWidth = metrics.measureText(input.placeholder).width;
+      const available =
+        input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      expect(available).toBeGreaterThanOrEqual(textWidth);
     } finally {
       await page.viewport(...viewport);
     }
