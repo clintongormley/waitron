@@ -2088,8 +2088,8 @@ declare module "@waitron/shared" {
     "restore.placement_failed": { kept: "previous" } | { kept: "set_aside"; folder: string };
     /** A start found no `venue.db` but a folder inside the venue folder, `folder`, into which a
      * restore moved the old database and which still holds files (`clearReplacedDatabases`,
-     * restore.ts). They may be the venue's only copy, so the folder is kept and the start refused
-     * until they are moved back or a restore is run again. */
+     * restore-file-placement.ts). They may be the venue's only copy, so the folder is kept and the
+     * start refused until they are moved back or a restore is run again. */
     "restore.database_set_aside": { folder: string };
     /** The owner's bucket holds no `current.json` for the kit's venue: nothing to rebuild from. */
     "restore.stream_pointer_missing": Record<string, never>;

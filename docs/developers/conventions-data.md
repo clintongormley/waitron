@@ -3486,8 +3486,9 @@ under `FULL_DISK_BYTES`, 16 MiB, and the cause chain carries an engine result co
 code (`errcode & 0xff`) is 10 or 14, or an `ENOSPC`. `classifyStartFailure` uses it to turn
 `provisioning.database_unreachable` or `unknown` into `storage.disk_full`; a known `AppError` keeps
 its own code. The start's write-back of its unchanged count uses it to decide whether to serve the
-recovery page at once (`countWritable`, `apps/server/src/node-entry.ts`). The repair page's recover,
-summary and start-again routes and its inspection read use it too (`diskFullOr`, and the inspection's own catch, in `apps/server/src/setup-first-fiscal-api.ts`). Why 16 MiB: every
+recovery page at once (`countWritable`, `apps/server/src/node-entry-recovery-state.ts`). The repair
+page's recover, summary and start-again routes and its inspection read use it too (`diskFullOr`,
+and the inspection's own catch, in `apps/server/src/setup-first-fiscal-api.ts`). Why 16 MiB: every
 full-disk failure measured happened with at most 48 KiB free on HFS+, tmpfs and ext4 (F6, F11, F14)
 and with about 1.2 MB reported free on APFS (F1, F2, F5), and a missing folder raises 14 with room
 to spare, so the clean-up floor of 256 MiB cannot be the test.
