@@ -4,10 +4,13 @@ import { describe, expect, it } from "vitest";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { recordReplacement } from "@waitron/core";
 import {
+  deviceProfiles,
+  devices,
   invoiceCorrections,
   invoiceDeliveries,
   printJobs,
   readLiveSeriesIdTx,
+  receiptReprints,
   sales,
   taxpayer,
 } from "@waitron/db";
@@ -142,6 +145,43 @@ const deliveriesOf = (saleId: string) =>
     })
     .from(invoiceDeliveries)
     .where(eq(invoiceDeliveries.saleId, saleId));
+
+const printsOf = (saleId: string) =>
+  venue.db
+    .select({ id: printJobs.id, receiptCopy: printJobs.receiptCopy, status: printJobs.status })
+    .from(printJobs)
+    .where(eq(printJobs.saleId, saleId));
+
+const reprintsOf = (saleId: string) =>
+  venue.db
+    .select({ printJobId: receiptReprints.printJobId })
+    .from(receiptReprints)
+    .where(eq(receiptReprints.saleId, saleId));
+
+/** The till's Reprint in Find a bill, sent while the till's profile may print receipts. */
+async function tillReprint(saleId: string) {
+  const [device] = await venue.db
+    .select({ profileId: devices.deviceProfileId })
+    .from(devices)
+    .where(eq(devices.id, venue.deviceId));
+  const [profile] = await venue.db
+    .select({ capabilities: deviceProfiles.capabilities })
+    .from(deviceProfiles)
+    .where(eq(deviceProfiles.id, device!.profileId!));
+  const capabilities = profile!.capabilities as string[];
+  await venue.db
+    .update(deviceProfiles)
+    .set({ capabilities: [...capabilities, "print-receipt"] })
+    .where(eq(deviceProfiles.id, device!.profileId!));
+  try {
+    return await send(venue.app, adminCookie, "POST", `/api/transactions/${saleId}/reprint`, {});
+  } finally {
+    await venue.db
+      .update(deviceProfiles)
+      .set({ capabilities })
+      .where(eq(deviceProfiles.id, device!.profileId!));
+  }
+}
 
 async function refusal(promise: Promise<unknown>): Promise<string> {
   const error = await promise.then(
@@ -365,5 +405,78 @@ describe("a corrective full invoice (R1) is delivered as a full invoice; a repla
       .where(eq(sales.id, row!.corrects!));
     expect(row!.department).toBeNull();
     expect(original!.department).not.toBeNull();
+  });
+
+  it("prints an R1 that never printed as its original from the till's Reprint, tracked as its delivery", async () => {
+    const r1 = await filedR1();
+    expect(await printsOf(r1)).toEqual([]);
+    const answer = await tillReprint(r1);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await printsOf(r1)).toEqual([
+      { id: expect.any(String), receiptCopy: false, status: "queued" },
+    ]);
+    expect(await deliveriesOf(r1)).toEqual([
+      { medium: "receipt", designation: "original", status: "queued" },
+    ]);
+    expect(await reprintsOf(r1)).toEqual([]);
+  });
+
+  it("prints a new original of an R1 whose original failed for good from the till's Reprint", async () => {
+    const r1 = await filedR1();
+    const failed = await printedOriginal(r1);
+    await venue.db
+      .update(printJobs)
+      .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+      .where(eq(printJobs.id, failed));
+    const answer = await tillReprint(r1);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect((await printsOf(r1)).filter((job) => job.id !== failed)).toEqual([
+      { id: expect.any(String), receiptCopy: false, status: "queued" },
+    ]);
+    expect(await deliveriesOf(r1)).toEqual([
+      { medium: "receipt", designation: "original", status: "queued" },
+    ]);
+    expect(await reprintsOf(r1)).toEqual([]);
+  });
+
+  it("prints a printed R1 as a copy from the till's Reprint, tracked as its duplicate and recorded as a reprint", async () => {
+    const r1 = await filedR1();
+    const printed = await printedOriginal(r1);
+    await venue.db
+      .update(printJobs)
+      .set({ status: "done", deliveredAt: new Date().toISOString() })
+      .where(eq(printJobs.id, printed));
+    const answer = await tillReprint(r1);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const copies = (await printsOf(r1)).filter((job) => job.id !== printed);
+    expect(copies).toEqual([{ id: expect.any(String), receiptCopy: true, status: "queued" }]);
+    expect(await deliveriesOf(r1)).toEqual([
+      { medium: "receipt", designation: "duplicate", status: "queued" },
+    ]);
+    expect(await reprintsOf(r1)).toEqual([{ printJobId: copies[0]!.id }]);
+  });
+
+  it("prints an R1 emailed but never printed as a copy from the till's Reprint", async () => {
+    const r1 = await filedR1();
+    const email = await inTx(venue, (tx) =>
+      reserveInvoiceDelivery(tx, r1, {
+        requestKey: randomUUID(),
+        personId: venue.adminId,
+        medium: "email",
+        recipient: "accounts@harbour.example",
+      }),
+    );
+    await venue.db
+      .update(invoiceDeliveries)
+      .set({ status: "sent" })
+      .where(eq(invoiceDeliveries.id, email.id));
+    const answer = await tillReprint(r1);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const [copy] = await printsOf(r1);
+    expect(copy).toEqual({ id: expect.any(String), receiptCopy: true, status: "queued" });
+    expect(await deliveriesOf(r1)).toEqual(
+      expect.arrayContaining([{ medium: "receipt", designation: "duplicate", status: "queued" }]),
+    );
+    expect(await reprintsOf(r1)).toEqual([{ printJobId: copy!.id }]);
   });
 });

@@ -9,13 +9,18 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
+import { enqueuePrintJob } from "@waitron/printing";
 import { readJsonBody, requireBodyUuid } from "@waitron/server-kit";
 import { AppError, isUuid } from "@waitron/shared";
 import { advancesTakenOff } from "./advance-taken-off.js";
 import { assertDeviceCapability } from "./device-session.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
 import type { Logger } from "./logger.js";
-import { expireInvoiceDeliveryClaims, invoiceDeliveryClaimsDue } from "./invoice-delivery.js";
+import {
+  expireInvoiceDeliveryClaims,
+  invoiceDeliveryClaimsDue,
+  reserveInvoiceDelivery,
+} from "./invoice-delivery.js";
 import { requestPrintDelivery, switchToReceipt } from "./invoice-delivery-actions.js";
 import { readInvoiceDeliveryState } from "./invoice-delivery-status.js";
 import { resendInvoicePrintJob } from "./invoice-print.js";
@@ -23,6 +28,7 @@ import {
   confirmReceiptHandover,
   enqueueOriginalReceipt,
   enqueueReceiptCopy,
+  requireReceiptBytes,
   resolveInvoicePrinter,
   resolveReceiptPrinter,
   saleReceiptLayout,
@@ -288,7 +294,35 @@ export function mountTransactionReceiptApi(
         const printer = await resolveReceiptPrinter(tx, cfg.origin);
         if (printer === undefined) throw new AppError("receipt.no_printer", {});
         let copy: { jobId: string } | undefined;
-        if (ticket.corrects?.inFull === true) {
+        if (ticket.invoiceType === "R1") {
+          // The till offers an R1 no Print original, so Reprint prints its original while none has
+          // gone out.
+          await expireInvoiceDeliveryClaims(tx);
+          const state = await readInvoiceDeliveryState(tx, id, { emailAvailable: false });
+          const duplicate = state!.status.originalCompleted;
+          const bytes = await requireReceiptBytes(
+            tx,
+            cfg,
+            ticket,
+            id,
+            duplicate,
+            printer,
+            language ?? null,
+          );
+          const job = await enqueuePrintJob(tx, printer.id, bytes, "document", {
+            saleId: id,
+            receiptCopy: duplicate,
+            pageLanguage: language ?? null,
+          });
+          await reserveInvoiceDelivery(tx, id, {
+            requestKey: job.jobId,
+            personId: session.personId,
+            medium: "receipt",
+            printJobId: job.jobId,
+          });
+          if (!duplicate) return;
+          copy = job;
+        } else if (ticket.corrects?.inFull === true) {
           // Put this right issues a replacement without printing it, so its first print is its
           // original.
           const original = await enqueueOriginalReceipt(tx, cfg, ticket, id, {
