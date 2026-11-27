@@ -1,3 +1,4 @@
+import type { AllergyPatch } from "@waitron/module";
 import { compareDecimal, decimal } from "@waitron/shared";
 import { SESSION_PERSON_REFUSAL, isNetworkFailure, type TillApi } from "../api/client.js";
 import type { Draft, DraftLine, DraftLineInput, BillDraftSnapshot } from "../api/drafts-api.js";
@@ -7,6 +8,34 @@ import type { BillEditExpected, BillEditState } from "../api/order-types.js";
 import { toDraftLineInput } from "./draft-lines.js";
 import { WorkingOrderStore, type LineSelection, type OrderLine } from "./working-order.js";
 import type { placeFor } from "./draft-place.js";
+import type { ClosedZoneQuestion, LateSendApprovalAsked, LateSendAsked } from "./late-send.js";
+
+/**
+ * What a draft's submission leaves to do once the draft is open for edits again. `find-tab`, after a
+ * submission that got no answer, moves to the tab the floor now shows for the table the draft was
+ * sent from, only while that table still holds the party the screen showed at the submission and the
+ * operator is still on it; `landedOn` names the tab the server added the draft to, when it is not the
+ * one it was sent to.
+ */
+export type DraftFollowUp =
+  | "read-tab"
+  | "find-tab"
+  | "mark-unsellable"
+  | "recheck-dead-ends"
+  | { landedOn: string }
+  | { setMenuNoPlace: string; draftLineId?: string }
+  | { closedZone: ClosedZoneQuestion; submissionId: string; answered?: AnsweredAllergy }
+  | { lateSend: LateSendAsked; answered?: AnsweredAllergy }
+  | { approval: LateSendApprovalAsked; answered?: AnsweredAllergy }
+  | undefined;
+
+/** The allergy answer a refused submission carried, with the party revision and the dishes it was
+ * given against. */
+export interface AnsweredAllergy {
+  patch: AllergyPatch;
+  revision: number;
+  dishes: string;
+}
 
 /** How long after a person's last edit their draft is saved. */
 export const DRAFT_SAVE_DELAY_MS = 400;
