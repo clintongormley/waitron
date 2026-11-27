@@ -1124,6 +1124,7 @@ export class WtCombobox extends LitElement {
           ${this.renderIcon(this.chosenOption, false, `${this.valueId}-icon`)}
           <span
             id=${this.valueId}
+            part="value"
             class=${classMap({ value: true, placeholder: !selectedText, muted })}
             ><slot name="value-prefix"></slot>${shownText}</span
           >

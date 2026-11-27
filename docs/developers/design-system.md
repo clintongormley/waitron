@@ -2055,8 +2055,9 @@ Style a column's header cell by its `column-<key>` part, its sort button by `col
 and its text label by `column-heading-<key>`. Products uses these parts to align Price with
 the amounts without moving the sort indicator into their space.
 
-Each section retains the `wt-combobox` choices its column's `filter` descriptor supplies. Its
-"all" row is shown as a chosen value while its empty string means no filter. A filter with
+Each section retains the `wt-combobox` choices its column's `filter` descriptor supplies. The
+chosen text wraps through the combobox's `value` part. The "all" row is shown as a chosen value
+while its empty string means no filter. A filter with
 `multiple` holds any number of choices at once: its dropdown is a `multiple` `wt-combobox`, the
 "all" row still first and shown chosen while nothing is ticked, and picking that row unticks
 everything. A row passes it when it matches any chosen value, and it counts once in the Filters

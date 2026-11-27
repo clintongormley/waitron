@@ -465,6 +465,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
         gap: var(--wt-space-2);
       }
 
+      .table-filter::part(value) {
+        text-wrap: wrap;
+      }
+
       .filters-clear-all,
       .filters-close {
         min-height: var(--wt-tap-min);
