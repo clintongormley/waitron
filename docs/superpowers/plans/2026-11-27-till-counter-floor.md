@@ -4,6 +4,11 @@
 
 **Split cleared by the watcher at 18:52 on 27 November.** Part (a) adds the server fields and the Counter floor when staff choose a counter. It shows ready and sent orders, opens New order, and returns to the chosen counter. Sign-in still opens the basket and the two existing queue shortcuts remain available. Part (b) opens the floor at sign-in, moves both shortcuts into Counter, shows its parked and seated bills, and adds Other orders. In part (a), the Counter floor refreshes Waiting live and falls back at 15 seconds while disconnected. The parked list keeps its existing reads until part (b).
 
+**Owner update, 27 November at 22:02 and 22:05.** Part (b) shows only the chosen counter’s
+ready, sent and parked orders. Staff use the table floor for seated bills, including bar seats.
+Other orders is dropped. Back to Counter preserves the Keep or Discard prompt for an unfinished
+basket.
+
 Choose a counter to see ready orders, a full-width **New order**, then that counter’s open orders. Open a paid order’s dishes, take payment for a sent unpaid order, or retrieve a parked order. Use **Floor** to return to the table floor. Follow `ad` frame 1 for the spacing, button and order rows. Sections 9.8 and 14.3 govern the ready rows and replace the frame’s jobs and Map/List.
 
 1. **Read and refresh.** In `apps/server/src/till-kitchen-counter-routes.ts`, return each Waiting row’s effective `zoneId` from the same pickup-first lookup that enforces visibility in `zone-access.ts`. In `working-order-counter.ts`, take `readyAt` from the latest ready stamp on live kitchen parts in a batched Waiting read. Declare the two fields in `apps/till/src/api/orders-api.ts`. The existing counts determine readiness. Put orders with at least one active portion and `canHandOver` in Ready when waiting, held and unsent counts are all zero. This includes served orders still awaiting handover. A partly ready order and a handed-over unpaid order stay in Open orders. Use the held read’s `zoneId` for parked orders and exclude the current basket. Refresh both lists on entry and on changes to existing order topics through `liveGate` while the floor is open. Use its 15-second fallback while disconnected and redraw elapsed minutes locally.

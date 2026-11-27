@@ -5,9 +5,7 @@ import type { TillLiveConnection } from "../api/live-connection.js";
 import type { FloorZone, TableState } from "../api/floor-api.js";
 import type { CounterWaitingOrder, HeldOrderSummary } from "../api/orders-api.js";
 import { t } from "../i18n/t.js";
-import { listedTables } from "../state/floor-map.js";
 import { liveGate } from "../state/live-gate.js";
-import type { NamedOrderZone } from "../widgets/order-label.js";
 import "../widgets/counter-waiting.js";
 import "../widgets/held-orders.js";
 
@@ -56,13 +54,9 @@ export class TillCounterFloor extends LitElement {
   @property({ attribute: false }) live?: TillLiveConnection;
   @property({ attribute: false }) refresh?: () => void;
   @property({ type: String }) zoneId = "";
-  @property({ attribute: false }) counterZoneIds: readonly string[] = [];
-  @property({ attribute: false }) floorZoneIds: readonly string[] = [];
-  @property({ attribute: false }) orderZones: readonly NamedOrderZone[] = [];
   @property({ attribute: false }) waiting: CounterWaitingOrder[] = [];
   @property({ attribute: false }) parked: HeldOrderSummary[] = [];
   @property({ attribute: false }) tables: TableState[] = [];
-  @property({ type: Boolean }) tableMapReadFinished = false;
   @property({ attribute: false }) zones: FloorZone[] = [];
   @property({ type: Boolean }) canEditKitchenNote = false;
   @property({ type: Boolean }) canMoveStation = false;
@@ -95,8 +89,6 @@ export class TillCounterFloor extends LitElement {
         "order_drafts",
         "order_draft_lines",
         "bill_payments",
-        "party_tables",
-        "dining_tables",
       ],
       intervalMs: 15_000,
       quietWhileConnected: true,
@@ -105,11 +97,10 @@ export class TillCounterFloor extends LitElement {
     if (!this.live?.up) run();
   }
 
-  #rows(orders: CounterWaitingOrder[], kind: "ready" | "open" | "other" = "open") {
+  #rows(orders: CounterWaitingOrder[], ready = false) {
     return html`<till-counter-waiting
       floor
-      ?ready=${kind === "ready"}
-      .outsideZones=${kind === "other" ? this.orderZones : undefined}
+      ?ready=${ready}
       .orders=${orders}
       .now=${this.#clock.now}
       .canEditKitchenNote=${this.canEditKitchenNote}
@@ -117,47 +108,20 @@ export class TillCounterFloor extends LitElement {
     ></till-counter-waiting>`;
   }
 
-  #heldRows(orders: HeldOrderSummary[], outside = false) {
-    return orders.length === 0
-      ? nothing
-      : html`<till-held-orders
-          floor
-          .orders=${orders}
-          .outsideZones=${outside ? this.orderZones : undefined}
-          .tables=${this.tables}
-          .zones=${this.zones}
-        ></till-held-orders>`;
-  }
-
   override render() {
     const current = this.waiting.filter(({ zoneId }) => zoneId === this.zoneId);
     const ready = current.filter(readyToHandOver);
     const open = current.filter((order) => !readyToHandOver(order));
-    const held = this.parked.filter(({ zoneId }) => zoneId === this.zoneId);
-    const seated = held.filter(({ partyId }) => partyId !== null);
-    const parked = held.filter(({ partyId }) => partyId === null);
-    const mappedParties = new Set(
-      listedTables(this.tables).flatMap(({ zoneId, party }) =>
-        zoneId !== null && this.floorZoneIds.includes(zoneId) && party !== null ? [party.id] : [],
-      ),
+    const parked = this.parked.filter(
+      ({ zoneId, partyId }) => zoneId === this.zoneId && partyId === null,
     );
-    const shownCounter = (zoneId: string | null) =>
-      zoneId !== null && this.counterZoneIds.includes(zoneId);
-    const otherWaiting = this.waiting.filter(({ zoneId }) => !shownCounter(zoneId));
-    const otherParked = this.parked.filter(
-      ({ zoneId, partyId }) =>
-        !shownCounter(zoneId) &&
-        (partyId === null || !mappedParties.has(partyId)) &&
-        (this.tableMapReadFinished || zoneId === null || !this.floorZoneIds.includes(zoneId)),
-    );
-    const openCount = open.length + held.length;
-    const otherCount = otherWaiting.length + otherParked.length;
+    const openCount = open.length + parked.length;
     return html`
       ${
         ready.length === 0
           ? nothing
           : html`<h2>${t("counter.floor_ready")}</h2>
-              ${this.#rows(ready, "ready")}`
+              ${this.#rows(ready, true)}`
       }
       <div class="new-order">
         <wt-button
@@ -171,15 +135,17 @@ export class TillCounterFloor extends LitElement {
         openCount === 0
           ? nothing
           : html`<h2>${t("counter.floor_open")} · ${openCount}</h2>
-              ${this.#heldRows(seated)}${this.#rows(open)}${this.#heldRows(parked)}`
-      }
-      ${
-        otherCount === 0
-          ? nothing
-          : html`<section data-other-orders>
-              <h2>${t("counter.floor_other")} · ${otherCount}</h2>
-              ${this.#rows(otherWaiting, "other")}${this.#heldRows(otherParked, true)}
-            </section>`
+              ${this.#rows(open)}
+              ${
+                parked.length === 0
+                  ? nothing
+                  : html`<till-held-orders
+                      floor
+                      .orders=${parked}
+                      .tables=${this.tables}
+                      .zones=${this.zones}
+                    ></till-held-orders>`
+              }`
       }
     `;
   }

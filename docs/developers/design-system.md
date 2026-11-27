@@ -7070,10 +7070,9 @@ scrolls inside its card. Total and payment controls take the space they need bel
 
 Choosing a counter, or signing in with a counter as the starting zone, opens its floor. Show orders
 ready to hand over above a full-width New order, then the counter’s open orders. A parked row
-retrieves the order on one tap and has a separate actions menu. Sent orders and seated bills expand
-to show their dishes and actions. Other orders lists work outside the counters and tables this till
-shows. Hide the section when it is empty. Back to Counter returns from the basket to the chosen
-counter through the draft prompt when needed.
+retrieves the order on one tap and has a separate actions menu. Sent orders expand to show their
+dishes and actions. Staff choose another counter to see its orders, and open seated bills on Floor.
+Back to Counter returns from the basket to the chosen counter through the draft prompt when needed.
 
 Counter and table Order share a last-added strip in the layout flow after the menu. It must leave
 the final product row uncovered. Adding a dish while the order is in view, including merging into an

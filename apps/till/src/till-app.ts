@@ -23863,23 +23863,12 @@ export class TillApp extends LitElement {
   }
 
   readonly #refreshCounterFloorOrders = (): void => {
-    const session = this.#operatorSession;
     void this.#refreshList("waiting", "refresh.waiting", TABLE_REQUEST_LIMIT_MS);
-    void this.#refreshList("held", "refresh.held", TABLE_REQUEST_LIMIT_MS).then(() => {
-      if (session !== this.#operatorSession || this.#activeTab() !== "counter") return;
-      const zones = this.#deviceNavigation()?.floorZoneIds;
-      if (
-        this.heldOrders.some(
-          ({ partyId, zoneId }) => partyId !== null && zoneId !== null && zones?.includes(zoneId),
-        )
-      )
-        void this.#pollFloor();
-    });
+    void this.#refreshList("held", "refresh.held", TABLE_REQUEST_LIMIT_MS);
   };
 
   #tabBody(tab: BuiltInScreen): TemplateResult | typeof nothing {
     if (tab === "counter") {
-      const navigation = this.#deviceNavigation();
       const bill = this.#currentCounterSetMenuBill;
       const copies = this.#counterOffers.ordering(bill);
       return html`<till-counter-screen
@@ -23915,10 +23904,6 @@ export class TillApp extends LitElement {
         .counterFloor=${this.showCounterFloor}
         .live=${this.#live}
         .refreshFloorOrders=${this.#refreshCounterFloorOrders}
-        .counterZoneIds=${navigation?.counterZoneIds ?? []}
-        .floorZoneIds=${navigation?.floorZoneIds ?? []}
-        .orderZones=${this.profileServiceZones}
-        .tableMapReadFinished=${this.tablesAnswered || this.floorReadFailed}
         .tables=${this.tables}
         .zones=${this.zones}
         .invoiceLocale=${this.invoiceLocale}

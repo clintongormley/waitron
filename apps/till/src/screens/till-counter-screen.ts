@@ -238,10 +238,6 @@ export class TillCounterScreen extends LitElement {
   @property({ type: Boolean }) counterFloor = false;
   @property({ attribute: false }) live?: TillLiveConnection;
   @property({ attribute: false }) refreshFloorOrders?: () => void;
-  @property({ attribute: false }) counterZoneIds: readonly string[] = [];
-  @property({ attribute: false }) floorZoneIds: readonly string[] = [];
-  @property({ attribute: false }) orderZones: readonly ServiceZoneSummary[] = [];
-  @property({ type: Boolean }) tableMapReadFinished = false;
   @state() private floorBasket = false;
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   @property({ attribute: false }) counterWaiting: CounterWaitingOrder[] = [];
@@ -531,12 +527,8 @@ export class TillCounterScreen extends LitElement {
         .zoneId=${this.selectedServiceZoneId}
         .live=${this.live}
         .refresh=${this.refreshFloorOrders}
-        .counterZoneIds=${this.counterZoneIds}
-        .floorZoneIds=${this.floorZoneIds}
-        .orderZones=${this.orderZones}
         .parked=${this.heldOrders.filter((order) => order.id !== this.store.id)}
         .tables=${this.tables}
-        .tableMapReadFinished=${this.tableMapReadFinished}
         .zones=${this.zones}
         .waiting=${this.counterWaiting}
         .canEditKitchenNote=${this.canEditKitchenNote}

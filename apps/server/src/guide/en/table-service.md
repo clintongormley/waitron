@@ -634,10 +634,6 @@ Each of them gets a bill of their own at the table. The bill switcher, at the to
 screen, shows the current bill and its amount. If the table has several bills, the number on the
 right shows where the current bill sits in the list. **2 of 3** means you are on the second bill.
 
-For a table outside your till’s map, open its bill under **Other orders** on **Counter**.
-Choose **Retrieve** or **Discard**. Discarding the last bill leaves a fresh empty bill at the table.
-To free the table, use **Finish table**.
-
 Tap the switcher to list the table's bills in number order. On a narrow screen, the list opens
 from the bottom. The teal check marks the bill you have open. Each row shows the bill's number and
 name, what it still owes, how much it was paid over its total, such as **€5.00 over**, or
@@ -984,9 +980,8 @@ zone you want, choose the one that **Opens first**, and tap **Save**.
 If your till opens on a counter zone, you start on **Counter**. From a narrow table floor,
 tap the zone button and choose the counter by name. Tap **Handed over** beside a ready order, or
 **New order** to start a basket. Under **Open orders**, tap a parked order to retrieve it. Tap a
-sent order or a seated bill to see its dishes and actions. Use **Other orders** when you cannot
-reach the order from a counter or table this till shows. Tap **Back to Counter** from the basket
-or **Floor** to return to the tables.
+sent order to see its dishes and actions. To see another counter’s orders, choose that counter.
+Tap **Back to Counter** from the basket, or **Floor** to return to the tables.
 A phone or tablet has no Counter, so its Floor shows every zone you chose. Until you save a choice,
 a phone or tablet opens where it always has. After that it opens on your **Opens first** zone.
 After you open a table, see [Get back to your tables with unsent dishes](table-service.md#unsent-tables).
@@ -1030,7 +1025,7 @@ a contribution. For an equal share, enter how many people are still to pay, incl
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
 Choosing every dish pays the whole bill. If the card is declined or you choose **Cancel payment**,
 check this bill for the dishes before trying again. If they are on a separate bill, pay that bill
-from the table's bill switcher or from **Other orders** when the table is outside this till's floor.
+from the table's bill switcher.
 While their card is still out, the till that
 took it shows **Being paid on** and the number of their bill; do not charge those dishes again.
 On a printed bill, **Items** cancels the existing receipt and reopens the bill. On a Counter order

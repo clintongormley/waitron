@@ -588,8 +588,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [shared panels and payment controls](developers/design-system.md#full-screen-panels-and-payment-controls).
   On the narrow floor the zone chooser opens Counter by zone name on tills that already run
   Counter, and opens the device's kitchen boards. At phone width, Floor stays visible on Counter.
-  Counter opens to its ready, sent and parked orders beside **New order**. **Other orders** keeps
-  work outside the displayed counters and tables reachable until the job list takes over.
+  Counter opens to the selected counter’s ready, sent and parked orders beside **New order**.
   **Kitchen-entry counts** still need board
   data for dishes to send out and dishes cooking. The kitchen boards need
   station titles, upright-phone controls and the shared Back treatment.

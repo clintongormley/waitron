@@ -673,10 +673,6 @@ arriba en la pantalla de la mesa, muestra la cuenta abierta y su importe. Si hay
 a la derecha ves la posición de la cuenta abierta en la lista. **2 de 3** indica que estás en la
 segunda cuenta.
 
-Si la mesa no aparece en el plano de tu dispositivo, abre su cuenta en **Otros pedidos**,
-en **Mostrador**. Elige **Recuperar** o **Descartar**. Al descartar la última cuenta, se abre una
-cuenta nueva y vacía en la mesa. Para liberar la mesa, usa **Cerrar mesa**.
-
 Toca el selector para ver las cuentas de la mesa por orden de número. En una pantalla estrecha,
 la lista se abre desde abajo. La marca verde azulada indica qué cuenta tienes abierta. Cada fila muestra el número y
 el nombre de la cuenta, lo que queda por pagar, lo que se pagó de más, por ejemplo **5,00 € de
@@ -1042,10 +1038,9 @@ Marca **Mostrar** en cada zona que quieras, elige la que **Abre primero** y toca
 Si la caja abre en una zona de mostrador, empiezas en **Mostrador**. Desde una sala en una
 pantalla estrecha, toca el botón de zona y elige el mostrador por su nombre. Toca **Entregado**
 junto a un pedido listo o **Nuevo pedido** para empezar una cesta. En **Pedidos abiertos**, toca
-un pedido aparcado para recuperarlo. Toca un pedido enviado o una cuenta de una mesa para ver
-sus platos y acciones. Usa **Otros pedidos** cuando no puedas abrir el pedido desde un mostrador
-o una mesa que muestre esta caja. Toca **Volver al mostrador** desde la cesta o **Sala** para
-volver a las mesas.
+un pedido aparcado para recuperarlo. Toca un pedido enviado para ver sus platos y acciones.
+Para ver los pedidos de otro mostrador, elígelo por su nombre. Toca **Volver al mostrador** desde
+la cesta o **Sala** para volver a las mesas.
 Un móvil o una tableta no tiene Mostrador, así que su Sala muestra
 todas las zonas que has elegido. Hasta que guardas una elección, un móvil o una tableta se abre donde siempre.
 Después se abre en tu zona de **Abre primero**. Tras abrir una mesa, mira
@@ -1091,8 +1086,7 @@ concretos o **Una cantidad** para aportar un importe. Para una parte igual, indi
 personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
 si solo se pagan algunos. Si eliges todos los platos, se cobra toda la cuenta. Si la tarjeta se
 rechaza o pulsas **Cancelar cobro**, comprueba si los platos están en esta cuenta antes de volver a
-cobrar. Si están en otra cuenta, cóbrala desde el selector de cuentas de la mesa o desde
-**Otros pedidos** si la mesa no está en la sala de esta caja. Mientras su
+cobrar. Si están en otra cuenta, cóbrala desde el selector de cuentas de la mesa. Mientras su
 tarjeta sigue en curso, la caja que la cobró muestra **Se está cobrando en la**
 y el número de su cuenta; no vuelvas a cobrar esos platos. En una cuenta impresa, **Artículos**
 anula el ticket y reabre la cuenta. En un pedido de mostrador ya enviado a cocina y aún sin

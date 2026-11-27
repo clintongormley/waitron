@@ -156,6 +156,8 @@ const heldSummary: HeldOrderSummary = {
   signals: [],
 };
 
+const parkedAtCounter = { ...heldSummary, zoneId: "zone-counter" };
+
 const floorZone: FloorZone = {
   id: "z1",
   name: "Comedor",
@@ -2843,7 +2845,7 @@ describe("till-app", () => {
         withFloorCard,
         { orderFlow: "ticket_then_pay" },
         {
-          listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+          listWorkingOrders: vi.fn().mockResolvedValue([parkedAtCounter]),
           getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
         },
       );
@@ -2853,7 +2855,7 @@ describe("till-app", () => {
       expect(currentApi.listCounterWaiting).toHaveBeenCalled();
       await openCounterFloor(el);
       expect(activeTabGrid(el)!.shadowRoot!.querySelector("till-station-queue")).toBeNull();
-      expect(parkedList(el)!.orders).toEqual([heldSummary]);
+      expect(parkedList(el)!.orders).toEqual([parkedAtCounter]);
     });
 
     const payCard = (el: TillApp, tab: string): TillTenderPay =>
@@ -19754,7 +19756,7 @@ function counterMovePreview() {
 
 describe("the counter's held orders: moving one to a table, and paying a moved bill", () => {
   const counterOrder: HeldOrderSummary = {
-    ...heldSummary,
+    ...parkedAtCounter,
     id: "wo-12",
     orderNumber: 12,
     label: "Ana",
@@ -25459,7 +25461,7 @@ describe("W69 held move basket protection", () => {
 
   it("protects the edited current order when a native held Move click outlives its row's order switch", async () => {
     const { el, c } = await loaded(
-      { listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]) },
+      { listWorkingOrders: vi.fn().mockResolvedValue([parkedAtCounter]) },
       undefined,
       false,
     );
@@ -25499,8 +25501,8 @@ describe("W69 held move basket protection", () => {
                 listWorkingOrders: vi
                   .fn()
                   .mockResolvedValue([
-                    heldSummary,
-                    { ...heldSummary, id: "other-held", orderNumber: 42 },
+                    parkedAtCounter,
+                    { ...parkedAtCounter, id: "other-held", orderNumber: 42 },
                   ]),
               },
               theme,
@@ -25508,8 +25510,8 @@ describe("W69 held move basket protection", () => {
             );
             Object.assign(el, {
               heldOrders: [
-                { ...heldSummary, id: c.store.id },
-                { ...heldSummary, id: "other-held" },
+                { ...parkedAtCounter, id: c.store.id },
+                { ...parkedAtCounter, id: "other-held" },
               ],
             });
             await flush(el);
@@ -25850,7 +25852,7 @@ describe("basket native replacement warning", () => {
             const { el } = await mountApp(
               {
                 getTill: vi.fn().mockResolvedValue({ ...till, locale }),
-                listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+                listWorkingOrders: vi.fn().mockResolvedValue([parkedAtCounter]),
               },
               theme,
             );
@@ -27729,7 +27731,7 @@ describe("A767 card outcome belongs to its order", () => {
 
 describe("A767 sign-in and held-order recovery", () => {
   const heldRow = (id: string): HeldOrderSummary => ({
-    zoneId: null,
+    zoneId: "zone-counter",
     items: [],
     id,
     orderNumber: id === "wo-1" ? 41 : 42,

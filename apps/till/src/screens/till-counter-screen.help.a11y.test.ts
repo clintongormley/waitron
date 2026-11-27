@@ -9,7 +9,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import type { CounterWaitingOrder, HeldOrderSummary } from "../api/orders-api.js";
 
 const heldOrder: HeldOrderSummary = {
-  zoneId: null,
+  zoneId: "zone-counter",
   items: [],
   id: "held",
   orderNumber: 1,
@@ -65,6 +65,7 @@ describe.each(["light", "dark"] as const)("Counter's help badges a11y (%s theme)
           store: new WorkingOrderStore(),
           asksGuests: true,
           counterFloor: true,
+          selectedServiceZoneId: "zone-counter",
           heldOrders: [heldOrder],
           counterWaiting: [waitingOrder],
         },

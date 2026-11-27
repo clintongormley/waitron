@@ -1449,7 +1449,7 @@ it("opens the Waiting note from its real row action and returns focus after Canc
         capabilities: ["take-orders"],
         formFactor: "till",
       }),
-      listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
+      listCounterWaiting: vi.fn().mockResolvedValue([{ ...waitingOrder, zoneId: "zone-counter" }]),
       getKitchenNote: vi.fn().mockResolvedValue(waitingSnapshot),
     },
     false,

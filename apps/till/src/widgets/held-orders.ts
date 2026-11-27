@@ -1,7 +1,7 @@
 import { actionChoiceStyles } from "@waitron/ui/src/components/wt-row-actions.js";
 import { repeat } from "lit/directives/repeat.js";
 import { counterFloorRowStyles } from "./counter-floor-row-styles.js";
-import { orderLabel, outsideOrderLocation, type NamedOrderZone } from "./order-label.js";
+import { orderLabel } from "./order-label.js";
 import { orderPreview, orderPreviewStyles } from "./order-preview.js";
 import { LitElement, css, html, nothing, type TemplateResult, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -141,7 +141,6 @@ export class TillHeldOrders extends LitElement {
 
   @property({ type: Boolean, reflect: true }) floor = false;
   @property({ attribute: false }) orders: HeldOrderSummary[] = [];
-  @property({ attribute: false }) outsideZones?: readonly NamedOrderZone[];
   /** The floor, which the app reads again when a picker opens. */
   @property({ attribute: false }) tables: TableState[] = [];
   @property({ attribute: false }) zones: FloorZone[] = [];
@@ -258,18 +257,15 @@ export class TillHeldOrders extends LitElement {
       : html`<span class="signals">${renderFloorChips(chips)}</span>`;
   }
 
-  #floorState({ partyId, counts }: HeldOrderSummary): string {
+  #floorState({ counts }: HeldOrderSummary): string {
     const items = countText(counts.ordered, "order_counts.items", "order_counts.items_one");
-    if (partyId === null) return `${items} · ${t("counter.floor_parked")}`;
-    if (counts.unsent > 0)
-      return `${items} · ${countText(counts.unsent, "order_counts.unsent", "order_counts.unsent_one")}`;
-    return counts.ordered > 0 ? `${items} · ${t("table.sent_title")}` : items;
+    return `${items} · ${t("counter.floor_parked")}`;
   }
 
   #row(order: HeldOrderSummary): TemplateResult {
     const scope = this.#scope(order);
     const label = heldLabel(order);
-    const parked = this.floor && order.partyId === null;
+    const parked = this.floor;
     const expanded = this.expanded.has(order.id);
     const actions = this.#actions(order, scope);
     return html`
@@ -292,12 +288,9 @@ export class TillHeldOrders extends LitElement {
           aria-expanded=${parked ? nothing : String(expanded)}
           aria-controls=${parked ? nothing : `preview-${order.id}`}
           aria-describedby=${parked ? `amount-${order.id}` : nothing}
-          @click=${(event: Event) => {
-            if (this.floor && !parked) this.#togglePreview(event, order.id);
-          }}
         >
           <span class="number"
-            >${orderNumber(order.orderNumber, order.formerNumbers)}${this.floor && label ? ` · ${label}` : nothing}${outsideOrderLocation(order, this.outsideZones)}</span
+            >${orderNumber(order.orderNumber, order.formerNumbers)}${this.floor && label ? ` · ${label}` : nothing}</span
           >
           ${!this.floor && label ? html`<span class="label">${label}</span>` : nothing}
           ${parked ? nothing : html`<span class="meta">${this.#meta(order)}</span>`}
@@ -312,13 +305,15 @@ export class TillHeldOrders extends LitElement {
             ? html`${this.#parkedActions(order, scope)}<span class="meta" id=${`amount-${order.id}`}
                   >${this.#meta(order)}</span
                 >`
-            : this.floor
-              ? nothing
-              : actions
+            : actions
         }
-        <div class="order-preview" id=${`preview-${order.id}`} ?hidden=${!expanded}>
-          ${expanded ? html`${orderPreview(order.items)}${this.floor ? actions : nothing}` : nothing}
-        </div>
+        ${
+          parked
+            ? nothing
+            : html`<div class="order-preview" id=${`preview-${order.id}`} ?hidden=${!expanded}>
+                ${expanded ? orderPreview(order.items) : nothing}
+              </div>`
+        }
       </div>
     `;
   }

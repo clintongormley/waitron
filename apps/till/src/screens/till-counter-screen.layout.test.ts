@@ -535,8 +535,9 @@ it("keeps the basket and payment controls usable after opening New order with ma
   const counter = grid as TillCounterScreen;
   counter.store.clear();
   counter.counterFloor = true;
+  counter.selectedServiceZoneId = "counter";
   counter.heldOrders = Array.from({ length: 20 }, (_, i) => ({
-    zoneId: null,
+    zoneId: "counter",
     items: [],
     id: `held-${i}`,
     orderNumber: i + 1,

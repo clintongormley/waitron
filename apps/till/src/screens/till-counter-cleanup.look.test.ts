@@ -373,24 +373,23 @@ for (const kind of ["counter", "table"] as const)
             screen.store.clear();
             screen.selectedServiceZoneId = "counter";
             screen.counterFloor = true;
-            screen.heldOrders = [{ ...parked, zoneId: "counter", partyId: "at-counter" }];
+            screen.heldOrders = [{ ...parked, zoneId: "counter" }];
             screen.counterWaiting = [{ ...waiting, zoneId: "counter" }];
             await screen.updateComplete;
             const floor = screen.shadowRoot!.querySelector("till-counter-floor")!;
             await floor.updateComplete;
-            for (const widget of [
-              ...floor.shadowRoot!.querySelectorAll("till-held-orders"),
-              ...floor.shadowRoot!.querySelectorAll("till-counter-waiting"),
-            ]) {
-              await widget.updateComplete;
-              await userEvent.click(
-                widget.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!,
-              );
-              await widget.updateComplete;
-              expect(widget.shadowRoot!.querySelector(".order-preview")!.textContent).toContain(
-                "Recorded roasted pumpkin soup",
-              );
-            }
+            const held = floor.shadowRoot!.querySelector("till-held-orders")!;
+            const sent = floor.shadowRoot!.querySelector("till-counter-waiting")!;
+            await held.updateComplete;
+            await sent.updateComplete;
+            expect(held.shadowRoot!.querySelector(".order.parked")).not.toBeNull();
+            await userEvent.click(
+              sent.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!,
+            );
+            await sent.updateComplete;
+            expect(sent.shadowRoot!.querySelector(".order-preview")!.textContent).toContain(
+              "Recorded roasted pumpkin soup",
+            );
             await capture("counter-floor");
             screen.heldOrders = [];
             screen.counterWaiting = [];

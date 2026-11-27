@@ -124,7 +124,7 @@ const held: HeldOrderSummary = {
   partyId: null,
   billNumber: null,
   billName: null,
-  zoneId: null,
+  zoneId: "zc",
   openedAt: "2026-10-20T10:00:00Z",
   total: "3.00",
   outstanding: "3.00",

@@ -66,7 +66,7 @@ const floor = (el: TillCounterScreen) =>
 const waitingList = (el: TillCounterScreen) => floor(el).querySelector("till-counter-waiting")!;
 const heldList = (el: TillCounterScreen) => floor(el).querySelector("till-held-orders")!;
 const heldOrder = {
-  zoneId: null,
+  zoneId: "zone-counter",
   items: [],
   id: "held",
   orderNumber: 1,
@@ -360,16 +360,25 @@ describe("till-counter-screen", () => {
         billName: null,
         openedAt: "2026-08-05T10:00:00.000Z",
         signals: [],
-        zoneId: null,
+        zoneId: "zone-counter",
       },
     ];
-    const { el } = await mount({ heldOrders, counterFloor: true });
+    const { el } = await mount({
+      heldOrders,
+      counterFloor: true,
+      selectedServiceZoneId: "zone-counter",
+    });
     expect(heldList(el).orders).toEqual(heldOrders);
   });
 
   it("passes the floor tables to held orders for Move to table", async () => {
     const tables = [{ id: "t9", label: "Table 9", today: null, zoneId: null, party: null }];
-    const { el } = await mount({ tables, heldOrders: [heldOrder], counterFloor: true } as never);
+    const { el } = await mount({
+      tables,
+      heldOrders: [heldOrder],
+      counterFloor: true,
+      selectedServiceZoneId: "zone-counter",
+    } as never);
     expect(heldList(el).tables).toBe(tables);
   });
 
@@ -407,13 +416,21 @@ describe("till-counter-screen", () => {
             canMoveStation: true,
             counterWaiting: [waitingOrder],
             counterFloor: true,
+            selectedServiceZoneId: "zone-counter",
           })
         ).el,
       ).canMoveStation,
     ).toBe(true);
     expect(
-      waitingList((await mount({ counterWaiting: [waitingOrder], counterFloor: true })).el)
-        .canMoveStation,
+      waitingList(
+        (
+          await mount({
+            counterWaiting: [waitingOrder],
+            counterFloor: true,
+            selectedServiceZoneId: "zone-counter",
+          })
+        ).el,
+      ).canMoveStation,
     ).toBe(false);
   });
 
@@ -508,6 +525,7 @@ it("lets a held-order retrieve event reach the fixed Counter host", async () => 
     store: new WorkingOrderStore(),
     heldOrders: [{ ...heldOrder, id: "wo-2" }],
     counterFloor: true,
+    selectedServiceZoneId: "zone-counter",
   });
   let captured: CustomEvent<{ id: string }> | undefined;
   el.addEventListener(
