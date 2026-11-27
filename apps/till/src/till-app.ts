@@ -17583,9 +17583,6 @@ export class TillApp extends LitElement {
     await this.#followActionBills(result.billIds, sent);
   }
 
-  /** After this till's Move guests or Join, the screen keeps its bill while the answer's `billIds`
-   * hold it, and reads lines and bills together; otherwise it reads the party's bills first and
-   * shows {@link billToShow}'s choice, else the answer's first bill. */
   async #followActionBills(billIds: readonly string[], sent: Sent): Promise<void> {
     const followed = this.orderParty?.id;
     const kept = this.activeTabId;
@@ -17619,6 +17616,7 @@ export class TillApp extends LitElement {
     };
     const live = () => this.#billCompositionCurrent(asked.source);
     let result: MoveBillResult | undefined;
+    const confirmation = {};
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const zoneId = toTable
@@ -17647,6 +17645,7 @@ export class TillApp extends LitElement {
             }),
           this.#presentLateSend,
           () => this.#billCompositionUnchanged(asked.source),
+          confirmation,
         );
         break;
       } catch (error) {
@@ -17794,6 +17793,7 @@ export class TillApp extends LitElement {
     let view: AllergyMoveRead;
     let key = crypto.randomUUID();
     let command: { submissionId: string; allergy: AllergyPatch } | undefined;
+    let confirmation = {};
     let refusal = "";
     let fieldRefusal: AllergyFieldRefusal | undefined;
     let requireConfirmation = false;
@@ -17826,6 +17826,7 @@ export class TillApp extends LitElement {
                 });
           if (patch === null || !current()) return false;
           command = { submissionId: crypto.randomUUID(), allergy: structuredClone(patch) };
+          confirmation = {};
         }
         try {
           const packet = command;
@@ -17834,6 +17835,7 @@ export class TillApp extends LitElement {
             (closedZoneId) => this.#sendCounterMove(asked, observed, packet, closedZoneId),
             this.#presentLateSend,
             current,
+            confirmation,
           );
           if (moved === undefined) return false;
           if (current()) this.#closeMoveAllergy(true);

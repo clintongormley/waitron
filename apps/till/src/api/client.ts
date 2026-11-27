@@ -524,7 +524,7 @@ export class TillApi extends FindBillApi {
         ? pending
         : undefined;
     const earlier = matched?.request;
-    // Only a known refusal permits replacing the consent on an existing submission.
+    // A closed-zone refusal can take a new answer. An uncertain payment repeats its original body.
     let request =
       matched?.needsZoneAnswer && earlier !== undefined && "basket" in earlier
         ? { ...earlier, basket: { ...earlier.basket, lateSend, closedZoneId } }

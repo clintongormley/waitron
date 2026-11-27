@@ -123,9 +123,10 @@ export async function writeWithClosedZone<T>(
   write: (zoneId?: string) => Promise<T>,
   show: (prompt: LateSendPrompt) => void,
   current: () => boolean,
+  confirmation: { zoneId?: string } = {},
 ): Promise<T | undefined> {
   try {
-    return await write();
+    return await write(confirmation.zoneId);
   } catch (error) {
     const zone = closedZoneQuestionOf(error);
     if (zone === undefined) throw error;
@@ -141,7 +142,10 @@ export async function writeWithClosedZone<T>(
         ),
       ),
     );
-    if (agreed && current()) return write(zone.zoneId);
+    if (agreed && current()) {
+      confirmation.zoneId = zone.zoneId;
+      return write(zone.zoneId);
+    }
   }
 }
 

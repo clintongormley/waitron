@@ -3451,7 +3451,7 @@ describe("till-app: moving a bill", () => {
     expect(moveBill).toHaveBeenCalledOnce();
   });
 
-  it("rechecks a table bill move after its replacement station closes", async () => {
+  it.each([false, true])("retries a bill move after a station refusal (%s)", async (closed) => {
     const askOrderDeadEnds = vi
       .fn()
       .mockResolvedValueOnce({ sends: false, deadEnds: [], stations: [] })
@@ -3471,16 +3471,34 @@ describe("till-app: moving a bill", () => {
         stations: [{ id: "kitchen", name: "Kitchen", open: true }],
       });
     const setMakeAt = vi.fn().mockResolvedValue({ revision: 4 });
-    const moveBill = vi
-      .fn()
+    const moveBill = vi.fn();
+    if (closed)
+      moveBill.mockRejectedValueOnce({
+        code: "service_zone.closed",
+        status: 409,
+        zoneId: zone.id,
+        closedZoneName: "Terrace",
+        closesAt: "22:00",
+      });
+    moveBill
       .mockRejectedValueOnce({ code: "station.no_replacement" })
       .mockResolvedValue({ partyId: null, billId: "wo-check" });
     const { el } = await mountApp({ askOrderDeadEnds, setMakeAt, moveBill });
     const order = await openPartyTable(el);
     emit(order, "move-bill", { to: { counter: true } });
     await flush(el);
+    if (closed) {
+      const question = el.shadowRoot!.querySelector("till-late-send-dialog");
+      expect(question?.shadowRoot?.querySelector("wt-dialog")?.heading).toBe(
+        "Terrace closed at 22:00",
+      );
+      await userEvent.click(
+        question!.shadowRoot!.querySelector<HTMLElement>("[data-late-agreed]")!,
+      );
+      await flush(el);
+    }
     expect(askOrderDeadEnds).toHaveBeenCalledTimes(2);
-    expect(moveBill).toHaveBeenCalledOnce();
+    expect(moveBill).toHaveBeenCalledTimes(closed ? 2 : 1);
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
     expect(dialog).not.toBeNull();
     dialog
@@ -3492,7 +3510,13 @@ describe("till-app: moving a bill", () => {
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
     await flush(el);
     expect(setMakeAt).toHaveBeenCalledOnce();
-    expect(moveBill).toHaveBeenCalledTimes(2);
+    expect(moveBill).toHaveBeenCalledTimes(closed ? 3 : 2);
+    if (closed) {
+      const [first, confirmed, afterStation] = moveBill.mock.calls;
+      expect(confirmed![2]).toEqual({ ...first![2], closedZoneId: zone.id });
+      expect(afterStation).toEqual(confirmed);
+      expect(el.shadowRoot!.querySelector("till-late-send-dialog")).toBeNull();
+    }
   });
 
   it("moves the bill on screen to the counter, sending the counter's zone and the party revision", async () => {

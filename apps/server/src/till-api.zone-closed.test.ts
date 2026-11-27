@@ -402,6 +402,30 @@ describe("closed zones take no new service", () => {
     },
   );
 
+  it("waits for the zone answer before asking the reader to charge a Counter order", async () => {
+    const v = await venue();
+    const route = `/api/working-orders/${randomUUID()}/payments`;
+    const payment = {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+      entry: "reader",
+      dining: "eat_in",
+      basket: { zoneId: v.zoneId, lines: [line(v)] },
+    };
+    at("23:45");
+    expect(await request(v, "POST", route, payment)).toEqual(refused(v));
+    expect(v.card.collectCalls).toHaveLength(0);
+    expect(
+      await request(v, "POST", route, {
+        ...payment,
+        basket: { ...payment.basket, closedZoneId: v.zoneId },
+      }),
+    ).toMatchObject({ status: 200 });
+    expect(v.card.collectCalls).toHaveLength(1);
+  });
+
   it("parks the same Counter order for the payment screen after the waiter confirms", async () => {
     const v = await venue();
     const route = "/api/working-orders";
@@ -1024,6 +1048,35 @@ describe("moving into closed zones", () => {
       .where(eq(partyTables.partyId, answer.json.partyId as string));
     expect(links.filter((row) => row.leftAt === null).map((row) => row.tableId)).toEqual([
       destination.id,
+    ]);
+  });
+  it("replays a confirmed Counter move without another allergy write or zone answer", async () => {
+    const { v, dining } = await moveVenue();
+    const billId = randomUUID();
+    expect(
+      await request(v, "POST", "/api/working-orders", {
+        id: billId,
+        dining: "eat_in",
+        zoneId: dining,
+        lines: [line(v)],
+      }),
+    ).toMatchObject({ status: 200 });
+    const destination = await freeTable(v.zoneId);
+    const move = {
+      to: { tableId: destination.id },
+      partyId: null,
+      otherPartyId: null,
+      expectedEdits: [await withTransaction(suite.db, (tx) => readBillEditState(tx, billId))],
+      submissionId: randomUUID(),
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+    };
+    const route = `/api/bills/${billId}/move`;
+    at("23:45");
+    const confirmed = await request(v, "POST", route, { ...move, closedZoneId: v.zoneId });
+    expect(confirmed).toMatchObject({ status: 200, json: { billId } });
+    expect(await request(v, "POST", route, move)).toEqual(confirmed);
+    expect(await closedZoneActivity()).toEqual([
+      { subjectId: v.zoneId, personId: v.operatorId, data: { closesAt: "23:30" } },
     ]);
   });
   it("lets a presented bill move to a closed zone, taking that zone", async () => {
