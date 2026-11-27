@@ -84,7 +84,7 @@ function published(
             name: "Almond dressing",
             price: "1.00",
             portion: "0.200",
-            unit: "kg",
+            unit: "kilogram",
             allergens: { nuts: { kinds: ["almonds"] } },
             dietary: ["vegetarian"],
           },
@@ -255,7 +255,7 @@ describe("the customer menu Online preview", () => {
     const allergenLine = allergens.element().nextElementSibling!;
     expect
       .soft(Array.from(allergenLine.children, (entry) => entry.textContent?.trim()))
-      .toEqual(["Eggs", "Fish"]);
+      .toEqual(["Eggs", "Fish", "Almond dressing: Almonds"]);
     const [first, second] = Array.from(allergenLine.children);
     const icon = first!.querySelector("wt-icon")!.getBoundingClientRect();
     const label = document.createRange();
@@ -266,6 +266,74 @@ describe("the customer menu Online preview", () => {
     expect.soft(betweenEntries).toBeGreaterThan(1.8 * (labelStart - icon.right));
     await expect.element(diets, { timeout: 1000 }).toBeVisible();
     expect(diets.element().nextElementSibling?.textContent?.trim()).toBe("Halal");
+  });
+
+  it("shows an extra's allergen beside its name and again in Allergens", async () => {
+    await open(() => Response.json(published()));
+    await page.getByRole("button", { name: "Roast pepper", exact: true }).click();
+    const sides = page.getByRole("heading", { name: "Sides" }).element().nextElementSibling!;
+    const allergen = page.getByRole("img", { name: "Nuts (Almonds)", exact: true });
+    await expect.element(allergen, { timeout: 1000 }).toBeVisible();
+    expect(allergen.element().closest("li")?.firstElementChild?.textContent).toContain(
+      "Almond dressing",
+    );
+    await expect.element(page.getByText("Almond dressing: Almonds", { exact: true })).toBeVisible();
+    expect(sides.textContent).toContain("Vegetarian");
+  });
+
+  it("leaves one extra serving implicit and writes a larger amount in full", async () => {
+    const preview = published();
+    const section = preview.menu.members[1]!;
+    if (section.kind !== "section") throw new Error("Expected the oven section");
+    const dish = section.members[0]!;
+    if (dish.kind !== "product") throw new Error("Expected a dish");
+    const sides = dish.modifiers[1]!;
+    if (sides.kind !== "extras") throw new Error("Expected the sides");
+    sides.items.push(
+      {
+        name: "Rice",
+        unit: "serving",
+        price: "1.00",
+        portion: "1.000",
+        allergens: {},
+        dietary: [],
+      },
+      {
+        name: "Bread",
+        unit: "servings",
+        price: "2.00",
+        portion: "2.000",
+        allergens: {},
+        dietary: [],
+      },
+    );
+    await open(() => Response.json(preview));
+    await page.getByRole("button", { name: dish.name, exact: true }).click();
+    await expect.element(page.getByText("Rice", { exact: true }), { timeout: 1000 }).toBeVisible();
+    await expect.element(page.getByText("Bread · 2 servings", { exact: true })).toBeVisible();
+  });
+
+  it("shows the set-menu title's return focus ring only after keyboard use", async () => {
+    const { el } = await open(() => Response.json(published()), "dark");
+    const cardTitle = page.getByRole("button", { name: "Two courses", exact: true });
+    const back = page.getByRole("button", { name: "Back to menu" });
+    await expect.element(cardTitle).toBeVisible();
+    const customer = customerPage(el)!;
+    customer.setAttribute("data-theme", "dark");
+    await cardTitle.click();
+    await back.click();
+    await expect.element(cardTitle).toBeVisible();
+    const button = cardTitle.element();
+    expect(customer.shadowRoot!.activeElement).toBe(button);
+    expect.soft(getComputedStyle(button).outlineStyle).toBe("none");
+
+    await userEvent.keyboard("{Enter}");
+    await expect.element(back).toBeVisible();
+    await userEvent.tab({ shift: true });
+    await userEvent.keyboard("{Enter}");
+    await expect.element(cardTitle, { timeout: 1000 }).toBeVisible();
+    expect(customer.shadowRoot!.activeElement).toBe(button);
+    expect(getComputedStyle(button).outlineStyle).toBe("solid");
   });
 
   it.each(["House bread", "Two courses"])(
@@ -710,7 +778,7 @@ describe("the customer menu Online preview", () => {
       const detailText = () => dish.textContent?.replace(/\s+/g, " ").trim();
       expect(detailText()).toContain("Wood-fired with olive oil");
       expect(detailText()).toContain("Large €8.50 Cereals containing gluten (Wheat), Vegan");
-      expect(detailText()).toContain("Almond dressing · 0.2 kg €1.00 Nuts (Almonds), Vegetarian");
+      expect(detailText()).toContain("Almond dressing · 0.2 kilogram €1.00 Vegetarian");
       const cooking = page.getByRole("heading", { name: "Cooking", exact: true }).element();
       expect.soft(cooking.nextElementSibling?.textContent?.trim()).toBe("Wood-fired · Roasted");
       expect
@@ -718,7 +786,11 @@ describe("the customer menu Online preview", () => {
         .toBe(getComputedStyle(dish.querySelector("h2")!).color);
       const allergens = page.getByRole("heading", { name: "Allergens", exact: true });
       await expect.element(allergens, { timeout: 1000 }).toBeVisible();
-      expect(allergens.element().nextElementSibling?.textContent?.trim()).toBe("Fish");
+      expect(
+        Array.from(allergens.element().nextElementSibling!.children, (entry) =>
+          entry.textContent?.trim(),
+        ),
+      ).toEqual(["Fish", "Almond dressing: Almonds"]);
       const photo = dish.querySelector("img")!;
       const name = dish.querySelector("h2")!.getBoundingClientRect();
       const image = photo.getBoundingClientRect();

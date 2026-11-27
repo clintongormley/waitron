@@ -90,14 +90,6 @@ function declarationLabels({ allergens, dietary }: GuestDeclarations, words: Wor
   };
 }
 
-function writtenDeclarations(value: GuestDeclarations, words: Words) {
-  const { allergens, diets } = declarationLabels(value, words);
-  const labels = [...allergens, ...diets].map(({ label }) => label);
-  return labels.length
-    ? html`<span class="description" lang=${words.language}>${labels.join(", ")}</span>`
-    : nothing;
-}
-
 function detailDeclarations(
   heading: string,
   labels: { icon: string; label: string }[],
@@ -133,11 +125,32 @@ function dishPrice(
   return `${min === max ? minimum : `${minimum}–${formatMoney(max, language)}`}${unitRate(unit)}`;
 }
 
-function choiceRow(name: string, price: string, value: GuestDeclarations, words: Words) {
+function choiceRow(
+  name: string,
+  price: string,
+  value: GuestDeclarations,
+  words: Words,
+  showAllergenIcons = false,
+) {
+  const { allergens, diets } = declarationLabels(value, words);
+  const labels = (showAllergenIcons ? diets : [...allergens, ...diets]).map(({ label }) => label);
   return html`<li>
-    <span>${name}</span>
+    <span>
+      ${name}
+      ${
+        showAllergenIcons && allergens.length
+          ? html`<span class="declarations" lang=${words.language}>
+              ${allergens.map(({ icon: name, label }) => icon(name, label))}
+            </span>`
+          : nothing
+      }
+    </span>
     ${price ? html`<span class="choice-price">${price}</span>` : nothing}
-    ${writtenDeclarations(value, words)}
+    ${
+      labels.length
+        ? html`<span class="description" lang=${words.language}>${labels.join(", ")}</span>`
+        : nothing
+    }
   </li>`;
 }
 
@@ -167,15 +180,22 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
       )}`;
   }
   const quantity = new Intl.NumberFormat(language, { maximumFractionDigits: 3 });
-  const choice = (value: GuestChoice & { portion?: string }) => {
-    const size =
-      value.portion !== undefined && value.unit
-        ? ` · ${quantity.format(Number(value.portion))} ${value.unit}`
-        : "";
-    const rate = value.portion === undefined ? unitRate(value.unit) : "";
-    return choiceRow(`${value.name}${size}`, `${money(value.price)}${rate}`, value, words);
+  const extra = (value: GuestChoice & { portion: string }) => {
+    const amount = Number(value.portion);
+    const size = amount !== 1 && value.unit ? ` · ${quantity.format(amount)} ${value.unit}` : "";
+    return choiceRow(`${value.name}${size}`, money(value.price), value, words, true);
   };
   const { allergens, diets } = declarationLabels(member, words);
+  const extraAllergens = member.modifiers.flatMap((group) =>
+    group.kind === "extras"
+      ? group.items.flatMap(({ name, allergens }) =>
+          allergenLabels(allergens, words).map(({ code, kinds, label }) => ({
+            icon: `allergen-${code}`,
+            label: `${name}: ${kinds ?? label}`,
+          })),
+        )
+      : [],
+  );
   return html`
     <p class="set-price"><strong>${dishPrice(member, language)}</strong></p>
     ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
@@ -183,7 +203,9 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
       member.variants.length
         ? html`<h3 lang=${words.language}>${words.text.variants}</h3>
             <ul class="choices" role="list">
-              ${member.variants.map(choice)}
+              ${member.variants.map((value) =>
+                choiceRow(value.name, `${money(value.price)}${unitRate(value.unit)}`, value, words),
+              )}
             </ul>`
         : nothing
     }
@@ -197,11 +219,11 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
       return group.items.length
         ? html`<h3>${group.name}</h3>
             <ul class="choices" role="list">
-              ${group.items.map(choice)}
+              ${group.items.map(extra)}
             </ul>`
         : nothing;
     })}
-    ${detailDeclarations(words.text.allergens!, allergens, words.language)}
+    ${detailDeclarations(words.text.allergens!, [...allergens, ...extraAllergens], words.language)}
     ${detailDeclarations(words.text.diet!, diets, words.language)}
   `;
 }
