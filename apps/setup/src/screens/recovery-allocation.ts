@@ -21,8 +21,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { RecoveryBackupPreview, RecoveryRestoreCredentials } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
-import { t, currentLocale } from "../i18n/t.js";
-import { masterKeyFieldWords } from "../i18n/master-key-words.js";
+import { t } from "../i18n/t.js";
+import { masterKeyFieldWords, wordsLanguage } from "../i18n/master-key-words.js";
 import { fieldStyles, errorStyles } from "../form-styles.js";
 
 export type RecoveryEntryField = "recoveryOperation" | "nodeRecoverySecret";
@@ -127,7 +127,7 @@ export class SetupRecoveryAllocation extends LitElement {
       this.#recoveryEntry =
         preview?.fiscalSelection && preview.nodeRecoveryKeyName && this.prepare
           ? contribution?.createRecovery?.({
-              locale: currentLocale() === "es-ES" ? "es" : "en",
+              locale: wordsLanguage(),
               selection: {
                 ...preview.fiscalSelection,
                 sourceId: preview.sourceId,
@@ -150,7 +150,7 @@ export class SetupRecoveryAllocation extends LitElement {
           : undefined;
     }
     if (this.#recoveryEntry) {
-      this.#recoveryEntry.locale = currentLocale() === "es-ES" ? "es" : "en";
+      this.#recoveryEntry.locale = wordsLanguage();
       this.#recoveryEntry.errorMessage = this.errorMessage;
       this.#recoveryEntry.refusedField = this.refusedField;
     }
