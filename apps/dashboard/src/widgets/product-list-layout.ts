@@ -12,8 +12,8 @@ export const productListLayoutStyles = css`
     --wt-table-cell-padding-inline: 0px;
   }
   wt-data-table[narrow][data-list] {
-    --tree-arrow-width: var(--wt-space-4);
     --wt-table-cell-padding-inline: calc(var(--wt-space-1) / 2);
+    --tree-arrow-width: calc(var(--wt-tap-min) - var(--wt-table-cell-padding-inline));
   }
   wt-data-table[narrow]::part(tree-cell) {
     --products-tree-inset: calc(min(var(--tree-depth, 0), 4) * var(--wt-space-1));

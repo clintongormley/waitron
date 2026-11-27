@@ -53,11 +53,22 @@ export const productRowStyles = css`
   wt-data-table::part(unavailable-count) {
     color: var(--wt-color-danger);
   }
+  wt-data-table[data-phone]::part(unavailable-total) {
+    display: inline-block;
+    max-inline-size: 100%;
+  }
+  wt-data-table[data-phone]::part(availability-switch) {
+    --wt-switch-track-offset: calc(var(--wt-tap-min) - var(--wt-space-6));
+  }
   wt-data-table[data-phone]::part(unavailable-label) {
     display: inline;
     border: 0;
     padding: 0;
     margin-inline-start: 0;
+  }
+  wt-data-table[data-phone][data-list]::part(unavailable-label) {
+    display: inline-block;
+    max-inline-size: 100%;
   }
   wt-data-table::part(phone-row-labels) {
     /* This line can use the gap between Name and Price. */
@@ -98,6 +109,9 @@ export const productRowStyles = css`
   }
   wt-data-table[narrow][data-list]::part(column-price) {
     inline-size: calc(var(--wt-tap-min) + var(--wt-space-6) + var(--wt-space-1) / 2);
+  }
+  wt-data-table[narrow]::part(column-sort-price) {
+    flex-direction: row-reverse;
   }
   wt-data-table[narrow]::part(price-layout) {
     display: flex;
@@ -143,7 +157,11 @@ export function unavailableLabel(available: boolean) {
 
 export function unavailableCount(count: number) {
   return count
-    ? html`<span part="unavailable-count"> · ${countOf("product.unavailable_count", count)}</span>`
+    ? html`<span part="unavailable-count"
+        >${" · "}<span part="unavailable-total"
+          >${countOf("product.unavailable_count", count)}</span
+        ></span
+      >`
     : nothing;
 }
 

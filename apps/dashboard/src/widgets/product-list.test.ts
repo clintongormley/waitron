@@ -1606,7 +1606,7 @@ describe("product-list", () => {
       const { el, root, table } = await mountTree({
         view: "list",
         reordering: false,
-        categories: [{ ...drinks, name: "Cheeses" }],
+        categories: [{ ...drinks, name: "Charcuterie" }],
         products: [
           product({
             id: "ham",
@@ -1636,8 +1636,13 @@ describe("product-list", () => {
       const labelBox = label.getBoundingClientRect();
       const danger = getComputedStyle(label).color;
       expect.soft(getComputedStyle(label).borderTopWidth).toBe("0px");
-      expect.soft(label.getClientRects()).toHaveLength(1);
-      expect.soft(Math.abs(labelBox.top - category.getBoundingClientRect().top)).toBeLessThan(3);
+      const labelText = document.createRange();
+      labelText.selectNodeContents(label);
+      expect.soft(labelText.getClientRects()).toHaveLength(1);
+      expect.soft(labelBox.top).toBeGreaterThanOrEqual(category.getBoundingClientRect().bottom - 1);
+      const listNameLeft = (key: string) =>
+        nameCell(key).querySelector("strong")!.getBoundingClientRect().left;
+      expect.soft(listNameLeft("coffee")).toBeCloseTo(listNameLeft("ham"), 0);
       expect
         .soft(labelBox.top)
         .toBeGreaterThanOrEqual(ham.querySelector("strong")!.getBoundingClientRect().bottom);
@@ -1645,8 +1650,15 @@ describe("product-list", () => {
         const cell = cellUnder(root, "ham", t("product.price"));
         const amount = cell.querySelector('[data-test="price"]')!.getBoundingClientRect();
         const unit = cell.querySelector('[data-test="price-unit"]')!.getBoundingClientRect();
+        const track = cellUnder(root, "ham", t("editor.available"))
+          .querySelector("wt-switch")!
+          .shadowRoot!.querySelector(".track")!;
+        const heading = document.createRange();
+        heading.selectNodeContents(root.querySelector('[part~="column-heading-price"]')!);
         expect.soft(unit.left).toBeGreaterThan(amount.right);
         expect.soft(unit.top).toBeLessThan(amount.bottom);
+        expect.soft(track.getBoundingClientRect().left - unit.right).toBeGreaterThanOrEqual(12);
+        expect.soft(heading.getBoundingClientRect().right).toBeCloseTo(unit.right, 0);
       };
       checkUnit();
 
@@ -1687,6 +1699,12 @@ describe("product-list", () => {
       const suffix = variantCount.querySelector('[part~="unavailable-count"]');
       expect.soft(suffix && getComputedStyle(suffix).color).toBe(danger);
       expect.soft(getComputedStyle(variantCount).color).not.toBe(danger);
+      const suffixText = document.createTreeWalker(suffix!, NodeFilter.SHOW_TEXT);
+      let words = suffixText.nextNode();
+      while (words && !words.textContent?.includes("1")) words = suffixText.nextNode();
+      const unavailable = document.createRange();
+      unavailable.selectNodeContents(words!);
+      expect.soft(unavailable.getClientRects()).toHaveLength(1);
       expect.soft(price.getBoundingClientRect().height, "price range").toBeLessThan(23);
       expect
         .soft(variantCount.getBoundingClientRect().right)

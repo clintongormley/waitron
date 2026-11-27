@@ -65,6 +65,7 @@ export class WtSwitch extends LitElement {
       }
 
       .track {
+        margin-left: var(--wt-switch-track-offset, 0px);
         width: var(--wt-space-6);
         height: var(--wt-space-4);
         border-radius: var(--wt-radius-lg);
@@ -74,7 +75,7 @@ export class WtSwitch extends LitElement {
 
       .thumb {
         position: absolute;
-        left: 0;
+        left: var(--wt-switch-track-offset, 0px);
         width: var(--wt-space-4);
         height: var(--wt-space-4);
         border-radius: var(--wt-radius-lg);
