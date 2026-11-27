@@ -1,10 +1,9 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html } from "lit";
 import { customElement, property, query } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { baseStyles, type WtDialog } from "@waitron/ui";
-import { BUILT_IN_ROLE_NAMES } from "@waitron/shared";
 import type { TillCloudEmergency } from "../api/device-session-api.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { qrSvg } from "../qr.js";
 import { trackDialog } from "./track-dialog.js";
@@ -18,9 +17,6 @@ export class TillCloudEmergencyDialog extends LitElement {
   static override styles = [
     baseStyles,
     css`
-      p {
-        overflow-wrap: anywhere;
-      }
       .qr {
         display: flex;
         justify-content: center;
@@ -39,7 +35,6 @@ export class TillCloudEmergencyDialog extends LitElement {
     this.dispatchEvent(new CustomEvent(name, { bubbles: true, composed: true }));
   }
   override render() {
-    const language = currentLocale().split("-")[0] === "es" ? "es" : "en";
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}
@@ -49,13 +44,10 @@ export class TillCloudEmergencyDialog extends LitElement {
         this.#emit("close-cloud-emergency");
       }}
     >
-      <p>${this.entrance.address}</p>
       <div class="qr" data-emergency-qr role="img" aria-label=${t("cloud_emergency.qr")}>
         ${unsafeHTML(qrSvg(this.entrance.address))}
       </div>
-      <p>${t("cloud_emergency.requirements")}</p>
-      ${this.entrance.roles.length === 0 ? nothing : html`<p data-emergency-roles>${t("cloud_emergency.roles")} ${this.entrance.roles.map((role) => (role.builtInKey === null ? role.name : BUILT_IN_ROLE_NAMES[role.builtInKey][language])).join(", ")}</p>`}
-      <p>${t("cloud_emergency.next")}</p>
+      <p>${t("cloud_emergency.master_key")}</p>
       <wt-button
         slot="footer"
         variant="secondary"

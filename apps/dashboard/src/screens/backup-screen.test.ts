@@ -220,6 +220,7 @@ const PACK_UP_TO_DATE: RecoveryPackStatus = {
     parts: [{ part: "bucket", state: "not-set-up" }],
   },
   upToDate: true,
+  masterKey: { name: "2026-10-12 · QZJV", pack: 1 },
 };
 const PACK_OUT_OF_DATE: RecoveryPackStatus = {
   ...PACK_UP_TO_DATE,

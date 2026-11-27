@@ -4,11 +4,11 @@ Use **Backups** in the dashboard to choose where you keep copies and to prepare 
 
 ## Recovery pack {#recovery-pack}
 
-Choose **Make recovery pack** and complete the sign-in it asks for. Use **Download PDF** or **Open to print**, then keep the pack locked away, off the box.
+Choose **Print the recovery pack**, type your master key, then choose **Print the recovery pack** and complete the sign-in it asks for. Use **Download PDF** or **Open to print**, then keep the pack locked away, off the box.
 
 If the master key is lost, or someone who should not have it may have seen it, choose **Make a new master key**. Download or print the new pack, then choose **Continue**. Keep the old pack until the date the window gives.
 
-Check this card after changing backup settings or keys. Follow its instructions to make a new pack and keep any older packs it still names. For a lost or exposed pack, follow [Common losses](data-protection.md#breach-losses). For emergency start, see [Check emergency start in Cloud](servers.md#cloud-emergency).
+Check this card after changing backup settings or keys. Follow its instructions to print a new pack and keep any older packs it still names. For a lost or exposed pack, follow [Common losses](data-protection.md#breach-losses). For emergency start, see [Check emergency start in Cloud](servers.md#cloud-emergency).
 
 ## Configuration export {#configuration-export}
 
@@ -32,7 +32,7 @@ If Cloud becomes unavailable, open **Change destination or schedule** and choose
 
 The master key, on the first page of your recovery pack, opens a backup file and authorises its restore. Keep the pack that holds the master key each backup needs.
 
-To change the backup key, choose **Change the backup key** on the **Recovery pack** card and type the master key. New backups then use the next backup key, which a box you removed can't read. Then choose **Make recovery pack** and keep the new pack: restoring your bucket copy after the change needs it.
+To change the backup key, choose **Change the backup key** on the **Recovery pack** card and type the master key. New backups then use the next backup key, which a box you removed can't read. Then choose **Print the recovery pack** and keep the new pack: restoring your bucket copy after the change needs it.
 
 Keep older keys and packs for the backups you still hold. See [Prove access to the selected backup](backup-recovery.md#proof) for what you need when restoring.
 

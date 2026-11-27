@@ -21,6 +21,8 @@ export type RenderPackInput = {
   /** In the order their pages are printed. */
   parts: PackPart[];
   file: RecoveryPackFile;
+  /** The venue's Cloud start address, `https://<host>/`, drawn as a QR code beside the key's. */
+  cloudAddress?: string;
   /** Defaults to {@link MAX_PACK_PDF}. */
   maxBytes?: number;
 };
@@ -84,6 +86,12 @@ function codePoint(c: string): string {
   return `[U+${c.codePointAt(0)!.toString(16).toUpperCase()}]`;
 }
 
+function hostOf(address: string): string {
+  const host = URL.canParse(address) ? new URL(address).hostname : "";
+  if (host === "" || address !== `https://${host}/`) refuse("cloudAddress");
+  return host;
+}
+
 async function digestOf(bytes: Uint8Array): Promise<string> {
   const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(bytes)));
   return "sha256-v1:" + Array.from(hash, (n) => n.toString(16).padStart(2, "0")).join("");
@@ -97,12 +105,15 @@ async function digestOf(bytes: Uint8Array): Promise<string> {
 export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8Array<ArrayBuffer>> {
   const { locale, pack, parts } = input;
   if (locale !== "en" && locale !== "es") refuse("locale");
+  const { masterKey, masterKeyName } = input.file;
+  if (masterKey === null || masterKeyName === null) refuse("masterKey");
   const words = PACK_WORDS[locale];
   const when = packDates(locale, input.timeZone);
   for (const part of parts) {
     if (part.state === "included" && !part.page) refuse("parts");
     if (part.state === "failed" && !part.failure) refuse("parts");
   }
+  const cloudHost = input.cloudAddress === undefined ? undefined : hostOf(input.cloudAddress);
   const fileBytes = buildRecoveryPackFile(input.file);
   const fontBytes = await input.loadFonts();
   const fonts = {
@@ -373,47 +384,39 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     pdf.y = bottom + 16;
   };
   drawPage(() => {
-    const { masterKey, masterKeyName, masterKeyHeldBy } = input.file;
     face();
     pdf.fontSize(13 * scale);
     write(words.heading(tallest(pack.venueName, width())), 13, "black", 12, true);
-    if (masterKey !== null) {
-      const top = pdf.y;
-      pdf
-        .fillColor(GREY)
-        .fontSize(9)
-        .text(safe(words.masterKeyLabel(masterKeyName!)), LEFT + 12, top + 12, {
-          width: width() - 24,
-        });
-      face(true);
-      pdf
-        .fillColor("black")
-        .fontSize(14)
-        .text(masterKey, LEFT + 12, pdf.y + 4, { width: width() - 24 });
-      face();
-      const bottom = pdf.y + 12;
-      pdf
-        .rect(LEFT, top, width(), bottom - top)
-        .lineWidth(1.2)
-        .stroke("black");
-      pdf.y = bottom + 16;
-      const qrTop = pdf.y;
-      qr(masterKey, LEFT, qrTop, QR_SIZE);
+    const top = pdf.y;
+    pdf
+      .fillColor(GREY)
+      .fontSize(9)
+      .text(safe(words.masterKeyLabel(masterKeyName)), LEFT + 12, top + 12, {
+        width: width() - 24,
+      });
+    face(true);
+    pdf
+      .fillColor("black")
+      .fontSize(14)
+      .text(masterKey, LEFT + 12, pdf.y + 4, { width: width() - 24 });
+    face();
+    const bottom = pdf.y + 12;
+    pdf
+      .rect(LEFT, top, width(), bottom - top)
+      .lineWidth(1.2)
+      .stroke("black");
+    pdf.y = bottom + 16;
+    const qrTop = pdf.y;
+    const captioned = (text: string, caption: string, x: number) => {
+      qr(text, x, qrTop, QR_SIZE);
       pdf
         .fillColor("black")
         .fontSize(10)
-        .text(safe(words.masterKeyQr), LEFT, qrTop + QR_SIZE + 6, {
-          width: QR_SIZE,
-          align: "center",
-        });
-    } else if (masterKeyName !== null) {
-      write(
-        masterKeyHeldBy === null
-          ? words.masterKeyNamed(masterKeyName)
-          : words.masterKeyInPack(masterKeyName, masterKeyHeldBy),
-        12,
-      );
-    }
+        .text(safe(caption), x, qrTop + QR_SIZE + 6, { width: QR_SIZE, align: "center" });
+    };
+    captioned(masterKey, words.masterKeyQr, LEFT);
+    if (cloudHost !== undefined)
+      captioned(input.cloudAddress!, words.cloudQr(cloudHost), LEFT + width() - QR_SIZE);
   }, false);
 
   for (const [part] of pageOf)

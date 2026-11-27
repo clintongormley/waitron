@@ -30,7 +30,6 @@ const facts = (monthly = 10005, closedReason: string | null = null, stale = fals
     open: closedReason === null,
     closedReason,
     address: "https://emergency.example.test/",
-    codeIssuedAt: "2026-11-01T09:00:00.000Z",
   },
   prices: {
     status: "published",
@@ -48,8 +47,6 @@ const facts = (monthly = 10005, closedReason: string | null = null, stale = fals
 async function open(value: unknown, connected = status, canManageEmergency = false) {
   const api = new DashboardApi("", async (url) => {
     if (String(url).endsWith("/people")) return Response.json([]);
-    if (String(url).endsWith("/code"))
-      return Response.json({ error: { code: "cloud.unavailable", params: {} } }, { status: 503 });
     return Response.json(
       String(url).endsWith("/emergency")
         ? value
@@ -132,21 +129,11 @@ it.each([403, 503])(
   },
 );
 
-it("fetches a code only on demand, shows its own address/date and clears it on close and leave", async () => {
-  let reads = 0;
-  const api = new DashboardApi("", async (url, init) => {
+it("the card has no Show code and its rows are Cloud address, Authorised users and the two-factor list", async () => {
+  const paths: string[] = [];
+  const api = new DashboardApi("", async (url) => {
     const path = String(url);
-    if (path.endsWith("/code")) {
-      reads++;
-      expect(init!.method).toBe("POST");
-      expect(init!.body).toBe("{}");
-      return Response.json({
-        asOf: "2026-11-10T12:00:00.000Z",
-        code: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ",
-        address: "https://current.example.test/",
-        codeIssuedAt: "2026-11-05T09:00:00.000Z",
-      });
-    }
+    paths.push(path);
     if (path.endsWith("/people"))
       return Response.json([
         { personId: "a", displayName: "Alex", hasAuthenticator: true },
@@ -160,101 +147,32 @@ it("fetches a code only on demand, shows its own address/date and clears it on c
           : status,
     );
   });
-  let pendingCode: ReturnType<DashboardApi["revealCloudEmergencyCode"]> | undefined;
-  const reveal = api.revealCloudEmergencyCode.bind(api);
-  api.revealCloudEmergencyCode = () => (pendingCode = reveal());
   const { el, host } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
     api,
     canManageEmergency: true,
   });
-  const button = (id: string) => el.shadowRoot!.querySelector<HTMLElement>(`#${id}`);
-  await expect.poll(() => button("show-emergency-code")).toBeInstanceOf(HTMLElement);
-  expect(reads).toBe(0);
-  await expect.poll(() => section(el)?.textContent).toContain("Alex");
-  expect(
-    section(el)!.querySelector("[data-test=emergency-needs-authenticator]")!.textContent,
-  ).toContain("Beatrice");
-  expect(
-    getComputedStyle(section(el)!.querySelector("[data-test=emergency-needs-authenticator]")!)
-      .color,
-  ).toBe(getComputedStyle(section(el)!.querySelector("dt")!).color);
-  button("show-emergency-code")!.click();
-  await expect.poll(() => button("hide-emergency-code")).toBeInstanceOf(HTMLElement);
-  expect(section(el)!.textContent).toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
-  expect(section(el)!.querySelector("[data-test=emergency-code] a")!.getAttribute("href")).toBe(
-    "https://current.example.test/",
-  );
-  expect(
-    section(el)!.querySelector("[data-test=emergency-code] time")!.getAttribute("datetime"),
-  ).toBe("2026-11-05T09:00:00.000Z");
+  await expect.poll(() => section(el)?.textContent).toContain("Beatrice");
+  const card = section(el)!;
+  expect(card.querySelector("#show-emergency-code")).toBeNull();
+  expect(card.querySelector("#hide-emergency-code")).toBeNull();
+  expect(card.textContent).not.toContain("Show code");
+  expect(card.textContent).toContain(t("cloud.emergency_first_step"));
+  expect([...card.querySelectorAll("dt")].map((n) => n.textContent!.trim())).toEqual([
+    t("cloud.emergency_address"),
+    t("cloud.emergency_people"),
+    t("cloud.emergency_needs_authenticator"),
+  ]);
+  expect([...card.querySelectorAll("dd")].map((n) => n.textContent!.trim())).toEqual([
+    "emergency.example.test",
+    "Alex",
+    "Beatrice",
+  ]);
+  expect(card.querySelector("dd a")!.getAttribute("href")).toBe("https://emergency.example.test/");
+  expect(paths.some((path) => path.endsWith("/code"))).toBe(false);
   await expectNoA11yViolations(host);
-  button("hide-emergency-code")!.click();
-  await el.updateComplete;
-  expect(section(el)!.textContent).not.toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
-  button("show-emergency-code")!.click();
-  await expect.poll(() => reads).toBe(2);
-  host.remove();
-  await pendingCode;
-  await el.updateComplete;
-  expect(el.shadowRoot!.textContent).not.toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
-});
-it("keeps code replies out of a card whose registration changed while the read waited", async () => {
-  let replaced = false,
-    entered = false,
-    release!: () => void;
-  const wait = new Promise<void>((r) => {
-    release = r;
-  });
-  const api = new DashboardApi("", async (url) => {
-    const path = String(url);
-    if (path.endsWith("/code")) {
-      entered = true;
-      await wait;
-      return Response.json({
-        code: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ",
-        address: "https://old.example.test/",
-        asOf: "2026-11-10T12:00:00.000Z",
-        codeIssuedAt: "2026-11-01T09:00:00.000Z",
-      });
-    }
-    if (path.endsWith("/people")) return Response.json([]);
-    return Response.json(
-      path.endsWith("/emergency")
-        ? facts()
-        : path.endsWith("/billing")
-          ? { billing: { status: "unavailable" }, prices: { status: "unavailable" } }
-          : { ...status, registration: { installationId: replaced ? "second" : "first" } },
-    );
-  });
-  let pendingCode: ReturnType<DashboardApi["revealCloudEmergencyCode"]> | undefined;
-  const reveal = api.revealCloudEmergencyCode.bind(api);
-  api.revealCloudEmergencyCode = () => (pendingCode = reveal());
-  try {
-    const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
-      api,
-      canManageEmergency: true,
-    });
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("#show-emergency-code"))
-      .toBeInstanceOf(HTMLElement);
-    el.shadowRoot!.querySelector<HTMLElement>("#show-emergency-code")!.click();
-    await expect.poll(() => entered).toBe(true);
-    replaced = true;
-    el.shadowRoot!.querySelector<HTMLElement>("#refresh")!.click();
-    await expect
-      .poll(() => el.shadowRoot!.querySelector("#show-emergency-code")?.hasAttribute("disabled"))
-      .toBe(false);
-    release();
-    await pendingCode;
-    await el.updateComplete;
-    await expect.poll(() => el.shadowRoot!.querySelector("#hide-emergency-code")).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
-  } finally {
-    release();
-  }
 });
 for (const language of ["en", "es"] as const) {
-  it(`${language} shows the emergency address, dates and exactly rounded daily price accessibly`, async () => {
+  it(`${language} shows the emergency address, check time and exactly rounded daily price accessibly`, async () => {
     setLocale(language);
     const { el, host } = await open(facts());
     await expect
@@ -268,7 +186,9 @@ for (const language of ["en", "es"] as const) {
     );
     expect([...section(el)!.querySelectorAll("time")].map((n) => n.dateTime)).toEqual([
       "2026-11-10T12:00:00.000Z",
-      "2026-11-01T09:00:00.000Z",
+    ]);
+    expect([...section(el)!.querySelectorAll("dt")].map((n) => n.textContent)).toEqual([
+      t("cloud.emergency_address"),
     ]);
     await expectNoA11yViolations(host);
   });
@@ -292,6 +212,15 @@ it.each(["setting_off", "level_inactive", "no_payment_method", "not_provisioned"
     expect(section(el)!.querySelector('a[href="https://cloud.test/account"]')).not.toBeNull();
   },
 );
+it("a closed card with an address shows the closure and the address row, but no first step", async () => {
+  const { el } = await open(facts(9000, "setting_off"));
+  await expect.poll(() => section(el)?.textContent).toContain(t("cloud.emergency_setting_off"));
+  expect([...section(el)!.querySelectorAll("dt")].map((n) => n.textContent)).toEqual([
+    t("cloud.emergency_address"),
+  ]);
+  expect(section(el)!.querySelector('dd a[href="https://emergency.example.test/"]')).not.toBeNull();
+  expect(section(el)!.textContent).not.toContain(t("cloud.emergency_first_step"));
+});
 it("labels old facts as stale and keeps unpublished prices independent of availability", async () => {
   const value = {
     ...facts(9000, null, true),
@@ -382,17 +311,6 @@ it("clears old registration details while the replacement's read is pending", as
   }
 });
 
-it("explains when Cloud cannot provide the code yet", async () => {
-  const { el } = await open(facts(), status, true);
-  await expect
-    .poll(() => el.shadowRoot!.querySelector("#show-emergency-code"))
-    .toBeInstanceOf(HTMLElement);
-  el.shadowRoot!.querySelector<HTMLElement>("#show-emergency-code")!.click();
-  await expect
-    .poll(() => section(el)?.querySelector('[role="alert"]')?.textContent)
-    .toContain("The emergency code could not be read.");
-});
-
 it("links to the existing recovery-pack dialog on Backups", async () => {
   const { el } = await open(facts(), status, true);
   await expect.poll(() => section(el)).not.toBeNull();
@@ -401,4 +319,26 @@ it("links to the existing recovery-pack dialog on Backups", async () => {
   );
   expect(link).not.toBeNull();
   expect(link!.textContent).toContain(t("cloud.emergency_print_pack"));
+});
+
+it("spaces Print the recovery pack and Open Cloud account apart as an action row", async () => {
+  const { el } = await open(facts(), status, true);
+  await expect
+    .poll(() => section(el)?.querySelector(`a[href="${status.accountUrl}"]`))
+    .toBeTruthy();
+  const pack = section(el)!.querySelector<HTMLAnchorElement>(
+    'a[href="/backup?recovery-pack=make"]',
+  )!;
+  const account = section(el)!.querySelector<HTMLAnchorElement>(`a[href="${status.accountUrl}"]`)!;
+  const probe = document.createElement("div");
+  probe.style.width = "var(--wt-space-3)";
+  section(el)!.append(probe);
+  const space = probe.getBoundingClientRect().width;
+  probe.remove();
+  expect(space).toBeGreaterThan(0);
+  const first = pack.getBoundingClientRect();
+  const second = account.getBoundingClientRect();
+  const sameLine = Math.abs(first.top - second.top) < 1;
+  const apart = sameLine ? second.left - first.right : second.top - first.bottom;
+  expect(apart).toBeGreaterThanOrEqual(space - 0.5);
 });

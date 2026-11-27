@@ -26,6 +26,8 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { parseModuleConfig } from "@waitron/module";
 import { NODE_FILE, VENUE_FILE } from "@waitron/store";
 import { buildManifest } from "./backup-manifest.js";
+import { masterKeyHolders } from "./backup-recovery-pack-output.js";
+import { namedMasterKeyPack } from "./backup-recovery-pack-status.js";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { createFiscalReadinessStore } from "./fiscal-readiness.js";
@@ -590,8 +592,12 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       const [pack] = await readRecoveryPacks(venueDb.db, id);
       const [row] = await storedMasterKeys();
       expect(pack).toMatchObject({ number: pdf.number, madeAt: new Date(pdf.madeAt) });
-      // The pack that shows a key is found later by this equal instant.
-      expect(row!.madeAt).toEqual(pack!.madeAt);
+      expect(pack!.parts.find((p) => p.part === "master-key")).toEqual({
+        part: "master-key",
+        state: "included",
+        masterKeyNumber: row!.number,
+        masterKeyName: name,
+      });
     },
   );
 
@@ -606,8 +612,28 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     expect(await storedMasterKeys()).toEqual([]);
     const retried = await post(body("prepare"));
     expect(retried.status).toBe(200);
-    const { masterKeyName: name } = await retried.json();
+    const { masterKeyName: name, recoveryPackPdf } = await retried.json();
     expect(await storedMasterKeys()).toMatchObject([{ number: 1, name }]);
+    const { number } = await readRecoveryPackPdf(Buffer.from(recoveryPackPdf, "base64"));
+    const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
+    const packs = await readRecoveryPacks(venueDb.db, id);
+    expect(packs.map((pack) => pack.number)).toEqual([2, 1]);
+    expect(number).toBe(2);
+    const entryOf = (n: number) =>
+      packs.find((pack) => pack.number === n)!.parts.find((p) => p.part === "master-key");
+    expect(entryOf(2)).toMatchObject({ masterKeyNumber: 1, masterKeyName: name });
+    // Pack 1 showed the first attempt's key, which was never saved but took the same row number.
+    expect(entryOf(1)).toMatchObject({ masterKeyNumber: 1, masterKeyName: expect.any(String) });
+    expect(entryOf(1)!.masterKeyName).not.toBe(name);
+    const current = await readCurrentMasterKey(venueDb.db);
+    expect(masterKeyHolders(current!, packs)).toEqual([2]);
+    expect(
+      masterKeyHolders(
+        current!,
+        packs.filter((pack) => pack.number === 1),
+      ),
+    ).toEqual([]);
+    expect(namedMasterKeyPack(packs, masterKeyHolders(current!, packs))).toBe(number);
   });
 
   it("a Demo retried after its publishing step failed keeps the unshown key's row, and the current key is the one the retry showed", async () => {

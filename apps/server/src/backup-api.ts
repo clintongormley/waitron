@@ -5,11 +5,12 @@ import { randomUUID } from "node:crypto";
 import { stat } from "node:fs/promises";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { masterKeyMatches, type KeyRing } from "@waitron/credentials";
-import { readCurrentMasterKey, withTransaction, type Database } from "@waitron/db";
+import type { KeyRing } from "@waitron/credentials";
+import { withTransaction, type Database } from "@waitron/db";
 import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
 import type { StreamView } from "@waitron/stream";
-import { AppError, decodeMasterKeyCode, hasCode, isAppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
+import { checkTypedMasterKey } from "./master-key-record.js";
 import {
   codeOf,
   createErrorBoundary,
@@ -219,21 +220,6 @@ async function readRotateBody(c: Context): Promise<{ masterKey: string }> {
     throw requestInvalid("masterKey");
   }
   return { masterKey: body.masterKey };
-}
-
-/** The venue's current master key's bytes and row, or `master_key.wrong` naming that key. */
-async function checkedMasterKey(db: Database, typed: string) {
-  const current = await readCurrentMasterKey(db);
-  let bytes: Uint8Array | null = null;
-  try {
-    bytes = decodeMasterKeyCode(typed);
-  } catch (error) {
-    if (!isAppError(error)) throw error;
-  }
-  if (current === null || bytes === null || !masterKeyMatches(bytes, current.checkValue)) {
-    throw new AppError("master_key.wrong", current === null ? {} : { keyName: current.name });
-  }
-  return { bytes, current };
 }
 
 function testFailed(reason: string): AppError {
@@ -534,7 +520,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       const { masterKey } = await readRotateBody(c);
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
-        const { bytes, current } = await checkedMasterKey(deps.db, masterKey);
+        const { bytes, current } = await checkTypedMasterKey(deps.db, masterKey);
         const heldNumber = heldBackupKeyNumber(await deps.readBoxEnv());
         if (heldNumber === undefined) throw new AppError("backup.key_number_unknown", {});
         const record = backupKeyRecord(bytes, heldNumber + 1, current.publicKey, current.name);

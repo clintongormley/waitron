@@ -159,14 +159,6 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "Waitron could not reach Cloud or verify its reply. Try again.",
     es: "Waitron no pudo conectar con Cloud o verificar su respuesta. Vuelve a intentarlo.",
   },
-  "cloud.emergency_hosting_closed": {
-    en: "Emergency start is unavailable. Open your Cloud account to check its settings.",
-    es: "El inicio de emergencia no está disponible. Abre tu cuenta de Cloud para revisar la configuración.",
-  },
-  "cloud.emergency_code_rate_limited": {
-    en: "Too many code requests. Wait {seconds} seconds, then try again.",
-    es: "Demasiadas solicitudes de código. Espera {seconds} segundos y vuelve a intentarlo.",
-  },
   "cloud.tunnel_unavailable": {
     en: "The staff tunnel could not be configured on this box. Check its tunnel configuration and refresh status to try again.",
     es: "No se pudo configurar el túnel del personal en este servidor. Revisa su configuración del túnel y actualiza el estado para volver a intentarlo.",
@@ -1316,12 +1308,12 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Este nodo no es el principal del local; cambia las copias de seguridad desde el nodo principal",
   },
   "backup.recovery_key_too_short": {
-    en: "The backup key this box holds is too short. Use “Change the backup key” on the Recovery pack card to replace it.",
-    es: "La clave de las copias que tiene este servidor es demasiado corta. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para sustituirla.",
+    en: "The backup key this box holds is too short. Use “Change the backup key” on the Recovery pack card to replace it. If the card offers only “Make a new master key”, use that: it replaces the backup key too.",
+    es: "La clave de las copias que tiene este servidor es demasiado corta. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para sustituirla. Si la tarjeta solo ofrece «Crear una clave maestra nueva», usa esa opción: también sustituye la clave de las copias.",
   },
   "backup.recovery_key_missing": {
-    en: "This box holds no backup key. Use “Change the backup key” on the Recovery pack card to make one.",
-    es: "Este servidor no tiene clave de las copias. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para crearla.",
+    en: "This box holds no backup key. Use “Change the backup key” on the Recovery pack card to make one. If the card offers only “Make a new master key”, use that: it makes a backup key too.",
+    es: "Este servidor no tiene clave de las copias. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para crearla. Si la tarjeta solo ofrece «Crear una clave maestra nueva», usa esa opción: también crea una clave de las copias.",
   },
   "backup.key_number_unknown": {
     en: "This box holds a backup key but cannot read its number, so changing it could make a key a removed box still has. Nothing was changed. Use “Make a new master key” on the Recovery pack card instead: it moves backups to a key no other box has.",
@@ -1440,22 +1432,22 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "No se pueden leer los ajustes guardados de las copias programadas. Elegir de nuevo los destinos con «Cambiar el destino o la programación» y «Guardar cambios», o con «Activar las copias» si las copias están desactivadas, los sustituye.",
   },
   "recovery.pack_connection_insecure": {
-    en: "Open the dashboard at its secure address (https://…) to make a recovery pack.",
-    es: "Abre el panel en su dirección segura (https://…) para hacer un paquete de recuperación.",
+    en: "Open the dashboard at its secure address (https://…) to print the recovery pack or make a new master key.",
+    es: "Abre el panel en su dirección segura (https://…) para imprimir el paquete de recuperación o crear una clave maestra nueva.",
   },
   // A fault in Waitron: `makeRecoveryPack` sends the make route's exact JSON, and no screen shows
   // the received route's answer.
   "recovery.pack_invalid": {
-    en: "The box could not read the request to make a recovery pack. This is a fault in Waitron. Reload the page and make the pack again.",
-    es: "El servidor no pudo leer la solicitud para hacer un paquete de recuperación. Es un fallo de Waitron. Recarga la página y vuelve a hacer el paquete.",
+    en: "The box could not read the request for a recovery pack. This is a fault in Waitron. Reload the page and try again.",
+    es: "El servidor no pudo leer la solicitud de un paquete de recuperación. Es un fallo de Waitron. Recarga la página y vuelve a intentarlo.",
   },
   "management.origin_refused": {
     en: "The box did not make this change because this page's address is not one it trusts. Open the dashboard at the box's own address and make the change again.",
     es: "El servidor no ha hecho este cambio porque no confía en la dirección de esta página. Abre el panel en la propia dirección del servidor y vuelve a hacer el cambio.",
   },
   "recovery.pack_origin_refused": {
-    en: "Make the pack from the dashboard's own page, not from another site.",
-    es: "Haz el paquete desde la propia página del panel, no desde otro sitio.",
+    en: "Print the recovery pack or make a new master key from the dashboard's own page, not from another site.",
+    es: "Imprime el paquete de recuperación o crea una clave maestra nueva desde la propia página del panel, no desde otro sitio.",
   },
   "backup.stream_settings_unreadable": {
     en: "The saved settings for the bucket copy can't be read.",
@@ -2161,17 +2153,6 @@ export function codeMessage(
     )
       .replace("{operation}", operation)
       .replace("{seconds}", String(params.seconds));
-  }
-  if (code === "cloud.emergency_code_rate_limited" && typeof params?.seconds === "number")
-    return registeredCodeMessage(code, locale).replace("{seconds}", String(params.seconds));
-  if (
-    code === "cloud.emergency_hosting_closed" &&
-    ["setting_off", "level_inactive", "no_payment_method", "not_provisioned"].includes(
-      params?.reason as string,
-    )
-  ) {
-    const key = `cloud.emergency_${params!.reason}` as "cloud.emergency_setting_off";
-    return pickLocale({ en: en[key], es: es[key] }, locale);
   }
   if (code === "tax_office.space_low")
     return registeredCodeMessage(code, locale)

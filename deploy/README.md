@@ -887,7 +887,7 @@ command against it treat that entrypoint differently:
   opens only a version 1 file such as a Cloud copy, never a backup file the box keeps in its backup
   folders or bucket, which opens only with the master key.
   `restore --from-bucket <pack-or-kit-file>` rebuilds the box from the copy the old box kept in the
-  owner's bucket. `<pack-or-kit-file>` is the venue's recovery pack PDF, made with **Make recovery
+  owner's bucket. `<pack-or-kit-file>` is the venue's recovery pack PDF, made with **Print the recovery
   pack** on the dashboard's Backups screen, or a recovery kit file saved before the pack replaced
   it. Either holds the bucket's key and the recovery key, so nothing secret goes on the command
   line. The file must be visible inside the container and readable by the image's user, `waitron`

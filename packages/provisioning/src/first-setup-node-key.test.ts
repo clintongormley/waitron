@@ -280,6 +280,7 @@ it("records recovery pack 1 as received beside the installed key, once across a 
   const before = Date.now();
   await f.keys.installStagedNodeKey(database.db, state, f.staged!.stage);
   const after = Date.now();
+  const { masterKeyName } = f.staged!.stage;
   const packs = await readRecoveryPacks(database.db, state.frozen.nodeId);
   expect(packs).toEqual([
     {
@@ -291,6 +292,7 @@ it("records recovery pack 1 as received beside the installed key, once across a 
       parts: [
         { part: "bucket", state: "not-set-up" },
         { part: "archives", state: "not-set-up" },
+        { part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName },
       ],
     },
   ]);

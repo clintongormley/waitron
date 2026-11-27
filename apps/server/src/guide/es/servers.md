@@ -513,30 +513,25 @@ Comprueba el correo, la cuenta, la organización y el ID del local. **Aprobar re
 página de recuperación de Cloud y configurar de nuevo el inicio de sesión. **Rechazar recuperación** termina esa solicitud
 de forma permanente. **Cancelar** no envía ninguna decisión. Cuando se registre la aprobación, vuelve a la misma página de Cloud para terminar.
 
-## Consultar el inicio de emergencia en Cloud {#cloud-emergency}
+## Consultar el arranque de emergencia en Cloud {#cloud-emergency}
 
-Abre **Sistema → Servicios Cloud** en el servidor principal y consulta **Inicio de emergencia
-en Cloud**. La tarjeta muestra la dirección de emergencia, cuándo se consultaron los datos
-y cuándo se emitió el código actual.
+Abre **Sistema → Servicios Cloud** en el servidor principal y consulta **Arranque de emergencia
+en Cloud**. La tarjeta indica si Cloud informa de que el arranque de emergencia está disponible,
+muestra la **Dirección de Cloud** del local y cuándo se consultaron los datos por última vez.
 
-Si el inicio está desactivado, el plan Conectado no está activo o falta un método de pago,
+Si el arranque está desactivado, el plan Conectado no está activo o falta un método de pago,
 abre la cuenta de Cloud para corregirlo. **Cloud aún no puede iniciar este local** indica que el
-alojamiento no está disponible para este local. Los datos anteriores se indican como tales;
-Cloud los comprueba de nuevo antes de iniciar el local. El precio diario es aproximado y no
-incluye IVA.
+alojamiento no está disponible para este local. Los datos anteriores se indican como tales. El
+precio diario es aproximado y no incluye IVA.
 
-Con permiso para gestionar el servidor, pulsa **Mostrar código** para consultar el código actual.
-Comprueba su fecha de emisión antes de usar una copia guardada. **Ocultar código** lo retira de
-la tarjeta, igual que salir de esta pantalla. La dirección junto al código corresponde a ese código.
-La tarjeta también muestra quién tiene permiso y autenticador, y quién necesita configurarlo
-en su perfil. La tarjeta no inicia el local.
+Con permiso para gestionar el servidor, la tarjeta también muestra los usuarios autorizados y los
+que todavía tienen que configurar la verificación en dos pasos en su perfil. La tarjeta no inicia
+el local.
 
-Si el servidor principal deja de responder, mantén el terminal abierto. Cuando la pantalla roja ofrezca **Iniciar el local en la nube**, elige la opción para ver la dirección de emergencia y un código QR. Escanéalo con el móvil o elige **Abrir aquí** para salir del terminal y abrirla en este navegador. **Cerrar** vuelve al terminal.
+Si el servidor principal deja de responder, mantén el terminal abierto. Cuando la pantalla roja ofrezca **Iniciar el local en la nube**, elige la opción para ver un código QR de la dirección de Cloud. Escanéalo con el móvil o elige **Abrir aquí** para salir del terminal y abrirla en este navegador. **Cerrar** vuelve al terminal.
 
-Ten a mano el código de emergencia, tu contraseña de Waitron y un código del autenticador o de recuperación. El diálogo indica los roles que pueden iniciar el local; Cloud comprueba la disponibilidad antes de continuar. La opción permanece oculta hasta que Cloud habilite el alojamiento de emergencia para tu local.
+Ten a mano la clave maestra (en el paquete de recuperación), tu contraseña de Waitron y un código del autenticador o de recuperación. Las llaves de acceso no funcionan allí. La opción permanece oculta hasta que Cloud habilite el alojamiento de emergencia para tu local.
 
-En **Copias de seguridad**, elige **Hacer paquete de recuperación** en el servidor principal mientras Cloud esté disponible. Con permiso para gestionar el servidor, el paquete incluye la dirección y el código de emergencia, sus códigos QR y la fecha de emisión del código. Guárdalo bajo llave fuera del servidor. El código inicia una copia bloqueada; aún necesitas tu contraseña y tu autenticador o un código de recuperación. Las llaves de acceso no funcionan allí. Si falta la página de emergencia o ha fallado, haz un paquete nuevo cuando esté disponible.
-
-Elige **Imprimir paquete de recuperación** en la tarjeta de Cloud para abrir el formulario en **Copias de seguridad**. Si ha cambiado, haz un paquete nuevo antes de necesitarlo. Si no se pudo comprobar, vuelve a intentarlo más tarde; eso por sí solo no significa que necesites otro paquete.
+Cuando el arranque de emergencia en Cloud está disponible, la primera página del paquete de recuperación también lleva un código QR de la dirección de Cloud, con la dirección impresa debajo. Guarda el paquete bajo llave fuera del servidor. Si **Copias de seguridad** indica que un paquete no tiene el código QR de Waitron Cloud, [imprime un paquete nuevo](backups.md#recovery-pack) antes de necesitarlo. **Imprimir el paquete de recuperación** en la tarjeta de Cloud abre **Copias de seguridad**.
 
 En la copia bloqueada, entra con tu correo de Waitron, contraseña y código del autenticador, o elige **Usar un código de recuperación**. Al entrar, comprueba tu nombre, la hora de cierre de la copia y cuándo fue el último contacto de Cloud con el servidor anterior. Si el estado de Cloud no está disponible, elige **Volver a comprobar**. Esta página aún no ofrece la declaración ni inicia el local.

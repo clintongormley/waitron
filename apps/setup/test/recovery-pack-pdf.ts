@@ -1,5 +1,6 @@
 import monoUrl from "../../../packages/fiscal-verifactu/src/assets/register-noto-sans-mono.ttf?url";
 import { PDFDocument } from "pdf-lib";
+import { encodeMasterKeyCode } from "@waitron/shared";
 import {
   buildRecoveryPackFile,
   type RecoveryPackFile,
@@ -17,8 +18,8 @@ export async function recoveryPackPdf(bucketCode: string | null): Promise<File> 
     bucketCode,
     archiveCode: null,
     backupKey: null,
-    masterKey: null,
-    masterKeyName: null,
+    masterKey: encodeMasterKeyCode(new Uint8Array(16).fill(1)),
+    masterKeyName: "2026-10-29 · QZJV",
     masterKeyHeldBy: null,
   };
   buildRecoveryPackFile(file);

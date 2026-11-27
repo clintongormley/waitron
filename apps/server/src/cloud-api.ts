@@ -51,8 +51,6 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       "cloud.unavailable": 503,
       "cloud.owner_recovery_not_available": 409,
       "cloud.owner_recovery_admin_required": 403,
-      "cloud.emergency_hosting_closed": 403,
-      "cloud.emergency_code_rate_limited": 429,
       "cloud.tunnel_unavailable": 422,
       "cloud.tunnel_conflict": 409,
       "cloud.tunnel_plan_required": 403,
@@ -260,24 +258,6 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       );
       primary();
       return c.json(people);
-    }),
-  );
-  app.post("/management-api/cloud/emergency/code", (c) =>
-    run(c, log, async () => {
-      if (c.req.header("origin") !== managementOriginFor(c, deps.managementOrigin))
-        throw new AppError("authorization.not_permitted", { permission: "node.manage" });
-      await authorize(c, false, "node.manage");
-      primary();
-      const body = await readRawJsonBody<unknown>(c);
-      if (!body || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length)
-        throw new AppError("cloud.request_invalid", {});
-      const { asOf, code, codeIssuedAt, address } = await connection().emergencyCode(
-        deps.managementOrigin,
-        c.req.raw.signal,
-      );
-      await authorize(c, true, "node.manage");
-      primary();
-      return c.json({ asOf, code, codeIssuedAt, address });
     }),
   );
   for (const action of ["prepare", "check", "reissue"] as const)

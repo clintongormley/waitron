@@ -5,6 +5,7 @@ import { credentialRevision, type KeyRing } from "@waitron/credentials";
 import {
   insertRecoveryPack,
   markRecoveryPackReceived,
+  nextMasterKeyNumber,
   nextRecoveryPackNumber,
   readRecoveryPack,
   readCurrentMasterKey,
@@ -23,7 +24,7 @@ import {
   readRawJsonBody,
   requireManagementSession,
 } from "@waitron/server-kit";
-import { AppError, decodeMasterKeyCode, isAppError } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, encodeMasterKeyCode, isAppError } from "@waitron/shared";
 import { readHeldArchiveSettingsIn } from "./archive-settings.js";
 import { errnoOf } from "./errno.js";
 import { inTurn } from "./attempt-turns.js";
@@ -37,34 +38,35 @@ import {
   type BackupKeyChangeDeps,
 } from "./backup-key-record.js";
 import {
-  buildEmergencyPart,
-  type EmergencyPartInput,
   buildArchivesPart,
   buildBucketPart,
-  type BuiltPart,
   type PartsContext,
 } from "./backup-recovery-pack-parts.js";
 import {
-  currentMasterKeyElsewhere,
-  masterKeyElsewhere,
   drawRecoveryPack,
-  shownMasterKey,
+  masterKeyHolders,
+  type PackMasterKey,
 } from "./backup-recovery-pack-output.js";
-import { keepOldPackUntil, packStatus, type CurrentChecks } from "./backup-recovery-pack-status.js";
+import {
+  keepOldPackUntil,
+  namedMasterKeyPack,
+  packStatus,
+  type CurrentChecks,
+} from "./backup-recovery-pack-status.js";
 import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { Turns } from "./backup-turns.js";
 import type { Logger } from "./logger.js";
-import { insertNewMasterKey } from "./master-key-record.js";
+import { createLiveOperationRateLimit } from "./live-operation-rate-limit.js";
+import { checkTypedMasterKey, insertNewMasterKey } from "./master-key-record.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import { knownZone } from "./venue-time-zone.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import type { CloudConnection } from "./cloud-client.js";
-import { readEmergencyPeople } from "./cloud-emergency-people.js";
 import "./errors.js";
 
 export interface BackupRecoveryPackMakeDeps extends BackupKeyChangeDeps {
   cloud?: {
-    connection: Pick<CloudConnection, "status" | "emergencyCode" | "emergency">;
+    connection: Pick<CloudConnection, "status" | "emergency">;
     managementOrigin: string;
     isPrimary: () => boolean;
   };
@@ -90,6 +92,8 @@ const makeRun = createErrorBoundary(
     "recovery.pack_connection_insecure": 403,
     "recovery.pack_origin_refused": 403,
     "recovery.pack_invalid": 400,
+    "master_key.wrong": 403,
+    "recovery.rate_limited": 429,
     "management.request_invalid": 400,
     "password.invalid": 401,
     "password.throttled": 429,
@@ -123,16 +127,19 @@ function requireSecurePackRequest(c: Context): void {
   }
 }
 
-type MakeRequest = { locale: PackLocale; newMasterKey: boolean };
+/** Print a new copy with the current master key, or make a new master key, which needs no old one. */
+type MakeRequest = { locale: PackLocale } & ({ masterKey: string } | { newMasterKey: true });
 
 function makeRequest(body: unknown): MakeRequest {
   if (body === null || typeof body !== "object" || Array.isArray(body)) invalid("shape");
   const fields = body as Record<string, unknown>;
-  const keys = Object.keys(fields).sort();
+  const keys = Object.keys(fields).sort().join(",");
   if (
-    keys.join(",") !== "locale,newMasterKey" ||
     (fields.locale !== "en" && fields.locale !== "es") ||
-    typeof fields.newMasterKey !== "boolean"
+    !(
+      (keys === "locale,masterKey" && typeof fields.masterKey === "string") ||
+      (keys === "locale,newMasterKey" && fields.newMasterKey === true)
+    )
   ) {
     invalid("shape");
   }
@@ -161,76 +168,41 @@ async function currentChecks(
   };
 }
 
-async function mayPrintEmergency(db: Database | Transaction, token: string): Promise<boolean> {
-  try {
-    await authorizeManager(db, {
-      managementSessionId: token,
-      permission: "node.manage",
-      touch: false,
-    });
-    return true;
-  } catch (error) {
-    if (isAppError(error) && error.code === "authorization.not_permitted") return false;
-    throw error;
-  }
-}
-
-async function readPackEmergency(
-  deps: BackupRecoveryPackMakeDeps,
-  token: string,
-  signal: AbortSignal,
-): Promise<EmergencyPartInput> {
-  const cloud = deps.cloud;
-  if (!cloud) return { state: "absent", reason: "not_connected" };
-  if (!cloud.isPrimary()) return { state: "absent", reason: "not_primary" };
-  if (!(await mayPrintEmergency(deps.db, token))) return { state: "absent", reason: "permission" };
-  try {
-    if ((await cloud.connection.status()).state !== "complete")
-      return { state: "absent", reason: "not_connected" };
-    return {
-      state: "included",
-      code: await cloud.connection.emergencyCode(cloud.managementOrigin, signal),
-    };
-  } catch (error) {
-    if (isAppError(error) && error.code === "cloud.emergency_hosting_closed") {
-      const reason = (error.params as Record<string, unknown>).reason;
-      if (
-        reason === "setting_off" ||
-        reason === "level_inactive" ||
-        reason === "no_payment_method" ||
-        reason === "not_provisioned"
-      )
-        return { state: "absent", reason };
-    }
-    return { state: "failed", failedWith: isAppError(error) ? error.code : "unexpected" };
-  }
-}
-
-async function readEmergencyCheck(
+/**
+ * The venue's Cloud start address, from a fresh read that says emergency start is open; `null` for
+ * a closed, stale or unreadable one, of which the pack and its status say nothing.
+ */
+async function readCloudAddress(
   deps: BackupRecoveryPackMakeDeps,
   signal: AbortSignal,
-): Promise<CurrentChecks["emergency"]> {
+): Promise<string | null> {
   const cloud = deps.cloud;
-  if (!cloud?.isPrimary()) return undefined;
+  if (!cloud?.isPrimary()) return null;
   try {
-    if ((await cloud.connection.status()).state !== "complete") return undefined;
+    if ((await cloud.connection.status()).state !== "complete") return null;
     const read = await cloud.connection.emergency(
       cloud.managementOrigin,
       AbortSignal.any([signal, AbortSignal.timeout(8000)]),
     );
-    if (read.stale || read.emergency.status !== "ready") return null;
-    return {
-      asOf: read.asOf,
-      open: read.emergency.open,
-      codeIssuedAt: read.emergency.codeIssuedAt,
-    };
+    const facts = read.emergency;
+    return !read.stale && facts.status === "ready" && facts.open ? facts.address : null;
   } catch {
     return null;
   }
 }
 
+/** The typed key, refused unless it is the venue's current master key, as the pack prints it. */
+async function printedMasterKey(tx: Transaction, typed: string): Promise<PackMasterKey> {
+  const { bytes, current } = await checkTypedMasterKey(tx, typed);
+  return {
+    masterKey: encodeMasterKeyCode(bytes),
+    masterKeyName: current.name,
+    number: current.number,
+  };
+}
+
 type MakeInput = {
-  emergency: EmergencyPartInput;
+  cloudAddress: string | null;
   token: string;
   personId: string;
   request: MakeRequest;
@@ -252,15 +224,19 @@ async function makePack(
   number: number;
   madeAt: string;
   pdf: Uint8Array<ArrayBuffer>;
-  parts: BuiltPart[];
+  /** For the log: each recorded part, and the code a failed one failed with. */
+  parts: { part: string; state: string; failedWith: string | undefined }[];
 }> {
   const { request, madeAt, newMasterKey } = input;
   const nodeId = deps.node.nodeId;
   await authorizeManager(tx, { managementSessionId: input.token, permission: "system.manage" });
   await requireFreshManagementSignIn(tx, input.token);
+  const masterKey: PackMasterKey =
+    newMasterKey === undefined
+      ? await printedMasterKey(tx, (request as { masterKey: string }).masterKey)
+      : { ...newMasterKey.made, number: await nextMasterKeyNumber(tx) };
   const venue = await readVenue(tx);
   const number = await nextRecoveryPackNumber(tx, nodeId);
-  const records = await readRecoveryPacks(tx, nodeId);
   const context: PartsContext = {
     locale: request.locale,
     timeZone: venue.timeZone,
@@ -269,20 +245,9 @@ async function makePack(
     ring: deps.ring,
     env: input.env,
   };
-  let emergency = input.emergency;
-  if (emergency.state === "included") {
-    if (!deps.cloud?.isPrimary()) emergency = { state: "absent", reason: "not_primary" };
-    else if (!(await mayPrintEmergency(tx, input.token)))
-      emergency = { state: "absent", reason: "permission" };
-  }
-  const emergencyPart = buildEmergencyPart(
-    context,
-    emergency,
-    emergency.state === "included" ? await readEmergencyPeople(tx) : [],
-  );
   const bucket = await buildBucketPart(tx, context);
   const archives = await buildArchivesPart(tx, context);
-  const parts = [emergencyPart, bucket, archives];
+  const parts = [bucket, archives];
   const { pdf, record } = await drawRecoveryPack(
     {
       locale: request.locale,
@@ -294,10 +259,8 @@ async function makePack(
       nodeId,
       madeBy: input.personId,
       parts,
-      masterKey:
-        newMasterKey === undefined
-          ? await currentMasterKeyElsewhere(tx, records)
-          : shownMasterKey(newMasterKey.made),
+      cloudAddress: deps.cloud?.isPrimary() ? input.cloudAddress : null,
+      masterKey,
     },
   );
   await insertRecoveryPack(tx, record);
@@ -306,7 +269,17 @@ async function makePack(
     input.signal.throwIfAborted();
     await insertNewMasterKey(tx, newMasterKey, new Date(madeAt), input.personId);
   }
-  return { number, madeAt, pdf, parts };
+  const failedWith = new Map(parts.map((part) => [part.record.part, part.failedWith]));
+  return {
+    number,
+    madeAt,
+    pdf,
+    parts: record.parts.map(({ part, state }) => ({
+      part,
+      state,
+      failedWith: failedWith.get(part),
+    })),
+  };
 }
 
 export function mountBackupRecoveryPackMakeApi(
@@ -315,6 +288,7 @@ export function mountBackupRecoveryPackMakeApi(
   log: Logger,
 ): void {
   const nodeId = deps.node.nodeId;
+  const typedKeyAdmission = createLiveOperationRateLimit();
 
   app.post("/api/backup/recovery-pack", (c) => {
     c.header("Cache-Control", "no-store");
@@ -328,15 +302,18 @@ export function mountBackupRecoveryPackMakeApi(
       });
       const { personId } = await requireFreshManagementSignIn(deps.db, token);
       const request = makeRequest(await readRawJsonBody<unknown>(c));
-      const emergency = await readPackEmergency(deps, token, c.req.raw.signal);
+      const cloudAddress = await readCloudAddress(deps, c.req.raw.signal);
       c.req.raw.signal.throwIfAborted();
-      const made = await deps.turns(async () => {
+      const turn = <T>(body: () => Promise<T>) =>
+        "masterKey" in request
+          ? typedKeyAdmission.withAdmission(() => deps.turns(body))
+          : deps.turns(body);
+      const made = await turn(async () => {
         const result = await inTurn(deps.db, `recovery-document:${nodeId}`, async () => {
           const held = await deps.readBoxEnv();
           const madeAt = deps.now().toISOString();
-          const newMasterKey = request.newMasterKey
-            ? makeNewMasterKey(madeAt.slice(0, 10))
-            : undefined;
+          const newMasterKey =
+            "newMasterKey" in request ? makeNewMasterKey(madeAt.slice(0, 10)) : undefined;
           const nextKey =
             newMasterKey === undefined
               ? undefined
@@ -354,7 +331,7 @@ export function mountBackupRecoveryPackMakeApi(
               : { ...held, ...backupKeyEnv(nextKey), WAITRON_BACKUP_KEY_ROTATED_AT: madeAt };
           const pack = await withTransaction(deps.db, (tx) =>
             makePack(tx, deps, {
-              emergency,
+              cloudAddress,
               token,
               personId,
               request,
@@ -386,7 +363,7 @@ export function mountBackupRecoveryPackMakeApi(
       log("info", "recovery.pack_made", {
         personId,
         number: made.number,
-        parts: made.parts.map(({ record: { part, state }, failedWith }) => ({
+        parts: made.parts.map(({ part, state, failedWith }) => ({
           part,
           state,
           ...(failedWith === undefined ? {} : { failedWith }),
@@ -416,7 +393,7 @@ export function mountBackupRecoveryPackMakeApi(
         permission: "system.manage",
         touch: false,
       });
-      const emergency = await readEmergencyCheck(deps, c.req.raw.signal);
+      const cloudAddress = await readCloudAddress(deps, c.req.raw.signal);
       const env = await deps.readBoxEnv();
       const { key: fileKey } = await readHeldKey(async () => loadRecoveryKey(env));
       const status = await withTransaction(deps.db, async (tx) => {
@@ -440,7 +417,8 @@ export function mountBackupRecoveryPackMakeApi(
         const loaded = deps.backups();
         const now = deps.now();
         const currentMasterKey = await readCurrentMasterKey(tx);
-        const master = masterKeyElsewhere(currentMasterKey, records);
+        const holders =
+          currentMasterKey === null ? [] : masterKeyHolders(currentMasterKey, records);
         const status = packStatus({
           records: records.map((r) => ({
             ...r,
@@ -448,7 +426,7 @@ export function mountBackupRecoveryPackMakeApi(
           })),
           current: {
             ...(await currentChecks(tx, deps, env)),
-            emergency: deps.cloud?.isPrimary() ? emergency : undefined,
+            cloudOpen: deps.cloud?.isPrimary() === true && cloudAddress !== null,
           },
           retention: loaded.retention,
           schedule: loaded.schedule,
@@ -456,15 +434,15 @@ export function mountBackupRecoveryPackMakeApi(
             loaded.recoveryKey !== undefined &&
             fileKey !== undefined &&
             loaded.recoveryKey !== fileKey,
-          masterKeyPack: master.masterKeyHeldBy,
+          masterKeyPacks: holders,
           now,
         });
         return {
           ...status,
           masterKey:
-            master.masterKeyName === null
+            currentMasterKey === null
               ? null
-              : { name: master.masterKeyName, pack: master.masterKeyHeldBy },
+              : { name: currentMasterKey.name, pack: namedMasterKeyPack(records, holders) },
           keepOldPackUntil: keepOldPackUntil({
             retention: loaded.retention,
             schedule: loaded.schedule,

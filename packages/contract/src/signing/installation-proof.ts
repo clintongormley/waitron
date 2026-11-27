@@ -3,7 +3,6 @@ import { isPairingUuid } from "./pairing-proof.js";
 
 export type MachineAction =
   | "emergency-hosting-display"
-  | "emergency-hosting-code"
   | "billing-display"
   | "renew"
   | "configuration"
@@ -141,7 +140,6 @@ export function readMachineClaims(value: unknown): MachineClaims {
       !originValid(v[1]) ||
       ![
         "emergency-hosting-display",
-        "emergency-hosting-code",
         "billing-display",
         "renew",
         "configuration",

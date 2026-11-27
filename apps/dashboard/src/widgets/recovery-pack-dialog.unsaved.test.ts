@@ -108,6 +108,30 @@ it.each(["pack", "master-key"] as const)(
   },
 );
 
+it("a typed master key asks before Escape, and Discard closes and forgets it", async () => {
+  const f = await fixture("pack");
+  const input = f.host
+    .shadowRoot!.querySelector("wt-master-key-input")!
+    .shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>("wt-input")!;
+  await input.updateComplete;
+  input.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "88DP 74BA YPVB" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await expect.poll(() => f.app.leave.coordinator.isDirty()).toBe(true);
+  f.press("cancel-pack").focus();
+  await userEvent.keyboard("{Escape}");
+  await expect.poll(async () => (await question(f.app)).open).toBe(true);
+  expect(f.dialog.open).toBe(true);
+  const closed = dialogClosed(f.dialog);
+  await choose(f.app, "discard");
+  await closed;
+  expect(f.app.leave.coordinator.isDirty()).toBe(false);
+});
+
 it("a shown master key not yet downloaded or printed asks before Escape", async () => {
   const f = await fixture();
   await showKey(f);

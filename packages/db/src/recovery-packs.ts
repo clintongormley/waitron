@@ -2,16 +2,26 @@ import { and, desc, eq, isNull, max } from "drizzle-orm";
 import type { Database, Transaction } from "./client.js";
 import { recoveryPacks } from "./schema/recovery-packs.js";
 
-/** What one part of a pack held, and the checks that tell when it is out of date. */
+/**
+ * What one part of a pack held, and the checks that tell when it is out of date. An `emergency`
+ * entry `included` means the pack printed the Cloud QR code; a `master-key` one, that it showed the
+ * current master key.
+ */
 export type RecoveryPackPartRecord = {
-  part: "bucket" | "archives" | "emergency";
-  codeIssuedAt?: string;
+  part: "bucket" | "archives" | "emergency" | "master-key";
   state: "included" | "absent" | "failed" | "not-set-up";
   keyChangedAt?: string;
   /** `keyChangedAt` is the pack's own time: nothing had changed the backup key yet. */
   keyNeverChanged?: boolean;
   settingsRevision?: string;
   destination?: "bucket" | "folder";
+  /**
+   * A `master-key` entry's: the row number in `master_keys` of the key the pack showed, and that
+   * key's name. Both are needed: a setup retry shows a new key that takes the row number an earlier
+   * attempt's pack recorded for a key it never saved.
+   */
+  masterKeyNumber?: number;
+  masterKeyName?: string;
 };
 
 export type RecoveryPackRecord = {
@@ -23,9 +33,11 @@ export type RecoveryPackRecord = {
   parts: RecoveryPackPartRecord[];
 };
 
-const PARTS = new Set(["bucket", "archives", "emergency"]);
+const PARTS = new Set(["bucket", "archives", "emergency", "master-key"]);
 const STATES = new Set(["included", "absent", "failed", "not-set-up"]);
-const TEXT_FIELDS = new Set(["keyChangedAt", "settingsRevision", "codeIssuedAt"]);
+const TEXT_FIELDS = new Set(["keyChangedAt", "settingsRevision"]);
+// The printed name's shape, so the master key itself can never be stored as its name.
+const MASTER_KEY_NAME = /^\d{4}-\d\d-\d\d · [2-9A-HJKMNP-Z]{4}$/;
 
 // An allow-list, so nothing secret can reach a backup through this table: the row travels in
 // every copy of venue.db.
@@ -44,6 +56,12 @@ function checkedPart(entry: unknown): RecoveryPackPartRecord {
       if (value !== "bucket" && value !== "folder") refuse();
     } else if (key === "keyNeverChanged") {
       if (typeof value !== "boolean") refuse();
+    } else if (key === "masterKeyNumber") {
+      if (record.part !== "master-key" || !Number.isSafeInteger(value) || (value as number) < 1)
+        refuse();
+    } else if (key === "masterKeyName") {
+      if (record.part !== "master-key" || typeof value !== "string" || !MASTER_KEY_NAME.test(value))
+        refuse();
     } else if (!TEXT_FIELDS.has(key) || typeof value !== "string") refuse();
   }
   if (!("part" in record) || !("state" in record)) refuse();

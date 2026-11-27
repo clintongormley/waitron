@@ -8,7 +8,6 @@ import type { TillRequest, ReadOptions } from "./till-request.js";
 
 export interface TillCloudEmergency {
   address: string;
-  roles: { builtInKey: "staff" | "supervisor" | "manager" | "admin" | null; name: string | null }[];
 }
 /**
  * `GET /api/till` — the public boot info the app reads before login. `cardProvider`/`tipsEnabled` decide whether the

@@ -477,15 +477,12 @@ describe("the till's setup revision", () => {
   });
 });
 
-it("A1188 sends only the entrance and permitted role names with a stable setup revision", async () => {
+it("the till start read's cloudEmergency is the address only", async () => {
   let hint: { address: string } | null = { address: "https://emergency.example.test/" };
   const till = await setupTill(() => (hint === null ? null : { ...hint }));
   const first = await sendAsTill(till, "GET", "/api/till");
   expect(first.status).toBe(200);
-  expect(first.body.cloudEmergency).toEqual({
-    address: "https://emergency.example.test/",
-    roles: [{ builtInKey: "admin", name: null }],
-  });
+  expect(first.body.cloudEmergency).toEqual({ address: "https://emergency.example.test/" });
   expect(await startRevision(till)).toBe(first.body.setupRevision);
   expect(await menuStateRevision(till)).toBe(first.body.setupRevision);
   await withTransaction(suite.db, async (tx) => {
@@ -493,26 +490,17 @@ it("A1188 sends only the entrance and permitted role names with a stable setup r
       .update(roles)
       .set({ permissions: ["node.manage"] })
       .where(eq(roles.builtInKey, "manager"));
-    await tx.insert(roles).values([
-      { name: "Weekend lead", nameFolded: "weekend lead", permissions: ["node.manage"] },
-      { name: "After hours lead", nameFolded: "after hours lead", permissions: ["node.manage"] },
-    ]);
+    await tx
+      .insert(roles)
+      .values([{ name: "Weekend lead", nameFolded: "weekend lead", permissions: ["node.manage"] }]);
   });
   const changed = await sendAsTill(till, "GET", "/api/till");
-  expect(changed.body.cloudEmergency).toEqual({
-    address: "https://emergency.example.test/",
-    roles: [
-      { builtInKey: "manager", name: null },
-      { builtInKey: "admin", name: null },
-      { builtInKey: null, name: "After hours lead" },
-      { builtInKey: null, name: "Weekend lead" },
-    ],
-  });
-  expect(changed.body.setupRevision).not.toBe(first.body.setupRevision);
-  expect(await menuStateRevision(till)).toBe(changed.body.setupRevision);
+  expect(changed.body.cloudEmergency).toEqual({ address: "https://emergency.example.test/" });
+  expect(changed.body.setupRevision).toBe(first.body.setupRevision);
   hint = null;
   const closed = await sendAsTill(till, "GET", "/api/till");
   expect(closed.status).toBe(200);
   expect(closed.body.cloudEmergency).toBeUndefined();
-  expect(closed.body.setupRevision).not.toBe(changed.body.setupRevision);
+  expect(closed.body.setupRevision).not.toBe(first.body.setupRevision);
+  expect(await menuStateRevision(till)).toBe(closed.body.setupRevision);
 });

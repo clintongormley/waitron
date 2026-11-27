@@ -91,17 +91,9 @@ export interface CloudEmergency {
         closedReason:
           null | "setting_off" | "level_inactive" | "no_payment_method" | "not_provisioned";
         address: string | null;
-        codeIssuedAt: string | null;
       }
     | { status: "unavailable"; reason: "state_not_ready" };
   prices: CloudBilling["prices"];
-}
-
-export interface CloudEmergencyCode {
-  asOf: string;
-  code: string;
-  codeIssuedAt: string;
-  address: string;
 }
 
 export interface CloudEmergencyPerson {
@@ -216,9 +208,6 @@ export class CloudApi extends OrdersApi {
   }
   getCloudEmergencyPeople(): Promise<CloudEmergencyPerson[]> {
     return this.#request("/management-api/cloud/emergency/people", "GET");
-  }
-  revealCloudEmergencyCode(): Promise<CloudEmergencyCode> {
-    return this.#request("/management-api/cloud/emergency/code", "POST", {});
   }
   getCloudBilling(): Promise<CloudBilling> {
     return this.#request("/management-api/cloud/billing", "GET");

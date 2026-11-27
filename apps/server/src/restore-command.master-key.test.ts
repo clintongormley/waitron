@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { backupKey, makeMasterKey } from "@waitron/credentials";
 import { AppError, encodeMasterKeyCode } from "@waitron/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { recoveryPackPdf } from "../test/recovery-pack-pdf.js";
+import { packPdfWithoutMasterKey, recoveryPackPdf } from "../test/recovery-pack-pdf.js";
 import { decryptBackupFile } from "./artifact-cipher-file.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
@@ -112,7 +112,7 @@ describe("waitron-restore restore <file> and the master key", () => {
   it("refuses a recovery pack PDF that does not hold the master key", async () => {
     const path = await backupFile();
     const pack = join(dir, "pack.pdf");
-    await writeFile(pack, await recoveryPackPdf({ bucketCode: null, archiveCode: null }));
+    await writeFile(pack, await packPdfWithoutMasterKey());
     const { code, out, restore } = await run(["restore", path, "--master-key-file", pack], {});
     expect(code).toBe(1);
     expect(out).toEqual([

@@ -10,6 +10,8 @@ import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
+import { createCanvas } from "@napi-rs/canvas";
+import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { masterKeyCheckValue, masterKeyName, sealingPublicKey } from "@waitron/credentials";
@@ -18,6 +20,7 @@ import {
   insertRecoveryPack,
   installChangeFeed,
   insertMasterKey,
+  markRecoveryPackReceived,
   masterKeys,
   readCurrentMasterKey,
   readRecoveryPacks,
@@ -32,7 +35,7 @@ import { verifyAuthenticationResponse } from "@simplewebauthn/server";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { ProvisionedNode } from "@waitron/module";
-import { PART_WORDS } from "@waitron/recovery-pack";
+import { PACK_WORDS } from "@waitron/recovery-pack";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import {
   AppError,
@@ -47,7 +50,11 @@ import {
   mountBackupRecoveryPackMakeApi,
   type BackupRecoveryPackMakeDeps,
 } from "./backup-recovery-pack-api.js";
+import { makeMasterKeyRecoveryPack } from "./backup-recovery-pack-output.js";
 import { createTurns, type Turns } from "./backup-turns.js";
+import { saveNewMasterKey } from "./master-key-record.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
+import { makeNewMasterKey } from "@waitron/provisioning";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { requestIdMiddleware } from "./request-id.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
@@ -56,6 +63,7 @@ import {
   PACK_BUCKET,
   PACK_RING,
   packRequests,
+  type PackPostOptions,
   seedPackVenue,
 } from "./testing/recovery-pack-make.js";
 import { emergencyReply } from "../test/cloud-emergency-fixture.js";
@@ -94,8 +102,17 @@ beforeEach(async () => {
     WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-20T08:00:00.000Z",
   };
   loadedKey = KEY;
+  heldKey = undefined;
   ({ node, admin } = await seedPackVenue(suite.db));
 });
+
+let heldKey: string | undefined;
+const KEY_MADE = new Date("2026-10-01T09:00:00.000Z");
+/** Prints with the venue's current master key, made before this test's first pack. */
+async function print(f: ReturnType<typeof fixture>, extra: PackPostOptions = {}) {
+  heldKey ??= (await mintMasterKey(suite.db, { madeAt: KEY_MADE })).secret;
+  return f.make(heldKey, extra);
+}
 
 function fixture(
   options: {
@@ -196,7 +213,7 @@ it("verifies remote recovery-pack passkeys against the staff origin and hostname
     response: { id: "cred-remote" },
   });
   expect(confirmation.status).toBe(204);
-  const response = await remote.make();
+  const response = await remote.make(true);
   expect(response.status).toBe(200);
   expect(response.headers.get("content-type")).toBe("application/pdf");
   await response.arrayBuffer();
@@ -263,9 +280,9 @@ describe("the make route's refusals", () => {
     ],
     ["no session", { token: null }, 401, "management_session.required"],
   ] as const)("refuses %s before reading anything", async (_name, extra, status, code) => {
-    const fetchCode = vi.fn(async () => EMERGENCY);
-    const response = await fixture({ cloud: cloudPack(fetchCode) }).make(true, extra);
-    expect(fetchCode).not.toHaveBeenCalled();
+    const read = vi.fn(async () => display());
+    const response = await fixture({ cloud: cloudPack(read) }).make(true, extra);
+    expect(read).not.toHaveBeenCalled();
     expect(response.status).toBe(status);
     expect((await codeOf(response)).code).toBe(code);
     expect(await packs()).toEqual([]);
@@ -280,17 +297,22 @@ describe("the make route's refusals", () => {
   });
 
   it.each([
-    ["an extra field", { locale: "en", newMasterKey: false, more: 1 }],
-    ["an unknown language", { locale: "fr", newMasterKey: false }],
+    ["an extra field", { locale: "en", newMasterKey: true, more: 1 }],
+    ["an unknown language", { locale: "fr", newMasterKey: true }],
     ["a tick that is not a boolean", { locale: "en", newMasterKey: "yes" }],
-    ["no language", { newMasterKey: false }],
+    ["no language", { newMasterKey: true }],
+    ["`newMasterKey: false`", { locale: "en", newMasterKey: false }],
+    ["a master key that is not text", { locale: "en", masterKey: 42 }],
+    ["a master key and a new one", { locale: "en", masterKey: "ABCD", newMasterKey: true }],
+    ["neither a master key nor a new one", { locale: "en" }],
   ])("refuses %s as the request's shape", async (_name, body) => {
-    const response = await fixture().make(false, {}, body);
+    const response = await fixture().make(true, {}, body);
     expect(response.status).toBe(400);
     expect(await codeOf(response)).toEqual({
       code: "recovery.pack_invalid",
       params: { reason: "shape" },
     });
+    expect(await packs()).toEqual([]);
   });
 
   it("requires fresh proof, writing no record and keeping the key", async () => {
@@ -378,7 +400,7 @@ describe("the make route's refusals", () => {
 describe("a made pack", () => {
   it("answers the PDF with its number, codes the readers accept, and a record with no secret", async () => {
     const f = fixture();
-    const response = await f.make();
+    const response = await print(f);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/pdf");
     expect(response.headers.get("cache-control")).toBe("no-store");
@@ -408,10 +430,12 @@ describe("a made pack", () => {
       ["emergency", "absent"],
       ["bucket", "included"],
       ["archives", "included"],
+      ["master-key", "included"],
     ]);
     const stored = JSON.stringify(record);
-    for (const secret of [KEY, BUCKET.secretAccessKey]) expect(stored).not.toContain(secret);
-    expect((await f.make()).headers.get("x-waitron-recovery-pack")).toBe("2");
+    for (const secret of [KEY, BUCKET.secretAccessKey, heldKey!])
+      expect(stored).not.toContain(secret);
+    expect((await print(f)).headers.get("x-waitron-recovery-pack")).toBe("2");
   });
 
   const oldMasterKey = {
@@ -495,7 +519,7 @@ describe("a made pack", () => {
   it.each([true, false])(
     "a pack has no server-key part and no box-key page (new master key %s)",
     async (newMasterKey) => {
-      const response = await fixture().make(newMasterKey);
+      const response = newMasterKey ? await fixture().make(true) : await print(fixture());
       expect(response.status).toBe(200);
       expect(response.headers.has("x-waitron-recovery-pack-key")).toBe(false);
       const bytes = await response.arrayBuffer();
@@ -505,7 +529,12 @@ describe("a made pack", () => {
       const text = await pdfText(bytes);
       expect(text).not.toMatch(/server key|box key/i);
       const [record] = await packs();
-      expect(record!.parts.map((p) => p.part)).toEqual(["emergency", "bucket", "archives"]);
+      expect(record!.parts.map((p) => p.part)).toEqual([
+        "emergency",
+        "bucket",
+        "archives",
+        "master-key",
+      ]);
     },
   );
 
@@ -549,11 +578,12 @@ describe("a made pack", () => {
     expect(logged).not.toContain(masterKey.replaceAll(" ", "").slice(0, 8));
   });
 
-  it("a plain pack makes no master key", async () => {
-    const response = await fixture().make(false);
+  it("Print's answer has no master-key headers, and Print makes no master key", async () => {
+    const response = await print(fixture());
     expect(response.status).toBe(200);
     expect(response.headers.has("x-waitron-master-key")).toBe(false);
-    expect(await storedMasterKeys()).toEqual([]);
+    expect(response.headers.has("x-waitron-master-key-name")).toBe(false);
+    expect(await storedMasterKeys()).toHaveLength(1);
   });
 
   it("Make a new master key's pack shows the master key", async () => {
@@ -571,22 +601,102 @@ describe("a made pack", () => {
     );
   });
 
-  it("a pack made without a new master key names the pack that holds the current one", async () => {
-    const f = fixture();
+  it("Print with the master key makes the next pack with the same key name, and the status names it", async () => {
+    let at = Date.parse("2026-10-30T09:00:00.000Z");
+    const f = fixture({ now: () => new Date((at += 60_000)) });
     const first = shownMasterKey(await f.make(true));
-    const plain = await f.make(false);
-    expect(plain.headers.get("x-waitron-recovery-pack")).toBe("2");
-    const bytes = await plain.arrayBuffer();
+    // Typed as a person might: lower case, without its spaces.
+    const typed = first.masterKey!.replaceAll(" ", "").toLowerCase();
+    const printed = await f.make(typed);
+    expect(printed.status).toBe(200);
+    expect(printed.headers.get("x-waitron-recovery-pack")).toBe("2");
+    const bytes = await printed.arrayBuffer();
     const file = await readRecoveryPackPdf(new Uint8Array(bytes));
     expect([file.masterKey, file.masterKeyName, file.masterKeyHeldBy]).toEqual([
-      null,
+      first.masterKey,
       first.masterKeyName,
-      1,
+      null,
     ]);
     expect(await firstPageText(bytes)).toBe(
-      `Waitron recovery pack · Sala Master key ${first.masterKeyName}: in pack 1`,
+      `Waitron recovery pack · Sala Master key · ${first.masterKeyName} ${first.masterKey} Master key`,
     );
-    expect(await pdfText(bytes)).not.toContain(first.masterKey!);
+    expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: first.masterKeyName }]);
+    expect(await (await f.status()).json()).toMatchObject({
+      masterKey: { name: first.masterKeyName, pack: 2 },
+    });
+  });
+
+  it("a wrong key prints nothing, writes no row and names the key", async () => {
+    const f = fixture();
+    const first = shownMasterKey(await f.make(true));
+    const response = await f.make(WRONG_MASTER_KEY);
+    expect(response.status).toBe(403);
+    expect(response.headers.get("content-type")).not.toBe("application/pdf");
+    expect(await codeOf(response)).toEqual({
+      code: "master_key.wrong",
+      params: { keyName: first.masterKeyName },
+    });
+    expect(await packs()).toMatchObject([{ number: 1 }]);
+    expect(await storedMasterKeys()).toHaveLength(1);
+  });
+
+  it.each(["not a master key", "", " ".repeat(40)])(
+    "a malformed key (%j) is refused as a wrong one",
+    async (typed) => {
+      const f = fixture();
+      const first = shownMasterKey(await f.make(true));
+      const response = await f.make(typed);
+      expect(response.status).toBe(403);
+      expect(await codeOf(response)).toEqual({
+        code: "master_key.wrong",
+        params: { keyName: first.masterKeyName },
+      });
+      expect(await packs()).toMatchObject([{ number: 1 }]);
+    },
+  );
+
+  it("with no master key, Print is refused with no key name", async () => {
+    const response = await fixture().make(WRONG_MASTER_KEY);
+    expect(response.status).toBe(403);
+    expect(await codeOf(response)).toEqual({ code: "master_key.wrong", params: {} });
+    expect(await packs()).toEqual([]);
+    expect(await storedMasterKeys()).toEqual([]);
+  });
+
+  it("Print takes the live-operation limiter's turn: a third print while two are being made is refused", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    let reads = 0;
+    const f = fixture({
+      readBoxEnv: async () => {
+        reads += 1;
+        await gate;
+        return { ...boxEnv };
+      },
+    });
+    const key = (await mintMasterKey(suite.db)).secret;
+    const held = [f.make(key), f.make(key)];
+    let third: Promise<Response> | Response | undefined;
+    try {
+      await vi.waitFor(() => expect(reads).toBe(1));
+      third = f.make(key);
+      // Without the limiter the third print waits for the held turn, which only `release` ends.
+      const answered = await Promise.race([
+        third,
+        new Promise<"still waiting">((resolve) =>
+          setTimeout(() => resolve("still waiting"), 5_000),
+        ),
+      ]);
+      expect(answered).not.toBe("still waiting");
+      const refused = answered as Response;
+      expect(refused.status).toBe(429);
+      expect((await codeOf(refused)).code).toBe("recovery.rate_limited");
+    } finally {
+      release();
+      await third;
+    }
+    expect((await Promise.all(held)).map((r) => r.status)).toEqual([200, 200]);
+    expect(await packs()).toHaveLength(2);
   });
 
   it("waits for a backup turn already running before it reads anything", async () => {
@@ -603,7 +713,7 @@ describe("a made pack", () => {
     };
     let release!: () => void;
     const held = turns(() => new Promise<void>((resolve) => (release = resolve)));
-    const making = fixture({ turns, readBoxEnv }).make();
+    const making = print(fixture({ turns, readBoxEnv }));
     await vi.waitFor(() => expect(handed).toBe(2), { timeout: 30_000 });
     expect(reads).toBe(0);
     expect(await packs()).toEqual([]);
@@ -615,7 +725,8 @@ describe("a made pack", () => {
   });
 
   it("logs the made pack's parts, why a part failed, and the person, and no code, key, secret or error message in the log or headers", async () => {
-    const response = await fixture().make(true);
+    const f = fixture();
+    const response = await f.make(true);
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
     expect(logs).toContainEqual([
       "info",
@@ -627,11 +738,12 @@ describe("a made pack", () => {
           { part: "emergency", state: "absent" },
           { part: "bucket", state: "included" },
           { part: "archives", state: "included" },
+          { part: "master-key", state: "included" },
         ],
       },
     ]);
     await withTransaction(suite.db, (tx) => storeArchivePart(tx, {}));
-    const failing = await fixture().make();
+    const failing = await f.make(file.masterKey!);
     expect(failing.status).toBe(200);
     expect(logs).toContainEqual([
       "info",
@@ -643,6 +755,7 @@ describe("a made pack", () => {
           { part: "emergency", state: "absent" },
           { part: "bucket", state: "included" },
           { part: "archives", state: "failed", failedWith: "backup.archive_settings_unreadable" },
+          { part: "master-key", state: "included" },
         ],
       },
     ]);
@@ -650,16 +763,14 @@ describe("a made pack", () => {
       cloud: cloudPack(async () => {
         throw new Error("could not read /home/jane-doe/cloud.json");
       }),
-    }).make();
+    }).make(file.masterKey!);
     expect(cloudFailing.status).toBe(200);
     expect(logs).toContainEqual([
       "info",
       "recovery.pack_made",
       expect.objectContaining({
         number: 3,
-        parts: expect.arrayContaining([
-          { part: "emergency", state: "failed", failedWith: "unexpected" },
-        ]),
+        parts: expect.arrayContaining([{ part: "emergency", state: "absent" }]),
       }),
     ]);
     const seen = JSON.stringify([
@@ -676,6 +787,8 @@ describe("a made pack", () => {
       "jane-doe",
     ])
       expect(seen).not.toContain(value);
+    const printed = JSON.stringify([logs, [...failing.headers], [...cloudFailing.headers]]);
+    expect(printed).not.toContain(file.masterKey!);
   });
 
   it("a pack that cannot be drawn writes no record and no master key", async () => {
@@ -718,12 +831,13 @@ describe("a made pack", () => {
 
   it("takes the backup key from the box's settings file, never the key the backups loaded", async () => {
     boxEnv = {};
-    const response = await fixture().make();
+    const response = await print(fixture());
     expect(response.status).toBe(200);
     expect((await packs())[0]!.parts.map((p) => [p.part, p.state])).toEqual([
       ["emergency", "absent"],
       ["bucket", "failed"],
       ["archives", "failed"],
+      ["master-key", "included"],
     ]);
   });
 
@@ -974,7 +1088,23 @@ describe("the status route", () => {
     expect(await read(fixture())).toMatchObject({ timeZone: "UTC" });
   });
 
-  it("names the current master key and the pack that showed it, which a plain make does not change", async () => {
+  /** A row written before packs recorded the master key: it has no `master-key` entry. */
+  const olderPack = (number: number, madeAt: Date, receivedAt: Date | null = null) =>
+    withTransaction(suite.db, async (tx) => {
+      await insertRecoveryPack(tx, {
+        nodeId: node.nodeId,
+        number,
+        madeAt,
+        madeBy: null,
+        parts: [
+          { part: "bucket", state: "not-set-up" },
+          { part: "archives", state: "not-set-up" },
+        ],
+      });
+      if (receivedAt !== null) await markRecoveryPackReceived(tx, node.nodeId, number, receivedAt);
+    });
+
+  it("names the current master key and the newest pack that showed it", async () => {
     let at = Date.parse("2026-10-30T09:00:00.000Z");
     const f = fixture({ now: () => new Date((at += 60_000)) });
     expect(await read(f)).toMatchObject({ masterKey: null });
@@ -982,44 +1112,142 @@ describe("the status route", () => {
     const name = decodeURIComponent(response.headers.get("x-waitron-master-key-name")!);
     await response.arrayBuffer();
     expect(await read(f)).toMatchObject({ masterKey: { name, pack: 1 } });
-    await (await f.make(false)).arrayBuffer();
-    expect(await read(f)).toMatchObject({ masterKey: { name, pack: 1 } });
+    await (await f.make(shownMasterKey(response).masterKey!)).arrayBuffer();
+    expect(await read(f)).toMatchObject({ masterKey: { name, pack: 2 } });
   });
 
-  it("still names the unconfirmed pack that showed the master key after a later plain pack is received", async () => {
+  it("names a Print made after the box's clock moved back as the pack holding the master key", async () => {
+    let at = Date.parse("2026-10-30T14:00:00.000Z");
+    const f = fixture({ now: () => new Date(at) });
+    const response = await f.make(true);
+    const { masterKey, masterKeyName: name } = shownMasterKey(response);
+    await response.arrayBuffer();
+    at = Date.parse("2026-10-30T13:01:00.000Z");
+    await (await f.make(masterKey!)).arrayBuffer();
+    expect((await packs()).map((p) => [p.madeAt.toISOString(), p.parts.at(-1)])).toEqual([
+      [
+        "2026-10-30T13:01:00.000Z",
+        { part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName: name },
+      ],
+      [
+        "2026-10-30T14:00:00.000Z",
+        { part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName: name },
+      ],
+    ]);
+    expect(await read(f)).toMatchObject({ masterKey: { name, pack: 2 } });
+  });
+
+  it("names no later pack whose entry names an earlier master key", async () => {
     let at = Date.parse("2026-10-30T09:00:00.000Z");
     const f = fixture({ now: () => new Date((at += 60_000)) });
-    await (await f.make(true)).arrayBuffer();
-    await (await f.make(false)).arrayBuffer();
-    expect((await f.received(2)).status).toBe(204);
-    expect(await read(f)).toMatchObject({
+    const first = await f.make(true);
+    const { masterKeyName: firstName } = shownMasterKey(first);
+    await first.arrayBuffer();
+    const second = await f.make(true);
+    const { masterKeyName: name } = shownMasterKey(second);
+    await second.arrayBuffer();
+    expect((await packs()).map((p) => p.parts.at(-1))).toEqual([
+      { part: "master-key", state: "included", masterKeyNumber: 2, masterKeyName: name },
+      { part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName: firstName },
+    ]);
+    await withTransaction(suite.db, (tx) =>
+      insertRecoveryPack(tx, {
+        nodeId: node.nodeId,
+        number: 3,
+        madeAt: new Date(at + 60_000),
+        madeBy: null,
+        parts: [
+          { part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName: firstName },
+        ],
+      }),
+    );
+    expect(await read(f)).toMatchObject({ masterKey: { name, pack: 2 } });
+  });
+
+  it("names the received pack as holding the master key, and an unreceived reprint of it plainly", async () => {
+    let at = Date.parse("2026-10-30T09:00:00.000Z");
+    const f = fixture({ now: () => new Date((at += 60_000)) });
+    const response = await f.make(true);
+    const { masterKey, masterKeyName: name } = shownMasterKey(response);
+    await response.arrayBuffer();
+    await f.received(1);
+    await (await f.make(masterKey!)).arrayBuffer();
+    const answer = await read(f);
+    expect(answer).toMatchObject({ masterKey: { name, pack: 1 } });
+    expect(answer.unreceived).toEqual({ number: 2, madeAt: expect.any(String) });
+  });
+
+  it("setup's pack is still named before any Print", async () => {
+    const made = makeNewMasterKey("2026-10-30");
+    const madeAt = "2026-10-30T08:00:00.000Z";
+    // The setup route's order: the pack, then the key's row.
+    const pdf = await makeMasterKeyRecoveryPack(suite.db, node.nodeId, "en", () => {}, {
+      made: made.made,
+      madeAt,
+    });
+    await saveNewMasterKey(suite.db, made, new Date(madeAt), null);
+    expect(pdf).toEqual(expect.any(String));
+    expect((await packs())[0]!.parts).toContainEqual({
+      part: "master-key",
+      state: "included",
+      masterKeyNumber: 1,
+      masterKeyName: made.made.masterKeyName,
+    });
+    expect(await read(fixture())).toMatchObject({
+      masterKey: { name: made.made.masterKeyName, pack: 1 },
+    });
+  });
+
+  it("still names an older unconfirmed pack that showed the master key after a later one without it is received", async () => {
+    const { name } = await mintMasterKey(suite.db, { madeAt: KEY_MADE });
+    await olderPack(1, KEY_MADE);
+    await olderPack(2, new Date("2026-10-02T09:00:00.000Z"), new Date("2026-10-02T10:00:00.000Z"));
+    expect(await read(fixture())).toMatchObject({
       latest: { number: 2, received: true },
       unreceived: { number: 1, holdsCurrentMasterKey: true },
+      masterKey: { name, pack: 1 },
+    });
+  });
+
+  it("names an older received pack that showed the master key past a later one without it, and adds no keep entry for it", async () => {
+    await mintMasterKey(suite.db, { madeAt: KEY_MADE });
+    await olderPack(1, KEY_MADE, KEY_MADE);
+    await olderPack(2, new Date("2026-10-02T09:00:00.000Z"), new Date("2026-10-02T10:00:00.000Z"));
+    expect(await read(fixture())).toMatchObject({
+      unreceived: null,
+      keep: [],
       masterKey: { pack: 1 },
     });
   });
 
-  it("names the received pack that showed the master key once a later plain pack is made, and adds no keep entry for it", async () => {
-    let at = Date.parse("2026-10-30T09:00:00.000Z");
-    const f = fixture({ now: () => new Date((at += 60_000)) });
-    await (await f.make(true)).arrayBuffer();
-    expect((await f.received(1)).status).toBe(204);
-    await (await f.make(false)).arrayBuffer();
-    expect((await f.received(2)).status).toBe(204);
-    expect(await read(f)).toMatchObject({ unreceived: null, keep: [], masterKey: { pack: 1 } });
+  it("names no older pack for a master key when two were made at the instant the key was", async () => {
+    const { name } = await mintMasterKey(suite.db, { madeAt: KEY_MADE });
+    await olderPack(1, KEY_MADE);
+    await olderPack(2, KEY_MADE);
+    expect(await read(fixture())).toMatchObject({ masterKey: { name, pack: null } });
   });
 
-  it("names no pack for a master key when a plain pack was made at the same instant as the pack that showed it", async () => {
-    const f = fixture({ now: () => new Date("2026-10-30T09:00:00.000Z") });
-    const response = await f.make(true);
-    const name = decodeURIComponent(response.headers.get("x-waitron-master-key-name")!);
-    await response.arrayBuffer();
-    await (await f.make(false)).arrayBuffer();
-    const third = await f.make(false);
-    expect(third.headers.get("x-waitron-recovery-pack")).toBe("3");
-    const file = await readRecoveryPackPdf(new Uint8Array(await third.arrayBuffer()));
-    expect([file.masterKey, file.masterKeyName, file.masterKeyHeldBy]).toEqual([null, name, null]);
-    expect(await read(f)).toMatchObject({ masterKey: { name, pack: null } });
+  it("names a Print over an older pack made at the key's instant", async () => {
+    const { secret, name } = await mintMasterKey(suite.db, { madeAt: KEY_MADE });
+    await olderPack(1, KEY_MADE);
+    const f = fixture();
+    await (await f.make(secret)).arrayBuffer();
+    expect(await read(f)).toMatchObject({ masterKey: { name, pack: 2 } });
+  });
+
+  it("names no pack that showed an earlier master key", async () => {
+    const f = fixture({ now: () => new Date("2026-10-02T09:00:00.000Z") });
+    await (await f.make(true)).arrayBuffer();
+    await withTransaction(suite.db, (tx) =>
+      insertMasterKey(tx, {
+        name: "2026-10-03 · AAAA",
+        checkValue: "a".repeat(64),
+        publicKey: Buffer.alloc(44, 1),
+        madeAt: new Date("2026-10-03T09:00:00.000Z"),
+        madeBy: null,
+      }),
+    );
+    expect(await read(f)).toMatchObject({ masterKey: { name: "2026-10-03 · AAAA", pack: null } });
   });
 
   it("names no pack for a master key no pack on this box showed", async () => {
@@ -1045,7 +1273,7 @@ describe("the status route", () => {
   it("says no pack has been made, then up to date once one is received, then out of date when the key changes", async () => {
     const f = fixture();
     expect(await read(f)).toMatchObject({ latest: null, upToDate: false });
-    await (await f.make()).arrayBuffer();
+    await (await print(f)).arrayBuffer();
     expect(await read(f)).toMatchObject({
       latest: { number: 1, received: false },
       upToDate: false,
@@ -1079,7 +1307,7 @@ describe("the status route", () => {
   it("answers when the backup key is too short; a pack made under it is incomplete", async () => {
     boxEnv = { ...boxEnv, WAITRON_BACKUP_RECOVERY_KEY: "short" };
     const f = fixture();
-    expect((await f.make()).status).toBe(200);
+    expect((await print(f)).status).toBe(200);
     expect((await f.received(1)).status).toBe(204);
     const response = await f.status();
     expect(response.status).toBe(200);
@@ -1090,7 +1318,7 @@ describe("the status route", () => {
 
   it("counts archives as changed when their record cannot be read", async () => {
     const f = fixture();
-    await (await f.make()).arrayBuffer();
+    await (await print(f)).arrayBuffer();
     await f.received(1);
     expect((await read(f)).upToDate).toBe(true);
     await withTransaction(suite.db, (tx) => storeArchivePart(tx, {}));
@@ -1112,7 +1340,7 @@ describe("the status route", () => {
       ),
     );
     const f = fixture();
-    const file = await readRecoveryPackPdf(new Uint8Array(await (await f.make()).arrayBuffer()));
+    const file = await readRecoveryPackPdf(new Uint8Array(await (await print(f)).arrayBuffer()));
     expect(decodeArchiveRecoveryPack(file.archiveCode!).bucket.bucket).toBe("old-bucket");
     await f.received(1);
     expect((await read(f)).upToDate).toBe(true);
@@ -1136,10 +1364,10 @@ describe("the status route", () => {
     delete boxEnv.WAITRON_BACKUP_KEY_ROTATED_AT;
     let instant = "2026-10-01T09:00:00.000Z";
     const f = fixture({ now: () => new Date(instant) });
-    await (await f.make()).arrayBuffer();
+    await (await print(f)).arrayBuffer();
     await f.received(1);
     instant = "2026-10-02T09:00:00.000Z";
-    await (await f.make()).arrayBuffer();
+    await (await print(f)).arrayBuffer();
     await f.received(2);
     boxEnv = { ...boxEnv, WAITRON_BACKUP_KEY_ROTATED_AT: "2026-10-03T09:00:00.000Z" };
     instant = "2026-10-04T09:00:00.000Z";
@@ -1162,77 +1390,163 @@ describe("the status route", () => {
   });
 });
 
-const EMERGENCY = {
-  version: 1 as const,
-  installationId: "installation",
-  venueId: "venue",
-  countryCode: "ES" as const,
-  asOf: "2026-10-30T09:00:00.000Z",
-  codeIssuedAt: "2026-10-20T08:00:00.000Z",
-  address: "https://rescue.venue.example/",
-  code: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ",
+const CLOUD_ADDRESS = "https://rescue.venue.example/";
+type Display = EmergencyDisplay & { stale: boolean };
+const display = (
+  facts: Partial<Extract<EmergencyDisplay["emergency"], { status: "ready" }>> = {},
+  stale = false,
+): Display => {
+  const reply = emergencyReply("installation", "venue", "2026-10-30T09:00:00.000Z");
+  return {
+    ...reply,
+    emergency: { ...reply.emergency, address: CLOUD_ADDRESS, ...facts },
+    stale,
+  } as Display;
 };
 const cloudPack = (
-  code = async () => EMERGENCY,
+  read: () => Promise<Display> = async () => display(),
   isPrimary = () => true,
 ): NonNullable<BackupRecoveryPackMakeDeps["cloud"]> => ({
   connection: {
     status: async () => ({ state: "complete", code: "" }),
-    emergencyCode: code,
-    emergency: async () =>
-      ({
-        ...emergencyReply("installation", "venue", EMERGENCY.asOf),
-        emergency: {
-          status: "ready",
-          open: true,
-          closedReason: null,
-          address: EMERGENCY.address,
-          codeIssuedAt: EMERGENCY.codeIssuedAt,
-        },
-        stale: false,
-      }) as EmergencyDisplay & { stale: boolean },
+    emergency: read,
   },
   managementOrigin: "https://box.test",
   isPrimary,
 });
 
+/** The QR code read from the left and the right half of the pack's first page. */
+async function firstPageCodes(bytes: ArrayBuffer): Promise<[string | null, string | null]> {
+  const loading = getDocument({ data: new Uint8Array(bytes.slice(0)), useSystemFonts: false });
+  try {
+    const page = await (await loading.promise).getPage(1);
+    const viewport = page.getViewport({ scale: 3 });
+    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+    const context = canvas.getContext("2d");
+    await page.render({ canvas: canvas as never, canvasContext: context as never, viewport })
+      .promise;
+    const half = Math.floor(canvas.width / 2);
+    const read = (left: number) =>
+      jsQR(context.getImageData(left, 0, half, canvas.height).data, half, canvas.height)?.data ??
+      null;
+    return [read(0), read(half)];
+  } finally {
+    await loading.destroy();
+  }
+}
+
 it.each(["en", "es"] as const)(
-  "prints Cloud's returned address and code, storing only the issue date (%s)",
+  "a pack made while connected has the Cloud QR code on its first page, reading back as the address (%s)",
   async (locale) => {
+    const caption = PACK_WORDS[locale].cloudQr("rescue.venue.example");
     const response = await fixture({ cloud: cloudPack() }).make(
-      false,
+      true,
       {},
-      { locale, newMasterKey: false },
+      { locale, newMasterKey: true },
     );
     expect(response.status).toBe(200);
     const bytes = await response.arrayBuffer();
+    const { masterKey } = shownMasterKey(response);
+    expect(await firstPageText(bytes)).toContain(caption);
+    expect(await firstPageCodes(bytes)).toEqual([masterKey, CLOUD_ADDRESS]);
     const text = await pdfText(bytes);
-    expect(text).toContain(EMERGENCY.address);
-    expect(text.replace(/\s+/g, "")).toContain(EMERGENCY.code);
-    expect(text).toContain(PART_WORDS[locale].emergency.intro);
+    expect(text).not.toMatch(/emergenc/i);
+    expect(text).toContain(PACK_WORDS[locale].page(3, 3));
     const [record] = await packs();
-    expect(record!.parts[0]).toEqual({
-      part: "emergency",
-      state: "included",
-      codeIssuedAt: EMERGENCY.codeIssuedAt,
-    });
+    expect(record!.parts[0]).toEqual({ part: "emergency", state: "included" });
     for (const value of [
       JSON.stringify(record),
       JSON.stringify(logs),
       JSON.stringify(await readRecoveryPackPdf(new Uint8Array(bytes))),
-    ]) {
-      expect(value).not.toContain(EMERGENCY.code);
-      expect(value).not.toContain(EMERGENCY.address);
-    }
+    ])
+      expect(value).not.toContain("rescue.venue.example");
   },
 );
 
-it("waits for Cloud before the backup turn or either write lock, then rechecks code authority", async () => {
+it("a pack made while not connected has the key and its QR code only", async () => {
+  const read = vi.fn(async () => display());
+  const cloud = cloudPack(read);
+  cloud.connection.status = async () => ({ state: "not_connected", code: "" });
+  for (const deps of [{}, { cloud }]) {
+    const response = await fixture(deps).make(true);
+    expect(response.status).toBe(200);
+    const bytes = await response.arrayBuffer();
+    expect(await firstPageCodes(bytes)).toEqual([shownMasterKey(response).masterKey, null]);
+    expect(await firstPageText(bytes)).not.toContain("Waitron Cloud");
+    expect((await packs())[0]!.parts[0]).toEqual({ part: "emergency", state: "absent" });
+  }
+  expect(read).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["closed", async () => display({ open: false, closedReason: "setting_off", address: null })],
+  ["closed with an address", async () => display({ open: false, closedReason: "setting_off" })],
+  ["stale", async () => display({}, true)],
+  [
+    "not ready",
+    async () =>
+      ({
+        ...display(),
+        emergency: { status: "unavailable", reason: "state_not_ready" },
+      }) as Display,
+  ],
+  [
+    "unreadable",
+    async () => {
+      throw new AppError("cloud.unavailable", {});
+    },
+  ],
+  [
+    "failing",
+    async () => {
+      throw new Error("could not read /home/jane-doe/cloud.json");
+    },
+  ],
+] as const)(
+  "closed or stale Cloud prints no Cloud QR code, and says nothing of it (%s)",
+  async (_name, read) => {
+    const response = await fixture({ cloud: cloudPack(read) }).make(true);
+    expect(response.status).toBe(200);
+    const bytes = await response.arrayBuffer();
+    expect(await firstPageCodes(bytes)).toEqual([shownMasterKey(response).masterKey, null]);
+    const text = await pdfText(bytes);
+    expect(text).not.toMatch(/Cloud|emergency|jane-doe/i);
+    expect(text).toContain("Page 3 of 3");
+    expect((await packs())[0]!.parts.map((p) => [p.part, p.state])).toEqual([
+      ["emergency", "absent"],
+      ["bucket", "included"],
+      ["archives", "included"],
+      ["master-key", "included"],
+    ]);
+    expect(JSON.stringify(logs)).not.toContain("jane-doe");
+  },
+);
+
+it("a secondary box prints no Cloud QR code and does not ask Cloud", async () => {
+  const read = vi.fn(async () => display());
+  const response = await fixture({ cloud: cloudPack(read, () => false) }).make(true);
+  expect(await firstPageCodes(await response.arrayBuffer())).toEqual([
+    shownMasterKey(response).masterKey,
+    null,
+  ]);
+  expect(read).not.toHaveBeenCalled();
+  expect((await packs())[0]!.parts[0]).toEqual({ part: "emergency", state: "absent" });
+});
+
+it("prints the Cloud QR code for a person without node.manage, since the address is not secret", async () => {
+  await setBuiltInRoleForTest(suite.db, admin.personId, "manager");
+  const response = await fixture({ cloud: cloudPack() }).make(true);
+  expect(response.status).toBe(200);
+  expect((await firstPageCodes(await response.arrayBuffer()))[1]).toBe(CLOUD_ADDRESS);
+  expect((await packs())[0]!.parts[0]).toEqual({ part: "emergency", state: "included" });
+});
+
+it("waits for Cloud before the backup turn or either write lock, then rechecks that the box is primary", async () => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
   const requested = vi.fn(async () => {
     await gate;
-    return EMERGENCY;
+    return display();
   });
   const enteredTurn = vi.fn();
   const queue = createTurns();
@@ -1241,7 +1555,7 @@ it("waits for Cloud before the backup turn or either write lock, then rechecks c
     return queue(body);
   };
   let primary = true;
-  const pending = fixture({ cloud: cloudPack(requested, () => primary), turns }).make();
+  const pending = print(fixture({ cloud: cloudPack(requested, () => primary), turns }));
   try {
     await vi.waitFor(() => expect(requested).toHaveBeenCalledOnce());
     expect(enteredTurn).not.toHaveBeenCalled();
@@ -1254,114 +1568,89 @@ it("waits for Cloud before the backup turn or either write lock, then rechecks c
   }
   const response = await pending;
   expect(response.status).toBe(200);
-  expect(await pdfText(await response.arrayBuffer())).not.toContain(EMERGENCY.code);
+  expect(await pdfText(await response.arrayBuffer())).not.toContain("Waitron Cloud");
   expect((await packs())[0]!.parts[0]).toEqual({ part: "emergency", state: "absent" });
 });
 
-it.each([
-  "setting_off",
-  "level_inactive",
-  "no_payment_method",
-  "not_provisioned",
-  "unavailable",
-  "rate_limited",
-  "unknown",
-] as const)("prints a usable partial pack when emergency is %s", async (reason) => {
-  const closed = ["setting_off", "level_inactive", "no_payment_method", "not_provisioned"].includes(
-    reason,
-  );
-  const response = await fixture({
-    cloud: cloudPack(async () => {
-      if (closed) throw new AppError("cloud.emergency_hosting_closed", { reason } as never);
-      if (reason === "rate_limited")
-        throw new AppError("cloud.emergency_code_rate_limited", { seconds: 99 });
-      if (reason === "unknown") throw new Error("SECRET-error-message");
-      throw new AppError("cloud.unavailable", {});
-    }),
-  }).make();
-  expect(response.status).toBe(200);
-  const text = await pdfText(await response.arrayBuffer());
-  expect(text).not.toContain(EMERGENCY.code);
-  expect(text).not.toContain("SECRET-error-message");
-  expect(text).not.toContain("99 seconds");
-  if (closed) expect(text).toContain("Page 2 of 3");
-  else expect(text).toContain("new pack");
-  const record = (await packs())[0]!;
-  expect(record.parts[0]).toEqual({ part: "emergency", state: closed ? "absent" : "failed" });
-  expect(record.parts.slice(1).map((p) => p.state)).toEqual(["included", "included"]);
-});
-
-it.each(["disconnected", "secondary", "permission"] as const)(
-  "omits the emergency code without fetching it when %s",
-  async (reason) => {
-    const fetchCode = vi.fn(async () => EMERGENCY);
-    const cloud = cloudPack(fetchCode, () => reason !== "secondary");
-    if (reason === "disconnected")
-      cloud.connection.status = async () => ({ state: "not_connected", code: "" });
-    if (reason === "permission") await setBuiltInRoleForTest(suite.db, admin.personId, "manager");
-    const response = await fixture({ cloud }).make();
-    expect(response.status).toBe(200);
-    const text = await pdfText(await response.arrayBuffer());
-    expect(text).not.toContain(EMERGENCY.code);
-    expect(text).toContain("Page 2 of 3");
-    expect(text).not.toContain("Emergency start");
-    expect(fetchCode).not.toHaveBeenCalled();
-    expect((await packs())[0]!.parts[0]).toEqual({ part: "emergency", state: "absent" });
-  },
-);
-
-it.each(["code permission", "maker permission", "cancelled"] as const)(
+it.each(["maker permission", "cancelled"] as const)(
   "rechecks %s after the Cloud wait before writing a pack or a master key",
   async (change) => {
     const controller = new AbortController();
-    const code = async () => {
+    const read = async () => {
       if (change === "cancelled") controller.abort();
-      else
-        await setBuiltInRoleForTest(
-          suite.db,
-          admin.personId,
-          change === "code permission" ? "manager" : "supervisor",
-        );
-      return EMERGENCY;
+      else await setBuiltInRoleForTest(suite.db, admin.personId, "supervisor");
+      return display();
     };
-    const response = await fixture({ cloud: cloudPack(code) }).make(true, {
+    const response = await fixture({ cloud: cloudPack(read) }).make(true, {
       signal: controller.signal,
     });
-    if (change === "code permission") {
-      expect(response.status).toBe(200);
-      expect(await pdfText(await response.arrayBuffer())).not.toContain(EMERGENCY.code);
-      expect((await packs())[0]!.parts[0]).toEqual({ part: "emergency", state: "absent" });
-    } else {
-      expect(response.status).toBe(change === "cancelled" ? 500 : 403);
-      if (change === "maker permission")
-        expect((await codeOf(response)).code).toBe("authorization.not_permitted");
-      expect(await packs()).toEqual([]);
-      expect(await storedMasterKeys()).toEqual([]);
-    }
+    expect(response.status).toBe(change === "cancelled" ? 500 : 403);
+    if (change === "maker permission")
+      expect((await codeOf(response)).code).toBe("authorization.not_permitted");
+    expect(await packs()).toEqual([]);
+    expect(await storedMasterKeys()).toEqual([]);
   },
 );
 
-it("reads code status outside the write transaction and returns the printed issue date", async () => {
+describe("the status's Cloud reason", () => {
+  async function madeWithout(f: ReturnType<typeof fixture>) {
+    await (await print(f)).arrayBuffer();
+    await f.received(1);
+  }
+
+  it("a pack without the Cloud QR code is out of date once Cloud is open", async () => {
+    const cloud = cloudPack(async () =>
+      display({ open: false, closedReason: "setting_off", address: null }),
+    );
+    const f = fixture({ cloud });
+    await madeWithout(f);
+    expect(await (await f.status()).json()).toMatchObject({ upToDate: true, reasons: [] });
+    cloud.connection.emergency = async () => display();
+    const value = await (await f.status()).json();
+    expect(value).toMatchObject({
+      upToDate: false,
+      reasons: [{ part: "emergency", kind: "set_up_after" }],
+    });
+    expect(value.latest.parts[0]).toEqual({ part: "emergency", state: "absent" });
+    expect(JSON.stringify(value)).not.toContain("rescue.venue.example");
+  });
+
+  it("a pack with the Cloud QR code stays up to date, Cloud open or closed", async () => {
+    const cloud = cloudPack();
+    const f = fixture({ cloud });
+    await madeWithout(f);
+    expect(await (await f.status()).json()).toMatchObject({ upToDate: true, reasons: [] });
+    cloud.connection.emergency = async () => display({ open: false, closedReason: "setting_off" });
+    expect(await (await f.status()).json()).toMatchObject({ upToDate: true, reasons: [] });
+  });
+
+  it.each([
+    ["stale", async () => display({}, true)],
+    [
+      "unreadable",
+      async () => {
+        throw new AppError("cloud.unavailable", {});
+      },
+    ],
+  ] as const)("says nothing of Cloud when its read is %s", async (_name, read) => {
+    const cloud = cloudPack(async () =>
+      display({ open: false, closedReason: "setting_off", address: null }),
+    );
+    const f = fixture({ cloud });
+    await madeWithout(f);
+    cloud.connection.emergency = read;
+    expect(await (await f.status()).json()).toMatchObject({ upToDate: true, reasons: [] });
+  });
+});
+
+it("reads Cloud outside the write transaction for pack status", async () => {
   const cloud = cloudPack();
   const f = fixture({ cloud });
-  await (await f.make()).arrayBuffer();
-  await f.received(1);
-  const issued = "2026-10-30T09:00:30.000Z";
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
   const read = vi.fn(async () => {
     await gate;
-    return {
-      ...emergencyReply("installation", "venue", "2026-10-30T09:01:00.000Z"),
-      emergency: {
-        status: "ready",
-        open: true,
-        closedReason: null,
-        address: EMERGENCY.address,
-        codeIssuedAt: issued,
-      },
-      stale: false,
-    } as EmergencyDisplay & { stale: boolean };
+    return display();
   });
   cloud.connection.emergency = read;
   const pending = f.status();
@@ -1376,24 +1665,15 @@ it("reads code status outside the write transaction and returns the printed issu
   } finally {
     release();
   }
-  const response = await pending;
-  const value = await response.json();
-  expect(value).toMatchObject({
-    upToDate: false,
-    reasons: [{ part: "emergency", kind: "code_changed", at: issued }],
-  });
-  expect(value.latest.parts[0]).toEqual({
-    part: "emergency",
-    state: "included",
-    codeIssuedAt: EMERGENCY.codeIssuedAt,
-  });
-  expect(JSON.stringify(value)).not.toContain(EMERGENCY.code);
+  expect((await pending).status).toBe(200);
 });
 
-it("bounds a status read to eight seconds and reports an unknown code", async () => {
-  const cloud = cloudPack();
+it("bounds a status read to eight seconds and then says nothing of Cloud", async () => {
+  const cloud = cloudPack(async () =>
+    display({ open: false, closedReason: "setting_off", address: null }),
+  );
   const f = fixture({ cloud });
-  await (await f.make()).arrayBuffer();
+  await (await print(f)).arrayBuffer();
   await f.received(1);
   const deadline = new AbortController();
   const timeout = vi.spyOn(AbortSignal, "timeout").mockReturnValue(deadline.signal);
@@ -1415,10 +1695,7 @@ it("bounds a status read to eight seconds and reports an unknown code", async ()
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 1000)),
     ]);
     expect(response).not.toBeNull();
-    expect(await response!.json()).toMatchObject({
-      upToDate: false,
-      reasons: [{ part: "emergency", kind: "cannot_check" }],
-    });
+    expect(await response!.json()).toMatchObject({ upToDate: true, reasons: [] });
   } finally {
     rejectRead(new Error("test cleanup"));
     await pending;

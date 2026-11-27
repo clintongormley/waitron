@@ -15,7 +15,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { ProvisionedNode } from "@waitron/module";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
-import { decodeMasterKeyCode } from "@waitron/shared";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { decryptBackupFile, readArtifactFileHeader } from "./artifact-cipher-file.js";
@@ -196,11 +196,11 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     expect(f.steps).toEqual(["stream stopped", "sealed", "stream started", "backups reloaded"]);
   });
 
-  it("a plain pack leaves the backup key as it is", async () => {
+  it("Print with the master key leaves the backup key as it is", async () => {
     const stateDir = await stateFolder(3);
     const before = await readFile(join(stateDir, "backup.env"), "utf8");
     const f = fixture(stateDir);
-    const response = await f.make(false);
+    const response = await f.make(encodeMasterKeyCode(OLD_MASTER));
     expect(response.status).toBe(200);
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
     expect(decodeArchiveRecoveryPack(file.archiveCode!).recoveryKey).toBe(

@@ -287,15 +287,15 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "emergency.status_source_recent":
     "Cloud detectó contacto reciente con el servidor anterior. Recarga la página para volver a comprobarlo.",
   "emergency.status_setting_off":
-    "El inicio de emergencia está desactivado. Entra en la cuenta del propietario en Cloud para activarlo.",
+    "El arranque de emergencia está desactivado. Entra en la cuenta del propietario en Cloud para activarlo.",
   "emergency.status_level_inactive":
-    "El inicio de emergencia necesita un plan Conectado activo. Consulta el plan en la cuenta de Cloud.",
+    "El arranque de emergencia necesita un plan Conectado activo. Consulta el plan en la cuenta de Cloud.",
   "emergency.status_no_payment_method":
-    "El inicio de emergencia necesita un método de pago. Añádelo en la cuenta del propietario en Cloud.",
+    "El arranque de emergencia necesita un método de pago. Añádelo en la cuenta del propietario en Cloud.",
   "emergency.status_not_provisioned":
     "Cloud aún no puede iniciar este local. Consulta la disponibilidad en la cuenta de Cloud.",
   "emergency.status_state_not_ready":
-    "Cloud no pudo comprobar si el inicio de emergencia está disponible.",
+    "Cloud no pudo comprobar si el arranque de emergencia está disponible.",
   "emergency.check_status": "Volver a comprobar",
 
   "connection.heading": "¿Es segura esta página?",

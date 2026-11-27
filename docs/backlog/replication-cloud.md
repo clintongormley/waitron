@@ -481,8 +481,6 @@ account". Left open by A1185.
 
 ## A1188. Someone at the venue can start the venue in the cloud when the box has died (owner, 2026-10-29)
 
-Before A1188 activation ships, recheck A1187-2’s printed emergency steps against the actual hosted flow; printing the page does not qualify hosted activation.
-
 The A1323 master key replaces the emergency code (owner, 2026-11-21): the emergency start in Cloud
 needs the master key typed in, and emergency start can be switched on at any time, including after
 the box has died, from the owner's Cloud sign-in.
@@ -490,7 +488,7 @@ the box has died, from the owner's Cloud sign-in.
 
 Part of A1018 and Cloud's P6. The tills learn the venue's cloud address and
 show the emergency link to an administrator when the box disappears. The locked copy Cloud
-restores after a valid emergency code offers only an administrator sign-in; a manager
+restores after the master key is typed in offers only an administrator sign-in; a manager
 holding `node.manage`, signing in with password and authenticator code, makes A1018's
 declaration that the box is off, and only if the Cloud owner agreed in advance.
 [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
@@ -501,8 +499,10 @@ Local selected-backup placement preserves an admitted spare's identity and recor
 source in the emergency declaration. Since A947 3b-F (#3172) a spare of a venue that files with
 Veri*Factu can join, with nothing fiscal written at the join. The locked Waitron entry
 uses A1425 part 3's placement of the copy under its own identity; the hosted start still waits for Cloud's launcher, part 4's declaration and activation, and year-sized timing qualification. The emergency-card adapter is built; its facts need
-Cloud's display endpoint. The card can reveal a fresh code and list permission/authenticator
-readiness; Cloud's code endpoint remains required. The till entrance and recovery-pack emergency page are built, including the entrance without a spare. Backups checks the printed emergency code and Cloud links to the existing pack maker. The hosted runtime remains open.
+Cloud's display endpoint. The card lists permission/authenticator readiness. The till entrance is
+built, including the entrance without a spare. There is no emergency code: while emergency start is
+open, the recovery pack's first page carries a QR code for the venue's Cloud address, and the Cloud
+card links to Backups' Print the recovery pack. The hosted runtime remains open.
 The [part 1 plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-14-a1188-part1-emergency-card.md) proposes two
 card slices and pins Cloud’s 14 November 13:33 CET agreement to the contract values.
 The [part 2 plan](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/plans/2026-11-15-a1188-part2-till-facts.md) covers saved facts and the till entrance; Claude reviewed it and the watcher cleared slice 2a on 15 November.

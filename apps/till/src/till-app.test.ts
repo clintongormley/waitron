@@ -18439,7 +18439,7 @@ describe("the main-server strip", () => {
     const { el, router } = await mount(bothServers, {
       getTill: vi.fn().mockResolvedValue({
         ...till,
-        cloudEmergency: { address: "https://emergency.example.test", roles: [] },
+        cloudEmergency: { address: "https://emergency.example.test" },
         servers: bothServers,
         formFactor: kdsFormFactor,
         capabilities: ["act-as-kds"],
@@ -18650,10 +18650,7 @@ describe("the main-server strip", () => {
     );
   });
 
-  const entrance = {
-    address: "https://emergency.example.test",
-    roles: [{ builtInKey: "admin" as const, name: null }],
-  };
+  const entrance = { address: "https://emergency.example.test" };
   const dialog = (el: TillApp) => el.shadowRoot!.querySelector("till-cloud-emergency-dialog");
   const cloudPress = (strip: Strip) =>
     strip.dispatchEvent(new CustomEvent("start-in-cloud", { bubbles: true, composed: true }));

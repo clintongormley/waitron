@@ -12,7 +12,6 @@ import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { ARCHIVE_PURPOSE, writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
 import {
-  buildEmergencyPart,
   buildArchivesPart,
   buildBucketPart,
   type PartsContext,
@@ -268,35 +267,4 @@ describe("the archives part", () => {
       "backup.archive_settings_unreadable",
     );
   });
-});
-
-it("keeps both authenticator groups", async () => {
-  const emergency = buildEmergencyPart(
-    context,
-    {
-      state: "included",
-      code: {
-        version: 1,
-        installationId: "i",
-        venueId: "v",
-        countryCode: "ES",
-        asOf: context.madeAt,
-        codeIssuedAt: "2026-10-20T08:00:00.000Z",
-        address: "https://rescue.venue.example/",
-        code: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ",
-      },
-    },
-    [
-      { personId: "ready", displayName: "Alex Smith", hasAuthenticator: true },
-      { personId: "not-enrolled", displayName: "Robin Jones", hasAuthenticator: false },
-    ],
-  );
-  expect(emergency.part.page!.rows).toEqual([
-    { label: "Code issued", value: "20 October 2026 10:00" },
-    { label: "Have permission and an authenticator", value: "Alex Smith" },
-    { label: "Need to set up an authenticator first", value: "Robin Jones" },
-  ]);
-  expect(emergency.part.page!.intro).toBe(
-    "This code starts a locked copy of the venue. Sign in with your password and your authenticator or a recovery code. Passkeys do not work there.",
-  );
 });

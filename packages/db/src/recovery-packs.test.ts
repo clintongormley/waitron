@@ -22,7 +22,7 @@ const parts: RecoveryPackPartRecord[] = [
     settingsRevision: "7",
   },
   { part: "archives", state: "absent" },
-  { part: "emergency", state: "included", codeIssuedAt: "2026-10-12T08:00:00.000Z" },
+  { part: "emergency", state: "included" },
 ];
 const madeAt = new Date("2026-10-30T09:00:00.000Z");
 
@@ -120,32 +120,89 @@ describe("recovery pack records", () => {
   });
 });
 
-it("records the emergency issue date while refusing the emergency code", async () => {
-  const emergency = {
-    part: "emergency",
+it("records that the Cloud QR code was printed, refusing an issue date, a code or the address", async () => {
+  const cloud: RecoveryPackPartRecord = { part: "emergency", state: "included" };
+  await withTransaction(suite.db, (tx) =>
+    insertRecoveryPack(tx, { nodeId: "node-a", number: 1, madeAt, madeBy: null, parts: [cloud] }),
+  );
+  expect((await readRecoveryPack(suite.db, "node-a", 1))!.parts).toEqual([cloud]);
+  for (const extra of [
+    { codeIssuedAt: "2026-10-12T08:00:00.000Z" },
+    { code: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ" },
+    { address: "https://es.waitron.io/" },
+  ]) {
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        insertRecoveryPack(tx, {
+          nodeId: "node-a",
+          number: 2,
+          madeAt,
+          madeBy: null,
+          parts: [{ ...cloud, ...extra } as RecoveryPackPartRecord],
+        }),
+      ),
+    ).rejects.toThrow("recovery pack part record refused");
+  }
+  expect(await readRecoveryPack(suite.db, "node-a", 2)).toBeNull();
+});
+
+it("records that a pack showed the master key, refusing the key itself", async () => {
+  const shown: RecoveryPackPartRecord = { part: "master-key", state: "included" };
+  await withTransaction(suite.db, (tx) =>
+    insertRecoveryPack(tx, { nodeId: "node-a", number: 1, madeAt, madeBy: null, parts: [shown] }),
+  );
+  expect((await readRecoveryPack(suite.db, "node-a", 1))!.parts).toEqual([shown]);
+  for (const extra of [{ masterKey: "QZJV ABCD" }, { masterKeyCode: "QZJV ABCD" }]) {
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        insertRecoveryPack(tx, {
+          nodeId: "node-a",
+          number: 2,
+          madeAt,
+          madeBy: null,
+          parts: [{ ...shown, ...extra } as RecoveryPackPartRecord],
+        }),
+      ),
+    ).rejects.toThrow("recovery pack part record refused");
+  }
+  expect(await readRecoveryPack(suite.db, "node-a", 2)).toBeNull();
+});
+
+it("records which master key a pack showed by its row number and name, refusing any other number, name or part", async () => {
+  const shown: RecoveryPackPartRecord = {
+    part: "master-key",
     state: "included",
-    codeIssuedAt: "2026-10-12T08:00:00.000Z",
+    masterKeyNumber: 3,
+    masterKeyName: "2026-11-23 · QZJV",
   };
   await withTransaction(suite.db, (tx) =>
-    insertRecoveryPack(tx, {
-      nodeId: "node-a",
-      number: 1,
-      madeAt,
-      madeBy: null,
-      parts: [emergency as RecoveryPackPartRecord],
-    }),
+    insertRecoveryPack(tx, { nodeId: "node-a", number: 1, madeAt, madeBy: null, parts: [shown] }),
   );
-  expect((await readRecoveryPack(suite.db, "node-a", 1))!.parts).toEqual([emergency]);
-  await expect(
-    withTransaction(suite.db, (tx) =>
-      insertRecoveryPack(tx, {
-        nodeId: "node-a",
-        number: 2,
-        madeAt,
-        madeBy: null,
-        parts: [{ ...emergency, code: "ABCD-EFGH-JKLM-NPQR-STUV-WXYZ" } as RecoveryPackPartRecord],
-      }),
-    ),
-  ).rejects.toThrow("recovery pack part record refused");
+  expect((await readRecoveryPack(suite.db, "node-a", 1))!.parts).toEqual([shown]);
+  for (const entry of [
+    { ...shown, masterKeyNumber: "3" },
+    { ...shown, masterKeyNumber: 1.5 },
+    { ...shown, masterKeyNumber: 0 },
+    { ...shown, masterKeyNumber: Number.MAX_SAFE_INTEGER + 1 },
+    { part: "bucket", state: "included", masterKeyNumber: 3 },
+    { ...shown, masterKeyName: "" },
+    { ...shown, masterKeyName: 3 },
+    { ...shown, masterKeyName: null },
+    { ...shown, masterKeyName: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5" },
+    { ...shown, masterKeyName: "Key 3" },
+    { part: "bucket", state: "included", masterKeyName: "2026-11-23 · QZJV" },
+  ]) {
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        insertRecoveryPack(tx, {
+          nodeId: "node-a",
+          number: 2,
+          madeAt,
+          madeBy: null,
+          parts: [entry as RecoveryPackPartRecord],
+        }),
+      ),
+    ).rejects.toThrow("recovery pack part record refused");
+  }
   expect(await readRecoveryPack(suite.db, "node-a", 2)).toBeNull();
 });

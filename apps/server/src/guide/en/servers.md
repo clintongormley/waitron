@@ -462,26 +462,21 @@ recovery page in Cloud and set up sign-in again. **Refuse recovery** ends that r
 ## Check emergency start in Cloud {#cloud-emergency}
 
 Open **System → Cloud services** on the main box to check **Emergency start in Cloud**.
-The card shows the emergency address, when the details were checked and when the current code
-was issued.
+The card says whether Cloud reports that emergency start is available, shows the venue's
+**Cloud address** and when the details were last checked.
 
 If emergency start is switched off, your Connected plan is inactive or a payment method is
 missing, open the Cloud account to put it right. **Cloud cannot start this venue yet** means the
-hosting path is not available for this venue. Earlier details are labelled as such; Cloud checks
-again before starting. The daily price is an estimate excluding VAT.
+hosting path is not available for this venue. Earlier details are labelled as such. The daily
+price is an estimate excluding VAT.
 
-With permission to manage the box, choose **Show code** to fetch the current code. Check its
-issuance date before using a saved copy. **Hide code** removes it from the card; leaving this
-screen does too. The address beside the revealed code belongs to that code.
-The card also lists people with permission and an authenticator, and people who need to set
-one up in their profile. The card does not start the venue.
+With permission to manage the box, the card also lists the authorised users, and the users who
+still need to set up two-factor authorisation in their profile. The card does not start the venue.
 
-If the main box stops answering, keep the till open. When the red screen offers **Start the venue in the cloud**, choose it to see the emergency address and a QR code. Scan it with your phone, or choose **Open here** to leave the till and open it in this browser. **Close** returns to the till.
+If the main box stops answering, keep the till open. When the red screen offers **Start the venue in the cloud**, choose it to see a QR code for the Cloud address. Scan it with your phone, or choose **Open here** to leave the till and open it in this browser. **Close** returns to the till.
 
-Have the emergency code, your Waitron password and an authenticator or recovery code ready. The dialog lists the roles allowed to start the venue; Cloud checks availability before continuing. The option stays hidden until Cloud has made emergency hosting available for your venue.
+Have the master key (in the recovery pack), your Waitron password and an authenticator or recovery code ready. Passkeys do not work there. The option stays hidden until Cloud has made emergency hosting available for your venue.
 
-From **Backups**, choose **Make recovery pack** on the main box while Cloud is available. With permission to manage the box, the pack includes the emergency address and code, their QR codes, and the code’s issue date. Keep it locked away off the box. The code starts a locked copy; you still need your password and your authenticator or a recovery code. Passkeys do not work there. If the emergency page is missing or failed, make a new pack when it is available.
-
-Choose **Print recovery pack** on the Cloud card to open the maker on **Backups**. If the code changed, make a new pack before you need it. If the code could not be checked, try again later; this alone does not mean you need another pack.
+When emergency start in Cloud is available, the recovery pack's first page also carries a QR code for the Cloud address, with the address printed under it. Keep the pack locked away off the box. If **Backups** says a pack has no Waitron Cloud QR code, [print a new pack](backups.md#recovery-pack) before you need it. **Print the recovery pack** on the Cloud card opens **Backups**.
 
 On the locked copy, sign in with your Waitron email, password and authenticator code, or choose **Use a recovery code**. After signing in, check your name, the copy’s stop time and when Cloud last heard from the old box. If Cloud status is unavailable, choose **Check again**. This page does not yet offer the declaration or start the venue.

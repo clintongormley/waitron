@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { RecoveryPackPartRecord } from "@waitron/db";
+import type { MasterKeyRecord, RecoveryPackPartRecord } from "@waitron/db";
+import { masterKeyHolders } from "./backup-recovery-pack-output.js";
 import {
   packStatus,
   type CurrentChecks,
@@ -54,7 +55,7 @@ const base: PackStatusInput = {
   retention: { count: 7, days: 30 },
   schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
   backupsUseOlderKey: false,
-  masterKeyPack: null,
+  masterKeyPacks: [],
   now: new Date("2026-10-30T09:00:00.000Z"),
 };
 
@@ -243,7 +244,7 @@ describe("a pack no browser confirmed receiving", () => {
         pack(2, "2026-10-12T10:00:00.000Z", { received: false }),
         pack(1, "2026-10-01T10:00:00.000Z"),
       ],
-      { masterKeyPack: 2 },
+      { masterKeyPacks: [2] },
     );
     expect(answer.unreceived).toEqual({
       number: 2,
@@ -259,28 +260,101 @@ describe("a pack no browser confirmed receiving", () => {
           pack(3, "2026-10-22T10:00:00.000Z", { received: false }),
           pack(2, "2026-10-12T10:00:00.000Z", { received: false }),
         ],
-        { masterKeyPack: 2 },
+        { masterKeyPacks: [2] },
       ).unreceived,
     ).toEqual({ number: 2, madeAt: "2026-10-12T10:00:00.000Z", holdsCurrentMasterKey: true });
   });
 
   it("says the newest unreceived pack holds the current master key only when it does", () => {
     const records = [pack(2, "2026-10-22T10:00:00.000Z", { received: false })];
-    expect(status(records, { masterKeyPack: 2 }).unreceived).toEqual({
+    expect(status(records, { masterKeyPacks: [2] }).unreceived).toEqual({
       number: 2,
       madeAt: "2026-10-22T10:00:00.000Z",
       holdsCurrentMasterKey: true,
     });
-    expect(status(records, { masterKeyPack: 1 }).unreceived).toEqual({
+    expect(status(records, { masterKeyPacks: [1] }).unreceived).toEqual({
       number: 2,
       madeAt: "2026-10-22T10:00:00.000Z",
     });
   });
 
+  it("names a lost reprint of the master key plainly once an earlier pack holding it was received", () => {
+    const answer = status(
+      [
+        pack(2, "2026-10-22T10:00:00.000Z", { received: false }),
+        pack(1, "2026-10-01T10:00:00.000Z"),
+      ],
+      { masterKeyPacks: [2, 1] },
+    );
+    expect(answer.unreceived).toEqual({ number: 2, madeAt: "2026-10-22T10:00:00.000Z" });
+  });
+
+  it("names the newest pack holding the master key when none holding it was received", () => {
+    const answer = status(
+      [
+        pack(3, "2026-10-22T10:00:00.000Z", { received: false }),
+        pack(2, "2026-10-12T10:00:00.000Z", { received: false }),
+      ],
+      { masterKeyPacks: [3, 2] },
+    );
+    expect(answer.unreceived).toEqual({
+      number: 3,
+      madeAt: "2026-10-22T10:00:00.000Z",
+      holdsCurrentMasterKey: true,
+    });
+  });
+
+  it("counts a received older pack made at the master key's instant as holding it beside a reprint", () => {
+    const keyMadeAt = "2026-10-01T10:00:00.000Z";
+    const key: MasterKeyRecord = {
+      number: 1,
+      name: "Key 1",
+      checkValue: "check",
+      publicKey: new Uint8Array(),
+      madeAt: new Date(keyMadeAt),
+      madeBy: "person",
+    };
+    const reprint = pack(2, "2026-10-22T10:00:00.000Z", {
+      received: false,
+      parts: [
+        included.bucket,
+        included.archives,
+        { part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName: "Key 1" },
+      ],
+    });
+    const older = pack(1, keyMadeAt);
+    const records = [reprint, older];
+    const holders = masterKeyHolders(key, records);
+    expect(holders).toEqual([2, 1]);
+    expect(status(records, { masterKeyPacks: holders }).unreceived).toEqual({
+      number: 2,
+      madeAt: "2026-10-22T10:00:00.000Z",
+    });
+    expect(masterKeyHolders(key, [older])).toEqual([1]);
+    expect(masterKeyHolders(key, [older, pack(3, keyMadeAt)])).toEqual([]);
+  });
+
+  it("does not count a pack showing an abandoned key that took the current key's row number", () => {
+    const key: MasterKeyRecord = {
+      number: 1,
+      name: "Key 1",
+      checkValue: "check",
+      publicKey: new Uint8Array(),
+      madeAt: new Date("2026-10-01T10:05:00.000Z"),
+      madeBy: null,
+    };
+    const abandoned = pack(1, "2026-10-01T10:00:00.000Z", {
+      parts: [
+        { part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName: "Key 0" },
+      ],
+    });
+    expect(masterKeyHolders(key, [abandoned])).toEqual([]);
+  });
+
   it("says nothing of a received pack that shows the current master key", () => {
     const answer = status(
       [pack(2, "2026-10-22T10:00:00.000Z"), pack(1, "2026-10-01T10:00:00.000Z")],
-      { masterKeyPack: 1 },
+      { masterKeyPacks: [1] },
     );
     expect(answer.unreceived).toBeNull();
     expect(answer.keep).toEqual([]);
@@ -394,77 +468,41 @@ describe("backups still on the older key", () => {
   });
 });
 
-describe("emergency-code freshness", () => {
-  const issued = "2026-10-10T08:00:00.000Z";
+describe("the Cloud QR code", () => {
   const made = "2026-10-12T09:00:00.000Z";
-  const fresh = "2026-10-12T09:01:00.000Z";
-  const old = "2026-10-12T08:59:00.000Z";
-  const changed = "2026-10-11T08:00:00.000Z";
   it.each([
-    ["matching cached code", { asOf: old, open: true, codeIssuedAt: issued }, "included", []],
+    ["printed, Cloud open", true, "included", []],
+    ["printed, Cloud closed, stale or unreadable", false, "included", []],
+    ["printed, no Cloud", undefined, "included", []],
+    ["not printed, Cloud open", true, "absent", [{ part: "emergency", kind: "set_up_after" }]],
     [
-      "changed code",
-      { asOf: fresh, open: true, codeIssuedAt: changed },
-      "included",
-      [{ part: "emergency", kind: "code_changed", at: changed }],
-    ],
-    [
-      "older differing observation",
-      { asOf: old, open: true, codeIssuedAt: changed },
-      "included",
-      [{ part: "emergency", kind: "cannot_check" }],
-    ],
-    [
-      "closed after printing",
-      { asOf: fresh, open: false, codeIssuedAt: issued },
-      "included",
-      [{ part: "emergency", kind: "removed" }],
-    ],
-    [
-      "closed before printing",
-      { asOf: old, open: false, codeIssuedAt: issued },
-      "included",
-      [{ part: "emergency", kind: "cannot_check" }],
-    ],
-    [
-      "failed page while Cloud is open",
-      { asOf: fresh, open: true, codeIssuedAt: issued },
-      "failed",
-      [],
-    ],
-    ["failed page while Cloud is unavailable", null, "failed", []],
-    ["unavailable", null, "included", [{ part: "emergency", kind: "cannot_check" }]],
-    ["not applicable", undefined, "included", [{ part: "emergency", kind: "cannot_check" }]],
-    [
-      "missing code on an open venue",
-      { asOf: fresh, open: true, codeIssuedAt: issued },
-      "absent",
-      [{ part: "emergency", kind: "code_missing" }],
-    ],
-    [
-      "pack made before the emergency page existed",
-      { asOf: fresh, open: true, codeIssuedAt: issued },
+      "a pack made before the Cloud entry existed, Cloud open",
+      true,
       "unrecorded",
-      [{ part: "emergency", kind: "code_missing" }],
+      [{ part: "emergency", kind: "set_up_after" }],
     ],
-    ["closed venue without code", { asOf: fresh, open: false, codeIssuedAt: null }, "absent", []],
-    ["no Cloud without code", undefined, "absent", []],
-    ["unavailable without code", null, "absent", []],
-  ] as const)("%s", (_label, emergency, state, reasons) => {
+    [
+      "an older pack whose emergency page failed, Cloud open",
+      true,
+      "failed",
+      [{ part: "emergency", kind: "set_up_after" }],
+    ],
+    ["an older pack whose emergency page failed, Cloud closed", false, "failed", []],
+    ["not printed, Cloud closed, stale or unreadable", false, "absent", []],
+    ["not printed, no Cloud", undefined, "absent", []],
+  ] as const)("%s", (_label, cloudOpen, state, reasons) => {
     const record = pack(1, made, {
-      parts:
-        state === "unrecorded"
-          ? []
-          : [
-              {
-                part: "emergency",
-                state,
-                ...(state === "included" ? { codeIssuedAt: issued } : {}),
-              },
-            ],
+      parts: state === "unrecorded" ? [] : [{ part: "emergency", state }],
     });
-    const answer = status([record], { current: { ...current, emergency } });
+    const answer = status([record], { current: { ...current, cloudOpen } });
     expect(answer.reasons).toEqual(reasons);
-    expect(answer.upToDate).toBe(state !== "failed" && reasons.length === 0);
+    expect(answer.incomplete).toBe(false);
+    expect(answer.upToDate).toBe(reasons.length === 0);
+  });
+
+  it("answers an older record's issue date as nothing more than its part and state", () => {
+    const older = { part: "emergency", state: "included", codeIssuedAt: made };
+    const answer = status([pack(1, made, { parts: [older as RecoveryPackPartRecord] })]);
+    expect(answer.latest!.parts).toEqual([{ part: "emergency", state: "included" }]);
   });
 });

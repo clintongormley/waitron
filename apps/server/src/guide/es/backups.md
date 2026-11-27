@@ -4,11 +4,11 @@ Usa **Copias de seguridad** en el panel para elegir dónde guardas las copias y 
 
 ## Paquete de recuperación {#recovery-pack}
 
-Elige **Hacer paquete de recuperación** y completa la identificación que te pida. Usa **Descargar PDF** o **Abrir para imprimir** y guarda el paquete bajo llave, fuera del servidor.
+Elige **Imprimir el paquete de recuperación**, escribe tu clave maestra, elige **Imprimir el paquete de recuperación** y completa la identificación que te pida. Usa **Descargar PDF** o **Abrir para imprimir** y guarda el paquete bajo llave, fuera del servidor.
 
 Si la clave maestra se ha perdido o alguien que no debía ha podido verla, elige **Crear una clave maestra nueva**. Descarga o imprime el paquete nuevo y elige **Continuar**. Guarda el paquete antiguo hasta la fecha que indica la ventana.
 
-Revisa esta tarjeta después de cambiar los ajustes de las copias o las claves. Sigue sus indicaciones para hacer un paquete nuevo y conserva los anteriores que aún nombre. Si pierdes un paquete o queda expuesto, sigue [Pérdidas habituales](data-protection.md#breach-losses). Para el inicio de emergencia, consulta [Consultar el inicio de emergencia en Cloud](servers.md#cloud-emergency).
+Revisa esta tarjeta después de cambiar los ajustes de las copias o las claves. Sigue sus indicaciones para imprimir un paquete nuevo y conserva los anteriores que aún nombre. Si pierdes un paquete o queda expuesto, sigue [Pérdidas habituales](data-protection.md#breach-losses). Para el arranque de emergencia, consulta [Consultar el arranque de emergencia en Cloud](servers.md#cloud-emergency).
 
 ## Exportar la configuración {#configuration-export}
 
@@ -32,7 +32,7 @@ Si Cloud deja de estar disponible, abre **Cambiar el destino o la programación*
 
 La clave maestra, en la primera página de tu paquete de recuperación, abre un archivo de copia y autoriza su restauración. Conserva el paquete con la clave maestra que necesita cada copia.
 
-Para cambiar la clave de las copias, elige **Cambiar la clave de las copias** en la tarjeta **Paquete de recuperación** y escribe la clave maestra. Las copias nuevas usan entonces la clave siguiente, que un servidor que hayas quitado no puede leer. Después elige **Hacer paquete de recuperación** y guarda el paquete nuevo: lo necesitarás para restaurar tu copia en el bucket después del cambio.
+Para cambiar la clave de las copias, elige **Cambiar la clave de las copias** en la tarjeta **Paquete de recuperación** y escribe la clave maestra. Las copias nuevas usan entonces la clave siguiente, que un servidor que hayas quitado no puede leer. Después elige **Imprimir el paquete de recuperación** y guarda el paquete nuevo: lo necesitarás para restaurar tu copia en el bucket después del cambio.
 
 Conserva las claves y los paquetes antiguos de las copias que aún guardes. Consulta [Identifícate ante la copia elegida](backup-recovery.md#proof) para saber qué necesitas al restaurar.
 

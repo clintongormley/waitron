@@ -1,14 +1,12 @@
 export type PackLocale = "en" | "es";
-export type PartKind = "bucket" | "archives" | "emergency";
+export type PartKind = "bucket" | "archives";
 
 type Words = {
   title: string;
   heading: (venue: string) => string;
   masterKeyLabel: (keyName: string) => string;
   masterKeyQr: string;
-  masterKeyInPack: (keyName: string, number: number) => string;
-  /** On a pack that does not hold the master key, when no pack of this box is known to. */
-  masterKeyNamed: (keyName: string) => string;
+  cloudQr: (host: string) => string;
   header: (venue: string, number: number, day: string) => string;
   page: (n: number, of: number) => string;
   part: Record<PartKind, string>;
@@ -22,14 +20,12 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     heading: (venue) => `Waitron recovery pack · ${venue}`,
     masterKeyLabel: (keyName) => `Master key · ${keyName}`,
     masterKeyQr: "Master key",
-    masterKeyInPack: (keyName, number) => `Master key ${keyName}: in pack ${number}`,
-    masterKeyNamed: (keyName) => `Master key ${keyName}`,
+    cloudQr: (host) => `Start the venue in Waitron Cloud · ${host}`,
     header: (venue, number, day) => `${venue} · Recovery pack ${number} · ${day}`,
     page: (n, of) => `Page ${n} of ${of}`,
     part: {
       bucket: "Bucket copy",
       archives: "Archives",
-      emergency: "Emergency start",
     },
     failedTitle: (part) => `${part}: could not be drawn`,
     spaceMark: "Each \u02fd is a space: type one space for it.",
@@ -39,12 +35,10 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     heading: (venue) => `Paquete de recuperación de Waitron · ${venue}`,
     masterKeyLabel: (keyName) => `Clave maestra · ${keyName}`,
     masterKeyQr: "Clave maestra",
-    masterKeyInPack: (keyName, number) => `Clave maestra ${keyName}: en el paquete ${number}`,
-    masterKeyNamed: (keyName) => `Clave maestra ${keyName}`,
+    cloudQr: (host) => `Iniciar el local en Waitron Cloud · ${host}`,
     header: (venue, number, day) => `${venue} · Paquete de recuperación ${number} · ${day}`,
     page: (n, of) => `Página ${n} de ${of}`,
     part: {
-      emergency: "Inicio de emergencia",
       bucket: "Copia en el bucket",
       archives: "Archivos",
     },
@@ -57,18 +51,6 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
 export type PartFailure = { what: string; todo: string };
 
 type PartWords = {
-  emergency: {
-    title: string;
-    intro: string;
-    address: string;
-    code: string;
-    issued: string;
-    ready: string;
-    notEnrolled: string;
-    nobody: string;
-    steps: string[];
-    failed: PartFailure;
-  };
   bucket: {
     title: string;
     intro: string;
@@ -95,29 +77,6 @@ type PartWords = {
 
 export const PART_WORDS: Record<PackLocale, PartWords> = {
   en: {
-    emergency: {
-      title: "Emergency start in the cloud",
-      intro:
-        "This code starts a locked copy of the venue. Sign in with your password and your authenticator or a recovery code. Passkeys do not work there.",
-      address: "Emergency address",
-      code: "Emergency code",
-      issued: "Code issued",
-      ready: "Have permission and an authenticator",
-      notEnrolled: "Need to set up an authenticator first",
-      nobody: "Nobody",
-      steps: [
-        "1. Unplug the old box so it cannot start again.",
-        "2. Open the emergency address and enter this code.",
-        "3. Sign in with your password and your authenticator or recovery code when asked.",
-        "4. Review any missing minutes and confirm that the old box is stopped.",
-        "5. Follow the page to join the tills to the cloud copy.",
-      ],
-      failed: {
-        what: "The emergency code could not be read from Cloud.",
-        todo: "Make a new pack when Cloud answers; if you just requested a code, try again in a minute.",
-      },
-    },
-
     bucket: {
       title: "Bucket copy",
       intro:
@@ -155,49 +114,27 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     failures: {
       "backup.archive_settings_unreadable": {
         what: "The box could not read its saved archive settings.",
-        todo: "Use Backups → Change destination or schedule, choose the destinations again and press Save changes. If backups are off, use Turn on backups instead. Then make a new pack.",
+        todo: "Use Backups → Change destination or schedule, choose the destinations again and press Save changes. If backups are off, use Turn on backups instead. Then print the recovery pack.",
       },
       "backup.recovery_key_missing": {
         what: "The box has no backup key.",
-        todo: "Use Backups → Recovery pack → Change the backup key, then make a new pack.",
+        todo: "Use Backups → Recovery pack → Change the backup key, then print the recovery pack.",
       },
       "backup.recovery_key_too_short": {
         what: "The backup key is too short to use.",
-        todo: "Use Backups → Recovery pack → Change the backup key: the new key replaces the short one. Then make a new pack.",
+        todo: "Use Backups → Recovery pack → Change the backup key: the new key replaces the short one. Then print the recovery pack.",
       },
       "backup.stream_signer_missing": {
         what: "The box could not find the key that signs its bucket copy.",
-        todo: "Check Backups and make a new pack.",
+        todo: "Check Backups and print the recovery pack.",
       },
     },
     general: {
       what: "This part could not be read when this pack was made.",
-      todo: "Check Backups and make a new pack.",
+      todo: "Check Backups and print the recovery pack.",
     },
   },
   es: {
-    emergency: {
-      title: "Inicio de emergencia en la nube",
-      intro:
-        "Este código inicia una copia bloqueada del local. Entra con tu contraseña y tu autenticador o un código de recuperación. Las llaves de acceso no funcionan allí.",
-      address: "Dirección de emergencia",
-      code: "Código de emergencia",
-      issued: "Código emitido",
-      ready: "Tienen permiso y autenticador",
-      notEnrolled: "Necesitan configurar un autenticador primero",
-      nobody: "Nadie",
-      steps: [
-        "1. Desenchufa el servidor antiguo para que no pueda volver a arrancar.",
-        "2. Abre la dirección de emergencia e introduce este código.",
-        "3. Entra con tu contraseña y tu autenticador o código de recuperación cuando se solicite.",
-        "4. Revisa los minutos que falten y confirma que el servidor antiguo está parado.",
-        "5. Sigue la página para conectar las cajas a la copia en la nube.",
-      ],
-      failed: {
-        what: "No se pudo leer el código de emergencia de Cloud.",
-        todo: "Haz un paquete nuevo cuando Cloud responda; si acabas de pedir un código, vuelve a intentarlo en un minuto.",
-      },
-    },
     bucket: {
       title: "Copia en el bucket",
       intro:
@@ -235,24 +172,24 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     failures: {
       "backup.archive_settings_unreadable": {
         what: "El servidor no pudo leer los ajustes de archivo guardados.",
-        todo: "Usa Copias de seguridad → Cambiar el destino o la programación, elige de nuevo los destinos y pulsa Guardar cambios. Si las copias están desactivadas, usa Activar las copias. Después haz un paquete nuevo.",
+        todo: "Usa Copias de seguridad → Cambiar el destino o la programación, elige de nuevo los destinos y pulsa Guardar cambios. Si las copias están desactivadas, usa Activar las copias. Después imprime el paquete de recuperación.",
       },
       "backup.recovery_key_missing": {
         what: "El servidor no tiene clave de las copias.",
-        todo: "Usa Copias de seguridad → Paquete de recuperación → Cambiar la clave de las copias y después haz un paquete nuevo.",
+        todo: "Usa Copias de seguridad → Paquete de recuperación → Cambiar la clave de las copias y después imprime el paquete de recuperación.",
       },
       "backup.recovery_key_too_short": {
         what: "La clave de las copias es demasiado corta para usarla.",
-        todo: "Usa Copias de seguridad → Paquete de recuperación → Cambiar la clave de las copias: la clave nueva sustituye a la corta. Después haz un paquete nuevo.",
+        todo: "Usa Copias de seguridad → Paquete de recuperación → Cambiar la clave de las copias: la clave nueva sustituye a la corta. Después imprime el paquete de recuperación.",
       },
       "backup.stream_signer_missing": {
         what: "El servidor no encontró la clave que firma su copia en el bucket.",
-        todo: "Revisa Copias de seguridad y haz un paquete nuevo.",
+        todo: "Revisa Copias de seguridad e imprime el paquete de recuperación.",
       },
     },
     general: {
       what: "Esta parte no se pudo leer cuando se hizo este paquete.",
-      todo: "Revisa Copias de seguridad y haz un paquete nuevo.",
+      todo: "Revisa Copias de seguridad e imprime el paquete de recuperación.",
     },
   },
 };
