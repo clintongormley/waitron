@@ -36,10 +36,7 @@ import {
   heldBackupKeyNumber,
   type BackupKeyChangeDeps,
 } from "./backup-key-record.js";
-import {
-  buildBucketPart,
-  type PartsContext,
-} from "./backup-recovery-pack-parts.js";
+import { buildBucketPart, type PartsContext } from "./backup-recovery-pack-parts.js";
 import {
   drawRecoveryPack,
   masterKeyHolders,

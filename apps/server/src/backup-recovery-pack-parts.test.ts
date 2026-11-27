@@ -8,10 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { PART_WORDS, partFailure } from "@waitron/recovery-pack";
 import type { NodeId } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
-import {
-  buildBucketPart,
-  type PartsContext,
-} from "./backup-recovery-pack-parts.js";
+import { buildBucketPart, type PartsContext } from "./backup-recovery-pack-parts.js";
 import { STREAM_PURPOSE, writeStreamSettings } from "./stream-host.js";
 
 const RING = loadKeyRing({
@@ -145,4 +142,3 @@ describe("the bucket part", () => {
     expect(built.part.failure).toEqual(partFailure("en", "backup.stream_signer_missing"));
   });
 });
-

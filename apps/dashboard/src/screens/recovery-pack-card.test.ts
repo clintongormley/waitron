@@ -5,7 +5,6 @@ import { DashboardApi } from "../api/client.js";
 import type { OwnProfile } from "../api/account-api.js";
 import type { MadeRecoveryPack, RecoveryPackStatus } from "../api/backup-api.js";
 import { LiveData } from "@waitron/dashboard-kit";
-import { en, es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";

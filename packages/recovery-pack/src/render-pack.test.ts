@@ -344,9 +344,7 @@ describe("long names", () => {
       await renderRecoveryPack(
         input({
           pack: { ...input().pack, venueName: "W".repeat(1000) },
-          parts: [
-            { kind: "bucket", state: "absent" },
-          ],
+          parts: [{ kind: "bucket", state: "absent" }],
         }),
       ),
     );
