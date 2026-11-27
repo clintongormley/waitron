@@ -1400,8 +1400,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Waitron no pudo verificar la copia de seguridad guardada.",
   },
   "restore.archive_resource_limit": {
-    en: "This backup is too large for Setup to restore from a downloaded file.",
-    es: "Esta copia es demasiado grande para restaurarla desde un archivo descargado en Configuración inicial.",
+    en: "Waitron reached a limit on backup size or disk space while checking the copy.",
+    es: "Waitron alcanzó un límite de tamaño o espacio en disco al comprobar la copia.",
   },
   "backup.staging_space_low": {
     en: "The box needs more free disk space for the backup.",

@@ -255,8 +255,25 @@ it("holds sales until the named archive is delivered and the administrator confi
     expect(() => shutdown.confirmDownload(name)).toThrow(
       expect.objectContaining({ code: "box.shutdown_in_progress" }),
     );
-    const transfer = await shutdown.beginDownload(name);
-    transfer.finish(true);
+    const active = await shutdown.beginDownload(name);
+    const started = vi.fn();
+    const retry = shutdown.beginDownload(name);
+    void retry.then(started, started);
+    await Promise.resolve();
+    const startedBeforeClose = started.mock.calls.length;
+    active.finish(false);
+    const transfer = await retry.catch(() => undefined);
+    transfer?.finish(true);
+    expect(startedBeforeClose).toBe(0);
+    expect(transfer).toBeDefined();
+    const repeat = await shutdown.beginDownload(name);
+    try {
+      expect(() => shutdown.confirmDownload(name)).toThrow(
+        expect.objectContaining({ code: "box.shutdown_in_progress" }),
+      );
+    } finally {
+      repeat.finish(false);
+    }
     expect(() => shutdown.confirmDownload("earlier-backup.wbackup")).toThrow(
       expect.objectContaining({ code: "box.shutdown_in_progress" }),
     );
