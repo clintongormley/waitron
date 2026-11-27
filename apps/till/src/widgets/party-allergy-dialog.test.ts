@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { WtInput, WtTextarea } from "@waitron/ui";
+import type { WtButton, WtInput, WtTextarea } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
 import type { PartyAllergyRead, AllergyPatch } from "@waitron/module";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -453,7 +453,7 @@ describe("A669 allergy dialog", () => {
   it("opens the allergy overview without selecting Edit and keeps Edit in the tab order", async () => {
     const el = await mount("allergies", "edit");
     const root = el.shadowRoot!;
-    const edit = root.querySelector('wt-button[data-edit="0"]')!;
+    const edit = root.querySelector<WtButton>('wt-button[data-edit="0"]')!;
     await edit.updateComplete;
     const button = edit.shadowRoot!.querySelector("button")!;
     await expect.poll(() => root.activeElement).toBe(root.querySelector(".content"));
