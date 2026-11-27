@@ -73,7 +73,7 @@ export interface TillProduct {
   };
   pricingUnit?: "each" | "weight";
   unitPrice: string;
-  productPrices?: ServedSetMenuOffer["productPrices"];
+  productPrices?: Record<string, string>;
   vatClass?: "general" | "reduced" | "super_reduced" | "zero";
   takeawayVatClass?: "general" | "reduced" | "super_reduced" | "zero";
   category: string | null;
@@ -188,9 +188,12 @@ function sellableModifiers(entries: TillMenuOffer["offeredModifiers"]): OfferedM
  * `menuVersionId` is the published version of the offer's menu, which each line added from it sends.
  */
 export function menuOfferToTillProduct(
-  offer: TillMenuOffer & Pick<ServedSetMenuOffer, "productPrices">,
+  offer: TillMenuOffer & Pick<ServedSetMenuOffer, "aLaCartePrices">,
   menuVersionId?: string,
+  priceVersionId = menuVersionId,
 ): TillProduct {
+  const productPrices =
+    priceVersionId === undefined ? undefined : offer.aLaCartePrices?.[priceVersionId];
   return {
     id: offer.productId,
     productId: offer.productId,
@@ -208,7 +211,7 @@ export function menuOfferToTillProduct(
     // No `pricingUnit`: `productUnit()` consults it only when `unit` is absent, and an offer always
     // carries its `unit`.
     unitPrice: offer.unitPrice,
-    ...(offer.productPrices === undefined ? {} : { productPrices: offer.productPrices }),
+    ...(productPrices === undefined ? {} : { productPrices }),
     category: offer.category,
     allergens: offer.allergens,
     courseId: offer.courseId,

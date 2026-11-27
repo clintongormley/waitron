@@ -1,29 +1,7 @@
 import { inArray, sql } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
-import { stringToCents, type FrozenOffer, type MenuDocument } from "@waitron/shared";
-
-type OwnPrices = { dishCents: number; variantCents: number | null };
-
-function offersByProduct(document: MenuDocument): ReadonlyMap<string, FrozenOffer> {
-  return new Map(Object.values(document.offers).map((offer) => [offer.productId, offer]));
-}
-
-/**
- * What a dish costs a la carte: the holding menu's ordinary offer of it (its variant's price where
- * the menu lists the variant), else the variant's own price, else the dish's own price.
- */
-export function aLaCarteUnitCents(
-  offer: FrozenOffer | undefined,
-  variantId: string | null,
-  own: OwnPrices,
-): number {
-  if (offer !== undefined) {
-    if (variantId === null) return stringToCents(offer.unitPrice);
-    const variant = offer.variants.find(({ id }) => id === variantId);
-    if (variant !== undefined) return stringToCents(variant.unitPrice);
-  }
-  return own.variantCents ?? own.dishCents;
-}
+import { aLaCarteUnitCents, offersByProduct } from "@waitron/menu";
+import type { FrozenOffer, MenuDocument } from "@waitron/shared";
 
 /** Each named product's own price in cents; null where it sets none. */
 async function readOwnPrices(

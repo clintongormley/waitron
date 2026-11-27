@@ -905,7 +905,7 @@ export async function listZoneOffers(
     tx,
     published.map((menu) => menu.document),
     options.menuItemIds === undefined ? undefined : new Set(options.menuItemIds),
-    [...copies.values()].map(({ copy }) => copy),
+    [...copies.values()],
   );
   return {
     defaultMenuId,
@@ -926,7 +926,12 @@ export async function listZoneOffers(
 
 type ZoneSetMenuCopies = Map<
   string,
-  { menuId: string; copy: PublishedSetMenu; versionIds: string[]; orderable: boolean }
+  {
+    menuId: string;
+    copy: PublishedSetMenu;
+    versions: { versionId: string; document: MenuDocument }[];
+    orderable: boolean;
+  }
 >;
 
 function zoneSetMenuCopies(
@@ -940,9 +945,14 @@ function zoneSetMenuCopies(
       const key = setMenuCopyKey(setMenuId, copy);
       const previous = copies.get(key);
       if (previous === undefined) {
-        copies.set(key, { menuId: setMenuId, copy, versionIds: [versionId], orderable });
+        copies.set(key, {
+          menuId: setMenuId,
+          copy,
+          versions: [{ versionId, document }],
+          orderable,
+        });
       } else {
-        previous.versionIds.push(versionId);
+        previous.versions.push({ versionId, document });
         previous.orderable ||= orderable;
       }
     }
@@ -955,9 +965,9 @@ function servedSetMenus(
   setMenuOffers: Map<PublishedSetMenu, ServedSetMenuOffer[]>,
 ): ServedSetMenu[] {
   return markNewestOnSale(
-    [...copies].map(([key, { menuId, copy, versionIds, orderable }]) => ({
+    [...copies].map(([key, { menuId, copy, versions, orderable }]) => ({
       ...serveSetMenuCopy(key, menuId, copy, setMenuOffers.get(copy)!),
-      versionIds: versionIds.sort(),
+      versionIds: versions.map(({ versionId }) => versionId).sort(),
       orderable,
     })),
   );
@@ -981,12 +991,7 @@ export async function listZoneSetMenus(
     : when.orderableMenuIds;
   const isOrderable = (menuId: string) => orderableMenuIds.includes(menuId);
   const copies = zoneSetMenuCopies(published, isOrderable);
-  const { setMenuOffers } = await applyLiveFields(
-    tx,
-    [],
-    undefined,
-    [...copies.values()].map(({ copy }) => copy),
-  );
+  const { setMenuOffers } = await applyLiveFields(tx, [], undefined, [...copies.values()]);
   return {
     setMenus: servedSetMenus(copies, setMenuOffers),
     sellingVersionIds: published

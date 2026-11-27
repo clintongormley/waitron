@@ -164,8 +164,8 @@ export type ServedSetMenuOffer = LiveOffer & {
   /** The counting course in this published copy. The served courseId controls sending. */
   countsAsCourseId: string | null;
   variantCountsAs: Record<string, string>;
-  /** Standalone product and variant prices by id. The offer's unit prices are supplements. */
-  productPrices?: Record<string, string>;
+  /** Prices outside the set menu, by holding menu version and then by product or variant id. */
+  aLaCartePrices?: Record<string, Record<string, string>>;
 };
 
 export interface ServedSetMenuCopy {

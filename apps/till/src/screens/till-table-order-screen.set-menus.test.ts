@@ -47,7 +47,13 @@ it("shows an unplaced dish's own price and its extra in the row and order total"
   draft.appendLines([
     {
       product: setMenuProduct({
-        offer: { ...offer, productPrices: { [offer.productId]: "18.00" } },
+        offer: {
+          ...offer,
+          aLaCartePrices: {
+            lunch: { [offer.productId]: "18.00" },
+            dinner: { [offer.productId]: "21.00" },
+          },
+        },
         setMenuId: daily.menuId,
         versionId: "lunch",
       }),

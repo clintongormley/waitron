@@ -69,16 +69,20 @@ export async function serveRecordedSetMenus(
     requests.map(({ versionId }) => versionId),
   );
   const copies = requests.map(({ menuId, versionId }) => {
-    const setMenus = documents.get(versionId)?.setMenus;
+    const document = documents.get(versionId);
+    const setMenus = document?.setMenus;
     if (setMenus === undefined || !Object.hasOwn(setMenus, menuId))
       throw new AppError("set_menu.not_found", { menuId });
-    return { menuId, versionId, copy: setMenus[menuId]! };
+    return { menuId, versionId, document: document!, copy: setMenus[menuId]! };
   });
   const { setMenuOffers } = await applyLiveFields(
     tx,
     [],
     undefined,
-    copies.map(({ copy }) => copy),
+    copies.map(({ copy, versionId, document }) => ({
+      copy,
+      versions: [{ versionId, document }],
+    })),
   );
   const recorded = copies.map(({ versionId, copy }) => ({
     versionId,

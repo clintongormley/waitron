@@ -195,6 +195,7 @@ export {
   readLiveState,
   type OmittedShortcut,
 } from "./menu-document.js";
+export { aLaCarteUnitCents, offersByProduct } from "./a-la-carte-price.js";
 export type {
   OverlayOfferField,
   FrozenExtraItem,

@@ -335,7 +335,7 @@ export function setMenuDish(
   sold: NonNullable<ReturnType<SetMenuOfferLookup>>,
   menuVersionId: string | null,
 ): TillProduct {
-  const dish = menuOfferToTillProduct(sold.offer, menuVersionId ?? undefined);
+  const dish = menuOfferToTillProduct(sold.offer, menuVersionId ?? undefined, sold.versionId);
   if (sold.versionId === menuVersionId) return dish;
   const modifiers = <T extends NonNullable<TillProduct["offeredModifiers"]>[number]>(
     entries: T[] | undefined,
