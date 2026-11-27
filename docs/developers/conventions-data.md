@@ -5429,10 +5429,12 @@ days"). The backup schedule row below keeps its earlier wording for interval sch
 | Venue liveness (`packages/store/src/venue-liveness.ts:127`) | none: measured on `process.hrtime` | none | nothing to do |
 | The box's TLS certificate (`apps/server/src/self-signed-cert.ts:160`) | — | the box may see its own leaf as not yet valid; its repair route reissues one | accepted with a backlog line (plan Task 15): a leaf issued while the clock was more than a day ahead is refused by devices whose clock is right; read, not run |
 
-**2026-11-27, A1617:** a replacement HTTPS certificate starts when both retained signing
-certificates are valid. A correctly timed TLS client accepted a newly added hostname after the
+**2026-11-27, A1617:** a replacement HTTPS certificate starts when both the retained root and
+its signer are valid. A correctly timed TLS client accepted a newly added hostname after the
 replacement was issued three days ahead. See `self-signed-cert.test.ts`, "serves a replacement
-leaf to a correctly timed client when the box clock runs ahead".
+leaf to a correctly timed client". For an HTTPS certificate already dated in the future, correct the
+clock, then use **Repair** and **Continue** on the HTTP page. A future-dated authority requires
+new trust.
 
 ## An envío to AEAT carries one taxpayer name
 
