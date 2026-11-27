@@ -888,6 +888,10 @@ too, and its company is closed), a company seal at either address, where a seal 
   certificate. One design for setup's first install and for renewal on A795's card. It also decides
   whether the box keeps the previous seal's key, since the owner then has no file of their own, and
   what the card shows while a request is pending.
+- **Design for the owner (2026-11-27):** [2026-11-27-a853-seal-key-on-the-box-design.md](../superpowers/specs/2026-11-27-a853-seal-key-on-the-box-design.md),
+  with two questions (setup, and the previous seal's key). The owner asked for it on 2026-11-27:
+  "I misunderstood what the seal certificate was for, so I think we do need one, or it'd be better
+  to use one", then "A853 yes".
 
 ## VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68)
 
