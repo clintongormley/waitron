@@ -610,8 +610,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   manager's PIN on the till moving a zone's closing time later for the day) goes. Where a closed zone
   refuses today (seating, new dishes, a first order, moving in), the till asks first, as the late
   send does after a period ends. Planned changes to a day's hours stay in the Calendar. No data
-  migration before go-live. Not started.
+  migration before go-live.
   [Design §6](superpowers/specs/2026-11-27-till-menu-period-dropdown-design.md#6-keep-open-is-removed-a-closed-zone-asks-instead-owner-2026-11-27)
+  · [Plan](superpowers/plans/2026-11-27-a1626-closed-zone-confirmation.md)
 
 - **Overpaid open bills (OVERPAID-BILLS, lane L; design approved by the owner, 24 November 2026).** A
   cancel, discount, move or split may leave more on a bill than it comes to, settled before it closes;

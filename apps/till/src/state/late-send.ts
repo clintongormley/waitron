@@ -1,3 +1,5 @@
+import type { LateSend } from "../api/drafts-api.js";
+import { approverRefusal, type ApproverRefusal } from "../widgets/supervisor-override-dialog.js";
 import type { TillMenuOffer } from "../api/menu-api.js";
 import type { OrderLine } from "./working-order.js";
 
@@ -145,4 +147,33 @@ export function isLateSendManagerRefusal(error: unknown): boolean {
     error.code === "authorization.not_permitted" &&
     error.permission === "venue.configure"
   );
+}
+
+/** Refusals of an approver's PIN, which the PIN prompt shows. */
+export const APPROVER_REFUSALS = new Set(["pin.invalid", "pin.throttled"]);
+
+export interface LateSendApprovalAsked {
+  lateSend: LateSend;
+  pinError: ApproverRefusal | undefined;
+}
+
+/** A refusal of a request that carried `lateSend` asking for a manager's PIN, with the PIN's own
+ * refusal to show in the dialog when the request carried one. */
+export function lateSendApprovalAsked(
+  error: unknown,
+  lateSend: LateSend | undefined,
+): LateSendApprovalAsked | undefined {
+  if (lateSend === undefined) return undefined;
+  const { override } = lateSend;
+  if (isLateSendManagerRefusal(error))
+    return {
+      lateSend,
+      pinError:
+        override === undefined
+          ? undefined
+          : { code: "authorization.not_permitted", personId: override.personId },
+    };
+  if (override === undefined) return undefined;
+  const pinError = approverRefusal(error, override.personId);
+  return APPROVER_REFUSALS.has(pinError.code) ? { lateSend, pinError } : undefined;
 }

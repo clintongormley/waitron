@@ -1,0 +1,36 @@
+# A1626. Confirm an action in a closed zone
+
+[Design §6](../specs/2026-11-27-till-menu-period-dropdown-design.md#6-keep-open-is-removed-a-closed-zone-asks-instead-owner-2026-11-27) and the Lane E queue describe the finish line. Staff can seat guests, add dishes or quantities, place a first order, and move guests or an open bill into a closed zone after answering a question that names the zone and closing time. An ended period is named in the same question when it also applies. Managers can change planned hours through Calendar.
+
+The owner picked “Remove it; closed zone asks” in design session `deaea909…` at 13:01 CET on 27 November, as verified by the watcher at 13:24: “After 22:00, adding a dish or seating on the terrace asks ‘Terrace closed at 22:00. Do it anyway?’, like the period's late send. One rule; a planned change goes in the Calendar.” The watcher cleared this plan with the file moves, one combined prompt and the quoted decision below.
+
+At 13:52 the owner said, “i don't think we should have the option to extend the opening hours from the till. that should happen in the dashboard, using the calendar”. At 13:53 the owner confirmed “yes correct” after the watcher explained that the till asks for the action itself. The watcher cleared the first split at 13:53 and separated seating and Send from Counter payment and relocation at 14:14.
+
+## 1a-0. Move the existing till code
+
+- [ ] The watcher cleared this separate prerequisite at 14:04. Move the two late-send dialog templates and prompt assembly to `widgets/late-send-prompts.ts`, the manager-refusal parser to `state/late-send.ts`, and the sent-dish change message and late extras to `state/sent-line-change.ts`. The tests keep their existing assertions. Check the focused late-send suites before and after and keep `till-app.ts` under its cap. The move adds 284 and removes 234 production lines with no test edits.
+
+## 1a. Ask when seating guests or sending a table's dishes
+
+- [ ] Use `packages/venue-service/src/zone-closed-times.ts` and the module seat for the current closure. The refusal carries the zone id, name and effective closing time, including a Keep open extension until PR 2 removes it. The till sends the zone id for this action. The transaction checks it against the actual zone and records an activity entry naming the signed-in person by id when the closure is confirmed, following the late-send pattern the watcher specified at 13:48. Existing sign-in, device, revision and destination checks still apply. Use Calendar to plan an hours change when dashboard or bookings seating refuses a closed zone.
+- [ ] Carry the choice through `till-table-routes.ts`, `parties.ts` and `working-order-open.ts` for seating. For a table's Send, use `till-draft-routes.ts`, `order-drafts.ts`, `order-group-submission.ts` and `working-order-pricing.ts`. Pricing includes ended-period details when both reasons apply. Retry with the original submission id.
+- [ ] Use the same `wt-dialog` and late-send details in `till-app.ts` and `widgets/late-send-dialog.ts`. When the last read shows a closed zone, the till waits for the box's combined question. When the last read showed the zone open, still ask if the box finds it closed during the write. Existing manager approval for an ended period still applies. Confirm applies the action once. Cancel, Escape and Back leave it unapplied.
+- [ ] Keep the server's no-write and open-bill checks. Assert that a confirmation for the wrong zone is refused. In the till tests, check a zone-only seat with dismiss and retry, and a combined Send with both reasons and the original submission id. The watcher set a budget of about 800 changed production and test lines at 14:14.
+
+## 1a-2. Ask about Counter and relocation actions
+
+- [ ] Reuse the question and activity entry for a Counter payment and when guests or a bill move in. Keep payment and move submission identities on retry. Move the payment retry shape and fingerprint to `bill-payment-fingerprint.ts`.
+- [ ] Keep the existing refusal checks until each corresponding confirmed action is available. Check the Counter payment and guest-move retries in the till and a confirmed payment replay on the box. Allow about 750 changed production and test lines, based on the saved draft's size after the move and the 1a allocation.
+
+## 1b. Offer the actions while the area is closed
+
+- [ ] Before enabling the screens, check that the first-order and increased-quantity paths and accepting an incoming transfer can ask, as the queue requires.
+- [ ] In `screens/{till-floor-screen,till-counter-screen,till-table-order-screen}.ts` and the move destination lists, expose the affected actions and keep the closed status visible. Move the floor’s table chip assembly and waiting-table labels to `screens/floor-table-indicators.ts`. Show the question in English and Spanish, in both themes, at phone and till widths. Send pictures to the watcher for the owner. Update the affected guide twins.
+
+## 2. Remove Keep open and its storage
+
+- [ ] Remove the old zone-extension controls and calls from `apps/till/src/widgets/{keep-open,keep-open-dialog,service-period}.ts`, their screens and API. Delete `apps/server/src/keep-open-api.ts` and `packages/venue-service/src/keep-open.ts`. Replace the `zoneKeepOpen` menu-state payload with closing information where still read, including `GET /api/menu-state`, the floor read, menu freshness, `packages/shared/src/menu-document/menu-document-types.ts` and `packages/module/src/module.ts`. Remove extension handling from `zone-closed-times.ts`, `operations.ts`, `business-day-schedule.ts` and `service-delete-settings.ts`. Update the stale reference in `floor-layout-due.ts`, whose calculation already ignores zone extensions. Keep today’s scheduled floor changes, department periods and Calendar special days.
+- [ ] Remove `keptOpenDay`, `keptOpenFrom`, `keptOpenUntil` and their checks in `packages/db/src/schema/floor-zones.ts` and the omissions in `configuration-transfer.ts`. Retire both extension activity kinds and their error entries. Remove Keep open instructions and update the English and Spanish guides, including `table-service.md`, the design-system description and the A1626 backlog entry. Leave historical receipts in place. Run `pnpm --filter @waitron/server migration-baseline rebuild --set core`. The PR starts “Resets venues”.
+- [ ] Before deletion, use a floor or menu-state test to show a scheduled closure still displays its time with no Keep open control. Retire tests specific to the removed feature and retain schedule, floor, Calendar and closed-zone assertions in their current suites. Run changed suites, `schema-constraints`, `append-only-triggers`, `behavioural-triggers`, `starting-migrations`, `errors-reachable`, `alert-codes` and fiscal `inmutabilidad`. Run the focused closed-zone tests after both changes.
+
+The watcher split the behaviour into 1a and 1a-2 at 14:14. Estimate for PR 2 is 120 production lines and 180 test and fixture lines changed, with roughly 650 production and 3,000 test lines retired plus the generated baseline. Each PR has its own validation and review. Landing the question first keeps a way to serve a closed zone in each release.

@@ -37,7 +37,10 @@ import type { BillUnsent, Tender } from "./api/payments-api.js";
 import type { BillEditExpected, BillEditState } from "./api/order-types.js";
 import { billHasUnsent, billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import {
+  APPROVER_REFUSALS,
   isLateSendManagerRefusal,
+  lateSendApprovalAsked,
+  type LateSendApprovalAsked,
   lateSendAsked,
   storedLateSendAsked,
   type EndedPeriod,
@@ -104,7 +107,6 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
-  multiplyDecimal,
   resolveActiveLocale,
   sumDecimals,
   toScale,
@@ -190,7 +192,7 @@ import "./screens/till-table-order-screen.js";
 import { offeredReceiptLanguage, shownReceiptLanguage } from "./widgets/receipt-language.js";
 import "./widgets/station-choice-dialog.js";
 import "./widgets/department-transfers.js";
-import { lineProductName, soldByTheUnit, unitName } from "./widgets/product-name.js";
+import { lineProductName } from "./widgets/product-name.js";
 import { optionAnswers } from "./widgets/option-snapshot.js";
 import type {
   InvoiceEmailRefusal,
@@ -363,7 +365,14 @@ import {
 } from "./state/reopened-bill.js";
 import "./widgets/basket-refresh-dialog.js";
 import "./widgets/late-send-dialog.js";
-import type { LateSendDish, LateSendPurpose } from "./widgets/late-send-dialog.js";
+import type { LateSendPurpose } from "./widgets/late-send-dialog.js";
+import {
+  lateSendPrompt,
+  renderLateSendPrompts,
+  type LateSendPrompt,
+  type LateSendApprovalPrompt,
+} from "./widgets/late-send-prompts.js";
+import { lateChangeMessage, lateExtrasDish, type LateChange } from "./state/sent-line-change.js";
 import "./widgets/reprint-language-dialog.js";
 import type { ReprintLanguageDetail } from "./widgets/reprint-language-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
@@ -444,7 +453,6 @@ import type {
   HeldOrder,
   HeldOrderSummary,
   OrderFlow,
-  OrderLinePatch,
 } from "./api/orders-api.js";
 import type {
   EndMealRequest,
@@ -499,7 +507,6 @@ import type {
 import type {
   ServiceZoneSummary,
   MenuStateAnswer,
-  TillMenuOffer,
   TillProduct,
   TillZoneMenu,
   DiningChoice,
@@ -507,7 +514,6 @@ import type {
   ZoneOffers,
 } from "./api/menu-api.js";
 import type { GroupCommand, SaleLine } from "./api/order-types.js";
-import { menuOfferToTillProduct } from "./api/menu-api.js";
 import {
   mergeInvoiceChoice,
   mergeInvoiceNames,
@@ -557,7 +563,7 @@ import {
 import { seatingRefusalOf } from "./state/seating-refusal.js";
 import { movedToTableNotice } from "./screens/bill-money-notice.js";
 import type { ShellAffordance } from "./widgets/till-shell.js";
-import type { BasketRefusal, OrderLine, SelectedExtra } from "./state/working-order.js";
+import type { BasketRefusal, OrderLine } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
 import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
@@ -1670,79 +1676,12 @@ const NOT_CHARGED_OUTCOMES = new Set<BillPaymentResult["outcome"]>([
 /** Fields of a payment's ask that a preview refuses for what was typed alone. */
 const TYPED_FIELDS = new Set(["tendered", "amount", "shareOf", "addedTip"]);
 
-/** Refusals of an approver's PIN, which the PIN prompt shows. */
-const APPROVER_REFUSALS = new Set(["pin.invalid", "pin.throttled"]);
-
-interface LateSendApprovalAsked {
-  lateSend: LateSend;
-  pinError: ApproverRefusal | undefined;
-}
-
-/** A refusal of a request that carried `lateSend` asking for a manager's PIN, with the PIN's own
- * refusal to show in the dialog when the request carried one. */
-function lateSendApprovalAsked(
-  error: unknown,
-  lateSend: LateSend | undefined,
-): LateSendApprovalAsked | undefined {
-  if (lateSend === undefined) return undefined;
-  const { override } = lateSend;
-  if (isLateSendManagerRefusal(error))
-    return {
-      lateSend,
-      pinError:
-        override === undefined
-          ? undefined
-          : { code: "authorization.not_permitted", personId: override.personId },
-    };
-  if (override === undefined) return undefined;
-  const pinError = approverRefusal(error, override.personId);
-  return APPROVER_REFUSALS.has(pinError.code) ? { lateSend, pinError } : undefined;
-}
-
 /** Refusals after which the bill may already be cancelled: no answer, and `working_order.not_placed`,
  * which a cancel gets once an earlier cancel of the same bill has been made. */
 const CANCEL_MAY_HAVE_LANDED = new Set(["network", "working_order.not_placed"]);
 
 /** Refusals about the reason chosen, after which the reasons are read again. */
 const REASON_REFUSALS = new Set(["adjustment.action_not_allowed", "adjustment_reason.not_found"]);
-
-/** A change to a line of an order the waiter had started leaving, and how it failed. */
-interface LateChange {
-  lineName: string;
-  /** Absent when the floor no longer lists the table. */
-  tableLabel?: string;
-  /** `tableLabel` is a name for today. */
-  tableNamed?: true;
-  /** The server gave no answer, so the change may have been saved. */
-  unanswered: boolean;
-  code?: string;
-  stationName?: string;
-}
-
-function lateChangeMessage(late: LateChange): string {
-  const { tableLabel } = late;
-  const named = late.tableNamed === true;
-  const key = late.unanswered
-    ? tableLabel === undefined
-      ? "table.change_unconfirmed_no_table"
-      : named
-        ? "table.change_unconfirmed_named"
-        : "table.change_unconfirmed"
-    : tableLabel === undefined
-      ? "table.change_not_saved_no_table"
-      : named
-        ? "table.change_not_saved_named"
-        : "table.change_not_saved";
-  const sentDish = sentDishRefusal(late.code, late.lineName, late.stationName);
-  return fill(t(key), {
-    line: late.lineName,
-    table: tableLabel ?? "",
-    reason:
-      sentDish === undefined
-        ? codeMessage(late.code ?? "server.internal")
-        : sentDishRefusalText(sentDish),
-  });
-}
 
 /** A drawer refusal the operator can act on keeps its own sentence; anything else is a retry. */
 function drawerError(code: string | undefined): StringKey | { code: string } {
@@ -3236,29 +3175,8 @@ export class TillApp extends LitElement {
     store: WorkingOrderStore;
     lines: readonly OrderLine[];
   };
-  /** The window asking whether the station agreed to dishes whose period ended: `retry` runs the
-   * action again carrying the confirmation of `menuIds`, `remove` runs the secondary choice: it takes new
-   * dishes out, abandons added extras, or leaves stored dishes unsent. */
-  @state() private lateSendWindow: {
-    dishes: readonly LateSendDish[];
-    periodNames: readonly [string, ...string[]];
-    menuIds: string[];
-    purpose: LateSendPurpose;
-    retry: (lateSend: LateSend) => Promise<void>;
-    remove: () => void;
-  } | null = null;
-  /** The manager's PIN a late send asks for when the department needs one: `retry` runs the action
-   * again carrying `lateSend` with the manager's override. */
-  @state() private lateSendApproval: {
-    authorizers: StaffMember[];
-    error: ApproverRefusal | null;
-    lateSend: LateSend;
-    busy: boolean;
-    /** Closed by the waiter while its send was in flight; the dialog cannot reopen, so the send's
-     * answer goes to the app's error line instead. */
-    dismissed: boolean;
-    retry: (lateSend: LateSend) => Promise<void>;
-  } | null = null;
+  @state() private lateSendWindow: LateSendPrompt | null = null;
+  @state() private lateSendApproval: LateSendApprovalPrompt | null = null;
   /** Whether an unsaved basket line keeps Pay shut: it cannot be sold as it stands, or it was priced
    * against a menu version staff have not yet reviewed. */
   @state() private basketHeld = false;
@@ -15128,45 +15046,7 @@ export class TillApp extends LitElement {
     retry: (lateSend: LateSend) => Promise<void>,
     remove: (listed: readonly OrderLine[]) => void,
   ): void {
-    this.#showLateSend(
-      listed.map((line) => ({
-        quantity: line.quantity,
-        name: lineProductName(line.product),
-        unitName: { [currentLocale()]: unitName(line.product) },
-        soldInEach: soldByTheUnit(line.product),
-        ...(purpose === "extras" && line.extras !== undefined
-          ? {
-              extras: line.extras.map((extra) =>
-                extra.quantity > 1 ? `${extra.name} x${extra.quantity}` : extra.name,
-              ),
-            }
-          : {}),
-      })),
-      periods,
-      purpose,
-      retry,
-      () => remove(listed),
-    );
-  }
-
-  #showLateSend(
-    dishes: readonly LateSendDish[],
-    periods: readonly [EndedPeriod, ...EndedPeriod[]],
-    purpose: LateSendPurpose,
-    retry: (lateSend: LateSend) => Promise<void>,
-    remove: () => void,
-  ): void {
-    const first = periods[0].periodName;
-    const rest = new Set(periods.map((period) => period.periodName));
-    rest.delete(first);
-    this.lateSendWindow = {
-      dishes,
-      periodNames: [first, ...rest],
-      menuIds: [...new Set(periods.map((period) => period.menuId))],
-      purpose,
-      retry,
-      remove,
-    };
+    this.lateSendWindow = lateSendPrompt(listed, periods, purpose, retry, remove);
   }
 
   /** As a line's own Remove does: a draft that can no longer be edited keeps them (`removeLine`). */
@@ -17431,7 +17311,7 @@ export class TillApp extends LitElement {
       };
       return;
     }
-    const dish = this.#lateExtrasDish(change);
+    const dish = lateExtrasDish(change, this.tabLines, this.#tableOffers);
     const asked =
       dish === undefined
         ? undefined
@@ -17506,72 +17386,6 @@ export class TillApp extends LitElement {
     else await this.#loadTabLines();
     if (!identity()) return;
     if (code !== undefined && DRAFT_REFUSALS.has(code)) await this.#refreshBillDraft();
-  }
-
-  /** The sent dish a change adds extras to, for the late-send window; undefined when the change sets
-   * no extras, or the dish or its offer is not in the till's lists. */
-  #lateExtrasDish(change: ChangeLineDetail): OrderLine | undefined {
-    if (change.patch.extras === undefined) return undefined;
-    const line = this.tabLines.find((each) => each.lineNo === change.lineNo);
-    const offer = this.#tableOffers.byId.get(change.saleLine?.menuItemId ?? line?.menuItemId ?? "");
-    if (line === undefined || offer === undefined) return undefined;
-    // The line's staff name already names its variant.
-    const product = {
-      ...menuOfferToTillProduct(offer, this.#tableOffers.versions.get(offer.menuId)),
-      name: change.lineName,
-    };
-    delete product.variantName;
-    const extras = this.#addedExtras(line, change.patch.extras, offer.offeredModifiers);
-    return {
-      product,
-      quantity: change.saleLine?.quantity ?? line.quantity,
-      workingOrderLineId: line.id,
-      ...(extras.length === 0 ? {} : { extras }),
-    };
-  }
-
-  /** The picks `requested` adds to the stored dish: as the server reads it (`editLineExtras`), every
-   * pick no stored extra holds at the same list, product and total quantity. */
-  #addedExtras(
-    dish: TabLine,
-    requested: NonNullable<OrderLinePatch["extras"]>,
-    lists: TillMenuOffer["offeredModifiers"],
-  ): SelectedExtra[] {
-    const remaining = this.tabLines.filter((child) => child.parentLineNo === dish.lineNo);
-    const added: SelectedExtra[] = [];
-    for (const { listId, picks } of requested)
-      for (const pick of picks) {
-        const index = remaining.findIndex(
-          (child) =>
-            child.listId === listId &&
-            child.productId === pick.productId &&
-            compareDecimal(
-              multiplyDecimal(
-                multiplyDecimal(decimal(dish.quantity), decimal(String(pick.quantity))),
-                decimal(child.priceQuantity ?? "1"),
-              ),
-              decimal(child.quantity),
-            ) === 0,
-        );
-        if (index >= 0) {
-          remaining.splice(index, 1);
-          continue;
-        }
-        const list = lists.find((each) => each.kind === "extras" && each.id === listId);
-        const item =
-          list?.kind === "extras"
-            ? list.items.find((each) => each.productId === pick.productId)
-            : undefined;
-        if (item !== undefined)
-          added.push({
-            listId,
-            productId: pick.productId,
-            name: item.name,
-            price: item.price,
-            quantity: pick.quantity,
-          });
-      }
-    return added;
   }
 
   #releaseEditDeadEnds(): void {
@@ -25425,37 +25239,17 @@ export class TillApp extends LitElement {
                 @wt-basket-refresh-cancelled=${() => (this.basketRefresh = undefined)}
               ></till-basket-refresh-dialog>`
         }
-        ${
-          lateSendWindow === null
-            ? nothing
-            : html`<till-late-send-dialog
-                .dishes=${lateSendWindow.dishes}
-                .periodNames=${lateSendWindow.periodNames}
-                .purpose=${lateSendWindow.purpose}
-                @wt-late-send-agreed=${() => void this.#onLateSendAgreed(lateSendWindow)}
-                @wt-late-send-removed=${() => this.#onLateSendRemoved(lateSendWindow)}
-                @wt-late-send-cancelled=${() => (this.lateSendWindow = null)}
-              ></till-late-send-dialog>`
-        }
-        ${
-          lateSendApproval === null
-            ? nothing
-            : html`<till-supervisor-override-dialog
-                data-late-send-approval
-                .authorizers=${lateSendApproval.authorizers}
-                .error=${lateSendApproval.error}
-                @override-confirm=${(event: CustomEvent<OverrideConfirmDetail>) => {
-                  event.stopPropagation();
-                  void this.#onLateSendApproved(lateSendApproval, event.detail);
-                }}
-                @override-cancel=${(event: Event) => {
-                  event.stopPropagation();
-                  if (this.lateSendApproval !== lateSendApproval) return;
-                  if (lateSendApproval.busy) lateSendApproval.dismissed = true;
-                  else this.lateSendApproval = null;
-                }}
-              ></till-supervisor-override-dialog>`
-        }
+        ${renderLateSendPrompts(lateSendWindow, lateSendApproval, {
+          agree: (open) => void this.#onLateSendAgreed(open),
+          remove: (open) => this.#onLateSendRemoved(open),
+          cancel: () => (this.lateSendWindow = null),
+          approve: (open, detail) => void this.#onLateSendApproved(open, detail),
+          cancelApproval: (open) => {
+            if (this.lateSendApproval !== open) return;
+            if (open.busy) open.dismissed = true;
+            else this.lateSendApproval = null;
+          },
+        })}
         ${
           this.#inShell() && this.basketStale && this.basketRefresh === undefined
             ? html`<div class="refresh-notice" data-active>
