@@ -1651,9 +1651,33 @@ test("an empty dropdown's resting label is drawn at the size its chosen value is
   const { field, label, value } = fieldParts(el);
   expect(field.getAttribute("data-label")).toBe("rest");
   expect(getComputedStyle(label!).fontSize).toBe(getComputedStyle(value).fontSize);
-  host.style.setProperty("--wt-font-size-md", "15px");
-  expect(getComputedStyle(value).fontSize).toBe("15px");
-  expect(getComputedStyle(label!).fontSize).toBe("15px");
+  host.style.setProperty("--wt-font-size-md", "17px");
+  expect(getComputedStyle(value).fontSize).toBe("17px");
+  expect(getComputedStyle(label!).fontSize).toBe("17px");
+});
+
+test("a dropdown draws its chosen value and its resting label at the size a text field draws its value", async () => {
+  const chosen = await mountWith('<wt-combobox label="Course" value="vegan"></wt-combobox>');
+  const row = host;
+  row.insertAdjacentHTML(
+    "beforeend",
+    '<wt-combobox label="Course"></wt-combobox><wt-input label="Name" value="Ana"></wt-input>',
+  );
+  const empty = row.querySelector<WtCombobox>("wt-combobox:not([value])")!;
+  empty.options = TAGS;
+  const input = row.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>("wt-input")!;
+  await Promise.all([empty.updateComplete, input.updateComplete]);
+  const inputText = input.shadowRoot!.querySelector("input")!;
+  const sizes = () => ({
+    value: getComputedStyle(fieldParts(chosen).value).fontSize,
+    restingLabel: getComputedStyle(fieldParts(empty).label!).fontSize,
+  });
+  expect(fieldParts(empty).field.getAttribute("data-label")).toBe("rest");
+  const textSize = getComputedStyle(inputText).fontSize;
+  expect(sizes()).toEqual({ value: textSize, restingLabel: textSize });
+  row.style.setProperty("--wt-text-control-font-size", "19px");
+  expect(getComputedStyle(inputText).fontSize).toBe("19px");
+  expect(sizes()).toEqual({ value: "19px", restingLabel: "19px" });
 });
 
 test("the trigger is the control of a filled field box, with the label resting while nothing is chosen", async () => {
