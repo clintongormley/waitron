@@ -48,7 +48,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 64,
+  version: 65,
   contentLanguages: null,
   holidayArea: null,
   settings: {},

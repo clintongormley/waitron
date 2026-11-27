@@ -16,7 +16,8 @@ import { dropMenuPricesOfProductsWithVariants } from "./menu-removal.js";
 import { syncMenuOffers } from "./menu-structure.js";
 import { MENU_SETTINGS } from "./settings.js";
 import { readVenueVatRates, vatRatesOfArea } from "./takeaway-vat-rates.js";
-import { firstNewClash } from "./name-uniqueness.js";
+import { checkedCustomerMenuAppearance } from "./customer-menu-styles.js";
+import { firstNewClash, foldName } from "./name-uniqueness.js";
 import { unitStaffText, validateUnitPrecision } from "./unit-validation.js";
 import { validateOptionalTranslations } from "./optional-translations.js";
 import "./errors.js";
@@ -220,6 +221,27 @@ function checkContentLanguages(
   checkedContentLanguages(config, required);
 }
 
+function checkCustomerMenuStyles(rows: Rows): void {
+  const refuse = (field: string): never => {
+    throw new AppError("setup.request_invalid", { field: `customer_menu_styles.${field}` });
+  };
+  if (rows.filter((row) => row.is_default === 1).length !== 1) refuse("is_default");
+  for (const row of rows) {
+    if (row.is_default !== 0 && row.is_default !== 1) refuse("is_default");
+    const name = foldName(nameOf(row, "customer_menu_styles"));
+    if (!name || row.name_key !== name) refuse("name_key");
+    if (row.logo_image != null) refuse("logo_image");
+    if (typeof row.appearance !== "string") refuse("appearance");
+    let appearance: unknown;
+    try {
+      appearance = JSON.parse(row.appearance as string);
+    } catch {
+      refuse("appearance");
+    }
+    checkedCustomerMenuAppearance(appearance, () => refuse("appearance"));
+  }
+}
+
 export function validateMenuConfiguration(
   tables: Readonly<Record<string, Rows>>,
   bundle?: {
@@ -229,6 +251,8 @@ export function validateMenuConfiguration(
   },
 ): void {
   if (bundle !== undefined) checkContentLanguages(bundle.contentLanguages, bundle);
+  if (tables.customer_menu_styles !== undefined)
+    checkCustomerMenuStyles(tables.customer_menu_styles);
   for (const row of tables.units ?? []) {
     for (const [column, field] of [
       ["staff_name", "staffName"],

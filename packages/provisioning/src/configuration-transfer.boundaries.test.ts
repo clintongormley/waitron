@@ -747,7 +747,7 @@ it("refuses the previous configuration format before reading its contents", () =
         packArchive([
           {
             name: "configuration.json",
-            bytes: Buffer.from(JSON.stringify({ ...configurationBundle(), version: 63 })),
+            bytes: Buffer.from(JSON.stringify({ ...configurationBundle(), version: 64 })),
           },
         ]),
         passphrase,
