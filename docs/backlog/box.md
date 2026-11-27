@@ -1115,14 +1115,12 @@ once released. Belongs with A1016.
 
 ## Bundle: Finish the clock work: a check at every start and every change
 
-2 entries, size L. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+1 entry, size L. Its text is unchanged from the index it came from (backlog review, 2026-11-06).
 
 - **A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but
   it can still sell.**
   Design revision 7 (2026-10-24).
   [Detail](box.md#a798-b-build-degraded-but-trading-what-the-box-does-and-tells-staff-when-a-part-fails-but-it-can-still-sell)
-- **The box's certificate issued under a wrong clock.**
-  [Detail](box.md#the-boxs-certificate-issued-under-a-wrong-clock)
 
 ## Bundle: Qualify clock confirmation through remote access
 
@@ -1855,14 +1853,6 @@ Whatever their browser sends counts:
   verifies or sees move the clock by more than a second. A scripted request from any staff member
   signed in on an enrolled till during such a stop can set any time from 28-10-2024 to 2100, with
   that person named ([Q61](../compliance/asesor-questions.md#q61-a-system-that-corrects-its-own-clock-from-a-tills-clock-when-it-has-no-internet-added-2026-11-01)). Left open by A798-B slice 9 (#2025).
-
-## The box's certificate issued under a wrong clock.
-
-The box's leaf (`apps/server/src/self-signed-cert.ts`, `notBefore` the clock less a day) issued
-while the clock was more than a day ahead is refused by every device whose clock is right. The box's
-repair route reissues a leaf the box itself sees as not healthy; whether a device that refuses the
-certificate can reach that route is not checked. Slice 9c should refuse a certificate issue while a
-clock check waits. Read, not run. Left open by A798-B slice 9b, Task 15.
 
 ## A798-B. Build "degraded but trading": what the box does, and tells staff, when a part fails but it can still sell.
 

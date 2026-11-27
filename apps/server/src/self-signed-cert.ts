@@ -221,6 +221,9 @@ function signerFor(rootPem: string, signerPem: string, now: Date) {
   return {
     pem: signer.pem,
     key: forge.pki.privateKeyFromPem(signer.keyPem),
+    validFrom: new Date(
+      Math.max(root.validFromDate.getTime(), signer.cert.validFromDate.getTime()),
+    ),
     validity: validityFrom(
       now,
       Math.min(root.validToDate.getTime(), signer.cert.validToDate.getTime()),
@@ -339,7 +342,11 @@ export function reissueServerLeaf(opts: {
   const makeKeypair = keypairFor(opts.hostnames, opts.keypair);
   const signer = signerFor(opts.caCertPem, opts.caKeyPem, opts.now);
   const serverKeys = makeKeypair();
-  const leaf = signLeaf(signer.key, serverKeys, opts.hostnames, opts.ipAddresses, signer.validity);
+  // A fast box clock must leave correctly timed clients able to use the retained authority.
+  const leaf = signLeaf(signer.key, serverKeys, opts.hostnames, opts.ipAddresses, {
+    notBefore: signer.validFrom,
+    notAfter: signer.validity.notAfter,
+  });
   return {
     serverCertPem: forge.pki.certificateToPem(leaf) + signer.pem,
     serverKeyPem: forge.pki.privateKeyToPem(serverKeys.privateKey),
