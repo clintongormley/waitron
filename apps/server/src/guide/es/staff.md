@@ -251,7 +251,7 @@ solicitud. Consulta su estado en **Mis horas**.
 
 ## Aprobar los días terminados {#approve-hours}
 
-En el panel, abre **Equipo** y elige **Por aprobar**. Pulsa **Detalles** en **Cambios solicitados** para
+En el menú del panel, abre **Por aprobar**. Pulsa **Detalles** en **Cambios solicitados** para
 revisar una solicitud. Pulsa **Detalles** en **En desacuerdo** para leer el cambio y la respuesta
 de la persona.
 
