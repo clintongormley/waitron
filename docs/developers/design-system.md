@@ -1252,14 +1252,15 @@ The bill picker, Eat here / Take away control and bill actions follow the table 
   heading. At wider widths it opens by the trigger. The menu uses native `menuitemradio` buttons
   with shared `wt-menu-row` content, leading teal check on the current bill, and amounts aligned
   at the trailing edge. The wide list caps its width and gives the name and amount at least 16 px
-  between them. The list follows the till's Text size setting, puts a muted check beside Paid and
-  keeps the amount on one line. The sheet gives each bill at least 56 px, divides the rows with a
-  line and leaves at least 20 px below **+ New bill**.
+  between them. The list follows the till's Text size setting with a 16 px minimum, puts a muted
+  check beside Paid and keeps the amount on one line. The sheet gives each bill at least 56 px,
+  divides the rows with a line and leaves at least 20 px below **+ New bill**. At the default
+  text size the leading check sits in a 20 px column.
   A bill with unsent dishes shows one line per editor. The picker adds an unsent hint on its own
   line when another bill holds the signed-in person's unsent dishes, and marks that bill “Unsent”.
-  **+ New bill** is always last. While a bill is being made the action is `aria-disabled` and sends
-  nothing. Choose another bill to send `switch-bill` with its id. Choosing the current bill sends
-  nothing.
+  Scroll to reach **+ New bill**, which is always last. While a bill is being made the action is
+  `aria-disabled` and sends nothing. Choose another bill to send `switch-bill` with its id.
+  Choosing the current bill sends nothing.
 - **A vanished bill.** When a bills read no longer holds the bill on screen, the screen shows the
   lowest-numbered bill still owing, else the lowest-numbered listed bill, and a `role="status"` line
   says "Bill 2 is no longer at this table. Now showing Bill 1." Choosing another bill or opening another table

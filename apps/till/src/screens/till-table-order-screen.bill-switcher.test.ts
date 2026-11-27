@@ -300,7 +300,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
   });
 
   it("keeps the amount on one line beside a long name in the phone sheet", async () => {
-    await pageAt(390, 844);
+    await pageAt(390, 844, 130);
     try {
       const billName = "W".repeat(40);
       const el = await mountScreen([...one, partyBill("wo-2", 2, "1234.56", { billName })], "wo-1");
@@ -309,6 +309,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
       const row = picker.querySelector('[data-switch-bill="wo-2"] wt-menu-row')!.shadowRoot!;
       const amount = row.querySelector(".value")!;
       expect(amount.textContent).toBe("€1,234.56");
+      expect(getComputedStyle(amount).fontSize).toBe("18px");
       const text = document.createRange();
       text.selectNodeContents(amount);
       expect(text.getClientRects()).toHaveLength(1);
@@ -336,9 +337,12 @@ describe("A803 switcher: the table screen's bill switcher", () => {
       const row = current.querySelector("wt-menu-row")!.shadowRoot!.querySelector(".row")!;
       expect(getComputedStyle(row).fontSize).toBe("16px");
       expect(icon.getAttribute("name")).toBe("check");
-      expect(icon.getBoundingClientRect().width).toBe(20);
+      const tick = icon.getBoundingClientRect();
+      expect(tick.width).toBe(20);
       const { left, right } = sheet.getBoundingClientRect();
-      expect(row.querySelector(".label")!.getBoundingClientRect().left - left).toBe(50);
+      const labelStart = row.querySelector(".label")!.getBoundingClientRect().left;
+      expect(labelStart - left).toBe(50);
+      expect(tick.right).toBeLessThan(labelStart);
       const value = row.querySelector(".value")!;
       expect(value.textContent).toBe("€54.00");
       expect(right - value.getBoundingClientRect().right).toBe(20);
