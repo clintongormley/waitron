@@ -19,7 +19,12 @@ const STATUS: RecoveryPackStatus = {
   latest: null,
   upToDate: false,
   incomplete: false,
-  unreceived: { number: 3, madeAt: "2026-10-12T12:00:00.000Z", holdsCurrentMasterKey: true },
+  unreceived: {
+    number: 3,
+    madeAt: "2026-10-12T12:00:00.000Z",
+    offeredAtSetup: true,
+    holdsCurrentMasterKey: true,
+  },
   reasons: [],
   keep: [],
   backupsUseOlderKey: false,
