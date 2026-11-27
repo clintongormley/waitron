@@ -1177,7 +1177,7 @@ Money given back as goodwill takes a corrective: the owner's "yes" to question 6
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md) on 18 November, "yes and yes" on 21
 November, and "take this as confirmed" (lane L `questions.md`, "WATCHER 2026-11-21 18:17"). So
 **Refund a payment** refuses the payment money **Correct invoice** would give back now, and Correct
-invoice gives it back with a corrective (`plainRefundLimit`, `apps/server/src/tender-refund-reservation.ts`).
+invoice gives it back with a corrective (`refuseBeyondPlainRoom`, `apps/server/src/tender-refund-reservation.ts`).
 That rule is the watcher's choice 1: cleared on 19 November at 09:05, parked by the owner at 10:03,
 and built on the owner's word of 21 November 18:17; shown to the owner as replacing the A802
 approval's "goodwill refunds stay money-only" with no objection (O5, "WATCHER 2026-11-23 14:18").

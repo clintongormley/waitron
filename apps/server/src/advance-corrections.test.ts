@@ -50,7 +50,7 @@ import {
   spanish,
   type AdvanceVenue,
 } from "./testing/advance-bills.js";
-import { correctableNow, readCorrectableNow } from "./invoice-corrections.js";
+import { readCorrectableNow } from "./invoice-corrections.js";
 import { inTx, send } from "./testing/bill-venue.js";
 import { openCorrection, previewCorrection } from "./testing/invoice-correction.js";
 import "./errors.js";
@@ -807,22 +807,20 @@ describe("an advance once the rest's invoice has taken it off", () => {
     return row!;
   }
 
-  it("marks a hand-keyed part payment's refund while a correction of it is open, and not before", async () => {
+  it("lists a hand-keyed part payment's refund while a correction of it is open, and before", async () => {
     const billId = await seated("Tasting menu");
     const { advanceId } = await manualAdvance(billId);
     const path = `/api/transactions/${advanceId}/refundable-tenders`;
     const before = await send(venue().app, venue().cookie, "GET", path);
     expect(before.status, JSON.stringify(before.json)).toBe(200);
     expect((before.json as unknown as unknown[])[0]).toMatchObject({ manual: true });
-    expect((before.json as unknown as unknown[])[0]).not.toHaveProperty("correctionOpen");
-    expect((before.json as unknown as unknown[])[0]).not.toHaveProperty("plainRefundLimit");
 
     const opened = await open(advanceId, "30.00", [{ rate: "10.00", base: "27.27", tax: "2.73" }]);
     openedId(opened);
 
     expect(await send(venue().app, venue().cookie, "GET", path)).toMatchObject({
       status: 200,
-      json: [{ manual: true, plainRefundLimit: "0.00", correctionOpen: true }],
+      json: [{ manual: true }],
     });
   });
 
@@ -1175,21 +1173,21 @@ describe("the link between an advance and the rest's invoice that took it off", 
   });
 });
 
-describe("correctableNow on a part payment", () => {
+describe("readCorrectableNow on a part payment", () => {
   it("answers 0 once the table's ticket took it off", async () => {
     const rest = await restOf(["Tasting menu"], ["30.00"], "90.00");
-    expect(
-      await inTx(venue(), (tx) =>
-        correctableNow(
-          tx,
-          venue().backend,
-          venue().cfg,
-          venue().clock.now(),
-          brandSaleId(rest.advanceIds[0]!),
-          () => true,
-        ),
+    const read = await inTx(venue(), (tx) =>
+      readCorrectableNow(
+        tx,
+        venue().backend,
+        venue().cfg,
+        venue().clock.now(),
+        brandSaleId(rest.advanceIds[0]!),
+        () => true,
       ),
-    ).toEqual({ refundable: 3000, correctable: 0 });
+    );
+    expect(read.waiting).toBeNull();
+    expect(read.amounts).toEqual({ refundable: 3000, correctable: 0 });
   });
 });
 

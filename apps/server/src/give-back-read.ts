@@ -172,8 +172,8 @@ export function moneyAvailability(ways: readonly WayMoney[]): Availability {
 }
 
 /** Whether `line` can be ticked now: never while no payment money can go back
- * ({@link moneyAvailability}), and while a corrective waits only for what its cancel still owes,
- * which on a full invoice is the corrective's too (D5). */
+ * ({@link moneyAvailability}), and while a corrective waits only for what its cancel still owes;
+ * on a full invoice nothing on a line is open while a corrective waits (D5). */
 export function lineAvailability(
   line: Pick<GiveBackLine, "left" | "cancelled">,
   waits: GiveBackWaits,

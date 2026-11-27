@@ -1254,7 +1254,7 @@ describe("Refund a payment gives back only what Correct invoice would not take n
     });
   });
 
-  /** Each refundable payment's method and what the read says Refund a payment may give back of it. */
+  /** Each refundable payment's method, as the read lists them. */
   async function limits(saleId: string) {
     const answer = await send(
       venue.app,
@@ -1263,34 +1263,23 @@ describe("Refund a payment gives back only what Correct invoice would not take n
       `/api/transactions/${saleId}/refundable-tenders`,
     );
     expect(answer.status).toBe(200);
-    return (answer.json as unknown as { method: string; plainRefundLimit?: string }[]).map(
-      (row) => [row.method, row.plainRefundLimit ?? null],
-    );
+    return (answer.json as unknown as { method: string }[]).map((row) => [row.method]);
   }
 
-  it("tells the till a hand-keyed card payment may give back nothing on a ticket Correct invoice can correct", async () => {
-    expect(await limits(await sold([{ card: "6.00" }, "4.00"]))).toEqual([
-      ["card", "0.00"],
-      ["cash", null],
-    ]);
+  it("lists a hand-keyed card payment on a ticket Correct invoice can correct", async () => {
+    expect(await limits(await sold([{ card: "6.00" }, "4.00"]))).toEqual([["card"], ["cash"]]);
   });
 
-  it("tells the till a hand-keyed card payment may give back all of it on a ticket Correct invoice cannot correct", async () => {
+  it("lists a hand-keyed card payment on a ticket Correct invoice cannot correct", async () => {
     const saleId = await sold([{ card: "6.00" }, "4.00"]);
     admittingNot("missing");
-    expect(await limits(saleId)).toEqual([
-      ["card", "6.00"],
-      ["cash", null],
-    ]);
+    expect(await limits(saleId)).toEqual([["card"], ["cash"]]);
   });
 
-  it("tells the till a hand-keyed card payment may give back nothing while the ticket's filing is refused", async () => {
+  it("lists a hand-keyed card payment while the ticket's filing is refused", async () => {
     const saleId = await sold([{ card: "6.00" }, "4.00"]);
     await inTx(venue, (tx) => refusedByAeat(tx, saleId));
-    expect(await limits(saleId)).toEqual([
-      ["card", "0.00"],
-      ["cash", null],
-    ]);
+    expect(await limits(saleId)).toEqual([["card"], ["cash"]]);
   });
 
   it("gives back a tip alone while payment money is left, and refuses all the money with its tip", async () => {

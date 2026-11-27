@@ -1,6 +1,7 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { findAdjustmentReason } from "@waitron/adjustments";
 import {
+  correctionTargetFor,
   formatInvoiceNumber,
   previewCorrectionAmounts,
   readCorrectableLines,
@@ -177,29 +178,8 @@ function refusesForGood(error: unknown): boolean {
   return LASTING_REFUSALS.has(error.code);
 }
 
-/**
- * The payment money still on invoice `saleId` (`refundable`, in cents) and how much of it Correct
- * invoice could give back now (`correctable`): what is left of its lines, capped by that money, or
- * 0 where Correct invoice refuses it for good. A refusal Correct invoice only waits out is thrown.
- * Unlike {@link checkCorrectionOpenable}, the lines are read before the pending-refund check, so a
- * ticket Correct invoice can never take does not wait on another payment's refund; and the chain
- * and clock checks run only when `stillRefused` says the caller would refuse without them.
- */
-export async function correctableNow(
-  tx: Transaction,
-  backend: FiscalBackend,
-  cfg: Pick<DeviceRequestConfig, "nodeId">,
-  reading: TrustedReading,
-  saleId: SaleId,
-  stillRefused: (amounts: { refundable: number; correctable: number }) => boolean,
-): Promise<{ refundable: number; correctable: number }> {
-  const read = await readCorrectableNow(tx, backend, cfg, reading, saleId, stillRefused);
-  if (read.waiting !== null) throw read.waiting;
-  return read.amounts;
-}
-
 /** Whether the box's invoice records need checking, which leaves Correct invoice nothing it can
- * give back ({@link readCorrectableNow}). */
+ * give back on a receipt, and makes it wait on a full invoice ({@link readCorrectableNow}). */
 export async function recordsNeedChecking(
   tx: Transaction,
   backend: FiscalBackend,
@@ -209,9 +189,13 @@ export async function recordsNeedChecking(
 }
 
 /**
- * {@link correctableNow}'s reads, answered rather than thrown where Correct invoice waits
- * (`waiting`), with the payments and the lines it read: `lines` is null where it refused them,
- * for good or for now.
+ * The payment money still on invoice `saleId` (`refundable`, in cents) and how much of it Correct
+ * invoice could give back now (`correctable`): what is left of its lines, capped by that money, or
+ * 0 where Correct invoice refuses it for good. Where Correct invoice waits, `waiting` is why.
+ * Unlike {@link checkCorrectionOpenable}, the lines are read before the pending-refund check, so a ticket Correct invoice can never take does
+ * not wait on another payment's refund; and the chain and clock checks run only when
+ * `stillRefused` says the caller would refuse without them. Answers the payments and the lines it
+ * read: `lines` is null where it refused them, for good or for now.
  */
 export async function readCorrectableNow(
   tx: Transaction,
@@ -275,9 +259,30 @@ export async function readCorrectableNow(
   if (!stillRefused(amounts, fullInvoice))
     return { tenders, lines, amounts, waiting: null, fullInvoice };
   if (await recordsNeedChecking(tx, backend, cfg.nodeId))
-    return { tenders, lines, amounts: { refundable, correctable: 0 }, waiting: null, fullInvoice };
+    return fullInvoice
+      ? {
+          tenders,
+          lines,
+          amounts,
+          waiting: new AppError("invoice_correction.chain_unsound", { saleId }),
+          fullInvoice,
+        }
+      : { tenders, lines, amounts: { refundable, correctable: 0 }, waiting: null, fullInvoice };
   await backend.refuseUntilRecordable(tx, reading);
   return { tenders, lines, amounts, waiting: null, fullInvoice };
+}
+
+/** Whether the regime's admission marks invoice `saleId` a full invoice, reading that alone; where
+ * it does not, {@link readCorrectableNow} answers `fullInvoice: false` too. */
+export async function admittedAsFullInvoice(
+  tx: Transaction,
+  backend: FiscalBackend,
+  nodeId: DeviceRequestConfig["nodeId"],
+  saleId: SaleId,
+): Promise<boolean> {
+  if (backend.correctionAdmissionFor === undefined) return false;
+  const target = await correctionTargetFor(tx, saleId);
+  return (await backend.correctionAdmissionFor(tx, target, nodeId)).fullInvoice === true;
 }
 
 /** What correcting `selection.gross` off the invoice would file, and the money still refundable on it. */

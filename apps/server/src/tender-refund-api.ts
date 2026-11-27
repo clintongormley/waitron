@@ -11,10 +11,8 @@ import { assertDeviceCapability } from "./device-session.js";
 import type { Logger } from "./logger.js";
 import { requestCfg } from "./request-config.js";
 import { checkAccess, withTenderRefundAuthorization } from "./tender-refund-authorization.js";
-import {
-  authorizeStoredTenderRefund,
-  readRefundableTendersWithLimits,
-} from "./tender-refund-reservation.js";
+import { readRefundableTenders } from "./tender-refund-balance.js";
+import { authorizeStoredTenderRefund } from "./tender-refund-reservation.js";
 import { refundSettledTender, toTenderRefundView } from "./tender-refunds.js";
 import {
   claimTenderRefund,
@@ -103,6 +101,7 @@ export function mountTenderRefundApi(
       "tender.refund_needs_correction": 409,
       "sale.correction_not_admitted": 409,
       "invoice_correction.refund_pending": 409,
+      "invoice_correction.chain_unsound": 409,
       "tender.refund_of_advance": 409,
       "tender.refund_unavailable": 409,
       "invoice_correction.already_open": 409,
@@ -133,12 +132,7 @@ export function mountTenderRefundApi(
       const id = pathId(c.req.param("saleId"), "sale");
       const result = await withTransaction(deps.db, async (tx) => {
         await checkAccess(tx, session, id);
-        return readRefundableTendersWithLimits(
-          tx,
-          deps.cfg.nodeId,
-          { backend: deps.backend, reading: deps.clock.now() },
-          id,
-        );
+        return readRefundableTenders(tx, id);
       });
       return c.json(result);
     }),

@@ -491,10 +491,9 @@ describe("a cancelled dish's money on a full invoice goes on its corrective (D5)
     const answer = await give(saleId, body);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(correctivesOf(saleId)).toEqual([r1(-2500)]);
-    expect(moneyOf(saleId)).toMatchObject([
-      { applied: 2500, method: "cash", state: "completed", leg: 1 },
+    expect(moneyOf(saleId)).toEqual([
+      { applied: 2500, method: "cash", state: "completed", leg: 1, cancel: cancelId },
     ]);
-    expect(moneyOf(saleId)).toHaveLength(1);
   });
 
   it("while the full invoice's filing waits, offers only the extra, and Refund a payment refuses the cancel's money", async () => {
@@ -530,18 +529,80 @@ describe("a cancelled dish's money on a full invoice goes on its corrective (D5)
     expect(moneyOf(tippedSale)).toEqual(before);
   });
 
-  it("tells the till a separate terminal's payment may give back nothing of the cancel plain, while the filing waits too", async () => {
+  it("while the box's records need checking, refuses the cancel's money and goodwill on every route alike, and the extra still goes back", async () => {
+    const tipped = await tabWith(venue, "Steak", "House salad");
+    await fixture.chooseFullInvoice(venue, tipped);
+    await payPart(tipped, { cash: "37.00" }, { tendered: "39.00", addedTip: "2.00", tip: "2.00" });
+    const saleId = await fixture.saleOf(venue, tipped);
+    const cancelId = await cancelSteak(tipped);
+    const { steak } = await steakOf(saleId);
+    const unsound = vi.spyOn(venue.backend, "checkIntegrity").mockResolvedValue({
+      ok: false,
+      checked: 1,
+      issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+    } as Awaited<ReturnType<typeof venue.backend.checkIntegrity>>);
+    onTestFinished(() => unsound.mockRestore());
+    const refused = {
+      status: 409,
+      json: { code: "invoice_correction.chain_unsound", params: { saleId } },
+    };
+    const cash = await tenderOf(saleId, "cash");
+    const drawer = drawerCents();
+
+    const dishes = ask("dishes", "25.00", { lineIds: [steak.id], fromCancel: [cancelId] });
+    expect(await routePreview(saleId, dishes)).toEqual(refused);
+    expect(await routePreview(saleId, ask("goodwill", "10.00"))).toEqual(refused);
+    expect(
+      await give(saleId, {
+        ...dishes,
+        reasonId,
+        note: "Cold",
+        submissionIds: {
+          refund: randomUUID(),
+          extra: randomUUID(),
+          correction: randomUUID(),
+          leg: randomUUID(),
+        },
+        expected: [{ kind: "correction", amount: "25.00", way: "cash", lineIds: [steak.id] }],
+      }),
+    ).toEqual(refused);
+    expect(await plainRefund(saleId, cash, { cancellationIds: [cancelId] })).toEqual(refused);
+    expect(await plainRefund(saleId, cash)).toEqual(refused);
+    expect(moneyOf(saleId)).toEqual([]);
+    expect(correctivesOf(saleId)).toEqual([]);
+    expect(drawerCents()).toBe(drawer);
+
+    const extra = await give(saleId, await giveBody(saleId, ask("extra", "2.00")));
+    expect(extra.status, JSON.stringify(extra.json)).toBe(200);
+    expect(moneyOf(saleId)).toEqual([
+      { applied: 0, method: "cash", state: "completed", leg: 0, cancel: null },
+    ]);
+    expect(correctivesOf(saleId)).toEqual([]);
+  });
+
+  it("refuses a separate terminal's refund of the cancel's money plain, while the filing waits too", async () => {
     const { billId, saleId } = await fullInvoice({ card: "37.00" });
-    await cancelSteak(billId);
+    const cancelId = await cancelSteak(billId);
+    const card = await tenderOf(saleId, "card");
+    const keyed = { cancellationIds: [cancelId], manualConfirmed: true };
     expect(await refundableTenders(saleId)).toMatchObject({
       status: 200,
-      json: [{ manual: true, appliedRemaining: "37.00", plainRefundLimit: "0.00" }],
+      json: [{ manual: true, appliedRemaining: "37.00" }],
+    });
+    expect(await plainRefund(saleId, card, keyed)).toEqual({
+      status: 409,
+      json: { code: "tender.refund_needs_correction", params: { tenderId: card } },
     });
     await inTx(venue, (tx) => heldFromSending(tx, saleId));
     expect(await refundableTenders(saleId)).toMatchObject({
       status: 200,
-      json: [{ manual: true, plainRefundLimit: "0.00" }],
+      json: [{ manual: true }],
     });
+    expect(await plainRefund(saleId, card, keyed)).toEqual({
+      status: 409,
+      json: { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } },
+    });
+    expect(moneyOf(saleId)).toEqual([]);
   });
 
   it("refuses Refund a payment of the cancel's money naming no cancels, as its corrective's money (section 2, row 8)", async () => {
