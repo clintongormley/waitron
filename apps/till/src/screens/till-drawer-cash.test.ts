@@ -85,7 +85,7 @@ it.each([
     const dialog = el.shadowRoot!.querySelector("till-drawer-cash")!;
     const bar = dialog.shadowRoot!.querySelector("wt-top-bar")!;
     expect(bar.backLabel).toBe(es["tab.floor"]);
-    expect(bar.subtitle).toBe("Cajón de Bar");
+    expect(bar.subtitle).toBe(es["drawer_entry.printer"].replace("{printer}", "Bar"));
     if (!opensDrawer) expect(dialog.shadowRoot!.textContent).toContain(es["drawer_close.use_key"]);
     await choose(dialog, 1);
     const firstPadKey = dialog
