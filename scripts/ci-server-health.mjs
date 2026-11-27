@@ -515,7 +515,7 @@ export async function recoverServer(options) {
       const current = await request(path);
       const skip = (reason) => {
         if (!plannersOnly) return;
-        if (cancelled) retryRefusal = reason;
+        if (cancelled) retryRefusal = `post-cancel verification: ${reason}`;
         else plannerSkip(options, run, run.plannerJobs, reason);
       };
       if (
@@ -641,7 +641,6 @@ export async function recoverServer(options) {
               options.report?.(`Cancelled PR run ${run.id} is obsolete; not retried.`);
               continue;
             }
-            plannerSkip(options, run, run.plannerJobs, `post-cancel verification: ${retryRefusal}`);
             throw new Error(
               "Current-head PR identity or work could not be verified after cancellation",
             );
@@ -652,6 +651,7 @@ export async function recoverServer(options) {
         if (plannersOnly) options.report?.(`Retried PR run ${run.id} on GitHub.`);
       } catch (error) {
         if (!plannersOnly) throw error;
+        if (retryRefusal) plannerSkip(options, run, run.plannerJobs, retryRefusal);
         throw new Error(`Cancelled PR run ${run.id}; intervention needed: ${error.message}`, {
           cause: error,
         });

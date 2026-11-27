@@ -1402,10 +1402,15 @@ describe("scheduled PR planner recovery", () => {
     "uses current capacity for planner rescue when the read is %s",
     async (capacity) => {
       const f = planner();
-      const currentTime = Date.now();
-      f.job.started_at = new Date(currentTime - 317_000).toISOString();
       const directory = mkdtempSync(tmpdir() + "/planner-capacity-");
       const reads = [];
+      const snapshot = {
+        observedAt: now - 447_000,
+        slots: 12,
+        serverRunning: 1,
+        serverWaiting: 1,
+      };
+      const clock = vi.spyOn(Date, "now").mockReturnValue(now);
       try {
         await health.main(
           "recover-planners",
@@ -1414,12 +1419,7 @@ describe("scheduled PR planner recovery", () => {
             GITHUB_REPOSITORY_ID: "42",
             GITHUB_STEP_SUMMARY: directory + "/summary",
             CAPACITY_READ_TOKEN: "capacity-only",
-            CAPACITY: JSON.stringify({
-              observedAt: currentTime - 447_000,
-              slots: 12,
-              serverRunning: 1,
-              serverWaiting: 1,
-            }),
+            CAPACITY: JSON.stringify(snapshot),
           },
           async (path, options = {}) => {
             if (path === "/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_CAPACITY") {
@@ -1427,10 +1427,9 @@ describe("scheduled PR planner recovery", () => {
               if (capacity === "read refused") throw new Error("HTTP 403");
               return {
                 value: JSON.stringify({
-                  observedAt: currentTime - 13_000,
-                  slots: 12,
+                  ...snapshot,
+                  observedAt: now - 13_000,
                   serverRunning: capacity === "full" ? 12 : 1,
-                  serverWaiting: 1,
                 }),
               };
             }
@@ -1438,15 +1437,10 @@ describe("scheduled PR planner recovery", () => {
             return f.options.request(path, options);
           },
         );
-        expect(
-          f.calls.filter(([, options]) => options.method === "POST").map(([path]) => path),
-        ).toEqual(
-          capacity === "full"
-            ? []
-            : [
-                "/repos/fixture/waitron/actions/runs/12/force-cancel",
-                "/repos/fixture/waitron/actions/runs/12/rerun",
-              ],
+        const writes = f.calls.filter(([, options]) => options.method === "POST");
+        const runPath = "/repos/fixture/waitron/actions/runs/12";
+        expect(writes.map(([path]) => path)).toEqual(
+          capacity === "full" ? [] : [`${runPath}/force-cancel`, `${runPath}/rerun`],
         );
         expect(reads).toEqual([{ token: "capacity-only" }]);
         const summary = readFileSync(directory + "/summary", "utf8");
@@ -1455,10 +1449,13 @@ describe("scheduled PR planner recovery", () => {
         );
         const occupancy = capacity === "full" ? "12/12" : "1/12";
         expect(summary).toContain(`Planner rescue capacity: ${occupancy} server slots occupied`);
-        expect(summary).toMatch(/observation age \d+ ms/);
+        expect(summary).toContain(
+          `observation age ${capacity === "read refused" ? 447000 : 13000} ms.`,
+        );
         if (capacity === "full")
           expect(summary).toContain("server is full in a fresh capacity snapshot");
       } finally {
+        clock.mockRestore();
         rmSync(directory, { recursive: true, force: true });
       }
     },
@@ -2117,8 +2114,11 @@ describe("scheduled PR planner recovery", () => {
     const f = planner(),
       reports = [],
       request = f.options.request;
+    let cancelledPullReads = 0;
     f.options.report = (line) => reports.push(line);
     f.options.request = async (path, options) => {
+      if (path.endsWith("/pulls/7") && !f.job.labels.length && ++cancelledPullReads > 1)
+        throw new Error("HTTP 503");
       const reply = await request(path, options);
       if (path.endsWith("/force-cancel")) Object.assign(f.job, change);
       return reply;

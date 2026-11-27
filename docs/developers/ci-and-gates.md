@@ -244,7 +244,7 @@ expressions locally; these checks do not run a hosted image build. Existing chec
 setup retries and execution limits remain unchanged.
 
 When configured, routing and planner recovery read `DISPOSABLE_TESTS_CAPACITY` using the repository
-secret `DISPOSABLE_CAPACITY_READ_TOKEN`. The bounded variable read uses this credential. Queue and
+secret `DISPOSABLE_CAPACITY_READ_TOKEN`. Only the bounded variable read uses this credential. Queue and
 health inventories use the workflow token. A missing or empty secret, a failed read or an invalid
 capacity value retains the workflow snapshot. The console and summary distinguish `fresh`,
 `snapshot (no read token)` and `snapshot (fresh read failed)`. Fresh describes the variable read.
