@@ -93,6 +93,7 @@ import {
   activityLog,
   outgoingMail,
   menus,
+  customerMenuStyles,
   saveVenueFields,
   readVenueSettings,
   categories,
@@ -1972,6 +1973,49 @@ it("round-trips current menus and their Home positions while leaving deleted men
       [0, "Removed menu"],
     ]);
   });
+});
+
+it("round-trips the edited customer menu style and its menu reference", async () => {
+  const source = await applyVenue(planVenue(venue("B55667788"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const appearance = { pageColor: "#fbf7ef", headingFont: "serif" } as const;
+  const sourceStyle = await withTransaction(suite.db, async (tx) => {
+    const [style] = await tx
+      .update(customerMenuStyles)
+      .set({ appearance })
+      .where(eq(customerMenuStyles.isDefault, true))
+      .returning({ id: customerMenuStyles.id });
+    const menu = await createMenu(tx, { name: "Customer style menu" });
+    await tx.update(menus).set({ customerMenuStyleId: style!.id }).where(eq(menus.id, menu.id));
+    return style!.id;
+  });
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date(),
+    versions,
+  );
+  expect(bundle.tables.customer_menu_styles).toMatchObject([
+    { id: sourceStyle, appearance: JSON.stringify(appearance), is_default: 1 },
+  ]);
+  await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
+  });
+  const styles = await targetSuite.db.select().from(customerMenuStyles);
+  expect(styles).toHaveLength(1);
+  expect(styles[0]!.id).not.toBe(sourceStyle);
+  expect(styles[0]!.appearance).toEqual(appearance);
+  const [menu] = await targetSuite.db
+    .select()
+    .from(menus)
+    .where(eq(menus.name, "Customer style menu"));
+  expect(menu!.customerMenuStyleId).toBe(styles[0]!.id);
 });
 
 it("transfers set-menu terms, course choices and variant exclusions", async () => {

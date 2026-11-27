@@ -327,6 +327,7 @@ export function validateMenuConfiguration(
 export const MENU_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
+    { name: "customer_menu_styles", before: ["menus"] },
     { name: "units" },
     { name: "menu_items" },
     { name: "menu_item_variant_overrides" },
