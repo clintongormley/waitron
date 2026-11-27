@@ -2,12 +2,7 @@ import { backupKey, masterKeyDayOf, masterKeyId } from "@waitron/credentials";
 import type { BackupKeyFrameInput } from "@waitron/provisioning";
 import { AppError, decodeMasterKeyCode, isAppError } from "@waitron/shared";
 import { backupKeyBytes } from "./artifact-cipher-file.js";
-import {
-  loadHeldKeyNumber,
-  loadKeyRotatedAt,
-  loadNumberedBackupKey,
-  loadRecoveryKey,
-} from "./backup-config.js";
+import { loadHeldKeyNumber, loadKeyRotatedAt, loadNumberedBackupKey } from "./backup-config.js";
 import { writeBackupKey, type BackupKeyRecord } from "./backup-env-writer.js";
 import { keyFingerprint } from "./backup-key-fingerprint.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
@@ -61,21 +56,12 @@ export function backupKeyFrameInput(record: BackupKeyRecord): BackupKeyFrameInpu
   };
 }
 
-/** The number of the backup key `backup.env` holds, so the next key is one more. 0 when it names no
- * number and holds no key, or one that cannot be a backup key (under the length floor, or text
- * that is not one). `undefined` when the number cannot be told: a number that is not one, or a
- * backup key held with none. Starting again at 1 there could make a key a removed box still holds. */
+/** The number of the backup key `backup.env` holds, so the next key is one more. 0 when it names
+ * no number: a box set up before keys were numbered holds a random key, so key 1 was never handed
+ * out there. `undefined` when it names a number that is not a backup key's. */
 export function heldBackupKeyNumber(env: Env): number | undefined {
   const number = loadHeldKeyNumber(env);
-  if (number !== null) return number;
-  let key: string | undefined;
-  try {
-    key = loadRecoveryKey(env);
-  } catch (error) {
-    if (isAppError(error) && error.code === "backup.recovery_key_too_short") return 0;
-    throw error;
-  }
-  return key === undefined || backupKeyBytes(key) === undefined ? 0 : undefined;
+  return number === null ? 0 : number;
 }
 
 export interface BackupKeyChangeDeps {

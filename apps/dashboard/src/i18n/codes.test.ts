@@ -942,12 +942,12 @@ it("words the backup key change's refusals: a wrong master key when the venue ha
   );
 });
 
-it("words the backup key change's refusal of a held key whose number the box cannot read", () => {
+it("words the backup key change's refusal of a held key number the box cannot read", () => {
   expect(codeMessage("backup.key_number_unknown", "en")).toBe(
-    "This box cannot read the number of the backup key it holds, so changing the key could give back one a removed box still has. Use “Make a new master key” on the Recovery pack card instead: its backup key is new.",
+    "This box holds a backup key but cannot read its number, so changing it could make a key a removed box still has. Nothing was changed. Use “Make a new master key” on the Recovery pack card instead: it moves backups to a key no other box has.",
   );
   expect(codeMessage("backup.key_number_unknown", "es")).toBe(
-    "Este servidor no puede leer el número de la clave de las copias que tiene, así que cambiarla podría devolver una que aún tiene un servidor retirado. Usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación: su clave de las copias es nueva.",
+    "Este servidor tiene una clave de las copias pero no puede leer su número, así que cambiarla podría crear una clave que aún tiene un servidor retirado. No se ha cambiado nada. Usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación: pasa las copias a una clave que ningún otro servidor tiene.",
   );
 });
 

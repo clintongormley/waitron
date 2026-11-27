@@ -1717,9 +1717,9 @@ declare module "@waitron/shared" {
      * Save or the bucket copy's Save finds no key held, which only "Change the backup key" then
      * writes. */
     "backup.recovery_key_missing": Record<string, never>;
-    /** "Change the backup key" found a backup key in `backup.env` whose number it cannot read:
-     * starting again at key 1 of the same master key could give back a key a removed box still
-     * holds. A new master key, made with a new recovery pack, starts its own numbers safely. */
+    /** "Change the backup key" found a `WAITRON_BACKUP_KEY_NUMBER` in `backup.env` that is not a
+     * backup key's number: guessing one could give back a key a removed box still holds. A new
+     * master key, made with a new recovery pack, starts its own numbers safely. */
     "backup.key_number_unknown": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };

@@ -1323,10 +1323,36 @@ describe("backup admin routes", () => {
     expect(sup.current()).toMatchObject({ enabled: true, recoveryKey: KEY_3 });
   }, 60_000);
 
-  it("refuses to change a held backup key whose number backup.env does not give", async () => {
+  it("changes the random key a box set up before backup keys were numbered holds to key 1", async () => {
+    const stateDir = await makeStateDir();
+    const random = randomBytes(32).toString("base64url");
+    await writeFile(join(stateDir, "backup.env"), `WAITRON_BACKUP_RECOVERY_KEY=${random}\n`, {
+      mode: 0o600,
+    });
+    const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
+    await sup.reload();
+    const app = buildApp(sup, stateDir);
+    const cookie = await login(app);
+    const rot = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(changeKey()),
+    });
+    expect(rot.status).toBe(200);
+    const file = await keyFileOf(stateDir);
+    expect(file.WAITRON_BACKUP_KEY_NUMBER).toBe("1");
+    expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
+    expect(file.WAITRON_BACKUP_MASTER_KEY_DAY).toBe(MASTER.name.slice(0, 10));
+  }, 60_000);
+
+  it("refuses to change a held backup key whose number backup.env gives but is not a key number", async () => {
     const stateDir = await makeStateDir();
     await holdKey(stateDir, 3);
-    await dropFromKeyFile(stateDir, "WAITRON_BACKUP_KEY_NUMBER");
+    await writeFile(
+      join(stateDir, "backup.env"),
+      formatEnvFile({ ...(await keyFileOf(stateDir)), WAITRON_BACKUP_KEY_NUMBER: "three" }),
+      { mode: 0o600 },
+    );
     const before = await readFile(join(stateDir, "backup.env"), "utf8");
     const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
     await sup.reload();

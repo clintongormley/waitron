@@ -1,4 +1,5 @@
 import { backupKey, makeMasterKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
+import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   backupKeyFacts,
@@ -67,23 +68,22 @@ describe("heldBackupKeyNumber", () => {
     expect(heldBackupKeyNumber(without("WAITRON_BACKUP_MASTER_KEY_ID"))).toBe(7);
   });
 
-  it("is 0 when no key is held, or one that cannot be a backup key, with no number", () => {
+  it("is 0 when backup.env names no number, whatever key it holds", () => {
     expect(heldBackupKeyNumber({})).toBe(0);
     expect(heldBackupKeyNumber({ WAITRON_BACKUP_RECOVERY_KEY: "short" })).toBe(0);
     expect(heldBackupKeyNumber({ WAITRON_BACKUP_RECOVERY_KEY: "x".repeat(64) })).toBe(0);
+    // A box set up before backup keys were numbered holds a random key and nothing else.
+    const random = randomBytes(32).toString("base64url");
+    expect(heldBackupKeyNumber({ WAITRON_BACKUP_RECOVERY_KEY: random })).toBe(0);
+    expect(heldBackupKeyNumber(without("WAITRON_BACKUP_KEY_NUMBER"))).toBe(0);
   });
 
   it.each([
-    ["no number", undefined],
     ["the number 0", "0"],
     ["a number that is not one", "seven"],
   ])("cannot tell the number of a backup key held with %s", (_, number) => {
-    const env = without("WAITRON_BACKUP_KEY_NUMBER");
-    expect(
-      heldBackupKeyNumber(
-        number === undefined ? env : { ...env, WAITRON_BACKUP_KEY_NUMBER: number },
-      ),
-    ).toBeUndefined();
+    expect(heldBackupKeyNumber({ ...seven, WAITRON_BACKUP_KEY_NUMBER: number })).toBeUndefined();
+    expect(heldBackupKeyNumber({ WAITRON_BACKUP_KEY_NUMBER: number })).toBeUndefined();
   });
 });
 
