@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
+import { NFC_EQUIPMENT } from "../test/equipment-nfc.js";
 import { passBoard, passCard, passItem } from "../test/pass-board-fixtures.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
@@ -11,7 +12,7 @@ import type { TillPassBoard } from "./widgets/pass-board.js";
 import type { CapabilityFlag } from "./layout.js";
 import type { TillApi } from "./api/client.js";
 import type { DevicePassBoard } from "./api/kitchen-api.js";
-import type { KitchenScreenKind } from "./api/device-session-api.js";
+import type { DeviceEquipmentRead, KitchenScreenKind } from "./api/device-session-api.js";
 import type { ZoneOffers } from "./api/menu-api.js";
 
 const previousLocale = currentLocale();
@@ -178,7 +179,29 @@ describe("A773 pass screen: app", () => {
         },
       ];
       const slots = stations.map(({ id, name }) => ({ id, name, available: id !== "closed" }));
+      const checkTimeOnPass = kind === "pass" && rows.length > 0;
       const api = stubApi({
+        ...(checkTimeOnPass && {
+          getDeviceEquipment: vi.fn().mockResolvedValue({
+            ...NFC_EQUIPMENT,
+            notices: [
+              {
+                owner: "box-clock",
+                key: "clock.check_time",
+                code: "clock.check_time",
+                severity: "error",
+                params: {},
+              },
+              {
+                owner: "fiscal",
+                key: "clock.unusable",
+                code: "clock.unusable",
+                severity: "error",
+                params: { clockAt: "2001-01-01T11:00:00.000Z", offsetMinutes: 60 },
+              },
+            ],
+          } satisfies DeviceEquipmentRead),
+        }),
         getTill: vi.fn().mockResolvedValue({
           ...till,
           formFactor: "phone-portrait",
@@ -230,6 +253,8 @@ describe("A773 pass screen: app", () => {
       const chooser = () => shell.shadowRoot!.querySelector("[data-floor-zone-chooser]");
       const trigger = () => chooser()?.shadowRoot?.querySelector("button");
       await vi.waitFor(() => expect(trigger()).toBeInstanceOf(HTMLButtonElement));
+      const checkTime = page.getByRole("button", { name: "Comprobar la hora" });
+      if (checkTimeOnPass) await expect.element(checkTime).toBeVisible();
       const more = shell.shadowRoot!.querySelector("[data-floor-bar] .floor-menu")!;
       await userEvent.click(trigger()!);
       const kitchen = page.getByRole("group", { name: "Pantallas de cocina" });
@@ -259,6 +284,7 @@ describe("A773 pass screen: app", () => {
         );
       }
       expect(shell.shadowRoot!.querySelector(".head")).toBeNull();
+      if (checkTimeOnPass) await expect.element(checkTime).toBeVisible({ timeout: 1000 });
       await page.getByRole("button", { name: "Atrás", exact: true }).click();
       await vi.waitFor(() => expect(trigger()?.matches(":focus")).toBe(true));
       expect(location.pathname).not.toContain("/view/");

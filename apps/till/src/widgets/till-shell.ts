@@ -1416,7 +1416,7 @@ export class TillShell extends LitElement {
     </wt-row-actions>`;
   }
 
-  #floorShortcuts(counterLabel: string): TemplateResult {
+  #floorShortcuts(counterLabel: string): TemplateResult | typeof nothing {
     const shortcuts =
       this.formFactor === "till"
         ? this.showCounter
@@ -1427,8 +1427,7 @@ export class TillShell extends LitElement {
         : this.barTables.length
           ? this.#primaryTabs([], undefined, false, "")
           : nothing;
-    return html`${shortcuts === nothing ? nothing : html`<header class="head">${shortcuts}</header>`}
-      ${this.#transferStatus()}<slot name="notices"></slot>`;
+    return shortcuts === nothing ? nothing : html`<header class="head">${shortcuts}</header>`;
   }
 
   #floorMenu(floor: TillFloorScreen): TemplateResult {
@@ -1710,11 +1709,11 @@ export class TillShell extends LitElement {
                   <div class="session">
                     ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorMenu()}${this.#tillMenu()}` : html`${nameInMore ? nothing : this.#operatorMenu()}${this.#helpSwitch()}${this.#menu(nameInMore)}`}
                   </div>
-                  ${this.formFactor !== "till" ? this.#transferStatus() : nothing}
                 </header>
-                <slot name="notices"></slot>
               `
         }
+        ${!this.#barless() && (bottomFloor || this.formFactor !== "till") ? this.#transferStatus() : nothing}
+        ${this.#barless() ? nothing : html`<slot name="notices"></slot>`}
         <div class="region">
           <main class="body" ?inert=${hasDrill} @floor-footer-update=${() => this.requestUpdate()}>
             <slot @slotchange=${() => this.requestUpdate()}></slot>
