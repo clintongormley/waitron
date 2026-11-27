@@ -33,8 +33,8 @@ function octets(value: string): forge.asn1.Asn1 {
 
 /**
  * The PKCS#12 MAC key comes from the passphrase as UTF-16 (RFC 7292 B.1), but PBES2 key encryption
- * from its UTF-8 bytes, as OpenSSL reads both. node-forge feeds one string to both, so for a
- * passphrase outside ASCII the key is encrypted with forge and the MAC added here.
+ * from its UTF-8 bytes, as OpenSSL reads both. node-forge feeds one string to both, so the key is
+ * encrypted with forge and the MAC added here.
  */
 function withMac(pfx: forge.asn1.Asn1, passphrase: string): forge.asn1.Asn1 {
   const content = (pfx.value as forge.asn1.Asn1[])[1]!;
