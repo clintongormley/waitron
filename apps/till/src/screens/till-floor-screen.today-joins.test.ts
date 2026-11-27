@@ -389,11 +389,12 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
     expect(dialog.heading).toBe("Seats for 1+2+3");
   });
 
-  it("two free fixed tables open the seat dialog for both, and seat them in one go", async () => {
+  it.each([false, true])("seats both fixed tables with zone closed=%s", async (closed) => {
     const api = stubApi();
     const el = await mount(
       [planned("F1", 2, { fixed: true }, "Bar 1"), planned("F2", 20, { fixed: true }, "Bar 2")],
       api,
+      [zone({ closed })],
     );
     el.canChangeToday = true;
     const opened: unknown[] = [];
@@ -407,6 +408,7 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
     expect(api.joinTables).not.toHaveBeenCalled();
     expect(api.mergeToday).not.toHaveBeenCalled();
     expect(drawnAt(el, "F1")).toBe(2);
+    expect(opened).toEqual([]);
 
     send(dialog, "seat-confirm", { guestCount: 2 });
     await el.updateComplete;
@@ -544,20 +546,6 @@ describe("till-floor-screen: dragging on today's plan — joins and seating", ()
       },
       { moving: "t1", target: "t2", side: "left", seats: 6, zoneRevision: 0 },
     );
-  });
-
-  it("two fixed tables dropped in a closed zone say it is closed and seat no one", async () => {
-    const api = stubApi();
-    const el = await mount(
-      [planned("F1", 2, { fixed: true }, "Bar 1"), planned("F2", 20, { fixed: true }, "Bar 2")],
-      api,
-      [zone({ closed: true })],
-    );
-    el.canChangeToday = true;
-    await drop(el, { tableId: "F1", x: 17, y: 3, targetId: "F2" });
-
-    expect(el.shadowRoot!.querySelector("till-seat-dialog")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull();
   });
 
   describe("in a zone that seats no one", () => {
