@@ -465,7 +465,9 @@ describe("the menu tables carry no taxpayer column", () => {
     expect(checks).toEqual({
       menus_home_order_ck: `"menus"."home_order" in ('home_first', 'menu_first')`,
       menus_kind_ck: `"menus"."kind" in ('menu', 'set_menu')`,
+      menus_online_photos_ck: `"menus"."online_photos" in ('none', 'small', 'large')`,
       menus_set_not_default_ck: `"menus"."kind" = 'menu' or "menus"."is_default" = 0`,
+      menus_set_offline_ck: `"menus"."kind" = 'menu' or ("menus"."online_enabled" = 0 and "menus"."online_address" is null)`,
       menus_set_price_ck: `"menus"."set_price" is null or "menus"."set_price" >= 0`,
       menus_set_terms_ck: `("menus"."kind" = 'set_menu' and "menus"."set_price" is not null and "menus"."set_vat_class" is not null)
         or ("menus"."kind" = 'menu' and "menus"."set_price" is null and "menus"."set_vat_class" is null and "menus"."set_takeaway_vat_class" is null)`,
@@ -531,6 +533,7 @@ describe("the menu tables carry no taxpayer column", () => {
       extra_list_items_list_sort_idx: { unique: false, columns: "list_id, sort" },
       sections_one_root_per_menu_uq: { unique: true, columns: "owner_menu_id, role" },
       menus_one_default_uq: { unique: true, columns: "is_default" },
+      menus_online_address_uq: { unique: true, columns: "online_address" },
       set_menu_lines_position_idx: { unique: false, columns: "menu_id, position" },
       set_menu_line_courses_course_idx: { unique: false, columns: "course_id" },
       set_menu_dish_courses_course_idx: { unique: false, columns: "course_id" },

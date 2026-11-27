@@ -54,6 +54,19 @@ export interface PublicGuestMenu {
 export type CustomerMenuPreview =
   { state: "unpublished" } | { state: "published"; menu: PublicGuestMenu };
 
+export const CUSTOMER_MENU_PHOTO_SIZES = ["none", "small", "large"] as const;
+export type CustomerMenuPhotoSize = (typeof CUSTOMER_MENU_PHOTO_SIZES)[number];
+
+export interface CustomerMenuOnlineSettings {
+  enabled: boolean;
+  address: string | null;
+  photos: CustomerMenuPhotoSize;
+}
+
+export function isCustomerMenuAddress(address: string): boolean {
+  return /^[a-z0-9][a-z0-9-]{0,62}$/.test(address) && !address.endsWith("-");
+}
+
 export function publicGuestMenu(
   document: MenuDocument,
   config: ContentLanguages,

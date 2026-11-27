@@ -207,7 +207,11 @@ export function validateCoreConfiguration(
 export const CORE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
-    { name: "menus", leaveBehindWhenFalse: "active" },
+    {
+      name: "menus",
+      leaveBehindWhenFalse: "active",
+      omit: ["online_enabled", "online_address"],
+    },
     {
       name: "kitchen_stations",
       jsonReferences: [{ column: "printer_ids", paths: [["*"]] }],

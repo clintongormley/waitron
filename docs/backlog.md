@@ -457,8 +457,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/menu.md#bundle-tabs-selected-visible)
 
 - **The customer menu, online and printed (owner, 2026-11-24).** Extend the Customer menu tab
-  with Online settings. Add Print, named styles and the customer address through
-  Cloud, including shareable dish links.
+  with an editor for its Online settings and a separate customer app for its published menu.
+  Add Print and named styles.
+  Delivery 6 brings live addresses through Cloud, shareable dish links, the Menus list Online column,
+  Copy link, QR code and Embed, and a warning before address changes or turning a live menu off.
+  The public server serves an active regular menu only when Online is on and it has a live edition.
+  It refuses photo requests when Photos is set to None.
   The box-side **Translate all** for course names follows Cloud D645.
   Hosted copies can show stale prices, allergens and diet labels until Cloud removes them in
   piece 6. [Design](superpowers/specs/2026-11-24-customer-menu-design.md)

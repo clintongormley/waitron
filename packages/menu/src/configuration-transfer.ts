@@ -4,6 +4,7 @@ import {
   stringToBasisPoints,
   colorOrNull,
   HOME_ORDERS,
+  CUSTOMER_MENU_PHOTO_SIZES,
   MAX_SET_MENU_AMOUNT_CENTS,
   isCalendarDate,
 } from "@waitron/shared";
@@ -49,13 +50,19 @@ function checkColors(rows: Rows | undefined, table: string, column = "color"): v
       });
 }
 
-function checkHomeOrders(rows: Rows | undefined): void {
-  for (const row of rows ?? [])
+function checkMenuPreferences(rows: Rows | undefined): void {
+  for (const row of rows ?? []) {
     if (
       row.home_order !== undefined &&
       !(HOME_ORDERS as readonly unknown[]).includes(row.home_order)
     )
       throw new AppError("setup.request_invalid", { field: "menus.home_order" });
+    if (
+      row.online_photos !== undefined &&
+      !(CUSTOMER_MENU_PHOTO_SIZES as readonly unknown[]).includes(row.online_photos)
+    )
+      throw new AppError("setup.request_invalid", { field: "menus.online_photos" });
+  }
 }
 
 /** An Inactive product sits in no menu list or Device Home Page shortcut, and an Inactive variant
@@ -263,7 +270,7 @@ export function validateMenuConfiguration(
       throw new AppError("setup.request_invalid", { field: "option_labels.is_default" });
     defaults.add(row.list_id);
   }
-  checkHomeOrders(tables.menus);
+  checkMenuPreferences(tables.menus);
   checkSetMenus(tables);
   checkColors(tables.products, "products");
   checkTakeawayVatRates(tables);

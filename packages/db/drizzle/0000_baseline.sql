@@ -1201,11 +1201,16 @@ CREATE TABLE `menus` (
 	`created_at` text NOT NULL,
 	`updated_at` text NOT NULL,
 	`home_order` text DEFAULT 'home_first' NOT NULL,
+	`online_enabled` integer DEFAULT false NOT NULL,
+	`online_address` text,
+	`online_photos` text DEFAULT 'large' NOT NULL,
 	`kind` text DEFAULT 'menu' NOT NULL,
 	`set_price` integer,
 	`set_vat_class` text,
 	`set_takeaway_vat_class` text,
 	CONSTRAINT "menus_home_order_ck" CHECK("menus"."home_order" in ('home_first', 'menu_first')),
+	CONSTRAINT "menus_online_photos_ck" CHECK("menus"."online_photos" in ('none', 'small', 'large')),
+	CONSTRAINT "menus_set_offline_ck" CHECK("menus"."kind" = 'menu' or ("menus"."online_enabled" = 0 and "menus"."online_address" is null)),
 	CONSTRAINT "menus_kind_ck" CHECK("menus"."kind" in ('menu', 'set_menu')),
 	CONSTRAINT "menus_set_terms_ck" CHECK(("menus"."kind" = 'set_menu' and "menus"."set_price" is not null and "menus"."set_vat_class" is not null)
         or ("menus"."kind" = 'menu' and "menus"."set_price" is null and "menus"."set_vat_class" is null and "menus"."set_takeaway_vat_class" is null)),
@@ -1215,6 +1220,7 @@ CREATE TABLE `menus` (
 	CONSTRAINT "menus_set_not_default_ck" CHECK("menus"."kind" = 'menu' or "menus"."is_default" = 0)
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `menus_online_address_uq` ON `menus` (`online_address`) WHERE "menus"."active" = 1 and "menus"."kind" = 'menu' and "menus"."online_address" is not null;--> statement-breakpoint
 CREATE UNIQUE INDEX `menus_one_default_uq` ON `menus` (`is_default`) WHERE "menus"."is_default" = 1;--> statement-breakpoint
 CREATE TABLE `products` (
 	`id` text PRIMARY KEY NOT NULL,

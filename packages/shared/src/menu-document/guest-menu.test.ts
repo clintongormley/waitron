@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { FrozenExtraItem, FrozenOffer, MenuDocument } from "./menu-document-types.js";
-import { publicGuestMenu as prepareGuestMenu } from "./guest-menu.js";
+import { isCustomerMenuAddress, publicGuestMenu as prepareGuestMenu } from "./guest-menu.js";
 
 const unit = {
   id: "each",
@@ -495,4 +495,14 @@ it("matches phone preferences before resolving authored text and keeps saved lin
       "en-AU",
     ),
   ).toMatchObject({ language: "en-US", languages: ["en-GB", "en-US", "es"] });
+});
+
+it.each([
+  ["a", true],
+  ["3-course-lunch", true],
+  ["a".repeat(63), true],
+  ["lunch-", false],
+  ["lunch\n", false],
+])("checks the customer menu address %j", (address, valid) => {
+  expect(isCustomerMenuAddress(address)).toBe(valid);
 });
