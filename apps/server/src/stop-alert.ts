@@ -13,7 +13,11 @@ const origin = jobOrigin("dashboard");
 
 async function closePriorStartAlert(
   tx: Transaction,
-  code: "start.unplanned_stop" | "start.selling_unconfirmed" | "start.shutdown_paused",
+  code:
+    | "start.unplanned_stop"
+    | "start.selling_unconfirmed"
+    | "start.shutdown_paused"
+    | "start.shutdown_upload_stalled",
   now: Date,
 ): Promise<void> {
   const { open } = await currentIncidentsOf(tx, { origin, code });
@@ -74,15 +78,18 @@ export async function recordUnexpectedStop(
 
 export async function recordShutdownPause(
   db: Database,
-  errorCode: string,
+  errorCode: string | null,
   now: Date,
 ): Promise<void> {
-  const code = "start.shutdown_paused";
+  const error =
+    errorCode === null
+      ? new AppError("start.shutdown_upload_stalled", {})
+      : new AppError("start.shutdown_paused", { errorCode });
   await withTransaction(db, async (tx) => {
-    await closePriorStartAlert(tx, code, now);
+    await closePriorStartAlert(tx, error.code, now);
     await recordIncident(tx, {
       origin,
-      error: new AppError(code, { errorCode }),
+      error,
       severity: "warning",
       detectedAt: now,
     });

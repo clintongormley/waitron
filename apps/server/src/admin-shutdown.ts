@@ -9,7 +9,7 @@ export const SHUTDOWN_PATH = "/api/box/shutdown";
 type ShutdownMode = { paired?: true; downloadOnly?: true };
 
 export type ShutdownStatus =
-  | { phase: "idle" | "checking" }
+  | { phase: "idle" | "checking" | "stalled" }
   | { phase: "ready"; checked?: false }
   | { phase: "paused"; errorCode: string }
   | { phase: "download"; name: string; bytes: number; delivered: boolean; errorCode?: string };
@@ -26,7 +26,12 @@ type ShutdownCheck = {
   checkSpare?: (signal: AbortSignal) => Promise<void>;
 };
 
-export type ShutdownDecision = "retry" | "shut-down-anyway";
+export type ShutdownDecision = "retry" | "keep-waiting" | "shut-down-anyway";
+
+type ShutdownRun = {
+  controller: AbortController;
+  waiting?: { promise: Promise<void>; resume(): void; uploads: number };
+};
 
 export async function waitForShutdownDrain(
   drain: Promise<unknown> | undefined,
@@ -47,7 +52,13 @@ export async function waitForShutdownDrain(
 }
 
 export function createAdminShutdown(deps: {
-  check(signal: AbortSignal): Promise<void | ShutdownCheck>;
+  check(
+    signal: AbortSignal,
+    context: {
+      attemptSignal: AbortSignal;
+      waitForUpload(uploadSignal: AbortSignal): Promise<void>;
+    },
+  ): Promise<void | ShutdownCheck>;
   save(): Promise<void>;
   clear(): Promise<void>;
   pauseDuties?(): { settled: Promise<void>; drainRefunds(): Promise<unknown>; resume(): void };
@@ -58,6 +69,7 @@ export function createAdminShutdown(deps: {
     mode: ShutdownMode;
     controller: AbortController;
     settled: Promise<void>;
+    run?: ShutdownRun;
     duties?: ReturnType<NonNullable<typeof deps.pauseDuties>>;
     drained: boolean;
     checked: boolean;
@@ -100,11 +112,40 @@ export function createAdminShutdown(deps: {
     return { phase: "download", name: archive.name, bytes: archive.bytes, delivered, errorCode };
   }
 
-  function run(current: Attempt, action: "check" | "confirm" | "unchecked"): void {
+  function run(
+    current: Attempt,
+    action: "check" | "confirm" | "unchecked",
+    after?: Promise<void>,
+  ): void {
     current.state = { phase: "checking" };
-    const { signal } = current.controller;
+    const active: ShutdownRun = { controller: new AbortController() };
+    current.run = active;
+    const attemptSignal = current.controller.signal;
+    const signal = AbortSignal.any([attemptSignal, active.controller.signal]);
+    async function waitForUpload(uploadSignal: AbortSignal): Promise<void> {
+      const waitingSignal = AbortSignal.any([signal, uploadSignal]);
+      waitingSignal.throwIfAborted();
+      if (active.waiting === undefined) {
+        let resume!: () => void;
+        const promise = new Promise<void>((resolve) => (resume = resolve));
+        active.waiting = { promise, resume, uploads: 0 };
+      }
+      const waiting = active.waiting;
+      waiting.uploads += 1;
+      current.state = { phase: "stalled" };
+      try {
+        await waitForShutdownDrain(waiting.promise, waitingSignal);
+      } finally {
+        waiting.uploads -= 1;
+        if (waiting.uploads === 0 && active.waiting === waiting && current.run === active) {
+          active.waiting = undefined;
+          current.state = { phase: "checking" };
+        }
+      }
+    }
     current.settled = (async () => {
       try {
+        if (after !== undefined) await after;
         if (!current.drained) {
           await waitForShutdownDrain(Promise.all(writers), signal);
           current.duties ??= deps.pauseDuties?.();
@@ -118,7 +159,7 @@ export function createAdminShutdown(deps: {
         signal.throwIfAborted();
         if (action === "check" && !current.spareCheckPending) {
           current.checked = false;
-          const result = await deps.check(signal);
+          const result = await deps.check(signal, { attemptSignal, waitForUpload });
           current.archive = result?.archive;
           current.checkSpare = result?.checkSpare;
           current.checked = true;
@@ -132,6 +173,7 @@ export function createAdminShutdown(deps: {
           current.spareCheckPending = true;
           await current.checkSpare(signal);
           current.spareCheckPending = false;
+          current.checkSpare = undefined;
         }
         signal.throwIfAborted();
         current.saving = true;
@@ -144,13 +186,18 @@ export function createAdminShutdown(deps: {
             ? { phase: "ready" }
             : { phase: "ready", checked: false };
       } catch (error) {
+        if (current.run !== active) return;
         const errorCode = codeOf(error);
         current.state =
           current.archive && !current.spareCheckPending
             ? downloadState(current.archive, current.delivered, errorCode)
             : { phase: "paused", errorCode };
       } finally {
-        current.saving = false;
+        active.controller.abort();
+        if (current.run === active) {
+          current.run = undefined;
+          current.saving = false;
+        }
       }
     })();
   }
@@ -191,9 +238,25 @@ export function createAdminShutdown(deps: {
     },
     resolvePaused(decision: ShutdownDecision): void {
       const current = attempt;
-      if (closing || current?.state.phase !== "paused" || current.cancelling !== undefined)
+      if (closing || current === undefined || current.cancelling !== undefined)
         throw new AppError("box.shutdown_in_progress", {});
-      run(current, decision === "retry" ? "check" : "unchecked");
+      const phase = current.state.phase;
+      if (phase === "paused" && decision === "retry") return run(current, "check");
+      if (phase === "paused" && decision === "shut-down-anyway") return run(current, "unchecked");
+      const active = current.run;
+      if (phase === "stalled" && active?.waiting !== undefined) {
+        if (decision === "keep-waiting") {
+          current.state = { phase: "checking" };
+          active.waiting.resume();
+          active.waiting = undefined;
+          return;
+        }
+        if (decision === "shut-down-anyway") {
+          active.controller.abort();
+          return run(current, "unchecked", current.settled);
+        }
+      }
+      throw new AppError("box.shutdown_in_progress", {});
     },
     async beginDownload(name: string) {
       const { current, archive } = pendingDownload(name);

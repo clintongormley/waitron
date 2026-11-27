@@ -102,6 +102,101 @@ it("waits for admitted work and keeps new work out until Cancel has settled", as
   }
 });
 
+function signalGate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => (resolve = done));
+  return { promise, resolve };
+}
+
+it.each(["keep-waiting", "cancel", "shut-down-anyway"] as const)(
+  "settles one stalled check when the administrator chooses %s",
+  async (decision) => {
+    const cleaned = signalGate();
+    const order: string[] = [];
+    const shutdown = createAdminShutdown({
+      async check(signal, context) {
+        order.push("captured");
+        try {
+          await context?.waitForUpload(signal);
+          order.push("verified");
+        } finally {
+          await cleaned.promise;
+          order.push("settled");
+        }
+      },
+      save: async () => void order.push("saved"),
+      clear: async () => {},
+    });
+    try {
+      shutdown.start();
+      await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "stalled" }));
+      expect(order).toEqual(["captured"]);
+      expect(() => shutdown.resolvePaused("retry")).toThrow();
+      const cancelling = decision === "cancel" ? shutdown.cancel() : undefined;
+      if (decision !== "cancel") shutdown.resolvePaused(decision);
+      expect(shutdown.status().phase).not.toBe("ready");
+      cleaned.resolve();
+      await cancelling;
+      if (decision === "cancel") {
+        expect(shutdown.status()).toEqual({ phase: "idle" });
+        expect(order).toEqual(["captured", "settled"]);
+      } else {
+        await vi.waitFor(() =>
+          expect(shutdown.status()).toEqual(
+            decision === "keep-waiting" ? { phase: "ready" } : { phase: "ready", checked: false },
+          ),
+        );
+        expect(order).toEqual(
+          decision === "keep-waiting"
+            ? ["captured", "verified", "settled", "saved"]
+            : ["captured", "settled", "saved"],
+        );
+      }
+    } finally {
+      cleaned.resolve();
+      await shutdown.close();
+    }
+  },
+);
+
+it("removes the stall prompt when the last waiting upload expires", async () => {
+  const first = new AbortController();
+  const second = new AbortController();
+  const firstSettled = signalGate();
+  const secondSettled = signalGate();
+  const cleaned = signalGate();
+  const shutdown = createAdminShutdown({
+    async check(_signal, { waitForUpload }) {
+      await Promise.allSettled([
+        waitForUpload(first.signal).finally(firstSettled.resolve),
+        waitForUpload(second.signal).finally(secondSettled.resolve),
+      ]);
+      await cleaned.promise;
+      throw new Error("The backup destinations timed out");
+    },
+    save: async () => {},
+    clear: async () => {},
+  });
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "stalled" }));
+    first.abort();
+    await firstSettled.promise;
+    expect(shutdown.status()).toEqual({ phase: "stalled" });
+    second.abort();
+    await secondSettled.promise;
+    expect(shutdown.status()).toEqual({ phase: "checking" });
+    expect(() => shutdown.resolvePaused("keep-waiting")).toThrow(
+      expect.objectContaining({ code: "box.shutdown_in_progress" }),
+    );
+    cleaned.resolve();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+  } finally {
+    cleaned.resolve();
+    await shutdown.close();
+  }
+});
+
 it("captures a new backup on Retry while sales stay paused", async () => {
   let passes = 0;
   let pauses = 0;

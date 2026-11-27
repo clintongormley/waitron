@@ -229,6 +229,28 @@ it("requires confirmation before switching off with an unchecked backup", async 
   expect(resolveBoxShutdown.mock.calls).toEqual([["shut-down-anyway"], ["shut-down-anyway"]]);
 });
 
+it("offers Keep waiting while an upload is stalled", async () => {
+  const before = { phase: "stalled", available: true } as const;
+  const after = { phase: "checking", available: true } as const;
+  const getBoxHealth = vi.fn().mockResolvedValue(health({ shutdown: before }));
+  const resolveBoxShutdown = vi.fn(async () => {
+    getBoxHealth.mockResolvedValue(health({ shutdown: after }));
+    return after;
+  });
+  const { el } = await mount(stubApi({ getBoxHealth, resolveBoxShutdown }));
+  el.canCheckClock = true;
+  await el.updateComplete;
+
+  const action = q(el, '[data-test="box-shutdown-keep-waiting"]');
+  expect(action).not.toBeNull();
+  expect(text(action)).toBe("Keep waiting");
+  expect(q(el, '[data-test="box-shutdown-retry"]')).toBeNull();
+  expect(q(el, '[data-test="box-shutdown-cancel"]')).not.toBeNull();
+  expect(q(el, '[data-test="box-shutdown-anyway"]')).not.toBeNull();
+  await userEvent.click(action!);
+  expect(resolveBoxShutdown).toHaveBeenCalledExactlyOnceWith("keep-waiting");
+});
+
 it("mentions both restore keys before pausing work for a downloadable backup", async () => {
   const { el } = await mount(
     stubApi({}, health({ shutdown: { phase: "idle", available: true, downloadOnly: true } })),

@@ -25,6 +25,7 @@ import type { StringKey } from "../i18n/strings.js";
 import { goToLabel, wholeTimes, wholeTimesStyles } from "../widgets/alert-format.js";
 import { guideHref } from "../help-guide.js";
 import "./upgrade-settings-dialog.js";
+import { renderShutdownPauseActions } from "./box-shutdown-actions.js";
 import { wifiRequestError } from "./box-wifi-dialog.js";
 import {
   boxStatusRows,
@@ -1156,29 +1157,15 @@ export class BoxStatusScreen extends LitElement {
               }`
           : nothing
       }
-      ${
-        phase === "paused"
-          ? html`
-              <wt-button
-                variant="primary"
-                data-test="box-shutdown-retry"
-                ?disabled=${this.shutdownBusy}
-                @click=${() => void this.#shutdown("retry")}
-                >${t(status.paired ? "box_status.shutdown.retry_check" : "box_status.shutdown.retry")}</wt-button
-              >
-              <wt-button
-                variant="danger"
-                data-test="box-shutdown-anyway"
-                ?disabled=${this.shutdownBusy}
-                @click=${() => {
-                  this.shutdownError = "";
-                  this.shutdownConfirmation = "shut-down-anyway";
-                }}
-                >${t("box_status.shutdown.anyway")}</wt-button
-              >
-            `
-          : nothing
-      }
+      ${renderShutdownPauseActions(
+        status,
+        this.shutdownBusy,
+        (decision) => void this.#shutdown(decision),
+        () => {
+          this.shutdownError = "";
+          this.shutdownConfirmation = "shut-down-anyway";
+        },
+      )}
       ${
         phase === "download"
           ? html`<p>
@@ -1201,7 +1188,7 @@ export class BoxStatusScreen extends LitElement {
           : nothing
       }
       ${
-        phase === "checking" || phase === "paused" || phase === "download"
+        phase !== "idle" && phase !== "ready"
           ? html`
               <wt-button
                 variant="secondary"

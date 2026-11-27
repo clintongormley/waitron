@@ -455,4 +455,6 @@ On a main box with a joined spare, choose **Hand over to the spare** to open the
 
 Waitron pauses work, saves a full backup to every saved destination and checks each copy. If you have no saved destination, choose **Download checked backup**. If the download stalls, choose **Download checked backup** again. Check the file name and size in Downloads. Keep the file, its encryption key and the master key together where you can reach them from the next box. Choose **I saved the backup** to confirm. Keep the box on until you see **Safe to switch off**. If the check fails, read the reason, then choose **Retry backup** to make a fresh copy or **Cancel and resume work** to keep the box open. Use **Shut down anyway** only if you have to switch off before you have a checked copy. Wait for the box to say you can switch it off. You may need an older backup if you later restore.
 
+If the upload to your backup bucket times out, choose **Keep waiting** to continue with the same backup. If that choice expires, retry the check to make a fresh copy. Keep the box on until it says you can switch it off.
+
 When the box starts again, sign in over HTTPS and choose **Carry on selling on this box** to reopen it. Choose **Keep it stopped** if another box took over.

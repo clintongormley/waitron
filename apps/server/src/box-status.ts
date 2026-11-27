@@ -188,6 +188,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         const body = await readJsonBody<{ decision?: unknown; name?: unknown } | null>(c);
         const decision = requireEnum(body?.decision, "decision", [
           "retry",
+          "keep-waiting",
           "shut-down-anyway",
           "backup-saved",
         ]);

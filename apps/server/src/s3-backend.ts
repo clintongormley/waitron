@@ -1,4 +1,4 @@
-import type { S3FileStore } from "@waitron/stream";
+import type { FileUploadCall, S3FileStore } from "@waitron/stream";
 import { AppError } from "@waitron/shared";
 import "@waitron/stream";
 import {
@@ -26,7 +26,7 @@ export class S3Backend implements StorageBackend {
     await this.files.putBytes(key, bytes, call);
   }
 
-  async putFile(key: string, path: string, call: StorageCall): Promise<void> {
+  async putFile(key: string, path: string, call: FileUploadCall): Promise<void> {
     await this.files.putFile(checkedKey(key), path, call);
   }
 

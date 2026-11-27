@@ -30,7 +30,10 @@ import { writeArchiveSettings } from "./archive-settings.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import * as atomic from "./fs-atomic.js";
 import { startServer as bootServer } from "./boot.js";
-import { SHUTDOWN_PAUSED_EMAIL_WORDS } from "./i18n/box-emails.js";
+import {
+  SHUTDOWN_PAUSED_EMAIL_WORDS,
+  SHUTDOWN_UPLOAD_STALLED_EMAIL_WORDS,
+} from "./i18n/box-emails.js";
 import { boxHostnameFor } from "./box-name.js";
 import * as boxEmail from "./box-alert-email.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
@@ -80,6 +83,7 @@ it.each([
   ["refuses checked shutdown when saved backups are disabled", "disabled"],
   ["refuses checked shutdown without a destination or backup key", "no-key"],
   ["records and emails a failed final backup while sales stay paused", "failed"],
+  ["emails one stalled upload alert across Keep waiting and a later failure", "stalled"],
   ["multi-destination shutdown offers a saved folder and bucket", "multiple"],
 ] as const)("%s", async (_description, scenario) => {
   const { cfg } = await setupVenue(suite.db);
@@ -118,8 +122,13 @@ it.each([
   });
   const checkedBackup = vi
     .spyOn(BackupSupervisor.prototype, "runForShutdown")
-    .mockImplementation(async (signal) => {
+    .mockImplementation(async (signal, _migrations, onUploadTimeout) => {
       signal.throwIfAborted();
+      if (scenario === "stalled") {
+        reachedCheck();
+        await onUploadTimeout?.(signal);
+        throw new AppError("backup.destination_timed_out", { timeoutMs: 1_000 });
+      }
       if (scenario === "failed") {
         reachedCheck();
         if (++failedChecks === 1)
@@ -132,7 +141,10 @@ it.each([
         if (scenario === "multiple") void checkFinished.then(resolve);
       });
     });
-  const smtp = scenario === "failed" ? await startFakeSmtp() : null;
+  const smtp = scenario === "failed" || scenario === "stalled" ? await startFakeSmtp() : null;
+  const incident =
+    scenario === "stalled" ? "start.shutdown_upload_stalled" : "start.shutdown_paused";
+  const pauseParams = scenario === "stalled" ? {} : { errorCode: "backup.archive_invalid" };
   const ordinaryMailDue = new Date(Date.now() + 30_000);
   if (smtp) vi.useFakeTimers({ toFake: ["Date"] });
   const socket = new TLSSocket(new Socket());
@@ -291,20 +303,22 @@ it.each([
           return;
         }
         if (smtp) {
+          if (scenario === "stalled")
+            expect(await (await health()).json()).toMatchObject({ shutdown: { phase: "stalled" } });
           const rows = () =>
             suite.db
               .select({ params: incidents.params })
               .from(incidents)
-              .where(eq(incidents.code, "start.shutdown_paused"));
+              .where(eq(incidents.code, incident));
           await vi.waitFor(async () => {
-            expect(await rows()).toEqual([{ params: { errorCode: "backup.archive_invalid" } }]);
+            expect(await rows()).toEqual([{ params: pauseParams }]);
           });
           const shutdownNotices = () =>
             suite.db
               .select({ id: outgoingMail.id })
               .from(outgoingMail)
               .innerJoin(incidents, eq(outgoingMail.subjectId, incidents.id))
-              .where(eq(incidents.code, "start.shutdown_paused"))
+              .where(eq(incidents.code, incident))
               .orderBy(outgoingMail.seq);
           await vi.waitFor(async () => expect(await shutdownNotices()).not.toHaveLength(0));
           const firstNotices = await shutdownNotices();
@@ -315,9 +329,11 @@ it.each([
             .find((mail) => mail.includes("To: owner@example.test"))!
             .replace(/=\r?\n/g, "");
           expect(message).toContain("To: owner@example.test");
-          expect(message).toContain(
-            SHUTDOWN_PAUSED_EMAIL_WORDS.es.text.split(" ").slice(-3).join(" "),
-          );
+          const words =
+            scenario === "stalled"
+              ? SHUTDOWN_UPLOAD_STALLED_EMAIL_WORDS
+              : SHUTDOWN_PAUSED_EMAIL_WORDS;
+          expect(message).toContain(words.es.text.split(" ").slice(-5).join(" "));
           expect((await readMail(suite.db, "ordinary-during-shutdown"))?.status).toBe("pending");
           const retry = await app.request(
             "https://box.example/api/box/shutdown",
@@ -327,7 +343,7 @@ it.each([
                 cookie: `waitron_management_session=${token}`,
                 "content-type": "application/json",
               },
-              body: JSON.stringify({ decision: "retry" }),
+              body: JSON.stringify({ decision: scenario === "stalled" ? "keep-waiting" : "retry" }),
             },
             { incoming: { socket } },
           );
@@ -340,7 +356,14 @@ it.each([
               shutdown: { phase: "paused", errorCode: "backup.destination_timed_out" },
             });
           });
-          expect(await rows()).toEqual([{ params: { errorCode: "backup.archive_invalid" } }]);
+          expect(await rows()).toEqual([{ params: pauseParams }]);
+          if (scenario === "stalled")
+            expect(
+              await suite.db
+                .select()
+                .from(incidents)
+                .where(eq(incidents.code, "start.shutdown_paused")),
+            ).toEqual([]);
           expect(await shutdownNotices()).toEqual(firstNotices);
           expect(smtp.messages).toHaveLength(firstNotices.length);
           const trading = await fetch(`${base}/api/node`);

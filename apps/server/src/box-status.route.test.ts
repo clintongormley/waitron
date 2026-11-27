@@ -262,48 +262,64 @@ it("lets an administrator sign in again and cancel while payments are paused", a
   }
 });
 
-it("requires a box administrator on HTTPS to resolve a failed shutdown check", async () => {
-  const { nodeId } = await setupVenue();
-  const shutdown = createAdminShutdown({
-    check: async () => {
-      throw new Error("Backup failed");
-    },
-    save: async () => {},
-    clear: async () => {},
-  });
-  const app = buildApp(nodeId, {
-    now: new Date(),
-    tlsCertPath: undefined,
-    shutdown: { ...shutdown, available: async () => true },
-  });
-  const admin = await login(app, "owner@example.test", "dashPass123");
-  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin, false));
-  const manager = await login(app, MANAGER_EMAIL);
-  const socket = new TLSSocket(new Socket());
-  const request = (cookie: string, secure: boolean, decision: string) =>
-    app.request(
-      "https://box.example/api/box/shutdown",
-      {
-        method: "PATCH",
-        headers: { cookie, "content-type": "application/json" },
-        body: JSON.stringify({ decision }),
+it.each([
+  ["paused", "shut-down-anyway"],
+  ["stalled", "keep-waiting"],
+] as const)(
+  "requires a box administrator on HTTPS to resolve a %s shutdown check",
+  async (phase, decision) => {
+    const { nodeId } = await setupVenue();
+    const shutdown = createAdminShutdown({
+      async check(signal, context) {
+        if (phase === "stalled") return context.waitForUpload(signal);
+        throw new Error("Backup failed");
       },
-      secure ? { incoming: { socket } } : undefined,
-    );
-  try {
-    shutdown.start();
-    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
-    expect((await request(admin, false, "shut-down-anyway")).status).toBe(403);
-    expect((await request(manager, true, "shut-down-anyway")).status).toBe(403);
-    expect((await request(admin, true, "unknown")).status).toBe(400);
-    expect(shutdown.status().phase).toBe("paused");
-    expect((await request(admin, true, "shut-down-anyway")).status).toBe(202);
-    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready", checked: false }));
-  } finally {
-    await shutdown.close();
-    socket.destroy();
-  }
-});
+      save: async () => {},
+      clear: async () => {},
+    });
+    const app = buildApp(nodeId, {
+      now: new Date(),
+      tlsCertPath: undefined,
+      shutdown: { ...shutdown, available: async () => true },
+    });
+    const admin = await login(app, "owner@example.test", "dashPass123");
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin, false));
+    const manager = await login(app, MANAGER_EMAIL);
+    const socket = new TLSSocket(new Socket());
+    const request = (cookie: string, secure: boolean, decision: string) =>
+      app.request(
+        "https://box.example/api/box/shutdown",
+        {
+          method: "PATCH",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ decision }),
+        },
+        secure ? { incoming: { socket } } : undefined,
+      );
+    try {
+      shutdown.start();
+      await vi.waitFor(() => expect(shutdown.status().phase).toBe(phase));
+      expect((await request(admin, false, decision)).status).toBe(403);
+      expect((await request(manager, true, decision)).status).toBe(403);
+      expect((await request(admin, true, "unknown")).status).toBe(400);
+      const unsupported = await request(admin, true, "continue-shutdown");
+      expect(unsupported.status).toBe(400);
+      expect(await unsupported.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "decision" } },
+      });
+      expect(shutdown.status().phase).toBe(phase);
+      expect((await request(admin, true, decision)).status).toBe(202);
+      await vi.waitFor(() =>
+        expect(shutdown.status()).toEqual(
+          decision === "keep-waiting" ? { phase: "ready" } : { phase: "ready", checked: false },
+        ),
+      );
+    } finally {
+      await shutdown.close();
+      socket.destroy();
+    }
+  },
+);
 
 it("restricts the shutdown archive and its confirmation to box administrators on HTTPS", async () => {
   const { nodeId } = await setupVenue();

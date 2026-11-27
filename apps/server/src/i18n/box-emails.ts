@@ -42,6 +42,17 @@ export const SHUTDOWN_PAUSED_EMAIL_WORDS = {
   },
 } as const;
 
+export const SHUTDOWN_UPLOAD_STALLED_EMAIL_WORDS = {
+  en: {
+    subject: "{venue}: the final backup upload stalled",
+    text: "The final backup upload at {venue} timed out and the box paused shutdown. If it is still paused, use an account with Manage the system and Manage boxes to decide what to do in Box status.",
+  },
+  es: {
+    subject: "{venue}: se detuvo el envío de la última copia de seguridad",
+    text: "Se agotó el tiempo de espera al enviar la última copia de seguridad de {venue} y el servidor pausó el apagado. Si sigue en pausa, usa una cuenta con Gestionar el sistema y Gestionar servidores y decide en Estado del servidor.",
+  },
+} as const;
+
 export const UNPLANNED_STOP_EMAIL_WORDS = {
   en: {
     subject: "{venue}: the box stopped without warning",

@@ -290,6 +290,48 @@ it("rehearses placement of its saved shutdown archive and clears the private cop
   }
 });
 
+it("keeps one staged shutdown archive until the upload and readback finish", async () => {
+  const folder = await makeDestDir();
+  const { sup, backends, restoreScratch } = await shutdownSupervisor([folder]);
+  const backend: StorageBackend = backends[0]!;
+  const choice = gate();
+  const put = backend.putFile.bind(backend);
+  const calls = vi.spyOn(backend, "putFile").mockImplementation(async (key, source, call) => {
+    await call.onUploadTimeout?.(call.signal);
+    await put(key, source, call);
+  });
+  const readBack = vi.spyOn(backend, "getFile");
+  let running: Promise<void> | undefined;
+  try {
+    await sup.runNow();
+    expect(calls.mock.calls[0]?.[2]).toEqual({ signal: expect.any(AbortSignal) });
+    const waiting = gate<"waiting">();
+    running = sup.runForShutdown(new AbortController().signal, null, async () => {
+      waiting.entered("waiting");
+      await choice.released;
+    });
+    expect(await Promise.race([waiting.reached, running.then(() => "done")])).toBe("waiting");
+    expect(calls).toHaveBeenCalledTimes(2);
+    const source = calls.mock.calls[1]![1];
+    expect((await stat(source)).size).toBeGreaterThan(0);
+    expect(readBack).not.toHaveBeenCalled();
+    choice.release();
+    await running;
+    expect(calls).toHaveBeenCalledTimes(2);
+    expect(readBack).toHaveBeenCalledWith(
+      calls.mock.calls[1]![0],
+      expect.any(String),
+      expect.anything(),
+    );
+    await expect(stat(source)).rejects.toHaveProperty("code", "ENOENT");
+    expect(await readdir(restoreScratch)).toEqual([]);
+  } finally {
+    choice.release();
+    await running?.catch(() => {});
+    await sup.stop();
+  }
+});
+
 async function shutdownSupervisor(folders: string[], statfs?: BackupSupervisorDeps["statfs"]) {
   const stateDir = await makeStateDir();
   const venueDir = await makeVenueDir();
