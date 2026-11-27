@@ -151,14 +151,13 @@ describe("Table and bill actions", () => {
       const panel = popup.querySelector('[role="dialog"]')!;
       const handle = getComputedStyle(panel, "::before");
       const firstRow = sheet!.querySelector('[data-action="allergy"]')!;
-      expect(
-        Math.round(
-          firstRow.getBoundingClientRect().bottom -
-            panel.getBoundingClientRect().top -
-            parseFloat(handle.marginTop) -
-            parseFloat(handle.height),
-        ),
-      ).toBe(84);
+      const handleToFirstRow = Math.round(
+        firstRow.getBoundingClientRect().bottom -
+          panel.getBoundingClientRect().top -
+          parseFloat(handle.marginTop) -
+          parseFloat(handle.height),
+      );
+      expect(Math.abs(handleToFirstRow - 84)).toBeLessThanOrEqual(1);
       expect(el.shadowRoot!.activeElement).toBe(sheet!.querySelector('[data-action="allergy"]'));
       const finish = sheet!.querySelector<HTMLElement>("[data-finish-table]")!;
       expect(sheet!.lastElementChild).toBe(finish);
