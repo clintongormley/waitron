@@ -3824,7 +3824,7 @@ export const es: Record<StringKey, string> = {
   "floor.open_station": "Abrir {station}",
   "floor.status_seated": "Ocupada",
   "floor.map_label": "Mesas",
-  "floor.map_pan": "Arrastra para ver más mesas",
+  "floor.map_pan": "Arrastra para ver más",
   "floor.table_title": "Mesa {table}",
   "floor.saved_as": "Guardada como {name}",
   "floor.seats": "{n} plazas",

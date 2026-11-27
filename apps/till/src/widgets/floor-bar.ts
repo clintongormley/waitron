@@ -1,9 +1,12 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import type { FloorCueIcon, ZoneTab } from "@waitron/ui";
 import type { TableState } from "../api/floor-api.js";
+import { helpBadgeLabel, helpText, type HelpKey } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, t } from "../i18n/t.js";
 import { kindCue, kindWords, mapKinds, topTabKind, type MapKind } from "../state/floor-look.js";
+
+import "@waitron/ui/src/components/wt-menu-row.js";
 
 type Marks = ReadonlyMap<string, { kind: MapKind; words: string }>;
 
@@ -71,15 +74,8 @@ export const floorBarStyles = css`
   .floor-bar {
     --wt-floor-menu-font-size: calc((var(--wt-font-size-md) + var(--wt-font-size-lg)) / 2);
     --wt-floor-name-font-size: calc((var(--wt-floor-menu-font-size) + var(--wt-font-size-lg)) / 2);
-    --wt-floor-bar-height: 0px;
     --wt-row-actions-sheet-inline-inset: var(--wt-page-padding, 0px);
-    --wt-row-actions-bottom-offset: calc(
-      var(--wt-floor-bar-height, 0px) + var(--wt-page-padding, 0px)
-    );
-    --wt-row-actions-sheet-scrim: linear-gradient(
-      var(--wt-color-scrim) calc(100% - var(--wt-row-actions-bottom-offset)),
-      transparent 0
-    );
+    position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: var(--wt-space-2);
@@ -97,6 +93,17 @@ export const floorBarStyles = css`
     .floor-bar {
       --wt-row-actions-sheet-inline-inset: 0px;
     }
+    .floor-bar::after {
+      content: "";
+      position: absolute;
+      inset: 100% 0 auto;
+      block-size: var(--wt-page-padding, 0px);
+      background: inherit;
+      pointer-events: none;
+    }
+  }
+  .floor-bar wt-row-actions::part(sheet) {
+    padding-block-end: 0;
   }
   .floor-bar > [data-view-toggle]::part(button) {
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
@@ -108,11 +115,17 @@ export const floorBarStyles = css`
     background: var(--wt-color-surface);
   }
   .floor-bar [data-floor-zone-chooser]::part(trigger) {
+    padding-inline: var(--wt-space-3);
     overflow-wrap: anywhere;
     justify-content: start;
     font-size: var(--wt-font-size-lg);
     font-weight: var(--wt-font-weight-bold);
     text-align: start;
+  }
+  .floor-zone-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(var(--wt-space-2) + var(--wt-space-1));
   }
   .floor-bar .floor-menu::part(trigger) {
     min-inline-size: calc(var(--wt-tap-min) + var(--wt-space-1));
@@ -121,19 +134,9 @@ export const floorBarStyles = css`
     inset-block-start: calc(-1 * var(--wt-space-1));
     inset-inline-end: calc(-1 * var(--wt-space-1));
   }
-  .floor-bar wt-row-actions::part(sheet)::before {
-    content: "";
-    display: block;
-    inline-size: var(--wt-tap-min);
-    block-size: var(--wt-space-1);
-    flex: none;
-    align-self: center;
-    margin-block: var(--wt-space-1) var(--wt-space-2);
-    border-radius: var(--wt-radius-full);
-    background: var(--wt-color-border);
-  }
   .floor-bar [data-floor-zone] {
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-4));
+    padding-inline: var(--wt-menu-row-padding-start) var(--wt-space-4);
     border-block-end: 1px solid var(--wt-color-border);
     border-radius: 0;
     font-size: var(--wt-floor-name-font-size);
@@ -144,6 +147,7 @@ export const floorBarStyles = css`
     color: var(--wt-action-native-icon-color);
   }
   .floor-bar [data-open-device-zones] {
+    min-block-size: var(--wt-menu-row-height);
     justify-content: center;
     color: var(--wt-color-primary-text);
     font-size: calc((var(--wt-font-size-md) + var(--wt-floor-menu-font-size)) / 2);
@@ -192,11 +196,17 @@ export const floorBarStyles = css`
   }
   .floor-bar .floor-menu wt-button:not([data-clock-action="out"])::part(button) {
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
-    border-block-end: 1px solid var(--wt-color-border);
     border-radius: 0;
     font-size: var(--wt-floor-menu-font-size);
   }
-  .floor-bar .floor-menu wt-button:not([data-clock-action="out"], .logout)::part(button)::after {
+  .floor-bar .floor-menu wt-button:not([data-clock-action="out"], .logout)::part(button) {
+    border-block-end: 1px solid var(--wt-color-border);
+  }
+  .floor-bar
+    .floor-menu
+    wt-button:is([data-clock-action]:not([data-clock-action="out"]), [data-clock-retry])::part(
+      button
+    )::after {
     content: "›" / "";
     margin-inline-start: auto;
     color: var(--wt-color-text-muted);
@@ -204,13 +214,6 @@ export const floorBarStyles = css`
   .floor-bar .floor-menu .logout::part(button) {
     color: var(--wt-color-primary-text);
     font-weight: var(--wt-font-weight-bold);
-  }
-  .floor-bar [data-floor-count] {
-    margin-inline-start: auto;
-    color: var(--wt-color-text-muted);
-  }
-  .floor-bar .floor-menu wt-button:has([data-floor-count])::part(button)::after {
-    margin-inline-start: 0;
   }
   .floor-operator {
     display: flex;
@@ -267,6 +270,73 @@ export const floorBarStyles = css`
   }
 `;
 
+export function floorMoreSheet(count: number | undefined, contents: TemplateResult) {
+  const pending = count !== undefined && count > 0;
+  return html`<wt-row-actions
+    class="floor-menu"
+    data-test="more-menu"
+    icon="hamburger"
+    .iconSize=${"lg"}
+    bottom-sheet
+    sheet-variant="menu"
+    focus-sheet
+    label=${pending ? countText(count, "shell.more_transfers", "shell.more_transfers_one") : t("shell.more")}
+  >
+    ${pending ? html`<wt-count-badge slot="badge" tone="warning" .count=${count}></wt-count-badge>` : nothing}
+    ${contents}
+  </wt-row-actions>`;
+}
+
+export function floorMoreRow(
+  label: string,
+  press: (event: Event) => void,
+  options: {
+    className?: string;
+    value?: number;
+    help?: HelpKey;
+    transfers?: boolean;
+    report?: boolean;
+  },
+) {
+  return html`<wt-menu-row
+    action
+    divider
+    chevron
+    class=${options.className ?? nothing}
+    .label=${label}
+    .value=${options.value ?? ""}
+    help=${options.help === undefined ? nothing : helpText(options.help)}
+    help-label=${helpBadgeLabel(label)}
+    ?data-open-transfers=${options.transfers}
+    ?data-report-problem=${options.report}
+    @click=${press}
+  ></wt-menu-row>`;
+}
+
+export function floorHoursRows(busy: boolean, press: (type: "my-hours" | "fix-my-hours") => void) {
+  const label = t("attendance.fix_hours");
+  return html`<wt-menu-row
+      action
+      divider
+      chevron
+      data-my-hours
+      .disabled=${busy}
+      .label=${t("hours.mine")}
+      @click=${() => press("my-hours")}
+    ></wt-menu-row>
+    <wt-menu-row
+      action
+      divider
+      chevron
+      data-fix-hours
+      .disabled=${busy}
+      .label=${label}
+      help=${helpText("help.person.fix_hours")}
+      help-label=${helpBadgeLabel(label)}
+      @click=${() => press("fix-my-hours")}
+    ></wt-menu-row>`;
+}
+
 export function floorMenuSection(label: StringKey, rows: TemplateResult) {
   return html`<section class="settings-group" aria-label=${t(label)}>
     <span class="settings-heading">${t(label)}</span>${rows}
@@ -292,7 +362,10 @@ export function floorOperatorLine(
 
 export function measureFloorControls(controls: HTMLElement): number {
   const bar = controls.querySelector("footer")!;
-  bar.style.setProperty("--wt-floor-bar-height", `${bar.getBoundingClientRect().height}px`);
+  bar.style.setProperty(
+    "--wt-menu-sheet-bottom-offset",
+    `${Math.max(0, innerHeight - bar.getBoundingClientRect().top)}px`,
+  );
   return controls.getBoundingClientRect().height;
 }
 
@@ -306,8 +379,16 @@ export function floorZoneControls(
   choose: () => void,
 ) {
   const name = tabs.find((tab) => tab.key === active)?.name ?? t("floor.zones");
-  return html`<wt-row-actions data-floor-zone-chooser bottom-sheet label=${name}>
-      <span slot="trigger">${name} <span aria-hidden="true">⌃</span></span>
+  return html`<wt-row-actions
+      data-floor-zone-chooser
+      bottom-sheet
+      sheet-variant="menu"
+      label=${name}
+      sheet-label=${t("floor.zones")}
+    >
+      <span slot="trigger" class="floor-zone-trigger"
+        ><span>${name}</span><span aria-hidden="true">⌃</span></span
+      >
       <div role="menu" aria-label=${t("floor.zones")}>
         ${tabs.map(({ key, name }) => {
           const mark = marks.get(key);

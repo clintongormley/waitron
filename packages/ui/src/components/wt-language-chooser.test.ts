@@ -1147,6 +1147,17 @@ describe('wt-language-chooser layout="group"', () => {
     expect(el.shadowRoot!.querySelector("[popover]")).toBeNull();
   });
 
+  it("uses regular weight for both choices in the segmented layout", async () => {
+    const el = await mountGroup({ active: "es-ES", loadLocales: twoLocales });
+    el.layout = "segmented";
+    await el.updateComplete;
+    const normal = getComputedStyle(host).getPropertyValue("--wt-font-weight-normal").trim();
+    expect(choicesOf(el).map((choice) => getComputedStyle(choice).fontWeight)).toEqual([
+      normal,
+      normal,
+    ]);
+  });
+
   it("marks the active language alone as pressed, and follows its parent when it changes", async () => {
     const el = await mountGroup({ active: "es-ES", loadLocales: twoLocales });
     expect(choicesOf(el).map((b) => b.getAttribute("aria-pressed"))).toEqual(["true", "false"]);

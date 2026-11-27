@@ -77,6 +77,7 @@ export class WtRowActions extends LitElement {
     baseStyles,
     css`
       :host {
+        --wt-row-actions-bottom-offset: 0px;
         display: inline-block;
       }
       button {
@@ -126,16 +127,13 @@ export class WtRowActions extends LitElement {
         max-width: none;
         min-width: 0;
         max-height: none;
-        --bottom-sheet-inset: max(
-          var(--wt-keyboard-inset),
-          var(--wt-row-actions-bottom-offset, 0px)
-        );
+        --bottom-sheet-inset: max(var(--wt-keyboard-inset), var(--wt-row-actions-bottom-offset));
         padding: var(--wt-keyboard-top) var(--wt-row-actions-sheet-inline-inset, 0px)
           var(--bottom-sheet-inset);
         overflow: hidden;
         border: 0;
         border-radius: 0;
-        background: var(--wt-row-actions-sheet-scrim, var(--wt-color-scrim));
+        background: var(--wt-color-scrim);
       }
       :host([bottom-sheet]) [popover]:is(:popover-open, .\\:popover-open) {
         display: grid;
@@ -260,6 +258,8 @@ export class WtRowActions extends LitElement {
   @property({ type: Boolean, attribute: "bottom-sheet", reflect: true }) bottomSheet = false;
   @property({ attribute: "sheet-variant", reflect: true }) sheetVariant: "menu" | "" = "";
   @property({ attribute: "sheet-heading" }) sheetHeading = "";
+  @property({ attribute: "sheet-label" }) sheetLabel = "";
+  @property({ type: Boolean, attribute: "focus-sheet" }) focusSheet = false;
   @state() private expanded = false;
   @state() private isMenu = false;
   @state() private directDelete: HTMLElement | null = null;
@@ -338,7 +338,7 @@ export class WtRowActions extends LitElement {
       const first = this.sheetControls().find(
         (control) => control.getAttribute("aria-disabled") !== "true",
       );
-      (first ?? this.actions).focus();
+      (this.focusSheet ? this.actions : (first ?? this.actions)).focus();
     }
   }
 
@@ -539,8 +539,10 @@ export class WtRowActions extends LitElement {
     if (this.menuContent() === undefined) {
       if (!this.menuSheet || event.key !== "Tab") return;
       const controls = this.sheetControls();
-      const current = controls.indexOf(event.composedPath()[0] as HTMLElement);
+      const target = event.composedPath()[0] as HTMLElement;
+      const current = controls.indexOf(target);
       if (current >= 0 && controls[current + (event.shiftKey ? -1 : 1)]) return;
+      if (target === this.actions && !event.shiftKey && controls.length > 0) return;
       event.preventDefault();
       this.hide({ restoreFocus: true });
       return;
@@ -590,7 +592,7 @@ export class WtRowActions extends LitElement {
           role=${this.menuSheet ? "dialog" : nothing}
           tabindex=${this.menuSheet ? -1 : nothing}
           aria-labelledby=${this.menuSheet && this.sheetHeading ? "sheet-heading" : nothing}
-          aria-label=${this.menuSheet && !this.sheetHeading ? this.label : nothing}
+          aria-label=${this.menuSheet && !this.sheetHeading ? this.sheetLabel || this.label : nothing}
           @click=${this.judgeAction}
           @auxclick=${this.judgeAuxclick}
         >

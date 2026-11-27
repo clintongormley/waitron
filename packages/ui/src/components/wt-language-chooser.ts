@@ -128,7 +128,7 @@ export class WtLanguageChooser extends LitElement {
 
       :host([layout="segmented"]) .choice {
         border-radius: 0;
-        font-weight: var(--wt-font-weight-bold);
+        font-weight: var(--wt-font-weight-normal);
       }
 
       :host([layout="segmented"]) .choice:first-child {

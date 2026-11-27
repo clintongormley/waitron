@@ -26,7 +26,10 @@ import { countText, currentLocale, t } from "../i18n/t.js";
 import type { TillFloorScreen } from "../screens/till-floor-screen.js";
 import {
   floorBarStyles,
+  floorHoursRows,
   floorMenuSection,
+  floorMoreRow,
+  floorMoreSheet,
   floorOperatorLine,
   measureFloorControls,
 } from "./floor-bar.js";
@@ -172,15 +175,14 @@ export class TillShell extends LitElement {
     });
   }
 
-  /** More's About Waitron: focus goes back to More's own button, the menu having closed. */
   #aboutOption(inFloorMenu = false): TemplateResult {
-    return html`<wt-button
-      icon=${inFloorMenu ? nothing : "menu-details"}
-      class="about"
-      @click=${(event: Event) =>
-        this.#openAbout((event.currentTarget as HTMLElement).closest("wt-row-actions")!)}
-      >${t("about.title")}</wt-button
-    >`;
+    const open = (event: Event) =>
+      this.#openAbout((event.currentTarget as HTMLElement).closest("wt-row-actions")!);
+    return inFloorMenu
+      ? floorMoreRow(t("about.title"), open, { className: "about" })
+      : html`<wt-button icon="menu-details" class="about" @click=${open}
+          >${t("about.title")}</wt-button
+        >`;
   }
 
   #aboutCorner(): TemplateResult {
@@ -806,6 +808,7 @@ export class TillShell extends LitElement {
             continue;
           }
           this.#setNarrowFloor(entry.contentRect.width < 800);
+          if (this.#floorControls) measureFloorControls(this.#floorControls);
           if (this.formFactor === "till") {
             void this.#measureCounterLogo();
             continue;
@@ -1167,24 +1170,24 @@ export class TillShell extends LitElement {
       help?: HelpKey,
       opensTransfers = false,
     ): TemplateResult =>
-      this.#withHelp(
-        html`<wt-button
-          icon=${inFloorMenu ? nothing : cls === "zones" || cls === "equipment" ? "menu-settings" : "menu-open"}
-          class=${cls}
-          ?data-open-transfers=${opensTransfers}
-          @click=${() => this.#emit(type)}
-          >${label}
-          ${
-            inFloorMenu && opensTransfers && this.transferCount !== undefined
-              ? html`<span data-floor-count data-test="department-transfers"
-                  >${this.transferCount}</span
-                >`
-              : nothing
-          }</wt-button
-        >`,
-        help,
-        label,
-      );
+      inFloorMenu
+        ? floorMoreRow(label, () => this.#emit(type), {
+            className: cls === nothing ? undefined : cls,
+            value: opensTransfers ? this.transferCount : undefined,
+            help,
+            transfers: opensTransfers,
+          })
+        : this.#withHelp(
+            html`<wt-button
+              icon=${cls === "zones" || cls === "equipment" ? "menu-settings" : "menu-open"}
+              class=${cls}
+              ?data-open-transfers=${opensTransfers}
+              @click=${() => this.#emit(type)}
+              >${label}</wt-button
+            >`,
+            help,
+            label,
+          );
     const affordance = (item: ShellAffordance, type: string, label: string, help?: HelpKey) =>
       this.affordances.includes(item) ? button(item, type, label, help) : nothing;
     return {
@@ -1292,9 +1295,10 @@ export class TillShell extends LitElement {
 
   #operatorHours(inFloorMenu = false): TemplateResult | typeof nothing {
     if (!this.clockAvailable) return nothing;
+    if (inFloorMenu) return floorHoursRows(this.hoursBusy, (type) => this.#emit(type));
     return html`
       <wt-button
-        icon=${inFloorMenu ? nothing : "menu-hours"}
+        icon="menu-hours"
         data-my-hours
         .disabled=${this.hoursBusy}
         @click=${() => this.#emit("my-hours")}
@@ -1302,7 +1306,7 @@ export class TillShell extends LitElement {
       >
       ${this.#withHelp(
         html`<wt-button
-          icon=${inFloorMenu ? nothing : "menu-edit"}
+          icon="menu-edit"
           data-fix-hours
           .disabled=${this.hoursBusy}
           @click=${() => this.#emit("fix-my-hours")}
@@ -1421,54 +1425,45 @@ export class TillShell extends LitElement {
 
   #floorMenu(floor: TillFloorScreen): TemplateResult {
     const items = this.#items(true);
-    const pending = this.transferCount !== undefined && this.transferCount > 0;
-    return html`<wt-row-actions
-      class="floor-menu"
-      data-test="more-menu"
-      icon="hamburger"
-      .iconSize=${"lg"}
-      bottom-sheet
-      label=${pending ? countText(this.transferCount!, "shell.more_transfers", "shell.more_transfers_one") : t("shell.more")}
-    >
-      ${pending ? html`<wt-count-badge slot="badge" tone="warning" .count=${this.transferCount!}></wt-count-badge>` : nothing}
-      <section aria-label=${t("floor.menu_you")}>${this.#operatorActions(false, true)}</section>
-      ${floor.zonePlanRows()}
-      ${floorMenuSection("floor.menu_bills_cash", html`${items["find-bill"]}${this.#drawerItem("cash", true)}${this.#drawerItem("close", true)}${items["transfer-button"]}`)}
-      ${floorMenuSection("floor.menu_time", html`${this.#operatorHours(true)}${items.schedule}`)}
-      ${floorMenuSection(
-        "floor.menu_device",
-        html`
-          ${this.#chooser("segmented")}
-          <div class="floor-help">
-            <span aria-hidden="true">${helpText("help.label")}</span>${this.#helpSwitch()}
-          </div>
-          <details class="settings-group">
-            <summary class="settings-heading">${t("device_zones.settings")}</summary>
-            ${items.equipment}${items.profile}${this.#themeChoices()}
-          </details>
-          ${items.expo}${this.formFactor !== "till" || this.testingKitchen ? items.station : nothing}
-          ${this.#reportOption(true)}${this.#aboutOption(true)} ${this.#logoutButton(true)}
-          ${this.#poweredBy()}
-        `,
-      )}
-    </wt-row-actions>`;
+    return floorMoreSheet(
+      this.transferCount,
+      html`
+        <section aria-label=${t("floor.menu_you")}>${this.#operatorActions(false, true)}</section>
+        ${floor.zonePlanRows()}
+        ${floorMenuSection("floor.menu_bills_cash", html`${items["find-bill"]}${this.#drawerItem("cash", true)}${this.#drawerItem("close", true)}${items["transfer-button"]}`)}
+        ${floorMenuSection("floor.menu_time", html`${this.#operatorHours(true)}${items.schedule}`)}
+        ${floorMenuSection(
+          "floor.menu_device",
+          html`
+            ${this.#chooser("segmented")}
+            <div class="floor-help">
+              <span aria-hidden="true">${helpText("help.label")}</span>${this.#helpSwitch()}
+            </div>
+            <details class="settings-group">
+              <summary class="settings-heading">${t("device_zones.settings")}</summary>
+              ${items.equipment}${items.profile}${this.#themeChoices()}
+            </details>
+            ${items.expo}${this.formFactor !== "till" || this.testingKitchen ? items.station : nothing}
+            ${this.#reportOption(true)}${this.#aboutOption(true)} ${this.#logoutButton(true)}
+            ${this.#poweredBy()}
+          `,
+        )}
+      `,
+    );
   }
 
   #reportOption(inFloorMenu = false): TemplateResult | typeof nothing {
-    return reportAvailable()
-      ? html`<wt-button
-          icon=${inFloorMenu ? nothing : "menu-report"}
-          data-report-problem
-          class="report-problem"
-          @click=${(event: Event) => {
-            const menu = (event.currentTarget as HTMLElement).closest<WtRowActions>(
-              "wt-row-actions",
-            )!;
-            this.#emit("open-problem-report", { opener: menu });
-          }}
-          >${t("problem_report.title")}</wt-button
-        >`
-      : nothing;
+    if (!reportAvailable()) return nothing;
+    const open = (event: Event) =>
+      this.#emit("open-problem-report", {
+        opener: (event.currentTarget as HTMLElement).closest<WtRowActions>("wt-row-actions")!,
+      });
+    const label = t("problem_report.title");
+    return inFloorMenu
+      ? floorMoreRow(label, open, { className: "report-problem", report: true })
+      : html`<wt-button icon="menu-report" data-report-problem class="report-problem" @click=${open}
+          >${label}</wt-button
+        >`;
   }
 
   #poweredBy(): TemplateResult | typeof nothing {
@@ -1480,17 +1475,26 @@ export class TillShell extends LitElement {
   }
 
   #drawerItem(action: "close" | "cash", inFloorMenu = false) {
-    return this.canCloseDrawer
-      ? html`<wt-button
-          icon=${inFloorMenu ? nothing : action === "close" ? "menu-drawer" : "menu-cash"}
+    if (!this.canCloseDrawer) return nothing;
+    const open = (event: Event) =>
+      this.#emit(`open-drawer-${action}`, {
+        opener: (event.currentTarget as HTMLElement).closest("wt-row-actions"),
+      });
+    const label = t(
+      action === "cash"
+        ? "drawer_entry.title"
+        : inFloorMenu
+          ? "floor.close_drawer"
+          : "drawer_close.title",
+    );
+    return inFloorMenu
+      ? floorMoreRow(label, open, { className: `drawer-${action}` })
+      : html`<wt-button
+          icon=${action === "close" ? "menu-drawer" : "menu-cash"}
           class=${`drawer-${action}`}
-          @click=${(event: Event) =>
-            this.#emit(`open-drawer-${action}`, {
-              opener: (event.currentTarget as HTMLElement).closest("wt-row-actions"),
-            })}
-          >${t(action === "cash" ? "drawer_entry.title" : inFloorMenu ? "floor.close_drawer" : "drawer_close.title")}</wt-button
-        >`
-      : nothing;
+          @click=${open}
+          >${label}</wt-button
+        >`;
   }
 
   #tillMenu(): TemplateResult {

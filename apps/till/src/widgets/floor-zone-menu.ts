@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, inNumberOrder } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-row-actions.js";
+import "@waitron/ui/src/components/wt-menu-row.js";
 import type { FloorZone, TableState } from "../api/floor-api.js";
 import { t } from "../i18n/t.js";
 import { shownName, sparesOf, takenOffOf } from "../state/floor-today.js";
@@ -164,40 +165,44 @@ export class TillFloorZoneMenu extends LitElement {
     const zone = this.zone;
     if (!zone || !this.canChangeToday) return nothing;
     const setName = zone.layoutSetName;
+    const row = (item: Dialog, label: string, icon: string, count?: number) =>
+      embedded
+        ? html`<wt-menu-row
+            action
+            divider
+            chevron
+            .label=${label}
+            .value=${count ?? ""}
+            data-menu-item=${item}
+            @click=${() => this.openPlanAction(item)}
+          ></wt-menu-row>`
+        : html`<wt-button
+            icon=${icon}
+            data-menu-item=${item}
+            @click=${() => this.openPlanAction(item)}
+            >${label}</wt-button
+          >`;
     return html`${
-        this.phone || embedded
-          ? html`<p class="heading" data-menu-heading>
-              ${t(embedded ? "floor.zone_service" : "floor.zone_menu_heading").replace("{zone}", () => zone.name)}
-            </p>`
-          : nothing
-      }
-      <wt-button
-        icon=${embedded ? nothing : "menu-add"}
-        data-menu-item="spares"
-        @click=${() => this.openPlanAction("spares")}
-      >
-        ${t("floor.add_spare")}
-        ${embedded ? html`<span data-floor-count>${sparesOf(this.tables).length}</span>` : nothing}
-      </wt-button>
-      <wt-button
-        icon=${embedded ? nothing : "menu-open"}
-        data-menu-item="taken-off"
-        @click=${() => this.openPlanAction("taken-off")}
-      >
-        ${t(embedded ? "floor.taken_off_service" : "floor.taken_off")}
-        ${embedded ? html`<span data-floor-count>${takenOffOf(this.tables).length}</span>` : nothing}
-      </wt-button>
-      ${
-        setName === null
-          ? nothing
-          : html`<wt-button
-              icon=${embedded ? nothing : "menu-reset-plan"}
-              data-menu-item="reset"
-              @click=${() => this.openPlanAction("reset")}
-            >
-              ${t(embedded ? "floor.return_to_plan" : "floor.reset_plan").replace("{set}", () => setName)}
-            </wt-button>`
-      }`;
+      this.phone || embedded
+        ? html`<p class="heading" data-menu-heading>
+            ${t(embedded ? "floor.zone_service" : "floor.zone_menu_heading").replace("{zone}", () => zone.name)}
+          </p>`
+        : nothing
+    }
+    ${row("spares", t("floor.add_spare"), "menu-add", embedded ? sparesOf(this.tables).length : undefined)}
+    ${row("taken-off", t(embedded ? "floor.taken_off_service" : "floor.taken_off"), "menu-open", embedded ? takenOffOf(this.tables).length : undefined)}
+    ${
+      setName === null
+        ? nothing
+        : row(
+            "reset",
+            t(embedded ? "floor.return_to_plan" : "floor.reset_plan").replace(
+              "{set}",
+              () => setName,
+            ),
+            "menu-reset-plan",
+          )
+    }`;
   }
 
   override render() {
