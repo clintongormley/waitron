@@ -2975,6 +2975,20 @@ describe("till-menu-browser", () => {
       expect(names(entries(el, "structure"))).toEqual(["Favourites (EN)", "Comida (ES)"]);
     });
 
+    it("goes home with no notice when the till switches to another menu, and again on the way back", async () => {
+      const { el } = await mount();
+      await tap(el, entry(el, "structure", "Drinks (EN)"));
+      el.menu = lunch({ id: "menu-dinner", structure: { members: [favourites, food] } });
+      await el.updateComplete;
+      expect(notice(el)).toBeNull();
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+      el.menu = lunch();
+      await el.updateComplete;
+      expect(notice(el)).toBeNull();
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+      expect(names(entries(el, "structure"))).toContain("Drinks (EN)");
+    });
+
     it("says Not found when the open section's parent no longer holds it", async () => {
       const { el } = await mount();
       await tap(el, entry(el, "structure", "Drinks (EN)"));

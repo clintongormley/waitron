@@ -647,6 +647,12 @@ export class TillMenuBrowser extends LitElement {
     }
     if (this.menu === undefined) return;
     const pending = this.#pendingSection;
+    const previous = changed.get("menu") as TillZoneMenu | undefined;
+    if (previous !== undefined && previous.id !== this.menu.id) {
+      // Another menu's sections are not this one's; a search result waiting for it opens below.
+      this.notFound = false;
+      this.path = [];
+    }
     if (pending !== undefined) {
       const target = orderableMenus(this.menus).find((menu) => menu.id === pending.menuId);
       const arrived = this.menu.id === pending.menuId;
