@@ -186,7 +186,7 @@ it("refuses a master key over 4,096 bytes as masterKey before opening any copy",
   expect(read).not.toHaveBeenCalled();
 });
 it.each([
-  [{ "content-type": "application/json" }, new Uint8Array([1]), "artifact"],
+  [{ "content-type": "text/plain" }, new Uint8Array([1]), "artifact"],
   [{}, new Uint8Array(), "artifact"],
   [{ "x-waitron-master-key": "" }, new Uint8Array([1]), "masterKey"],
   [{ "x-waitron-restore-environment": "dev" }, new Uint8Array([1]), "environment"],
@@ -208,6 +208,55 @@ it.each([
     expect(read).not.toHaveBeenCalled();
   },
 );
+it.each<[string, (file: object) => Record<string, unknown>, string]>([
+  ["no file", () => ({ masterKey: MASTER_KEY_TEXT, environment: "preproduction" }), "file"],
+  [
+    "a file outside the drive",
+    (file) => ({
+      file: { ...file, path: `../sdb1/${(file as { path: string }).path}` },
+      masterKey: MASTER_KEY_TEXT,
+      environment: "preproduction",
+    }),
+    "file",
+  ],
+  ["no master key", (file) => ({ file, environment: "preproduction" }), "masterKey"],
+  [
+    "an unknown environment",
+    (file) => ({ file, masterKey: MASTER_KEY_TEXT, environment: "dev" }),
+    "environment",
+  ],
+])("refuses a drive preview with %s before opening any copy", async (_label, body, field) => {
+  const dir = await mkdtemp(join(tmpdir(), "setup-preview-drive-refused-"));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const root = join(dir, "drives");
+  const staging = join(dir, "scratch");
+  const name = backupArchiveKey(new Date("2026-06-01T10:00:00Z"), { nodeId: preview.nodeId });
+  await mkdir(join(root, "sda1"), { recursive: true });
+  await mkdir(staging);
+  await writeFile(join(root, "sda1", name), ARCHIVE);
+  const app = new Hono();
+  const read = vi.fn(async () => preview);
+  mountSetup(
+    app,
+    {
+      environment: "preproduction",
+      receiveArchive: receiveRestoreArchive(staging, root),
+      previewRestore: read,
+    },
+    () => {},
+  );
+  const response = await app.request("/setup-api/restore/preview", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body({ drive: "sda1", path: name })),
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "setup.request_invalid", params: { field } },
+  });
+  expect(read).not.toHaveBeenCalled();
+  expect(await readdir(staging)).toEqual([]);
+});
 it.each([
   ["recovery.passphrase_invalid", 422],
   ["restore.environment_mismatch", 409],

@@ -846,7 +846,11 @@ export function mountSetupOperationRoutes(
               },
               { oldBoxGone },
             );
-            if (drive) await deps.releaseDrives?.();
+            // A drive left mounted read-only harms nothing, so a failed release never refuses.
+            if (drive)
+              await deps
+                .releaseDrives?.()
+                .catch(() => log("warn", "setup.drives_release_failed", {}));
             mustRestart();
             // The restore is already recorded, so it must still answer and restart; the next start
             // that reaches the server's boot clears the staging folder.
