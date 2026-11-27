@@ -4,6 +4,8 @@ import type { TillProduct } from "../api/menu-api.js";
 import { DraftStore } from "../state/draft-sync.js";
 import type { TillBasket } from "../widgets/basket.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
+import { allergenLabel } from "../i18n/allergen-names.js";
+import { en, es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import { beer, flan, mount, resized } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -140,16 +142,25 @@ it("shows the dish's information in Spanish", async () => {
   const el = await open([tortilla, unreviewed]);
   await tapRow(el, 0);
   const facts = info(el, 0)!;
-  expect(text(facts)).toContain("Contiene");
-  expect([...facts.querySelectorAll("[data-allergens] li")].map(text)).toEqual([
-    "Huevos",
-    "Cereales con gluten (Trigo)",
+  const spanish = (key: keyof typeof en) => {
+    expect(es[key]).not.toBe(en[key]);
+    return es[key];
+  };
+  expect(text(facts)).toContain(spanish("allergens.contains"));
+  const allergens = [
+    allergenLabel("eggs", {}, "es"),
+    allergenLabel("gluten", { kinds: ["wheat"] }, "es"),
+  ];
+  expect(allergens).not.toEqual([
+    allergenLabel("eggs", {}, "en"),
+    allergenLabel("gluten", { kinds: ["wheat"] }, "en"),
   ]);
+  expect([...facts.querySelectorAll("[data-allergens] li")].map(text)).toEqual(allergens);
   expect([...facts.querySelectorAll("[data-diet] li")].map(text)).toEqual([
-    "Vegetariano",
-    "Sin carne",
-    "Sin pescado",
+    spanish("diet.vegetarian"),
+    spanish("diet.filter.no_meat"),
+    spanish("diet.filter.no_fish"),
   ]);
   await tapRow(el, 1);
-  expect(text(info(el, 1))).toContain("Alérgenos pendientes de revisión");
+  expect(text(info(el, 1))).toContain(spanish("product_info.not_reviewed"));
 });
