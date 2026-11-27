@@ -153,8 +153,11 @@ it("keeps Spanish photo choices on one line beside the preview", async () => {
   await page.viewport(900, 800);
   setLocale("es");
   await open();
-  for (const name of ["Ninguna", "Pequeñas", "Grandes"]) {
-    const choice = page.getByRole("radio", { name, exact: true });
+  for (const size of ["none", "small", "large"] as const) {
+    const choice = page.getByRole("radio", {
+      name: t(`customer_menu.photos_${size}`),
+      exact: true,
+    });
     await expect.element(choice).toBeVisible();
     const text = document.createRange();
     text.selectNodeContents(choice.element());

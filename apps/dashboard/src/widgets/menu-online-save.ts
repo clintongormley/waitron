@@ -33,7 +33,6 @@ export const menuOnlineStyles = css`
   }
   .online-settings-status {
     display: grid;
-    justify-items: start;
     gap: var(--wt-space-2);
   }
   wt-segmented-control[name="customer-menu-photos"]::part(button) {
@@ -130,6 +129,10 @@ export class MenuOnlineSave implements ReactiveController {
       draft !== null &&
       (draft.address === null ? draft.enabled : !isCustomerMenuAddress(draft.address))
     );
+  }
+
+  get loading(): boolean {
+    return this.draft === null && !this.#loadFailed;
   }
 
   #changed(): void {

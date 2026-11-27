@@ -3339,6 +3339,7 @@ export class MenusScreen extends LitElement {
                       .previewHref=${previewHref}
                       .openPreview=${openPreview}
                       .photos=${this.#onlineSave.draft?.photos ?? "none"}
+                      .waitingForSettings=${this.#onlineSave.loading}
                     ></dashboard-menu-online-preview>
                   </div>
                   ${this.#onlineSave.actions(this.busy)}`

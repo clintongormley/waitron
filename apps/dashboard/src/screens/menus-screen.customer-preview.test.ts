@@ -269,21 +269,31 @@ describe("the customer menu Online preview", () => {
     }
   });
 
-  it("shows the published dishes while the saved photo setting loads", async () => {
-    const settings = Promise.withResolvers<Response>();
-    const { el } = await open(
-      () => Response.json(published()),
-      "light",
-      () => status,
-      () => settings.promise,
-    );
-    const photo = () => customerPage(el)?.shadowRoot?.querySelector(".dish img");
+  it("waits for the saved photo setting before showing the phone preview", async () => {
+    const viewport = [innerWidth, innerHeight] as const;
+    const settings = gate<Response>();
+    const readPreview = vi.spyOn(DashboardApi.prototype, "getCustomerPreview");
+    await page.viewport(390, 800);
     try {
-      await expect.element(page.getByRole("heading", { name: "Lunch for guests" })).toBeVisible();
-      await expect.element(page.getByRole("button", { name: "Roast pepper" })).toBeVisible();
-      expect(photo()).toBeNull();
-    } finally {
+      const { el } = await open(
+        () => Response.json(published()),
+        "light",
+        () => status,
+        () => settings.promise,
+      );
+      const title = page.getByRole("heading", { name: "Lunch for guests" });
+      await vi.waitFor(() => expect(readPreview).toHaveBeenCalled());
+      await readPreview.mock.results[0]?.value;
+      await expect.element(page.getByText("Loading Online settings…")).toBeVisible();
+      await new Promise(requestAnimationFrame);
+      expect(title.query()).toBeNull();
       settings.resolve(Response.json({ enabled: false, address: null, photos: "none" }));
+      await expect.element(title).toBeVisible();
+      expect(customerPage(el)?.shadowRoot?.querySelector(".dish img")).toBeNull();
+    } finally {
+      readPreview.mockRestore();
+      settings.resolve(Response.json({ enabled: false, address: null, photos: "none" }));
+      await page.viewport(...viewport);
     }
   });
 
@@ -306,6 +316,7 @@ describe("the customer menu Online preview", () => {
       await expect
         .element(page.getByText("Could not load the Online settings."), { timeout: 2000 })
         .toBeVisible();
+      await expect.element(page.getByRole("button", { name: "Roast pepper" })).toBeVisible();
       expect(customerPage(el)?.shadowRoot?.querySelector(".dish img")).toBeNull();
       await page.getByRole("button", { name: "Try again", exact: true }).click();
       await vi.waitFor(() =>

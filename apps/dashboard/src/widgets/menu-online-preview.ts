@@ -69,6 +69,7 @@ export class MenuOnlinePreview extends LitElement {
   @property({ attribute: false }) status: MenuStatus | null = null;
   @property({ attribute: false }) defaultLanguage = "en";
   @property({ attribute: false }) photos: CustomerMenuPhotoSize = "large";
+  @property({ attribute: false }) waitingForSettings = false;
   @property({ attribute: false }) previewHref = "";
   @property({ attribute: false }) openPreview?: (event: MouseEvent) => void;
 
@@ -182,6 +183,7 @@ export class MenuOnlinePreview extends LitElement {
   }
 
   protected override render() {
+    if (this.waitingForSettings) return nothing;
     return html`
       ${
         this.status?.state === "changed" && this.answer?.state === "published"
