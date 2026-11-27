@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   adjustments,
+  coveredBySetMenu,
   endAdjustment,
   endingRestores,
   type AdjustmentAction,
@@ -13,13 +14,10 @@ import type { AdjustmentAsk } from "./adjustments-apply.js";
 import { money } from "./bill-allocation.js";
 import { ownSetMenuDiscountIds } from "./set-menu-discount-ending.js";
 
-/**
- * The dishes a set-menu row's comp or discount covers with it (spec section 6, D49): those placed
- * in it that are charged, which is what their supplements are; their paid extras are not covered.
- */
+/** {@link coveredBySetMenu}, for a set-menu row. */
 export function setMenuDishes(target: Row, rows: readonly Row[]): Row[] {
   if (target.setMenuRole !== "set_menu") return [];
-  return rows.filter(({ setMenuLineId, unit }) => setMenuLineId === target.id && unit > 0);
+  return coveredBySetMenu(target.id, rows);
 }
 
 /** A set menu's comp or discount that a new one on it replaces (D52), as a preview answers it. */

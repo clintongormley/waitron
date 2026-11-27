@@ -6,16 +6,24 @@ import {
   approves,
   evaluateCancel,
   evaluateComp,
+  exactOnWholeBill,
   floorAllowance,
   findAdjustmentReason,
+  handOutRows,
   isPercentBp,
+  lineGross,
   percentReduction,
   policySnapshotOf,
+  portionExactness,
   readAdjustmentSettings,
   readReasonStanding,
   recordAdjustment,
-  spreadBillDiscount,
+  spreadOverFiledGroups,
+  spreadSubjects,
   standingOff,
+  takesAlone,
+  withExactness,
+  zeroedRows,
   type AdjustmentAction,
   type AdjustmentReason,
   type AdjustmentSplit,
@@ -26,8 +34,7 @@ import {
   type Approval,
   type CompAction,
   type PricedRow,
-  type SpreadLine,
-  type SpreadResult,
+  type SpreadSubject,
 } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/menu";
 import { insertInChunks, workingOrderLines } from "@waitron/db";
@@ -59,7 +66,6 @@ import {
 import {
   canonical,
   familyAt,
-  gross,
   listValue,
   readRows,
   stageOf,
@@ -296,68 +302,16 @@ function requestedDiscount(ask: AdjustmentAsk, base: Decimal): Decimal {
 }
 
 /** A row an adjustment prices, `quantity` of it, split off with the part of its dish covered when
- * `carved`; `exact` as {@link SpreadLine} takes it, and `exactWhenShort` as {@link spreadReaching}
- * takes it. */
-interface Subject {
-  row: Row;
-  quantity: number;
+ * `carved`. */
+interface Subject extends SpreadSubject<Row> {
   carved: boolean;
-  exact: boolean;
-  exactWhenShort: boolean;
-}
-
-/**
- * Whether a row standing for `lines` takes its share exactly: only when each line is one unmeasured
- * unit, so each takes one of the row's prices whole and no line is split. A dish's row then does;
- * an extra's row only when the exact rows alone miss the discount.
- */
-function portionExactness(
-  lines: readonly Pick<Subject, "row" | "quantity">[],
-): Pick<Subject, "exact" | "exactWhenShort"> {
-  const oneUnitEach = lines.every(
-    ({ row, quantity }) => (row.unitPrecision ?? 0) === 0 && quantity === 1000,
-  );
-  const dish = lines[0]!.row.parentLineId === null;
-  return { exact: oneUnitEach && dish, exactWhenShort: oneUnitEach && !dish };
-}
-
-type ShortSpreadLine = SpreadLine & { exactWhenShort: boolean };
-
-/** {@link spreadBillDiscount} of `lines`; when it misses `discount`, spread again with the
- * `exactWhenShort` lines exact too. */
-function spreadReaching(
-  lines: readonly ShortSpreadLine[],
-  discount: Decimal,
-): Map<string, SpreadResult> {
-  const first = spreadBillDiscount(lines, discount);
-  const taken = sumDecimals([...first.values()].map(({ reduction }) => reduction));
-  if (compareDecimal(taken, discount) === 0 || !lines.some((line) => line.exactWhenShort)) {
-    return first;
-  }
-  return spreadBillDiscount(
-    lines.map((line) => ({ ...line, exact: line.exact || line.exactWhenShort })),
-    discount,
-  );
 }
 
 /** Spread `discount` over `subjects` (plan D4, D15) and keep the rows whose price moves. */
 function spread(subjects: readonly Subject[], discount: Decimal): Change[] {
-  const lines: ShortSpreadLine[] = subjects.map(({ row, quantity, exact, exactWhenShort }) => ({
-    lineId: row.id,
-    addedOrder: row.lineNo,
-    gross: gross(row, quantity),
-    quantity: thousandthsToDecimal(quantity),
-    priceQuantity: thousandthsToDecimal(row.priceQuantity),
-    grossUnit: centsToDecimal(row.unit),
-    exact,
-    exactWhenShort,
-  }));
-  const results = spreadReaching(lines, discount);
-  return subjects.flatMap(({ row, carved }) => {
-    const result = results.get(row.id)!;
-    if (compareDecimal(result.reduction, ZERO) === 0) return [];
-    return [{ row, carved, rows: result.rows, reduction: result.reduction }];
-  });
+  return spreadSubjects(subjects, discount).filter(
+    ({ reduction }) => compareDecimal(reduction, ZERO) !== 0,
+  );
 }
 
 /**
@@ -384,63 +338,18 @@ async function spreadOverFiledRows(
   const groups = (await readLockedLines(tx, orderId)).map(({ identity }) =>
     (identity.lineIds ?? [identity.id]).map((id) => subjectOf.get(id)!),
   );
-  const results = spreadReaching(
-    groups.map((members) => {
-      const { row, exact } = members[0]!;
-      const quantity = members.reduce((sum, member) => sum + member.quantity, 0);
-      const each = portionExactness(members);
-      return {
-        lineId: row.id,
-        addedOrder: row.lineNo,
-        gross: gross(row, quantity),
-        quantity: thousandthsToDecimal(quantity),
-        priceQuantity: thousandthsToDecimal(row.priceQuantity),
-        grossUnit: centsToDecimal(row.unit),
-        exact: exact || each.exact,
-        exactWhenShort: each.exactWhenShort,
-      };
-    }),
-    discount,
-  );
   const ordinal = (subject: Subject) => bindings.get(subject.row.id)?.ordinal ?? 0;
-  return groups.flatMap((members) => {
-    const priced = results.get(members[0]!.row.id)!.rows;
-    const handed = handOut(
-      [...members].sort((a, b) => ordinal(a) - ordinal(b)),
-      priced,
-    );
-    const lower = priced[1]?.unitGross;
-    const second =
-      lower === undefined
-        ? undefined
-        : handed.find(({ rows }) => compareDecimal(rows[0]!.unitGross, lower) === 0);
-    if (second !== undefined) splits.push({ from: handed[0]!.row.id, to: second.row.id });
-    return handed.filter(({ reduction }) => compareDecimal(reduction, ZERO) !== 0);
-  });
-}
-
-/** One line's priced rows handed to the lines standing for it, in the order given, each taking
- * its own quantity from the rows that are left, the higher price first. */
-function handOut(
-  members: readonly Pick<Subject, "row" | "quantity" | "carved">[],
-  priced: readonly PricedRow[],
-): Change[] {
-  const pieces = priced.map((piece) => ({ ...piece, left: decimalToThousandths(piece.quantity) }));
-  return members.map(({ row, quantity, carved }) => {
-    const rows: PricedRow[] = [];
-    const cuts: Decimal[] = [];
-    for (let need = quantity; need > 0;) {
-      const piece = pieces.find((candidate) => candidate.left > 0)!;
-      const take = Math.min(need, piece.left);
-      piece.left -= take;
-      need -= take;
-      rows.push({ quantity: thousandthsToDecimal(take), unitGross: piece.unitGross });
-      cuts.push(
-        subtractDecimal(gross(row, take), gross(row, take, decimalToCents(piece.unitGross))),
-      );
-    }
-    return { row, carved, rows, reduction: sumDecimals(cuts) };
-  });
+  return spreadOverFiledGroups(groups, discount, ordinal).flatMap(
+    ({ rows: priced, shares: handed }) => {
+      const lower = priced[1]?.unitGross;
+      const second =
+        lower === undefined
+          ? undefined
+          : handed.find(({ rows }) => compareDecimal(rows[0]!.unitGross, lower) === 0);
+      if (second !== undefined) splits.push({ from: handed[0]!.row.id, to: second.row.id });
+      return handed.filter(({ reduction }) => compareDecimal(reduction, ZERO) !== 0);
+    },
+  );
 }
 
 /**
@@ -518,19 +427,6 @@ export async function rowsAmong(
   );
 }
 
-/** A comp's rows (plan D4): each one not already free is priced at exactly zero, never at a price
- * whose total merely rounds to nothing. */
-function zeroed(subjects: readonly Subject[]): Change[] {
-  return subjects
-    .filter(({ row }) => row.unit !== 0)
-    .map(({ row, quantity, carved }) => ({
-      row,
-      carved,
-      rows: [{ quantity: thousandthsToDecimal(quantity), unitGross: ZERO }],
-      reduction: gross(row, quantity),
-    }));
-}
-
 /**
  * Everything an adjustment decides before it writes, reading only: the refusals of the bill, the
  * line, the amount and the reason's policy, and the rows it would change. A dish is
@@ -573,25 +469,14 @@ export async function planAdjustment(
   if (ask.lineId === null) {
     if (ask.action === "cancel" || ask.action === "comp") throw invalid("lineId");
     if (ask.quantity !== undefined) throw invalid("quantity");
-    const families = new Set(rows.flatMap((row) => row.parentLineId ?? []));
-    before = sumDecimals(rows.map((row) => gross(row, row.quantity)));
+    before = sumDecimals(rows.map((row) => lineGross(row, row.quantity)));
     changes = await spreadOverFiledRows(
       tx,
       orderId,
-      rows.map((row) => {
-        const each = portionExactness([{ row, quantity: row.quantity }]);
-        return {
-          row,
-          quantity: row.quantity,
-          carved: false,
-          exact:
-            (row.parentLineId === null &&
-              !families.has(row.id) &&
-              (row.unitPrecision ?? 0) === 0) ||
-            each.exact,
-          exactWhenShort: each.exactWhenShort,
-        };
-      }),
+      withExactness(
+        rows.map((row) => ({ row, quantity: row.quantity, carved: false })),
+        exactOnWholeBill(rows),
+      ),
       requestedDiscount(ask, before),
       rowSplits,
     );
@@ -637,7 +522,7 @@ export async function planAdjustment(
       const left = familyAt(family, target.quantity - covered);
       reduction = sumDecimals(
         family.map((row) =>
-          subtractDecimal(gross(row, row.quantity), gross(row, left.get(row.id)!)),
+          subtractDecimal(lineGross(row, row.quantity), lineGross(row, left.get(row.id)!)),
         ),
       );
       nominal = sumDecimals(family.map((row) => listValue(row, row.quantity - left.get(row.id)!)));
@@ -654,7 +539,7 @@ export async function planAdjustment(
         });
       }
       const standingFor = (one: Row) => (row === null ? [one] : row.membersOf.get(one.id)!);
-      const exactness = (standIn: Row, quantity: number) =>
+      const exactness = ({ row: standIn, quantity }: { row: Row; quantity: number }) =>
         portionExactness(
           row === null
             ? [{ row: standIn, quantity }]
@@ -674,31 +559,21 @@ export async function planAdjustment(
             quantity: ask.quantity!,
           });
         }
-        subjects = family.map((row) => {
-          const each = exactness(row, carved.get(row.id)!);
-          return {
-            row,
-            quantity: carved.get(row.id)!,
-            carved: true,
-            exact: family.length === 1 || each.exact,
-            exactWhenShort: each.exactWhenShort,
-          };
-        });
+        subjects = withExactness(
+          family.map((row) => ({ row, quantity: carved.get(row.id)!, carved: true })),
+          () => family.length === 1,
+          exactness,
+        );
       } else {
-        subjects = family.map((row) => {
-          const each = exactness(row, row.quantity);
-          return {
-            row,
-            quantity: row.quantity,
-            carved: false,
-            exact: (family.length === 1 && target.parentLineId === null && !weighed) || each.exact,
-            exactWhenShort: each.exactWhenShort,
-          };
-        });
+        subjects = withExactness(
+          family.map((row) => ({ row, quantity: row.quantity, carved: false })),
+          () => takesAlone(family, target),
+          exactness,
+        );
       }
-      before = sumDecimals(subjects.map(({ row, quantity }) => gross(row, quantity)));
+      before = sumDecimals(subjects.map(({ row, quantity }) => lineGross(row, quantity)));
       const discount = requestedDiscount(ask, before);
-      changes = ask.action === "comp" ? zeroed(subjects) : spread(subjects, discount);
+      changes = ask.action === "comp" ? zeroedRows(subjects) : spread(subjects, discount);
       if (row !== null) {
         const { membersOf } = row;
         const taken = partial
@@ -716,7 +591,7 @@ export async function planAdjustment(
         }
         stamped = changes.flatMap((change) => standingFor(change.row).map((one) => one.id));
         writes = changes.flatMap((change) => {
-          const portions = handOut(
+          const portions = handOutRows(
             takenOf(change.row).map((member) => ({
               row: member,
               quantity: member.quantity,
@@ -830,7 +705,7 @@ async function judgeComp(
   );
   const billComped = sumDecimals(
     rows.map((row) => {
-      const off = subtractDecimal(listValue(row, row.quantity), gross(row, row.quantity));
+      const off = subtractDecimal(listValue(row, row.quantity), lineGross(row, row.quantity));
       return compareDecimal(off, ZERO) > 0 ? off : ZERO;
     }),
   );
@@ -883,7 +758,7 @@ function dishPrices(
         const quantity = decimalToThousandths(priced.quantity);
         dishes.push({
           list: listValue(dish, quantity),
-          after: gross(dish, quantity, decimalToCents(priced.unitGross)),
+          after: lineGross(dish, quantity, decimalToCents(priced.unitGross)),
           allowance: allowanceOf([{ row: dish, quantity }]),
         });
       }
@@ -902,10 +777,14 @@ function dishPrices(
       const quantity = change === undefined ? at.get(row.id)! : quantityOf(change);
       const after =
         change === undefined
-          ? gross(row, quantity)
+          ? lineGross(row, quantity)
           : sumDecimals(
               change.rows.map((priced) =>
-                gross(row, decimalToThousandths(priced.quantity), decimalToCents(priced.unitGross)),
+                lineGross(
+                  row,
+                  decimalToThousandths(priced.quantity),
+                  decimalToCents(priced.unitGross),
+                ),
               ),
             );
       return { row, quantity, list: listValue(row, quantity), after };
@@ -1077,8 +956,8 @@ async function reprice(
       await setPrice(tx, second.id, lower!, change.row.priceQuantity);
       const quantity = decimalToThousandths(lower!.quantity);
       const reduction = subtractDecimal(
-        gross(change.row, quantity),
-        gross(change.row, quantity, decimalToCents(lower!.unitGross)),
+        lineGross(change.row, quantity),
+        lineGross(change.row, quantity, decimalToCents(lower!.unitGross)),
       );
       firstReduction = subtractDecimal(change.reduction, reduction);
       taken.push({ lineId: second.id, reduction, quantity });

@@ -574,7 +574,7 @@ sees changes.
 
 **The change.**
 1. New `packages/adjustments/src/bill-discounts.ts` (pure; imports `@waitron/shared` and
-   `./spread.js` only). Input: the bill's lines (id, line number, parent, set-menu role and row,
+   `./spread.js` only). Input: the bill's lines (id, line number, parent, set-menu row,
    quantity, price quantity, unit and total in cents, unit precision, and each line's bound-portion
    group when the bill has any, read by the caller) and its pending discounts (target, action,
    percentage or amount, origin, position). It works the discounts out in spec 7.2's order (extras,
@@ -588,9 +588,9 @@ sees changes.
    holds (`yes`, `set_menu_gone` when its set-menu row is gone, `cut_down` when an amount exceeds
    what its target costs). Output for the bill: the total taken off.
 2. Move `portionExactness`, `spreadReaching`, `spread`'s line mapping, `handOut`'s pure part and
-   `zeroed` from `adjustments-apply.ts` into the new module; `adjustments-apply.ts` imports them
+   `zeroed` from `adjustments-apply.ts` into the new module, and `gross` (now `lineGross`), `setMenuDishes`'s filter (now `coveredBySetMenu`) and the per-target exactness rules (`withExactness`, `takesAlone`, `exactOnWholeBill`); `adjustments-apply.ts` imports them
    (about 120 lines out of a file at its cap). `spreadOverFiledRows` keeps its two reads and calls
-   the pure part.
+   the pure part, `spreadOverFiledGroups`.
 
 **Tests (failing first).** `packages/adjustments/src/bill-discounts.test.ts`:
 - spec 7.3's four worked examples, figure for figure (the owner's two items 50.00/10.00; the Daily
@@ -611,12 +611,16 @@ The assertion that fails if the behaviour is deleted: each example's per-line fi
 **Changed test checks.** None.
 
 **Checks to run.** `pnpm --filter @waitron/adjustments exec vitest run`, `pnpm --filter
-@waitron/server exec vitest run src/adjustments-apply.test.ts src/set-menu-adjustments.test.ts`,
+@waitron/server exec vitest run src/adjustments-apply.test.ts src/set-menu-adjustments.test.ts
+src/bill-discounts-filing.test.ts`,
 `pnpm --filter @waitron/adjustments test:coverage` (98/98/98/95), golden huella, `inmutabilidad`,
 `scripts/product-file-size.test.ts`.
 
 **Files.** `packages/adjustments/src/bill-discounts.ts` (new), its test (new),
-`packages/adjustments/src/index.ts`, `apps/server/src/adjustments-apply.ts`.
+`packages/adjustments/src/index.ts`, `apps/server/src/adjustments-apply.ts`,
+`apps/server/src/adjustment-rows.ts`, `apps/server/src/set-menu-adjustment.ts`,
+`apps/server/src/adjustment-bill-total.ts`, `apps/server/src/bill-discounts-filing.test.ts` (new),
+`docs/backlog/menu.md`.
 
 **Tasks.** 1.1 the module with the order and target rules and their tests; 1.2 moving the helpers
 out of `adjustments-apply.ts`, `adjustments-apply.test.ts` green.
@@ -1250,6 +1254,14 @@ discount given after a part payment that would take the bill below its money is 
   names it; refused with each pinned column changed (the same `FROZEN_REOPEN_COLUMNS` cases); refused
   for a placed order with a party or another mode and no pending row (as the existing cases, which
   stay unchanged).
+- **bound portions with a measured extra** (found in PR 1's review, 27 November): two 1.00 dishes
+  bound as one cohort, each with 0.125 of a sauce at 10.08 a unit, 0.05 off the bill: the shown
+  total and the invoice both come to 4.47, and a further 4.48 off is cut down to the 4.47 left,
+  never refused. Today's
+  comp window shows 4.48 here while the invoice files 4.47, and refuses a further 4.48 with
+  `adjustment.exceeds_amount`; PR 1's calculator gives 4.47 (`bill-discounts-filing.test.ts`). The same file's bill where
+  splitting a bound pair would refile its extras higher ("keeps a bound pair at one price…") runs
+  through the comp window too, and the invoice falls by what the bill shows.
 
 **Changed test checks** (about 30; each listed in the pull request): the whole-bill groups of
 `adjustments-apply.test.ts` (`:813` "a bill discount with a weighed line", `:875`, `:928`, and the
@@ -1358,7 +1370,7 @@ sentence (`table-service.md:18-19`).
 the Daily and rejoins it when the discount is removed; two Hakes in a row, 10% on the row, then one
 moved: each keeps 10%; the per-dish floor still asks for a PIN at the same limits; on a Counter
 order placed unpaid, removing the Hake's discount puts it back in the Daily (the assertion that fails
-if Remove's regroup is refused on a placed order).
+if Remove's regroup is refused on a placed order). The bill in `bill-discounts-filing.test.ts` where a bound dish's own discount would refile its extras higher ("leaves a bound dish as it is…") runs through the comp window too, and the invoice falls by what the bill shows.
 
 **Changed test checks** (about 60, the largest set): `adjustments-apply.test.ts`'s line groups
 (`:316` "a comp" for its discount cases, `:667`, `:791`, `:1291`, `:1350`, `:2007`, `:2412`,
@@ -1382,7 +1394,7 @@ checks (split by file); 7c.5 guide.
 on an extra goes when the extra goes and leaves its dish in its set menu (D34). Every comp and
 discount is now pending. Owner lands.
 
-**Today (read).** A comp prices rows at exactly zero (`zeroed`, now in PR 1's module); an extra is
+**Today (read).** A comp prices rows at exactly zero (`zeroedRows`, now in PR 1's module); an extra is
 covered only whole (`coveredQuantity`, `adjustments-apply.ts:261-272` (†)).
 
 **The change.** `bill-discounts-give.ts` takes Free on dishes and every extra target; the comp route's

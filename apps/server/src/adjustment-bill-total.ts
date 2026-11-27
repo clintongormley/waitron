@@ -1,4 +1,4 @@
-import type { Ending } from "@waitron/adjustments";
+import { lineGross, type Ending } from "@waitron/adjustments";
 import type { Transaction } from "@waitron/db";
 import {
   aLaCarteLineTotal,
@@ -11,7 +11,7 @@ import {
   subtractDecimal,
   type Decimal,
 } from "@waitron/shared";
-import { familyAt, gross, readRows, type Row } from "./adjustment-rows.js";
+import { familyAt, readRows, type Row } from "./adjustment-rows.js";
 import type { Plan } from "./adjustments-apply.js";
 import { takesSetMenus, totalAfterAdjusting } from "./set-menu-regroup.js";
 
@@ -91,7 +91,8 @@ function rowsAfter(plan: Planned): (line: GroupingLine) => GroupingLine[] {
       return [row.id, [part]];
     }),
   );
-  const totalOf = (row: Row, part: Part) => decimalToCents(gross(row, part.quantity, part.unit));
+  const totalOf = (row: Row, part: Part) =>
+    decimalToCents(lineGross(row, part.quantity, part.unit));
   const { carve } = plan;
   if (carve !== null && plan.writes.some(({ carved }) => carved)) {
     const dish = rows.find(({ lineNo }) => lineNo === carve.lineNo)!;
