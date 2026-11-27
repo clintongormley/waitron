@@ -1,54 +1,60 @@
 # PR 14b · Move, Join, Split and Finish table
 
-From the table name, each action opens with Back and reaches the top of the screen. On a phone it
-fills the screen. On a wide till it covers the order column. This addresses A1359. The watcher
-assigned 14b at 05:24 CET on 27 November, stacked on 14a at `b11f658219`.
-[Design §6](../specs/2026-11-26-till-handheld-redesign-design.md#6-the-tables-menu-and-the-bills-menu) ·
-[§14](../specs/2026-11-26-till-handheld-redesign-design.md#14-how-it-looks) ·
+From the table name, Move, Join and Split open with Back at the top of the screen. Finish table
+still takes one press. If dishes need attention first, its existing confirmation gets the same
+layout. The panels fill a phone or cover the order column on a wide till. This addresses A1359.
+The watcher assigned 14b at 05:24 CET on 27 November, stacked on 14a at `b11f658219`.
+[Design §§6 and 14](../specs/2026-11-26-till-handheld-redesign-design.md) ·
 [Pass 1 split](2026-11-26-till-handheld-redesign-pass-1.md)
 
-## Build after Claude review and watcher clearance
+## Build after watcher clearance
 
-- In `apps/till/src/screens/till-table-order-screen.ts`, render Move, Join, both Split steps and a
-  Finish step with a small `table-action-panel.ts` template. Use `wt-dialog full-screen`,
-  `wt-full-screen-panel`, `wt-top-bar` and `wt-foot-button-bar`. Name the dialog and scrolling body.
-  Reuse `#placeOrderPanels` and `orderPaneInset` on open and resize. Use zero on narrow screens.
-  Dim the display and scroll the body. The existing aside still serves the bill actions for 14c.
-- Keep the screen’s action state, target filters and draft scope. Route Back and Escape through
-  the same leave check. In Split, Back dismisses the all-selected question first, then steps back
-  to the table list, then the order. Keep the modal open between those steps. Keep draft protection,
-  live and refused selections, and focus on the relevant heading or recovery action. Return focus
-  to the table name after closing. Reuse `trackDialog` for the nested prompts.
-- Reuse `#prepareRelocation`, including Split’s Move guests route. In `apps/till/src/till-app.ts`,
-  show current preparation refusals where the modal leaves them visible. Back retires that choice
-  so an old answer cannot send or replace a new action. Keep the current revision checks, queued
-  saves, refused writes and recovery.
-- Keep the outlined **Finish table** button in `table-party-menu.ts`. Have it open a panel naming
-  the table, with Back and **Finish table**. Move the existing finish event to the panel’s explicit
-  action. Send it once for the current opening and close the panel so existing outcomes can show.
-  Keep the current party write and recovery routes, including the unserved-dish confirmation.
+- In `apps/till/src/screens/till-table-order-screen.ts`, render Move, Join and both Split steps
+  in a small `table-action-panel.ts` template using `wt-dialog full-screen` with `trackDialog`,
+  `wt-full-screen-panel`, `wt-top-bar` and `wt-foot-button-bar`. Name the dialog and its scroll
+  body. Set `--wt-dialog-inset-inline-start` on the dialog from `#placeOrderPanels` and the existing
+  `orderPaneInset` on open and resize. Use zero on a phone. Keep the aside for bill actions,
+  including the `move-bill` verb’s shared table picker and Counter choice.
+- Keep one modal through Split’s steps and set a stable `beforeClose`. Back calls `requestClose`
+  and uses the same guard as Escape. If the all-selected question is visible, dismiss it and keep
+  the modal open. From the Split editor, run the existing leave decision, step back to the list
+  on discard and keep the modal open. Close at the first step after its leave decision proceeds.
+  Guard delayed answers by the opening and step. Preserve focus on the heading or recovery action
+  after updates and return it to the table name on exit. Use the top bar as the sole Back control.
+- Keep Move and Join’s target filters and `#prepareRelocation`, including Split’s Move guests
+  path. Give `TableRelocationOpenDetail` a refusal callback alongside `ready`. In `till-app.ts`,
+  deliver preparation errors to that callback for the table panel and retain the banner for other
+  callers. Show the current choice’s error above the foot. Back retires the choice. Preserve
+  revision checks, queued saves, refused writes and recovery.
+- Keep the direct action in `table-party-menu.ts` and the finish handlers in `till-app.ts`.
+  Convert `apps/till/src/widgets/finish-table-dialog.ts` to the shared panels and bars. Pass
+  the active order’s live inset from `#renderFinishTable` as the allergy editor does. Keep the
+  draft guard, the supervisor prompt above it, and the existing actions and refusals. Close this
+  panel before revealing the unpaid-bill notice or money-held error, in today’s order.
   [Menu dispatch](../../../apps/till/src/screens/till-table-order-screen.ts#L7037) ·
-  [Handler](../../../apps/till/src/till-app.ts#L19897) · [POST](../../../apps/till/src/api/floor-api.ts#L367)
+  [Refusal handoff](../../../apps/till/src/till-app.ts#L20245)
 
 ## Verify and document
 
 - Start red in `apps/till/src/screens/till-table-order-screen.{table-menu,parties,split-table,split-table.unsaved}.test.ts`.
-  At 1280 × 800, reproduce Split below a long order. Assert phone fill, wide bounds and Back and
-  Split visible while rows scroll. Resize with choices held. Exercise Back, Escape, Keep/Discard
-  and return focus. Verify that opening or backing out of Finish sends zero requests and confirming
-  sends one in `apps/till/src/till-app-parties.test.ts`.
-- Run those files, `till-app-parties-closing.test.ts`, `till-app-split-table.test.ts`,
-  `till-app-drafts.test.ts`, the screen’s `*.actions-unsaved.test.ts` and `*.move-dishes.test.ts`,
-  and every changed suite with `pnpm --filter @waitron/till exec vitest run` and the `src/` paths.
-  Preserve the existing assertions, including the handheld Finish cases in
-  `till-app-handheld-pay.test.ts`. Wait for `wt-close` where it drives the result.
-- Update `apps/server/src/guide/{en,es}/table-service.md` and the A1359 entries in `docs/backlog.md`
-  and `docs/backlog/till.md`. The bill panels and A1290 follow in 14c–d. This slice changes how staff
-  reach the table actions. It reuses today’s floor, payment, refund, receipt, invoice and filing flows.
-- Measure the approved HTML in `~/waitron-campaign-shared/mockups/2026-11-26-till-handheld-redesign/html/`.
+  Reproduce Split low on a long 1280 × 800 order. Check wide bounds, phone fill, visible Back and
+  Split while rows scroll, and preserved choices on resize. Exercise Keep/Discard and Escape.
+- In `apps/till/src/till-app-parties.test.ts`, show a failed destination read in the current
+  panel and verify a held answer cannot act after Back. In `till-app-parties-closing.test.ts`
+  and `widgets/finish-table-dialog.{test,unsaved.test,a11y.test}.ts`, check the Finish placement,
+  Back, and the existing payment refusals after close. Keep the handheld checks for one press.
+- Run the named and changed files with `pnpm --filter @waitron/till exec vitest run` and their
+  `src/` paths. Include `till-app-{drafts,split-table,handheld-pay}.test.ts` and the screen files
+  that read `data-action-panel`, as listed by `rg -l 'data-action-panel' src -g '*.test.ts'` in
+  `apps/till`. Keep revision, draft and bill-action assertions. Wait for `wt-close` when it drives
+  the assertion. Update both table-service guides and the A1359 backlog references. Run
+  `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`.
+- Measure the approved HTML under `~/waitron-campaign-shared/mockups/2026-11-26-till-handheld-redesign/html/`.
   Use `i` 2 for entry, `h` 3 for shared bars and `m` and `s` 1 for wide placement. Follow §14.1.
-  Compare captures outside Git at 390 × 844, 820 × 1180 and 1180 × 820, in EN/ES and both themes.
-  Lane P reviews the pictures, then the watcher sends them to the owner. Land after the owner’s
-  recorded picture decision and green CI on the current head.
+  Compare captures outside Git at 390 × 844, 820 × 1180 and 1180 × 820 in EN/ES and both themes.
+  Lane P reviews the pictures before the watcher shows the owner. Land after recorded picture OK
+  and green CI on the current head.
 
-Allow about three hours. Estimate 240 changed product lines and 240 changed test lines.
+Allow about three hours. Estimate 300 changed product lines and 240 changed test lines.
+The bill panels and A1290 follow in 14c–d. This slice uses today’s floor actions and payment,
+refund, receipt, invoice and filing flows.
