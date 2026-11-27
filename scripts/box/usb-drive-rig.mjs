@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { STORAGE_DRIVES_ROOT } from "./host-protocol.mjs";
 
 /** Past FAT32's 4 GiB file limit, so only exFAT or NTFS can hold it. */
 export const USB_FILE_BYTES = 4_400_000_000;
@@ -68,7 +69,7 @@ const until=Date.now()+180000;
 let list=ask("storage.list");
 while(!(list.ok===true&&list.drives.length>0)&&Date.now()<until){sleep(1000);list=ask("storage.list");}
 const drive=list.drives?.[0]?.drive;
-const path="/run/waitron-drives/"+drive+"/"+file;
+const path=${JSON.stringify(`${STORAGE_DRIVES_ROOT}/`)}+drive+"/"+file;
 const uid=inApp(["id","-u"]).stdout.trim();
 const hashed=inApp(["sha256sum",path],1500000);
 const sha256=hashed.status===0?hashed.stdout.split(" ")[0]:undefined;

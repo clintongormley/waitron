@@ -87,10 +87,11 @@ function skipped(name: string): boolean {
   return name.startsWith(".") || name.startsWith("$") || SYSTEM_FOLDERS.has(name);
 }
 
-async function entriesOf(dir: string): Promise<Dirent[]> {
+async function entriesOf(dir: string, drive: string, log: Logger): Promise<Dirent[]> {
   try {
     return await readdir(dir, { withFileTypes: true });
-  } catch {
+  } catch (error) {
+    log("warn", "drives.folder_unreadable", { drive, code: errnoOf(error) ?? "unexpected" });
     return [];
   }
 }
@@ -101,12 +102,13 @@ async function walk(
   dir: string,
   relative: readonly string[],
   found: DriveBackupFile[],
+  log: Logger,
 ): Promise<void> {
-  for (const entry of await entriesOf(dir)) {
+  for (const entry of await entriesOf(dir, drive, log)) {
     const segments = [...relative, entry.name];
     if (entry.isDirectory()) {
       if (relative.length < FOLDERS_DEEP && !skipped(entry.name))
-        await walk(drive, join(dir, entry.name), segments, found);
+        await walk(drive, join(dir, entry.name), segments, found, log);
       continue;
     }
     if (!entry.isFile()) continue;
@@ -130,11 +132,11 @@ async function walk(
  * names: a copy onto a stick carries the copy's time, never the backup's. */
 export async function listDriveBackups(
   drives: readonly StorageDrive[],
-  { root = STORAGE_DRIVES_ROOT }: { root?: string } = {},
+  { root = STORAGE_DRIVES_ROOT, log }: { root?: string; log: Logger },
 ): Promise<DriveBackupList> {
   const found: DriveBackupFile[] = [];
   for (const { drive, readable } of drives) {
-    if (readable && STORAGE_DRIVE_NAME.test(drive)) await walk(drive, join(root, drive), [], found);
+    if (readable && STORAGE_DRIVE_NAME.test(drive)) await walk(drive, join(root, drive), [], found, log);
   }
   found.sort(
     (a, b) =>

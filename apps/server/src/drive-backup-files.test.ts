@@ -88,7 +88,7 @@ describe("listDriveBackups", () => {
     await put("sdc1", name("2026-10-01T10:00:00Z"));
 
     const drives = [drive("sda1"), drive("sdb1"), drive("sdc1", false)];
-    const listed = await listDriveBackups(drives, { root });
+    const listed = await listDriveBackups(drives, { root, log: vi.fn() });
 
     expect(listed.drives).toEqual(drives);
     expect(listed.files).toEqual([
@@ -100,10 +100,20 @@ describe("listDriveBackups", () => {
   });
 
   it("a drive whose folder is missing lists no files", async () => {
-    expect(await listDriveBackups([drive("sdd1")], { root })).toEqual({
+    expect(await listDriveBackups([drive("sdd1")], { root, log: vi.fn() })).toEqual({
       drives: [drive("sdd1")],
       files: [],
     });
+  });
+  it("a drive folder that cannot be read is skipped and logged by drive and error code", async () => {
+    await writeFile(join(root, "sda1"), "not a folder");
+    await put("sdb1", name("2026-06-01T10:00:00Z"));
+    const log = vi.fn();
+    const listed = await listDriveBackups([drive("sda1"), drive("sdb1")], { root, log });
+    expect(listed.files.map((file) => file.drive)).toEqual(["sdb1"]);
+    expect(log.mock.calls).toEqual([
+      ["warn", "drives.folder_unreadable", { drive: "sda1", code: "ENOTDIR" }],
+    ]);
   });
 });
 
@@ -377,24 +387,26 @@ describe("receiveDriveArchive", () => {
   });
 
   it.each([
-    ["not an object", "[1]", "body"],
-    ["no file", '{"masterKey":"k"}', "file"],
+    ["not an object", "[1]", false, "body"],
+    ["no file", '{"masterKey":"k"}', false, "file"],
     [
       "a field that is neither text nor an object",
       `{"file":{"drive":"sda1","path":"${good}"},"masterKey":1}`,
+      false,
       "masterKey",
     ],
     [
       "an unnamed key when the fields are exact",
       `{"file":{"drive":"sda1","path":"${good}"},"other":"x"}`,
+      true,
       "body",
     ],
-  ])("refuses a body with %s", async (_label, body, field) => {
+  ])("refuses a body with %s", async (_label, body, exactFields, field) => {
     await put("sda1", good);
     await expect(
       receiveDriveArchive(
         jsonRequest(body),
-        { fields: ["masterKey"], exactFields: field === "body" && body.includes("other") },
+        { fields: ["masterKey"], exactFields },
         { root, stagingDir: staging, limitBytes: 4096 },
       ),
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field } });
