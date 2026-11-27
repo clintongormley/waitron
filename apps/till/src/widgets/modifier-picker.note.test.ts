@@ -148,3 +148,38 @@ for (const theme of ["light", "dark"] as const)
         }
       },
     );
+
+it.each([
+  ["an empty note", {}],
+  ["a recorded note", { note: "No salt" }],
+])("focusNote opens with %s's field open and focused, leaving Save quiet", async (_, selection) => {
+  const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+    product,
+    initialSelections: selection,
+    lineDetails: true,
+    withNote: true,
+    focusNote: true,
+  });
+  await expect.poll(() => el.shadowRoot!.activeElement?.localName).toBe("wt-textarea");
+  const field = el.shadowRoot!.querySelector<WtTextarea>("wt-textarea")!;
+  expect(field.shadowRoot!.activeElement).toBe(field.shadowRoot!.querySelector("textarea"));
+  expect(el.shadowRoot!.querySelector(".add-note")).toBeNull();
+  expect(el.shadowRoot!.querySelector<WtButton>(".confirm")!.disabled).toBe(true);
+});
+
+it("without focusNote, or on a read-only window, the note stays behind Add note", async () => {
+  for (const over of [{}, { focusNote: true, readOnly: true }] as { readOnly?: boolean }[]) {
+    const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+      product,
+      initialSelections: {},
+      lineDetails: true,
+      withNote: true,
+      ...over,
+    });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("wt-textarea")).toBeNull();
+    expect(el.shadowRoot!.querySelector(".add-note") !== null).toBe(over.readOnly !== true);
+    cleanupWidgets();
+  }
+});

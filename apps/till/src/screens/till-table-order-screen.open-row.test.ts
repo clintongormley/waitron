@@ -1,0 +1,296 @@
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import type { WtStepper } from "@waitron/ui";
+import { DraftStore } from "../state/draft-sync.js";
+import type { TillBasket } from "../widgets/basket.js";
+import type { TillModifierPicker } from "../widgets/modifier-picker.js";
+import { cleanupWidgets } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
+import { beer, burger, flan, ham, mount, resized } from "./till-table-order-screen.test-helpers.js";
+import type { TillTableOrderScreen } from "./till-table-order-screen.js";
+import type { OrderLine } from "../state/working-order.js";
+
+beforeEach(async () => {
+  setLocale("en");
+  await page.viewport(1280, 1800);
+});
+afterEach(() => {
+  vi.useRealTimers();
+  cleanupWidgets();
+});
+
+async function open(lines: OrderLine[] = []) {
+  const draft = new DraftStore();
+  draft.loadFrom(
+    "draft",
+    lines.length > 0
+      ? lines
+      : [
+          { product: beer, quantity: "2", place: { kind: "fire" } },
+          { product: flan, quantity: "1", place: { kind: "new", slot: 1 } },
+        ],
+  );
+  const { el } = await mount({ draftStore: draft });
+  el.style.width = "1280px";
+  await resized(el);
+  await settled(el);
+  return { el, draft };
+}
+
+async function settled(el: TillTableOrderScreen) {
+  await el.updateComplete;
+  for (const basket of el.shadowRoot!.querySelectorAll<TillBasket>("till-basket"))
+    await basket.updateComplete;
+}
+
+const basketOf = (el: TillTableOrderScreen, index: number) =>
+  [...el.shadowRoot!.querySelectorAll<TillBasket>("till-basket")].find((basket) =>
+    basket.lineIndexes?.includes(index),
+  )!;
+const row = (el: TillTableOrderScreen, index: number) =>
+  basketOf(el, index).shadowRoot!.querySelector<HTMLButtonElement>(`[data-draft-row="${index}"]`)!;
+const controls = (el: TillTableOrderScreen, index: number) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-draft-open="${index}"]`);
+const stepper = (el: TillTableOrderScreen, index: number) =>
+  controls(el, index)?.querySelector<WtStepper>("wt-stepper") ?? null;
+const step = (el: TillTableOrderScreen, index: number, delta: -1 | 1) =>
+  stepper(el, index)!.shadowRoot!.querySelector<HTMLButtonElement>(`[data-step="${delta}"]`)!;
+const options = (el: TillTableOrderScreen, index: number) =>
+  controls(el, index)!.querySelector<HTMLButtonElement>("[data-draft-open-options]")!;
+const note = (el: TillTableOrderScreen, index: number) =>
+  controls(el, index)!.querySelector<HTMLButtonElement>("[data-draft-open-note]")!;
+const picker = (el: TillTableOrderScreen, index: number) =>
+  basketOf(el, index).shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker");
+
+async function tapRow(el: TillTableOrderScreen, index: number) {
+  await userEvent.click(row(el, index));
+  await settled(el);
+  await stepper(el, index)?.updateComplete;
+}
+
+it("a tap opens the row in place with a stepper, Options and Note, and a second tap closes it", async () => {
+  const { el } = await open();
+  expect(row(el, 0).getAttribute("aria-expanded")).toBe("false");
+  expect(controls(el, 0)).toBeNull();
+  await tapRow(el, 0);
+  const entry = row(el, 0).closest(".entry")!;
+  expect(entry.hasAttribute("data-open")).toBe(true);
+  expect(row(el, 0).getAttribute("aria-expanded")).toBe("true");
+  expect(controls(el, 0)!.slot).toBe("opened-0");
+  expect(controls(el, 0)!.assignedSlot?.name).toBe("opened-0");
+  expect(stepper(el, 0)!.value).toBe(2);
+  expect(options(el, 0).textContent!.trim()).toBe("Options");
+  expect(note(el, 0).textContent!.trim()).toBe("Note");
+  expect(picker(el, 0)).toBeNull();
+  await tapRow(el, 0);
+  expect(row(el, 0).getAttribute("aria-expanded")).toBe("false");
+  expect(row(el, 0).closest(".entry")!.hasAttribute("data-open")).toBe(false);
+  expect(controls(el, 0)).toBeNull();
+  expect(picker(el, 0)).toBeNull();
+});
+
+it("opening another row closes the first", async () => {
+  const { el } = await open();
+  await tapRow(el, 0);
+  await tapRow(el, 1);
+  expect(controls(el, 0)).toBeNull();
+  expect(row(el, 0).getAttribute("aria-expanded")).toBe("false");
+  expect(controls(el, 1)).not.toBeNull();
+  expect(row(el, 1).getAttribute("aria-expanded")).toBe("true");
+});
+
+it("+ and − change the dish's count, its row's price and the order total at once, leaving the draft unsaved", async () => {
+  const { el, draft } = await open();
+  const total = () =>
+    el.shadowRoot!.querySelector("[data-order-total]")!.textContent!.replace(/\s/g, "");
+  const price = () => row(el, 0).querySelector(".draft-row-price")!.textContent!.trim();
+  expect(price()).toBe("€6.00");
+  expect(total()).toBe("€9.00");
+  await tapRow(el, 0);
+  expect(draft.dirty).toBe(false);
+  await userEvent.click(step(el, 0, 1));
+  await settled(el);
+  expect(draft.lines[0]!.quantity).toBe("3");
+  expect(draft.dirty).toBe(true);
+  expect(price()).toBe("€9.00");
+  expect(total()).toBe("€12.00");
+  expect(stepper(el, 0)!.value).toBe(3);
+  await userEvent.click(step(el, 0, -1));
+  await userEvent.click(step(el, 0, -1));
+  await settled(el);
+  await stepper(el, 0)!.updateComplete;
+  expect(draft.lines[0]!.quantity).toBe("1");
+  expect(price()).toBe("€3.00");
+  expect(total()).toBe("€6.00");
+  expect(step(el, 0, -1).disabled).toBe(true);
+  expect(step(el, 0, 1).disabled).toBe(false);
+  expect(controls(el, 0)).not.toBeNull();
+});
+
+it("+ is disabled when the dish cannot be added", async () => {
+  const { el } = await open();
+  el.productSelectable = (product) => product.id !== "beer";
+  await settled(el);
+  await tapRow(el, 0);
+  expect(step(el, 0, 1).disabled).toBe(true);
+  expect(step(el, 0, -1).disabled).toBe(false);
+  await tapRow(el, 1);
+  expect(step(el, 1, 1).disabled).toBe(false);
+});
+
+it("+ is disabled on a dish holding a pick the menu no longer offers", async () => {
+  const { el } = await open([
+    {
+      product: burger,
+      quantity: "1",
+      place: { kind: "fire" },
+      notOfferedExtras: [
+        { listId: "list-gone", productId: "p-gone", name: "Gone", quantity: 1, price: "1.00" },
+      ],
+    } as OrderLine,
+  ]);
+  await tapRow(el, 0);
+  expect(step(el, 0, 1).disabled).toBe(true);
+});
+
+it("a weighed dish and a set-menu dish get Options and Note but no stepper", async () => {
+  const { el } = await open([
+    { product: ham, quantity: "0.250", place: { kind: "fire" } },
+    { product: flan, quantity: "1", place: { kind: "fire" }, setMenuId: "daily" },
+  ]);
+  for (const index of [0, 1]) {
+    await tapRow(el, index);
+    expect(controls(el, index)).not.toBeNull();
+    expect(stepper(el, index)).toBeNull();
+    expect(options(el, index)).not.toBeNull();
+    expect(note(el, index)).not.toBeNull();
+  }
+});
+
+it("Options opens the dish's details, and Note opens them with focus in the note field", async () => {
+  const { el } = await open();
+  await tapRow(el, 0);
+  await userEvent.click(options(el, 0));
+  await settled(el);
+  let details = picker(el, 0)!;
+  expect(details).not.toBeNull();
+  await details.updateComplete;
+  expect(details.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Beer");
+  expect(details.shadowRoot!.activeElement?.localName).not.toBe("wt-textarea");
+  await userEvent.click(details.shadowRoot!.querySelector<HTMLElement>(".cancel")!);
+  await settled(el);
+  expect(picker(el, 0)).toBeNull();
+  await userEvent.click(note(el, 0));
+  await settled(el);
+  details = picker(el, 0)!;
+  await vi.waitFor(() => expect(details.shadowRoot!.activeElement?.localName).toBe("wt-textarea"));
+});
+
+it.each(["sending", "locked", "in flight"] as const)(
+  "the opened row closes while %s",
+  async (state) => {
+    const { el, draft } = await open();
+    await tapRow(el, 0);
+    expect(controls(el, 0)).not.toBeNull();
+    if (state === "sending") draft.sending = true;
+    if (state === "locked") draft.lockEdits();
+    if (state === "in flight") el.groupCommandBusy = true;
+    await settled(el);
+    expect(controls(el, 0)).toBeNull();
+    if (state !== "locked") {
+      expect(row(el, 0).disabled).toBe(true);
+      expect(row(el, 0).getAttribute("aria-expanded")).toBe("false");
+    }
+  },
+);
+
+it("the opened row closes when its dish leaves the order or the order is read again", async () => {
+  const { el, draft } = await open();
+  await tapRow(el, 1);
+  draft.removeLine(1);
+  await settled(el);
+  expect(el.shadowRoot!.querySelector("[data-draft-open]")).toBeNull();
+  await tapRow(el, 0);
+  draft.loadFrom("draft", [{ product: beer, quantity: "2", place: { kind: "fire" } }]);
+  await settled(el);
+  expect(controls(el, 0)).toBeNull();
+  expect(row(el, 0).getAttribute("aria-expanded")).toBe("false");
+});
+
+it("the opened row closes when the screen moves to another bill's order", async () => {
+  const { el } = await open();
+  await tapRow(el, 0);
+  const other = new DraftStore();
+  other.loadFrom("other", [{ product: beer, quantity: "2", place: { kind: "fire" } }]);
+  el.draftStore = other;
+  await settled(el);
+  expect(controls(el, 0)).toBeNull();
+});
+
+function point(target: HTMLElement) {
+  const box = target.getBoundingClientRect();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+function pointer(target: EventTarget, type: string, at: { x: number; y: number }) {
+  target.dispatchEvent(
+    new PointerEvent(type, {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+      pointerId: 71,
+      pointerType: "touch",
+      button: 0,
+      buttons: type === "pointerup" ? 0 : 1,
+      clientX: at.x,
+      clientY: at.y,
+    }),
+  );
+}
+
+it("holding a row opens its details without opening it in place", async () => {
+  const { el } = await open();
+  const at = point(row(el, 0));
+  vi.useFakeTimers();
+  pointer(row(el, 0), "pointerdown", at);
+  await vi.advanceTimersByTimeAsync(500);
+  pointer(window, "pointerup", at);
+  vi.useRealTimers();
+  await settled(el);
+  const details = picker(el, 0)!;
+  expect(details).not.toBeNull();
+  await details.updateComplete;
+  expect(details.shadowRoot!.querySelector("wt-modal")!.heading).toBe("Beer");
+  expect(controls(el, 0)).toBeNull();
+});
+
+it("dragging a row to another group opens nothing", async () => {
+  const { el, draft } = await open();
+  const at = point(row(el, 0));
+  vi.useFakeTimers();
+  pointer(row(el, 0), "pointerdown", at);
+  await vi.advanceTimersByTimeAsync(500);
+  const to = point(el.shadowRoot!.querySelector<HTMLElement>('[data-draft-group="new:1"] h3')!);
+  pointer(window, "pointermove", to);
+  await el.updateComplete;
+  pointer(window, "pointerup", to);
+  vi.useRealTimers();
+  await settled(el);
+  expect(draft.lines[0]!.place).toEqual({ kind: "new", slot: 1 });
+  expect(el.shadowRoot!.querySelector("[data-draft-open]")).toBeNull();
+  for (const basket of el.shadowRoot!.querySelectorAll<TillBasket>("till-basket"))
+    expect(basket.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+});
+
+it("a step, Options or Note pressed after an order goes in flight, before the row redraws closed, does nothing", async () => {
+  const { el, draft } = await open();
+  await tapRow(el, 0);
+  const plus = step(el, 0, 1);
+  const buttons = [options(el, 0), note(el, 0)];
+  el.groupCommandBusy = true;
+  plus.click();
+  for (const button of buttons) button.click();
+  await settled(el);
+  expect(draft.lines[0]!.quantity).toBe("2");
+  expect(picker(el, 0)).toBeNull();
+  expect(controls(el, 0)).toBeNull();
+});

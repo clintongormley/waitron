@@ -1200,6 +1200,7 @@ export const en = {
   "line.note.add": "+ Add a note",
   "line.note.placeholder": "e.g. no onion, allergy — nut",
   "line.note.button": "Note",
+  "line.options.button": "Options",
   // Staff schedule (the staff-facing swap/absence request path)
   "schedule.open": "My schedule",
   "schedule.title": "My schedule",
@@ -3674,6 +3675,7 @@ export const es: Record<StringKey, string> = {
   "line.note.add": "+ Añadir una nota",
   "line.note.placeholder": "p. ej. sin cebolla, alergia — frutos secos",
   "line.note.button": "Nota",
+  "line.options.button": "Opciones",
   "schedule.open": "Mi horario",
   "schedule.title": "Mi horario",
   "schedule.back": "Volver a la caja",

@@ -506,12 +506,20 @@ describe("New order: compact rows", () => {
     ).toHaveLength(1);
   });
 
-  it("opens the dish's details once on a tap on its row", async () => {
+  it("opens the dish in place on a tap on its row, and its details once through Options", async () => {
     const { el } = await wide();
     store(el).addProduct(beer, "1");
     const row = await rowOf(el, 0);
     const open = vi.spyOn(basketOf(el, 0), "openLineDetails");
     await userEvent.click(row);
+    await basketOf(el, 0).updateComplete;
+    expect(open).not.toHaveBeenCalled();
+    expect(pickerOf(el, 0)).toBeNull();
+    expect(row.getAttribute("aria-expanded")).toBe("true");
+    const options = root(el).querySelector<HTMLElement>(
+      '[data-draft-open="0"] [data-draft-open-options]',
+    )!;
+    await userEvent.click(options);
     await basketOf(el, 0).updateComplete;
     expect(open).toHaveBeenCalledTimes(1);
     expect(pickerOf(el, 0)).not.toBeNull();

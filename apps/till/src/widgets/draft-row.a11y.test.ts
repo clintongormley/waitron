@@ -7,6 +7,33 @@ import type { TillProduct } from "../api/menu-api.js";
 import "./basket.js";
 import type { TillBasket } from "./basket.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import { LitElement, html } from "lit";
+import { userEvent } from "vitest/browser";
+import { registerIcons } from "@waitron/ui";
+import { OpenDraftRow, draftSlotStyles } from "./draft-row-open.js";
+
+registerIcons({
+  minus: "M2.5 7.25H13.5V8.75H2.5Z",
+  plus: "M7.25 2.5H8.75V7.25H13.5V8.75H8.75V13.5H7.25V8.75H2.5V7.25H7.25Z",
+});
+
+/** The order screen's part in an opened row: it holds which row is open and slots its controls. */
+class OpenedRowHost extends LitElement {
+  static override styles = draftSlotStyles;
+  store!: WorkingOrderStore;
+  readonly opener = new OpenDraftRow(this, () => false);
+  override render() {
+    return html`<till-basket
+      .store=${this.store}
+      .lineDetails=${true}
+      .compactRows=${true}
+      stacked
+      .openedLine=${this.opener.line(this.store)}
+      >${this.store.lines.map((line, index) => this.opener.controls(this.store, line, index))}</till-basket
+    >`;
+  }
+}
+customElements.define("test-opened-row-host", OpenedRowHost);
 
 const dish = (id: string, name: string): TillProduct => ({
   id,
@@ -149,6 +176,49 @@ describe.each(["light", "dark"] as const)("compact draft rows a11y (%s theme)", 
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-period-ended]")).not.toBeNull();
     await expectNoA11yViolations(host);
+  });
+
+  it("an opened row, with its stepper, Options and Note, has no violations, before and after it was added last", async () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [{ product: croquettes, quantity: "2" }]);
+    const { el, host } = await mountWidget<OpenedRowHost>("test-opened-row-host", { store }, theme);
+    const basket = el.shadowRoot!.querySelector<TillBasket>("till-basket")!;
+    await basket.updateComplete;
+    const row = basket.shadowRoot!.querySelector<HTMLButtonElement>("[data-draft-row]")!;
+    await userEvent.click(row);
+    await el.updateComplete;
+    await basket.updateComplete;
+    expect(row.getAttribute("aria-expanded")).toBe("true");
+    const box = basket.shadowRoot!.querySelector<HTMLElement>(".entry[data-open]")!;
+    const style = getComputedStyle(box);
+    expect(style.borderTopWidth).toBe("2px");
+    expect(style.boxShadow).toBe("none");
+    const options = el.shadowRoot!.querySelector<HTMLElement>("[data-draft-open-options]")!;
+    expect(options.getBoundingClientRect().height).toBe(44);
+    expect(el.shadowRoot!.querySelector("wt-stepper")).not.toBeNull();
+    await expectNoA11yViolations(host);
+    store.addProduct(bravas, "1");
+    await el.updateComplete;
+    await basket.updateComplete;
+    await userEvent.click(
+      basket.shadowRoot!.querySelector<HTMLButtonElement>('[data-draft-row="1"]')!,
+    );
+    await el.updateComplete;
+    await basket.updateComplete;
+    const added = basket.shadowRoot!.querySelector<HTMLElement>(".entry[data-last-added]")!;
+    const plain = getComputedStyle(
+      basket.shadowRoot!.querySelector(".entry:not([data-last-added])")!,
+    );
+    expect(added.hasAttribute("data-open")).toBe(true);
+    expect(getComputedStyle(added).backgroundColor).toBe(plain.backgroundColor);
+    await expectNoA11yViolations(host);
+    await userEvent.click(
+      basket.shadowRoot!.querySelector<HTMLButtonElement>('[data-draft-row="1"]')!,
+    );
+    await el.updateComplete;
+    await basket.updateComplete;
+    expect(added.hasAttribute("data-open")).toBe(false);
+    expect(getComputedStyle(added).backgroundColor).not.toBe(plain.backgroundColor);
   });
 
   it("a disabled row has no violations", async () => {

@@ -104,13 +104,14 @@ import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { lineNutrition } from "../widgets/line-nutrition.js";
 import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
 import "../widgets/basket.js";
-import { draftRowSlotStyles, draftSelectBox, draftSelectLabel } from "../widgets/draft-row.js";
+import { draftSelectBox, draftSelectLabel } from "../widgets/draft-row.js";
 import {
   draftFamilyHeader,
   draftSplitArrow,
   foldDraftFamily,
   splitDraftLine,
 } from "../widgets/draft-portions.js";
+import { OpenDraftRow, draftSlotStyles } from "../widgets/draft-row-open.js";
 import "../widgets/last-added.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
@@ -697,7 +698,7 @@ export class TillTableOrderScreen extends LitElement {
     guestsStepperStyles,
     formMessageStyles,
     floorChipStyles,
-    draftRowSlotStyles,
+    draftSlotStyles,
     css`
       .actions[data-split-pick],
       .split-lines {
@@ -2052,6 +2053,7 @@ export class TillTableOrderScreen extends LitElement {
    * line leaves it. */
   #selected = new WeakSet<OrderLine>();
   #draftGestures?: Gestures;
+  readonly #openRow = new OpenDraftRow(this, () => this.groupCommandBusy);
   #draftEpoch = 0;
   @state() private draftDragging = false;
   #suppressDraftClick = false;
@@ -2203,13 +2205,9 @@ export class TillTableOrderScreen extends LitElement {
     const press = this.#draftPress;
     if (press !== undefined && press.group === undefined && this.#draftPressCurrent()) {
       const index = Number(press.control.dataset.draftSelect ?? press.control.dataset.draftRow);
-      const basket = [...this.renderRoot.querySelectorAll<TillBasket>("till-basket")].find(
-        (basket) => basket.lineIndexes?.includes(index),
-      );
-      // The row is itself the details control, so this click must pass #draftClick; the release's
-      // own click after it must not.
-      this.#suppressDraftClick = false;
-      basket?.shadowRoot?.querySelector<HTMLElement>(`[data-line-detail="${index}"]`)?.click();
+      [...this.renderRoot.querySelectorAll<TillBasket>("till-basket")]
+        .find((basket) => basket.lineIndexes?.includes(index))
+        ?.openLineDetails(press.store.lines[index]!);
       this.#suppressDraftClick = true;
     }
     this.#endDraftDrag();
@@ -4669,6 +4667,7 @@ export class TillTableOrderScreen extends LitElement {
                       .draftParent=${this}
                       .courses=${this.courses}
                       .orderInFlight=${this.groupCommandBusy}
+                      .openedLine=${this.#openRow.line(store)}
                       .draggedLines=${this.draftDragging && this.#draftPress?.group === undefined ? this.#draftPress?.chosen : undefined}
                       stacked
                       .store=${store}
@@ -4727,6 +4726,7 @@ export class TillTableOrderScreen extends LitElement {
         ${draftSelectBox(selected)}
       </button>
       ${marked} ${draftSplitArrow(line, index, current, () => this.#splitDraftLine(store, line))}
+      ${this.#openRow.controls(store, line, index)}
       ${
         tools.length === 0
           ? nothing

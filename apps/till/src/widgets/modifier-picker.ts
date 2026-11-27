@@ -312,6 +312,8 @@ export class TillModifierPicker extends LitElement {
   @state() private removedDefaults: string[] = [];
 
   @property({ type: Boolean }) withNote = false;
+  /** Opens with the note field open and focused, as Add note does. */
+  @property({ type: Boolean }) focusNote = false;
 
   @property({ attribute: false }) initialCourse?: string;
   @property({ attribute: false }) courseSnapshot?: TillCourse;
@@ -887,6 +889,27 @@ export class TillModifierPicker extends LitElement {
     );
   }
 
+  override firstUpdated(): void {
+    if (this.focusNote && this.withNote && this.lineDetails) void this.#openNote();
+  }
+
+  async #openNote(): Promise<void> {
+    if (!this.isConnected || !this.active || this.disabled || this.readOnly) return;
+    const connection = this.#connection;
+    this.noteExpanded = true;
+    await this.updateComplete;
+    const field = this.shadowRoot!.querySelector("wt-textarea");
+    await field?.updateComplete;
+    if (
+      connection === this.#connection &&
+      this.isConnected &&
+      this.active &&
+      !this.disabled &&
+      !this.readOnly
+    )
+      field?.focus();
+  }
+
   override render() {
     const { stale, totals, saveAction, satisfied } = this.#checks;
     const measured = !soldByTheUnit(this.product);
@@ -1057,23 +1080,9 @@ export class TillModifierPicker extends LitElement {
                     ? html`<wt-button
                         class="add-note"
                         variant="secondary"
-                        @click=${async (event: Event) => {
+                        @click=${(event: Event) => {
                           event.stopPropagation();
-                          if (!this.isConnected || !this.active || this.disabled || this.readOnly)
-                            return;
-                          const connection = this.#connection;
-                          this.noteExpanded = true;
-                          await this.updateComplete;
-                          const field = this.shadowRoot!.querySelector("wt-textarea");
-                          await field?.updateComplete;
-                          if (
-                            connection === this.#connection &&
-                            this.isConnected &&
-                            this.active &&
-                            !this.disabled &&
-                            !this.readOnly
-                          )
-                            field?.focus();
+                          void this.#openNote();
                         }}
                         >${t("line.note.add")}</wt-button
                       >`
