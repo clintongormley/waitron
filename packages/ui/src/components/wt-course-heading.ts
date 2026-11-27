@@ -34,7 +34,8 @@ export class WtCourseHeading extends LitElement {
         text-transform: uppercase;
       }
 
-      /* The mark moves under the title only when the title would keep less than half the width. */
+      /* The mark moves under the title only when the title would keep less than half the width, or
+         less than --wt-course-heading-title-min-width. */
       .title {
         flex: 1 1 max(50%, var(--wt-course-heading-title-min-width));
       }

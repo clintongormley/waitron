@@ -6614,7 +6614,7 @@ Above a table's New order, the bill's sent dishes are drawn always, with no box 
 own. A heading's title is its courses' names, then its state: "Fired 12 min ago", "At the pass"
 when every dish still to serve waits at the pass, or "Held". A fired or at-the-pass heading carries
 the ✓ Sent mark and **Serve all**, which serves the section's released dishes still to serve; a held
-heading carries no mark and **Fire**, with **Serve all** beside it when some of its dishes are already released, and its other bills' held dishes stand under it, named by
+heading carries no mark and **Fire**, with **Serve all** beside it when some of this bill's dishes under it are released and still to serve, and its other bills' held dishes stand under it, named by
 bill, each a `--wt-color-track` band in `--wt-color-text`. The sent rows and their headings sit on
 the page colour; beside the menu, the order layout (`apps/till/src/screens/table-order-layout.ts`) paints `till-sent-orders` `--wt-color-bg` out to the order
 column's edge while the new dishes keep the column's `--wt-color-surface`. A row is quiet (`apps/till/src/widgets/sent-row.ts`): normal-weight muted text, the quantity
