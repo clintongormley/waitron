@@ -132,7 +132,7 @@ describe("Give money back replaces the two old buttons in the till's words", () 
       "Refund a guest: for a dish, as goodwill, or the extra paid on top. If you close it before it is all refunded, find the receipt in Find a bill under Refunds under way; if it is not there, open Refund on the receipt again on this till.",
     );
     expect(helpEs["help.give_money_back"]).toBe(
-      "Devuelve dinero a un cliente: por un plato, por cortesía o lo pagado de más. Si la cierras antes de que vuelva todo el dinero, busca el ticket en Buscar cuenta, en Devoluciones en curso; si no está, vuelve a abrir Devolver dinero en el ticket en esta caja.",
+      "Devuelve dinero a un cliente: por un plato, por cortesía o lo pagado de más. Si la cierras antes de que vuelva todo el dinero, busca el ticket en Buscar cuenta, en Devoluciones en curso; si no está, vuelve a abrir Devolución en el ticket en esta caja.",
     );
   });
 });
@@ -172,5 +172,42 @@ describe("Refund names the receipt's action in English", () => {
     pairs(CODE_TABLES, "codes", codes);
     expect(codes.filter(([, english]) => old.test(english))).toEqual([]);
     expect(Object.entries(helpEn).filter(([, text]) => old.test(text))).toEqual([]);
+  });
+});
+
+describe("Devolución names the receipt's action in Spanish", () => {
+  it.each([
+    ["give_back.title", "Devolución"],
+    ["give_back.submit", "Devolver {amount}"],
+    ["give_back.submit_any", "Devolver"],
+    ["give_back.under_way", "Devolución en curso"],
+    ["find_page.corrections", "Devoluciones en curso"],
+    ["find_page.refund", "Devolución"],
+    ["cancel_item.refund_at_till", "Devuélvelo en una caja: elige Devolución en el recibo."],
+    [
+      "cancel_item.free_served",
+      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuélvelo desde el recibo.",
+    ],
+  ] as const)("%s", (key, wording) => {
+    expect(es[key]).toBe(wording);
+  });
+
+  it("tells the checkbox from the receipt's Devolución where a sentence names both", () => {
+    const tables = CODE_TABLES as Record<string, Record<string, { es: string }>>;
+    expect(tables.FREE_ITEM_WITH_DISH!.served!.es).toBe(
+      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después devuélvelo desde el recibo.",
+    );
+    expect(freeItemAtFinishMessage("served", "es")).toBe(
+      "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuélvelo desde el recibo.",
+    );
+  });
+
+  it("leaves no Spanish string naming Devolver dinero", () => {
+    const old = /Devolver dinero/;
+    expect(Object.entries(es).filter(([, text]) => old.test(text))).toEqual([]);
+    const codes: [string, string, string][] = [];
+    pairs(CODE_TABLES, "codes", codes);
+    expect(codes.filter(([, , spanish]) => old.test(spanish))).toEqual([]);
+    expect(Object.entries(helpEs).filter(([, text]) => old.test(text))).toEqual([]);
   });
 });

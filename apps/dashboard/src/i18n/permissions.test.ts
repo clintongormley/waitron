@@ -22,3 +22,10 @@ it("names the permission to correct an issued document as the till does", () => 
   expect(en["permission.sale.rectify"]).toBe("Issue corrective receipts and invoices");
   expect(en["permission.sale.rectify.help"]).toContain("a corrective receipt or invoice");
 });
+
+it("names the till's Refund action as the till does in Spanish", () => {
+  for (const key of ["permission.sale.refund.help", "permission.sale.rectify.help"] as const) {
+    expect(es[key], key).toContain("Devolución en el recibo de una caja");
+    expect(es[key], key).not.toContain("Devolver dinero");
+  }
+});

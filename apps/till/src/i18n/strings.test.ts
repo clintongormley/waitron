@@ -495,7 +495,7 @@ describe("Print the bill's own sentences", () => {
     ],
     [
       "es-ES",
-      "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Devolver dinero.",
+      "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Devolución.",
     ],
   ])("offers no Mark served where none is drawn, in %s", (locale, message) => {
     expect(catalogues[locale]?.["meal_end.unserved_no_mark"]).toBe(message);
@@ -582,7 +582,7 @@ describe("the Finish table and Cancel item lines on a dish given free", () => {
     [
       "es-ES",
       "cancel_item.free_served",
-      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después abre Devolver dinero en el recibo.",
+      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuélvelo desde el recibo.",
     ],
   ])("reads in %s for %s", (locale, key, line) => {
     expect(catalogues[locale]?.[key as StringKey]).toBe(line);

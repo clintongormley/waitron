@@ -28,19 +28,19 @@ under way"; change the text, keep the key names; give the real size). Frames: no
    `codes.ts:1163`, `:1185`, `cancel_item.refund_at_till` and their Spanish ("…untick Refund on one
    of them, then refund it from the receipt"). "Refund {amount}" on a table, a bill's excess and a
    bill's payment already mean the same thing in different windows and stay.
-3. **Spanish is unchanged.** The owner's complaint was the English wording, and the till's Spanish
-   already says devolver/devolución for refunds. Changing "Devolver dinero" to "Devolver" alone
-   would give the window's title the same word as its button (`give_back.submit_any`) and as a
-   bill's per-payment refund button (`bill_pay.refund`), and read badly in sentences.
+3. **Spanish changes too** (the watcher, 2026-11-27 02:15): the action and window named "Devolver
+   dinero" become "Devolución", a noun as "Refund" is; the button keeps the verb "Devolver", and
+   text that already says devolución stays. Sentences naming both controls name the receipt.
 4. **The staff guide.** `apps/server/src/guide/en/table-service.md` (33 lines on the pattern above)
    says refund. Its heading `## Give money back {#give-money-back}` becomes `## Refund from a
    receipt {#give-money-back}`, distinct from its neighbours "Refund all or part of a payment" and
    "Refund a card payment on a separate terminal". Ids stay, so `help-guide.ts` and
-   `give-back-dialog.ts` links keep working. The Spanish guide stays, as item 3.
+   `give-back-dialog.ts` links keep working. The Spanish guide's heading becomes `## Devolución
+   desde un recibo {#give-money-back}`, as item 3.
 5. **The dashboard's pointers to the till.** `apps/dashboard/src/i18n/alert-messages.ts` (the
    "Money back under way" pointers, lines 487–503) and the permission descriptions in
    `apps/dashboard/src/i18n/strings.ts:13,15` ("Give money back on the till") name the till's
-   control by its new English name. Spanish stays.
+   control by its new name in both languages.
 6. **Keys, files, element names and code comments stay** (`give_back.*`, `give-back-dialog.ts`).
    Renaming them would touch every importer for no change staff see.
 
@@ -74,4 +74,4 @@ dashboard's pointers, the Spanish clash and the two-control sentences; all appli
 
 Spanish: leave it unchanged (recommended, item 3), or change it too, and if so to what?
 
-Answered: the watcher, 2026-11-27 01:00 (lane O questions.md): build as written, Spanish unchanged.
+Answered: the watcher, 2026-11-27 02:15: Spanish changes too, as item 3.

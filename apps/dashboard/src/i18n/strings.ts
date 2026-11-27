@@ -4813,9 +4813,9 @@ export const es: Record<StringKey, string> = {
   "permission.sale.void.help":
     "Anula una venta registrada o el ticket de una cuenta impresa en la que no se sirvió nada, o autoriza registrar que un grupo se ha ido sin pagar. Otros empleados pueden pedir tu autorización con PIN.",
   "permission.sale.refund.help":
-    "Devuelve pagos y autoriza quitar cargos de platos ya enviados o servidos. Devolver dinero en la caja también lo necesita, salvo cuando una ventana abierta desde Cancelar y devolver o Cerrar mesa devuelve solo el dinero de los platos cancelados, y no en un datáfono aparte.",
+    "Devuelve pagos y autoriza quitar cargos de platos ya enviados o servidos. Devolución en el recibo de una caja también lo necesita, salvo cuando una ventana abierta desde Cancelar y devolver o Cerrar mesa devuelve solo el dinero de los platos cancelados, y no en un datáfono aparte.",
   "permission.sale.rectify.help":
-    "Autoriza emitir un ticket rectificativo o una factura rectificativa. Devolver dinero en la caja puede necesitarlo cuando se devuelve dinero de platos o por cortesía por encima de lo que se debe por platos cancelados. Devolver el pago requiere un permiso aparte.",
+    "Autoriza emitir un ticket rectificativo o una factura rectificativa. Devolución en el recibo de una caja puede necesitarlo cuando se devuelve dinero de platos o por cortesía por encima de lo que se debe por platos cancelados. Devolver el pago requiere un permiso aparte.",
   "permission.order.custom_item.help":
     "Añade a la venta algo que no está en la carta, con un nombre y un precio escritos en la caja. Quien no tenga este permiso puede pedir a alguien que lo tenga que introduzca su PIN.",
   "permission.cash.drawer.help":

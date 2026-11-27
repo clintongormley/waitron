@@ -2570,7 +2570,7 @@ export const es: Record<StringKey, string> = {
   "cancel_item.yes": "Sí",
   "cancel_item.no": "No",
   "cancel_item.started": "Ya se está preparando o se ha servido",
-  "cancel_item.refund_at_till": "Devuelve el dinero en una caja: Devolver dinero, en el recibo.",
+  "cancel_item.refund_at_till": "Devuélvelo en una caja: elige Devolución en el recibo.",
   "cancel_item.paid": "Esta cuenta ya está cerrada",
   "cancel_item.choice": "¿Qué pasa con el cobro?",
   "cancel_item.still_charge": "Cancelar y cobrar",
@@ -2578,7 +2578,7 @@ export const es: Record<StringKey, string> = {
   "cancel_item.refund": "Cancelar y devolver {amount}",
   "cancel_item.with_free": "Vuelve con él, por invitación: {dishes}",
   "cancel_item.free_served":
-    "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después abre Devolver dinero en el recibo.",
+    "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuélvelo desde el recibo.",
   "cancel_item.unavailable": "Este plato no se puede cancelar aquí.",
 
   "device_zones.title": "Zonas en este dispositivo",
@@ -2632,7 +2632,7 @@ export const es: Record<StringKey, string> = {
   "tender_refund.failed": "La devolución ha fallado. Este intento no ha devuelto dinero.",
   "refund.provider_balance_unavailable":
     "El proveedor de pagos aún no puede hacer esta devolución. Puedes iniciar una nueva devolución más tarde.",
-  "give_back.title": "Devolver dinero",
+  "give_back.title": "Devolución",
   "give_back.loading": "Leyendo el ticket…",
   "give_back.read_failed": "No se pudo leer el ticket. No ha cambiado nada.",
   "give_back.what_for": "¿Por qué se devuelve?",
@@ -2670,7 +2670,7 @@ export const es: Record<StringKey, string> = {
   "give_back.preview_failed":
     "No se pudo contactar con el servidor para comprobar esta devolución. No se ha devuelto nada. Pulsa Devolver para intentarlo de nuevo.",
   "give_back.way_not_here":
-    "El perfil de este dispositivo no permite devolver dinero así. Para devolverlo así, abre Devolver dinero en un dispositivo cuyo perfil lo permita.",
+    "El perfil de este dispositivo no permite devolver dinero así. Para devolverlo así, abre Devolución en un dispositivo cuyo perfil lo permita.",
   "give_back.changed_while_checking":
     "La devolución cambió mientras se comprobaba. Revisa lo que se muestra y vuelve a pulsar Devolver.",
   "give_back.terminal_heading": "Devuélvelo en el datáfono aparte",
@@ -2685,7 +2685,7 @@ export const es: Record<StringKey, string> = {
     "No se pudo leer quién puede aprobarlo. No se ha devuelto nada. Pulsa Devolver para intentarlo de nuevo.",
   "give_back.nothing_given": "No se ha devuelto nada.",
   "give_back.storage":
-    "Este dispositivo no pudo guardar la devolución antes de enviarla. No se ha devuelto nada. Cierra esta ventana y, en otro dispositivo que cobre, abre Devolver dinero en el ticket.",
+    "Este dispositivo no pudo guardar la devolución antes de enviarla. No se ha devuelto nada. Cierra esta ventana y, en otro dispositivo que cobre, abre Devolución en el ticket.",
   "give_back.lost":
     "El servidor no respondió, así que no se sabe si el dinero se devolvió. Enviar de nuevo se lo pregunta al servidor: envía la misma devolución, que nunca se devuelve dos veces.",
   "give_back.busy":
@@ -2712,7 +2712,7 @@ export const es: Record<StringKey, string> = {
   "give_back.still_waiting":
     "La compañía de la tarjeta aún no ha respondido. Vuelve a comprobarlo más tarde: el resto sigue esperando en esta caja.",
   "give_back.rest_failed":
-    "La compañía de la tarjeta no hizo la primera devolución, así que el resto no se envió. No se ha devuelto nada más. Vuelve a abrir Devolver dinero para intentarlo de nuevo o elegir otra forma.",
+    "La compañía de la tarjeta no hizo la primera devolución, así que el resto no se envió. No se ha devuelto nada más. Vuelve a abrir Devolución para intentarlo de nuevo o elegir otra forma.",
   "give_back.under_way": "Devolución en curso",
   "give_back.done": "Listo",
   "give_back.uw_back": "Devueltos {back} hasta ahora, de {gross}.",
@@ -4447,7 +4447,7 @@ export const es: Record<StringKey, string> = {
   "meal_end.not_admitted":
     "El perfil de este dispositivo ya no te deja trabajar en él, así que no puede imprimir la cuenta por ti. Inicia sesión en un dispositivo cuyo perfil te admita.",
   "meal_end.unserved_no_mark":
-    "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Devolver dinero.",
+    "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Devolución.",
   "meal_end.unconfirmed":
     "Imprimir la cuenta no obtuvo respuesta, así que puede que se haya impreso. Revisa esta cuenta antes de volver a intentarlo.",
   "meal_end.refused":

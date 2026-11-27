@@ -1039,8 +1039,8 @@ counter order delivered to a table; dropped for now, §9.8).
   the SumUp radio in `apps/till/src/widgets/outside-card.ts`. What a stored payment keeps of the
   machine is the plan's to propose.
 - (pass 3) **"Refund" replaces "Give money back" and "Give back"** in every till string (the
-  `give_back.*` and `bill_refund.*` keys' English and Spanish), as §7.12 says. (2026-11-27: built
-  in English only; the watcher kept the Spanish, which already says devolver/devolución, in
+  `give_back.*` and `bill_refund.*` keys' English and Spanish), as §7.12 says. (2026-11-27, the
+  watcher: in Spanish "Devolver dinero" becomes "Devolución" and the button stays "Devolver"; see
   [the R1 plan](../plans/2026-11-27-o-r1-refund-wording.md).)
 - (pass 3) **Find a bill searches by amount** (new on `apps/server/src/find-bill-transactions.ts`) and
   drops the Bills tab (`apps/till/src/screens/till-find-bill-screen.ts`).
