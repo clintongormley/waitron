@@ -1,6 +1,5 @@
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { listAdjustmentReasons } from "@waitron/adjustments";
 import { recordReplacement } from "@waitron/core";
 import { readLiveSeriesIdTx, saleLines, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -9,17 +8,14 @@ import { addProducts, createProduct, menuItems, requireMenuRoot } from "@waitron
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { saleId as brandSaleId, seriesId as brandSeriesId, type SaleId } from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
-import { recordAttendanceFact } from "./attendance-capture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { correctiveLinesInPart } from "./corrective-lines-in-part.js";
 import { readReceiptEmailDocument } from "./invoice-document.js";
-import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
-import { openInvoiceCorrection, previewInvoiceCorrection } from "./invoice-corrections.js";
 import { splitAfterPrint } from "./split-after-print.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readOrderRevision } from "./working-order-context.js";
 import { GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
-import { parseInvoiceCorrection } from "./testing/invoice-correction.js";
+import { giveBackCash } from "./testing/give-back-cash.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
   cashContribution,
@@ -77,16 +73,6 @@ beforeAll(async () => {
   lunch = await addSpecLunch(spec);
 });
 
-const actor = () => ({
-  personId: venue.operator.personId,
-  authz: { sessionId: venue.operator.sessionId },
-  authorization: {
-    authorizedBy: venue.operator.personId,
-    permission: "sale.rectify",
-    viaOverride: false,
-  },
-});
-
 /** A bill eaten here holding `lines`, paid in cash: its sale's filed rows. */
 async function paidBill(lines: { menuItemId: string; quantity: string }[], amount: string) {
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
@@ -108,42 +94,8 @@ async function filedOf(tabId: string) {
   return { saleId: brandSaleId(sale!.id), rows };
 }
 
-/** Gives `gross` back in cash off the sale's row `lineId`; answers the corrective's id. */
-async function giveBack(saleId: SaleId, gross: string, lineId: string) {
-  const { vatBreakdown } = await inTx(venue, (tx) =>
-    previewInvoiceCorrection(tx, venue.backend, venue.cfg, venue.clock.now(), saleId, {
-      gross,
-      lineIds: [lineId],
-    }),
-  );
-  const deps = { backend: venue.backend, clock: venue.clock, attendance: recordAttendanceFact };
-  const given = await inTx(venue, async (tx) => {
-    const { correction } = await openInvoiceCorrection(
-      tx,
-      deps,
-      venue.cfg,
-      saleId,
-      parseInvoiceCorrection({
-        submissionId: crypto.randomUUID(),
-        gross,
-        lineIds: [lineId],
-        reasonId: (await listAdjustmentReasons(tx))[0]!.id,
-        note: "Goodwill",
-        expectedSplit: vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
-      }),
-      actor(),
-    );
-    return giveCorrectionCash(
-      tx,
-      deps,
-      venue.cfg,
-      correction.id,
-      parseCorrectionCash({ submissionId: crypto.randomUUID(), amount: gross }),
-      { ...actor(), authorization: { ...actor().authorization, permission: "sale.refund" } },
-    );
-  });
-  return given.correction.correctiveSaleId!;
-}
+const giveBack = (saleId: SaleId, gross: string, lineId: string) =>
+  giveBackCash(venue, saleId, gross, [lineId]);
 
 /**
  * The corrective's rows given back in part, by name: as the function answers them, and as the
