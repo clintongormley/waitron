@@ -3372,7 +3372,7 @@ export class TillTableOrderScreen extends LitElement {
         .billId=${billId}
         .snapshot=${this.currentOrders === null ? null : { scope, billId, current: this.currentOrders }}
         .billLabels=${new Map(bills.map((bill) => [bill.workingOrderId, billName(this.party?.displayName ?? "", bill)]))}
-        .busy=${this.busy || this.groupCommandBusy}
+        .busy=${this.busy || this.groupCommandBusy || this.currentOrdersUnread}
         .now=${this.now}
         @reorder-held=${(event: CustomEvent<SentReorderDetail>) => {
           event.stopPropagation();

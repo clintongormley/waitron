@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { userEvent } from "vitest/browser";
 import type { CurrentOrderRow, CurrentOrders, LineNutrition } from "../api/kitchen-api.js";
 import { setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "./sent-orders.js";
@@ -67,13 +66,7 @@ async function mount(data: CurrentOrders) {
     snapshot: { scope: "party", billId: "bill", current: data },
     now,
   });
-  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-sent-toggle]")!);
-  await el.updateComplete;
   return el;
-}
-async function unfold(el: TillSentOrders, kind: "held" | "served") {
-  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-toggle]`)!);
-  await el.updateComplete;
 }
 const icons = (row: Element) =>
   [...row.querySelectorAll("wt-icon")].map((icon) => icon.getAttribute("name"));
@@ -100,7 +93,6 @@ describe.each(["en", "es"] as const)("stored nutrition in Sent (%s)", (locale) =
           kind === "held",
         ),
       );
-      if (kind !== "fired") await unfold(el, kind === "held" ? "held" : "served");
       const row = el.shadowRoot!.querySelector(
         `[data-${kind === "cancelled" ? "served" : kind}-line="dish"]`,
       )!;
@@ -130,7 +122,6 @@ describe.each(["en", "es"] as const)("stored nutrition in Sent (%s)", (locale) =
         true,
       ),
     );
-    await unfold(el, "held");
     const companion = el.shadowRoot!.querySelector('[data-companion="companion"]')!;
     expect(icons(companion)).toEqual(["allergen-nuts", "diet-halal"]);
     const nuts = companion.querySelector('wt-icon[name="allergen-nuts"]')!;
@@ -140,7 +131,7 @@ describe.each(["en", "es"] as const)("stored nutrition in Sent (%s)", (locale) =
       "allergen-gluten",
       "diet-kosher",
     ]);
-    expect(companion.querySelector(".amount, button, wt-button")).toBeNull();
+    expect(companion.querySelector(".row-price, button, wt-button")).toBeNull();
   });
 });
 

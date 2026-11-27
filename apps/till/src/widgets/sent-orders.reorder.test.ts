@@ -45,8 +45,6 @@ async function mount() {
     now,
     snapshot: { scope: "visit", billId: "wo-4", current: data() },
   });
-  await userEvent.click(mounted.el.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
-  await mounted.el.updateComplete;
   return mounted.el;
 }
 const q = (el: TillSentOrders, selector: string) =>
@@ -92,8 +90,8 @@ it.each([
         true,
       ],
     ]);
-    expect(q(el, '[data-held-group="g3"] h4').textContent).toContain("Group 30");
-    expect(q(el, '[data-held-group="g4"] h4').textContent).toContain("Group 4");
+    expect(q(el, '[data-group-fire="g3"]').getAttribute("aria-label")).toContain("Group 30");
+    expect(q(el, '[data-group-fire="g4"]').getAttribute("aria-label")).toContain("Group 4");
     expect(more.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
   },
 );
@@ -171,10 +169,10 @@ it("a changed service read closes the old menu before it can target a different 
   expect(more.isConnected).toBe(false);
   oldButton.click();
   expect(events).toEqual([]);
-  const headings = [...el.shadowRoot!.querySelectorAll("[data-held-group] h4")].map((heading) =>
-    heading.textContent!.trim(),
+  const headings = [...el.shadowRoot!.querySelectorAll("[data-held-group] [data-group-fire]")].map(
+    (fire) => fire.getAttribute("aria-label"),
   );
-  expect(headings).toEqual(["Group 4", "Group 30"]);
+  expect(headings).toEqual(["Fire · Group 4", "Fire · Group 30"]);
   await menu(el, "g3");
   await userEvent.click(q(el, '[data-group-more="g3"] [data-group-earlier]'));
   expect(events.map((event) => event.detail.heldGroupIds)).toEqual([["g3", "g4", "other-bill"]]);
@@ -190,21 +188,21 @@ it("one held group has no empty More menu", async () => {
   expect(q(el, '[data-group-fire="g3"]')).not.toBeNull();
 });
 
-it.each(['[data-group-drag="g3"]', '[data-held-group="g3"] [data-held-line] .dish'])(
+it.each(['[data-group-drag="g3"]', '[data-held-group="g3"] [data-held-line] .sent-row-open'])(
   "keeps the browser menu off the held-order target %s",
   async (selector) => {
     expect(touchContextMenu(q(await mount(), selector))).toBe(true);
   },
 );
 
-it("only the heading reserves touch dragging; the fold controls retain native scrolling", async () => {
+it("only the heading reserves touch dragging; the rows retain native scrolling", async () => {
   const el = await mount();
   const heading = q(el, '[data-group-drag="g3"]');
   expect(getComputedStyle(heading).touchAction).toBe("none");
   expect(getComputedStyle(heading).userSelect).toBe("none");
   expect(heading.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
-  expect(getComputedStyle(q(el, "[data-held-toggle]")).touchAction).toBe("auto");
-  expect(getComputedStyle(q(el, "[data-sent-toggle]")).touchAction).toBe("auto");
+  expect(getComputedStyle(q(el, "[data-held-line] .sent-row-open")).touchAction).toBe("auto");
+  expect(getComputedStyle(q(el, "[data-group-fire]")).touchAction).toBe("auto");
 });
 
 function pointer(target: EventTarget, type: string, x: number, y: number) {
@@ -249,7 +247,7 @@ it("a 500ms hold and drag moves a held heading after its target without renumber
   expect(events.map((event) => event.detail.heldGroupIds)).toEqual([["other-bill", "g4", "g3"]]);
   expect(activity).toHaveLength(1);
   expect(q(el, '[data-held-group="g3"]').hasAttribute("data-dragging")).toBe(false);
-  expect(q(el, '[data-held-group="g3"] h4').textContent).toContain("Group 30");
+  expect(q(el, '[data-group-fire="g3"]').getAttribute("aria-label")).toContain("Group 30");
 });
 
 it("a held heading drops before another heading after an unchanged passive read", async () => {
@@ -268,11 +266,8 @@ it.each(["held", "fired", "served"] as const)(
   "a sent %s row cannot drag a group or serve on release",
   async (kind) => {
     const el = await mount();
-    if (kind === "served") {
-      await userEvent.click(q(el, "[data-served-toggle]"));
-      await el.updateComplete;
-    }
-    const line = q(el, `[data-${kind}-line="${kind === "held" ? "l-flan" : "l-croq"}"] .dish`);
+    const id = { held: "l-flan", fired: "l-croq", served: "l-salad" }[kind];
+    const line = q(el, `[data-${kind}-line="${id}"] .sent-row-open`);
     const reorder = collect(el);
     const serve = collect(el, "serve-lines");
     const info = collect(el, "sent-line-info");
@@ -303,8 +298,6 @@ it.each([
   scroll.style.cssText = "height: 160px; overflow-y: auto";
   parent.append(scroll);
   scroll.append(el);
-  await el.updateComplete;
-  await userEvent.click(q(el, "[data-held-toggle]"));
   await el.updateComplete;
   const heading = q(el, '[data-group-drag="g3"]');
   heading.scrollIntoView({ block: "center" });

@@ -4,21 +4,26 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, formatDecimalInput, Gestures, preventTouchContextMenu } from "@waitron/ui";
-import { scrollAncestors } from "@waitron/ui/src/reorder-table.js";
 import {
-  MONEY_SCALE,
-  decimal,
-  formatMoney,
-  sumDecimals,
-  toScale,
-  type BillSetMenuState,
-} from "@waitron/shared";
-import type { CurrentOrderRow, CurrentOrders, TabLine } from "../api/kitchen-api.js";
+  baseStyles,
+  formatDecimalInput,
+  Gestures,
+  preventTouchContextMenu,
+  visuallyHiddenStyles,
+} from "@waitron/ui";
+import { scrollAncestors } from "@waitron/ui/src/reorder-table.js";
+import { decimal, formatMoney, type BillSetMenuState } from "@waitron/shared";
+import type {
+  CurrentOrderRow,
+  CurrentOrders,
+  ReleaseReminder,
+  TabLine,
+} from "../api/kitchen-api.js";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { sentItemCount, sentPanel, type SentPanel, type SentSlice } from "../state/sent-panel.js";
-import { portionGroups, sentSlicePortionKey } from "../state/portion-groups.js";
+import type { SentSlice } from "../state/sent-panel.js";
+import { sentRowPortionKey } from "../state/portion-groups.js";
+import { type SentRow, type SentSection, sentSections } from "../state/sent-sections.js";
 import { sentMenuDishes } from "../state/set-menus.js";
 import { setMenuTag, setMenuTagStyles } from "./set-menu-presentation.js";
 import { reminderDueAt } from "../state/release-reminder.js";
@@ -26,7 +31,9 @@ import { trimQuantity } from "./dish-format.js";
 import { groupName } from "./group-name.js";
 import { nutritionIcons, nutritionIconStyles } from "./nutrition-icons.js";
 import { nutritionDietLabels } from "../diet-labels.js";
+import { sentCompanion, sentRow, sentRowStyles } from "./sent-row.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-course-heading.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "./fired-ago.js";
 
@@ -52,6 +59,15 @@ export interface SentReorderDetail {
   expected: HeldOrder;
   heldGroupIds: string[];
 }
+interface SentModel {
+  sections: SentSection[];
+  reminder: ReleaseReminder | null;
+}
+
+/** The slices a row's information and hold name: what is left of it, or else all of it. */
+const infoMembers = (row: SentRow) => (row.left.length > 0 ? row.left : row.slices);
+const firedLeft = (rows: readonly SentRow[]) =>
+  rows.flatMap((row) => row.left).filter((slice) => slice.kind === "fired");
 
 @customElement("till-sent-orders")
 export class TillSentOrders extends LitElement {
@@ -66,6 +82,7 @@ export class TillSentOrders extends LitElement {
     nutritionIconStyles,
     setMenuTagStyles,
     allergyMarkStyles,
+    sentRowStyles,
     css`
       :host {
         display: block;
@@ -74,148 +91,20 @@ export class TillSentOrders extends LitElement {
       section {
         min-width: 0;
       }
-      .panel {
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        overflow: hidden;
-      }
-      .attention {
-        border-color: var(--wt-color-warning);
-      }
-      .attention:not(.expanded) {
-        animation: attention 3s ease-in-out infinite;
-      }
-      @keyframes attention {
-        50% {
-          outline: 1px solid var(--wt-color-warning);
-          outline-offset: 1px;
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .attention:not(.expanded) {
-          animation: none;
-        }
-      }
-      button {
-        font: inherit;
-        color: inherit;
-        cursor: pointer;
-      }
-      .toggle {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-2);
-        width: 100%;
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-3);
-        background: var(--wt-color-surface);
-        border: 0;
-        text-align: start;
-      }
-      .panel-title {
-        flex-shrink: 0;
-      }
-      .summary {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-        overflow-wrap: anywhere;
-      }
-      .content {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        padding: var(--wt-space-2);
-      }
-      .heading {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-2);
-        flex-wrap: wrap;
-      }
-      h2,
-      h3,
-      h4,
-      p {
-        margin: 0;
-        overflow-wrap: anywhere;
-      }
-      h2,
-      h3,
-      h4 {
-        font-size: var(--wt-font-size-md);
+      .visually-hidden {
+        ${visuallyHiddenStyles}
       }
       ul {
         margin: 0;
         padding: 0;
         list-style: none;
       }
-      li {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        border-bottom: 1px solid var(--wt-color-border);
-      }
-      .dish {
-        -webkit-user-select: none;
-        user-select: none;
-        display: flex;
-        flex: 1;
-        min-width: 0;
-        align-items: center;
-        gap: var(--wt-space-2);
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2);
-      }
-      button.dish {
-        width: 100%;
-        background: transparent;
-        border: 0;
-        text-align: start;
-      }
-      button:focus-visible {
-        outline: 2px solid var(--wt-color-focus);
-        outline-offset: -2px;
-      }
-      button:disabled {
-        cursor: default;
-      }
-      .what {
-        flex: 1;
-        min-width: 0;
-        overflow-wrap: anywhere;
-      }
-      .extra,
-      .note,
-      .status,
-      .bill {
-        display: block;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-      .amount {
-        white-space: nowrap;
-        font-variant-numeric: tabular-nums;
-      }
-      .companion {
-        background: var(--wt-color-surface-sunken);
-        color: var(--wt-color-text);
-      }
-      .companion .bill {
-        color: inherit;
-      }
-      .group {
-        padding-block: var(--wt-space-2);
-      }
       .group[data-dragging] {
         outline: var(--wt-focus-ring);
       }
-      .group-title {
-        flex: 1;
-        display: flex;
+      .section-title[data-group-drag] {
+        display: inline-flex;
         align-items: center;
-        min-width: 0;
         min-height: var(--wt-tap-min);
         touch-action: none;
         user-select: none;
@@ -227,9 +116,7 @@ export class TillSentOrders extends LitElement {
         flex-wrap: wrap;
         padding: var(--wt-space-2);
         background: var(--wt-color-surface-sunken);
-      }
-      .mark {
-        font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
       }
     `,
   ];
@@ -239,12 +126,8 @@ export class TillSentOrders extends LitElement {
   @property({ attribute: false }) billLabels: ReadonlyMap<string, string> = new Map();
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) now?: number;
-  @state() private expanded = false;
-  @state() private servedOpen = false;
-  @state() private heldOpen = false;
   #opening = "";
-  #read = false;
-  #pressedModel: SentPanel | null = null;
+  #pressedModel: SentModel | null = null;
   #pressedNow?: number;
   #gestures?: Gestures;
   #pressed?: {
@@ -321,24 +204,17 @@ export class TillSentOrders extends LitElement {
     const opening = JSON.stringify([this.scope, this.billId]);
     if (opening !== this.#opening) {
       this.#opening = opening;
-      this.#read = false;
-      this.expanded = this.servedOpen = this.heldOpen = false;
       this.#pressedModel = null;
       this.#pressedNow = undefined;
       this.#pressed = undefined;
       this.#releaseHeading();
-    }
-    const model = this.#model();
-    if (model !== null && !this.#read) {
-      this.#read = true;
-      this.expanded = model.attention;
     }
   }
   protected override updated(): void {
     clearTimeout(this.#reminderTimer);
     clearTimeout(this.#ageTimer);
     if (this.now !== undefined) return;
-    if (this.expanded && (this.#model()?.fired.length ?? 0) > 0)
+    if (this.#model()?.sections.some((section) => firedLeft(section.rows).length > 0))
       this.#ageTimer = setTimeout(() => this.requestUpdate(), 20_000);
     const delay = reminderDueAt(this.#current()?.reminder) - Date.now();
     if (Number.isFinite(delay) && delay > 0)
@@ -349,9 +225,16 @@ export class TillSentOrders extends LitElement {
       ? this.snapshot.current
       : null;
   }
-  #model(): SentPanel | null {
+  #model(): SentModel | null {
     const current = this.#current();
-    return current === null ? null : sentPanel(current, this.billId, this.now ?? Date.now());
+    if (current === null) return null;
+    const sections = sentSections(current, this.billId, this.now ?? Date.now(), (slice) =>
+      sentRowPortionKey(slice, this.lines, [
+        allergyGuestId(this.allergy, { kind: "working", id: slice.row.lineId }),
+        this.#setMenuDishes.get(slice.row.lineId)?.setMenuId,
+      ]),
+    );
+    return { sections, reminder: current.reminder };
   }
   #dispatch(name: string, detail: unknown): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
@@ -416,9 +299,10 @@ export class TillSentOrders extends LitElement {
   }
   #dropHeading(x: number, y: number): void {
     const press = this.#headingPress;
-    const target = this.shadowRoot
-      ?.elementFromPoint(x, y)
-      ?.closest<HTMLElement>("[data-group-drag]");
+    const hit = this.shadowRoot?.elementFromPoint(x, y);
+    const target =
+      hit?.closest<HTMLElement>("[data-group-drag]") ??
+      hit?.closest("wt-course-heading")?.querySelector<HTMLElement>("[data-group-drag]");
     if (press && this.dragging === press.id && target) {
       const id = target.dataset.groupDrag!;
       const from = press.expected.ids.indexOf(press.id);
@@ -431,9 +315,8 @@ export class TillSentOrders extends LitElement {
   }
   #serve(displayed: readonly { lineId: string; quantity: string }[]): void {
     if (!this.isConnected || this.busy || displayed.length === 0) return;
-    const fired = this.#model()?.fired ?? [];
     const current = new Map(
-      fired
+      firedLeft(this.#model()?.sections.flatMap((section) => section.rows) ?? [])
         .filter((slice) => slice.row.released)
         .map((slice) => [slice.row.lineId, slice.quantity]),
     );
@@ -443,8 +326,9 @@ export class TillSentOrders extends LitElement {
   }
   #info(members: readonly SentSlice[]): void {
     if (!this.isConnected || this.busy) return;
-    const model = this.#model();
-    const slices = model && [...model.served, ...model.fired, ...model.held.flatMap((g) => g.rows)];
+    const slices = this.#model()?.sections.flatMap((section) =>
+      section.rows.flatMap((row) => row.slices),
+    );
     const found = members.map((member) =>
       slices?.find((slice) => slice.row.lineId === member.row.lineId && slice.kind === member.kind),
     );
@@ -460,7 +344,7 @@ export class TillSentOrders extends LitElement {
   }
   #groupCommand(name: string, groupId: string): void {
     if (!this.isConnected || this.busy) return;
-    if (!this.#model()?.held.some(({ group }) => group.id === groupId)) return;
+    if (!this.#model()?.sections.some(({ held, group }) => held && group?.id === groupId)) return;
     if (name !== "fire-group" && this.#current()?.reminder?.groupId !== groupId) return;
     this.#dispatch(name, { groupId, ...(name === "snooze-group" ? { minutes: 5 } : {}) });
   }
@@ -469,7 +353,8 @@ export class TillSentOrders extends LitElement {
     this.#pressedNow = undefined;
     this.requestUpdate();
   }
-  #pressLine(members: readonly SentSlice[], event: PointerEvent): void {
+  #pressLine(row: SentRow, event: PointerEvent): void {
+    const members = infoMembers(row);
     const slice = members[0]!;
     this.#releaseHeading();
     if (this.busy || (slice.kind === "fired" && !slice.row.released)) return;
@@ -482,9 +367,11 @@ export class TillSentOrders extends LitElement {
     }
     this.#suppressClick = false;
   }
-  #clickServe(members: readonly SentSlice[], event: MouseEvent): void {
+  #clickServe(row: SentRow, event: MouseEvent): void {
     if (event.detail === 0 || !this.#suppressClick)
-      this.#serve(members.map((slice) => ({ lineId: slice.row.lineId, quantity: slice.quantity })));
+      this.#serve(
+        firedLeft([row]).map((slice) => ({ lineId: slice.row.lineId, quantity: slice.quantity })),
+      );
     this.#releasePointer();
   }
   #displayNow(): number {
@@ -493,211 +380,162 @@ export class TillSentOrders extends LitElement {
   #money(value: string): string {
     return formatMoney(decimal(value), currentLocale());
   }
-  #quantity(value: string): string {
-    return formatDecimalInput(trimQuantity(value), currentLocale());
+  #quantity = (value: string): string => formatDecimalInput(trimQuantity(value), currentLocale());
+  #marks(row: CurrentOrderRow): TemplateResult {
+    return html`${nutritionIcons(row.nutrition?.allergens, nutritionDietLabels(undefined, row.nutrition?.dietaryDeclarations))}${setMenuTag(this.#setMenuDishes.get(row.lineId)?.price)}${allergyMark(this.allergy, { kind: "working", id: row.lineId })}`;
   }
-  #portions(slices: readonly SentSlice[]): SentSlice[][] {
-    return portionGroups(
-      slices,
-      (slice) =>
-        sentSlicePortionKey(slice, this.lines, [
-          allergyGuestId(this.allergy, { kind: "working", id: slice.row.lineId }),
-          this.#setMenuDishes.get(slice.row.lineId)?.setMenuId,
-        ]),
-      (slice) => slice.row.lineNo,
-    );
+  #courseNames(section: SentSection): string {
+    const courses = this.#current()?.retainedCourses ?? [];
+    return section.title.courseIds
+      .map((id) => courses.find((course) => course.id === id)?.name ?? t("table.course_none"))
+      .join(", ");
   }
-  #what(row: CurrentOrderRow, quantity: string): TemplateResult {
-    return html`<span class="what"
-      >${row.name}${nutritionIcons(row.nutrition?.allergens, nutritionDietLabels(undefined, row.nutrition?.dietaryDeclarations))}
-      ×${this.#quantity(quantity)}${setMenuTag(this.#setMenuDishes.get(row.lineId)?.price)}${allergyMark(this.allergy, { kind: "working", id: row.lineId })}
-      ${row.extras.map((extra) => html`<span class="extra">${extra.name} ×${this.#quantity(extra.quantity)}</span>`)}
-      ${row.note === null ? nothing : html`<span class="note">${t("line.note.label")}: ${row.note}</span>`}
-    </span>`;
+  #title(section: SentSection): TemplateResult {
+    const names = this.#courseNames(section);
+    const { state, firedAt } = section.title;
+    const word =
+      state === "held"
+        ? t("table.group_held")
+        : state === "at_the_pass"
+          ? t("table.at_the_pass")
+          : firedAt === null
+            ? t("table.group_fired")
+            : html`<till-fired-ago
+                .firedAt=${firedAt}
+                .now=${this.#displayNow()}
+              ></till-fired-ago>`;
+    return html`${names === "" ? nothing : `${names} · `}${word}`;
   }
-  #status(slice: SentSlice): TemplateResult | string {
-    if (slice.kind === "cancelled_charged") return t("table.cancelled_charged");
-    if (slice.kind === "served") return t("table.row_served");
-    if (slice.kind === "held") return t("table.group_held");
-    if (slice.row.readyAt !== null) {
-      const minutes = Math.max(
-        0,
-        Math.floor((this.#displayNow() - Date.parse(slice.row.readyAt)) / 60_000),
-      );
-      return t("table.row_ready_ago").replace("{n}", String(minutes));
-    }
-    if (slice.row.released && slice.row.firedAt === null && slice.row.requestedAt !== null) {
-      return t("table.at_the_pass");
-    }
-    return slice.row.firedAt === null
-      ? t("table.group_fired")
-      : html`<till-fired-ago
-          .firedAt=${slice.row.firedAt}
-          .now=${this.#displayNow()}
-        ></till-fired-ago>`;
-  }
-  #line(members: readonly SentSlice[]): TemplateResult {
-    const slice = members[0]!;
-    const fired = slice.kind === "fired";
-    const quantity = trimQuantity(sumDecimals(members.map((member) => decimal(member.quantity))));
-    const amount = toScale(
-      sumDecimals(members.map((member) => decimal(member.amount))),
-      MONEY_SCALE,
-    );
-    const contents = html`${this.#what(slice.row, quantity)}<span class="status"
-        >${this.#status(slice)}</span
-      ><span class="amount">${this.#money(amount)}</span>`;
-    return html`<li
-      data-fired-line=${fired ? slice.row.lineId : nothing}
-      data-served-line=${slice.kind === "served" || slice.kind === "cancelled_charged" ? slice.row.lineId : nothing}
-      data-held-line=${slice.kind === "held" ? slice.row.lineId : nothing}
-    >
-      ${
-        fired
-          ? html`<button
-              type="button"
-              class="dish"
-              data-serve-line=${slice.row.lineId}
-              ?disabled=${this.busy || !slice.row.released}
-              aria-description=${t("table.serve")}
-              @pointerdown=${(event: PointerEvent) => this.#pressLine(members, event)}
-              @contextmenu=${preventTouchContextMenu}
-              @click=${(event: MouseEvent) => this.#clickServe(members, event)}
-            >
-              ${contents}
-            </button>`
-          : html`<div
-              class="dish"
-              @pointerdown=${(event: PointerEvent) => this.#pressLine(members, event)}
-              @contextmenu=${preventTouchContextMenu}
-            >
-              ${contents}
-            </div>`
+  #heldActions(section: SentSection, expected: HeldOrder): TemplateResult {
+    const group = section.group!;
+    const index = expected.ids.indexOf(group.id);
+    return html`${
+        expected.ids.length < 2
+          ? nothing
+          : keyed(
+              JSON.stringify(expected),
+              html`<wt-row-actions
+                slot="end"
+                data-group-more=${group.id}
+                label=${`${t("shell.more")} · ${groupName(group)}`}
+                align="end"
+              >
+                ${
+                  index > 0
+                    ? html`<wt-button
+                        icon="menu-up"
+                        data-group-earlier
+                        ?disabled=${this.busy}
+                        @click=${() => this.#reorder(expected, group.id, index - 1)}
+                        >${t("table.group_earlier")}</wt-button
+                      >`
+                    : nothing
+                }
+                ${
+                  index < expected.ids.length - 1
+                    ? html`<wt-button
+                        icon="menu-down"
+                        data-group-later
+                        ?disabled=${this.busy}
+                        @click=${() => this.#reorder(expected, group.id, index + 1)}
+                        >${t("table.group_later")}</wt-button
+                      >`
+                    : nothing
+                }
+              </wt-row-actions>`,
+            )
       }
       <wt-button
-        variant="ghost"
-        data-sent-info=${slice.row.lineId}
-        aria-label=${`${t("table.sent_info")} · ${slice.row.name}`}
+        slot="end"
+        variant=${this.busy ? "secondary" : "primary"}
+        data-group-fire=${group.id}
         ?disabled=${this.busy}
-        @click=${() => this.#info(members)}
-        >ⓘ</wt-button
-      >
-    </li>`;
+        aria-label=${`${t("table.group_fire")} · ${groupName(group)}`}
+        @click=${() => this.#groupCommand("fire-group", group.id)}
+        >${t("table.group_fire")}</wt-button
+      >`;
   }
-  #courseName(id: string | null): string {
-    return (
-      this.#current()?.retainedCourses.find((course) => course.id === id)?.name ??
-      t("table.course_none")
-    );
+  #serveAll(section: SentSection): TemplateResult {
+    const released = firedLeft(section.rows).filter((slice) => slice.row.released);
+    const off = this.busy || released.length === 0;
+    return html`<wt-button
+      slot="end"
+      data-serve-all
+      variant=${off ? "secondary" : "primary"}
+      ?disabled=${off}
+      @click=${() => this.#serve(released.map((slice) => ({ lineId: slice.row.lineId, quantity: slice.quantity })))}
+      >${t("table.serve_group")}</wt-button
+    >`;
   }
-  #courseOrder(id: string | null): number {
-    return this.#current()?.retainedCourses.find((course) => course.id === id)?.displayOrder ?? -1;
-  }
-  #heldTitle(entry: SentPanel["held"][number]): string {
-    const ids = [...new Set(entry.group.rows.map((row) => row.courseId))]
-      .filter((id) => id !== null)
-      .sort((a, b) => this.#courseOrder(a) - this.#courseOrder(b));
-    return [
-      groupName(entry.group),
-      ...(ids.length === 0 ? [] : [ids.map((id) => this.#courseName(id)).join(", ")]),
-    ].join(" · ");
-  }
-  #heldCounts(model: SentPanel): string {
-    const counts = new Map<string | null, SentSlice[]>();
-    for (const { rows } of model.held)
-      for (const slice of rows) {
-        const id = slice.row.courseId;
-        counts.set(id, [...(counts.get(id) ?? []), slice]);
-      }
-    return [...counts]
-      .sort(([a], [b]) => this.#courseOrder(a) - this.#courseOrder(b))
-      .map(([id, slices]) => `${this.#courseName(id)} (${this.#quantity(sentItemCount(slices))})`)
-      .join(" · ");
-  }
-  #heldGroup(entry: SentPanel["held"][number]): TemplateResult {
-    const expected = this.#heldOrder()!;
-    const index = expected.ids.indexOf(entry.group.id);
+  #section(section: SentSection, expected: HeldOrder): TemplateResult {
+    const id = section.group?.id ?? "";
+    const held = section.held;
+    const now = this.#displayNow();
     return html`<section
       class="group"
-      data-held-group=${entry.group.id}
-      ?data-dragging=${this.dragging === entry.group.id}
+      data-sent-section=${id}
+      data-held-group=${held ? id : nothing}
+      ?data-dragging=${held && this.dragging === id}
     >
-      <div class="heading">
-        <h4
-          class="group-title"
-          data-group-drag=${entry.group.id}
-          @contextmenu=${preventTouchContextMenu}
-          @pointerdown=${(event: PointerEvent) => this.#pressHeading(entry.group.id, event)}
-          .textContent=${this.#heldTitle(entry)}
-        ></h4>
+      <wt-course-heading level="3" mark=${held ? "" : "sent"} mark-label=${t("table.sent_title")}>
         ${
-          expected.ids.length < 2
-            ? nothing
-            : keyed(
-                JSON.stringify(expected),
-                html`<wt-row-actions
-                  data-group-more=${entry.group.id}
-                  label=${`${t("shell.more")} · ${groupName(entry.group)}`}
-                  align="end"
-                >
-                  ${
-                    index > 0
-                      ? html`<wt-button
-                          icon="menu-up"
-                          data-group-earlier
-                          ?disabled=${this.busy}
-                          @click=${() => this.#reorder(expected, entry.group.id, index - 1)}
-                          >${t("table.group_earlier")}</wt-button
-                        >`
-                      : nothing
-                  }
-                  ${
-                    index < expected.ids.length - 1
-                      ? html`<wt-button
-                          icon="menu-down"
-                          data-group-later
-                          ?disabled=${this.busy}
-                          @click=${() => this.#reorder(expected, entry.group.id, index + 1)}
-                          >${t("table.group_later")}</wt-button
-                        >`
-                      : nothing
-                  }
-                </wt-row-actions>`,
-              )
+          held
+            ? html`<span
+                class="section-title"
+                data-section-title
+                data-group-drag=${id}
+                @contextmenu=${preventTouchContextMenu}
+                @pointerdown=${(event: PointerEvent) => this.#pressHeading(id, event)}
+                >${this.#title(section)}</span
+              >`
+            : html`<span class="section-title" data-section-title>${this.#title(section)}</span>`
         }
-        <wt-button
-          variant=${this.busy ? "secondary" : "primary"}
-          data-group-fire=${entry.group.id}
-          ?disabled=${this.busy}
-          aria-label=${`${t("table.group_fire")} · ${groupName(entry.group)}`}
-          @click=${() => this.#groupCommand("fire-group", entry.group.id)}
-          >${t("table.group_fire")}</wt-button
-        >
-      </div>
-      <ul>
-        ${this.#portions(entry.rows).map((members) => this.#line(members))}
-        ${entry.companions.map(
+        ${held ? this.#heldActions(section, expected) : this.#serveAll(section)}
+      </wt-course-heading>
+      <ul
+        @pointercancel=${() => this.#releasePointer()}
+        @pointerleave=${() => this.#releasePointer()}
+      >
+        ${repeat(
+          section.rows,
+          (row) => `${row.slices[0]!.kind === "cancelled_charged"}:${row.slices[0]!.row.lineId}`,
           (row) =>
-            html`<li class="companion" data-companion=${row.lineId}>
-              <div class="dish">
-                ${this.#what(row, trimQuantity(row.quantity))}<span class="bill"
-                  >${this.billLabels.get(row.workingOrderId) ?? t("table.sent_other_bill")}</span
-                >
-              </div>
-            </li>`,
+            sentRow({
+              row,
+              heading: section.title.state,
+              now,
+              quantity: this.#quantity,
+              price: this.#money(row.amount),
+              marks: this.#marks(infoMembers(row)[0]!.row),
+              busy: this.busy,
+              press: (event) => this.#pressLine(row, event),
+              serve: (event) => this.#clickServe(row, event),
+              info: () => this.#info(infoMembers(row)),
+            }),
+        )}
+        ${section.companions.map((row) =>
+          sentCompanion(
+            row,
+            this.billLabels.get(row.workingOrderId) ?? t("table.sent_other_bill"),
+            this.#quantity,
+            this.#marks(row),
+          ),
         )}
       </ul>
     </section>`;
   }
-  #reminder(model: SentPanel): TemplateResult | typeof nothing {
+  #reminder(model: SentModel): TemplateResult | typeof nothing {
     const reminder = model.reminder;
-    const entry = model.held.find(({ group }) => group.id === reminder?.groupId);
-    if (!entry || reminderDueAt(reminder) === Number.POSITIVE_INFINITY) return nothing;
+    const section = model.sections.find(
+      ({ held, group }) => held && group?.id === reminder?.groupId,
+    );
+    if (!section || reminderDueAt(reminder) === Number.POSITIVE_INFINITY) return nothing;
     const due = reminderDueAt(reminder) <= this.#displayNow();
-    const group = entry.group;
+    const group = section.group!;
+    const names = this.#courseNames(section);
     return html`<div class="reminder" data-group-reminder=${due ? "due" : "waiting"}>
       <span
-        >${this.#heldTitle(entry)} ·
+        >${[groupName(group), ...(names === "" ? [] : [names])].join(" · ")} ·
         ${due ? `${t("table.reminder_due")} · ${clockTime(reminderDueAt(reminder))}` : t("table.reminder_at").replace("{time}", clockTime(reminderDueAt(reminder)))}</span
       >
       ${
@@ -735,101 +573,11 @@ export class TillSentOrders extends LitElement {
   protected override render(): TemplateResult | typeof nothing {
     const live = this.#model();
     const model = live === null ? null : (this.#pressedModel ?? live);
-    if (!model || model.served.length + model.fired.length + model.held.length === 0)
-      return nothing;
-    const counts = model.counts;
-    const summary = t("table.sent_counts")
-      .replace("{ready}", this.#quantity(counts.ready))
-      .replace("{firing}", this.#quantity(counts.firing))
-      .replace("{held}", this.#quantity(counts.held))
-      .replace("{served}", this.#quantity(counts.served));
-    const fired = model.fired;
-    return html`<section
-      class="panel${model.attention ? " attention" : ""}${this.expanded ? " expanded" : ""}"
-      data-sent-panel
-    >
-      <h2>
-        <button
-          type="button"
-          class="toggle"
-          data-sent-toggle
-          aria-expanded=${String(this.expanded)}
-          aria-controls="sent-content"
-          @click=${() => {
-            this.expanded = !this.expanded;
-          }}
-        >
-          <span class="panel-title"
-            >${t("table.sent_title")}${model.attention ? html` <span class="mark" data-sent-attention>!</span>` : nothing}</span
-          >
-          <span class="summary">${summary}</span
-          ><span aria-hidden="true">${this.expanded ? "▾" : "▸"}</span>
-        </button>
-      </h2>
-      ${this.#reminder(model)}
-      ${
-        !this.expanded
-          ? nothing
-          : html`<div class="content" id="sent-content">
-              <section>
-                <button
-                  type="button"
-                  class="toggle"
-                  data-served-toggle
-                  aria-expanded=${String(this.servedOpen)}
-                  @click=${() => {
-                    this.servedOpen = !this.servedOpen;
-                  }}
-                >
-                  ${t("table.served_title")} · ${this.#quantity(counts.served)} ·
-                  ${this.#money(model.subtotals.served)}
-                </button>
-                ${
-                  !this.servedOpen
-                    ? nothing
-                    : html`<ul>
-                        ${this.#portions(model.served).map((members) => this.#line(members))}
-                      </ul>`
-                }
-              </section>
-              <section>
-                <div class="heading">
-                  <h3>${t("table.group_fired")}</h3>
-                  <wt-button
-                    data-serve-all
-                    variant=${this.busy || !model.fired.some((slice) => slice.row.released) ? "secondary" : "primary"}
-                    ?disabled=${this.busy || !model.fired.some((slice) => slice.row.released)}
-                    @click=${() => this.#serve(model.fired.filter((slice) => slice.row.released).map((slice) => ({ lineId: slice.row.lineId, quantity: slice.quantity })))}
-                    >${t("table.serve_group")}</wt-button
-                  >
-                </div>
-                <ul
-                  @pointercancel=${() => this.#releasePointer()}
-                  @pointerleave=${() => this.#releasePointer()}
-                >
-                  ${repeat(
-                    this.#portions(fired),
-                    (members) => members[0]!.row.lineId,
-                    (members) => this.#line(members),
-                  )}
-                </ul>
-              </section>
-              <section>
-                <button
-                  type="button"
-                  class="toggle"
-                  data-held-toggle
-                  aria-expanded=${String(this.heldOpen)}
-                  @click=${() => {
-                    this.heldOpen = !this.heldOpen;
-                  }}
-                >
-                  ${t("table.group_held")} · ${this.#heldCounts(model)}
-                </button>
-                ${!this.heldOpen ? nothing : model.held.map((entry) => this.#heldGroup(entry))}
-              </section>
-            </div>`
-      }
+    if (!model || model.sections.length === 0) return nothing;
+    const expected = this.#heldOrder()!;
+    return html`<section data-sent-panel>
+      <h2 class="visually-hidden">${t("table.sent_title")}</h2>
+      ${this.#reminder(model)} ${model.sections.map((section) => this.#section(section, expected))}
     </section>`;
   }
 }

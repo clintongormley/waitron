@@ -314,6 +314,19 @@ it("puts a failed current-orders read beside Sent without offering old service r
   expect(panel(el).shadowRoot!.querySelector("[data-serve-line]")).toBeNull();
 });
 
+it("refuses a serve tap while the dish list is unread, as the dish window does", async () => {
+  const { el } = await sent();
+  const events = collect(el, "serve-lines");
+  const line = inside(el, "[data-serve-line]") as HTMLButtonElement;
+  el.currentOrdersUnread = true;
+  await el.updateComplete;
+  await panel(el).updateComplete;
+  expect(panel(el).busy).toBe(true);
+  expect(line.disabled).toBe(true);
+  line.click();
+  expect(events).toEqual([]);
+});
+
 it.each([
   "group-fired",
   "group-gone",

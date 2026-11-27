@@ -42,8 +42,6 @@ describe.each(["en", "es"] as const)("Sent heading reorder %s", (locale) => {
         },
         theme,
       );
-      await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
-      await el.updateComplete;
       const more = el.shadowRoot!.querySelector<WtRowActions>('[data-group-more="g3"]')!;
       await more.updateComplete;
       const trigger = more.shadowRoot!.querySelector<HTMLButtonElement>("button")!;

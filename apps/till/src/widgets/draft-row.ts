@@ -16,6 +16,7 @@ import { extraNutrition } from "./diet-badges.js";
 import { quantityText } from "./dish-format.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { lineProductName, soldByTheUnit } from "./product-name.js";
+import { rowTextStyles } from "./row-text.js";
 import { setMenuTag } from "./set-menu-presentation.js";
 
 registerIcons(DROPDOWN_ICONS);
@@ -172,9 +173,9 @@ export function draftRow(view: DraftRowView): TemplateResult {
         @click=${view.open}
         @contextmenu=${preventTouchContextMenu}
       >
-        <span class="draft-row-qty">${quantity}</span>
-        <span class="draft-row-text"
-          ><span class="draft-row-name"
+        <span class="draft-row-qty row-qty">${quantity}</span>
+        <span class="draft-row-text row-text"
+          ><span class="draft-row-name row-name"
             ><span class="product-name" lang=${currentContentLanguages().defaultLanguage}
               >${name}</span
             >${setMenuTag(view.setMenuPrice)}${view.nutrition}<slot name=${`mark-${index}`}></slot
@@ -182,12 +183,12 @@ export function draftRow(view: DraftRowView): TemplateResult {
           >${
             more.length === 0
               ? nothing
-              : html`<span class="draft-row-more"
+              : html`<span class="draft-row-more row-more"
                   >${more.map((part, i) => (i === 0 ? part : html` · ${part}`))}</span
                 >`
           }</span
         >
-        <span class="draft-row-price">${price}</span>
+        <span class="draft-row-price row-price">${price}</span>
       </button>
       <slot class="draft-row-end" name=${`end-${index}`}></slot>
       <slot class="draft-row-opened" name=${`opened-${index}`}></slot>
@@ -277,30 +278,7 @@ export const draftRowStyles = css`
   .draft-row-open:disabled {
     cursor: default;
   }
-  .draft-row-qty {
-    font-size: var(--wt-font-size-lg);
-    font-weight: var(--wt-font-weight-bold);
-  }
-  .draft-row-text {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-  .draft-row-name {
-    font-size: var(--wt-font-size-lg);
-    font-weight: var(--wt-font-weight-medium);
-  }
-  .draft-row-more {
-    display: block;
-    font-size: var(--wt-font-size-sm);
-    font-weight: var(--wt-font-weight-normal);
-    color: var(--wt-color-text-muted);
-  }
-  .draft-row-price {
-    margin-inline-start: var(--wt-space-2);
-    font-size: var(--wt-font-size-md);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
+  ${rowTextStyles}
   :host .draft-row > .draft-row-end {
     display: grid;
     grid-column: 3;
