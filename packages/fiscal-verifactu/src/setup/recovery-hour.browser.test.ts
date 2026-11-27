@@ -3598,8 +3598,6 @@ async function olderRecoveryPack(
     number: 3,
     madeAt,
     bucketCode: null,
-    archiveCode: null,
-    backupKey: null,
     masterKey: MASTER_KEY,
     masterKeyName: selection.keyName,
     masterKeyHeldBy: null,

@@ -1079,7 +1079,10 @@ describe("the status route", () => {
         number,
         madeAt,
         madeBy: null,
-        parts: [{ part: "bucket", state: "not-set-up" }],
+        parts: [
+          { part: "bucket", state: "not-set-up" },
+          { part: "archives", state: "not-set-up" },
+        ],
       });
       if (receivedAt !== null) await markRecoveryPackReceived(tx, node.nodeId, number, receivedAt);
     });
@@ -1425,7 +1428,7 @@ it.each(["en", "es"] as const)(
     expect(await firstPageCodes(bytes)).toEqual([masterKey, CLOUD_ADDRESS]);
     const text = await pdfText(bytes);
     expect(text).not.toMatch(/emergenc/i);
-    expect(text).toContain(PACK_WORDS[locale].page(3, 3));
+    expect(text).toContain(PACK_WORDS[locale].page(2, 2));
     const [record] = await packs();
     expect(record!.parts[0]).toEqual({ part: "emergency", state: "included" });
     for (const value of [
