@@ -911,12 +911,6 @@ export interface VenueServiceContribution {
     at: Date,
     zoneConfirmation?: ClosedZoneConfirmation,
   ): Promise<void>;
-  checkClosedZoneAt(
-    tx: Transaction,
-    zoneId: string,
-    at: Date,
-    zoneConfirmation?: ClosedZoneConfirmation,
-  ): Promise<{ zoneId: string; zoneName: string; closesAt: string } | undefined>;
   resolveDepartmentService(
     tx: Transaction,
     departmentId: string,

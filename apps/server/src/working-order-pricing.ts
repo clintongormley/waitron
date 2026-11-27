@@ -29,6 +29,7 @@ import {
   type ContentLanguages,
   newCustomerPresentation,
   AppError,
+  hasCode,
   isUuid,
   type ExtraSelection,
   type OptionSelection,
@@ -367,7 +368,7 @@ export async function priceOrderLines(
         });
   };
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
-  let closedZone: Awaited<ReturnType<typeof VENUE_SERVICE.checkClosedZoneAt>>;
+  let closedZone: AppError<"service_zone.closed"> | undefined;
   // Dishes and extras added to sent dishes can be marked when their menu ended earlier today.
   const ended = new Map<(typeof requestedLines)[number], EndedMenu>();
   const periodOf = new Map<string, EndedMenu>();
@@ -381,15 +382,16 @@ export async function priceOrderLines(
     // Extras added to a stored dish are not new service, so a closed zone does not refuse them;
     // after a sent dish's period they are late like a new dish of it.
     if (requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true)) {
-      if (zoneConfirmation === undefined) {
-        await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
-      } else {
-        closedZone = await VENUE_SERVICE.checkClosedZoneAt(
-          tx,
-          context.zoneId,
-          at,
-          zoneConfirmation,
-        );
+      try {
+        await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at, zoneConfirmation);
+      } catch (error) {
+        if (
+          zoneConfirmation === undefined ||
+          !(error instanceof AppError) ||
+          !hasCode(error, "service_zone.closed")
+        )
+          throw error;
+        closedZone = error;
       }
     }
     service = await routing.departmentService(context.departmentId);
@@ -602,13 +604,23 @@ export async function priceOrderLines(
   }
   confirmations.sort((a, b) => a.index - b.index);
   if (closedZone !== undefined) {
-    if (confirmations.length === 0 || coversLateDishes(lateSend, confirmations))
-      throw new AppError("service_zone.closed", closedZone);
+    if (confirmations.length === 0 || coversLateDishes(lateSend, confirmations)) throw closedZone;
     const departmentId = service!.departmentId;
     const needsManager = await VENUE_SERVICE.readLateSendNeedsManager(tx, departmentId);
+    const { menus, ...lateSendQuestion } = lateDishesQuestion(
+      departmentId,
+      confirmations,
+      needsManager,
+    );
     throw new AppError("service_zone.closed", {
-      ...closedZone,
-      lateSend: lateDishesQuestion(departmentId, confirmations, needsManager),
+      ...closedZone.params,
+      lateSend: {
+        ...lateSendQuestion,
+        menus: menus.map(({ menuId, periodName }) => ({
+          menuId,
+          closedMenuPeriodName: periodName,
+        })),
+      },
     });
   }
   if (confirmations.length > 0) {

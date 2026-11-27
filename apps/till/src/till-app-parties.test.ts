@@ -237,7 +237,7 @@ describe("till-app: seating a party", () => {
       code: "service_zone.closed",
       status: 409,
       zoneId: "z1",
-      zoneName: "Terrace",
+      closedZoneName: "Terrace",
       closesAt: "22:00",
     };
     const seatTable = vi

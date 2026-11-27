@@ -580,13 +580,18 @@ const heading = (el: TillApp) => windowOf(el)!.shadowRoot!.querySelector("wt-dia
 describe("a table's send into a closed zone", () => {
   it("asks once about the closure and ended period, then confirms both on the same submission", async () => {
     const { departmentId, menus, menuItemIds, needsManager } = BREAKFAST_ENDED;
-    const lateSend = { departmentId, menus, menuItemIds, needsManager };
+    const lateSend = {
+      departmentId,
+      menus: menus.map(({ menuId, periodName }) => ({ menuId, closedMenuPeriodName: periodName })),
+      menuItemIds,
+      needsManager,
+    };
     const el = await lateTable({
       submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce({
         code: "service_zone.closed",
         status: 409,
         zoneId: "zone-dining-room",
-        zoneName: "Terrace",
+        closedZoneName: "Terrace",
         closesAt: "22:00",
         lateSend,
       }),
@@ -620,7 +625,7 @@ describe("a table's send into a closed zone", () => {
         code: "service_zone.closed",
         status: 409,
         zoneId: "zone-dining-room",
-        zoneName: "Terrace",
+        closedZoneName: "Terrace",
         closesAt: "22:00",
       }),
     });

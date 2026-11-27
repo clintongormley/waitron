@@ -80,7 +80,7 @@ const refused = (v: BillVenue, closesAt = "23:30") => ({
   status: 409,
   json: {
     code: "service_zone.closed",
-    params: { zoneId: v.zoneId, zoneName: "Test tables", closesAt },
+    params: { zoneId: v.zoneId, closedZoneName: "Test tables", closesAt },
   },
 });
 async function endMenuDuringClosure(v: BillVenue) {
@@ -276,7 +276,7 @@ describe("closed zones take no new service", () => {
       status: 409,
       json: {
         code: "service_zone.closed",
-        params: { zoneId: v.zoneId, zoneName: "Test tables", closesAt: "23:30" },
+        params: { zoneId: v.zoneId, closedZoneName: "Test tables", closesAt: "23:30" },
       },
     };
     expect(await request(v, "POST", route, { guestCount: 3 })).toEqual(question);
@@ -722,7 +722,7 @@ describe("existing service in a closed zone", () => {
                     ...refused(v).json.params,
                     lateSend: {
                       departmentId: period.departmentId,
-                      menus: [{ menuId: period.menuId, periodName: "Always" }],
+                      menus: [{ menuId: period.menuId, closedMenuPeriodName: "Always" }],
                       menuItemIds: [line(v).menuItemId],
                       needsManager: false,
                     },

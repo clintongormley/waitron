@@ -43,21 +43,25 @@ export interface LateSendRefusal {
 
 export interface ClosedZoneQuestion {
   zoneId: string;
-  zoneName: string;
+  closedZoneName: string;
   closesAt: string;
   lateSend?: LateSendRefusal;
 }
 
 export function closedZoneQuestionOf(error: unknown): ClosedZoneQuestion | undefined {
   if (!isRecord(error) || error.code !== "service_zone.closed") return undefined;
-  const { zoneId, zoneName, closesAt, lateSend } = error;
-  if (typeof zoneId !== "string" || typeof zoneName !== "string" || typeof closesAt !== "string")
+  const { zoneId, closedZoneName, closesAt, lateSend } = error;
+  if (
+    typeof zoneId !== "string" ||
+    typeof closedZoneName !== "string" ||
+    typeof closesAt !== "string"
+  )
     return undefined;
   return {
     zoneId,
-    zoneName,
+    closedZoneName,
     closesAt,
-    lateSend: isRecord(lateSend) ? lateSendParams(lateSend) : undefined,
+    lateSend: isRecord(lateSend) ? lateSendParams(lateSend, "closedMenuPeriodName") : undefined,
   };
 }
 
@@ -80,12 +84,17 @@ export function lateSendRefusalOf(error: unknown): LateSendRefusal | undefined {
   return lateSendParams(error);
 }
 
-function lateSendParams(params: Record<string, unknown>): LateSendRefusal | undefined {
+function lateSendParams(
+  params: Record<string, unknown>,
+  nameKey: "periodName" | "closedMenuPeriodName" = "periodName",
+): LateSendRefusal | undefined {
   const { menus, menuItemIds, workingOrderLineIds } = params;
-  if (!Array.isArray(menus) || !menus.every(isEndedPeriod)) return undefined;
+  if (!Array.isArray(menus) || !menus.every(isRecord)) return undefined;
+  const periods = menus.map((menu) => ({ menuId: menu.menuId, periodName: menu[nameKey] }));
+  if (!periods.every(isEndedPeriod)) return undefined;
   if (!isTextList(menuItemIds)) return undefined;
   if (workingOrderLineIds !== undefined && !isTextList(workingOrderLineIds)) return undefined;
-  const [head, ...tail] = menus.map(({ menuId, periodName }) => ({ menuId, periodName }));
+  const [head, ...tail] = periods;
   if (head === undefined) return undefined;
   return {
     menus: [head, ...tail],

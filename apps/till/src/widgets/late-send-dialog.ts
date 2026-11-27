@@ -73,7 +73,7 @@ export class TillLateSendDialog extends LitElement {
         ? this.#heading()
         : t("late_send.zone_closed_at")
             .replace("{time}", () => zone.closesAt)
-            .replace("{zone}", () => zone.zoneName);
+            .replace("{zone}", () => zone.closedZoneName);
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}

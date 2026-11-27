@@ -26111,7 +26111,7 @@ describe("closed floor zone refusals", () => {
       seatTable: vi.fn().mockRejectedValue({
         code: "service_zone.closed",
         zoneId: "z1",
-        zoneName: "Terrace",
+        closedZoneName: "Terrace",
         closesAt: "22:00",
       }),
     });

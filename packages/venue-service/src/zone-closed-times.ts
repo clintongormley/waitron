@@ -300,12 +300,12 @@ export async function closedZoneIdsAt(
   return closedZoneIdsIn(await zoneClosureDays(tx, zoneIds, at));
 }
 
-export async function checkClosedZoneAt(
+export async function assertZoneTakesNewOrders(
   tx: Transaction,
   zoneId: string,
   at: Date,
   zoneConfirmation?: ClosedZoneConfirmation,
-): Promise<{ zoneId: string; zoneName: string; closesAt: string } | undefined> {
+): Promise<void> {
   const days = await zoneClosureDays(tx, [zoneId], at);
   const closure = days.zones.get(zoneId);
   const active = closure === undefined ? undefined : activeClosure(days, closure);
@@ -324,19 +324,9 @@ export async function checkClosedZoneAt(
     .select({ name: floorZones.name })
     .from(floorZones)
     .where(eq(floorZones.id, zoneId));
-  return {
+  throw new AppError("service_zone.closed", {
     zoneId,
-    zoneName: zone!.name,
+    closedZoneName: zone!.name,
     closesAt: active.startsAt,
-  };
-}
-
-export async function assertZoneTakesNewOrders(
-  tx: Transaction,
-  zoneId: string,
-  at: Date,
-  zoneConfirmation?: ClosedZoneConfirmation,
-): Promise<void> {
-  const question = await checkClosedZoneAt(tx, zoneId, at, zoneConfirmation);
-  if (question !== undefined) throw new AppError("service_zone.closed", question);
+  });
 }

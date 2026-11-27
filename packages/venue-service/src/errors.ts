@@ -116,9 +116,14 @@ declare module "@waitron/shared" {
     "service_zone.join_mismatch": { orderZoneId: string; tableZoneId: string };
     "service_zone.closed": {
       zoneId: string;
-      zoneName: string;
+      closedZoneName: string;
       closesAt: string;
-      lateSend?: ErrorParams["menu_period.ended"];
+      lateSend?: {
+        departmentId: string;
+        menus: { menuId: string; closedMenuPeriodName: string }[];
+        menuItemIds: string[];
+        needsManager: boolean;
+      };
     };
     /** The device's active profile may not work in this zone. Names only the zone tried. */
     "service_zone.not_allowed": { zoneId: string };

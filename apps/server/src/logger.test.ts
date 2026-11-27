@@ -245,6 +245,8 @@ describe("stringifyMasked", () => {
     idEmisorFactura: "M***r",
     todayName: "M***a S***r",
     merchantName: "M***a S***r",
+    closedZoneName: "M***a S***r",
+    closedMenuPeriodName: "M***a S***r",
   };
 
   it.each([...PERSONAL_LOG_KEYS])("masks the listed key %s", (key) => {
@@ -252,6 +254,25 @@ describe("stringifyMasked", () => {
     expect(stringifyMasked({ [key]: "Martha Spencer" })).toBe(
       `{"${key}":"${MARTHA_SPENCER_UNDER[key]}"}`,
     );
+  });
+
+  it("masks names in a closed-zone refusal, including the ended period", () => {
+    const context = {
+      code: "service_zone.closed",
+      params: {
+        closedZoneName: "Martha Spencer",
+        closesAt: "22:00",
+        lateSend: { menus: [{ menuId: "breakfast", closedMenuPeriodName: "Jamie Foster" }] },
+      },
+    };
+    expect(JSON.parse(stringifyMasked(context))).toEqual({
+      code: "service_zone.closed",
+      params: {
+        closedZoneName: "M***a S***r",
+        closesAt: "22:00",
+        lateSend: { menus: [{ menuId: "breakfast", closedMenuPeriodName: "J***e F***r" }] },
+      },
+    });
   });
 
   it("writes a line with no listed key exactly as plain JSON.stringify does", () => {
