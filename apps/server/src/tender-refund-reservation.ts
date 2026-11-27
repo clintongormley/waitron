@@ -4,7 +4,11 @@ import {
   readCancelsForRefund,
   readCancelsStillOwed,
 } from "@waitron/adjustments";
-import { admittedAsFullInvoice, correctionTargetFor, readCorrectionAdmission } from "@waitron/core";
+import {
+  admittedAsFullInvoice,
+  correctionTargetNamesACustomer,
+  readCorrectionAdmission,
+} from "@waitron/core";
 import {
   adjustmentRefunds,
   invoiceCorrectionRefunds,
@@ -26,7 +30,6 @@ import {
   isUuid,
   saleId as brandSaleId,
   type Decimal,
-  type SaleId,
 } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
@@ -175,7 +178,7 @@ async function refuseBeyondPlainRoom(
   owed: number,
 ): Promise<void> {
   const sale = brandSaleId(saleId);
-  if (upTo <= owed && !(await targetNamesACustomer(tx, sale))) return;
+  if (upTo <= owed && !(await correctionTargetNamesACustomer(tx, sale))) return;
   const admission = await readCorrectionAdmission(tx, fiscal.backend, sale, nodeId);
   const fullInvoice = await admittedAsFullInvoice(tx, fiscal.backend, sale, nodeId, {
     ...AS_ADMITTED,
@@ -198,16 +201,6 @@ async function refuseBeyondPlainRoom(
   );
   if (read.waiting !== null) throw read.waiting;
   if (upTo > room(read.amounts)) throw new AppError("tender.refund_needs_correction", { tenderId });
-}
-
-/** Whether the invoice a correction of the sale is filed against names a customer, which a full
- * invoice's corrective needs (`requireFullInvoiceCorrection`). */
-async function targetNamesACustomer(tx: Transaction, saleId: SaleId): Promise<boolean> {
-  const [target] = await tx
-    .select({ taxId: sales.counterpartyTaxId })
-    .from(sales)
-    .where(eq(sales.id, await correctionTargetFor(tx, saleId)));
-  return target?.taxId != null;
 }
 
 /** The fiscal backend and the clock reading a refund outside Correct invoice is checked with. */

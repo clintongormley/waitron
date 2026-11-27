@@ -28,6 +28,7 @@ import { eq, sql } from "drizzle-orm";
 import {
   admittedAsFullInvoice,
   correctionLinesFor,
+  correctionTargetNamesACustomer,
   previewCorrectionAmounts,
   readCorrectableLines,
   readCorrectionAmountHistory,
@@ -768,6 +769,42 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
       Promise.resolve(id === replacementId ? { ...admitted, fullInvoice: true } : admitted),
     );
     expect(await kindOf(replaced.saleId, { fullInvoice: "as_admitted" })).toBe(true);
+  });
+
+  it("answers whether the invoice a correction is filed against names a customer, read through its replacement", async () => {
+    const namesACustomer = (saleId: SaleId) =>
+      withTransaction(suite.db, (tx) => correctionTargetNamesACustomer(tx, saleId));
+    expect(await namesACustomer((await sellFull()).saleId)).toBe(true);
+    expect(await namesACustomer((await sellSteak()).saleId)).toBe(false);
+
+    // Stored directly, as `correctStoring` does: a replacement copies its original's customer,
+    // so only a stored one that differs shows which of the two is read.
+    const receipt = await sellSteak();
+    const rollBack = new Error("roll back");
+    let written: typeof sales.$inferSelect;
+    const error = await captureError(() =>
+      withTransaction(suite.db, async (tx) => {
+        const { saleId } = await recordReplacement(tx, backend, {
+          operationDescription: "Sale on premises",
+          origin: deviceOrigin(deviceId),
+          nodeId,
+          seriesId: rectSeriesId,
+          correctsSaleId: receipt.saleId,
+          authz: { sessionId },
+          clock,
+        });
+        [written] = await tx.select().from(sales).where(eq(sales.id, saleId));
+        throw rollBack;
+      }),
+    );
+    expect(error).toBe(rollBack);
+    await suite.db.insert(sales).values({
+      ...written!,
+      counterpartyTaxId: "12345678Z",
+      counterpartyLegalName: "Ana Garcia",
+      counterpartyCountryCode: "ES",
+    });
+    expect(await namesACustomer(receipt.saleId)).toBe(true);
   });
 
   it("with an admission already read, takes the kind and the lines from it without reading it again", async () => {

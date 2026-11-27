@@ -13,6 +13,7 @@ export { requireSupportedCorrection } from "./correction-eligibility.js";
 export type { RecordReplacementInput } from "./record-replacement.js";
 export {
   admittedAsFullInvoice,
+  correctionTargetNamesACustomer,
   previewCorrectionAmounts,
   readCorrectableLines,
   readCorrectionAdmission,

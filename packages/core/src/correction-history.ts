@@ -158,6 +158,20 @@ export async function admittedAsFullInvoice(
   );
 }
 
+/** Whether the invoice a correction of `saleId` is filed against (`correctionTargetFor`) names a
+ * customer. A cheap pre-check of {@link admittedAsFullInvoice}: an invoice that names no customer
+ * cannot be a full invoice's correction (`requireFullInvoiceCorrection`). */
+export async function correctionTargetNamesACustomer(
+  tx: Transaction,
+  saleId: SaleId,
+): Promise<boolean> {
+  const [target] = await tx
+    .select({ taxId: sales.counterpartyTaxId })
+    .from(sales)
+    .where(eq(sales.id, await correctionTargetFor(tx, saleId)));
+  return target?.taxId != null;
+}
+
 async function admittedHistory(
   tx: Transaction,
   backend: FiscalBackend,
