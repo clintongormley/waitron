@@ -1624,6 +1624,7 @@ describe("product-list", () => {
           }),
         ],
       });
+      el.parentElement!.style.width = "374px";
       await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
       await vi.waitFor(() => expect(root.querySelector('[part~="phone-category"]')).not.toBeNull());
       const nameCell = (key: string) => cellUnder(root, key, t("product.name"));

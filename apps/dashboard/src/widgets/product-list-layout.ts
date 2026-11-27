@@ -8,7 +8,7 @@ export const productListLayoutStyles = css`
     --tree-arrow-width: calc(var(--wt-tap-min) - var(--wt-space-2));
   }
   wt-data-table[narrow] {
-    --tree-arrow-width: var(--wt-space-5);
+    --tree-arrow-width: calc(var(--wt-space-5) - var(--wt-space-1));
     --wt-table-cell-padding-inline: calc(var(--wt-space-1) / 2);
   }
   wt-data-table[narrow][data-list] {
@@ -273,11 +273,11 @@ export const fullRowProductsMediaStyles = css`
   }
   wt-data-table[narrow]::part(folder-frame),
   wt-data-table[narrow]::part(products-media-slot) {
-    margin-inline-end: var(--wt-space-1);
+    margin-inline-end: calc(var(--wt-space-1) / 2);
   }
   wt-data-table[narrow]::part(tree-heading) {
     margin-inline-start: min(
-      calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-1)),
+      calc(var(--tree-arrow-width) + var(--wt-tap-min) + var(--wt-space-1) / 2),
       max(0px, calc(100% - var(--wt-tap-min) * 1.5))
     );
   }

@@ -90,12 +90,15 @@ export const productRowStyles = css`
   wt-data-table[narrow]::part(column-price) {
     inline-size: calc(var(--wt-tap-min) * 2 + var(--wt-space-2));
   }
+  wt-data-table[narrow][data-list]::part(column-price) {
+    inline-size: calc(var(--wt-tap-min) + var(--wt-space-6) + var(--wt-space-1) / 2);
+  }
   wt-data-table[narrow]::part(price-layout) {
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
     justify-content: end;
-    column-gap: var(--wt-space-1);
+    column-gap: calc(var(--wt-space-1) / 2);
   }
   wt-data-table[narrow]::part(vat-note) {
     flex-basis: 100%;
