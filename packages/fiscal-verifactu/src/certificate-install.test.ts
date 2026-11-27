@@ -22,6 +22,7 @@ import {
 import { seedTaxpayerNodeSif, TAXPAYER_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
+  MAC_ACCENTED_CANDIDATE,
   OPENSSL_AUTHORITY,
   OPENSSL_SIGNED_FINGERPRINT,
   RC2_ACCENTED_CANDIDATE,
@@ -172,6 +173,14 @@ describe("installCertificate's local refusals", () => {
       { outcome: "refused", reason: "passphrase_wrong", field: "passphrase" },
     ],
     [
+      "passphrase_wrong for a macOS export under a wrong passphrase outside ASCII",
+      () => ({
+        pfx: Buffer.from(MAC_ACCENTED_CANDIDATE.pfxBase64, "base64"),
+        passphrase: "contraseña-ñandu",
+      }),
+      { outcome: "refused", reason: "passphrase_wrong", field: "passphrase" },
+    ],
+    [
       "expired",
       () => authority.issue({ notAfter: new Date("2026-10-01T10:00:00Z") }),
       { outcome: "refused", reason: "expired", field: "file", details: { date: "2026-10-01" } },
@@ -281,10 +290,11 @@ describe("installCertificate's local refusals", () => {
   });
 });
 
-describe("installing a file Node refuses as old encryption", () => {
+describe("installing a file Node refuses that node-forge reads", () => {
   it.each([
     ["an RC2 file", RC2_SIGNED_CANDIDATE],
     ["an RC2 file under a passphrase outside ASCII", RC2_ACCENTED_CANDIDATE],
+    ["a macOS export under a passphrase outside ASCII", MAC_ACCENTED_CANDIDATE],
   ])("installs %s rewritten, and later sends and reads open it", async (_label, rc2) => {
     const v = await venue();
     const server = await startAnsweringServer(OPENSSL_AUTHORITY, {

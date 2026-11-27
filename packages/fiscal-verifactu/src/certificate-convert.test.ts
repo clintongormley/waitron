@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { makeAuthority } from "../test/certificate-fixtures.js";
 import {
   KEY_ONLY_CANDIDATE,
+  MAC_ACCENTED_CANDIDATE,
   OPENSSL_SIGNED_FINGERPRINT,
   RC2_ACCENTED_CANDIDATE,
   RC2_CANDIDATE,
@@ -35,7 +36,7 @@ function certificatesIn(pfx: Buffer, passphrase: string, rewritten = false): str
   );
 }
 
-describe("rewriting a file Node refuses as old encryption", () => {
+describe("rewriting a file Node refuses that node-forge reads", () => {
   it.each([
     ["an RC2 file", RC2_SIGNED_CANDIDATE],
     ["an RC2 file under a passphrase outside ASCII", RC2_ACCENTED_CANDIDATE],
@@ -56,6 +57,47 @@ describe("rewriting a file Node refuses as old encryption", () => {
     const chain = certificatesIn(original, file.passphrase);
     expect(chain).toHaveLength(2);
     expect(certificatesIn(opened.rewritten, file.passphrase, true)).toEqual(chain);
+  });
+
+  it("opens a macOS export under a passphrase outside ASCII, rewritten under the typed one", () => {
+    const original = bytes(MAC_ACCENTED_CANDIDATE);
+    const { passphrase } = MAC_ACCENTED_CANDIDATE;
+    expect(openCertificateFile(original, passphrase)).toEqual({
+      ok: false,
+      reason: "passphrase_wrong",
+    });
+    const opened = openOrRewrite(original, passphrase);
+    if (!opened.ok || opened.rewritten === undefined) throw new Error("not rewritten");
+    expect(opened.details.fingerprint).toBe(OPENSSL_SIGNED_FINGERPRINT);
+    expect(openCertificateFile(opened.rewritten, passphrase)).toEqual({
+      ok: true,
+      details: opened.details,
+    });
+    expect(certificatesIn(opened.rewritten, passphrase, true)).toEqual(
+      certificatesIn(bytes(RC2_SIGNED_CANDIDATE), RC2_SIGNED_CANDIDATE.passphrase),
+    );
+  });
+
+  it("keeps passphrase_wrong for a wrong passphrase outside ASCII", () => {
+    for (const file of [MAC_ACCENTED_CANDIDATE, RC2_ACCENTED_CANDIDATE]) {
+      expect(openOrRewrite(bytes(file), "contraseña-ñandu")).toEqual({
+        ok: false,
+        reason: "passphrase_wrong",
+      });
+    }
+  });
+
+  it("does not ask node-forge again for a wrong passphrase in plain ASCII", () => {
+    const read = vi.spyOn(forge.pkcs12, "pkcs12FromAsn1");
+    try {
+      expect(openOrRewrite(bytes(RC2_ACCENTED_CANDIDATE), "contrasena-nandu")).toEqual({
+        ok: false,
+        reason: "passphrase_wrong",
+      });
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      read.mockRestore();
+    }
   });
 
   it("rewrites a self-signed RC2 file", () => {

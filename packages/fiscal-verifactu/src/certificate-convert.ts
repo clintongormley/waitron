@@ -78,13 +78,17 @@ function withMac(pfx: forge.asn1.Asn1, passphrase: string): forge.asn1.Asn1 {
 
 /**
  * Reads a PKCS#12 file node-forge understands (40-bit RC2 among them) and writes it again with its
- * key under AES-256 and the same passphrase. `null` when forge cannot read it, or it holds no RSA
- * key with a certificate for it.
+ * key under AES-256 and the same passphrase. `readAs` is the passphrase's spelling forge reads the
+ * file with. `null` when forge cannot read it, or it holds no RSA key with a certificate for it.
  */
-export function rewriteOldCertificate(pfx: Buffer, passphrase: string): Buffer | null {
+export function rewriteOldCertificate(
+  pfx: Buffer,
+  passphrase: string,
+  { readAs = passphrase }: { readAs?: string } = {},
+): Buffer | null {
   let p12: forge.pkcs12.Pkcs12Pfx;
   try {
-    p12 = forge.pkcs12.pkcs12FromAsn1(asn1.fromDer(pfx.toString("binary")), passphrase);
+    p12 = forge.pkcs12.pkcs12FromAsn1(asn1.fromDer(pfx.toString("binary")), readAs);
   } catch {
     return null;
   }
@@ -110,11 +114,27 @@ export function rewriteOldCertificate(pfx: Buffer, passphrase: string): Buffer |
   return Buffer.from(asn1.toDer(withMac(written, passphrase)).getBytes(), "binary");
 }
 
-/** Opens the file; one Node refuses as old encryption is opened again once rewritten. */
+/**
+ * macOS's export derives every key from the passphrase's UTF-8 bytes taken one character each, as
+ * OpenSSL 1.0 did, so Node calls a passphrase outside ASCII wrong; forge reads that spelling.
+ */
+function readSpelling(reason: string, passphrase: string): string | null {
+  if (reason === "old_encryption") return passphrase;
+  if (reason !== "passphrase_wrong") return null;
+  const spelling = forge.util.encodeUtf8(passphrase);
+  return spelling === passphrase ? null : spelling;
+}
+
+/**
+ * Opens the file; one Node refuses as old encryption, or a macOS export under a passphrase outside
+ * ASCII, is opened again once rewritten under the passphrase as typed.
+ */
 export function openOrRewrite(pfx: Buffer, passphrase: string): RewrittenResult {
   const opened = openCertificateFile(pfx, passphrase);
-  if (opened.ok || opened.reason !== "old_encryption") return opened;
-  const rewritten = rewriteOldCertificate(pfx, passphrase);
+  if (opened.ok) return opened;
+  const readAs = readSpelling(opened.reason, passphrase);
+  if (readAs === null) return opened;
+  const rewritten = rewriteOldCertificate(pfx, passphrase, { readAs });
   if (rewritten === null) return opened;
   const again = openCertificateFile(rewritten, passphrase);
   return again.ok ? { ...again, rewritten } : opened;
