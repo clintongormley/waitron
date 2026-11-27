@@ -273,6 +273,7 @@ it("requires a box administrator on HTTPS to resolve a failed shutdown check", a
     shutdown: { ...shutdown, available: async () => true },
   });
   const admin = await login(app, "owner@example.test", "dashPass123");
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin, false));
   const manager = await login(app, MANAGER_EMAIL);
   const socket = new TLSSocket(new Socket());
   const request = (cookie: string, secure: boolean, decision: string) =>
@@ -310,7 +311,7 @@ it("shows the shutdown confirmation who is working or on break to box administra
     offsetMinutes: 60,
     origin: jobOrigin("dashboard"),
   };
-  await withTransaction(suite.db, async (tx) => {
+  const workingId = await withTransaction(suite.db, async (tx) => {
     const [working, finished] = await seedPersons(tx, [
       { displayName: "Working staff", pinHash: "seed", role: "staff" },
       { displayName: "Finished staff", pinHash: "seed", role: "staff" },
@@ -324,6 +325,7 @@ it("shows the shutdown confirmation who is working or on break to box administra
     });
     await workforce.clockIn(tx, input);
     await workforce.breakStart(tx, { ...input, at: "2026-11-25T18:15:00.000Z" });
+    return working!.id;
   });
   const app = buildApp(nodeId, {
     now: new Date(),
@@ -350,6 +352,12 @@ it("shows the shutdown confirmation who is working or on break to box administra
   try {
     const manager = await login(app, MANAGER_EMAIL);
     const admin = await login(app, "owner@example.test", "dashPass123");
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin));
+    const deactivated = await app.request(`/management-api/staff/${workingId}/deactivate`, {
+      method: "POST",
+      headers: { cookie: admin },
+    });
+    expect(deactivated.status).toBe(204);
     expect((await request(manager)).status).toBe(403);
     const response = await request(admin);
     expect(response.status).toBe(200);

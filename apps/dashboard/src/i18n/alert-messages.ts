@@ -91,8 +91,8 @@ export const ALERT_MESSAGES: Readonly<
     },
   },
   "start.shutdown_paused": {
-    en: "The final backup check paused during shutdown. Open Box status to see your choices.",
-    es: "La comprobación de la última copia se detuvo durante el apagado. Consulta las opciones en Estado del servidor.",
+    en: "The final backup check failed during shutdown. An administrator with Manage boxes can review the shutdown on Box status.",
+    es: "Falló la comprobación de la última copia durante el apagado. Un administrador con el permiso Gestionar servidores puede revisar el apagado en Estado del servidor.",
   },
   "start.unplanned_stop": {
     en: "The box stopped without warning.",

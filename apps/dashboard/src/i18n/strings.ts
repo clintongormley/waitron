@@ -4775,15 +4775,14 @@ export const en = {
     "You need a password to shut down this box. Set a password in Account settings, then try again. If you only sign in with Google, add a passkey there first.",
   "box_status.shutdown.checking":
     "Waiting for work to finish and checking the saved backup. Leave the box on.",
-  "box_status.shutdown.paused":
-    "Waitron could not finish checking the backup. Leave the box on while you decide.",
+  "box_status.shutdown.paused": "Shutdown is paused. Leave the box on while you decide.",
   "box_status.shutdown.retry": "Retry backup",
   "box_status.shutdown.anyway": "Shut down anyway",
-  "box_status.shutdown.anyway_question": "Shut down without a checked backup?",
+  "box_status.shutdown.anyway_question": "Shut down without making another backup?",
   "box_status.shutdown.anyway_warning":
-    "The final backup hasn’t been checked. If you need to restore, you may have to use an older backup and lose the work done since it was taken.",
+    "If you need to restore, you may have to use an older backup and lose the work done since it was taken.",
   "box_status.shutdown.unchecked":
-    "You can switch off the box now. The final backup was not checked.",
+    "You can switch off the box now. A restore may need an older backup.",
   "box_status.shutdown.ready": "Safe to switch off",
   "box_status.shutdown.cancel": "Cancel and resume work",
   "box_status.restart.title": "Restart the box",
@@ -9682,14 +9681,14 @@ export const es: Record<StringKey, string> = {
   "box_status.shutdown.checking":
     "Esperando a que termine el trabajo y comprobando la copia guardada. Deja el servidor encendido.",
   "box_status.shutdown.paused":
-    "Waitron no pudo terminar de comprobar la copia. Deja el servidor encendido mientras decides.",
+    "El apagado está en pausa. Deja el servidor encendido mientras decides.",
   "box_status.shutdown.retry": "Volver a hacer la copia",
   "box_status.shutdown.anyway": "Apagar de todos modos",
-  "box_status.shutdown.anyway_question": "¿Apagar sin una copia comprobada?",
+  "box_status.shutdown.anyway_question": "¿Apagar sin hacer otra copia?",
   "box_status.shutdown.anyway_warning":
-    "La última copia de seguridad no se ha comprobado. Si necesitas restaurar, quizá tengas que usar una copia anterior y pierdas el trabajo realizado desde entonces.",
+    "Si necesitas restaurar, quizá tengas que usar una copia anterior y pierdas el trabajo realizado desde entonces.",
   "box_status.shutdown.unchecked":
-    "Ya puedes apagar el servidor. La última copia no se ha comprobado.",
+    "Ya puedes apagar el servidor. Para restaurar, quizá necesites una copia anterior.",
   "box_status.shutdown.ready": "Ya puedes apagar el servidor",
   "box_status.shutdown.cancel": "Cancelar y reanudar el trabajo",
   "box_status.restart.title": "Reiniciar el servidor",

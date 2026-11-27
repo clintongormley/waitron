@@ -4,6 +4,7 @@ import {
   incidents,
   outgoingMail,
   persons,
+  readMail,
   withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
@@ -25,6 +26,7 @@ import { writeArchiveSettings } from "./archive-settings.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import * as atomic from "./fs-atomic.js";
 import { startServer as bootServer } from "./boot.js";
+import { SHUTDOWN_PAUSED_EMAIL_WORDS } from "./i18n/box-emails.js";
 import { boxHostnameFor } from "./box-name.js";
 import * as boxEmail from "./box-alert-email.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
@@ -101,6 +103,8 @@ it.each([
       });
     });
   const smtp = scenario === "failed" ? await startFakeSmtp() : null;
+  const ordinaryMailDue = new Date(Date.now() + 30_000);
+  if (smtp) vi.useFakeTimers({ toFake: ["Date"] });
   const socket = new TLSSocket(new Socket());
   let app!: Hono;
   let started!: Awaited<ReturnType<typeof startServer>>;
@@ -131,11 +135,24 @@ it.each([
               },
               null,
             );
-            if (smtp)
+            if (smtp) {
               await saveSmtpForTest(tx, ring, {
                 url: `smtp://127.0.0.1:${smtp.port}`,
                 from: "notices@example.test",
               });
+              const [owner] = await tx
+                .select({ id: persons.id })
+                .from(persons)
+                .where(eq(persons.email, "owner@example.test"));
+              await enqueueMail(tx, {
+                kind: "security_change",
+                dedupeKey: "ordinary-during-shutdown",
+                personId: owner!.id,
+                params: { change: "password_changed" },
+                nextAttemptAt: ordinaryMailDue,
+                notAfter: new Date(ordinaryMailDue.getTime() + 60_000),
+              });
+            }
             if (scenario === "streaming")
               await writeStreamSettings(
                 tx,
@@ -192,6 +209,7 @@ it.each([
           headers: { cookie: `waitron_management_session=${token}` },
         });
         const enteredCheckEarly = checkedBackup.mock.calls.length !== 0;
+        if (smtp) vi.setSystemTime(ordinaryMailDue.getTime() + 1_000);
         releaseScheduled();
         expect(view.status).toBe(200);
         expect(enteredCheckEarly).toBe(false);
@@ -208,8 +226,10 @@ it.each([
           await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 10_000 });
           const message = smtp.messages[0]!.replace(/=\r?\n/g, "");
           expect(message).toContain("To: owner@example.test");
-          expect(message).toContain("La comprobaci");
-          expect(message).toContain("Estado del servidor");
+          expect(message).toContain(
+            SHUTDOWN_PAUSED_EMAIL_WORDS.es.text.split(" ").slice(-3).join(" "),
+          );
+          expect((await readMail(suite.db, "ordinary-during-shutdown"))?.status).toBe("pending");
           const trading = await fetch(`${base}/api/node`);
           expect(await trading.json()).toMatchObject({ acceptingSales: false });
           await expect(stat(join(stateDir, "admin-shutdown.json"))).rejects.toHaveProperty(
@@ -233,6 +253,7 @@ it.each([
     scheduledBackup.mockRestore();
     checkedBackup.mockRestore();
     socket.destroy();
+    if (smtp) vi.useRealTimers();
     await smtp?.close();
   }
 });

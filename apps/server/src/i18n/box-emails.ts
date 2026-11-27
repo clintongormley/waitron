@@ -34,11 +34,11 @@ export const BOX_EMAIL_WORDS = {
 export const SHUTDOWN_PAUSED_EMAIL_WORDS = {
   en: {
     subject: "{venue}: shutdown paused during the final backup check",
-    text: "The box at {venue} could not finish checking the final backup. Open Box status to see the reason and decide what to do.",
+    text: "The box at {venue} could not finish checking the final backup. If shutdown is still paused, an administrator with Manage boxes can review the reason and choose what to do on Box status.",
   },
   es: {
     subject: "{venue}: el apagado se detuvo durante la comprobación de la última copia",
-    text: "La comprobación de la última copia de seguridad de {venue} no terminó. Abre Estado del servidor para ver el motivo y decidir qué hacer.",
+    text: "La comprobación de la última copia de seguridad de {venue} no terminó. Si el apagado sigue en pausa, un administrador con el permiso Gestionar servidores puede ver el motivo y decidir qué hacer en Estado del servidor.",
   },
 } as const;
 

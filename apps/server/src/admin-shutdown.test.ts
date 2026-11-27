@@ -154,3 +154,52 @@ it("writes the next-start hold only when the administrator chooses Shut down any
     await shutdown.close();
   }
 });
+
+it("keeps the backup checked when only the first attempt to save the shutdown hold fails", async () => {
+  let saves = 0;
+  const check = vi.fn(async () => {});
+  const shutdown = createAdminShutdown({
+    check,
+    save: async () => {
+      saves++;
+      if (saves === 1) throw new Error("The shutdown hold could not be saved");
+    },
+    clear: async () => {},
+  });
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    shutdown.resolvePaused("shut-down-anyway");
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready" }));
+    expect(check).toHaveBeenCalledOnce();
+  } finally {
+    await shutdown.close();
+  }
+});
+
+it("clears a partly written shutdown hold when cancelling after a failed save", async () => {
+  let mark = false;
+  const shutdown = createAdminShutdown({
+    check: async () => {
+      throw new Error("The final backup failed");
+    },
+    save: async () => {
+      mark = true;
+      throw new Error("The hold could not be synced");
+    },
+    clear: async () => {
+      mark = false;
+    },
+  });
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    shutdown.resolvePaused("shut-down-anyway");
+    await vi.waitFor(() => expect(mark && shutdown.status().phase === "paused").toBe(true));
+    await shutdown.cancel();
+    expect(mark).toBe(false);
+    expect(shutdown.status()).toEqual({ phase: "idle" });
+  } finally {
+    await shutdown.close();
+  }
+});

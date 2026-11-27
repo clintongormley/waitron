@@ -160,7 +160,7 @@ it("shows that the box can be switched off only when the shutdown check is ready
 
 it("requires confirmation before switching off with an unchecked backup", async () => {
   const paused = health({
-    shutdown: { phase: "paused", available: true, errorCode: "backup.destination_timed_out" },
+    shutdown: { phase: "paused", available: true, errorCode: "backup.archive_invalid" },
   });
   const unchecked = health({ shutdown: { phase: "ready", available: true, checked: false } });
   const getBoxHealth = vi.fn().mockResolvedValue(paused);
@@ -173,19 +173,19 @@ it("requires confirmation before switching off with an unchecked backup", async 
   await el.updateComplete;
 
   expect(text(q(el, '[data-test="box-shutdown-status"]'))).toContain(
-    codeMessage("backup.destination_timed_out"),
+    "Waitron could not verify the saved backup.",
   );
   const anyway = q(el, '[data-test="box-shutdown-anyway"]');
   expect(anyway).not.toBeNull();
   await userEvent.click(anyway!);
   const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
-  expect(text(confirm.closest("wt-dialog"))).toContain("The final backup hasn’t been checked.");
+  expect(text(confirm.closest("wt-dialog"))).toContain("you may have to use an older backup");
   expect(resolveBoxShutdown).not.toHaveBeenCalled();
   await userEvent.click(confirm);
   await vi.waitFor(() => expect(resolveBoxShutdown).toHaveBeenCalledWith("shut-down-anyway"));
   await vi.waitFor(() =>
     expect(text(q(el, '[data-test="box-shutdown-status"]'))).toBe(
-      "You can switch off the box now. The final backup was not checked.",
+      "You can switch off the box now. A restore may need an older backup.",
     ),
   );
 });

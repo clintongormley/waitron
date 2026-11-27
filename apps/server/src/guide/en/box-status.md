@@ -449,7 +449,7 @@ requested and what the card provider reported. Check the charge in the provider'
 
 ## Shut down this box {#shutdown}
 
-On a standalone main box with one saved backup destination and no streaming, open **Box status** and choose **Shut down this box**. Enter your administrator password when prompted. If you need a password, set one in **Account settings** first. Ask the people listed to clock out before you continue. To keep a copy of the key you’ll need to restore, choose **Make recovery pack** if you have permission to manage the box’s settings.
+On a standalone main box with one saved backup destination and no streaming, open **Box status** and choose **Shut down this box**. Enter your administrator password when prompted. If you need a password, set one in **Account settings** first. Ask the people listed to clock out before you continue. To keep a copy of the key you’ll need to restore, choose **Make recovery pack** if you have **Manage the system** permission.
 
 Waitron pauses work and checks the backup it just saved. Keep the box on until you see **Safe to switch off**. If the check fails, read the reason, then choose **Retry backup** to make a fresh copy or **Cancel and resume work** to keep the box open. Use **Shut down anyway** only if you have to switch off before you have a checked copy. Wait for the box to say you can switch it off. You may need an older backup if you later restore.
 

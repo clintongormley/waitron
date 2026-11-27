@@ -10,7 +10,7 @@ import {
   type BoxEmailCode,
 } from "./box-alert-email.js";
 import { BOX_EMAIL_WORDS, CLOCK_CORRECTED_EMAIL_WORDS } from "./i18n/box-emails.js";
-import { recordUnexpectedStop } from "./stop-alert.js";
+import { recordShutdownPause, recordUnexpectedStop } from "./stop-alert.js";
 
 const CODES = Object.keys(BOX_EMAIL_WORDS) as BoxEmailCode[];
 const LANGUAGES = ["en", "es"] as const;
@@ -371,6 +371,21 @@ describe("incidents read by the box email duty", () => {
       },
     ]);
     expect(open[0]!.id).not.toBe(earlier!.id);
+  });
+
+  it("offers a new email for a later shutdown pause while its earlier alert is open", async () => {
+    await recordShutdownPause(suite.db, "backup.archive_invalid", new Date("2026-11-24T15:00Z"));
+    const [first] = await readOpenEmailedIncidents(suite.db);
+    await recordShutdownPause(
+      suite.db,
+      "backup.destination_timed_out",
+      new Date("2026-11-25T15:00Z"),
+    );
+    const later = await readOpenEmailedIncidents(suite.db);
+    expect(later.map(({ code, params }) => ({ code, params }))).toEqual([
+      { code: "start.shutdown_paused", params: { errorCode: "backup.destination_timed_out" } },
+    ]);
+    expect(later[0]!.id).not.toBe(first!.id);
   });
 
   it("reads an open clock.corrected alert and no handled one", async () => {

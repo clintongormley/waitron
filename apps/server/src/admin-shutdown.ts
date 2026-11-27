@@ -44,6 +44,7 @@ export function createAdminShutdown(deps: {
     settled: Promise<void>;
     duties?: ReturnType<NonNullable<typeof deps.pauseDuties>>;
     drained: boolean;
+    checked: boolean;
     saving: boolean;
     markMayExist: boolean;
     cancelling?: Promise<void>;
@@ -86,12 +87,16 @@ export function createAdminShutdown(deps: {
           current.drained = true;
         }
         signal.throwIfAborted();
-        if (checkBackup) await deps.check(signal);
+        if (checkBackup) {
+          current.checked = false;
+          await deps.check(signal);
+          current.checked = true;
+        }
         signal.throwIfAborted();
         current.saving = true;
         current.markMayExist = true;
         await deps.save();
-        current.state = checkBackup ? { phase: "ready" } : { phase: "ready", checked: false };
+        current.state = current.checked ? { phase: "ready" } : { phase: "ready", checked: false };
       } catch (error) {
         current.state = { phase: "paused", errorCode: codeOf(error) };
       } finally {
@@ -110,6 +115,7 @@ export function createAdminShutdown(deps: {
         controller: new AbortController(),
         settled: Promise.resolve(),
         drained: false,
+        checked: false,
         saving: false,
         markMayExist: false,
       };

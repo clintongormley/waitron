@@ -1,7 +1,8 @@
 import { readNodeMembership, withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
-import { listActiveStaff } from "@waitron/identity";
-import { readLatestLiveEntry } from "@waitron/workforce";
+import { persons } from "@waitron/identity";
+import { eq, exists } from "drizzle-orm";
+import { readLatestLiveEntry, timeEntries } from "@waitron/workforce";
 import { readPairLink } from "@waitron/node-db";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
@@ -18,8 +19,17 @@ import "./errors.js";
 
 export async function readShutdownStaff(db: Database) {
   return withTransaction(db, async (tx) => {
+    const hasEntries = tx
+      .select({ id: timeEntries.id })
+      .from(timeEntries)
+      .where(eq(timeEntries.personId, persons.id));
+    const people = await tx
+      .select({ personId: persons.id, displayName: persons.displayName })
+      .from(persons)
+      .where(exists(hasEntries))
+      .orderBy(persons.displayName);
     const staff = [];
-    for (const { personId, displayName } of await listActiveStaff(tx)) {
+    for (const { personId, displayName } of people) {
       const latest = await readLatestLiveEntry(tx, personId);
       if (latest?.entryKind === "in" || latest?.entryKind === "break_end")
         staff.push({ displayName, state: "working" as const });
