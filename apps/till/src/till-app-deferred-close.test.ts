@@ -1029,6 +1029,7 @@ it("Cancel on a Counter close returns to the Counter's Pay window", async () => 
   await flush(el, 8);
   expect(closing(el)).toBeNull();
   expect(deferredButton(el)).not.toBeNull();
+  expect(payDialog(el)!.shadowRoot!.querySelector("[data-quiet-pay]")).not.toBeNull();
   expect(api.closeDeferred).not.toHaveBeenCalled();
 });
 

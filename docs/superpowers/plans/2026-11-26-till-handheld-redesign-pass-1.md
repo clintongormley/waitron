@@ -59,7 +59,8 @@ Claude reads the plan before the watcher clears a slice to build. Aim for three 
 | I · 15a Shared till panels | Use the full-screen panel, amount block, top bar, foot button bar and choice tile in the till redesign. | [Component plan](2026-11-26-i-till-pay-primitives.md) |
 | I · 15 Table Pay | Open q1 full screen with stacked choices from the table bill and from Pay in parts. Keep the existing allocation confirmation. | 15a and existing payment paths |
 | I · Pay with a saved invoice | Add q2's invoice summary and choices, and bring the presented bill's whole-payment entry into Pay. | 15 |
-| I · 15b Counter and wide Pay | Open the same panel at Counter and dock it in the wide order column. | 15 and Lane N's wide order shell |
+| I · 15b Counter Pay | Open the same checked Pay panel full-screen at Counter. | 15 and 15c |
+| Wide Pay placement | Dock Pay in the wide order column. Reuse the inset from 14a (#4479). | 15b and PR 12's wide order shell |
 | I · 15c Direct Pay | Show the checked amount and receipt questions, then start Charge and Cash directly. | 15 |
 | O · 16 Equipment | Scan successive stickers or select eligible reader, printer, slip and drawer roles. Keep NFC pickup from any screen, camera fallback and ownership checks. | 15 |
 | O · 17 Invoice | Fill in invoice details from Pay or the bill menu and see the saved choice in Pay. Pick an eligible printer or email. Keep Receipt instead. | 15 and D 13b for the second entry |

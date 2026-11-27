@@ -7,7 +7,11 @@ import type { TillProduct, ZoneOffers } from "./api/menu-api.js";
 import { quantityLabel } from "./state/order-line.js";
 import { setLocale, t } from "./i18n/t.js";
 import {
+  answerOwnReceipt,
   balanceOf,
+  choosePayWay,
+  money,
+  text,
   cash,
   dialog,
   emit,
@@ -42,6 +46,11 @@ beforeEach(() => {
   resetBillPayDrafts();
 });
 afterEach(cleanupWidgets);
+
+async function enterCash(el: TillApp, tendered: string): Promise<void> {
+  await expect.poll(() => inDialog(el, "[data-quiet-pay-cash]")?.disabled).toBe(false);
+  await type(el, "tendered", tendered);
+}
 
 it("persists the first Counter payment before opening the window, then offers the remaining tender", async () => {
   let finishSave!: () => void;
@@ -107,11 +116,18 @@ it("persists the first Counter payment before opening the window, then offers th
     expect.objectContaining({ signal: expect.any(AbortSignal) }),
   );
   expect(dialog(el)!.way).toBe("whole");
-  dialog(el)!.shadowRoot!.querySelector<HTMLElement>('[name="way"][value="contribution"]')!.click();
-  await flush(el);
+  expect(inDialog(el, "wt-full-screen-panel[data-quiet-pay]")).not.toBeNull();
+  expect(inDialog(el, "wt-top-bar")).toHaveProperty("backLabel", "Counter · z1");
+  await choosePayWay(el, "contribution");
   await type(el, "amount", "10");
-  await type(el, "tendered", "20");
+  const receipt = () => inDialog(el, "[data-pay-own-receipt]");
+  await expect.poll(() => text(receipt())).toContain("No, include it on the final receipt");
+  expect(inDialog(el, "[data-quiet-pay-cash]")?.disabled).toBe(true);
+  await answerOwnReceipt(el, "no");
+  await enterCash(el, "20");
   await press(el, "[data-pay-continue]");
+  expect(text(inDialog(el, "[data-pay-change]"))).toContain(money("10.00"));
+  expect(api.takeBillPayment).not.toHaveBeenCalled();
   await press(el, "[data-pay-confirm]");
   expect(api.takeBillPayment).toHaveBeenCalledWith(
     id,
@@ -158,6 +174,29 @@ it("persists the first Counter payment before opening the window, then offers th
     guestCount: 2,
   });
   expect(dialog(el)).toBeNull();
+});
+
+it("asks for the full-invoice recipient before saving or quoting a Counter order over the limit", async () => {
+  const api = stubApi({
+    getTill: vi
+      .fn()
+      .mockResolvedValue({ ...till, fullInvoices: true, simplifiedInvoiceLimit: "20.00" }),
+    parkOrder: vi.fn(),
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flush(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flush(el);
+  const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  counter.store.loadFrom("large", [{ product, quantity: "1" }]);
+  await flush(el);
+  const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
+  tender.shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
+  await flush(el);
+  expect(el.shadowRoot!.querySelector("till-invoice-recipient-dialog")).not.toBeNull();
+  expect(dialog(el)).toBeNull();
+  expect(api.parkOrder).not.toHaveBeenCalled();
+  expect(api.previewBillPayment).not.toHaveBeenCalled();
 });
 
 it.each([undefined, "F1/7"])(
@@ -276,37 +315,32 @@ it("a sent Counter order whose own mode takes payment first shows Items barred i
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await flush(el);
 
-  const ways = [...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('[name="way"]')];
-  expect(ways.map((input) => [input.value, input.disabled])).toEqual([
-    ["contribution", false],
+  const ways = [
+    ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-choice-tile"]>(
+      "[data-quiet-pay-way]",
+    ),
+  ];
+  expect(ways.map((tile) => [tile.dataset.quietPayWay, tile.disabled])).toEqual([
+    ["whole", false],
     ["share", false],
     ["items", true],
-    ["whole", false],
+    ["contribution", false],
   ]);
   ways[2]!.click();
   await flush(el);
-  expect(ways.map((input) => input.checked)).toEqual([false, false, false, true]);
+  expect(ways.map((tile) => tile.selected)).toEqual([true, false, false, false]);
   expect(dialog(el)!.shadowRoot!.querySelector("[data-pay-lines]")).toBeNull();
   expect(
     dialog(el)!.shadowRoot!.querySelector("[data-pay-items-reason]")?.textContent?.trim(),
   ).toBe(
     "A Counter order in a zone paid before preparation is paid with An amount, Split equally or Whole bill.",
   );
-  expectReasonDescribesItems(el);
-});
-
-/** The barred Items radio is described by the reason under the choices, and no other radio is. */
-function expectReasonDescribesItems(el: TillApp): void {
   const root = dialog(el)!.shadowRoot!;
-  const ways = [...root.querySelectorAll<HTMLInputElement>('[name="way"]')];
-  expect(ways.map((input) => [input.value, input.getAttribute("aria-describedby")])).toEqual([
-    ["contribution", null],
-    ["share", null],
-    ["items", "items-reason"],
-    ["whole", null],
-  ]);
-  expect(root.getElementById("items-reason")).toBe(root.querySelector("[data-pay-items-reason]"));
-}
+  const reason = root.querySelector("[data-pay-items-reason]");
+  expect(
+    root.getElementById(root.querySelector("[data-pay-way]")!.getAttribute("aria-describedby")!),
+  ).toBe(reason);
+});
 
 it.each(["en", "es"] as const)(
   "each barred-Items reason in %s names the window's other choices as they are labelled",
@@ -444,14 +478,14 @@ it("a Counter order just sent offers Items, and paying them keeps the Counter on
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await flush(el);
 
-  const items = dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>(
-    '[name="way"][value="items"]',
+  const items = dialog(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-choice-tile"]>(
+    '[data-quiet-pay-way="items"]',
   )!;
   expect(items.disabled).toBe(false);
   expect(dialog(el)!.shadowRoot!.querySelector("[data-pay-items-reason]")).toBeNull();
-  await press(el, 'input[name="way"][value="items"]');
+  await choosePayWay(el, "items");
   await press(el, 'input[name="line"][value="1"]');
-  await type(el, "tendered", "50");
+  await enterCash(el, "50");
   await press(el, "[data-pay-continue]");
   await press(el, "[data-pay-confirm]");
   await flush(el, 6);
@@ -508,8 +542,8 @@ it("an unsent Counter order offers Items in its Pay window, with no reason", asy
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await flush(el);
 
-  const items = dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>(
-    '[name="way"][value="items"]',
+  const items = dialog(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-choice-tile"]>(
+    '[data-quiet-pay-way="items"]',
   )!;
   expect(items.disabled).toBe(false);
   expect(dialog(el)!.shadowRoot!.querySelector("[data-pay-items-reason]")).toBeNull();
@@ -572,8 +606,8 @@ it("a sent Counter order in a mode that takes payment first shows Items barred i
   await flush(el);
 
   expect(dialog(el)!.balance).toBeNull();
-  const items = dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>(
-    '[name="way"][value="items"]',
+  const items = dialog(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-choice-tile"]>(
+    '[data-quiet-pay-way="items"]',
   )!;
   expect(items.disabled).toBe(true);
   expect(
@@ -985,6 +1019,67 @@ async function sentWaitingOrder(
   return { el, api };
 }
 
+it("checks Charge again before sending and repeats the exact unanswered payment", async () => {
+  const allocation = (amount: string) => ({
+    ...cash(amount, "0.00"),
+    change: null,
+    charged: amount,
+  });
+  const previewBillPayment = vi
+    .fn()
+    .mockResolvedValueOnce(allocation("35.00"))
+    .mockResolvedValue(allocation("32.00"));
+  const takeBillPayment = vi.fn().mockRejectedValue({ code: "network" });
+  const { el } = await sentWaitingOrder(() => "no", {
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      cardProvider: "simulator",
+      capabilities: [...till.capabilities, "integrated-card-payment"],
+      activeReaders: [],
+    }),
+    previewBillPayment,
+    takeBillPayment,
+  });
+  const charge = () => inDialog(el, "[data-quiet-pay-card]");
+  await expect.poll(() => text(charge())).toContain(money("35.00"));
+  await press(el, "[data-quiet-pay-card]");
+  await expect.poll(() => text(charge())).toContain(money("32.00"));
+  expect(takeBillPayment).not.toHaveBeenCalled();
+
+  await press(el, "[data-quiet-pay-card]");
+  await expect.poll(() => takeBillPayment.mock.calls.length).toBeGreaterThan(0);
+  const first = takeBillPayment.mock.calls[0]!;
+  expect(first[1]).toMatchObject({ method: "card", entry: "reader", applied: "32.00" });
+  await expect.poll(() => inDialog(el, "[data-pay-confirm]")).not.toBeNull();
+  await press(el, "[data-pay-confirm]");
+  expect(takeBillPayment.mock.calls.at(-1)?.slice(0, 2)).toEqual(first.slice(0, 2));
+  expect(takeBillPayment.mock.calls.length).toBeGreaterThan(1);
+});
+
+it("keeps the current Counter amount when the previous choice answers late", async () => {
+  let answer!: (preview: ReturnType<typeof cash>) => void;
+  const held = new Promise<ReturnType<typeof cash>>((resolve) => (answer = resolve));
+  const previewBillPayment = vi
+    .fn()
+    .mockReturnValueOnce(held)
+    .mockResolvedValue(cash("12.00", "0.00"));
+  const { el, api } = await sentWaitingOrder(() => "no", { previewBillPayment });
+  await expect.poll(() => previewBillPayment.mock.calls.length).toBe(1);
+
+  await choosePayWay(el, "contribution");
+  await type(el, "amount", "12");
+  const amount = () => text(inDialog(el, "[data-quiet-pay-amount]"));
+  await expect.poll(() => inDialog(el, "[data-pay-own-receipt]")).not.toBeNull();
+  await answerOwnReceipt(el, "no");
+  await expect.poll(() => inDialog(el, "[data-quiet-pay-cash]")?.disabled).toBe(false);
+  expect(amount()).toBe(money("12.00"));
+  answer(cash("35.00", "0.00"));
+  await flush(el);
+  expect(amount()).toBe(money("12.00"));
+  expect(inDialog(el, "[data-quiet-pay-cash]")?.disabled).toBe(false);
+  expect(api.takeBillPayment).not.toHaveBeenCalled();
+});
+
 const waitingShown = (el: TillApp) =>
   el
     .shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!
@@ -996,9 +1091,9 @@ it("Items shows no receipt warning on a sent Counter order with no receipt", asy
       .fn()
       .mockResolvedValue({ total: "30.00", applied: "30.00", tip: "0.00", change: "20.00" }),
   });
-  await press(el, 'input[name="way"][value="items"]');
+  await choosePayWay(el, "items");
   await press(el, 'input[name="line"][value="1"]');
-  await type(el, "tendered", "50");
+  await enterCash(el, "50");
   await press(el, "[data-pay-continue]");
   await flush(el);
 
@@ -1037,9 +1132,9 @@ it("paying Items on a sent Counter order lists Waiting again, with what is left 
     }),
   });
   expect(waitingShown(el)).toEqual([[7, "placed", "35.00"]]);
-  await press(el, 'input[name="way"][value="items"]');
+  await choosePayWay(el, "items");
   await press(el, 'input[name="line"][value="1"]');
-  await type(el, "tendered", "50");
+  await enterCash(el, "50");
   await press(el, "[data-pay-continue]");
   await press(el, "[data-pay-confirm]");
   await flush(el, 8);
@@ -1072,7 +1167,7 @@ it("paying the whole of a sent Counter order from its Pay window lists Waiting a
     }),
   });
   expect(waitingShown(el)).toEqual([[7, "placed", "35.00"]]);
-  await type(el, "tendered", "50");
+  await enterCash(el, "50");
   await press(el, "[data-pay-continue]");
   await press(el, "[data-pay-confirm]");
   await flush(el, 8);
@@ -1328,8 +1423,8 @@ it("Items is available as soon as Place succeeds, while Waiting is still being r
   pay!.click();
   await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
   await flush(el);
-  const items = dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>(
-    '[name="way"][value="items"]',
+  const items = dialog(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-choice-tile"]>(
+    '[data-quiet-pay-way="items"]',
   )!;
   expect(items.disabled).toBe(false);
   answerWaiting();

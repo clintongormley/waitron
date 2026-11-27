@@ -26,8 +26,9 @@ an item before approval is needed.
 ## Share a Counter bill {#counter-part-payments}
 
 Choose **Pay** to take all or part of a Counter bill. **Whole bill** starts selected;
-you can instead enter an amount, split equally or choose items. Choose **Cash** or **Card**
-for each payment. After a part payment, check **Still to pay** before taking the next payment.
+you can enter an amount, split equally or choose items. Check **To pay** and answer any receipt
+questions. Choose **Charge** to start the connected reader or **Cash** to enter what the guest
+handed over. After a part payment, check **Still to pay** before taking the next payment.
 
 Add an item before paying or sending an order.
 
@@ -1018,7 +1019,7 @@ manager can recover the payment after the fault is fixed.
 ## Take a whole or part payment {#pay-window}
 
 To collect a bill, open **Pay** at the Counter or on the table's bill. On a table, send or remove
-any unsent items first. **To pay** shows the amount at the top of the table’s Pay screen.
+any unsent items first. **To pay** shows the amount at the top of the Pay screen.
 For a full invoice, [set up the bill before paying](table-service.md#full-invoice).
 
 **Choose what this guest pays.** Choose **Whole bill** to pay everything still due.
@@ -1036,10 +1037,9 @@ own, which **Waiting orders** shows with the order's number in brackets. Once su
 paid with **An amount**, **Split equally** or **Whole bill**, not by item; when its bill is
 presented for collection, choose **Pay in parts** to see those choices.
 
-At a table, check **To pay** and answer any receipt questions on **Pay**. Choose **Charge** to start
-the connected reader, or **Cash** to enter what the guest handed over. Choose **Other card machine**
-to enter the details of a payment taken separately. At the Counter, choose the method, press
-**Continue** and check the amounts on the confirmation.
+Check **To pay** and answer any receipt questions on **Pay**. Choose **Charge** to start
+the connected reader or **Cash** to enter what the guest handed over. Choose **Other card machine**
+to enter the details of a payment taken separately.
 
 **A bill paid more than it comes to.** A bill can take more than it comes to, for example a
 contribution followed by dishes paid on a bill of their own. It then says how much more and
@@ -1050,10 +1050,10 @@ If the bill comes to €0.00, choose **Close** after you see the refund confirma
 bill, choose **Cash** or **Card** and **Confirm payment** for €0.00 to close it.
 
 **A receipt of their own.** When a guest pays part of a bill that has no invoice yet and is set for
-a receipt, ask whether they want their own receipt for that amount. On a table's Pay screen, answer before
-choosing **Charge** or **Cash**. For **Other card machine** or at the Counter, answer on the
-confirmation. **Yes** prints them a ticket of its own, and the table's receipt takes it off.
-**No** lists it on the table's receipt.
+a receipt, ask whether they want their own receipt for that amount. On the opening Pay screen,
+answer before choosing **Charge** or **Cash**. If the question appears on the confirmation,
+answer before taking payment. **Yes** prints a separate receipt for that payment.
+**No** lists it on the bill's final receipt.
 To see which table's receipt took a part payment off, open its receipt in **Find a bill**.
 
 **Cash and change.** Choose **Cash** and enter the actual **Cash handed over**. The confirmation
@@ -1061,17 +1061,14 @@ shows how much pays off the bill and the **Change to give**. If the venue takes 
 whether to return all the change, leave all of it as a tip, or leave an amount. Check the change
 again after choosing a tip, then press **Take payment** and give that change to the guest.
 
-**Card and reader.** At a table, use the contactless icon to open **Reader and printer**;
-use **Change** or scan its Waitron label if you are holding another one. Check the amount on
-**Charge** before pressing it. At the Counter, choose from the card readers when a list is
-offered. Check the reader and the total on the confirmation.
+**Card and reader.** Use the contactless icon to see the selected reader. Change it if you need
+another one. Check the amount on **Charge** before pressing it.
 To use a separate machine, follow [Use another card machine](table-service.md#outside-card).
 
-If the venue takes tips and Waitron drives the reader, use **Enter tip** on the table’s Pay screen.
+If the venue takes tips and Waitron drives the reader, use **Enter tip** on the Pay screen.
 To take it off before starting the payment, choose **Edit tip**, then **Remove tip**. For a
-separate card machine, enter the tip with the other payment details. At the Counter, enter
-**Tip on the card (optional)** before continuing. The confirmation at the Counter or for
-**Other card machine** separates **Paid off the bill**, **Tip** and **Charged on the card**.
+separate card machine, enter the tip with the other payment details. Its confirmation separates
+**Paid off the bill**, **Tip** and **Charged on the card**.
 An amount above what is still due becomes a tip, so check the full card charge with the guest before
 sending it. For example, a €50 card contribution towards €40 still due pays €40 off the bill and adds a €10
 tip. If the venue does not take tips, use the amount the refusal says can be charged.

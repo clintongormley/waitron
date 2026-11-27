@@ -4,7 +4,7 @@ import type { BillEditExpected } from "../api/order-types.js";
 import type { AllocationPreview, BillBalance } from "../api/payments-api.js";
 import type * as PayDialog from "../widgets/bill-pay-dialog.js";
 import { refusalOf } from "./bill-payment.js";
-import { itemsRefusal, previewPayment } from "./pay-for-items.js";
+import { counterItemsEditFor, itemsRefusal, previewEdit, previewPayment } from "./pay-for-items.js";
 import type { BillNotice } from "./reopened-bill.js";
 
 /** The order a bill payment dialog pays: the table's bill on screen, whose `visit` is the order
@@ -15,6 +15,7 @@ export interface PayingOrder {
   visit: number;
   /** The bill's receipt was issued before the window opened, so the payment settling it issues none. */
   printed?: boolean;
+  counterPayPanel?: boolean;
   /** A bill Find bill pays without loading it into a screen: the edit state its row was read with,
    * sent in place of the basket's; undefined when the row carried none. */
   found?: { expectedEdit: BillEditExpected | null | undefined };
@@ -58,6 +59,7 @@ export function tablePayContext(
   edit: BillEditExpected | null | undefined,
   revisions: BillRevisions,
   unsent: boolean,
+  counterVisit?: readonly [session: number, visit: number, revision: number],
 ): string {
   return JSON.stringify([
     id,
@@ -67,6 +69,7 @@ export function tablePayContext(
     edit,
     revisions,
     unsent,
+    counterVisit,
   ]);
 }
 
@@ -76,11 +79,24 @@ export async function readTablePayQuote(
   request: TablePayQuoteRequest,
   edit: BillEditExpected | null | undefined,
   revisions: BillRevisions,
+  surface: PayingOrder["surface"],
+  current: () => boolean = () => true,
 ): Promise<TablePayQuote> {
+  const editForQuote = async () => {
+    const { expectedEdit, readCounterEdit } = previewEdit(edit, { surface }, request.asked.choice);
+    return readCounterEdit
+      ? counterItemsEditFor(api, { billId, preview: null, expectedEdit })
+      : expectedEdit;
+  };
+  let checkedEdit: Promise<BillEditExpected | null> | undefined;
   const read = async (asked: PayDialog.PayRequest) => {
     try {
-      if (edit == null) throw { code: "draft.out_of_date" };
-      return { preview: await previewPayment(api, billId, asked, edit), refusal: null };
+      checkedEdit ??= editForQuote();
+      const paidEdit = await checkedEdit;
+      return {
+        preview: current() ? await previewPayment(api, billId, asked, paidEdit) : null,
+        refusal: null,
+      };
     } catch (error) {
       const refusal = itemsRefusal(refusalOf(error));
       const unread = refusal.code === "network" || refusal.code === "server.internal";
