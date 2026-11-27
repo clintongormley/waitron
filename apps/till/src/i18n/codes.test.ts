@@ -649,7 +649,7 @@ it("words each refusal Nothing was served can meet, in both languages, naming no
   }
 });
 
-it("words Nothing was served's refusals of served dishes and of a receipt AEAT has not answered or refused, in both languages", () => {
+it("words Nothing was served's refusals of served dishes and of a receipt AEAT has not answered, holds or refused, in both languages", () => {
   expect(codeMessage("bill.served_dishes", "en")).toBe(
     "These dishes were served or charged, so the receipt can't be cancelled. Take payment, or use Reopen bill where it is offered.",
   );
@@ -657,10 +657,10 @@ it("words Nothing was served's refusals of served dishes and of a receipt AEAT h
     "Estos platos se sirvieron o se cobran, así que el ticket no se puede anular. Cobra la cuenta o, si se ofrece, usa Reabrir cuenta.",
   );
   expect(codeMessage("fiscal.original_unanswered", "en")).toBe(
-    "AEAT has not answered for this receipt yet. Try again later.",
+    "This receipt is waiting for the tax agency's answer, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Then try again.",
   );
   expect(codeMessage("fiscal.original_unanswered", "es")).toBe(
-    "La AEAT aún no ha respondido sobre este ticket. Inténtalo más tarde.",
+    "Este ticket está esperando la respuesta de la Agencia Tributaria, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después vuelve a intentarlo.",
   );
   expect(codeMessage("fiscal.original_refused", "en")).toBe(
     "AEAT refused this receipt, so it cannot be cancelled. Take payment.",

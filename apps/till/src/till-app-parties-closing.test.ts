@@ -1261,6 +1261,7 @@ describe("till-app: reopening a printed bill", () => {
     ["bill.not_at_table", "split.refused_not_at_table"],
     ["bill.not_issued", "split.refused_not_issued"],
     ["fiscal.original_refused", "split.refused_receipt_refused"],
+    ["fiscal.original_unanswered", "split.refused_receipt_unanswered"],
   ] as const)("keeps the dialog open with %s's sentence", async (code, key) => {
     const server = billServer(async () => {
       throw { code, status: 409, workingOrderId: "wo-check" };

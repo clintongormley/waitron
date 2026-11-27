@@ -106,6 +106,7 @@ const TEXT = {
       "bill.not_at_table": "split.refused_not_at_table",
       "bill.not_issued": "split.refused_not_issued",
       "fiscal.original_refused": "split.refused_receipt_refused",
+      "fiscal.original_unanswered": "split.refused_receipt_unanswered",
       "bill.unserved_dishes": "split.unserved",
     },
   },

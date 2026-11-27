@@ -126,6 +126,8 @@ export function itemsAllocatedFrom(preview: AllocationPreview): AllocationPrevie
 export function itemsRefusal(refusal: PayRefusal): PayRefusal {
   if (refusal.code === "fiscal.original_refused")
     return { ...refusal, text: t("split.refused_receipt_refused") };
+  if (refusal.code === "fiscal.original_unanswered")
+    return { ...refusal, text: t("split.refused_receipt_unanswered") };
   const { dishNames = [] } = refusal;
   if (refusal.code === "set_menu.move_adjusted" && dishNames.length > 0)
     return {

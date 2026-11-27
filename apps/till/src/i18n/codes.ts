@@ -655,8 +655,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "bill.served_dishes": { en: en["cancel_credit.served"], es: es["cancel_credit.served"] },
   "fiscal.original_unanswered": {
-    en: "AEAT has not answered for this receipt yet. Try again later.",
-    es: "La AEAT aún no ha respondido sobre este ticket. Inténtalo más tarde.",
+    en: "This receipt is waiting for the tax agency's answer, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Then try again.",
+    es: "Este ticket está esperando la respuesta de la Agencia Tributaria, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después vuelve a intentarlo.",
   },
   "fiscal.original_refused": {
     en: "AEAT refused this receipt, so it cannot be cancelled. Take payment.",
