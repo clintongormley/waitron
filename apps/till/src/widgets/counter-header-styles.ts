@@ -42,6 +42,11 @@ export const counterHeaderStyles = css`
     flex-wrap: wrap;
   }
 
+  .counter-shortcuts.edge-fade {
+    --fade-width: var(--wt-space-4);
+    scroll-padding-inline: var(--fade-start) var(--fade-end);
+  }
+
   .head[data-narrow-counter] .tabs {
     flex: 0 0 100%;
     overflow: visible;

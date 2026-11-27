@@ -666,6 +666,7 @@ export class TillShell extends LitElement {
     void this.#settled().then(() => this.#watchHiddenBelow());
     this.#observe();
     if (this.formFactor === "till") {
+      this.#overflowFrame.schedule();
       this.#observeCounter();
       void this.#measureCounterLogo();
       return;
@@ -744,8 +745,8 @@ export class TillShell extends LitElement {
   }
 
   #markOverflow(): void {
-    const strip = this.renderRoot.querySelector<HTMLElement>(".head .bar-tables");
-    if (strip) markOverflow(strip);
+    for (const strip of this.renderRoot.querySelectorAll<HTMLElement>(".head .edge-fade"))
+      markOverflow(strip);
   }
 
   /** A failed logo's box retries only while it is on the page, so while the bar leaves the logo out
@@ -794,6 +795,7 @@ export class TillShell extends LitElement {
           // The bar can move when the shell resizes without changing the bar's height.
           if (this.#floorControls) measureFloorControls(this.#floorControls);
           if (this.formFactor === "till") {
+            this.#overflowFrame.schedule();
             void this.#measureCounterLogo();
             continue;
           }
@@ -913,7 +915,10 @@ export class TillShell extends LitElement {
    * notifications are being delivered is a ResizeObserver loop. */
   #observeCounter(): void {
     if (!this.isConnected) return;
-    this.#counterObserver ??= new ResizeObserver(() => void this.#measureCounterLogo());
+    this.#counterObserver ??= new ResizeObserver(() => {
+      this.#overflowFrame.schedule();
+      void this.#measureCounterLogo();
+    });
     const targets = new Set<Element>(
       this.renderRoot.querySelectorAll(
         `.head > .counter-logo, .head > .session, ${counterStripItems}`,
@@ -1689,7 +1694,8 @@ export class TillShell extends LitElement {
                       ? html`<div class=${narrowCounter ? "counter-navigation" : "till-strip"}>
                           ${tabs}
                           <div
-                            class=${narrowCounter ? "counter-shortcuts till-strip" : "counter-shortcuts"}
+                            class=${narrowCounter ? "counter-shortcuts till-strip edge-fade" : "counter-shortcuts"}
+                            @scroll=${this.#overflowFrame.schedule}
                           >
                             ${this.showCounter ? html`${this.#counterOrders("parked", this.parkedCount)}${this.#counterOrders("waiting", this.waitingCount)}` : nothing}
                             ${this.transferAvailable ? html`<wt-button data-open-transfers variant="secondary" @click=${() => this.#emit("open-transfers")}>${t("department_transfer.short")}${this.transferCount === undefined ? nothing : html` <span role="status" data-test="department-transfers" aria-label=${this.#transferText()}>${this.transferCount}</span>`}</wt-button>` : nothing}

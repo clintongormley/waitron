@@ -975,6 +975,7 @@ zone you want, choose the one that **Opens first**, and tap **Save**.
 
 On a till with the zone button at the bottom, tap it and pick a counter by name to open **Counter**.
 Tap **Floor** to return. Above the floor, use **Parked orders** or **Waiting** to reopen an order.
+On a narrow Counter screen, swipe the shortcuts sideways to see more.
 A phone or tablet has no Counter, so its Floor shows every zone you chose. Until you save a choice,
 a phone or tablet opens where it always has. After that it opens on your **Opens first** zone.
 After you open a table, see [Get back to your tables with unsent dishes](table-service.md#unsent-tables).
