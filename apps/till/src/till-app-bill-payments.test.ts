@@ -8918,14 +8918,14 @@ describe("till-app: a party bill's receipt language", () => {
       setOrderReceiptLanguage,
     });
     const order = await openTable(el);
-    expect(text(languageButton(order))).toBe("Recibo: Español");
+    expect(text(languageButton(order))).toBe("Ticket: Español");
 
     await choose(el, order, "ca-ES");
 
     expect(text(el.shadowRoot!.querySelector('[role="alert"]'))).toContain(
-      "No se pudo guardar el idioma del recibo, inténtalo de nuevo",
+      "No se pudo guardar el idioma del ticket, inténtalo de nuevo",
     );
-    expect(text(languageButton(order))).toBe("Recibo: Español");
+    expect(text(languageButton(order))).toBe("Ticket: Español");
 
     await choose(el, order, "ca-ES");
     expect(setOrderReceiptLanguage.mock.calls).toEqual([
@@ -8946,7 +8946,7 @@ describe("till-app: a party bill's receipt language", () => {
         },
       ],
     ]);
-    expect(text(languageButton(order))).toBe("Recibo: Catalán");
+    expect(text(languageButton(order))).toBe("Ticket: Catalán");
   });
 
   it("reads the party's bills again when the choice was refused as out of date, and chooses from what it reads", async () => {

@@ -87,8 +87,8 @@ emparejamiento. Abre **Añadir impresora** y elige **Emparejar** junto a ella, o
 nuevo** si aparece en sus detalles.
 
 Si **Eliminar** avisa de que el cajón tiene saldo o un recuento pendiente, sigue las instrucciones
-de **Cerrar primero**. Elige **Cerrar cajón** en el terminal indicado y deja el cajón vacío. Si no
-aparece un terminal, asigna el cajón en **Dispositivos**. Si **Cajón portamonedas conectado**
+de **Cerrar primero**. Elige **Cerrar cajón** en la caja indicada y deja el cajón vacío. Si no
+aparece una caja, asigna el cajón en **Dispositivos**. Si **Cajón portamonedas conectado**
 está desactivado, actívalo en **Editar**. **Eliminar de todos modos** conserva el saldo y el recuento pendiente
 si añades una impresora en la misma dirección y Waitron recupera su registro.
 
@@ -117,11 +117,11 @@ Si un trabajo en A4 está **En espera** porque falta papel, añade papel y deja 
 Consulta **Trabajos pendientes** y **Última impresión** en la pestaña **Impresoras** para ver qué
 queda por imprimir y cuándo terminó el último trabajo.
 
-Las órdenes del cajón no se pueden reenviar. Si el TPV muestra **El cajón no se abrió**, comprueba
+Las órdenes del cajón no se pueden reenviar. Si la caja muestra **El cajón no se abrió**, comprueba
 la alimentación y la conexión de la impresora y pulsa **Abrir cajón** si aún necesitas abrirlo. Si no se recibió
 el resultado, comprueba si el cajón se abrió antes de volver a abrirlo.
 
-Si moviste efectivo a mano, [regístralo en el terminal](table-service.md#drawer-cash-entry).
+Si moviste efectivo a mano, [regístralo en la caja](table-service.md#drawer-cash-entry).
 
 Si un trabajo se envió a una impresora de tickets, **Reimprimir** ofrece impresoras de tickets.
 Si el original ya se imprimió, obtendrás un duplicado. Para imprimir en A4 una copia de una

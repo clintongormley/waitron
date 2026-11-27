@@ -1,4 +1,4 @@
-# Avisos del terminal
+# Avisos de la caja
 
 Cuando el servidor necesita atención, tu caja o terminal de mano muestra un aviso bajo la barra
 superior. La pantalla del PIN también avisa de que queda poco espacio y de que los cobros
@@ -10,8 +10,8 @@ Si Waitron no puede verificar este dispositivo para una acción, recarga o vuelv
 
 ## Cuando la caja no puede conectar con el servidor {#cannot-open}
 
-Si ves **No se puede conectar con el servidor**, comprueba que este teléfono esté conectado a la red
-WiFi del local. Deja la página abierta. La caja se abre sola cuando el servidor está listo.
+Si ves **No se puede conectar con el servidor**, comprueba que este móvil está en el WiFi del local.
+Deja la página abierta. La caja se abre sola cuando el servidor está listo.
 
 Si ya estás en la red WiFi del local, comprueba que el servidor esté encendido. Si lo está, puede
 que tengas que [volver a instalar su certificado](table-service.md#certificate-trust).
@@ -20,7 +20,7 @@ Si la caja ya está abierta y dice **No se puede conectar con el servidor**, com
 dispositivo esté conectado a la red WiFi del local. Deja la pantalla abierta mientras la caja
 vuelve a comprobar la conexión. En la pantalla del PIN, desplaza el aviso que está encima del
 teclado si hace falta y pulsa **Comprobar de nuevo** para comprobarla al momento.
-En **Comprueba tus horas**, pulsa **Volver a consultar** si no se pudieron cargar.
+En **Comprueba tus horas**, pulsa **Reintentar** si no se pudieron cargar.
 
 ## Lee la línea de avisos {#notice-line}
 
@@ -58,7 +58,7 @@ decir **Comprobar la hora** en su lugar, como se explica más abajo.
 
 **Los cobros esperan: el servidor espera a que se conecten dispositivos y coincidan con su hora (0
 de 2 por ahora) · Comprobar la hora** es rojo. Cuando el servidor arranca sin la hora de internet,
-los cobros esperan. Vuelven a funcionar solos en cuanto dos cajas o terminales están encendidos y
+los cobros esperan. Vuelven a funcionar solos en cuanto dos cajas o terminales de mano están encendidos y
 conectados, aunque estén en la pantalla de inicio de sesión, y coinciden con la hora del servidor.
 Si no, usa **Comprobar la hora**: mantén la hora del servidor si es correcta, o usa la de este
 dispositivo si lo es esa. La pantalla de inicio de sesión y las páginas de fichaje y de asistencia muestran las mismas palabras, sin
@@ -111,7 +111,7 @@ ofrece **Acceso de administrador**. Elige a alguien con **Gestionar servidores**
 introduzca su PIN para ajustar la hora desde esa caja.
 
 **La hora de este dispositivo es incorrecta · Corrígela en los ajustes del dispositivo** es ámbar: el
-servidor mantiene su hora por internet, y el reloj de este terminal se aleja de ella más de un minuto.
+servidor mantiene su hora por internet, y el reloj de este dispositivo se aleja de ella más de un minuto.
 
 **Queda poco espacio en el servidor · Consulta Estado del servidor en el panel** es ámbar. El trabajo se sigue guardando,
 pero se está acabando el espacio. Libera espacio antes de que se acabe, en
@@ -123,25 +123,25 @@ que puedes seguir vendiendo. Una venta que necesita que una persona la resuelva 
 así que mientras alguna de las ventas pendientes lo necesite, la indicación dice **Avisa al
 encargado**.
 
-**Impresora «Cocina» no imprime · desde 21:16** es ámbar. Una comanda enviada a esa impresora a
-las 21:16 lleva dos minutos o más sin imprimirse, o el servidor ha dejado de intentar enviarla. El
+**Impresora «Cocina» no imprime · desde 21:16** es ámbar. Un trabajo enviado a esa impresora a
+las 21:16 lleva dos minutos o más sin imprimirse, o el servidor ha dejado de intentar enviarlo. El
 aviso de una impresora de estación aparece en todas las cajas registradoras y todos los terminales de
-camarero; el de cualquier otra impresora, solo en los que imprimen en ella sus recibos, sus
+camarero; el de cualquier otra impresora, solo en los que imprimen en ella sus tickets, sus
 justificantes de pago o sus facturas completas. Revisa el papel, la corriente y el cable de la
-impresora. El aviso desaparece cuando la impresora imprime algo que se le envió después de esa
-comanda. Si el servidor dejó de intentar enviar alguna comanda, las cajas muestran entonces
+impresora. El aviso desaparece cuando la impresora imprime algo que se le envió después de ese
+trabajo. Si el servidor dejó de intentar enviar algún trabajo, las cajas muestran entonces
 **Impresora «Cocina» no pudo imprimir un ticket · Vuelve a imprimirlo** en ámbar hasta que se
-imprima una reimpresión (una comanda desde la mesa, un recibo desde su venta) o un reenvío desde
-**Impresoras**. Un recibo original que no se imprimió también se vuelve a intentar por sí solo cada
+imprima una reimpresión (una comanda desde la mesa, un ticket desde su venta) o un reenvío desde
+**Impresoras**. Un ticket original que no se imprimió también se vuelve a intentar por sí solo cada
 10 minutos aproximadamente durante un día después de la venta, así que para imprimirlo ya, abre su
 venta y pulsa **Reintentar original** en lugar de imprimir una copia.
 
-**El servidor necesita atención · Consulta Estado del servidor en el panel** es un aviso para el que este terminal no tiene
+**El servidor necesita atención · Consulta Estado del servidor en el panel** es un aviso para el que este dispositivo no tiene
 texto, quizá de una versión más reciente del servidor.
 
 Si una acción dice **No se ha guardado: el servidor no tiene espacio en disco. Avisa al encargado.**,
 avisa al encargado y espera a que se libere espacio antes de reintentarlo. Que se rechace la
-impresión de un recibo o justificante, o la apertura del cajón, no anula un pago; no lo cobres otra
+impresión de un ticket o justificante, o la apertura del cajón, no anula un pago; no lo cobres otra
 vez. Si el mensaje dice que se ha cobrado la tarjeta, sigue sus instrucciones de recuperación en
 lugar de volver a cobrar.
 
@@ -163,7 +163,7 @@ antes el importe ahí.
 Si la caja dice **El servidor está comprobando su copia de seguridad antes de aceptar ventas**
 o **Ningún servidor acepta ventas ahora mismo**, déjala abierta. La caja continúa en cuanto un
 servidor vuelve a aceptar ventas. En la pantalla de inicio de sesión, pulsa **Comprobar de nuevo**
-para comprobarlo al momento. En **Comprueba tus horas**, pulsa **Volver a consultar** cuando el
+para comprobarlo al momento. En **Comprueba tus horas**, pulsa **Reintentar** cuando el
 servidor esté listo.
 
 ## Guarda un informe sobre un problema {#problem-report}

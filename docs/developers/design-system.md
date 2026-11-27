@@ -593,6 +593,27 @@ edits. Publish the menu to send the saved arrangement to devices.
 The Structure tree and shortcut picker label an included menu "Menu: <name>" / "Carta: <name>",
 so you can distinguish it from a section with the same name.
 
+**The till's Spanish words.** The till's Spanish uses one word for each thing
+([till redesign §7.18](../superpowers/specs/2026-11-26-till-handheld-redesign-design.md#718-pass-3-the-spanish-words)):
+
+| English          | Spanish                                                      | Not                                                                                   |
+| ---------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| receipt          | ticket ("factura simplificada" where the legal name matters) | recibo                                                                                |
+| order, on screen | pedido                                                       | comanda                                                                               |
+| the till         | caja                                                         | terminal, TPV                                                                         |
+| try again        | Reintentar on a button; Inténtalo de nuevo in a sentence     | Intentar de nuevo, Volver a consultar, Reinténtalo                                    |
+| could not load   | No se pudo cargar … (No se pudieron cargar … for a plural)   | No se ha(n) podido cargar, leer or consultar; No se pudo (pudieron) leer or consultar |
+| course           | orden del plato                                              | orden de plato                                                                        |
+
+"Comanda" stays for what a kitchen station receives, including a station's printout ("comanda de
+estación"). A handheld stays "terminal de camarero" or "terminal de mano". Where the till names the
+dashboard's "Recibos" tab, it uses the tab's own name. A physical read, such as an NFC sticker,
+keeps "No se ha podido leer". "Datáfono", "lector de tarjetas", "servidor", "Devolución"/"Devolver"
+and "carta" already are the one word and stay. `apps/till/src/i18n/strings.test.ts` reads, as text,
+the till's catalogue, its help text and the tables in `codes.ts` (the refund messages included), and
+refuses the dropped words there; it does not read the guide pages, nor Spanish written inline in `codes.ts`'s message
+functions or in components.
+
 **The till's menu search.** The till and dashboard Home preview label the field "Search" / "Buscar".
 The search field sits above both blocks, on home and inside a
 section; typing replaces the view with results, and clearing returns to where it was. Its results

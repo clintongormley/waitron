@@ -384,7 +384,7 @@ describe("till-tender-pay", () => {
       el.addEventListener("confirm-payment", payment);
 
       const button = languageButton(el)!;
-      expect(button.textContent?.trim()).toBe("Recibo: Catalán");
+      expect(button.textContent?.trim()).toBe("Ticket: Catalán");
       expect(button.hasAttribute("aria-label")).toBe(false);
       expect(button.getAttribute("variant")).toBe("secondary");
       button.click();

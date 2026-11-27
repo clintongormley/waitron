@@ -183,10 +183,10 @@ describe("Devolución names the receipt's action in Spanish", () => {
     ["give_back.under_way", "Devolución en curso"],
     ["find_page.corrections", "Devoluciones en curso"],
     ["find_page.refund", "Devolución"],
-    ["cancel_item.refund_at_till", "Devuélvelo en una caja: elige Devolución en el recibo."],
+    ["cancel_item.refund_at_till", "Devuélvelo en una caja: elige Devolución en el ticket."],
     [
       "cancel_item.free_served",
-      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuélvelo desde el recibo.",
+      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuélvelo desde el ticket.",
     ],
   ] as const)("%s", (key, wording) => {
     expect(es[key]).toBe(wording);
@@ -195,10 +195,10 @@ describe("Devolución names the receipt's action in Spanish", () => {
   it("tells the checkbox from the receipt's Devolución where a sentence names both", () => {
     const tables = CODE_TABLES as Record<string, Record<string, { es: string }>>;
     expect(tables.FREE_ITEM_WITH_DISH!.served!.es).toBe(
-      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después devuélvelo desde el recibo.",
+      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después devuélvelo desde el ticket.",
     );
     expect(freeItemAtFinishMessage("served", "es")).toBe(
-      "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuélvelo desde el recibo.",
+      "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuélvelo desde el ticket.",
     );
   });
 

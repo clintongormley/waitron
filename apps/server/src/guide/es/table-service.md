@@ -43,15 +43,15 @@ la cesta. Corrige el importe y vuelve a intentarlo, o aparca el pedido para guar
 ## Registrar una entrada o salida de efectivo {#drawer-cash-entry}
 
 Si repones cambio o retiras efectivo, abre **Más** y elige **Entrada o salida de efectivo** en un
-terminal asignado al cajón. Elige **Abrir cajón** o usa la llave si sigue cerrado. Elige **Entrada**
+caja asignada al cajón. Elige **Abrir cajón** o usa la llave si sigue cerrado. Elige **Entrada**
 o **Salida**, indica el importe y el motivo del movimiento y pulsa **Guardar**.
 
 ## Cerrar un cajón de efectivo {#close-drawer}
 
-En un terminal asignado al cajón, abre **Más** y elige **Cerrar cajón**. Si no se abre, usa la
+En una caja asignada al cajón, abre **Más** y elige **Cerrar cajón**. Si no se abre, usa la
 llave. Cuenta el efectivo y elige **Guardar recuento**. Después verás la diferencia, si la hay,
 y podrás elegir **Volver a contar** una vez. Si sales después de guardar el recuento, elige
-**Cerrar cajón** en cualquier terminal asignado al mismo cajón para continuar.
+**Cerrar cajón** en cualquier caja asignada al mismo cajón para continuar.
 
 Si Waitron te pide que vuelvas a contar tras un movimiento de efectivo, elige **Volver a contar**
 e indica cuánto hay ahora en el cajón.
@@ -104,7 +104,7 @@ devolución. Ese caso aún no se ha probado con SumUp.
 
 ## Elegir documentos después de cobrar {#settlement-document}
 
-Después del último pago, elige **Recibo** o **Factura completa**. Un cambio que deja
+Después del último pago, elige **Ticket** o **Factura completa**. Un cambio que deja
 la cuenta pagada ofrece la misma elección. Para imprimir, espera a que **Imprimir en {printer}**
 nombre el destino y púlsalo. Una factura completa conserva el cliente registrado.
 
@@ -112,7 +112,7 @@ Si no está claro si se imprimió una factura en A4, comprueba la impresora que 
 ventana. Si aún la necesitas, pulsa **Volver a imprimir**. Para enviarla a otra impresora, elige
 **Impresora de facturas**. La ventana muestra cómo avanza la impresión o el envío por correo.
 
-Cuando se ofrece **Enviar por correo electrónico**, puedes enviar un recibo o una factura completa en PDF.
+Cuando se ofrece **Enviar por correo electrónico**, puedes enviar un ticket o una factura completa en PDF.
 Introduce el correo del cliente y pulsa **Enviar**. Imprimir y enviar por correo son acciones
 independientes. Si la caja dice **Compruébalo antes de intentarlo de nuevo**, puede que el documento
 ya se haya entregado: pregunta al cliente o mira la impresora antes. Si falla el envío, o el cliente
@@ -120,13 +120,13 @@ no lo tiene, pulsa **Volver a enviar el correo** para repetirlo a la misma direc
 dirección.
 
 Pulsa **Listo** o cierra la ventana para continuar. Salvo que lo hayas enviado por correo
-electrónico, el recibo se imprime al cerrar. Si la impresora está desactivada o no funciona, se
+electrónico, el ticket se imprime al cerrar. Si la impresora está desactivada o no funciona, se
 imprime por sí solo cuando vuelva a funcionar; si al día siguiente no se ha impreso, imprímelo desde la
 venta. Si el dispositivo no tiene impresora de tickets, elige una o envía el
 correo antes de cerrar; si no, se imprime si el dispositivo pasa a tener una en el plazo de un día. Cierras la mesa por separado.
 Después de imprimir una cuenta con **Imprimir la cuenta**, la ventana que aparece tras el último
 pago ofrece una copia en lugar del original, que se imprimió con la cuenta; imprímela solo si el
-cliente pide otro recibo.
+cliente pide otro ticket.
 Si necesitas un documento más tarde, abre la venta y elige **Imprimir/Reimprimir**.
 
 ## Comprobar un pago con tarjeta antes de cancelar {#cancel-pending-card}
@@ -214,8 +214,8 @@ mostrador**, los pedidos de mostrador aún sin terminar: elige uno para abrirlo.
 
 Abre una venta en **Buscar cuenta** para revisar su ticket con el formato de papel de 80 mm.
 El ticket se muestra en el idioma en que se emitió. Para una copia en papel, elige **Imprimir/Reimprimir**. Para una factura completa, elige
-**Recibo** para la versión compacta o **Factura** para el formato de factura. Una factura
-simplificada muestra directamente sus impresoras de recibos. Ambas versiones de una factura
+**Ticket** para la versión compacta o **Factura** para el formato de factura. Una factura
+simplificada muestra directamente sus impresoras de tickets. Ambas versiones de una factura
 completa conservan los datos del cliente registrados.
 
 Si una factura completa ligada a una cuenta puede haberse impreso, ábrela en **Buscar cuenta** y
@@ -227,19 +227,19 @@ reenviar una factura completa.
 
 Elige una impresora de la lista de tu dispositivo. Elige **Heredar** para seguir el perfil. Cualquier
 otra elección se guarda en **Equipo de este dispositivo**. Si otro
-dispositivo lleva la impresora de recibos, Waitron pregunta antes de que te la quedes.
+dispositivo lleva la impresora de tickets, Waitron pregunta antes de que te la quedes.
 
 Espera a que **Imprimir en {printer}** o **Imprimir una copia en {printer}** nombre tu destino y
 púlsalo. Elegir un documento o una impresora, actualizar la lista y volver atrás no imprime nada.
 La copia sigue preguntando el idioma cuando hay más de uno; cancelar no imprime nada. Si la
-elección no se ha guardado, pulsa **Reintentar**; usa **Actualizar** si no se ha podido leer la lista.
+elección no se ha guardado, pulsa **Reintentar**; usa **Actualizar** si no se pudieron cargar las impresoras.
 
 Para una factura completa antigua sin cuenta, ábrela en **Buscar cuenta** y elige **Factura**.
-Usa **Recibo** para una copia compacta cuando se haya completado un original. Si falla la impresión,
-comprueba el destino de **Reintentar original** o elige la impresora de recibos indicada en su lugar.
+Usa **Ticket** para una copia compacta cuando se haya completado un original. Si falla la impresión,
+comprueba el destino de **Reintentar original** o elige la impresora de tickets indicada en su lugar.
 
-Si el TPV indica que la impresora de oficina se ha quedado sin papel, añade papel y espera la
-factura. El aviso puede seguir en la pantalla de inicio de sesión si el TPV se bloquea. Si puede que
+Si la caja indica que la impresora de oficina se ha quedado sin papel, añade papel y espera la
+factura. El aviso puede seguir en la pantalla de inicio de sesión si la caja se bloquea. Si puede que
 la factura se haya impreso, revisa la impresora antes de volver a enviarla.
 
 ## Imprimir desde Pedidos del panel {#dashboard-documents}
@@ -320,7 +320,7 @@ pago** te pide cuánto se devuelve y por qué. Para **Una parte**, escribe el **
 Elige el **Motivo** de la lista. Un motivo que necesita una nota te pide que la escribas, y la nota queda registrada como motivo.
 
 Mientras la cuenta no tenga factura, o cuando su factura ya ha descontado ese pago, **Devolver**
-junto a un pago que tiene su propio ticket abre [Devolución desde un recibo](table-service.md#give-money-back)
+junto a un pago que tiene su propio ticket abre [Devolución desde un ticket](table-service.md#give-money-back)
 en ese ticket.
 
 Elige **Devolver** con el importe mostrado. Si no puedes aprobar devoluciones, un supervisor o
@@ -347,7 +347,7 @@ Usa × para quitar un plato que aún no has enviado. En un plato enviado, × y *
 quitas el cobro y selecciona un motivo. Quitar ese cobro puede requerir el PIN de un supervisor.
 
 **Atrás** deja el plato como está. Tras confirmar, la cesta se actualiza desde la cuenta guardada.
-Si eliges **Descartar** en un pedido aparcado con platos enviados, el terminal abre primero ese
+Si eliges **Descartar** en un pedido aparcado con platos enviados, la caja abre primero ese
 pedido. Cancela sus platos enviados antes de descartarlo. Si conservas el cobro de un plato
 cancelado, cobra la cuenta.
 
@@ -381,13 +381,13 @@ devuelve dinero.
 
 La marca solo aparece cuando este dispositivo puede devolver el pago. Si el cliente pagó de una
 forma que este dispositivo no acepta, la ventana dice **Devuélvelo en una caja: elige Devolución en
-el recibo.** Después de **Cancelar y devolver**, la ventana **Devolución** del recibo se abre ya
-rellenada, como se explica en [Devolución desde un recibo](table-service.md#give-money-back).
+el ticket.** Después de **Cancelar y devolver**, la ventana **Devolución** del ticket se abre ya
+rellenada, como se explica en [Devolución desde un ticket](table-service.md#give-money-back).
 
 ## Cerrar una mesa pagada con platos aún por llegar {#finish-paid-table}
 
 Cuando eliges **Cerrar mesa** y una cuenta pagada aún tiene platos sin servir, una ventana con un
-título como **2 platos sin servir** los muestra, y puedes cancelarlos todos o, si alguno tiene ticket de estación, pasar
+título como **2 platos sin servir** los muestra, y puedes cancelarlos todos o, si alguno tiene comanda de estación, pasar
 la comida al mostrador. Puedes elegir la devolución plato por plato. El ticket de anulación
 sigue el [ajuste de agrupación de la estación](kitchen-service.md#identical-dishes).
 
@@ -401,16 +401,16 @@ pagados de la cuenta cuando los marcas todos.
 Elige **Cancelar y devolver** con el total de los platos marcados, o **Cancelar** si no hay ninguno
 marcado. **Atrás** deja la mesa abierta. Si marcas **Devolución** y no puedes hacer devoluciones,
 alguien que pueda introduce su PIN. Si un pago se cobró de una forma que este dispositivo no
-acepta, la ventana dice **Devuélvelo en una caja: elige Devolución en el recibo.**
+acepta, la ventana dice **Devuélvelo en una caja: elige Devolución en el ticket.**
 
-Cuando la mesa se cierra, una ventana **Devolución** muestra cada recibo con platos marcados. Elige
-uno para abrir su ventana **Devolución**, ya rellenada. Si solo hay un recibo, se abre
+Cuando la mesa se cierra, una ventana **Devolución** muestra cada ticket con platos marcados. Elige
+uno para abrir su ventana **Devolución**, ya rellenada. Si solo hay un ticket, se abre
 directamente.
 
 Si los clientes van a esperar y recoger la comida en el mostrador, elige **Lo recogerán en el
-mostrador**. Aparece cuando al menos uno de los platos tiene ticket de estación. No se cancela ni se
+mostrador**. Aparece cuando al menos uno de los platos tiene comanda de estación. No se cancela ni se
 devuelve nada. Los platos en espera pasan ahora a la estación, cada cuenta cuyos platos por llegar
-tienen ticket de estación pasa a ser un pedido pagado que espera en el mostrador, y la mesa se
+tienen comanda de estación pasa a ser un pedido pagado que espera en el mostrador, y la mesa se
 cierra. Abre el primer mostrador activo del departamento de la venta.
 Busca **Mostrador** en el pase y el pedido en **Mostrador**. Elige **Entregado** en el pedido
 marcado **Pagado, sin entregar** cuando lo recojan. Desde la caja de la mesa, puedes encontrar su
@@ -421,9 +421,9 @@ Si mueves manualmente al mostrador una cuenta que ya has presentado, cobra en la
 Una vez cobrada, abre el primer mostrador activo según el orden de
 las zonas, aunque hayas usado una caja en otro mostrador.
 
-## Devolución desde un recibo {#give-money-back}
+## Devolución desde un ticket {#give-money-back}
 
-En un recibo anterior, elige **Devolución**. **¿Por qué se devuelve?** ofrece:
+En un ticket anterior, elige **Devolución**. **¿Por qué se devuelve?** ofrece:
 
 - **Un plato**: algo que pidieron no llegó o no estaba bien. Marca los platos en **¿Qué platos?**.
   **Dinero a devolver** empieza en lo que cuestan; cámbialo para devolver menos, o más.
@@ -457,7 +457,7 @@ devuelvas más. En una factura completa a nombre de un cliente, la aprobación d
 cubre el dinero que va en una factura rectificativa: salvo que tengas
 **Devolver pagos** y también **Emitir tickets y facturas rectificativos**, un responsable o
 encargado lo aprueba con su PIN.
-Mantén la ventana abierta para aprovecharla: una que abras después desde el recibo no viene
+Mantén la ventana abierta para aprovecharla: una que abras después desde el ticket no viene
 rellenada.
 
 Cuando una devolución a tarjeta espera a la compañía de la tarjeta, elige **Comprobar de nuevo**
@@ -467,9 +467,9 @@ que el servidor no respondió, elige **Enviar de nuevo**. **Comprobar de nuevo**
 nunca devuelven el mismo dinero dos veces. Un ticket rectificativo o una factura rectificativa que no se imprime
 solo se puede imprimir desde **Buscar cuenta**.
 
-Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **Buscar cuenta**, en
+Si cierras la ventana antes de que vuelva todo el dinero, busca el ticket en **Buscar cuenta**, en
 **Devoluciones en curso**. Si no está, la devolución espera en esta caja: vuelve a abrir
-**Devolución** en el recibo para continuar. Si está, elígelo en **Buscar cuenta** para continuar:
+**Devolución** en el ticket para continuar. Si está, elígelo en **Buscar cuenta** para continuar:
 
 - **Devolver … en efectivo** o **Devolver … a la tarjeta** devuelve lo que queda de esa forma.
 - **Terminar** registra lo devuelto. Si el ticket o la factura no lo admite, la ventana lo indica: si sigue ofreciendo **Terminar**, este acaba la devolución y lo devuelto queda devuelto; si no, sigue lo que indica y elige **Comprobar de nuevo**. Hasta que **Comprobar de nuevo** lo resuelva, no se puede devolver más dinero.
@@ -479,7 +479,7 @@ Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **B
 
 ## Devolver una tarjeta en un datáfono aparte {#separate-terminal}
 
-Si el TPV indica que el servidor no tiene espacio en disco, espera a que un encargado resuelva el bloqueo
+Si la caja indica que el servidor no tiene espacio en disco, espera a que un encargado resuelva el bloqueo
 antes de devolver el dinero en el datáfono: Waitron no puede registrar la devolución mientras dure.
 
 Para un pago con tarjeta registrado desde un datáfono aparte, devuélvelo en ese datáfono solo
@@ -530,7 +530,7 @@ cosas también lo quitan:
 Hasta que se envía el primer pedido, no se muestra ningún paso mientras se toma nota en la mesa.
 
 Un paso ya hecho vuelve cuando ocurre otra vez el momento en que empieza, como cuando se sirven más
-platos del mismo orden de plato. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada
+platos del mismo orden del plato. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada
 repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cuenta.
 
 ## Cada plato es su propia línea {#portions}
@@ -649,8 +649,8 @@ Para pasar un menú a otra cuenta, abre **Mover platos** y selecciona el menú. 
 mueven con él.
 
 En el **Mostrador**, elige **Para llevar** y añade los platos desde cualquier carpeta: la
-cuenta los agrupa en menús igual que en una mesa. Para añadir platos después, busca la cuenta
-en **Pedidos abiertos** y tócalo para recuperarlo.
+cuenta los agrupa en menús igual que en una mesa. Para añadir platos después, toca el pedido
+aparcado en **Pedidos abiertos**.
 
 ## Dar a una mesa un nombre corto {#short-names}
 
@@ -793,7 +793,7 @@ Primero envía o quita los platos que aún no se han enviado. Si hay platos de l
 como servidos, todavía no se imprime nada: la caja los muestra bajo **Aún sin servir:**. Si los
 clientes ya los han tomado, elige **Marcar como servidos** donde aparezca y vuelve a elegir
 **Imprimir la cuenta**. Si no, elige **Imprimir igualmente**: un plato que al final no llegue se devuelve después
-del cobro con [Devolución desde un recibo](table-service.md#give-money-back). En una factura completa a nombre
+del cobro con [Devolución desde un ticket](table-service.md#give-money-back). En una factura completa a nombre
 de un cliente, esa devolución emite una factura rectificativa, así que en esas cuentas quita antes de
 imprimir los platos que puedan no llegar.
 
@@ -865,7 +865,7 @@ Algunas casillas salen en gris, con el motivo debajo del plato:
 En **Mover a**, elige adónde van los platos: otra de las cuentas abiertas de la mesa, o **+ Cuenta
 nueva**. Una cuenta que ya ha recibido un pago simplemente debe más después. **Mover** sigue apagado hasta que marques un plato y elijas adónde va.
 Después de moverlos, una cuenta nueva se pone en pantalla; si los pasas a otra cuenta, esta sigue en
-pantalla. Cada plato conserva su orden de plato y sigue enviado, marchado o servido como estaba. Si mueves
+pantalla. Cada plato conserva su orden del plato y sigue enviado, marchado o servido como estaba. Si mueves
 platos de una cuenta pagada en parte hasta que sus pagos cubren lo que queda, la cuenta queda
 pagada del todo y se emite su factura.
 
@@ -895,7 +895,7 @@ ningún plato de la otra mesa.
 
 ## Traspasar una cuenta de Mostrador a otro departamento {#department-transfers}
 
-Abre una cuenta guardada en **Mostrador** y elige **Traspasos** en la barra superior del TPV, o en
+Abre una cuenta guardada en **Mostrador** y elige **Traspasos** en la barra superior de la caja, o en
 **Más** en un dispositivo de mano. Elige **Solicitar traspaso**, selecciona el **Departamento de
 destino** y pulsa **Guardar**. Tu departamento sigue
 siendo responsable hasta que el mostrador receptor acepte. Mientras la solicitud esté pendiente,
@@ -937,7 +937,7 @@ mesa o del mostrador toma el siguiente número de los clientes, y también las c
 unes. Una mesa que separas con cuentas vuelve a empezar por la Cuenta 1, igual que una mesa que
 se vuelve a ocupar cuando sus clientes terminan. Una cuenta conserva su nombre cuando se mueve,
 también al mostrador, donde no tiene número. Solo puedes poner nombre a una cuenta en una mesa. El
-nombre no se imprime en los tickets de estación ni en los recibos.
+nombre no se imprime en las comandas de estación ni en los tickets.
 
 ## Ver qué mesas tienen comida lista {#ready-bar}
 
@@ -999,7 +999,7 @@ Cuando una mesa indique **Por mover**, muévela y elige **Marcar movida**.
 
 ## Elegir el equipo de este dispositivo {#equipment}
 
-En un TPV, elige **Más**, **Ajustes** y **Equipo**. En un dispositivo de mano, elige **Más**
+En una caja, elige **Más**, **Ajustes** y **Equipo**. En un dispositivo de mano, elige **Más**
 y **Equipo**. En cada lista disponible, elige el equipo que quieres usar en este dispositivo,
 o **Heredar** para seguir la elección de su perfil.
 
@@ -1141,8 +1141,8 @@ tarjeta en ese lector y espera el resultado. Que el teléfono siga esperando no 
 cobro haya fallado.
 
 Si el cliente cambia de idea mientras el lector SumUp espera la tarjeta, pulsa **Cancelar cobro**
-en esta ventana, en Mostrador o al cobrar una cuenta presentada. Espera a que el terminal confirme
-que no se ha cobrado nada antes de volver a cobrar. Si ya se ha cobrado la tarjeta, el terminal
+en esta ventana, en Mostrador o al cobrar una cuenta presentada. Espera a que la caja confirme
+que no se ha cobrado nada antes de volver a cobrar. Si ya se ha cobrado la tarjeta, la caja
 muestra el cobro como realizado.
 
 **Sigue con el siguiente comensal.** Tras un pago parcial, comprueba **Queda por pagar**. En un

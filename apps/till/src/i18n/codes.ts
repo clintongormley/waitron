@@ -7,7 +7,7 @@ import { currentLocale, named, pickLocale } from "./t.js";
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "module.disabled": {
     en: "Connected card payments are off. Take cash or use a separate card terminal.",
-    es: "Los pagos con tarjeta conectada están desactivados. Cobra en efectivo o usa un terminal de tarjeta independiente.",
+    es: "Los pagos con tarjeta conectada están desactivados. Cobra en efectivo o usa otro datáfono.",
   },
   "set_menu.not_seated": {
     en: "Set menus are available at a seated table or on a takeaway or delivery order. Open one of those orders, or order dishes à la carte here.",
@@ -91,7 +91,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "device_zones.changed": {
     en: "These zone choices changed. Read them again before saving.",
-    es: "Estas selecciones de zonas han cambiado. Vuelve a consultarlas antes de guardar.",
+    es: "Estas selecciones de zonas han cambiado. Vuelve a cargarlas antes de guardar.",
   },
   "tab.portions_too_many": {
     en: `At most ${PORTIONS_AT_ONCE} of one dish can be added at a time. Lower it to ${PORTIONS_AT_ONCE}, then add the rest.`,
@@ -115,15 +115,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "attendance.read_failed": {
     en: "Your hours could not be read. Retry read.",
-    es: "No se han podido consultar tus horas. Vuelve a consultarlas.",
+    es: "No se pudieron cargar tus horas. Inténtalo de nuevo.",
   },
   "attendance.write_failed": {
     en: "Your response could not be recorded. Try again.",
-    es: "No se ha podido registrar tu respuesta. Reinténtalo.",
+    es: "No se ha podido registrar tu respuesta. Inténtalo de nuevo.",
   },
   "attendance.not_pending": {
     en: "This question no longer needs an answer. Read your hours again.",
-    es: "Esta pregunta ya no necesita respuesta. Vuelve a consultar tus horas.",
+    es: "Esta pregunta ya no necesita respuesta. Vuelve a cargar tus horas.",
   },
   "correction.not_pending": {
     en: "This request has changed. Read its latest history before responding.",
@@ -135,11 +135,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "correction.target_not_found": {
     en: "This time entry could not be found. Read your hours again.",
-    es: "No se ha encontrado este fichaje. Vuelve a consultar tus horas.",
+    es: "No se ha encontrado este fichaje. Vuelve a cargar tus horas.",
   },
   "attendance.state_changed": {
     en: "Your clock changed. Check its latest state and try again.",
-    es: "Tu fichaje ha cambiado. Consulta el estado actual y reinténtalo.",
+    es: "Tu fichaje ha cambiado. Consulta el estado actual e inténtalo de nuevo.",
   },
   "attendance.not_permitted": {
     en: "You cannot change your clock from this device.",
@@ -447,7 +447,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "invoice_delivery.receipt_invalid": {
     en: "That original receipt cannot be printed. Check the invoice's delivery status or ask a manager.",
-    es: "No se puede imprimir ese recibo original. Comprueba el estado de entrega de la factura o avisa a un responsable.",
+    es: "No se puede imprimir ese ticket original. Comprueba el estado de entrega de la factura o avisa a un responsable.",
   },
   "invoice_delivery.printer_invalid": {
     en: "That invoice printer is unavailable. Choose another printer.",
@@ -467,11 +467,11 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "print_job.sale_payload_expired": {
     en: "Saved print data is removed after a week. Reprint this receipt or invoice from Orders in the dashboard.",
-    es: "Los datos de impresión guardados se eliminan al cabo de una semana. Vuelve a imprimir este recibo o factura desde Pedidos en el panel.",
+    es: "Los datos de impresión guardados se eliminan al cabo de una semana. Vuelve a imprimir este ticket o factura desde Pedidos en el panel.",
   },
   "print_job.not_resendable": {
     en: "The original receipt cannot be printed again now. Check its status",
-    es: "Ahora no se puede volver a imprimir el recibo original. Comprueba su estado",
+    es: "Ahora no se puede volver a imprimir el ticket original. Comprueba su estado",
   },
   "invoice_delivery.email_unavailable": {
     en: "This invoice can't be emailed from this box. In the dashboard, check the mail server in System → Email and the Email field on the department's Receipts tab in Departments and zones.",
@@ -958,7 +958,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "till.origin_refused": {
     en: "This page cannot change the till. Open the till from the venue's address and try again.",
-    es: "Esta página no puede hacer cambios en el TPV. Abre el TPV desde la dirección del local e inténtalo de nuevo.",
+    es: "Esta página no puede hacer cambios en la caja. Abre la caja desde la dirección del local e inténtalo de nuevo.",
   },
   "device.unauthorized": {
     en: "This device could not be verified for this action. Reload or reopen Waitron on this device, then try again.",
@@ -1148,7 +1148,7 @@ const FREE_ITEM_WITH_DISH: Record<string, { en: string; es: string }> = {
   },
   served: {
     en: "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then refund it from the receipt.",
-    es: "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después devuélvelo desde el recibo.",
+    es: "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después devuélvelo desde el ticket.",
   },
   not_listed: {
     en: "A dish given free comes back with this one. The window now lists it: check the amount and choose again.",
@@ -1170,7 +1170,7 @@ const FREE_ITEM_AT_FINISH: Record<string, { en: string; es: string }> = {
   },
   served: {
     en: "A dish given free on this bill has been served, so the paid dishes cannot all be refunded here. Untick Refund on one of them, then refund it from the receipt.",
-    es: "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuélvelo desde el recibo.",
+    es: "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuélvelo desde el ticket.",
   },
 };
 
@@ -1256,24 +1256,6 @@ const NAMED_STATION_MESSAGES = {
     en: "This item has already been sent to {name} and cannot be changed. You can cancel it",
     es: "Este artículo ya se ha enviado a {name} y no se puede cambiar. Puedes cancelarlo",
   },
-};
-
-/** Every table above, for guards that read the till's wording. */
-export const CODE_TABLES: Readonly<Record<string, unknown>> = {
-  CODE_MESSAGES,
-  DEFERRED_INELIGIBLE,
-  CORRECTION_NOT_ADMITTED,
-  FREE_ITEM_WITH_DISH,
-  FREE_ITEM_AT_FINISH,
-  TAKEN_OFF_NOTHING_LEFT,
-  TAKEN_OFF_NOT_FULLY_PAID,
-  TAKEN_OFF_REOPEN_BILL,
-  MONEY_SHORT_NOTHING_LEFT,
-  MONEY_SHORT_ADVANCES,
-  DINING_FIXED,
-  SEATED_BELOW_ADVANCES,
-  SEATED_BELOW_ADVANCES_UNPRICED,
-  NAMED_STATION_MESSAGES,
 };
 
 export function listDishNames(names: readonly string[], locale: string): string {
@@ -1554,3 +1536,27 @@ export function giveBackFilingMessage(
     return pickLocale(GIVE_BACK_NOT_RECORDED_BY_CODE[code]!, locale);
   return pickLocale(GIVE_BACK_NOT_RECORDED_NOW[full ? "fullInvoice" : "receipt"], locale);
 }
+
+/** Every table in this file, for guards that read the till's wording. */
+export const CODE_TABLES: Readonly<Record<string, unknown>> = {
+  CODE_MESSAGES,
+  DEFERRED_INELIGIBLE,
+  CORRECTION_NOT_ADMITTED,
+  FREE_ITEM_WITH_DISH,
+  FREE_ITEM_AT_FINISH,
+  TAKEN_OFF_NOTHING_LEFT,
+  TAKEN_OFF_NOT_FULLY_PAID,
+  TAKEN_OFF_REOPEN_BILL,
+  MONEY_SHORT_NOTHING_LEFT,
+  MONEY_SHORT_ADVANCES,
+  DINING_FIXED,
+  SEATED_BELOW_ADVANCES,
+  SEATED_BELOW_ADVANCES_UNPRICED,
+  NAMED_STATION_MESSAGES,
+  GIVE_BACK_CHAIN_UNSOUND,
+  GIVE_BACK_NEVER_RECORDED,
+  FULL_INVOICE_NEVER_RECORDED,
+  GIVE_BACK_NOT_RECORDED_BY_CODE,
+  GIVE_BACK_RECORDS_NEED_CHECKING,
+  GIVE_BACK_NOT_RECORDED_NOW,
+};

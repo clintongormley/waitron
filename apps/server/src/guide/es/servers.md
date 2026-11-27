@@ -528,7 +528,7 @@ Con permiso para gestionar el servidor, la tarjeta también muestra los usuarios
 que todavía tienen que configurar la verificación en dos pasos en su perfil. La tarjeta no inicia
 el local.
 
-Si el servidor principal deja de responder, mantén el terminal abierto. Cuando la pantalla roja ofrezca **Iniciar el local en la nube**, elige la opción para ver un código QR de la dirección de Cloud. Escanéalo con el móvil o elige **Abrir aquí** para salir del terminal y abrirla en este navegador. **Cerrar** vuelve al terminal.
+Si el servidor principal deja de responder, mantén la caja abierta. Cuando la pantalla roja ofrezca **Iniciar el local en la nube**, elige la opción para ver un código QR de la dirección de Cloud. Escanéalo con el móvil o elige **Abrir aquí** para salir de la caja y abrir la dirección en este navegador. **Cerrar** vuelve a la caja.
 
 Ten a mano la clave maestra (en el paquete de recuperación), tu contraseña de Waitron y un código del autenticador o de recuperación. Las llaves de acceso no funcionan allí. La opción permanece oculta hasta que Cloud habilite el alojamiento de emergencia para tu local.
 

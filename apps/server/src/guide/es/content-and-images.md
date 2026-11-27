@@ -132,7 +132,7 @@ Pedir de nuevo el ticket original conserva el trabajo de impresión existente. P
 hoja cuando haya terminado, abre **Imprimir/Reimprimir**, elige una impresora para **Recibo** y pulsa
 **Imprimir una copia en {printer}**. La copia lleva el mismo número de factura y la marca de duplicado.
 
-Los tickets de estación y los comprobantes del número de recogida también usan tu idioma del
+Las comandas de estación y los comprobantes del número de recogida también usan tu idioma del
 contenido predeterminado en sus cabeceras. Con español salen en español; con otros idiomas, en
 inglés hasta que esté disponible su traducción de estación. El papel nuevo y las reimpresiones de
 estación siguen el cambio al momento; un reenvío conserva sus cabeceras originales. Los nombres de
