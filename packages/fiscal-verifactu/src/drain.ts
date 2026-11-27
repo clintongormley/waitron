@@ -1262,16 +1262,14 @@ async function markTechnicalCohort(
 async function openTechnicalIncident(
   tx: Transaction,
   environment: Entorno,
-  { now, ids, certificateRefusal }: TechnicalFailure,
+  { now, ids, refusedFingerprint }: TechnicalFailure,
 ): Promise<void> {
   await tx.execute(sql`
     insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg, technical_incident_token)
     values (1, ${now.toISOString()}, 0, ${randomUUID()})
     on conflict (id) do update set technical_incident_token = excluded.technical_incident_token
   `);
-  if (certificateRefusal !== undefined) {
-    await markCertificateRefused(tx, certificateRefusal.fingerprint, certificateRefusal.at);
-  }
+  if (refusedFingerprint !== undefined) await markCertificateRefused(tx, refusedFingerprint, now);
   await markTechnicalCohort(tx, environment, now, ids);
 }
 
@@ -1299,13 +1297,7 @@ async function closeOnAnswer(
 
 // At most one failed metadata transaction per environment is retained: no more work is claimed
 // until it can commit. A process loss cannot preserve this uncommitted evidence.
-// A certificate refusal keeps the time of the first pass that saw that certificate refused, as
-// `markCertificateRefused` does once written.
-type TechnicalFailure = {
-  now: Date;
-  ids: string[];
-  certificateRefusal?: { fingerprint: string; at: Date };
-};
+type TechnicalFailure = { now: Date; ids: string[]; refusedFingerprint?: string };
 const technicalFailures = new WeakMap<Database, Map<Entorno, TechnicalFailure>>();
 
 function rememberTechnicalFailure(
@@ -1320,14 +1312,9 @@ function rememberTechnicalFailure(
     failures = new Map();
     technicalFailures.set(db, failures);
   }
-  let failure = failures.get(environment) ?? { now, ids };
-  if (
-    refusedFingerprint !== null &&
-    failure.certificateRefusal?.fingerprint !== refusedFingerprint
-  ) {
-    // A new object, so a claim that flushed the older one does not forget this refusal.
-    failure = { ...failure, certificateRefusal: { fingerprint: refusedFingerprint, at: now } };
-  }
+  const failure =
+    failures.get(environment) ??
+    (refusedFingerprint === null ? { now, ids } : { now, ids, refusedFingerprint });
   failures.set(environment, failure);
   return failure;
 }

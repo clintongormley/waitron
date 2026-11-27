@@ -22,6 +22,7 @@ import {
 } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import type { DrainClient } from "./aeat-transport.js";
+import { markCertificateRefused } from "./certificate-refusal.js";
 import { DEFAULT_SKIP_RETRY_MS, backoffMs, drain, type DrainDeps } from "./drain.js";
 import { heldRecords, listFilingCases, recordCaseEvent } from "./filing-cases.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
@@ -1158,6 +1159,36 @@ describe("drain — a duplicate whose lookup fails", () => {
     return { seeded, duplicate: duplicate!, accepted, refused, real: aeat.client() };
   }
 
+  /** Answers the envío and refuses the certificate for every lookup. */
+  const refusingLookups = (real: VerifactuClient, fingerprint: string | null): DrainClient => ({
+    submit: (cabecera, registros) => real.submit(cabecera, registros),
+    consultar: () =>
+      Promise.reject(new AppError("fiscal.certificate_not_accepted", { page: "erro4011.html" })),
+    certificateFingerprint: () => fingerprint,
+  });
+
+  it("keeps an earlier refusal's time when a lookup is refused for the same certificate", async () => {
+    const { real } = await mixedBatch();
+    await withTransaction(suite.db, (tx) => markCertificateRefused(tx, "AA:01", FIRST));
+
+    await drain(deps(refusingLookups(real, "AA:01")), SECOND);
+
+    expect(await certificateMark()).toEqual([
+      { certificate_refused_fingerprint: "AA:01", certificate_refused_at: FIRST.toISOString() },
+    ]);
+  });
+
+  it("keeps an earlier refusal when a lookup is refused and the certificate cannot be named", async () => {
+    const { real } = await mixedBatch();
+    await withTransaction(suite.db, (tx) => markCertificateRefused(tx, "AA:01", FIRST));
+
+    await drain(deps(refusingLookups(real, null)), SECOND);
+
+    expect(await certificateMark()).toEqual([
+      { certificate_refused_fingerprint: "AA:01", certificate_refused_at: FIRST.toISOString() },
+    ]);
+  });
+
   it("marks only that record unknown, saves every other line, its CSV and its case, and keeps its chain blocked", async () => {
     const { seeded, duplicate, accepted, refused, real } = await mixedBatch();
     const lookupFails: VerifactuClient = {
@@ -1212,14 +1243,8 @@ describe("drain — a duplicate whose lookup fails", () => {
 
   it("records AEAT's refusal of the certificate during the lookup beside the other lines' outcomes", async () => {
     const { duplicate, accepted, refused, real } = await mixedBatch();
-    const lookupRefused: DrainClient = {
-      submit: (cabecera, registros) => real.submit(cabecera, registros),
-      consultar: () =>
-        Promise.reject(new AppError("fiscal.certificate_not_accepted", { page: "erro4011.html" })),
-      certificateFingerprint: () => "AA:01",
-    };
 
-    await drain(deps(lookupRefused), SECOND);
+    await drain(deps(refusingLookups(real, "AA:01")), SECOND);
 
     expect((await envioOf(duplicate)).estado).toBe("pendiente");
     expect((await envioOf(accepted.registroId)).estado).toBe("aceptado");
@@ -1231,19 +1256,13 @@ describe("drain — a duplicate whose lookup fails", () => {
 
   it("records the lookup's certificate refusal when the reply's transaction fails", async () => {
     const { accepted, real } = await mixedBatch();
-    const lookupRefused: DrainClient = {
-      submit: (cabecera, registros) => real.submit(cabecera, registros),
-      consultar: () =>
-        Promise.reject(new AppError("fiscal.certificate_not_accepted", { page: "erro4011.html" })),
-      certificateFingerprint: () => "AA:01",
-    };
     await suite.db.execute(sql`
       create trigger test_refuse_accept before update of estado on verifactu_submissions
       when new.estado = 'aceptado'
       begin select raise(abort, 'refused by test'); end
     `);
     try {
-      await drain(deps(lookupRefused), SECOND);
+      await drain(deps(refusingLookups(real, "AA:01")), SECOND);
     } finally {
       await suite.db.execute(sql`drop trigger test_refuse_accept`);
     }
