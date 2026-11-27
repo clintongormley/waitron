@@ -176,14 +176,17 @@ const BUCKET: BucketConfig = {
   secretAccessKey: "secret-0123456789",
 };
 
-const POINTER: StreamPointer = {
+const POINTER_BODY = {
   streamId: T.streamId,
   term: 0,
   nodeId: T.nodeId,
   generation: GENERATION,
   writtenAt: "2026-09-23T09:00:05.000Z",
-  recovery: { signerPublicKey: signer.publicKey, keyNumber: 2, masterKeyId: "1caa45f2d2fe567b" },
 };
+const POINTER = {
+  ...POINTER_BODY,
+  recovery: { signerPublicKey: signer.publicKey, keyNumber: 2, masterKeyId: "1caa45f2d2fe567b" },
+} satisfies StreamPointer;
 
 /**
  * A bucket holding a pointer to GENERATION signed by `signWith`, whose one change file was written
@@ -344,8 +347,7 @@ describe("prepareStreamRestore", () => {
       const parent = createMemoryObjectStore();
       const good = await numberedBucket();
       const old = createMemoryObjectStore();
-      const { recovery: _recovery, ...unversioned } = POINTER;
-      await writePointer(old, T.streamId, signPointer(unversioned, signer.privateKey), null);
+      await writePointer(old, T.streamId, signPointer(POINTER_BODY, signer.privateKey), null);
       const neighbour =
         problem === "invalid name" ? "notes " : problem === "dot segment" ? "." : "old";
       const deps = await masterKeyDeps(parent);
@@ -1510,7 +1512,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
       if (changedFact === "signing key") {
         const nextSigner = generateNodeKeyPair();
         replacement = await bucket({
-          pointer: { recovery: { ...POINTER.recovery!, signerPublicKey: nextSigner.publicKey } },
+          pointer: { recovery: { ...POINTER.recovery, signerPublicKey: nextSigner.publicKey } },
           signWith: nextSigner.privateKey,
         });
       }
