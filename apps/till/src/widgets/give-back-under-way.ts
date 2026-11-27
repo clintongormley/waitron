@@ -66,6 +66,7 @@ const PIN_REFUSALS = new Set(["pin.invalid", "pin.throttled", "authorization.not
 const FILING_REFUSALS = new Set([
   "sale.correction_not_admitted",
   "sale.correction_history_unusable",
+  "invoice_correction.chain_unsound",
 ]);
 /** Refusals saying the shown correction is out of date: it is read again, so the right step shows. */
 const REREAD_AFTER = new Set([
@@ -453,10 +454,12 @@ export class TillGiveBackUnderWay extends LitElement {
     </div>`;
   }
   /** Whether the filing refusal shown is one the box also refuses fresh money back over: any
-   * refusal Finish cannot close over. With none shown (nothing back yet, or a refund waiting) it
-   * bars nothing, and the box may still refuse. */
+   * refusal Finish cannot close over, or a full invoice's records check refusing a step, which
+   * the view cannot show while nothing is back. Otherwise (a refund waiting) it bars nothing, and
+   * the box may still refuse. */
   #barred(): boolean {
     const { fileNow } = this.correction;
+    if (this.fullInvoice && this.refused?.code === "invoice_correction.chain_unsound") return true;
     return fileNow !== null && "refusal" in fileNow && !fileNow.closable;
   }
   #cashChoice(left: string) {

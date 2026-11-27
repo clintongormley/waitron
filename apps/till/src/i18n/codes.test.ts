@@ -1264,7 +1264,7 @@ it("says in Money back under way that the business's registered address is missi
   );
 });
 
-it("says in Money back under way that the box's records need checking, so the rest of a full invoice's refund waits", () => {
+it("says in Money back under way that the box's records need checking, so the rest of a full invoice's refund waits and a receipt's recording waits", () => {
   expect(
     giveBackFilingMessage("invoice_correction.chain_unsound", "en", { fullInvoice: true }),
   ).toBe(
@@ -1276,7 +1276,10 @@ it("says in Money back under way that the box's records need checking, so the re
     "Hay que revisar los registros de tickets y facturas del servidor, así que aún no se puede devolver más en esta factura completa ni registrar en ella el dinero devuelto. El dinero ya devuelto queda devuelto. Pulsa Comprobar de nuevo cuando se hayan revisado.",
   );
   expect(giveBackFilingMessage("invoice_correction.chain_unsound", "en", {})).toBe(
-    "The refund cannot be recorded on this receipt now, so Finish is not offered. Press Check again to see whether that has changed.",
+    "The box's receipt and invoice records need checking, so the refund cannot be recorded on this receipt yet. Money already refunded stays refunded. Try again once they have been checked.",
+  );
+  expect(giveBackFilingMessage("invoice_correction.chain_unsound", "es", {})).toBe(
+    "Hay que revisar los registros de tickets y facturas del servidor, así que aún no se puede registrar en este ticket el dinero devuelto. El dinero ya devuelto queda devuelto. Vuelve a intentarlo cuando se hayan revisado.",
   );
 });
 

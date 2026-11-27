@@ -1573,11 +1573,17 @@ const GIVE_BACK_NOT_RECORDED_BY_CODE: Record<string, { en: string; es: string }>
   },
 };
 
-/** Money back under way's words while a full invoice's give-back waits for the box's records to be
- * checked. */
-const FULL_INVOICE_RECORDS_NEED_CHECKING = {
-  en: "The box's receipt and invoice records need checking, so no more can be refunded on this full invoice and the refund cannot be recorded on it yet. Money already refunded stays refunded. Press Check again once they have been checked.",
-  es: "Hay que revisar los registros de tickets y facturas del servidor, así que aún no se puede devolver más en esta factura completa ni registrar en ella el dinero devuelto. El dinero ya devuelto queda devuelto. Pulsa Comprobar de nuevo cuando se hayan revisado.",
+/** Money back under way's words while the box's records need checking: a full invoice's money
+ * back waits for them, a receipt's only its recording. */
+const GIVE_BACK_RECORDS_NEED_CHECKING = {
+  receipt: {
+    en: "The box's receipt and invoice records need checking, so the refund cannot be recorded on this receipt yet. Money already refunded stays refunded. Try again once they have been checked.",
+    es: "Hay que revisar los registros de tickets y facturas del servidor, así que aún no se puede registrar en este ticket el dinero devuelto. El dinero ya devuelto queda devuelto. Vuelve a intentarlo cuando se hayan revisado.",
+  },
+  fullInvoice: {
+    en: "The box's receipt and invoice records need checking, so no more can be refunded on this full invoice and the refund cannot be recorded on it yet. Money already refunded stays refunded. Press Check again once they have been checked.",
+    es: "Hay que revisar los registros de tickets y facturas del servidor, así que aún no se puede devolver más en esta factura completa ni registrar en ella el dinero devuelto. El dinero ya devuelto queda devuelto. Pulsa Comprobar de nuevo cuando se hayan revisado.",
+  },
 };
 
 /** Any other refusal of recording: Finish is not offered while it holds. */
@@ -1607,8 +1613,8 @@ export function giveBackFilingMessage(
     if (Object.hasOwn(GIVE_BACK_NEVER_RECORDED, reason))
       return pickLocale(GIVE_BACK_NEVER_RECORDED[reason]!, locale);
   }
-  if (full && code === "invoice_correction.chain_unsound")
-    return pickLocale(FULL_INVOICE_RECORDS_NEED_CHECKING, locale);
+  if (code === "invoice_correction.chain_unsound")
+    return pickLocale(GIVE_BACK_RECORDS_NEED_CHECKING[full ? "fullInvoice" : "receipt"], locale);
   if (Object.hasOwn(GIVE_BACK_NOT_RECORDED_BY_CODE, code))
     return pickLocale(GIVE_BACK_NOT_RECORDED_BY_CODE[code]!, locale);
   return pickLocale(GIVE_BACK_NOT_RECORDED_NOW[full ? "fullInvoice" : "receipt"], locale);
