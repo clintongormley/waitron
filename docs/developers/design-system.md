@@ -7170,6 +7170,13 @@ stacked choices with a hint each and a help-mode badge linked to the payment gui
 Cash are large actions. Other card machine is a text action. Choose Full invoice from the bill
 before opening Pay. Back uses the payment draft's leave check.
 
+On a table, Split equally opens its own full-screen panel (`till-split-equally`): a top bar whose
+back says Pay, the muted question, a round `wt-stepper` for the guests, a `wt-share-list` of every
+guest's share with the guests already paid ticked, the cent note only when the shares differ, and
+a foot button naming the next guest and their share. Its button returns to Pay for that share with
+no count field, and Pay's back, labelled Split equally, reopens the panel with the count kept. A
+Counter order keeps the typed people-still-to-pay field.
+
 Pay shows the server's checked amount and any required receipt answers. Charge starts the reader
 for that amount. Cash opens the tender fields and takes payment when the change is confirmed.
 Other card machine opens its own fields before confirmation. A presented bill uses its whole
