@@ -249,7 +249,14 @@ function detailContent(
                 } else if (value.unit) {
                   size = ` · ${quantity.format(amount)} ${value.unit}`;
                 }
-                return choiceRow(`${value.name}${size}`, money(value.price), value, words, excluded, true);
+                return choiceRow(
+                  `${value.name}${size}`,
+                  money(value.price),
+                  value,
+                  words,
+                  excluded,
+                  true,
+                );
               })}
             </ul>`
         : nothing;
