@@ -23,6 +23,7 @@ import { isSsidHex } from "../../../scripts/box/wifi-record.mjs";
 export interface BoxHostApiDeps {
   db: Database;
   host: BoxHostRequests;
+  places: HostPlaces;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -46,11 +47,17 @@ const BODY_MAX_BYTES = 4096;
  * of them go to the routes: `docs/backlog/box.md`, Decisions and deliberate limits. */
 export const BOX_HOST_ROUTE_CALLS = 2;
 
-interface Places {
+/** The routes' count of host calls; boot makes one and hands it to every route that asks the host. */
+export interface HostPlaces {
   taken: number;
 }
 
-type OwnRefusalCode = "box_network.busy" | "box_network.no_wifi" | "box_network.not_saved";
+export function createHostPlaces(): HostPlaces {
+  return { taken: 0 };
+}
+
+type OwnRefusalCode =
+  "box_host.busy" | "box_network.busy" | "box_network.no_wifi" | "box_network.not_saved";
 
 function personActor(authorizedBy: string): PersonActor {
   if (!isUuid(authorizedBy)) throw new Error("a person id the host protocol would refuse");
@@ -62,7 +69,7 @@ type OwnRefusals<Own extends string> = [Own] extends [never]
   : Record<Own, OwnRefusalCode>;
 
 export async function askHost<Value extends object, Own extends string = never>(
-  places: Places,
+  places: HostPlaces,
   call: () => Promise<HostAnswer<Value, Own | ProtocolRefusal>>,
   own: NoInfer<OwnRefusals<Exclude<Own, ProtocolRefusal>>>,
   onInvalid: () => Error = () =>
@@ -167,7 +174,7 @@ function isJson(c: Context): boolean {
  * `system.manage`. */
 export function mountBoxHostApi(app: Hono, deps: BoxHostApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "box-host-route.failed");
-  const places: Places = { taken: 0 };
+  const { places } = deps;
   const limit = bodyLimit({
     maxSize: BODY_MAX_BYTES,
     onError: (c) =>

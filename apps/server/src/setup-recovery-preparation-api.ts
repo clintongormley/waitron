@@ -119,7 +119,7 @@ async function readMultipart(c: Context, limit: number): Promise<FormData> {
   }
 }
 
-function assertOwnerTransport(c: Context): void {
+export function assertOwnerTransport(c: Context): void {
   if (!isSecure(c) || !sentFromThisOrigin(c)) throw new AppError("setup.owner_required", {});
 }
 export async function readUpload(

@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, startManagementSession, type BuiltInRoleKey } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { BOX_HOST_ROUTE_CALLS, mountBoxHostApi } from "./box-host-api.js";
+import { BOX_HOST_ROUTE_CALLS, createHostPlaces, mountBoxHostApi } from "./box-host-api.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import type { BoxHostRequests, NetworkSnapshot } from "./box-host-client.js";
 import "./errors.js";
@@ -131,7 +131,7 @@ function mount(host: BoxHostRequests): Hono {
       () => {},
     ),
   );
-  mountBoxHostApi(app, { db: suite.db, host }, () => {});
+  mountBoxHostApi(app, { db: suite.db, host, places: createHostPlaces() }, () => {});
   return app;
 }
 

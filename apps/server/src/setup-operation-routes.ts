@@ -54,6 +54,7 @@ import {
   type SetupCloudSignIn,
 } from "./setup-cloud-sign-in.js";
 import { mountSetupEmailTest } from "./setup-email-api.js";
+import { mountSetupDriveRoutes } from "./setup-drive-routes.js";
 import { mountSetupJoinRoutes } from "./setup-join-routes.js";
 import { isUnfinishedAdopt, setupPhaseReached } from "./setup-operation.js";
 import { parseProvisionPayload } from "./setup-provision-input.js";
@@ -151,6 +152,12 @@ export function mountSetupOperationRoutes(
       { ...BUCKET_RESTORE_STATUS, "setup.not_ready": 503, "restore.staged_copy_missing": 409 },
       "setup.restore_failed",
     ),
+  });
+  mountSetupDriveRoutes(app, deps, log, {
+    busy: setupBusy,
+    setBusy: (value) => {
+      provisioning = value;
+    },
   });
 
   app.post("/setup-api/fiscal-test", async (c) => {
@@ -691,52 +698,6 @@ export function mountSetupOperationRoutes(
     });
   });
 
-  app.post("/setup-api/restore/preview", async (c) => {
-    const preview = deps.previewRestore;
-    if (preview === undefined || deps.receiveArchive === undefined)
-      return directError(c, log, "setup.not_ready", 503);
-    if (provisioning || fiscalTesting || configurationStaging || emailTesting())
-      return directError(c, log, "setup.already_provisioning", 409);
-    provisioning = true;
-    return runRestore(c, log, async () => {
-      try {
-        const type = c.req.header("content-type")?.toLowerCase() ?? "";
-        const json = type.startsWith("application/json");
-        if (!json && !type.startsWith("application/octet-stream")) invalidRequest("artifact");
-        const read = (fields?: Map<string, string>) => {
-          const get = (name: string, header: string) =>
-            fields ? fields.get(name) : c.req.header(header);
-          const masterKey = asMasterKey(get("masterKey", "x-waitron-master-key"), "masterKey");
-          const environment = get("environment", "x-waitron-restore-environment");
-          if (environment !== "production" && environment !== "preproduction")
-            invalidRequest("environment");
-          return { masterKey, environment } as const;
-        };
-        if (!json) read();
-        const upload = await deps.receiveArchive!(c.req.raw, {
-          fields: ["masterKey", "environment"],
-        });
-        try {
-          const { masterKey, environment } = read(json ? upload.fields : undefined);
-          c.header("Cache-Control", "no-store");
-          return c.json(
-            await preview({
-              kind: "archive-file",
-              artifactPath: upload.artifactPath,
-              recoveryKey: await openingKeyFor(upload, masterKey),
-              environment,
-            }),
-            200,
-          );
-        } finally {
-          await upload.dispose();
-        }
-      } finally {
-        provisioning = false;
-      }
-    });
-  });
-
   app.post("/setup-api/restore", async (c) => {
     const stageRestore = deps.stageRestore;
     const requestRestart = deps.requestRestart;
@@ -782,6 +743,7 @@ export function mountSetupOperationRoutes(
               "nodeRecoverySecret",
               "recoveryContext",
             ],
+            exactFields: drive,
             moves: true,
           });
           const form = multipart ? upload.fields : undefined;
@@ -846,11 +808,7 @@ export function mountSetupOperationRoutes(
               },
               { oldBoxGone },
             );
-            // A drive left mounted read-only harms nothing, so a failed release never refuses.
-            if (drive)
-              await deps
-                .releaseDrives?.()
-                .catch(() => log("warn", "setup.drives_release_failed", {}));
+            if (drive) await deps.releaseDrives?.();
             mustRestart();
             // The restore is already recorded, so it must still answer and restart; the next start
             // that reaches the server's boot clears the staging folder.

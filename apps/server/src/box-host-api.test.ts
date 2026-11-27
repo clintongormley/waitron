@@ -16,7 +16,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
-import { askHost, mountBoxHostApi } from "./box-host-api.js";
+import { askHost, createHostPlaces, mountBoxHostApi } from "./box-host-api.js";
 import { requireManagementChangeFromOwnPage } from "./own-page.js";
 import { readOnlyGate } from "./read-only-gate.js";
 import { isReadOnlyExempt } from "./read-only-exemptions.js";
@@ -129,7 +129,7 @@ function mount(
       ),
     );
   }
-  mountBoxHostApi(app, { db, host }, log);
+  mountBoxHostApi(app, { db, host, places: createHostPlaces() }, log);
   return { app, host };
 }
 

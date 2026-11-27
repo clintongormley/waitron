@@ -510,6 +510,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.mocked(stageRestoreRequest).mockReset();
   });
   async function withSetupBoot(
     directory: string,

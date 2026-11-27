@@ -6,13 +6,8 @@ import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { STORAGE_DRIVES_ROOT, STORAGE_DRIVE_NAME } from "../../../scripts/box/host-protocol.mjs";
 import { parseBackupArchiveKey } from "./backup-keys.js";
-import { askHost } from "./box-host-api.js";
-import type {
-  BoxHostRequests,
-  HostAnswer,
-  ProtocolRefusal,
-  StorageDrive,
-} from "./box-host-client.js";
+import { askHost, type HostPlaces } from "./box-host-api.js";
+import type { BoxHostRequests, StorageDrive } from "./box-host-client.js";
 import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { freeBytes as statFreeBytes } from "./free-bytes.js";
@@ -71,8 +66,6 @@ export interface TakenDriveFile {
   byteLength: number;
   dispose(): Promise<void>;
 }
-
-type Places = Parameters<typeof askHost>[0];
 
 function refuse(code: InvalidCode, field: string): AppError {
   return code === "handover.request_invalid"
@@ -329,18 +322,14 @@ export function receiveRestoreArchive(stagingDir: string, root?: string): Receiv
 /** Never throws: a drive left mounted read-only harms nothing, and the next list clears it. */
 export async function releaseDrives(deps: {
   host: Pick<BoxHostRequests, "storageRelease">;
-  places: Places;
+  places: HostPlaces;
   log: Logger;
 }): Promise<void> {
   try {
     const { released } = await askHost(
       deps.places,
-      // The host's own `busy` falls through to `box_host.failed`, which is only logged here.
-      () =>
-        deps.host.storageRelease({ source: "server" }) as Promise<
-          HostAnswer<{ released: number }, ProtocolRefusal>
-        >,
-      {},
+      () => deps.host.storageRelease({ source: "server" }),
+      { busy: "box_host.busy" },
     );
     deps.log("info", "drives.released", { released });
   } catch (error) {

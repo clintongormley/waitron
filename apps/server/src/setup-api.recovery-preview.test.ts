@@ -225,6 +225,11 @@ it.each<[string, (file: object) => Record<string, unknown>, string]>([
     (file) => ({ file, masterKey: MASTER_KEY_TEXT, environment: "dev" }),
     "environment",
   ],
+  [
+    "a key the route does not take",
+    (file) => ({ file, masterKey: MASTER_KEY_TEXT, environment: "preproduction", extra: "x" }),
+    "body",
+  ],
 ])("refuses a drive preview with %s before opening any copy", async (_label, body, field) => {
   const dir = await mkdtemp(join(tmpdir(), "setup-preview-drive-refused-"));
   onTestFinished(() => rm(dir, { recursive: true, force: true }));

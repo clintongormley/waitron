@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { attachRequestReceiveLimits } from "./request-receive-limits.js";
-import { receiveRestoreArchive } from "./drive-backup-files.js";
+import { receiveRestoreArchive, releaseDrives } from "./drive-backup-files.js";
 import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { disarmRestoreDiscard } from "./restore-flow.js";
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
@@ -480,7 +480,7 @@ import { adminShutdownDuties } from "./admin-shutdown-duties.js";
 import { clearShutdownMark, hasShutdownMark } from "./admin-shutdown-hold.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
-import { mountBoxHostApi } from "./box-host-api.js";
+import { createHostPlaces, mountBoxHostApi } from "./box-host-api.js";
 import { collectBoxHealth } from "./box-health.js";
 import { sharedClockServiceReading, timeServiceReader } from "./clock-service-reading.js";
 import { CLOCK_WATCH_MS, createClockWatch, clockWatchJob } from "./clock-watch.js";
@@ -860,7 +860,7 @@ export interface StartServerSeams {
   };
   /** The folder the host mounts USB drives under; unset, `STORAGE_DRIVES_ROOT`. */
   drivesRoot?: string;
-  /** Setup's release of the USB drives after a restore stages its copy; unset, it only logs. */
+  /** Setup's release of the USB drives after a restore stages its copy; unset, the host's. */
   releaseDrives?: () => Promise<void>;
 }
 
@@ -1003,6 +1003,8 @@ async function bootServer(
   // alone: the personal-data mask runs in `createLogger`, before the split, so it applies to both.
   const log = createLogger(tee(stdoutSink, fileSink), now, () => verbosity.current());
   const hostClient = seams.boxHost ?? boxHostClient();
+  const localHostRequests = seams.boxHostRequests ?? boxHostRequests();
+  const hostPlaces = createHostPlaces();
   const boxHost = keepTimeServiceOn(hostClient, log, now);
   const timeServiceSynchronised = timeServiceReader(boxHost);
   let setupKeyRing: ReturnType<typeof loadKeyRing> | undefined;
@@ -1502,7 +1504,10 @@ async function bootServer(
         ),
         releaseDrives:
           seams.releaseDrives ??
-          (async () => log("info", "drives.release_skipped", { reason: "no_host_client" })),
+          (() => releaseDrives({ host: localHostRequests, places: hostPlaces, log })),
+        hostRequests: localHostRequests,
+        hostPlaces,
+        drivesRoot: seams.drivesRoot,
         stageRecovery: recoveryPreparation.stage,
         discardStagedRecovery: recoveryPreparation.discard,
         clearStagedRecovery: recoveryPreparation.clearStaged,
@@ -2799,7 +2804,6 @@ async function bootServer(
       incidents: recordIncidentOnce,
       captureAlerts: { raise: recordIncidentOnce, handle: markIncidentHandled },
     });
-  const localHostRequests = seams.boxHostRequests ?? boxHostRequests();
   const clockService = sharedClockServiceReading(boxHost, now);
   const readClockService = clockService.read;
   const recordHeads = (tx: Transaction) => nodeBackend.recordHeads?.(tx) ?? Promise.resolve({});
@@ -4146,7 +4150,7 @@ async function bootServer(
     },
     log,
   );
-  mountBoxHostApi(app, { db, host: localHostRequests }, log);
+  mountBoxHostApi(app, { db, host: localHostRequests, places: hostPlaces }, log);
 
   // Mounted on every node: `retireSelf`'s own guards refuse a serving node.
   mountBoxRetireApi(app, { appDb: db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);

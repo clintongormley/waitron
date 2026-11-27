@@ -444,6 +444,18 @@ describe("releaseDrives", () => {
     expect(log).toHaveBeenCalledWith("warn", "drives.release_failed", expect.any(Object));
   });
 
+  it("logs the host's own busy as box_host.busy", async () => {
+    const log = vi.fn();
+    await releaseDrives({
+      host: {
+        storageRelease: async () => ({ available: false, reason: "refused", refusal: "busy" }),
+      },
+      places: { taken: 0 },
+      log,
+    });
+    expect(log).toHaveBeenCalledWith("warn", "drives.release_failed", { code: "box_host.busy" });
+  });
+
   it("logs without asking when both host places are taken", async () => {
     const storageRelease = vi.fn();
     const log = vi.fn();

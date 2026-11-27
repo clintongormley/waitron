@@ -4337,6 +4337,16 @@ describe("setup routes — remaining refusals and resumption paths", () => {
         }),
         "oldBoxGone",
       ],
+      [
+        "a key the route does not take",
+        (file) => ({
+          file,
+          masterKey: RESTORE_MASTER_KEY_TEXT,
+          environment: "production",
+          extra: "x",
+        }),
+        "body",
+      ],
     ])("refuses a drive restore with %s without staging", async (_label, body, field) => {
       const dir = mkdtempSync(join(tmpdir(), "setup-restore-drive-"));
       try {
@@ -4361,50 +4371,6 @@ describe("setup routes — remaining refusals and resumption paths", () => {
         expect(deps.stageRestore).not.toHaveBeenCalled();
         expect(await readdir(staging)).toEqual([]);
         expect(readFileSync(join(root, "sda1", name))).toEqual(sealedRestore(Uint8Array.from([1])));
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    });
-
-    it("a drive restore whose release of the drives fails still answers staged and logs it", async () => {
-      const dir = mkdtempSync(join(tmpdir(), "setup-restore-release-"));
-      try {
-        const root = join(dir, "drives");
-        const name = backupArchiveKey(new Date("2026-06-01T10:00:00Z"), {
-          nodeId: "d0000000-0000-4000-8000-000000000001",
-        });
-        mkdirSync(join(root, "sda1"), { recursive: true });
-        writeFileSync(join(root, "sda1", name), sealedRestore(Uint8Array.from([1])));
-        const deps = restoreDeps();
-        const releaseDrives = vi.fn(async () => {
-          throw new Error("host socket closed");
-        });
-        const log = vi.fn();
-        const app = new Hono();
-        mountSetup(
-          app,
-          {
-            ...deps,
-            releaseDrives,
-            receiveArchive: receiveRestoreArchive(join(dir, "scratch"), root),
-          },
-          log,
-        );
-        const res = await app.request("/setup-api/restore", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            file: { drive: "sda1", path: name },
-            masterKey: RESTORE_MASTER_KEY_TEXT,
-            environment: "production",
-          }),
-        });
-        expect(res.status).toBe(202);
-        expect(await res.json()).toEqual({ restoreStaged: true, restarting: true });
-        expect(deps.stageRestore).toHaveBeenCalledOnce();
-        expect(releaseDrives).toHaveBeenCalledOnce();
-        await vi.waitFor(() => expect(deps.requestRestart).toHaveBeenCalled());
-        expect(log).toHaveBeenCalledWith("warn", "setup.drives_release_failed", {});
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
