@@ -256,7 +256,7 @@ describe("a refund names the cancels it pays back", () => {
     ]);
   });
 
-  it("within what its cancels owe on a receipt, reads only the invoice's admission, never its filed figures", async () => {
+  it("within what its cancels owe on a receipt, reads neither the invoice's admission nor its filed figures", async () => {
     const { paid, burger } = await twoCancels();
     const admissions = vi.spyOn(venue.backend, "correctionAdmissionFor");
     const figures = vi.spyOn(venue.backend, "filedFiguresFor");
@@ -266,7 +266,7 @@ describe("a refund names the cancels it pays back", () => {
     });
     const answer = await refund(paid, refundBody(paid, "12.00", [burger]));
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect(admissions).toHaveBeenCalledTimes(1);
+    expect(admissions).not.toHaveBeenCalled();
     expect(figures).not.toHaveBeenCalled();
   });
 

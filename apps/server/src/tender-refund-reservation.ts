@@ -4,7 +4,7 @@ import {
   readCancelsForRefund,
   readCancelsStillOwed,
 } from "@waitron/adjustments";
-import { admittedAsFullInvoice, readCorrectionAdmission } from "@waitron/core";
+import { admittedAsFullInvoice, correctionTargetFor, readCorrectionAdmission } from "@waitron/core";
 import {
   adjustmentRefunds,
   invoiceCorrectionRefunds,
@@ -26,6 +26,7 @@ import {
   isUuid,
   saleId as brandSaleId,
   type Decimal,
+  type SaleId,
 } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
@@ -173,6 +174,7 @@ async function refuseBeyondPlainRoom(
   owed: number,
 ): Promise<void> {
   const sale = brandSaleId(saleId);
+  if (upTo <= owed && !(await targetNamesACustomer(tx, sale))) return;
   const admission =
     upTo <= owed ? await readCorrectionAdmission(tx, fiscal.backend, sale, nodeId) : undefined;
   if (
@@ -199,6 +201,16 @@ async function refuseBeyondPlainRoom(
     throw new AppError("tender.refund_needs_correction", { tenderId });
 }
 
+/** Whether the invoice a correction of the sale is filed against names a customer, which a full
+ * invoice's corrective needs (`requireFullInvoiceCorrection`). */
+async function targetNamesACustomer(tx: Transaction, saleId: SaleId): Promise<boolean> {
+  const [target] = await tx
+    .select({ taxId: sales.counterpartyTaxId })
+    .from(sales)
+    .where(eq(sales.id, await correctionTargetFor(tx, saleId)));
+  return target?.taxId != null;
+}
+
 /** The fiscal backend and the clock reading a refund outside Correct invoice is checked with. */
 export interface RefundFiscal {
   backend: FiscalBackend;
@@ -213,6 +225,14 @@ export async function cancelsStillOwedBy(tx: Transaction, saleId: string): Promi
   return sale?.workingOrderId == null ? [] : readCancelsStillOwed(tx, sale.workingOrderId);
 }
 
+async function isCorrectionLeg(tx: Transaction, refundId: string): Promise<boolean> {
+  const [leg] = await tx
+    .select({ id: invoiceCorrectionRefunds.id })
+    .from(invoiceCorrectionRefunds)
+    .where(eq(invoiceCorrectionRefunds.tenderRefundId, refundId));
+  return leg !== undefined;
+}
+
 type RefundActor = { requestedBy: string } & (
   { authorizedBy: string } | { authorize: (cancelledBy?: string) => Promise<Authorization> }
 );
@@ -222,23 +242,22 @@ export async function authorizeStoredTenderRefund(
   refund: typeof refunds.$inferSelect,
   authorize: (cancelledBy?: string) => Promise<Authorization>,
 ): Promise<void> {
+  const links = await tx
+    .select()
+    .from(adjustmentRefunds)
+    .where(eq(adjustmentRefunds.refundId, refund.id));
   // No cancel's approval covers a correction's leg (D4).
-  const [leg] = await tx
-    .select({ id: invoiceCorrectionRefunds.id })
-    .from(invoiceCorrectionRefunds)
-    .where(eq(invoiceCorrectionRefunds.tenderRefundId, refund.id));
-  const links =
-    leg !== undefined
+  const cancels =
+    links.length === 0 || (await isCorrectionLeg(tx, refund.id))
       ? []
-      : await tx.select().from(adjustmentRefunds).where(eq(adjustmentRefunds.refundId, refund.id));
-  const cancels = await cancelsForSale(
-    tx,
-    refund.saleId!,
-    links.map((row) => row.adjustmentId),
-  );
+      : await cancelsForSale(
+          tx,
+          refund.saleId!,
+          links.map((row) => row.adjustmentId),
+        );
   const authorisers = new Set(cancels.map((row) => row.approvedBy ?? row.requestedBy));
   const covered =
-    links.length > 0 &&
+    cancels.length > 0 &&
     !namedNoCancels(refund) &&
     refund.tipAmount === 0 &&
     links.reduce((total, row) => total + row.amount, 0) === refund.appliedAmount &&
