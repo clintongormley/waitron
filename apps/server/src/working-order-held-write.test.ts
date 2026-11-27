@@ -488,7 +488,6 @@ describe("frozen answers through a fractional quantity edit", () => {
         name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
-        vatClass: "general",
       });
       const list = await menu.createExtraList(
         tx,
@@ -1749,7 +1748,6 @@ describe("editing a saved order prices only what the edit adds", () => {
           kitchenName: `${name} kitchen`,
           pricingUnit: "each",
           unitPrice,
-          vatClass: "general",
         });
       const lemonade = await product("Lemonade", "3.00");
       const water = await product("Water", "2.00");

@@ -140,14 +140,12 @@ async function venue(db: Database): Promise<Venue> {
       name: "Pan",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     const free = await createProduct(tx, {
       categoryId: category.id,
       name: "Agua del grifo",
       pricingUnit: "each",
       unitPrice: "0.00",
-      vatClass: "general",
     });
     const offers = await offerProducts(tx, { productIds: [product.id, free.id] });
     const tables = await offerProducts(tx, {

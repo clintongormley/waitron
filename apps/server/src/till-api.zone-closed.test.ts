@@ -593,7 +593,6 @@ describe("existing service in a closed zone", () => {
         name: "Lemon",
         pricingUnit: "each",
         unitPrice: "0.20",
-        vatClass: "general",
       });
       const list = await createExtraList(
         tx,

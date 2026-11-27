@@ -256,7 +256,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<{
       name: "Mineral water",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     return {

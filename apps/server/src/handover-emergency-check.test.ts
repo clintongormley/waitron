@@ -105,8 +105,6 @@ it.each(["sentAt", "servedAt"] as const)("includes line %s", async (field) => {
     descriptions: { en: "Soup" },
     quantity: 1000,
     unitPriceGross: 100,
-    vatClass: "general",
-    takeawayVatClass: "general",
     lineTotal: 100,
     [field]: "2026-11-11T10:00:00Z",
   });

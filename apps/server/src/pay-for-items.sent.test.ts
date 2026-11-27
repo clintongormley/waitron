@@ -76,7 +76,6 @@ useVenueDb({
         kitchenName: "HAM",
         pricingUnit: "weight",
         unitPrice: "20.00",
-        vatClass: "general",
       });
       hamOffer = (await offerProducts(tx, { zone: "counter" })).offerFor(ham.id);
       for (const productId of [v.productId("Burger"), v.productId("Paella"), ham.id])

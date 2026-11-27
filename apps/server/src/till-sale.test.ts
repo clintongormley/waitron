@@ -218,14 +218,12 @@ async function setupVenue(options: { variants?: boolean } = {}): Promise<{
       name: "Jamón cortado",
       pricingUnit: "weight",
       unitPrice: "24.90",
-      vatClass: "reduced",
     });
     const water = await createProduct(tx, {
       categoryId: drinks.id,
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
       kitchenName: "COLD BAR",
     });
     await assignMenuToVenue(tx, cat.id);
@@ -916,7 +914,6 @@ describe("priceOrderLines re-keys bare menu content to the venue invoice_locales
         customerName,
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       await assignMenuToVenue(tx, cat.id);
       return product.id;
@@ -1154,22 +1151,16 @@ describe("ordering extras and options — parent + child lines", () => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const cat = await createMenu(tx, { name: "Delicatessen" });
       const food = await createCategory(tx, { name: "Food" });
-      const dish = (
-        name: string,
-        unitPrice: string,
-        vatClass: "general" | "reduced",
-        pricingUnit: "each" | "weight" = "each",
-      ) =>
+      const dish = (name: string, unitPrice: string, pricingUnit: "each" | "weight" = "each") =>
         createProduct(tx, {
           categoryId: food.id,
           name,
           pricingUnit,
           unitPrice,
-          vatClass,
         });
       // The three names carry DIFFERENT text, so a surface reading the wrong one of them fails
       // (CLAUDE.md §3).
-      const extraProduct = (name: string, vatClass: "general" | "reduced") =>
+      const extraProduct = (name: string) =>
         createProduct(tx, {
           categoryId: food.id,
           name: `${name} staff`,
@@ -1177,15 +1168,14 @@ describe("ordering extras and options — parent + child lines", () => {
           kitchenName: `${name} kitchen`,
           pricingUnit: "each",
           unitPrice: "3.00",
-          vatClass,
         });
 
-      const burger = await dish("Hamburguesa", "9.00", "general");
-      const menu = await dish("Menú", "12.00", "general");
-      const ham = await dish("Jamón", "24.90", "reduced", "weight");
-      const combo = await dish("Combo", "8.00", "general");
-      const platedDish = await dish("Plato", "10.00", "general");
-      const bacon = await extraProduct("Bacon", "reduced");
+      const burger = await dish("Hamburguesa", "9.00");
+      const menu = await dish("Menú", "12.00");
+      const ham = await dish("Jamón", "24.90", "weight");
+      const combo = await dish("Combo", "8.00");
+      const platedDish = await dish("Plato", "10.00");
+      const bacon = await extraProduct("Bacon");
       if (storedEachExtra) {
         const [each] = await tx
           .insert(units)
@@ -1201,7 +1191,7 @@ describe("ordering extras and options — parent + child lines", () => {
           .returning({ id: units.id });
         await assignProductUnit(tx, bacon.id, each!.id);
       }
-      const cheese = await extraProduct("Queso", "general");
+      const cheese = await extraProduct("Queso");
       if (storedEachExtra) {
         const [millilitres] = await tx
           .insert(units)
@@ -1217,8 +1207,8 @@ describe("ordering extras and options — parent + child lines", () => {
           .returning({ id: units.id });
         await assignProductUnit(tx, cheese.id, millilitres!.id);
       }
-      const potatoes = await extraProduct("Patatas", "general");
-      const salad = await extraProduct("Ensalada", "general");
+      const potatoes = await extraProduct("Patatas");
+      const salad = await extraProduct("Ensalada");
 
       const extrasList = await createExtraList(
         tx,
@@ -1610,7 +1600,6 @@ describe("ordering extras and options — parent + child lines", () => {
   async function sellVariantAsExtra(own: {
     stem: string;
     unitPrice: number | null;
-    vatClass: "general" | null;
     baconRate: string;
     variantRate?: string;
   }) {
@@ -1626,7 +1615,6 @@ describe("ordering extras and options — parent + child lines", () => {
           kitchenName: `${own.stem} kitchen`,
 
           unitPrice: own.unitPrice,
-          vatClass: own.vatClass,
           dietaryDeclarations: null,
         })
         .returning({ id: products.id });
@@ -1635,7 +1623,6 @@ describe("ordering extras and options — parent + child lines", () => {
         name: "Tostada",
         pricingUnit: "each",
         unitPrice: "4.00",
-        vatClass: "super_reduced",
       });
       await tx.update(departments).set({ dining: "takeaway" });
       await setTakeawayVatRate(tx, dish.id, "4.00");
@@ -1690,7 +1677,6 @@ describe("ordering extras and options — parent + child lines", () => {
     const { total, child } = await sellVariantAsExtra({
       stem: "Bacon doble",
       unitPrice: null,
-      vatClass: null,
       baconRate: "21.00",
     });
     // 4.00 dish + 3.00 borrowed from Bacon = 7.00 gross.
@@ -1710,7 +1696,6 @@ describe("ordering extras and options — parent + child lines", () => {
     const { total, child } = await sellVariantAsExtra({
       stem: "Bacon triple",
       unitPrice: 350,
-      vatClass: "general",
       baconRate: "10.00",
       variantRate: "21.00",
     });

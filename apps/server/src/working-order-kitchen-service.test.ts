@@ -387,7 +387,6 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
         name: "Hamburguesa",
         pricingUnit: "each",
         unitPrice: "9.00",
-        vatClass: "general",
         allergens: { gluten: { kinds: ["wheat" as const] } },
       });
       const gfBun = await addExtra(tx, burger.id, "Gluten-free bread");
@@ -476,7 +475,6 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
         name: "Ensalada",
         pricingUnit: "each",
         unitPrice: "7.00",
-        vatClass: "general",
         allergens: { gluten: { kinds: ["wheat" as const] } },
       });
       const nuts = await addExtra(tx, dish.id, "Con nueces", {
@@ -504,7 +502,6 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
         name: "Crema",
         pricingUnit: "each",
         unitPrice: "6.00",
-        vatClass: "general",
         dietaryDeclarations: ["vegan"],
       });
       const dairyFree = await addExtra(tx, dish.id, "Dairy-free", {
@@ -553,7 +550,6 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
         name: "Ensalada",
         pricingUnit: "each",
         unitPrice: "7.00",
-        vatClass: "general",
         dietaryDeclarations: ["vegan"],
       });
       const bacon = await addExtra(tx, dish.id, "Con bacon", {

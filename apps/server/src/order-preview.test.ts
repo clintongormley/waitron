@@ -54,8 +54,6 @@ describe("A738 order previews", () => {
             kitchenName: "KITCHEN WATER",
             quantity: 2000,
             unitPriceGross: 100,
-            vatClass: "general",
-            takeawayVatClass: "general",
             lineTotal: 200,
           },
           {
@@ -70,8 +68,6 @@ describe("A738 order previews", () => {
             kitchenName: "KITCHEN SOUP",
             quantity: 375,
             unitPriceGross: 400,
-            vatClass: "general",
-            takeawayVatClass: "general",
             lineTotal: 150,
             note: "No salt <please>",
           },
@@ -85,8 +81,6 @@ describe("A738 order previews", () => {
             kitchenName: "KITCHEN CHEESE",
             quantity: 750,
             unitPriceGross: 100,
-            vatClass: "general",
-            takeawayVatClass: "general",
             lineTotal: 75,
           },
         ]);

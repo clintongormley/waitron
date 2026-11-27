@@ -125,7 +125,6 @@ useVenueDb({
             kitchenName: name.toUpperCase(),
             pricingUnit: "each",
             unitPrice,
-            vatClass: "general",
           })
         ).id;
       const cheese = await product("Cheese", "1.00");

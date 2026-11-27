@@ -112,7 +112,6 @@ const labelledReduced = (tx: Transaction, name: string, unitPrice: string, rate:
     name,
     pricingUnit: "each",
     unitPrice,
-    vatClass: "reduced",
     takeawayVatRate: rate,
   });
 
@@ -496,7 +495,6 @@ async function lunchVenue(
       name: "Lemonade",
       pricingUnit: "each",
       unitPrice: "3.50",
-      vatClass: "reduced",
       takeawayVatRate: options.lemonadeRate ?? "21.00",
     });
     await tx.update(products).set({ courseId: drinkCourse }).where(eq(products.id, lemonade.id));

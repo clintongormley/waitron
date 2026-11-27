@@ -95,7 +95,6 @@ const suite = useVenueDb({
           name: description,
           pricingUnit: "each",
           unitPrice: "1.50",
-          vatClass: "general",
         });
         return p.id;
       };

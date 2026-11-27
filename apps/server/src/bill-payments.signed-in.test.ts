@@ -141,7 +141,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       kitchenName: "BAR BEER",
       pricingUnit: "each",
       unitPrice: "3.00",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     return {

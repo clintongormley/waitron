@@ -68,7 +68,6 @@ beforeAll(async () => {
       name: "Bread roll",
       pricingUnit: "each",
       unitPrice: "0.00",
-      vatClass: "reduced",
       takeawayVatRate: "21.00",
     });
     const [{ id: bread }] = await tx

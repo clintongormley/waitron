@@ -248,7 +248,6 @@ async function seedSaleVenue(admin: Database): Promise<string> {
       name: "Mineral water",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     const offers = await offerProducts(tx);

@@ -544,7 +544,6 @@ async function burgerWithSideSent() {
       name: "Side",
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "reduced",
     });
     const list = await createExtraList(
       tx,

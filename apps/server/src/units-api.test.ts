@@ -45,7 +45,7 @@ beforeEach(async () => {
 async function seedProduct(tx: Transaction, name: string, unitId: string): Promise<string> {
   const [product] = await tx
     .insert(products)
-    .values({ name, unitPrice: 100, vatClass: "general" })
+    .values({ name, unitPrice: 100 })
     .returning({ id: products.id });
   await tx
     .update(products)

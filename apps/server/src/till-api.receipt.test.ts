@@ -231,7 +231,6 @@ async function setupVenue(): Promise<{
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     const menuItem = await addProductToMenu(tx, {
@@ -3663,7 +3662,6 @@ describe("receipt lines' VAT rates", () => {
         name: "Pan",
         pricingUnit: "each",
         unitPrice: "2.20",
-        vatClass: "reduced",
       });
       await tx.update(departments).set({ dining: "till_choice" });
       await setTakeawayVatRate(tx, each.id, "21.00");

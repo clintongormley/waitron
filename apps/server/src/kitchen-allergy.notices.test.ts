@@ -384,7 +384,6 @@ describe("A669 notices", () => {
           kitchenName: "SIDE COOK",
           pricingUnit: "each",
           unitPrice: "1.00",
-          vatClass: "reduced",
           allergens: { milk: {} },
         });
         const list = await createExtraList(

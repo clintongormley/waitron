@@ -47,7 +47,6 @@ useVenueDb({
           name: "Iced tea",
           pricingUnit: "each",
           unitPrice: "1.80",
-          vatClass: "reduced",
           takeawayVatRate: "21.00",
         })
       ).id;

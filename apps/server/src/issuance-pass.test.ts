@@ -165,7 +165,6 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
         kitchenName: `${name} cocina`,
         pricingUnit: "each",
         unitPrice,
-        vatClass: "general",
       });
     const negroni = await product("Negroni", cocktails.id, "9.00");
     const draftBeer = await product("Caña", alcoholicDrinks.id, "2.50");

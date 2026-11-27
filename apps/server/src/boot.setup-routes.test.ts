@@ -1209,7 +1209,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           name: "Agua",
           pricingUnit: "each",
           unitPrice: "1.50",
-          vatClass: "general",
         });
         await assignMenuToVenue(tx, menu.id);
         const offers = await offerProducts(tx);

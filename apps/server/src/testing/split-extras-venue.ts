@@ -154,7 +154,6 @@ export async function setupSplitExtrasVenue() {
           kitchenName: kitchen,
           pricingUnit: "each",
           unitPrice: "1.00",
-          vatClass: "general",
           ...(allergens === undefined ? {} : { allergens }),
         })
       ).id;
@@ -328,7 +327,6 @@ export async function addExtras(
       ...(item.kitchenName === undefined ? {} : { kitchenName: item.kitchenName }),
       pricingUnit: "each",
       unitPrice: "0.50",
-      vatClass: "reduced",
     });
     productIds.push(id);
   }

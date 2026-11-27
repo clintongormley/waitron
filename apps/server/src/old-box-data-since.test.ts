@@ -403,8 +403,6 @@ async function line(
       opts.variantName === undefined ? null : { "es-ES": "Customer variant name" },
     quantity,
     unitPriceGross: unitPrice,
-    vatClass: "reduced",
-    takeawayVatClass: "reduced",
     lineTotal: Math.round((unitPrice * quantity) / 1000),
     sentAt: opts.sent === undefined ? null : iso(opts.sent),
     servedAt: opts.served === undefined ? null : iso(opts.served),

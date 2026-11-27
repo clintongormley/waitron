@@ -1753,7 +1753,6 @@ async function seedWaiting(jobId: string, count: number): Promise<void> {
         name: `STAFF ${i}`,
         kitchenName: `KITCHEN ${i}`,
         unitPrice: 300,
-        vatClass: "reduced",
       });
       const { cells } = await resolveTranslationCells(
         tx,

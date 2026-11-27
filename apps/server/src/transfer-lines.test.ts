@@ -84,28 +84,24 @@ async function setupVenue(): Promise<Seeded> {
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     const water = await createProduct(tx, {
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
     });
     const ham = await createProduct(tx, {
       categoryId: drinks.id,
       name: "Jamón",
       pricingUnit: "weight",
       unitPrice: "24.90",
-      vatClass: "reduced",
     });
     const bacon = await createProduct(tx, {
       categoryId: drinks.id,
       name: "Bacon",
       pricingUnit: "each",
       unitPrice: "0.50",
-      vatClass: "reduced",
     });
     await assignMenuToVenue(tx, cat.id);
     const offers = await offerProducts(tx, { zone: "tables" });

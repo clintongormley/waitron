@@ -54,7 +54,6 @@ async function seasonVenue() {
           name,
           pricingUnit: "each",
           unitPrice: "12.00",
-          vatClass: "general",
         });
         const itemId = (await addProductToMenu(tx, { menuId, productId: product.id })).id;
         return { menuId, itemId, versionId: await publishWorkingMenu(tx, menuId) };

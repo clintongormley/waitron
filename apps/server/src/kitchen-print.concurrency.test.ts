@@ -81,7 +81,6 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
           name: "Ribeye",
           pricingUnit: "each",
           unitPrice: "1.50",
-          vatClass: "general",
         });
         const orderId = randomUUID();
         const offers = await offerProducts(tx);

@@ -174,7 +174,6 @@ async function venueWith(
       kitchenName: "KITCHEN Pan",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     const offers = await offerProducts(tx, { productIds: [product.id] });
     const [staff] = await seedPersons(tx, {
@@ -796,7 +795,6 @@ describe("a sale prints its goods in the default content language its lines stor
         kitchenName: "KITCHEN Torrada",
         unitId: unit.id,
         unitPrice: "2.00",
-        vatClass: "general",
       });
       const bread = await createOptionList(
         tx,

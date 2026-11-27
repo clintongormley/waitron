@@ -2788,7 +2788,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
         name: unique("Prod"),
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       return product.id;
     });
@@ -2936,7 +2935,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
         name: unique("Prod"),
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       return { productId: product.id };
     });
@@ -2995,7 +2993,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
         name: unique("Prod"),
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       const [variant] = await tx
         .insert(products)
@@ -3022,7 +3019,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
         name: unique("Archived dish"),
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       await tx.update(products).set({ active: false, courseId }).where(eq(products.id, product.id));
       return product.id;

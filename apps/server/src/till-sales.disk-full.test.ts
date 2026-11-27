@@ -38,7 +38,6 @@ useVenueDb({
         name: "Water",
         pricingUnit: "each",
         unitPrice: "0.00",
-        vatClass: "general",
       });
       freeId = water.id;
       await assignMenuToVenue(tx, cat.id);

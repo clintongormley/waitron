@@ -224,7 +224,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     return {

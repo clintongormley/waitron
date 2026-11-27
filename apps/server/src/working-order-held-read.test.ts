@@ -278,7 +278,6 @@ it("shows the dish's own allergens and diet beside a frozen options answer", asy
       name: "Coffee",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
       allergens: { milk: {} },
       dietaryDeclarations: ["vegan"],
     });

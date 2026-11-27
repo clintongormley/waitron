@@ -92,7 +92,6 @@ useVenueDb({
           kitchenName: name.toUpperCase(),
           pricingUnit,
           unitPrice,
-          vatClass: "general",
         });
       const cheese = (await product("Cheese", "each", "1.00")).id;
       const ham = (await product("Ham", "weight", "24.90")).id;

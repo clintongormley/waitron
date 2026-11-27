@@ -130,7 +130,6 @@ export async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<Seede
         name: "Espresso",
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       // Deliberately category-less, so its priced line snapshots `category: null` — the other side
       // of `parkOrder`'s `?? null`.
@@ -139,7 +138,6 @@ export async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<Seede
         name: "Water",
         pricingUnit: "each",
         unitPrice: "2.00",
-        vatClass: "general",
       });
       await assignMenuToVenue(tx, cat.id);
       const premium = await createMenu(tx, { name: "Premium menu" });
@@ -397,7 +395,6 @@ export async function seedVariantOffer(
     kitchenName: "COF",
     pricingUnit: "each",
     unitPrice: "1.50",
-    vatClass: "general",
   });
   const offer = await addProductToMenu(tx, { menuId: menuId, productId: product.id });
   const variants = await setProductVariants(
@@ -544,7 +541,6 @@ export async function makeProduct(
     name: `P-${randomUUID().slice(0, 8)}`,
     pricingUnit: "each",
     unitPrice: "1.50",
-    vatClass: "general",
   });
   if (route.stationId !== undefined) {
     await routeProductTo(tx, id, route.stationId);
@@ -674,8 +670,6 @@ export async function insertContextlessLines(
       descriptions: { [LOCALE]: "Line" },
       quantity,
       unitPriceGross: 150,
-      vatClass: "general",
-      takeawayVatClass: "general",
       lineTotal: (quantity * 150) / 1000,
     })),
   );
@@ -700,7 +694,6 @@ export async function addExtra(
     name,
     pricingUnit: "each",
     unitPrice: "9.99",
-    vatClass: "reduced",
     ...(overlay?.add === undefined ? {} : { allergens: overlay.add }),
     ...(overlay?.suitableFor === undefined ? {} : { dietaryDeclarations: overlay.suitableFor }),
   });
@@ -810,7 +803,6 @@ export async function storedRows(id: string) {
       quantity: workingOrderLines.quantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
       lineTotal: workingOrderLines.lineTotal,
-      vatClass: workingOrderLines.vatClass,
       note: workingOrderLines.note,
       extraListId: workingOrderLines.extraListId,
       sentAt: workingOrderLines.sentAt,
@@ -846,7 +838,6 @@ export async function seedWine(tx: Transaction, menuId: string) {
     kitchenName: "WINE",
     pricingUnit: "each",
     unitPrice: "4.00",
-    vatClass: "reduced",
     allergens: { sulphites: {} },
     dietaryDeclarations: ["vegan"],
   });
@@ -882,7 +873,6 @@ export async function seedWine(tx: Transaction, menuId: string) {
   await tx
     .update(products)
     .set({
-      vatClass: "general",
       categoryId: glassesCategory.id,
       courseId: secondCourse.id,
       allergens: { gluten: { kinds: ["wheat" as const] } },

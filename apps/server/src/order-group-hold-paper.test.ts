@@ -131,7 +131,6 @@ describe("advance HOLD tickets (Task 6)", () => {
         kitchenName: "K-TUNA",
         pricingUnit: "each",
         unitPrice: "20.00",
-        vatClass: "general",
       });
       const list = await createOptionList(
         tx,

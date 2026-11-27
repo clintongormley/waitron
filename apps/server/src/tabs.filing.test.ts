@@ -135,14 +135,12 @@ async function setupVenue(db: Database = suite.db): Promise<SeededVenue> {
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await createProduct(tx, {
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     return {
@@ -541,7 +539,6 @@ describe("a sent line is payable after archival; an archived unsent one is not",
         kitchenName: "Burger kitchen",
         pricingUnit: "each",
         unitPrice: "12.00",
-        vatClass: "reduced",
       });
       const beer = await createProduct(tx, {
         categoryId: null,
@@ -550,7 +547,6 @@ describe("a sent line is payable after archival; an archived unsent one is not",
         kitchenName: "Beer kitchen",
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       });
       const offers = await offerProducts(tx, { zone: "tables" });
       await setRoutingCell(

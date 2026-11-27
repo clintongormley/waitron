@@ -58,7 +58,6 @@ describe("menu allergen workflows", () => {
       for (const sample of samples) {
         await createProduct(tx, {
           pricingUnit: "each",
-          vatClass: "reduced",
           ...sample,
         });
       }
@@ -107,7 +106,6 @@ it("retrieves held product, variant and extra declarations outside current offer
     const extra = await createProduct(tx, {
       name: "Lemon",
       unitPrice: "1.00",
-      vatClass: "reduced",
       pricingUnit: "each",
       categoryId: null,
       allergens: { sesame: {} },

@@ -162,7 +162,6 @@ export async function setupVenue(countryCourses = false): Promise<Venue> {
         kitchenName: names.kitchen,
         pricingUnit: "each",
         unitPrice: names.price,
-        vatClass: "general",
       });
       productId[dish] = product.id;
       await setProductCourse(tx, product.id, courseIds[COURSE_OF[dish]]!);

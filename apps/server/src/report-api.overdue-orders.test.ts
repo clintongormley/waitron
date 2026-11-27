@@ -46,7 +46,6 @@ async function seedFiredOrder(
       name: "Item",
 
       unitPrice: 100,
-      vatClass: "general",
     })
     .returning({ id: products.id });
   const order = await seedWorkingOrder(db, {
@@ -69,8 +68,6 @@ async function seedFiredOrder(
       descriptions: { "es-ES": "Item" },
       quantity: 1000,
       unitPriceGross: 100,
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
       lineTotal: 100,
     })
     .returning({ id: workingOrderLines.id });

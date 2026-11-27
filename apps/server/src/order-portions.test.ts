@@ -42,8 +42,6 @@ function dish(id: string, overrides: Partial<Row> = {}): Row {
     unitPrecision: 0,
     quantity: 1000,
     unitPriceGross: 150,
-    vatClass: "reduced",
-    takeawayVatClass: "reduced",
     lineTotal: 150,
     category: null,
     courseId: "course-1",
@@ -308,7 +306,6 @@ describe("A803 portions: recording portions", () => {
             kitchenName: name.toUpperCase(),
             pricingUnit: "each",
             unitPrice: price,
-            vatClass: "reduced",
           })
         ).id;
       const burger = await product("Burger", "5.00");
@@ -471,7 +468,6 @@ describe("A803 portions: recording portions", () => {
           kitchenName: "BACON",
           pricingUnit: "each",
           unitPrice: "0.75",
-          vatClass: "reduced",
         })
       ).id;
       const sides = (

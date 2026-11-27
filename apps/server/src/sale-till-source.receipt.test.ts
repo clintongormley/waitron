@@ -139,7 +139,6 @@ async function setupVenue(): Promise<{
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     const menuItem = await addProductToMenu(tx, {

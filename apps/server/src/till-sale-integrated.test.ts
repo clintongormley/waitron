@@ -48,7 +48,6 @@ describe("saved-zone payment transactions", () => {
             kitchenName: `Kitchen ${name}`,
             pricingUnit: "each",
             unitPrice: decimal(price!),
-            vatClass: "reduced",
           }),
         );
       }

@@ -180,25 +180,23 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
 
   const products = await withTransaction(suite.db, async (tx) => {
     const menu = await createMenu(tx, { name: `Vat rate at issue menu ${cfg.nodeId}` });
-    const product = (name: string, unitPrice: string, vatClass: "reduced" | "general") =>
+    const product = (name: string, unitPrice: string) =>
       createProduct(tx, {
         categoryId: null,
         name,
         pricingUnit: "each",
         unitPrice,
-        vatClass,
       });
-    const beer = await product("Caña", "2.50", "reduced");
-    const burger = await product("Hamburguesa", "10.00", "reduced");
-    const cheese = await product("Queso", "0.75", "reduced");
-    const wine = await product("Vino", "3.63", "general");
+    const beer = await product("Caña", "2.50");
+    const burger = await product("Hamburguesa", "10.00");
+    const cheese = await product("Queso", "0.75");
+    const wine = await product("Vino", "3.63");
     // Its takeaway rates are set by the takeaway case.
     const juice = await createProduct(tx, {
       categoryId: null,
       name: "Juice",
       pricingUnit: "each",
       unitPrice: "2.50",
-      vatClass: "general",
       takeawayVatRate: "10.00",
     });
     const extras = await createExtraList(

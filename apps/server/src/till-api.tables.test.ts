@@ -90,14 +90,12 @@ const suite = useVenueDb({
         name: "Agua mineral",
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       const bread = await createProduct(tx, {
         categoryId: drinksCategory.id,
         name: "Bread",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
       });
       await assignMenuToVenue(tx, cat.id);
       return { id: p.id, breadId: bread.id };

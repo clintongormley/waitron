@@ -64,7 +64,6 @@ export async function makeProduct(
     name: name,
     pricingUnit: "each",
     unitPrice: "1.50",
-    vatClass: "general",
   });
   if (route.stationId !== undefined) await routeProductTo(tx, id, route.stationId);
   if (route.courseId !== undefined) await setProductCourse(tx, id, route.courseId);

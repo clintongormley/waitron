@@ -137,14 +137,12 @@ async function setupVenue(opts: { takeaway?: boolean } = {}): Promise<Seeded> {
       name: "Jamón cortado",
       pricingUnit: "weight",
       unitPrice: "24.90",
-      vatClass: "reduced",
     });
     const water = await createProduct(tx, {
       categoryId: drinks.id,
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     if (opts.takeaway) {
       await tx.update(departments).set({ dining: "takeaway" });

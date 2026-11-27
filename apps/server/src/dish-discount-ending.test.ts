@@ -76,7 +76,6 @@ async function variantDish(
     name,
     pricingUnit: "each",
     unitPrice: sizes[0]![1],
-    vatClass: "reduced",
   });
   await tx.update(products).set({ courseId }).where(eq(products.id, parent.id));
   const variants = await setProductVariants(
@@ -153,7 +152,6 @@ useVenueDb({
           name,
           pricingUnit: "each",
           unitPrice: price,
-          vatClass: "reduced",
         });
         const list = await createExtraList(
           tx,

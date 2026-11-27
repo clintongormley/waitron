@@ -126,8 +126,6 @@ it("exports the subject’s recorded service actions and only their roles", asyn
       quantity: 1000,
       unitPriceGross: 600,
       lineTotal: 600,
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
     };
     await tx.insert(workingOrderLines).values([
       { ...line, id: "served-line", lineNo: 1, lateConfirmedBy: "bea", sentAt: AT },

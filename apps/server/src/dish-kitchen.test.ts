@@ -67,8 +67,6 @@ async function seed() {
       workingOrderId: orderId,
       descriptions: { en: line.name },
       unitPriceGross: 100,
-      vatClass: "general",
-      takeawayVatClass: "general",
       lineTotal: 100,
     })),
   );

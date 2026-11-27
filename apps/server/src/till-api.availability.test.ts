@@ -54,7 +54,6 @@ beforeEach(async () => {
       categoryId: null,
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "reduced",
     });
     extraId = extra.id;
     const extras = await createExtraList(

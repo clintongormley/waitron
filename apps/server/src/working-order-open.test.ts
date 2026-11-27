@@ -131,7 +131,6 @@ describe("a sold variant line carries its product and relative variant names", (
       const seeded = await seedVariantOffer(tx, menuId);
       await menu.updateProduct(tx, seeded.productId, { allergens: { milk: {} } });
       await menu.updateProduct(tx, seeded.variantId, {
-        vatClass: "reduced",
         allergens: { soybeans: {} },
       });
       await publishWorkingMenu(tx, menuId);
@@ -191,7 +190,6 @@ describe("parkOrder", () => {
         kitchenName: "COF",
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       const offer = await addProductToMenu(tx, { menuId: menuId, productId: product.id });
       // "Large" carries all three names; "Small" carries only its staff name, so the row it freezes

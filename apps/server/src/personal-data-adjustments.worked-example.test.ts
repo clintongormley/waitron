@@ -235,7 +235,6 @@ async function tellStory(venue: AdjustmentVenue): Promise<Story> {
         kitchenName: dish.kitchen,
         pricingUnit: "each",
         unitPrice: dish.price,
-        vatClass: "general",
       });
       ids.set(dish.name, product.id);
     }

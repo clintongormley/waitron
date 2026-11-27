@@ -160,7 +160,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
         kitchenName: product.kitchen,
         pricingUnit: "each",
         unitPrice: product.price,
-        vatClass: "general",
       });
     }
     await assignMenuToVenue(tx, cat.id);
@@ -433,7 +432,6 @@ export async function linesOf(
     name: string;
     quantity: number;
     unitPriceGross: number;
-    vatClass: string;
     groupId: string | null;
   }[]
 > {
@@ -444,7 +442,6 @@ export async function linesOf(
         name: workingOrderLines.name,
         quantity: workingOrderLines.quantity,
         unitPriceGross: workingOrderLines.unitPriceGross,
-        vatClass: workingOrderLines.vatClass,
         groupId: workingOrderLines.groupId,
       })
       .from(workingOrderLines)

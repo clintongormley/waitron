@@ -69,7 +69,6 @@ useVenueDb({
           kitchenName: kitchen,
           pricingUnit: "each",
           unitPrice: price,
-          vatClass: "general",
         });
       // The dish's staff, customer-facing and kitchen names differ, so the slip can only pass by
       // printing the kitchen one.
@@ -600,7 +599,6 @@ describe("cancelling an extra of a held dish (B11g)", () => {
           kitchenName,
           pricingUnit: "each",
           unitPrice: "9.00",
-          vatClass: "general",
         });
         await writeProductModifiers(tx, product.id, [{ kind: "extras", id: extras.listId }]);
         await setRoutingCell(

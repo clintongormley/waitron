@@ -125,7 +125,6 @@ async function configurationArtifact(
       name: "Prepared gazpacho",
       pricingUnit: "each",
       unitPrice: "7.25",
-      vatClass: "general",
     });
     await savePrivacyContact(
       tx,

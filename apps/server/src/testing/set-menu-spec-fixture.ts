@@ -121,7 +121,6 @@ export async function setupSetMenuSpecVenue(db: Database): Promise<SpecVenue> {
         name: dish.name,
         pricingUnit: "each",
         unitPrice: dish.price,
-        vatClass: "reduced",
       });
       await tx
         .update(products)
@@ -134,7 +133,6 @@ export async function setupSetMenuSpecVenue(db: Database): Promise<SpecVenue> {
       name: "Bread",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "reduced",
     });
     const breadList = await createExtraList(
       tx,
@@ -248,7 +246,6 @@ export async function addSpecLunch(spec: SpecVenue): Promise<SpecLunch> {
       name: "Lemonade",
       pricingUnit: "each",
       unitPrice: "3.50",
-      vatClass: "reduced",
       takeawayVatRate: "21.00",
     });
     await tx.update(products).set({ courseId: drinkCourse }).where(eq(products.id, lemonade.id));

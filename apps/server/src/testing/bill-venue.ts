@@ -204,7 +204,6 @@ export async function provisionBillVenue(
         kitchenName: item.kitchen,
         pricingUnit: "each",
         unitPrice: item.price,
-        vatClass: "general",
       });
       productIds.set(item.name, product.id);
     }

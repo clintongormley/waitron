@@ -46,7 +46,6 @@ async function fixture() {
       categoryId: null,
       pricingUnit: "each",
       unitPrice: "4.00",
-      vatClass: "general",
     });
     const member = await addMember(tx, await requireMenuRoot(tx, lunch.id), {
       kind: "product",

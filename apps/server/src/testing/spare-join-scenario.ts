@@ -392,7 +392,6 @@ async function seedCounterTill(venueDir: string, box: { nodeId: string }): Promi
         kitchenName: "FLATW",
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       });
       await assignMenuToVenue(tx, menu.id);
       const offers = await offerProducts(tx, { zone: "counter" });

@@ -218,7 +218,6 @@ async function provision(db: typeof suite.db): Promise<Venue> {
         kitchenName: item.kitchen,
         pricingUnit: "each",
         unitPrice: item.price,
-        vatClass: "general",
       });
       productIds.set(item.name, product.id);
     }

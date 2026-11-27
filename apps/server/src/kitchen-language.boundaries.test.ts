@@ -281,7 +281,6 @@ it("A964 language boundaries preserve saved receipt-language card bytes and fisc
       customerName: { es: "Diner boundary", en: "Diner boundary" },
       pricingUnit: "each",
       unitPrice: "1234.56",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     const offered = await offerProducts(tx);

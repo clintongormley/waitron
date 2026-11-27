@@ -86,7 +86,6 @@ async function seedVenueWithMenuAndTill(db: Database): Promise<Venue> {
         name,
         pricingUnit: "each",
         unitPrice,
-        vatClass: "general",
       });
     const coffee = await product("Café", "1.20");
     await setProductVariants(

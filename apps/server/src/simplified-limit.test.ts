@@ -62,7 +62,6 @@ useVenueDb({
           name,
           pricingUnit: "each",
           unitPrice,
-          vatClass: "general",
         });
         product.set(name, created.id);
       }

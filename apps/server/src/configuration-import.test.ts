@@ -693,7 +693,6 @@ describe("routing cells in a staged import", () => {
           name: "Mojito",
           pricingUnit: "each",
           unitPrice: "7",
-          vatClass: "general",
         });
         const [large] = await tx
           .insert(products)

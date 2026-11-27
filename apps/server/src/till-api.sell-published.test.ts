@@ -194,18 +194,17 @@ async function setupLunch(): Promise<Lunch> {
 
     const lunch = await createMenu(tx, { name: "Lunch" });
     const category = await createCategory(tx, { name: "Dishes" });
-    const product = (name: string, unitPrice: string, vatClass: "general" | "reduced") =>
+    const product = (name: string, unitPrice: string) =>
       createProduct(tx, {
         categoryId: category.id,
         name,
         pricingUnit: "each",
         unitPrice,
-        vatClass,
       });
-    const lemonade = await product("Lemonade", "3.00", "reduced");
-    const burger = await product("Burger", "9.00", "general");
-    const flan = await product("Flan", "4.00", "general");
-    const extraLemon = await product("Extra lemon", "2.00", "reduced");
+    const lemonade = await product("Lemonade", "3.00");
+    const burger = await product("Burger", "9.00");
+    const flan = await product("Flan", "4.00");
+    const extraLemon = await product("Extra lemon", "2.00");
     const lemon = await createExtraList(
       tx,
       {
@@ -783,7 +782,6 @@ describe("who may order a product on its own (spec §9, D12)", () => {
         kitchenName: "BCN",
         pricingUnit: "each",
         unitPrice: "2.00",
-        vatClass: "general",
         ordering,
       });
       const toppings = await createExtraList(

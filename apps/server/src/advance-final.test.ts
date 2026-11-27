@@ -72,16 +72,15 @@ let offerFor: (name: string) => string;
 const DISHES: {
   name: string;
   price: string;
-  vatClass: "reduced" | "general";
   takeawayVatRate: string;
 }[] = [
-  { name: "Tasting menu", price: "120.00", vatClass: "reduced", takeawayVatRate: "10.00" },
-  { name: "Bread roll", price: "1.05", vatClass: "reduced", takeawayVatRate: "10.00" },
-  { name: "Salad bowl", price: "20.00", vatClass: "reduced", takeawayVatRate: "10.00" },
-  { name: "Seafood platter", price: "30.05", vatClass: "reduced", takeawayVatRate: "10.00" },
-  { name: "Wine case", price: "80.00", vatClass: "general", takeawayVatRate: "21.00" },
-  { name: "Cava bottle", price: "30.00", vatClass: "general", takeawayVatRate: "21.00" },
-  { name: "Reserva bottle", price: "50.00", vatClass: "general", takeawayVatRate: "21.00" },
+  { name: "Tasting menu", price: "120.00", takeawayVatRate: "10.00" },
+  { name: "Bread roll", price: "1.05", takeawayVatRate: "10.00" },
+  { name: "Salad bowl", price: "20.00", takeawayVatRate: "10.00" },
+  { name: "Seafood platter", price: "30.05", takeawayVatRate: "10.00" },
+  { name: "Wine case", price: "80.00", takeawayVatRate: "21.00" },
+  { name: "Cava bottle", price: "30.00", takeawayVatRate: "21.00" },
+  { name: "Reserva bottle", price: "50.00", takeawayVatRate: "21.00" },
 ];
 
 useVenueDb({
@@ -104,7 +103,6 @@ useVenueDb({
           kitchenName: dish.name.toUpperCase(),
           pricingUnit: "each",
           unitPrice: dish.price,
-          vatClass: dish.vatClass,
           takeawayVatRate: dish.takeawayVatRate,
         });
         ids.set(dish.name, product.id);

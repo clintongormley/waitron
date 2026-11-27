@@ -193,14 +193,12 @@ async function setupVenue(): Promise<{
       name: "Jamón cortado",
       unitId: kgId,
       unitPrice: "24.90",
-      vatClass: "reduced",
     });
     const water = await createProduct(tx, {
       categoryId: drinkCategory.id,
       name: "Agua mineral",
       unitId: null, // Each (no unit).
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     const hamMenuItem = await addProductToMenu(tx, {
@@ -2791,7 +2789,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
         name: "Queso",
         pricingUnit: "each",
         unitPrice: "9.00",
-        vatClass: "reduced",
       });
       const extras = await createExtraList(
         tx,
@@ -3714,7 +3711,6 @@ describe("a sale cannot hand over settled extras or options", () => {
           name: "Queso",
           pricingUnit: "each",
           unitPrice: "9.00",
-          vatClass: "general",
         });
         const extras = await createExtraList(
           tx,
@@ -3758,7 +3754,6 @@ describe("a sale cannot hand over settled extras or options", () => {
             kitchenName: null,
             price: "0.00",
             listId: lists.extras.id,
-            vatClass: "general",
             quantity: 7,
           },
         ],

@@ -245,7 +245,6 @@ describe("getHeldOrder", () => {
         name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
-        vatClass: "general",
       });
       const list = await menu.createExtraList(
         tx,
@@ -297,7 +296,6 @@ describe("getHeldOrder", () => {
         name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
-        vatClass: "general",
       });
       const list = await menu.createExtraList(
         tx,
@@ -372,7 +370,6 @@ describe("getHeldOrder", () => {
         kitchenName: "Ham kitchen",
         unitId: kgUnitId,
         unitPrice: "0.27",
-        vatClass: "general",
       });
       const list = await menu.createExtraList(
         tx,
@@ -466,7 +463,6 @@ describe("getHeldOrder", () => {
         name: "Ham",
         unitId,
         unitPrice: "12.00",
-        vatClass: "general",
       });
       const menuItem = await addProductToMenu(tx, {
         menuId: menuId,
@@ -2612,7 +2608,6 @@ describe("a variant is sold as the product it is", () => {
         name: "Cider",
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       });
       const [pint] = await setProductVariants(tx, cider.id, [fresh("Cider pint")], LOCALE);
       return {

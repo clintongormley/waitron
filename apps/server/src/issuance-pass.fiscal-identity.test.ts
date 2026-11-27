@@ -154,7 +154,6 @@ async function fileOneSale(db: Database) {
         kitchenName: `${name} cocina`,
         pricingUnit: "each",
         unitPrice,
-        vatClass: "general",
       });
     const negroni = await product("Negroni", cocktails.id, "9.00");
     const ice = await product("Hielo", extrasCategory.id, "1.00");

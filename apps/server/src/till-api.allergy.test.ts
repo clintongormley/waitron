@@ -81,8 +81,6 @@ beforeEach(async () => {
       quantity: 2000,
       unitPriceGross: 500,
       lineTotal: 1000,
-      vatClass: "general",
-      takeawayVatClass: "general",
     })
     .returning();
   lineId = line!.id;

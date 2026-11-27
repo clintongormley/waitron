@@ -65,7 +65,6 @@ async function arrange() {
       kitchenName: "Kitchen dish",
       unitId: unit!.id,
       unitPrice: "12.00",
-      vatClass: "general",
     });
     const parent = await createProduct(tx, {
       categoryId: null,
@@ -74,7 +73,6 @@ async function arrange() {
       kitchenName: "Kitchen topping",
       pricingUnit: "each",
       unitPrice: "4.00",
-      vatClass: "general",
     });
     const [variant] = await setProductVariants(
       tx,

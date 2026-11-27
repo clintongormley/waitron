@@ -680,7 +680,6 @@ async function seedProduct(): Promise<string> {
       name: "Routed product",
 
       unitPrice: 100,
-      vatClass: "general",
     })
     .returning({ id: products.id });
   return row!.id;

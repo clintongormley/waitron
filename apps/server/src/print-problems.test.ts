@@ -128,7 +128,6 @@ async function setupVenue(): Promise<Venue> {
         kitchenName: names.kitchen,
         pricingUnit: "each",
         unitPrice: names.price,
-        vatClass: "general",
       });
       productId[dish] = product.id;
     }

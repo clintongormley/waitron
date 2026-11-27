@@ -152,7 +152,6 @@ async function dish(name: string, categoryId: string | null = null): Promise<Dis
       kitchenName: `KITCHEN ${name}`,
       pricingUnit: "each",
       unitPrice: "4.00",
-      vatClass: "general",
     });
     const counter = await offerProducts(tx, {
       zone: "counter",
@@ -853,8 +852,6 @@ describe("paying a pay-first order, or an open counter order in a zone that send
         descriptions: { [v.cfg.locale]: "Soup" },
         quantity: 1000,
         unitPriceGross: 150,
-        vatClass: "general",
-        takeawayVatClass: "general",
         lineTotal: 150,
       }),
     );

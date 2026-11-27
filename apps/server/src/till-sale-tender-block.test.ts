@@ -146,7 +146,6 @@ beforeAll(async () => {
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     const offers = await offerProducts(tx);

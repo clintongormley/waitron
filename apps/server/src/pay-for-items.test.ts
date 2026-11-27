@@ -65,7 +65,6 @@ useVenueDb({
             kitchenName: name.toUpperCase(),
             pricingUnit,
             unitPrice,
-            vatClass: "general",
           })
         ).id;
       ids = {

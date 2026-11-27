@@ -102,7 +102,6 @@ async function generalVenue() {
       name: "Wine by the glass",
       pricingUnit: "each",
       unitPrice: "4.00",
-      vatClass: "reduced",
       takeawayVatRate: "21.00",
     });
     const [wine175] = await setProductVariants(

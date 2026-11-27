@@ -161,7 +161,6 @@ async function setupVenue(options: {
           name,
           pricingUnit: "each",
           unitPrice,
-          vatClass: "general",
         });
       const toast = await product("Toast", "3.00");
       const offer = async (menu: MenuName, productId: string, grossPrice?: string) =>
@@ -284,7 +283,6 @@ describe("ordering uses period membership while browsing follows the timetable",
           name: "Cup of soup",
           pricingUnit: "each",
           unitPrice: "7.00",
-          vatClass: "reduced",
         });
         await tx.update(products).set({ courseId: mains }).where(eq(products.id, soup));
         const { id: daily } = await createMenu(tx, {
@@ -586,7 +584,6 @@ async function butterOnMiddayToast(v: Venue) {
       name: "Butter",
       pricingUnit: "each",
       unitPrice: "0.50",
-      vatClass: "general",
     });
     const list = await createExtraList(
       tx,
@@ -2657,7 +2654,6 @@ describe("kitchen routing for current and confirmed late dishes", () => {
         name: "Mojito",
         pricingUnit: "each",
         unitPrice: "8.00",
-        vatClass: "general",
       });
       const offer = (
         await addProductToMenu(tx, { menuId: v.menus["Midday menu"], productId: mojito.id })
@@ -2930,7 +2926,6 @@ describe("kitchen routing for current and confirmed late dishes", () => {
         name: "Mint",
         pricingUnit: "each",
         unitPrice: "0.50",
-        vatClass: "general",
       });
       const list = await createExtraList(
         tx,

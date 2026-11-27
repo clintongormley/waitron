@@ -31,7 +31,6 @@ export async function zonePaymentVenue(db: Database) {
       name: "Worker dish",
       customerName: { "en-GB": "Customer dish" },
       kitchenName: "Kitchen dish",
-      vatClass: "general",
       pricingUnit: "each",
       unitPrice: decimal("12.10"),
     });

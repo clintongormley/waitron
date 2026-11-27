@@ -131,26 +131,20 @@ describe("the category report reconciles with the till's sales", () => {
         name: "Refrescos",
         parentId: drinks.id,
       });
-      const product = async (
-        name: string,
-        categoryId: string | null,
-        unitPrice: string,
-        vatClass: "general" | "reduced",
-      ) =>
+      const product = async (name: string, categoryId: string | null, unitPrice: string) =>
         (
           await createProduct(tx, {
             categoryId,
             name,
             pricingUnit: "each",
             unitPrice,
-            vatClass,
           })
         ).id;
       const ids = {
-        cola: await product("Cola", softs.id, "2.35", "general"),
-        water: await product("Agua", drinks.id, "1.15", "reduced"),
-        bread: await product("Pan", null, "0.95", "reduced"),
-        olives: await product("Aceitunas", null, "3.33", "general"),
+        cola: await product("Cola", softs.id, "2.35"),
+        water: await product("Agua", drinks.id, "1.15"),
+        bread: await product("Pan", null, "0.95"),
+        olives: await product("Aceitunas", null, "3.33"),
       };
       await tx.update(departments).set({ dining: "takeaway" });
       await setTakeawayVatRate(tx, ids.cola, "21.00");
