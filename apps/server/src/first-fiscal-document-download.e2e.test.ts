@@ -17,7 +17,8 @@ import { withRecoveryKeyAuthority } from "./operation-authentication.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
 
-// External clock, email and AEAT readiness are synthetic; local setup and key verification stay real.
+// Synthetic certificate, AEAT, clock and email answers let the real setup and recovery routes run
+// offline.
 vi.mock("@waitron/composition", async (original) => {
   const actual = await original<typeof import("@waitron/composition")>();
   return {
@@ -31,6 +32,7 @@ vi.mock("@waitron/composition", async (original) => {
               ...module.fiscal!,
               provisioningSecret: {
                 required: () => true,
+                inspect: async () => ({ taxId: null, legalName: null }),
                 validate: () => {},
                 seal: async () => {},
               },
@@ -190,6 +192,13 @@ it.each(["en", "es"] as const)(
       }))
         await fill(`setup-admin-screen [data-test=${key}]`, value);
       await click("setup-admin-screen [data-test=next]");
+      await page.locator("setup-cert-screen [data-test=pfx] input[type=file]").setInputFiles({
+        name: "synthetic.p12",
+        mimeType: "application/x-pkcs12",
+        buffer: Buffer.from("synthetic"),
+      });
+      await fill("setup-cert-screen [data-test=passphrase]", "synthetic");
+      await click("setup-cert-screen [data-test=next]");
       for (const [key, value] of Object.entries({
         taxId: "50000000R",
         legalName: "Olivo SL",
@@ -203,13 +212,6 @@ it.each(["en", "es"] as const)(
       await page.locator("setup-venue-screen [data-test=province] input").fill("Madrid");
       await page.getByRole("option", { name: "Madrid", exact: true }).click();
       await click("setup-venue-screen [data-test=next]");
-      await page.locator("setup-cert-screen [data-test=pfx] input[type=file]").setInputFiles({
-        name: "synthetic.p12",
-        mimeType: "application/x-pkcs12",
-        buffer: Buffer.from("synthetic"),
-      });
-      await fill("setup-cert-screen [data-test=passphrase]", "synthetic");
-      await click("setup-cert-screen [data-test=next]");
       await click("setup-fiscal-test-screen [data-test=run]");
       await click("setup-fiscal-test-screen [data-test=continue]");
       for (const [key, value] of Object.entries({

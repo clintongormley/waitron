@@ -316,7 +316,9 @@ async function modeDraft(mode: "demo" | "prepare" | "live" = "prepare") {
   (mounted.el as unknown as State).draft.mode = mode;
   await edit(mounted.admin, "email", "submitted@example.com");
   mounted.admin.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!.click();
-  await expect.poll(() => (mounted.el as unknown as State).screen).toBe("venue");
+  await expect
+    .poll(() => (mounted.el as unknown as State).screen)
+    .toBe(mode === "live" ? "cert" : "venue");
   patchRoot(mounted.el, {
     venue: {
       legalName: "Casa Alba",
