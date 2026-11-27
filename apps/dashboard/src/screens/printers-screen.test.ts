@@ -4350,43 +4350,52 @@ it("steps through the sorted and filtered queue, skipping jobs without a printou
   ]);
 });
 
-it("ignores a late printout after stepping and retries the failed read", async () => {
-  const liveData = new LiveData();
-  const api = Object.assign(stubApi(), { liveData });
-  const getPreview = vi.mocked(api.getPrintJobPreview);
-  const sample = await api.getPrintJobPreview("sample");
-  let finish!: (preview: Awaited<typeof sample>) => void;
-  getPreview
-    .mockResolvedValueOnce(sample)
-    .mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
-    .mockRejectedValueOnce({ code: "server.internal" });
-  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
-  await flush(el);
-  q(el, "[data-test=view-job-j1]")!.click();
-  await flush(el);
-  const next = q(el, "[data-test=preview-next]");
-  expect(next).not.toBeNull();
-  next!.click();
-  await flush(el);
-  expect(q(el, "dashboard-print-job-preview")!.shadowRoot!.querySelector(".paper")).toBeNull();
-  q(el, "[data-test=preview-previous]")!.click();
-  await flush(el);
-  finish(sample);
-  vi.mocked(api.listRecentJobs).mockResolvedValue([{ ...jobs[0]!, status: "printing" }, jobs[1]!]);
-  liveData.invalidate([{ type: "print_jobs", id: "j1" }]);
-  await vi.waitFor(() =>
-    expect(text(el, "[data-test=preview-status]")).toBe(jobStatusName("printing")),
-  );
-  expect(text(el, "[data-test=preview-error]")).toBe(codeMessage("server.internal"));
-  expect(q(el, "dashboard-print-job-preview")!.shadowRoot!.querySelector(".paper")).toBeNull();
-  next!.click();
-  await flush(el);
-  expect(q(el, "[data-test=preview-error]")).toBeNull();
-  expect(
-    (q(el, "dashboard-print-job-preview") as HTMLElementTagNameMap["dashboard-print-job-preview"])
-      .preview,
-  ).toEqual(sample);
-});
+it.each([false, true])(
+  "ignores a late printout answer after stepping (refused: %s)",
+  async (refused) => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const getPreview = vi.mocked(api.getPrintJobPreview);
+    const sample = await api.getPrintJobPreview("sample");
+    let finish!: () => void;
+    const late = new Promise<Awaited<typeof sample>>((resolve, reject) => {
+      finish = () => (refused ? reject({ code: "printer.not_visible" }) : resolve(sample));
+    });
+    getPreview
+      .mockResolvedValueOnce(sample)
+      .mockReturnValueOnce(late)
+      .mockRejectedValueOnce({ code: "server.internal" });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    q(el, "[data-test=view-job-j1]")!.click();
+    await flush(el);
+    const next = q(el, "[data-test=preview-next]");
+    expect(next).not.toBeNull();
+    next!.click();
+    await flush(el);
+    expect(q(el, "dashboard-print-job-preview")!.shadowRoot!.querySelector(".paper")).toBeNull();
+    q(el, "[data-test=preview-previous]")!.click();
+    await flush(el);
+    finish();
+    vi.mocked(api.listRecentJobs).mockResolvedValue([
+      { ...jobs[0]!, status: "printing" },
+      jobs[1]!,
+    ]);
+    liveData.invalidate([{ type: "print_jobs", id: "j1" }]);
+    await vi.waitFor(() =>
+      expect(text(el, "[data-test=preview-status]")).toBe(jobStatusName("printing")),
+    );
+    expect(text(el, "[data-test=preview-error]")).toBe(codeMessage("server.internal"));
+    expect(q(el, "dashboard-print-job-preview")!.shadowRoot!.querySelector(".paper")).toBeNull();
+    next!.click();
+    await flush(el);
+    expect(q(el, "[data-test=preview-error]")).toBeNull();
+    expect(
+      (q(el, "dashboard-print-job-preview") as HTMLElementTagNameMap["dashboard-print-job-preview"])
+        .preview,
+    ).toEqual(sample);
+  },
+);
 
 it("reprints the selected preview and returns the keyboard to the printout", async () => {
   const api = stubApi();
@@ -6235,6 +6244,7 @@ it("shows office printer holds and allows viewing uncertain invoice pages", asyn
     lastError: null,
   };
   const held = { ...office, id: "held-page", status: "printing", printerHold: "paper_out" };
+  const cover = { ...held, id: "cover-open-page", printerHold: "cover_open" };
   const queued = { ...held, id: "queued-page", status: "queued" };
   const printing = { ...held, id: "printing-page", printerHold: null };
   const failed = { ...office, id: "failed-page", status: "failed", lastError: "printer_refused" };
@@ -6243,7 +6253,7 @@ it("shows office printer holds and allows viewing uncertain invoice pages", asyn
   const liveData = new LiveData();
   const listRecentJobs = vi
     .fn()
-    .mockResolvedValue([held, queued, printing, failed, switched, uncertain]);
+    .mockResolvedValue([held, cover, queued, printing, failed, switched, uncertain]);
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi({ liveData, listRecentJobs }),
   });
@@ -6251,6 +6261,8 @@ it("shows office printer holds and allows viewing uncertain invoice pages", asyn
   expect(text(el, "[data-test=job-wait-held-page]")).toBe(
     "Back office is out of paper. Add paper and it will print.",
   );
+  expect(text(el, "[data-test=job-wait-cover-open-page]")).toContain("Back office");
+  expect(text(el, "[data-test=job-wait-cover-open-page]")).toContain("a cover is open");
   expect(text(el, "[data-test=job-status-held-page]")).toBe("Held");
   expect(text(el, "[data-test=job-status-queued-page]")).toBe("Held");
   expect(text(el, "[data-test=job-status-printing-page]")).toBe("Printing");
@@ -13765,6 +13777,39 @@ describe("one table for every printer", () => {
     expect(printed()).toContain("18:15");
     expect(api.listPagePrinters).toHaveBeenCalledTimes(reads);
   });
+
+  it.each([
+    ["pending", "pp1", "pp2"],
+    ["lastPrint", "pp2", "pp1"],
+  ] as const)(
+    "sorts office printers by %s when some totals are still missing",
+    async (column, first, second) => {
+      const { el } = await mountTable({
+        listPagePrinterSummaries: vi.fn().mockResolvedValue([
+          { ...PAGE_ROWS[0], pendingJobs: 2, lastPrintAt: "2026-11-25T14:00:00Z" },
+          { ...PAGE_ROWS[1], pendingJobs: 8, lastPrintAt: "2026-11-24T14:00:00Z" },
+        ]),
+      });
+      const sort = table(el).shadowRoot!.querySelector<HTMLButtonElement>(
+        `button[data-sort=${column}]`,
+      )!;
+      await userEvent.click(sort);
+      const shown = () =>
+        [
+          ...table(el).shadowRoot!.querySelectorAll(
+            '[data-test="printer-row-pp1"], [data-test="printer-row-pp2"]',
+          ),
+        ].map((row) => row.getAttribute("data-test"));
+      await vi.waitFor(() =>
+        expect(shown()).toEqual([`printer-row-${first}`, `printer-row-${second}`]),
+      );
+      await userEvent.click(sort);
+      await vi.waitFor(() =>
+        expect(shown()).toEqual([`printer-row-${second}`, `printer-row-${first}`]),
+      );
+      expect(textOf(el, "[data-test=page-printer-pending-pp3]")).toBe("—");
+    },
+  );
 
   it("keeps the row menu in a pinned actions column for both kinds", async () => {
     const { el } = await mountTable();

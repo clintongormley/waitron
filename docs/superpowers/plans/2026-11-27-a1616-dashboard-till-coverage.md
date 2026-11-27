@@ -30,3 +30,11 @@ report requests. Finish and land the branch, then run full `ci.yml` on main and 
 SHA because local V8 coverage and the CI shard merge measure through different paths.
 
 Estimate 0 production lines and 250–400 test lines, plus this plan.
+
+The watcher cleared a split on 27 November at 04:20 CET if the remaining dashboard
+coverage needed more than about 900 net test lines. The first pull request adds the
+tested dashboard and till cases. On nightly 45927524956, replaying those cases
+recovers 45 dashboard statements and 68 branches and brings the till to 98.01% statements.
+The dashboard still needs 12 statements and 24 branches in that replay. Close the
+remaining gap in a second test-only pull request, then verify both coverage jobs
+in a full run on main.

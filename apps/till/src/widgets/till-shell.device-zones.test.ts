@@ -388,6 +388,22 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     await vi.waitFor(() =>
       expect(more().shadowRoot!.activeElement).toBe(more().shadowRoot!.querySelector("button")),
     );
+    floor.zones = [
+      ...floor.zones,
+      { ...floor.zones[0]!, id: "patio", name: "Patio", displayOrder: 1 },
+    ];
+    await floor.updateComplete;
+    const zones = bar()!.querySelector("wt-row-actions[data-floor-zone-chooser]")!;
+    await userEvent.click(zones.shadowRoot!.querySelector("button")!);
+    await vi.waitFor(() => expect(zones.shadowRoot!.querySelector(":popover-open")).not.toBeNull());
+    await page.viewport(800, 844);
+    await vi.waitFor(() => {
+      expect(bar()).toBeNull();
+      expect(floor.shadowRoot!.activeElement).toBe(
+        floor.shadowRoot!.querySelector('[data-zone="room"]'),
+      );
+      expect(floor.shadowRoot!.activeElement).not.toBeNull();
+    });
   } finally {
     await page.viewport(1280, 900);
   }

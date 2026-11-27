@@ -616,6 +616,31 @@ describe("the menu editor's heading", () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])(
+    "keeps the current section when opening clashes (guard present: %s)",
+    async (guarded) => {
+      const sectionPath = `${LUNCH_PATH}/section/m-drinks`;
+      const el = await mount(
+        api(async () => ({ ...CHANGED, clashes: 2 })),
+        sectionPath,
+      );
+      if (guarded) {
+        const guard = new NavigationGuard(window, { isDirty: () => false, request: vi.fn() });
+        onTestFinished(() => guard.dispose());
+      }
+      await vi.waitFor(() => expect(location.pathname).toBe(sectionPath));
+      await userEvent.click(clashWords(el)!);
+      await vi.waitFor(() => expect(location.pathname).toBe(`${sectionPath}/filter/clashes`));
+      await userEvent.click(clashWords(el)!);
+      const table = q<HTMLElementTagNameMap["dashboard-menu-structure-table"]>(
+        el,
+        "dashboard-menu-structure-table",
+      )!.shadowRoot!.querySelector("wt-data-table")!;
+      await vi.waitFor(() => expect(table.filterValues("price")).toEqual(["clashes"]));
+      expect(location.pathname).toBe(`${sectionPath}/filter/clashes`);
+    },
+  );
+
   it.each(MODIFIERS)(
     "leaves a click on the clash words with %s held to the browser",
     async (modifier) => {
