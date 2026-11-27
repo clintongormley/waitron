@@ -193,6 +193,7 @@ export class TillMenuBrowser extends LitElement {
         grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-4);
         align-content: start;
+        container-type: inline-size;
       }
 
       .menu-toolbar,
@@ -220,6 +221,29 @@ export class TillMenuBrowser extends LitElement {
           display: grid;
           grid-column: 2 / -1;
           grid-template-columns: subgrid;
+        }
+      }
+
+      /* Below 360 px the picker takes its own line above the search, giving the menu's name the
+         toolbar's width. */
+      @container (width < 360px) {
+        .menu-toolbar[data-menu-picker] {
+          flex-wrap: wrap;
+        }
+
+        .menu-toolbar[data-menu-picker] ::slotted([slot="menu-picker"]) {
+          flex-basis: 100%;
+        }
+
+        @supports (grid-template-columns: subgrid) {
+          .menu-toolbar[data-menu-picker] {
+            grid-template-columns: minmax(0, 1fr) auto;
+          }
+
+          .menu-toolbar[data-menu-picker] ::slotted([slot="menu-picker"]),
+          .menu-toolbar[data-menu-picker] [data-region="search"] {
+            grid-column: 1 / -1;
+          }
         }
       }
 
