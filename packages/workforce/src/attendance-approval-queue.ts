@@ -5,6 +5,7 @@ import type { AttendanceDayApprovalTarget, AttendanceManagerQueue } from "./atte
 import { projectCorrectionItems } from "./attendance-responses.js";
 import { maySelfApproveAttendance } from "./corrections.js";
 import { approvalsForPerson, writeAttendanceDayApproval } from "./day-approvals.js";
+import { groupByPerson } from "./projection.js";
 import { entryDate } from "./record-period.js";
 import { recordRoot } from "./record-projection.js";
 import { readRecordedEntries } from "./record-reads.js";
@@ -20,34 +21,31 @@ async function readManagerQueue(tx: Transaction) {
       item.status === "waiting-worker" ||
       item.status === "disputed",
   );
-  const pendingByPerson = Map.groupBy(items, (item) => item.personId);
+  const pendingByPerson = groupByPerson(items);
   const byId = new Map(entries.map((entry) => [entry.entryId, entry]));
   const days = new Map(
-    Array.from(
-      Map.groupBy(entries, (entry) => entry.personId),
-      ([personId, own]) => {
-        const openChanges = pendingByPerson.get(personId)?.flatMap((item) => item.history) ?? [];
-        const days = approvalsForPerson(own);
-        if (openChanges.length === 0) return [personId, days];
-        const dateByRoot = new Map<string, string>();
-        for (const [date, { times }] of days) {
-          for (const time of times) dateByRoot.set(recordRoot(time, byId).entryId, date);
-        }
-        const workDays = [...days];
-        for (const entry of openChanges) {
-          const linkedDate = dateByRoot.get(recordRoot(entry, byId).entryId);
-          // A missing time can fall inside an overnight shift without being linked to an entry.
-          const enclosingDate =
-            linkedDate ??
-            workDays.find(
-              ([, { times }]) =>
-                entry.eventAt >= times[0]!.eventAt && entry.eventAt <= times.at(-1)!.eventAt,
-            )?.[0];
-          days.delete(enclosingDate ?? entryDate(entry));
-        }
-        return [personId, days];
-      },
-    ),
+    Array.from(groupByPerson(entries), ([personId, own]) => {
+      const openChanges = pendingByPerson.get(personId)?.flatMap((item) => item.history) ?? [];
+      const days = approvalsForPerson(own);
+      if (openChanges.length === 0) return [personId, days];
+      const dateByRoot = new Map<string, string>();
+      for (const [date, { times }] of days) {
+        for (const time of times) dateByRoot.set(recordRoot(time, byId).entryId, date);
+      }
+      const workDays = [...days];
+      for (const entry of openChanges) {
+        const linkedDate = dateByRoot.get(recordRoot(entry, byId).entryId);
+        // A missing time can fall inside an overnight shift without being linked to an entry.
+        const enclosingDate =
+          linkedDate ??
+          workDays.find(
+            ([, { times }]) =>
+              entry.eventAt >= times[0]!.eventAt && entry.eventAt <= times.at(-1)!.eventAt,
+          )?.[0];
+        days.delete(enclosingDate ?? entryDate(entry));
+      }
+      return [personId, days];
+    }),
   );
   return { items, days };
 }
