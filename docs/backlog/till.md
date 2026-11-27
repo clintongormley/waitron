@@ -3,14 +3,14 @@
 The open entries are listed in [the backlog](../backlog.md), under "The till, devices and table service". This file holds
 their full text.
 
-## A1569. The till's sold-out window needs a design with the owner
+## A1569. Dish information and sold-out wording on the till
 
 On hold until the device screens are reviewed (owner, 2026-11-24). The owner had seen the dish
 information window in a picture and could not find it on the till. Holding an available dish's
 tile opens its information. The tile has no visible cue for that gesture.
 
-A1622 moved the availability actions to the dashboard. This entry still tracks how staff find
-dish information.
+On the till, a sold-out tile and a blocked basket line both say **Sold out**. The dashboard's
+product row says **Unavailable**.
 
 ## The table screen's redundant exit configuration was not audited
 

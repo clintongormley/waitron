@@ -77,6 +77,7 @@ opening draft, matched by choice id. The server fills omitted existing flags fro
 labels and defaults new choices to available; explicit booleans still apply and null is refused.
 The form retains full values for saved and discarded drafts. When another dashboard save changes
 availability while a form is open, an unrelated save preserves the choice's stored flag.
+You can save an inactive list with every choice unavailable.
 
 The till keeps every published modifier row in `modifierAvailability` so a held line can refresh
 its extras' allergen information even after an extra sells out. The ordering picker uses the
