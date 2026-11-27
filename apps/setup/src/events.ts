@@ -56,7 +56,11 @@ export interface RestoreRequestDetail extends RecoveryRestoreCredentials {
   oldBoxGone: boolean;
 }
 
-/** What the shell keeps of a refused request to draw it again: never its recovery details. */
+/**
+ * What the shell keeps, in page memory only, of a refused request to draw it again: never its
+ * recovery operation or a separate node key. A file restore keeps its master key, so the form can
+ * be sent again.
+ */
 export type KeptRestoreRequest = Omit<RestoreRequestDetail, keyof RecoveryRestoreCredentials>;
 
 export function dispatchRestoreRequested(el: EventTarget, request: RestoreRequestDetail): void {
@@ -77,7 +81,11 @@ export interface BucketRestoreRequestDetail extends RecoveryRestoreCredentials {
   venueConfirmed: string | null;
 }
 
-/** What the shell keeps of a refused request to draw it again: never its recovery details. */
+/**
+ * What the shell keeps, in page memory only, of a refused request to draw it again: never its
+ * recovery operation or a separate node key. A file restore keeps its master key, so the form can
+ * be sent again.
+ */
 export type KeptBucketRestoreRequest = Omit<
   BucketRestoreRequestDetail,
   keyof RecoveryRestoreCredentials

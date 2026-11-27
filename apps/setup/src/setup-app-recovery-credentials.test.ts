@@ -23,7 +23,7 @@ const credentials = {
   nodeRecoverySecret: "node-key-secret",
 };
 it.each(["archive", "bucket"])(
-  "drops the entered node key from a refused %s request",
+  "drops the recovery operation and node key from a refused %s request, keeping a file's master key on purpose",
   async (kind) => {
     const api = new SetupApi("https://box.example.test", async (input, init) => {
       const request = new Request(input, init);
@@ -60,7 +60,8 @@ it.each(["archive", "bucket"])(
             kind === "archive"
               ? {
                   artifact: new File(["encrypted"], "copy.backup"),
-                  masterKey: "archive-key",
+                  // One field: the master key that opens the file also authorises.
+                  masterKey: credentials.nodeRecoverySecret,
                   environment: "production",
                   oldBoxGone: true,
                   ...credentials,
@@ -87,8 +88,9 @@ it.each(["archive", "bucket"])(
     expect(kept).toBeDefined();
     expect(kept!.nodeRecoverySecret).toBeUndefined();
     expect(kept!.recoveryOperation).toBeUndefined();
+    // Kept in page memory only, so a file restore can be sent again without typing the key.
     expect(kind === "archive" ? kept!.masterKey : kept!.kit).toBe(
-      kind === "archive" ? "archive-key" : "outside-bucket-kit",
+      kind === "archive" ? credentials.nodeRecoverySecret : "outside-bucket-kit",
     );
   },
 );

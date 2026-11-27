@@ -212,8 +212,8 @@ export async function typeMasterKey(host: HTMLElement, text: string): Promise<vo
 }
 
 /**
- * Enters `record` and `nodeKey` on a `setup-recovery-allocation` and ticks both of its
- * confirmations.
+ * Enters `record`, and `nodeKey` where the allocation asks for it, on a `setup-recovery-allocation`
+ * and ticks both of its confirmations.
  */
 export async function enterRecoveryDetails(
   entry: HTMLElement,
@@ -230,7 +230,8 @@ export async function enterRecoveryDetails(
     input.dispatchEvent(new Event("change"));
   };
   change("record", JSON.stringify(record));
-  await typeMasterKey(entry, nodeKey);
+  // A file's master key also authorises, so no field asks for it there.
+  if (entry.shadowRoot!.querySelector("wt-master-key-input")) await typeMasterKey(entry, nodeKey);
   tick("isolated");
   tick("retained");
   await (entry as Updating).updateComplete;

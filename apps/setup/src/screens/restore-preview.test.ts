@@ -4,7 +4,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { SetupApi } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, typeMasterKey } from "../widgets/test-helpers.js";
+import { encodeMasterKeyCode } from "@waitron/shared";
 import { SetupRestoreScreen } from "./restore-screen.js";
 
 const saved = {
@@ -20,19 +21,16 @@ afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
 });
+const KEY = encodeMasterKeyCode(new Uint8Array(16).fill(5));
 const child = (screen: SetupRestoreScreen) =>
   screen.shadowRoot!.querySelector<LitElement>("setup-recovery-copy");
 async function fill(
   screen: SetupRestoreScreen,
   file = new File(["encrypted-copy"], "selected.backup"),
-  key = "archive-secret",
+  key = KEY,
 ) {
   chooseFiles(screen.shadowRoot!.querySelector("[data-test=artifact]")!, file);
-  const input = screen
-    .shadowRoot!.querySelector("[data-test=recovery-key]")!
-    .shadowRoot!.querySelector<HTMLInputElement>("input")!;
-  input.value = key;
-  input.dispatchEvent(new Event("input"));
+  await typeMasterKey(screen, key);
   await screen.updateComplete;
   await child(screen)?.updateComplete;
 }
@@ -45,7 +43,7 @@ async function mount(fetchImpl: typeof fetch) {
 function review(screen: SetupRestoreScreen) {
   child(screen)!.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
 }
-it("shows the selected backup's key name and date without exposing the archive encryption key", async () => {
+it("shows the selected backup's key name and date without exposing the typed master key", async () => {
   const { el } = await mount(async () => new Response(JSON.stringify(saved)));
   await fill(el);
   expect(child(el)).not.toBeNull();
@@ -58,26 +56,25 @@ it("shows the selected backup's key name and date without exposing the archive e
   expect(text).toContain("Saved venue");
   expect(text).not.toContain(t("restore.preview_older_key"));
   expect(text).not.toContain(t("restore.preview_keep_keys"));
-  expect(text).not.toContain(t("restore.preview_key_separate"));
-  expect(text).not.toContain("archive-secret");
-  expect(child(el)!.outerHTML).not.toContain("archive-secret");
+  expect(text).not.toContain(KEY);
+  expect(child(el)!.outerHTML).not.toContain(KEY);
 });
 it.each([
   [
     "en-GB",
     "An older backup brings back its older master key.",
     "Keep older master keys until no older backup remains.",
-    "The backup encryption key opens the copy. The master key authorises recovery.",
+    "encryption key",
   ],
   [
     "es-ES",
     "Una copia antigua recupera la clave maestra de entonces.",
     "Conserva las claves maestras antiguas mientras queden copias que las necesiten.",
-    "La clave de cifrado de copias abre la copia. La clave maestra autoriza la restauración.",
+    "cifrado",
   ],
 ] as const)(
-  "tells the %s review of a filing backup that the master key authorises recovery",
-  async (locale, older, keep, separate) => {
+  "tells the %s review of a filing backup about older master keys, and names no second key",
+  async (locale, older, keep, backupKeyWord) => {
     setLocale(locale);
     const { el } = await mount(
       async () =>
@@ -99,10 +96,10 @@ it.each([
     const text = child(el)!.shadowRoot!.textContent!.replace(/\s+/g, " ");
     expect(text).toContain(older);
     expect(text).toContain(keep);
-    expect(text).toContain(separate);
+    expect(text).not.toContain(backupKeyWord);
   },
 );
-it("waits for a file and encryption key before it can review", async () => {
+it("waits for a file and master key before it can review", async () => {
   const transport = vi.fn(async () => new Response(JSON.stringify(saved)));
   const { el } = await mount(transport);
   expect(child(el)).not.toBeNull();
@@ -264,8 +261,8 @@ it("shows a refusal beside the review action and allows another attempt", async 
   const transport = vi
     .fn()
     .mockResolvedValueOnce(
-      new Response(JSON.stringify({ error: { code: "recovery.passphrase_invalid" } }), {
-        status: 422,
+      new Response(JSON.stringify({ error: { code: "promotion.break_glass_invalid" } }), {
+        status: 400,
       }),
     )
     .mockResolvedValue(new Response(JSON.stringify(saved)));
@@ -275,14 +272,33 @@ it("shows a refusal beside the review action and allows another attempt", async 
   await vi.waitFor(() =>
     expect(
       child(el)!.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent,
-    ).toContain("Check the backup encryption key."),
+    ).toContain("Check the master key."),
   );
   expect(
-    el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-test=recovery-key]")!
-      .error,
-  ).toBe("Check the backup encryption key.");
+    el.shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-test=master-key]")!.error,
+  ).toBe("Check the master key.");
   review(el);
   await vi.waitFor(() => expect(child(el)!.shadowRoot!.textContent).toContain("Amber Hill"));
+});
+
+it.each([
+  ["recovery.passphrase_invalid", 422],
+  ["setup.request_invalid", 400],
+] as const)("shows a %s Review refusal under the field it is about", async (code, status) => {
+  const params = code === "setup.request_invalid" ? { field: "masterKey" } : undefined;
+  const { el } = await mount(async () =>
+    Response.json({ error: { code, ...(params ? { params } : {}) } }, { status }),
+  );
+  await fill(el);
+  review(el);
+  const field = (name: string) =>
+    el.shadowRoot!.querySelector<HTMLElement & { error: string }>(`[data-test=${name}]`)!;
+  const [refused, other, line] =
+    code === "recovery.passphrase_invalid"
+      ? ["artifact", "master-key", "Check the backup file."]
+      : ["master-key", "artifact", "Check the master key."];
+  await vi.waitFor(() => expect(field(refused).error).toBe(line));
+  expect(field(other).error).toBe("");
 });
 
 it.each(["en-GB", "es-ES"])(

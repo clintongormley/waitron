@@ -310,7 +310,7 @@ async function reloadOntoHeldFirstSetup(): Promise<void> {
  * screen's `#<name>-error` paragraph. */
 function messageUnder(screen: HTMLElement, name: string): string | null {
   const field = screen.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-    `:is(wt-file-input, wt-input, wt-textarea, wt-combobox)[data-test="${name}"]`,
+    `:is(wt-file-input, wt-master-key-input, wt-input, wt-textarea, wt-combobox)[data-test="${name}"]`,
   );
   if (field !== null) return field.error;
   return screen.shadowRoot!.querySelector(`#${name}-error`)?.textContent ?? null;
@@ -4961,7 +4961,7 @@ describe("restoring a backup file whose old server may still be running", () => 
   );
 
   it.each([
-    ["recovery.passphrase_invalid", {}, "recoveryKey", "Check the backup encryption key."],
+    ["recovery.passphrase_invalid", {}, "artifact", "Check the backup file."],
     [
       "restore.environment_mismatch",
       { backup: "preproduction", target: "production" },
@@ -4969,16 +4969,11 @@ describe("restoring a backup file whose old server may still be running", () => 
       "The backup comes from the other environment. Choose the environment it came from.",
     ],
     ["setup.request_invalid", { field: "artifact" }, "artifact", "Check the backup file."],
-    [
-      "setup.request_invalid",
-      { field: "masterKey" },
-      "recoveryKey",
-      "Check the backup encryption key.",
-    ],
+    ["setup.request_invalid", { field: "masterKey" }, "masterKey", "Check the master key."],
     [
       "promotion.break_glass_invalid",
       { masterKeyId: "ab".repeat(16), keyNumber: 2, keyName: "2026-11-02 · QZJV" },
-      "recoveryKey",
+      "masterKey",
       "Wrong master key. Use the one dated 2026-11-02 · QZJV.",
     ],
     [
@@ -4997,13 +4992,34 @@ describe("restoring a backup file whose old server may still be running", () => 
       await flush(el);
       const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
       expect(screen.invalidField).toBe(field);
-      const id = field === "recoveryKey" ? "recovery-key" : field;
+      const id = field === "masterKey" ? "master-key" : field;
       expect(messageUnder(screen, id)).toBe(message);
       expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
       const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
         disabled: boolean;
       };
       expect(button.disabled).toBe(false);
+    },
+  );
+
+  it.each([
+    [{}, "Check the master key."],
+    [{ keyName: "2026-11-02 · QZJV" }, "Wrong master key. Use the one dated 2026-11-02 · QZJV."],
+  ])(
+    "shows a refused authorisation %o under the one master-key field when that key was the authorisation",
+    async (params, message) => {
+      const el = await mountSetupApp(
+        stubApi({
+          restore: vi
+            .fn()
+            .mockRejectedValue({ code: "promotion.break_glass_invalid", params, status: 400 }),
+        }),
+      );
+      restoreRequest(el, { ...backup, masterKey: REVIEWED_CREDENTIALS.nodeRecoverySecret });
+      await flush(el);
+      const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
+      expect(screen.invalidField).toBe("masterKey");
+      expect(messageUnder(screen, "master-key")).toBe(message);
     },
   );
 
@@ -6595,7 +6611,7 @@ describe("a recovery request refused because another setup holds the server", ()
     const host = (await screenHost(el, screen)) as HTMLElement & Record<string, unknown>;
     if (source === "archive") {
       host.artifact = new File(["encrypted selected copy"], "backup.waitron");
-      host.recoveryKey = "archive password";
+      host.masterKey = "archive password";
     } else if (source === "bucket") host.kit = "private selected kit";
     await (host as unknown as LitElement).updateComplete;
     const copy = host.shadowRoot!.querySelector<LitElement>("setup-recovery-copy")!;

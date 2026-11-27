@@ -73,7 +73,7 @@ export class SetupRecoveryCopy extends LitElement {
   @property({ attribute: false }) api: SetupApi = new SetupApi();
   @property({ attribute: false }) boxAddress?: string;
   @property({ attribute: false }) artifact?: File;
-  @property({ attribute: false }) recoveryKey = "";
+  @property({ attribute: false }) masterKey = "";
   @property() environment: "production" | "preproduction" = "production";
   @property({ attribute: false }) bucketKit?: string;
   @property({ attribute: false }) cloudPointId?: string;
@@ -154,7 +154,7 @@ export class SetupRecoveryCopy extends LitElement {
         eventId,
         api: this.api,
         id: this.api
-          .stageRecovery(this.artifact!, this.recoveryKey, this.environment, eventId)
+          .stageRecovery(this.artifact!, this.masterKey, this.environment, eventId)
           .then(({ stagedId }) => stagedId),
       };
       staged.id.catch(() => {
@@ -186,7 +186,7 @@ export class SetupRecoveryCopy extends LitElement {
         [
           "api",
           "artifact",
-          "recoveryKey",
+          "masterKey",
           "environment",
           "bucketKit",
           "cloudPointId",
@@ -222,7 +222,7 @@ export class SetupRecoveryCopy extends LitElement {
   #notifyRefusal(cause?: ApiError): void {
     const field =
       this.error === "key"
-        ? "recoveryKey"
+        ? "masterKey"
         : this.error === "environment"
           ? "environment"
           : this.error === "file"
@@ -265,7 +265,7 @@ export class SetupRecoveryCopy extends LitElement {
       ? this.bucketKit.trim() !== ""
       : this.cloudPointId !== undefined
         ? this.cloudPointId !== ""
-        : this.artifact !== undefined && this.recoveryKey !== "";
+        : this.artifact !== undefined && this.masterKey !== "";
   }
 
   /** As the Review backup button does. */
@@ -281,7 +281,7 @@ export class SetupRecoveryCopy extends LitElement {
     const selectionId = this.selectionId;
     const oldBoxGone = this.oldBoxGone;
     const api = this.api;
-    const recoveryKey = this.recoveryKey;
+    const masterKey = this.masterKey;
     const environment = this.environment;
     const attempt = ++this.#attempt;
     const current = () =>
@@ -293,7 +293,7 @@ export class SetupRecoveryCopy extends LitElement {
       this.selectionId === selectionId &&
       this.oldBoxGone === oldBoxGone &&
       this.artifact === artifact &&
-      this.recoveryKey === recoveryKey &&
+      this.masterKey === masterKey &&
       this.environment === environment;
     this.busy = true;
     this.error = undefined;
@@ -306,7 +306,7 @@ export class SetupRecoveryCopy extends LitElement {
           ? await api.previewBucketRestore(bucketKit, environment, oldBoxGone)
           : cloudPointId !== undefined
             ? await api.previewCloudRestore(cloudPointId)
-            : await api.previewRestore(artifact!, recoveryKey, environment);
+            : await api.previewRestore(artifact!, masterKey, environment);
       if (current() && preview.fiscalSelection !== undefined && !preview.nodeRecoveryKeyName) {
         this.error = "noMasterKey";
         this.#notifyRefusal();
@@ -329,12 +329,13 @@ export class SetupRecoveryCopy extends LitElement {
               ? "interrupted"
               : error?.code === "restore.archive_resource_limit"
                 ? "capacity"
-                : error?.code === "recovery.passphrase_invalid" || field === "recoveryKey"
+                : error?.code === "promotion.break_glass_invalid" || field === "masterKey"
                   ? "key"
                   : error?.code === "restore.environment_mismatch" || field === "environment"
                     ? "environment"
                     : error?.code === "backup.artifact_invalid" ||
                         error?.code === "backup.archive_invalid" ||
+                        error?.code === "recovery.passphrase_invalid" ||
                         field === "artifact"
                       ? "file"
                       : error?.code === "backup.stream_kit_invalid" || field === "kit"
@@ -359,7 +360,7 @@ export class SetupRecoveryCopy extends LitElement {
       Pick<
         SetupRecoveryCopy,
         | "artifact"
-        | "recoveryKey"
+        | "masterKey"
         | "environment"
         | "bucketKit"
         | "cloudPointId"
@@ -431,8 +432,7 @@ export class SetupRecoveryCopy extends LitElement {
                 preview.fiscalSelection === undefined
                   ? nothing
                   : html`<p>${t("restore.preview_older_key")}</p>
-                      <p>${t("restore.preview_keep_keys")}</p>
-                      <p>${t("restore.preview_key_separate")}</p>`
+                      <p>${t("restore.preview_keep_keys")}</p>`
               }
               <setup-recovery-allocation
                 @recovery-edit-details=${(event: Event) => {
@@ -440,6 +440,11 @@ export class SetupRecoveryCopy extends LitElement {
                   this.#invalidate();
                 }}
                 .preview=${preview}
+                .masterKey=${
+                  this.bucketKit === undefined && this.cloudPointId === undefined
+                    ? this.masterKey
+                    : undefined
+                }
                 .prepare=${this.#prepare}
                 .boxAddress=${this.boxAddress}
                 .errorMessage=${this.errorMessage}

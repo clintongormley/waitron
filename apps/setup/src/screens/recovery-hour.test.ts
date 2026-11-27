@@ -85,7 +85,7 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
   const artifact = new File(["encrypted selected copy"], "backup.waitron");
   const source =
     kind === "archive"
-      ? { artifact, recoveryKey: "archive password", environment: "production" as const }
+      ? { artifact, masterKey: "archive password", environment: "production" as const }
       : kind === "bucket"
         ? {
             bucketKit: "private selected kit",
@@ -187,7 +187,7 @@ it.each(["archive", "bucket", "cloud"] as const)(
     }
     if (kind === "bucket") el.bucketKit = "different kit";
     else if (kind === "cloud") el.selectionId = "approval-2";
-    else el.recoveryKey = "different password";
+    else el.masterKey = "different password";
     expect(el.readCredentials()).toBeNull();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("setup-recovery-allocation")).toBeNull();

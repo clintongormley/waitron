@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
 import { SetupApi } from "../api/client.js";
 import {
+  REVIEWED_CREDENTIALS,
   REVIEWED_PREVIEW,
   cleanupWidgets,
   expectNoA11yViolations,
   mountWidget,
+  typeMasterKey,
 } from "../widgets/test-helpers.js";
 import "./restore-screen.js";
 import type { SetupRestoreScreen } from "./restore-screen.js";
@@ -96,11 +98,7 @@ describe.each(["light", "dark"] as const)("setup-restore-screen a11y (%s theme)"
       el.shadowRoot!.querySelector("[data-test=artifact]")!,
       new File(["encrypted"], "waitron.backup"),
     );
-    const key = el
-      .shadowRoot!.querySelector("[data-test=recovery-key]")!
-      .shadowRoot!.querySelector("input")!;
-    key.value = "recovery-key";
-    key.dispatchEvent(new Event("input"));
+    await typeMasterKey(el, REVIEWED_CREDENTIALS.nodeRecoverySecret);
     await el.updateComplete;
     const copy = el.shadowRoot!.querySelector("setup-recovery-copy")! as HTMLElement & {
       updateComplete: Promise<unknown>;

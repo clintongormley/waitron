@@ -511,7 +511,7 @@ function recoveryCredentials({
 
 const RESTORE_FIELD_CODES: Record<string, RestoreField> = {
   "promotion.break_glass_invalid": "nodeRecoverySecret",
-  "recovery.passphrase_invalid": "recoveryKey",
+  "recovery.passphrase_invalid": "artifact",
   "restore.environment_mismatch": "environment",
 };
 
@@ -519,18 +519,21 @@ const RESTORE_FIELD_PATHS: Record<string, RestoreField> = {
   recoveryOperation: "recoveryOperation",
   nodeRecoverySecret: "nodeRecoverySecret",
   artifact: "artifact",
-  masterKey: "recoveryKey",
+  masterKey: "masterKey",
   environment: "environment",
 };
 
 /** The master key that does not open the file is refused naming the file's key number; one that
- * opens it but does not authorise the restore is refused without it. */
+ * opens it but does not authorise the restore is refused without it, and belongs to the field
+ * that typed the authorisation: a separate node key's, or else the one master-key field. */
 function restoreRefusedField(
   code: unknown,
   params: Record<string, unknown> | undefined,
+  request: RestoreRequestDetail,
 ): RestoreField | undefined {
-  return code === "promotion.break_glass_invalid" && params?.keyNumber !== undefined
-    ? "recoveryKey"
+  return code === "promotion.break_glass_invalid" &&
+    (params?.keyNumber !== undefined || request.nodeRecoverySecret === request.masterKey)
+    ? "masterKey"
     : refusedField(code, params, RESTORE_FIELD_CODES, RESTORE_FIELD_PATHS);
 }
 
@@ -559,7 +562,7 @@ const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
   recoveryOperation: "restore.allocation_invalid",
   nodeRecoverySecret: "restore.allocation_key_missing",
   artifact: "restore.check.backup_file",
-  recoveryKey: "restore.check.recovery_key",
+  masterKey: "restore.check.master_key",
   environment: "restore.check.environment",
 };
 
@@ -591,7 +594,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
   "restore.stream_state_missing": "shell.bucket.state_missing",
   "restore.identity_unknown": "shell.bucket.identity_unknown",
   "restore.administrator_password_missing": "shell.restore.administrator_password_missing",
-  // One sentence for all three, as the command line gives (`DECRYPT_PHASE_CODES`,
+  // One sentence for each of these, as the command line gives (`DECRYPT_PHASE_CODES`,
   // apps/server/src/restore-command.ts).
   "recovery.passphrase_invalid": "shell.bucket.unopenable",
   "backup.artifact_invalid": "shell.bucket.unopenable",
@@ -2334,7 +2337,7 @@ export class SetupApp extends LitElement {
         this.restoreLiveSince = undefined;
         this.restoreLiveUnknown = true;
       } else {
-        this.restoreInvalidField = restoreRefusedField(code, params);
+        this.restoreInvalidField = restoreRefusedField(code, params, request);
         const finishKey =
           manifestRefusalKey(code, params) ?? finishRefusalKey(error, "shell.clock_step_unsaved");
         this.restoreError =

@@ -31,10 +31,8 @@ export const restoreEn = {
     "This backup holds no master key, so it cannot be restored. Choose a newer backup.",
   "restore.preview_older_key": "An older backup brings back its older master key.",
   "restore.preview_keep_keys": "Keep older master keys until no older backup remains.",
-  "restore.preview_key_separate":
-    "The backup encryption key opens the copy. The master key authorises recovery.",
   "restore.preview_kit_error": "Check the recovery pack or kit file.",
-  "restore.preview_key_error": "Check the backup encryption key.",
+  "restore.preview_key_error": "Check the master key.",
   "restore.preview_environment_error": "Check the backup environment.",
   "restore.preview_file_error": "Check the backup file.",
   "restore.preview_failed": "Couldn't review this backup.",
@@ -47,11 +45,7 @@ export const restoreEn = {
   "restore.backup_file_help_label": "Help with backup file",
   "restore.backup_file_help": "Choose the encrypted backup from the box you are recovering.",
   "restore.backup_file_missing": "Choose a backup file.",
-  "restore.recovery_key": "Backup encryption key",
-  "restore.recovery_key_hint": "The key that unlocks this backup",
-  "restore.recovery_key_missing": "Enter the backup encryption key.",
-  "restore.show_recovery_key": "Show backup encryption key",
-  "restore.hide_recovery_key": "Hide backup encryption key",
+  "restore.master_key_missing": "Enter the master key.",
   "restore.environment": "Backup environment",
   "restore.environment_help_label": "Help with backup environment",
   "restore.environment_help":
@@ -69,7 +63,7 @@ export const restoreEn = {
   "restore.review_first":
     "Press Review backup and enter the recovery details it asks for before you restore.",
   "restore.check.backup_file": "Check the backup file.",
-  "restore.check.recovery_key": "Check the backup encryption key.",
+  "restore.check.master_key": "Check the master key.",
   "restore.check.environment": "Check the backup environment.",
   "restore.back": "Back",
   "restore.submit": "Restore backup",
@@ -233,10 +227,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.preview_older_key": "Una copia antigua recupera la clave maestra de entonces.",
   "restore.preview_keep_keys":
     "Conserva las claves maestras antiguas mientras queden copias que las necesiten.",
-  "restore.preview_key_separate":
-    "La clave de cifrado de copias abre la copia. La clave maestra autoriza la restauración.",
   "restore.preview_kit_error": "Revisa el paquete de recuperación o el archivo del kit.",
-  "restore.preview_key_error": "Revisa la clave de cifrado de copias.",
+  "restore.preview_key_error": "Revisa la clave maestra.",
   "restore.preview_environment_error": "Revisa el entorno de la copia.",
   "restore.preview_file_error": "Revisa el archivo de copia.",
   "restore.preview_failed": "No se ha podido revisar esta copia.",
@@ -251,11 +243,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.backup_file_help":
     "Elige la copia de seguridad cifrada del servidor que estás recuperando.",
   "restore.backup_file_missing": "Elige un archivo de copia de seguridad.",
-  "restore.recovery_key": "Clave de cifrado de copias",
-  "restore.recovery_key_hint": "La clave que abre esta copia",
-  "restore.recovery_key_missing": "Introduce la clave de cifrado de copias.",
-  "restore.show_recovery_key": "Mostrar la clave de cifrado de copias",
-  "restore.hide_recovery_key": "Ocultar la clave de cifrado de copias",
+  "restore.master_key_missing": "Escribe la clave maestra.",
   "restore.environment": "Entorno de la copia",
   "restore.environment_help_label": "Ayuda sobre el entorno de la copia",
   "restore.environment_help":
@@ -275,7 +263,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.review_first":
     "Pulsa Revisar copia e introduce los datos de recuperación que pide antes de restaurar.",
   "restore.check.backup_file": "Revisa el archivo de copia de seguridad.",
-  "restore.check.recovery_key": "Revisa la clave de cifrado de copias.",
+  "restore.check.master_key": "Revisa la clave maestra.",
   "restore.check.environment": "Revisa el entorno de la copia.",
   "restore.back": "Volver",
   "restore.submit": "Restaurar la copia",
