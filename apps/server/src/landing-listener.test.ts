@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { startLandingListener } from "./boot.js";
+import { startLandingListener } from "./landing-listener.js";
 import type { ServerConfig } from "./config.js";
 import type { Logger } from "./logger.js";
 import { retainHttpListener } from "./testing/retained-http-listener.js";

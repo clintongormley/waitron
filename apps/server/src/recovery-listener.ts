@@ -2,7 +2,7 @@ import { SECRETS_ENV_FILE, TLS_DIR } from "@waitron/store";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { AppError, readVariable } from "@waitron/shared";
-import { startLandingListener, type LandingListenerConfig } from "./boot.js";
+import { startLandingListener, type LandingListenerConfig } from "./landing-listener.js";
 import { BOX_HOSTNAME, BOX_LEAF_HOSTNAMES } from "./box-name.js";
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
