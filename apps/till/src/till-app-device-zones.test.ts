@@ -753,18 +753,117 @@ it("a click on another Counter zone is refused with basket lines and during a su
   expect(api.listZoneOffers).not.toHaveBeenCalled();
 });
 
-it("choosing a Counter zone from Floor opens Counter once and closes its checked list", async () => {
-  const { el, api } = await mount(selection(["bar", "shop", "room"], "room"), {
-    listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers("bar")),
-  });
-  expect(counter(el)).toBeNull();
-  const menu = shell(el).shadowRoot!.querySelector<HTMLElement>("[data-counter-zones]")!;
-  await (menu as TillShell).updateComplete;
-  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
-  await userEvent.click(menu.querySelector<HTMLElement>('[data-counter-zone="shop"]')!);
-  await vi.waitFor(() => expect(counter(el)?.selectedServiceZoneId).toBe("shop"));
-  expect(api.listZoneOffers).toHaveBeenCalledExactlyOnceWith("shop");
-  expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+it("choosing a Counter zone from wide Floor opens Counter once and closes its checked list", async () => {
+  await pageAt(1180, 820);
+  try {
+    const { el, api } = await mount(selection(["bar", "shop", "room"], "room"), {
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers("bar")),
+    });
+    expect(counter(el)).toBeNull();
+    const menu = shell(el).shadowRoot!.querySelector<HTMLElement>("[data-counter-zones]")!;
+    await (menu as TillShell).updateComplete;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    await userEvent.click(menu.querySelector<HTMLElement>('[data-counter-zone="shop"]')!);
+    await vi.waitFor(() => expect(counter(el)?.selectedServiceZoneId).toBe("shop"));
+    expect(api.listZoneOffers).toHaveBeenCalledExactlyOnceWith("shop");
+    expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+  } finally {
+    await resetPage();
+  }
+});
+
+it("opens the chosen narrow-floor counter after retrying a scoped offer read", async () => {
+  await pageAt(390, 844);
+  try {
+    const chosen = selection(["room", "bar", "shop"], "room");
+    const counterName = "Upstairs counter beside the terrace and the private dining room";
+    const namedZones = chosen.zones.map((zone) =>
+      zone.id === "shop" ? { ...zone, name: counterName } : zone,
+    );
+    const hidden = { ...zones[0]!, id: "patio", name: "Patio counter" };
+    const { el, api } = await mount(
+      { ...chosen, zones: [...namedZones, hidden] },
+      {
+        listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers("bar")),
+        listZoneOffers: vi
+          .fn(async (id: string) => zoneOffers(id))
+          .mockRejectedValueOnce(new Error("Offline")),
+      },
+    );
+    const chooser = await openZoneChooser(el);
+    const shop = page.getByRole("menuitem", { name: counterName, exact: true });
+    expect(shop.query()).not.toBeNull();
+    expect(page.getByRole("menuitem", { name: "Patio counter" }).query()).toBeNull();
+    shell(el).dispatchEvent(
+      new CustomEvent("counter-zone-selected", {
+        detail: { zoneId: "patio" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+
+    await shop.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+        "Could not load menus for this service area",
+      ),
+    );
+    expect(counter(el)).toBeNull();
+    expect(chooser.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+    await openZoneChooser(el);
+    await shop.click();
+    await vi.waitFor(() => expect(counter(el)?.selectedServiceZoneId).toBe("shop"));
+    expect(api.listZoneOffers.mock.calls).toEqual([["shop"], ["shop"]]);
+    const floor = page.getByRole("button", { name: "Floor", exact: true });
+    const floorButton = floor.element();
+    const { left, right, top, height } = floorButton.getBoundingClientRect();
+    const root = shell(el).shadowRoot!;
+    expect(root.elementFromPoint(left + 2, top + height / 2), "Floor's leading edge").toBe(
+      floorButton,
+    );
+    expect(root.elementFromPoint(right - 2, top + height / 2), "Floor's trailing edge").toBe(
+      floorButton,
+    );
+    const counterTrigger = page.getByRole("button", { name: `Counter: ${counterName}` }).element();
+    const label = root.querySelector<HTMLElement>("[data-counter-zones] [slot=trigger] span")!;
+    expect(counterTrigger.getBoundingClientRect().right).toBeLessThanOrEqual(left);
+    expect(label.scrollWidth).toBeGreaterThan(label.clientWidth);
+    expect(getComputedStyle(label).textOverflow).toBe("ellipsis");
+    await floor.click();
+    await vi.waitFor(() => expect(zoneChooser(el)?.label).toBe("Room"));
+  } finally {
+    await resetPage();
+  }
+});
+
+it("opens one prepared counter directly and keeps Parked and Waiting on the narrow floor", async () => {
+  await pageAt(390, 844);
+  try {
+    const { el, api } = await mount(selection(["room", "bar"], "room"), {
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers("bar")),
+    });
+    await openZoneChooser(el);
+    const bar = page.getByRole("menuitem", { name: "Bar", exact: true });
+    expect(bar.query()).not.toBeNull();
+    const initialReads = api.listDefaultZoneOffers.mock.calls.length;
+    await bar.click();
+    await vi.waitFor(() => expect(counter(el)?.selectedServiceZoneId).toBe("bar"));
+    expect(api.listZoneOffers).not.toHaveBeenCalled();
+    expect(api.listDefaultZoneOffers).toHaveBeenCalledTimes(initialReads);
+
+    for (const kind of ["parked", "waiting"] as const) {
+      await page.getByRole("tab", { name: "Floor", exact: true }).click();
+      await vi.waitFor(() => expect(zoneChooser(el)?.label).toBe("Room"));
+      await userEvent.click(
+        shell(el).shadowRoot!.querySelector<HTMLElement>(`[data-counter-orders="${kind}"]`)!,
+      );
+      await vi.waitFor(() => expect(counter(el)?.orderList).toBe(kind));
+    }
+  } finally {
+    await resetPage();
+  }
 });
 
 describe("picking a Counter zone while the basket has lines or an order is in flight", () => {
@@ -845,7 +944,8 @@ describe("picking a Counter zone while the basket has lines or an order is in fl
     const push = vi.spyOn(history, "pushState");
 
     try {
-      await pickZone(el, "bar");
+      await openZoneChooser(el);
+      await page.getByRole("menuitem", { name: "Bar", exact: true }).click();
 
       await vi.waitFor(() => expect(counter(el)).not.toBeNull());
       expect(push).toHaveBeenCalledOnce();

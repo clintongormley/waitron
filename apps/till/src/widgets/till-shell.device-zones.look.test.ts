@@ -135,10 +135,16 @@ for (const locale of ["en-GB", "es-ES"]) {
         await page.screenshot({
           path: `__screenshots__/a740-zones/floor-${locale}-${theme}-${width}.png`,
         });
-        const menu = el.shadowRoot!.querySelector<HTMLElement>("[data-counter-zones]")!;
-        await (menu as TillShell).updateComplete;
+        const menu = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+          narrow ? "[data-floor-zone-chooser]" : "[data-counter-zones]",
+        )!;
+        await menu.updateComplete;
         await userEvent.click(menu.shadowRoot!.querySelector("button")!);
         expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+        const counterRow = narrow ? "data-floor-counter-zone" : "data-counter-zone";
+        expect(
+          [...menu.querySelectorAll(`[${counterRow}]`)].map((row) => row.getAttribute(counterRow)),
+        ).toEqual(["bar", "shop"]);
         const popup = menu
           .shadowRoot!.querySelector<HTMLElement>("[popover]")!
           .getBoundingClientRect();

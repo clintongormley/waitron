@@ -7278,12 +7278,15 @@ for (const locale of ["en-GB", "es-ES"] as const)
             if (view.formFactor === "kds") {
               expect(shellRoot.querySelector("header")).toBeNull();
             } else if (width < 800 && view.name.endsWith("-floor")) {
-              await vi.waitFor(() =>
-                expect(
-                  shellRoot.querySelector("[data-floor-bar] [data-floor-zone-chooser]"),
-                ).not.toBeNull(),
-              );
-              expect(shellRoot.querySelectorAll(".tab")).toHaveLength(
+              const chooser = await vi.waitFor(() => {
+                const control = shellRoot.querySelector(
+                  "[data-floor-bar] [data-floor-zone-chooser]",
+                );
+                expect(control).not.toBeNull();
+                return control!;
+              });
+              expect(shellRoot.querySelectorAll(".tab")).toHaveLength(0);
+              expect(chooser.querySelectorAll("[data-floor-counter-zone]")).toHaveLength(
                 view.formFactor === "till" ? 1 : 0,
               );
             } else {

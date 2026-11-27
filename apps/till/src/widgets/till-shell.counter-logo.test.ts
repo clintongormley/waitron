@@ -78,9 +78,13 @@ function shown(el: TillShell): boolean {
   );
 }
 
-/** The span the strip's children take, which a sideways scroll does not change. */
+const stripItems = (el: TillShell) => [
+  ...strip(el).querySelectorAll(".tabs, [data-counter-orders], [data-open-transfers], .expo"),
+];
+
+/** The span the strip's controls take, which a sideways scroll does not change. */
 function content(el: TillShell): number {
-  const rects = [...strip(el).children].map((child) => child.getBoundingClientRect());
+  const rects = stripItems(el).map((item) => item.getBoundingClientRect());
   return Math.max(...rects.map((r) => r.right)) - Math.min(...rects.map((r) => r.left));
 }
 
@@ -88,7 +92,7 @@ const contentLeft = (el: TillShell) =>
   head(el).getBoundingClientRect().left + parseFloat(getComputedStyle(head(el)).paddingLeft);
 
 const childWidths = (el: TillShell) =>
-  [...strip(el).children].map((child) => child.getBoundingClientRect().width);
+  stripItems(el).map((item) => item.getBoundingClientRect().width);
 
 interface Baseline {
   hostWidth: number;

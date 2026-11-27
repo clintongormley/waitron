@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { currentHelpMode, setHelpMode, type WtRowActions } from "@waitron/ui";
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
@@ -196,7 +196,10 @@ it("the next person signs in with help off", async () => {
   expect(currentHelpMode()).toBe(false);
 });
 
-it("help stays on between Counter and Floor", async () => {
+it("help stays on between Counter and Floor", async ({ onTestFinished }) => {
+  const viewport = [innerWidth, innerHeight] as const;
+  onTestFinished(() => page.viewport(...viewport));
+  await page.viewport(390, 844);
   const el = await mount({
     getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture(["zone-counter"], ["zone-floor"])),
   });
@@ -210,7 +213,9 @@ it("help stays on between Counter and Floor", async () => {
   await userEvent.click(tab("Floor"));
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-floor-screen")).not.toBeNull());
   expect(currentHelpMode()).toBe(true);
-  await userEvent.click(tab("Counter"));
+  const chooser = bar.shadowRoot!.querySelector("[data-floor-zone-chooser]")!;
+  await userEvent.click(chooser.shadowRoot!.querySelector("button")!);
+  await page.getByRole("menuitem", { name: "zone-counter", exact: true }).click();
   await vi.waitFor(() =>
     expect(el.shadowRoot!.querySelector("till-counter-screen")).not.toBeNull(),
   );

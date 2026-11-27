@@ -26,6 +26,7 @@ import { countText, currentLocale, t } from "../i18n/t.js";
 import type { TillFloorScreen } from "../screens/till-floor-screen.js";
 import {
   floorBarStyles,
+  floorControls,
   floorDeviceRows,
   floorHoursRows,
   floorMenuSection,
@@ -58,6 +59,7 @@ import "@waitron/ui/src/components/wt-menu-row.js";
 import "@waitron/ui/src/components/wt-venue-logo.js";
 import "@waitron/ui/src/components/wt-powered-by.js";
 import { PHONE_WIDTH, chooserStyles } from "./chooser-styles.js";
+import { counterHeaderStyles, counterStripItems } from "./counter-header-styles.js";
 import { edgeFadeStyles, markOverflow, oncePerFrame } from "./edge-fade.js";
 import { themeChooser, themeLabels } from "./theme-chooser.js";
 import "./guide-sheet.js";
@@ -269,20 +271,6 @@ export class TillShell extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .till-strip {
-        display: flex;
-        flex: 1;
-        min-width: 0;
-        overflow-x: auto;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
-      .till-strip > * {
-        flex: none;
-      }
-      .head.phone .till-strip .tabs {
-        flex: none;
-      }
       .head:has(.till-strip) .operator {
         max-width: calc(var(--wt-tap-min) * 6);
       }
@@ -359,17 +347,6 @@ export class TillShell extends LitElement {
       .tab[aria-selected="true"],
       .tab[aria-pressed="true"],
       .bar-table[aria-selected="true"] {
-        background: var(--wt-color-surface-raised);
-        border-color: var(--wt-color-border);
-      }
-
-      [data-counter-zones]::part(trigger) {
-        min-height: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      [data-counter-zones][data-active]::part(trigger) {
         background: var(--wt-color-surface-raised);
         border-color: var(--wt-color-border);
       }
@@ -521,6 +498,7 @@ export class TillShell extends LitElement {
         background: var(--wt-color-bg);
       }
     `,
+    counterHeaderStyles,
   ];
 
   @property() formFactor: FormFactor = "till";
@@ -688,6 +666,7 @@ export class TillShell extends LitElement {
     void this.#settled().then(() => this.#watchHiddenBelow());
     this.#observe();
     if (this.formFactor === "till") {
+      this.#overflowFrame.schedule();
       this.#observeCounter();
       void this.#measureCounterLogo();
       return;
@@ -766,8 +745,8 @@ export class TillShell extends LitElement {
   }
 
   #markOverflow(): void {
-    const strip = this.renderRoot.querySelector<HTMLElement>(".head .bar-tables");
-    if (strip) markOverflow(strip);
+    for (const strip of this.renderRoot.querySelectorAll<HTMLElement>(".head .edge-fade"))
+      markOverflow(strip);
   }
 
   /** A failed logo's box retries only while it is on the page, so while the bar leaves the logo out
@@ -816,6 +795,7 @@ export class TillShell extends LitElement {
           // The bar can move when the shell resizes without changing the bar's height.
           if (this.#floorControls) measureFloorControls(this.#floorControls);
           if (this.formFactor === "till") {
+            this.#overflowFrame.schedule();
             void this.#measureCounterLogo();
             continue;
           }
@@ -935,9 +915,14 @@ export class TillShell extends LitElement {
    * notifications are being delivered is a ResizeObserver loop. */
   #observeCounter(): void {
     if (!this.isConnected) return;
-    this.#counterObserver ??= new ResizeObserver(() => void this.#measureCounterLogo());
+    this.#counterObserver ??= new ResizeObserver(() => {
+      this.#overflowFrame.schedule();
+      void this.#measureCounterLogo();
+    });
     const targets = new Set<Element>(
-      this.renderRoot.querySelectorAll(".head > .counter-logo, .head > .session, .till-strip > *"),
+      this.renderRoot.querySelectorAll(
+        `.head > .counter-logo, .head > .session, ${counterStripItems}`,
+      ),
     );
     for (const target of this.#counterTargets)
       if (!targets.has(target)) this.#counterObserver.unobserve(target);
@@ -1012,7 +997,9 @@ export class TillShell extends LitElement {
     }
     const logoWidth = box.getBoundingClientRect().width;
     const gap = parseFloat(getComputedStyle(head).columnGap) || 0;
-    const rects = [...strip.children].map((child) => child.getBoundingClientRect());
+    const rects = [...head.querySelectorAll(counterStripItems)].map((child) =>
+      child.getBoundingClientRect(),
+    );
     const content =
       rects.length === 0
         ? 0
@@ -1416,12 +1403,12 @@ export class TillShell extends LitElement {
     </wt-row-actions>`;
   }
 
-  #floorShortcuts(counterLabel: string): TemplateResult | typeof nothing {
+  #floorShortcuts(): TemplateResult | typeof nothing {
     const shortcuts =
       this.formFactor === "till"
         ? this.showCounter
           ? html`<div class="till-strip">
-              ${this.#primaryTabs(["counter"], undefined, true, counterLabel)}${this.#counterOrders("parked", this.parkedCount)}${this.#counterOrders("waiting", this.waitingCount)}
+              ${this.#counterOrders("parked", this.parkedCount)}${this.#counterOrders("waiting", this.waitingCount)}
             </div>`
           : nothing
         : this.barTables.length
@@ -1619,7 +1606,7 @@ export class TillShell extends LitElement {
               ?data-active=${screen === activeScreen}
               label=${counterLabel}
             >
-              <span slot="trigger">${`${counterLabel} ▾`}</span>
+              <span slot="trigger"><span>${counterLabel}</span> ▾</span>
               <div role="menu">
                 ${this.counterZones.map(
                   (zone) =>
@@ -1681,10 +1668,13 @@ export class TillShell extends LitElement {
     const activeScreen = screens.find((screen) => screen === requestedScreen) ?? screens[0];
     const counterMenu =
       this.formFactor === "till" && this.showCounter && this.counterZones.length > 1;
+    const narrowCounter =
+      this.phone && this.formFactor === "till" && activeScreen === "counter" && this.showFloor;
     const counterLabel = `${t("tab.counter")}: ${this.counterZones.find((zone) => zone.id === this.selectedCounterZoneId)?.name ?? ""}`;
+    const tabs = this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel);
     return html`
       <div class="shell">
-        ${bottomFloor ? this.#floorShortcuts(counterLabel) : nothing}
+        ${bottomFloor ? this.#floorShortcuts() : nothing}
         ${
           this.#barless() || bottomFloor || this.floorKitchenOpen
             ? this.#drawsCorner()
@@ -1694,17 +1684,25 @@ export class TillShell extends LitElement {
                 </div>`
               : nothing
             : html`
-                <header class=${this.phone ? "head phone" : "head"}>
+                <header
+                  class=${this.phone ? "head phone" : "head"}
+                  ?data-narrow-counter=${narrowCounter}
+                >
                   ${this.formFactor === "till" ? this.#counterLogo() : this.steps > 0 || this.phone ? nothing : this.#brandMark()}
                   ${
                     this.formFactor === "till"
-                      ? html`<div class="till-strip">
-                          ${this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel)}
-                          ${this.showCounter ? html`${this.#counterOrders("parked", this.parkedCount)}${this.#counterOrders("waiting", this.waitingCount)}` : nothing}
-                          ${this.transferAvailable ? html`<wt-button data-open-transfers variant="secondary" @click=${() => this.#emit("open-transfers")}>${t("department_transfer.short")}${this.transferCount === undefined ? nothing : html` <span role="status" data-test="department-transfers" aria-label=${this.#transferText()}>${this.transferCount}</span>`}</wt-button>` : nothing}
-                          ${this.affordances.includes("expo") ? html`<wt-button class="expo" variant="secondary" @click=${() => this.#emit("show-expo")}>${t("expo.open")}</wt-button>` : nothing}
+                      ? html`<div class=${narrowCounter ? "counter-navigation" : "till-strip"}>
+                          ${tabs}
+                          <div
+                            class=${narrowCounter ? "counter-shortcuts till-strip edge-fade" : "counter-shortcuts"}
+                            @scroll=${this.#overflowFrame.schedule}
+                          >
+                            ${this.showCounter ? html`${this.#counterOrders("parked", this.parkedCount)}${this.#counterOrders("waiting", this.waitingCount)}` : nothing}
+                            ${this.transferAvailable ? html`<wt-button data-open-transfers variant="secondary" @click=${() => this.#emit("open-transfers")}>${t("department_transfer.short")}${this.transferCount === undefined ? nothing : html` <span role="status" data-test="department-transfers" aria-label=${this.#transferText()}>${this.transferCount}</span>`}</wt-button>` : nothing}
+                            ${this.affordances.includes("expo") ? html`<wt-button class="expo" variant="secondary" @click=${() => this.#emit("show-expo")}>${t("expo.open")}</wt-button>` : nothing}
+                          </div>
                         </div>`
-                      : this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel)
+                      : tabs
                   }
                   <div class="session">
                     ${this.formFactor === "till" ? html`${this.#helpSwitch()}${this.#operatorMenu()}${this.#tillMenu()}` : html`${nameInMore ? nothing : this.#operatorMenu()}${this.#helpSwitch()}${this.#menu(nameInMore)}`}
@@ -1724,12 +1722,9 @@ export class TillShell extends LitElement {
         </div>
         ${
           bottomFloor
-            ? html`<div class="floor-controls">
-                ${bottomFloor.otherZoneLine()}
-                <footer data-floor-bar class="floor-bar">
-                  ${bottomFloor.footerControls({ choose: () => this.#emit("open-device-zones"), kitchen: this.floorKitchenRows, openKitchen: (stationId) => this.#emit(stationId === undefined ? "show-expo" : "show-station", { stationId, fromFloorChooser: true }) })}${this.#floorMenu(bottomFloor)}
-                </footer>
-              </div>`
+            ? floorControls(this, bottomFloor, this.#floorMenu(bottomFloor), (event, detail) =>
+                this.#emit(event, detail),
+              )
             : nothing
         }
       </div>
