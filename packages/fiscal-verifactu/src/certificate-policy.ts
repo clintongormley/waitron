@@ -85,10 +85,13 @@ function policies(der: Buffer): string[] {
     if (oid(der, fields[0]) !== CERTIFICATE_POLICIES) continue;
     const value = fields.at(-1)!;
     if (value.tag !== OCTET_STRING) throw new Malformed();
-    return children(der, only(der, value, SEQUENCE)).map((policy) => {
+    const found = children(der, only(der, value, SEQUENCE)).map((policy) => {
       if (policy.tag !== SEQUENCE) throw new Malformed();
       return oid(der, children(der, policy)[0]);
     });
+    // RFC 5280 §4.2.1.4: a policy OID must not appear more than once.
+    if (new Set(found).size !== found.length) throw new Malformed();
+    return found;
   }
   return [];
 }

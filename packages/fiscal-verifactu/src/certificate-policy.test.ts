@@ -220,6 +220,8 @@ describe("certificateKind", () => {
         "holds a policy that is a set",
         toDer(seq([create(0, Type.SET, true, [oid(QCP_L)])])).getBytes(),
       ],
+      ["names a seal policy twice", policies([QCP_L, QCP_L])],
+      ["names another policy twice beside a seal policy", policies([QCP_N, QCP_L, QCP_N])],
     ])("a policies extension that %s", (_label, value) => {
       const cert = certificate([extension("2.5.29.32", value)]);
       expect(() => certificateKind(cert)).not.toThrow();
