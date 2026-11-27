@@ -3,6 +3,7 @@ import type { TillSentOrders } from "./widgets/sent-orders.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import { openDraftLine, showView } from "./screens/till-table-order-screen.test-helpers.js";
 import {
+  billChoiceText,
   openPartyMenu,
   switchToBill,
 } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
@@ -442,8 +443,9 @@ describe("till-app: seating a party", () => {
 /** What the bill on screen's switcher row says it owes, and the table's still-to-pay in the foot. */
 function figures(el: TillApp) {
   const screen = tableOrder(el)!.shadowRoot!;
+  const bill = screen.querySelector('[data-switch-bill="wo-4"]');
   return {
-    toPay: screen.querySelector('[data-switch-bill="wo-4"] .bill-row-owes')?.textContent?.trim(),
+    toPay: bill ? billChoiceText(bill, "value") : undefined,
     stillToPay: screen.querySelector("[data-party-outstanding]")?.textContent,
   };
 }
@@ -2231,10 +2233,10 @@ describe("A803 name bill", () => {
     draftId: null,
     draftRevision: null,
   });
-  const billNameShown = (el: TillApp, billId: string) =>
-    tableOrder(el)!
-      .shadowRoot!.querySelector(`[data-switch-bill="${billId}"] .bill-row-label`)
-      ?.textContent?.trim();
+  const billNameShown = (el: TillApp, billId: string) => {
+    const bill = tableOrder(el)!.shadowRoot!.querySelector(`[data-switch-bill="${billId}"]`);
+    return bill ? billChoiceText(bill, "label") : undefined;
+  };
   const billWindow = (el: TillApp) =>
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement & { value: string; bill: string }>(
       "till-bill-name-dialog",

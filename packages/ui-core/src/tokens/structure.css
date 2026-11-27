@@ -43,6 +43,7 @@
   --wt-menu-row-height: 52px;
   --wt-menu-row-label-size: 1rem;
   --wt-menu-row-padding-start: 20px;
+  --wt-menu-row-gap: var(--wt-space-2);
   --wt-menu-row-value-gap: 6px;
   --wt-menu-sheet-bottom-offset: 0px;
   --wt-row-actions-bottom-offset: 0px;

@@ -6,7 +6,11 @@ import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { PartyBill, TableParty } from "../api/floor-api.js";
-import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  billChoiceText,
+  partyBill,
+  switcherParty,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const one = [partyBill("wo-1", 1, "38.50")];
 const three = [
@@ -33,11 +37,26 @@ async function mountScreen(
 const switcher = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-bill-switcher]");
 const closedLabel = (el: TillTableOrderScreen) =>
-  switcher(el)!.querySelector("[data-bill-switcher-label]")!.textContent!.trim();
+  [
+    ...switcher(el)!.querySelectorAll(
+      ".bill-switcher-name, .bill-switcher-amount, .bill-switcher-position",
+    ),
+  ]
+    .map((piece) => piece.textContent!.trim())
+    .join(" · ");
 /** The open list's items in order: each bill's row text, then "New bill". */
 const items = (el: TillTableOrderScreen) =>
-  [...switcher(el)!.querySelectorAll<HTMLElement>("[data-switch-bill], [data-new-bill]")].map(
-    (item) => item.textContent!.replace(/\s+/g, " ").trim(),
+  [...switcher(el)!.querySelectorAll("[data-switch-bill], [data-new-bill]")].map((item) =>
+    [
+      billChoiceText(item, "label"),
+      billChoiceText(item, "value"),
+      ...[...item.querySelectorAll(".bill-row-unsent, [data-bill-row-unsent-mark]")].map(
+        (note) => note.textContent,
+      ),
+    ]
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim(),
   );
 
 function capture(el: TillTableOrderScreen, type: string): unknown[] {
@@ -69,8 +88,8 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     const unselected = state('[data-switch-bill="wo-1"]')!;
     const selected = state('[data-switch-bill="wo-2"]')!;
     const add = state("[data-new-bill]")!;
-    expect(selected?.getAttribute("name")).toBe("menu-check");
-    expect(add?.getAttribute("name")).toBe("menu-add");
+    expect(selected?.getAttribute("name")).toBe("check");
+    expect(add?.getAttribute("name")).toBe("plus");
     expect(getComputedStyle(unselected).visibility).toBe("hidden");
     expect(unselected.getBoundingClientRect().width).toBe(selected.getBoundingClientRect().width);
     expect(selected.getBoundingClientRect().left).toBe(add.getBoundingClientRect().left);
@@ -96,7 +115,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     expect(items(el)).toEqual([
       "Bill 1 €67.00",
       "Bill 2 · Clint €54.00 Ana has an unsent order: 3 items",
-      "Bill 3 Paid ✓",
+      "Bill 3 Paid",
       "New bill",
     ]);
     const current = switcher(el)!.querySelector('[data-switch-bill="wo-1"]')!;
@@ -120,10 +139,10 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     const el = await mountScreen(bills, "wo-3");
 
     const trigger = switcher(el)!.querySelector<HTMLElement>('[slot="trigger"]')!;
-    expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe(
-      "Bill 3 · Deferred payment · 2 of 2 ▾",
-    );
+    expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe("Bill 3 Deferred payment 2 of 2");
     expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Deferred payment", "New bill"]);
+    const deferred = switcher(el)!.querySelector('[data-switch-bill="wo-3"] wt-menu-row')!;
+    expect(deferred.shadowRoot!.querySelector('wt-icon[name="check"]')).toBeNull();
   });
 
   it("the switcher shows an overpaid bill's excess, not an amount owed", async () => {
@@ -142,15 +161,15 @@ describe("A803 switcher: the table screen's bill switcher", () => {
 
     expect(closedLabel(el)).toBe("Bill 3 · Paid ✓ · 3 of 3");
     const trigger = switcher(el)!.querySelector<HTMLElement>('[slot="trigger"]')!;
-    expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe("Bill 3 · Paid ✓ · 3 of 3 ▾");
+    expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe("Bill 3 Paid ✓ 3 of 3");
     expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 3 · Paid · 3 of 3");
-    const marks = [...switcher(el)!.querySelectorAll<HTMLElement>("[data-paid-mark]")];
-    expect(
-      marks.map((mark) => [mark.textContent!.trim(), mark.getAttribute("aria-hidden")]),
-    ).toEqual([
-      ["✓", "true"],
-      ["✓", "true"],
-    ]);
+    expect(trigger.querySelector("[data-paid-mark]")!.getAttribute("aria-hidden")).toBe("true");
+    const row = switcher(el)!.querySelector('[data-switch-bill="wo-3"] wt-menu-row')!.shadowRoot!;
+    const tick = row.querySelector('wt-icon[name="check"]');
+    expect(tick?.shadowRoot?.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    expect(getComputedStyle(tick!).color).toBe(
+      getComputedStyle(row.querySelector(".value")!).color,
+    );
   });
 
   it("New bill is the last item with one bill and with three", async () => {
@@ -172,7 +191,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     const el = await mountScreen(merged, "wo-1");
 
     expect(closedLabel(el)).toBe("Bill 1 · €67.00 · 1 of 2");
-    expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Paid ✓", "New bill"]);
+    expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Paid", "New bill"]);
   });
 
   it("a table holding Bills 1 and 4 shows Bill 4 in position 2 of 2", async () => {
@@ -198,27 +217,143 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     const seen = capture(el, "new-bill");
     const newBill = () => switcher(el)!.querySelector<HTMLElement>("[data-new-bill]")!;
     expect(newBill().hasAttribute("aria-disabled")).toBe(false);
+    const paintedLabel = () =>
+      getComputedStyle(newBill().querySelector("wt-menu-row")!.shadowRoot!.querySelector(".label")!)
+        .color;
     const idle = getComputedStyle(newBill()).color;
+    expect(paintedLabel()).toBe(idle);
 
     el.newBillBusy = true;
     await el.updateComplete;
     newBill().click();
 
     expect(newBill().getAttribute("aria-disabled")).toBe("true");
-    expect(getComputedStyle(newBill()).color).not.toBe(idle);
+    expect(paintedLabel()).toBe(getComputedStyle(newBill()).color);
+    expect(paintedLabel()).not.toBe(idle);
     expect(seen).toEqual([]);
   });
 
-  it("uses shared choice spacing without losing the bill's two columns", async () => {
-    const el = await mountScreen(three, "wo-1");
-    el.style.setProperty("--wt-space-3", "23px");
-    await userEvent.click(switcher(el)!.shadowRoot!.querySelector("button")!);
-    const item = switcher(el)!.querySelector<HTMLElement>("[data-switch-bill]")!;
-    expect(getComputedStyle(item).paddingInlineStart).toBe("23px");
-    const label = item.querySelector(".bill-row-label")!.getBoundingClientRect();
-    const owes = item.querySelector(".bill-row-owes")!.getBoundingClientRect();
-    expect(label.right).toBeLessThan(owes.left);
-    expect(label.top).toBeLessThan(owes.bottom);
+  it("keeps the wide drop-down under its trigger and the amount clear of a long name", async () => {
+    await pageAt(820, 1180, 130);
+    try {
+      const billName = "W".repeat(40);
+      const el = await mountScreen([...one, partyBill("wo-2", 2, "54.00", { billName })], "wo-1");
+      const picker = switcher(el)!;
+      await expect.poll(() => picker.hasAttribute("bottom-sheet")).toBe(false);
+      const trigger = picker.shadowRoot!.querySelector("button")!;
+      await userEvent.click(trigger);
+      const popup = picker.shadowRoot!.querySelector("[popover]")!;
+      expect(popup.matches(":popover-open")).toBe(true);
+      const row = picker.querySelector('[data-switch-bill="wo-2"] wt-menu-row')!.shadowRoot!;
+      const label = row.querySelector(".label")!;
+      const owes = row.querySelector(".value")!;
+      expect(getComputedStyle(label).fontSize).toBe("18px");
+      expect(getComputedStyle(owes).fontSize).toBe("18px");
+      const bounds = popup.getBoundingClientRect();
+      expect(bounds.left).toBeCloseTo(trigger.getBoundingClientRect().left);
+      expect(bounds.width).toBeLessThanOrEqual(384);
+      expect(
+        owes.getBoundingClientRect().left - label.getBoundingClientRect().right,
+      ).toBeGreaterThanOrEqual(16);
+      expect(owes.getBoundingClientRect().right).toBeLessThan(bounds.right);
+    } finally {
+      await resetPage();
+    }
+  });
+
+  it("keeps the amount and position readable beside a long name on a phone", async () => {
+    await pageAt(390, 844);
+    try {
+      const el = await mountScreen(
+        [...one, partyBill("wo-2", 2, "54.00", { billName: "Birthday party by the window" })],
+        "wo-2",
+      );
+      const picker = switcher(el)!;
+      const trigger = picker.shadowRoot!.querySelector("button")!;
+      const label = picker.querySelector<HTMLElement>(".bill-switcher-name")!;
+      const amount = picker.querySelector<HTMLElement>(".bill-switcher-amount")!;
+      const position = picker.querySelector<HTMLElement>(".bill-switcher-position")!;
+      const arrow = picker.querySelector('[slot="trigger"] wt-icon[name="chevron-down"]')!;
+      expect(label?.textContent).toBe("Bill 2 · Birthday party by the window");
+      expect(amount.textContent!.trim()).toBe("€54.00");
+      expect(position.textContent).toBe("2 of 2");
+      expect(getComputedStyle(label).fontWeight).toBe("600");
+      expect(getComputedStyle(amount).fontWeight).toBe("400");
+      expect(getComputedStyle(amount).color).toBe(getComputedStyle(position).color);
+      expect(getComputedStyle(amount).color).not.toBe(getComputedStyle(label).color);
+      expect(parseFloat(getComputedStyle(position).fontSize)).toBeLessThan(
+        parseFloat(getComputedStyle(label).fontSize),
+      );
+      expect(amount.getBoundingClientRect().right).toBeLessThan(
+        position.getBoundingClientRect().left,
+      );
+      expect(position.getBoundingClientRect().right).toBeLessThan(
+        arrow.getBoundingClientRect().left,
+      );
+      expect(arrow.getBoundingClientRect().right).toBeLessThan(
+        trigger.getBoundingClientRect().right,
+      );
+      expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+    } finally {
+      await resetPage();
+    }
+  });
+
+  it("keeps the amount on one line beside a long name in the phone sheet", async () => {
+    await pageAt(390, 844, 130);
+    try {
+      const billName = "W".repeat(40);
+      const el = await mountScreen([...one, partyBill("wo-2", 2, "1234.56", { billName })], "wo-1");
+      const picker = switcher(el)!;
+      await userEvent.click(picker.shadowRoot!.querySelector("button")!);
+      const row = picker.querySelector('[data-switch-bill="wo-2"] wt-menu-row')!.shadowRoot!;
+      const amount = row.querySelector(".value")!;
+      expect(amount.textContent).toBe("€1,234.56");
+      expect(getComputedStyle(amount).fontSize).toBe("18px");
+      const text = document.createRange();
+      text.selectNodeContents(amount);
+      expect(text.getClientRects()).toHaveLength(1);
+    } finally {
+      await resetPage();
+    }
+  });
+
+  it("paints a named, divided sheet with roomy rows on a phone", async () => {
+    await pageAt(390, 844);
+    try {
+      const el = await mountScreen(three, "wo-2");
+      const picker = switcher(el)!;
+      await userEvent.click(picker.shadowRoot!.querySelector("button")!);
+      const sheet = picker.shadowRoot!.querySelector<HTMLElement>('[part="sheet"]')!;
+      const heading = picker.shadowRoot!.getElementById(sheet.getAttribute("aria-labelledby")!);
+      const rows = [...picker.querySelectorAll<HTMLElement>("[data-switch-bill]")];
+      expect(heading?.textContent).toBe("Bills on Table 4");
+      expect(getComputedStyle(heading!).textTransform).toBe("uppercase");
+      expect(getComputedStyle(sheet, "::before").width).toBe("40px");
+      expect(rows.map((row) => row.getBoundingClientRect().height)).toEqual([56, 56, 56]);
+      expect(getComputedStyle(rows[0]!).borderBlockEndWidth).toBe("1px");
+      const current = rows[1]!;
+      const icon = current.querySelector("wt-icon")!;
+      const row = current.querySelector("wt-menu-row")!.shadowRoot!.querySelector(".row")!;
+      expect(getComputedStyle(row).fontSize).toBe("16px");
+      expect(icon.getAttribute("name")).toBe("check");
+      const tick = icon.getBoundingClientRect();
+      expect(tick.width).toBe(20);
+      const { left, right } = sheet.getBoundingClientRect();
+      const labelStart = row.querySelector(".label")!.getBoundingClientRect().left;
+      expect(labelStart - left).toBe(50);
+      expect(tick.right).toBeLessThan(labelStart);
+      const value = row.querySelector(".value")!;
+      expect(value.textContent).toBe("€54.00");
+      expect(right - value.getBoundingClientRect().right).toBe(20);
+      const newBill = picker.querySelector("[data-new-bill]")!;
+      expect(newBill.getBoundingClientRect().height).toBe(56);
+      expect(sheet.getBoundingClientRect().bottom - newBill.getBoundingClientRect().bottom).toBe(
+        20,
+      );
+    } finally {
+      await resetPage();
+    }
   });
 
   it("the closed switcher is drawn with a border, as a secondary button is", async () => {
@@ -292,8 +427,11 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     const picker = switcher(el)!;
     await userEvent.click(picker.shadowRoot!.querySelector("button")!);
     const menu = picker.querySelector('[role="menu"]')!;
-    const title = picker.querySelector(`#${menu.getAttribute("aria-labelledby")}`);
-    expect(title?.textContent?.trim()).toBe(typeof heading === "function" ? heading() : heading);
+    const sheet = picker.shadowRoot!.querySelector('[role="dialog"]')!;
+    const title = picker.shadowRoot!.getElementById(sheet.getAttribute("aria-labelledby")!);
+    const expected = typeof heading === "function" ? heading() : heading;
+    expect(title?.textContent?.trim()).toBe(expected);
+    expect(menu.getAttribute("aria-label")).toBe(expected);
   });
 
   it("shows on a handheld too", async () => {
@@ -314,7 +452,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
 describe.each(["light", "dark"] as const)(
   "A803 switcher: the bill on screen in the %s theme",
   (theme) => {
-    it("the checked row's background differs from the open list's, and from an unchecked row's", async () => {
+    it("marks the current bill with a check and gives its row the same fill as other bills", async () => {
       const { el } = await mountWidget<TillTableOrderScreen>(
         "till-table-order-screen",
         { products: [], lines: [], orderId: "wo-2", party: switcherParty, bills: three },
@@ -328,9 +466,14 @@ describe.each(["light", "dark"] as const)(
         getComputedStyle(host.querySelector<HTMLElement>(selector)!).backgroundColor;
 
       expect(popup.matches(":popover-open")).toBe(true);
-      const checked = background('[data-switch-bill="wo-2"]');
-      expect(checked).not.toBe(getComputedStyle(popup).backgroundColor);
-      expect(checked).not.toBe(background('[data-switch-bill="wo-1"]'));
+      const checked = host.querySelector<HTMLElement>('[data-switch-bill="wo-2"]')!;
+      const other = '[data-switch-bill="wo-1"]';
+      expect(getComputedStyle(checked).backgroundColor).toBe(background(other));
+      await userEvent.hover(host.querySelector<HTMLElement>(other)!);
+      const hover = background(other);
+      await userEvent.hover(checked);
+      expect(checked.matches(":hover")).toBe(true);
+      expect(getComputedStyle(checked).backgroundColor).toBe(hover);
     });
   },
 );
@@ -345,7 +488,7 @@ it("switches the mounted bill by keyboard, updates its label and returns focus t
     el.orderId = (event as CustomEvent<{ workingOrderId: string }>).detail.workingOrderId;
   });
   await userEvent.click(trigger);
-  expect(trigger.getAttribute("aria-haspopup")).toBe("menu");
+  expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
   expect(el.shadowRoot!.activeElement).toBe(host.querySelector('[data-switch-bill="wo-1"]'));
   await userEvent.keyboard("{ArrowDown}{Enter}");
   await el.updateComplete;
@@ -398,7 +541,7 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
     const el = await mountFor([draft("wo-2", 2, "p-ana")]);
 
     expect(closedLabel(el)).toBe("Bill 1 · €67.00 · 1 of 3");
-    expect(triggerText(el)).toBe("Bill 1 · €67.00 · 1 of 3 ▾ Bill 2 unsent");
+    expect(triggerText(el)).toBe("Bill 1 €67.00 1 of 3 Bill 2 unsent");
     expect(switcher(el)!.getAttribute("label")).toBe(
       "Bills: Bill 1 · €67.00 · 1 of 3 · Bill 2 unsent",
     );
@@ -413,13 +556,13 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
     )!;
     expect(rowMark.textContent!.trim()).toBe("Unsent");
     expect(rowMark.querySelector("wt-icon")!.getAttribute("aria-hidden")).toBe("true");
-    expect(items(el)[1]).toBe("Bill 2 · Clint Unsent €54.00 Ana has an unsent order: 2 items");
+    expect(items(el)[1]).toBe("Bill 2 · Clint €54.00 Unsent Ana has an unsent order: 2 items");
   });
 
   it("another person's draft on Bill 2 draws no mark", async () => {
     const el = await mountFor([draft("wo-2", 2, "p-clint")]);
 
-    expect(triggerText(el)).toBe("Bill 1 · €67.00 · 1 of 3 ▾");
+    expect(triggerText(el)).toBe("Bill 1 €67.00 1 of 3");
     expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 1 · €67.00 · 1 of 3");
     expect(markedRows(el)).toEqual([]);
   });
@@ -427,7 +570,7 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
   it("this person's draft on the bill on screen only draws no mark", async () => {
     const el = await mountFor([draft("wo-1", 1, "p-ana")]);
 
-    expect(triggerText(el)).toBe("Bill 1 · €67.00 · 1 of 3 ▾");
+    expect(triggerText(el)).toBe("Bill 1 €67.00 1 of 3");
     expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 1 · €67.00 · 1 of 3");
     expect(markedRows(el)).toEqual([]);
   });
@@ -435,14 +578,14 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
   it("a draft of this person's with no lines draws no mark", async () => {
     const el = await mountFor([draft("wo-2", 2, "p-ana", 0)]);
 
-    expect(triggerText(el)).toBe("Bill 1 · €67.00 · 1 of 3 ▾");
+    expect(triggerText(el)).toBe("Bill 1 €67.00 1 of 3");
     expect(markedRows(el)).toEqual([]);
   });
 
   it("two other bills: the closed switcher says 2 bills unsent and both rows are marked", async () => {
     const el = await mountFor([draft("wo-3", 3, "p-ana"), draft("wo-2", 2, "p-ana")], "wo-1");
 
-    expect(triggerText(el)).toBe("Bill 1 · €67.00 · 1 of 3 ▾ 2 bills unsent");
+    expect(triggerText(el)).toBe("Bill 1 €67.00 1 of 3 2 bills unsent");
     expect(switcher(el)!.getAttribute("label")).toBe(
       "Bills: Bill 1 · €67.00 · 1 of 3 · 2 bills unsent",
     );
@@ -453,7 +596,7 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
     setLocale("es");
     const one = await mountFor([draft("wo-2", 2, "p-ana")]);
 
-    expect(triggerText(one)).toBe("Cuenta 1 · 67,00 € · 1 de 3 ▾ Cuenta 2 sin enviar");
+    expect(triggerText(one)).toBe("Cuenta 1 67,00 € 1 de 3 Cuenta 2 sin enviar");
     expect(
       switcher(one)!
         .querySelector('[data-switch-bill="wo-2"] [data-bill-row-unsent-mark]')!
@@ -462,7 +605,7 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
     cleanupWidgets();
 
     const two = await mountFor([draft("wo-2", 2, "p-ana"), draft("wo-3", 3, "p-ana")]);
-    expect(triggerText(two)).toBe("Cuenta 1 · 67,00 € · 1 de 3 ▾ 2 cuentas sin enviar");
+    expect(triggerText(two)).toBe("Cuenta 1 67,00 € 1 de 3 2 cuentas sin enviar");
   });
 
   describe("on a phone, embedded in the till", () => {
@@ -498,21 +641,21 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
       const sw = box(switcher(el)!);
       const menu = box(el.shadowRoot!.querySelector("[data-table-menu]")!);
 
-      expect(triggerText(el)).toBe("Cuenta 1 · 67,00 € · 1 de 3 ▾ Cuenta 2 sin enviar");
+      expect(triggerText(el)).toBe("Cuenta 1 67,00 € 1 de 3 Cuenta 2 sin enviar");
       expect(Math.abs(middle(menu) - middle(sw))).toBeLessThanOrEqual(1);
       expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
     });
 
-    // CI's Linux fonts draw this row about a fifth wider than macOS's, enough to wrap it at 360 wide.
-    it("480 wide, in English, where there is room, the closed label and the mark stay on one line beside the ⋮", async () => {
+    it("480 wide, the unsent hint has its own line and the ⋮ stays beside the picker", async () => {
       const el = await mountPhone(480);
       const closed = box(trigger(el).querySelector(".bill-switcher-closed")!);
       const mark = box(trigger(el).querySelector("[data-unsent-mark]")!);
       const sw = box(switcher(el)!);
       const menu = box(el.shadowRoot!.querySelector("[data-table-menu]")!);
 
-      expect(mark.left).toBeGreaterThanOrEqual(closed.right);
-      expect(Math.abs(middle(mark) - middle(closed))).toBeLessThanOrEqual(1);
+      expect(mark.top).toBeGreaterThan(closed.bottom);
+      expect(mark.left).toBeGreaterThanOrEqual(closed.left);
+      expect(mark.right).toBeLessThanOrEqual(sw.right);
       expect(Math.abs(middle(menu) - middle(sw))).toBeLessThanOrEqual(1);
       expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
     });

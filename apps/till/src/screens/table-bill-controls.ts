@@ -1,5 +1,6 @@
 import { type TemplateResult, css, html, nothing } from "lit";
 import "@waitron/ui/src/components/wt-icon.js";
+import "@waitron/ui/src/components/wt-menu-row.js";
 import { actionChoiceStyles } from "@waitron/ui/src/components/wt-row-actions.js";
 import { decimal, formatMoney, TABLE_SEPARATOR } from "@waitron/shared";
 import type { PartyBill, TableParty } from "../api/floor-api.js";
@@ -17,14 +18,9 @@ function owes(bill: PartyBill): string {
       });
 }
 
-/** The ✓ drawn after "Paid"; the word alone is what is read out. */
-function paidMark(bill: PartyBill | undefined): TemplateResult | typeof nothing {
-  return bill?.status === "settled" && bill.deferred !== true
-    ? html`<span data-paid-mark aria-hidden="true"> ✓</span>`
-    : nothing;
+function isPaid(bill: PartyBill | undefined): boolean {
+  return bill?.status === "settled" && bill.deferred !== true;
 }
-
-const chevron = html`<span aria-hidden="true"> ▾</span>`;
 
 const unsentIcon = html`<wt-icon name="floor-unsent" aria-hidden="true"></wt-icon>`;
 
@@ -52,32 +48,25 @@ function unsentWords(marked: readonly PartyBill[]): string {
     : fill(t("table.unsent_bills"), { n: String(marked.length) });
 }
 
-/** One bill's row in the switcher: its short label, what it owes, and who has unsent dishes on it.
- * `marked` adds the Unsent mark after the label. */
-export function billRowContent(bill: PartyBill, party: TableParty, marked = false): TemplateResult {
+function billUnsentDetails(bill: PartyBill, party: TableParty, marked: boolean): TemplateResult {
   const unsent = party.unsentDrafts.filter((draft) => draft.billId === bill.workingOrderId);
-  return html`<span class="bill-row-head"
-      ><span class="bill-row-label"
-        >${billLabel(bill)}${
-          marked
-            ? html` <span class="bill-unsent-mark" data-bill-row-unsent-mark
-                >${unsentIcon}${t("floor.unsent_mark")}</span
-              >`
-            : nothing
-        }</span
-      >
-      <span class="bill-row-owes">${owes(bill)}${paidMark(bill)}</span></span
-    >
-    ${unsent.map(
-      (draft) =>
-        html`<span class="bill-row-unsent"
-          >${named(
-            draft.ownerName,
-            countText(draft.lineCount, "floor.unsent_owner", "floor.unsent_owner_one"),
-            countText(draft.lineCount, "floor.unsent", "floor.unsent_one"),
-          )}</span
-        >`,
-    )}`;
+  return html`${
+    marked
+      ? html`<span class="bill-unsent-mark" data-bill-row-unsent-mark
+          >${unsentIcon}${t("floor.unsent_mark")}</span
+        >`
+      : nothing
+  }
+  ${unsent.map(
+    (draft) =>
+      html`<span class="bill-row-unsent"
+        >${named(
+          draft.ownerName,
+          countText(draft.lineCount, "floor.unsent_owner", "floor.unsent_owner_one"),
+          countText(draft.lineCount, "floor.unsent", "floor.unsent_one"),
+        )}</span
+      >`,
+  )}`;
 }
 
 function billSheetHeading(party: TableParty): string {
@@ -116,45 +105,62 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
   const bills = shownBills(options.bills);
   const index = bills.findIndex((bill) => bill.workingOrderId === billId);
   const shown = bills[index];
-  const closed =
-    shown === undefined ? t("table.bills_title") : `${billLabel(shown)} · ${owes(shown)}`;
+  const name = shown === undefined ? t("table.bills_title") : billLabel(shown);
+  const amount = shown === undefined ? undefined : owes(shown);
   const position =
     shown !== undefined && bills.length > 1
-      ? ` · ${fill(t("table.bill_position"), { position: String(index + 1), count: String(bills.length) })}`
-      : "";
+      ? fill(t("table.bill_position"), { position: String(index + 1), count: String(bills.length) })
+      : undefined;
   const heading = bottomSheet ? billSheetHeading(party) : undefined;
   const marked = othersUnsent(bills, party, billId, options.personId);
   const words = marked.length === 0 ? undefined : unsentWords(marked);
-  const label = shown === undefined ? closed : `${t("table.bills_title")}: ${closed}${position}`;
+  const label = [
+    amount === undefined ? name : `${t("table.bills_title")}: ${name}`,
+    amount,
+    position,
+    words,
+  ]
+    .filter((piece) => piece !== undefined)
+    .join(" · ");
   return html`<wt-row-actions
     class="bill-switcher"
     data-bill-switcher
     .bottomSheet=${bottomSheet}
+    sheet-variant="menu"
+    sheet-heading=${heading ?? nothing}
     opens-below
-    label=${words === undefined ? label : `${label} · ${words}`}
+    label=${label}
   >
-    <span slot="trigger" class="bill-switcher-trigger"
-      ><span class="bill-switcher-closed"
-        ><span data-bill-switcher-label>${closed}${paidMark(shown)}${position}</span
-        >${chevron}</span
-      >${
+    <span slot="trigger" class="bill-switcher-trigger">
+      <span class="bill-switcher-closed">
+        <span class="bill-switcher-caption">
+          <span class="bill-switcher-name">${name}</span>
+          ${
+            amount === undefined
+              ? nothing
+              : html`<span class="bill-switcher-amount"
+                  >${amount}${
+                    isPaid(shown)
+                      ? html`<span data-paid-mark aria-hidden="true"> ✓</span>`
+                      : nothing
+                  }</span
+                >`
+          }
+        </span>
+        ${
+          position === undefined
+            ? nothing
+            : html`<span class="bill-switcher-position">${position}</span>`
+        }
+        <wt-icon name="chevron-down" size="lg" aria-hidden="true"></wt-icon>
+      </span>
+      ${
         words === undefined
           ? nothing
-          : html` <span class="bill-unsent-mark" data-unsent-mark>${unsentIcon}${words}</span>`
-      }</span
-    >
-    <div
-      role="menu"
-      class="bill-switcher-menu"
-      aria-labelledby=${heading === undefined ? nothing : "bill-switcher-heading"}
-    >
-      ${
-        heading === undefined
-          ? nothing
-          : html`<div id="bill-switcher-heading" class="table-menu-heading" role="presentation">
-              ${heading}
-            </div>`
+          : html`<span class="bill-unsent-mark" data-unsent-mark>${unsentIcon}${words}</span>`
       }
+    </span>
+    <div role="menu" class="bill-switcher-menu" aria-label=${heading ?? nothing}>
       ${bills.map(
         (bill) =>
           html`<button
@@ -167,10 +173,10 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
               if (bill.workingOrderId !== billId) options.onSwitch(bill.workingOrderId);
             }}
           >
-            <wt-icon data-row-check name="menu-check" size="lg"></wt-icon>
-            <span class="bill-row-details"
-              >${billRowContent(bill, party, marked.includes(bill))}</span
-            >
+            <wt-icon data-row-check name="check" size="lg" aria-hidden="true"></wt-icon>
+            <wt-menu-row label=${billLabel(bill)} .value=${owes(bill)} .check=${isPaid(bill)}>
+            </wt-menu-row>
+            ${billUnsentDetails(bill, party, marked.includes(bill))}
           </button>`,
       )}
       <button
@@ -183,8 +189,8 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
           if (!options.newBillBusy) options.onNewBill();
         }}
       >
-        <wt-icon name="menu-add" size="lg"></wt-icon>
-        ${t("table.new_bill_menu")}
+        <wt-icon name="plus" size="lg" aria-hidden="true"></wt-icon>
+        <wt-menu-row label=${t("table.new_bill_menu")}></wt-menu-row>
       </button>
     </div>
   </wt-row-actions>`;
@@ -217,26 +223,95 @@ export const billControlStyles = css`
   ${actionChoiceStyles}
   .bill-switcher::part(trigger) {
     min-height: var(--wt-tap-min);
-    padding: var(--wt-space-2) var(--wt-space-3);
+    width: 100%;
+    padding: var(--wt-space-1) var(--wt-space-2) var(--wt-space-1) var(--wt-space-3);
     border: 1px solid var(--wt-color-border);
     border-radius: var(--wt-radius-md);
     background: var(--wt-color-surface);
-    font-weight: var(--wt-font-weight-bold);
+    text-align: start;
   }
   .bill-switcher-menu {
-    display: flex;
-    flex-direction: column;
+    --wt-menu-row-height: var(--wt-tap-min);
+    --wt-bill-row-text-size: max(var(--wt-menu-row-label-size), var(--wt-font-size-md));
   }
-  .bill-row-details {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    gap: var(--wt-space-1);
+  .bill-switcher:not([bottom-sheet]) .bill-switcher-menu {
+    --wt-menu-row-gap: var(--wt-space-4);
   }
-  .bill-row-head {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--wt-space-3);
+  .bill-switcher:not([bottom-sheet])::part(popup) {
+    max-inline-size: min(
+      calc(100vw - 2 * var(--wt-space-2)),
+      calc(2 * var(--wt-row-menu-min-width))
+    );
+  }
+  .bill-switcher[bottom-sheet] .bill-switcher-menu {
+    --wt-menu-row-height: var(--wt-field-height);
+  }
+  .bill-switcher[bottom-sheet]::part(sheet) {
+    padding-block-end: max(
+      calc(var(--wt-space-4) + var(--wt-space-1)),
+      env(safe-area-inset-bottom)
+    );
+  }
+  .bill-switcher-menu [data-row-choice] {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0;
+  }
+  .bill-switcher[bottom-sheet] .bill-switcher-menu [data-row-choice] {
+    padding-inline-end: var(--wt-space-1);
+  }
+  .bill-switcher-menu [data-switch-bill] {
+    border-block-end-width: var(--wt-field-line-width);
+    border-block-end-color: var(--wt-color-border);
+    border-radius: 0;
+  }
+  .bill-switcher[bottom-sheet] [data-switch-bill] wt-menu-row {
+    --wt-menu-row-height: calc(var(--wt-field-height) - var(--wt-field-line-width));
+  }
+  .bill-switcher-menu [data-switch-bill][aria-checked="true"]:not(:hover, :active) {
+    background: transparent;
+  }
+  .bill-switcher-menu [data-row-choice]:focus-visible {
+    outline-offset: calc(-1 * var(--wt-focus-offset));
+  }
+  .bill-switcher-menu wt-menu-row {
+    --wt-menu-row-padding-start: var(--wt-space-2);
+    --wt-menu-row-label-size: var(--wt-bill-row-text-size);
+    --wt-font-size-md: var(--wt-bill-row-text-size);
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .bill-switcher[bottom-sheet] .bill-switcher-menu wt-menu-row {
+    --wt-menu-row-padding-start: calc(var(--wt-space-2) + var(--wt-space-1) / 2);
+  }
+  .bill-switcher-menu wt-menu-row::part(trailing) {
+    white-space: nowrap;
+  }
+  .bill-switcher-menu wt-menu-row::part(check) {
+    color: var(--wt-color-text-muted);
+  }
+  .bill-switcher-menu [data-row-choice] > wt-icon {
+    --wt-action-native-icon-color: var(--wt-color-primary);
+    margin-inline-start: var(--wt-menu-row-padding-start);
+    color: var(--wt-action-native-icon-color);
+    inline-size: max(calc(var(--wt-space-4) + var(--wt-space-1)), var(--wt-font-size-lg));
+    block-size: max(calc(var(--wt-space-4) + var(--wt-space-1)), var(--wt-font-size-lg));
+  }
+  .bill-switcher-menu [data-row-check] {
+    scale: 1 1.05;
+    translate: 0 -1.25%;
+  }
+  .bill-switcher-menu [data-new-bill]:not([aria-disabled="true"]) {
+    color: var(--wt-color-primary-text);
+  }
+  .bill-switcher-menu [data-new-bill] wt-menu-row,
+  .bill-switcher-menu [data-new-bill][aria-disabled="true"] > wt-icon {
+    color: inherit;
+  }
+  .bill-switcher-menu :is(.bill-row-unsent, .bill-unsent-mark) {
+    grid-column: 2;
+    margin-inline: var(--wt-space-2) var(--wt-space-4);
+    padding-block-end: var(--wt-space-1);
   }
   .table-menu-group {
     display: flex;
@@ -253,13 +328,40 @@ export const billControlStyles = css`
     font-size: var(--wt-font-size-sm);
   }
   .bill-switcher-trigger {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: center;
-    column-gap: var(--wt-space-2);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: var(--wt-space-1);
   }
-  .bill-switcher-closed {
+  .bill-switcher-closed,
+  .bill-switcher-caption {
+    display: flex;
+    align-items: center;
+    gap: var(--wt-space-2);
+    min-width: 0;
+  }
+  .bill-switcher-caption {
+    align-items: baseline;
+    flex-wrap: wrap;
+    row-gap: 0;
+    font-size: var(--wt-font-size-lg);
+    overflow-wrap: anywhere;
+  }
+  .bill-switcher-name {
+    font-weight: var(--wt-font-weight-bold);
+  }
+  .bill-switcher-amount,
+  .bill-switcher-position {
+    color: var(--wt-color-text-muted);
+    font-weight: var(--wt-font-weight-normal);
     white-space: nowrap;
+  }
+  .bill-switcher-position {
+    margin-inline-start: auto;
+    font-size: var(--wt-font-size-sm);
+  }
+  .bill-switcher-closed > wt-icon {
+    flex: none;
   }
   .bill-unsent-mark {
     display: inline-flex;
