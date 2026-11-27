@@ -103,8 +103,64 @@ function rowsOf(discount: WorkedBillDiscount): Record<string, string[]> {
 }
 
 /**
+ * What the bill's invoice totals with each line at `rowsNow`: a bound dish files with the others of
+ * its group at its price holding the same extras, as one dish row and one row per extra, each
+ * quantity summed (`projectPortionSale`); every other row files alone.
+ */
+function invoiceTotal(
+  lines: readonly BillDiscountLine[],
+  rowsNow: ReadonlyMap<string, readonly BillDiscountRow[]>,
+): number {
+  const byId = new Map(lines.map((one) => [one.id, one]));
+  const extraRows = (dish: BillDiscountLine) =>
+    lines
+      .filter(({ parentLineId }) => parentLineId === dish.id)
+      .flatMap((one) => rowsNow.get(one.id)!.map((row) => ({ line: one, row })));
+  const extraKey = ({ line: one, row }: ReturnType<typeof extraRows>[number]) =>
+    JSON.stringify([one.portion?.group ?? one.id, row.unit, one.priceQuantity, row.quantity]);
+  const filed = new Map<
+    string,
+    {
+      quantity: number;
+      n: number;
+      dish: BillDiscountLine;
+      unit: number;
+      extras: ReturnType<typeof extraRows>;
+    }
+  >();
+  let sum = 0;
+  for (const one of lines) {
+    const parent = one.parentLineId === null ? null : byId.get(one.parentLineId)!;
+    if (parent?.portion != null) continue;
+    for (const row of rowsNow.get(one.id)!) {
+      if (one.portion === null || parent !== null) {
+        sum += row.total;
+        continue;
+      }
+      const extras = extraRows(one);
+      const key = JSON.stringify([
+        one.portion.group,
+        row.unit,
+        one.priceQuantity,
+        extras.map(extraKey).sort(),
+      ]);
+      const group = filed.get(key) ?? { quantity: 0, n: 0, dish: one, unit: row.unit, extras };
+      group.quantity += row.quantity;
+      group.n += 1;
+      filed.set(key, group);
+    }
+  }
+  for (const { quantity, n, dish, unit, extras } of filed.values()) {
+    sum += total(unit, quantity, dish.priceQuantity);
+    for (const { line: one, row } of extras)
+      sum += total(row.unit, row.quantity * n, one.priceQuantity);
+  }
+  return sum;
+}
+
+/**
  * Replays each discount's rows over the bill and fails when one raises a row's price, or when
- * what it says it takes differs from what the bill's total actually drops by.
+ * what it says it takes differs from what the bill's invoice total actually drops by.
  */
 function expectHonest(lines: readonly BillDiscountLine[], result: WorkedBill): void {
   const rowsNow = new Map(
@@ -113,8 +169,7 @@ function expectHonest(lines: readonly BillDiscountLine[], result: WorkedBill): v
       [{ id, lineNo, quantity, unit, total: lineTotal }] as BillDiscountRow[],
     ]),
   );
-  const billTotal = () =>
-    [...rowsNow.values()].flat().reduce((sum, { total: rowTotal }) => sum + rowTotal, 0);
+  const billTotal = () => invoiceTotal(lines, rowsNow);
   const start = billTotal();
   for (const discount of result.discounts) {
     const before = billTotal();
@@ -655,6 +710,54 @@ describe("workOutBillDiscounts: bound portions", () => {
     );
     // The sauces' filed row is d1's then d2's, so d1's keeps the higher of its two prices.
     expect(rowsOf(worked(result, "one"))).toEqual({ e2: ["1000@999"] });
+  });
+
+  it("takes from a bill holding bound portions what its filed rows lose, and cuts an amount down to them", () => {
+    const sauce = (id: string, lineNo: number, parent: string) =>
+      line(id, lineNo, 1008, {
+        parentLineId: parent,
+        quantity: 125,
+        unitPrecision: 3,
+        portion: { group: "sauce", ordinal: 0 },
+      });
+    const dish = (id: string, lineNo: number, ordinal: number) =>
+      line(id, lineNo, 100, { portion: { group: "croquettes", ordinal } });
+    const lines = [dish("d1", 1, 0), dish("d2", 2, 1), sauce("s1", 3, "d1"), sauce("s2", 4, "d2")];
+    const result = workOutBillDiscounts(lines, [
+      amount("five", bill, 5, 1),
+      amount("rest", bill, 448, 2),
+    ]);
+    // Filed as 2 × 1.00 and 0.250 × 10.08 = 2.52, 4.52: the sauces' row takes 0.03 at 9.97 (2.49),
+    // though each sauce alone only drops from 1.26 to 1.25.
+    expect(worked(result, "five")).toMatchObject({ holds: "yes", takes: 5 });
+    expect(rowsOf(worked(result, "five"))).toEqual({
+      d1: ["1000@99"],
+      d2: ["1000@99"],
+      s1: ["125@997"],
+      s2: ["125@997"],
+    });
+    // 4.47 is left on the invoice, though the lines alone add up to 4.48.
+    expect(worked(result, "rest")).toMatchObject({ holds: "cut_down", takes: 447 });
+    expect(result.takes).toBe(452);
+    expectHonest(lines, result);
+  });
+
+  it("moves a bound extra's price where its filed row takes a cent its own total does not lose", () => {
+    const sauce = (id: string, lineNo: number, parent: string) =>
+      line(id, lineNo, 1003, {
+        parentLineId: parent,
+        quantity: 125,
+        unitPrecision: 3,
+        portion: { group: "sauce", ordinal: 0 },
+      });
+    const dish = (id: string, lineNo: number, ordinal: number) =>
+      line(id, lineNo, 0, { portion: { group: "croquettes", ordinal } });
+    const lines = [dish("d1", 1, 0), dish("d2", 2, 1), sauce("s1", 3, "d1"), sauce("s2", 4, "d2")];
+    const result = workOutBillDiscounts(lines, [amount("one", bill, 1, 1)]);
+    // 0.250 at 10.03 files as 2.51 and at 10.01 as 2.50; each sauce is 1.25 at either price.
+    expect(worked(result, "one")).toMatchObject({ holds: "yes", takes: 1 });
+    expect(rowsOf(worked(result, "one"))).toEqual({ s1: ["125@1001"], s2: ["125@1001"] });
+    expectHonest(lines, result);
   });
 });
 

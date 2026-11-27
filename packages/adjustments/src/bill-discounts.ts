@@ -279,9 +279,11 @@ export interface BillDiscountRow {
 }
 
 /**
- * What one discount takes off, in cents, and every row of each line whose price it moved.
- * `cut_down`: an amount larger than what its target costs, which takes the target to zero;
- * `set_menu_gone`: its set-menu row is gone, so it takes nothing.
+ * What one discount takes off the bill's invoice total, in cents, and every row of each line whose
+ * price it moved, each row's `total` its own price times its quantity as the line would store it.
+ * The invoice prices bound portions' filed row once, so on a bill holding them `takes` can differ
+ * from what the lines' own totals lose. `cut_down`: an amount larger than what its target costs,
+ * which takes the target to zero; `set_menu_gone`: its set-menu row is gone, so it takes nothing.
  */
 export interface WorkedBillDiscount {
   id: string;
@@ -436,6 +438,12 @@ function filedRows<M extends { row: Part; quantity: number }>(members: readonly 
   });
 }
 
+/** What a filed row of `members` costs: their quantities at the first one's price. */
+function filedCost(members: readonly Measured[]): number {
+  const quantity = members.reduce((sum, member) => sum + member.quantity, 0);
+  return decimalToCents(lineGross(members[0]!.row, quantity));
+}
+
 /** A piece of a discount's target, what it costs and how a share of the discount spreads over it. */
 interface Piece {
   cost: number;
@@ -460,10 +468,7 @@ function linePiece(subjects: readonly Subject[]): Piece {
 function filedPiece(subjects: readonly Subject[]): Piece {
   const groups = filedRows(subjects);
   return {
-    cost: subjects.reduce(
-      (sum, { row, quantity }) => sum + decimalToCents(lineGross(row, quantity)),
-      0,
-    ),
+    cost: groups.reduce((sum, members) => sum + filedCost(members), 0),
     spread: (cents) =>
       spreadOverFiledGroups(groups, centsToDecimal(cents), ordinal).flatMap(({ shares }) => shares),
   };
@@ -476,7 +481,7 @@ function filedPiece(subjects: readonly Subject[]): Piece {
  * A line one discount leaves at two prices is two parts for the next; a later discount on that
  * line is worked out once on each part, a percentage or Free as it is, an amount shared by
  * quantity (plan D10). On a bill holding bound portions, a whole-bill discount is spread over the
- * rows the bill files.
+ * rows the bill files, and what every discount takes is what the filed rows' total loses.
  */
 export function workOutBillDiscounts(
   lines: readonly BillDiscountLine[],
@@ -528,6 +533,12 @@ export function workOutBillDiscounts(
   parts.forEach(file);
   let lastLineNo = Math.max(0, ...lines.map(({ lineNo }) => lineNo));
   const partsOf = (lineId: string) => partsByLine.get(lineId)!;
+  const filedTotal = () =>
+    filedRows(parts.map((row) => ({ row, quantity: row.quantity }))).reduce(
+      (sum, members) => sum + filedCost(members),
+      0,
+    );
+
   const steps = discounts.map((discount) => {
     refuseValue(discount);
     return { discount, step: stepOf(discount, lineOf) };
@@ -553,16 +564,17 @@ export function workOutBillDiscounts(
         a.discount.position - b.discount.position,
     );
 
-  /** Writes `shares` into the parts; a share taking nothing moves nothing unless `zeroed`, as Free
-   * prices a row at zero even where its total was already nothing. */
-  const apply = (shares: readonly PricedShare<Subject>[], zeroed: boolean): Set<string> => {
+  /** Writes `shares` into the parts, those whose rows leave them as they are excepted. */
+  const apply = (shares: readonly PricedShare<Subject>[]): Set<string> => {
     const moved = new Set<string>();
-    for (const { row: part, rows, reduction } of shares) {
-      if (!zeroed && compareDecimal(reduction, ZERO) === 0) continue;
-      moved.add(part.lineId);
+    for (const { row: part, rows } of shares) {
       const [first, ...rest] = rows;
-      part.quantity = decimalToThousandths(first!.quantity);
-      part.unit = decimalToCents(first!.unitGross);
+      const quantity = decimalToThousandths(first!.quantity);
+      const unit = decimalToCents(first!.unitGross);
+      if (rest.length === 0 && quantity === part.quantity && unit === part.unit) continue;
+      moved.add(part.lineId);
+      part.quantity = quantity;
+      part.unit = unit;
       for (const row of rest) {
         lastLineNo += 1;
         const split = {
@@ -632,12 +644,18 @@ export function workOutBillDiscounts(
     };
   };
 
+  let filedBefore = bound ? filedTotal() : 0;
   const worked: WorkedBillDiscount[] = ordered.map(({ discount }) => {
     const copies = copiesOf(discount);
     if (copies === null) return { id: discount.id, holds: "set_menu_gone", takes: 0, lines: [] };
     const { cut, shares } = sharesOf(discount, copies);
-    const moved = apply(shares, discount.action === "comp");
-    const takes = shares.reduce((sum, { reduction }) => sum + decimalToCents(reduction), 0);
+    const moved = apply(shares);
+    let takes = shares.reduce((sum, { reduction }) => sum + decimalToCents(reduction), 0);
+    if (bound) {
+      const filedAfter = filedTotal();
+      takes = filedBefore - filedAfter;
+      filedBefore = filedAfter;
+    }
     return {
       id: discount.id,
       holds: cut ? "cut_down" : "yes",
