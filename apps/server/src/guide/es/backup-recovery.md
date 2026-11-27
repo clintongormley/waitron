@@ -122,7 +122,7 @@ Para tu bucket, introduce el nombre, la región, la carpeta y las dos claves de 
 el proveedor. Introduce la dirección de almacenamiento si usas un proveedor distinto de Amazon S3.
 Introduce la **Clave maestra** de la copia o elige su paquete de recuperación y selecciona el
 **Entorno** del servidor anterior. Si la carpeta que indicas no tiene ninguna copia, al revisarla
-se buscan copias en las carpetas que contiene. Si aparecen varias copias, elige la carpeta que
+se buscan copias en las carpetas que contiene directamente. Si aparecen varias copias, elige la carpeta que
 usaba el servidor anterior y vuelve a revisar la copia.
 
 Para Waitron Cloud, elige **Iniciar la recuperación desde Cloud**, introduce el código que

@@ -19,6 +19,7 @@ import { generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   generationPrefix,
+  generationName,
   pointerKey,
   signPointer,
   writePointer,
@@ -251,6 +252,20 @@ async function masterKeyDeps(
   return prepareDeps(store, { masterKey, restoreGeneration: restore });
 }
 
+function refusePointerRead(store: ObjectStore, status: 403 | 500): ObjectStore {
+  return {
+    ...store,
+    get: async () => {
+      throw new AppError("backup.stream_request_failed", {
+        operation: "get",
+        key: pointerKey(),
+        status,
+        name: status === 403 ? "AccessDenied" : "InternalError",
+      });
+    },
+  };
+}
+
 describe("prepareStreamRestore", () => {
   it("opens the stream and sealed state with numbered backup key 2", async () => {
     const deps = await masterKeyDeps(await numberedBucket());
@@ -323,7 +338,7 @@ describe("prepareStreamRestore", () => {
     }
   });
 
-  it.each(["older pointer", "invalid name", "access refused"] as const)(
+  it.each(["older pointer", "invalid name", "dot segment", "access refused"] as const)(
     "finds a usable child stream beside a folder with %s",
     async (problem) => {
       const parent = createMemoryObjectStore();
@@ -331,24 +346,14 @@ describe("prepareStreamRestore", () => {
       const old = createMemoryObjectStore();
       const { recovery: _recovery, ...unversioned } = POINTER;
       await writePointer(old, T.streamId, signPointer(unversioned, signer.privateKey), null);
-      const neighbour = problem === "invalid name" ? "notes " : "old";
+      const neighbour =
+        problem === "invalid name" ? "notes " : problem === "dot segment" ? "." : "old";
       const deps = await masterKeyDeps(parent);
       const openStore = ({ prefix }: BucketConfig) => {
         if (prefix === "good") return good;
         if (prefix === neighbour && problem === "older pointer") return old;
-        if (prefix === neighbour && problem === "access refused") {
-          return {
-            ...parent,
-            get: async () => {
-              throw new AppError("backup.stream_request_failed", {
-                operation: "get",
-                key: pointerKey(),
-                status: 403,
-                name: "AccessDenied",
-              });
-            },
-          };
-        }
+        if (prefix === neighbour && problem === "access refused")
+          return refusePointerRead(parent, 403);
         return { ...parent, listFolders: async () => [neighbour, "good"] };
       };
       const prepared = await prepareStreamRestore({ ...deps, openStore });
@@ -362,6 +367,25 @@ describe("prepareStreamRestore", () => {
       }
     },
   );
+
+  it.each([
+    { status: 403, folders: ["refused"] },
+    { status: 500, folders: ["refused", "good"] },
+  ] as const)("preserves a child read refusal with status $status", async ({ status, folders }) => {
+    const parent = createMemoryObjectStore();
+    const good = await numberedBucket();
+    const deps = await masterKeyDeps(parent);
+    const openStore = ({ prefix }: BucketConfig) => {
+      if (prefix === "refused") return refusePointerRead(parent, status);
+      if (prefix === "good") return good;
+      return { ...parent, listFolders: async () => [...folders] };
+    };
+    const prepared = prepareStreamRestore({ ...deps, openStore }).then((copy) => copy.discard());
+    await expect(prepared).rejects.toMatchObject({
+      code: "backup.stream_request_failed",
+      params: { status },
+    });
+  });
 
   it("asks for the exact folder when there are more than 24 child folders", async () => {
     const parent = createMemoryObjectStore();
@@ -403,6 +427,31 @@ describe("prepareStreamRestore", () => {
     } finally {
       await prepared.discard();
     }
+  });
+
+  it("asks for an exact folder when the listing can hide another child copy", async () => {
+    const parent = createMemoryObjectStore();
+    const good = await numberedBucket();
+    const deps = await masterKeyDeps(parent);
+    const folders = Array.from({ length: 48 }, (_, i) =>
+      generationName(0, T.nodeId, new Date(NOW.getTime() - i * 1_000)),
+    );
+    folders.push("first", "unlisted");
+    const openStore = vi.fn(({ prefix }: BucketConfig) =>
+      prefix === ""
+        ? {
+            ...parent,
+            listFolders: async (_prefix: string, call: { limit: number }) =>
+              folders.slice(0, call.limit),
+          }
+        : good,
+    );
+    const prepared = prepareStreamRestore({ ...deps, openStore }).then((copy) => copy.discard());
+    await expect(prepared).rejects.toMatchObject({
+      code: "restore.stream_folder_required",
+      params: { folders: [] },
+    });
+    expect(openStore).toHaveBeenCalledTimes(1);
   });
 
   it("restores the pointer's generation and unlocks the node's secrets row", async () => {

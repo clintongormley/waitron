@@ -328,7 +328,12 @@ async function locateBucketCopy(
       if (read !== null) copies.push({ bucket: candidate, store: child, pointer: read.pointer });
     } catch (error) {
       if (signal?.aborted || !isAppError(error)) throw error;
-      if (hasCode(error, "setup.request_invalid") && error.params.field === "prefix") continue;
+      if (
+        (hasCode(error, "setup.request_invalid") ||
+          hasCode(error, "backup.stream_config_unsafe")) &&
+        error.params.field === "prefix"
+      )
+        continue;
       if (
         !hasCode(error, "backup.stream_pointer_invalid") &&
         !(hasCode(error, "backup.stream_request_failed") && error.params.status === 403)
