@@ -101,6 +101,24 @@ export function closedZonePrompt(
   };
 }
 
+export function askCounterClosedZone(
+  error: unknown,
+  show: (prompt: LateSendPrompt) => void,
+  lines: readonly OrderLine[],
+  retry: (lateSend: LateSend | undefined, zoneId: string) => Promise<void>,
+  current: () => boolean,
+): boolean {
+  const zone = closedZoneQuestionOf(error);
+  if (zone === undefined) return false;
+  if (current())
+    show(
+      closedZonePrompt(zone, lines, "send", (lateSend) => {
+        if (current()) return retry(lateSend, zone.zoneId);
+      }),
+    );
+  return true;
+}
+
 export async function writeWithClosedZone<T>(
   write: (zoneId?: string) => Promise<T>,
   show: (prompt: LateSendPrompt) => void,

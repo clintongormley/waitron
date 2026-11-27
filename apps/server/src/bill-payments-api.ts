@@ -37,6 +37,7 @@ import { resolveCardCollector } from "./till-card-collector.js";
 import { resolveHttpOrderZone } from "./till-order-zones.js";
 import {
   overridePinAttempts,
+  parseClosedZoneConfirmation,
   parseOverrideField,
   parseReason,
   requireRevision,
@@ -410,6 +411,7 @@ export function mountBillPaymentsApi(
           label: draft.label,
           zoneId,
           kitchenNote: draft.kitchenNote as string | null | undefined,
+          closedZoneId: parseClosedZoneConfirmation(draft.closedZoneId, personId).zoneId,
           invoiceType: draft.invoiceType,
           recipient: draft.recipient,
         };

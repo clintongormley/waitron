@@ -1553,6 +1553,60 @@ const integratedCard = () => ({
 });
 
 describe("counter pay", () => {
+  it("asks about the closure before saving an order for the bill payment window", async () => {
+    const parkOrder = vi.fn().mockRejectedValue({
+      code: "service_zone.closed",
+      status: 409,
+      zoneId: "zone-bar",
+      closedZoneName: "Bar",
+      closesAt: "22:00",
+    });
+    const el = await counterBasket({ parkOrder });
+
+    emit(counterScreen(el), "counter-bill-pay", {});
+    await flush(el, 6);
+
+    expect(windowOf(el)?.shadowRoot?.querySelector("wt-dialog")?.heading).toBe(
+      "Bar closed at 22:00",
+    );
+    expect(parkOrder).toHaveBeenCalledOnce();
+    await choose(el, "data-late-agreed");
+
+    expect(parkOrder.mock.calls[1]).toEqual([
+      { ...parkOrder.mock.calls[0]![0], closedZoneId: "zone-bar" },
+    ]);
+  });
+
+  it("retries the same payment only after the closed-zone confirmation", async () => {
+    const recordSale = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "service_zone.closed",
+        status: 409,
+        zoneId: "zone-bar",
+        closedZoneName: "Bar",
+        closesAt: "22:00",
+      })
+      .mockResolvedValueOnce(saleResult);
+    const el = await counterBasket({ recordSale });
+    const orderId = counterScreen(el).store.id;
+
+    emit(counterScreen(el), "confirm-payment", CASH);
+    await flush(el, 6);
+
+    expect(windowOf(el)?.shadowRoot?.querySelector("wt-dialog")?.heading).toBe(
+      "Bar closed at 22:00",
+    );
+    expect(recordSale).toHaveBeenCalledOnce();
+    await choose(el, "data-late-agreed");
+
+    expect(windowOf(el)).toBeNull();
+    expect(recordSale.mock.calls.map((call) => [call[2], call[12]])).toEqual([
+      [orderId, undefined],
+      [orderId, "zone-bar"],
+    ]);
+  });
+
   it("asks about the marked dish before cash Pay records anything", async () => {
     const el = await lateCounter();
 

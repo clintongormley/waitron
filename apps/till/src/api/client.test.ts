@@ -1566,6 +1566,49 @@ describe("TillApi", () => {
     },
   );
 
+  it("keeps the Counter submission when confirming a closure and retrying a lost reply", async () => {
+    const ticket = { invoiceNumber: "A/1", tender: { method: "cash" } };
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ error: { code: "service_zone.closed", params: {} } }, 409),
+      )
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(jsonResponse({ outcome: "received", invoice: ticket }));
+    const api = new TillApi("", fetchStub);
+    const pay = (zone?: string) =>
+      api.recordSale(
+        [{ menuItemId: "mi-p", quantity: "1" }],
+        { method: "cash", amount: "5.00" },
+        "wo1",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        null,
+        "eat_in",
+        zone === undefined ? undefined : { menuIds: ["breakfast"] },
+        undefined,
+        zone,
+      );
+
+    await expect(pay()).rejects.toMatchObject({ code: "service_zone.closed" });
+    await expect(pay("terrace")).rejects.toThrow(TypeError);
+    await expect(pay()).resolves.toEqual(ticket);
+
+    const [first, confirmed, replay] = postedBodies(fetchStub);
+    expect(confirmed).toEqual({
+      ...first,
+      basket: {
+        lines: [{ menuItemId: "mi-p", quantity: "1" }],
+        closedZoneId: "terrace",
+        lateSend: { menuIds: ["breakfast"] },
+      },
+    });
+    expect(replay).toEqual(confirmed);
+  });
+
   it.each(["open", "placed"] as const)(
     "returns a %s whole bill's earlier slip failure with the ticket",
     async (status) => {

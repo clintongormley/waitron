@@ -106,6 +106,7 @@ type CounterPaymentBasket = Partial<CounterPaymentEdit> & {
   invoiceType?: "F1" | "F2";
   recipient?: unknown;
   lateSend?: LateSend;
+  closedZoneId?: string;
 };
 type CounterPaymentRequest = WholeBillTender & {
   kind: "share";
@@ -125,6 +126,8 @@ export class TillApi extends FindBillApi {
     {
       person: SessionPerson | null;
       key: string;
+      menuIds: string | undefined;
+      needsZoneAnswer?: true;
       request: BillPaymentRequest | CounterPaymentRequest;
     }
   >();
@@ -260,6 +263,7 @@ export class TillApi extends FindBillApi {
     dining: Dining,
     lateSend?: LateSend,
     edit?: CounterPaymentEdit,
+    closedZoneId?: string,
   ): Promise<TillSaleResult> {
     const basket =
       lines.length === 0 && expectedEdit !== null
@@ -270,6 +274,7 @@ export class TillApi extends FindBillApi {
             ...invoice,
             kitchenNote,
             lateSend,
+            closedZoneId,
             ...edit,
           };
     return this.#collectWholeBill(
@@ -327,6 +332,7 @@ export class TillApi extends FindBillApi {
       kitchenNote?: string | null;
       guestCount?: number | null;
       lateSend?: LateSend;
+      closedZoneId?: string;
       edit?: CounterPaymentEdit;
     },
     options: { onSubmission?: (id: string) => void } = {},
@@ -339,6 +345,7 @@ export class TillApi extends FindBillApi {
       invoiceType,
       recipient,
       lateSend,
+      closedZoneId,
       edit,
       tip,
       ...payment
@@ -353,6 +360,7 @@ export class TillApi extends FindBillApi {
             invoiceType,
             recipient,
             lateSend,
+            closedZoneId,
             ...edit,
           };
     return this.#payWholeBill(
@@ -421,6 +429,7 @@ export class TillApi extends FindBillApi {
     label?: string;
     kitchenNote?: string | null;
     lateSend?: LateSend;
+    closedZoneId?: string;
     firstSetMenuId?: string;
   }): Promise<{
     id: string;
@@ -487,7 +496,8 @@ export class TillApi extends FindBillApi {
     options: { onSubmission?: (id: string) => void; closeZero?: true } = {},
   ): Promise<WholeBillResult> {
     const person = this.#personSource?.() ?? null;
-    const { lateSend, ...basketFields } = basket ?? {};
+    const { lateSend, closedZoneId, ...basketFields } = basket ?? {};
+    const menuIds = JSON.stringify(lateSend?.menuIds);
     const key = JSON.stringify([
       status,
       tender.method,
@@ -502,11 +512,23 @@ export class TillApi extends FindBillApi {
       tender.simulationOutcome,
       tender.dining,
       tender.receiptLanguage,
-      basket === undefined ? null : [basketFields, lateSend?.menuIds],
+      basket === undefined ? null : basketFields,
     ]);
     const pending = this.#unansweredWholeBills.get(id);
-    const earlier = pending?.person === person && pending.key === key ? pending.request : undefined;
-    let request = earlier;
+    const matched =
+      pending?.person === person &&
+      pending.key === key &&
+      (pending.menuIds === menuIds ||
+        pending.needsZoneAnswer ||
+        ("basket" in pending.request && pending.request.basket.closedZoneId !== undefined))
+        ? pending
+        : undefined;
+    const earlier = matched?.request;
+    // Only a known refusal permits replacing the consent on an existing submission.
+    let request =
+      matched?.needsZoneAnswer && earlier !== undefined && "basket" in earlier
+        ? { ...earlier, basket: { ...earlier.basket, lateSend, closedZoneId } }
+        : earlier;
     if (request === undefined && basket !== undefined) {
       request = structuredClone({
         ...tender,
@@ -543,7 +565,7 @@ export class TillApi extends FindBillApi {
       };
     }
 
-    const sent = { person, key, request };
+    const sent = { person, key, menuIds, request };
     options.onSubmission?.(request.submissionId);
     try {
       const result = await this.#request<WholeBillResult>(
@@ -568,7 +590,12 @@ export class TillApi extends FindBillApi {
         ((refusal.status ?? 0) >= 500 && refusal.code !== "menu.reset_required")
       )
         this.#unansweredWholeBills.set(id, sent);
-      else if (refusal.code !== "handover.stepping_down" || earlier === undefined)
+      else if (basket !== undefined && refusal.code === "service_zone.closed")
+        this.#unansweredWholeBills.set(id, { ...sent, needsZoneAnswer: true });
+      else if (
+        !matched?.needsZoneAnswer &&
+        (refusal.code !== "handover.stepping_down" || earlier === undefined)
+      )
         this.#unansweredWholeBills.delete(id);
       if (
         basket !== undefined &&

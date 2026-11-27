@@ -33,6 +33,9 @@ antes de cobrar el siguiente.
 
 Añade un artículo antes de cobrar o enviar un pedido.
 
+Si empiezas a cobrar justo cuando cierra tu zona de servicio, comprueba la hora de cierre en el aviso
+y pulsa **Continuar** para seguir con ese pedido.
+
 Si **Enviar** desaparece tras un cambio en los ajustes de cobro de tu zona de
 servicio, pulsa **Cobrar** para continuar.
 
@@ -713,6 +716,9 @@ la que añades no puede tener pagos. Si la cuenta que añades tiene factura comp
 cliente que no figura en la cuenta que recibe, la caja pregunta antes: elige a qué cliente se
 factura la cuenta juntada, o **No juntar**. Si mueves la última cuenta de la mesa, la caja sigue en
 la mesa con una cuenta nueva y vacía.
+
+Si la zona a la que vas a mover clientes o una cuenta abierta ya ha cerrado, comprueba la zona que
+figura en el aviso antes de pulsar **Continuar**.
 
 Si hay pedidos sin enviar que impiden **Unir mesas**, **Mover a otra mesa**, **Mover esta cuenta**
 o **Juntar cuentas**, elige **Tomar el pedido** en las cuentas indicadas y vuelve a intentarlo.

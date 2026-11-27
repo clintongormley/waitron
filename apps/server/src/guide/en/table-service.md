@@ -31,6 +31,9 @@ for each payment. After a part payment, check **Still to pay** before taking the
 
 Add an item before paying or sending an order.
 
+If you start payment as your service area closes, check the closing time in the question and choose
+**Continue** to go ahead with this order.
+
 If **Send** disappears after a change to your service area’s payment settings,
 choose **Pay** to continue.
 
@@ -673,6 +676,9 @@ add must have no payments. If the bill you add is set for a full invoice to a cu
 receiving bill does not name, the till asks first: choose the customer the merged bill is invoiced
 to, or **Do not merge**. If you move the table's last bill away, the till stays at the table with a
 fresh empty bill.
+
+If the zone you are moving guests or an open bill into has closed, check the zone in the question
+before you choose **Continue**.
 
 If unsent orders block **Join tables**, **Move to another table**, **Move this bill** or **Merge bills**,
 choose **Take over draft** for the bills listed, then try the action again.

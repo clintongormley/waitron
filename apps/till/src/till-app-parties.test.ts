@@ -428,6 +428,32 @@ describe("till-app: seating a party", () => {
     expect(tableOrder(el)).toBeNull();
   });
 
+  it("retries the same guest move with the confirmed destination zone", async () => {
+    const moveGuests = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "service_zone.closed",
+        status: 409,
+        zoneId: "z2",
+        closedZoneName: "Terrace",
+        closesAt: "22:00",
+      })
+      .mockResolvedValueOnce({ partyId: "v1", billIds: ["wo-4"] });
+    const { el } = await mountApp({ moveGuests });
+    const order = await openPartyTable(el);
+
+    emit(order, "move-guests", { toTableId: "t9" });
+    await flush(el);
+    const modal = el.shadowRoot!.querySelector("till-late-send-dialog");
+    expect(modal?.shadowRoot?.querySelector("wt-dialog")?.heading).toBe("Terrace closed at 22:00");
+    expect(moveGuests).toHaveBeenCalledOnce();
+
+    await userEvent.click(modal!.shadowRoot!.querySelector<HTMLElement>("[data-late-agreed]")!);
+    await vi.waitFor(() => expect(moveGuests).toHaveBeenCalledTimes(2));
+    const [party, table, revisions] = moveGuests.mock.calls[0]!;
+    expect(moveGuests.mock.calls[1]).toEqual([party, table, { ...revisions, closedZoneId: "z2" }]);
+  });
+
   it("names the table that needs moving by today's name when moving guests to it is refused", async () => {
     const today = {
       placement: { x: 0, y: 0, width: 2, height: 2, shape: "round" as const, rotation: 0 },

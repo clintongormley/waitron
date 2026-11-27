@@ -352,6 +352,105 @@ describe("closed zones take no new service", () => {
     expect(await orderRows()).toEqual(before);
   });
 
+  it.each(["zone only", "zone and period"])(
+    "takes a confirmed Counter payment once for %s",
+    async (reason) => {
+      const v = await venue();
+      const period = reason === "zone and period" ? await endMenuDuringClosure(v) : undefined;
+      const route = `/api/working-orders/${randomUUID()}/payments`;
+      const payment = {
+        submissionId: randomUUID(),
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "3.00",
+        dining: "eat_in",
+        basket: { zoneId: v.zoneId, lines: [line(v)] },
+      };
+      at("23:45");
+      const refusal = refused(v);
+      expect(await request(v, "POST", route, payment)).toMatchObject(
+        period === undefined
+          ? refusal
+          : {
+              ...refusal,
+              json: {
+                ...refusal.json,
+                params: {
+                  ...refusal.json.params,
+                  lateSend: {
+                    menus: [{ menuId: period.menuId, closedMenuPeriodName: "Always" }],
+                    menuItemIds: [line(v).menuItemId],
+                  },
+                },
+              },
+            },
+      );
+      const confirmed = await request(v, "POST", route, {
+        ...payment,
+        basket: {
+          ...payment.basket,
+          closedZoneId: v.zoneId,
+          ...(period === undefined ? {} : { lateSend: { menuIds: [period.menuId] } }),
+        },
+      });
+      expect(confirmed).toMatchObject({ status: 200, json: { outcome: "received" } });
+      expect(await request(v, "POST", route, payment)).toEqual(confirmed);
+      expect(await closedZoneActivity()).toEqual([
+        { subjectId: v.zoneId, personId: v.operatorId, data: { closesAt: "23:30" } },
+      ]);
+    },
+  );
+
+  it("parks the same Counter order for the payment screen after the waiter confirms", async () => {
+    const v = await venue();
+    const route = "/api/working-orders";
+    const basket = { id: randomUUID(), dining: "eat_in", zoneId: v.zoneId, lines: [line(v)] };
+    at("23:45");
+    expect(await request(v, "POST", route, basket)).toEqual(refused(v));
+    expect(await request(v, "POST", route, { ...basket, closedZoneId: v.zoneId })).toMatchObject({
+      status: 200,
+      json: { id: basket.id },
+    });
+    expect(await closedZoneActivity()).toEqual([
+      { subjectId: v.zoneId, personId: v.operatorId, data: { closesAt: "23:30" } },
+    ]);
+  });
+
+  it("takes payment for a raised Counter quantity only after the waiter confirms", async () => {
+    const v = await venue();
+    const id = await park(v);
+    const [saved] = await suite.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    const route = `/api/working-orders/${id}/payments`;
+    const payment = {
+      submissionId: randomUUID(),
+      kind: "share",
+      shareOf: 1,
+      method: "cash",
+      tendered: "15.00",
+      dining: "eat_in",
+      basket: {
+        revision: 0,
+        zoneId: v.zoneId,
+        lines: [{ ...line(v), workingOrderLineId: saved!.id, quantity: "2" }],
+      },
+    };
+    at("23:45");
+    expect(await request(v, "POST", route, payment)).toEqual(refused(v));
+    expect(
+      await request(v, "POST", route, {
+        ...payment,
+        basket: { ...payment.basket, closedZoneId: v.zoneId },
+      }),
+    ).toMatchObject({ status: 200, json: { outcome: "received" } });
+    expect(await closedZoneActivity()).toEqual([
+      { subjectId: v.zoneId, personId: v.operatorId, data: { closesAt: "23:30" } },
+    ]);
+  });
+
   it("reports the half-open closure on the zones read", async () => {
     const v = await venue();
     for (const [time, closed] of [
@@ -814,7 +913,7 @@ describe("moving into closed zones", () => {
     };
   }
   it.each(["free table", "held table", "counter"])(
-    "refuses a bill entering a closed zone at a %s and rolls back its move",
+    "moves a bill into a closed zone at a %s only after confirmation",
     async (target) => {
       const { v, dining } = await moveVenue();
       const source = await seated(v, dining);
@@ -822,23 +921,32 @@ describe("moving into closed zones", () => {
       const destination = holder ?? (await freeTable(v.zoneId));
       const before = await moveRows();
       at("23:45");
-      expect(
-        await request(v, "POST", `/api/bills/${source.tabId}/move`, {
-          to:
-            target === "counter"
-              ? { counter: { zoneId: v.zoneId } }
-              : { tableId: "tableId" in destination ? destination.tableId : destination.id },
-          partyId: source.partyId,
-          expectedPartyRevision: source.revision,
-          otherPartyId: holder?.partyId ?? null,
-          ...(holder ? { expectedOtherPartyRevision: holder.revision } : {}),
-        }),
-      ).toEqual(refused(v));
+      const route = `/api/bills/${source.tabId}/move`;
+      const move = {
+        to:
+          target === "counter"
+            ? { counter: { zoneId: v.zoneId } }
+            : { tableId: "tableId" in destination ? destination.tableId : destination.id },
+        partyId: source.partyId,
+        expectedPartyRevision: source.revision,
+        otherPartyId: holder?.partyId ?? null,
+        ...(holder ? { expectedOtherPartyRevision: holder.revision } : {}),
+      };
+      expect(await request(v, "POST", route, move)).toEqual(refused(v));
       expect(await moveRows()).toEqual(before);
+      expect(await request(v, "POST", route, { ...move, closedZoneId: v.zoneId })).toMatchObject({
+        status: 200,
+      });
+      expect(await orderRows()).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: source.tabId, zoneId: v.zoneId })]),
+      );
+      expect(await closedZoneActivity()).toEqual([
+        { subjectId: v.zoneId, personId: v.operatorId, data: { closesAt: "23:30" } },
+      ]);
     },
   );
   it.each(["free table", "held table", "no bill", "held table without a bill"])(
-    "refuses guests entering a closed zone with %s and keeps both parties unchanged",
+    "moves guests into a closed zone with %s only after confirmation",
     async (target) => {
       const { v, dining } = await moveVenue();
       const source = await seated(v, dining);
@@ -854,15 +962,30 @@ describe("moving into closed zones", () => {
         });
       const before = await moveRows();
       at("23:45");
-      expect(
-        await request(v, "POST", `/api/parties/${source.partyId}/move`, {
-          toTableId: "tableId" in destination ? destination.tableId : destination.id,
-          expectedPartyRevision: source.revision,
-          otherPartyId: holder?.partyId ?? null,
-          ...(holder ? { expectedOtherPartyRevision: holder.revision } : {}),
-        }),
-      ).toEqual(refused(v));
+      const toTableId = "tableId" in destination ? destination.tableId : destination.id;
+      const route = `/api/parties/${source.partyId}/move`;
+      const move = {
+        toTableId,
+        expectedPartyRevision: source.revision,
+        otherPartyId: holder?.partyId ?? null,
+        ...(holder ? { expectedOtherPartyRevision: holder.revision } : {}),
+      };
+      expect(await request(v, "POST", route, move)).toEqual(refused(v));
       expect(await moveRows()).toEqual(before);
+      const moved = await request(v, "POST", route, { ...move, closedZoneId: v.zoneId });
+      expect(moved).toMatchObject({ status: 200 });
+      expect((await moveRows()).tables).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            partyId: moved.json.partyId,
+            tableId: toTableId,
+            leftAt: null,
+          }),
+        ]),
+      );
+      expect(await closedZoneActivity()).toEqual([
+        { subjectId: v.zoneId, personId: v.operatorId, data: { closesAt: "23:30" } },
+      ]);
     },
   );
   it.each([

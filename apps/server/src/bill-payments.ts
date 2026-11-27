@@ -3,7 +3,7 @@ import { outsideCardDetails, type OutsideCardDetails } from "./outside-card.js";
 import { withIssuanceTransaction } from "@waitron/core";
 import { prepareIssueClock, type TrustedReading } from "@waitron/fiscal";
 import { requireEconomicWrite } from "./trading-admission.js";
-import { parseBillEditExpected, requireOrderBillEditor } from "./bill-editing.js";
+import { requireOrderBillEditor } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { assertBillHasNoUnsent, readBillUnsent } from "./bill-unsent.js";
@@ -117,7 +117,9 @@ import {
   owedOf,
   type RefundMoney,
 } from "./bill-payment-money.js";
-import { bumpPartyRevision, fingerprint } from "./parties.js";
+import { bumpPartyRevision } from "./parties.js";
+import { billPaymentFingerprint } from "./bill-payment-fingerprint.js";
+export { retryShapeOf } from "./bill-payment-fingerprint.js";
 import { parseSetMenuWireLines } from "./set-menu-wire-lines.js";
 import {
   filedLines,
@@ -198,6 +200,7 @@ export interface CounterPaymentBasket {
   revision?: number;
   label?: string;
   zoneId?: string;
+  closedZoneId?: string;
   kitchenNote?: string | null;
   invoiceType?: unknown;
   recipient?: unknown;
@@ -1452,28 +1455,6 @@ async function resultOf(
   };
 }
 
-/** A payment request as its retry fingerprint reads it: every amount at the money scale, an absent
- * added tip as none, so a resend that spells the same request another way is the same request.
- * Receipt language and guest count are excluded from the match. */
-export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
-  const scaled = (value: string | undefined) =>
-    value === undefined ? undefined : money(decimal(value));
-  return {
-    ...req,
-    expectedEdit: req.expectedEdit == null ? null : parseBillEditExpected(req.expectedEdit),
-    guestCount: undefined,
-    receiptLanguage: undefined,
-    printCardSlip: undefined,
-    amount: scaled(req.amount),
-    tendered: scaled(req.tendered),
-    addedTip: scaled(req.addedTip ?? "0"),
-    applied: scaled(req.applied),
-    tip: scaled(req.tip),
-    // Absent and false are one request; only a payer's own receipt changes the fingerprint.
-    ownReceipt: req.ownReceipt === true ? true : undefined,
-  };
-}
-
 /** What already uses `submissionId` on the bill or a bill reopened from it (design §5.1): one of
  * their payments, or a refund of one of them. */
 export async function findSubmission(
@@ -1621,6 +1602,7 @@ async function saveCounterBasket(
 ): Promise<void> {
   refuseUnavailableInvoiceRequest(basket.invoiceType, basket.recipient);
   const lines = parseSetMenuWireLines(basket.lines);
+  const zoneConfirmation = { zoneId: basket.closedZoneId, personId: operatorId };
   if (status !== undefined) {
     if (status !== "open") throw new AppError("working_order.not_open", { workingOrderId });
     await refusePaymentInFlight(tx, [workingOrderId]);
@@ -1637,6 +1619,7 @@ async function saveCounterBasket(
         {
           ...basket,
           lines,
+          zoneConfirmation,
           revision: basket.revision,
           expectedEdit: req.expectedEdit,
           dining: req.dining,
@@ -1666,6 +1649,7 @@ async function saveCounterBasket(
     creditedTo: operatorId,
     invalidMakeAt: "ignore",
     lateSend: basket.lateSend,
+    zoneConfirmation,
     dining: req.dining,
   });
 }
@@ -1706,18 +1690,7 @@ async function beginBillPayment(
     sessionId: operator.sessionId,
     personId: operator.personId,
   });
-  const print =
-    printOverride ??
-    fingerprint({
-      ...retryShapeOf(req),
-      basket:
-        basket === undefined
-          ? undefined
-          : {
-              ...basket,
-              lateSend: undefined,
-            },
-    });
+  const print = printOverride ?? billPaymentFingerprint(req, basket);
   const earlier = await findSubmission(tx, workingOrderId, req.submissionId);
   if (earlier.payment !== undefined) {
     if (earlier.payment.fingerprint !== print) {

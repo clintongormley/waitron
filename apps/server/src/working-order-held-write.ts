@@ -182,6 +182,7 @@ export async function saveHeldOrderIn(
     req.operatorId,
     attendance,
     req.lateSend,
+    req.zoneConfirmation,
   );
   const relabelled = (req.label ?? null) !== label;
   if (relabelled) {
