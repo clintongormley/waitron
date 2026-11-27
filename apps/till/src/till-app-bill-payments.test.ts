@@ -46,6 +46,8 @@ import {
   showBillFooter,
   type,
   press,
+  takeBillPaymentFromDialog,
+  readyBillCharge,
   answerOwnReceipt,
   resetBillPayDrafts,
   equipmentItem,
@@ -82,6 +84,7 @@ import type { Draft } from "./api/drafts-api.js";
 import type {
   AllocationPreview,
   BillBalance,
+  BillPaymentAsk,
   BillPaymentRequest,
   BillPaymentResult,
   BillPaymentView,
@@ -210,6 +213,8 @@ describe("stored station-choice ownership", () => {
       choice: { kind: "contribution", amount: "40" },
       pay: { method: "cash", tendered: "50" },
     });
+  const contributionPreviews = () =>
+    vi.mocked(api.previewBillPayment).mock.calls.filter(([, ask]) => ask.kind === "contribution");
   async function choose(el: TillApp) {
     const question = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
     expect(question).not.toBeNull();
@@ -236,17 +241,20 @@ describe("stored station-choice ownership", () => {
     await flush(el);
     await choose(el);
     expect(askOrderDeadEnds).toHaveBeenCalledTimes(2);
-    expect(api.previewBillPayment).not.toHaveBeenCalled();
+    expect(contributionPreviews()).toEqual([]);
+    expect(sent()).toEqual([]);
     await choose(el);
     expect(setMakeAt.mock.calls).toEqual([
       ["wo-4", 2, { "line-1": "kitchen" }, expectedEdit],
       ["wo-4", 2, { "line-1": "kitchen" }, expectedEdit],
     ]);
-    expect(api.previewBillPayment).toHaveBeenCalledExactlyOnceWith(
-      "wo-4",
-      expect.objectContaining({ expectedEdit }),
-      { signal: expect.any(AbortSignal) },
-    );
+    expect(contributionPreviews()).toEqual([
+      [
+        "wo-4",
+        expect.objectContaining({ expectedEdit, method: "cash", tendered: "50" }),
+        { signal: expect.any(AbortSignal) },
+      ],
+    ]);
   });
 
   it.each(["logout", "api", "ownership"] as const)(
@@ -276,7 +284,8 @@ describe("stored station-choice ownership", () => {
       await flush(el);
       expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).toBeNull();
       expect(setMakeAt).not.toHaveBeenCalled();
-      expect(api.previewBillPayment).not.toHaveBeenCalled();
+      expect(contributionPreviews()).toEqual([]);
+      expect(sent()).toEqual([]);
     },
   );
 
@@ -296,7 +305,8 @@ describe("stored station-choice ownership", () => {
     await expect.poll(() => tableOrder(el).billEdit?.editorVersion).toBe(2);
     await choose(el);
     expect(setMakeAt).not.toHaveBeenCalled();
-    expect(api.previewBillPayment).not.toHaveBeenCalled();
+    expect(contributionPreviews()).toEqual([]);
+    expect(sent()).toEqual([]);
   });
 
   it("does not retry a station choice after its bill observation changed", async () => {
@@ -318,7 +328,8 @@ describe("stored station-choice ownership", () => {
     await flush(el);
     expect(askOrderDeadEnds).toHaveBeenCalledOnce();
     expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).toBeNull();
-    expect(api.previewBillPayment).not.toHaveBeenCalled();
+    expect(contributionPreviews()).toEqual([]);
+    expect(sent()).toEqual([]);
   });
 
   it("does not use a refreshed observation to pay after its station read", async () => {
@@ -336,7 +347,8 @@ describe("stored station-choice ownership", () => {
     await expect.poll(() => tableOrder(el).billEdit?.editorVersion).toBe(2);
     release({ sends: false, deadEnds: [] });
     await flush(el);
-    expect(api.previewBillPayment).not.toHaveBeenCalled();
+    expect(contributionPreviews()).toEqual([]);
+    expect(sent()).toEqual([]);
   });
 });
 
@@ -1155,7 +1167,9 @@ describe("till-app: the three ways to pay part of a bill", () => {
       stations: [{ id: "kitchen", name: "Kitchen", open: true }],
     });
     const setMakeAt = vi.fn().mockResolvedValue({ revision: 3 });
-    const previewBillPayment = vi.fn().mockResolvedValue(cash("40.00", "10.00"));
+    const previewBillPayment = vi
+      .fn<TillApi["previewBillPayment"]>()
+      .mockResolvedValue(cash("40.00", "10.00"));
     const { el } = await mountApp({ askOrderDeadEnds, setMakeAt, previewBillPayment });
     await openTable(el);
     await openDialog(el, "contribution");
@@ -1165,7 +1179,12 @@ describe("till-app: the three ways to pay part of a bill", () => {
     });
     await flush(el);
     expect(askOrderDeadEnds).toHaveBeenCalledWith("wo-4", undefined);
-    expect(previewBillPayment).not.toHaveBeenCalled();
+    const contributionPreviewOrders = () =>
+      previewBillPayment.mock.invocationCallOrder.filter(
+        (_, index) => previewBillPayment.mock.calls[index]![1].kind === "contribution",
+      );
+    expect(contributionPreviewOrders()).toEqual([]);
+    expect(sent()).toEqual([]);
     const question = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
     expect(question).not.toBeNull();
     question
@@ -1182,10 +1201,8 @@ describe("till-app: the three ways to pay part of a bill", () => {
       { "line-1": "kitchen" },
       { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
     );
-    expect(previewBillPayment).toHaveBeenCalledOnce();
-    expect(setMakeAt.mock.invocationCallOrder[0]!).toBeLessThan(
-      previewBillPayment.mock.invocationCallOrder[0]!,
-    );
+    expect(contributionPreviewOrders()).toHaveLength(1);
+    expect(setMakeAt.mock.invocationCallOrder[0]!).toBeLessThan(contributionPreviewOrders()[0]!);
   });
   it("accepted bill payment retires dirty entry before the following table read", async () => {
     let accepted = false;
@@ -1222,8 +1239,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     await openDialog(el, "items");
     await press(el, 'input[name="line"][value="1"]');
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     emit(el.shadowRoot!.querySelector("till-settlement-document-dialog")!, "settlement-close");
     await expect.poll(() => dirtyAtRead.length).toBeGreaterThan(0);
     expect(dirtyAtRead).toEqual([false]);
@@ -1245,7 +1261,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
   it("pays for chosen items, then a contribution, then an equal share, showing the balance after each", async () => {
     const answers = [
       takenOf(
-        { applied: "20.00", tendered: "20.00" },
+        { applied: "20.00", tendered: "25.00", change: "5.00" },
         { total: "80.00", received: "20.00", outstanding: "60.00" },
       ),
       takenOf(
@@ -1277,10 +1293,12 @@ describe("till-app: the three ways to pay part of a bill", () => {
       latest = answer.balance;
       return answer;
     });
-    const previewBillPayment = vi
-      .fn()
-      .mockResolvedValueOnce(cash("20.00", "0.00"))
-      .mockResolvedValueOnce(cash("20.00", "0.00"));
+    const previewBillPayment = vi.fn(async (_id: string, ask: BillPaymentAsk) => {
+      const applied = ask.shareOf === 1 ? latest.outstanding : "20.00";
+      return ask.method === "card"
+        ? { ...cash(applied, "0.00"), charged: applied, change: null }
+        : cash(applied, ask.tendered === "25" ? "5.00" : "0.00");
+    });
     const getBillBalance = vi.fn(async () => latest);
     const getPartyBills = vi.fn(async () => [
       billOf({ outstanding: latest.outstanding, hasPayments: latest.received !== "0.00" }),
@@ -1300,8 +1318,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(shownBalance(el)).toEqual(balanceShows("120.00", "0.00", "120.00"));
     await press(el, 'input[name="line"][value="1"]');
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     // The items are paid on a bill of their own, whose receipt shows; the table's bill is read again.
     expect(dialog(el)).toBeNull();
     emit(el.shadowRoot!.querySelector("till-settlement-document-dialog")!, "settlement-close");
@@ -1310,19 +1327,19 @@ describe("till-app: the three ways to pay part of a bill", () => {
     await openDialog(el, "contribution");
     expect(shownBalance(el)).toEqual(balanceShows("80.00", "0.00", "80.00"));
     await type(el, "amount", "20");
-    await type(el, "tendered", "20");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await type(el, "tendered", "25");
+    await takeBillPaymentFromDialog(el);
     expect(shownBalance(el)).toEqual(balanceShows("80.00", "20.00", "60.00"));
 
     await choosePayWay(el, "share");
     await type(el, "people", "3");
     await type(el, "tendered", "20");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     expect(shownBalance(el)).toEqual(balanceShows("80.00", "40.00", "40.00"));
 
-    expect(vi.mocked(api.previewItemPayment).mock.calls).toEqual([
+    expect(
+      vi.mocked(api.previewItemPayment).mock.calls.filter(([, ask]) => ask.method === "cash"),
+    ).toEqual([
       [
         "wo-4",
         { picks: [{ lineId: "line-1" }], method: "cash", tendered: "50" },
@@ -1342,7 +1359,15 @@ describe("till-app: the three ways to pay part of a bill", () => {
         submissionId: expect.any(String),
       },
     ]);
-    expect(previewBillPayment.mock.calls.map(([billId, ask]) => [billId, ask])).toEqual([
+    expect(
+      previewBillPayment.mock.calls
+        .filter(
+          ([, ask]) =>
+            ask.method === "cash" &&
+            (ask.tendered === "25" || (ask.kind === "share" && ask.tendered === "20")),
+        )
+        .map(([billId, ask]) => [billId, ask]),
+    ).toEqual([
       [
         "wo-4",
         {
@@ -1350,7 +1375,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
           kind: "contribution",
           amount: "20",
           method: "cash",
-          tendered: "20",
+          tendered: "25",
         },
       ],
       [
@@ -1370,7 +1395,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
         kind: "contribution",
         amount: "20",
         method: "cash",
-        tendered: "20",
+        tendered: "25",
         applied: "20.00",
         tip: "0.00",
         submissionId: expect.any(String),
@@ -1424,8 +1449,8 @@ describe("till-app: the three ways to pay part of a bill", () => {
   });
 
   it("leaves all the change as a tip when the guest says so, and takes it", async () => {
-    const previewBillPayment = vi
-      .fn()
+    const previewTender = vi
+      .fn<TillApi["previewBillPayment"]>()
       .mockResolvedValueOnce(cash("40.00", "10.00"))
       .mockResolvedValueOnce(cash("40.00", "0.00", "10.00"));
     const takeBillPayment = vi
@@ -1436,6 +1461,12 @@ describe("till-app: the three ways to pay part of a bill", () => {
           { received: "40.00", outstanding: "80.00", tips: "10.00" },
         ),
       );
+    const previewBillPayment = vi.fn(
+      (id: string, ask: BillPaymentAsk, options: { signal?: AbortSignal }) =>
+        ask.tendered === "50" || ask.tendered === "50.00"
+          ? previewTender(id, ask, options)
+          : Promise.resolve({ ...cash("40.00", "0.00"), charged: "40.00", change: null }),
+    );
     const { el } = await mountApp({ previewBillPayment, takeBillPayment });
     await openTable(el);
     await openDialog(el, "contribution");
@@ -1449,7 +1480,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(text(inDialog(el, "[data-pay-tip] dd"))).toBe(money("10.00"));
     await press(el, "[data-pay-confirm]");
 
-    expect(previewBillPayment.mock.calls[1]![1]).toEqual({
+    expect(previewTender.mock.calls[1]![1]).toEqual({
       expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
       kind: "contribution",
       amount: "40",
@@ -1748,8 +1779,8 @@ describe("till-app: a bill payment's refusals and retries", () => {
   it("an unanswered preview lets Continue be pressed again once it reaches its time limit", async () => {
     let previews = 0;
     // The first preview answers only its abort; with no signal it never answers.
-    const previewBillPayment = vi.fn(
-      (_billId: string, _ask: unknown, options?: { signal?: AbortSignal }) =>
+    const previewTender = vi.fn(
+      (_billId: string, _ask: BillPaymentAsk, options?: { signal?: AbortSignal }) =>
         new Promise<AllocationPreview>((resolve, reject) => {
           if (previews++ === 0) {
             options?.signal?.addEventListener("abort", () =>
@@ -1757,18 +1788,24 @@ describe("till-app: a bill payment's refusals and retries", () => {
             );
             return;
           }
-          resolve(cash("40.00", "0.00"));
+          resolve(cash("40.00", "10.00"));
         }),
     );
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
     onTestFinished(() => {
       vi.useRealTimers();
     });
+    const previewBillPayment = vi.fn(
+      (id: string, ask: BillPaymentAsk, options: { signal?: AbortSignal }) =>
+        ask.tendered === "50" || ask.tendered === "50.00"
+          ? previewTender(id, ask, options)
+          : Promise.resolve({ ...cash("40.00", "0.00"), charged: "40.00", change: null }),
+    );
     const { el } = await mountApp({ previewBillPayment });
     await openTable(el);
     await openDialog(el, "contribution");
     await type(el, "amount", "40.00");
-    await type(el, "tendered", "40.00");
+    await type(el, "tendered", "50.00");
     await press(el, "[data-pay-continue]");
 
     await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1_000);
@@ -1783,7 +1820,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
 
     await press(el, "[data-pay-continue]");
     await flush(el);
-    expect(previewBillPayment).toHaveBeenCalledTimes(2);
+    expect(previewTender).toHaveBeenCalledTimes(2);
     expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
   });
 
@@ -1985,8 +2022,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
       await openDialog(el, "contribution");
       await type(el, "amount", "40");
       await type(el, "tendered", "50");
-      await press(el, "[data-pay-continue]");
-      await press(el, "[data-pay-confirm]");
+      await takeBillPaymentFromDialog(el);
       await expect
         .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
         .toBe(t("bill_pay.unconfirmed"));
@@ -2060,8 +2096,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
@@ -2100,8 +2135,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
@@ -2188,8 +2222,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
@@ -2204,7 +2237,9 @@ describe("till-app: a bill payment's refusals and retries", () => {
 
     expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
     expect(inDialog(el, "wt-form-actions")?.error).toBe(t("bill_pay.unconfirmed"));
-    expect(api.previewBillPayment).toHaveBeenCalledOnce();
+    expect(
+      vi.mocked(api.previewBillPayment).mock.calls.filter(([, ask]) => ask.tendered === "50"),
+    ).toHaveLength(1);
     takeBillPayment.mockResolvedValueOnce(takenOf({}, {}));
     await press(el, "[data-pay-confirm]");
     expect(sent().at(-1)).toEqual(sent()[0]);
@@ -2226,8 +2261,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
       await openDialog(el, "contribution");
       await type(el, "amount", "40");
       await type(el, "tendered", "50");
-      await press(el, "[data-pay-continue]");
-      await press(el, "[data-pay-confirm]");
+      await takeBillPaymentFromDialog(el);
     };
     await contribute();
     await expect
@@ -2544,8 +2578,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     const expectedEdit = {
       billId: "wo-4",
@@ -2614,8 +2647,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     expect(takeBillPayment).toHaveBeenCalledOnce();
     expect(text(inDialog(el, "[data-pay-applied] dd"))).toBe(money("30.00"));
@@ -2651,8 +2683,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await openDialog(el, "items");
     await press(el, 'input[name="line"][value="1"]');
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     expect(inDialog(el, "wt-form-actions")!.error).toBe(
       `${t("form.fix_fields")} ${codeMessage("bill.received_exceeds_total")}`,
@@ -2669,8 +2700,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.disk_full"));
   });
@@ -2699,8 +2729,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     expect(inDialog(el, "wt-form-actions")!.error).toBe(
       t("sale.clock_unusable_check").replace("{date}", "01/01/2001"),
@@ -2718,8 +2747,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("take_payment.not_permitted"));
   });
@@ -2753,8 +2781,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     await expect.poll(() => takeBillPayment.mock.calls.length, { timeout: 5_000 }).toBe(2);
     await expect.poll(() => text(inDialog(el, "[data-pay-taken]"))).not.toBe("");
@@ -2768,8 +2795,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
@@ -2790,8 +2816,7 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
   }
 
   async function reopen(el: TillApp): Promise<void> {
@@ -2853,8 +2878,7 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
     await choosePayWay(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     expect(takeBillPayment).toHaveBeenCalledTimes(2);
     expect(sent()[1]!.submissionId).not.toBe(first);
@@ -2978,8 +3002,7 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
     expect(dialog(el)!.busy).toBe(false);
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     expect(takeBillPayment).toHaveBeenCalledTimes(2);
 
     release();
@@ -3039,8 +3062,7 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
     expect(paymentStart(el)).not.toBeNull();
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     expect(takeBillPayment).toHaveBeenCalledTimes(2);
     expect(sent()[1]).toMatchObject({ expectedEdit: { billId: "wo-check" } });
@@ -3112,8 +3134,7 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
@@ -3205,8 +3226,7 @@ describe("till-app: A803 quiet Pay follows the dishes on the screen and leaves a
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
@@ -3586,8 +3606,7 @@ describe("till-app: a balance read that shows the held payment (A796 default 7)"
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
@@ -3634,8 +3653,7 @@ describe("till-app: a balance read that shows the held payment (A796 default 7)"
       );
       await type(el, "amount", "40");
       await type(el, "tendered", "50");
-      await press(el, "[data-pay-continue]");
-      await press(el, "[data-pay-confirm]");
+      await takeBillPaymentFromDialog(el);
       expect(sent().length).toBe(before + 1);
       expect(sent().at(-1)!.submissionId).not.toBe(original.submissionId);
     },
@@ -3755,8 +3773,7 @@ describe("till-app: a balance read that shows the held payment (A796 default 7)"
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
@@ -3787,8 +3804,7 @@ describe("till-app: a balance read that shows the held payment (A796 default 7)"
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
@@ -3843,8 +3859,7 @@ describe("till-app: the bill's balance is read once for each answer", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "20");
     await type(el, "tendered", "20");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     await expect.poll(() => readCounts().bills).toBeGreaterThan(atSend.bills);
     await flush(el);
     return { el, atSend };
@@ -3942,7 +3957,9 @@ describe("till-app: the bill payment dialog's own steps", () => {
 
     expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
     await press(el, "[data-pay-continue]");
-    expect(api.previewBillPayment).toHaveBeenCalledTimes(2);
+    expect(
+      vi.mocked(api.previewBillPayment).mock.calls.filter(([, ask]) => ask.tendered === "50"),
+    ).toHaveLength(2);
     expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
   });
 
@@ -4022,8 +4039,7 @@ describe("till-app: the bill payment dialog's own steps", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     emit(tableOrder(el), "back-to-floor");
     await discardUnsavedLeave(el);
@@ -4104,8 +4120,7 @@ describe("till-app: a bill that already holds money", () => {
     ).toBe("true");
     expect(text(inDialog(el, "[data-quiet-pay-amount]"))).toBe(money("70.00"));
     await type(el, "tendered", "70");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     expect(api.recordSale).not.toHaveBeenCalled();
     expect(api.collectOrder).not.toHaveBeenCalled();
@@ -4159,8 +4174,7 @@ describe("till-app: a bill that already holds money", () => {
 
       await openDialog(el, "rest");
       await type(el, "tendered", "80");
-      await press(el, "[data-pay-continue]");
-      await press(el, "[data-pay-confirm]");
+      await takeBillPaymentFromDialog(el);
 
       expect(takeBillPayment).toHaveBeenCalledOnce();
       expect(api.collectOrder).not.toHaveBeenCalled();
@@ -4284,8 +4298,7 @@ describe("till-app: Find bill collects the rest of a printed bill", () => {
         t("bill_pay.items_barred_found"),
       );
       await type(el, "tendered", "30");
-      await press(el, "[data-pay-continue]");
-      await press(el, "[data-pay-confirm]");
+      await takeBillPaymentFromDialog(el);
 
       expect(takeBillPayment).toHaveBeenCalledOnce();
       expect(sent()[0]).toMatchObject({
@@ -4323,8 +4336,7 @@ describe("till-app: Find bill collects the rest of a printed bill", () => {
       getFiledTicket: vi.fn().mockResolvedValue(invoiceOf("30.00")),
     });
     await type(el, "tendered", "25");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
@@ -5025,8 +5037,7 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(dialog(el)!.way).toBe("whole");
     expect(shownBalance(el)).toEqual(balanceShows("120.00", "50.00", "70.00"));
     await type(el, "tendered", "70");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     expect(takeBillPayment).toHaveBeenCalledWith("wo-1", expect.anything(), expect.anything());
     expect(api.recordSale).not.toHaveBeenCalled();
@@ -5698,8 +5709,7 @@ describe("till-app: a partly paid order at the counter", () => {
     payRest(el)!.click();
     await flush(el);
     await type(el, "tendered", "70");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
@@ -5820,10 +5830,13 @@ describe("till-app: the guests the receipt of a bill paid in parts prints", () =
         latest = answer.balance;
         return answer;
       }),
-      previewBillPayment: vi
-        .fn()
-        .mockResolvedValueOnce(cash("50.00", "0.00"))
-        .mockResolvedValueOnce(cash("70.00", "0.00")),
+      previewBillPayment: vi.fn(async (_id: string, ask: BillPaymentAsk) => {
+        const applied =
+          ask.amount === undefined ? latest.outstanding : Number(ask.amount).toFixed(2);
+        return ask.method === "card"
+          ? { ...cash(applied, "0.00"), charged: applied, change: null }
+          : cash(applied, "0.00");
+      }),
       getBillBalance: vi.fn(async () => latest),
       getPartyBills: vi.fn(async () => [
         billOf({
@@ -6057,8 +6070,7 @@ describe("till-app: the owner's split after a contribution", () => {
     await press(el, 'input[name="line"][value="1"]');
     await press(el, 'input[name="line"][value="2"]');
     await type(el, "tendered", "30");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     expect(takeBillPayment.mock.calls[0]![0]).toBe("wo-check");
     const ticket = el.shadowRoot!.querySelector<HTMLElement & { result: TillSaleResult }>(
@@ -6204,12 +6216,14 @@ describe("till-app: a bill payment on the card reader", () => {
         await choosePayMethod(el, "card");
         await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
       }
-      await press(el, "[data-pay-continue]");
+      if (method === "cash") await press(el, "[data-pay-continue]");
+      else await readyBillCharge(el);
       if (!earlierUnanswered) {
         answering = false;
         await router.probeNow();
       }
-      await press(el, "[data-pay-confirm]");
+      if (method === "card") await takeBillPaymentFromDialog(el);
+      else await press(el, "[data-pay-confirm]");
       const attempts = earlierUnanswered ? 2 : 1;
       await expect.poll(() => takeBillPayment.mock.calls.length, { timeout: 5_000 }).toBe(attempts);
       await expect(takeBillPayment.mock.results[attempts - 1]!.value).rejects.toEqual({
@@ -6222,8 +6236,8 @@ describe("till-app: a bill payment on the card reader", () => {
 
       answering = true;
       await router.probeNow();
-      if (!earlierUnanswered) await press(el, "[data-pay-continue]");
-      await press(el, "[data-pay-confirm]");
+      if (earlierUnanswered) await press(el, "[data-pay-confirm]");
+      else await takeBillPaymentFromDialog(el);
       await expect.poll(() => takeBillPayment.mock.calls.length).toBe(attempts + 1);
       await expect.poll(() => text(inDialog(el, "[data-pay-taken]"))).not.toBe("");
       const ids = sent().map((request) => request.submissionId);
@@ -6270,8 +6284,7 @@ describe("till-app: a bill payment on the card reader", () => {
     await type(el, "amount", "40");
     await choosePayMethod(el, "card");
     if (chooseReader) await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     return el;
   }
 
@@ -6312,8 +6325,7 @@ describe("till-app: a bill payment on the card reader", () => {
       expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
 
       await type(el, "amount", "40");
-      await press(el, "[data-pay-continue]");
-      await press(el, "[data-pay-confirm]");
+      await takeBillPaymentFromDialog(el);
       expect(sent()).toHaveLength(4);
       expect(sent()[3]!.submissionId).not.toBe(sent()[0]!.submissionId);
       expect(sent()[3]!.amount).toBe(sent()[0]!.amount);
@@ -6330,8 +6342,7 @@ describe("till-app: a bill payment on the card reader", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "40");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     expect(dialog(el)!.confirmationLocked).toBe(true);
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.unconfirmed"));
 
@@ -6516,8 +6527,7 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(dialog(el)!.confirmationLocked).toBe(false);
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
     await type(el, "amount", "40");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     expect(sent()[3]!.submissionId).not.toBe(sent()[0]!.submissionId);
   });
 
@@ -6529,8 +6539,7 @@ describe("till-app: a bill payment on the card reader", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "40");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     expect(dialog(el)!.confirmationLocked).toBe(false);
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.disk_full"));
     expect(paymentStart(el)).not.toBeNull();
@@ -6816,8 +6825,7 @@ describe("till-app: a bill payment on the card reader", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     expect(api.takeBillPayment).toHaveBeenCalledOnce();
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
     try {
@@ -6840,8 +6848,7 @@ describe("till-app: a bill payment on the card reader", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await choosePayMethod(el, "manual");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     expect(api.takeBillPayment).toHaveBeenCalledOnce();
     expect(sent()[0]).toMatchObject({ entry: "manual", method: "card" });
     vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
@@ -6916,8 +6923,7 @@ describe("till-app: a bill payment on the card reader", () => {
           submissionId: expect.any(String),
         });
         expect(paymentStart(el)!.disabled).toBe(false);
-        await press(el, "[data-pay-continue]");
-        await press(el, "[data-pay-confirm]");
+        await takeBillPaymentFromDialog(el);
         expect(sent()).toEqual([original, original]);
         expect(
           el.shadowRoot!.querySelector("till-ticket-view, till-settlement-document-dialog"),
@@ -7027,7 +7033,7 @@ describe("till-app: a bill payment on the card reader", () => {
         expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
       } else {
         expect(inDialog(el, "wt-form-actions")!.error).toBe(message ?? t("bill_pay.card_declined"));
-        expect(inDialog(el, "[data-pay-confirm]")!.disabled).toBe(false);
+        await expect.poll(() => inDialog(el, "[data-quiet-pay-card]")?.disabled).toBe(false);
       }
       expect(inDialog(el, "[data-pay-cancel-reader]")).toBeNull();
     },
@@ -7045,9 +7051,9 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.card_declined"));
     expect(inDialog(el, "[data-pay-taken]")).toBeNull();
     expect(shownBalance(el)).toEqual(balanceShows("120.00", "0.00", "120.00"));
-    expect(inDialog(el, "[data-pay-confirm]")!.disabled).toBe(false);
+    await expect.poll(() => inDialog(el, "[data-quiet-pay-card]")?.disabled).toBe(false);
 
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     expect(sent()).toHaveLength(2);
     expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
@@ -7069,9 +7075,9 @@ describe("till-app: a bill payment on the card reader", () => {
 
         expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.payment_failed"));
         expect(inDialog(el, "[data-pay-taken]")).toBeNull();
-        expect(inDialog(el, "[data-pay-confirm]")!.disabled).toBe(false);
+        await expect.poll(() => inDialog(el, "[data-quiet-pay-card]")?.disabled).toBe(false);
 
-        await press(el, "[data-pay-confirm]");
+        await takeBillPaymentFromDialog(el);
         expect(sent()).toHaveLength(2);
         expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
         expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
@@ -7114,8 +7120,7 @@ describe("till-app: a bill payment on the card reader", () => {
       const el = await takeOnReader(takeBillPayment);
       expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("device.profile_changed"));
 
-      await press(el, "[data-pay-continue]");
-      await press(el, "[data-pay-confirm]");
+      await takeBillPaymentFromDialog(el);
 
       expect(sent()).toHaveLength(2);
       expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
@@ -7135,8 +7140,7 @@ describe("till-app: a bill payment on the card reader", () => {
       const el = await takeOnReader(takeBillPayment);
       expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage(code));
 
-      await press(el, "[data-pay-continue]");
-      await press(el, "[data-pay-confirm]");
+      await takeBillPaymentFromDialog(el);
 
       expect(sent()).toHaveLength(2);
       expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
@@ -7227,8 +7231,7 @@ describe("till-app: a bill payment on the card reader", () => {
 
     expect(inDialog(el, 'input[name="reader"]')).toBeNull();
     expect(inDialog(el, 'wt-input[name="externalRef"]')).not.toBeNull();
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     expect(sent()[0]!.entry).toBe("manual");
   });
 
@@ -7255,8 +7258,7 @@ describe("till-app: a bill payment on the card reader", () => {
 
     expect(inDialog(el, 'input[name="reader"]')).toBeNull();
     expect(inDialog(el, 'wt-input[name="externalRef"]')).not.toBeNull();
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     expect(sent()[0]!.entry).toBe("manual");
   });
 
@@ -7276,8 +7278,7 @@ describe("till-app: a bill payment on the card reader", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await choosePayMethod(el, "manual");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     expect(sent()[0]!.entry).toBe("manual");
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.disk_full_manual_card"));
@@ -7302,8 +7303,7 @@ describe("till-app: a bill payment on the card reader", () => {
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await choosePayMethod(el, "manual");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
 
     expect(sent()[0]!.entry).toBe("manual");
     expect(inDialog(el, "wt-form-actions")!.error).toBe(t("sale.chain_handed_over_manual_card"));
@@ -7346,8 +7346,7 @@ describe("till-app: a bill payment on the card reader", () => {
     await flush(el);
     await type(el, "amount", "40");
     await choosePayMethod(el, "card");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     return el;
   }
 
@@ -7411,8 +7410,7 @@ describe("till-app: a bill payment on the card reader", () => {
   });
 
   describe("till-app: the charge names the reader the handheld's row shows", () => {
-    /** A handheld at the confirmation of a 40.00 payment by `method`, before Take payment is
-     * pressed. */
+    /** A handheld with a checked 40.00 card quote or a 40.00 cash confirmation. */
     async function handheldConfirming(
       takeBillPayment: unknown,
       method: "card" | "cash",
@@ -7457,13 +7455,17 @@ describe("till-app: a bill payment on the card reader", () => {
       await flush(el);
       await type(el, "amount", "40");
       await choosePayMethod(el, method);
-      if (method === "cash") await type(el, "tendered", "50");
-      await press(el, "[data-pay-continue]");
+      if (method === "cash") {
+        await type(el, "tendered", "50");
+        await press(el, "[data-pay-continue]");
+      } else await readyBillCharge(el);
       return el;
     }
 
     async function confirm(el: TillApp, detail?: Record<string, unknown>): Promise<void> {
-      emit(dialog(el)!, "bill-pay-confirm", detail);
+      const pay = dialog(el)!;
+      const quote = pay.asked === null ? pay.checkedQuote : null;
+      emit(pay, "bill-pay-confirm", quote === null ? detail : { ...detail, quote });
       await flush(el);
     }
 
@@ -7595,8 +7597,7 @@ describe("till-app: a bill payment on the card reader", () => {
 
     async function takenAsANewPayment(el: TillApp, takeBillPayment: ReturnType<typeof vi.fn>) {
       takeBillPayment.mockResolvedValueOnce(received());
-      await press(el, "[data-pay-continue]");
-      await press(el, "[data-pay-confirm]");
+      await takeBillPaymentFromDialog(el);
       expect(sent().at(-1)!.submissionId).not.toBe(sent()[0]!.submissionId);
       expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
     }
@@ -7634,7 +7635,7 @@ describe("till-app: a bill payment on the card reader", () => {
       );
 
       await typeGuests(el, "5");
-      await press(el, "[data-pay-confirm]");
+      await takeBillPaymentFromDialog(el);
       expect(sent()).toHaveLength(2);
       expect(sent()[1]!.submissionId).toBe(sent()[0]!.submissionId);
       expect(sent()[1]).toHaveProperty("guestCount", 5);
@@ -9058,8 +9059,7 @@ describe("till-app: a box update while a bill payment still waits for the server
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
+    await takeBillPaymentFromDialog(el);
     expect(api.takeBillPayment).toHaveBeenCalledOnce();
 
     await signOutIdle(el, activity);

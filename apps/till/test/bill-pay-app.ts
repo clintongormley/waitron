@@ -1,4 +1,5 @@
 import { expect, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import {
   adjustmentStubs,
@@ -485,6 +486,32 @@ export const paymentStart = (el: TillApp) =>
     el,
     "[data-pay-continue], [data-quiet-pay-card], [data-quiet-pay-cash], [data-quiet-pay-manual]",
   );
+
+export async function readyBillCharge(el: TillApp): Promise<HTMLElementTagNameMap["wt-button"]> {
+  const charge = () =>
+    dialog(el)?.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-quiet-pay-card]",
+    );
+  await expect
+    .poll(() => charge()?.disabled === false || inDialog(el, "[data-pay-own-receipt]") !== null)
+    .toBe(true);
+  await answerOwnReceipt(el, "no", { ifUnanswered: true });
+  await expect.poll(() => charge()?.disabled).toBe(false);
+  return charge()!;
+}
+
+export async function takeBillPaymentFromDialog(el: TillApp): Promise<void> {
+  if (
+    inDialog(el, "[data-pay-continue]") === null &&
+    inDialog(el, "[data-quiet-pay-card]") !== null
+  ) {
+    await userEvent.click(await readyBillCharge(el));
+    await flush(el);
+    return;
+  }
+  await press(el, "[data-pay-continue]");
+  await press(el, "[data-pay-confirm]");
+}
 
 /** Presses `selector` in the Pay window. Take payment first answers an unanswered own-receipt
  * question No, the answer that changes nothing else the payment sends; the question's own cases

@@ -1028,9 +1028,10 @@ own, which **Waiting orders** shows with the order's number in brackets. Once su
 paid with **An amount**, **Split equally** or **Whole bill**, not by item; when its bill is
 presented for collection, choose **Pay in parts** to see those choices.
 
-At a table, choose **Charge** to check a payment on a connected reader. Choose **Cash** or **Other card machine**
-to enter the payment details. At the Counter, choose the method and press **Continue**. Check the
-amounts on the confirmation, including any changes since you opened Pay.
+At a table, check **To pay** and answer any receipt questions on **Pay**. Choose **Charge** to start
+the connected reader, or **Cash** to enter what the guest handed over. Choose **Other card machine**
+to enter the details of a payment taken separately. At the Counter, choose the method, press
+**Continue** and check the amounts on the confirmation.
 
 **A bill paid more than it comes to.** A bill can take more than it comes to, for example a
 contribution followed by dishes paid on a bill of their own. It then says how much more and
@@ -1041,7 +1042,7 @@ If the bill comes to €0.00, choose **Close** after you see the refund confirma
 bill, choose **Cash** or **Card** and **Confirm payment** for €0.00 to close it.
 
 **A receipt of their own.** When a guest pays part of a bill that has no invoice yet and is set
-for a receipt, not a full invoice, the confirmation asks whether they want their own receipt for that amount. **Yes** prints them a ticket
+for a receipt, Pay asks whether they want their own receipt for that amount. **Yes** prints them a ticket
 of its own, and the table's receipt takes it off. **No** lists it on the table's receipt.
 To see which table's receipt took a part payment off, open its receipt in **Find a bill**.
 
@@ -1064,8 +1065,7 @@ An amount above what is still due becomes a tip, so check the full card charge w
 sending it. For example, a €50 card contribution towards €40 still due pays €40 off the bill and adds a €10
 tip. If the venue does not take tips, use the amount the refusal says can be charged.
 
-On a phone, the confirmation button names the amount and reader. Once you press it, the waiting
-panel shows that same amount and reader, with elapsed waiting time. Complete the card step on
+On a phone, the waiting panel shows the amount, reader and elapsed waiting time. Complete the card step on
 that reader and wait for the result. A spinning phone is not proof that the card failed.
 
 If the guest changes their mind while the SumUp reader waits for their card, choose

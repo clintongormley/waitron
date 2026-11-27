@@ -1085,9 +1085,11 @@ muestra con el número del pedido entre paréntesis. Si ese pedido se pasa despu
 **Dividir a partes iguales** o **Toda la cuenta**, no por artículos; cuando su cuenta está
 presentada para su cobro, elige **Cobrar por partes** para ver esas opciones.
 
-En una mesa, pulsa **Cobrar** para revisar el pago con un lector conectado. Pulsa **Efectivo** u
-**Otro datáfono** para introducir los detalles. En Mostrador, elige la forma de pago y pulsa
-**Continuar**. Revisa los importes en la confirmación, incluidos los cambios desde que abriste Cobrar.
+En una mesa, comprueba **A pagar** y responde a las preguntas sobre el ticket en **Cobrar**.
+Pulsa **Cobrar** para iniciar el pago en el lector conectado o **Efectivo** para indicar cuánto te
+ha entregado el cliente. Pulsa **Otro datáfono** para introducir los datos de un pago realizado
+aparte. En Mostrador, elige la forma de pago, pulsa **Continuar** y comprueba los importes en la
+confirmación.
 
 **Una cuenta pagada de más.** Una cuenta puede recibir más de lo que suma, por ejemplo una
 aportación seguida de platos cobrados en una cuenta propia. Entonces indica cuánto de más y no
@@ -1099,7 +1101,7 @@ Si la cuenta suma 0,00 €, pulsa **Cerrar** cuando veas la confirmación de la 
 cuenta, elige **Efectivo** o **Tarjeta** y pulsa **Confirmar cobro** por 0,00 € para cerrarla.
 
 **Un ticket propio.** Cuando un cliente paga una parte de una cuenta que aún no tiene factura y que
-va con ticket, no con factura completa, la confirmación pregunta si quiere su propio ticket por ese importe. **Sí** le imprime un ticket
+va con ticket, en Cobrar se pregunta si quiere su propio ticket por ese importe. **Sí** le imprime un ticket
 propio, y el ticket de la mesa lo descuenta. **No** lo deja en el ticket de la mesa.
 Para ver qué ticket de la mesa descontó un pago parcial, abre su ticket en **Buscar cuenta**.
 
@@ -1123,8 +1125,7 @@ completo antes de enviarlo. Por ejemplo, aportar 50 € con tarjeta cuando queda
 40 € de la cuenta y añade 10 € de propina. Si el local no acepta propinas, usa el importe que el
 mensaje indica que se puede cobrar.
 
-En un teléfono, el botón de confirmación nombra el importe y el lector. Al pulsarlo, el panel de
-espera muestra ese mismo importe y lector, con el tiempo transcurrido. Completa el paso de la
+En un teléfono, el panel de espera muestra el importe, el lector y el tiempo transcurrido. Completa el paso de la
 tarjeta en ese lector y espera el resultado. Que el teléfono siga esperando no demuestra que el
 cobro haya fallado.
 

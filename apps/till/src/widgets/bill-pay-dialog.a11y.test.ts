@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { commands, page } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
 import { pendingCard } from "../../test/bill-pay-fixtures.js";
+import type { TablePayQuoteRequest } from "../state/table-pay-quote.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
 import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/payments-api.js";
 import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/device-session-api.js";
@@ -318,6 +319,42 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       });
     }
   }
+
+  it("lets a keyboard user answer the receipt question before choosing a payment", async () => {
+    const { el, host } = await mount({
+      quiet: true,
+      way: "contribution",
+      amount: "20.00",
+      ownReceiptOffered: true,
+      takesCash: true,
+      cardReader: "simulator",
+    });
+    const charge = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-quiet-pay-card]");
+    el.addEventListener("bill-pay-quote", (event) => {
+      const request = (event as CustomEvent<TablePayQuoteRequest>).detail;
+      el.checkedQuote = {
+        request,
+        preview: shareOf3,
+        cash: shareOf3,
+        refusal: null,
+        revisions: {},
+      };
+    });
+    const receiptAnswer = () =>
+      el.shadowRoot!.querySelector<HTMLInputElement>('input[name="ownReceipt"][value="no"]');
+    expect(receiptAnswer()).toBeNull();
+    el.quoteContext = "table bill";
+    await expect.poll(receiptAnswer).not.toBeNull();
+    expect(charge()?.disabled).toBe(true);
+    await expectNoA11yViolations(host);
+
+    receiptAnswer()!.focus();
+    await userEvent.keyboard(" ");
+    expect(receiptAnswer()!.checked).toBe(true);
+    await expect.poll(() => charge()?.disabled).toBe(false);
+    await expectNoA11yViolations(host);
+  });
 
   it("has no violations choosing items, with the units of a line", async () => {
     const { el, host } = await mount();

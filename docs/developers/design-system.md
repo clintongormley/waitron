@@ -7112,13 +7112,14 @@ stacked choices with a hint each and a help-mode badge linked to the payment gui
 Cash are large actions. Other card machine is a text action. Choose Full invoice from the bill
 before opening Pay. Back uses the payment draft's leave check.
 
-Charge opens the server's confirmation. Cash and Other card machine open their existing fields
-before confirmation. Printed bills use these choices directly. A presented bill uses its whole
+Pay shows the server's checked amount and any required receipt answers. Charge starts the reader
+for that amount. Cash opens the tender fields and takes payment when the change is confirmed.
+Other card machine opens its own fields before confirmation. A presented bill uses its whole
 payment confirmation, with Pay in parts offered when it still has a balance and no issued invoice.
 Counter, retained whole-payment confirmations and zero-total completion use their existing windows.
 
-Whole bill asks the server for one share of the current balance. Its confirmation heading and
-receipt guest-count prompt use that preview, even while the opening balance is still shown.
+Whole bill asks the server for one share of the current balance. The checked amount is used for
+the guest-count prompt when a receipt needs one.
 Items groups matching whole portions with the bill screen's grouping key and a count control;
 the request carries the selected members' line ids (`ItemPick.lineId`), and Pay for items moves
 them to a bill of their own; on a printed bill the server first reopens it, crediting its receipt,

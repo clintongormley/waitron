@@ -352,6 +352,15 @@ import {
   withItems,
 } from "./state/pay-for-items.js";
 import {
+  readTablePayQuote,
+  replaceCardAllocation,
+  sameCardAllocation,
+  tablePayContext,
+  type TablePayQuote,
+  type TablePayQuoteRequest,
+} from "./state/table-pay-quote.js";
+import { requestBillReaderStop, type BillReaderStop } from "./state/bill-reader-stop.js";
+import {
   billAfterDocument,
   billAfterItems,
   billNoticeText,
@@ -481,7 +490,6 @@ import type {
   AllocationPreview,
   BillBalance,
   BillParty,
-  BillReaderStopOutcome,
   BillPaymentResult,
   BillPaymentView,
   BillRefundResult,
@@ -1550,12 +1558,6 @@ interface PendingReread {
   out: boolean;
 }
 
-interface BillReaderStop extends Omit<ReaderStopControl, "request"> {
-  submissionId: string;
-  signal?: AbortSignal;
-  answer?: Promise<BillReaderStopOutcome>;
-}
-
 /** The bill payment dialog: the order it pays, and what the server last answered it. */
 interface BillPaying extends PayingOrder {
   id: number;
@@ -1565,6 +1567,7 @@ interface BillPaying extends PayingOrder {
   balance: BillBalance | null;
   asked: PayRequest | null;
   preview: AllocationPreview | null;
+  quote?: TablePayQuote;
   expectedEdit: BillEditExpected | null;
   refusal: PayRefusal | null;
   taken: PayTaken | null;
@@ -4193,7 +4196,7 @@ export class TillApp extends LitElement {
             visible: () => sameSession() && here(),
             request: () => {
               if (this.#directReaderStop === live && live.visible())
-                void this.#requestReaderStop(api, req.id, live);
+                void requestBillReaderStop(api, req.id, live, () => this.requestUpdate());
             },
           };
           stop = this.#directReaderStop = live;
@@ -12020,6 +12023,8 @@ export class TillApp extends LitElement {
         .amount=${open.amount}
         .asked=${open.asked}
         .preview=${open.preview}
+        .quoteContext=${quiet ? this.#tablePayContext(open) : ""}
+        .checkedQuote=${open.quote ?? null}
         .refusal=${open.refusal}
         .taken=${open.taken}
         .paymentSlip=${this.#paymentSlip(open.taken?.slipBillId ?? open.billId, open.taken?.pending === undefined ? open.taken?.slipPaymentId : undefined)}
@@ -12059,7 +12064,8 @@ export class TillApp extends LitElement {
         @pay-equipment-sticker=${(event: CustomEvent<EquipmentCode>) =>
           void this.#pickUpSticker(event.detail)}
         @pay-equipment-nfc=${() => this.#askNfc()}
-        @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
+        @bill-pay-preview=${(event: CustomEvent<PayRequest>) => void this.#onBillPayPreview(event.detail)}
+        @bill-pay-quote=${(event: CustomEvent<TablePayQuoteRequest>) => void this.#onBillPayQuote(event.detail)}
         .readerStop=${stop?.status ?? null}
         .readerStopRefusal=${stop?.refusal ?? null}
         @bill-pay-stop=${() => void this.#onBillPayStop()}
@@ -22648,7 +22654,6 @@ export class TillApp extends LitElement {
     return true;
   }
 
-  /** The dialog's unsent sentence {@link #refusedUnsent} put up, taken down as the screen's is. */
   #unsentSaid?: PayRefusal;
 
   /** The till's own error, as the dialog shows it over the banner it covers. */
@@ -22659,11 +22664,55 @@ export class TillApp extends LitElement {
     return typeof said === "string" ? { code: "draft_unsaved", text: said } : null;
   }
 
-  async #onBillPayPreview(event: Event): Promise<void> {
-    const asked = (event as CustomEvent<PayRequest>).detail;
-    // The dialog's events come only while it is open. A press while a request is out is dropped.
-    const open = this.billPaying!;
-    if (open.busy) return;
+  #tablePayEdit(open: BillPaying) {
+    return open.found !== undefined
+      ? open.found.expectedEdit
+      : this.#draftSync?.expectedEditFor(open.billId);
+  }
+
+  #tablePayContext(open: BillPaying): string {
+    const unsent = this.#unsentOnScreen(open.billId);
+    return tablePayContext(open, this.#tablePayEdit(open), this.#billRevisions(), unsent);
+  }
+
+  #quoteRead?: TablePayQuoteRequest;
+  async #onBillPayQuote(request: TablePayQuoteRequest): Promise<void> {
+    const open = this.billPaying;
+    if (
+      open === null ||
+      open.surface !== "table" ||
+      open.busy ||
+      request.context !== this.#tablePayContext(open) ||
+      this.#refusedUnsent(open)
+    )
+      return;
+    const api = this.api;
+    const session = this.#operatorSession;
+    const visit = this.#orderVisit;
+    this.#quoteRead = request;
+    const quote = await readTablePayQuote(
+      api,
+      open.billId,
+      request,
+      this.#tablePayEdit(open),
+      this.#billRevisions(),
+    );
+    const now = this.#billPayingNow(open.id);
+    if (
+      now !== null &&
+      !now.busy &&
+      this.api === api &&
+      this.#operatorSession === session &&
+      this.#orderVisit === visit &&
+      this.#quoteRead === request &&
+      this.#tablePayContext(now) === request.context
+    )
+      this.billPaying = { ...now, quote };
+  }
+
+  async #onBillPayPreview(asked: PayRequest, quote?: TablePayQuote): Promise<void> {
+    const open = this.billPaying;
+    if (open === null || open.busy) return;
     const pending = this.#unansweredPayments.get(open.billId);
     if (pending?.unconfirmed === true) {
       this.billPaying = {
@@ -22683,11 +22732,9 @@ export class TillApp extends LitElement {
         return;
       }
       const { expectedEdit, readCounterEdit } = previewEdit(
-        open.found !== undefined
-          ? open.found.expectedEdit
-          : open.surface === "counter"
-            ? this.#counterExpectedEdit(open.billId)
-            : this.#draftSync?.expectedEditFor(open.billId),
+        open.surface === "counter" && open.found === undefined
+          ? this.#counterExpectedEdit(open.billId)
+          : this.#tablePayEdit(open),
         open,
         asked.choice,
       );
@@ -22716,8 +22763,20 @@ export class TillApp extends LitElement {
       }
       const preview = await previewPayment(api, open.billId, asked, paidEdit);
       const now = this.#billPayingNow(open.id);
-      if (now !== null)
-        this.billPaying = { ...now, asked, preview, expectedEdit: paidEdit, busy: false };
+      if (now === null) return;
+      if (
+        quote !== undefined &&
+        (!current() || quote.request.context !== this.#tablePayContext(now))
+      )
+        this.billPaying = { ...now, busy: false };
+      else if (quote !== undefined && !sameCardAllocation(quote.preview, preview))
+        this.billPaying = {
+          ...now,
+          quote: replaceCardAllocation(quote, preview),
+          refusal: { code: "bill.allocation_changed" },
+          busy: false,
+        };
+      else this.billPaying = { ...now, asked, preview, expectedEdit: paidEdit, busy: false };
     } catch (error) {
       await this.#onBillPayRefused(open.id, error, asked, "preview");
     }
@@ -22728,41 +22787,22 @@ export class TillApp extends LitElement {
     if (open === null) return;
     const send = this.#paymentsOut.get(open.billId);
     if (send?.dialogId !== open.id || send.readerStop === undefined) return;
-    void this.#requestReaderStop(this.api, open.billId, send.readerStop);
-  }
-
-  async #requestReaderStop(api: TillApi, billId: string, stop: BillReaderStop): Promise<void> {
-    if (stop.status === "sending" || stop.status === "requested" || stop.status === "unknown")
-      return;
-    stop.status = "sending";
-    stop.refusal = undefined;
-    this.requestUpdate();
-    stop.answer = api
-      .cancelBillReaderPayment(billId, stop.submissionId, {
-        signal: stop.signal ?? AbortSignal.timeout(TABLE_REQUEST_LIMIT_MS),
-      })
-      .then(
-        ({ outcome }) => outcome,
-        (error: unknown): BillReaderStopOutcome => {
-          const status = (error as { status?: unknown } | null)?.status;
-          if (typeof status === "number" && status >= 400 && status < 500 && status !== 408) {
-            stop.refusal = refusalOf(error, false);
-            return "refused";
-          }
-          return "unknown";
-        },
-      );
-    stop.status = await stop.answer;
-    this.requestUpdate();
+    void requestBillReaderStop(this.api, open.billId, send.readerStop, () => this.requestUpdate());
   }
 
   async #onBillPayConfirm(event: Event): Promise<void> {
-    // Sent only from the confirmation, which shows an allocated preview of what was asked.
-    const open = this.billPaying!;
+    let open = this.billPaying!;
     if (open.busy) return;
-    const asked = open.asked!;
-    const { readerId, ...detail }: BillPayConfirmDetail =
+    const { readerId, quote, ...detail }: BillPayConfirmDetail =
       (event as CustomEvent<BillPayConfirmDetail | null>).detail ?? {};
+    if (quote !== undefined) {
+      if (open.quote !== quote || quote.request.context !== this.#tablePayContext(open)) return;
+      await this.#onBillPayPreview(quote.request.asked, quote);
+      const checked = this.#billPayingNow(open.id);
+      if (checked?.asked !== quote.request.asked || checked.preview === null) return;
+      open = checked;
+    }
+    const asked = open.asked!;
     const confirmation = withItems(
       confirmationOf(
         paymentAsk(asked.choice, asked.pay, open.expectedEdit),
@@ -22773,7 +22813,7 @@ export class TillApp extends LitElement {
       ),
       asked,
       open.expectedEdit,
-      open.surface === "table" ? this.#billRevisions() : {},
+      quote?.revisions ?? (open.surface === "table" ? this.#billRevisions() : {}),
     );
     // Named now: a tap while the card is out may change the phone's reader before the answer.
     const ready = this.handheldMode
@@ -22960,7 +23000,10 @@ export class TillApp extends LitElement {
       // The put-back moved the table's bill's revisions, so its confirmation could only be refused.
       this.billPaying = {
         ...now,
-        ...(own === undefined ? { asked: null, preview: null } : shown),
+        ...shown,
+        ...(own === undefined || now.quote?.request.asked === now.asked
+          ? { asked: null, preview: null }
+          : {}),
         refusal: cancelled
           ? { code: "payment_failed", text: t("bill_pay.no_payment_taken") }
           : {
@@ -23120,18 +23163,26 @@ export class TillApp extends LitElement {
     if (unconfirmed || refusal.code === "network") {
       this.billPaying = { ...now, refusal, busy: false };
     } else if (refusal.code === "bill.allocation_changed" && preview !== undefined) {
+      const fresh = paysOnNewBill(now.preview)
+        ? itemsAllocatedFrom(preview as AllocationPreview)
+        : (preview as AllocationPreview);
+      const quote = now.quote?.request.asked === asked ? now.quote : undefined;
       this.billPaying = {
         ...now,
-        asked,
-        preview: paysOnNewBill(now.preview)
-          ? itemsAllocatedFrom(preview as AllocationPreview)
-          : (preview as AllocationPreview),
+        asked: quote === undefined ? asked : null,
+        preview: quote === undefined ? fresh : null,
+        quote: quote === undefined ? now.quote : replaceCardAllocation(quote, fresh),
         refusal: { code: refusal.code },
         busy: false,
       };
     } else if (refusal.code === "management.request_invalid" && refusal.field === "guestCount") {
-      // The guests field is drawn only on the confirmation.
-      this.billPaying = { ...now, refusal, busy: false };
+      const opening = now.quote?.request.asked === asked;
+      this.billPaying = {
+        ...now,
+        ...(opening ? { asked: null, preview: null } : {}),
+        refusal,
+        busy: false,
+      };
     } else {
       this.billPaying = {
         ...now,
