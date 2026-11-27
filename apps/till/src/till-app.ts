@@ -23778,7 +23778,6 @@ export class TillApp extends LitElement {
     this.drill = drill;
   }
 
-  /** Records the `nav` trail for the tab it returns to. */
   #popDrill(): void {
     this.#dismissStationChoices();
     if (isTillDestination(this.drill?.kind))
