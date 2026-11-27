@@ -810,12 +810,12 @@ remain the historical receipt for the variants table.
 Minimum interactive target, 44px, **on both axes**. POS screens are touched under time pressure by
 staff who are not looking carefully — a numpad key ("1", "+", "−") fails just as badly if it's
 44px tall but only 32px wide as if it were too short. `wt-button`, `wt-input`, `wt-textarea`,
-`wt-price-input`, `wt-number-stepper`, `wt-switch`, `wt-slider`, `wt-combobox`, `wt-address-lookup`, `wt-colour-chooser` and `wt-help-switch` size the element that actually
+`wt-price-input`, `wt-number-stepper`, `wt-switch`, `wt-slider`, `wt-combobox`, `wt-address-lookup`, `wt-colour-chooser`, `wt-help-switch` and `wt-stepper` size the element that actually
 forms the hit target (the inner `button` for `wt-button`; the inner `input` for `wt-input`; the
 inner `textarea` for `wt-textarea`; the inner `input` and the unit button for `wt-price-input`; the
 inner `input` for `wt-number-stepper`; both `:host` and `.control` for `wt-switch`; the inner
 range `input` for `wt-slider`;
-the `.trigger` button for `wt-combobox`; the inner `input` for `wt-address-lookup`; the `.trigger` button and each tile for `wt-colour-chooser`; the inner `button` for `wt-help-switch`) — never an element that can overflow its own container
+the `.trigger` button for `wt-combobox`; the inner `input` for `wt-address-lookup`; the `.trigger` button and each tile for `wt-colour-chooser`; the inner `button` for `wt-help-switch`; the − and + buttons for `wt-stepper`) — never an element that can overflow its own container
 (see "Hit targets must not overflow their container" below). A field's control (`.field-control`
 in `fieldStyles`) takes `min-width: var(--wt-tap-min)` and `min-height: var(--wt-field-height)`
 (`wt-textarea` moves the floated label's share of that height into its field box's top padding,
@@ -6523,8 +6523,8 @@ and the split control keeps its full `--wt-tap-min` width, reaching over them. U
 **Options** and **Note**, each `--wt-tap-min` tall with a 1px `--wt-color-border` line,
 `--wt-radius-md` and bold `md` text: Options opens the dish's details, and Note opens them with the
 note field focused. A press held until the whole row is outlined (2px of `--wt-color-primary` inside
-its edge) and then moved drags it; released without moving, it opens the details and leaves the row
-closed. Remove, Move to… and Fire in the draft bar act on the ticked rows. The selection box is
+its edge) and then moved drags it; released without moving, it opens the details and closes any
+opened row. Remove, Move to… and Fire in the draft bar act on the ticked rows. The selection box is
 a `checkbox` named by the dish, its quantity, its guest and its second line, with each answer after
 its question (“Doneness: Medium”), so rows of one dish that differ in any of those read differently.
 Spec: §4 and §14.4 of `docs/superpowers/specs/2026-11-26-till-handheld-redesign-design.md`.

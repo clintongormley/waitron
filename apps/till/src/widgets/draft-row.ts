@@ -87,7 +87,7 @@ export interface DraftRowView {
   open: () => void;
 }
 
-/** What a compact row's tap sends, in place of opening the dish's details. */
+/** What a compact row's tap sends; the screen holding the basket decides what it opens. */
 export interface DraftRowTap {
   store: WorkingOrderStore;
   line: OrderLine;

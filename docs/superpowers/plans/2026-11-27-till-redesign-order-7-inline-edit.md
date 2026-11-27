@@ -5,8 +5,8 @@ Lane N, item TILL-REDESIGN-ORDER, PR 7 of the [split](2026-11-26-till-handheld-r
 foot is built.”). Design: [§4 The order screen](../specs/2026-11-26-till-handheld-redesign-design.md#4-the-order-screen),
 §14.2 “Stepper”, §14.4 “Rows”, “Unfolded rows” and “An opened row”. It builds on PR 6 (#4459,
 branch `feat/n-till-order-6-rows`, not yet landed): branch from it, and rebase onto `main` once it
-lands. Line numbers below are PR 6's head (`b51313a980`). Status: written 2026-11-27 for the
-watcher's read. It lands as two pull requests, **7a** then **7b**, each about three hours (see Size).
+lands. Line numbers below are PR 6's head (`b51313a980`). Status: cleared by the watcher 2026-11-27 03:03 (questions 1–3 answered as
+proposed); 7a built on `feat/n-till-order-7a-open-row`. It lands as two pull requests, **7a** then **7b**, each about three hours (see Size).
 
 ## What staff can do when it lands
 
@@ -206,8 +206,8 @@ building, list every caller that changes the browser's menu id (`#onMenuSelected
 ## Docs
 
 The English and Spanish `table-service.md` change in `{#portions}`'s last two paragraphs. 7a: a tap
-opens a dish in place, where − and + change how many, Options its options and Note its note, and
-holding opens all its details. 7b: the arrow on a row of several gives one row per dish, the arrow
+opens a dish in place, where − and + change how many, **Options** opens its details and **Note**
+opens them at its note; the guide no longer describes holding, which PR 9d makes select. 7b: the arrow on a row of several gives one row per dish, the arrow
 again folds them, and a folded row of different dishes says how many of each. 7a also changes
 `{#portions}`'s weighed-dish paragraph (English `:522–523`, Spanish `:551`), which says to tap a
 weighed dish's row at a table to edit it: a tap now opens it, and Options edits the amount.

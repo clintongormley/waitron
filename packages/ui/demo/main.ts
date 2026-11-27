@@ -24,6 +24,7 @@ import "../src/components/wt-file-input.js";
 import "../src/components/wt-textarea.js";
 import "../src/components/wt-price-input.js";
 import "../src/components/wt-number-stepper.js";
+import "../src/components/wt-stepper.js";
 import "../src/components/wt-spinner.js";
 import "../src/components/wt-switch.js";
 import "../src/components/wt-segmented-control.js";
@@ -278,6 +279,11 @@ const panel = (theme: "light" | "dark") => `
         max="1"
       >
       </wt-number-stepper>
+    </div>
+    <div class="row" style="margin-top:16px">
+      <wt-stepper label="Burger" value="2" min="1"></wt-stepper>
+      <wt-stepper label="Burger" value="1" min="1" max="1"></wt-stepper>
+      <wt-stepper label="Burger" value="2" disabled></wt-stepper>
     </div>
     <wt-file-input name="photo" label="Photo" required accept="image/jpeg,image/png,image/webp" hint="JPEG, PNG or WebP, up to 20 MB"></wt-file-input>
     <wt-file-input name="photos" label="Photos" multiple compact></wt-file-input>
