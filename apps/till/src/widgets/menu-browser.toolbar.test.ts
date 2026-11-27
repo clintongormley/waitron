@@ -1,19 +1,21 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 import type { WtCombobox } from "@waitron/ui";
 import type { TillProduct, TillZoneMenu } from "../api/menu-api.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
 import "./menu-browser.js";
 import "./menu-switcher.js";
 import "./diet-filter.js";
 
 const locale = currentLocale();
-afterEach(() => {
+afterEach(async () => {
   cleanupWidgets();
   setLocale(locale);
+  await resetPage();
 });
 
 const dish: TillProduct = {
@@ -44,9 +46,10 @@ function menuNamed(name: string): TillZoneMenu {
   };
 }
 
-/** Mounts the browser at `width` with the screens' own picker and diet filter in its toolbar. */
+/** Mounts the browser in a page `width` wide, with the screens' picker and diet filter in its toolbar. */
 async function mount(width: number, name: string, lang: string) {
   setLocale(lang);
+  await page.viewport(width, 800);
   const menu = menuNamed(name);
   const { el, host } = await mountWidget<TillMenuBrowser>("till-menu-browser", {
     menu,

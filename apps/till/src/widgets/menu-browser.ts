@@ -193,7 +193,6 @@ export class TillMenuBrowser extends LitElement {
         grid-template-columns: minmax(0, 1fr);
         gap: var(--wt-space-4);
         align-content: start;
-        container-type: inline-size;
       }
 
       .menu-toolbar,
@@ -224,9 +223,9 @@ export class TillMenuBrowser extends LitElement {
         }
       }
 
-      /* Below 360 px the picker takes its own line above the search, giving the menu's name the
-         toolbar's width. */
-      @container (width < 360px) {
+      /* A viewport query, not a size container: containment would stop the browser's content
+         counting toward the width a screen's layout gives it. */
+      @media (width < 360px) {
         .menu-toolbar[data-menu-picker] {
           flex-wrap: wrap;
         }
