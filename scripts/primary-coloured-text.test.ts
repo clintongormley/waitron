@@ -99,8 +99,8 @@ export const GRAPHIC_USES: readonly GraphicUse[] = [
   },
   {
     file: "packages/ui/src/components/wt-stepper.ts",
-    selector: 'button[data-step="1"] wt-icon',
-    draws: "the + icon",
+    selector: 'button[data-step="1"] .mark',
+    draws: "the + mark",
   },
 ];
 
