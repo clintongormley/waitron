@@ -310,6 +310,12 @@ records the planned and actual placements from a passing full run with both runn
 The bundle still needs a full-day queue measurement. Keep the corrected v41 controller and the
 [13 November measured-memory decision](#decisions-and-deliberate-limits).
 
+- **Planner rescue capacity and retry diagnostics.** [The 27 November health pass](https://github.com/clintongormley/waitron/actions/runs/45943751778/job/140323637910)
+  cancelled #4465 using a snapshot more than seven minutes old. Job timestamps show all 12 slots
+  occupied at cancellation. The exact capacity value published then and the response that refused
+  its retry are unavailable. On recurrence, retain the reported capacity source and any
+  post-cancel verification line with the run, attempt and planner job IDs.
+
 - **Planner discovery shortfall: qualify live recovery.** Retain a natural Server health pass that logs `Planner discovery count shortfall`, then recovers an eligible PR on its recorded workflow/module commit, with run/attempt/job and runner identities. Fixture recovery from the captured count 2/row 1/empty-page shape does not close this. Standalone `check` now tolerates a short queued workflow list after one reread, while running and job lists stay strict. Its partial green answer cannot establish whole-queue health or recover omitted runs. Earlier runs [43828425789](https://github.com/clintongormley/waitron/actions/runs/43828425789) (3 of 4 rows) and [43858443488](https://github.com/clintongormley/waitron/actions/runs/43858443488) (1 of 2) refused short lists; their underlying API cause remains open. During #3470’s wait, passes [43820479461](https://github.com/clintongormley/waitron/actions/runs/43820479461) and [43821896202](https://github.com/clintongormley/waitron/actions/runs/43821896202) reported no stalled run without naming its old, unassigned, correctly labelled planner; the reason remains unknown. The queued-list capture in [43882357125](https://github.com/clintongormley/waitron/actions/runs/43882357125) returned 11 of 12 rows and omitted #3521; accepting those rows does not explain its unassigned wait. On recurrence retain the discovered run IDs and contemporaneous PR/job state. [Capture and limits](../developers/ci-and-gates.md#disposable-server-test-runners).
 
 - **A1424 / A1440: remaining real-run qualification.** Each line names the evidence that would close that gap; do not drain other lanes or repeat the completed rescue drill.

@@ -401,6 +401,9 @@ dispatch, on trusted `main` only. Its `recover-planners` command can cancel and 
 untouched, current-head PR's first attempt when its server `changes` job has waited five
 minutes without assignment. It skips runs already marked for hosted recovery and a server
 whose capacity snapshot under five minutes old shows every positive slot occupied.
+The recovery step reads the current capacity variable with its dedicated read credential.
+If the credential is absent or the read fails, it uses the workflow snapshot. The log names
+the source it used. The separate read-only queue check continues to use the workflow snapshot.
 Missing or stale capacity permits rescue; other server progress does not hide a waiting planner.
 It checks complete job inventories and the PR head again before cancellation and retry.
 The planner candidate scan accepts collected workflow rows when an empty page arrives
@@ -420,7 +423,8 @@ A full server is reported before diagnostic reads; every old unassigned planning
 seen there gets only `server full`, including marked runs and retries. Failed diagnostic
 reads on these skipped paths are reported without enabling recovery or failing the pass.
 Excluded-run diagnostic reads follow the eligible rescue loop, using the same run inventory.
-An eligible run's check after cancellation adds no skip line.
+If a check after cancellation refuses a retry, its skip line includes `post-cancel verification`
+and the reason, alongside the original run, attempt and planner job IDs.
 
 An absent line does not establish that a job could be recovered. Only owned PR runs in
 the queued/running CI inventory and queued unassigned self-hosted `changes` jobs are

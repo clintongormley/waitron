@@ -509,7 +509,13 @@ export async function recoverServer(options) {
     const eligible = async (cancelled = false) => {
       const current = await request(path);
       const skip = (reason) => {
-        if (plannersOnly && !cancelled) plannerSkip(options, run, run.plannerJobs, reason);
+        if (plannersOnly)
+          plannerSkip(
+            options,
+            run,
+            run.plannerJobs,
+            cancelled ? `post-cancel verification: ${reason}` : reason,
+          );
       };
       if (
         current.id !== run.id ||
@@ -559,7 +565,11 @@ export async function recoverServer(options) {
             old(job, options.now ?? Date.now()),
         )
       ) {
-        skip("planning job no longer queued unassigned and old");
+        skip(
+          cancelled
+            ? "cancelled planning job did not match its label, status or age"
+            : "planning job no longer queued unassigned and old",
+        );
         return;
       }
       if (
@@ -816,7 +826,7 @@ export async function main(command, env = process.env, request = githubRequest) 
     appendFileSync(env.GITHUB_STEP_SUMMARY, line + "\n");
   };
   let capacity = () => JSON.parse(env.CAPACITY);
-  if (command === "route") {
+  if (command === "route" || command === "recover-planners") {
     let source = "snapshot (no read token)";
     if (env.CAPACITY_READ_TOKEN) {
       try {

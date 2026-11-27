@@ -1397,6 +1397,69 @@ describe("scheduled PR planner recovery", () => {
       path.endsWith("/pulls/7") ? f.pull : f.request(path, options);
     return f;
   }
+
+  it.each(["full", "free", "read refused"])(
+    "uses current capacity for planner rescue when the read is %s",
+    async (capacity) => {
+      const f = planner();
+      const currentTime = Date.now();
+      f.job.started_at = new Date(currentTime - 317_000).toISOString();
+      const directory = mkdtempSync(tmpdir() + "/planner-capacity-");
+      const reads = [];
+      try {
+        await health.main(
+          "recover-planners",
+          {
+            GITHUB_REPOSITORY: "fixture/waitron",
+            GITHUB_REPOSITORY_ID: "42",
+            GITHUB_STEP_SUMMARY: directory + "/summary",
+            CAPACITY_READ_TOKEN: "capacity-only",
+            CAPACITY: JSON.stringify({
+              observedAt: currentTime - 447_000,
+              slots: 12,
+              serverRunning: 1,
+              serverWaiting: 1,
+            }),
+          },
+          async (path, options = {}) => {
+            if (path === "/repos/fixture/waitron/actions/variables/DISPOSABLE_TESTS_CAPACITY") {
+              reads.push(options);
+              if (capacity === "read refused") throw new Error("HTTP 403");
+              return {
+                value: JSON.stringify({
+                  observedAt: currentTime - 13_000,
+                  slots: 12,
+                  serverRunning: capacity === "full" ? 12 : 1,
+                  serverWaiting: 1,
+                }),
+              };
+            }
+            expect(options).not.toHaveProperty("token");
+            return f.options.request(path, options);
+          },
+        );
+        expect(
+          f.calls.filter(([, options]) => options.method === "POST").map(([path]) => path),
+        ).toEqual(
+          capacity === "full"
+            ? []
+            : [
+                "/repos/fixture/waitron/actions/runs/12/force-cancel",
+                "/repos/fixture/waitron/actions/runs/12/rerun",
+              ],
+        );
+        expect(reads).toEqual([{ token: "capacity-only" }]);
+        const summary = readFileSync(directory + "/summary", "utf8");
+        expect(summary).toContain(
+          `CI capacity source: ${capacity === "read refused" ? "snapshot (fresh read failed)" : "fresh"}`,
+        );
+        if (capacity === "full")
+          expect(summary).toContain("server is full in a fresh capacity snapshot");
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
+  );
   it.each([
     { command: "recover-planners", key: "jobs" },
     { command: "check", key: "workflow_runs" },
@@ -2045,7 +2108,9 @@ describe("scheduled PR planner recovery", () => {
   });
   it("requires intervention when a cancelled current-head planner cannot be verified", async () => {
     const f = planner(),
+      reports = [],
       request = f.options.request;
+    f.options.report = (line) => reports.push(line);
     f.options.request = async (path, options) => {
       const reply = await request(path, options);
       if (path.endsWith("/force-cancel")) f.job.labels = [];
@@ -2054,6 +2119,10 @@ describe("scheduled PR planner recovery", () => {
     await expect(health.recoverServer(f.options)).rejects.toThrow(
       /Cancelled PR run 12.*intervention/,
     );
+    expect(reports).toContain(
+      "Planner rescue skipped: run=12 attempt=1 job=123; post-cancel verification: cancelled planning job did not match its label, status or age.",
+    );
+    expect(f.calls.some(([path]) => path.endsWith("/rerun"))).toBe(false);
     expect(f.run.run_attempt).toBe(1);
   });
   it("reports an interrupted cancelled PR for a person without resuming it from history", async () => {
