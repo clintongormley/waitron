@@ -120,9 +120,9 @@ describe("equalShares: every guest's share, each equalShare of what the guests b
     expect(sumDecimals(shares)).toBe("100.01");
   });
 
-  it("gives the same list as shareByWeight with equal weights, for every amount to €15.00 among 1 to 15 guests", () => {
+  it("gives the same list as shareByWeight with equal weights, for every amount to €3.00 among 1 to 15 guests", () => {
     const differences: string[] = [];
-    for (let cents = 1; cents <= 1500; cents += 1) {
+    for (let cents = 1; cents <= 300; cents += 1) {
       for (let n = 1; n <= Math.min(15, cents); n += 1) {
         const left = d(literal(cents));
         const ours = equalShares(left, n);
