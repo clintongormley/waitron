@@ -163,6 +163,7 @@ it("applies dashboard product availability immediately to both published till zo
       epoch: expect.any(String),
       sequence: index + 1,
     });
-    await expectOffers(...expected);
+    const [productAvailable, variantAvailable, extraAvailable] = expected;
+    await expectOffers(productAvailable, variantAvailable, extraAvailable);
   }
 });
