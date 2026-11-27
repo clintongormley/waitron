@@ -69,7 +69,9 @@ try {
   await page.getByRole("button", { name: "Roast pepper" }).waitFor();
   const article = page.locator("customer-menu-page article");
   assert.equal(
-    await article.evaluate((node) => getComputedStyle(node).backgroundColor),
+    await article.evaluate(
+      (node) => node.ownerDocument.defaultView.getComputedStyle(node).backgroundColor,
+    ),
     "rgb(31, 41, 40)",
   );
   assert.deepEqual(
