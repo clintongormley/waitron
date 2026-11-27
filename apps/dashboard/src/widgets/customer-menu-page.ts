@@ -305,7 +305,7 @@ export class CustomerMenuPage extends LitElement {
       }
       header h2 {
         margin: 0;
-        font-size: calc(1.4 * var(--wt-font-size-xl));
+        font-size: calc(1.65 * var(--wt-font-size-xl));
       }
       search {
         display: grid;
@@ -574,7 +574,7 @@ export class CustomerMenuPage extends LitElement {
         .price {
           margin-block-start: 0;
           margin-inline-start: auto;
-          font-size: calc(0.9 * var(--wt-font-size-lg));
+          font-size: var(--wt-font-size-lg);
           text-align: end;
         }
         .description {

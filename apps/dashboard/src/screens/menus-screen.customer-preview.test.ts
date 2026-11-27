@@ -549,9 +549,7 @@ describe("the customer menu Online preview", () => {
     expect(bread.getBoundingClientRect().left).toBeGreaterThan(pepper.getBoundingClientRect().left);
     const dish = pepper.closest(".dish")!;
     const priceLabel = dish.querySelector(".price")!;
-    expect(parseFloat(getComputedStyle(priceLabel).fontSize)).toBeGreaterThanOrEqual(
-      0.85 * parseFloat(getComputedStyle(pepper).fontSize),
-    );
+    expect(getComputedStyle(priceLabel).fontSize).toBe(getComputedStyle(pepper).fontSize);
     const price = document.createRange();
     price.selectNodeContents(priceLabel);
     const photo = dish.querySelector("img")!;
@@ -651,13 +649,17 @@ describe("the customer menu Online preview", () => {
     },
   );
 
-  it("draws a nested section heading smaller than its parent on the Phone preview", async () => {
+  it("distinguishes the menu title, main sections and nested sections on the Phone preview", async () => {
     await open(() => Response.json(publishedSections()));
     await page.getByRole("radio", { name: "Phone" }).click();
+    const title = page.getByRole("heading", { name: "Lunch for guests", exact: true });
     const parent = page.getByRole("heading", { name: "From the oven", exact: true }).first();
     const nested = page.getByRole("heading", { name: "Vegetables", exact: true });
     await expect.element(nested).toBeVisible();
     const parentSize = parseFloat(getComputedStyle(parent.element()).fontSize);
+    const titleRatio = parseFloat(getComputedStyle(title.element()).fontSize) / parentSize;
+    expect(titleRatio).toBeGreaterThanOrEqual(1.4);
+    expect(titleRatio).toBeLessThanOrEqual(1.5);
     const dish = page.getByText("Roast pepper", { exact: true }).element();
     expect(parentSize).toBeGreaterThanOrEqual(1.35 * parseFloat(getComputedStyle(dish).fontSize));
     expect(parseFloat(getComputedStyle(nested.element()).fontSize)).toBeLessThan(parentSize);
