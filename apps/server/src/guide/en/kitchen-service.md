@@ -305,7 +305,7 @@ On a till, a card that is not held also offers **Reprint** for each of its bills
 
 A pass display (view only) shows the same board for watching, with no **Fire**, Ready or **Reprint**
 buttons. In the device profile, choose **Pass** or **Pass display (view only)**. On the narrow
-floor, tap the zone name at the bottom and choose **Pass** or **Pass monitor** under **Kitchen
+floor, tap the zone name at the bottom and choose **Pass** or **Pass display** under **Kitchen
 screens**.
 
 Tap a column's heading to collapse it to a narrow strip that keeps its name and count; tap it again

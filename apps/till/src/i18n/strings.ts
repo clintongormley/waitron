@@ -901,6 +901,7 @@ export const en = {
   // rendered as `${n} ${t(key)}`.
   "kitchen_screen.station": "Station screen",
   "kitchen_screen.pass": "Pass",
+  "kitchen_screen.pass_display": "Pass display",
   "kitchen_screen.pass_monitor": "Pass display (view only)",
   "kitchen_screen.read_failed": "The screen could not be read. Trying again…",
   "kitchen_screen.none":
@@ -1253,7 +1254,6 @@ export const en = {
   "floor.menu_device": "This phone",
   "floor.zones": "Zones",
   "floor.kitchen_screens": "Kitchen screens",
-  "floor.pass_monitor": "Pass monitor",
   "floor.show_zone": "Show {zone}",
   "floor.capacity": "pax",
   "floor.to_serve": "to serve",
@@ -3391,6 +3391,7 @@ export const es: Record<StringKey, string> = {
   "action.send_to_prep": "Enviar a la estación",
   "kitchen_screen.station": "Pantalla de estación",
   "kitchen_screen.pass": "Pase",
+  "kitchen_screen.pass_display": "Pantalla de pase",
   "kitchen_screen.pass_monitor": "Pantalla de pase (solo lectura)",
   "kitchen_screen.read_failed": "No se pudo consultar la pantalla. Reintentando…",
   "kitchen_screen.none":
@@ -3733,7 +3734,6 @@ export const es: Record<StringKey, string> = {
   "floor.menu_device": "Este móvil",
   "floor.zones": "Zonas",
   "floor.kitchen_screens": "Pantallas de cocina",
-  "floor.pass_monitor": "Monitor del pase",
   "floor.show_zone": "Ver {zone}",
   "floor.capacity": "pax",
   "floor.to_serve": "por servir",

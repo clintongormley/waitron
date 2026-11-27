@@ -154,7 +154,7 @@ describe("A773 pass screen: app", () => {
   it.each([
     ["station", ["show-station", "show-expo"], ["Grill", "Cold"]],
     ["pass", ["show-station", "show-expo"], ["Pase"]],
-    ["pass_monitor", ["show-station", "show-expo"], ["Monitor del pase"]],
+    ["pass_monitor", ["show-station", "show-expo"], ["Pantalla de pase"]],
     [null, ["show-station", "show-expo"], []],
     ["station", [], []],
     ["pass", [], []],

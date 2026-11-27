@@ -179,12 +179,13 @@ export const floorBarStyles = css`
     inset-inline-end: calc(-1 * var(--wt-space-1));
   }
   .floor-bar [data-floor-zone] {
-    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-4));
-    padding-inline: var(--wt-menu-row-padding-start) var(--wt-space-4);
-    border-block-end: 1px solid var(--wt-color-border);
+    position: relative;
     border-radius: 0;
     font-size: var(--wt-floor-name-font-size);
-    font-weight: var(--wt-font-weight-bold);
+  }
+  .floor-bar [data-floor-zone] > [data-row-check] {
+    position: absolute;
+    inset-inline-start: var(--wt-menu-row-padding-start);
   }
   .floor-bar [data-floor-zone][aria-checked="true"] [data-row-check] {
     --wt-action-native-icon-color: var(--wt-color-primary);
@@ -194,7 +195,7 @@ export const floorBarStyles = css`
     padding-block-start: calc(var(--wt-space-3) + var(--wt-space-1) / 2);
     letter-spacing: calc(var(--wt-font-size-sm) * 0.04);
   }
-  .floor-bar [data-floor-kitchen-row] {
+  .floor-bar [data-floor-zone-chooser] wt-menu-row {
     --wt-menu-row-height: calc(var(--wt-tap-min) + var(--wt-space-4));
     --wt-menu-row-padding-start: calc(var(--wt-space-5) + var(--wt-space-6));
     --wt-menu-row-label-size: var(--wt-floor-name-font-size);
@@ -457,7 +458,7 @@ export function floorKitchenRows(
           .map(({ id, name }) => ({ label: name, stationId: id }))
       : [];
   return affordances.includes("expo")
-    ? [{ label: t(screen.kind === "pass_monitor" ? "floor.pass_monitor" : "expo.open") }]
+    ? [{ label: t(screen.kind === "pass_monitor" ? "kitchen_screen.pass_display" : "expo.open") }]
     : [];
 }
 
@@ -505,8 +506,10 @@ export function floorZoneControls(
             aria-checked=${key === active ? "true" : "false"}
             @click=${() => select(key)}
           >
-            <wt-icon data-row-check name="menu-check" size="lg"></wt-icon>${name}
-            ${mark ? html`<span class="floor-zone-mark" data-mark=${mark.kind}>${mark.words}</span>` : nothing}
+            <wt-icon data-row-check name="menu-check" size="lg"></wt-icon>
+            <wt-menu-row divider label=${name}>
+              ${mark ? html`<span class="floor-zone-mark" data-mark=${mark.kind}>${mark.words}</span>` : nothing}
+            </wt-menu-row>
           </button>`;
         })}
         ${

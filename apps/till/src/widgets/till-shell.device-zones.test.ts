@@ -545,7 +545,18 @@ it("walks from the last floor zone to the kitchen action with the arrow key", as
     const opened = vi.fn();
     el.addEventListener("show-expo", opened);
     await userEvent.click(chooser.shadowRoot!.querySelector("button")!);
-    chooser.querySelector<HTMLButtonElement>('[data-floor-zone="room"]')!.focus();
+    const zone = chooser.querySelector<HTMLButtonElement>('[data-floor-zone="room"]')!;
+    const kitchen = chooser.querySelector<HTMLButtonElement>("[data-floor-kitchen-row]")!;
+    const nameInset = (row: HTMLButtonElement, name: string) => {
+      const label = row.querySelector("wt-menu-row")?.shadowRoot?.querySelector(".label") ?? row;
+      const text = Array.from(label.childNodes).find((node) => node.textContent === name)!;
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      return range.getBoundingClientRect().left - row.getBoundingClientRect().left;
+    };
+    expect(nameInset(zone, "Dining room")).toBe(56);
+    expect(nameInset(kitchen, "Pass")).toBe(56);
+    zone.focus();
     await userEvent.keyboard("{ArrowDown}");
     expect(
       chooser.querySelector('[role="menuitem"]:focus wt-menu-row')?.getAttribute("label"),

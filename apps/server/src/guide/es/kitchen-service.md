@@ -338,7 +338,7 @@ En un terminal, una tarjeta que no está en espera ofrece además **Reimprimir**
 
 Una pantalla de pase (solo lectura) muestra el mismo tablero para mirarlo, sin **Marchar**, botones de
 listo ni **Reimprimir**. En el perfil del dispositivo, elige **Pase** o **Pantalla de pase (solo
-lectura)**. En el plano estrecho, toca el nombre de la zona abajo y elige **Pase** o **Monitor del
+lectura)**. En el plano estrecho, toca el nombre de la zona abajo y elige **Pase** o **Pantalla de
 pase** en **Pantallas de cocina**.
 
 Toca la cabecera de una columna para plegarla en una franja estrecha que conserva su nombre y su

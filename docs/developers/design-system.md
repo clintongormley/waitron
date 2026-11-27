@@ -6452,7 +6452,7 @@ opens on that table's zone instead when this device shows that zone, as "Navigat
 sign-in says so, holds no choice and shows every permitted zone until a later read applies one.
 Below 800 CSS px of shell width, the floor has a bottom bar with a zone chooser, one button
 naming the other view (Map or List), and ☰. The zone chooser marks the selected zone with a check.
-**Kitchen screens**, below the zones, lists the device profile’s available Pass, Pass monitor or
+**Kitchen screens**, below the zones, lists the device profile’s available Pass, Pass display or
 prep stations when the profile and device allow them. Each opens its board full screen. **Back**
 returns to the same floor zone and focuses the zone chooser.
 Both menus meet the top of the bar and reach the screen edges in portrait. The bar stays
