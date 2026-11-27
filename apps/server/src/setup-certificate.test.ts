@@ -1,9 +1,12 @@
 import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { ALL_MODULES } from "@waitron/composition";
+import { assertOtherFirstSetupAllowed } from "@waitron/provisioning";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { RC2_CANDIDATE } from "@waitron/fiscal-verifactu/test/openssl-certificates.js";
 import { mountSetup } from "./setup-api.js";
@@ -25,7 +28,9 @@ const body = (pfx: Buffer, passphrase = good.passphrase) => ({
   certKind: "sello",
 });
 const roots: string[] = [];
+const sockets: TLSSocket[] = [];
 afterEach(async () => {
+  for (const socket of sockets.splice(0)) socket.destroy();
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
@@ -161,4 +166,108 @@ it("setup refuses a certificate issued to another tax number, and nothing is mad
   expect((await readdir(stateDir)).some((name) => name.startsWith("fiscal-readiness-db-"))).toBe(
     false,
   );
+});
+
+it("opens a certificate before reservation, with one local read at a time", async () => {
+  const root = await mkdtemp(join(tmpdir(), "setup-certificate-inspect-"));
+  roots.push(root);
+  const stateDir = join(root, "state");
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const host = createFirstSetupModuleHost({
+    stateDir,
+    venueDir: join(root, "venue"),
+    environment: {},
+    modules: ALL_MODULES.map((module) => {
+      const fiscal = module.fiscal;
+      const secret = fiscal?.provisioningSecret;
+      return fiscal && secret
+        ? {
+            ...module,
+            fiscal: {
+              ...fiscal,
+              provisioningSecret: {
+                ...secret,
+                async inspect(raw: unknown) {
+                  started.resolve();
+                  await release.promise;
+                  return secret.inspect!(raw);
+                },
+              },
+            },
+          }
+        : module;
+    }),
+  });
+  const app = new Hono();
+  mountSetup(
+    app,
+    {
+      environment: "production",
+      firstFiscal: host,
+      firstSetup: {
+        coordinator: host.coordinator,
+        assertOtherAllowed: () => assertOtherFirstSetupAllowed(host.roots.venueDir, host.store),
+      },
+    },
+    () => {},
+  );
+  const socket = new TLSSocket(new Socket());
+  sockets.push(socket);
+  const post = (aeatCert: unknown, url = "https://box.test", origin = url) =>
+    app.request(
+      url + "/setup-api/certificate/inspect",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: JSON.stringify({ fiscalTerritory: "ES-common", aeatCert }),
+      },
+      url.startsWith("https:") ? { incoming: { socket } } : undefined,
+    );
+
+  expect((await post(body(good.pfx), "http://box.test")).status).toBe(403);
+  expect((await post(body(good.pfx), "https://box.test", "https://other.test")).status).toBe(403);
+  const large = await post({ ...body(good.pfx), pfxBase64: "A".repeat(256 * 1024) });
+  expect(large.status).toBe(413);
+  expect(await large.json()).toEqual({
+    error: {
+      code: "setup.certificate_refused",
+      params: { field: "pfxBase64", reason: "too_large" },
+    },
+  });
+
+  const opening = post(body(good.pfx));
+  try {
+    await started.promise;
+    let turnRan = false;
+    void host.coordinator.run(async () => {
+      turnRan = true;
+    });
+    await expect.poll(() => turnRan).toBe(true);
+    const busy = await post(body(good.pfx));
+    expect(busy.status).toBe(409);
+    expect(await busy.json()).toEqual({
+      error: { code: "setup.certificate_refused", params: { field: "body", reason: "busy" } },
+    });
+  } finally {
+    release.resolve();
+  }
+  const response = await opening;
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+  expect(await response.json()).toEqual({ taxId: request.taxId, legalName: "WAITRON SL" });
+  expect(await readdir(root)).toEqual([]);
+
+  const refusal = await post(body(noKey.pfx));
+  expect(refusal.status).toBe(422);
+  expect(await refusal.json()).toEqual({
+    error: {
+      code: "setup.certificate_refused",
+      params: { field: "pfxBase64", reason: "no_private_key" },
+    },
+  });
+  await host.owner.claimFirstSetup({ environment: "production", request });
+  const held = await post(body(good.pfx));
+  expect(held.status).toBe(409);
+  expect(await held.json()).toEqual({ error: { code: "setup.attempt_conflict", params: {} } });
 });

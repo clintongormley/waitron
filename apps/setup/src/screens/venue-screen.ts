@@ -1055,8 +1055,11 @@ export class SetupVenueScreen extends LitElement {
     dispatchSetupAdvance(this);
   }
 
+  @property({ type: Boolean }) certificateBeforeVenue = false;
+  @property({ type: Boolean }) certificateTaxId = false;
+
   #back(): void {
-    dispatchSetupGoto(this, "admin");
+    dispatchSetupGoto(this, this.certificateBeforeVenue ? "cert" : "admin");
   }
 
   #fieldMessage(key: FormField): string {
@@ -1129,6 +1132,7 @@ export class SetupVenueScreen extends LitElement {
     const demoName = this.#demo && key === "name";
     const help = !hasHint(key) ? this.#help(key) : demoName ? this.#help("name") : nothing;
     const code = CODE_FIELDS.has(key);
+    const locked = key === "taxId" && this.certificateTaxId;
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
@@ -1140,7 +1144,8 @@ export class SetupVenueScreen extends LitElement {
       spellcheck=${code ? "false" : nothing}
       data-test=${key}
       type=${type}
-      hint=${hasHint(key) && !demoName ? t(FIELD_HINT[key]) : ""}
+      hint=${locked ? t("venue.hint.certificate_tax_id") : hasHint(key) && !demoName ? t(FIELD_HINT[key]) : ""}
+      ?readonly=${locked}
       ?invalid=${error !== ""}
       ?required=${key !== "addressLine2" && key !== "registeredLine2" && key !== "registeredProvince"}
       error=${error}

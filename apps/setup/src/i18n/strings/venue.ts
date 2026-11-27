@@ -204,6 +204,8 @@ export const venueEn = {
   "review.provision": "Provision this box",
 
   "cert.heading": "AEAT certificate",
+  "cert.before_venue":
+    "Choose your certificate and enter its passphrase. Waitron uses the certificate to fill your tax ID and legal name where available.",
   "cert.intro":
     "A live Spanish venue files invoices to AEAT with a certificate. Upload the certificate file and enter its passphrase.",
   "cert.file_label": "Certificate file (.pfx or .p12)",
@@ -230,11 +232,16 @@ export const venueEn = {
   "cert.refusal.unreadable": "Choose a valid .pfx or .p12 certificate file.",
   "cert.refusal.too_large": "This file is too large to be a certificate.",
   "cert.refusal.unavailable": "The box could not check this certificate. Try again.",
+  "cert.refusal.busy": "The box is checking another certificate. Try again in a moment.",
+  "cert.checking": "Checking the certificate…",
+  "venue.hint.certificate_tax_id": "This tax ID comes from your certificate.",
   "cert.refusal.setup_stopped":
     "Setup stopped after the invoice series were made. No invoice was issued. Select Reconnect, then Start again. Start again clears this unfinished setup so you can enter it again.",
   "cert.refusal.old_encryption": "Export the certificate again with modern encryption.",
   "cert.refusal.no_private_key": "Export the certificate again, including its private key.",
   "cert.refusal.expired": "This certificate has expired. Choose its replacement.",
+  "cert.refusal.invalid_tax_id":
+    "This certificate contains an invalid tax ID. Choose another certificate.",
   "cert.refusal.not_yet_valid":
     "This certificate is not valid yet. Check the date or choose another file.",
   "cert.refusal.other_taxpayer":
@@ -482,6 +489,8 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "review.provision": "Configurar este servidor",
 
   "cert.heading": "Certificado de la AEAT",
+  "cert.before_venue":
+    "Elige tu certificado e introduce su contraseña. Waitron rellena el NIF y el nombre legal si figuran en el certificado.",
   "cert.intro":
     "Un local real en España envía sus facturas a la AEAT con un certificado. Sube el archivo del certificado e introduce su contraseña.",
   "cert.file_label": "Archivo del certificado (.pfx o .p12)",
@@ -507,11 +516,17 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "cert.refusal.unreadable": "Elige un archivo de certificado .pfx o .p12 válido.",
   "cert.refusal.too_large": "Este archivo es demasiado grande para ser un certificado.",
   "cert.refusal.unavailable": "El servidor no pudo comprobar este certificado. Inténtalo de nuevo.",
+  "cert.refusal.busy":
+    "El servidor está comprobando otro certificado. Inténtalo de nuevo en un momento.",
+  "cert.checking": "Comprobando el certificado…",
+  "venue.hint.certificate_tax_id": "Este NIF procede de tu certificado.",
   "cert.refusal.setup_stopped":
     "La configuración se detuvo después de crear las series de facturas. No se emitió ninguna factura. Pulsa Reconectar y después Empezar de nuevo. Empezar de nuevo borra esta configuración incompleta para que puedas introducirla otra vez.",
   "cert.refusal.old_encryption": "Exporta el certificado de nuevo con un cifrado moderno.",
   "cert.refusal.no_private_key": "Exporta el certificado de nuevo, incluida su clave privada.",
   "cert.refusal.expired": "Este certificado ha caducado. Elige su sustituto.",
+  "cert.refusal.invalid_tax_id":
+    "Este certificado contiene un NIF no válido. Elige otro certificado.",
   "cert.refusal.not_yet_valid":
     "Este certificado aún no es válido. Revisa la fecha o elige otro archivo.",
   "cert.refusal.other_taxpayer":

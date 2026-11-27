@@ -81,6 +81,11 @@ export interface VenueDraft {
   dayCutover: string;
 }
 
+export interface CertificateIdentity {
+  taxId: string | null;
+  legalName: string | null;
+}
+
 export interface AeatCertDraft {
   pfxBase64: string;
   passphrase: string;
@@ -813,6 +818,13 @@ export class SetupApi {
       email,
       venue: { admin: { email: adminEmail } },
     });
+  }
+
+  inspectCertificate(
+    fiscalTerritory: string,
+    aeatCert: AeatCertDraft,
+  ): Promise<CertificateIdentity> {
+    return this.#request("/setup-api/certificate/inspect", "POST", { fiscalTerritory, aeatCert });
   }
 
   runFiscalTest(body: ProvisionBody): Promise<FiscalReadinessResult> {

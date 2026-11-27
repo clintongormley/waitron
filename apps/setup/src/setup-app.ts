@@ -1,3 +1,4 @@
+import { getVenueSetupCountryPack } from "@waitron/country-packs";
 import { SETUP_MODULES } from "@waitron/dashboard-modules/setup";
 import { FirstSetupSession } from "./first-setup-session.js";
 import { readWipeSummary, sendWipe, wipeRefusal, type WipeRefusal } from "./start-again-wipe.js";
@@ -50,6 +51,8 @@ import "./about-sheet.js";
 import "@waitron/ui/src/components/wt-waitron-lockup.js";
 import type {
   RecoveryRestoreCredentials,
+  AeatCertDraft,
+  CertificateIdentity,
   EmailSettingsDraft,
   ApiError,
   ConfigurationPreview,
@@ -1060,6 +1063,60 @@ export class SetupApp extends LitElement {
     },
   };
 
+  #certificateIdentity?: CertificateIdentity;
+  #checkingCertificateBeforeVenue = false;
+
+  get #certificateFirst(): boolean {
+    return (
+      this.draft.mode === "live" &&
+      !this.developmentMode &&
+      !this.draft.configurationImport &&
+      (this.draft.venue?.fiscalTerritory ?? "ES-common") === "ES-common" &&
+      (!this.#firstSession?.state || this.#firstReplacing)
+    );
+  }
+
+  async #inspectCertificate(cert: AeatCertDraft, current: () => boolean): Promise<boolean> {
+    const identity = await this.api.inspectCertificate("ES-common", cert);
+    if (!current() || this.screen !== "cert" || !this.#certificateFirst) return false;
+    const previous = this.#certificateIdentity;
+    const venue = { ...this.draft.venue };
+    if (identity.taxId !== null) {
+      const validated = getVenueSetupCountryPack("ES")?.taxIdentifier?.validate(identity.taxId);
+      if (!validated?.valid)
+        throw {
+          code: "setup.certificate_refused",
+          params: { field: "pfxBase64", reason: "invalid_tax_id" },
+        };
+      identity.taxId = validated.normalized;
+    }
+    const sameReplacementTaxId =
+      this.#firstReplacing && identity.taxId !== null && venue.taxId === identity.taxId;
+    const sameIdentity =
+      previous?.taxId === identity.taxId && previous.legalName === identity.legalName;
+    if (identity.taxId !== null) venue.taxId = identity.taxId;
+    else if (previous?.taxId) delete venue.taxId;
+    if (!sameIdentity && !sameReplacementTaxId) {
+      if (identity.legalName) venue.legalName = identity.legalName;
+      else if (previous?.legalName || (this.#firstReplacing && identity.taxId !== null))
+        delete venue.legalName;
+    }
+    this.#certificateIdentity = identity;
+    this.draft = { ...this.draft, venue };
+    return true;
+  }
+
+  #clearInspectedCertificate(): void {
+    const previous = this.#certificateIdentity;
+    this.#certificateIdentity = undefined;
+    const venue = { ...this.draft.venue };
+    if (previous?.taxId) delete venue.taxId;
+    if (previous?.legalName) delete venue.legalName;
+    const draft = { ...this.draft, venue };
+    delete draft.aeatCert;
+    this.draft = draft;
+  }
+
   #rootBaseline?: DeepPartial<ProvisionBody>;
   #rootScope?: DraftScope<DeepPartial<ProvisionBody>>;
   #rootGeneration = 0;
@@ -1143,6 +1200,7 @@ export class SetupApp extends LitElement {
       snapshot: (draft) => structuredClone(draft),
       equal: (a, b) => sameDraftValue(assembleBody(a), assembleBody(b)),
       restore: (draft) => {
+        if (draft.aeatCert === undefined) this.#certificateIdentity = undefined;
         this.draft = draft;
       },
     });
@@ -1338,6 +1396,11 @@ export class SetupApp extends LitElement {
     this.#registerRoot();
     const before = this.draft;
     const { mode, configurationImport } = event.detail.patch;
+    if (
+      configurationImport === false ||
+      (mode !== undefined && mode !== before.mode && this.#certificateIdentity)
+    )
+      this.#clearInspectedCertificate();
     this.draft = deepMerge(
       switchMode(this.draft, mode),
       event.detail.patch,
@@ -1565,6 +1628,13 @@ export class SetupApp extends LitElement {
     }
     if (this.#cloudSignInAvailable && (destination === "mode" || destination === "cloud-sign-in"))
       sessionStorage.removeItem("waitron-setup-cloud-signed-in");
+    if (this.#certificateFirst && this.screen === "admin" && destination === "venue")
+      destination = "cert";
+    this.#checkingCertificateBeforeVenue =
+      this.#certificateFirst &&
+      destination === "cert" &&
+      (this.screen === "admin" ||
+        (this.screen === "venue" && this.#certificateIdentity !== undefined));
     this.screen = destination;
   }
 
@@ -1584,10 +1654,13 @@ export class SetupApp extends LitElement {
   }
 
   #afterFirstOwner(): void {
+    this.#checkingCertificateBeforeVenue = false;
     this.screen =
       this.draft.mode === "live" && !this.developmentMode
         ? this.draft.venue?.fiscalTerritory === "ES-common"
-          ? "cert"
+          ? this.draft.aeatCert?.pfxBase64
+            ? "fiscal-test"
+            : "cert"
           : "email"
         : this.draft.mode === "prepare" && !this.developmentMode
           ? "email"
@@ -1673,6 +1746,7 @@ export class SetupApp extends LitElement {
     this.#afterFirstOwner();
   }
   #acceptFirstIdentity(): void {
+    this.#certificateIdentity = undefined;
     this.#cloudAdminTab = undefined;
     const state = this.#firstSession!.state!;
     this.draft = {
@@ -2591,6 +2665,7 @@ export class SetupApp extends LitElement {
       );
       for (const key of PREVIEW_NULLABLE_VENUE_FIELDS)
         if (key in exported) venue[key] = exported[key] ?? "";
+      this.#clearInspectedCertificate();
       this.draft = deepMerge(this.draft, {
         configurationImport: true,
         venue,
@@ -3244,12 +3319,20 @@ export class SetupApp extends LitElement {
           .errorMessage=${this.venueError?.()}
           .refusal=${this.venueError}
           .invalidField=${this.venueInvalidField}
+          .certificateBeforeVenue=${this.#certificateIdentity !== undefined}
+          .certificateTaxId=${Boolean(this.#certificateIdentity?.taxId)}
         ></setup-venue-screen>`;
       case "cert":
         return html`<setup-cert-screen
           data-test="screen-cert"
           .draft=${this.draft}
           .refusal=${this.certificateRefusal}
+          .inspect=${
+            this.#checkingCertificateBeforeVenue && this.#certificateFirst
+              ? (cert: AeatCertDraft, current: () => boolean) =>
+                  this.#inspectCertificate(cert, current)
+              : undefined
+          }
         ></setup-cert-screen>`;
       case "review":
         return html`<setup-review-screen

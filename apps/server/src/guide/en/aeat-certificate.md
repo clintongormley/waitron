@@ -3,6 +3,16 @@
 For a live Spanish venue, choose your `.pfx` or `.p12` certificate file and enter the passphrase
 you used when exporting it. Demo and Preparation do not ask for this certificate.
 
+## Check your venue details {#venue-details}
+
+When you start an empty live Spanish setup, choose the certificate before entering the venue
+details. Check the tax ID shown from the certificate and correct the legal name if needed. That
+name appears on receipts. To change the certificate's tax ID, go back and choose a certificate
+for the business you are setting up.
+
+Type any missing details. If you are self-employed and use a personal certificate, enter your
+legal name. The certificate has no company field.
+
 ## Correct a refused file {#refusals}
 
 Setup checks the file before running the fiscal test or provisioning the venue. A wrong passphrase
@@ -10,8 +20,8 @@ is explained under **Certificate passphrase**. A file that cannot be opened, use
 encryption, has no private key, has expired, is not valid yet or is for another tax ID is
 explained under **Certificate file**.
 
-Correct the passphrase or choose a replacement file, then select **Next** and run the fiscal test
-again. For a file with no private key or old encryption, export the certificate again with its
+Correct the passphrase or choose a replacement file, then select **Next**. Run the fiscal test
+when you reach it. For a file with no private key or old encryption, export the certificate again with its
 private key and modern encryption. The export instructions are on the certificate screen.
 
 If the fiscal test says AEAT did not accept the certificate, select **Back**, choose another
