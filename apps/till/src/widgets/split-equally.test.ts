@@ -36,6 +36,12 @@ const startButton = (el: TillSplitEqually) =>
 const stepButton = (el: TillSplitEqually, step: -1 | 1) =>
   stepper(el).shadowRoot!.querySelector<HTMLButtonElement>(`button[data-step="${step}"]`)!;
 
+function deepActive(): Element | null {
+  let focused = document.activeElement;
+  while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+  return focused;
+}
+
 async function press(el: TillSplitEqually, step: -1 | 1): Promise<void> {
   stepButton(el, step).click();
   await el.updateComplete;
@@ -179,6 +185,73 @@ describe("till-split-equally", () => {
     await press(el, 1);
     expect(amounts(el)).toEqual(["€24.44", "€24.43", "€0.01", "€0.01"]);
     expect(stepButton(el, 1).disabled).toBe(true);
+  });
+
+  it("with a record, asks how many guests are paying in all, over what is left", async () => {
+    const el = await mount({
+      left: "48.86",
+      taken: true,
+      startCount: 3,
+      paid: [{ amount: "24.44", state: "received" }],
+    });
+    expect(root(el).querySelector("[data-split-question]")!.textContent!.trim()).toBe(
+      "How many guests are paying?",
+    );
+    expect(topBar(el).subtitle).toBe("Bill 1 · €48.86 left");
+  });
+
+  it("offers no shares and no Start when the guests paid leave no count inside the limits", async () => {
+    const el = await mount({
+      left: "0.01",
+      taken: true,
+      startCount: 1000,
+      paid: Array.from({ length: 999 }, () => ({ amount: "0.01", state: "received" as const })),
+    });
+    expect(rows(el).filter(([, , , state]) => state === "due")).toEqual([]);
+    expect(startButton(el).disabled).toBe(true);
+  });
+
+  it("keeps the count being chosen when a render brings the same record again", async () => {
+    const paid = () => [{ amount: "24.44", state: "received" as const }];
+    const el = await mount({ left: "48.86", taken: true, startCount: 3, paid: paid() });
+    await press(el, 1);
+    el.paid = paid();
+    await el.updateComplete;
+    expect(stepper(el).value).toBe(4);
+  });
+
+  it("shows a card received while open as paid, keeping the count being chosen", async () => {
+    const el = await mount({
+      left: "48.86",
+      taken: true,
+      startCount: 3,
+      paid: [{ amount: "24.44", state: "card" }],
+    });
+    await press(el, 1);
+    el.paid = [{ amount: "24.44", state: "received" }];
+    await el.updateComplete;
+    expect(rows(el)[0]).toEqual(["Guest 1", "paid", "€24.44", "paid"]);
+    expect(stepper(el).value).toBe(4);
+  });
+
+  it("starts again by the starting rule when the record or what is left changes", async () => {
+    const el = await mount({ left: "0.00", startCount: 4 });
+    el.left = "73.30";
+    await el.updateComplete;
+    expect(stepper(el).value).toBe(4);
+
+    await press(el, 1);
+    el.paid = [];
+    el.taken = true;
+    el.left = "48.86";
+    await el.updateComplete;
+    expect(stepper(el).value).toBe(2);
+  });
+
+  it("takes keyboard focus to its back control when it opens", async () => {
+    const el = await mount({ startCount: 3 });
+    const back = topBar(el).shadowRoot!.querySelector("wt-button")!;
+    await expect.poll(deepActive).toBe(back.shadowRoot!.querySelector("button"));
   });
 
   it("shows a card in progress as still due, saying so", async () => {

@@ -8,7 +8,7 @@ import {
   multiplyDecimal,
   type Decimal,
 } from "@waitron/shared";
-import { baseStyles, type ShareListShare } from "@waitron/ui";
+import { baseStyles, type ShareListShare, type WtButton, type WtTopBar } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-foot-button-bar.js";
 import "@waitron/ui/src/components/wt-full-screen-panel.js";
@@ -25,6 +25,14 @@ export interface SplitEquallyStartDetail {
 }
 
 const money = (amount: string): string => formatMoney(decimal(amount), currentLocale());
+
+/** `ShareRun.paid` is a new array on every read, so only a change in what it holds counts. */
+const paidChanged = (next: readonly PaidShare[], previous?: readonly PaidShare[]): boolean =>
+  previous === undefined ||
+  next.length !== previous.length ||
+  next.some(
+    (share, i) => share.amount !== previous[i]!.amount || share.state !== previous[i]!.state,
+  );
 
 /** Split equally: the number of guests with − and +, and every guest's share of what is left. */
 @customElement("till-split-equally")
@@ -70,9 +78,19 @@ export class TillSplitEqually extends LitElement {
   /** The count chosen before the share's Pay was opened; set, it is where the screen starts. */
   @property({ attribute: false }) keptCount: number | null = null;
   /** The guests the record counts as paid, in order. */
-  @property({ attribute: false }) paid: readonly PaidShare[] = [];
+  @property({ attribute: false, hasChanged: paidChanged }) paid: readonly PaidShare[] = [];
 
+  /** The count chosen; the count shown and started is this held inside the limits. */
   @state() private count = 2;
+
+  /** Money is on the bill and no record says whose, so the count is of the guests still to pay. */
+  get #asksLeft(): boolean {
+    return this.taken && this.paid.length === 0;
+  }
+
+  get #shown(): number {
+    return Math.max(this.#min, Math.min(this.#max, this.count));
+  }
 
   get #min(): number {
     return Math.max(2, this.paid.length + 1);
@@ -88,16 +106,29 @@ export class TillSplitEqually extends LitElement {
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     super.willUpdate(changed);
+    const paidBefore = changed.get("paid") as readonly PaidShare[] | undefined;
+    // A card received changes no count, so the count being chosen stays.
     if (
+      !this.hasUpdated ||
       changed.has("startCount") ||
       changed.has("keptCount") ||
-      changed.has("paid") ||
-      changed.has("taken")
+      changed.has("taken") ||
+      changed.has("left") ||
+      (changed.has("paid") && paidBefore?.length !== this.paid.length)
     )
-      this.count =
-        this.keptCount ??
-        (this.taken && this.paid.length === 0 ? 2 : (this.startCount ?? this.#min));
-    this.count = Math.max(this.#min, Math.min(this.#max, this.count));
+      this.count = this.keptCount ?? (this.#asksLeft ? 2 : (this.startCount ?? this.#min));
+  }
+
+  protected override firstUpdated(): void {
+    void this.#focusBack();
+  }
+
+  async #focusBack(): Promise<void> {
+    const bar = this.renderRoot.querySelector<WtTopBar>("wt-top-bar")!;
+    await bar.updateComplete;
+    const back = bar.shadowRoot!.querySelector<WtButton>("wt-button");
+    await back?.updateComplete;
+    back?.focus();
   }
 
   #onCount(event: CustomEvent<{ value: number }>): void {
@@ -108,7 +139,7 @@ export class TillSplitEqually extends LitElement {
   #start(shares: readonly Decimal[]): void {
     this.dispatchEvent(
       new CustomEvent<SplitEquallyStartDetail>("split-equally-start", {
-        detail: { guests: this.count, amount: shares[0]! },
+        detail: { guests: this.#shown, amount: shares[0]! },
         bubbles: true,
         composed: true,
       }),
@@ -121,8 +152,8 @@ export class TillSplitEqually extends LitElement {
 
   override render() {
     const paid = this.paid.length;
-    const shares =
-      this.count - paid > this.#cents ? [] : equalShares(decimal(this.left), this.count - paid);
+    const count = this.#shown;
+    const shares = count > this.#max ? [] : equalShares(decimal(this.left), count - paid);
     const guest = (index: number) => fill(t("split_equally.guest"), { n: String(index + 1) });
     const rows: ShareListShare[] = [
       ...this.paid.map((share, index) => ({
@@ -154,12 +185,12 @@ export class TillSplitEqually extends LitElement {
         }}
       ></wt-top-bar>
       <p class="question" data-split-question>
-        ${t(this.taken ? "split_equally.question_left" : "split_equally.question")}
+        ${t(this.#asksLeft ? "split_equally.question_left" : "split_equally.question")}
       </p>
       <div class="count">
         <wt-stepper
           variant="round"
-          .value=${this.count}
+          .value=${count}
           .min=${this.#min}
           .max=${this.#max}
           .label=${t("seat.guest_count")}
