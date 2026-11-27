@@ -243,12 +243,12 @@ single job. GitHub reports the hosted image job as `image / smoke`.
 expressions locally; these checks do not run a hosted image build. Existing check names, test commands, coverage merges,
 setup retries and execution limits remain unchanged.
 
-When configured, the route command first reads `DISPOSABLE_TESTS_CAPACITY` using the repository secret
-`DISPOSABLE_CAPACITY_READ_TOKEN`. Only that bounded read uses this credential; queue and health
-inventories keep the existing workflow token. A missing or empty secret, a failed read or an
-invalid capacity value retains the snapshot supplied when the run was created. When routing consults
-capacity, console and summary
-distinguish `fresh`, `snapshot (no read token)` and `snapshot (fresh read failed)`.
+When configured, routing and planner recovery read `DISPOSABLE_TESTS_CAPACITY` using the repository
+secret `DISPOSABLE_CAPACITY_READ_TOKEN`. The bounded variable read uses this credential. Queue and
+health inventories use the workflow token. A missing or empty secret, a failed read or an invalid
+capacity value retains the workflow snapshot. The console and summary distinguish `fresh`,
+`snapshot (no read token)` and `snapshot (fresh read failed)`. Fresh describes the variable read.
+The observation it returns has its own age.
 Create the repository-only token with Variables read access and renew it every 90 days;
 trusted same-repository workflow code can access this credential.
 If the source says `snapshot (fresh read failed)`, inspect the job log and stored capacity value;
@@ -403,7 +403,8 @@ minutes without assignment. It skips runs already marked for hosted recovery and
 whose capacity snapshot under five minutes old shows every positive slot occupied.
 The recovery step reads the current capacity variable with its dedicated read credential.
 If the credential is absent or the read fails, it uses the workflow snapshot. The log names
-the source it used. The separate read-only queue check continues to use the workflow snapshot.
+the source and reports the observation's age and slot counts when available. The separate
+read-only queue check continues to use the workflow snapshot.
 Missing or stale capacity permits rescue; other server progress does not hide a waiting planner.
 It checks complete job inventories and the PR head again before cancellation and retry.
 The planner candidate scan accepts collected workflow rows when an empty page arrives

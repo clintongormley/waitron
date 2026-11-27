@@ -1453,6 +1453,9 @@ describe("scheduled PR planner recovery", () => {
         expect(summary).toContain(
           `CI capacity source: ${capacity === "read refused" ? "snapshot (fresh read failed)" : "fresh"}`,
         );
+        const occupancy = capacity === "full" ? "12/12" : "1/12";
+        expect(summary).toContain(`Planner rescue capacity: ${occupancy} server slots occupied`);
+        expect(summary).toMatch(/observation age \d+ ms/);
         if (capacity === "full")
           expect(summary).toContain("server is full in a fresh capacity snapshot");
       } finally {
@@ -2106,21 +2109,25 @@ describe("scheduled PR planner recovery", () => {
       rmSync(directory, { recursive: true, force: true });
     }
   });
-  it("requires intervention when a cancelled current-head planner cannot be verified", async () => {
+  it.each([
+    ["planning job is missing or its label changed", { labels: [] }],
+    ["planning job did not complete as cancelled", { conclusion: "failure" }],
+    ["cancelled planning job age is unknown or below five minutes", { started_at: date(1) }],
+  ])("requires intervention after cancellation when the %s", async (reason, change) => {
     const f = planner(),
       reports = [],
       request = f.options.request;
     f.options.report = (line) => reports.push(line);
     f.options.request = async (path, options) => {
       const reply = await request(path, options);
-      if (path.endsWith("/force-cancel")) f.job.labels = [];
+      if (path.endsWith("/force-cancel")) Object.assign(f.job, change);
       return reply;
     };
     await expect(health.recoverServer(f.options)).rejects.toThrow(
       /Cancelled PR run 12.*intervention/,
     );
     expect(reports).toContain(
-      "Planner rescue skipped: run=12 attempt=1 job=123; post-cancel verification: cancelled planning job did not match its label, status or age.",
+      `Planner rescue skipped: run=12 attempt=1 job=123; post-cancel verification: ${reason}.`,
     );
     expect(f.calls.some(([path]) => path.endsWith("/rerun"))).toBe(false);
     expect(f.run.run_attempt).toBe(1);
