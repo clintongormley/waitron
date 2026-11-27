@@ -269,17 +269,43 @@ it.each([
   },
 );
 
-it("names the master key before pausing work for a downloadable backup", async () => {
-  const { el } = await mount(
-    stubApi({}, health({ shutdown: { phase: "idle", available: true, downloadOnly: true } })),
-  );
+it.each([
+  ["en", "To restore this backup, you need the master key."],
+  ["es", "Para restaurar esta copia necesitas la clave maestra."],
+] as const)(
+  "names the master key before pausing work for a downloadable backup (%s)",
+  async (locale, line) => {
+    setLocale(locale);
+    const { el } = await mount(
+      stubApi({}, health({ shutdown: { phase: "idle", available: true, downloadOnly: true } })),
+    );
+    el.canCheckClock = true;
+    await el.updateComplete;
+    await userEvent.click(q(el, '[data-test="box-shutdown"]')!);
+    const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
+    expect(text(confirm.closest("wt-dialog"))).toContain(line);
+  },
+);
+
+it("asks in Spanish whether the backup and the master key were saved", async () => {
+  setLocale("es");
+  const name = "waitron-final.backup.enc";
+  const download = {
+    phase: "download",
+    name,
+    bytes: 1234,
+    delivered: true,
+    available: true,
+  } as const;
+  const { el } = await mount(stubApi({}, health({ shutdown: download })));
   el.canCheckClock = true;
   await el.updateComplete;
-  await userEvent.click(q(el, '[data-test="box-shutdown"]')!);
-  const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
-  expect(text(confirm.closest("wt-dialog"))).toContain(
-    "To restore this backup, you need the master key.",
+  await userEvent.click(q(el, '[data-test="box-shutdown-backup-saved"]')!);
+  const confirmation = q(el, '[data-test="box-shutdown-confirm"]')!.closest("wt-dialog")!;
+  expect(confirmation.getAttribute("heading")).toBe(
+    "¿Has guardado la copia de seguridad y la clave maestra?",
   );
+  expect(text(confirmation)).toContain("Para restaurar esta copia necesitas la clave maestra.");
 });
 
 it("shows the checked download and asks the administrator to confirm the named file and the master key", async () => {

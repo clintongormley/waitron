@@ -3607,23 +3607,15 @@ async function attachedPack(
 }
 /**
  * The same, its file also carrying `archiveCode` and `backupKey`, both null, as the format required
- * of every pack file before A1323 PR 4b-2. Its keys are sorted and unspaced, as
- * `buildRecoveryPackFile` writes them, and the PDF names its true digest, so only its shape is wrong.
+ * of every pack file before A1323 PR 4b-2. It is written in canonical form and the PDF names its
+ * true digest, so only its shape is wrong.
  */
 async function packWithArchiveFields(
   file: Partial<import("@waitron/recovery-pack").RecoveryPackFile>,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  const fields: Record<string, unknown> = {
-    ...attachedFile(file),
-    archiveCode: null,
-    backupKey: null,
-  };
-  const sorted = Object.fromEntries(
-    Object.keys(fields)
-      .sort()
-      .map((key) => [key, fields[key]]),
-  );
-  return carrierPack(new TextEncoder().encode(JSON.stringify(sorted)));
+  const { canonicalJson } = await import("@waitron/recovery-pack");
+  const fields = { ...attachedFile(file), archiveCode: null, backupKey: null };
+  return carrierPack(new TextEncoder().encode(canonicalJson(fields)));
 }
 async function carrierPack(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
   const { PACK_ATTACHMENT } = await import("@waitron/recovery-pack");
@@ -3765,6 +3757,14 @@ it.each([
   check(el, "recovery-details-confirmed");
   expect(el.readCredentials()).toBeNull();
   expect(prepare).not.toHaveBeenCalled();
+});
+it("a pack whose file still carries archiveCode and backupKey is refused for its shape, not its digest", async () => {
+  const { readRecoveryPackPdf } = await import("@waitron/recovery-pack/src/read-pack-pdf.js");
+  const { RecoveryPackFileError } = await import("@waitron/recovery-pack");
+  const bytes = await packWithArchiveFields({ masterKey: null, masterKeyHeldBy: 1 });
+  expect(await readRecoveryPackPdf(bytes).catch((error: unknown) => error)).toEqual(
+    new RecoveryPackFileError("shape"),
+  );
 });
 it.each([
   ["names another key than the preview's", REFUSED_KEY, WRONG_KEY],

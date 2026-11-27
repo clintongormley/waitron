@@ -4,6 +4,7 @@ import PDFKit from "pdfkit";
 import { encodeMasterKeyCode } from "@waitron/shared";
 import {
   buildRecoveryPackFile,
+  canonicalJson,
   PACK_ATTACHMENT,
   renderRecoveryPack,
   type RecoveryPackFile,
@@ -65,17 +66,12 @@ export async function packPdfWithoutMasterKey(): Promise<Uint8Array<ArrayBuffer>
 
 /**
  * The same pack file also carrying `archiveCode` and `backupKey`, both null, as the format required
- * of every pack file before A1323 PR 4b-2. Its keys are sorted and unspaced, as
- * `buildRecoveryPackFile` writes them, and the PDF names its true digest, so only its shape is wrong.
+ * of every pack file before A1323 PR 4b-2. It is written in canonical form and the PDF names its
+ * true digest, so only its shape is wrong.
  */
 export async function packPdfWithArchiveFields(): Promise<Uint8Array<ArrayBuffer>> {
-  const fields: Record<string, unknown> = { ...NO_MASTER_KEY, archiveCode: null, backupKey: null };
-  const sorted = Object.fromEntries(
-    Object.keys(fields)
-      .sort()
-      .map((key) => [key, fields[key]]),
-  );
-  return carrierPdf(new TextEncoder().encode(JSON.stringify(sorted)));
+  const fields = { ...NO_MASTER_KEY, archiveCode: null, backupKey: null };
+  return carrierPdf(new TextEncoder().encode(canonicalJson(fields)));
 }
 
 async function carrierPdf(fileBytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
