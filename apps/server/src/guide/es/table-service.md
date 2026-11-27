@@ -636,6 +636,9 @@ menús más baratos que encuentra cada vez que cambia el pedido, y cobra a la ca
 ninguno. La carpeta de un menú muestra qué platos incluye y cuáles tienen suplemento: ábrela
 desde la cuadrícula o escribe su nombre en **Buscar** y pulsa el resultado.
 
+En una mesa, **Precio al enviar** indica que el plato aún no tiene precio. El total del pedido
+incluye los extras de pago de ese plato. Envía los platos para ver el total completo.
+
 Abre el resumen de menús en **Pedido** para ver qué platos lleva cada menú y qué sitios quedan
 libres. Para invitar o hacer un descuento en un menú, pulsa **Descuento…** en él dentro del
 resumen. Un plato al que invitas o haces un descuento sale de su menú y se cobra a la carta, menos

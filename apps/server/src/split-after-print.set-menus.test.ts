@@ -6,7 +6,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   AppError,
   groupSetMenus,
-  suggestMove,
   thousandthsToDecimal,
   type SetMenuGroupingInput,
 } from "@waitron/shared";
@@ -20,7 +19,6 @@ import { COMP_BILL_REASON, GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel
 import { commandFor, inTx, type PartyVenue } from "./testing/party-venue.js";
 import { markServed } from "./working-order-serving.js";
 import {
-  addEmptySpecSetMenus,
   printSpecBill,
   serveSpecBill,
   setupSetMenuSpecVenue,
@@ -201,7 +199,7 @@ it("a comped set-menu dish splits after print a la carte, with its comp", async 
 
 it("a set-menu dish a whole-bill discount reduced splits after print in its set menu, with its part", async () => {
   const tab = await specBill(spec, "fire");
-  // Both Sirloins sit at +5.00 in a Daily menu; each is reduced, so neither may be offered a move.
+  // Both Sirloins sit at +5.00 in a Daily menu; each is reduced and stays with its set menu.
   const sirloins = (await specRows(spec, tab.tabId)).filter(({ name }) => name === "Sirloin");
   expect(sirloins).toHaveLength(2);
   await adjust(tab.tabId, null);
@@ -233,16 +231,6 @@ it("a set-menu dish a whole-bill discount reduced splits after print in its set 
     expect(await movable(billId, copy.id)).toBe(false);
   }
   expect(copied.reduce((sum, { lineTotal }) => sum + lineTotal, 0)).toBe(3600);
-
-  // Undiscounted, an empty Special would draw a Sirloin off its +5.00 place to make room for a Hake.
-  const [third] = await addEmptySpecSetMenus(spec, billId, spec.special);
-  const suggestion = suggestMove(await inTx(venue, (tx) => readBillSetMenus(tx, billId)), [], {
-    id: crypto.randomUUID(),
-    productId: spec.productIds.Hake,
-    variantId: null,
-  });
-  expect(suggestion?.moves).toEqual([]);
-  expect(suggestion?.place).toMatchObject({ setMenuLineId: third, place: 1 });
 });
 
 it("a comped set menu splits after print with its comp", async () => {

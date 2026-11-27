@@ -599,6 +599,9 @@ menus it finds each time the order changes, and charges a dish that fits none à
 folder shows which dishes it includes and which cost extra: open it from the grid, or type its
 name in **Search** and tap the result.
 
+At a table, **Price after Send** means the dish has no price yet. The order total includes any
+priced extras on that dish. Send the dishes to see the full total.
+
 Open the set-menu summary on **Order** to see which dishes each set menu holds and which places
 are free. To comp or discount a set menu, choose **Comp…** on it in the summary. A dish you comp
 or discount leaves its set menu and is charged à la carte, less what you take off. A set menu

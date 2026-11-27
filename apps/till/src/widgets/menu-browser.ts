@@ -22,15 +22,7 @@ import {
 } from "@waitron/ui";
 import "./product-info.js";
 import {
-  centsToDecimal,
-  copiesListing,
   foldCache,
-  placeInOrder,
-  setMenuCopyOf,
-  suggestMove,
-  type DishMove,
-  type DishPlace,
-  type DishToPlace,
   foldForSearch,
   formatMoney,
   searchFor,
@@ -52,23 +44,14 @@ import "./modifier-picker.js";
 import "./tender-pay.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { menuOfferToTillProduct, type TillProduct, type TillZoneMenu } from "../api/menu-api.js";
-import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
+import type { WorkingOrderStore } from "../state/working-order.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { countText, currentLocale, fill, t } from "../i18n/t.js";
+import { countText, currentLocale, t } from "../i18n/t.js";
 import { descriptionFor } from "./dish-format.js";
 import { helpBadge } from "./help-badge.js";
 import { productName, productTilePrice, soldByTheUnit } from "./product-name.js";
 import { hasSomethingToSell, pickProduct, setMenuProduct } from "./product-pick.js";
-import {
-  draftMenuDishes,
-  draftPlacementId,
-  menusWithCopies,
-  setMenuLineOf,
-  type OrderingCopy,
-  type OwnSetMenuOffers,
-} from "../state/set-menus.js";
-import { codeMessage } from "../i18n/codes.js";
-import { trackDialog } from "./track-dialog.js";
+import { setMenuLineOf, type OrderingCopy, type OwnSetMenuOffers } from "../state/set-menus.js";
 import { type PickSetMenuDishDetail } from "./set-menu-folder.js";
 
 registerIcons({
@@ -79,20 +62,6 @@ registerIcons({
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
 
 type MenuIndex = HomeIndex<TillProduct>;
-type SetMenuPlaceChoice = { label: string; run: () => Promise<string | undefined> };
-type SetMenuTarget = DishPlace | ReadonlySet<string>;
-type MenuPick = {
-  detail: PickSetMenuDishDetail;
-  confirmed?: ModifierConfirmDetail;
-  existing?: OrderLine;
-};
-const EMPTY_SET_MENUS: BillSetMenuState = {
-  copies: [],
-  dishes: [],
-  setMenus: [],
-  recorded: {},
-  exact: true,
-};
 function listsSetMenu(members: readonly DocumentMember[], id: string): boolean {
   return members.some((member) =>
     member.kind === "set_menu"
@@ -514,21 +483,12 @@ export class TillMenuBrowser extends LitElement {
   @state() private notFound = false;
 
   @state() private pickerProduct?: TillProduct;
-  #pickerSetMenu?: { pick: MenuPick; target?: SetMenuTarget };
+  #pickerSetMenu?: PickSetMenuDishDetail;
 
   @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = [];
   @property({ attribute: false }) ownSetMenuOffer?: OwnSetMenuOffers;
   @property({ attribute: false }) setMenuBill?: BillSetMenuState;
   @property({ attribute: false }) setMenuCourses: Readonly<Record<string, string>> = {};
-  @property({ attribute: false }) addSetMenu?: (id: string) => Promise<string | undefined>;
-  @property({ attribute: false }) moveSetMenuDishes?: (
-    moves: readonly DishMove[],
-  ) => Promise<string | undefined>;
-  @property({ attribute: false }) setMenuDishNames: ReadonlyMap<string, string> = new Map();
-  @state() private placeRequest?: MenuPick;
-  #replaceAfterPick?: OrderLine;
-  @state() private setMenuError = "";
-  @state() private changingSetMenu = false;
   @state() private setMenuFolder?: { id?: string; held: boolean };
 
   #indexed?: { menu: TillZoneMenu; products: TillProduct[]; index: MenuIndex };
@@ -612,7 +572,7 @@ export class TillMenuBrowser extends LitElement {
     if (this.pickerProduct && this.#pickerSetMenu !== undefined)
       this.pickerProduct = this.#withOwnDeclarations(
         this.pickerProduct,
-        this.#pickerSetMenu.pick.detail.setMenuId,
+        this.#pickerSetMenu.setMenuId,
       );
     if (this.#waitingForMenu()) {
       this.#pendingSection = undefined;
@@ -623,12 +583,9 @@ export class TillMenuBrowser extends LitElement {
       if (this.#pickerSetMenu === undefined || this.setMenuCopies.length === 0) {
         this.pickerProduct = undefined;
         this.#pickerSetMenu = undefined;
-        this.#replaceAfterPick = undefined;
       }
       if (this.setMenuCopies.length === 0) {
         this.setMenuFolder = undefined;
-        this.placeRequest = undefined;
-        this.setMenuError = "";
       }
       return;
     }
@@ -715,17 +672,11 @@ export class TillMenuBrowser extends LitElement {
     if (trail.isConnected) trail.scrollIntoView({ block: "nearest" });
   }
 
-  #pick(product: TillProduct, replacing?: OrderLine): void {
+  #pick(product: TillProduct): void {
     this.notFound = false;
-    pickProduct(
-      product,
-      this.store,
-      (picked) => {
-        this.#replaceAfterPick = replacing;
-        this.pickerProduct = picked;
-      },
-      replacing,
-    );
+    pickProduct(product, this.store, (picked) => {
+      this.pickerProduct = picked;
+    });
   }
 
   #onSearch(event: CustomEvent<{ value: string }>): void {
@@ -735,182 +686,31 @@ export class TillMenuBrowser extends LitElement {
     this.notFound = false;
   }
 
-  #pickCandidates(pick: MenuPick): DishToPlace[] {
-    const product = pick.confirmed?.product ?? setMenuProduct(pick.detail);
-    const variants =
-      pick.confirmed === undefined && product.variants?.length
-        ? product.variants.filter(({ available }) => available).map(({ id }) => id)
-        : [product.variantId ?? null];
-    return variants.map((variantId) => ({
-      id: "picked-dish",
-      productId: product.productId ?? product.id,
-      variantId,
-      reserved: null,
-    }));
-  }
-
   #withOwnDeclarations(product: TillProduct, setMenuId: string): TillProduct {
     const own = this.ownSetMenuOffer?.(setMenuLineOf({ product, setMenuId }));
     return refreshProductDeclarations(product, own && menuOfferToTillProduct(own));
   }
 
-  #pickSetMenu(pick: MenuPick, target?: SetMenuTarget): void {
+  #pickSetMenu(pick: PickSetMenuDishDetail, confirmed?: ModifierConfirmDetail): void {
     const product = this.#withOwnDeclarations(
-      pick.confirmed?.product ?? setMenuProduct(pick.detail),
-      pick.detail.setMenuId,
+      confirmed?.product ?? setMenuProduct(pick),
+      pick.setMenuId,
     );
     if (!hasSomethingToSell(product) || this.store.editsLocked) return;
-    const bill = this.setMenuBill ?? EMPTY_SET_MENUS;
-    const candidates = this.#pickCandidates(pick);
-    const reserved =
-      target === undefined || "place" in target
-        ? target
-        : candidates.flatMap(
-            (dish) =>
-              placeInOrder(
-                {
-                  ...bill,
-                  setMenus: bill.setMenus.filter(({ lineId }) => target.has(lineId)),
-                },
-                [dish],
-              ).placed,
-          )[0];
-    if (pick.confirmed === undefined && needsModifierPicker(product)) {
-      this.#pickerSetMenu = { pick, target };
+    if (confirmed === undefined && needsModifierPicker(product)) {
+      this.#pickerSetMenu = pick;
       this.pickerProduct = product;
       return;
     }
-    this.store.addProduct(
-      product,
-      "1",
-      {
-        ...pick.confirmed,
-        setMenu: { id: pick.detail.setMenuId, reserved },
-      },
-      pick.existing,
-    );
+    this.store.addProduct(product, "1", { ...confirmed, setMenu: { id: pick.setMenuId } });
   }
 
   #onModifierConfirm(detail: ModifierConfirmDetail): void {
     const setMenu = this.#pickerSetMenu;
     this.#pickerSetMenu = undefined;
     this.pickerProduct = undefined;
-    if (setMenu !== undefined) {
-      this.#pickSetMenu({ ...setMenu.pick, confirmed: detail }, setMenu.target);
-      return;
-    }
-    const replacing = this.#replaceAfterPick;
-    this.#replaceAfterPick = undefined;
-    this.store.addProduct(detail.product, "1", detail, replacing);
-  }
-
-  openSetMenuPlace(line: OrderLine): boolean {
-    const row = this.setMenuCopies.find(({ copy }) => copy.menuId === line.setMenuId);
-    const offer = row?.copy.offers.find(({ id }) => id === line.product.menuItemId);
-    if (row === undefined || offer === undefined) return false;
-    this.setMenuError = "";
-    this.placeRequest = {
-      detail: { offer, setMenuId: row.copy.menuId, versionId: row.versionId },
-      confirmed: {
-        product: line.product,
-        extras: line.extras,
-        options: line.options,
-        optionSnapshots: line.optionSnapshots,
-        note: line.note,
-      },
-      existing: line,
-    };
-    return true;
-  }
-
-  #placeChoices(pick: MenuPick): SetMenuPlaceChoice[] {
-    const bill = this.setMenuBill ?? EMPTY_SET_MENUS;
-    const draft = this.store.lines.filter((line) => line !== pick.existing);
-    const dishes = draftMenuDishes(draft);
-    const placed = placeInOrder(bill, dishes).placed;
-    const candidates = this.#pickCandidates(pick);
-    const choices: SetMenuPlaceChoice[] = [];
-    const add = this.addSetMenu;
-    if (add !== undefined)
-      for (const { copy, versionId } of this.setMenuCopies) {
-        if (
-          !candidates.some(
-            ({ productId, variantId }) =>
-              copiesListing([setMenuCopyOf(copy, versionId)], productId, variantId).length > 0,
-          )
-        )
-          continue;
-        choices.push({
-          label: `${fill(t("set_menu.add"), { name: copy.name })} (${formatMoney(copy.terms.price, currentLocale())})`,
-          run: async () => {
-            const error = await add(copy.menuId);
-            if (error !== undefined || !this.isConnected) return error;
-            const now = this.setMenuBill ?? EMPTY_SET_MENUS;
-            const old = new Set(bill.setMenus.map(({ lineId }) => lineId));
-            const added = new Set(
-              now.setMenus.map(({ lineId }) => lineId).filter((id) => !old.has(id)),
-            );
-            const pinned = new Map<number, OrderLine>();
-            for (const { id, place, setMenuLineId } of placed) {
-              const line = draft.find((line, index) => draftPlacementId(line, index) === id)!;
-              const index = this.store.lines.indexOf(line);
-              if (index >= 0)
-                pinned.set(index, { ...line, setMenuReserved: { place, setMenuLineId } });
-            }
-            if (pinned.size > 0) this.store.adoptLines(pinned);
-            this.#pickSetMenu(pick, added);
-            return undefined;
-          },
-        });
-      }
-    const move = this.moveSetMenuDishes;
-    if (move !== undefined && candidates.length === 1) {
-      const drafted = placed.map((place) => ({
-        ...dishes.find(({ id }) => id === place.id)!,
-        ...place,
-      }));
-      const suggestion = suggestMove(bill, drafted, candidates[0]!);
-      if (suggestion !== null && suggestion.moves.length > 0) {
-        const names = new Map(
-          menusWithCopies(bill).map(({ menu, copy }) => [menu.lineId, copy.name]),
-        );
-        const moves = suggestion.moves.map(({ lineId, to, priceCents }) =>
-          fill(t("set_menu.move_named"), {
-            dish: this.setMenuDishNames.get(lineId) ?? lineId,
-            menu: names.get(to.setMenuLineId) ?? "",
-            price: formatMoney(centsToDecimal(priceCents), currentLocale()),
-          }),
-        );
-        choices.push({
-          label: fill(t("set_menu.move_for_dish"), {
-            moves: moves.join(" · "),
-            dish: pick.detail.offer.name,
-          }),
-          run: async () => {
-            const error = await move(suggestion.moves.map(({ lineId, to }) => ({ lineId, to })));
-            if (error === undefined && this.isConnected) this.#pickSetMenu(pick, suggestion.place);
-            return error;
-          },
-        });
-      }
-    }
-    const ordinary = (this.unfilteredServedProducts ?? this.servedProducts).find(
-      (product) =>
-        (product.productId ?? product.id) === pick.detail.offer.productId &&
-        product.ordering !== "not_sold_separately" &&
-        hasSomethingToSell(product),
-    );
-    if (ordinary !== undefined)
-      choices.push({
-        label: fill(t("set_menu.order_separately"), {
-          price: formatMoney(ordinary.unitPrice, currentLocale()),
-        }),
-        run: async () => {
-          this.#pick(ordinary, pick.existing);
-          return undefined;
-        },
-      });
-    return choices;
+    if (setMenu !== undefined) this.#pickSetMenu(setMenu, detail);
+    else this.store.addProduct(detail.product, "1", detail);
   }
 
   #sectionName(section: SectionNode): string {
@@ -1251,22 +1051,6 @@ export class TillMenuBrowser extends LitElement {
     >`;
   }
 
-  async #chooseSetMenu(run: () => Promise<string | undefined>, close = false): Promise<void> {
-    if (this.changingSetMenu || this.store.editsLocked) return;
-    const request = this.placeRequest;
-    this.changingSetMenu = true;
-    this.setMenuError = (await run().catch(() => codeMessage("server.internal"))) ?? "";
-    this.changingSetMenu = false;
-    if (close && this.setMenuError === "" && this.placeRequest === request)
-      this.placeRequest = undefined;
-  }
-
-  #closeSetMenuPlace(event: Event): void {
-    event.stopPropagation();
-    this.placeRequest = undefined;
-    this.setMenuError = "";
-  }
-
   #setMenuView(row: OrderingCopy | undefined): TemplateResult {
     return html`<section data-region="section">
       <nav class="breadcrumb" aria-label=${t("menu.breadcrumb")}>
@@ -1275,7 +1059,6 @@ export class TillMenuBrowser extends LitElement {
           @click=${() => {
             this.setMenuFolder =
               row !== undefined && this.setMenuFolder?.held ? { held: true } : undefined;
-            this.setMenuError = "";
           }}
           >${t("action.back")}</wt-button
         >
@@ -1287,11 +1070,10 @@ export class TillMenuBrowser extends LitElement {
               .copy=${row.copy}
               .versionId=${row.versionId}
               .courseNames=${this.setMenuCourses}
-              .busy=${this.changingSetMenu || this.store.editsLocked}
-              @pick-set-menu-dish=${(event: CustomEvent<PickSetMenuDishDetail>) => this.#pickSetMenu({ detail: event.detail })}
+              .busy=${this.store.editsLocked}
+              @pick-set-menu-dish=${(event: CustomEvent<PickSetMenuDishDetail>) => this.#pickSetMenu(event.detail)}
             ></till-set-menu-folder>`
       }
-      ${this.setMenuError === "" ? nothing : html`<p class="notice" role="alert">${this.setMenuError}</p>`}
     </section>`;
   }
 
@@ -1397,37 +1179,6 @@ export class TillMenuBrowser extends LitElement {
       ${this.notFound ? html`<p class="notice" role="alert">${t("menu.not_found")}</p>` : nothing}
       ${view}
       ${
-        this.placeRequest === undefined
-          ? nothing
-          : html`<wt-dialog
-              ${trackDialog()}
-              data-set-menu-place
-              .open=${true}
-              .dismissible=${!this.changingSetMenu}
-              .heading=${fill(t("set_menu.no_place_heading"), { dish: this.placeRequest.detail.offer.name })}
-              @wt-close=${this.#closeSetMenuPlace}
-            >
-              ${this.setMenuError === "" ? nothing : html`<p role="alert">${this.setMenuError}</p>`}
-              <wt-button
-                slot="footer"
-                variant="secondary"
-                ?disabled=${this.changingSetMenu}
-                @click=${this.#closeSetMenuPlace}
-                >${t("action.cancel")}</wt-button
-              >
-              ${this.#placeChoices(this.placeRequest).map(
-                ({ label, run }) =>
-                  html`<wt-button
-                    slot="footer"
-                    variant="secondary"
-                    ?disabled=${this.changingSetMenu}
-                    @click=${() => void this.#chooseSetMenu(run, true)}
-                    >${label}</wt-button
-                  >`,
-              )}
-            </wt-dialog>`
-      }
-      ${
         this.infoProduct
           ? html`<till-product-info
               .product=${this.infoProduct}
@@ -1464,7 +1215,6 @@ export class TillMenuBrowser extends LitElement {
                 this.#onModifierConfirm(event.detail)}
               @wt-modifier-cancel=${() => {
                 this.#pickerSetMenu = undefined;
-                this.#replaceAfterPick = undefined;
                 this.pickerProduct = undefined;
               }}
             ></till-modifier-picker>`

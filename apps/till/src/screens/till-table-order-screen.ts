@@ -4,10 +4,7 @@ import {
   sentMenuDishes,
   type OrderingCopy,
   type OwnSetMenuOffers,
-  type SetMenuChange,
 } from "../state/set-menus.js";
-import type { TillMenuBrowser } from "../widgets/menu-browser.js";
-import "../widgets/set-menu-counts.js";
 import "../widgets/set-menu-summary.js";
 import type { PartyAllergyRead } from "@waitron/module";
 import {
@@ -1831,10 +1828,6 @@ export class TillTableOrderScreen extends LitElement {
 
   @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = [];
   @property({ attribute: false }) ownSetMenuOffer?: OwnSetMenuOffers;
-  @property({ attribute: false }) changeSetMenu?: (
-    change: SetMenuChange,
-  ) => Promise<string | undefined>;
-
   get #setMenus(): BillSetMenuState | undefined {
     return this.bills.find((bill) => bill.workingOrderId === this.orderId)?.setMenus;
   }
@@ -3056,7 +3049,6 @@ export class TillTableOrderScreen extends LitElement {
       .setMenuCopies=${this.setMenuCopies}
       .ownSetMenuOffer=${this.ownSetMenuOffer}
       .setMenuCourses=${this.#menuCourseNames}
-      .setMenuDishNames=${this.#menuDishNames}
       .filters=${this.selectedFilters}
       .products=${this.#browserProducts(this.products, menu?.id ?? "", this.selectedFilters)}
       .unfilteredProducts=${this.#unfilteredProducts(this.products, menu?.id ?? "", EMPTY_MENU_FILTERS)}
@@ -4371,17 +4363,6 @@ export class TillTableOrderScreen extends LitElement {
         ? 0
         : scroller.getBoundingClientRect().top + scroller.clientTop;
     scroller.scrollTop += toggle.getBoundingClientRect().top - areaTop;
-  }
-
-  async openSetMenuPlace(line: OrderLine): Promise<boolean> {
-    const orderId = this.orderId;
-    await this.#showMenu();
-    await this.updateComplete;
-    if (this.orderId !== orderId || !this.isConnected) return false;
-    return (
-      this.renderRoot.querySelector<TillMenuBrowser>("till-menu-browser")?.openSetMenuPlace(line) ??
-      false
-    );
   }
 
   async #showMenu(): Promise<void> {

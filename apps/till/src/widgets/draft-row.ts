@@ -69,9 +69,8 @@ export function lineMarks(line: OrderLine) {
 export interface DraftRowView {
   line: OrderLine;
   index: number;
-  /** {@link draftLinePrice}'s figure, so the row shows what the order total adds. */
   price: Decimal;
-  /** The set-menu place's surcharge, for its tag; absent on a dish outside a set menu. */
+  /** The supplement if this dish fits a saved set menu. */
   setMenuPrice?: string;
   /** The dish's own allergen and diet icons. */
   nutrition: TemplateResult | typeof nothing;
@@ -130,7 +129,10 @@ export function draftRow(view: DraftRowView): TemplateResult {
   const { line, index } = view;
   const name = lineProductName(line.product);
   const quantity = isCounted(line) ? quantityText(line.quantity) : quantityLabel(line);
-  const price = formatMoney(view.price, currentLocale());
+  const price =
+    line.setMenuId !== undefined && view.setMenuPrice === undefined
+      ? t("set_menu.price_after_send")
+      : formatMoney(view.price, currentLocale());
   const more = [
     ...(line.extras ?? []).map((extra, i) => {
       const own = view.extraNutrition(extra);

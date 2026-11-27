@@ -188,12 +188,12 @@ export function panelTotal(
   return toScale(sumDecimals([decimal(storedTotal), ...drafts]), MONEY_SCALE);
 }
 
-/** A draft row's price; the panel total adds exactly these, so a row and the total agree. */
 export function draftLinePrice(
   line: OrderLine,
   placedPrice?: (line: OrderLine) => string | undefined,
 ): Decimal {
   if (line.setMenuId === undefined) return lineGross(line);
+  // A folder offer carries its supplement. Until it fits a saved menu, only its extras are priced.
   const unitPrice = placedPrice?.(line) ?? "0.00";
   return lineGross({ ...line, product: { ...line.product, unitPrice } });
 }

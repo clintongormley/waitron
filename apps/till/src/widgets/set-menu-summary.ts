@@ -1,30 +1,17 @@
 import { css, html, LitElement, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import {
-  centsToDecimal,
-  checkMoves,
-  type BillSetMenuState,
-  type DishMove,
-  type PlacedDish,
-} from "@waitron/shared";
-import { codeMessage } from "../i18n/codes.js";
+import { centsToDecimal, type BillSetMenuState } from "@waitron/shared";
 import { countText, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import {
-  draftNamesLosingPlace,
-  draftPlacementId,
-  draftPlacements,
-  menusWithCopies,
-} from "../state/set-menus.js";
+import { draftPlacementId, draftPlacements, menusWithCopies } from "../state/set-menus.js";
 import type { OrderLine } from "../state/working-order.js";
 import { lineProductName } from "./product-name.js";
 import {
   notCheapestText,
   setMenuCourseName,
-  setMenuPrice,
   setMenuTag,
   setMenuTagStyles,
 } from "./set-menu-presentation.js";
@@ -74,14 +61,6 @@ export class TillSetMenuSummary extends LitElement {
         margin: var(--wt-space-2) 0;
         padding-inline-start: var(--wt-space-5);
       }
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-2);
-      }
-      .error {
-        color: var(--wt-color-danger);
-      }
     `,
   ];
 
@@ -89,14 +68,8 @@ export class TillSetMenuSummary extends LitElement {
   @property({ attribute: false }) draft: readonly OrderLine[] = [];
   @property({ attribute: false }) courseNames: Readonly<Record<string, string>> = {};
   @property({ attribute: false }) dishNames: ReadonlyMap<string, string> = new Map();
-  @property({ attribute: false }) removeMenu?: (id: string) => Promise<string | undefined>;
-  @property({ attribute: false }) moveDish?: (move: DishMove) => Promise<string | undefined>;
   @property({ attribute: false }) compMenu?: (lineId: string, name: string) => void;
   @property({ type: Boolean }) busy = false;
-  @state() private moving: string | null = null;
-  @state() private pending = false;
-  @state() private errors = new Map<string, string>();
-
   constructor() {
     super();
     new LocaleChangeController(this);
@@ -140,62 +113,6 @@ export class TillSetMenuSummary extends LitElement {
     const places = Array.from(openings)
       .flatMap(([name, count]) => (count > 0 ? [`${count} ${name}`] : []))
       .join(" · ");
-    const disabled = this.busy || this.pending;
-
-    const moveOptions = (dish: PlacedDish) =>
-      rows.flatMap((row) =>
-        row.places.flatMap(({ name, place, open }) => {
-          if (open <= 0 || (row.id === dish.setMenuLineId && place === dish.place)) return [];
-          const move = { lineId: dish.lineId, to: { setMenuLineId: row.id, place } };
-          const result = checkMoves(bill, [move]);
-          return result.kind === "ok"
-            ? [
-                {
-                  move,
-                  label: `${row.name} ${row.number} · ${name} · ${setMenuPrice(centsToDecimal(result.results[0]!.priceCents), "set_menu.included")}`,
-                },
-              ]
-            : [];
-        }),
-      );
-
-    const sentDish = (dish: PlacedDish, menuId: string) => {
-      const options = this.moveDish === undefined || !dish.movable ? [] : moveOptions(dish);
-      return html`<li>
-        ${this.dishNames.get(dish.lineId)}${setMenuTag(centsToDecimal(dish.priceCents))}
-        ${
-          options.length === 0
-            ? nothing
-            : html`
-                <wt-button
-                  variant="ghost"
-                  ?disabled=${disabled}
-                  aria-expanded=${this.moving === dish.lineId ? "true" : "false"}
-                  @click=${() => {
-                    this.moving = this.moving === dish.lineId ? null : dish.lineId;
-                  }}
-                  >${t("set_menu.move")}</wt-button
-                >
-                ${
-                  this.moving !== dish.lineId
-                    ? nothing
-                    : html` <div class="actions" data-move-options>
-                        ${options.map(
-                          ({ move, label }) =>
-                            html` <wt-button
-                              variant="secondary"
-                              ?disabled=${disabled}
-                              @click=${() => void this.#apply(menuId, () => this.moveDish!(move))}
-                              >${label}</wt-button
-                            >`,
-                        )}
-                      </div>`
-                }
-              `
-        }
-      </li>`;
-    };
-
     return html`<details>
       <summary>
         ${total} · ${types}
@@ -211,7 +128,12 @@ export class TillSetMenuSummary extends LitElement {
             <ul>
               ${row.places.map(
                 ({ name, open, sent, unsent }) => html`
-                  ${sent.map((dish) => sentDish(dish, row.id))}
+                  ${sent.map(
+                    (dish) =>
+                      html`<li>
+                        ${this.dishNames.get(dish.lineId)}${setMenuTag(centsToDecimal(dish.priceCents))}
+                      </li>`,
+                  )}
                   ${unsent.map(
                     (dish) =>
                       html`<li>
@@ -230,58 +152,21 @@ export class TillSetMenuSummary extends LitElement {
               )}
             </ul>
             ${
-              this.removeMenu === undefined
-                ? nothing
-                : html`<wt-button
-                    variant="secondary"
-                    ?disabled=${disabled}
-                    @click=${() =>
-                      void this.#apply(row.id, async () => {
-                        if (row.places.some(({ sent }) => sent.length > 0))
-                          return this.removeMenu!(row.id);
-                        const draft = draftNamesLosingPlace(bill, this.draft, [row.id]);
-                        if (draft.length > 0)
-                          return codeMessage("set_menu.needed_by_draft", undefined, {
-                            setMenuName: row.name,
-                            dishNames: draft,
-                          });
-                        return this.removeMenu!(row.id);
-                      })}
-                    >${t("action.cancel")}</wt-button
-                  >`
-            }
-            ${
               this.compMenu === undefined
                 ? nothing
                 : html`<wt-button
                     variant="secondary"
                     data-comp-menu
                     aria-label=${`${t("comp.title")} · ${row.name} ${row.number}`}
-                    ?disabled=${disabled}
+                    ?disabled=${this.busy}
                     @click=${() => this.compMenu!(row.id, `${row.name} ${row.number}`)}
                     >${t("comp.title")}</wt-button
                   >`
             }
-            <div class="error" role="status">${this.errors.get(row.id) ?? ""}</div>
           </article>
         `,
       )}
     </details>`;
-  }
-
-  async #apply(id: string, change: () => Promise<string | undefined>) {
-    if (this.pending || this.busy) return;
-    this.pending = true;
-    let error: string | undefined;
-    try {
-      error = await change();
-    } catch {
-      error = codeMessage("server.error");
-    } finally {
-      this.errors = new Map(this.errors).set(id, error ?? "");
-      this.pending = false;
-    }
-    if (error === undefined) this.moving = null;
   }
 }
 

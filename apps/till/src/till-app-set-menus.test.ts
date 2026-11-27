@@ -1,15 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import {
-  allergyView,
-  api,
   emit as emitApp,
   flush,
   menu,
   mountApp,
   openTable,
   resetAllergyFixture,
-  shell,
 } from "../test/allergy-app-fixture.js";
 import { t } from "./i18n/t.js";
 import { setMenuCopyOf } from "@waitron/shared";
@@ -51,79 +48,6 @@ import {
 
 beforeEach(resetAllergyFixture);
 afterEach(cleanupWidgets);
-
-it("opens the same choices for the exact drafted dish Send refuses", async () => {
-  const sirloin = daily.offers[1]!;
-  const variant = {
-    ...sirloin,
-    id: "rare",
-    name: "Rare",
-    menuPrice: null,
-    pricingUnit: "each" as const,
-  };
-  const offer = { ...sirloin, variants: [variant], variantCountsAs: { rare: "main" } };
-  const withVariant = { ...daily, offers: [offer] };
-  const zone = menu("lunch");
-  zone.menus[0]!.structure.members.push({
-    kind: "set_menu",
-    menuId: daily.menuId,
-    name: daily.name,
-  });
-  zone.setMenus = [withVariant, special].map((copy) => ({
-    ...copy,
-    versionIds: ["lunch"],
-    orderable: true,
-    newestOnSale: true,
-  }));
-  const submitDraft = vi.fn(async (_party, _draft, request) => {
-    const ids = request.groups.flatMap((group: { lineIds: string[] }) => group.lineIds);
-    expect(ids).toHaveLength(2);
-    throw {
-      code: "set_menu.no_place",
-      status: 409,
-      dishName: "Sirloin",
-      draftLineId: ids[1],
-    };
-  });
-  const { el } = await mountApp({
-    listZoneOffers: vi.fn(async () => zone),
-    getPartyBills: vi.fn(async () => [
-      {
-        ...partyBillOf("v1", "wo-4", 1),
-        setMenus: bill,
-        setMenuCopies: [withVariant, special],
-      },
-    ]),
-    previewPartyAllergy: vi.fn(async (_partyId, target) => allergyView("none", target)),
-    submitDraft,
-  });
-  const screen = await openTable(el);
-  const product = setMenuProduct({
-    offer,
-    setMenuId: daily.menuId,
-    versionId: "lunch",
-  });
-  const selected = { ...product, variantId: "rare", variantName: "Rare" };
-  for (const note of ["First", "Second"])
-    screen.draftStore!.addProduct(selected, "1", { note, setMenu: { id: daily.menuId } });
-  const openPlace = vi.spyOn(screen, "openSetMenuPlace");
-  await showView(screen, "order", { ifShown: true, scripted: true });
-  await flush(el);
-  const send = screen.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="send-all"]')!;
-  expect(send).not.toBeNull();
-  await userEvent.click(send);
-  await vi.waitFor(() => expect(submitDraft).toHaveBeenCalled());
-  const browser = screen.shadowRoot!.querySelector("till-menu-browser")!;
-  await vi.waitFor(() => {
-    const modal =
-      browser.shadowRoot!.querySelector<import("@waitron/ui").WtDialog>("[data-set-menu-place]");
-    expect(modal?.heading).toContain("No place for Sirloin");
-    expect(modal?.shadowRoot!.querySelector("dialog")?.open).toBe(true);
-  });
-  await userEvent.click(page.elementLocator(browser).getByRole("button", { name: "Cancel" }));
-  expect(openPlace).toHaveBeenCalledExactlyOnceWith(screen.draftStore!.lines[1]);
-  expect(screen.draftStore!.lines.map((line) => line.product.name)).toEqual(["Sirloin", "Sirloin"]);
-});
 
 it("shows the counter its set-menu folders on a takeaway order, with no count", async () => {
   resetBillPayDrafts();
@@ -539,82 +463,6 @@ async function tableWithSetMenus(overrides: Record<string, unknown> = {}) {
   await flush(el);
   return { el, screen, state, getPartyBills };
 }
-
-const lineIds = (screen: { bills: readonly { setMenus?: typeof bill }[] }) =>
-  screen.bills[0]!.setMenus!.setMenus.map(({ lineId }) => lineId);
-
-it("refuses a set-menu change while the table's order is locked", async () => {
-  const setSetMenuCount = vi.fn();
-  const { screen } = await tableWithSetMenus({ setSetMenuCount });
-  const unlock = screen.draftStore!.lockEdits();
-
-  await expect(screen.changeSetMenu!({ menuId: daily.menuId, count: 3 })).resolves.toBe(
-    "Something went wrong, try again",
-  );
-  unlock();
-  expect(setSetMenuCount).not.toHaveBeenCalled();
-  expect(lineIds(screen)).toEqual(["daily-1", "daily-2", "special-1"]);
-});
-
-it("does not change set menus when the drafted dishes cannot be saved first", async () => {
-  const setSetMenuCount = vi.fn();
-  const { screen } = await tableWithSetMenus({ setSetMenuCount });
-  api.saveDraft.mockRejectedValue(new TypeError("offline"));
-  const product = setMenuProduct({
-    offer: daily.offers[0]!,
-    setMenuId: daily.menuId,
-    versionId: "lunch",
-  });
-  screen.draftStore!.addProduct(product, "1", { setMenu: { id: daily.menuId } });
-
-  await expect(screen.changeSetMenu!({ menuId: daily.menuId, count: 3 })).resolves.toBe(
-    t("table.draft_save_failed"),
-  );
-  expect(setSetMenuCount).not.toHaveBeenCalled();
-  expect(api.saveDraft).toHaveBeenCalled();
-});
-
-it("asks to reopen the table when it cannot be read after a set-menu change", async () => {
-  const setSetMenuCount = vi.fn(async () => {
-    getPartyBills.mockRejectedValue(new TypeError("offline"));
-    return { setMenus: bill, partyRevision: 4 };
-  });
-  const { el, screen, getPartyBills } = await tableWithSetMenus({ setSetMenuCount });
-
-  await expect(screen.changeSetMenu!({ menuId: daily.menuId, count: 3 })).resolves.toBeUndefined();
-  await flush(el);
-  expect(el.shadowRoot!.textContent).toContain(t("table.reread_failed"));
-});
-
-it.each(["answer", "refusal"])(
-  "drops a set-menu %s that arrives after the table was left",
-  async (kind) => {
-    let answer!: (value: { setMenus: typeof bill; partyRevision: number }) => void;
-    let refuse!: (error: unknown) => void;
-    const setSetMenuCount = vi.fn(
-      () =>
-        new Promise<{ setMenus: typeof bill; partyRevision: number }>((resolve, reject) => {
-          answer = resolve;
-          refuse = reject;
-        }),
-    );
-    const { el, screen, getPartyBills } = await tableWithSetMenus({ setSetMenuCount });
-
-    const saved = screen.changeSetMenu!({ menuId: daily.menuId, count: 3 });
-    await vi.waitFor(() => expect(setSetMenuCount).toHaveBeenCalled());
-    emitApp(shell(el), "screen-select", { screen: "floor" });
-    await flush(el);
-    const reads = getPartyBills.mock.calls.length;
-    if (kind === "answer")
-      answer({ setMenus: { ...bill, setMenus: bill.setMenus.slice(0, 1) }, partyRevision: 9 });
-    else refuse({ code: "party.out_of_date" });
-
-    await expect(saved).resolves.toBeUndefined();
-    await flush(el);
-    expect(getPartyBills.mock.calls.length).toBe(reads);
-    expect(el.shadowRoot!.textContent).not.toContain(t("table.reread_failed"));
-  },
-);
 
 const tabRow = (over: Partial<TabLine> & Pick<TabLine, "id" | "lineNo">): TabLine => ({
   changesAfterSending: null,

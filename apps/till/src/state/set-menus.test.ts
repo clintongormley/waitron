@@ -119,13 +119,6 @@ it("fills open places in draft order, leaving the sent dish and ordinary lines a
   });
 });
 
-it("holds a saved reservation before an earlier unsent dish can take it", () => {
-  const held = { ...fresh("b"), setMenuReserved: { setMenuLineId: "second", place: 0 } };
-  expect(
-    draftPlacements(bill, [fresh("a"), held]).placed.map((place) => place.setMenuLineId),
-  ).toEqual(["third", "second"]);
-});
-
 it("finds a line's own menu's dish, and never another full menu's", () => {
   const selling = (versionId: string, dish: string, setMenuId = "Daily") =>
     ({

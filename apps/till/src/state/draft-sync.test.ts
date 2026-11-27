@@ -3193,7 +3193,7 @@ describe("DraftSync: a request refused because it names someone not signed in", 
   });
 });
 
-it("rebuilds a saved draft when the returned set-menu reservation differs", async () => {
+it("ignores reservations on returned set-menu drafts", async () => {
   const draft = new DraftSync({
     api: server,
     partyId: "v1",
@@ -3209,9 +3209,9 @@ it("rebuilds a saved draft when the returned set-menu reservation differs", asyn
       product: steak,
       quantity: "1",
       setMenuId: "daily",
-      setMenuReserved: { setMenuLineId: "old-menu", place: 0 },
     },
   ]);
+  const before = draft.store.lines[0];
   const save = server.saveDraft.getMockImplementation()!;
   server.saveDraft.mockImplementationOnce(async (...args) => {
     const answer = await save(...args);
@@ -3225,5 +3225,5 @@ it("rebuilds a saved draft when the returned set-menu reservation differs", asyn
     };
   });
   expect(await draft.flush()).toEqual("saved");
-  expect(draft.store.lines[0]?.setMenuReserved).toEqual({ setMenuLineId: "other-menu", place: 1 });
+  expect(draft.store.lines[0]?.product).toBe(before?.product);
 });

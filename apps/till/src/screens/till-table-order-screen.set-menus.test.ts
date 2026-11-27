@@ -3,23 +3,22 @@ import { userEvent } from "vitest/browser";
 import { bill, daily, seaBass, special } from "../../test/set-menu-widgets.js";
 import type { TabLine } from "../api/kitchen-api.js";
 import { WorkingOrderStore } from "../state/working-order.js";
+import { setMenuProduct } from "../widgets/product-pick.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 import type { AdjustDetail } from "./till-table-order-screen.js";
-import { mount, showView } from "./till-table-order-screen.test-helpers.js";
+import { draftRow, mount, showView } from "./till-table-order-screen.test-helpers.js";
 
 afterEach(cleanupWidgets);
 
 it("shows the bill's set menus above the draft with no count or Cancel, keeping the set menu's included price", async () => {
   const draft = new WorkingOrderStore();
   draft.appendLines([seaBass]);
-  const changeSetMenu = vi.fn(async () => undefined);
   const { el } = await mount({
     party: switcherParty,
     bills: [partyBill("wo-4", 1, "47.00", { setMenus: bill })],
     draftStore: draft,
     setMenuCopies: [daily, special].map((copy) => ({ copy, versionId: "lunch" })),
-    changeSetMenu,
   });
   await showView(el, "order", { ifShown: true });
   const pane = el.shadowRoot!.querySelector("[data-draft-pane]")!;
@@ -40,7 +39,35 @@ it("shows the bill's set menus above the draft with no count or Cancel, keeping 
   )!;
   await basket.updateComplete;
   expect(basket.shadowRoot!.textContent).toMatch(/Sea bass\s*menu/);
-  expect(changeSetMenu).not.toHaveBeenCalled();
+});
+
+it("marks an unplaced dish's price as pending while the order total includes its known extras", async () => {
+  const draft = new WorkingOrderStore();
+  draft.appendLines([
+    {
+      product: setMenuProduct({
+        offer: daily.offers[1]!,
+        setMenuId: daily.menuId,
+        versionId: "lunch",
+      }),
+      setMenuId: daily.menuId,
+      quantity: "1",
+      extras: [{ listId: "extras", productId: "sauce", name: "Sauce", quantity: 1, price: "2.00" }],
+    },
+  ]);
+  const { el } = await mount({
+    party: switcherParty,
+    bills: [partyBill("wo-4", 1, "0.00")],
+    draftStore: draft,
+    setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+  });
+  await showView(el, "order", { ifShown: true });
+  await vi.waitFor(() => {
+    const row = draftRow(el, 0)!;
+    expect(row.querySelector(".draft-row-price")?.textContent?.trim()).toBe("Price after Send");
+    expect(row.querySelector(".set-menu-tag")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-order-total]")?.textContent?.trim()).toBe("€2.00");
+  });
 });
 
 const dailyLine = (id: string, lineNo: number): TabLine => ({
@@ -72,7 +99,6 @@ async function setMenuSummary(status: "open" | "placed") {
     bills: [partyBill("wo-4", 1, "47.00", { setMenus: bill, status })],
     lines: [dailyLine("daily-1", 1), dailyLine("daily-2", 2)],
     setMenuCopies: [daily, special].map((copy) => ({ copy, versionId: "lunch" })),
-    changeSetMenu: vi.fn(async () => undefined),
   });
   await showView(el, "order", { ifShown: true });
   const summary = el

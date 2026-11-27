@@ -10,7 +10,6 @@ import { countText, currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { blurAll, cleanupWidgets, measured, mountWidget, type Theme } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
-import { setMenuProduct } from "./product-pick.js";
 import type { OwnSetMenuOffers } from "../state/set-menus.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/menu-api.js";
@@ -355,7 +354,19 @@ describe("set-menu folders", () => {
       setMenuCopies: [daily, special].map((copy) => ({ copy, versionId: "lunch" })),
       setMenuBill: {
         ...setMenuBill,
-        setMenus: setMenuBill.setMenus.filter(({ lineId }) => lineId !== "special-1"),
+        dishes: [
+          ...setMenuBill.dishes,
+          {
+            lineId: "sent-sea-bass",
+            setMenuLineId: "special-1",
+            place: 0,
+            productId: "product-sea-bass",
+            variantId: null,
+            priceCents: 0,
+            countsAsCourseId: "main",
+            movable: true,
+          },
+        ],
       },
     });
     await tap(el, entry(el, "structure", special.name));
@@ -363,125 +374,13 @@ describe("set-menu folders", () => {
     await folder.updateComplete;
     await userEvent.click(page.elementLocator(folder).getByRole("button", { name: /Sea bass/ }));
     expect(store.lines).toMatchObject([
-      { quantity: "1", setMenuId: special.menuId, product: { menuItemId: "sea-bass" } },
+      {
+        quantity: "1",
+        setMenuId: special.menuId,
+        product: { menuItemId: "sea-bass", menuVersionId: "lunch", unitPrice: "0.00" },
+      },
     ]);
-    expect(store.lines[0]?.setMenuReserved).toBeUndefined();
     expect(root(el).querySelector("[data-set-menu-place]")).toBeNull();
-  });
-
-  it("keeps the set-menu dish when replacing it à la carte is refused", async () => {
-    const offer = daily.offers[1]!;
-    const ordinary = product("ordinary", "Sirloin", {
-      productId: offer.productId,
-      unitPrice: "18.00",
-    });
-    const { el, store } = await mount({
-      menu,
-      servedProducts: [ordinary],
-      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
-      setMenuBill,
-    });
-    const dish = setMenuProduct({ offer, setMenuId: daily.menuId, versionId: "lunch" });
-    store.addProduct(dish, "1", { setMenu: { id: daily.menuId } });
-    const original = store.lines[0]!;
-    store.simplifiedInvoiceLimit = "10.00";
-    expect(el.openSetMenuPlace(original)).toBe(true);
-    await el.updateComplete;
-    const modal = root(el).querySelector("[data-set-menu-place]")!;
-    await userEvent.click(
-      page.elementLocator(modal).getByRole("button", { name: /Order it à la carte/ }),
-    );
-    expect(store.lines).toEqual([original]);
-  });
-
-  describe("when a dish has no place on the bill", () => {
-    const dailyMenu = lunch({ structure: { members: [dailyMember] } });
-    // Soup sits in the mains place, so a sirloin fits only once the soup moves to a starter place.
-    const soupInMains = {
-      ...setMenuBill,
-      setMenus: setMenuBill.setMenus.filter(({ lineId }) => lineId === "daily-1"),
-      dishes: [
-        {
-          lineId: "sent-soup",
-          setMenuLineId: "daily-1",
-          place: 1,
-          productId: daily.offers[0]!.productId,
-          variantId: null,
-          priceCents: 0,
-          countsAsCourseId: "starter",
-          movable: true,
-        },
-      ],
-    };
-    const oneDaily = { ...soupInMains, dishes: [] };
-
-    async function pickInFolder(el: TillMenuBrowser, dish: RegExp): Promise<void> {
-      if (root(el).querySelector("till-set-menu-folder") === null)
-        await tap(el, entry(el, "structure", daily.name));
-      const folder = root(el).querySelector("till-set-menu-folder")!;
-      await folder.updateComplete;
-      await userEvent.click(page.elementLocator(folder).getByRole("button", { name: dish }));
-      await el.updateComplete;
-    }
-
-    function placeModal(el: TillMenuBrowser): import("@waitron/ui").WtDialog | null {
-      return root(el).querySelector<import("@waitron/ui").WtDialog>("[data-set-menu-place]");
-    }
-
-    it("shows a refused move and adds nothing", async () => {
-      const { el, store } = await mount({
-        menu: dailyMenu,
-        setMenuCopies: [{ copy: daily, versionId: "lunch" }],
-        setMenuBill: soupInMains,
-        moveSetMenuDishes: async () => "That place was taken.",
-      });
-      await pickInFolder(el, /Soup/);
-      await pickInFolder(el, /Sirloin/);
-      const drafted = [...store.lines];
-      expect(el.openSetMenuPlace(drafted[1]!)).toBe(true);
-      await el.updateComplete;
-      // With no name for the moved dish, the choice names its line.
-      await userEvent.click(
-        page.elementLocator(placeModal(el)!).getByRole("button", { name: /Move sent-soup/ }),
-      );
-      await vi.waitFor(() =>
-        expect(placeModal(el)!.querySelector("[role='alert']")?.textContent).toBe(
-          "That place was taken.",
-        ),
-      );
-      expect(store.lines).toEqual(drafted);
-    });
-
-    it.each([
-      ["refuses", async (): Promise<string> => "No more set menus.", "No more set menus."],
-      [
-        "fails",
-        async (): Promise<string> => {
-          throw new Error("network down");
-        },
-        "Something went wrong, try again",
-      ],
-    ] as const)("shows why when adding a set menu %s", async (_, add, message) => {
-      const { el, store } = await mount({
-        menu: dailyMenu,
-        setMenuCopies: [{ copy: daily, versionId: "lunch" }],
-        setMenuBill: oneDaily,
-        addSetMenu: add,
-      });
-      await pickInFolder(el, /Sirloin/);
-      await pickInFolder(el, /Sirloin/);
-      const drafted = [...store.lines];
-      expect(el.openSetMenuPlace(drafted[1]!)).toBe(true);
-      await el.updateComplete;
-      await userEvent.click(
-        page.elementLocator(placeModal(el)!).getByRole("button", { name: /Add a Daily menu/ }),
-      );
-      await vi.waitFor(() =>
-        expect(placeModal(el)?.querySelector("[role='alert']")?.textContent).toBe(message),
-      );
-      expect(store.lines).toEqual(drafted);
-      expect(drafted[0]).not.toHaveProperty("setMenuReserved");
-    });
   });
 
   it("ignores a set-menu dish picked while edits are locked, or one that is sold out", async () => {
@@ -558,25 +457,7 @@ describe("set-menu folders", () => {
     expect(names(entries(el, "structure"))).toEqual(["Café"]);
   });
 
-  it("does not offer to place a dish whose set menu or dish has gone", async () => {
-    const { el, store } = await mount({
-      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
-      setMenuBill,
-    });
-    const offer = daily.offers[0]!;
-    store.addProduct(setMenuProduct({ offer, setMenuId: daily.menuId, versionId: "lunch" }), "1", {
-      setMenu: { id: daily.menuId },
-    });
-    const line = store.lines[0]!;
-    expect(el.openSetMenuPlace({ ...line, setMenuId: special.menuId })).toBe(false);
-    expect(el.openSetMenuPlace({ ...line, product: { ...line.product, menuItemId: "gone" } })).toBe(
-      false,
-    );
-    await el.updateComplete;
-    expect(root(el).querySelector("[data-set-menu-place]")).toBeNull();
-  });
-
-  describe("a correction published while a set-menu dish is being placed", () => {
+  describe("a correction published while a set-menu dish is being added", () => {
     const declared = (allergens: TillProduct["allergens"], variants = false) => {
       const dish = { ...daily.offers[1]!, allergens: allergens ?? null };
       if (!variants) return dish;
@@ -596,7 +477,7 @@ describe("set-menu folders", () => {
         line.setMenuId === daily.menuId && line.menuVersionId === "lunch" ? offer : undefined,
       );
 
-    async function mountPlacing(offer = none, onBill = false) {
+    async function mountCorrectedFolder(offer = none, onBill = false) {
       const copy = { ...daily, offers: [offer] };
       const withDaily = { ...setMenuBill, copies: [setMenuCopyOf(copy, "lunch")], dishes: [] };
       withDaily.setMenus = withDaily.setMenus.filter(({ copyId }) => copyId === daily.key);
@@ -607,11 +488,6 @@ describe("set-menu folders", () => {
         ownSetMenuOffer: corrected(offer),
       });
       const { el } = mounted;
-      el.addSetMenu = async () => {
-        el.setMenuBill = withDaily;
-        await el.updateComplete;
-        return undefined;
-      };
       const tapDish = async () => {
         await tap(el, entry(el, "structure", daily.name));
         const folder = root(el).querySelector("till-set-menu-folder")!;
@@ -619,45 +495,19 @@ describe("set-menu folders", () => {
         await userEvent.click(page.elementLocator(folder).getByRole("button", { name: /Sirloin/ }));
         await el.updateComplete;
       };
-      const addDaily = () =>
-        userEvent.click(
-          page
-            .elementLocator(root(el).querySelector("[data-set-menu-place]")!)
-            .getByRole("button", { name: /Add a Daily menu/ }),
-        );
-      return { ...mounted, tapDish, addDaily };
+      return { ...mounted, tapDish };
     }
 
     it("is taken by a dish tapped from a copy drawn before it", async () => {
-      const { el, store, tapDish } = await mountPlacing();
+      const { el, store, tapDish } = await mountCorrectedFolder();
       el.ownSetMenuOffer = corrected();
       await tapDish();
       expect(store.lines).toHaveLength(1);
       expect(store.lines[0]!.product.allergens).toEqual({ milk: {} });
     });
 
-    it("is kept by a line whose place is chosen again", async () => {
-      const { el, store, addDaily } = await mountPlacing();
-      const pick = { offer: none, setMenuId: daily.menuId, versionId: "lunch" };
-      store.addProduct(setMenuProduct(pick), "1", {
-        setMenu: { id: daily.menuId },
-        note: "No salt",
-      });
-      const line = store.lines[0]!;
-      expect(el.openSetMenuPlace(line)).toBe(true);
-      await el.updateComplete;
-      const own = corrected();
-      el.ownSetMenuOffer = own;
-      store.refreshDeclarations([], own);
-      await addDaily();
-      await vi.waitFor(() => expect(store.lines[0]).not.toBe(line));
-      expect(store.lines).toMatchObject([
-        { note: "No salt", setMenuId: daily.menuId, product: { allergens: { milk: {} } } },
-      ]);
-    });
-
     it("reaches the variants in choices kept open while no menu is chosen", async () => {
-      const { el, store, tapDish } = await mountPlacing(declared({}, true), true);
+      const { el, store, tapDish } = await mountCorrectedFolder(declared({}, true), true);
       await tapDish();
       const picker = root(el).querySelector("till-modifier-picker")!;
       await picker.updateComplete;

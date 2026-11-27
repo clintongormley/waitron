@@ -4,7 +4,7 @@ import { adjustmentLines, lineServiceCancellations, sales, workingOrderLines } f
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createAdjustmentReason } from "@waitron/adjustments";
-import { decimal, suggestMove } from "@waitron/shared";
+import { decimal } from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
@@ -182,45 +182,27 @@ it("a bill discount spreads over set menus and surcharges and the ticket matches
   expect(sale!.total).toBe(6480);
 });
 
-// With an empty Special, a new Hake draws the Daily's +5.00 Sirloin to the Special at 0.00 unless
-// something holds the Sirloin where it is.
-it("the offered move never names a comped or discounted dish", async () => {
-  const offeredFor = async (fix: (billId: string, lineId: string) => Promise<unknown>) => {
+it("releases a dish with its own reduction and leaves a whole-bill reduction in its saved place", async () => {
+  const savedAfter = async (fix: (billId: string, lineId: string) => Promise<unknown>) => {
     const tab = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
     await sendSpecDishes(spec, tab, [
       { dish: "Soup", from: spec.daily },
       { dish: "Sirloin", from: spec.daily },
     ]);
     const sirloin = await firstSirloin(tab.tabId);
-    await fix(tab.tabId, sirloin.id);
-    const [third] = await addEmptySpecSetMenus(spec, tab.tabId, spec.special);
-    const state = await inTx(venue, (tx) => readBillSetMenus(tx, tab.tabId));
-    const suggestion = suggestMove(state, [], {
-      id: crypto.randomUUID(),
-      productId: spec.productIds.Hake,
-      variantId: null,
+    const read = async () =>
+      (await inTx(venue, (tx) => readBillSetMenus(tx, tab.tabId))).dishes.find(
+        ({ lineId }) => lineId === sirloin.id,
+      );
+    expect(await read()).toMatchObject({
+      setMenuLineId: sirloin.setMenuLineId,
+      place: 1,
+      movable: true,
     });
-    const held = state.dishes.some(({ lineId }) => lineId === sirloin.id);
-    return { daily: sirloin.setMenuLineId!, third: third!, sirloin: sirloin.id, suggestion, held };
+    await fix(tab.tabId, sirloin.id);
+    return { dish: await read(), menuId: sirloin.setMenuLineId };
   };
 
-  const control = await offeredFor(async () => {});
-  expect(control.suggestion?.moves).toEqual([
-    {
-      lineId: control.sirloin,
-      from: { setMenuLineId: control.daily, place: 1 },
-      to: { setMenuLineId: control.third, place: 1 },
-      priceCents: 0,
-      countsAsCourseId: expect.any(String),
-    },
-  ]);
-  expect(control.suggestion?.place).toMatchObject({
-    setMenuLineId: control.daily,
-    place: 1,
-  });
-
-  // Its own comp or discount takes the Sirloin out of its set menu; a whole-bill discount holds it
-  // there.
   for (const [inSetMenu, fix] of [
     [false, (billId: string, lineId: string) => adjust(billId, lineId, { action: "comp" })],
     [
@@ -233,10 +215,9 @@ it("the offered move never names a comped or discounted dish", async () => {
       (billId: string) => adjust(billId, null, { action: "discount_percent", percentBp: 1000 }),
     ],
   ] as const) {
-    const { third, suggestion, held } = await offeredFor(fix);
-    expect(held).toBe(inSetMenu);
-    expect(suggestion?.moves).toEqual([]);
-    expect(suggestion?.place).toMatchObject({ setMenuLineId: third, place: 1 });
+    const { dish, menuId } = await savedAfter(fix);
+    if (inSetMenu) expect(dish).toMatchObject({ setMenuLineId: menuId, place: 1, movable: false });
+    else expect(dish).toBeUndefined();
   }
 });
 

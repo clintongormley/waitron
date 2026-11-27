@@ -1,13 +1,6 @@
 import { stringToCents } from "./cents.js";
-import { hasCode, isAppError } from "./errors.js";
 import type { PublishedSetMenu, ServedSetMenuCopy } from "./menu-document/menu-document-types.js";
-import {
-  fitSetMenus,
-  type SetMenuFit,
-  type SetMenuOffer,
-  type SetMenuOfferDish,
-  type SetMenuPlace,
-} from "./set-menu-fit.js";
+import type { SetMenuOffer, SetMenuOfferDish } from "./set-menu-fit.js";
 
 export interface SetMenuCopy extends SetMenuOffer {
   setMenuId: string;
@@ -133,7 +126,6 @@ export interface DishToPlace {
   id: string;
   productId: string;
   variantId: string | null;
-  reserved: DishPlace | null;
 }
 
 interface PlacementResult extends DishPlace {
@@ -180,10 +172,6 @@ function placeKey({ setMenuLineId, place }: DishPlace): string {
   return JSON.stringify([setMenuLineId, place]);
 }
 
-function samePlace(left: DishPlace, right: DishPlace): boolean {
-  return left.setMenuLineId === right.setMenuLineId && left.place === right.place;
-}
-
 function occupy(occupied: Map<string, number>, place: DishPlace): void {
   const key = placeKey(place);
   occupied.set(key, (occupied.get(key) ?? 0) + 1);
@@ -210,33 +198,15 @@ function comparePlaces(left: Candidate, right: Candidate): number {
 export function placeInOrder(
   state: BillSetMenuState,
   dishes: readonly DishToPlace[],
-  heldFor: readonly DishPlace[] = [],
 ): { placed: PlacementResult[]; unplaced: string[] } {
   const occupied = new Map<string, number>();
   for (const dish of state.dishes) occupy(occupied, dish);
-  for (const hold of heldFor) occupy(occupied, hold);
-
-  const requests = dishes.map((dish) => ({ dish, candidates: placesFor(state, dish) }));
-  const reserved = new Map<string, Candidate>();
-  // A valid reservation counts before any unreserved dish can take its place.
-  for (const { dish, candidates } of requests) {
-    const hold = dish.reserved;
-    if (hold === null) continue;
-    const target = candidates.find((place) => samePlace(place, hold) && isOpen(occupied, place));
-    if (target === undefined) continue;
-    occupy(occupied, target);
-    reserved.set(dish.id, target);
-  }
-
   const placed: PlacementResult[] = [];
   const unplaced: string[] = [];
-  for (const { dish, candidates } of requests) {
-    const hold = reserved.get(dish.id);
-    if (hold !== undefined) {
-      placed.push(pricePlace(dish.id, hold));
-      continue;
-    }
-    const target = candidates.sort(comparePlaces).find((place) => isOpen(occupied, place));
+  for (const dish of dishes) {
+    const target = placesFor(state, dish)
+      .sort(comparePlaces)
+      .find((place) => isOpen(occupied, place));
     if (target === undefined) {
       unplaced.push(dish.id);
       continue;
@@ -245,128 +215,4 @@ export function placeInOrder(
     placed.push(pricePlace(dish.id, target));
   }
   return { placed, unplaced };
-}
-
-export function withPlacements(
-  state: BillSetMenuState,
-  dishes: readonly DishToPlace[],
-  placed: readonly PlacementResult[],
-): BillSetMenuState {
-  const results = new Map(placed.map(({ id, ...place }) => [id, place]));
-  const added = dishes.flatMap(({ id, productId, variantId }) => {
-    const place = results.get(id);
-    return place === undefined
-      ? []
-      : [{ ...place, lineId: id, productId, variantId, movable: true }];
-  });
-  return { ...state, dishes: [...state.dishes, ...added] };
-}
-
-export interface DishMove {
-  lineId: string;
-  to: DishPlace;
-}
-
-export interface MoveSuggestion {
-  moves: (DishMove & { from: DishPlace; priceCents: number; countsAsCourseId: string })[];
-  place: PlacementResult;
-}
-
-function fitPlace({ setMenuLineId, place }: DishPlace): SetMenuPlace {
-  return { setMenuId: setMenuLineId, lineIndex: place };
-}
-
-export function suggestMove(
-  state: BillSetMenuState,
-  drafted: readonly (PlacementResult & DishChoice)[],
-  dish: Omit<DishToPlace, "reserved">,
-): MoveSuggestion | null {
-  const offerBySetMenu = new Map(state.setMenus.map(({ lineId, copyId }) => [lineId, copyId]));
-  const copyIds = new Set(offerBySetMenu.values());
-  const placeByDish = new Map(state.dishes.map((placed) => [placed.lineId, fitPlace(placed)]));
-  let fit: SetMenuFit;
-  try {
-    fit = fitSetMenus({
-      offers: state.copies.filter(({ id }) => copyIds.has(id)),
-      setMenus: state.setMenus.map(({ lineId, copyId }) => ({ id: lineId, fixedOfferId: copyId })),
-      dishes: [
-        ...state.dishes.map((placed) => ({
-          id: placed.lineId,
-          productId: placed.productId,
-          variantId: placed.variantId,
-          pinnedTo: placed.movable ? null : fitPlace(placed),
-        })),
-        ...drafted.map((draft) => ({
-          id: draft.id,
-          productId: draft.productId,
-          variantId: draft.variantId,
-          pinnedTo: fitPlace(draft),
-        })),
-        { ...dish, pinnedTo: null },
-      ],
-      previous: { offerBySetMenu, placeByDish },
-    });
-  } catch (error) {
-    if (
-      isAppError(error) &&
-      hasCode(error, "set_menu.fit_invalid_input") &&
-      error.params.reason === "invalid_amount"
-    )
-      return null;
-    throw error;
-  }
-  if (fit.kind !== "fitted") return null;
-
-  const targets = new Map(
-    fit.dishes.map(({ id, place: { setMenuId, lineIndex } }) => [
-      id,
-      { setMenuLineId: setMenuId, place: lineIndex },
-    ]),
-  );
-  const moves: MoveSuggestion["moves"] = [];
-  for (const placed of state.dishes) {
-    const to = targets.get(placed.lineId)!;
-    if (samePlace(placed, to)) continue;
-    const { priceCents, countsAsCourseId } = placesFor(state, placed).find((place) =>
-      samePlace(place, to),
-    )!;
-    moves.push({
-      lineId: placed.lineId,
-      from: { setMenuLineId: placed.setMenuLineId, place: placed.place },
-      to,
-      priceCents,
-      countsAsCourseId,
-    });
-  }
-  const to = targets.get(dish.id)!;
-  const destination = placesFor(state, dish).find((place) => samePlace(place, to))!;
-  return { moves, place: pricePlace(dish.id, destination) };
-}
-
-export function checkMoves(
-  state: BillSetMenuState,
-  moves: readonly DishMove[],
-  heldFor: readonly DishPlace[] = [],
-):
-  | { kind: "ok"; results: PlacementResult[] }
-  | { kind: "place_taken"; lineId: string }
-  | { kind: "not_placed"; lineId: string } {
-  const moving = new Set(moves.map(({ lineId }) => lineId));
-  const dishes = new Map(state.dishes.map((dish) => [dish.lineId, dish]));
-  const occupied = new Map<string, number>();
-  for (const dish of state.dishes) {
-    if (!moving.has(dish.lineId)) occupy(occupied, dish);
-  }
-  for (const hold of heldFor) occupy(occupied, hold);
-  const results: PlacementResult[] = [];
-  for (const { lineId, to } of moves) {
-    const dish = dishes.get(lineId);
-    if (dish === undefined) return { kind: "not_placed", lineId };
-    if (!dish.movable || !moving.delete(lineId)) return { kind: "place_taken", lineId };
-    const target = placesFor(state, dish).find((place) => samePlace(place, to));
-    if (target === undefined || !isOpen(occupied, target)) return { kind: "place_taken", lineId };
-    occupy(occupied, target);
-    results.push(pricePlace(lineId, target));
-  }
-  return { kind: "ok", results };
 }

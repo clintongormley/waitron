@@ -1,6 +1,6 @@
 import type { TillProduct } from "../api/menu-api.js";
 import { needsModifierPicker } from "../state/order-line.js";
-import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
+import type { WorkingOrderStore } from "../state/working-order.js";
 import { menuOfferToTillProduct } from "../api/menu-api.js";
 import type { PickSetMenuDishDetail } from "./set-menu-folder.js";
 import { soldByTheUnit } from "./product-name.js";
@@ -22,7 +22,6 @@ export function pickProduct(
   product: TillProduct,
   store: WorkingOrderStore,
   openModifiers: (product: TillProduct) => void,
-  replacing?: OrderLine,
 ): void {
   if (!hasSomethingToSell(product)) return;
   if (!soldByTheUnit(product)) {
@@ -30,7 +29,7 @@ export function pickProduct(
   } else if (needsModifierPicker(product)) {
     openModifiers(product);
   } else {
-    store.addProduct(product, "1", undefined, replacing);
+    store.addProduct(product, "1");
   }
 }
 

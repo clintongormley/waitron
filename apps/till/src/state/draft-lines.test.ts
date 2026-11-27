@@ -837,7 +837,7 @@ describe("orderLineMergeKey (D10, the shared rule)", () => {
   });
 });
 
-it("restores a set-menu draft line from its recorded offer and preserves its wire fields", () => {
+it("restores the recorded offer but clears a legacy set-menu reservation on save", () => {
   const ordinary = offer({ id: "hake", productId: "hake", unitPrice: "20.00" });
   const recorded = { ...ordinary, unitPrice: "5.00" };
   const saved = {
@@ -883,8 +883,8 @@ it("restores a set-menu draft line from its recorded offer and preserves its wir
     extras: [],
     noMerge: false,
     setMenuId: "daily",
-    setMenuReservedLineId: "first-menu",
-    setMenuReservedPlace: 0,
+    setMenuReservedLineId: null,
+    setMenuReservedPlace: null,
   });
   expect(orderLineMergeKey(restored)).toBeNull();
 });

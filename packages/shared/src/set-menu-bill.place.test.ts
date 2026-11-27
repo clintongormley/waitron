@@ -44,89 +44,6 @@ describe("placing set-menu dishes", () => {
     ).toBe(0);
   });
 
-  it("saves a reserved place for its dish in either input order", () => {
-    const state = bill(["daily-one", daily], ["daily-two", daily], ["special", special]);
-    const existing = [dish("soup"), dish("hake")];
-    const occupied = shared.withPlacements(
-      state,
-      existing,
-      shared.placeInOrder(state, existing).placed,
-    );
-    const sirloin = dish("sirloin");
-    const bass = { ...dish("sea bass"), reserved: { setMenuLineId: "special", place: 1 } };
-    const onDaily = {
-      id: "sirloin",
-      setMenuLineId: "daily-two",
-      place: 1,
-      priceCents: 500,
-      countsAsCourseId: "mains",
-    };
-    const onSpecial = {
-      id: "sea bass",
-      setMenuLineId: "special",
-      place: 1,
-      priceCents: 0,
-      countsAsCourseId: "mains",
-    };
-
-    expect(shared.placeInOrder(occupied, [sirloin, bass])).toEqual({
-      placed: [onDaily, onSpecial],
-      unplaced: [],
-    });
-    expect(shared.placeInOrder(occupied, [bass, sirloin])).toEqual({
-      placed: [onSpecial, onDaily],
-      unplaced: [],
-    });
-    expect(shared.placeInOrder(occupied, [sirloin, dish("sea bass")])).toEqual({
-      placed: [{ ...onSpecial, id: "sirloin" }],
-      unplaced: ["sea bass"],
-    });
-  });
-
-  it("leaves a place held for another draft line free", () => {
-    const state = bill(["daily", daily], ["special", special]);
-    const result = shared.placeInOrder(
-      state,
-      [dish("sirloin")],
-      [{ setMenuLineId: "special", place: 1 }],
-    );
-    expect(result).toEqual({
-      placed: [
-        {
-          id: "sirloin",
-          setMenuLineId: "daily",
-          place: 1,
-          priceCents: 500,
-          countsAsCourseId: "mains",
-        },
-      ],
-      unplaced: [],
-    });
-  });
-
-  it("tries other places when a reservation is already occupied", () => {
-    const state = bill(["daily", daily], ["special", special]);
-    const existing = [dish("sea bass")];
-    const occupied = shared.withPlacements(
-      state,
-      existing,
-      shared.placeInOrder(state, existing).placed,
-    );
-    const sirloin = { ...dish("sirloin"), reserved: { setMenuLineId: "special", place: 1 } };
-    expect(shared.placeInOrder(occupied, [sirloin])).toEqual({
-      placed: [
-        {
-          id: "sirloin",
-          setMenuLineId: "daily",
-          place: 1,
-          priceCents: 500,
-          countsAsCourseId: "mains",
-        },
-      ],
-      unplaced: [],
-    });
-  });
-
   it("uses the counting course of a dish and its variant from the landing copy", () => {
     const dailyOrders = [dish("bravas"), { ...dish("wine"), variantId: "glass" }];
     expect(shared.placeInOrder(bill(["daily", daily]), dailyOrders).placed).toEqual([
@@ -157,26 +74,6 @@ describe("placing set-menu dishes", () => {
     });
     expect(shared.placeInOrder(bill(), [dish("soup")])).toEqual({ placed: [], unplaced: ["soup"] });
   });
-
-  it("adds successful placements as movable dishes without changing the original state", () => {
-    const state = bill(["daily", daily]);
-    const dishes = [dish("sea bass"), { ...dish("wine", "wine-line"), variantId: "glass" }];
-    const { placed } = shared.placeInOrder(state, dishes);
-    const updated = shared.withPlacements(state, dishes, placed);
-    expect(updated.dishes).toEqual([
-      {
-        lineId: "wine-line",
-        productId: "wine",
-        variantId: "glass",
-        setMenuLineId: "daily",
-        place: 3,
-        priceCents: 200,
-        countsAsCourseId: "drinks",
-        movable: true,
-      },
-    ]);
-    expect(state.dishes).toEqual([]);
-  });
 });
 
 it("uses every free place on a line that holds more than one dish", () => {
@@ -184,9 +81,23 @@ it("uses every free place on a line that holds more than one dish", () => {
     ...daily,
     lines: [{ count: 3, courseIds: ["starters"] }, ...daily.lines.slice(1)],
   };
-  const state = bill(["daily", threeStarters]);
+  const state = {
+    ...bill(["daily", threeStarters]),
+    dishes: [
+      {
+        lineId: "sent-soup",
+        setMenuLineId: "daily",
+        place: 0,
+        productId: "soup",
+        variantId: null,
+        priceCents: 0,
+        countsAsCourseId: "starters",
+        movable: true,
+      },
+    ],
+  };
   const soups = ["first", "second", "third"].map((id) => dish("soup", id));
-  const result = shared.placeInOrder(state, soups, [{ setMenuLineId: "daily", place: 0 }]);
+  const result = shared.placeInOrder(state, soups);
   expect(result.placed.map(({ id, place }) => [id, place])).toEqual([
     ["first", 0],
     ["second", 0],

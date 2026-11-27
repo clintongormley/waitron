@@ -4,7 +4,7 @@ import { floorZones, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { getCountryPack } from "@waitron/country-packs";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { placeInOrder, setMenuCopyOf, suggestMove, withPlacements } from "@waitron/shared";
+import { placeInOrder, setMenuCopyOf } from "@waitron/shared";
 import { listZoneOffers } from "@waitron/venue-service";
 import { listCourses } from "../../src/kitchen.js";
 import { seedDemoRestaurant } from "./seed.js";
@@ -140,7 +140,6 @@ it.each(["en", "es"] as const)("publishes the two lunch set menus in %s", async 
       id: String(index),
       productId: dish(special, image).productId,
       variantId: null,
-      reserved: null,
     }));
     const placed = placeInOrder(state, orderedDishes);
     expect(placed.unplaced).toEqual([]);
@@ -152,24 +151,8 @@ it.each(["en", "es"] as const)("publishes the two lunch set menus in %s", async 
       ["daily-1", 500],
       ["daily-2", 0],
     ]);
-    const cod = orderedDishes[4]!;
-    const firstOrder = [...orderedDishes.slice(0, 4), ...orderedDishes.slice(5, 7)];
-    const afterSend = withPlacements(state, firstOrder, placeInOrder(state, firstOrder).placed);
-    expect(placeInOrder(afterSend, [cod]).unplaced).toEqual([cod.id]);
-    const suggestion = suggestMove(afterSend, [], cod);
-    expect(suggestion).toMatchObject({
-      moves: [
-        {
-          lineId: expect.stringMatching(/^[56]$/),
-          from: { setMenuLineId: expect.stringMatching(/^special-/), place: 1 },
-          to: { setMenuLineId: expect.stringMatching(/^daily-/), place: 1 },
-          priceCents: 500,
-        },
-      ],
-      place: { id: cod.id, priceCents: 0, place: 1 },
-    });
-    expect(suggestion!.place.setMenuLineId).toBe(suggestion!.moves[0]!.from.setMenuLineId);
     const menuPrice = 2 * (day!.priceCents + extra!.priceCents);
-    expect(menuPrice + suggestion!.moves[0]!.priceCents + suggestion!.place.priceCents).toBe(7300);
+    const supplements = placed.placed.reduce((sum, { priceCents }) => sum + priceCents, 0);
+    expect(menuPrice + supplements).toBe(7300);
   });
 });

@@ -14,7 +14,6 @@ import type {
   JoinSide,
   TimingBand,
   TableSignal,
-  DishMove,
 } from "@waitron/shared";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 import type { StaffMember } from "./device-session-api.js";
@@ -124,10 +123,6 @@ export interface MergeInvoiceChoice {
   from: InvoiceIdentity;
 }
 
-export interface BillSetMenusReply {
-  setMenus: BillSetMenuState;
-  partyRevision: number;
-}
 /** One bill of a seated party from `GET /api/parties/:id/bills`. `outstanding` is zero on a settled or
  * abandoned bill; `receiptAvailable` says a sale was filed for it, so its receipt can be printed again. */
 export interface PartyBill {
@@ -728,42 +723,6 @@ export class FloorApi extends InvoiceDeliveryApi {
     return this.#request(`/api/parties/${partyId}/guests`, "PUT", {
       guestCount,
       expectedPartyRevision,
-    });
-  }
-  setSetMenuCount(
-    billId: string,
-    setMenuId: string,
-    count: number,
-    expectedPartyRevision: number,
-    expectedEdit: BillEditExpected | null,
-  ): Promise<BillSetMenusReply> {
-    return this.#request(`/api/bills/${billId}/set-menus/${setMenuId}`, "PUT", {
-      count,
-      expectedPartyRevision,
-      expectedEdit,
-    });
-  }
-  removeSetMenu(
-    billId: string,
-    lineId: string,
-    expectedPartyRevision: number,
-    expectedEdit: BillEditExpected | null,
-  ): Promise<BillSetMenusReply> {
-    return this.#request(`/api/bills/${billId}/set-menu-lines/${lineId}`, "DELETE", {
-      expectedPartyRevision,
-      expectedEdit,
-    });
-  }
-  moveSetMenuDishes(
-    billId: string,
-    moves: readonly DishMove[],
-    expectedPartyRevision: number,
-    expectedEdit: BillEditExpected | null,
-  ): Promise<BillSetMenusReply> {
-    return this.#request(`/api/bills/${billId}/set-menu-moves`, "POST", {
-      moves,
-      expectedPartyRevision,
-      expectedEdit,
     });
   }
   /**

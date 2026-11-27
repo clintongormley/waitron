@@ -634,21 +634,16 @@ export {
 } from "./set-menu-fit.js";
 
 export {
-  checkMoves,
   copiesListing,
   newBillVersionOf,
   placeInOrder,
   setMenuCopyOf,
   setMenuOfferOf,
   setMenuProductIds,
-  suggestMove,
-  withPlacements,
   type BillSetMenu,
   type BillSetMenuState,
-  type DishMove,
   type DishPlace,
   type DishToPlace,
-  type MoveSuggestion,
   type PlacedDish,
   type SetMenuCopy,
 } from "./set-menu-bill.js";

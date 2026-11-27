@@ -44,8 +44,8 @@ export function toDraftLineInput(line: OrderLine): DraftLineInput {
       ? {}
       : {
           setMenuId: line.setMenuId,
-          setMenuReservedLineId: line.setMenuReserved?.setMenuLineId ?? null,
-          setMenuReservedPlace: line.setMenuReserved?.place ?? null,
+          setMenuReservedLineId: null,
+          setMenuReservedPlace: null,
         }),
   };
 }
@@ -104,15 +104,7 @@ export function fromDraftLine(
   return {
     ...(line.id === undefined ? {} : { draftLineId: line.id }),
     product,
-    ...(line.setMenuId === undefined
-      ? {}
-      : {
-          setMenuId: line.setMenuId,
-          setMenuReserved:
-            line.setMenuReservedLineId == null || line.setMenuReservedPlace == null
-              ? null
-              : { setMenuLineId: line.setMenuReservedLineId, place: line.setMenuReservedPlace },
-        }),
+    ...(line.setMenuId === undefined ? {} : { setMenuId: line.setMenuId }),
     ...(line.joinGroupId !== null
       ? { place: { kind: "join" as const, groupId: line.joinGroupId } }
       : line.slot > 0
