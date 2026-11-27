@@ -63,7 +63,7 @@ export const menuOnlineStyles = css`
   }
   @container online-editor (inline-size > 760px) {
     .online-workspace {
-      grid-template-columns: minmax(220px, 1fr) minmax(0, 3fr);
+      grid-template-columns: minmax(248px, 1fr) minmax(0, 3fr);
     }
     .online-view,
     .online-settings .unpublished-link {

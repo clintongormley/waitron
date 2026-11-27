@@ -68,10 +68,10 @@ async function open(save = vi.fn(async (_id: string, value: CustomerMenuOnlineSe
     }),
   } as unknown as DashboardApi;
   history.replaceState(null, "", "/menus/menu/menu/view/customer-menu");
-  const { el: app } = await mountWidget<OnlineSettingsLeaveApp>("online-settings-leave-app", {
+  const { el: app, host } = await mountWidget<OnlineSettingsLeaveApp>("online-settings-leave-app", {
     api,
   });
-  return { app, save };
+  return { app, host, save };
 }
 
 const online = () => page.getByRole("switch", { name: "Online", exact: true });
@@ -152,15 +152,22 @@ it("keeps the draft while switching between Settings and Preview on a phone", as
 it("keeps Spanish photo choices on one line beside the preview", async () => {
   await page.viewport(900, 800);
   setLocale("es");
-  await open();
+  const { host } = await open();
+  host.style.setProperty("--wt-font-size-sm", "15px");
   for (const size of ["none", "small", "large"] as const) {
+    const name = t(`customer_menu.photos_${size}`);
     const choice = page.getByRole("radio", {
-      name: t(`customer_menu.photos_${size}`),
+      name,
       exact: true,
     });
     await expect.element(choice).toBeVisible();
-    const text = document.createRange();
-    text.selectNodeContents(choice.element());
-    expect(Array.from(text.getClientRects()).filter((rect) => rect.width > 0)).toHaveLength(1);
+    await vi.waitFor(() => {
+      const text = document.createRange();
+      text.selectNodeContents(choice.element());
+      const tops = Array.from(text.getClientRects())
+        .filter((rect) => rect.width > 0)
+        .map((rect) => rect.top);
+      expect(new Set(tops).size, name).toBe(1);
+    });
   }
 });
