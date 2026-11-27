@@ -904,7 +904,7 @@ command against it treat that entrypoint differently:
   [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected
   backup's master key in `WAITRON_MASTER_KEY`, a fresh allocation and current outside evidence. The source examples below
   show archive and bucket access only; add that procedure's recovery override and credentials
-  when restoring Veri*Factu. The recovery key alone does not authorise activation.
+  when restoring Veri*Factu. A bucket kit's or Cloud copy's recovery key alone does not authorise activation.
   When the series check cannot confirm the box's time (`sif.allocation_invalid` with reason
   `second_clock_missing` or `clock_unconfirmed`), the command prints one line naming the code and
   that reason, says no invoice series was made, and asks you to check that `timedatectl` shows

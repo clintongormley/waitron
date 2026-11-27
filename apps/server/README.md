@@ -350,7 +350,7 @@ setting's source, default and accepted values. The [print agent's inventory](../
 covers its own settings.
 
 A box keeps its deployment identity in `trading.env`, its credential keys in `secrets.env`, and
-its backup key, the key's number, its master key's id and rotation date in `backup.env`. Each file supplies only the names it
+its backup key, the key's number, its master key's id and day, and the rotation date in `backup.env`. Each file supplies only the names it
 owns. A non-empty process value takes precedence over a value from a file.
 
 `WAITRON_ENV` defaults to `preproduction`. Set `production` explicitly for a Live deployment.
@@ -575,7 +575,7 @@ share that document. Only each bucket's access key and secret key are sealed as 
 Use **Backups** to save or remove these settings. The credentials tool refuses backup changes
 because the bucket keys and the backup choices must be saved or removed together.
 
-Setup writes backup key 1 of the master key, its number and the master key's id to `backup.env` under `WAITRON_STATE_DIR`; Change the backup key and Make a new master key write the next one.
+Setup writes backup key 1 of the master key, its number and the master key's id and day to `backup.env` under `WAITRON_STATE_DIR`; Change the backup key and Make a new master key write the next one.
 The box reads that file along with its other env files; a process-environment key still takes precedence.
 
 Change the backup key writes the new key and rotation time to `backup.env`,

@@ -603,7 +603,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     );
   }, 60_000);
 
-  it("a backup file names its master key id and N and opens with key N only", async () => {
+  it("a backup file names its master key id, day and N and opens with key N only", async () => {
     const dest = await makeDestDir();
     const refs: Refs = {
       config: localFsConfig([dest], STRONG_KEY_2),

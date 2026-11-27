@@ -226,7 +226,7 @@ observaciones en otros dispositivos.
 
 La restauración sustituye la base de datos que ya está en este servidor.
 
-Escribe la clave maestra en **Clave maestra**, marca las dos declaraciones y «Estos datos son
+Escribe la clave maestra en **Clave maestra** (para un archivo de copia la página usa la que escribiste con el archivo y solo la pide aquí si la copia necesita otra clave maestra), marca las dos declaraciones y «Estos datos son
 correctos.», y elige **Continuar**. Después de **Continuar**, la
 página compara los relojes y crea las series de facturas sola, también tras cualquier espera que
 muestre; no hay ningún código de instalación que escribir. Si el servidor no puede comprobar su hora
@@ -272,8 +272,8 @@ Hasta que eliges el botón de restaurar, la página conserva lo que introdujiste
 abierta. Cambiar el archivo, la clave o el entorno descarta lo que comprobó, y al recargar se abre
 la primera pantalla de la página; desde ahí elige **Unirse o recuperar**, o en «Configura este
 servidor» **Unirse a un restaurante o recuperarlo** (**Recuperar un restaurante** cuando esa página
-ha encontrado otro servidor Waitron), y empieza de nuevo la restauración. Si el servidor rechaza la restauración, la página vuelve al formulario y tienes que
-introducir de nuevo la clave maestra.
+ha encontrado otro servidor Waitron), y empieza de nuevo la restauración. Si el servidor rechaza la restauración, la página vuelve al formulario. Para un archivo de copia conserva la clave maestra que escribiste; para tu bucket o una copia de Cloud tienes que
+introducirla de nuevo.
 
 Cuando eliges el botón de restaurar, la página dice «Configurando este servidor» y te pide que la
 mantengas abierta. El servidor guarda la solicitud y se reinicia. Si se detiene después de guardar la

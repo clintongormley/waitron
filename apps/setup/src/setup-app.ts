@@ -595,7 +595,7 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
   "restore.stream_state_missing": "shell.bucket.state_missing",
   "restore.identity_unknown": "shell.bucket.identity_unknown",
   "restore.administrator_password_missing": "shell.restore.administrator_password_missing",
-  // One sentence for each of these, as the command line gives (`DECRYPT_PHASE_CODES`,
+  // One sentence for all of these, as the command line gives (`DECRYPT_PHASE_CODES`,
   // apps/server/src/restore-command.ts).
   "recovery.passphrase_invalid": "shell.bucket.unopenable",
   "backup.artifact_invalid": "shell.bucket.unopenable",

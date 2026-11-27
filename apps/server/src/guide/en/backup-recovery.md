@@ -205,7 +205,7 @@ fetch observations from other devices.
 
 Restoring replaces the database already on this box.
 
-Enter the master key in **Master key**, tick both statements and "These details are correct.", then choose
+Enter the master key in **Master key** (for a backup file the page uses the one typed with the file, and asks here only when the copy needs a different master key), tick both statements and "These details are correct.", then choose
 **Proceed**. After **Proceed** the page compares the clocks and creates the invoice series
 by itself, including after any wait it shows; there is no installation code to type. If the box
 cannot check its time over the internet, the page first shows the box's time and this device's:
@@ -248,7 +248,7 @@ Changing the file, key or environment discards what it checked, and a reload ope
 first screen; from there choose **Join or recover**, or on "Set up this box" **Join or recover a
 restaurant** (**Recover a restaurant** when that page has found another Waitron box), and start the
 restore again. If the box refuses the
-restore, the page returns to the form and you enter the master key again.
+restore, the page returns to the form. For a backup file it keeps the master key you typed; for your bucket or a Cloud copy you enter the master key again.
 
 Once you choose the restore button, the page says "Provisioning this box" and asks you to keep it
 open. The box saves the request and restarts. If it stops after saving the request, the next start

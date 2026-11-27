@@ -59,7 +59,7 @@ not AEAT acceptance or proof of another machine's isolation.
 ## Check the selected copy
 
 Open Restore in setup and select the copy. Review its taxpayer, environment, source, saved node
-and key name. Keep production and preproduction separate. Choose **Choose the recovery pack PDF** and
+and key name. Keep production and preproduction separate. For a backup file, the page uses the master key typed with the file, and shows a second **Master key** field only when the copy needs a different master key. For a bucket or Cloud copy, choose **Choose the recovery pack PDF** and
 pick the pack that holds this backup's master key, scan its master key QR code with **Scan the recovery
 pack**, or type the master key in **Master key**. There is no
 installation code to type: the form has no field for one and sends none (`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no

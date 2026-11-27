@@ -21,6 +21,10 @@
 > **2026-11-26, A1323 PR 3c:** the **Master key** field also takes the key from **Scan the recovery
 > pack**, which reads the pack's master key QR code with the device's camera.
 
+> **2026-11-27, A1323 PR 4b:** a backup file now opens with the master key, not a separate backup
+> encryption key; `WAITRON_BACKUP_RECOVERY_KEY` opens only a Waitron Cloud copy. The `restore`
+> command takes the master key in `WAITRON_MASTER_KEY` or `--master-key-file`.
+
 # Recover a filing box from an old backup
 
 An archive gives you the venue's saved history. It cannot tell you which installation names

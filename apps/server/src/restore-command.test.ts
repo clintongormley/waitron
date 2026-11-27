@@ -72,7 +72,7 @@ describe("waitron-restore restore", () => {
     expect(out).toEqual([expect.stringMatching(/usage/i)]);
   });
 
-  it("returns 1 and names the variable when the recovery key is missing", async () => {
+  it("returns 1 and names both key settings when no key is given", async () => {
     const out: string[] = [];
     const code = await runRestore({
       argv: ["restore", "/does/not/matter"],
@@ -80,7 +80,9 @@ describe("waitron-restore restore", () => {
       out: (line) => out.push(line),
     });
     expect(code).toBe(1);
-    expect(out).toEqual([expect.stringMatching(/WAITRON_BACKUP_RECOVERY_KEY/)]);
+    expect(out).toEqual([
+      expect.stringMatching(/WAITRON_MASTER_KEY.*--master-key-file.*WAITRON_BACKUP_RECOVERY_KEY/),
+    ]);
   });
 
   it("takes the default venue directory when WAITRON_VENUE_DIR is EMPTY, never the working directory", async () => {

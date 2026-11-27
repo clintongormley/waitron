@@ -13,6 +13,10 @@
 
 > **2026-11-24, A1323 PR 2b:** the node recovery key named below is now the venue's master key.
 
+> **2026-11-27, A1323 PR 4b:** a backup file now opens with the master key, not a separate backup
+> encryption key; `WAITRON_BACKUP_RECOVERY_KEY` opens only a Waitron Cloud copy. The `restore`
+> command takes the master key in `WAITRON_MASTER_KEY` or `--master-key-file`.
+
 # Retain an emergency allocation outside the box
 
 When you cannot establish the current short-name register, an emergency allocation uses a fresh
