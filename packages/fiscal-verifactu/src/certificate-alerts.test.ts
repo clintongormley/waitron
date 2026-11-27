@@ -1,4 +1,7 @@
+import { randomBytes } from "node:crypto";
+import { credentialRevision, loadKeyRing, putCredential } from "@waitron/credentials";
 import { nodes, withTransaction } from "@waitron/db";
+import { sql } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import type { CertKind } from "./aeat-transport.js";
@@ -148,5 +151,52 @@ describe("certificateAlerts", () => {
     await expect(alertsAt("2026-10-19T10:00:00Z", TAXPAYER_A.nodeId2)).resolves.toMatchObject([
       { code: "fiscal.certificate_expiring", params: { days: 6, date: "2026-10-25" } },
     ]);
+  });
+});
+
+describe("the installed certificate AEAT refused", () => {
+  async function vaultAndMark(markedRevision?: string): Promise<void> {
+    const ring = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: randomBytes(32).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+    const revision = await withTransaction(suite.db, async (tx) => {
+      await putCredential(tx, ring, {
+        personId: null,
+        purpose: "fiscal.aeat",
+        value: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
+      });
+      return credentialRevision(tx, { purpose: "fiscal.aeat" });
+    });
+    // 00:30 Madrid on 25 Oct: the venue's day differs from the UTC one.
+    await suite.db.execute(sql`
+      insert into verifactu_sending_state
+        (id, proximo_envio_en, tiempo_espera_seg, certificate_refused_revision, certificate_refused_at)
+      values (1, '2026-10-24T22:30:00.000Z', 0, ${markedRevision ?? revision},
+        '2026-10-24T22:30:00.000Z')
+    `);
+  }
+
+  it("raises an error since AEAT first refused the certificate the vault holds", async () => {
+    await seedTaxpayerNodeSif(suite.db);
+    await install(TAXPAYER_A.nodeId, "sello", new Date("2028-01-01T00:00:00Z"));
+    await vaultAndMark();
+    await expect(alertsAt("2026-10-26T10:00:00Z")).resolves.toEqual([
+      {
+        key: "fiscal.certificate_not_accepted",
+        code: "fiscal.certificate_not_accepted",
+        params: { date: "2026-10-25" },
+        severity: "error",
+        since: "2026-10-24T22:30:00.000Z",
+        screen: "venue-settings",
+      },
+    ]);
+  });
+
+  it("raises nothing once the vault holds another revision", async () => {
+    await seedTaxpayerNodeSif(suite.db);
+    await install(TAXPAYER_A.nodeId, "sello", new Date("2028-01-01T00:00:00Z"));
+    await vaultAndMark("an-earlier-revision");
+    await expect(alertsAt("2026-10-26T10:00:00Z")).resolves.toEqual([]);
   });
 });

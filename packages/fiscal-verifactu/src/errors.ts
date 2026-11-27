@@ -398,8 +398,10 @@ declare module "@waitron/shared" {
     /**
      * Thrown inside `mtlsFetch` (./aeat-transport.ts) on a redirect to `page`, erro4011.html (certificate
      * not verified) or erro4033.html (none arrived): docs/compliance/first-aeat-contact.md, 2026-11-25.
+     * Also the ongoing alert from ./certificate-alerts.ts, never thrown with `date`: AEAT first
+     * refused the vault's certificate on the venue-local day `date`.
      */
-    "fiscal.certificate_not_accepted": { page: string };
+    "fiscal.certificate_not_accepted": { page: string } | { date: string };
 
     /** `installCertificate` (./certificate-install.ts): another install changed the vault after the
      * dialog read the card. */

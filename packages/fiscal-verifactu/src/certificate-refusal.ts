@@ -1,4 +1,3 @@
-import { credentialRevision } from "@waitron/credentials";
 import type { Transaction } from "@waitron/db";
 import type { VerifactuClient } from "@waitron/verifactu";
 import { sql } from "drizzle-orm";
@@ -27,10 +26,13 @@ export async function clearCertificateRefusal(tx: Transaction): Promise<void> {
   `);
 }
 
-/** When AEAT first refused the certificate the vault holds now, or null when it has not. Compared
- * by revision, never by date, so a new install hides an older refusal at once. */
-export async function certificateRefusedAt(tx: Transaction): Promise<Date | null> {
-  const revision = await credentialRevision(tx, { purpose: "fiscal.aeat" });
+/** When AEAT first refused the certificate the vault holds now (`revision`, read in `tx`), or null
+ * when it has not. Compared by revision, never by date, so a new install hides an older refusal at
+ * once. */
+export async function certificateRefusedAt(
+  tx: Transaction,
+  revision: string | null,
+): Promise<Date | null> {
   if (revision === null) return null;
   const { rows } = await tx.execute<{ at: string }>(sql`
     select certificate_refused_at as at from verifactu_sending_state
