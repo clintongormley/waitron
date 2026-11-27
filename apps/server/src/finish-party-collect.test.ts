@@ -755,7 +755,7 @@ async function whereItShows(billId: string, itemId: string, orderNumber: number)
   });
   const waiting = await get("/api/orders/counter-waiting");
   expect(waiting.status).toBe(200);
-  const bills = await get(`/api/bills?state=paid-not-handed-over&q=${orderNumber}`);
+  const bills = await get(`/api/bills?counter=true&q=${orderNumber}`);
   expect(bills.status).toBe(200);
   return {
     ...boards,
