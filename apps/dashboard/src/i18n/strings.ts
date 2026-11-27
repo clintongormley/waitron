@@ -10,9 +10,9 @@ export const en = {
   "permission.sale.void.help":
     "Void a recorded sale, cancel the receipt of a printed bill nothing was served on, or authorise recording that a party left without paying. Other staff can ask for your PIN approval.",
   "permission.sale.refund.help":
-    "Refund payments and authorise removing charges for dishes already sent or served. Give money back on the till needs it too, except when a window opened by Cancel and refund or Finish table gives back only the cancelled dishes' money, and not on a separate card terminal.",
+    "Refund payments and authorise removing charges for dishes already sent or served. Refund on a till's receipt needs it too, except when a window opened by Cancel and refund or Finish table refunds only the cancelled dishes' money, and not on a separate card terminal.",
   "permission.sale.rectify.help":
-    "Authorise issuing a corrective receipt or invoice. Give money back on the till may need it when money for dishes or goodwill goes back beyond what is owed for cancelled dishes. Refunding the payment is a separate permission.",
+    "Authorise issuing a corrective receipt or invoice. Refund on a till's receipt may need it when a refund for dishes or goodwill goes beyond what is owed for cancelled dishes. Refunding the payment is a separate permission.",
   "permission.order.custom_item.help":
     "Ring up something that is not on the menu, with a name and price typed at the till. Someone without it can ask a person who has it to enter their PIN.",
   "permission.cash.drawer.help":
