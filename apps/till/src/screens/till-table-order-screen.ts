@@ -445,7 +445,7 @@ function sameSplitInputs(a: SplitInputs, b: SplitInputs): boolean {
 
 const NO_SPLIT_PICKS: SplitPicks = { whole: new Set(), picks: new Map() };
 
-/** What the list of the bill's dishes and Move dishes…' rows are grouped from. */
+/** What the list of the bill's dishes and rows in Move dishes are grouped from. */
 interface DishSources {
   lines: readonly TabLine[];
   balance: BillBalance | null;
@@ -1454,7 +1454,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) takesCash = true;
   /** Mounted inside a card host, which supplies the header. */
   @property({ type: Boolean }) embedded = false;
-  /** The move and join target lists read this; merge and Move dishes… offer {@link bills}. */
+  /** The move and join target lists read this. Merge and Move dishes offer {@link bills}. */
   @property({ attribute: false }) tables: TableState[] = [];
   @property({ attribute: false }) activeTableId?: string;
   /** The floor's zones, whose service mode decides whether a free table there may take guests. */
@@ -1705,10 +1705,10 @@ export class TillTableOrderScreen extends LitElement {
   #splitNames = new Map<string, string>();
   #splitRows?: { inputs: SplitInputs; sources: SplitSource[] };
   @state() private moveDishesPicks: Picks = new Set();
-  /** Where Move dishes… sends the picks: a bill's id, null for a new bill, undefined while none is
+  /** Where Move dishes sends the picks: a bill's id, null for a new bill, undefined while none is
    * chosen. */
   @state() private moveDishesTo: string | null | undefined = undefined;
-  /** The rows Move dishes… last drew, which a re-read's picks are tidied from. */
+  /** The rows Move dishes last drew, which a re-read's picks are tidied from. */
   #moveDishesDrawn?: DishSources & { rows: readonly PickRow[] };
   #dishGroups?: { sources: DishSources; groups: PickGroups };
   /** {@link moveDishesTo} while it is offered, as unsaved work last counted it. */
@@ -5943,7 +5943,7 @@ export class TillTableOrderScreen extends LitElement {
     return this.#otherOpenBills().filter(({ bill }) => !bill.hasPayments);
   }
 
-  /** The party's other open bills, one holding a payment included, which Move dishes… offers. */
+  /** The party's other open bills, one holding a payment included, which Move dishes offers. */
   #otherOpenBills(): { bill: PartyBill; name: string }[] {
     const party = this.party;
     if (party === null) return [];

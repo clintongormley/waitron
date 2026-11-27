@@ -5192,7 +5192,7 @@ describe("till-table-order-screen", () => {
       );
     });
 
-    it("offers no Move dishes…, Split by item, Transfer items or Merge bills for an order that belongs to no party", async () => {
+    it("offers no Move dishes, Split by item, Transfer items or Merge bills for an order that belongs to no party", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4" });
       await toMenu(el);
 

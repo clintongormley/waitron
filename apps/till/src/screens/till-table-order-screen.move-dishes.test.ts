@@ -562,7 +562,7 @@ describe("A803 move dishes panel", () => {
     });
   });
 
-  it("choosing Move dishes… again from the ⋮ while it is open starts with nothing picked and no destination", async () => {
+  it("choosing Move dishes again from the ⋮ while it is open starts with nothing picked and no destination", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);
     await tick(el, "h1");

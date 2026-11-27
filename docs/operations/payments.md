@@ -2,7 +2,7 @@
 
 For a table bill, use **Items** for particular dishes, **An amount** for an amount
 towards the bill, or **Split equally** for the people still to pay. Review the amount applied,
-tip and change before taking payment. **Move dishes…** with **+ New bill** puts whole dishes on
+tip and change before taking payment. **Move dishes** with **+ New bill** puts whole dishes on
 another bill; a part-paid bill's dishes may go too, as long as what stays still covers what it has
 been paid, a card payment in progress included.
 **Items** moves the chosen dishes to a bill of their own, paid at once; it reopens a printed

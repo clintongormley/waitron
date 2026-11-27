@@ -6504,7 +6504,7 @@ one in a unit with no decimals; a weighed or measured line, and a line no portio
 always stand alone.
 
 On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
-many members; Move station takes every member; Change dish changes every member; Move dishes… picks the row's first members whole
+many members; Move station takes every member; Change dish changes every member; Move dishes picks the row's first members whole
 ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
 or a count of it. Fire now releases every member of the row with its extras in one group.
 Finish table keeps a cancellation for each dish and groups the slips according to the station's
@@ -6552,7 +6552,7 @@ Spec: §4 and §14.4 of `docs/superpowers/specs/2026-11-26-till-handheld-redesig
 
 ### The dish picker
 
-Move dishes… draws the bill's dishes through `till-portion-picker`
+Move dishes draws the bill's dishes through `till-portion-picker`
 (`apps/till/src/widgets/portion-picker.ts`), which draws rows from the selection model
 (`pickGroups` and `pickRows`, `apps/till/src/state/portion-selection.ts`) and emits `portion-picks` with the picked
 line ids; the screen keeps the picks in its action draft scope, so leaving with picks or a chosen destination asks first. A
@@ -6596,7 +6596,7 @@ Split a table draws every open and presented bill of the party, in number order,
 (`apps/till/src/widgets/split-picker.ts`), which holds no picks of its own: the selection model
 (`apps/till/src/state/split-selection.ts`) gives each change, the widget emits `split-picks`, and the
 screen hands the selection back and keeps it in its action draft scope. Each bill's dishes are this
-same `till-portion-picker`, with these additions. Here and in Move dishes…, a set menu and each
+same `till-portion-picker`, with these additions. Here and in Move dishes, a set menu and each
 dish of one have a row of their own, never a counted row, and a set menu holding dishes is marked with
 their names (`table.move_dishes_includes`).
 

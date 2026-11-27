@@ -12,7 +12,7 @@ import { billGross } from "./adjust-target.js";
 import { moneyPlus } from "./bill-payment.js";
 import { portionGroups } from "./portion-groups.js";
 
-/** One row of Move dishes…: identical whole portions as one row with a count, anything else alone. */
+/** Identical whole portions share a row with a count. Other portions get their own row. */
 export interface PickRow {
   /** Members in line order on this bill; one member for a line that stands alone. */
   members: readonly TabLine[];
@@ -42,7 +42,7 @@ interface PickGroup {
   each: Decimal;
 }
 
-/** A bill's dishes grouped into Move dishes…' rows. The grouping does not depend on the picks, so
+/** A bill's dishes grouped into rows in Move dishes. The grouping does not depend on the picks, so
  * one grouping serves every drawing of the rows until what it is grouped from changes. */
 export interface PickGroups {
   readonly groups: readonly PickGroup[];
@@ -51,7 +51,6 @@ export interface PickGroups {
   readonly floor: { total: Decimal; received: Decimal; kept: Decimal } | null;
 }
 
-/** The bill's dishes as Move dishes… offers them. */
 export function pickGroups(
   lines: readonly TabLine[],
   keyOf: (dish: TabLine) => string | null,

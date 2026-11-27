@@ -430,7 +430,7 @@ describe("Table and bill actions", () => {
   });
 
   it("opens the current bill's sheet at the bottom of the order on a phone and a till", async () => {
-    await page.viewport(390, 844);
+    await page.viewport(1280, 900);
     try {
       const el = await mountScreen();
       const sheet = menu(el);
@@ -438,20 +438,24 @@ describe("Table and bill actions", () => {
       const icon = trigger.querySelector("wt-icon")!;
       expect([trigger.offsetWidth, trigger.offsetHeight]).toEqual([44, 44]);
       expect(icon.getBoundingClientRect().width).toBe(18);
+      const orderLeft = () =>
+        Math.round(el.shadowRoot!.querySelector("[data-draft-pane]")!.getBoundingClientRect().left);
+      await expect.poll(orderLeft).toBeGreaterThan(0);
       await userEvent.click(trigger);
       const panel = sheet.shadowRoot!.querySelector(".actions")!;
       const bounds = () => {
         const { left, right, bottom } = panel.getBoundingClientRect();
         return [left, right, bottom].map(Math.round);
       };
-      await expect.poll(bounds).toEqual([0, 390, 844]);
+      expect(bounds()[0]).toBe(orderLeft());
+      await expect.poll(bounds).toEqual([orderLeft(), 1280, 900]);
       await expect
         .element(page.getByRole("dialog", { name: "Bill 2 · Clint · €54.00" }))
         .toBeVisible();
 
+      await page.viewport(390, 844);
+      await expect.poll(bounds).toEqual([0, 390, 844]);
       await page.viewport(1280, 900);
-      const orderLeft = () =>
-        Math.round(el.shadowRoot!.querySelector("[data-draft-pane]")!.getBoundingClientRect().left);
       await expect.poll(orderLeft).toBeGreaterThan(0);
       await expect.poll(bounds).toEqual([orderLeft(), 1280, 900]);
     } finally {
@@ -916,7 +920,7 @@ describe("Table and bill actions", () => {
     it.each([
       ["a paid bill", paid],
       ["a presented bill", presented],
-    ])("%s offers no Move dishes… or Merge bills", async (_, bill) => {
+    ])("%s offers no Move dishes or Merge bills", async (_, bill) => {
       const el = await mountScreen({ bills: [bill] });
 
       expect(billItem(el, '[data-action="move-dishes"]')).toBeNull();
@@ -963,7 +967,7 @@ describe("Table and bill actions", () => {
       ]);
     });
 
-    it("an open bill holding a payment keeps Move dishes…", async () => {
+    it("an open bill holding a payment keeps Move dishes", async () => {
       const el = await mountScreen({
         bills: [partyBill("wo-2", 2, "40.00", { total: "54.00", hasPayments: true })],
       });
@@ -971,7 +975,7 @@ describe("Table and bill actions", () => {
       expect(billItem(el, '[data-action="move-dishes"]')).not.toBeNull();
     });
 
-    it("an open bill holding a payment offers Merge bills and Move dishes…", async () => {
+    it("an open bill holding a payment offers Merge bills and Move dishes", async () => {
       const el = await mountScreen({
         bills: [
           partyBill("wo-2", 2, "40.00", { total: "54.00", hasPayments: true }),
@@ -983,7 +987,7 @@ describe("Table and bill actions", () => {
       expect(billItem(el, '[data-action="move-dishes"]')).not.toBeNull();
     });
 
-    it("an open bill holding no payment, beside one that does, still offers Move dishes… and Merge bills", async () => {
+    it("an open bill holding no payment, beside one that does, still offers Move dishes and Merge bills", async () => {
       const el = await mountScreen({
         bills: [
           partyBill("wo-2", 2, "54.00", { total: "54.00" }),
