@@ -443,25 +443,28 @@ describe("a made pack", () => {
     madeBy: null,
   };
 
-  it("a refused master_keys save writes no pack and keeps the old master key current", async () => {
+  it("a refused master_keys save leaves the pack unreceived and the old master key current", async () => {
     await withTransaction(suite.db, (tx) => insertMasterKey(tx, oldMasterKey));
+    const f = fixture();
+    const made = await f.make(true);
+    expect(made.status).toBe(200);
+    await made.arrayBuffer();
     suite.db.run(
       sql`create trigger refuse_master_key before insert on master_keys begin select raise(abort, 'refused'); end`,
     );
     let refused: Response;
     try {
-      refused = await fixture().make(true);
+      refused = await f.confirm(made);
     } finally {
       suite.db.run(sql`drop trigger refuse_master_key`);
     }
     expect(refused.status).toBe(500);
     expect(await refused.json()).toEqual({ error: { code: "server.internal" } });
-    expect(refused.headers.has("x-waitron-master-key")).toBe(false);
-    expect(await packs()).toEqual([]);
+    expect(await packs()).toMatchObject([{ number: 1, receivedAt: null }]);
     expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: oldMasterKey.name }]);
-    const retried = await fixture().make(true);
-    expect(retried.status).toBe(200);
-    const shown = shownMasterKey(retried);
+    const retried = await f.confirm(made);
+    expect(retried.status).toBe(204);
+    const shown = shownMasterKey(made);
     expect(await storedMasterKeys()).toMatchObject([
       { number: 1, name: oldMasterKey.name },
       {
@@ -497,15 +500,17 @@ describe("a made pack", () => {
     });
   });
 
-  it("Make a new master key writes its pack and its master_keys row, and nothing in node.db", async () => {
+  it("Make a new master key writes its pack, its confirm the master_keys row, and neither anything in node.db", async () => {
     const boxRows = () => suite.node.all(sql`select * from box`);
     const handoverEvents = () => suite.node.select().from(nodeHandoverEvents);
     const [boxBefore, eventsBefore] = [boxRows(), await handoverEvents()];
-    const response = await fixture().make(true);
+    const f = fixture();
+    const response = await f.make(true);
     expect(response.status).toBe(200);
     const shown = shownMasterKey(response);
     await response.arrayBuffer();
     expect(await packs()).toMatchObject([{ number: 1, madeBy: admin.personId }]);
+    expect((await f.confirm(response)).status).toBe(204);
     expect(await storedMasterKeys()).toMatchObject([
       { number: 1, name: shown.masterKeyName, madeBy: admin.personId },
     ]);
@@ -534,6 +539,7 @@ describe("a made pack", () => {
     const f = fixture();
     const response = await f.make(true);
     const { masterKey, masterKeyName: name } = shownMasterKey(response);
+    expect((await f.confirm(response)).status).toBe(204);
     const bytes = decodeMasterKeyCode(masterKey!);
     expect(masterKey).toBe(encodeMasterKeyCode(bytes));
     const publicKey = sealingPublicKey(bytes);
@@ -549,7 +555,9 @@ describe("a made pack", () => {
       },
     ]);
     expect(JSON.stringify(logs)).not.toContain(masterKey!.slice(0, 9));
-    const again = shownMasterKey(await f.make(true));
+    const againResponse = await f.make(true);
+    expect((await f.confirm(againResponse)).status).toBe(204);
+    const again = shownMasterKey(againResponse);
     const rows = await storedMasterKeys();
     expect(rows.map((row) => [row.number, row.name])).toEqual([
       [1, name],
@@ -596,7 +604,9 @@ describe("a made pack", () => {
   it("Print with the master key makes the next pack with the same key name, and the status names it", async () => {
     let at = Date.parse("2026-10-30T09:00:00.000Z");
     const f = fixture({ now: () => new Date((at += 60_000)) });
-    const first = shownMasterKey(await f.make(true));
+    const firstResponse = await f.make(true);
+    expect((await f.confirm(firstResponse)).status).toBe(204);
+    const first = shownMasterKey(firstResponse);
     // Typed as a person might: lower case, without its spaces.
     const typed = first.masterKey!.replaceAll(" ", "").toLowerCase();
     const printed = await f.make(typed);
@@ -613,6 +623,8 @@ describe("a made pack", () => {
       `Waitron recovery pack · Sala Master key · ${first.masterKeyName} ${first.masterKey} Master key`,
     );
     expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: first.masterKeyName }]);
+    // The confirm marked pack 1 received, and a received pack is named over an unreceived Print.
+    expect((await f.received(2)).status).toBe(204);
     expect(await (await f.status()).json()).toMatchObject({
       masterKey: { name: first.masterKeyName, pack: 2 },
     });
@@ -620,7 +632,9 @@ describe("a made pack", () => {
 
   it("a wrong key prints nothing, writes no row and names the key", async () => {
     const f = fixture();
-    const first = shownMasterKey(await f.make(true));
+    const made = await f.make(true);
+    expect((await f.confirm(made)).status).toBe(204);
+    const first = shownMasterKey(made);
     const response = await f.make(WRONG_MASTER_KEY);
     expect(response.status).toBe(403);
     expect(response.headers.get("content-type")).not.toBe("application/pdf");
@@ -636,7 +650,9 @@ describe("a made pack", () => {
     "a malformed key (%j) is refused as a wrong one",
     async (typed) => {
       const f = fixture();
-      const first = shownMasterKey(await f.make(true));
+      const made = await f.make(true);
+      expect((await f.confirm(made)).status).toBe(204);
+      const first = shownMasterKey(made);
       const response = await f.make(typed);
       expect(response.status).toBe(403);
       expect(await codeOf(response)).toEqual({
@@ -720,6 +736,7 @@ describe("a made pack", () => {
     const f = fixture();
     const response = await f.make(true);
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
+    expect((await f.confirm(response)).status).toBe(204);
     expect(logs).toContainEqual([
       "info",
       "recovery.pack_made",
@@ -810,6 +827,10 @@ describe("a made pack", () => {
       replies.map(async (reply) => readRecoveryPackPdf(new Uint8Array(await reply.arrayBuffer()))),
     );
     const later = files.find((file) => file.number === 2)!;
+    const laterReply = replies.find(
+      (reply) => reply.headers.get("x-waitron-recovery-pack") === "2",
+    )!;
+    expect((await f.confirm(laterReply)).status).toBe(204);
     expect((await storedMasterKeys()).at(-1)!.name).toBe(later.masterKeyName);
   });
 
@@ -833,7 +854,7 @@ describe("a made pack", () => {
 describe("the received route", () => {
   async function made() {
     const f = fixture();
-    await (await f.make(true)).arrayBuffer();
+    await (await print(f)).arrayBuffer();
     return f;
   }
   const receivedAt = async () => (await packs())[0]!.receivedAt;
@@ -1009,9 +1030,10 @@ describe("the live change", () => {
     const f = fixture();
     let afterMake: ResourceIdentity[] = [];
     const heard = await packChanges(async (seen) => {
-      await (await f.make(true)).arrayBuffer();
+      const made = await f.make(true);
+      await made.arrayBuffer();
       afterMake = [...seen];
-      expect((await f.received(1)).status).toBe(204);
+      expect((await f.confirm(made)).status).toBe(204);
     });
     expect(afterMake).toEqual([{ type: "recovery_packs" }]);
     // An update is announced as the row before and the row after.
@@ -1094,8 +1116,10 @@ describe("the status route", () => {
     const response = await f.make(true);
     const name = decodeURIComponent(response.headers.get("x-waitron-master-key-name")!);
     await response.arrayBuffer();
+    expect((await f.confirm(response)).status).toBe(204);
     expect(await read(f)).toMatchObject({ masterKey: { name, pack: 1 } });
     await (await f.make(shownMasterKey(response).masterKey!)).arrayBuffer();
+    expect((await f.received(2)).status).toBe(204);
     expect(await read(f)).toMatchObject({ masterKey: { name, pack: 2 } });
   });
 
@@ -1105,8 +1129,10 @@ describe("the status route", () => {
     const response = await f.make(true);
     const { masterKey, masterKeyName: name } = shownMasterKey(response);
     await response.arrayBuffer();
+    expect((await f.confirm(response)).status).toBe(204);
     at = Date.parse("2026-10-30T13:01:00.000Z");
     await (await f.make(masterKey!)).arrayBuffer();
+    expect((await f.received(2)).status).toBe(204);
     expect((await packs()).map((p) => [p.madeAt.toISOString(), p.parts.at(-1)])).toEqual([
       [
         "2026-10-30T13:01:00.000Z",
@@ -1126,9 +1152,11 @@ describe("the status route", () => {
     const first = await f.make(true);
     const { masterKeyName: firstName } = shownMasterKey(first);
     await first.arrayBuffer();
+    expect((await f.confirm(first)).status).toBe(204);
     const second = await f.make(true);
     const { masterKeyName: name } = shownMasterKey(second);
     await second.arrayBuffer();
+    expect((await f.confirm(second)).status).toBe(204);
     expect((await packs()).map((p) => p.parts.at(-1))).toEqual([
       { part: "master-key", state: "included", masterKeyNumber: 2, masterKeyName: name },
       { part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName: firstName },
@@ -1153,7 +1181,7 @@ describe("the status route", () => {
     const response = await f.make(true);
     const { masterKey, masterKeyName: name } = shownMasterKey(response);
     await response.arrayBuffer();
-    await f.received(1);
+    expect((await f.confirm(response)).status).toBe(204);
     await (await f.make(masterKey!)).arrayBuffer();
     const answer = await read(f);
     expect(answer).toMatchObject({ masterKey: { name, pack: 1 } });
@@ -1220,7 +1248,9 @@ describe("the status route", () => {
 
   it("names no pack that showed an earlier master key", async () => {
     const f = fixture({ now: () => new Date("2026-10-02T09:00:00.000Z") });
-    await (await f.make(true)).arrayBuffer();
+    const made = await f.make(true);
+    await made.arrayBuffer();
+    expect((await f.confirm(made)).status).toBe(204);
     await withTransaction(suite.db, (tx) =>
       insertMasterKey(tx, {
         name: "2026-10-03 · AAAA",

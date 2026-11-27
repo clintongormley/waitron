@@ -112,8 +112,15 @@ export function packRequests(
         ? { locale: "en", newMasterKey: true }
         : { locale: "en", masterKey: key },
     ) => post("/api/backup/recovery-pack", body, extra),
-    received: (number: number, extra: PackPostOptions = {}) =>
-      post(`/api/backup/recovery-pack/${number}/received`, {}, extra),
+    received: (number: number, extra: PackPostOptions = {}, body: unknown = {}) =>
+      post(`/api/backup/recovery-pack/${number}/received`, body, extra),
+    /** Says a "Make a new master key" answer arrived, sending back the key it showed. */
+    confirm: (made: Response, extra: PackPostOptions = {}) =>
+      post(
+        `/api/backup/recovery-pack/${made.headers.get("x-waitron-recovery-pack")}/received`,
+        { masterKey: made.headers.get("x-waitron-master-key") },
+        extra,
+      ),
     status: (token: string | null = options.token()) =>
       app.request("https://box.test/api/backup/recovery-pack", {
         headers: token === null ? {} : { cookie: `waitron_management_session=${token}` },

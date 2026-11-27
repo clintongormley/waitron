@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   makeMasterKey,
   masterKeyId,
@@ -23,7 +23,7 @@ import { loadBackupSettings, loadRecoveryKey } from "./backup-config.js";
 import { writeBackupKey } from "./backup-env-writer.js";
 import { keyFingerprint } from "./backup-key-fingerprint.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
-import { createTurns } from "./backup-turns.js";
+import { createTurns, type Turns } from "./backup-turns.js";
 import { loadBoxEnv } from "./box-env.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
@@ -91,6 +91,7 @@ function fixture(
     /** The stream refuses to start again after the key file is written. */
     streamStartFails?: boolean;
     now?: () => Date;
+    turns?: Turns;
   } = {},
 ) {
   const steps: string[] = [];
@@ -101,7 +102,7 @@ function fixture(
       db: suite.db,
       ring: PACK_RING,
       node,
-      turns: createTurns(),
+      turns: options.turns ?? createTurns(),
       readBoxEnv: () => loadBoxEnv({}, stateDir),
       backups: () => ({
         schedule: ARCHIVES.schedule,
@@ -137,6 +138,7 @@ function fixture(
     steps,
     make: requests.make,
     received: requests.received,
+    confirm: requests.confirm,
     status: async () => {
       const response = await requests.status();
       expect(response.status).toBe(200);
@@ -146,6 +148,7 @@ function fixture(
         backupKey: unknown;
         unreceived: unknown;
         masterKey: unknown;
+        newKeyWaiting?: boolean;
       };
     },
   };
@@ -176,6 +179,7 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     const shownName = decodeURIComponent(response.headers.get("x-waitron-master-key-name")!);
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
     expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(next.key);
+    expect((await f.confirm(response)).status).toBe(204);
     const held = await keyFile(stateDir);
     expect(held).toMatchObject({
       WAITRON_BACKUP_RECOVERY_KEY: next.key,
@@ -208,10 +212,12 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
 
   it("with no backup key held, a new master key writes its key 1", async () => {
     const stateDir = await stateFolder(0);
-    const response = await fixture(stateDir).make(true);
+    const f = fixture(stateDir);
+    const response = await f.make(true);
     expect(response.status).toBe(200);
     const next = heldBackupKey(shownBytes(response), 1);
     await response.arrayBuffer();
+    expect((await f.confirm(response)).status).toBe(204);
     expect(await keyFile(stateDir)).toMatchObject({
       WAITRON_BACKUP_RECOVERY_KEY: next.key,
       WAITRON_BACKUP_KEY_NUMBER: "1",
@@ -224,10 +230,12 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     const held = await keyFile(stateDir);
     delete held.WAITRON_BACKUP_KEY_NUMBER;
     await writeFile(join(stateDir, "backup.env"), formatEnvFile(held), { mode: 0o600 });
-    const response = await fixture(stateDir).make(true);
+    const f = fixture(stateDir);
+    const response = await f.make(true);
     expect(response.status).toBe(200);
     const next = heldBackupKey(shownBytes(response), 1);
     await response.arrayBuffer();
+    expect((await f.confirm(response)).status).toBe(204);
     expect(await keyFile(stateDir)).toMatchObject({
       WAITRON_BACKUP_RECOVERY_KEY: next.key,
       WAITRON_BACKUP_KEY_NUMBER: "1",
@@ -240,7 +248,7 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     const response = await f.make(true);
     const next = heldBackupKey(shownBytes(response), 4);
     await response.arrayBuffer();
-    expect((await f.received(1)).status).toBe(204);
+    expect((await f.confirm(response)).status).toBe(204);
     const status = await f.status();
     expect(status).toMatchObject({ upToDate: true, reasons: [] });
     expect(status.backupKey).toEqual({
@@ -251,18 +259,20 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     });
   });
 
-  it("a failed backup.env write after the commit still answers the pack, and the status says the backup key is not from the current master key", async () => {
+  it("a failed backup.env write after the confirm's commit still answers it, and the status says the backup key is not from the current master key", async () => {
     const stateDir = await stateFolder(3);
     const before = await readFile(join(stateDir, "backup.env"), "utf8");
     const f = fixture(stateDir);
-    // A folder nothing can be written into: the key file cannot be replaced.
-    await chmod(stateDir, 0o500);
     const response = await f.make(true);
-    await chmod(stateDir, 0o700);
     expect(response.status).toBe(200);
     const shown = shownBytes(response);
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
     expect(file.number).toBe(1);
+    // A folder nothing can be written into: the key file cannot be replaced.
+    await chmod(stateDir, 0o500);
+    const confirmed = await f.confirm(response);
+    await chmod(stateDir, 0o700);
+    expect(confirmed.status).toBe(204);
     const current = await withTransaction(suite.db, (tx) => readCurrentMasterKey(tx));
     expect(Buffer.from(current!.publicKey)).toEqual(sealingPublicKey(shown));
     expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before);
@@ -282,12 +292,14 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
   it("after a failed backup.env write, Change the backup key with the new master key writes the key the pack prints", async () => {
     const stateDir = await stateFolder(3);
     const f = fixture(stateDir);
-    await chmod(stateDir, 0o500);
     const response = await f.make(true);
-    await chmod(stateDir, 0o700);
     expect(response.status).toBe(200);
     const typed = response.headers.get("x-waitron-master-key")!;
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
+    await chmod(stateDir, 0o500);
+    const confirmed = await f.confirm(response);
+    await chmod(stateDir, 0o700);
+    expect(confirmed.status).toBe(204);
     const printed = parseRecoveryKit(file.bucketCode!).recoveryKey;
     expect((await keyFile(stateDir)).WAITRON_BACKUP_RECOVERY_KEY).toBe(
       heldBackupKey(OLD_MASTER, 3).key,
@@ -360,18 +372,22 @@ async function rotateApp(stateDir: string) {
 }
 
 describe("a new master key whose pack never arrived", () => {
-  it("is named as unreceived on the pack that holds it, and a second new master key needs only the sign-in", async () => {
+  it("never becomes current, and a second new master key needs only the sign-in", async () => {
     const stateDir = await stateFolder(3);
     let at = Date.parse(MADE_AT);
     const f = fixture(stateDir, { now: () => new Date((at += 60_000)) });
+    const oldName = (await withTransaction(suite.db, (tx) => readCurrentMasterKey(tx)))!.name;
     const first = await f.make(true);
     expect(first.status).toBe(200);
     const firstName = decodeURIComponent(first.headers.get("x-waitron-master-key-name")!);
     await first.arrayBuffer();
-    expect(await f.status()).toMatchObject({
-      unreceived: { number: 1, holdsCurrentMasterKey: true },
-      masterKey: { name: firstName, pack: 1 },
+    const waiting = await f.status();
+    expect(waiting).toMatchObject({
+      unreceived: { number: 1 },
+      masterKey: { name: oldName, pack: null },
+      newKeyWaiting: true,
     });
+    expect(waiting.unreceived).not.toHaveProperty("holdsCurrentMasterKey");
 
     const second = await f.make(true, {}, { locale: "en", newMasterKey: true });
     expect(second.status).toBe(200);
@@ -380,16 +396,14 @@ describe("a new master key whose pack never arrived", () => {
     const secondName = decodeURIComponent(second.headers.get("x-waitron-master-key-name")!);
     await second.arrayBuffer();
     expect(secondName).not.toBe(firstName);
+    expect((await f.confirm(second)).status).toBe(204);
     const current = await withTransaction(suite.db, (tx) => readCurrentMasterKey(tx));
     expect(Buffer.from(current!.publicKey)).toEqual(sealingPublicKey(secondBytes));
     expect(await keyFile(stateDir)).toMatchObject({
-      WAITRON_BACKUP_RECOVERY_KEY: heldBackupKey(secondBytes, 5).key,
-      WAITRON_BACKUP_KEY_NUMBER: "5",
+      WAITRON_BACKUP_RECOVERY_KEY: heldBackupKey(secondBytes, 4).key,
+      WAITRON_BACKUP_KEY_NUMBER: "4",
     });
-    expect(await f.status()).toMatchObject({
-      unreceived: { number: 2, holdsCurrentMasterKey: true },
-      masterKey: { name: secondName, pack: 2 },
-    });
+    expect(await f.status()).toMatchObject({ masterKey: { name: secondName, pack: 2 } });
   });
 });
 
@@ -414,7 +428,7 @@ describe("the backup key is written only once the pack and its master key are sa
     expect(await readRecoveryPacks(suite.db, node.nodeId)).toEqual([]);
   });
 
-  it("an aborted request saves no master key and writes no backup key", async () => {
+  it("an aborted make saves no master key and writes no backup key", async () => {
     const stateDir = await stateFolder(3);
     const before = await readFile(join(stateDir, "backup.env"), "utf8");
     const rowsBefore = await masterKeyRows();
@@ -426,13 +440,9 @@ describe("the backup key is written only once the pack and its master key are sa
         return loadRecoveryPackFonts();
       },
     });
-    const response = await f.make(true, { signal: aborted.signal });
+    await (await f.make(true, { signal: aborted.signal })).arrayBuffer();
     expect(aborted.signal.aborted).toBe(true);
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ error: { code: "server.internal" } });
-    expect(response.headers.has("x-waitron-master-key")).toBe(false);
     expect(await masterKeyRows()).toEqual(rowsBefore);
-    expect(await readRecoveryPacks(suite.db, node.nodeId)).toEqual([]);
     expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before);
     expect(f.steps).toEqual([]);
   });
@@ -448,6 +458,7 @@ describe("the backup key is written only once the pack and its master key are sa
     expect(response.status).toBe(200);
     const next = heldBackupKey(shownBytes(response), 4);
     await response.arrayBuffer();
+    expect((await f.confirm(response)).status).toBe(204);
     expect((await keyFile(stateDir)).WAITRON_BACKUP_RECOVERY_KEY).toBe(next.key);
     const events = logs.filter(([level]) => level === "warn").map(([, event]) => event);
     expect(events).toEqual(["backup.reload_after_write_failed"]);
@@ -461,6 +472,7 @@ describe("the backup key is written only once the pack and its master key are sa
     expect(response.status).toBe(200);
     const next = heldBackupKey(shownBytes(response), 4);
     await response.arrayBuffer();
+    expect((await f.confirm(response)).status).toBe(204);
     expect((await keyFile(stateDir)).WAITRON_BACKUP_RECOVERY_KEY).toBe(next.key);
     expect(f.steps).toEqual(["stream stopped", "sealed", "backups reloaded"]);
     expect(logs).toContainEqual([
@@ -527,10 +539,12 @@ describe("a backup written after a new master key", () => {
     });
     stops.push(() => sup.stop());
     await sup.reload();
-    const response = await fixture(stateDir, { reloadBackups: () => sup.reload() }).make(true);
+    const f = fixture(stateDir, { reloadBackups: () => sup.reload() });
+    const response = await f.make(true);
     expect(response.status).toBe(200);
     const newBytes = shownBytes(response);
     await response.arrayBuffer();
+    expect((await f.confirm(response)).status).toBe(204);
     // The reload after the change starts a backup under the new key.
     const written = await poll(async () => {
       const names = (await readdir(dest)).filter((name) => name.endsWith(".backup.enc"));
@@ -567,4 +581,175 @@ describe("a backup written after a new master key", () => {
       ).rejects.toMatchObject({ code: "recovery.passphrase_invalid" });
     }
   }, 60_000);
+});
+
+describe("a new master key takes over only once its pack's arrival is confirmed", () => {
+  const masterKeyRows = () => suite.db.select().from(masterKeys).orderBy(masterKeys.number);
+  const packs = () => readRecoveryPacks(suite.db, node.nodeId);
+  /** What a refused or lost confirm must leave as it was. */
+  async function snapshot(stateDir: string, f: { steps: string[] }) {
+    return {
+      backupEnv: await readFile(join(stateDir, "backup.env"), "utf8"),
+      rows: await masterKeyRows(),
+      received: (await packs()).map((pack) => [pack.number, pack.receivedAt]),
+      steps: [...f.steps],
+    };
+  }
+
+  it("Make leaves the current master key and backup.env as they are, reloads nothing, and says a key waits", async () => {
+    const stateDir = await stateFolder(3);
+    const f = fixture(stateDir);
+    expect((await f.status()).newKeyWaiting).toBeUndefined();
+    const before = await snapshot(stateDir, f);
+    const response = await f.make(true);
+    expect(response.status).toBe(200);
+    await response.arrayBuffer();
+    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before.backupEnv);
+    expect(await masterKeyRows()).toEqual(before.rows);
+    expect(f.steps).toEqual([]);
+    expect((await f.status()).newKeyWaiting).toBe(true);
+  });
+
+  it("the confirm with the shown key makes it current with the pack's time, writes the printed backup key and reloads backups", async () => {
+    const stateDir = await stateFolder(3);
+    let at = Date.parse(MADE_AT);
+    const f = fixture(stateDir, { now: () => new Date((at += 60_000)) });
+    const made = await f.make(true);
+    const madeAt = made.headers.get("x-waitron-recovery-pack-made-at")!;
+    const shown = shownBytes(made);
+    const shownName = decodeURIComponent(made.headers.get("x-waitron-master-key-name")!);
+    const file = await readRecoveryPackPdf(new Uint8Array(await made.arrayBuffer()));
+    const printed = parseRecoveryKit(file.bucketCode!).recoveryKey;
+    expect(f.steps).toEqual([]);
+
+    const confirmed = await f.confirm(made);
+    expect(confirmed.status).toBe(204);
+    const current = await withTransaction(suite.db, (tx) => readCurrentMasterKey(tx));
+    expect(current).toMatchObject({
+      number: 2,
+      name: shownName,
+      madeAt: new Date(madeAt),
+      madeBy: admin.personId,
+    });
+    expect(Buffer.from(current!.publicKey)).toEqual(sealingPublicKey(shown));
+    expect(await keyFile(stateDir)).toMatchObject({
+      WAITRON_BACKUP_RECOVERY_KEY: printed,
+      WAITRON_BACKUP_KEY_NUMBER: "4",
+      WAITRON_BACKUP_MASTER_KEY_ID: masterKeyId(sealingPublicKey(shown)).toString("hex"),
+      WAITRON_BACKUP_KEY_ROTATED_AT: madeAt,
+    });
+    expect(f.steps).toEqual(["stream stopped", "sealed", "stream started", "backups reloaded"]);
+    const [pack] = await packs();
+    expect(pack!.receivedAt!.getTime()).toBeGreaterThan(Date.parse(madeAt));
+    expect((await f.status()).newKeyWaiting).toBeUndefined();
+  });
+
+  it("writes the key the pack printed even when the backup key changed between the make and the confirm", async () => {
+    const stateDir = await stateFolder(3);
+    const f = fixture(stateDir);
+    const made = await f.make(true);
+    const file = await readRecoveryPackPdf(new Uint8Array(await made.arrayBuffer()));
+    const printed = parseRecoveryKit(file.bucketCode!).recoveryKey;
+    const changed = await (
+      await rotateApp(stateDir)
+    ).post("/api/backup/rotate", { masterKey: encodeMasterKeyCode(OLD_MASTER) });
+    expect(changed.status).toBe(200);
+    await changed.arrayBuffer();
+    expect((await keyFile(stateDir)).WAITRON_BACKUP_RECOVERY_KEY).toBe(
+      heldBackupKey(OLD_MASTER, 4).key,
+    );
+
+    expect((await f.confirm(made)).status).toBe(204);
+    expect(await keyFile(stateDir)).toMatchObject({
+      WAITRON_BACKUP_RECOVERY_KEY: printed,
+      WAITRON_BACKUP_KEY_NUMBER: "4",
+    });
+    expect(printed).not.toBe(heldBackupKey(shownBytes(made), 5).key);
+  }, 60_000);
+
+  it.each([
+    ["a wrong master key", "wrong"],
+    ["a code that is not a master key", "garbage"],
+    ["no master key", "none"],
+    ["a key a later make replaced", "replaced"],
+    ["a key the box forgot when it restarted", "restarted"],
+  ] as const)("refuses %s, changing nothing", async (_name, kind) => {
+    const stateDir = await stateFolder(3);
+    const f = fixture(stateDir);
+    const made = await f.make(true);
+    await made.arrayBuffer();
+    if (kind === "replaced") await (await f.make(true)).arrayBuffer();
+    const before = await snapshot(stateDir, f);
+    const masterKey = {
+      wrong: encodeMasterKeyCode(makeMasterKey()),
+      garbage: "not a master key",
+      none: undefined,
+      replaced: made.headers.get("x-waitron-master-key")!,
+      restarted: made.headers.get("x-waitron-master-key")!,
+    }[kind];
+    const confirmer = kind === "restarted" ? fixture(stateDir) : f;
+    const response = await confirmer.received(1, {}, masterKey === undefined ? {} : { masterKey });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "recovery.pack_invalid", params: { reason: "unknown_pack" } },
+    });
+    expect(await snapshot(stateDir, f)).toEqual(before);
+    expect(confirmer.steps).toEqual([]);
+  });
+
+  it("a confirm whose request is gone before its backup turn comes changes nothing", async () => {
+    const stateDir = await stateFolder(3);
+    const queue = createTurns();
+    let handed = 0;
+    const turns: Turns = (body) => {
+      handed += 1;
+      return queue(body);
+    };
+    const f = fixture(stateDir, { turns });
+    const made = await f.make(true);
+    await made.arrayBuffer();
+    const before = await snapshot(stateDir, f);
+    const handedBefore = handed;
+    let release!: () => void;
+    const held = turns(() => new Promise<void>((resolve) => (release = resolve)));
+    const aborted = new AbortController();
+    const confirming = f.confirm(made, { signal: aborted.signal });
+    await vi.waitFor(() => expect(handed).toBe(handedBefore + 2), { timeout: 30_000 });
+    aborted.abort();
+    release();
+    await held;
+    expect((await confirming).status).toBe(400);
+    expect(await snapshot(stateDir, f)).toEqual(before);
+    expect((await f.status()).newKeyWaiting).toBe(true);
+  });
+
+  it("a repeated confirm, after the first answer was lost, answers again and writes nothing more", async () => {
+    const stateDir = await stateFolder(3);
+    let at = Date.parse(MADE_AT);
+    const f = fixture(stateDir, { now: () => new Date((at += 60_000)) });
+    const made = await f.make(true);
+    await made.arrayBuffer();
+    expect((await f.confirm(made)).status).toBe(204);
+    const after = await snapshot(stateDir, f);
+    expect(after.rows).toHaveLength(2);
+    expect(after.steps).toEqual(["stream stopped", "sealed", "stream started", "backups reloaded"]);
+
+    const again = await f.confirm(made);
+    expect(again.status).toBe(204);
+    expect(await snapshot(stateDir, f)).toEqual(after);
+    const wrong = await f.received(1, {}, { masterKey: encodeMasterKeyCode(OLD_MASTER) });
+    expect(wrong.status).toBe(400);
+    expect(await snapshot(stateDir, f)).toEqual(after);
+  });
+
+  it("a plain pack's empty confirm still marks it received, and a waiting key's pack refuses one", async () => {
+    const stateDir = await stateFolder(3);
+    const f = fixture(stateDir);
+    await (await f.make(encodeMasterKeyCode(OLD_MASTER))).arrayBuffer();
+    expect((await f.received(1)).status).toBe(204);
+    expect((await packs())[0]!.receivedAt).not.toBeNull();
+    await (await f.make(true)).arrayBuffer();
+    expect((await f.received(2)).status).toBe(400);
+    expect((await packs())[0]!.receivedAt).toBeNull();
+  });
 });
