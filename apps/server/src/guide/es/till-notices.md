@@ -1,4 +1,4 @@
-# Avisos del terminal
+# Avisos de la caja
 
 Cuando el servidor necesita atención, tu caja o terminal de mano muestra un aviso bajo la barra
 superior. La pantalla del PIN también avisa de que queda poco espacio y de que los cobros
