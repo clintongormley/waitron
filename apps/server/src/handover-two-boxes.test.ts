@@ -59,7 +59,8 @@ import { mountHandoverSourceStartApi } from "./handover-source-start-api.js";
 import { stepDown } from "./handover-stepdown.js";
 import { advanceHandover } from "./handover-store.js";
 import { loadBoxEnv } from "./box-env.js";
-import { BOX_LEAF_HOSTNAMES } from "./box-name.js";
+import { BOX_LEAF_HOSTNAMES, sameBoxName } from "./box-name.js";
+import * as reservedIdentity from "./reserved-identity.js";
 import { ensureBoxSecrets, ensureLeaf, reissueBoxLeaf } from "./box-secrets.js";
 import { loadConfig } from "./config.js";
 import { readModuleConfig } from "./module-config.js";
@@ -896,6 +897,11 @@ describe("a controlled handover to the joined spare, then the old box back by em
         SPARE_URL,
       );
       const cFiscalAtJoin = await fiscalRows(c.venue);
+      const drawn = reservedIdentity.generateStandbyIdentity();
+      vi.spyOn(reservedIdentity, "generateStandbyIdentity").mockReturnValueOnce({
+        ...drawn,
+        nodeId: spareId.slice(0, 4) + drawn.nodeId.slice(4),
+      });
       const rejoined = await joinSpare(
         { spareBox: resetBox, spareState: resetState, ring: RING },
         { bundleApp: cBundle, email: boxes.main.email },
@@ -904,6 +910,7 @@ describe("a controlled handover to the joined spare, then the old box back by em
       const newId = rejoined.spareId;
       expect(newId).not.toBe(mainId);
       expect(newId).not.toBe(spareId);
+      expect(sameBoxName(newId, spareId)).toBe(false);
       expect((await readNodeMode(resetBox.node, newId)).mode).toBe("mirror");
       expect(await fiscalRows(c.venue)).toEqual(cFiscalAtJoin);
       for (const rows of Object.values(await fiscalRows(resetBox.db))) expect(rows).toEqual([]);

@@ -3,9 +3,10 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
 import { nodeSigningPublicKey, type KeyRing } from "@waitron/credentials";
 import {
+  readNodeMembership,
   stampDeployment,
   withTransaction,
   type DeploymentEnvironment,
@@ -22,6 +23,8 @@ import { personIdForLoginEmail } from "@waitron/identity";
 import { adoptFromPrimary } from "../adopt.js";
 import { replaceBackupSettings } from "../backup-env-writer.js";
 import { createBoxJoinAttempt, type JoinedBox } from "../box-join-attempt.js";
+import { sameBoxName } from "../box-name.js";
+import * as reservedIdentity from "../reserved-identity.js";
 import { readModuleConfig, writeModuleConfig } from "../module-config.js";
 import { ALL_MODULES } from "../modules.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "../node-identity.js";
@@ -119,7 +122,7 @@ export async function veriFactuMainBox(
  */
 const MAIN_BOXES = new WeakMap<
   Hono,
-  { db: Database; stateDir: string; advertisedOrigin: string }
+  { db: Database; stateDir: string; advertisedOrigin: string; nodeId: string }
 >();
 
 /** The real box-join routes of the main box `nodeId`, whose files are `box`'s. */
@@ -139,7 +142,7 @@ export function mirrorBundleApp(
     designated: { nodeId },
     wakeSpareJoin: () => {},
   });
-  MAIN_BOXES.set(bundleApp, { db: box.db, stateDir: box.stateDir, advertisedOrigin });
+  MAIN_BOXES.set(bundleApp, { db: box.db, stateDir: box.stateDir, advertisedOrigin, nodeId });
   return bundleApp;
 }
 
@@ -195,7 +198,21 @@ export async function collectJoin(
       return answer;
     },
   });
-  await attempt.start(mainBox.advertisedOrigin);
+  const chart = await readNodeMembership(mainBox.db);
+  const usedIds = [mainBox.nodeId, ...(chart?.body.nodes.map((node) => node.nodeId) ?? [])];
+  const identity = reservedIdentity.generateStandbyIdentity();
+  let nodeId = identity.nodeId;
+  for (let prefix = 0; usedIds.some((used) => sameBoxName(used, nodeId)); prefix += 1) {
+    nodeId = prefix.toString(16).padStart(4, "0") + identity.nodeId.slice(4);
+  }
+  const draw = vi
+    .spyOn(reservedIdentity, "generateStandbyIdentity")
+    .mockReturnValueOnce({ ...identity, nodeId });
+  try {
+    await attempt.start(mainBox.advertisedOrigin);
+  } finally {
+    draw.mockRestore();
+  }
   try {
     await attempt.confirm();
     const approved = await approveJoin(main.bundleApp, requestId!, {}, { cookie });
