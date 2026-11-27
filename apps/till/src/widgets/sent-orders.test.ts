@@ -228,7 +228,7 @@ it("says Fired on a released dish under a Held heading, which the heading does n
     ],
   );
   const el = await mount(data);
-  expect(headings(el)).toEqual([["No course · Held", "", ["fire"]]]);
+  expect(headings(el)).toEqual([["No course · Held", "", ["fire", "serve all"]]]);
   expect(second(el, "[data-fired-line=early]")).toBe("Fired 20 min ago");
   expect(second(el, "[data-fired-line=unknown]")).toBe("Fired");
   expect(second(el, "[data-held-line=held]")).toBe("");
@@ -289,6 +289,87 @@ it("Serve all sends nothing while busy or after a row of its section changed", a
   await el.updateComplete;
   await click(el, "[data-serve-all]");
   expect(calls).toEqual([{ items: [{ lineId: "beer", quantity: "4" }] }]);
+});
+
+it("a held group with released dishes offers Serve all beside Fire, which serves only those", async () => {
+  const el = await mount(
+    current(
+      [],
+      [
+        group("g", [
+          row("flan", { readyAt: at(59) }),
+          row("water", { lineNo: 2 }),
+          row("soup", { lineNo: 3, released: false, firedAt: null }),
+          row("other", { lineNo: 4, workingOrderId: "b2", released: false, firedAt: null }),
+        ]),
+      ],
+    ),
+  );
+  expect(headings(el)).toEqual([["Held", "", ["fire", "serve all"]]]);
+  const calls = collect(el, "serve-lines");
+  await click(el, "[data-sent-section=g] [data-serve-all]");
+  expect(calls).toEqual([
+    {
+      items: [
+        { lineId: "flan", quantity: "1" },
+        { lineId: "water", quantity: "1" },
+      ],
+    },
+  ]);
+});
+
+it("a held group with nothing released offers Fire alone", async () => {
+  const el = await mount(
+    current([], [group("g", [row("soup", { released: false, firedAt: null })])]),
+  );
+  expect(headings(el)).toEqual([["Held", "", ["fire"]]]);
+});
+
+it("Serve all sends nothing once a dish it showed has moved under another heading", async () => {
+  const beer = row("beer");
+  const wine = row("wine", { lineNo: 2 });
+  const water = row("water", { lineNo: 3 });
+  const fired = { state: "fired", firedAt: at(48) } as const;
+  const el = await mount(
+    current(
+      [],
+      [group("drinks", [beer, wine], fired), group("later", [water], { ...fired, position: 2 })],
+    ),
+  );
+  const old = find(el, "[data-sent-section=drinks] [data-serve-all]");
+  const calls = collect(el, "serve-lines");
+  el.snapshot = {
+    ...el.snapshot!,
+    current: current(
+      [],
+      [group("drinks", [beer], fired), group("later", [water, wine], { ...fired, position: 2 })],
+    ),
+  };
+  old.click();
+  expect(calls).toEqual([]);
+  await el.updateComplete;
+  await click(el, "[data-sent-section=drinks] [data-serve-all]");
+  expect(calls).toEqual([{ items: [{ lineId: "beer", quantity: "1" }] }]);
+});
+
+it("keeps a focused Serve all on its own group when an earlier group leaves the list", async () => {
+  const fired = (id: string, dish: string, position: number) =>
+    group(id, [row(dish)], { state: "fired", position, firedAt: at(40) });
+  const el = await mount(
+    current([], [fired("first", "soup", 1), fired("next", "steak", 2), fired("last", "pie", 3)]),
+  );
+  const button = find(el, "[data-sent-section=next] [data-serve-all]") as LitElement;
+  await button.updateComplete;
+  button.shadowRoot!.querySelector("button")!.focus();
+  expect(root(el).activeElement).toBe(button);
+  el.snapshot = {
+    ...el.snapshot!,
+    current: current([], [fired("next", "steak", 2), fired("last", "pie", 3)]),
+  };
+  await el.updateComplete;
+  expect(
+    root(el).activeElement?.closest("[data-sent-section]")?.getAttribute("data-sent-section"),
+  ).toBe("next");
 });
 
 it("serves the active remainder on a native row tap, one row per dish, with the charged cancellation apart", async () => {
@@ -936,6 +1017,60 @@ it("refreshes Ready N min every 20 seconds while a fired row shows, and runs no 
     expect(vi.getTimerCount()).toBeGreaterThan(0);
     el.remove();
     expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("keeps a wholly served heading's fired age moving without a server read", async () => {
+  vi.useFakeTimers({
+    toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date"],
+  });
+  try {
+    vi.setSystemTime(now);
+    const done = row("done", { servedQuantity: "1.000", servedAt: at(50) });
+    const el = await mount(current([], [group("g", [done], { state: "fired", firedAt: at(48) })]), {
+      now: undefined,
+    });
+    const age = find(el, "[data-sent-section=g] till-fired-ago");
+    expect(text(age)).toBe("Fired 12 min ago");
+    await vi.advanceTimersByTimeAsync(60_000);
+    await el.updateComplete;
+    expect(text(age)).toBe("Fired 13 min ago");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("moves fired ages on their own clocks, redrawing the list only while a Ready age shows", async () => {
+  vi.useFakeTimers({
+    toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "Date"],
+  });
+  try {
+    vi.setSystemTime(now);
+    const el = await mount(
+      current(
+        [],
+        [
+          group("g", [row("soup", { firedAt: at(50) })], { state: "fired", firedAt: at(48) }),
+          group(
+            "h",
+            [
+              row("early", { lineNo: 2, firedAt: at(40) }),
+              row("later", { lineNo: 3, released: false, firedAt: null }),
+            ],
+            { position: 2 },
+          ),
+        ],
+      ),
+      { now: undefined },
+    );
+    const render = vi.spyOn(el as unknown as { render(): unknown }, "render");
+    await vi.advanceTimersByTimeAsync(60_000);
+    await el.updateComplete;
+    expect(text(find(el, "[data-sent-section=g] [data-section-title]"))).toBe("Fired 13 min ago");
+    expect(second(el, "[data-fired-line=early]")).toBe("Fired 21 min ago");
+    expect(render).not.toHaveBeenCalled();
   } finally {
     vi.useRealTimers();
   }

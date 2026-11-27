@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { setLocale } from "../i18n/t.js";
-import { current, now } from "../screens/till-table-order-screen.current-orders.test-helpers.js";
+import {
+  cake,
+  coffee,
+  current,
+  currentGroup,
+  flan,
+  now,
+} from "../screens/till-table-order-screen.current-orders.test-helpers.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { TillSentOrders } from "./sent-orders.js";
 
@@ -44,6 +51,30 @@ describe.each(["light", "dark"] as const)("Sent accessibility (%s)", (theme) => 
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-sent-panel]")).toBeNull();
     await expectNoA11yViolations(host);
+  });
+  it("has no violations and keeps Fire and Serve all apart on a held heading with a released dish", async () => {
+    const { el, host } = await mount({
+      snapshot: {
+        scope: "visit",
+        billId: "wo-4",
+        current: current({
+          groups: [
+            currentGroup("g3", 3, "held", [flan, { ...coffee, lineNo: 9 }]),
+            currentGroup("g4", 4, "held", [cake]),
+          ],
+          ungrouped: [],
+        }),
+      },
+    });
+    const heading = el.shadowRoot!.querySelector("[data-sent-section=g3] wt-course-heading")!;
+    const fire = heading.querySelector<HTMLElement>("[data-group-fire]")!;
+    const serve = heading.querySelector<HTMLElement>("[data-serve-all]")!;
+    await expectNoA11yViolations(host);
+    const [a, b] = [fire.getBoundingClientRect(), serve.getBoundingClientRect()];
+    expect(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top).toBe(
+      true,
+    );
+    for (const box of [a, b]) expect(box.height).toBeGreaterThanOrEqual(44);
   });
   it("uses inherited text/spacing tokens and keeps information targets at least 44px", async () => {
     const { el, host } = await mount();

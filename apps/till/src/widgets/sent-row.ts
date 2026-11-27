@@ -13,6 +13,8 @@ export interface SentRowView {
   /** The section heading's state: a row in the same state does not repeat it. */
   heading: SentSectionTitle["state"];
   now: number;
+  /** Set while the list holds time still; otherwise a fired age keeps its own clock. */
+  heldNow: number | undefined;
   quantity: (value: string) => string;
   price: string;
   /** Beside the name: nutrition icons, the set-menu tag and the guest allergy mark. */
@@ -44,7 +46,7 @@ function stateText(view: SentRowView): TemplateResult | string | undefined {
   }
   return dish.firedAt === null
     ? t("table.group_fired")
-    : html`<till-fired-ago .firedAt=${dish.firedAt} .now=${view.now}></till-fired-ago>`;
+    : html`<till-fired-ago .firedAt=${dish.firedAt} .now=${view.heldNow}></till-fired-ago>`;
 }
 
 function dishWords(dish: CurrentOrderRow, quantity: (value: string) => string) {

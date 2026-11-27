@@ -73,6 +73,8 @@ const servedBeside = (row: SentRow) =>
   row.left.length > 0 ? row.slices.filter((slice) => slice.kind === "served") : [];
 const firedLeft = (rows: readonly SentRow[]) =>
   rows.flatMap((row) => row.left).filter((slice) => slice.kind === "fired");
+const servable = (rows: readonly SentRow[]) =>
+  firedLeft(rows).filter((slice) => slice.row.released);
 
 @customElement("till-sent-orders")
 export class TillSentOrders extends LitElement {
@@ -219,7 +221,9 @@ export class TillSentOrders extends LitElement {
     clearTimeout(this.#reminderTimer);
     clearTimeout(this.#ageTimer);
     if (this.now !== undefined) return;
-    if (this.#model()?.sections.some((section) => firedLeft(section.rows).length > 0))
+    if (
+      this.#model()?.sections.some((section) => section.rows.some((row) => row.state === "ready"))
+    )
       this.#ageTimer = setTimeout(() => this.requestUpdate(), 20_000);
     const delay = reminderDueAt(this.#current()?.reminder) - Date.now();
     if (Number.isFinite(delay) && delay > 0)
@@ -318,12 +322,21 @@ export class TillSentOrders extends LitElement {
     }
     this.#releaseHeading();
   }
-  #serve(displayed: readonly { lineId: string; quantity: string }[]): void {
+  /** `groupId` names the section a heading's Serve all belongs to (null: the ungrouped one), whose
+   * live rows must still hold everything it showed; a row's Serve checks the whole bill. */
+  #serve(
+    displayed: readonly { lineId: string; quantity: string }[],
+    groupId?: string | null,
+  ): void {
     if (!this.isConnected || this.busy || displayed.length === 0) return;
+    const sections = (this.#model()?.sections ?? []).filter(
+      (section) => groupId === undefined || (section.group?.id ?? null) === groupId,
+    );
     const current = new Map(
-      firedLeft(this.#model()?.sections.flatMap((section) => section.rows) ?? [])
-        .filter((slice) => slice.row.released)
-        .map((slice) => [slice.row.lineId, slice.quantity]),
+      servable(sections.flatMap((section) => section.rows)).map((slice) => [
+        slice.row.lineId,
+        slice.quantity,
+      ]),
     );
     if (displayed.some((item) => current.get(item.lineId) !== item.quantity)) return;
     this.#dispatch("serve-lines", { items: displayed.map((item) => ({ ...item })) });
@@ -383,7 +396,11 @@ export class TillSentOrders extends LitElement {
     this.#releasePointer();
   }
   #displayNow(): number {
-    return this.#pressedNow ?? this.now ?? Date.now();
+    return this.#heldNow() ?? Date.now();
+  }
+  /** The time while a press or the page holds it still; otherwise each fired age keeps its own. */
+  #heldNow(): number | undefined {
+    return this.#pressedNow ?? this.now;
   }
   #money(value: string): string {
     return formatMoney(decimal(value), currentLocale());
@@ -408,10 +425,7 @@ export class TillSentOrders extends LitElement {
           ? t("table.at_the_pass")
           : firedAt === null
             ? t("table.group_fired")
-            : html`<till-fired-ago
-                .firedAt=${firedAt}
-                .now=${this.#displayNow()}
-              ></till-fired-ago>`;
+            : html`<till-fired-ago .firedAt=${firedAt} .now=${this.#heldNow()}></till-fired-ago>`;
     return html`${names === "" ? nothing : `${names} · `}${word}`;
   }
   #heldActions(section: SentSection, expected: HeldOrder): TemplateResult {
@@ -464,14 +478,19 @@ export class TillSentOrders extends LitElement {
       >`;
   }
   #serveAll(section: SentSection): TemplateResult {
-    const released = firedLeft(section.rows).filter((slice) => slice.row.released);
+    const released = servable(section.rows);
     const off = this.busy || released.length === 0;
+    const groupId = section.group?.id ?? null;
     return html`<wt-button
       slot="end"
       data-serve-all
       variant=${off ? "secondary" : "primary"}
       ?disabled=${off}
-      @click=${() => this.#serve(released.map((slice) => ({ lineId: slice.row.lineId, quantity: slice.quantity })))}
+      @click=${() =>
+        this.#serve(
+          released.map((slice) => ({ lineId: slice.row.lineId, quantity: slice.quantity })),
+          groupId,
+        )}
       >${t("table.serve_group")}</wt-button
     >`;
   }
@@ -498,7 +517,8 @@ export class TillSentOrders extends LitElement {
               >`
             : html`<span class="section-title" data-section-title>${this.#title(section)}</span>`
         }
-        ${held ? this.#heldActions(section, expected) : this.#serveAll(section)}
+        ${held ? this.#heldActions(section, expected) : nothing}
+        ${!held || servable(section.rows).length > 0 ? this.#serveAll(section) : nothing}
       </wt-course-heading>
       <ul
         @pointercancel=${() => this.#releasePointer()}
@@ -512,6 +532,7 @@ export class TillSentOrders extends LitElement {
               row,
               heading: section.title.state,
               now,
+              heldNow: this.#heldNow(),
               quantity: this.#quantity,
               price: this.#money(row.amount),
               marks: this.#marks(infoMembers(row)[0]!.row),
@@ -585,7 +606,12 @@ export class TillSentOrders extends LitElement {
     const expected = this.#heldOrder()!;
     return html`<section data-sent-panel>
       <h2 class="visually-hidden">${t("table.sent_title")}</h2>
-      ${this.#reminder(model)} ${model.sections.map((section) => this.#section(section, expected))}
+      ${this.#reminder(model)}
+      ${repeat(
+        model.sections,
+        (section) => section.group?.id ?? null,
+        (section) => this.#section(section, expected),
+      )}
     </section>`;
   }
 }
