@@ -4943,10 +4943,11 @@ it.each(["100%", "130%"])("shows each Spanish filter's whole choice at %s", asyn
     for (const value of values) {
       const choice = value.textContent!.trim();
       expect(value.scrollWidth, choice).toBeLessThanOrEqual(value.clientWidth);
+      expect(value.scrollHeight, choice).toBeLessThanOrEqual(value.clientHeight);
       const textBounds = value.getBoundingClientRect();
-      const fieldBounds = value.parentElement!.getBoundingClientRect();
-      expect(textBounds.top, choice).toBeGreaterThanOrEqual(fieldBounds.top);
-      expect(textBounds.bottom, choice).toBeLessThanOrEqual(fieldBounds.bottom);
+      const triggerBounds = value.closest(".trigger")!.getBoundingClientRect();
+      expect(textBounds.top, choice).toBeGreaterThanOrEqual(triggerBounds.top);
+      expect(textBounds.bottom, choice).toBeLessThanOrEqual(triggerBounds.bottom);
     }
   } finally {
     document.adoptedStyleSheets = previousSheets;
