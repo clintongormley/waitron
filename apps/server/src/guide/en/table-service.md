@@ -594,10 +594,10 @@ cost. Tap the product to choose one and see its price.
 
 ## Set menus {#set-menus}
 
-Add the dishes the guests order, from any folder. The bill groups them into the cheapest set
-menus it finds each time the order changes, and charges a dish that fits none à la carte. A set menu's
-folder shows which dishes it includes and which cost extra: open it from the grid, or type its
-name in **Search** and tap the result.
+Add the dishes the guests order, from any folder. When you send dishes at a table, the bill
+groups them into the cheapest set menus it finds. It charges any dish outside those menus à la carte.
+Open a set-menu folder to see the dishes and supplements. Find it in the grid or by name in
+**Search**.
 
 At a table, **Price after Send** means the dish has no price yet. The order total includes any
 priced extras on that dish. Send the dishes to see the full total.

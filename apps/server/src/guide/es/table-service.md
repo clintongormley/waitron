@@ -631,9 +631,9 @@ cuestan las variantes. Toca el producto para elegir una y ver su precio.
 
 ## Menús {#set-menus}
 
-Añade los platos que piden los clientes, desde cualquier carpeta. La cuenta los agrupa en los
-menús más baratos que encuentra cada vez que cambia el pedido, y cobra a la carta un plato que no cabe en
-ninguno. La carpeta de un menú muestra qué platos incluye y cuáles tienen suplemento: ábrela
+Añade los platos que piden los clientes, desde cualquier carpeta. Cuando envías los platos de una mesa,
+la cuenta los agrupa en los menús más baratos que encuentra. Cobra a la carta los platos que quedan
+fuera. La carpeta de un menú muestra qué platos incluye y cuáles tienen suplemento: ábrela
 desde la cuadrícula o escribe su nombre en **Buscar** y pulsa el resultado.
 
 En una mesa, **Precio al enviar** indica que el plato aún no tiene precio. El total del pedido
