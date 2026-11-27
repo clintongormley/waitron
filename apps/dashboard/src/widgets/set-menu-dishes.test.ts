@@ -60,11 +60,16 @@ it.each([390, 1280])("aligns Surcharge across course tables at %ipx", async (wid
   const before = { width: window.innerWidth, height: window.innerHeight };
   await page.viewport(width, 844);
   onTestFinished(() => page.viewport(before.width, before.height));
+  const unbrokenName = "ExtraLongOvenRoastedPotatoAndHerbSpecial";
   await mountDishes({
     ...details,
-    dishes: [soup, { ...bravas, name: "Crispy potatoes with smoked paprika and garlic" }, hake],
+    dishes: [
+      soup,
+      { ...bravas, name: "Crispy potatoes with smoked paprika and garlic" },
+      { ...hake, name: unbrokenName },
+    ],
   });
-  await expect.element(page.getByRole("link", { name: "Edit Hake" })).toBeVisible();
+  await expect.element(page.getByRole("link", { name: `Edit ${unbrokenName}` })).toBeVisible();
   await document.fonts.ready;
 
   const starts = page
