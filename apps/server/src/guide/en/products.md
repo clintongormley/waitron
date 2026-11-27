@@ -417,7 +417,8 @@ Open **Customer menu** and choose **Phone** or **Computer** to check the publish
 or set menu by name, or choose a section to jump to it. Find the allergen key below the dishes.
 Open a dish to check its variants, options and extras. Check the dish's **Allergens** and
 **Dietary declarations**. Check an extra's allergen icons beside its name and look for that
-extra in **Allergens**. Open a set menu to see the courses, choices and any supplements.
+extra in **Allergens**. Look below each variant or set-menu choice for its declarations.
+Open a set menu to see the courses, choices and any supplements.
 Choose **Menu** to pick up where you left off.
 Customers cannot open this page yet. To review or publish your changes, switch to
 **Preview**.

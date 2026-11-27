@@ -451,6 +451,7 @@ encontrar un plato o menú por su nombre, o elige una sección para ir a ella. D
 verás la leyenda de alérgenos. Abre un plato para comprobar sus variantes, opciones y extras.
 Consulta **Alérgenos** y **Declaraciones dietéticas** para el plato. Los iconos de alérgenos de
 cada extra aparecen junto a su nombre. También puedes consultar ese extra en **Alérgenos**.
+Consulta las declaraciones de cada variante u opción de un menú debajo de su nombre.
 Abre un menú para ver los órdenes de plato, las opciones y los suplementos.
 Elige **Carta** para seguir donde estabas. Los clientes aún no pueden abrir esta
 página. Para revisar o publicar tus cambios, abre **Vista previa**.

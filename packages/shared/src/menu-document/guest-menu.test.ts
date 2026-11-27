@@ -404,7 +404,7 @@ it("keeps separately priced extras and option names with their own declarations"
           name: "Bread ES (Staff size)",
           price: "1.50",
           portion: "2.000",
-          unit: "Each",
+          unit: "ea",
           allergens: { nuts: { kinds: ["almonds"] } },
           dietary: ["vegetarian"],
         },

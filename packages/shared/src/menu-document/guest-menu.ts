@@ -164,10 +164,7 @@ export function publicGuestMenu(
                           : `${parent} (${text(p.variantCustomerName, p.variantName)})`,
                       price: extra.price,
                       portion: extra.portion,
-                      unit:
-                        extra.unit.id === eachUnitId
-                          ? ""
-                          : text(extra.unit.name, extra.unit.staffName),
+                      unit: unit(extra.unit),
                       ...declarations(extra.addAllergens, extra.suitableFor),
                     };
                   }),

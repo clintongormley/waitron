@@ -92,14 +92,20 @@ function declarationLabels({ allergens, dietary }: GuestDeclarations, words: Wor
 
 function detailDeclarations(
   heading: string,
-  labels: { icon: string; label: string }[],
+  labels: { icon: string; label: string; category?: string }[],
   language: string,
 ) {
   return labels.length
     ? html`<div lang=${language}>
         <h3>${heading}</h3>
         <div class="declarations">
-          ${labels.map(({ icon, label }) => html`<span><wt-icon name=${icon} aria-hidden="true"></wt-icon>${label}</span>`)}
+          ${labels.map(
+            ({ icon: glyph, label, category }) =>
+              html`<span>
+                ${category ? icon(glyph, category) : html`<wt-icon name=${glyph} aria-hidden="true"></wt-icon>`}
+                ${label}
+              </span>`,
+          )}
         </div>
       </div>`
     : nothing;
@@ -140,7 +146,7 @@ function choiceRow(
       ${
         showAllergenIcons && allergens.length
           ? html`<span class="declarations" lang=${words.language}>
-              ${allergens.map(({ icon: name, label }) => icon(name, label))}
+              ${allergens.map(({ icon: glyph, label }) => icon(glyph, label))}
             </span>`
           : nothing
       }
@@ -182,7 +188,7 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
   const quantity = new Intl.NumberFormat(language, { maximumFractionDigits: 3 });
   const extra = (value: GuestChoice & { portion: string }) => {
     const amount = Number(value.portion);
-    const size = amount !== 1 && value.unit ? ` · ${quantity.format(amount)} ${value.unit}` : "";
+    const size = value.unit ? ` · ${quantity.format(amount)} ${value.unit}` : "";
     return choiceRow(`${value.name}${size}`, money(value.price), value, words, true);
   };
   const { allergens, diets } = declarationLabels(member, words);
@@ -191,7 +197,8 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
       ? group.items.flatMap(({ name, allergens }) =>
           allergenLabels(allergens, words).map(({ code, kinds, label }) => ({
             icon: `allergen-${code}`,
-            label: `${name}: ${kinds ?? label}`,
+            label: `${name}: ${kinds || label}`,
+            category: kinds ? words.text[code] : undefined,
           })),
         )
       : [],
