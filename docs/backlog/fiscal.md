@@ -924,8 +924,9 @@ at its dish's takeaway rate, and a takeaway set menu is no longer refused becaus
 24 November; piece B's first pull request, [plan](../superpowers/plans/2026-11-24-vat-rates-b.md)).
 The adviser is asked to confirm it ([question 4](../compliance/2026-11-19-adviser-meeting.md)). Left:
 
-- **Piece B, the rest** ([plan](../superpowers/plans/2026-11-24-vat-rates-b.md), PRs B4–B5;
-  since B3 nothing decides anything by a label, and the schema fills the columns with "reduced"): the
+- **Piece B, the rest** ([plan](../superpowers/plans/2026-11-24-vat-rates-b.md), PR B5;
+  since B3 nothing decides anything by a label, the schema fills the columns with "reduced", and
+  since B4 most test fixtures no longer set them): the
   old VAT class labels go: the `vat_class` and `takeaway_vat_class` columns on products and order
   lines, set menus' leftover VAT class columns, their checks, the
   hidden `defaultProductVatClass` setting and the shared class table's last readers.
