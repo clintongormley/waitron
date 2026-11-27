@@ -1,3 +1,4 @@
+import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi } from "../api/client.js";
 import type { PaymentProviderRow, ReaderRow } from "../api/payments-api.js";
@@ -226,4 +227,125 @@ it("keeps Add unavailable while the provider read is pending or failed, without 
   expect(add()?.disabled).toBe(true);
   expect(root.querySelector("[data-test=configure-providers]")).toBeNull();
   expect(client.availableReaders).not.toHaveBeenCalled();
+});
+
+it.each([
+  { state: "connected", note: false },
+  { state: "not_connected", note: true },
+] as const)(
+  "places other card machines after the settings and tells them SumUp is $state",
+  async ({ state, note }) => {
+    const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+      api: api([reader], {
+        listPaymentProviders: vi
+          .fn()
+          .mockResolvedValue([{ providerId: "sumup", state, canUnpair: false }]),
+        getOtherCardMachines: vi.fn().mockResolvedValue({
+          otherCardMachines: [{ id: "m1", name: "Terrace", paysInto: "connected_account" }],
+          revision: 0,
+        }),
+      }),
+      panels: [],
+    });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("dashboard-payments-settings")).not.toBeNull(),
+    );
+    const machines = el.shadowRoot!.querySelector("dashboard-other-card-machines")!;
+    expect(el.shadowRoot!.querySelector("dashboard-payments-settings")!.nextElementSibling).toBe(
+      machines,
+    );
+    await vi.waitFor(() => expect(machines.sumUpConnected).toBe(!note));
+    await vi.waitFor(() => expect(machines.shadowRoot!.querySelector("wt-input")).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(machines.shadowRoot!.textContent!.includes("SumUp is not connected")).toBe(note),
+    );
+  },
+);
+
+it("says nothing about SumUp's connection while the provider read is pending or failed", async () => {
+  let reject!: (reason: unknown) => void;
+  const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+    api: api([reader], {
+      listPaymentProviders: vi.fn(
+        () =>
+          new Promise<PaymentProviderRow[]>((_resolve, no) => {
+            reject = no;
+          }),
+      ),
+      getOtherCardMachines: vi.fn().mockResolvedValue({
+        otherCardMachines: [{ id: "m1", name: "Terrace", paysInto: "connected_account" }],
+        revision: 0,
+      }),
+    }),
+    panels: [],
+  });
+  const root = el.shadowRoot!;
+  await vi.waitFor(() =>
+    expect(
+      root.querySelector("dashboard-other-card-machines")?.shadowRoot?.querySelector("wt-input"),
+    ).not.toBeNull(),
+  );
+  const machines = root.querySelector("dashboard-other-card-machines")!;
+  await machines.updateComplete;
+  expect(machines.shadowRoot!.textContent).not.toContain("SumUp is not connected");
+  reject({ code: "server.internal" });
+  await vi.waitFor(() => expect(root.querySelector("[role=alert]")).not.toBeNull());
+  await machines.updateComplete;
+  expect(machines.shadowRoot!.textContent).not.toContain("SumUp is not connected");
+});
+
+it("drops the SumUp note when a later provider read fails", async () => {
+  const liveData = new LiveData();
+  const listPaymentProviders = vi
+    .fn()
+    .mockResolvedValueOnce([{ providerId: "sumup", state: "not_connected", canUnpair: false }])
+    .mockRejectedValue({ code: "server.internal" });
+  const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+    api: api([reader], {
+      liveData,
+      listPaymentProviders,
+      getOtherCardMachines: vi.fn().mockResolvedValue({
+        otherCardMachines: [{ id: "m1", name: "Terrace", paysInto: "connected_account" }],
+        revision: 0,
+      }),
+    } as Partial<DashboardApi>),
+    panels: [],
+  });
+  const root = el.shadowRoot!;
+  const note = () =>
+    root.querySelector("dashboard-other-card-machines")?.shadowRoot?.textContent ?? "";
+  await vi.waitFor(() => expect(note()).toContain("SumUp is not connected"));
+  liveData.refresh();
+  await vi.waitFor(() => expect(listPaymentProviders).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(root.querySelector("[role=alert]")).not.toBeNull());
+  await vi.waitFor(() => expect(note()).not.toContain("SumUp is not connected"));
+});
+
+it("leaves the same section's gap between each heading and what is drawn above it", async () => {
+  const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+    api: api([reader], {
+      getOtherCardMachines: vi.fn().mockResolvedValue({ otherCardMachines: [], revision: 0 }),
+    }),
+    panels: [],
+  });
+  const root = el.shadowRoot!;
+  const inside = (host: string, selector: string) =>
+    root.querySelector(host)?.shadowRoot?.querySelector(selector) ?? null;
+  await vi.waitFor(() => {
+    expect(inside("dashboard-payments-settings", "wt-form-actions wt-button")).not.toBeNull();
+    expect(inside("dashboard-other-card-machines", "h2")).not.toBeNull();
+  });
+  const readers = root.querySelector("[data-test=readers-section]")!.getBoundingClientRect();
+  const settingsHeading = inside("dashboard-payments-settings", "h2")!.getBoundingClientRect();
+  const tipsSave = inside(
+    "dashboard-payments-settings",
+    "wt-form-actions wt-button",
+  )!.getBoundingClientRect();
+  const machinesHeading = inside("dashboard-other-card-machines", "h2")!.getBoundingClientRect();
+  const sectionGap = Number.parseFloat(
+    getComputedStyle(el).getPropertyValue("--wt-space-5").trim() || "NaN",
+  );
+  expect(sectionGap).toBeGreaterThan(0);
+  expect(settingsHeading.top - readers.bottom).toBe(sectionGap);
+  expect(machinesHeading.top - tipsSave.bottom).toBe(sectionGap);
 });

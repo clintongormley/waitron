@@ -14,6 +14,22 @@ export interface PaymentSettingsView extends PaymentSettingsEdit {
   testProvidersAvailable: boolean;
 }
 
+export interface OtherCardMachine {
+  id: string;
+  name: string;
+  paysInto: "connected_account" | "other";
+}
+
+export interface OtherCardMachinesView {
+  otherCardMachines: OtherCardMachine[];
+  revision: number;
+}
+
+export interface OtherCardMachinesEdit {
+  otherCardMachines: (Omit<OtherCardMachine, "id"> & { id?: string })[];
+  revision: number;
+}
+
 export interface PaymentProviderRow {
   providerId: string;
   state: "connected" | "not_connected";
@@ -157,6 +173,12 @@ export class PaymentsApi extends ServersApi {
   }
   savePaymentSettings(edit: PaymentSettingsEdit): Promise<PaymentSettingsView> {
     return this.#request("/management-api/payments/settings", "PUT", edit);
+  }
+  getOtherCardMachines(): Promise<OtherCardMachinesView> {
+    return this.#request("/management-api/payments/other-card-machines", "GET");
+  }
+  saveOtherCardMachines(edit: OtherCardMachinesEdit): Promise<OtherCardMachinesView> {
+    return this.#request("/management-api/payments/other-card-machines", "PUT", edit);
   }
   listPaymentProviders(): Promise<PaymentProviderRow[]> {
     return this.#request<PaymentProviderRow[]>("/management-api/payments/providers", "GET");

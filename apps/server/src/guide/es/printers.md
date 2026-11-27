@@ -168,3 +168,5 @@ Abre **Lectores de tarjetas** en **Hardware**, busca el lector y elige **Elimina
 Cuando vuelvas a añadir un lector eliminado, si se reconoce el registro, verás el nombre y los ajustes de impresión guardados: elige **Añadir**. Marca los perfiles que deben usarlo y elige **Guardar perfiles**. En caso contrario, vincúlalo siguiendo los pasos del proveedor.
 
 Elige **Desvincular de …** para quitar solo su registro en el proveedor y conservarlo en la lista de Waitron. Tendrás que añadirlo o vincularlo de nuevo antes de usarlo.
+
+En **Otros datáfonos**, en la misma página, añade cada datáfono con el que cobras y al que Waitron no está conectado, con su nombre y adónde van sus pagos, y elige **Guardar**.

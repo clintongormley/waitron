@@ -156,3 +156,5 @@ Open **Card readers** in **Hardware**, find the reader and choose **Delete** in 
 When you add a deleted reader again, a recognised registration shows its saved name and print settings: choose **Add**. Tick the profiles that should use it and choose **Save profiles**. Otherwise, pair it using the provider's normal steps.
 
 Choose **Unpair from …** to remove only its provider registration while keeping it listed in Waitron. You will need to add or pair it again before using it.
+
+Under **Other card machines** on the same page, add each card machine you take payments on that Waitron is not connected to, with its name and where its payments go, then choose **Save**.

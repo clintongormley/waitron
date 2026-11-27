@@ -143,6 +143,7 @@ export const QUERY_DEPENDENCIES = {
   // The route reads `venue_credentials`, which no module declares as a live resource.
   listPaymentProviders: [],
   getPaymentSettings: ["settings.payments"],
+  getOtherCardMachines: ["settings.payments"],
   // Scheduled runs have no live resource; the query polls passively.
   getBackupAudit: [],
   listModules: ["settings.payments", "settings.modules"],
