@@ -280,7 +280,6 @@ export class TillDrawerCash extends LitElement {
             </div>
             <wt-input
               name="reason"
-              variant="outlined"
               required
               .label=${t("drawer_entry.reason")}
               .value=${this.draft.reason}

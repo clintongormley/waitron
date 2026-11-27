@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { mountEquipmentApp, signIn, till } from "../../test/equipment-app.js";
 import { TillApi } from "../api/client.js";
 import { es } from "../i18n/strings.js";
@@ -80,7 +80,7 @@ it.each([
         .shadowRoot!.querySelector("till-shell")
         ?.shadowRoot?.querySelector("[data-test=more-menu]");
     await vi.waitFor(() => expect(menu()?.querySelector(".drawer-cash")).toBeTruthy());
-    await userEvent.click(menu()!.shadowRoot!.querySelector("button")!);
+    await page.getByRole("button", { name: es["shell.more"], exact: true }).click();
     await userEvent.click(menu()!.querySelector<HTMLElement>(".drawer-cash")!);
     const dialog = el.shadowRoot!.querySelector("till-drawer-cash")!;
     const bar = dialog.shadowRoot!.querySelector("wt-top-bar")!;
@@ -94,6 +94,10 @@ it.each([
     expect(firstPadKey?.textContent?.trim()).toBe("1");
     await enterAmount(dialog, "12.50");
     await userEvent.fill(input(dialog, "reason"), "Paid supplier");
+    const reasonLabel = input(dialog, "reason").getRootNode() as ShadowRoot;
+    expect(reasonLabel.querySelector("label")?.textContent ?? "").toContain(
+      es["drawer_entry.reason"],
+    );
     const saveLabel = action(dialog, "save").textContent!;
     expect(saveLabel).toContain("12,50");
     expect(saveLabel.includes(es["drawer_entry.opens_drawer"])).toBe(opensDrawer);
