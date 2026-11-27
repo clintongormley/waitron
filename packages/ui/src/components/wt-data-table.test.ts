@@ -839,6 +839,26 @@ test.each(["list", "tree"])("washes each ticked %s row through its pinned cell",
   expect(paint(selected)).toEqual(paint(other));
 });
 
+test("a ticked row that opens still responds to pointer hover across its pinned cell", async () => {
+  const el = await table({
+    selectable: true,
+    selected: ["a"],
+    rowClick: () => undefined,
+    columns: [columns[0]!, { key: "actions", label: "Actions", cell: () => "Edit", pinned: "end" }],
+  });
+  el.style.setProperty("--wt-color-surface-lifted", "rgb(11, 33, 55)");
+  const tick = el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-a"]')!;
+  const row = tick.closest("tr")!;
+  const pinned = row.querySelector('td[data-pinned="end"]')!;
+  const resting = getComputedStyle(pinned).backgroundColor;
+  onTestFinished(() => commands.parkPointer());
+  await userEvent.hover(row);
+  expect(getComputedStyle(pinned).backgroundColor).toBe("rgb(11, 33, 55)");
+  await commands.parkPointer();
+  expect(getComputedStyle(pinned).backgroundColor).toBe(resting);
+  expect(tick.checked).toBe(true);
+});
+
 test("tree mode nests children under parents in order", async () => {
   const el = await treeTable();
   const keys = [...el.shadowRoot!.querySelectorAll("tbody tr")].map((r) =>

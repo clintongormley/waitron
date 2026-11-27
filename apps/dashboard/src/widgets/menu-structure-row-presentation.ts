@@ -4,6 +4,8 @@ import { countOf } from "./count-text.js";
 export const structureRowStyles = css`
   wt-data-table {
     --tree-arrow-width: var(--wt-space-5);
+    --structure-indent: calc(var(--wt-space-4) + var(--wt-space-1) / 2);
+    --structure-arrow-offset: var(--wt-space-4);
     --wt-table-cell-padding-inline: var(--wt-space-1);
     --structure-media-size: calc(var(--wt-space-6) + var(--wt-space-1));
     --structure-grip-width: calc(var(--wt-space-6) - var(--wt-field-line-width-active));
@@ -11,6 +13,8 @@ export const structureRowStyles = css`
   }
   wt-data-table[narrow] {
     --tree-arrow-width: var(--wt-space-4);
+    --structure-indent: var(--wt-space-3);
+    --structure-arrow-offset: var(--wt-space-2);
     --structure-media-size: calc(var(--wt-space-6) - var(--wt-field-line-width-active));
     --structure-grip-width: calc(var(--wt-space-5) + var(--wt-field-line-width-active));
     --structure-media-gap: var(--wt-space-1);
@@ -21,7 +25,7 @@ export const structureRowStyles = css`
   }
   wt-data-table::part(tree-cell) {
     align-items: center;
-    padding-inline-start: calc(var(--tree-depth, 0) * var(--wt-space-1));
+    padding-inline-start: calc(var(--tree-depth, 0) * var(--structure-indent));
   }
   wt-data-table::part(structure-cell) {
     padding-block: calc(var(--wt-space-1) / 2);
@@ -38,13 +42,26 @@ export const structureRowStyles = css`
   }
   wt-data-table::part(tree-indent) {
     justify-content: start;
+    position: relative;
+    inset-inline-start: calc(-1 * var(--structure-arrow-offset));
+  }
+  wt-data-table::part(structure-root-toggle) {
+    inline-size: var(--wt-tap-min);
+    margin-inline-end: calc(var(--tree-arrow-width) - var(--wt-tap-min));
   }
   :host([reordering]) wt-data-table::part(structure-root-toggle),
   wt-data-table[data-selecting]::part(structure-root-toggle) {
     position: relative;
-    inline-size: var(--wt-tap-min);
-    margin-inline-end: calc(var(--tree-arrow-width) - var(--wt-tap-min));
     inset-inline-start: calc(-1 * (var(--wt-tap-min) + var(--wt-space-1)));
+  }
+  wt-data-table::part(structure-root-toggle):focus-visible {
+    outline-offset: calc(-1 * var(--wt-focus-offset));
+  }
+  wt-data-table[data-selecting]::part(structure-root-toggle) {
+    padding-inline-end: var(--wt-space-3);
+  }
+  wt-data-table[data-selecting]:not([narrow])::part(structure-root-toggle) {
+    inset-inline-start: calc(-1 * (var(--wt-tap-min) + var(--wt-space-1) + var(--wt-space-5)));
   }
   wt-data-table::part(tree-heading),
   wt-data-table[narrow]::part(tree-heading) {

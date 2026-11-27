@@ -2227,7 +2227,7 @@ selection checkboxes, outside tree indentation. Name that column with `rowContro
 Products lines the photo or colour square, visible columns and row controls up with the first
 line of the name. Structure uses `rowControlsAlign="center"` for its name-and-count stacks.
 The top-level section arrow sits beside its grip. The menu's own arrow sits over its empty grip slot.
-Counts sit beside the menu and section names and move below them when the table narrows.
+Each level steps in 18 px on desktop and 12 px at phone width. Counts sit beside the menu and section names and move below them when the table narrows.
 In Select mode, the header's native
 checkbox and each row's checkbox line up. Grip and checkbox sit side by side in the wide Products
 Tree and stack at phone width. Controls without selection keep their horizontal centering when `rowControlsAlign="center"`.
@@ -2477,7 +2477,7 @@ one card's actions.
 
 When you need to act on several rows together, give the list a **Select** button. Show
 checkboxes only while selecting, with an action bar for the selected count, actions and
-**Cancel**. The table gives ticked rows a teal wash across every cell, including the pinned
+**Cancel**. At rest the table gives ticked rows a teal wash across every cell, including the pinned
 actions cell. Clear the selection when you navigate. Most lists also clear it on search or filter
 changes. Products and Menus Structure retain eligible ticks across those changes so you can gather
 rows from several searches; their count includes hidden ticks, and Select all acts only on rendered
@@ -5928,7 +5928,8 @@ focus the row. Removed rows without a destination read as text. Set-menu names l
 editor while the set menu exists, and Home page changes link to the Home page tab.
 
 Draw the menu as a read-only Structure tree with prices, variant rows, set menus and 36 px photos.
-Show **Price clash** in the price slot for a disputed price. An icon fills an empty photo slot. Keep the content language picker (including **Internal names**)
+Show **Price clash** in the price slot for a disputed price. For an empty photo slot, use the same
+neutral fill and icon as Structure. Keep the content language picker (including **Internal names**)
 and **Expand all** above the tree. Draw the actual translation's language tag and name a missing
 requested language beside its fallback. A replacement preview resets the tree's expansion and
 highlight. Changing the content language makes no request.

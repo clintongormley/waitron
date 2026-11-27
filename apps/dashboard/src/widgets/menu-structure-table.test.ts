@@ -678,6 +678,19 @@ it("keeps an included menu's contents in place and offers Open, Edit and Remove 
   expect(edits).toEqual([]);
 });
 
+it("draws variants inside an included menu in regular ink", async () => {
+  const coffee = { ...burgerWithVariants(), id: "p-lager", name: "Lager" };
+  const el = await mount({ nodes: [wines()], products: [coffee] });
+  await toggle(el, "included-wine");
+  await toggle(el, "included-wine/wine-lager");
+  const dish = row(el, "included-wine/wine-lager")!.querySelector('[data-test="name"]')!;
+  const variant = row(el, "included-wine/wine-lager/v-regular")!.querySelector(
+    '[data-test="name"]',
+  )!;
+  expect(getComputedStyle(variant).color).toBe(getComputedStyle(table(el)).color);
+  expect(getComputedStyle(dish).color).not.toBe(getComputedStyle(variant).color);
+});
+
 it("offers Remove for a set menu and removes that placement", async () => {
   const el = await mount({
     menus: [{ id: "daily", name: "Daily menu", active: true, kind: "set_menu", setPrice: "14.00" }],
@@ -1106,12 +1119,13 @@ it.each(
     try {
       await page.viewport(width, 844);
       const el = await mountDeep({ reordering, menuColor });
+      await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(width === 390));
       const rows = DEEP_ROWS.map((key) => ({ key, ...pieces(el, key) }));
       expect(row(el, "root")!.getAttribute("aria-level")).toBe("1");
       // The menu's own row is level 1, and the same step separates it from its members.
       const root = rootNameLeft(el);
       const step = rows.find(({ level }) => level === 3)!.name.left - rows[0]!.name.left;
-      expect(step).toBeGreaterThan(0);
+      expect(step).toBeCloseTo(width === 390 ? 12 : 18, 0);
       for (const { key, level, name } of rows)
         expect(name.left, key).toBeCloseTo(root + (level - 1) * step, 0);
       for (const current of rows) {
@@ -1147,6 +1161,21 @@ it("puts the menu arrow over the grip column and the section arrow immediately a
   expect(arrow("root")).toBeCloseTo(handle, -1);
   expect(arrow("m-drinks") - handle).toBeGreaterThan(15);
   expect(arrow("m-drinks") - handle).toBeLessThanOrEqual(35);
+});
+
+it("keeps the menu arrow's keyboard ring inside the table on desktop", async () => {
+  const el = await mountDeep();
+  const toggle = row(el, "root")!.querySelector<HTMLButtonElement>(".tree-toggle")!;
+  await userEvent.keyboard("{Shift}");
+  toggle.focus();
+  const style = getComputedStyle(toggle);
+  expect(style.outlineStyle).toBe("solid");
+  const ringLeft =
+    toggle.getBoundingClientRect().left -
+    parseFloat(style.outlineWidth) -
+    parseFloat(style.outlineOffset);
+  const scrollLeft = table(el).shadowRoot!.querySelector(".scroll")!.getBoundingClientRect().left;
+  expect(ringLeft).toBeGreaterThanOrEqual(scrollLeft);
 });
 
 it.each([390, 1280])("shows an owned section count with its name at %i px", async (width) => {
@@ -2612,7 +2641,9 @@ describe("colour swatches", () => {
     for (const key of ["m-burger", "m-drinks"]) {
       const chip = chipOf(el, key);
       expect(getComputedStyle(chip).position, key).toBe("static");
-      expect(getComputedStyle(chip).backgroundColor, key).toBe("rgba(0, 0, 0, 0)");
+      expect(getComputedStyle(chip).backgroundColor, key).toBe(
+        key === "m-burger" ? "rgba(0, 0, 0, 0)" : "rgb(240, 241, 244)",
+      );
       expect(chip.hasAttribute("style"), key).toBe(false);
       expect(chip.part.contains("color-swatch"), key).toBe(true);
       expect(chip.part.contains("empty"), key).toBe(true);
@@ -2646,9 +2677,9 @@ describe("colour swatches", () => {
         const el = await mountColoured({ reordering, nodes: [...paintedLunch(), red] });
         await toggle(el, "included-wine");
         for (const [key, part, icon] of [
-          ["m-drinks", "swatch-button", "folder"],
+          ["m-drinks", "swatch-button", "folder-outline"],
           ["included-wine", "swatch-box", "section-menu"],
-          ["included-wine/wine-red", "swatch-box", "folder"],
+          ["included-wine/wine-red", "swatch-box", "folder-outline"],
         ] as const) {
           const swatch = swatchOf(el, key);
           expect(swatch.getAttribute("part"), key).toBe(part);
@@ -2719,7 +2750,7 @@ describe("colour swatches", () => {
     const sent = sentEvents(el);
     expect(getComputedStyle(chipOf(el, "m-drinks")).backgroundColor).toBe("rgb(170, 51, 0)");
     expect(chipOf(el, "m-fav").part.contains("empty")).toBe(true);
-    expect(chipOf(el, "m-fav").querySelector('wt-icon[name="folder"]')).not.toBeNull();
+    expect(chipOf(el, "m-fav").querySelector('wt-icon[name="folder-outline"]')).not.toBeNull();
     const swatch = swatchOf(el, "m-drinks");
     expect(swatch.tagName).toBe("BUTTON");
     expect(swatch.getAttribute("aria-label")).toBe(
@@ -2761,7 +2792,7 @@ describe("colour swatches", () => {
     await toggle(el, "included-wine/wine-red");
     const sent = sentEvents(el);
     for (const [key, colour] of [
-      ["included-wine", "rgba(0, 0, 0, 0)"],
+      ["included-wine", "rgb(240, 241, 244)"],
       ["included-wine/wine-red", "rgb(122, 31, 61)"],
       ["included-wine/wine-red/wine-rioja", "rgb(74, 42, 107)"],
     ] as const) {

@@ -416,8 +416,8 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
       "Soup Starters → el nivel principal y Mains › Hot",
       "Nivel principal: orden cambiado",
       "Burger 12,00 € → 13,00 € cambio en Productos, también en Dinner Menu y Terrace Menu",
-      "Han cambiado los accesos directos de la página de inicio del dispositivo",
-      "Ha cambiado lo que se muestra primero en la página de inicio del dispositivo",
+      "Han cambiado los accesos directos de la pantalla inicial",
+      "Ha cambiado lo que se muestra primero en la pantalla inicial",
     ].sort(),
   );
 });
@@ -900,7 +900,7 @@ it.each(["en-GB", "es-ES"])(
     const expected =
       locale === "en-GB"
         ? "3 shortcuts on Evening's Device Home Page point at things no longer in this menu. They stay as empty spaces until you remove them."
-        : "3 accesos directos de la página de inicio del dispositivo de Evening apuntan a cosas que ya no están en esta carta. Quedan como espacios vacíos hasta que los quites.";
+        : "3 accesos directos de la pantalla inicial de Evening apuntan a cosas que ya no están en esta carta. Quedan como espacios vacíos hasta que los quites.";
     expect(items(el, "warnings")).toHaveLength(1);
     expect(items(el, "warnings")[0]).toBe(expected);
     const asked = capture(el, "wt-menu-publish");

@@ -360,7 +360,7 @@ En **Estructura**, abre las acciones de un producto y elige **Editar producto**.
 
 En **Estructura**, abre las acciones de la carta o de una sección para añadir platos o secciones.
 Arrastra una fila por su control para moverla. Para mover o quitar varias filas a la vez, elige
-**Seleccionar** y márcalas. Las filas marcadas se sombrean. Selecciona una sección y copia la
+**Seleccionar** y márcalas. Selecciona una sección y copia la
 dirección para volver a abrirla.
 
 Escribe un precio junto a un plato para fijarlo en esta carta. Despliega un plato con variantes
@@ -401,7 +401,7 @@ En **Vista previa**, revisa dónde lo has puesto, los cambios y cualquier proble
 corregir. Publica la carta completa para enviar la versión actual a las cajas. Cada cambio
 posterior llega a las cajas cuando vuelves a publicar la carta completa.
 
-## Configura el inicio del dispositivo {#menu-home}
+## Configura la pantalla inicial {#menu-home}
 
 Abre **Pantalla inicial** en la carta que quieres cambiar. Elige **Añadir accesos directos**
 y selecciona los productos y las secciones que el personal necesita tener a mano. Para mover un
@@ -426,7 +426,7 @@ Nombre.
 Las cartas que ya comparten nombre lo conservan hasta que renombres una.
 
 La copia empieza sin publicar, con las secciones de trabajo, los precios y los ajustes de la
-inicio del dispositivo de la carta original. Las versiones publicadas y las publicaciones programadas
+pantalla inicial de la carta original. Las versiones publicadas y las publicaciones programadas
 se quedan en la original. Editar las secciones propias de la copia deja la original como estaba;
 las cartas incluidas siguen apuntando a las mismas cartas compartidas.
 

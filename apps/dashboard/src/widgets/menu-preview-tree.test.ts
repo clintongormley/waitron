@@ -92,6 +92,24 @@ async function tree(el: MenuPreviewPanel) {
   await node!.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
   return node!;
 }
+it("draws cutlery on a product with no photo", async () => {
+  const el = await mount();
+  const view = await tree(el);
+  const table = view.shadowRoot!.querySelector("wt-data-table")!;
+  table.setExpanded("outer", true);
+  await table.updateComplete;
+  table.setExpanded("outer/inner", true);
+  await table.updateComplete;
+  const row = table.shadowRoot!.querySelector('[data-row-key="outer/inner/mi"]')!;
+  const frame = row.querySelector('[part~="thumb-placeholder"]')!;
+  expect(frame.querySelector("wt-icon")!.getAttribute("name")).toBe("cutlery");
+  const section = table.shadowRoot!.querySelector('[data-row-key="outer/inner"]')!;
+  expect(section.querySelector('[part~="media-placeholder-icon"]')!.getAttribute("name")).toBe(
+    "folder-outline",
+  );
+  expect(getComputedStyle(frame).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+});
+
 function rows(node: MenuDocumentTree) {
   return node.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
 }
@@ -390,7 +408,8 @@ it("places every change kind in its named group and keeps the groups in working 
   const groups = [...el.shadowRoot!.querySelectorAll("[data-group]")];
   const order = el.shadowRoot!.querySelector('[data-change-row="order"]')!;
   expect(order.textContent?.trim()).toBe("Mains reordered");
-  expect(getComputedStyle(order.parentElement!).listStyleType).toBe("disc");
+  expect(order.parentElement!.getAttribute("role")).toBe("list");
+  expect(getComputedStyle(order.parentElement!).listStyleType).toBe("none");
   expect(
     groups.map((group) => [
       group.querySelector("h3")!.textContent,
@@ -434,7 +453,7 @@ it.each(["light", "dark"] as const)(
   },
 );
 
-it("keeps the tree's swatch-size image slot visible beside changes in a desktop dashboard column", async () => {
+it("keeps the tree's compact picture slot visible beside changes in a desktop dashboard column", async () => {
   const el = await mount();
   el.style.width = "900px";
   await el.updateComplete;
@@ -453,9 +472,7 @@ it("keeps the tree's swatch-size image slot visible beside changes in a desktop 
   );
   expect(table.hasAttribute("narrow")).toBe(false);
   const frame = table.shadowRoot!.querySelector<HTMLElement>('[part~="product-media"]')!;
-  expect(frame.getBoundingClientRect().width).toBe(
-    parseFloat(getComputedStyle(node).getPropertyValue("--wt-tap-min")),
-  );
+  expect(frame.getBoundingClientRect().width).toBe(36);
 });
 
 it("keeps the content view through a same-menu empty reload", async () => {

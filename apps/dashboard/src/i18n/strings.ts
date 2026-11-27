@@ -8895,10 +8895,9 @@ export const es: Record<StringKey, string> = {
     "{list}: la cantidad máxima de {name} ha cambiado de {from} a {to}",
   "menu_preview.no_limit": "sin límite",
   "menu_preview.section_renamed": "Se ha cambiado el nombre de {name}",
-  "menu_preview.home_shortcuts_changed":
-    "Han cambiado los accesos directos de la página de inicio del dispositivo",
+  "menu_preview.home_shortcuts_changed": "Han cambiado los accesos directos de la pantalla inicial",
   "menu_preview.home_display_changed":
-    "Ha cambiado lo que se muestra primero en la página de inicio del dispositivo",
+    "Ha cambiado lo que se muestra primero en la pantalla inicial",
   "menu_preview.menu_renamed": "Se ha cambiado el nombre de la carta de {from} a {to}",
   "menu_preview.field_names": "nombres",
   "menu_preview.field_name": "nombre",
@@ -8944,9 +8943,9 @@ export const es: Record<StringKey, string> = {
   "menu_preview.document_heading": "La carta tal como se publicará",
   "menu_preview.document_heading_live": "La carta tal como está publicada",
   "menu_preview.shortcut_missing_one":
-    "1 acceso directo de la página de inicio del dispositivo de {menu} apunta a algo que ya no está en esta carta. Queda como un espacio vacío hasta que lo quites.",
+    "1 acceso directo de la pantalla inicial de {menu} apunta a algo que ya no está en esta carta. Queda como un espacio vacío hasta que lo quites.",
   "menu_preview.shortcut_missing":
-    "{count} accesos directos de la página de inicio del dispositivo de {menu} apuntan a cosas que ya no están en esta carta. Quedan como espacios vacíos hasta que los quites.",
+    "{count} accesos directos de la pantalla inicial de {menu} apuntan a cosas que ya no están en esta carta. Quedan como espacios vacíos hasta que los quites.",
   "menu_preview.extra_portion_precision":
     "{product} en {list} tiene una porción guardada de {amount}, que supera los {precision} decimales de la unidad. Revísala antes de publicar.",
   "menu_preview.publish": "Publicar ahora",

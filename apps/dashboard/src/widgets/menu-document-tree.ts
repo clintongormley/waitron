@@ -298,14 +298,14 @@ export class MenuDocumentTree extends LitElement {
           member.color,
           false,
           false,
-          member.includedMenu ? "section-menu" : "folder",
+          member.includedMenu ? "section-menu" : "folder-outline",
         )
       : productMedia({
           key: row.key,
           name: text.text,
           image: variant?.image ?? offer?.image ?? null,
           color: offer?.color ?? null,
-          fallbackIcon: member.kind === "set_menu" ? "section-menu" : "prep-station",
+          fallbackIcon: member.kind === "set_menu" ? "prep-station" : "cutlery",
           editable: false,
           busy: false,
         });

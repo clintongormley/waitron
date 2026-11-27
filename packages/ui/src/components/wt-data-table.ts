@@ -775,14 +775,17 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
 
       /* The raised surface equals the resting one in the light theme, so a row that opens something
-         takes the lifted one. Last, and as specific as the pinned and joined rules, so it wins over
-         both. */
+         takes the lifted one, including in pinned and joined cells. */
       tbody tr.clickable:is(:hover, [data-focus-visible]) td {
         background: var(--wt-color-surface-lifted);
         cursor: pointer;
       }
 
-      tbody tr:has(> td[data-selection-cell] > .row-controls > input:checked) td {
+      tbody
+        tr:not(.clickable:is(:hover, [data-focus-visible])):has(
+          > td[data-selection-cell] > .row-controls > input[part="row-checkbox"]:checked
+        )
+        td {
         background: color-mix(in srgb, var(--wt-color-primary) 12%, var(--wt-color-surface));
       }
 

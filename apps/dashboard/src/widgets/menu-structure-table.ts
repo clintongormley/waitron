@@ -1379,7 +1379,7 @@ export class MenuStructureTable extends LitElement {
       color,
       false,
       false,
-      node.includedMenuId ? "section-menu" : "folder",
+      node.includedMenuId ? "section-menu" : "folder-outline",
     );
     if (!this.#ownedSection(row))
       return html`<span part="swatch-box" data-test=${`color-${key}`} aria-hidden="true"

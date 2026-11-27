@@ -32,7 +32,7 @@ export const productMediaStyles = css`
     margin-inline-end: 0;
     overflow: hidden;
     border-color: var(--product-media-color, var(--wt-color-border));
-    background: var(--product-media-color, transparent);
+    background: var(--product-media-color, var(--menu-tree-media-fallback, transparent));
   }
   wt-data-table::part(media-photo-frame) {
     background: transparent;

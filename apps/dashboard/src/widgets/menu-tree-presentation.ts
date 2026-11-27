@@ -2,6 +2,13 @@ import { css, html, nothing } from "lit";
 
 // Cells belong to wt-data-table's shadow root; only parts cross that boundary.
 export const menuTreeStyles = css`
+  wt-data-table {
+    --menu-tree-media-fallback: var(--wt-color-field-fill);
+  }
+  wt-data-table::part(media-placeholder-icon) {
+    inline-size: var(--wt-font-size-lg);
+    block-size: var(--wt-font-size-lg);
+  }
   wt-data-table::part(folder-cell) {
     display: flex;
     align-items: center;

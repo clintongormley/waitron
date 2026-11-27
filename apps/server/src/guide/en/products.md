@@ -335,7 +335,7 @@ In **Structure**, open a product’s row menu and choose **Edit product**. Choos
 
 In **Structure**, open the menu or section’s row actions to add dishes or sections. Drag a row
 by its handle to move it. To move or remove several at once, choose **Select** and tick their
-rows. The ticked rows are shaded. Choose a section row and copy the address if you need to link back to that section.
+rows. Choose a section row and copy the address if you need to link back to that section.
 
 Enter a price beside a dish to set its price on this menu. Expand a dish with variants to price
 each one. Clear an entered price to use the usual price. A price you change applies everywhere
