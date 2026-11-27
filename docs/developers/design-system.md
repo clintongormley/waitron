@@ -1243,7 +1243,7 @@ case opens a real table.
 
 **Table screen: table actions, bill switcher and bill actions.** Tap the table name in the
 order header to open its bottom sheet at every width. The status pin opens table details.
-The bill picker, Eat here / Take away control and bill actions follow the table controls.
+The bill picker and its actions sit together before the Eat here / Take away control.
 
 - **The switcher** is a `wt-row-actions` drawn whenever the screen has a party. The outlined trigger
   has a 44 px minimum height, a bold bill name, a muted amount or payment status, and a smaller

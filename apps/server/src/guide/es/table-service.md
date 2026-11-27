@@ -143,9 +143,9 @@ la cuenta o al imprimirla con **Imprimir la cuenta** se emite la factura; al reg
 ido sin pagar también se emite y queda pendiente de pago. Una cuenta que sigue abierta al terminar
 el día de trabajo se emite entonces.
 
-**Factura completa** está en la zona de cobro de la cuenta, debajo del pedido, y en el menú **⋮**,
-bajo el nombre de la cuenta; las dos abren el mismo formulario para la cuenta en pantalla. Ninguna
-aparece cuando la cuenta ya está pagada o ya se ha emitido su factura. Convertir una cuenta pagada
+Abre **Factura completa** desde la zona de cobro, debajo del pedido, o desde **⋮** junto al selector
+de cuentas. Ambas opciones abren el mismo formulario para la cuenta en pantalla hasta que cobres
+la cuenta entera o se emita su factura. Convertir una cuenta pagada
 en factura completa sería corregir una factura ya emitida, y Waitron todavía no ofrece esa
 corrección. Cuando ya has elegido un cliente, su nombre y su identificador aparecen debajo de
 **Factura completa**, en la zona de cobro. Al juntar cuentas, o al mover todos los platos a otra
