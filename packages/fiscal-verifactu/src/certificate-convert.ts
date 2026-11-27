@@ -4,6 +4,7 @@ import {
   type CertificateDetails,
   type OpenResult,
 } from "./certificate-file.js";
+import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
 
 export type RewrittenResult =
   { ok: true; details: CertificateDetails; rewritten?: Buffer } | Exclude<OpenResult, { ok: true }>;
@@ -79,12 +80,16 @@ function withMac(pfx: forge.asn1.Asn1, passphrase: string): forge.asn1.Asn1 {
 /**
  * Reads a PKCS#12 file node-forge understands (40-bit RC2 among them) and writes it again with its
  * key under AES-256 and the same passphrase. `readAs` is the passphrase's spelling forge reads the
- * file with. `null` when forge cannot read it, or it holds no RSA key with a certificate for it.
+ * file with. `null` when forge cannot read it, it holds no RSA key with a certificate for it, or
+ * the rewrite is larger than `maxBytes`, which every later reader refuses.
  */
 export function rewriteOldCertificate(
   pfx: Buffer,
   passphrase: string,
-  { readAs = passphrase }: { readAs?: string } = {},
+  {
+    readAs = passphrase,
+    maxBytes = CERTIFICATE_MAX_BYTES,
+  }: { readAs?: string; maxBytes?: number } = {},
 ): Buffer | null {
   let p12: forge.pkcs12.Pkcs12Pfx;
   try {
@@ -111,7 +116,8 @@ export function rewriteOldCertificate(
     forge.util.encodeUtf8(passphrase),
     { algorithm: "aes256", useMac: false },
   );
-  return Buffer.from(asn1.toDer(withMac(written, passphrase)).getBytes(), "binary");
+  const rewritten = Buffer.from(asn1.toDer(withMac(written, passphrase)).getBytes(), "binary");
+  return rewritten.length > maxBytes ? null : rewritten;
 }
 
 /**

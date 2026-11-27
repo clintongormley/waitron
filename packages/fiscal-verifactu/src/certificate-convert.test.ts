@@ -106,6 +106,14 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
     expect(openCertificateFile(rewritten!, RC2_CANDIDATE.passphrase)).toMatchObject({ ok: true });
   });
 
+  it("treats a rewrite over the size limit as not rewritten", () => {
+    const file = bytes(RC2_SIGNED_CANDIDATE);
+    const { passphrase } = RC2_SIGNED_CANDIDATE;
+    const size = rewriteOldCertificate(file, passphrase)!.length;
+    expect(rewriteOldCertificate(file, passphrase, { maxBytes: size })).toHaveLength(size);
+    expect(rewriteOldCertificate(file, passphrase, { maxBytes: size - 1 })).toBeNull();
+  });
+
   it("keeps old_encryption for a file node-forge cannot read either", () => {
     expect(rewriteOldCertificate(bytes(RC4_CANDIDATE), RC4_CANDIDATE.passphrase)).toBeNull();
     expect(openOrRewrite(bytes(RC4_CANDIDATE), RC4_CANDIDATE.passphrase)).toEqual({
