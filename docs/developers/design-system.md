@@ -6132,11 +6132,14 @@ The change applies to every menu using it. Switching a product leaves its varian
 in place. A refusal names the item above the table and restores the switch.
 
 List starts with Name, Category, Price, Available and row actions. Tree starts with Name, Price,
-Available and row actions. On a phone, Category starts in Filters and you can show its column
-in Customise. Open Customise for
-Course, Modifiers, Standalone, Allergens and Dietary info. Off products and variants carry a red
-outlined **Unavailable** label beside their names. A closed category counts each of its direct
-products once when that product or one of its active variants is unavailable.
+Available and row actions. On desktop, the Price heading aligns with the amounts and leaves room
+beside each amount for its unit. The List Category column uses a small colour marker.
+On a phone, List and Tree share a full-width switch above Filters, Select, Search and Customise.
+Category starts in Filters and you can show its column in Customise. Open Customise for Course,
+Modifiers, Standalone, Allergens and Dietary info. Off products and variants show **Unavailable**,
+outlined beside their names on desktop and in plain red under their names on a phone.
+A closed category counts each of its direct products once when that product or one of its active
+variants is unavailable. Only the unavailable count is red.
 
 Delete removes the product or variant from Products and keeps its past sales. Take it out of every
 live or scheduled menu and publish before deleting. The refusal names the menus that still use it,

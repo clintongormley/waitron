@@ -27,6 +27,7 @@ export const productListCategoryStyles = css`
     padding-block-start: var(--products-first-line-inset);
   }
   wt-data-table::part(category-path-swatch) {
+    --products-media-size: var(--wt-font-size-md);
     display: flex;
     align-items: center;
     min-block-size: var(--wt-tap-min);

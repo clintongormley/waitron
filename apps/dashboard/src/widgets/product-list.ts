@@ -63,6 +63,7 @@ import {
   productDetailText,
   productRowLabels,
   productRowStyles,
+  unavailableCount,
   unavailableLabel,
 } from "./product-list-row-parts.js";
 import {
@@ -741,7 +742,7 @@ export class ProductList extends LitElement {
     );
   };
 
-  #contents(categoryId: string | null, filterMatches?: readonly ListRow[]): string {
+  #contents(categoryId: string | null, filterMatches?: readonly ListRow[]) {
     if (filterMatches !== undefined) {
       const key = categoryId === null ? ROOT_KEY : `folder:${categoryId}`;
       const total = this.#productsByBranch(this.#rowList).get(key) ?? 0;
@@ -756,7 +757,7 @@ export class ProductList extends LitElement {
     if (products > 0 || categories === 0) parts.push(countOf("folders.product_count", products));
     const totals = parts.join(", ");
     return categoryId !== null && unavailable && !this.#table()?.isExpanded(`folder:${categoryId}`)
-      ? `${totals} · ${countOf("product.unavailable_count", unavailable)}`
+      ? html`${totals}${unavailableCount(unavailable)}`
       : totals;
   }
 
@@ -838,6 +839,13 @@ export class ProductList extends LitElement {
           const { ancestorOnly, searchRoot } = context;
           const { product, variant } = row;
           const category = variant ? undefined : inlineCategory?.categoryName(row);
+          const inlineName = category && !this.#table()?.isColumnShown("category") ? category : "";
+          const label = unavailableLabel((variant ?? product).available);
+          const name = html`<span
+            ><strong part="product-name">${product.name}</strong>${
+              this.phone ? nothing : label
+            }</span
+          >`;
           const { color, inheritedFrom } =
             product.color === null
               ? this.#inheritedColor(product.primaryCategoryId)
@@ -857,7 +865,9 @@ export class ProductList extends LitElement {
                       this.#send("edit-product", { productId: variant.id, field: "image" }),
                   })}</span
                 ><span part="variant-name"
-                  ><span>${variant.name}${unavailableLabel(variant.available)}</span></span
+                  ><span>${variant.name}${this.phone ? nothing : label}</span>${
+                    this.phone ? label : nothing
+                  }</span
                 ></span
               >`
             : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
@@ -876,19 +886,23 @@ export class ProductList extends LitElement {
                 ><span part="name-stack"
                   >${
                     searchRoot && this.view === "tree"
-                      ? html`<span part="search-name-line"
-                          ><span
-                            ><strong>${product.name}</strong
-                            >${unavailableLabel(product.available)}</span
-                          >${this.#searchPath(row)}</span
-                        >`
-                      : html`<span
-                          ><strong>${product.name}</strong
-                          >${unavailableLabel(product.available)}</span
-                        >`
+                      ? html`<span part="search-name-line">${name}${this.#searchPath(row)}</span>`
+                      : name
                   }${
-                    category && !this.#table()?.isColumnShown("category")
-                      ? html`<span part="phone-category category-path-name">${category}</span>`
+                    this.phone && (inlineName || label !== nothing)
+                      ? html`<span part="phone-row-labels"
+                          >${
+                            inlineName
+                              ? html`<span part="phone-category category-path-name"
+                                  >${inlineName}</span
+                                >`
+                              : nothing
+                          }${
+                            inlineName && label !== nothing
+                              ? html` <span aria-hidden="true">·</span> `
+                              : nothing
+                          }${label}</span
+                        >`
                       : nothing
                   }${productRowLabels(product)}</span
                 >
@@ -1480,6 +1494,7 @@ export class ProductList extends LitElement {
         wrap-to-fit
         ?data-availability-saving=${this.availabilityPending.size > 0}
         ?data-list=${this.view === "list"}
+        ?data-phone=${this.phone}
         .filterCandidates=${this.#filterCandidates}
         .filterOpensBranch=${(row: ListRow) => row.kind === "root" || row.kind === "folder"}
         customiseColumnsLabel=${t("table.customise_columns")}

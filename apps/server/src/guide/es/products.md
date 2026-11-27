@@ -639,8 +639,8 @@ aviso aparte que debe confirmarse. Consulta cómo las
 ## Marca un plato como agotado durante el servicio {#sold-out}
 
 En el panel, abre **Productos** y desactiva **Disponible** en la fila del plato o del tamaño. La fila
-muestra **No disponible**. El cambio afecta a todas las cartas que lo venden. Activa el interruptor
-cuando vuelva a estar listo.
+muestra **No disponible**. En el móvil, busca el aviso justo debajo del nombre. El cambio afecta
+a todas las cartas que lo venden. Activa el interruptor cuando vuelva a estar listo.
 
 Cuando se agote un plato, mantén pulsado su botón en Mostrador o en el pedido de una mesa.
 Puedes enviar o marchar las raciones que ya estén en una cuenta.

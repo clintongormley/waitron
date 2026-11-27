@@ -2712,6 +2712,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
               <th
                 role="columnheader"
                 scope="col"
+                part=${`column-${column.key}`}
                 data-align=${column.align ?? "start"}
                 data-pinned=${column.pinned ?? nothing}
                 data-actions=${column.key === "actions" ? "" : nothing}
@@ -2742,6 +2743,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                         : this.#headingLabel(column)
                       : html`<button
                           class="sort"
+                          part=${`column-sort-${column.key}`}
                           data-sort=${column.key}
                           @click=${(event: Event) => {
                             event.stopPropagation();
@@ -2769,9 +2771,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #headingLabel(column: DataTableColumn<Row>) {
-    return column.hideHeadingLabel
-      ? html`<span class="visually-hidden">${column.label}</span>`
-      : column.label;
+    return html`<span
+      part=${`column-heading-${column.key}`}
+      class=${column.hideHeadingLabel ? "visually-hidden" : nothing}
+      >${column.label}</span
+    >`;
   }
 
   #withHelp(column: DataTableColumn<Row>, content: unknown) {
