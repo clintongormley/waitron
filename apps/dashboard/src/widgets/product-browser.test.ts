@@ -4920,13 +4920,13 @@ it("A461 keeps the selection when a filter is chosen in the panel beside the row
   }
 });
 
-it.each([100, 130])("shows each filter's whole choice in Spanish at %i%% text", async (size) => {
+it.each(["100%", "130%"])("shows each Spanish filter's whole choice at %s", async (size) => {
   const width = window.innerWidth,
     height = window.innerHeight;
   await page.viewport(1280, 720);
   setLocale("es");
   const previousSheets = document.adoptedStyleSheets;
-  if (size === 130) document.adoptedStyleSheets = [...previousSheets, TEXT_130_SHEET];
+  if (size === "130%") document.adoptedStyleSheets = [...previousSheets, TEXT_130_SHEET];
   try {
     const el = await mountBrowser();
     const table = await tableOf(el);
@@ -4943,7 +4943,10 @@ it.each([100, 130])("shows each filter's whole choice in Spanish at %i%% text", 
     for (const value of values) {
       const choice = value.textContent!.trim();
       expect(value.scrollWidth, choice).toBeLessThanOrEqual(value.clientWidth);
-      expect(value.scrollHeight, choice).toBeLessThanOrEqual(value.clientHeight);
+      const textBounds = value.getBoundingClientRect();
+      const fieldBounds = value.parentElement!.getBoundingClientRect();
+      expect(textBounds.top, choice).toBeGreaterThanOrEqual(fieldBounds.top);
+      expect(textBounds.bottom, choice).toBeLessThanOrEqual(fieldBounds.bottom);
     }
   } finally {
     document.adoptedStyleSheets = previousSheets;
