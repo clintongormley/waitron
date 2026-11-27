@@ -170,14 +170,20 @@ describe("a corrective full invoice is filed by whatever finishes the money", ()
   it("files one R1 on the sweep at start for a leg whose own filing failed", async () => {
     const saleId = await fullInvoice({ cash: "20.00" }, { card: "17.00" });
     const { correctionId } = await giveBack(saleId, goodwill("25.00"));
+    // The records read sound to the leg's own check, so its money is taken, and need checking once
+    // that leg has committed, so the filing after it fails. `venue.db` sees committed rows only.
+    const legCommitted = () =>
+      refundStates(saleId).filter((each) => each.state === "completed").length === 2;
     const broken = Object.create(venue.backend, {
       checkIntegrity: {
-        value: () =>
-          Promise.resolve({
-            ok: false,
-            checked: 1,
-            issues: [{ code: "predecessor-hash-mismatch", params: {} }],
-          }),
+        value: (...args: Parameters<typeof venue.backend.checkIntegrity>) =>
+          legCommitted()
+            ? Promise.resolve({
+                ok: false,
+                checked: 1,
+                issues: [{ code: "predecessor-hash-mismatch", params: {} }],
+              })
+            : venue.backend.checkIntegrity(...args),
       },
     }) as typeof venue.backend;
     const leg = await send(
