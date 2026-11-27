@@ -310,24 +310,31 @@ function streamedRequest(text: string, onPull: () => void): Request {
 }
 
 describe("readingDriveFile", () => {
-  const eio = () => Object.assign(new Error("i/o error"), { code: "EIO" });
-  it("a read error with no path answers restore.drive_file_unreadable once the file is gone, and keeps its own answer while it is there", async () => {
-    const file = join(root, "sda1", "backup");
+  const fault = (code: string, path?: string) =>
+    Object.assign(new Error(code), { code }, path === undefined ? {} : { path });
+  const file = () => join(root, "sda1", "backup");
+
+  it("a read error naming no file answers restore.drive_file_unreadable, though the file is still there", async () => {
     await put("sda1", "backup");
-    const kept = await readingDriveFile(file, () => Promise.reject(eio())).catch((e: unknown) => e);
-    expect(kept).toMatchObject({ code: "EIO" });
-    await rm(file);
-    await expect(readingDriveFile(file, () => Promise.reject(eio()))).rejects.toMatchObject({
-      code: "restore.drive_file_unreadable",
-    });
+    await expect(
+      readingDriveFile(file(), () => Promise.reject(fault("EIO"))),
+    ).rejects.toMatchObject({ code: "restore.drive_file_unreadable" });
   });
-  it("an error that is not a read error, or a run with no drive path, keeps its own answer", async () => {
-    const file = join(root, "sda1", "gone");
-    const full = Object.assign(new Error("full"), { code: "ENOSPC", path: file });
-    await expect(readingDriveFile(file, () => Promise.reject(full))).rejects.toBe(full);
-    const missing = Object.assign(new Error("missing"), { code: "ENOENT", path: file });
+  it("a read error naming the drive file answers restore.drive_file_unreadable", async () => {
+    await expect(
+      readingDriveFile(file(), () => Promise.reject(fault("ENOENT", file()))),
+    ).rejects.toMatchObject({ code: "restore.drive_file_unreadable" });
+  });
+  it("a read error naming another file keeps its own answer", async () => {
+    const other = fault("EIO", join(staging, "archive"));
+    await expect(readingDriveFile(file(), () => Promise.reject(other))).rejects.toBe(other);
+  });
+  it("an error outside the read errors, or a run with no drive path, keeps its own answer", async () => {
+    const full = fault("ENOSPC", file());
+    await expect(readingDriveFile(file(), () => Promise.reject(full))).rejects.toBe(full);
+    const missing = fault("ENOENT", file());
     await expect(readingDriveFile(undefined, () => Promise.reject(missing))).rejects.toBe(missing);
-    await expect(readingDriveFile(file, async () => 7)).resolves.toBe(7);
+    await expect(readingDriveFile(file(), async () => 7)).resolves.toBe(7);
   });
 });
 

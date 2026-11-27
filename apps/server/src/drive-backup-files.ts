@@ -207,8 +207,8 @@ export async function resolveDriveFile(
 }
 
 /** Runs `work`, which reads the drive file at `path` where it lies, and answers a read that a
- * pulled stick broke as `restore.drive_file_unreadable`. An error naming another path, or one
- * naming none while the file is still there, keeps its own answer. With no path it only runs. */
+ * pulled stick broke as `restore.drive_file_unreadable`. An error naming another path keeps its
+ * own answer. With no path it only runs. */
 export async function readingDriveFile<T>(
   path: string | undefined,
   work: () => Promise<T>,
@@ -218,15 +218,10 @@ export async function readingDriveFile<T>(
     return await work();
   } catch (error) {
     if (isAppError(error) || !UNREADABLE.has(errnoOf(error) ?? "")) throw error;
+    // A read of the open file names no path, and a pulled stick can stay mounted with its details
+    // cached, so no path counts as the stick's.
     const named = (error as { path?: unknown }).path;
-    const gone =
-      typeof named === "string"
-        ? named === path
-        : await stat(path).then(
-            () => false,
-            () => true,
-          );
-    throw gone ? unreadable() : error;
+    throw named === undefined || named === path ? unreadable() : error;
   }
 }
 

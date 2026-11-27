@@ -68,6 +68,7 @@ import {
   asString,
 } from "./setup-request-fields.js";
 import type { TradingConfig } from "./trading-config.js";
+import { isJsonRequest } from "./drive-backup-files.js";
 import "./errors.js";
 
 function recoveryCredentials(
@@ -718,7 +719,7 @@ export function mountSetupOperationRoutes(
         let upload: ArchiveUpload | undefined;
         try {
           const type = c.req.header("content-type")?.toLowerCase() ?? "";
-          const drive = type.startsWith("application/json");
+          const drive = isJsonRequest(c.req.raw);
           const multipart = drive || type.startsWith("multipart/form-data");
           if (!multipart && !type.startsWith("application/octet-stream"))
             invalidRequest("artifact");
