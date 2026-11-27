@@ -7,12 +7,24 @@ import "./errors.js";
 
 export type BackupFileSource = { artifactPath: string } | { artifact: Uint8Array };
 
-/** The backup key text that opens a version 2 file, derived from a typed master key. A key that
- * does not decode, or is not the master key the header names, is refused with the header's master
- * key id, number and name. A version 1 file is refused before any key is derived. The header is
- * authenticated only when the file opens, so a damaged id byte is refused here as a wrong key; a
- * damaged day byte is refused as `backup.artifact_invalid` (`bad_key_day`) when it no longer reads
- * as a date, and otherwise, like a damaged key number, only when the file opens. */
+/** The header of a file that opens with the master key. */
+export type MasterKeyHeader = Extract<ArtifactHeader, { version: 2 }>;
+
+/** Refuses a version 1 file, which no master key opens, as `backup.artifact_invalid`. */
+export function masterKeyHeader(header: ArtifactHeader): MasterKeyHeader {
+  if (header.version !== 2) {
+    throw new AppError("backup.artifact_invalid", { reason: "bad_version" });
+  }
+  return header;
+}
+
+/** The name of the master key the header names, as its `master_keys` row holds it. */
+export function headerKeyName(header: MasterKeyHeader): string {
+  return masterKeyNameOf(header.masterKeyId, header.masterKeyDay);
+}
+
+/** {@link headerOpeningKey} for a file whose header is not yet read. A version 1 file is refused
+ * before any key is derived. */
 export async function openingKeyFor(
   source: BackupFileSource,
   masterKeyText: string,
@@ -21,13 +33,20 @@ export async function openingKeyFor(
     "artifactPath" in source
       ? await readArtifactFileHeader(source.artifactPath)
       : readArtifactHeader(source.artifact);
-  if (header.version !== 2) {
-    throw new AppError("backup.artifact_invalid", { reason: "bad_version" });
-  }
+  return headerOpeningKey(masterKeyHeader(header), masterKeyText);
+}
+
+/** The backup key text that opens the file, derived from a typed master key. A key that does not
+ * decode, or is not the master key the header names, is refused with the header's master key id,
+ * number and name. The header is authenticated only when the file opens, so a damaged id byte is
+ * refused here as a wrong key; a damaged day byte is refused as `backup.artifact_invalid`
+ * (`bad_key_day`) when it no longer reads as a date, and otherwise, like a damaged key number,
+ * only when the file opens. */
+export function headerOpeningKey(header: MasterKeyHeader, masterKeyText: string): string {
   const wrongKey = new AppError("promotion.break_glass_invalid", {
     masterKeyId: header.masterKeyId.toString("hex"),
     keyNumber: header.keyNumber,
-    keyName: masterKeyNameOf(header.masterKeyId, header.masterKeyDay),
+    keyName: headerKeyName(header),
   });
   let masterKey: Uint8Array;
   try {

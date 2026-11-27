@@ -2,7 +2,7 @@ import "./errors.js";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { masterKeyNameOf, nodeSigningPublicKey } from "@waitron/credentials";
+import { nodeSigningPublicKey } from "@waitron/credentials";
 import { readNodeMembership, type Database, type DeploymentEnvironment } from "@waitron/db";
 import {
   servingPrimaryNodeId,
@@ -15,7 +15,12 @@ import { AppError } from "@waitron/shared";
 import { openBackupQuery, PAIR_COPY_DIR, SCRATCH_DIR, VENUE_FILE } from "@waitron/store";
 import { readArtifactFileHeader } from "./artifact-cipher-file.js";
 import type { BackupKeyRecord } from "./backup-env-writer.js";
-import { heldKeyOpens, openingKeyFor } from "./backup-file-key.js";
+import {
+  headerKeyName,
+  headerOpeningKey,
+  heldKeyOpens,
+  masterKeyHeader,
+} from "./backup-file-key.js";
 import { COPY_READY_FILE, type SelectedCopy } from "./handover-copy-selection.js";
 import { readStoredTrustSet, type StoredTrustDeps } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -94,17 +99,15 @@ export async function stageBackupAsCopy(
     environment: DeploymentEnvironment;
   },
 ): Promise<SelectedCopy> {
-  const header = await readArtifactFileHeader(deps.artifactPath);
-  if (header.version !== 2)
-    throw new AppError("backup.artifact_invalid", { reason: "bad_version" });
+  const header = masterKeyHeader(await readArtifactFileHeader(deps.artifactPath));
   let recoveryKey: string;
   if (deps.masterKey !== undefined) {
-    recoveryKey = await openingKeyFor(deps, deps.masterKey);
+    recoveryKey = headerOpeningKey(header, deps.masterKey);
   } else {
     const held = await deps.readBackupKey();
     if (held === undefined || !heldKeyOpens(header, held))
       throw new AppError("handover.backup_needs_master_key", {
-        keyName: masterKeyNameOf(header.masterKeyId, header.masterKeyDay),
+        keyName: headerKeyName(header),
       });
     recoveryKey = held.key;
   }
