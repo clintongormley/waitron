@@ -3651,8 +3651,7 @@ command outside the terminal's foreground group, and Linux stops a process there
 terminal's settings, which apt-get does to a terminal input once dpkg finishes; nothing resumes it,
 so the attempt waits out its whole limit. On the test box (Debian 13, as root under `script`,
 2026-11-27), `timeout 90 apt-get install --reinstall -y nano >&2` exited 124 after installing, and
-the same command with `</dev/null` exited 0. Any command `waitron.sh` runs under `timeout` from a
-terminal has the same exposure if it touches the terminal.
+the same command with `</dev/null` exited 0.
 
 An `apt-get update` that could not connect, or timed out waiting, warned "Failed to fetch" and
 exited 0 (apt 2.8.3 and 3.0.3), so a retry loop never saw it fail. The Dockerfile and the bench image

@@ -278,9 +278,17 @@ it("checks the installed box's signed offer and remembers a newer pause across c
   });
 });
 
-it("defers on an interrupted attempt without running recovery or writing over the evidence", async () => {
+it("defers on a held attempt without running recovery or writing over the evidence", async () => {
   const f = await fixture();
   await fs.mkdir(f.directory, { recursive: true });
+  const marker = JSON.stringify({
+    mode: "manual",
+    phase: "awaiting-choice",
+    copied: true,
+    paths: ["/live/state"],
+    images: { old: { app: "sha256:old" }, candidate: { app: "sha256:new" } },
+  });
+  await fs.writeFile(join(f.directory, "attempt.json"), marker);
   const result = await promisify(execFile)(process.execPath, [
     fileURLToPath(new URL("./cli.mjs", import.meta.url)),
     offerVerb,
@@ -290,7 +298,23 @@ it("defers on an interrupted attempt without running recovery or writing over th
   ]).catch((error) => error);
   expect(result.code).toBe(1);
   expect(result.stdout).toBe(JSON.stringify(deferred("upgrade-pending")) + "\n");
-  expect(await fs.readdir(f.directory)).toEqual([]);
+  expect(await fs.readdir(f.directory)).toEqual(["attempt.json"]);
+  expect(await fs.readFile(join(f.directory, "attempt.json"), "utf8")).toBe(marker);
+});
+
+it.each([
+  [offerVerb, { status: "offered", version: "1.2.3" }],
+  ["check-offered-upgrade", deferred("upgrade check skipped: could not read the venue time zone")],
+])("%s goes past an empty interrupted attempt and leaves it in place", async (verb, expected) => {
+  const f = await offerFixture();
+  const attempt = join(`${f.box}.upgrades`, "attempt");
+  await fs.mkdir(attempt, { recursive: true });
+  const stagedOffer = join(f.box, "..", "offer");
+  await fs.writeFile(stagedOffer, f.offer(4, "1.2.3"));
+  expect(
+    await runUpgradeCli([verb, f.box, "1.2.3-rc.1", f.link, stagedOffer], { run: f.run }),
+  ).toEqual(expected);
+  expect(await fs.readdir(attempt)).toEqual([]);
 });
 
 it.each([

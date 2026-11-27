@@ -166,10 +166,11 @@ Receipts moved on 2026-11-24 are in [ci-and-gates](docs/developers/ci-and-gates.
   runs under an outer `timeout` and retries stalls and failures; so does `playwright install --with-deps`,
   and every `curl` in `deploy/Dockerfile` carries `--retry`, `--connect-timeout` and `--max-time`.**
   Guards: `scripts/ci-workflow.test.mjs` and `scripts/deploy-image-env.test.ts`, weaker than their names. `scripts/waitron-sh.test.mjs` runs waitron.sh's retries under stubs.
-- **A command `deploy/waitron.sh` runs under `timeout` that could touch the terminal takes
-  `</dev/null`**: `timeout` runs it outside the terminal's foreground group, where Linux stops it.
-  Cost: a reset run from a terminal sat after its apt-get finished until the 30-minute limit. Guard:
-  the apt-get input case in `scripts/waitron-sh.test.mjs`, weaker than the rule: `apt_get` only.
+- **`deploy/waitron.sh`'s apt-get takes `</dev/null`**: `timeout` runs it outside the terminal's
+  foreground group, where Linux stops it when it resets the terminal after dpkg. Cost: a reset run
+  from a terminal sat after its apt-get finished until the 30-minute limit. Guard: the "gives
+  apt-get /dev/null as its input" case in `scripts/waitron-sh.test.mjs`, weaker than the rule: the
+  `apt_get` wrapper only.
   [Receipt](docs/developers/ci-and-gates.md#every-apt-wait-is-bounded).
 - **Every workflow pnpm setup runs `scripts/ci-setup-pnpm.sh`: three attempts, each under `timeout`,
   then fail. Never use `pnpm/action-setup`.** Guards: `scripts/ci-workflow.test.mjs` (weaker than its name) and `scripts/ci-setup-pnpm.test.mjs`.

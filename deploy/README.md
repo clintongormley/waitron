@@ -342,7 +342,7 @@ Restore puts back the copied data, Compose configuration and old images; the hos
 service, the host's USB drive module, AppArmor policy and retained upgrade runtime stay updated. An interrupted restore
 starts again from its intact copy. Install and reset refuse while
 an attempt is held; an install stopped before it recorded anything, such as with Ctrl-C, holds
-nothing, and the next install or reset goes ahead. On an unfinished setup, Keep continues setup; choose Restore before
+nothing, and the next install, reset or offered upgrade goes ahead. On an unfinished setup, Keep continues setup; choose Restore before
 using `--reset install` instead.
 
 The USB recipe installs the script at `/opt/waitron-host/waitron.sh`. Status, Restore and

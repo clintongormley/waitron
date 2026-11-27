@@ -232,7 +232,8 @@ async function checkUpgradeOffer(
   offeredInstall,
 ) {
   try {
-    if (await pending(boxDirectory)) return deferred("upgrade-pending");
+    const current = await pending(boxDirectory);
+    if (current && current.marker !== null) return deferred("upgrade-pending");
   } catch {
     return deferred("upgrade-pending");
   }

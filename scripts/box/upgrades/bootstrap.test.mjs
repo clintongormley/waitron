@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
-import { afterAll, expect, it } from "vitest";
+import { afterAll, expect, it, onTestFinished } from "vitest";
 
 const root = mkdtempSync(join(tmpdir(), "upgrade-bootstrap-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -36,11 +36,22 @@ writeFileSync(join(archiveRoot, "LICENSE"), "fixture licence notices");
 const archive = join(root, "runtime.tar.xz");
 execFileSync("tar", ["-cJf", archive, "-C", join(root, "archive"), "node-v26.7.0-linux-x64"]);
 const script = fileURLToPath(new URL("./bootstrap.sh", import.meta.url));
-function install(knobs = {}) {
+function makeAttempts(folder, shape) {
+  mkdirSync(join(folder, "one"), { recursive: true });
+  if (shape === "file") writeFileSync(join(folder, "one", "attempt.json"), "{}");
+  if (shape === "hidden") writeFileSync(join(folder, "one", ".partial"), "");
+  if (shape === "two") mkdirSync(join(folder, "two"));
+  if (shape === "unreadable") {
+    chmodSync(join(folder, "one"), 0o000);
+    onTestFinished(() => chmodSync(join(folder, "one"), 0o700));
+  }
+}
+
+function install(knobs = {}, attempts = "") {
   const folder = mkdtempSync(join(root, "case-"));
   const host = join(folder, "host");
   const box = join(folder, "box");
-  if (knobs.WT_HELD === "1") mkdirSync(join(`${box}.upgrades`, "attempt"), { recursive: true });
+  if (attempts) makeAttempts(`${box}.upgrades`, attempts);
   const result = spawnSync("bash", [script, host, box], {
     encoding: "utf8",
     env: {
@@ -72,13 +83,44 @@ it("installs a checksum-verified pinned host Node with its bundled licence notic
   );
 });
 
+it.skipIf(process.getuid?.() === 0)(
+  "does not publish a runtime past an attempt folder it cannot read",
+  () => {
+    const r = install({}, "unreadable");
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toContain("resolve the upgrade attempt");
+    expect(existsSync(join(r.host, "node-v26.7.0"))).toBe(false);
+  },
+);
+
+it("decides a held attempt exactly as waitron.sh's upgrade_pending does", () => {
+  const body = (file, dir) => {
+    const text = readFileSync(fileURLToPath(new URL(file, import.meta.url)), "utf8");
+    const found = /^upgrade_pending\(\) \{\n[\s\S]*?\n\}\n/m.exec(text);
+    expect(found, file).not.toBeNull();
+    return found[0].replaceAll(dir, "DIR");
+  };
+  expect(body("./bootstrap.sh", "${box_dir}")).toBe(
+    body("../../../deploy/waitron.sh", "${WAITRON_DIR}"),
+  );
+});
+
+it("installs past one empty attempt folder, which holds nothing to resolve", () => {
+  const r = install({}, "empty");
+  expect(r.stderr).toBe("");
+  expect(r.status).toBe(0);
+  expect(existsSync(join(r.host, "node-v26.7.0", "bin", "node"))).toBe(true);
+});
+
 it.each([
-  [{ WT_BAD_SUM: "1" }, "checksum mismatch"],
-  [{ WT_ARCH: "unknown" }, "unsupported host architecture"],
-  [{ WT_BUSY: "1" }, "another host operation"],
-  [{ WT_HELD: "1" }, "resolve the upgrade attempt"],
-])("does not publish an unverified runtime for %j", (knobs, reason) => {
-  const r = install(knobs);
+  [{ WT_BAD_SUM: "1" }, "", "checksum mismatch"],
+  [{ WT_ARCH: "unknown" }, "", "unsupported host architecture"],
+  [{ WT_BUSY: "1" }, "", "another host operation"],
+  [{}, "file", "resolve the upgrade attempt"],
+  [{}, "hidden", "resolve the upgrade attempt"],
+  [{}, "two", "resolve the upgrade attempt"],
+])("does not publish an unverified runtime for %j with attempts %j", (knobs, attempts, reason) => {
+  const r = install(knobs, attempts);
   expect(r.status).not.toBe(0);
   expect(r.stderr).toContain(reason);
   expect(existsSync(join(r.host, "node-v26.7.0"))).toBe(false);
