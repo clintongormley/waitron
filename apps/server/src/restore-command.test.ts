@@ -1,6 +1,5 @@
 import { ensureStreamId } from "@waitron/db";
 import { seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { spawn } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -20,10 +19,7 @@ import {
   withDigest,
 } from "../test/recovery-pack-pdf.js";
 import { describe, expect, it, vi } from "vitest";
-import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
-import { archiveNamespace } from "./archive-settings.js";
 import { encryptArtifact } from "./artifact-cipher.js";
-import { backupArchiveKey } from "./backup-keys.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
@@ -1242,8 +1238,8 @@ describe("waitron-restore restore, the arguments each form accepts", () => {
       "--confirm-venue followed by another flag",
       ["--from-bucket", KIT_FILE, "--confirm-venue", "--confirm-old-box-gone"],
     ],
-    ["--confirm-venue on the archive form", [ARTIFACT, "--confirm-venue", "89890001K"]],
-    ["a misspelled flag on the archive form", [ARTIFACT, "--confirm-old-box-gon"]],
+    ["--confirm-venue on the file form", [ARTIFACT, "--confirm-venue", "89890001K"]],
+    ["a misspelled flag on the file form", [ARTIFACT, "--confirm-old-box-gon"]],
     ["a misspelled flag on the bucket form", ["--from-bucket", KIT_FILE, "--confrim-venue", "X"]],
     ["an artifact given with --from-bucket", [ARTIFACT, "--from-bucket", KIT_FILE]],
     ["an artifact after the kit file", ["--from-bucket", KIT_FILE, ARTIFACT]],
@@ -1253,6 +1249,12 @@ describe("waitron-restore restore, the arguments each form accepts", () => {
       "--confirm-old-box-gone given twice",
       [ARTIFACT, "--confirm-old-box-gone", "--confirm-old-box-gone"],
     ],
+    [
+      "--from-archive with --archive-key",
+      ["--from-archive", KIT_FILE, "--archive-key", "waitron-20261001T030000Z-n-x.backup.enc"],
+    ],
+    ["--from-archive alone", ["--from-archive", KIT_FILE]],
+    ["--archive-key on the file form", [ARTIFACT, "--archive-key", "any"]],
   ])("prints the one-line usage and runs nothing for %s", async (_label, args) => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-cli-args-"));
     const artifactPath = await makeArtifact(dir);
@@ -1343,7 +1345,7 @@ describe("waitron-restore restore --from-bucket <recovery pack PDF>", () => {
 
   it("reads the bucket copy code out of the pack's attached file and runs the bucket restore", async () => {
     const { dir, packPath } = await packFile(
-      await recoveryPackPdf({ bucketCode: encodeRecoveryKit(KIT), archiveCode: null }),
+      await recoveryPackPdf({ bucketCode: encodeRecoveryKit(KIT) }),
     );
     const { code, out, received } = await run(packPath, dir);
     expect(code).toBe(0);
@@ -1352,9 +1354,7 @@ describe("waitron-restore restore --from-bucket <recovery pack PDF>", () => {
   });
 
   it("says a pack made with no bucket copy holds no code, and restores nothing", async () => {
-    const { dir, packPath } = await packFile(
-      await recoveryPackPdf({ bucketCode: null, archiveCode: null }),
-    );
+    const { dir, packPath } = await packFile(await recoveryPackPdf({ bucketCode: null }));
     const { code, out, received } = await run(packPath, dir);
     expect(received).toBeUndefined();
     expect({ code, out }).toEqual({
@@ -1373,7 +1373,7 @@ describe("waitron-restore restore --from-bucket <recovery pack PDF>", () => {
   });
 
   it("says a pack whose attached file was changed is damaged", async () => {
-    const bytes = await recoveryPackPdf({ bucketCode: encodeRecoveryKit(KIT), archiveCode: null });
+    const bytes = await recoveryPackPdf({ bucketCode: encodeRecoveryKit(KIT) });
     const { dir, packPath } = await packFile(
       await withDigest(bytes, "sha256-v1:" + "0".repeat(64)),
     );
@@ -1392,28 +1392,6 @@ describe("waitron-restore restore, the venue folder", () => {
       seen.push(venueDir);
       throw new AppError("provisioning.database_in_use", { database: venueDir });
     };
-  }
-
-  async function archivePackFile(dir: string): Promise<string> {
-    const packPath = join(dir, "pack.txt");
-    await writeFile(
-      packPath,
-      encodeArchiveRecoveryPack({
-        version: 1,
-        format: "WBK1",
-
-        bucket: {
-          region: "eu-west-1",
-          bucket: "owner-bucket",
-          prefix: "waitron",
-          accessKeyId: "AKIDEXAMPLE",
-          secretAccessKey: "synthetic-secret",
-        },
-        archivePrefix: archiveNamespace("waitron"),
-        recoveryKey: "synthetic-backup-key",
-      }),
-    );
-    return packPath;
   }
 
   it("refuses at once while another program holds the venue folder, before reading the bucket", async () => {
@@ -1451,24 +1429,7 @@ describe("waitron-restore restore, the venue folder", () => {
     expect(restore).not.toHaveBeenCalled();
   });
 
-  it("refuses --from-archive at once while another program holds the venue folder, before downloading", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "restore-command-held-archive-"));
-    const packPath = await archivePackFile(dir);
-    const out: string[] = [];
-    const openArchiveFiles = vi.fn();
-    const code = await runRestore({
-      argv: ["restore", "--from-archive", packPath, "--archive-key", "any"],
-      env: { WAITRON_STATE_DIR: dir },
-      out: (line) => out.push(line),
-      lockVenue: heldElsewhere([]),
-      openArchiveFiles,
-    });
-    expect(code).toBe(1);
-    expect(out).toEqual([IN_USE]);
-    expect(openArchiveFiles).not.toHaveBeenCalled();
-  });
-
-  it.each(["bucket", "artifact", "archive"] as const)(
+  it.each(["bucket", "artifact"] as const)(
     "holds the venue folder until it exits (%s form)",
     async (form) => {
       const dir = await mkdtemp(join(tmpdir(), `restore-command-hold-${form}-`));
@@ -1483,28 +1444,9 @@ describe("waitron-restore restore, the venue folder", () => {
       if (form === "bucket") {
         argv = ["restore", "--from-bucket", (await kitFile()).kitPath];
         extra.restoreStream = heldDuringRestore;
-      } else if (form === "artifact") {
+      } else {
         argv = ["restore", await makeArtifact(dir)];
         extra.restore = heldDuringRestore;
-      } else {
-        const key = backupArchiveKey(new Date("2026-10-01T03:00:00Z"), { nodeId: BACKUP_NODE_ID });
-        argv = ["restore", "--from-archive", await archivePackFile(dir), "--archive-key", key];
-        const unused = async (): Promise<never> => {
-          throw new Error("unexpected file-store operation");
-        };
-        extra.restore = heldDuringRestore;
-        extra.openArchiveFiles = () => ({
-          putFile: unused,
-          putBytes: unused,
-          readStream: unused,
-          deleteMany: unused,
-          list: async () => [{ key, size: 1, lastModified: new Date() }],
-          getFile: async (_key, path) => {
-            await heldDuringRestore();
-            await writeFile(path, "x");
-          },
-          close() {},
-        });
       }
       const out: string[] = [];
       const code = await runRestore({

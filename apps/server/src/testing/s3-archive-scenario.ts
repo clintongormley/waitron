@@ -3,22 +3,16 @@ import { createCipheriv, createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { access, open, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { hasCode, isAppError } from "@waitron/shared";
+import { encodeMasterKeyCode, hasCode, isAppError } from "@waitron/shared";
 import { createS3FileStore, statusOf, type CommandObservation } from "@waitron/stream";
 import { expect } from "vitest";
-import {
-  decodeArchiveRecoveryPack,
-  encodeArchiveRecoveryPack,
-  type ArchiveRecoveryPack,
-} from "../archive-recovery-pack.js";
-import { downloadArchive } from "../archive-download.js";
 import { archiveNamespace } from "../archive-settings.js";
 import { artifactHeaderBytes } from "../artifact-cipher.js";
 import { makeMasterKey } from "@waitron/credentials";
 import { decryptBackupFile, encryptArtifactFileUnderBackupKey } from "../artifact-cipher-file.js";
 import { backupKeyFrameInput } from "../backup-key-record.js";
+import { openingKeyFor } from "../backup-file-key.js";
 import { heldBackupKey } from "./backup-key.js";
-import { checkedRecoveryKey } from "../backup-config.js";
 import { backupArchiveKey, parseBackupArchiveKey } from "../backup-keys.js";
 import { AWS_REHEARSAL_LIMITS } from "./aws-rehearsal-limits.js";
 import { receiptErrorName } from "./aws-rehearsal-receipt.js";
@@ -31,7 +25,6 @@ const PART_BYTES = 8 * MiB;
 const ABORT_ARCHIVE_BYTES = 3 * PART_BYTES;
 const REHEARSAL_MASTER_KEY = makeMasterKey();
 const REHEARSAL_KEY = heldBackupKey(REHEARSAL_MASTER_KEY, 2);
-const RECOVERY_KEY = REHEARSAL_KEY.key;
 const WRONG_KEY = heldBackupKey(REHEARSAL_MASTER_KEY, 1).key;
 
 /** A Vitest time limit for each scenario; nothing inside it enforces this. */
@@ -103,9 +96,9 @@ function trackCreated(fixture: S3ScenarioFixture, observation: CommandObservatio
 }
 
 /**
- * Uploads a 32 MiB encrypted synthetic archive through the backend, then downloads it again using
- * only a recovery pack that has been encoded and decoded, and checks its decrypted bytes match.
- * A wrong key and a flipped byte must each be refused, leaving no output file.
+ * Uploads a 32 MiB encrypted synthetic archive through the backend, downloads it again with the S3
+ * file store, opens it with the master key and checks its decrypted bytes match. A wrong key and a
+ * flipped byte must each be refused, leaving no output file.
  */
 export async function runArchiveRoundTrip(fixture: S3ScenarioFixture): Promise<void> {
   const SCENARIO = "archive-roundtrip";
@@ -118,7 +111,6 @@ export async function runArchiveRoundTrip(fixture: S3ScenarioFixture): Promise<v
     (observation) => trackCreated(fixture, observation),
   );
   await withBackend(async (backend, work) => {
-    const recoveryKey = checkedRecoveryKey(RECOVERY_KEY)!;
     const key = backupArchiveKey(new Date(), { nodeId: BACKUP_NODE_ID });
     const plainHash = await step("uploaded", async () => {
       const archive = await syntheticArchive(work, bytes, SCENARIO, signal);
@@ -144,67 +136,57 @@ export async function runArchiveRoundTrip(fixture: S3ScenarioFixture): Promise<v
       phase("listed", { count: found.length, bytes: found[0]!.size });
     });
 
-    const saved = encodeArchiveRecoveryPack({
-      version: 1,
-      format: "WBK1",
-
-      bucket: fixture.bucket,
-      archivePrefix: archiveNamespace(fixture.bucket.prefix),
-      recoveryKey,
-    } satisfies ArchiveRecoveryPack);
-    const pack = decodeArchiveRecoveryPack(saved);
-
-    const downloaded = await step("downloaded", () =>
-      downloadArchive({
-        pack,
-        key,
-        stagingDir: join(work, "staging"),
-        signal,
-        openFiles: (bucket) => createS3FileStore(bucket, { observe }),
-      }),
+    const downloaded = join(work, "downloaded.backup.enc");
+    const files = createS3FileStore(
+      { ...fixture.bucket, prefix: archiveNamespace(fixture.bucket.prefix) },
+      { observe },
     );
-    try {
-      await step("downloaded", async () => {
-        expect(requestsTo("GetObject").map(answered2xx)).toEqual([true]);
-        const got = (await stat(downloaded.path)).size;
-        expect(got).toBe(bytes);
-        phase("downloaded", { bytes: got });
-      });
+    await step("downloaded", () =>
+      files.getFile(key, downloaded, { signal }).finally(() => files.close()),
+    );
+    await step("downloaded", async () => {
+      expect(requestsTo("GetObject").map(answered2xx)).toEqual([true]);
+      const got = (await stat(downloaded)).size;
+      expect(got).toBe(bytes);
+      phase("downloaded", { bytes: got });
+    });
 
-      await step("decrypted-match", async () => {
-        const out = join(work, "decrypted.bin");
-        await decryptBackupFile(downloaded.path, out, pack.recoveryKey);
-        const decrypted = await sha256Of(out);
-        await rm(out);
-        expect(decrypted).toBe(plainHash);
-        phase("decrypted-match");
-      });
+    const openingKey = await step("decrypted-match", async () => {
+      const opening = await openingKeyFor(
+        { artifactPath: downloaded },
+        encodeMasterKeyCode(REHEARSAL_MASTER_KEY),
+      );
+      const out = join(work, "decrypted.bin");
+      await decryptBackupFile(downloaded, out, opening);
+      const decrypted = await sha256Of(out);
+      await rm(out);
+      expect(decrypted).toBe(plainHash);
+      phase("decrypted-match");
+      return opening;
+    });
 
-      await step("wrong-key-refused", async () => {
-        await refusedDecrypt(join(work, "wrong-key.bin"), (out) =>
-          decryptBackupFile(downloaded.path, out, WRONG_KEY),
-        );
-        phase("wrong-key-refused");
-      });
+    await step("wrong-key-refused", async () => {
+      await refusedDecrypt(join(work, "wrong-key.bin"), (out) =>
+        decryptBackupFile(downloaded, out, WRONG_KEY),
+      );
+      phase("wrong-key-refused");
+    });
 
-      await step("tamper-refused", async () => {
-        // Nothing reads the staged download after this step, so the byte is flipped in it, not in a copy.
-        const handle = await open(downloaded.path, "r+");
-        try {
-          const middle = Math.floor(bytes / 2);
-          const { buffer } = await handle.read(Buffer.alloc(1), 0, 1, middle);
-          await handle.write(Buffer.from([buffer[0]! ^ 0xff]), 0, 1, middle);
-        } finally {
-          await handle.close();
-        }
-        await refusedDecrypt(join(work, "tampered.bin"), (out) =>
-          decryptBackupFile(downloaded.path, out, pack.recoveryKey),
-        );
-        phase("tamper-refused");
-      });
-    } finally {
-      await downloaded.dispose();
-    }
+    await step("tamper-refused", async () => {
+      // Nothing reads the download after this step, so the byte is flipped in it, not in a copy.
+      const handle = await open(downloaded, "r+");
+      try {
+        const middle = Math.floor(bytes / 2);
+        const { buffer } = await handle.read(Buffer.alloc(1), 0, 1, middle);
+        await handle.write(Buffer.from([buffer[0]! ^ 0xff]), 0, 1, middle);
+      } finally {
+        await handle.close();
+      }
+      await refusedDecrypt(join(work, "tampered.bin"), (out) =>
+        decryptBackupFile(downloaded, out, openingKey),
+      );
+      phase("tamper-refused");
+    });
   });
 }
 

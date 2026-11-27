@@ -80,8 +80,6 @@ export function packDates(locale: PackLocale, timeZone: string) {
   };
 }
 
-const SPACE_MARK = "\u02fd";
-
 function codePoint(c: string): string {
   return `[U+${c.codePointAt(0)!.toString(16).toUpperCase()}]`;
 }
@@ -110,6 +108,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   const words = PACK_WORDS[locale];
   const when = packDates(locale, input.timeZone);
   for (const part of parts) {
+    if (!Object.hasOwn(words.part, part.kind)) refuse("parts");
     if (part.state === "included" && !part.page) refuse("parts");
     if (part.state === "failed" && !part.failure) refuse("parts");
   }
@@ -344,14 +343,6 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   };
   const secret = (value: NonNullable<RecoveryPackPage["secret"]>, size = QR_SIZE) => {
     face();
-    // A drawn space cannot be counted, and one at either end cannot be seen; a passphrase may
-    // hold either. The QR code still carries the text itself.
-    const spaced = value.exactSpaces === true && value.text.includes(" ");
-    const shown = value.exactSpaces
-      ? Array.from(value.text, (c) =>
-          c === " " ? SPACE_MARK : c === SPACE_MARK || /\s/.test(c) ? codePoint(c) : c,
-        ).join("")
-      : value.text;
     const top = pdf.y;
     const textWidth = width() - 24 - size - 16;
     pdf
@@ -363,18 +354,11 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     pdf
       .fillColor("black")
       .fontSize(10)
-      .text(safe(shown), LEFT + 12, pdf.y, {
+      .text(safe(value.text), LEFT + 12, pdf.y, {
         width: textWidth,
         lineGap: 3,
       });
     face();
-    if (spaced) {
-      pdf.y += 4;
-      pdf
-        .fillColor(GREY)
-        .fontSize(8)
-        .text(safe(words.spaceMark), LEFT + 12, pdf.y, { width: textWidth });
-    }
     qr(value.text, LEFT + width() - 12 - size, top + 12, size);
     const bottom = Math.max(pdf.y, top + 12 + size) + 12;
     pdf

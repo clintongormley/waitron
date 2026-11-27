@@ -16,8 +16,6 @@ const file: RecoveryPackFile = {
   number: 2,
   madeAt: "2026-10-29T17:00:00.000Z",
   bucketCode: "WAITRON-RECOVERY-KIT-2:" + "b".repeat(600),
-  archiveCode: null,
-  backupKey: "k".repeat(43),
   masterKey: null,
   masterKeyName: null,
   masterKeyHeldBy: null,

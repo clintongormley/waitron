@@ -11,14 +11,7 @@ import {
 } from "@waitron/recovery-pack";
 import { AppError, isAppError } from "@waitron/shared";
 import { encodeRecoveryKit } from "@waitron/stream";
-import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
-import { archiveNamespace, readHeldArchiveSettingsIn } from "./archive-settings.js";
-import {
-  archiveDestinations,
-  loadKeyRotatedAt,
-  loadRecoveryKey,
-  readHeldKey,
-} from "./backup-config.js";
+import { loadKeyRotatedAt, loadRecoveryKey, readHeldKey } from "./backup-config.js";
 import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
 import { readStreamSettingsIn, STREAM_PURPOSE } from "./stream-host.js";
 import "./errors.js";
@@ -34,7 +27,7 @@ export type PartsContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
 };
 
-type FileFields = Partial<Pick<RecoveryPackFile, "bucketCode" | "archiveCode" | "backupKey">>;
+type FileFields = Partial<Pick<RecoveryPackFile, "bucketCode">>;
 
 export type BuiltPart = {
   readonly part: PackPart;
@@ -145,80 +138,6 @@ export function buildBucketPart(tx: Transaction, context: PartsContext): Promise
         settingsRevision: revision,
       },
       file: { bucketCode },
-    };
-  });
-}
-
-export function buildArchivesPart(tx: Transaction, context: PartsContext): Promise<BuiltPart> {
-  return orFailed("archives", context, async () => {
-    const read = await readHeldArchiveSettingsIn(tx, context.ring);
-    if ("unreadable" in read) {
-      throw new AppError("backup.archive_settings_unreadable", { reason: read.unreadable });
-    }
-    const sealed = read.settings;
-    if (sealed === null) return absent("archives");
-    const destinations = archiveDestinations(sealed);
-    const bucket = destinations.find((d) => d.kind === "s3");
-    const folder = destinations.find((d) => d.kind === "local-fs");
-    const recoveryKey = await backupKey(context.env);
-    const revision = sealed.revision;
-    const facts = keyFacts(context);
-    const words = PART_WORDS[context.locale].archives;
-    const record: RecoveryPackPartRecord = {
-      part: "archives",
-      state: "included",
-      ...facts.record,
-      settingsRevision: revision,
-      destination: bucket === undefined ? "folder" : "bucket",
-    };
-    const part = {
-      kind: "archives",
-      state: "included",
-    } as const;
-    if (bucket !== undefined) {
-      const archivePrefix = archiveNamespace(bucket.bucket.prefix);
-      const archiveCode = encodeArchiveRecoveryPack({
-        version: 1,
-        format: "WBK1",
-        bucket: bucket.bucket,
-        archivePrefix,
-        recoveryKey,
-      });
-      return {
-        part: {
-          ...part,
-          page: {
-            title: words.title,
-            intro: words.introBucket,
-            secret: { label: words.codeLabel, text: archiveCode, qr: true },
-            rows: [
-              {
-                label: words.folderRow,
-                value: `${bucket.bucket.bucket} / ${archivePrefix}`,
-                mono: true,
-              },
-              ...facts.rows,
-            ],
-            notes: [...words.stepsBucket],
-          },
-        },
-        record,
-        file: { archiveCode },
-      };
-    }
-    return {
-      part: {
-        ...part,
-        page: {
-          title: words.title,
-          intro: words.introFolder,
-          secret: { label: words.keyLabel, text: recoveryKey, qr: true, exactSpaces: true },
-          rows: [{ label: words.folderRow, value: folder!.dir, mono: true }, ...facts.rows],
-          notes: [...words.stepsFolder],
-        },
-      },
-      record,
-      file: { backupKey: recoveryKey },
     };
   });
 }

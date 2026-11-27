@@ -4,12 +4,14 @@
 
 In **Backups**, choose **A folder on this box**, a **Bucket**, or both, then save. Bucket
 archives copy the current bucket settings when you save. Later edits to the continuous
-bucket copy do not move those archives.
+bucket copy do not move those archives. The recovery pack does not record where archives are kept
+or how to sign in to their bucket, so keep your own way to sign in to that bucket away from the box.
 
-The **Recovery pack** card at the top of **Backups** prints one PDF holding the master key: see [Print a new recovery pack](recovery-document.md). Keep the pack secret and off
-the box, outside the bucket. Keep earlier packs while you keep backups made before **Make a new master key**: a backup file
-opens with the master key that was current when it was made. After **Change the backup key**, or
-the bucket copy or archive settings on **Backups**, the card says the pack is out of date; print a new one.
+The **Recovery pack** card at the top of **Backups** prints one PDF holding the master key: see
+[Print a new recovery pack](recovery-document.md). Keep the pack secret and off the box, outside the
+bucket. Keep earlier packs while you keep backups made before **Make a new master key**: a backup file
+opens with the master key that was current when it was made. When the card says the pack is out of
+date, print a new one.
 
 If **Change the backup key** reports that the box could not record the change, the new key is already in use: print a new recovery pack. See the [archive settings reference](../../apps/server/README.md)
 and [restore procedures](../developers/offline-fiscal-restore.md).

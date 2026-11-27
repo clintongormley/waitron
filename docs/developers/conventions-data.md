@@ -3919,9 +3919,9 @@ NEW entry point which reads `tls/` calls `finishTlsInstall` first.
 
 A solo primary checks its configured bucket while serving. A restored box starts this check once
 its first start has completed. A newer published pointer for the same stream and node counts only
-when it verifies with the box’s own signing key. The bucket and archive recovery cases
-(`stream-loop.e2e.test.ts` and `restore-command.archive.test.ts`) exercise the publication of that
-evidence. The archive case runs the first start and pointer publisher with a simulated full-copy
+when it verifies with the box’s own signing key. The bucket and backup-file recovery cases
+(`stream-loop.e2e.test.ts` and `restore-command.file.test.ts`) exercise the publication of that
+evidence. The backup-file case runs the first start and pointer publisher with a simulated full-copy
 upload.
 
 On a start without a restart mark, `boot.ts` also asks the configured bucket before starting sales

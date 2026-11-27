@@ -291,7 +291,6 @@ it("records recovery pack 1 as received beside the installed key, once across a 
       receivedAt: expect.any(Date),
       parts: [
         { part: "bucket", state: "not-set-up" },
-        { part: "archives", state: "not-set-up" },
         { part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName },
       ],
     },
@@ -388,10 +387,7 @@ it.each(["no master key", "another master key"] as const)(
         number: 1,
         madeAt: new Date(),
         madeBy: null,
-        parts: [
-          { part: "bucket", state: "not-set-up" },
-          { part: "archives", state: "not-set-up" },
-        ],
+        parts: [{ part: "bucket", state: "not-set-up" }],
       });
       if (current === "another master key") {
         const other = makeMasterKey();

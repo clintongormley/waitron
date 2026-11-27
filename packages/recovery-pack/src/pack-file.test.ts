@@ -18,8 +18,6 @@ const full: RecoveryPackFile = {
   number: 3,
   madeAt: "2026-10-29T17:00:00.000Z",
   bucketCode: "WAITRON-RECOVERY-KIT-2:" + "b".repeat(600),
-  archiveCode: "WAITRON-ARCHIVE-PACK-1:" + "c".repeat(400),
-  backupKey: "k".repeat(43),
   masterKey,
   masterKeyName,
   masterKeyHeldBy: null,
@@ -43,26 +41,19 @@ describe("the recovery pack's attached file", () => {
   it("builds canonical bytes: keys sorted, no spaces", () => {
     const bytes = buildRecoveryPackFile(full);
     const out = text(bytes);
-    expect(out.startsWith('{"archiveCode":')).toBe(true);
+    expect(out.startsWith('{"bucketCode":')).toBe(true);
     expect(out).not.toMatch(/[ \n]"/);
     expect(out).toBe(canonicalJson(full));
   });
 
   it("round-trips every field, with absent parts as null", () => {
     expect(parseRecoveryPackFile(buildRecoveryPackFile(full))).toEqual(full);
-    const bare: RecoveryPackFile = {
-      ...full,
-      bucketCode: null,
-      archiveCode: null,
-      backupKey: null,
-    };
+    const bare: RecoveryPackFile = { ...full, bucketCode: null };
     expect(parseRecoveryPackFile(buildRecoveryPackFile(bare))).toEqual(bare);
   });
 
-  it("parses a pack file without serverKey fields", () => {
+  it("parses a pack file without serverKey, archiveCode or backupKey fields", () => {
     expect(Object.keys(parseRecoveryPackFile(bytesOf(full))).sort()).toEqual([
-      "archiveCode",
-      "backupKey",
       "bucketCode",
       "kind",
       "madeAt",
@@ -91,6 +82,15 @@ describe("the recovery pack's attached file", () => {
     expect(refusal(bytesOf({ ...full, ...extra }))).toBe("shape");
   });
 
+  it.each([
+    ["both", { archiveCode: null, backupKey: null }],
+    ["both, filled", { archiveCode: "WAITRON-ARCHIVE-PACK-1:" + "c".repeat(400), backupKey: "k" }],
+    ["archiveCode alone", { archiveCode: null }],
+    ["backupKey alone", { backupKey: "k".repeat(43) }],
+  ])("a pack file with archiveCode or backupKey is refused (%s) as shape", (_name, extra) => {
+    expect(refusal(bytesOf({ ...full, ...extra }))).toBe("shape");
+  });
+
   it("carries masterKey and masterKeyName, or, on a pack without the key, the pack that holds it", () => {
     const read = parseRecoveryPackFile(buildRecoveryPackFile(full));
     expect(read.version).toBe(2);
@@ -114,19 +114,9 @@ describe("the recovery pack's attached file", () => {
     ).toThrow("Recovery pack file refused: size");
   });
 
-  it.each([
-    ["spaces between words", "correct horse battery staple"],
-    ["a leading and a trailing space", " correct horse battery staple "],
-    ["two spaces in a row", "correct  horse"],
-    ["a line break", "abc\ndef"],
-  ])("carries a backup key with %s exactly as it is", (_name, backupKey) => {
-    const bytes = buildRecoveryPackFile({ ...full, backupKey });
-    expect(parseRecoveryPackFile(bytes).backupKey).toBe(backupKey);
-  });
-
   it("refuses a missing key and an extra key", () => {
     const missing: Partial<RecoveryPackFile> = { ...full };
-    delete missing.backupKey;
+    delete missing.bucketCode;
     expect(refusal(bytesOf(missing))).toBe("shape");
     expect(refusal(bytesOf({ ...full, extra: "secret" }))).toBe("shape");
   });
@@ -156,9 +146,6 @@ describe("the recovery pack's attached file", () => {
     ["bucketCode without its prefix", { bucketCode: "b".repeat(40) }],
     ["bucketCode with a space", { bucketCode: "WAITRON-RECOVERY-KIT-2:ab cd" }],
     ["bucketCode prefix alone", { bucketCode: "WAITRON-RECOVERY-KIT-2:" }],
-    ["archiveCode without its prefix", { archiveCode: "WAITRON-RECOVERY-KIT-2:abc" }],
-    ["backupKey empty", { backupKey: "" }],
-    ["backupKey a number", { backupKey: 7 }],
   ])("refuses a wrong %s", (_name, change) => {
     expect(refusal(bytesOf({ ...full, ...change }))).toBe("shape");
   });
@@ -171,7 +158,7 @@ describe("the recovery pack's attached file", () => {
 
   it("refuses a duplicate key, which JSON readers resolve differently", () => {
     const canonical = text(buildRecoveryPackFile(full));
-    const doubled = canonical.replace('{"archiveCode":', '{"archiveCode":null,"archiveCode":');
+    const doubled = canonical.replace('{"bucketCode":', '{"bucketCode":null,"bucketCode":');
     expect(refusal(encoder.encode(doubled))).toBe("noncanonical");
   });
 
@@ -186,7 +173,7 @@ describe("the recovery pack's attached file", () => {
 
   it("refuses an empty file and one over the limit, before parsing", () => {
     expect(refusal(new Uint8Array())).toBe("size");
-    const big = { ...full, backupKey: "k".repeat(MAX_PACK_FILE) };
+    const big = { ...full, bucketCode: full.bucketCode + "b".repeat(MAX_PACK_FILE) };
     expect(refusal(encoder.encode(canonicalJson(big)))).toBe("size");
     expect(MAX_PACK_FILE).toBe(16 * 1024);
   });

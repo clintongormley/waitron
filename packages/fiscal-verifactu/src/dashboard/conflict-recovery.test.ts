@@ -352,8 +352,6 @@ async function packFor(masterKey: string, masterKeyName: string): Promise<Uint8A
       number: 4,
       madeAt,
       bucketCode: null,
-      archiveCode: null,
-      backupKey: null,
       masterKey,
       masterKeyName,
       masterKeyHeldBy: null,

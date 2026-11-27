@@ -17,7 +17,6 @@ import type { ProvisionedNode } from "@waitron/module";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
-import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { decryptBackupFile, readArtifactFileHeader } from "./artifact-cipher-file.js";
 import { mountBackupApi } from "./backup-api.js";
 import { loadBackupSettings, loadRecoveryKey } from "./backup-config.js";
@@ -168,7 +167,7 @@ const keyFile = async (stateDir: string) =>
   parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
 
 describe("Make a new master key moves the backup key to N+1 of the new master key", () => {
-  it("the new pack's archives page prints key N+1", async () => {
+  it("the new pack's bucket page prints key N+1", async () => {
     const stateDir = await stateFolder(3);
     const f = fixture(stateDir);
     const response = await f.make(true);
@@ -176,7 +175,6 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     const next = heldBackupKey(shownBytes(response), 4);
     const shownName = decodeURIComponent(response.headers.get("x-waitron-master-key-name")!);
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
-    expect(decodeArchiveRecoveryPack(file.archiveCode!).recoveryKey).toBe(next.key);
     expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(next.key);
     const held = await keyFile(stateDir);
     expect(held).toMatchObject({
@@ -203,9 +201,7 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     const response = await f.make(encodeMasterKeyCode(OLD_MASTER));
     expect(response.status).toBe(200);
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
-    expect(decodeArchiveRecoveryPack(file.archiveCode!).recoveryKey).toBe(
-      heldBackupKey(OLD_MASTER, 3).key,
-    );
+    expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(heldBackupKey(OLD_MASTER, 3).key);
     expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before);
     expect(f.steps).toEqual([]);
   });
@@ -292,8 +288,7 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     expect(response.status).toBe(200);
     const typed = response.headers.get("x-waitron-master-key")!;
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
-    const printed = decodeArchiveRecoveryPack(file.archiveCode!).recoveryKey;
-    expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(printed);
+    const printed = parseRecoveryKit(file.bucketCode!).recoveryKey;
     expect((await keyFile(stateDir)).WAITRON_BACKUP_RECOVERY_KEY).toBe(
       heldBackupKey(OLD_MASTER, 3).key,
     );

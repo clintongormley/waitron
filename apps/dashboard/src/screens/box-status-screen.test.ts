@@ -251,7 +251,18 @@ it("offers Keep waiting while an upload is stalled", async () => {
   expect(resolveBoxShutdown).toHaveBeenCalledExactlyOnceWith("keep-waiting");
 });
 
-it("mentions both restore keys before pausing work for a downloadable backup", async () => {
+it("names the master key before pausing work for backups at saved destinations", async () => {
+  const { el } = await mount(stubApi({}, health({ shutdown: { phase: "idle", available: true } })));
+  el.canCheckClock = true;
+  await el.updateComplete;
+  await userEvent.click(q(el, '[data-test="box-shutdown"]')!);
+  const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
+  expect(text(confirm.closest("wt-dialog"))).toContain(
+    "You need the backup and the master key to restore.",
+  );
+});
+
+it("names the master key before pausing work for a downloadable backup", async () => {
   const { el } = await mount(
     stubApi({}, health({ shutdown: { phase: "idle", available: true, downloadOnly: true } })),
   );
@@ -259,10 +270,12 @@ it("mentions both restore keys before pausing work for a downloadable backup", a
   await el.updateComplete;
   await userEvent.click(q(el, '[data-test="box-shutdown"]')!);
   const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
-  expect(text(confirm.closest("wt-dialog"))).toContain("encryption key and master key");
+  expect(text(confirm.closest("wt-dialog"))).toContain(
+    "To restore this backup, you need the master key.",
+  );
 });
 
-it("shows the checked download and asks the administrator to confirm the named file and keys", async () => {
+it("shows the checked download and asks the administrator to confirm the named file and the master key", async () => {
   const name = "waitron-final.backup.enc";
   const bytes = 1234;
   const download = { phase: "download", name, bytes, delivered: false, available: true } as const;
@@ -298,9 +311,12 @@ it("shows the checked download and asks the administrator to confirm the named f
   await userEvent.click(saved());
 
   const dialog = text(confirmation);
+  expect(confirmation.getAttribute("heading")).toBe(
+    "Have you saved the backup and the master key?",
+  );
   expect(dialog).toContain(name);
   expect(dialog).toContain(bytes.toLocaleString("en"));
-  expect(dialog).toContain("encryption key and master key");
+  expect(dialog).toContain("To restore this backup, you need the master key.");
   await userEvent.click(confirm);
   await vi.waitFor(() => expect(confirmBoxShutdownDownload).toHaveBeenCalledWith(name));
   await vi.waitFor(() =>

@@ -178,10 +178,9 @@ If the box restarted after it made the master key, it no longer holds it: the pa
 with a new one, which the step then shows once"; `apps/server/src/first-setup-key-reissue.boot.test.ts`).
 
 Keep the PDF or paper outside the box and its backups. It contains the master key.
-Pack 1 has one page, the master key's, and its attached file names no bucket copy or archives
+Pack 1 has one page, the master key's, and its attached file holds no bucket copy code
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the command path writes recovery pack
-1 holding the master key and no box key, in %s"). Your Cloud login, or the downloaded archive's password,
-stays separate. Keep an older pack while you retain backups that need its key.
+1 holding the master key and no box key, in %s"). Your Cloud login stays separate. Keep an older pack while you retain backups that need its key.
 The box keeps only the master key's name, check value and sealing public key, never the key itself.
 
 During recovery, select the recovery pack that holds this backup's master key, scan its master key

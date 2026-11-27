@@ -5,6 +5,7 @@ import { DashboardApi } from "../api/client.js";
 import type { OwnProfile } from "../api/account-api.js";
 import type { MadeRecoveryPack, RecoveryPackStatus } from "../api/backup-api.js";
 import { LiveData } from "@waitron/dashboard-kit";
+import { en, es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
@@ -136,10 +137,7 @@ const STATES = {
   }),
   "out of date": status({
     latest: latest(),
-    reasons: [
-      { part: "bucket", kind: "key_changed", at: "2026-10-20T10:00:00.000Z" },
-      { part: "archives", kind: "key_changed", at: "2026-10-20T10:00:00.000Z" },
-    ],
+    reasons: [{ part: "bucket", kind: "key_changed", at: "2026-10-20T10:00:00.000Z" }],
     keep: [{ number: 3, madeAt: MADE_AT, until: "2026-11-19T10:00:00.000Z", why: "backup_key" }],
   }),
   incomplete: status({
@@ -318,6 +316,29 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     expect(row(el, "backup-key")).toBe(day.backupKey);
   });
 
+  it("names the pack to keep for the bucket copy, and draws no archives reason", async () => {
+    setLocale(locale);
+    const el = await mount(stubApi(STATES["out of date"]));
+    expect(line(el)).toContain(
+      locale === "en-GB"
+        ? "Keep pack 3, made on 12 October, until about 19 November: the bucket copy made before the backup key changed needs it."
+        : "Guarda el paquete 3, hecho el 12 de octubre, hasta aproximadamente el 19 de noviembre: la copia en el bucket hecha antes del cambio de la clave de las copias lo necesita.",
+    );
+    expect(line(el)).not.toMatch(/archiv/i);
+    const catalogue: Record<string, string> = locale === "en-GB" ? en : es;
+    expect(Object.keys(catalogue).filter((key) => key.includes("reason.archives"))).toEqual([]);
+  });
+
+  it("says the box's backups still use the older key in the bucket copy's words", async () => {
+    setLocale(locale);
+    const el = await mount(stubApi(status({ ...STATES["up to date"], backupsUseOlderKey: true })));
+    expect(line(el)).toContain(
+      locale === "en-GB"
+        ? "The box's backups still use the backup key from before the last change, because the box could not load the new settings. Keep the older pack too while the Recovery pack card says this."
+        : "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Guarda también el paquete anterior mientras la tarjeta Paquete de recuperación lo diga.",
+    );
+  });
+
   it("says the last pack is incomplete", async () => {
     setLocale(locale);
     const el = await mount(stubApi(STATES.incomplete));
@@ -445,8 +466,8 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     expect(line(el)).toContain(t("recovery_pack.older_key"));
     expect(t("recovery_pack.older_key")).toContain(
       locale === "en-GB"
-        ? "keep the older pack too while the Recovery pack card says this."
-        : "guarda también el paquete anterior mientras la tarjeta Paquete de recuperación lo diga.",
+        ? "Keep the older pack too while the Recovery pack card says this."
+        : "Guarda también el paquete anterior mientras la tarjeta Paquete de recuperación lo diga.",
     );
   });
 });

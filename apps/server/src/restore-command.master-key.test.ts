@@ -99,7 +99,6 @@ describe("waitron-restore restore <file> and the master key", () => {
       pack,
       await recoveryPackPdf({
         bucketCode: null,
-        archiveCode: null,
         masterKey: MASTER_KEY_TEXT,
         masterKeyName: heldBackupKeyName(MASTER_KEY),
       }),
