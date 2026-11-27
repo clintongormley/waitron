@@ -1268,12 +1268,12 @@ it("says in Money back under way that the box's records need checking, so the re
   expect(
     giveBackFilingMessage("invoice_correction.chain_unsound", "en", { fullInvoice: true }),
   ).toBe(
-    "The box's receipt and invoice records need checking, so the rest cannot be refunded or recorded on this full invoice yet. Money already refunded stays refunded. Press Check again once they have been checked.",
+    "The box's receipt and invoice records need checking, so no more can be refunded on this full invoice and the refund cannot be recorded on it yet. Money already refunded stays refunded. Press Check again once they have been checked.",
   );
   expect(
     giveBackFilingMessage("invoice_correction.chain_unsound", "es", { fullInvoice: true }),
   ).toBe(
-    "Hay que revisar los registros de tickets y facturas del servidor, así que lo que queda aún no se puede devolver ni registrar en esta factura completa. El dinero ya devuelto queda devuelto. Pulsa Comprobar de nuevo cuando se hayan revisado.",
+    "Hay que revisar los registros de tickets y facturas del servidor, así que aún no se puede devolver más en esta factura completa ni registrar en ella el dinero devuelto. El dinero ya devuelto queda devuelto. Pulsa Comprobar de nuevo cuando se hayan revisado.",
   );
   expect(giveBackFilingMessage("invoice_correction.chain_unsound", "en", {})).toBe(
     "The refund cannot be recorded on this receipt now, so Finish is not offered. Press Check again to see whether that has changed.",

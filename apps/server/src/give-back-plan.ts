@@ -138,7 +138,7 @@ async function coveredByCancel(
 
 /**
  * What giving back `request` on the receipt `saleId` would do (5.2), writing nothing: the plain
- * refunds of what cancels still owe (on a receipt), the extra, then one correction of the rest,
+ * refunds of what cancels still owe, the extra, then one correction of the rest,
  * each from the chosen way; a refusal the write would answer is thrown. Every choice the read shows
  * unavailable answers the read's reason.
  */
@@ -201,7 +201,8 @@ export async function planWithRights(
   const amount = cents(request.amount);
   const extra = request.purpose === "extra" ? amount : cents(request.extra);
   const wayMoney = cents(way.moneyLeft);
-  // On a full invoice a cancel's money goes on the corrective with the rest.
+  // On a full invoice a cancel's money goes with the rest: on the corrective when there is one, else
+  // back plainly.
   const owedHere = (line: GiveBackLine) => (facts.fullInvoice ? 0 : owedOf(line));
 
   let owed = 0;

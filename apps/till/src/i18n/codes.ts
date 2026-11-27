@@ -1576,8 +1576,8 @@ const GIVE_BACK_NOT_RECORDED_BY_CODE: Record<string, { en: string; es: string }>
 /** Money back under way's words while a full invoice's give-back waits for the box's records to be
  * checked. */
 const FULL_INVOICE_RECORDS_NEED_CHECKING = {
-  en: "The box's receipt and invoice records need checking, so the rest cannot be refunded or recorded on this full invoice yet. Money already refunded stays refunded. Press Check again once they have been checked.",
-  es: "Hay que revisar los registros de tickets y facturas del servidor, así que lo que queda aún no se puede devolver ni registrar en esta factura completa. El dinero ya devuelto queda devuelto. Pulsa Comprobar de nuevo cuando se hayan revisado.",
+  en: "The box's receipt and invoice records need checking, so no more can be refunded on this full invoice and the refund cannot be recorded on it yet. Money already refunded stays refunded. Press Check again once they have been checked.",
+  es: "Hay que revisar los registros de tickets y facturas del servidor, así que aún no se puede devolver más en esta factura completa ni registrar en ella el dinero devuelto. El dinero ya devuelto queda devuelto. Pulsa Comprobar de nuevo cuando se hayan revisado.",
 };
 
 /** Any other refusal of recording: Finish is not offered while it holds. */
