@@ -69,10 +69,10 @@ it("words a bill paid more than it comes to without promising Keep as tip where 
 
 it("words a refund that now has to be recorded on the receipt, in both languages", () => {
   expect(codeMessage("tender.refund_needs_correction", "en")).toBe(
-    "This money now has to be recorded on the receipt as it is refunded. Close this window and open Refund again to carry on.",
+    "This money now has to be recorded on the receipt or invoice as it is refunded. Close this window and open Refund again to carry on.",
   );
   expect(codeMessage("tender.refund_needs_correction", "es")).toBe(
-    "Este dinero ahora tiene que registrarse en el ticket al devolverse. Cierra esta ventana y vuelve a abrir Devolución para continuar.",
+    "Este dinero ahora tiene que registrarse en el ticket o la factura al devolverse. Cierra esta ventana y vuelve a abrir Devolución para continuar.",
   );
 });
 
@@ -1204,8 +1204,8 @@ it("names a full invoice, not a receipt, in Give money back's and Money back und
     [
       "giveBackReasonMessage",
       "filing_refused",
-      "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
-      "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
+      "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes, cancelled dishes or goodwill cannot be refunded; the extra paid on top can.",
+      "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos, de platos cancelados o por cortesía no se puede devolver; lo pagado de más, sí.",
     ],
     [
       "giveBackFilingMessage",
@@ -1216,8 +1216,8 @@ it("names a full invoice, not a receipt, in Give money back's and Money back und
     [
       "giveBackReasonMessage",
       "filing_pending",
-      "This full invoice is still being sent to the tax agency, so dishes or goodwill cannot be refunded yet; money owed for cancelled dishes and the extra paid on top can. Try again in a few minutes.",
-      "Esta factura completa aún se está enviando a la Agencia Tributaria, así que el dinero de platos o por cortesía todavía no se puede devolver; el de platos cancelados y lo pagado de más, sí. Vuelve a intentarlo en unos minutos.",
+      "This full invoice is still being sent to the tax agency, so dishes, cancelled dishes or goodwill cannot be refunded yet; the extra paid on top can. Try again in a few minutes.",
+      "Esta factura completa aún se está enviando a la Agencia Tributaria, así que el dinero de platos, de platos cancelados o por cortesía todavía no se puede devolver; lo pagado de más, sí. Vuelve a intentarlo en unos minutos.",
     ],
     [
       "giveBackFilingMessage",
@@ -1261,6 +1261,48 @@ it("says in Money back under way that the business's registered address is missi
     giveBackFilingMessage("fiscal.taxpayer_domicile_missing", "es", { fullInvoice: true }),
   ).toBe(
     "Falta el domicilio fiscal del negocio, así que el dinero devuelto aún no se puede registrar en esta factura completa. Añádelo en el panel, en Ajustes del local › Datos del local. Después pulsa Comprobar de nuevo.",
+  );
+});
+
+it("says in Money back under way that the box's records need checking, so the rest of a full invoice's refund waits and a receipt's recording waits", () => {
+  expect(
+    giveBackFilingMessage("invoice_correction.chain_unsound", "en", { fullInvoice: true }),
+  ).toBe(
+    "The box's receipt and invoice records need checking, so no more can be refunded on this full invoice and the refund cannot be recorded on it yet. Money already refunded stays refunded. Press Check again once they have been checked.",
+  );
+  expect(
+    giveBackFilingMessage("invoice_correction.chain_unsound", "es", { fullInvoice: true }),
+  ).toBe(
+    "Hay que revisar los registros de tickets y facturas del servidor, así que aún no se puede devolver más en esta factura completa ni registrar en ella el dinero devuelto. El dinero ya devuelto queda devuelto. Pulsa Comprobar de nuevo cuando se hayan revisado.",
+  );
+  expect(giveBackFilingMessage("invoice_correction.chain_unsound", "en", {})).toBe(
+    "The box's receipt and invoice records need checking, so the refund cannot be recorded on this receipt yet. Money already refunded stays refunded. Try again once they have been checked.",
+  );
+  expect(giveBackFilingMessage("invoice_correction.chain_unsound", "es", {})).toBe(
+    "Hay que revisar los registros de tickets y facturas del servidor, así que aún no se puede registrar en este ticket el dinero devuelto. El dinero ya devuelto queda devuelto. Vuelve a intentarlo cuando se hayan revisado.",
+  );
+});
+
+it("says the box's receipt and invoice records need checking, naming cancelled dishes on a full invoice in Give money back", () => {
+  const receipt = {
+    en: "The box's receipt and invoice records need checking, so dishes or goodwill cannot be refunded or recorded now. Money already refunded stays refunded.",
+    es: "Hay que revisar los registros de tickets y facturas del servidor, así que ahora no se puede devolver ni registrar dinero de platos o por cortesía. El dinero ya devuelto queda devuelto.",
+  };
+  expect(codeMessage("invoice_correction.chain_unsound", "en")).toBe(receipt.en);
+  expect(codeMessage("invoice_correction.chain_unsound", "es")).toBe(receipt.es);
+  for (const locale of ["en", "es"] as const)
+    expect(giveBackReasonMessage("invoice_correction.chain_unsound", locale, {})).toBe(
+      receipt[locale],
+    );
+  expect(
+    giveBackReasonMessage("invoice_correction.chain_unsound", "en", { fullInvoice: true }),
+  ).toBe(
+    "The box's receipt and invoice records need checking, so dishes, cancelled dishes or goodwill cannot be refunded or recorded now; the extra paid on top can be refunded. Money already refunded stays refunded.",
+  );
+  expect(
+    giveBackReasonMessage("invoice_correction.chain_unsound", "es", { fullInvoice: true }),
+  ).toBe(
+    "Hay que revisar los registros de tickets y facturas del servidor, así que ahora no se puede devolver ni registrar dinero de platos, de platos cancelados o por cortesía; lo pagado de más sí se puede devolver. El dinero ya devuelto queda devuelto.",
   );
 });
 

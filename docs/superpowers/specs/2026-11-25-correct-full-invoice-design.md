@@ -1,8 +1,8 @@
 # Giving money back on a full invoice files a corrective full invoice (CORRECT-FULL-INVOICE)
 
 Status: the owner answered all four questions on 2026-11-25 (section 6, "Owner's answers"); where an
-answer changes a statement below, a dated note says so. PR 0 (#4363) and PR 1 (#4391) landed; PR 2a landed as #4448; PR 3 is on
-`feat/correct-full-invoice-part-lines`. The plan is
+answer changes a statement below, a dated note says so. PR 0 (#4363), PR 1 (#4391), PR 2a (#4448) and PR 3
+(#4496) landed; PR 2b is on `feat/correct-full-invoice-cancelled-dish`. The plan is
 [2026-11-25-correct-full-invoice.md](../plans/2026-11-25-correct-full-invoice.md). Every "I
 recommend" is mine (lane L), not the owner's.
 
@@ -47,6 +47,10 @@ AEAT. Nothing simpler meets the ask.
   invoice is delivered before the money goes back (it starts on the way the original was), and the
   end screen says "A corrective invoice for Acme Foods SL (−€10.00) is printing." Against a receipt it
   says "A corrective receipt (−€10.00) is printing."_
+  _2026-11-27 (PR 2b, plan D4, the watcher's): after Cancel and refund on a full invoice, money that
+  goes on the corrective asks a PIN unless the person holds both Refund payments and Issue
+  corrective receipts and invoices; on a ticket the cancel's approval covers the cancelled dishes'
+  money alone._
 - **The customer** receives a corrective full invoice (section 4), delivered the way the original
   full invoice was (question 1). _2026-11-25: unless staff choose another way (answer 1)._
 - **The accountant:** the refund no longer appears on the "Refunds with no corrective" sheet,

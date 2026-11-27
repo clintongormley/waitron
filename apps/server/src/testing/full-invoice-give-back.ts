@@ -1,13 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { expect } from "vitest";
-import { sales, workingOrders, type Transaction } from "@waitron/db";
+import { adjustments, parties, sales, workingOrders, type Transaction } from "@waitron/db";
 import { loginWithPin } from "@waitron/identity";
 import { readBillEditState } from "../bill-editing.js";
 import { DEVICE_COOKIE } from "../device-session.js";
 import type { GiveBackPlan, GiveBackRequest } from "../give-back-plan.js";
+import { cancelItem } from "../line-cancel.js";
+import { readCancellationContext } from "../line-cancel-context.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { inTx, send, tabWith, type BillVenue } from "./bill-venue.js";
+import { testTradingAdmission } from "./trading-admission.js";
 
 /** The customer every full invoice here names. */
 export const CUSTOMER_TAX_ID = "B12345674";
@@ -144,3 +147,41 @@ export const r1 = (total: number) => ({
   customer: CUSTOMER_TAX_ID,
   total,
 });
+
+/** The administrator's still-charge cancel, with Refund ticked, of the bill's line `lineNo`, for
+ * `reasonId`; its id. */
+export async function refundableCancelFor(
+  venue: BillVenue,
+  billId: string,
+  lineNo: number,
+  reasonId: string,
+): Promise<string> {
+  const [order] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
+  const [line] = venue.db.all<{ id: string }>(
+    sql`select id from working_order_lines where working_order_id = ${billId} and line_no = ${lineNo}`,
+  );
+  await inTx(venue, async (tx) => {
+    const [party] = await tx.select().from(parties).where(eq(parties.id, order!.partyId!));
+    return cancelItem(
+      tx,
+      venue.cfg,
+      order!.partyId!,
+      line!.id,
+      {
+        quantity: "1",
+        expectedEdit: await readBillEditState(tx, billId),
+        outcome: "keep_charge",
+        reasonId,
+        expectedPartyRevision: party!.revision,
+        expectedBillRevision: order!.revision,
+        expectedContext: await readCancellationContext(tx, order!.partyId!, line!.id),
+        submissionId: randomUUID(),
+        refundHandoff: true,
+        admission: testTradingAdmission(),
+      },
+      venue.adminId,
+    );
+  });
+  const rows = await venue.db.select().from(adjustments).where(eq(adjustments.lineId, line!.id));
+  return rows.find((row) => row.action === "cancel")!.id;
+}

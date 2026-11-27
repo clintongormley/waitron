@@ -530,8 +530,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor.",
   },
   "invoice_correction.chain_unsound": {
-    en: "The box's receipt records need checking, so dishes or goodwill cannot be refunded or recorded now. Money already refunded stays refunded.",
-    es: "Hay que revisar los registros de tickets del servidor, así que ahora no se puede devolver ni registrar dinero de platos o por cortesía. El dinero ya devuelto queda devuelto.",
+    en: "The box's receipt and invoice records need checking, so dishes or goodwill cannot be refunded or recorded now. Money already refunded stays refunded.",
+    es: "Hay que revisar los registros de tickets y facturas del servidor, así que ahora no se puede devolver ni registrar dinero de platos o por cortesía. El dinero ya devuelto queda devuelto.",
   },
   "sale.correction_amount_invalid": {
     en: "Enter an amount above zero and no more than is left to refund on this receipt for the dishes chosen or as goodwill.",
@@ -707,8 +707,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta devolución supera el valor de los platos cancelados",
   },
   "tender.refund_needs_correction": {
-    en: "This money now has to be recorded on the receipt as it is refunded. Close this window and open Refund again to carry on.",
-    es: "Este dinero ahora tiene que registrarse en el ticket al devolverse. Cierra esta ventana y vuelve a abrir Devolución para continuar.",
+    en: "This money now has to be recorded on the receipt or invoice as it is refunded. Close this window and open Refund again to carry on.",
+    es: "Este dinero ahora tiene que registrarse en el ticket o la factura al devolverse. Cierra esta ventana y vuelve a abrir Devolución para continuar.",
   },
   "advance.full_invoice_unsupported": {
     en: "This bill is set for a full invoice, so this payment cannot have a receipt of its own. Take it without one: it is listed on the bill's full invoice.",
@@ -1465,15 +1465,14 @@ function zoneAdmissionMessage(reason: unknown, locale: string): string {
   return pickLocale({ en: en[key], es: es[key] }, locale);
 }
 
-/** In Give money back a refused or held filing holds back only money for dishes and goodwill. */
 const GIVE_BACK_FILING_REFUSED = {
   receipt: {
     en: "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
     es: "La Agencia Tributaria rechazó este ticket, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
   },
   fullInvoice: {
-    en: "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
-    es: "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
+    en: "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes, cancelled dishes or goodwill cannot be refunded; the extra paid on top can.",
+    es: "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos, de platos cancelados o por cortesía no se puede devolver; lo pagado de más, sí.",
   },
 };
 
@@ -1484,8 +1483,16 @@ const GIVE_BACK_FILING_PENDING = {
     es: "Este ticket aún se está enviando a la Agencia Tributaria, así que el dinero de platos o por cortesía todavía no se puede devolver; el de platos cancelados y lo pagado de más, sí. Vuelve a intentarlo en unos minutos.",
   },
   fullInvoice: {
-    en: "This full invoice is still being sent to the tax agency, so dishes or goodwill cannot be refunded yet; money owed for cancelled dishes and the extra paid on top can. Try again in a few minutes.",
-    es: "Esta factura completa aún se está enviando a la Agencia Tributaria, así que el dinero de platos o por cortesía todavía no se puede devolver; el de platos cancelados y lo pagado de más, sí. Vuelve a intentarlo en unos minutos.",
+    en: "This full invoice is still being sent to the tax agency, so dishes, cancelled dishes or goodwill cannot be refunded yet; the extra paid on top can. Try again in a few minutes.",
+    es: "Esta factura completa aún se está enviando a la Agencia Tributaria, así que el dinero de platos, de platos cancelados o por cortesía todavía no se puede devolver; lo pagado de más, sí. Vuelve a intentarlo en unos minutos.",
+  },
+};
+
+const GIVE_BACK_CHAIN_UNSOUND = {
+  receipt: CODE_MESSAGES["invoice_correction.chain_unsound"]!,
+  fullInvoice: {
+    en: "The box's receipt and invoice records need checking, so dishes, cancelled dishes or goodwill cannot be refunded or recorded now; the extra paid on top can be refunded. Money already refunded stays refunded.",
+    es: "Hay que revisar los registros de tickets y facturas del servidor, así que ahora no se puede devolver ni registrar dinero de platos, de platos cancelados o por cortesía; lo pagado de más sí se puede devolver. El dinero ya devuelto queda devuelto.",
   },
 };
 
@@ -1496,6 +1503,9 @@ export function giveBackReasonMessage(
   locale: string = currentLocale(),
   params?: Record<string, unknown>,
 ): string {
+  const kind = params?.fullInvoice === true ? "fullInvoice" : "receipt";
+  if (code === "invoice_correction.chain_unsound")
+    return pickLocale(GIVE_BACK_CHAIN_UNSOUND[kind], locale);
   const words =
     code !== "sale.correction_not_admitted"
       ? undefined
@@ -1504,9 +1514,7 @@ export function giveBackReasonMessage(
         : params?.reason === "filing_pending"
           ? GIVE_BACK_FILING_PENDING
           : undefined;
-  return words === undefined
-    ? codeMessage(code, locale, params)
-    : pickLocale(words[params?.fullInvoice === true ? "fullInvoice" : "receipt"], locale);
+  return words === undefined ? codeMessage(code, locale, params) : pickLocale(words[kind], locale);
 }
 
 /** Why Money back under way cannot record the money given back, by the refusal's reason: all but
@@ -1565,6 +1573,19 @@ const GIVE_BACK_NOT_RECORDED_BY_CODE: Record<string, { en: string; es: string }>
   },
 };
 
+/** Money back under way's words while the box's records need checking: a full invoice's money
+ * back waits for them, a receipt's only its recording. */
+const GIVE_BACK_RECORDS_NEED_CHECKING = {
+  receipt: {
+    en: "The box's receipt and invoice records need checking, so the refund cannot be recorded on this receipt yet. Money already refunded stays refunded. Try again once they have been checked.",
+    es: "Hay que revisar los registros de tickets y facturas del servidor, así que aún no se puede registrar en este ticket el dinero devuelto. El dinero ya devuelto queda devuelto. Vuelve a intentarlo cuando se hayan revisado.",
+  },
+  fullInvoice: {
+    en: "The box's receipt and invoice records need checking, so no more can be refunded on this full invoice and the refund cannot be recorded on it yet. Money already refunded stays refunded. Press Check again once they have been checked.",
+    es: "Hay que revisar los registros de tickets y facturas del servidor, así que aún no se puede devolver más en esta factura completa ni registrar en ella el dinero devuelto. El dinero ya devuelto queda devuelto. Pulsa Comprobar de nuevo cuando se hayan revisado.",
+  },
+};
+
 /** Any other refusal of recording: Finish is not offered while it holds. */
 const GIVE_BACK_NOT_RECORDED_NOW = {
   receipt: {
@@ -1592,6 +1613,8 @@ export function giveBackFilingMessage(
     if (Object.hasOwn(GIVE_BACK_NEVER_RECORDED, reason))
       return pickLocale(GIVE_BACK_NEVER_RECORDED[reason]!, locale);
   }
+  if (code === "invoice_correction.chain_unsound")
+    return pickLocale(GIVE_BACK_RECORDS_NEED_CHECKING[full ? "fullInvoice" : "receipt"], locale);
   if (Object.hasOwn(GIVE_BACK_NOT_RECORDED_BY_CODE, code))
     return pickLocale(GIVE_BACK_NOT_RECORDED_BY_CODE[code]!, locale);
   return pickLocale(GIVE_BACK_NOT_RECORDED_NOW[full ? "fullInvoice" : "receipt"], locale);

@@ -138,9 +138,9 @@ async function coveredByCancel(
 
 /**
  * What giving back `request` on the receipt `saleId` would do (5.2), writing nothing: the plain
- * refunds of what cancels still owe, the extra, then one correction of the rest, each from the
- * chosen way; a refusal the write would answer is thrown. Every choice the read shows unavailable
- * answers the read's reason.
+ * refunds of what cancels still owe, the extra, then one correction of the rest,
+ * each from the chosen way; a refusal the write would answer is thrown. Every choice the read shows
+ * unavailable answers the read's reason.
  */
 export async function planGiveBack(
   tx: Transaction,
@@ -201,18 +201,21 @@ export async function planWithRights(
   const amount = cents(request.amount);
   const extra = request.purpose === "extra" ? amount : cents(request.extra);
   const wayMoney = cents(way.moneyLeft);
+  // On a full invoice a cancel's money goes with the rest: on the corrective when there is one, else
+  // back plainly.
+  const owedHere = (line: GiveBackLine) => (facts.fullInvoice ? 0 : owedOf(line));
 
   let owed = 0;
   let cancellationIds: string[] | undefined;
   if (request.purpose === "dishes") {
-    owed = ticked.reduce((total, line) => total + owedOf(line), 0);
+    owed = ticked.reduce((total, line) => total + owedHere(line), 0);
     const ids = new Set(
       ticked
         .filter((line) => owedOf(line) > 0)
         .flatMap((line) => facts.cancelIds.get(line.id) ?? []),
     );
     if (ids.size > 0) cancellationIds = [...ids];
-  } else if (request.purpose === "goodwill") {
+  } else if (request.purpose === "goodwill" && !facts.fullInvoice) {
     const owedIds = await cancelsStillOwedBy(tx, saleId);
     owed =
       owedIds.length === 0 ? 0 : (await allocateToCancels(tx, saleId, owedIds, 0)).canStillTake;
@@ -230,17 +233,17 @@ export async function planWithRights(
   let leftUnderWay = 0;
   if (rest > 0) {
     if (waits.correction !== null) throw refusal(waits.correction);
-    const correctable =
-      facts.correctable > 0 && !(await facts.recordsUnchecked()) ? facts.correctable : 0;
+    const unchecked = facts.correctable > 0 && (await facts.recordsUnchecked());
+    const correctable = unchecked ? 0 : facts.correctable;
     if (correctable === 0) {
       refund += rest;
       rest = 0;
     } else {
       const usable = view.ways.filter((row) => row.reason === null);
       if (rest > sumCents(usable.map((row) => row.moneyLeft)) - refund) throw invalid("amount");
-      const named = ticked.filter((line) => cents(line.left) - owedOf(line) > 0);
+      const named = ticked.filter((line) => cents(line.left) - owedHere(line) > 0);
       const linesHold =
-        named.reduce((total, line) => total + cents(line.left) - owedOf(line), 0) >= rest;
+        named.reduce((total, line) => total + cents(line.left) - owedHere(line), 0) >= rest;
       correction = {
         kind: "correction",
         amount: centsToDecimal(rest),

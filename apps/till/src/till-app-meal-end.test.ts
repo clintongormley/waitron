@@ -2452,7 +2452,7 @@ describe("till-app: Print the bill with dishes not served", () => {
     ["with Mark served", canServe, true],
     ["without Mark served", cannotServe, false],
   ])(
-    "tells staff a cancelled dish's money is not taken off a full invoice naming a customer, %s, and still offers Print anyway",
+    "tells staff a dish refunded on a full invoice naming a customer issues a corrective invoice, %s, and still offers Print anyway",
     async (_case, capabilities, marksServed) => {
       const { el } = await openBill(
         {

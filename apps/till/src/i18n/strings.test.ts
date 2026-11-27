@@ -545,14 +545,14 @@ describe("Print the bill's refused wording", () => {
   it.each([
     [
       "en-GB",
-      "Some dishes on this bill are not marked served. On a full invoice naming a customer, money refunded for a cancelled dish is not taken off the invoice, so take off any dish that may not come before you print.",
+      "Some dishes on this bill are not marked served. On a full invoice naming a customer, refunding a dish that never comes issues a corrective invoice, so take off any dish that may not come before you print.",
     ],
     [
       "es-ES",
-      "Algunos platos de esta cuenta no están marcados como servidos. En una factura completa a nombre de un cliente, el dinero que se devuelve por un plato cancelado no se descuenta de la factura, así que quita antes de imprimir los platos que puedan no llegar.",
+      "Algunos platos de esta cuenta no están marcados como servidos. En una factura completa a nombre de un cliente, devolver un plato que no llegue emite una factura rectificativa, así que quita antes de imprimir los platos que puedan no llegar.",
     ],
   ])(
-    "says in %s that a cancelled dish's money is not taken off a full invoice naming a customer",
+    "says in %s that refunding a dish on a full invoice naming a customer issues a corrective invoice",
     (locale, message) => {
       expect(catalogues[locale]?.["meal_end.unserved_full_invoice"]).toBe(message);
     },

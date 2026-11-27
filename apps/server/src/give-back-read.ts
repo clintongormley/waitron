@@ -1,17 +1,6 @@
-import { and, asc, eq, isNull, ne, or } from "drizzle-orm";
-import { readCancelsForRefund } from "@waitron/adjustments";
-import { correctionTargetFor } from "@waitron/core";
-import {
-  adjustmentRefunds,
-  adjustments,
-  refunds,
-  saleLines,
-  sales,
-  type Transaction,
-} from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import type { FiscalBackend, TrustedReading } from "@waitron/fiscal";
 import {
-  addDecimal,
   AppError,
   centsToDecimal,
   compareDecimal,
@@ -25,7 +14,7 @@ import {
 } from "@waitron/shared";
 import { refusePlainRefundOfAdvance } from "./advance-taken-off.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
-import { filedFamilyOf, isFree, pairFiling, readBillFiling } from "./cancellation-refund-value.js";
+import { cancelsAndFreeByLine, correctionTargetLines } from "./cancelled-lines.js";
 import { assertTakesTender, type DeviceBinding } from "./device-session.js";
 import { correctionOpenRefusal, openCorrectionOf } from "./invoice-correction-legs.js";
 import {
@@ -60,8 +49,10 @@ export interface GiveBackLine extends Availability {
   descriptions: Record<string, string>;
   quantity: string;
   gross: string;
-  /** Correct invoice's `left` where it can read the receipt (any refusal: `gross`), less
-   * `cancelled.back`; never below 0. A cancelled dish's line counts its extras' lines too. */
+  /** Correct invoice's `left` where it can read the receipt (any refusal: `gross`), less the part
+   * of `cancelled.back` no filed corrective paid (where the lines are read; otherwise all of it);
+   * never below 0. A cancelled dish's line counts its extras' lines too. On a full invoice
+   * `cancelled.owed` is at most `left`. */
   left: string;
   /** The cancels with Refund ticked on this dish, its priced extras included: a cancel's money is
    * owed for the dish and its extras together, so they are one selection. `waiting` is the part
@@ -105,7 +96,8 @@ export interface GiveBackDeps {
 export interface GiveBackWaits {
   /** Stops every choice (cases 4–7). */
   all: WaitReason | null;
-  /** Stops money that needs a corrective (cases 1 and 2); null while `all` holds. */
+  /** Stops money that needs a corrective (cases 1 and 2; on a full invoice, also records that need
+   * checking); null while `all` holds. */
   correction: WaitReason | null;
   /** Stops all payment money: a part payment's ticket Correct invoice cannot take, whose plain
    * refund the write refuses (cases 9 and 10); null while `all` holds. */
@@ -183,16 +175,19 @@ export function moneyAvailability(ways: readonly WayMoney[]): Availability {
 }
 
 /** Whether `line` can be ticked now: never while no payment money can go back
- * ({@link moneyAvailability}), and while a corrective waits only for what its cancel still owes. */
+ * ({@link moneyAvailability}), and while a corrective waits only for what its cancel still owes;
+ * on a full invoice nothing on a line is open while a corrective waits. */
 export function lineAvailability(
   line: Pick<GiveBackLine, "left" | "cancelled">,
   waits: GiveBackWaits,
   money: Availability,
+  fullInvoice: boolean,
 ): Availability {
   if (waits.all !== null) return { available: false, reason: waits.all };
   if (!money.available) return money;
   if (waits.money !== null) return { available: false, reason: waits.money };
-  const open = waits.correction === null ? line.left : (line.cancelled?.owed ?? "0.00");
+  const open =
+    waits.correction === null ? line.left : fullInvoice ? "0.00" : (line.cancelled?.owed ?? "0.00");
   if (positive(decimal(open))) return { available: true, reason: null };
   return { available: false, reason: waits.correction };
 }
@@ -224,129 +219,6 @@ export function choiceAvailability(
     ? { available: true, reason: null }
     : { available: false, reason: withExtra[0]?.reason ?? null };
   return { dishes, goodwill, extra };
-}
-
-async function readCancelsOf(tx: Transaction, workingOrderId: string) {
-  const ids = await tx
-    .select({ id: adjustments.id })
-    .from(adjustments)
-    .where(
-      and(
-        eq(adjustments.workingOrderId, workingOrderId),
-        eq(adjustments.action, "cancel"),
-        eq(adjustments.refundHandoff, true),
-      ),
-    );
-  return ids.length === 0
-    ? []
-    : readCancelsForRefund(
-        tx,
-        ids.map((row) => row.id),
-      );
-}
-
-type CancelShare = { quantity: Decimal; owed: Decimal; back: Decimal; waiting: Decimal };
-
-/** What card refunds still pending hold of each cancel of `workingOrderId`, in cents. */
-async function waitingByCancel(tx: Transaction, workingOrderId: string) {
-  const rows = await tx
-    .select({ adjustmentId: adjustmentRefunds.adjustmentId, amount: adjustmentRefunds.amount })
-    .from(adjustmentRefunds)
-    .innerJoin(refunds, eq(refunds.id, adjustmentRefunds.refundId))
-    .innerJoin(adjustments, eq(adjustments.id, adjustmentRefunds.adjustmentId))
-    .where(and(eq(adjustments.workingOrderId, workingOrderId), eq(refunds.state, "pending")));
-  const waiting = new Map<string, number>();
-  for (const row of rows)
-    waiting.set(row.adjustmentId, (waiting.get(row.adjustmentId) ?? 0) + row.amount);
-  return waiting;
-}
-
-/** The cancels with Refund ticked and the free dishes of the receipt `saleId`, keyed by the line
- * of `toLine` each filed row becomes: a cancel by its dish's line, which `members` maps to every
- * line of the dish's family and `partOf` maps each extra's line back to. */
-async function cancelsAndFreeByLine(
-  tx: Transaction,
-  saleId: SaleId,
-  toLine: (filedRowId: string) => string | undefined,
-) {
-  const cancelled = new Map<string, CancelShare>();
-  const cancelIds = new Map<string, string[]>();
-  const members = new Map<string, Set<string>>();
-  const partOf = new Map<string, string>();
-  const free = new Set<string>();
-  const [sale] = await tx
-    .select({ workingOrderId: sales.workingOrderId })
-    .from(sales)
-    .where(eq(sales.id, saleId));
-  if (sale?.workingOrderId == null) return { cancelled, cancelIds, members, partOf, free };
-  const filing = await readBillFiling(tx, sale.workingOrderId, saleId);
-  const pairs = pairFiling(filing);
-  for (const line of filing.stored.filter(isFree)) {
-    const dish = filedFamilyOf(filing, pairs, line.id)?.[0];
-    const id = dish === undefined ? undefined : toLine(dish.rowId);
-    if (id !== undefined) free.add(id);
-  }
-  const waitingOf = await waitingByCancel(tx, sale.workingOrderId);
-  for (const cancel of await readCancelsOf(tx, sale.workingOrderId)) {
-    if (cancel.lineId === null || cancel.refundValue === null) continue;
-    const family = filedFamilyOf(filing, pairs, cancel.lineId);
-    const ids = [...new Set(family?.flatMap((row) => toLine(row.rowId) ?? []))];
-    const dish = ids[0];
-    if (dish === undefined) continue;
-    const value = decimalToCents(cancel.refundValue);
-    const back = decimalToCents(cancel.linked);
-    const before = cancelled.get(dish) ?? {
-      quantity: decimal("0.000"),
-      owed: ZERO,
-      back: ZERO,
-      waiting: ZERO,
-    };
-    cancelled.set(dish, {
-      quantity: addDecimal(before.quantity, cancel.quantity ?? decimal("0.000")),
-      owed: addDecimal(before.owed, centsToDecimal(Math.max(0, value - back))),
-      back: addDecimal(before.back, centsToDecimal(back)),
-      waiting: addDecimal(before.waiting, centsToDecimal(waitingOf.get(cancel.id) ?? 0)),
-    });
-    if (value > back) cancelIds.set(dish, [...(cancelIds.get(dish) ?? []), cancel.id]);
-    const lines = members.get(dish) ?? new Set([dish]);
-    for (const id of ids) lines.add(id);
-    members.set(dish, lines);
-  }
-  for (const [dish, lines] of members)
-    for (const id of lines) if (id !== dish && !members.has(id)) partOf.set(id, dish);
-  return { cancelled, cancelIds, members, partOf, free };
-}
-
-const filedLines = (tx: Transaction, saleId: string) =>
-  tx
-    .select({
-      id: saleLines.id,
-      lineNo: saleLines.lineNo,
-      descriptions: saleLines.descriptions,
-      quantity: saleLines.quantity,
-      lineGross: saleLines.lineGross,
-    })
-    .from(saleLines)
-    .where(
-      and(
-        eq(saleLines.saleId, saleId),
-        or(isNull(saleLines.advanceRole), ne(saleLines.advanceRole, "deduction")),
-      ),
-    )
-    .orderBy(asc(saleLines.lineNo));
-
-/** The lines Correct invoice works on for `saleId` (a replacement's, once one took its place) and
- * the line each of `saleId`'s own filed rows became: a replacement copies them at the same line
- * numbers. */
-async function receiptLines(tx: Transaction, saleId: SaleId) {
-  const target = await correctionTargetFor(tx, saleId);
-  const lines = await filedLines(tx, target);
-  if (target === saleId) return { lines, toLine: (id: string) => id };
-  const byNumber = new Map(lines.map((line) => [line.lineNo, line.id]));
-  const own = new Map(
-    (await filedLines(tx, saleId)).map((line) => [line.id, byNumber.get(line.lineNo)]),
-  );
-  return { lines, toLine: (id: string) => own.get(id) };
 }
 
 export function tenderKind(tender: RefundableTender) {
@@ -434,6 +306,8 @@ interface GiveBackFacts {
   tenders: RefundableTender[];
   /** What Correct invoice could give back now, in cents, before the records are checked. */
   correctable: number;
+  /** Whether the corrective is a full invoice's, which takes the cancels' money too. */
+  fullInvoice: boolean;
   /** The cancels on each line whose money is not all given back yet. */
   cancelIds: ReadonlyMap<string, readonly string[]>;
   /** The lines a correction names for each ticked line: a cancelled dish's family, those of its
@@ -454,10 +328,18 @@ export async function readFacts(
   const openCorrectionId = await openCorrectionOf(tx, saleId);
   let unchecked: Promise<boolean> | undefined;
   const recordsUnchecked = () => (unchecked ??= recordsNeedChecking(tx, deps.backend, cfg.nodeId));
+  // A full invoice's money waits for the records rather than going back with no corrective.
+  const recordsWait =
+    correctable.waiting === null &&
+    correctable.fullInvoice &&
+    correctable.amounts.correctable > 0 &&
+    (await recordsUnchecked());
   const waits = await giveBackWaits(tx, deps, cfg, reading, saleId, {
     recordsUnchecked,
     openCorrectionId,
-    correctionWaiting: correctable.waiting,
+    correctionWaiting: recordsWait
+      ? new AppError("invoice_correction.chain_unsound", { saleId })
+      : correctable.waiting,
     correctable: correctable.amounts.correctable,
     tenderId: correctable.tenders.find((row) => positive(decimal(row.appliedRemaining)))?.tenderId,
   });
@@ -470,30 +352,39 @@ export async function readFacts(
   // What this device can give back: a way it cannot use counts as held, with the preview's code.
   const usableHere = waysHere.map(({ way, here }) => ({ ...way, reason: here }));
   const money = moneyAvailability(usableHere);
-  const { lines: filed, toLine } = await receiptLines(tx, saleId);
-  const { cancelled, cancelIds, members, partOf, free } = await cancelsAndFreeByLine(
+  const { lines: filed, toLine } = await correctionTargetLines(tx, saleId);
+  const { cancelled, cancelIds, members, partOf, free, filedBack } = await cancelsAndFreeByLine(
     tx,
     saleId,
     toLine,
+    { filedLegs: correctable.fullInvoice && correctable.lines !== null },
   );
   const correctableLeft = new Map(correctable.lines?.map((line) => [line.id, line.left]));
   const grossOf = new Map(filed.map((line) => [line.id, line.lineGross ?? 0]));
   const leftOf = (id: string) =>
     decimalToCents(correctableLeft.get(id) ?? centsToDecimal(grossOf.get(id) ?? 0));
   const familyOf = (id: string) => [...(members.get(id) ?? [id])];
+  // A filed corrective's links never exceed what it took off the dish, which `left` already counts.
   const lines = filed.map((line) => {
     const cancel = cancelled.get(line.id);
     const dish = partOf.get(line.id);
     const rest =
       familyOf(line.id).reduce((total, id) => total + leftOf(id), 0) -
-      decimalToCents(cancel?.back ?? ZERO);
+      decimalToCents(cancel?.back ?? ZERO) +
+      (filedBack.get(line.id) ?? 0);
+    const left = dish === undefined ? Math.max(0, rest) : 0;
     const view = {
       id: line.id,
       descriptions: line.descriptions,
       quantity: thousandthsToDecimal(line.quantity),
       gross: centsToDecimal(line.lineGross ?? 0),
-      left: centsToDecimal(dish === undefined ? Math.max(0, rest) : 0),
-      cancelled: cancel ?? null,
+      left: centsToDecimal(left),
+      cancelled:
+        cancel === undefined
+          ? null
+          : correctable.fullInvoice
+            ? { ...cancel, owed: centsToDecimal(Math.min(decimalToCents(cancel.owed), left)) }
+            : cancel,
       cancelIds: [...(cancelIds.get(line.id) ?? [])],
       partOf: dish ?? null,
       givenFree: free.has(line.id),
@@ -501,7 +392,7 @@ export async function readFacts(
     return {
       ...view,
       ...(dish === undefined
-        ? lineAvailability(view, waits, money)
+        ? lineAvailability(view, waits, money, correctable.fullInvoice)
         : { available: false, reason: null }),
     };
   });
@@ -518,6 +409,7 @@ export async function readFacts(
     waits,
     tenders: correctable.tenders,
     correctable: correctable.amounts.correctable,
+    fullInvoice: correctable.fullInvoice,
     cancelIds,
     namedFor: (lineId) => familyOf(lineId).filter((id) => leftOf(id) > 0),
     recordsUnchecked,

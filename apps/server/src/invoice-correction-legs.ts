@@ -6,7 +6,7 @@ import {
   tenders,
   type Transaction,
 } from "@waitron/db";
-import { previewCorrectionAmounts } from "@waitron/core";
+import { previewCorrectionAmounts, type CorrectionPreview } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import {
@@ -189,8 +189,10 @@ export async function checkCorrectionLeg(
 /**
  * Refuses as `previewCorrectionAmounts` refuses the correction's corrective for `moneyBack` cents
  * (its admission, a full invoice's customer and registered address), except a refusal Close ends the
- * correction over (`closableRefusal`), whose money goes back unrecorded. The chain and clock checks
- * filing also runs are not repeated here.
+ * correction over (`closableRefusal`), whose money goes back unrecorded. A full invoice's
+ * corrective that can still be filed is also refused `invoice_correction.chain_unsound` while the
+ * box's invoice records need checking, so its money waits for them; a receipt's is not. The clock
+ * check filing also runs is not repeated here.
  */
 export async function checkLegFileable(
   tx: Transaction,
@@ -198,8 +200,9 @@ export async function checkLegFileable(
   correction: InvoiceCorrectionRow,
   moneyBack: number,
 ): Promise<void> {
+  let preview: CorrectionPreview;
   try {
-    await previewCorrectionAmounts(
+    preview = await previewCorrectionAmounts(
       tx,
       fiscal.backend,
       correction.originalSaleId as SaleId,
@@ -212,7 +215,23 @@ export async function checkLegFileable(
     );
   } catch (error) {
     if (!(error instanceof AppError) || !closableRefusal(error)) throw error;
+    return;
   }
+  if (await waitsForRecordsCheck(tx, fiscal, preview))
+    throw new AppError("invoice_correction.chain_unsound", { saleId: correction.originalSaleId });
+}
+
+/** Whether the corrective `preview` answers is a full invoice's and the box's invoice records need
+ * checking, so its money waits for them; a receipt's never waits here. */
+export async function waitsForRecordsCheck(
+  tx: Transaction,
+  fiscal: { backend: FiscalBackend; nodeId: NodeId },
+  preview: Pick<CorrectionPreview, "fullInvoice">,
+): Promise<boolean> {
+  return (
+    preview.fullInvoice === true &&
+    (await fiscal.backend.checkIntegrity(tx, fiscal.nodeId)).issues.length > 0
+  );
 }
 
 /** The correction as its caller read it in this transaction, the cents it had left before this

@@ -290,7 +290,7 @@ describe("ending it", () => {
       {
         ...OPEN,
         moneyBack: "2.00",
-        fileNow: { refusal: "invoice_correction.chain_unsound", closable: false },
+        fileNow: { refusal: "sale.correction_not_admitted", reason: "missing", closable: false },
       },
       api,
     );
@@ -542,6 +542,96 @@ describe("ending it", () => {
     expect(api.getInvoiceCorrection).toHaveBeenCalledExactlyOnceWith("correction-1", {});
     expect(bottom(el)).toBe(giveBackFilingMessage("sale.correction_history_unusable", "en"));
     expect(bottom(el)).not.toMatch(/correct/i);
+  });
+
+  const RECORDS_NEED_CHECKING =
+    "The box's receipt and invoice records need checking, so no more can be refunded on this full invoice and the refund cannot be recorded on it yet. Money already refunded stays refunded. Press Check again once they have been checked.";
+  const button = (el: TillGiveBackUnderWay, name: string) =>
+    root(el).querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-choice=${name}]`)!;
+
+  it("on a full invoice with nothing back yet, says the records need checking when the cash is refused, holding cash and card until Check again", async () => {
+    const api = fakeApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce(
+      refused("invoice_correction.chain_unsound", { saleId: "sale-1" }),
+    );
+    const { el } = await mount(OPEN, api);
+    el.fullInvoice = true;
+    await el.updateComplete;
+
+    press(el, "cash");
+    await vi.waitFor(() => expect(bottom(el)).toBe(RECORDS_NEED_CHECKING));
+    expect(api.getInvoiceCorrection).toHaveBeenCalledExactlyOnceWith("correction-1", {});
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    for (const name of ["cash", "card"]) expect(button(el, name).disabled).toBe(true);
+
+    press(el, "check");
+    await vi.waitFor(() => expect(button(el, "cash").disabled).toBe(false));
+    expect(button(el, "card").disabled).toBe(false);
+    expect(bottom(el)).toBe("");
+  });
+
+  it("on a full invoice read before its records needed checking, says so when the card is refused and reads again, offering no more money back and no Stop here", async () => {
+    const api = fakeApi();
+    const waits = { refusal: "invoice_correction.chain_unsound", closable: false };
+    api.getInvoiceCorrection.mockResolvedValue({ ...FILING, fileNow: waits });
+    api.refundTransaction.mockRejectedValueOnce(
+      refused("invoice_correction.chain_unsound", { saleId: "sale-1" }),
+    );
+    const { el } = await mount(FILING, api);
+    el.fullInvoice = true;
+    await el.updateComplete;
+    expect(shown(el, "stop")).toBe(true);
+
+    press(el, "card");
+    await vi.waitFor(() => expect(shown(el, "stop")).toBe(false));
+    expect(bottom(el)).toBe(RECORDS_NEED_CHECKING);
+    expect(text(root(el).querySelector("[data-file-refusal]"))).toBe(RECORDS_NEED_CHECKING);
+    for (const name of ["cash", "card"]) expect(button(el, name).disabled).toBe(true);
+    expect(shown(el, "finish")).toBe(false);
+  });
+
+  it("on a full invoice whose Finish is refused while its records need checking, says so and reads again, offering no Finish", async () => {
+    const api = fakeApi();
+    const waits = { refusal: "invoice_correction.chain_unsound", closable: false };
+    api.getInvoiceCorrection.mockResolvedValue({ ...FILING, left: "0.00", fileNow: waits });
+    api.fileInvoiceCorrection.mockRejectedValueOnce(
+      refused("invoice_correction.chain_unsound", { saleId: "sale-1" }),
+    );
+    const { el } = await mount({ ...FILING, left: "0.00" }, api);
+    el.fullInvoice = true;
+    await el.updateComplete;
+
+    press(el, "finish");
+    await vi.waitFor(() => expect(shown(el, "finish")).toBe(false));
+    expect(bottom(el)).toBe(RECORDS_NEED_CHECKING);
+  });
+
+  it("on a receipt whose Stop here is refused while the records need checking, says the refund cannot be recorded yet and keeps offering what the box still takes", async () => {
+    const api = fakeApi();
+    api.getInvoiceCorrection.mockResolvedValue(FILING);
+    api.fileInvoiceCorrection.mockRejectedValueOnce(
+      refused("invoice_correction.chain_unsound", { saleId: "sale-1" }),
+    );
+    const { el } = await mount(FILING, api);
+
+    press(el, "stop");
+    await vi.waitFor(() =>
+      expect(bottom(el)).toBe(
+        "The box's receipt and invoice records need checking, so the refund cannot be recorded on this receipt yet. Money already refunded stays refunded. Try again once they have been checked.",
+      ),
+    );
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(shown(el, "stop")).toBe(true);
+    for (const name of ["cash", "card"]) expect(button(el, name).disabled).toBe(false);
+
+    setLocale("es");
+    api.fileInvoiceCorrection.mockRejectedValueOnce(
+      refused("invoice_correction.chain_unsound", { saleId: "sale-1" }),
+    );
+    press(el, "stop");
+    await vi.waitFor(() =>
+      expect(bottom(el)).toBe(giveBackFilingMessage("invoice_correction.chain_unsound", "es", {})),
+    );
   });
 
   it("says a lost filing answer needs checking, not that the same request goes again", async () => {

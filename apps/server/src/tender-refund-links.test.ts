@@ -1,7 +1,7 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it, onTestFinished } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { adjustmentRefunds, adjustments } from "@waitron/adjustments";
 import {
   devices,
@@ -254,6 +254,20 @@ describe("a refund names the cancels it pays back", () => {
       { adjustmentId: ham, amount: 2400 },
       { adjustmentId: burger, amount: 600 },
     ]);
+  });
+
+  it("within what its cancels owe on a receipt, reads neither the invoice's admission nor its filed figures", async () => {
+    const { paid, burger } = await twoCancels();
+    const admissions = vi.spyOn(venue.backend, "correctionAdmissionFor");
+    const figures = vi.spyOn(venue.backend, "filedFiguresFor");
+    onTestFinished(() => {
+      admissions.mockRestore();
+      figures.mockRestore();
+    });
+    const answer = await refund(paid, refundBody(paid, "12.00", [burger]));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(admissions).not.toHaveBeenCalled();
+    expect(figures).not.toHaveBeenCalled();
   });
 
   it("a second refund naming the same cancels takes only what they still owe", async () => {
@@ -560,13 +574,22 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     );
   });
 
-  it("refuses a linked refund above what its cancels owe on a full invoice as its corrective's money, and without new approval once AEAT refused it with no fix", async () => {
+  it("refuses a linked refund on a full invoice as its corrective's money, even within what its cancels owe, and above it without new approval once AEAT refused it with no fix", async () => {
     const { paid, burger } = await oneCancel(false, true);
-    const first = await staffRefund(paid, refundBody(paid, "6.00", [burger]));
-    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    await refusedNeedsCorrection(paid, refundBody(paid, "6.00", [burger]), staffRefund);
     await refusedNeedsCorrection(paid, refundBody(paid, "8.00", [burger]), staffRefund);
     await inTx(venue, (tx) => refusedByAeat(tx, paid.saleId));
+    const first = await staffRefund(paid, refundBody(paid, "6.00", [burger]));
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
     expect(await refusedOver(paid, refundBody(paid, "8.00", [burger]))).toBe("6.00");
+  });
+
+  it("within what its cancels owe on a full invoice, reads the invoice's admission once", async () => {
+    const { paid, burger } = await oneCancel(false, true);
+    const admissions = vi.spyOn(venue.backend, "correctionAdmissionFor");
+    onTestFinished(() => admissions.mockRestore());
+    await refusedNeedsCorrection(paid, refundBody(paid, "6.00", [burger]), staffRefund);
+    expect(admissions).toHaveBeenCalledTimes(1);
   });
 
   it("refuses €8 naming a cancel that owes €6 as Correct invoice's money on a correctable invoice", async () => {
@@ -961,31 +984,20 @@ describe("Refund a payment naming no cancels", () => {
     );
   }
 
-  it("tells the till a hand-keyed card payment may give back what the cancels still owe", async () => {
+  it("lists a hand-keyed card payment with a cancel still owed", async () => {
     const paid = await handKeyedOwingTwelve();
     expect(await refundableTenders(paid.saleId)).toMatchObject({
       status: 200,
-      json: [{ manual: true, appliedRemaining: "37.00", plainRefundLimit: "12.00" }],
+      json: [{ manual: true, appliedRemaining: "37.00" }],
     });
   });
 
-  it("tells the till a hand-keyed card payment gives back nothing while a correction is open, as the refund is refused", async () => {
+  it("refuses a hand-keyed card payment's refund while a correction is open", async () => {
     const paid = await handKeyedOwingTwelve();
-    // The cancel still owes €12.00, which only the open correction holds back.
-    expect(await refundableTenders(paid.saleId)).toMatchObject({
-      json: [{ plainRefundLimit: "12.00" }],
-    });
     await correctionOf(paid.saleId, "5.00");
     expect(await refundableTenders(paid.saleId)).toMatchObject({
       status: 200,
-      json: [
-        {
-          manual: true,
-          appliedRemaining: "37.00",
-          plainRefundLimit: "0.00",
-          correctionOpen: true,
-        },
-      ],
+      json: [{ manual: true, appliedRemaining: "37.00" }],
     });
     const before = await written();
     expect(

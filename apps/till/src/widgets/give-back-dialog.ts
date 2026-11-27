@@ -20,7 +20,6 @@ import { trackDialog } from "./track-dialog.js";
 import { giveBackStyles } from "./give-back-styles.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
 import type { TillApi } from "../api/client.js";
 import type { AdjustmentReason } from "../api/payments-api.js";
 import type { StaffMember } from "../api/device-session-api.js";
@@ -78,6 +77,7 @@ import {
   readApprovers,
   recoveryLinkOf,
   recoveryText,
+  refusalWords,
   resendRefused,
   restOutcome,
   sendRefusalOf,
@@ -435,7 +435,7 @@ export class TillGiveBackDialog extends LitElement {
   }
   #refusalText(refusal: Refusal, lost: StringKey): string {
     if (refusal.code === "network") return t(lost);
-    return recoveryText(refusal) ?? codeMessage(refusal.code, currentLocale(), refusal);
+    return refusalWords(refusal, this.fullInvoice);
   }
   async #confirm(): Promise<void> {
     this.attempted = true;

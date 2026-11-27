@@ -40,6 +40,12 @@ export type CorrectionPreview = CorrectionAmountPreview &
  * `"as_admitted"`, for whichever kind the regime's admission says the invoice takes. */
 export interface FullInvoiceCorrection {
   fullInvoice?: true | "as_admitted";
+  /** Told whether it is a full invoice's correction once the admission is read, before any refusal
+   * of it: a refusal Correct invoice waits out carries no kind. */
+  kindSeen?: (fullInvoice: boolean) => void;
+  /** The regime's admission of this invoice's correction, as {@link readCorrectionAdmission} read
+   * it earlier in the same transaction; read again when absent. */
+  admission?: CorrectionAdmission;
 }
 
 /**
@@ -111,6 +117,61 @@ export async function readCorrectableLines(
   }));
 }
 
+async function admissionOf(
+  tx: Transaction,
+  backend: FiscalBackend,
+  saleId: SaleId,
+  issuingNodeId: NodeId,
+): Promise<CorrectionAdmission> {
+  return backend.correctionAdmissionFor
+    ? backend.correctionAdmissionFor(tx, saleId, issuingNodeId)
+    : { eligible: false, reason: "unsupported" };
+}
+
+const isFullInvoiceCorrection = (kind: FullInvoiceCorrection, admission: CorrectionAdmission) =>
+  kind.fullInvoice === true ||
+  (kind.fullInvoice === "as_admitted" && admission.fullInvoice === true);
+
+/** The regime's admission of a correction of the invoice `saleId`, read through its replacement. */
+export async function readCorrectionAdmission(
+  tx: Transaction,
+  backend: FiscalBackend,
+  saleId: SaleId,
+  issuingNodeId: NodeId,
+): Promise<CorrectionAdmission> {
+  return admissionOf(tx, backend, await correctionTargetFor(tx, saleId), issuingNodeId);
+}
+
+/** Whether a correction of the invoice `saleId` asked for as `kind` is a full invoice's, as
+ * {@link previewCorrectionAmounts} decides it, reading the regime's admission alone: none of the
+ * preview's refusals is checked. */
+export async function admittedAsFullInvoice(
+  tx: Transaction,
+  backend: FiscalBackend,
+  saleId: SaleId,
+  issuingNodeId: NodeId,
+  kind: FullInvoiceCorrection,
+): Promise<boolean> {
+  return isFullInvoiceCorrection(
+    kind,
+    kind.admission ?? (await readCorrectionAdmission(tx, backend, saleId, issuingNodeId)),
+  );
+}
+
+/** Whether the invoice a correction of `saleId` is filed against (`correctionTargetFor`) names a
+ * customer. A cheap pre-check of {@link admittedAsFullInvoice}: an invoice that names no customer
+ * cannot be a full invoice's correction (`requireFullInvoiceCorrection`). */
+export async function correctionTargetNamesACustomer(
+  tx: Transaction,
+  saleId: SaleId,
+): Promise<boolean> {
+  const [target] = await tx
+    .select({ taxId: sales.counterpartyTaxId })
+    .from(sales)
+    .where(eq(sales.id, await correctionTargetFor(tx, saleId)));
+  return target?.taxId != null;
+}
+
 async function admittedHistory(
   tx: Transaction,
   backend: FiscalBackend,
@@ -127,12 +188,9 @@ async function admittedHistory(
   if (substituted !== undefined) {
     throw new AppError("sale.correction_not_admitted", { reason: "replaced" });
   }
-  const admission: CorrectionAdmission = backend.correctionAdmissionFor
-    ? await backend.correctionAdmissionFor(tx, saleId, issuingNodeId)
-    : { eligible: false, reason: "unsupported" };
-  const full =
-    kind.fullInvoice === true ||
-    (kind.fullInvoice === "as_admitted" && admission.fullInvoice === true);
+  const admission = kind.admission ?? (await admissionOf(tx, backend, saleId, issuingNodeId));
+  const full = isFullInvoiceCorrection(kind, admission);
+  kind.kindSeen?.(full);
   if (admission.fullInvoice && !full) {
     throw new AppError("sale.correction_not_admitted", { reason: "not_simplified" });
   }

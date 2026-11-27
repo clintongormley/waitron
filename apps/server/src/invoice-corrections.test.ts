@@ -57,7 +57,7 @@ import {
   openInvoiceCorrection,
   previewInvoiceCorrection,
   readInvoiceCorrection,
-  correctableNow,
+  readCorrectableNow,
 } from "./invoice-corrections.js";
 import { parseInvoiceCorrection } from "./testing/invoice-correction.js";
 import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
@@ -767,15 +767,15 @@ describe("fileCorrectionIn", () => {
   });
 });
 
-describe("correctableNow", () => {
+describe("readCorrectableNow", () => {
   it("answers 0 for a ticket not yet paid, without asking whether the caller would refuse", async () => {
     const saleId = await soldForCash("Rib steak", []);
     const stillRefused = vi.fn(() => true);
-    expect(
-      await inTx(venue, (tx) =>
-        correctableNow(tx, venue.backend, venue.cfg, venue.clock.now(), saleId, stillRefused),
-      ),
-    ).toEqual({ refundable: 0, correctable: 0 });
+    const read = await inTx(venue, (tx) =>
+      readCorrectableNow(tx, venue.backend, venue.cfg, venue.clock.now(), saleId, stillRefused),
+    );
+    expect(read.waiting).toBeNull();
+    expect(read.amounts).toEqual({ refundable: 0, correctable: 0 });
     expect(stillRefused).not.toHaveBeenCalled();
   });
 });

@@ -11,7 +11,13 @@ export { recordReplacement } from "./record-replacement.js";
 export { correctionTargetFor } from "./correction-target.js";
 export { requireSupportedCorrection } from "./correction-eligibility.js";
 export type { RecordReplacementInput } from "./record-replacement.js";
-export { previewCorrectionAmounts, readCorrectableLines } from "./correction-history.js";
+export {
+  admittedAsFullInvoice,
+  correctionTargetNamesACustomer,
+  previewCorrectionAmounts,
+  readCorrectableLines,
+  readCorrectionAdmission,
+} from "./correction-history.js";
 export type {
   CorrectableLine,
   CorrectionPreview,
