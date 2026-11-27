@@ -177,8 +177,6 @@ it.each(["en", "es"] as const)(
         number: 1,
         madeAt: "2026-10-16T11:40:00.000Z",
         bucketCode: null,
-        archiveCode: null,
-        backupKey: null,
         ...made,
         masterKeyHeldBy: null,
       });

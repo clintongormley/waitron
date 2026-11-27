@@ -171,11 +171,11 @@ export function isInstant(value: string): boolean {
 type RecoveryPackPart = "bucket" | "archives" | "emergency" | "master-key";
 /** Each reason names only the parts the box can give it for. */
 export type RecoveryPackReason =
-  | { part: "bucket" | "archives"; kind: "key_changed"; at: string }
-  | { part: "bucket" | "archives"; kind: "settings_changed" }
-  | { part: "bucket" | "archives"; kind: "set_up_after" }
+  | { part: "bucket"; kind: "key_changed"; at: string }
+  | { part: "bucket"; kind: "settings_changed" }
+  | { part: "bucket"; kind: "set_up_after" }
   | { part: "emergency"; kind: "set_up_after" }
-  | { part: "bucket" | "archives"; kind: "removed" };
+  | { part: "bucket"; kind: "removed" };
 /** `GET /api/backup/recovery-pack` — LOCAL copy of `apps/server/src/backup-recovery-pack-status.ts`'s
  * `PackStatus`. */
 export interface RecoveryPackStatus {

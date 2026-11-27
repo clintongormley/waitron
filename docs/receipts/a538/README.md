@@ -117,6 +117,8 @@ Across the four runs:
   about large databases, large archives, large deletes or how long any of them takes.
 - **A full restore from an archive in the bucket.** The round trip downloads and decrypts from the
   pack; it does not run `waitron-restore restore --from-archive`'s placement against Amazon S3.
+  _2026-11-27, A1323 PR 4b-2: `--from-archive` is removed; an archive is now downloaded by
+  hand and restored with `restore <file>`; this run did neither._
 - **Other open questions this run did not touch:** the error names versitygw gives, a deleted
   stream pointer (Amazon documents a 404; not exercised here), Litestream's own requests, the
   frozen-transport timing, and the Litestream trace-logging stall.

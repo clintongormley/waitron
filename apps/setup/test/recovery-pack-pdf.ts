@@ -16,8 +16,6 @@ export async function recoveryPackPdf(bucketCode: string | null): Promise<File> 
     number: 2,
     madeAt: "2026-10-29T17:00:00.000Z",
     bucketCode,
-    archiveCode: null,
-    backupKey: null,
     masterKey: encodeMasterKeyCode(new Uint8Array(16).fill(1)),
     masterKeyName: "2026-10-29 · QZJV",
     masterKeyHeldBy: null,

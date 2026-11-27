@@ -49,7 +49,6 @@ import { previewRecoveryArchive, previewRecoveryStream } from "../src/recovery-b
 import { restoreFromStream } from "../src/restore-stream.js";
 import { recoveryStreamSourceId } from "../src/recovery-source.js";
 import "../src/restore-command.js";
-import "../src/archive-recovery-pack.js";
 import { stageRestoreRequest, stageStreamRestore } from "../src/restore-request.js";
 import { Hono } from "hono";
 import { mountSetup } from "../src/setup-api.js";

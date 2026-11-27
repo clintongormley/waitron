@@ -43,8 +43,6 @@ describe("setup's delivery is recovery pack 1", () => {
           number: 1,
           madeAt: document.createdAt,
           bucketCode: null,
-          archiveCode: null,
-          backupKey: null,
           ...made,
           masterKeyHeldBy: null,
         });

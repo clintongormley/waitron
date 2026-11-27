@@ -15,17 +15,12 @@ export type CurrentChecks = {
   cloudOpen?: boolean;
   /** `null` when the box has no bucket copy. */
   bucket: { revision: string } | null;
-  /** `null` when the box makes no archives. */
-  archives: { revision: string } | "unreadable" | null;
 };
 
 export type PackStatusInput = {
   /** This node's packs, newest first. */
   records: StatusRecord[];
   current: CurrentChecks;
-  /** The archives' keeping settings and schedule; `undefined` when the box makes none. */
-  retention: { count: number; days: number } | undefined;
-  schedule: BackupSchedule | undefined;
   backupsUseOlderKey: boolean;
   /** The packs in `records` that showed the current master key, newest first. */
   masterKeyPacks: readonly number[];
@@ -34,10 +29,10 @@ export type PackStatusInput = {
 
 /** Each reason names only the parts it is given for. */
 type Reason =
-  | { part: "bucket" | "archives"; kind: "key_changed"; at: string }
-  | { part: "bucket" | "archives"; kind: "settings_changed" }
-  | { part: "bucket" | "archives" | "emergency"; kind: "set_up_after" }
-  | { part: "bucket" | "archives"; kind: "removed" };
+  | { part: "bucket"; kind: "key_changed"; at: string }
+  | { part: "bucket"; kind: "settings_changed" }
+  | { part: "bucket" | "emergency"; kind: "set_up_after" }
+  | { part: "bucket"; kind: "removed" };
 
 type Keep = {
   number: number;
@@ -75,30 +70,27 @@ const partOf = (record: RecoveryPackRecord, part: RecoveryPackPartRecord["part"]
 
 const later = (a: string, b: string) => Date.parse(a) > Date.parse(b);
 
-function reasonsFor(record: RecoveryPackRecord, current: CurrentChecks): Reason[] {
+function bucketReasons(record: RecoveryPackRecord, current: CurrentChecks): Reason[] {
+  const part = "bucket";
+  const recorded = partOf(record, part);
+  const now = current.bucket;
+  if (recorded === undefined || recorded.state === "failed") return [];
+  if (recorded.state !== "included") return now === null ? [] : [{ part, kind: "set_up_after" }];
+  if (now === null) return [{ part, kind: "removed" }];
   const reasons: Reason[] = [];
-  for (const part of ["bucket", "archives"] as const) {
-    const recorded = partOf(record, part);
-    const now = current[part];
-    if (recorded === undefined || recorded.state === "failed") continue;
-    if (recorded.state !== "included") {
-      if (now !== null) reasons.push({ part, kind: "set_up_after" });
-      continue;
-    }
-    if (now === null) {
-      reasons.push({ part, kind: "removed" });
-      continue;
-    }
-    if (now === "unreadable" || recorded.settingsRevision !== now.revision)
-      reasons.push({ part, kind: "settings_changed" });
-    if (
-      current.keyChangedAt !== undefined &&
-      recorded.keyChangedAt !== undefined &&
-      later(current.keyChangedAt, recorded.keyChangedAt)
-    ) {
-      reasons.push({ part, kind: "key_changed", at: current.keyChangedAt });
-    }
+  if (recorded.settingsRevision !== now.revision) reasons.push({ part, kind: "settings_changed" });
+  if (
+    current.keyChangedAt !== undefined &&
+    recorded.keyChangedAt !== undefined &&
+    later(current.keyChangedAt, recorded.keyChangedAt)
+  ) {
+    reasons.push({ part, kind: "key_changed", at: current.keyChangedAt });
   }
+  return reasons;
+}
+
+function reasonsFor(record: RecoveryPackRecord, current: CurrentChecks): Reason[] {
+  const reasons = bucketReasons(record, current);
   if (current.cloudOpen === true && partOf(record, "emergency")?.state !== "included")
     reasons.push({ part: "emergency", kind: "set_up_after" });
   return reasons;
@@ -115,14 +107,18 @@ function interval(schedule: BackupSchedule): number {
 }
 
 /**
- * When the last archive made before a key change at `changedAt` should be gone: the sweep keeps the
- * `count` newest archives and none older than `days`, checked after each new one is stored. Taking
- * the change itself for the newest archive made with the old key errs later.
+ * When a pack made before a master-key change now could be thrown away: archives made before it
+ * still need the old master key until the sweep, which keeps the `count` newest archives and none
+ * older than `days`, checked after each new one is stored, has removed the last of them. Taking the
+ * change itself for the newest archive made with the old key errs later.
  */
-function keepUntil(
-  changedAt: number,
-  input: Pick<PackStatusInput, "retention" | "schedule">,
-): number {
+export function keepOldPackUntil(input: {
+  /** The archives' keeping settings and schedule; `undefined` when the box makes none. */
+  retention: { count: number; days: number } | undefined;
+  schedule: BackupSchedule | undefined;
+  now: Date;
+}): string {
+  const changedAt = input.now.getTime();
   let until = changedAt + BUCKET_COPY_KEEP;
   if (input.retention !== undefined && input.schedule !== undefined) {
     const every = interval(input.schedule);
@@ -131,14 +127,7 @@ function keepUntil(
       every;
     until = Math.max(until, gone);
   }
-  return until;
-}
-
-/** When a pack made before a key change now could be thrown away, by the rule above. */
-export function keepOldPackUntil(
-  input: Pick<PackStatusInput, "retention" | "schedule" | "now">,
-): string {
-  return new Date(keepUntil(input.now.getTime(), input)).toISOString();
+  return new Date(until).toISOString();
 }
 
 function keepList(input: PackStatusInput): Keep[] {
@@ -146,9 +135,8 @@ function keepList(input: PackStatusInput): Keep[] {
   const keep: Keep[] = [];
   const seenKeys = new Set<string>();
   for (const record of records.filter((r) => r.receivedAt !== null)) {
-    const facts = [partOf(record, "bucket"), partOf(record, "archives")].find(
-      (p) => p?.state === "included" && p.keyChangedAt !== undefined,
-    );
+    const bucket = partOf(record, "bucket");
+    const facts = bucket?.state === "included" ? bucket : undefined;
     const recorded = facts?.keyChangedAt;
     // Nothing records a change before the first rotation, so packs made before it count as one key.
     const key = facts?.keyNeverChanged === true ? "never-changed" : recorded;
@@ -162,7 +150,7 @@ function keepList(input: PackStatusInput): Keep[] {
       continue;
     }
     seenKeys.add(key);
-    const until = keepUntil(Date.parse(current.keyChangedAt), input);
+    const until = Date.parse(current.keyChangedAt) + BUCKET_COPY_KEEP;
     if (until <= now.getTime()) continue;
     keep.push({
       number: record.number,

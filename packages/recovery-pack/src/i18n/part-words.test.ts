@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { partFailure } from "./part-words.js";
 
 const CODES = [
-  "backup.archive_settings_unreadable",
   "backup.recovery_key_missing",
   "backup.recovery_key_too_short",
   "backup.stream_signer_missing",
@@ -34,27 +33,6 @@ describe("part failure words", () => {
         expect(`${words.what} ${words.todo}`).not.toMatch(/encryption key|clave de cifrado/);
       }
     }
-  });
-
-  it("names the Backups buttons that replace unreadable archive settings", () => {
-    const en = partFailure("en", "backup.archive_settings_unreadable").todo;
-    const es = partFailure("es", "backup.archive_settings_unreadable").todo;
-    for (const label of [
-      "Backups → Change destination or schedule",
-      "Save changes",
-      "Turn on backups",
-    ]) {
-      expect(en).toContain(label);
-    }
-    for (const label of [
-      "Copias de seguridad → Cambiar el destino o la programación",
-      "Guardar cambios",
-      "Activar las copias",
-    ]) {
-      expect(es).toContain(label);
-    }
-    expect(en).not.toMatch(/save them again/);
-    expect(es).not.toMatch(/vuelve a guardarlos/);
   });
 
   it.each(["en", "es"] as const)(

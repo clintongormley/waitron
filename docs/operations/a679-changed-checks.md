@@ -1,5 +1,9 @@
 # A679 changed test checks
 
+_2026-11-27, A1323 PR 4b-2: `restore --from-archive` is removed, with its case "the archive-pack
+command uses the downloaded exact archive and the pack password". The sections below that describe
+the archive-pack command record the earlier tree._
+
 _2026-11-17, SETUP-STALE-CLOCK: Provision now takes its own fresh clock reading. So the restart
 case's `clock_stale` assertion and its manual clock comparison are removed, and
 `initial-hour-setup.test.ts`'s "issuing refuses clock_stale when the only passing reading is older

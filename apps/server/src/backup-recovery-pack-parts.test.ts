@@ -1,4 +1,3 @@
-import { storeArchivePart } from "./testing/backup-settings.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { credentialRevision, loadKeyRing } from "@waitron/credentials";
@@ -9,13 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { PART_WORDS, partFailure } from "@waitron/recovery-pack";
 import type { NodeId } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
-import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
-import { ARCHIVE_PURPOSE, writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
-import {
-  buildArchivesPart,
-  buildBucketPart,
-  type PartsContext,
-} from "./backup-recovery-pack-parts.js";
+import { buildBucketPart, type PartsContext } from "./backup-recovery-pack-parts.js";
 import { STREAM_PURPOSE, writeStreamSettings } from "./stream-host.js";
 
 const RING = loadKeyRing({
@@ -30,14 +23,6 @@ const BUCKET = {
   prefix: "shop/",
   accessKeyId: "AKIASTREAM",
   secretAccessKey: "stream-secret-0123456789abcdef",
-};
-const ARCHIVES: Omit<ArchiveSettings, "revision"> = {
-  enabled: true,
-  cloud: false,
-  destinations: [{ kind: "s3", id: "bucket", bucket: { ...BUCKET, prefix: "archives/" } }],
-  schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
-  retention: { count: 7, days: 30 },
-  destinationTimeoutMs: 15 * 60 * 1000,
 };
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -67,8 +52,6 @@ beforeEach(async () => {
 
 const inTx = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const storeStream = () => inTx((tx) => writeStreamSettings(tx, RING, BUCKET, null));
-const storeArchives = (settings: Omit<ArchiveSettings, "revision"> = ARCHIVES) =>
-  inTx((tx) => writeArchiveSettings(tx, RING, settings, null));
 
 describe("the bucket part", () => {
   it("carries the restore code for the stored bucket, the backup key and the server's signing key", async () => {
@@ -157,114 +140,5 @@ describe("the bucket part", () => {
     await suite.db.execute(sql`update nodes set public_key = null`);
     const built = await inTx((tx) => buildBucketPart(tx, context));
     expect(built.part.failure).toEqual(partFailure("en", "backup.stream_signer_missing"));
-  });
-});
-
-describe("the archives part", () => {
-  it("carries the archive code for the first bucket destination", async () => {
-    await storeArchives();
-    const built = await inTx((tx) => buildArchivesPart(tx, context));
-    expect(decodeArchiveRecoveryPack(built.file.archiveCode!)).toMatchObject({
-      recoveryKey: KEY,
-      archivePrefix: "archives/",
-      bucket: { bucket: "venue-bucket", prefix: "archives/" },
-    });
-    expect(built.file.backupKey).toBeUndefined();
-    const [stored] = await suite.db.all<{ purpose: string }>(
-      sql`select purpose from venue_credentials where purpose = ${ARCHIVE_PURPOSE}`,
-    );
-    expect(stored).toBeDefined();
-    expect(built.record).toMatchObject({
-      part: "archives",
-      state: "included",
-      keyChangedAt: "2026-09-20T08:00:00.000Z",
-      destination: "bucket",
-    });
-    expect(built.record.settingsRevision).toMatch(/.+/);
-    expect(built.part.page!.secret).toEqual({
-      label: "Restore code for the archives",
-      text: built.file.archiveCode,
-      qr: true,
-    });
-    expect(built.part.page!.notes).toEqual(PART_WORDS.en.archives.stepsBucket);
-  });
-
-  it("carries the backup key itself, spaces kept, for a local folder", async () => {
-    const spaced = "  correct horse battery staple  ";
-    await storeArchives({
-      ...ARCHIVES,
-      destinations: [{ kind: "local-fs", id: "primary", dir: "/var/backups/venue" }],
-    });
-    const built = await inTx((tx) =>
-      buildArchivesPart(tx, { ...context, env: { WAITRON_BACKUP_RECOVERY_KEY: spaced } }),
-    );
-    expect(built.file).toEqual({ backupKey: spaced });
-    expect(built.record.destination).toBe("folder");
-    expect(built.part.page!.secret).toEqual({
-      label: "Backup encryption key",
-      text: spaced,
-      qr: true,
-      exactSpaces: true,
-    });
-    expect(built.part.page!.rows[0]).toEqual({
-      label: "Archive folder",
-      value: "/var/backups/venue",
-      mono: true,
-    });
-    expect(built.part.page!.notes).toEqual(PART_WORDS.en.archives.stepsFolder);
-  });
-
-  it("is absent when the box makes no archives", async () => {
-    expect((await inTx((tx) => buildArchivesPart(tx, context))).part).toEqual({
-      kind: "archives",
-      state: "absent",
-    });
-  });
-
-  it("fails as backup.archive_settings_unreadable when the stored record cannot be read", async () => {
-    await inTx((tx) => storeArchivePart(tx, {}));
-    const built = await inTx((tx) => buildArchivesPart(tx, context));
-    expect(built.part.failure).toEqual(partFailure("en", "backup.archive_settings_unreadable"));
-    expect(built.record).toEqual({ part: "archives", state: "failed" });
-    expect(built.failedWith).toBe("backup.archive_settings_unreadable");
-  });
-
-  it("fails both bucket and archives with the Backups wording when the key is too short", async () => {
-    await storeStream();
-    await storeArchives();
-    const short = { ...context, env: { WAITRON_BACKUP_RECOVERY_KEY: "short" } };
-    const words = partFailure("en", "backup.recovery_key_too_short");
-    expect((await inTx((tx) => buildBucketPart(tx, short))).part.failure).toEqual(words);
-    expect((await inTx((tx) => buildArchivesPart(tx, short))).part.failure).toEqual(words);
-  });
-
-  it("carries the whole archive code for a switched-off record's bucket, listed after its folder", async () => {
-    const bucket = { ...BUCKET, prefix: "archives/" };
-    await storeArchives({
-      ...ARCHIVES,
-      enabled: false,
-      destinations: [
-        { kind: "local-fs", id: "primary", dir: "/var/backups/venue" },
-        { kind: "s3", id: "bucket", bucket },
-      ],
-    });
-    const built = await inTx((tx) => buildArchivesPart(tx, context));
-    expect(built.record.destination).toBe("bucket");
-    expect(decodeArchiveRecoveryPack(built.file.archiveCode!)).toEqual({
-      version: 1,
-      format: "WBK1",
-      bucket,
-      archivePrefix: "archives/",
-      recoveryKey: KEY,
-    });
-  });
-
-  it("with no backup key, says archives are absent when there are none and names an unreadable record", async () => {
-    const keyless = { ...context, env: {} };
-    expect((await inTx((tx) => buildArchivesPart(tx, keyless))).part.state).toBe("absent");
-    await inTx((tx) => storeArchivePart(tx, {}));
-    expect((await inTx((tx) => buildArchivesPart(tx, keyless))).failedWith).toBe(
-      "backup.archive_settings_unreadable",
-    );
   });
 });

@@ -27,15 +27,12 @@ const REASON_WORDS: {
 } = {
   settings_changed: {
     bucket: "recovery_pack.reason.bucket_settings",
-    archives: "recovery_pack.reason.archives_settings",
   },
   set_up_after: {
     bucket: "recovery_pack.reason.bucket_set_up",
-    archives: "recovery_pack.reason.archives_set_up",
   },
   removed: {
     bucket: "recovery_pack.reason.bucket_removed",
-    archives: "recovery_pack.reason.archives_removed",
   },
 };
 
@@ -50,14 +47,12 @@ function reasonWords(reason: Worded): StringKey {
   }
 }
 
-/** Each reason's sentence once: the bucket copy and the archives share one recovery key. */
 function reasonSentences(reasons: Listed[], date: (iso: string) => string): string[] {
-  const sentences = reasons.map((reason) =>
+  return reasons.map((reason) =>
     reason.kind === "key_changed"
       ? fill("recovery_pack.reason.key_changed", { date: date(reason.at) })
       : t(reasonWords(reason)),
   );
-  return [...new Set(sentences)];
 }
 
 /**

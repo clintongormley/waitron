@@ -26,7 +26,7 @@ import { establishNodeIdentity } from "./node-identity.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
 import { startServer, type StartedServer } from "./boot.js";
 import { freePorts } from "./testing/free-ports.js";
-import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { invoiceSeries, nodes, openVenueDatabase } from "@waitron/db";
@@ -48,9 +48,6 @@ import { packArchive, unpackArchive } from "./backup-archive.js";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
 import { writeStreamRestore } from "./restore-stream.js";
 import { runRestore } from "./restore-command.js";
-import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
-import { backupArchiveKey } from "./backup-keys.js";
-import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 import { eq } from "drizzle-orm";
 import { execFile } from "node:child_process";
@@ -547,98 +544,6 @@ describe("selected-hour admission before archive placement", () => {
     const command = await archiveCommand(f);
     expect(await runRestore({ ...command, out: () => {} })).toBe(0);
     expect(await unretiredSeriesCodes(f.roots.venueDir)).toEqual(expectedSeriesCodes(f));
-  });
-
-  it("the archive-pack command uses the downloaded exact archive and the pack password", async () => {
-    const f = await archiveHost();
-    const command = await archiveCommand(f);
-    const packPath = join(root, "archive-pack.txt");
-    const archiveKey = backupArchiveKey(new Date("2026-10-16T11:40:00Z"), {
-      nodeId: BACKUP_NODE_ID,
-    });
-    await writeFile(
-      packPath,
-      encodeArchiveRecoveryPack({
-        version: 1,
-        format: "WBK1",
-
-        bucket: {
-          region: "eu-west-1",
-          bucket: "synthetic-bucket",
-          prefix: "",
-          accessKeyId: "synthetic-access",
-          secretAccessKey: "synthetic-secret",
-        },
-        archivePrefix: "",
-        recoveryKey: "archive password",
-      }),
-    );
-    external.internet.mockImplementation(async () => ({
-      source: "internet",
-      result: "usable",
-      instantMs: Date.now(),
-      uncertaintyMs: 0,
-      wallStartedMs: Date.now(),
-      wallFinishedMs: Date.now(),
-      monotonicStartedMs: performance.now(),
-      monotonicFinishedMs: performance.now(),
-    }));
-    command.env.WAITRON_BACKUP_RECOVERY_KEY = "unused environment password";
-    const output: string[] = [];
-    const unexpected = async (): Promise<never> => {
-      throw new Error("unexpected archive transport call");
-    };
-    const result = await runRestore({
-      env: command.env,
-      argv: [
-        "restore",
-        "--from-archive",
-        packPath,
-        "--archive-key",
-        archiveKey,
-        "--confirm-old-box-gone",
-        "--confirm-sole-recovery",
-      ],
-      out: (line) => output.push(line),
-      openArchiveFiles: (bucket) => {
-        expect(bucket.prefix).toBe("");
-        return {
-          putFile: unexpected,
-          putBytes: unexpected,
-          readStream: unexpected,
-          deleteMany: unexpected,
-          list: async (prefix) => {
-            expect(prefix).toBe(archiveKey);
-            return [{ key: archiveKey, size: f.restore.artifact.length, lastModified: new Date() }];
-          },
-          getFile: async (name, path) => {
-            expect(name).toBe(archiveKey);
-            await writeFile(path, f.restore.artifact);
-          },
-          close() {},
-        };
-      },
-    });
-    expect(result).toBe(0);
-    expect(output.at(-1)).toBe(
-      `restored archive ${archiveKey} from the bucket named in ${packPath}`,
-    );
-    const restored = await openVenueDatabase(f.roots.venueDir);
-    try {
-      const rows = await restored.venue.select(seriesWithNextNumber).from(invoiceSeries);
-      expect(rows.filter((row) => row.retiredAt === null).map((row) => row.code)).toEqual([
-        "A-0CNQT",
-        "FF-0CNQT",
-        "R-0CNQT",
-        "RF-0CNQT",
-      ]);
-      expect(rows.filter((row) => row.retiredAt !== null).map((row) => row.nextNumber)).toEqual([
-        123, 123, 123, 123,
-      ]);
-    } finally {
-      await restored.close();
-    }
-    expect(await readdir(join(f.roots.stateDir, "scratch/restore"))).toEqual([]);
   });
 
   it("carries the bucket HTTP selection and isolation through the real staging adapter", async () => {

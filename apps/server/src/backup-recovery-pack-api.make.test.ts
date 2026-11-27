@@ -44,7 +44,6 @@ import {
   type ResourceIdentity,
 } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
-import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
 import {
   mountBackupRecoveryPackMakeApi,
@@ -416,8 +415,7 @@ describe("a made pack", () => {
     expect(file.number).toBe(1);
     expect(file.madeAt).toBe("2026-10-30T09:00:00.000Z");
     expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(KEY);
-    expect(decodeArchiveRecoveryPack(file.archiveCode!).recoveryKey).toBe(KEY);
-    for (const key of ["serverKey", "serverKeyName", "serverKeyHeldBy"])
+    for (const key of ["serverKey", "serverKeyName", "serverKeyHeldBy", "archiveCode", "backupKey"])
       expect(file).not.toHaveProperty(key);
     const [record] = await packs();
     expect(record).toMatchObject({
@@ -429,7 +427,6 @@ describe("a made pack", () => {
     expect(record!.parts.map((p) => [p.part, p.state])).toEqual([
       ["emergency", "absent"],
       ["bucket", "included"],
-      ["archives", "included"],
       ["master-key", "included"],
     ]);
     const stored = JSON.stringify(record);
@@ -529,12 +526,7 @@ describe("a made pack", () => {
       const text = await pdfText(bytes);
       expect(text).not.toMatch(/server key|box key/i);
       const [record] = await packs();
-      expect(record!.parts.map((p) => p.part)).toEqual([
-        "emergency",
-        "bucket",
-        "archives",
-        "master-key",
-      ]);
+      expect(record!.parts.map((p) => p.part)).toEqual(["emergency", "bucket", "master-key"]);
     },
   );
 
@@ -737,13 +729,12 @@ describe("a made pack", () => {
         parts: [
           { part: "emergency", state: "absent" },
           { part: "bucket", state: "included" },
-          { part: "archives", state: "included" },
           { part: "master-key", state: "included" },
         ],
       },
     ]);
-    await withTransaction(suite.db, (tx) => storeArchivePart(tx, {}));
-    const failing = await f.make(file.masterKey!);
+    boxEnv = { ...boxEnv, WAITRON_BACKUP_RECOVERY_KEY: "short" };
+    const failing = await fixture().make(file.masterKey!);
     expect(failing.status).toBe(200);
     expect(logs).toContainEqual([
       "info",
@@ -753,8 +744,7 @@ describe("a made pack", () => {
         number: 2,
         parts: [
           { part: "emergency", state: "absent" },
-          { part: "bucket", state: "included" },
-          { part: "archives", state: "failed", failedWith: "backup.archive_settings_unreadable" },
+          { part: "bucket", state: "failed", failedWith: "backup.recovery_key_too_short" },
           { part: "master-key", state: "included" },
         ],
       },
@@ -779,13 +769,7 @@ describe("a made pack", () => {
       [...failing.headers],
       [...cloudFailing.headers],
     ]);
-    for (const value of [
-      KEY,
-      BUCKET.secretAccessKey,
-      file.bucketCode!,
-      file.archiveCode!,
-      "jane-doe",
-    ])
+    for (const value of [KEY, BUCKET.secretAccessKey, file.bucketCode!, "jane-doe"])
       expect(seen).not.toContain(value);
     const printed = JSON.stringify([logs, [...failing.headers], [...cloudFailing.headers]]);
     expect(printed).not.toContain(file.masterKey!);
@@ -836,7 +820,6 @@ describe("a made pack", () => {
     expect((await packs())[0]!.parts.map((p) => [p.part, p.state])).toEqual([
       ["emergency", "absent"],
       ["bucket", "failed"],
-      ["archives", "failed"],
       ["master-key", "included"],
     ]);
   });
@@ -1289,7 +1272,6 @@ describe("the status route", () => {
     boxEnv = { ...boxEnv, WAITRON_BACKUP_KEY_ROTATED_AT: "2026-10-29T08:00:00.000Z" };
     expect((await read(f)).reasons).toEqual([
       { part: "bucket", kind: "key_changed", at: "2026-10-29T08:00:00.000Z" },
-      { part: "archives", kind: "key_changed", at: "2026-10-29T08:00:00.000Z" },
     ]);
   });
 
@@ -1316,18 +1298,16 @@ describe("the status route", () => {
     for (const key of [KEY, "short"]) expect(JSON.stringify(answer)).not.toContain(key);
   });
 
-  it("counts archives as changed when their record cannot be read", async () => {
+  it("does not count archives as changed when their record cannot be read", async () => {
     const f = fixture();
     await (await print(f)).arrayBuffer();
     await f.received(1);
     expect((await read(f)).upToDate).toBe(true);
     await withTransaction(suite.db, (tx) => storeArchivePart(tx, {}));
-    const answer = await read(f);
-    expect(answer.upToDate).toBe(false);
-    expect(answer.reasons).toContainEqual({ part: "archives", kind: "settings_changed" });
+    expect(await read(f)).toMatchObject({ upToDate: true, reasons: [] });
   });
 
-  it("says a pack is out of date when the archive bucket changes, recording none of its credentials", async () => {
+  it("keeps a pack up to date when the archive bucket changes, recording none of its credentials", async () => {
     const destinations = (bucket: string): ArchiveSettings["destinations"] => [
       { kind: "s3", id: "bucket", bucket: { ...BUCKET, bucket } },
     ];
@@ -1340,8 +1320,7 @@ describe("the status route", () => {
       ),
     );
     const f = fixture();
-    const file = await readRecoveryPackPdf(new Uint8Array(await (await print(f)).arrayBuffer()));
-    expect(decodeArchiveRecoveryPack(file.archiveCode!).bucket.bucket).toBe("old-bucket");
+    await (await print(f)).arrayBuffer();
     await f.received(1);
     expect((await read(f)).upToDate).toBe(true);
     const stored = JSON.stringify(await packs());
@@ -1355,9 +1334,7 @@ describe("the status route", () => {
         null,
       ),
     );
-    const answer = await read(f);
-    expect(answer.upToDate).toBe(false);
-    expect(answer.reasons).toEqual([{ part: "archives", kind: "settings_changed" }]);
+    expect(await read(f)).toMatchObject({ upToDate: true, reasons: [] });
   });
 
   it("keeps one pack for a backup key that was never changed before its first change", async () => {
@@ -1451,7 +1428,7 @@ it.each(["en", "es"] as const)(
     expect(await firstPageCodes(bytes)).toEqual([masterKey, CLOUD_ADDRESS]);
     const text = await pdfText(bytes);
     expect(text).not.toMatch(/emergenc/i);
-    expect(text).toContain(PACK_WORDS[locale].page(3, 3));
+    expect(text).toContain(PACK_WORDS[locale].page(2, 2));
     const [record] = await packs();
     expect(record!.parts[0]).toEqual({ part: "emergency", state: "included" });
     for (const value of [
@@ -1511,11 +1488,10 @@ it.each([
     expect(await firstPageCodes(bytes)).toEqual([shownMasterKey(response).masterKey, null]);
     const text = await pdfText(bytes);
     expect(text).not.toMatch(/Cloud|emergency|jane-doe/i);
-    expect(text).toContain("Page 3 of 3");
+    expect(text).toContain("Page 2 of 2");
     expect((await packs())[0]!.parts.map((p) => [p.part, p.state])).toEqual([
       ["emergency", "absent"],
       ["bucket", "included"],
-      ["archives", "included"],
       ["master-key", "included"],
     ]);
     expect(JSON.stringify(logs)).not.toContain("jane-doe");

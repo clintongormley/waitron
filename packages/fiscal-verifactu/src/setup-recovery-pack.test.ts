@@ -77,8 +77,6 @@ it.each(["en", "es"] as const)(
       number: 1,
       madeAt: document.createdAt,
       bucketCode: null,
-      archiveCode: null,
-      backupKey: null,
       masterKey: made.masterKey,
       masterKeyName: made.masterKeyName,
       masterKeyHeldBy: null,

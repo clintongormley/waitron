@@ -25,7 +25,6 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import { AppError, decodeMasterKeyCode, encodeMasterKeyCode, isAppError } from "@waitron/shared";
-import { readHeldArchiveSettingsIn } from "./archive-settings.js";
 import { errnoOf } from "./errno.js";
 import { inTurn } from "./attempt-turns.js";
 import { loadKeyRotatedAt, loadRecoveryKey, readHeldKey } from "./backup-config.js";
@@ -37,11 +36,7 @@ import {
   heldBackupKeyNumber,
   type BackupKeyChangeDeps,
 } from "./backup-key-record.js";
-import {
-  buildArchivesPart,
-  buildBucketPart,
-  type PartsContext,
-} from "./backup-recovery-pack-parts.js";
+import { buildBucketPart, type PartsContext } from "./backup-recovery-pack-parts.js";
 import {
   drawRecoveryPack,
   masterKeyHolders,
@@ -146,25 +141,14 @@ function makeRequest(body: unknown): MakeRequest {
   return fields as MakeRequest;
 }
 
-async function currentArchives(
-  tx: Transaction,
-  deps: BackupRecoveryPackMakeDeps,
-): Promise<CurrentChecks["archives"]> {
-  const read = await readHeldArchiveSettingsIn(tx, deps.ring);
-  if ("unreadable" in read) return "unreadable";
-  return read.settings === null ? null : { revision: read.settings.revision };
-}
-
 async function currentChecks(
   tx: Transaction,
-  deps: BackupRecoveryPackMakeDeps,
   env: Readonly<Record<string, string | undefined>>,
 ): Promise<CurrentChecks> {
   const streamRevision = await credentialRevision(tx, { purpose: STREAM_PURPOSE });
   return {
     keyChangedAt: loadKeyRotatedAt(env),
     bucket: streamRevision === null ? null : { revision: streamRevision },
-    archives: await currentArchives(tx, deps),
   };
 }
 
@@ -246,8 +230,7 @@ async function makePack(
     env: input.env,
   };
   const bucket = await buildBucketPart(tx, context);
-  const archives = await buildArchivesPart(tx, context);
-  const parts = [bucket, archives];
+  const parts = [bucket];
   const { pdf, record } = await drawRecoveryPack(
     {
       locale: request.locale,
@@ -425,11 +408,9 @@ export function mountBackupRecoveryPackMakeApi(
             madeByName: r.madeBy === null ? null : (names.get(r.madeBy) ?? null),
           })),
           current: {
-            ...(await currentChecks(tx, deps, env)),
+            ...(await currentChecks(tx, env)),
             cloudOpen: deps.cloud?.isPrimary() === true && cloudAddress !== null,
           },
-          retention: loaded.retention,
-          schedule: loaded.schedule,
           backupsUseOlderKey:
             loaded.recoveryKey !== undefined &&
             fileKey !== undefined &&

@@ -149,9 +149,8 @@ docker compose -f compose.yml -f recovery.override.yml run --rm --no-deps \
 The example selects a **preproduction** backup. For a real production backup, explicitly use
 `WAITRON_ENV=production`; environments are never interchangeable. The command prints
 `restored /input/archive.wt` on success. Use the old-box confirmation flag only after establishing
-that the former box is permanently off. The bucket and archive-pack CLI forms retain their
-existing source-download and confirmation requirements; the override supplies their outside
-fiscal evidence too.
+that the former box is permanently off. The bucket CLI form keeps its own source-download and
+confirmation requirements; the override supplies its outside fiscal evidence too.
 
 ## Retain the generated result
 

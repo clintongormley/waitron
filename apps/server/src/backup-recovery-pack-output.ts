@@ -67,8 +67,6 @@ export async function drawRecoveryPack(
       number,
       madeAt,
       bucketCode: null,
-      archiveCode: null,
-      backupKey: null,
       masterKey: details.masterKey.masterKey,
       masterKeyName: details.masterKey.masterKeyName,
       masterKeyHeldBy: null,
@@ -128,7 +126,7 @@ export async function makeMasterKeyRecoveryPack(
         {
           nodeId,
           madeBy: null,
-          parts: [notSetUp("bucket"), notSetUp("archives")],
+          parts: [notSetUp("bucket")],
           masterKey: { ...shown.made, number: masterKeyNumber },
         },
       );

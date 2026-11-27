@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { MasterKeyRecord, RecoveryPackPartRecord } from "@waitron/db";
+import type { BackupSchedule } from "./backup-config.js";
 import { masterKeyHolders } from "./backup-recovery-pack-output.js";
 import {
+  keepOldPackUntil,
   packStatus,
   type CurrentChecks,
   type PackStatusInput,
@@ -18,13 +20,6 @@ const included = {
     keyChangedAt: "2026-09-20T08:00:00.000Z",
     settingsRevision: "rev-b",
   },
-  archives: {
-    part: "archives",
-    state: "included",
-    keyChangedAt: "2026-09-20T08:00:00.000Z",
-    settingsRevision: "rev-a",
-    destination: "bucket",
-  },
 } satisfies Record<string, RecoveryPackPartRecord>;
 
 function pack(
@@ -39,21 +34,18 @@ function pack(
     madeBy: "person",
     madeByName: options.name === undefined ? "Martha Green" : options.name,
     receivedAt: options.received === false ? null : new Date(madeAt),
-    parts: options.parts ?? [included.bucket, included.archives],
+    parts: options.parts ?? [included.bucket],
   };
 }
 
 const current: CurrentChecks = {
   keyChangedAt: "2026-09-20T08:00:00.000Z",
   bucket: { revision: "rev-b" },
-  archives: { revision: "rev-a" },
 };
 
 const base: PackStatusInput = {
   records: [],
   current,
-  retention: { count: 7, days: 30 },
-  schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
   backupsUseOlderKey: false,
   masterKeyPacks: [],
   now: new Date("2026-10-30T09:00:00.000Z"),
@@ -82,10 +74,7 @@ describe("the latest pack", () => {
       madeAt: "2026-10-12T10:00:00.000Z",
       madeByName: "Martha Green",
       received: true,
-      parts: [
-        { part: "bucket", state: "included" },
-        { part: "archives", state: "included" },
-      ],
+      parts: [{ part: "bucket", state: "included" }],
     });
     expect(answer).toMatchObject({ upToDate: true, incomplete: false, reasons: [] });
   });
@@ -100,23 +89,14 @@ describe("the latest pack", () => {
     [
       "the backup key changed",
       { keyChangedAt: "2026-10-20T07:00:00.000Z" },
-      [
-        { part: "bucket", kind: "key_changed", at: "2026-10-20T07:00:00.000Z" },
-        { part: "archives", kind: "key_changed", at: "2026-10-20T07:00:00.000Z" },
-      ],
+      [{ part: "bucket", kind: "key_changed", at: "2026-10-20T07:00:00.000Z" }],
     ],
     [
       "the bucket settings changed",
       { bucket: { revision: "rev-b2" } },
       [{ part: "bucket", kind: "settings_changed" }],
     ],
-    [
-      "the archive settings changed",
-      { archives: { revision: "rev-a2" } },
-      [{ part: "archives", kind: "settings_changed" }],
-    ],
     ["the bucket copy was switched off", { bucket: null }, [{ part: "bucket", kind: "removed" }]],
-    ["the archives were switched off", { archives: null }, [{ part: "archives", kind: "removed" }]],
   ])("is out of date when %s", (_name, change, reasons) => {
     const answer = status([pack(1, "2026-10-12T10:00:00.000Z")], {
       current: { ...current, ...change },
@@ -125,31 +105,14 @@ describe("the latest pack", () => {
     expect(answer.upToDate).toBe(false);
   });
 
-  it("counts unreadable archive settings as changed, even against a record with no revision", () => {
-    const noRevision = { ...included.archives, settingsRevision: undefined };
-    for (const archives of [included.archives, noRevision]) {
-      const parts = [included.bucket, archives];
-      const answer = status([pack(1, "2026-10-12T10:00:00.000Z", { parts })], {
-        current: { ...current, archives: "unreadable" },
-      });
-      expect(answer.reasons).toEqual([{ part: "archives", kind: "settings_changed" }]);
-      expect(answer.upToDate).toBe(false);
-    }
-  });
-
-  it.each<[RecoveryPackPartRecord["part"], Partial<CurrentChecks>]>([
-    ["bucket", {}],
-    ["archives", {}],
-  ])("is out of date when the %s part was absent and is set up now", (part) => {
-    const parts = [included.bucket, included.archives].map((p) =>
-      p.part === part ? { part, state: "absent" as const } : p,
-    );
+  it("is out of date when the bucket part was absent and is set up now", () => {
+    const parts = [{ part: "bucket" as const, state: "absent" as const }];
     const answer = status([pack(1, "2026-10-12T10:00:00.000Z", { parts })]);
-    expect(answer.reasons).toEqual([{ part, kind: "set_up_after" }]);
+    expect(answer.reasons).toEqual([{ part: "bucket", kind: "set_up_after" }]);
   });
 
   it("stays up to date for a part absent then and absent now", () => {
-    const parts = [{ part: "bucket" as const, state: "absent" as const }, included.archives];
+    const parts = [{ part: "bucket" as const, state: "absent" as const }];
     expect(
       status([pack(1, "2026-10-12T10:00:00.000Z", { parts })], {
         current: { ...current, bucket: null },
@@ -158,10 +121,7 @@ describe("the latest pack", () => {
   });
 
   it("lets the pack's own time stand in for a key never changed, until a change after it", () => {
-    const parts = [
-      { ...included.bucket, keyChangedAt: "2026-10-12T10:00:00.000Z" },
-      { ...included.archives, keyChangedAt: "2026-10-12T10:00:00.000Z" },
-    ];
+    const parts = [{ ...included.bucket, keyChangedAt: "2026-10-12T10:00:00.000Z" }];
     const made = pack(1, "2026-10-12T10:00:00.000Z", { parts });
     expect(status([made], { current: { ...current, keyChangedAt: undefined } }).upToDate).toBe(
       true,
@@ -172,14 +132,11 @@ describe("the latest pack", () => {
     ).toBe(true);
     expect(
       status([made], { current: { ...current, keyChangedAt: "2026-10-13T09:00:00.000Z" } }).reasons,
-    ).toHaveLength(2);
+    ).toEqual([{ part: "bucket", kind: "key_changed", at: "2026-10-13T09:00:00.000Z" }]);
   });
 
   it("is incomplete, and not up to date, when a part failed — as when the box had no backup key yet", () => {
-    const parts = [
-      { part: "bucket" as const, state: "failed" as const },
-      { part: "archives" as const, state: "failed" as const },
-    ];
+    const parts = [{ part: "bucket" as const, state: "failed" as const }];
     const answer = status([pack(1, "2026-10-12T10:00:00.000Z", { parts })]);
     expect(answer).toMatchObject({ incomplete: true, upToDate: false, reasons: [] });
   });
@@ -318,7 +275,6 @@ describe("a pack no browser confirmed receiving", () => {
       received: false,
       parts: [
         included.bucket,
-        included.archives,
         { part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName: "Key 1" },
       ],
     });
@@ -362,7 +318,7 @@ describe("a pack no browser confirmed receiving", () => {
 });
 
 describe("the packs to keep", () => {
-  it("keeps the newest pack with an older backup key until its archives should be gone (daily schedule)", () => {
+  it("keeps the newest pack with an older backup key until the bucket copy's seven days have passed", () => {
     const change = "2026-10-25T07:00:00.000Z";
     const answer = status(
       [pack(2, "2026-10-12T10:00:00.000Z"), pack(1, "2026-10-01T10:00:00.000Z")],
@@ -370,13 +326,11 @@ describe("the packs to keep", () => {
         current: { ...current, keyChangedAt: change },
       },
     );
-    // min(7 daily archives, 30 days) after the change, plus one interval: 7 + 1 days, over the
-    // bucket copy's 7.
     expect(answer.keep).toEqual([
       {
         number: 2,
         madeAt: "2026-10-12T10:00:00.000Z",
-        until: new Date(Date.parse(change) + 8 * DAY).toISOString(),
+        until: new Date(Date.parse(change) + 7 * DAY).toISOString(),
         why: "backup_key",
       },
     ]);
@@ -385,7 +339,6 @@ describe("the packs to keep", () => {
   it("keeps one pack, the newest, for the key that had never been changed when they were made", () => {
     const standIn = (madeAt: string): RecoveryPackPartRecord[] => [
       { ...included.bucket, keyChangedAt: madeAt, keyNeverChanged: true },
-      { ...included.archives, keyChangedAt: madeAt, keyNeverChanged: true },
     ];
     const change = "2026-10-25T07:00:00.000Z";
     const answer = status(
@@ -399,59 +352,16 @@ describe("the packs to keep", () => {
       {
         number: 2,
         madeAt: "2026-10-12T10:00:00.000Z",
-        until: new Date(Date.parse(change) + 8 * DAY).toISOString(),
+        until: new Date(Date.parse(change) + 7 * DAY).toISOString(),
         why: "backup_key",
       },
     ]);
   });
 
-  it("takes the longest gap between a weekly schedule's days as its interval", () => {
-    const change = "2026-10-25T07:00:00.000Z";
-    const answer = status([pack(1, "2026-10-12T10:00:00.000Z")], {
-      current: { ...current, keyChangedAt: change },
-      schedule: { kind: "wall-clock", days: [1, 3], at: { hour: 3, minute: 0 } },
-    });
-    // Monday and Wednesday: the longest gap is Wednesday to Monday, 5 days; min(7 × 5, 30) + 5 = 35.
-    expect(answer.keep[0]!.until).toBe(new Date(Date.parse(change) + 35 * DAY).toISOString());
-  });
-
-  it("uses an interval schedule's own interval, and the age cap when it is sooner", () => {
-    const change = "2026-10-25T07:00:00.000Z";
-    const answer = status([pack(1, "2026-10-12T10:00:00.000Z")], {
-      current: { ...current, keyChangedAt: change },
-      schedule: { kind: "interval", ms: 2 * DAY },
-      retention: { count: 50, days: 10 },
-    });
-    expect(answer.keep[0]!.until).toBe(new Date(Date.parse(change) + 12 * DAY).toISOString());
-  });
-
-  it("keeps the bucket copy's seven days when the box keeps no archives", () => {
-    const change = "2026-10-25T07:00:00.000Z";
-    const answer = status([pack(1, "2026-10-12T10:00:00.000Z")], {
-      current: { ...current, keyChangedAt: change },
-      schedule: undefined,
-      retention: undefined,
-    });
-    expect(answer.keep[0]!.until).toBe(new Date(Date.parse(change) + 7 * DAY).toISOString());
-  });
-
-  it("keeps the bucket copy's seven days when the archives should be gone sooner", () => {
-    const change = "2026-10-25T07:00:00.000Z";
-    const answer = status([pack(1, "2026-10-12T10:00:00.000Z")], {
-      current: { ...current, keyChangedAt: change },
-      retention: { count: 5, days: 30 },
-    });
-    // min(5 daily archives, 30 days) plus one interval is 6 days, under the bucket copy's 7.
-    expect(answer.keep[0]!.until).toBe(new Date(Date.parse(change) + 7 * DAY).toISOString());
-  });
-
   it("drops a pack whose keep date has passed", () => {
-    const parts = [
-      { ...included.bucket, keyChangedAt: "2026-08-01T08:00:00.000Z" },
-      { ...included.archives, keyChangedAt: "2026-08-01T08:00:00.000Z" },
-    ];
+    const parts = [{ ...included.bucket, keyChangedAt: "2026-08-01T08:00:00.000Z" }];
     const made = pack(1, "2026-08-12T10:00:00.000Z", { parts });
-    // A change on 1 September: kept until 9 September, long before now.
+    // A change on 1 September: kept until 8 September, long before now.
     expect(
       status([made], { current: { ...current, keyChangedAt: "2026-09-01T07:00:00.000Z" } }).keep,
     ).toEqual([]);
@@ -459,6 +369,86 @@ describe("the packs to keep", () => {
     expect(
       status([made], { current: { ...current, keyChangedAt: "2026-10-25T07:00:00.000Z" } }).keep,
     ).toHaveLength(1);
+  });
+});
+
+describe("a backup-key change", () => {
+  const change = "2026-10-25T07:00:00.000Z";
+  const archivesPart = {
+    part: "archives",
+    state: "included",
+    keyChangedAt: "2026-09-20T08:00:00.000Z",
+    settingsRevision: "rev-a",
+    destination: "bucket",
+  } satisfies RecoveryPackPartRecord;
+
+  it("a backup-key change does not mark a pack out of date for archives", () => {
+    const onlyArchives = pack(1, "2026-10-12T10:00:00.000Z", {
+      parts: [{ part: "bucket", state: "absent" }, archivesPart],
+    });
+    const answer = status([onlyArchives], {
+      current: { ...current, keyChangedAt: change, bucket: null },
+    });
+    expect(answer.reasons).toEqual([]);
+    expect(answer.upToDate).toBe(true);
+    expect(answer.keep).toEqual([]);
+  });
+
+  it("with a bucket copy, a backup-key change still marks the pack out of date and names the pack to keep until the bucket copy's date", () => {
+    const answer = status(
+      [pack(1, "2026-10-12T10:00:00.000Z", { parts: [included.bucket, archivesPart] })],
+      { current: { ...current, keyChangedAt: change } },
+    );
+    expect(answer.reasons).toEqual([{ part: "bucket", kind: "key_changed", at: change }]);
+    expect(answer.upToDate).toBe(false);
+    expect(answer.keep).toEqual([
+      {
+        number: 1,
+        madeAt: "2026-10-12T10:00:00.000Z",
+        until: new Date(Date.parse(change) + 7 * DAY).toISOString(),
+        why: "backup_key",
+      },
+    ]);
+  });
+});
+
+describe("the date a pack made before a master-key change can go", () => {
+  const now = new Date("2026-10-25T07:00:00.000Z");
+  const daily = { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } } as const;
+  const after = (days: number) => new Date(now.getTime() + days * DAY).toISOString();
+
+  it("waits until the archives made before it should be gone (daily schedule)", () => {
+    // min(7 daily archives, 30 days) after the change, plus one interval: 7 + 1 days, over the
+    // bucket copy's 7.
+    expect(keepOldPackUntil({ retention: { count: 7, days: 30 }, schedule: daily, now })).toBe(
+      after(8),
+    );
+  });
+
+  it("takes the longest gap between a weekly schedule's days as its interval", () => {
+    const schedule: BackupSchedule = {
+      kind: "wall-clock",
+      days: [1, 3],
+      at: { hour: 3, minute: 0 },
+    };
+    // Monday and Wednesday: the longest gap is Wednesday to Monday, 5 days; min(7 × 5, 30) + 5 = 35.
+    expect(keepOldPackUntil({ retention: { count: 7, days: 30 }, schedule, now })).toBe(after(35));
+  });
+
+  it("uses an interval schedule's own interval, and the age cap when it is sooner", () => {
+    const schedule = { kind: "interval", ms: 2 * DAY } as const;
+    expect(keepOldPackUntil({ retention: { count: 50, days: 10 }, schedule, now })).toBe(after(12));
+  });
+
+  it("keeps the bucket copy's seven days when the box keeps no archives", () => {
+    expect(keepOldPackUntil({ retention: undefined, schedule: undefined, now })).toBe(after(7));
+  });
+
+  it("keeps the bucket copy's seven days when the archives should be gone sooner", () => {
+    // min(5 daily archives, 30 days) plus one interval is 6 days, under the bucket copy's 7.
+    expect(keepOldPackUntil({ retention: { count: 5, days: 30 }, schedule: daily, now })).toBe(
+      after(7),
+    );
   });
 });
 

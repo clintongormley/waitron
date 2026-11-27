@@ -1719,20 +1719,17 @@ export const en = {
     "The current master key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, choose {option}.",
   "recovery_pack.reason.key_changed": "The backup key changed on {date}.",
   "recovery_pack.reason.bucket_settings": "The bucket copy's settings changed.",
-  "recovery_pack.reason.archives_settings": "The archive settings changed.",
   "recovery_pack.reason.bucket_set_up": "The bucket copy was set up after this pack.",
-  "recovery_pack.reason.archives_set_up": "Archives were set up after this pack.",
   "recovery_pack.reason.bucket_removed": "The bucket copy was turned off.",
-  "recovery_pack.reason.archives_removed": "Archives were turned off.",
   "recovery_pack.reason.cloud_missing": "The pack has no Waitron Cloud QR code.",
   "recovery_pack.make_new": "Print the recovery pack.",
   "recovery_pack.make_new_master_key": "Make a new master key.",
   "recovery_pack.make_new_once_fixed": "Print the recovery pack once the cause is fixed.",
   "recovery_pack.make_new_master_key_once_fixed": "Make a new master key once the cause is fixed.",
   "recovery_pack.keep_backup_key":
-    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
+    "Keep pack {number}, made on {date}, until about {until}: the bucket copy made before the backup key changed needs it.",
   "recovery_pack.older_key":
-    "The box's backups still use the backup key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too while the Recovery pack card says this.",
+    "The box's backups still use the backup key from before the last change, because the box could not load the new settings. Keep the older pack too while the Recovery pack card says this.",
   "recovery_pack.row.last": "Last pack",
   "recovery_pack.row.backup_key": "Backup key",
   "recovery_pack.last_none": "None yet",
@@ -4811,15 +4808,15 @@ export const en = {
     "Waitron checked the backup on this box. Download it before switching off.",
   "box_status.shutdown.download_backup": "Download checked backup",
   "box_status.shutdown.backup_saved": "I saved the backup",
-  "box_status.shutdown.saved_question": "Have you saved the backup and its keys?",
+  "box_status.shutdown.saved_question": "Have you saved the backup and the master key?",
   "box_status.shutdown.check_file": "Check that you saved {name} ({bytes} bytes) in Downloads.",
-  "box_status.shutdown.keys": "To restore this backup, you need its encryption key and master key.",
+  "box_status.shutdown.keys": "To restore this backup, you need the master key.",
   "box_status.shutdown.question": "Shut down this box?",
   "box_status.shutdown.clock_out_first":
     "Ask anyone still clocked in to clock out before you continue.",
   "box_status.shutdown.working": "Working",
   "box_status.shutdown.what":
-    "Waitron pauses selling and staff clocking while it saves and checks a full backup at every saved destination. You need the backup and its recovery key to restore. An administrator must choose whether to sell here again when this box starts.",
+    "Waitron pauses selling and staff clocking while it saves and checks a full backup at every saved destination. You need the backup and the master key to restore. An administrator must choose whether to sell here again when this box starts.",
   "box_status.shutdown.password_reason":
     "Use your password to confirm. You can use that password to sign back in and cancel, or to carry on when the box starts again. If you haven’t set a password, set one in Account settings before you continue.",
   "box_status.shutdown.add_password":
@@ -6625,12 +6622,9 @@ export const es: Record<StringKey, string> = {
     "La clave maestra actual está en el paquete de recuperación {number}, hecho el {date}, pero el servidor nunca recibió la confirmación de que el paquete {number} llegó. Si no tienes el paquete {number}, elige {option}.",
   "recovery_pack.reason.key_changed": "La clave de las copias cambió el {date}.",
   "recovery_pack.reason.bucket_settings": "Los ajustes de la copia en el bucket cambiaron.",
-  "recovery_pack.reason.archives_settings": "Los ajustes de los archivos cambiaron.",
   "recovery_pack.reason.bucket_set_up":
     "La copia en el bucket se configuró después de este paquete.",
-  "recovery_pack.reason.archives_set_up": "Los archivos se configuraron después de este paquete.",
   "recovery_pack.reason.bucket_removed": "La copia en el bucket se desactivó.",
-  "recovery_pack.reason.archives_removed": "Los archivos se desactivaron.",
   "recovery_pack.reason.cloud_missing": "El paquete no tiene el código QR de Waitron Cloud.",
   "recovery_pack.make_new": "Imprime el paquete de recuperación.",
   "recovery_pack.make_new_master_key": "Crea una clave maestra nueva.",
@@ -6639,9 +6633,9 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.make_new_master_key_once_fixed":
     "Crea una clave maestra nueva cuando se haya resuelto la causa.",
   "recovery_pack.keep_backup_key":
-    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de las copias si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
+    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}: la copia en el bucket hecha antes del cambio de la clave de las copias lo necesita.",
   "recovery_pack.older_key":
-    "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior mientras la tarjeta Paquete de recuperación lo diga.",
+    "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Guarda también el paquete anterior mientras la tarjeta Paquete de recuperación lo diga.",
   "recovery_pack.row.last": "Último paquete",
   "recovery_pack.row.backup_key": "Clave de las copias",
   "recovery_pack.last_none": "Ninguno todavía",
@@ -9770,17 +9764,16 @@ export const es: Record<StringKey, string> = {
     "Waitron ha comprobado la copia de seguridad en este servidor. Descárgala antes de apagarlo.",
   "box_status.shutdown.download_backup": "Descargar la copia comprobada",
   "box_status.shutdown.backup_saved": "He guardado la copia",
-  "box_status.shutdown.saved_question": "¿Has guardado la copia de seguridad y sus claves?",
+  "box_status.shutdown.saved_question": "¿Has guardado la copia de seguridad y la clave maestra?",
   "box_status.shutdown.check_file":
     "Comprueba que has guardado {name} ({bytes} bytes) en Descargas.",
-  "box_status.shutdown.keys":
-    "Para restaurar esta copia necesitas su clave de cifrado y su clave maestra.",
+  "box_status.shutdown.keys": "Para restaurar esta copia necesitas la clave maestra.",
   "box_status.shutdown.question": "¿Apagar este servidor?",
   "box_status.shutdown.clock_out_first":
     "Pide a quienes siguen con el turno abierto que fichen la salida antes de continuar.",
   "box_status.shutdown.working": "Trabajando",
   "box_status.shutdown.what":
-    "Waitron pausa las ventas y los fichajes mientras guarda y comprueba una copia de seguridad completa en cada destino guardado. Necesitas la copia y su clave de recuperación para restaurarla. Al arrancar, un administrador deberá decidir si se vuelve a vender aquí.",
+    "Waitron pausa las ventas y los fichajes mientras guarda y comprueba una copia de seguridad completa en cada destino guardado. Necesitas la copia de seguridad y la clave maestra para restaurarla. Al arrancar, un administrador deberá decidir si se vuelve a vender aquí.",
   "box_status.shutdown.password_reason":
     "Usa tu contraseña para confirmar. Podrás usarla para volver a iniciar sesión y cancelar, o para continuar cuando el servidor vuelva a arrancar. Si aún no tienes contraseña, créala en Configuración de la cuenta antes de continuar.",
   "box_status.shutdown.add_password":

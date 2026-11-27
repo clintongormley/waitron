@@ -6,7 +6,6 @@ export const MAX_PACK_FILE = 16 * 1024;
  * refuse a larger PDF without loading pdf-lib. */
 export const MAX_PACK_PDF = 8 * 1024 * 1024;
 export const BUCKET_CODE_PREFIX = "WAITRON-RECOVERY-KIT-2:";
-export const ARCHIVE_CODE_PREFIX = "WAITRON-ARCHIVE-PACK-1:";
 
 const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d];
 
@@ -35,9 +34,6 @@ export type RecoveryPackFile = {
   number: number;
   madeAt: string;
   bucketCode: string | null;
-  archiveCode: string | null;
-  /** Carried exactly as the box holds it: a passphrase's spaces, even at either end, are part of it. */
-  backupKey: string | null;
   /** As printed: seven groups of four, single spaces. Only on a pack made with a new master key. */
   masterKey: string | null;
   /** The current master key's name, on every pack made while the venue has one. */
@@ -52,8 +48,6 @@ const FIELDS = [
   "number",
   "madeAt",
   "bucketCode",
-  "archiveCode",
-  "backupKey",
   "masterKey",
   "masterKeyName",
   "masterKeyHeldBy",
@@ -133,11 +127,6 @@ function checked(value: unknown): RecoveryPackFile {
     !count(value.number) ||
     !instant(value.madeAt) ||
     !code(value.bucketCode, BUCKET_CODE_PREFIX) ||
-    !code(value.archiveCode, ARCHIVE_CODE_PREFIX) ||
-    !(
-      value.backupKey === null ||
-      (typeof value.backupKey === "string" && value.backupKey !== "")
-    ) ||
     !masterKeyFields(value)
   )
     refuse("shape");

@@ -874,9 +874,15 @@ command against it treat that entrypoint differently:
   The same `--entrypoint node` applies to `docker compose run app /app/bin-rejoin.js …` and to
   any bare `docker run` against this image.
 
-- **A restore takes one of three sources.** `restore <backup-file>` restores an encrypted backup
-  file. The file opens with the master key, set in `WAITRON_MASTER_KEY` or given with
-  `--master-key-file <path>`, where `<path>` is a text file holding the key or the venue's
+- **A restore takes one of two sources.** `restore <backup-file>` restores an encrypted backup
+  file, such as an archive you download from the bucket yourself, signed in at your storage
+  provider. The recovery pack does not record where archives are kept or how to sign in to their
+  bucket, so keep the bucket's provider, name and folder, and your own way to sign in to it, away
+  from the box. The box writes each archive directly inside the bucket folder chosen on the
+  dashboard's Backups screen, named `waitron-<UTC time>-<node id>-<nonce>.backup.enc` with the time
+  to the second, so the names sort oldest first; the order of two taken in the same second means
+  nothing. The file opens with the master key, set in `WAITRON_MASTER_KEY` or given with `--master-key-file <path>`, where `<path>` is a
+  text file holding the key or the venue's
   recovery pack PDF when it holds the key. That file must be visible inside the container and
   readable by the image's user, as for the bucket form's file below, or the command stops with
   `cannot read the master key file`, without naming the path, so a key pasted in its place is
@@ -903,8 +909,8 @@ command against it treat that entrypoint differently:
 
   **A filing node also needs its fiscal recovery operation.** Follow
   [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected
-  backup's master key in `WAITRON_MASTER_KEY`, a fresh allocation and current outside evidence. The source examples below
-  show archive and bucket access only; add that procedure's recovery override and credentials
+  backup's master key in `WAITRON_MASTER_KEY`, a fresh allocation and current outside evidence. The bucket example below
+  shows bucket access only; add that procedure's recovery override and credentials
   when restoring Veri*Factu. A bucket kit's or Cloud copy's recovery key alone does not authorise activation.
   When the series check cannot confirm the box's time (`sif.allocation_invalid` with reason
   `second_clock_missing` or `clock_unconfirmed`), the command prints one line naming the code and
@@ -923,28 +929,6 @@ command against it treat that entrypoint differently:
   same check. Each form takes only its own flags, each once: `--confirm-venue` belongs to the
   bucket form alone, and a backup file given together with `--from-bucket` is refused. Anything
   else prints the usage line and exits 2.
-
-  `restore --from-archive <pack-pdf-or-archive-pack-file> --archive-key <name>` downloads one archive from the bucket
-  named in the venue's recovery pack PDF, or in an archive recovery pack file saved before the
-  recovery pack replaced it, and restores it as `restore <backup-file>` does, with the same check
-  on the old box. Either holds the bucket's key and the recovery key: keep it off the box, and
-  make it visible and readable inside the container as above, or the command stops with
-  `cannot read pack file: <path>`.
-  `<name>` is the archive's file name as the bucket lists it. This form takes neither a backup
-  file, `--from-bucket` nor `--confirm-venue`, and uses the pack's recovery key even when
-  `WAITRON_BACKUP_RECOVERY_KEY` is set. An archive file downloaded from the bucket by hand
-  opens with `restore <backup-file>` and the master key. A filing node still needs the separate
-  fiscal recovery inputs.
-
-  ```bash
-  docker compose run --rm -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \
-    /app/bin-restore.js restore --from-archive /recovery-pack.pdf --archive-key <name>
-  ```
-
-  It reads the PDF's archive code the same way as `--from-bucket` reads its bucket copy code, and
-  refuses in the same three cases, the first being a pack made while the box kept no backup archive
-  in a bucket. The dashboard no longer shows either restore code on screen; both are in the
-  recovery pack.
 
   **Keep older master keys.** Restoring a backup that files invoices needs the master key that was
   current when the backup was made, and the restored box then answers to that key again, not to a
@@ -1007,18 +991,16 @@ command against it treat that entrypoint differently:
   until it ends, so the server cannot start while one runs. On a box with no venue folder yet, a
   restore makes an empty one first, holding only its lock file `venue.lock`, and leaves it there
   even when it is then refused. A run makes its own working folders (`stream-restore-` inside
-  `state/scratch/` or, inside `state/scratch/restore/`, `archive-download-`,
-  `archive-validate-` or `restore-admission-`, each followed by six random characters) and removes
-  them when it ends. A run that is killed leaves them, holding a full copy of the venue's database
-  or the encrypted archive, and the next server start removes them. Beside the secrets in the
+  `state/scratch/` or, inside `state/scratch/restore/`, `archive-validate-` or
+  `restore-admission-`, each followed by six random characters) and removes them when it ends. A
+  run that is killed leaves them, holding a full copy of the venue's database, and the next server
+  start removes them. Beside the secrets in the
   state folder it can also leave `<name>.tmp`, `<name>.incoming`, `<name>.incoming.tmp` and
   `<name>.restore-previous` files. Once recovery has finished, a later server start removes them
   beside live regular files. It waits while a restore or its first start is pending, or the old
   identity remains set aside; the first recovery start may leave cleanup to the next start.
   Linked folders and files, and working files with no live target, are kept with a warning.
-  If a live file is missing, run the restore again. A `--from-archive` run that
-  downloaded the archive but cannot remove its `archive-download-*` folder afterwards prints its
-  result and then a line saying the next server start tries to remove it. Break-glass is the exception by design: it runs beside the server
+  If a live file is missing, run the restore again. Break-glass is the exception by design: it runs beside the server
   and takes no lock. Whatever holds the folder keeps a small file beside it,
   `venue.holder.json`, naming what kind of program it is and rewriting a heartbeat time every five
   seconds. A server start refused while that heartbeat is under 30 seconds old — a second copy of

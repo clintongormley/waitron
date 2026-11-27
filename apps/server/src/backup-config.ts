@@ -187,7 +187,7 @@ export function resolveBackupConfig(input: {
   };
 }
 
-export function archiveDestinations(sealed: ArchiveSettings | null): BackupDestination[] {
+function archiveDestinations(sealed: ArchiveSettings | null): BackupDestination[] {
   return sealed?.destinations ?? [];
 }
 

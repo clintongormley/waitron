@@ -210,7 +210,6 @@ export function createFirstSetupNodeKeys(options: Options) {
             madeBy: null,
             parts: [
               { part: "bucket", state: "not-set-up" },
-              { part: "archives", state: "not-set-up" },
               {
                 part: "master-key",
                 state: "included",

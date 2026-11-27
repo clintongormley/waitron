@@ -1,11 +1,11 @@
 # Print a new recovery pack
 
 The recovery pack is one PDF holding what you need when the box fails. Its first page holds the
-master key, with its name and QR code. Until later
-changes remove them, the other parts the box has follow, a page each: the restore codes for the
-bucket copy and the archives. When emergency start in Cloud is available, the first page also
-holds a QR code for the venue's Cloud address. Printing another copy needs the current master key; if you have lost the
-recovery pack, [make a new master key](#make-a-new-master-key) instead. You need the system-management
+master key, with its name and QR code. Until a later change removes it, the bucket copy's restore
+code follows on a page of its own when the box has a bucket copy. When emergency start in Cloud is
+available, the first page also holds a QR code for the venue's Cloud address. Printing another copy
+needs the current master key; if you have lost the recovery pack,
+[make a new master key](#make-a-new-master-key) instead. You need the system-management
 permission and a secure (HTTPS) connection to that box.
 
 1. Open **Backups**. The **Recovery pack** card at the top says which pack is the latest and

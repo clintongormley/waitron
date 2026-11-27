@@ -339,9 +339,9 @@ backend (`buildBackupBackend`), so each request is built by the product's own st
 - **`archive-roundtrip`** and **`archive-abort`** (`apps/server/src/aws-archive.aws-rehearsal.test.ts`,
   steps in `apps/server/src/testing/s3-archive-scenario.ts`) run one after the other in one run, so
   in one bucket under one 128 MiB budget. The round trip uploads a synthetic encrypted archive of
-  32 MiB in four 8 MiB parts, lists it, downloads it using only a recovery pack that has been encoded
-  and decoded, checks the decrypted bytes match, and checks that a wrong key and a flipped byte are
-  each refused (phases `uploaded`, `listed`, `downloaded`, `decrypted-match`, `wrong-key-refused`,
+  32 MiB in four 8 MiB parts, lists it, downloads it with the product's S3 file store, opens it with
+  the master key, checks the decrypted bytes match, and checks that a wrong key and a flipped byte
+  are each refused (phases `uploaded`, `listed`, `downloaded`, `decrypted-match`, `wrong-key-refused`,
   `tamper-refused`). The abort starts a 24 MiB archive upload, cancels it once one part has been
   answered, and checks that an AbortMultipartUpload was sent, no completion was, and neither an
   unfinished upload nor an object, at any key, is left under its archive folder (phases `aborted`,
@@ -387,6 +387,12 @@ CreateMultipartUpload, 4 UploadPart, 1 CompleteMultipartUpload, 2 ListObjectsV2 
 AbortMultipartUpload answered 204. That is how versitygw answers, not how Amazon S3 does. The
 delete-many scenario's refusal of a 1,006th object and its failing first listing are checked without
 a server, in `apps/server/src/testing/s3-delete-scenario.test.ts`.
+
+2026-11-27, A1323 PR 4b-2: the round trip's download no longer lists the folder itself; the one
+ListObjectsV2 left is the scenario's check after upload. Against versitygw 1.8.0
+(`WAITRON_REQUIRE_TEST_TOOLS=1 pnpm --filter @waitron/server exec vitest run src/s3-rehearsal-scenarios.e2e.test.ts -t 'a 32 MiB archive' --reporter=default`)
+it recorded 1 CreateMultipartUpload, 4 UploadPart, 1 CompleteMultipartUpload, 1 ListObjectsV2 and
+1 GetObject, all 200. Amazon S3 was not run.
 
 ## When teardown fails: the cleanup command
 

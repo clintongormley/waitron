@@ -13,17 +13,13 @@ import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js
 import { AppError, diskFullIn, hasCode, readVariable } from "@waitron/shared";
 import {
   createS3ObjectStore,
-  type S3FileStore,
   parseRecoveryKit,
   resolveLitestreamBin,
   type BucketConfig,
   type ObjectStore,
   type RecoveryKit,
 } from "@waitron/stream";
-import { downloadArchive, type DownloadedArchive } from "./archive-download.js";
-import { decodeArchiveRecoveryPack, type ArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { readArtifactFileHeader } from "./artifact-cipher-file.js";
-import { DEFAULT_DESTINATION_TIMEOUT_MS } from "./backup-config.js";
 import { headerOpeningKey } from "./backup-file-key.js";
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT } from "./boot.js";
 import { boundObjectStore } from "./bounded-store.js";
@@ -63,10 +59,6 @@ interface CommandDeps {
   /** Opens the bucket; every call on what it returns is bounded. Default {@link createS3ObjectStore}. */
   openStore?: (bucket: BucketConfig) => ObjectStore;
   bucketTimeoutMs?: number;
-  /** Opens the archive's bucket for `--from-archive`. Default `createS3FileStore`. */
-  openArchiveFiles?: (bucket: BucketConfig) => S3FileStore;
-  /** How long the `--from-archive` download may take. Default {@link DEFAULT_DESTINATION_TIMEOUT_MS}. */
-  archiveTimeoutMs?: number;
   withModuleOperations?: RestoreOperationRunner;
   /** Holds the venue folder from resolving the target to exit. Default {@link lockRestoreTarget}. */
   lockVenue?: (venueDir: string) => Promise<VenueLock>;
@@ -78,16 +70,8 @@ const CONFIRM_OLD_BOX_GONE = "--confirm-old-box-gone";
 const CONFIRM_SOLE_RECOVERY = "--confirm-sole-recovery";
 const FROM_BUCKET = "--from-bucket";
 const CONFIRM_VENUE = "--confirm-venue";
-const FROM_ARCHIVE = "--from-archive";
-const ARCHIVE_KEY = "--archive-key";
 const MASTER_KEY_FILE = "--master-key-file";
-const VALUED_FLAGS: ReadonlySet<string> = new Set([
-  FROM_BUCKET,
-  CONFIRM_VENUE,
-  FROM_ARCHIVE,
-  ARCHIVE_KEY,
-  MASTER_KEY_FILE,
-]);
+const VALUED_FLAGS: ReadonlySet<string> = new Set([FROM_BUCKET, CONFIRM_VENUE, MASTER_KEY_FILE]);
 const clock = (): Date => new Date();
 
 /**
@@ -105,11 +89,10 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
 
 /**
  * `waitron-restore restore <artifact-path>` restores one backup artifact; `restore --from-bucket
- * <pack-or-kit-file>` rebuilds from the venue's bucket copy instead, and `restore --from-archive
- * <pack-pdf-or-archive-pack-file> --archive-key <name>` downloads one archive and restores it as the
- * first form does. A backup file opens with the master key, from `--master-key-file` or
- * `WAITRON_MASTER_KEY`; a Waitron Cloud copy (version 1) with `WAITRON_BACKUP_RECOVERY_KEY`. No key
- * is ever taken from argv: an argv element leaks into `ps`.
+ * <pack-or-kit-file>` rebuilds from the venue's bucket copy instead. A backup file opens with the
+ * master key, from `--master-key-file` or `WAITRON_MASTER_KEY`; a Waitron Cloud copy (version 1)
+ * with `WAITRON_BACKUP_RECOVERY_KEY`. No key is ever taken from argv: an argv element leaks into
+ * `ps`.
  *
  * Returns a process exit code: 0 on success, 1 on a failure, 2 on a usage error.
  */
@@ -117,12 +100,11 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   const args = parseArgs(deps.argv);
   if (args === null) {
     deps.out(
-      "usage: waitron-restore restore <artifact-path> [--master-key-file <path>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket <pack-or-kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-archive <pack-pdf-or-archive-pack-file> --archive-key <name> [--confirm-old-box-gone] [--confirm-sole-recovery]",
+      "usage: waitron-restore restore <artifact-path> [--master-key-file <path>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket <pack-or-kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] [--confirm-sole-recovery]",
     );
     return 2;
   }
   if ("kitPath" in args) return runBucketRestore(deps, args);
-  if ("packPath" in args) return runPackRestore(deps, args);
   const { artifactPath, masterKeyFile, oldBoxGone, soleRecovery } = args;
 
   const masterKey = await readMasterKey(deps, masterKeyFile);
@@ -164,15 +146,10 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
       deps,
       target,
       artifactPath,
-      opening.key,
+      opening,
       authorising,
       oldBoxGone,
       soleRecovery,
-      {
-        keyDoesNotOpen: opening.underMasterKey
-          ? BACKUP_FILE_DAMAGED
-          : "restore failed: wrong recovery key or corrupt artifact",
-      },
     );
     if (!restored) return 1;
     deps.out(`restored ${artifactPath}`);
@@ -185,20 +162,17 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
 const COLD_RESTORE_NOTICE =
   "cold restore: use only when no peer (mirror or local secondary) survived — a survivor holds more history and is promoted, not overwritten";
 
-/**
- * The archive restore chain both file forms share; false once the refusal is printed.
- * `keyDoesNotOpen` is the one line for every {@link DECRYPT_PHASE_CODES} refusal.
- */
+/** The file restore; false once the refusal is printed. */
 async function restoreArtifact(
   deps: CommandDeps,
   target: RestoreTarget,
   artifactPath: string,
-  recoveryKey: string,
+  opening: { key: string; underMasterKey: boolean },
   masterKey: string | undefined,
   oldBoxGone: boolean,
   soleRecovery: boolean,
-  words: { keyDoesNotOpen: string },
 ): Promise<boolean> {
+  const recoveryKey = opening.key;
   try {
     const withModuleOperations = soleRecovery
       ? await archiveRecoveryRunner(deps, target, artifactPath, recoveryKey, masterKey, oldBoxGone)
@@ -221,7 +195,11 @@ async function restoreArtifact(
   } catch (err) {
     if ((err as { code?: unknown } | null)?.code === "ENOSPC") deps.out(RESTORE_DISK_FULL);
     else if (err instanceof AppError && DECRYPT_PHASE_CODES.has(err.code)) {
-      deps.out(words.keyDoesNotOpen);
+      deps.out(
+        opening.underMasterKey
+          ? BACKUP_FILE_DAMAGED
+          : "restore failed: wrong recovery key or corrupt artifact",
+      );
     } else {
       deps.out(
         (err instanceof AppError && sourceLiveRefusal(err, "the server this backup came from")) ||
@@ -254,8 +232,7 @@ type ParsedArgs =
       confirmedTaxId: string | undefined;
       oldBoxGone: boolean;
       soleRecovery: boolean;
-    }
-  | { packPath: string; archiveKey: string; oldBoxGone: boolean; soleRecovery: boolean };
+    };
 
 function parseArgs(argv: readonly string[]): ParsedArgs | null {
   const [cmd, ...rest] = argv;
@@ -284,19 +261,8 @@ function parseArgs(argv: readonly string[]): ParsedArgs | null {
   }
   const kitPath = valued[FROM_BUCKET];
   const confirmedTaxId = valued[CONFIRM_VENUE];
-  const packPath = valued[FROM_ARCHIVE];
-  const archiveKey = valued[ARCHIVE_KEY];
   const masterKeyFile = valued[MASTER_KEY_FILE];
   if (masterKeyFile !== undefined && artifactPath === undefined) return null;
-  if (packPath !== undefined || archiveKey !== undefined) {
-    return packPath !== undefined &&
-      archiveKey !== undefined &&
-      kitPath === undefined &&
-      confirmedTaxId === undefined &&
-      artifactPath === undefined
-      ? { packPath, archiveKey, oldBoxGone, soleRecovery }
-      : null;
-  }
   if (kitPath !== undefined) {
     return artifactPath === undefined
       ? { kitPath, confirmedTaxId, oldBoxGone, soleRecovery }
@@ -713,11 +679,9 @@ async function runBucketRestore(
 
 type Source = { text: string } | { refused: string };
 
-const NO_CODE: Record<"bucketCode" | "archiveCode" | "masterKey", string> = {
+const NO_CODE: Record<"bucketCode" | "masterKey", string> = {
   bucketCode:
     "restore failed: the recovery pack holds no bucket copy code — the box that made the pack had no bucket copy then; give a pack made after the bucket copy was set up, or the recovery kit file",
-  archiveCode:
-    "restore failed: the recovery pack holds no archive code — the box that made the pack kept no backup archive in a bucket then; give a pack made after archives were set up, or the archive recovery pack file",
   masterKey:
     "restore failed: the recovery pack PDF does not hold the master key; give the pack that holds it, or a file with the key",
 };
@@ -741,107 +705,4 @@ async function sourceText(bytes: Uint8Array, code: keyof typeof NO_CODE): Promis
   }
   const text = pack[code];
   return text === null ? { refused: NO_CODE[code] } : { text };
-}
-
-/** The words for a refusal only the pack path words its own way; null for any other. */
-function packRefusal(err: AppError): string | null {
-  const words: Partial<Record<string, string>> = {
-    "restore.archive_key_invalid":
-      "that is not the name of a backup archive; give the archive's file name exactly as the bucket lists it, such as waitron-20261001T030000Z-<node-id>-<nonce>.backup.enc",
-    "restore.archive_missing":
-      "the bucket holds no archive by that name in this venue's archive folder; check the name and that the pack is this venue's",
-    "restore.archive_disk_full":
-      "there is not enough free disk space to download the archive; nothing on this server changed. Free some space and run it again",
-    "restore.archive_download_failed":
-      "the archive could not be downloaded from the bucket, for a reason on this server, on its network or at the bucket; check this server's network, the bucket and its key, and that this server's disk and state folder can be written, then run it again",
-  };
-  const said = words[err.code];
-  return said === undefined ? null : `restore failed: ${err.code} — ${said}`;
-}
-
-const PACK_KEY_DOES_NOT_OPEN =
-  "restore failed: the recovery key in this pack does not open the archive, or the archive is damaged";
-
-/** Fixed words: the error would name the path and its cause. */
-const DOWNLOAD_LEFT_BEHIND =
-  "the downloaded archive could not be removed; the next server start tries to remove it";
-
-/**
- * The recovery key and the bucket's secret come from the pack, never the environment; no printed
- * line carries the pack's text.
- */
-async function runPackRestore(
-  deps: CommandDeps,
-  args: Extract<ParsedArgs, { packPath: string }>,
-): Promise<number> {
-  const { packPath, archiveKey, oldBoxGone, soleRecovery } = args;
-  let source: Source;
-  try {
-    source = await sourceText(await readFile(packPath), "archiveCode");
-  } catch {
-    deps.out(`cannot read pack file: ${packPath}`);
-    return 1;
-  }
-  if ("refused" in source) {
-    deps.out(source.refused);
-    return 1;
-  }
-  const packText = source.text;
-  let pack: ArchiveRecoveryPack;
-  try {
-    pack = decodeArchiveRecoveryPack(packText);
-  } catch (err) {
-    const reason = hasCode(err as AppError, "backup.archive_recovery_pack_invalid")
-      ? (err as AppError<"backup.archive_recovery_pack_invalid">).params.reason
-      : undefined;
-    deps.out(
-      reason === "not_found"
-        ? "restore failed: backup.archive_recovery_pack_invalid — the file holds no archive recovery pack; give the recovery pack PDF or archive recovery pack file saved for this venue"
-        : reason === "several"
-          ? "restore failed: backup.archive_recovery_pack_invalid — the file holds more than one archive recovery pack; give a file holding only the pack for the archive you want"
-          : "restore failed: backup.archive_recovery_pack_invalid — the archive recovery pack in the file is incomplete or damaged, perhaps cut short when it was copied; use the whole pack file as it was saved",
-    );
-    return 1;
-  }
-  const masterKey = envMasterKey(deps);
-  const resolved = await resolveRestoreTarget(deps, masterKey);
-  if (typeof resolved === "number") return resolved;
-  const { target, hold } = resolved;
-  try {
-    deps.out(COLD_RESTORE_NOTICE);
-    let downloaded: DownloadedArchive;
-    try {
-      downloaded = await downloadArchive({
-        pack,
-        key: archiveKey,
-        stagingDir: target.stagingDir,
-        signal: AbortSignal.timeout(deps.archiveTimeoutMs ?? DEFAULT_DESTINATION_TIMEOUT_MS),
-        openFiles: deps.openArchiveFiles,
-      });
-    } catch (err) {
-      deps.out((err instanceof AppError && packRefusal(err)) || sharedRefusal(err));
-      return 1;
-    }
-    let restored: boolean;
-    try {
-      restored = await restoreArtifact(
-        deps,
-        target,
-        downloaded.path,
-        pack.recoveryKey,
-        masterKey,
-        oldBoxGone,
-        soleRecovery,
-        {
-          keyDoesNotOpen: PACK_KEY_DOES_NOT_OPEN,
-        },
-      );
-      if (restored) deps.out(`restored archive ${archiveKey} from the bucket named in ${packPath}`);
-    } finally {
-      await downloaded.dispose().catch(() => deps.out(DOWNLOAD_LEFT_BEHIND));
-    }
-    return restored ? 0 : 1;
-  } finally {
-    hold.release();
-  }
 }

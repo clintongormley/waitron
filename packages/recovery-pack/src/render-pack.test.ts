@@ -25,7 +25,6 @@ const monoBytes = new Uint8Array(
 const loadFonts = async () => ({ regular: fontBytes, mono: monoBytes });
 
 const bucketCode = "WAITRON-RECOVERY-KIT-2:" + "Ab9_-".repeat(124);
-const archiveCode = "WAITRON-ARCHIVE-PACK-1:" + "Zx7-_".repeat(80);
 
 const masterKey = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
 const masterKeyName = "2026-11-23 · QZJV";
@@ -36,8 +35,6 @@ const file: RecoveryPackFile = {
   number: 3,
   madeAt: "2026-10-12T16:40:00.000Z",
   bucketCode,
-  archiveCode,
-  backupKey: null,
   masterKey,
   masterKeyName,
   masterKeyHeldBy: null,
@@ -54,18 +51,8 @@ const bucket: PackPart = {
     notes: ["1. Install Waitron on the new box and open its setup page."],
   },
 };
-const archives: PackPart = {
-  kind: "archives",
-  state: "included",
-  page: {
-    title: "Archives",
-    rows: [],
-    secret: { label: "Restore code for the archives", text: archiveCode, qr: true },
-    notes: ["Run restore --from-archive with this PDF."],
-  },
-};
 const namesPart: PackPart = {
-  kind: "archives",
+  kind: "bucket",
   state: "included",
   page: {
     title: "Names",
@@ -83,7 +70,7 @@ function input(overrides: Partial<RenderPackInput> = {}): RenderPackInput {
     timeZone: "Europe/Madrid",
     loadFonts,
     pack: { venueName: "Bar Nora", madeAt: file.madeAt, number: 3 },
-    parts: [bucket, archives, namesPart],
+    parts: [bucket, namesPart],
     file,
     ...overrides,
   };
@@ -187,8 +174,8 @@ describe("the master key's page", () => {
       await task.destroy();
     }
     const pages = await rendered(bytes);
-    expect(pages[0]!.text).not.toContain("Page 1 of 4");
-    expect(pages[1]!.text).toContain("Bar Nora · Recovery pack 3 · 12 Oct 2026 Page 2 of 4");
+    expect(pages[0]!.text).not.toContain("Page 1 of 3");
+    expect(pages[1]!.text).toContain("Bar Nora · Recovery pack 3 · 12 Oct 2026 Page 2 of 3");
   });
 });
 
@@ -285,9 +272,8 @@ describe("long names", () => {
       pack: { ...input().pack, venueName, number: 1 },
       parts: [
         { kind: "bucket", state: "not-set-up" },
-        { kind: "archives", state: "not-set-up" },
         {
-          kind: "archives",
+          kind: "bucket",
           state: "included",
           page: namesPage(legalName, venueName),
         },
@@ -296,7 +282,6 @@ describe("long names", () => {
         ...file,
         number: 1,
         bucketCode: null,
-        archiveCode: null,
       },
     });
   const dashboardPack = (locale: "en" | "es", legalName: string, venueName: string) =>
@@ -305,7 +290,6 @@ describe("long names", () => {
       pack: { ...input().pack, venueName },
       parts: [
         bucket,
-        archives,
         {
           ...namesPart,
           page: { ...namesPage(legalName, venueName)!, secret: undefined },
@@ -360,12 +344,7 @@ describe("long names", () => {
       await renderRecoveryPack(
         input({
           pack: { ...input().pack, venueName: "W".repeat(1000) },
-          parts: [
-            { kind: "bucket", state: "absent" },
-            { kind: "archives", state: "absent" },
-            { kind: "archives", state: "absent" },
-          ],
-          file: { ...file, archiveCode: null },
+          parts: [{ kind: "bucket", state: "absent" }],
         }),
       ),
     );
@@ -386,7 +365,7 @@ describe("long names", () => {
       }[];
       const header = items.find((i) => i.str.includes("Recovery pack 3"))!;
       const number = items.find(
-        (i) => i.str === "Page 2 of 4" && i.transform[5] === header.transform[5],
+        (i) => i.str === "Page 2 of 3" && i.transform[5] === header.transform[5],
       )!;
       expect(header.str).toMatch(/^Ԫ+… · Recovery pack 3 · 12 Oct 2026$/);
       expect(header.transform[4] + header.width).toBeLessThan(number.transform[4]);
@@ -473,16 +452,12 @@ describe("a part the pack does not hold", () => {
     const pages = await rendered(
       await renderRecoveryPack(
         input({
-          parts: [
-            { kind: "bucket", state: "not-set-up" },
-            archives,
-            { kind: "archives", state: "absent" },
-          ],
+          parts: [{ kind: "bucket", state: "not-set-up" }, namesPart],
         }),
       ),
     );
     expect(pages).toHaveLength(2);
-    expect(pages[1]!.text).toContain("Archives");
+    expect(pages[1]!.text).toContain("Names");
     expect(pages.map((page) => page.text).join(" ")).not.toContain("Bucket copy");
   });
 
@@ -491,12 +466,11 @@ describe("a part the pack does not hold", () => {
       await renderRecoveryPack(
         input({
           parts: [
-            bucket,
             {
-              kind: "archives",
+              kind: "bucket",
               state: "failed",
               failure: {
-                what: "The archive settings could not be read.",
+                what: "The bucket copy settings could not be read.",
                 todo: "Make a new pack.",
               },
             },
@@ -505,11 +479,29 @@ describe("a part the pack does not hold", () => {
         }),
       ),
     );
-    expect(pages).toHaveLength(4);
-    expect(pages[2]!.text).toContain("Archives");
-    expect(pages[2]!.text).toContain("The archive settings could not be read.");
-    expect(pages[2]!.text).toContain("Make a new pack.");
-    expect(squash(pages[2]!.text)).not.toContain(squash(archiveCode).slice(0, 40));
+    expect(pages).toHaveLength(3);
+    expect(pages[1]!.text).toContain("Bucket copy");
+    expect(pages[1]!.text).toContain("The bucket copy settings could not be read.");
+    expect(pages[1]!.text).toContain("Make a new pack.");
+    expect(squash(pages[1]!.text)).not.toContain(bucketCode.slice(0, 40));
+  });
+});
+
+describe("no archives page", () => {
+  it("a pack made with every part has no archives page", async () => {
+    const kinds = Object.keys(PACK_WORDS.en.part) as PackPart["kind"][];
+    const parts = kinds.map((kind): PackPart => ({ ...namesPart, kind }));
+    const pages = await rendered(await renderRecoveryPack(input({ parts })));
+    expect(pages).toHaveLength(2);
+    expect(pages.map((page) => page.text).join(" ")).not.toMatch(/archive/i);
+  });
+
+  it("refuses an archives part a caller passes past the type", async () => {
+    const failure = { what: "The archive settings could not be read.", todo: "Make a new pack." };
+    const archives = { kind: "archives", state: "failed", failure } as unknown as PackPart;
+    await expect(renderRecoveryPack(input({ parts: [archives] }))).rejects.toThrow(
+      "Recovery pack refused: parts",
+    );
   });
 });
 
@@ -530,9 +522,9 @@ describe("no page names where a box key is", () => {
     async (locale) => {
       const stale = { serverKeyLocation: { kind: "this-pack" } } as unknown as Partial<PackPart>;
       const failed: PackPart = {
-        kind: "archives",
+        kind: "bucket",
         state: "failed",
-        failure: { what: "The archive settings could not be read.", todo: "Make a new pack." },
+        failure: { what: "The bucket copy settings could not be read.", todo: "Make a new pack." },
       };
       const pages = await rendered(
         await renderRecoveryPack(
@@ -554,68 +546,19 @@ describe("no page names where a box key is", () => {
 
 describe("the secrets on the pages", () => {
   it("draws each code as text and as a QR code that reads back as the same text", async () => {
-    const pages = await rendered(await renderRecoveryPack(input()), 3, [0, 1, 2]);
+    const pages = await rendered(await renderRecoveryPack(input()), 3, [0, 1]);
     expect(squash(pages[1]!.text)).toContain(bucketCode);
     expect(pages[1]!.qr).toBe(bucketCode);
-    expect(squash(pages[2]!.text)).toContain(archiveCode);
-    expect(pages[2]!.qr).toBe(archiveCode);
     expect(pages[0]!.qr).toBe(masterKey);
-  });
-
-  it.each([
-    ["spaces between words", "correct horse battery staple"],
-    ["a space at each end and two in a row", " correct  horse battery staple "],
-  ])("draws a passphrase with %s so that every space shows", async (_name, backupKey) => {
-    const page: PackPart = {
-      kind: "archives",
-      state: "included",
-      page: {
-        title: "Archives",
-        rows: [],
-        secret: { label: "Backup key", text: backupKey, qr: true, exactSpaces: true },
-        notes: [],
-      },
-    };
-    const bytes = await renderRecoveryPack(input({ parts: [page], file: { ...file, backupKey } }));
-    expect((await readRecoveryPackPdf(bytes)).backupKey).toBe(backupKey);
-    const pages = await rendered(bytes, 3, [1]);
-    expect(pages[1]!.qr).toBe(backupKey);
-    expect(pages[1]!.text).toContain(backupKey.replaceAll(" ", "\u02fd"));
-    expect(pages[1]!.text).toContain(PACK_WORDS.en.spaceMark);
-  });
-
-  it("draws other blank characters, and the mark itself, as their code points", async () => {
-    const backupKey = "no\u00a0break\u02fdmark tab\there";
-    const page: PackPart = {
-      kind: "archives",
-      state: "included",
-      page: {
-        title: "Archives",
-        rows: [],
-        secret: { label: "Key", text: backupKey, qr: true, exactSpaces: true },
-        notes: [],
-      },
-    };
-    const bytes = await renderRecoveryPack(input({ parts: [page], file: { ...file, backupKey } }));
-    expect((await readRecoveryPackPdf(bytes)).backupKey).toBe(backupKey);
-    expect((await rendered(bytes))[1]!.text).toContain(
-      "no[U+A0]break[U+2FD]mark\u02fdtab[U+9]here",
-    );
-  });
-
-  it("draws a code with no space without the space mark or its note", async () => {
-    const pages = await rendered(await renderRecoveryPack(input()));
-    expect(pages[1]!.text).not.toContain("\u02fd");
-    expect(pages[1]!.text).not.toContain(PACK_WORDS.en.spaceMark);
   });
 
   it("draws a grouped key's spaces as plain spaces when its spaces carry no meaning", async () => {
     const grouped = "ABCD EFGH IJKL";
     const page: PackPart = {
-      kind: "archives",
+      kind: "bucket",
       state: "included",
       page: {
-        title: "Archives",
+        title: "Bucket copy",
         rows: [],
         secret: { label: "Restore code", text: grouped, qr: true },
         notes: [],
@@ -625,7 +568,6 @@ describe("the secrets on the pages", () => {
     expect(pages[1]!.qr).toBe(grouped);
     expect(pages[1]!.text).toContain(grouped);
     expect(pages[1]!.text).not.toContain("\u02fd");
-    expect(pages[1]!.text).not.toContain(PACK_WORDS.en.spaceMark);
   });
 
   it("draws a page's rows and notes", async () => {
@@ -633,7 +575,7 @@ describe("the secrets on the pages", () => {
     expect(pages[1]!.text).toContain("Bucket copy");
     expect(pages[1]!.text).toContain("Bucket s3.eu-west-3.amazonaws.com · bar-nora-backups");
     expect(pages[1]!.text).toContain("1. Install Waitron on the new box and open its setup page.");
-    expect(pages[1]!.text).toContain("Page 2 of 4");
+    expect(pages[1]!.text).toContain("Page 2 of 3");
   });
 
   it("draws a character the font lacks as its code point", async () => {
@@ -660,7 +602,7 @@ describe("the attached file", () => {
     const bytes = await renderRecoveryPack(input());
     expect(await readRecoveryPackPdf(bytes)).toEqual(file);
     const pdf = await PDFDocument.load(bytes);
-    expect(pdf.getPageCount()).toBe(4);
+    expect(pdf.getPageCount()).toBe(3);
     const [width, height] = [pdf.getPage(0).getWidth(), pdf.getPage(0).getHeight()];
     expect([Math.round(width), Math.round(height)]).toEqual([595, 842]);
   });
@@ -701,10 +643,10 @@ it.each(["en", "es"] as const)(
       },
     };
     const bytes = await renderRecoveryPack(
-      input({ locale, parts: [addressed, bucket, archives, namesPart] }),
+      input({ locale, parts: [addressed, bucket, namesPart] }),
     );
     const pages = await rendered(bytes);
-    expect(pages).toHaveLength(5);
+    expect(pages).toHaveLength(4);
     expect(pages[1]!.text).toContain("https://rescue.venue.example/");
     expect(squash(pages[1]!.text)).toContain("ABCD-EFGH-JKLM-NPQR-STUV-WXYZ");
     expect(await readRecoveryPackPdf(bytes)).toEqual(file);
@@ -733,12 +675,11 @@ it.each(["en", "es"] as const)(
 );
 
 describe("pack typography", () => {
-  it("uses equal-width glyphs for Latin codes and visible spaces", () => {
+  it("uses equal-width glyphs for Latin codes", () => {
     const mono = create(monoBytes as never) as Font;
-    const characters =
-      Array.from({ length: 224 }, (_, i) => String.fromCodePoint(i + 32))
-        .filter((c) => !/[\u007f-\u009f]/u.test(c))
-        .join("") + "\u02fd";
+    const characters = Array.from({ length: 224 }, (_, i) => String.fromCodePoint(i + 32))
+      .filter((c) => !/[\u007f-\u009f]/u.test(c))
+      .join("");
     for (const character of characters) {
       expect(mono.hasGlyphForCodePoint(character.codePointAt(0)!), character).toBe(true);
       expect(mono.glyphForCodePoint(character.codePointAt(0)!).advanceWidth, character).toBe(600);

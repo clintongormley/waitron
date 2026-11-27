@@ -23,7 +23,6 @@ import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js
 import { parseRecoveryKit } from "@waitron/stream";
 import { seedTaxpayers, TAXPAYER_A, TAXPAYER_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
-import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { writeArchiveSettings } from "./archive-settings.js";
 import { writeBackupKey } from "./backup-env-writer.js";
 import { HELD_BACKUP_KEY } from "./testing/recovery-key.js";
@@ -198,7 +197,7 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
         recoveryKey: KEY,
         pointerSignerPublicKey: "SIGNER_PUBLIC_KEY",
       });
-      expect(decodeArchiveRecoveryPack(file.archiveCode!)).toMatchObject({ recoveryKey: KEY });
+      for (const key of ["archiveCode", "backupKey"]) expect(file).not.toHaveProperty(key);
 
       const received = await fetch(at(`/api/backup/recovery-pack/${file.number}/received`), {
         ...via,
@@ -223,7 +222,6 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
       expect(fresh.latest.parts).toEqual([
         { part: "emergency", state: "absent" },
         { part: "bucket", state: "included" },
-        { part: "archives", state: "included" },
         { part: "master-key", state: "included" },
       ]);
       expect(fresh.upToDate).toBe(true);
@@ -246,7 +244,7 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
       );
       const log = await readFile(join(scratch, "logs", "waitron.log"), "utf8");
       expect(log).toContain('"event":"recovery.pack_made"');
-      for (const secret of [KEY, BUCKET.secretAccessKey, file.bucketCode!, file.archiveCode!])
+      for (const secret of [KEY, BUCKET.secretAccessKey, file.bucketCode!])
         expect(log).not.toContain(secret);
     } finally {
       await close();

@@ -212,7 +212,7 @@ describe("the S3 rehearsal scenarios, against versitygw", () => {
   );
 
   it(
-    "a 32 MiB archive goes up in four parts and comes back through its saved pack alone",
+    "a 32 MiB archive goes up in four parts, downloads whole and opens with the master key",
     async (ctx) => {
       const local = await scenarioFixture(ctx, "archive-roundtrip");
       await planned(local, ARCHIVE_APIS, () => runArchiveRoundTrip(local.fixture));
