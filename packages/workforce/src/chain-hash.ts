@@ -89,6 +89,7 @@ function canonicalString(input: EntryHashInput): string {
       extension.missingEntryKind,
       extension.respondsToEntryId,
       extension.payPeriodClosureId,
+      ...(extension.approvalDigest === undefined ? [] : [extension.approvalDigest]),
     ])
   );
 }

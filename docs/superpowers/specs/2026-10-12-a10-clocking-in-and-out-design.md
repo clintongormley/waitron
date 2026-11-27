@@ -30,6 +30,11 @@ including the representatives' version, through the [part 6 plan](https://github
 All six parts are built. Inspector remote access, advisor policy checks and payroll export remain
 in [the workforce backlog](../../backlog/workforce.md).
 
+Update 2026-11-27: [the till redesign's hours decisions](2026-11-26-till-handheld-redesign-design.md#714-pass-3-clocking-in-and-out-hours-the-cash-drawer-and-a-waiters-float)
+supersede decisions 7 and 9. Every finished day waits for a manager. The recorded minutes still
+count, and the record keeps a manager's proposed change and the worker's reply beside the original.
+Managers approve on their own device or the dashboard.
+
 ## Why
 
 Spanish law requires a daily record of each worker's start and end times, kept four years, from the

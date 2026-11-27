@@ -142,6 +142,62 @@ describe("computeEntryHash", () => {
     ).toBe(createHash("sha256").update(canonical, "utf8").digest("hex").toUpperCase());
   });
 
+  it("preserves the canonical hash bytes for an automatic clock-out", () => {
+    const entry = content({
+      entryKind: "out",
+      recordedByPersonId: null,
+      capturedBySource: "dashboard",
+      capturedByDeviceId: null,
+      extension: {
+        authorKind: "automatic",
+        direction: null,
+        missingEntryKind: null,
+        respondsToEntryId: null,
+        payPeriodClosureId: null,
+      },
+    });
+    const canonical =
+      "SequenceNo=1&PersonId=11111111-1111-4111-8111-111111111111" +
+      "&NodeId=99999999-9999-4999-8999-999999999999&EntryKind=out" +
+      "&EventAtMs=1767603600000&RecordedAtMs=1767603600000&EventOffsetMinutes=0" +
+      "&RecordedByPersonId=&CapturedBySource=dashboard&CapturedByDeviceId=" +
+      "&CorrectsEntryId=&CorrectionReason=&CorrectionStatus=&CorrectionActorId=&PrevEntryHash=" +
+      '&RecordExtension=[false,"automatic",null,null,null,null]';
+    expect(computeEntryHash(entry)).toBe(
+      createHash("sha256").update(canonical).digest("hex").toUpperCase(),
+    );
+  });
+
+  it("includes the approval digest in the stored hash of a day approval", () => {
+    const entry = content({
+      entryKind: "day_approval",
+      capturedBySource: "dashboard",
+      capturedByDeviceId: null,
+      extension: {
+        selfApproved: true,
+        authorKind: "manager",
+        direction: null,
+        missingEntryKind: null,
+        respondsToEntryId: null,
+        payPeriodClosureId: null,
+        approvalDigest: "A".repeat(64),
+      },
+    });
+    const canonical =
+      "SequenceNo=1&PersonId=11111111-1111-4111-8111-111111111111" +
+      "&NodeId=99999999-9999-4999-8999-999999999999&EntryKind=day_approval" +
+      "&EventAtMs=1767603600000&RecordedAtMs=1767603600000&EventOffsetMinutes=0" +
+      "&RecordedByPersonId=11111111-1111-4111-8111-111111111111" +
+      "&CapturedBySource=dashboard&CapturedByDeviceId=" +
+      "&CorrectsEntryId=&CorrectionReason=&CorrectionStatus=&CorrectionActorId=&PrevEntryHash=" +
+      '&RecordExtension=[true,"manager",null,null,null,null,"' +
+      "A".repeat(64) +
+      '"]';
+    expect(computeEntryHash(entry)).toBe(
+      createHash("sha256").update(canonical).digest("hex").toUpperCase(),
+    );
+  });
+
   it("commits to the event instant, not its string form — the same instant hashes identically", () => {
     const asZulu = computeEntryHash(content({ eventAt: "2026-01-05T09:00:00Z" }));
     const asOffset = computeEntryHash(content({ eventAt: "2026-01-05T10:00:00+01:00" }));

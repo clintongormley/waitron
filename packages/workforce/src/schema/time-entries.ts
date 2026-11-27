@@ -25,6 +25,7 @@ export const workforceEntryKind = enumType([
   "break_end",
   "correction",
   "confirmation",
+  "day_approval",
 ]);
 
 export const workforceCorrectionStatus = enumType([
@@ -75,6 +76,7 @@ export const timeEntries = table(
     >(),
     respondsToEntryId: id("responds_to_entry_id"),
     payPeriodClosureId: id("pay_period_closure_id"),
+    approvalDigest: label("approval_digest"),
     // The hash chain, assigned by `appendToChain` (../chain.ts), never by the device.
     /** `computeEntryHash(content ‖ prev_entry_hash)`, uppercase hex. */
     entryHash: label("entry_hash").notNull(),
@@ -162,7 +164,7 @@ export const timeEntries = table(
       sql`(${t.authorKind} is null and ${t.correctionDirection} is null
           and ${t.missingEntryKind} is null and ${t.respondsToEntryId} is null
           and ${t.payPeriodClosureId} is null
-          and ${t.entryKind} <> 'confirmation'
+          and ${t.entryKind} not in ('confirmation','day_approval')
           and ((${t.correctsEntryId} is null and ${t.correctionReason} is null
             and ${t.correctionStatus} is null and ${t.correctionActorId} is null)
             or (${t.correctsEntryId} is not null and ${t.correctionReason} is not null
@@ -184,7 +186,19 @@ export const timeEntries = table(
           and ${t.payPeriodClosureId} is null
           and ((${t.correctsEntryId} is not null and ${t.missingEntryKind} is null)
             or (${t.correctsEntryId} is null and ${t.missingEntryKind} is not null
-              and ${t.correctionDirection} is not null and ${t.authorKind} is not null)))`,
+              and ${t.correctionDirection} is not null and ${t.authorKind} is not null)))
+        or (${t.entryKind} = 'day_approval' and ${t.authorKind} is 'manager'
+          and ${t.correctsEntryId} is null and ${t.correctionReason} is null
+          and ${t.correctionStatus} is null and ${t.correctionActorId} is null
+          and ${t.correctionDirection} is null and ${t.missingEntryKind} is null
+          and ${t.respondsToEntryId} is null and ${t.payPeriodClosureId} is null
+          and ${t.selfApproved} = (${t.recordedByPersonId} = ${t.personId}))`,
+    ),
+    check(
+      "time_entries_approval_digest_ck",
+      sql`(${t.entryKind} = 'day_approval') = (${t.approvalDigest} is not null)
+        and (${t.approvalDigest} is null or
+          (length(${t.approvalDigest}) = 64 and ${t.approvalDigest} not glob '*[^0-9A-F]*'))`,
     ),
     // The backstop against a forked chain: refuses a taken position whatever wrote the row.
     uniqueIndex("time_entries_chain_position_uq").on(t.nodeId, t.sequenceNo),

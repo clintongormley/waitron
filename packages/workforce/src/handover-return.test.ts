@@ -291,6 +291,46 @@ describe("receiveWorkforceBatch", () => {
     expect(old.at(-1)!.sequenceNo).toBe(4);
   });
 
+  it("returns a day approval and refuses a changed digest before storing it", async () => {
+    const manager = await seedPerson(suite.db, "Marta");
+    const start = clockIn(personId, 0);
+    const digest = "A".repeat(64);
+    await appendChainEntries(suite.db, oldBox, [
+      start,
+      clockIn(personId, 1),
+      {
+        ...start,
+        entryKind: "day_approval",
+        recordedByPersonId: manager,
+        extension: {
+          authorKind: "manager",
+          direction: null,
+          missingEntryKind: null,
+          respondsToEntryId: null,
+          payPeriodClosureId: null,
+          approvalDigest: digest,
+        },
+      },
+    ]);
+    const batch = await readBatch();
+    await copyRows(main.db, "persons", rows(suite.db, "persons", personId));
+    await copyRows(main.db, "time_entries", batch.entries.slice(0, 2));
+    const approval = batch.entries[2]!;
+    const work = queuedDays();
+
+    expect(
+      await receive({ ...batch, entries: [{ ...approval, approval_digest: "B".repeat(64) }] }),
+    ).toMatchObject({
+      refusal: "attendance.return_entry_invalid",
+      params: { reason: "hash mismatch" },
+    });
+    expect(await receive({ ...batch, entries: [approval] })).toBe(true);
+    const chain = await heldChain(oldBox);
+    expect(verifyChain(chain)).toEqual({ ok: true });
+    expect(chain.at(-1)?.extension?.approvalDigest).toBe(digest);
+    expect(queuedDays()).toEqual(work);
+  });
+
   it("stores a manager's proposal, a worker's request and the worker's self-approval of it", async () => {
     const manager = await seedPerson(suite.db, "Marta");
     const missingOut = (

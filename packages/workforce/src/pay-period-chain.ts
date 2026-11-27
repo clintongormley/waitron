@@ -37,6 +37,9 @@ function canonicalEntry(row: ProjectedRecordEntry) {
               missingEntryKind: extension.missingEntryKind,
               respondsToEntryId: extension.respondsToEntryId,
               payPeriodClosureId: extension.payPeriodClosureId,
+              ...(extension.approvalDigest !== undefined && {
+                approvalDigest: extension.approvalDigest,
+              }),
             },
     },
     author: { kind: row.author.kind, personId: row.author.personId },

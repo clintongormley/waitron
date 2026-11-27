@@ -16,7 +16,6 @@ import {
   type CorrectionStatus,
   type EntryAuthor,
   type TimeRecord,
-  type WorkforceEntryKind,
   type WorkSession,
 } from "@waitron/workforce";
 import {
@@ -28,7 +27,7 @@ import {
 
 type Cells = Record<string, RecordExportValue>;
 type Words = readonly [string, string];
-const ENTRY_KIND_WORDS: Record<WorkforceEntryKind, Words> = {
+const ENTRY_KIND_WORDS: Record<EntradaJornada["tipo"], Words> = {
   in: ["Clock in", "Entrada"],
   out: ["Clock out", "Salida"],
   break_start: ["Break start", "Inicio del descanso"],

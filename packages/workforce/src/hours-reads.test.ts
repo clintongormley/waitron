@@ -140,6 +140,165 @@ function freeze() {
   );
 }
 
+it("shows a finished overnight shift on its start date while its hours count", async () => {
+  await event("clockIn", "2026-01-05T21:00:00Z", 60);
+  await event("clockOut", "2026-01-06T03:00:00Z", 60);
+
+  const hours = await read();
+  const day = await f.run((tx) =>
+    api.readAttendanceDay(tx, { personId: f.personId, date: "2026-01-05" }),
+  );
+  expect(hours.workedMinutes).toBe(360);
+  expect(hours.days[4]).toMatchObject({
+    date: "2026-01-05",
+    workedMinutes: 360,
+    approval: { status: "pending", digest: expect.stringMatching(/^[A-F0-9]{64}$/) },
+  });
+  expect(day.approval).toEqual(hours.days[4]!.approval);
+  expect(hours.days[5]?.approval).toBeUndefined();
+});
+
+it("shows an automatic close as awaiting approval until a second shift opens on that date", async () => {
+  await automatic();
+  expect((await read()).days[4]?.approval?.status).toBe("pending");
+  await event("clockIn", "2026-01-05T19:00:00Z");
+  const hours = await read();
+  expect(hours.workedMinutes).toBe(480);
+  expect(hours.days[4]?.approval).toBeUndefined();
+});
+
+function approveDay(
+  digest: string,
+  { actorPersonId = f.manager, personId = f.personId, date = "2026-01-05" } = {},
+) {
+  return f.run((tx) =>
+    api.approveAttendanceDay(tx, {
+      personId,
+      date,
+      digest,
+      actorPersonId,
+      nodeId: f.nodeId,
+      origin: f.event("").origin,
+      now,
+    }),
+  );
+}
+
+it("records approval without changing the times or re-queuing automatic clock work", async () => {
+  await shift();
+  await freeze();
+  const before = await read();
+  const approval = before.days[4]!.approval!;
+  const { work } = await f.state();
+  await approveDay(approval.digest);
+  await approveDay(approval.digest);
+
+  const after = await read();
+  expect(after.days[4]?.approval).toEqual({ ...approval, status: "approved" });
+  expect(after.workedMinutes).toBe(480);
+  expect(after.record.entries.map(({ entry }) => entry.entryKind)).toEqual(["in", "out"]);
+  const day = await f.run((tx) =>
+    api.readAttendanceDay(tx, { personId: f.personId, date: "2026-01-05" }),
+  );
+  expect(day.approval).toEqual(after.days[4]?.approval);
+  expect(day.record.entries.map(({ entry }) => entry.entryKind)).toEqual(["in", "out"]);
+  expect(after.record.closedPeriodImpacts).toEqual([]);
+  expect((await f.state()).work).toEqual(work);
+  const entries = await f.entries();
+  expect(entries.slice(0, -1).map((entry) => entry.entryKind)).toEqual(["in", "out"]);
+  expect(entries.at(-1)).toMatchObject({
+    entryKind: "day_approval",
+    recordedByPersonId: f.manager,
+    eventAt: "2026-01-05T09:00:00.000Z",
+    approvalDigest: approval.digest,
+    selfApproved: false,
+  });
+  expect(api.verifyChain(await f.run((tx) => api.readChain(tx, { nodeId: f.nodeId })))).toEqual({
+    ok: true,
+  });
+});
+
+it("keeps a correction draft valid when another day is approved", async () => {
+  await shift();
+  const { end } = await shift("2026-01-06");
+  const before = await read();
+  const expectedRevision = await f.run((tx) => readAttendanceRevision(tx, f.personId));
+  await approveDay(before.days[4]!.approval!.digest);
+
+  const answer = await f.run((tx) =>
+    api.executeAttendanceCommand(tx, {
+      nodeId: f.nodeId,
+      requestedByPersonId: f.personId,
+      authorizedByPersonId: f.personId,
+      origin: f.event("").origin,
+      command: {
+        action: "request",
+        questionId: null,
+        reason: "I left later",
+        changes: [{ target: { entryId: end }, at: "2026-01-06T18:00:00Z", offsetMinutes: 0 }],
+        commandId: newId(),
+        expectedRevision,
+      },
+      now,
+    }),
+  );
+  expect((await f.entries()).at(-1)).toMatchObject({
+    id: answer.entryIds[0],
+    correctionStatus: "requested",
+    correctsEntryId: end,
+  });
+});
+
+it("requires a fresh approval when another shift completes on the same day", async () => {
+  await shift();
+  const first = (await read()).days[4]!.approval!;
+  await approveDay(first.digest);
+  await event("clockIn", "2026-01-05T20:00:00Z");
+  await expect(approveDay(first.digest)).rejects.toMatchObject({
+    code: "attendance.state_changed",
+  });
+  await event("clockOut", "2026-01-05T23:00:00Z");
+  const current = (await read()).days[4]!.approval!;
+  expect(current.status).toBe("pending");
+  expect(current.digest).not.toBe(first.digest);
+  await expect(approveDay(first.digest)).rejects.toMatchObject({
+    code: "attendance.state_changed",
+  });
+  await approveDay(current.digest);
+  expect((await read()).days[4]?.approval).toEqual({ ...current, status: "approved" });
+});
+
+it("keeps a midnight retime out of the earlier day's approval", async () => {
+  const start = await event("clockIn", "2026-01-05T23:00:00Z");
+  await event("clockOut", "2026-01-06T03:00:00Z");
+  const first = (await read()).days[4]!.approval!;
+  await approveDay(first.digest);
+  const change = await request(start, "2026-01-06T00:00:00Z");
+  await send({ action: "approve", itemId: change.entryIds[0]! }, f.manager, f.personId);
+  const hours = await read();
+  expect(hours.days[4]?.approval).toBeUndefined();
+  expect(hours.days[5]).toMatchObject({ workedMinutes: 180, approval: { status: "pending" } });
+});
+
+it("refuses self-approval for a default manager and permits it for an administrator", async () => {
+  await shift("2026-01-05", f.manager);
+  const approval = (await read(undefined, f.manager)).days[4]!.approval!;
+  await expect(
+    approveDay(approval.digest, { actorPersonId: f.personId, personId: f.manager }),
+  ).rejects.toMatchObject({ code: "attendance.not_permitted" });
+  await expect(approveDay(approval.digest, { personId: f.manager })).rejects.toMatchObject({
+    code: "attendance.not_permitted",
+  });
+
+  await setBuiltInRoleForTest(f.suite.db, f.manager, "admin");
+  await approveDay(approval.digest, { personId: f.manager });
+  expect((await f.entries()).at(-1)).toMatchObject({
+    entryKind: "day_approval",
+    recordedByPersonId: f.manager,
+    selfApproved: true,
+  });
+});
+
 it("reads the venue snapshot once for the whole team and keeps each person's total separate", async () => {
   await shift();
   await freeze();

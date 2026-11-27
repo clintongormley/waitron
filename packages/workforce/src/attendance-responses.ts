@@ -11,7 +11,9 @@ import { attendanceQuestions } from "./schema/attendance.js";
 import { attendanceAnswers } from "./schema/attendance-responses.js";
 
 export async function readAttendanceRevision(tx: Transaction, personId: string): Promise<string> {
-  const entries = (await readRecordedEntries(tx, { personId })).sort(compareRecording);
+  const entries = (await readRecordedEntries(tx, { personId }))
+    .filter((entry) => entry.entryKind !== "day_approval")
+    .sort(compareRecording);
   const questions = await tx
     .select()
     .from(attendanceQuestions)

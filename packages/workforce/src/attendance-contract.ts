@@ -79,12 +79,21 @@ export interface AttendanceInbox {
   items: CorrectionItem[];
   timeZone: string;
 }
+/**
+ * Approval covers effective clock entries for shifts that started on this work date.
+ * An approved day can still have a pending change in `AttendanceDayView.items` or `PersonHours.pending`.
+ */
+export interface DayApproval {
+  status: "pending" | "approved";
+  digest: string;
+}
 export interface AttendanceDayView {
   personId: string;
   date: string;
   timeZone: string;
   revision: string;
   record: TimeRecord;
+  approval?: DayApproval;
   items: CorrectionItem[];
 }
 export interface AttendanceManagerQueue {
@@ -106,6 +115,7 @@ export interface HoursSelection {
 export interface HoursDay {
   date: string;
   sessions: WorkSession[];
+  approval?: DayApproval;
   workedMinutes: number;
 }
 export interface HoursOpenShift {

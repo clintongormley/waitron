@@ -8,7 +8,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { startManagementSession } from "@waitron/identity";
+import { registerModulePermissions, startManagementSession } from "@waitron/identity";
 import {
   personalDataParts,
   selectTimeRecordExport,
@@ -22,11 +22,20 @@ import { PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { eq } from "drizzle-orm";
 import { jobOrigin } from "@waitron/shared";
-import { WORKFORCE_MIGRATIONS, WorkforceBackend, timeEntries } from "@waitron/workforce";
+import {
+  approveAttendanceDay,
+  readAttendanceDay,
+  WORKFORCE_MIGRATIONS,
+  WORKFORCE_PERMISSIONS,
+  WorkforceBackend,
+  timeEntries,
+} from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { mountAttendanceExportApi } from "./attendance-export-api.js";
 import { TIME_RECORD_FILES, timeRecordPersonalData } from "./personal-data-time-record.js";
+
+registerModulePermissions(WORKFORCE_PERMISSIONS);
 
 const suite = useVenueDb({
   migrations: [
@@ -246,6 +255,19 @@ it.each([false, true])(
         origin: jobOrigin("dashboard"),
       }),
     );
+    const [manager] = await seedPersons(suite.db, [{ displayName: "Manager", role: "manager" }]);
+    const day = { personId: marthaId, date: "2026-03-20" };
+    const { approval } = await withTransaction(suite.db, (tx) => readAttendanceDay(tx, day));
+    await withTransaction(suite.db, (tx) =>
+      approveAttendanceDay(tx, {
+        ...day,
+        actorPersonId: manager!.id,
+        nodeId: original.nodeId,
+        digest: approval!.digest,
+        origin: jobOrigin("dashboard"),
+        now: new Date("2026-04-01T14:00:00Z"),
+      }),
+    );
     const modules = ALL_MODULES.filter((module) => enabled || module.name !== "workforce-es");
     const app = new Hono();
     mountPersonalDataExportApi(
@@ -267,7 +289,7 @@ it.each([false, true])(
     expect(!!archive["time-record.xlsx"]).toBe(enabled);
     const payload = text(archive["clock-entries.json"]!);
     const { entries } = JSON.parse(payload);
-    expect(entries).toHaveLength(7);
+    expect(entries).toHaveLength(8);
     expect(Object.keys(entries[0]).sort()).toEqual([
       "authorKind",
       "capturedBySource",
@@ -289,7 +311,7 @@ it.each([false, true])(
       "selfApproved",
     ]);
     expect(entries.map((entry: { personId: string }) => entry.personId)).toEqual(
-      Array(7).fill(marthaId),
+      Array(8).fill(marthaId),
     );
     expect(entries[0]).toMatchObject({
       eventAt: "2026-01-02T00:30:00.000Z",
@@ -312,6 +334,13 @@ it.each([false, true])(
       respondsToEntryId: null,
       payPeriodClosureId: null,
     });
+    expect(entries.filter((entry: object) => "approvalDigest" in entry)).toEqual([
+      expect.objectContaining({
+        entryKind: "day_approval",
+        recordedByPersonId: manager!.id,
+        approvalDigest: approval!.digest,
+      }),
+    ]);
     expect(payload).not.toContain(colleagueId);
     expect(payload).not.toContain(COLLEAGUE_NAME);
     expect(payload).not.toContain("Martha Lewis");

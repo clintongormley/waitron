@@ -1871,7 +1871,8 @@ for (const locale of ["en", "es"] as const) {
       }
       // Workforce 0013's rebuild writes self_approved before author_kind; the capture has it
       // last, where 0006's ALTER added it.
-      const entryColumns = expected[phase].tables.time_entries!.columns;
+      const timeEntries = expected[phase].tables.time_entries!;
+      const entryColumns = timeEntries.columns;
       const selfApproved = entryColumns.splice(
         entryColumns.findIndex((column) => column.name === "self_approved"),
         1,
@@ -1881,6 +1882,12 @@ for (const locale of ["en", "es"] as const) {
         0,
         ...selfApproved,
       );
+      entryColumns.splice(
+        entryColumns.findIndex((column) => column.name === "entry_hash"),
+        0,
+        { name: "approval_digest", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+      );
+      for (const row of Object.values(timeEntries.rows)) row.approval_digest = null;
       const commandLocation = expected[phase].tables.attendance_answers!.columns.find(
         (column) => column.name === "location_id",
       )!;

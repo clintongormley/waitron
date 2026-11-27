@@ -202,6 +202,7 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
         missingEntryKind: timeEntries.missingEntryKind,
         respondsToEntryId: timeEntries.respondsToEntryId,
         payPeriodClosureId: timeEntries.payPeriodClosureId,
+        approvalDigest: timeEntries.approvalDigest,
       })
       .from(timeEntries)
       .where(eq(timeEntries.personId, personId))
@@ -292,7 +293,14 @@ export const WORKFORCE_PERSONAL_DATA: ModulePersonalData = {
             activity,
           }),
         );
-      if (clockRows.length > 0) files.push(jsonFile("clock-entries.json", { entries: clockRows }));
+      if (clockRows.length > 0)
+        files.push(
+          jsonFile("clock-entries.json", {
+            entries: clockRows.map(({ approvalDigest, ...row }) =>
+              approvalDigest === null ? row : { ...row, approvalDigest },
+            ),
+          }),
+        );
       return files;
     };
   },

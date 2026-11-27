@@ -11,6 +11,7 @@ import type {
   PersonHours,
 } from "./attendance-contract.js";
 import { projectAttendanceInboxWork, readAttendanceInboxInputs } from "./attendance-reads.js";
+import { dayApprovalsForPerson } from "./day-approvals.js";
 import { compareEvents, compareRecording, effectiveClockEntries } from "./effective-entries.js";
 import { readClosedPeriodContaining, readClosures } from "./pay-period-reads.js";
 import type { PayPeriodClosure } from "./record-types.js";
@@ -148,6 +149,7 @@ async function personInWindow(
   const monthly = manager && period.start.endsWith("-01") && period.end.endsWith("-01");
   const { inputs, entries, inbox } = await hoursInbox(tx, personId, monthly);
   const record = await readTimeRecord(tx, { personId, period }, policy, saved);
+  const approvals = dayApprovalsForPerson(record.entries.map(({ entry }) => entry));
   const fullRecord = projectTimeRecord(entries);
   const effective = effectiveClockEntries(entries).sort(compareEvents);
   let openShifts = openShiftsFor(effective);
@@ -184,13 +186,17 @@ async function personInWindow(
       (e) => !shown.has(e.entry.entryId) && extraRoots.has(recordRoot(e.entry, byId).entryId),
     ),
   );
-  record.entries.sort((a, b) => compareRecording(a.entry, b.entry));
+  record.entries = record.entries
+    .filter(({ entry }) => entry.entryKind !== "day_approval")
+    .sort((a, b) => compareRecording(a.entry, b.entry));
   const days: HoursDay[] = [];
   for (let date = period.start; date < period.end; date = nextDate(date)) {
     const sessions = record.sessions.filter((s) => s.workDate === date);
+    const approval = approvals.get(date);
     days.push({
       date,
       sessions,
+      ...(approval && { approval }),
       workedMinutes: sessions.reduce((sum, s) => sum + s.workedMinutes, 0),
     });
   }

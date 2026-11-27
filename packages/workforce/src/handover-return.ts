@@ -27,8 +27,8 @@ export interface WorkforceReturnBatch {
 }
 
 export const WORKFORCE_RETURN_MAX_BYTES = 200 * 1024;
-/** The largest row the routes can write measured 4,010 bytes (handover-return.test.ts), so 51 fit. */
-export const WORKFORCE_RETURN_ROW_CAP = 51;
+/** The row cap leaves room for the largest correction rows under the byte limit. */
+export const WORKFORCE_RETURN_ROW_CAP = 50;
 
 const COLUMNS = Object.entries(getTableColumns(timeEntries));
 const ENTRY_COLUMNS = new Set(COLUMNS.map(([, column]) => column.name));
@@ -319,12 +319,13 @@ export async function receiveWorkforceBatch(
     if (!names) return invalid("missing staff or device name");
     await restoreNames(tx, names, now);
     await insertRow(tx, "time_entries", entry);
-    await markAttendanceEntry(tx, {
-      id: String(entry.id),
-      eventAt: String(entry.event_at),
-      correctsEntryId: nullableText(entry.corrects_entry_id!),
-      respondsToEntryId: nullableText(entry.responds_to_entry_id!),
-    });
+    if (entry.entry_kind !== "day_approval")
+      await markAttendanceEntry(tx, {
+        id: String(entry.id),
+        eventAt: String(entry.event_at),
+        correctsEntryId: nullableText(entry.corrects_entry_id!),
+        respondsToEntryId: nullableText(entry.responds_to_entry_id!),
+      });
   }
   return true;
 }

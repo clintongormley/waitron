@@ -1,3 +1,4 @@
+import { dayApprovalsForPerson } from "./day-approvals.js";
 import type { PaidBreakPolicy } from "./ruleset.js";
 import { and, eq, getTableColumns, isNull, sql } from "drizzle-orm";
 import { readVenue, type Transaction } from "@waitron/db";
@@ -87,9 +88,10 @@ export async function readAttendanceInboxInputs(
 
 export function projectAttendanceInboxWork(
   personId: string,
-  entries: TimeEntryRecord[],
+  recorded: TimeEntryRecord[],
   { commands, questions, timeZone }: Awaited<ReturnType<typeof readAttendanceInboxInputs>>,
 ): Omit<AttendanceInbox, "revision"> {
+  const entries = recorded.filter((entry) => entry.entryKind !== "day_approval");
   const items = projectCorrectionItems(entries, commands);
   const byId = new Map(entries.map((e) => [e.entryId, e]));
   const prompts: { at: string; prompt: AttendancePrompt }[] = [];
@@ -185,6 +187,8 @@ export async function readAttendanceDay(
     },
     policy,
   );
+  const approval = dayApprovalsForPerson(record.entries.map(({ entry }) => entry)).get(scope.date);
+  record.entries = record.entries.filter(({ entry }) => entry.entryKind !== "day_approval");
   const shown = new Set(record.entries.map((e) => e.entry.entryId));
   const items = projectCorrectionItems(entries, commands).filter((item) =>
     item.history.some((e) => shown.has(e.entryId)),
@@ -195,6 +199,7 @@ export async function readAttendanceDay(
     timeZone,
     revision: await readAttendanceRevision(tx, scope.personId),
     record,
+    ...(approval && { approval }),
     items,
   };
 }
