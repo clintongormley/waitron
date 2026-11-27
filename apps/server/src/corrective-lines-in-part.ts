@@ -14,8 +14,7 @@ type CorrectedLine = Pick<
  * k when `taken` cents are k of a counted row's n dishes, 0 < k < n, and the row's unit price is
  * what one of them paid: an nth of its money is whole cents whose price before VAT is the stored
  * unit price, so -k at that price agrees with the corrective's amount as the row's n agrees with
- * its own. A free item's share leaves the unit price at the menu price, so the row is in part:
- * null. So is a row of a divided set menu, whatever its figures.
+ * its own. A row of a divided set menu is in part, null, whatever its figures.
  */
 function wholeDishesOf(taken: number, line: CorrectedLine): number | null {
   if (line.unitPrecision !== 0 || line.setMenuPart !== null) return null;

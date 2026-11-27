@@ -55,6 +55,8 @@ let venue: PartyVenue;
 let lunch: SpecLunch;
 let cheeseItem: string;
 let mintItem: string;
+let chopItem: string;
+let cressItem: string;
 useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   resetPerTest: false,
@@ -100,6 +102,30 @@ beforeAll(async () => {
       .from(menuItems)
       .where(and(eq(menuItems.menuId, venue.tables.menuId), eq(menuItems.productId, mint.id)));
     return item!.id;
+  });
+  [chopItem, cressItem] = await inTx(venue, async (tx) => {
+    const chop = await createProduct(tx, {
+      categoryId: null,
+      name: "Chop",
+      pricingUnit: "each",
+      unitPrice: "12.05",
+      vatClass: "general",
+    });
+    const cress = await createProduct(tx, {
+      categoryId: null,
+      name: "Cress",
+      pricingUnit: "each",
+      unitPrice: "0.03",
+      vatClass: "general",
+      takeawayVatRate: "21.00",
+    });
+    await addProducts(tx, await requireMenuRoot(tx, venue.tables.menuId), [chop.id, cress.id]);
+    await publishWorkingMenu(tx, venue.tables.menuId);
+    const items = await tx
+      .select({ id: menuItems.id, productId: menuItems.productId })
+      .from(menuItems)
+      .where(eq(menuItems.menuId, venue.tables.menuId));
+    return [chop.id, cress.id].map((id) => items.find((item) => item.productId === id)!.id);
   });
   lunch = await addSpecLunch(spec);
 });
@@ -370,6 +396,54 @@ describe("dishes given back from a row of several whose money moved, in other wa
     const correctiveId = await giveBack(saleId, "10.80", [rows[0]!.id]);
     const line = { quantity: "-1", unitPrice: "9.82", amount: "-9.82", inPart: false };
     expect(await printedFigures(correctiveId)).toEqual({ receipt: [line], emailed: [line] });
+  });
+
+  it("as dishes of three at 12.05 sharing a free 0.03 item prints -k at the unrounded price", async () => {
+    const threeChops = async () => {
+      const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+      await inTx(venue, (tx) =>
+        tx
+          .update(workingOrders)
+          .set({ dining: "takeaway" })
+          .where(eq(workingOrders.id, bill.tabId)),
+      );
+      await inTx(venue, (tx) =>
+        addTabRound(tx, venue.cfg, bill.tabId, [
+          { menuItemId: chopItem, quantity: "3" },
+          { menuItemId: cressItem, quantity: "1" },
+        ]),
+      );
+      await compSpecLine(spec, bill.tabId, await specLineId(spec, bill.tabId, "Cress"));
+      await fullInvoice(venue, bill.tabId, BAR_SOL);
+      await cashContribution(venue, bill.tabId, "36.15");
+      const filed = await filedOf(bill.tabId);
+      const chops = filed.rows.find((row) => row.name === "Chop")!;
+      // 36.12 over three is 12.04 a chop, whose price before VAT rounds to 10.95 as 12.05's does.
+      expect(chops).toMatchObject({
+        quantity: 3000,
+        lineGross: 3612,
+        listGross: 3615,
+        unitPrice: 1095,
+        vatRate: 1000,
+      });
+      return { saleId: filed.saleId, chops };
+    };
+    const one = await threeChops();
+    const original = await printedFigures(one.saleId);
+    expect(original.receipt[0]).toEqual({
+      quantity: "3",
+      unitPrice: "10.95",
+      amount: "32.84",
+      inPart: false,
+    });
+    const oneBack = await giveBack(one.saleId, "12.04", [one.chops.id]);
+    const minusOne = { quantity: "-1", unitPrice: "10.95", amount: "-10.95", inPart: false };
+    expect(await printedFigures(oneBack)).toEqual({ receipt: [minusOne], emailed: [minusOne] });
+    const two = await threeChops();
+    const twoBack = await giveBack(two.saleId, "24.08", [two.chops.id]);
+    // One cent from 2 × 10.95, as the original row prints 3 × 10.95 as 32.84.
+    const minusTwo = { quantity: "-2", unitPrice: "10.95", amount: "-21.89", inPart: false };
+    expect(await printedFigures(twoBack)).toEqual({ receipt: [minusTwo], emailed: [minusTwo] });
   });
 });
 
