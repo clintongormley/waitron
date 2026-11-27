@@ -831,6 +831,20 @@ it.each(localesAndThemes)(
     expect(use.textContent!.trim()).toBe(t("handover.emergency.use_backup"));
     expect(another.textContent!.trim()).toBe(t("handover.emergency.choose_another_file"));
     expect(actions(el)).toBe("");
+    if (import.meta.env.VITE_A1188_VISUAL === "1") {
+      const { page } = await import("vitest/browser");
+      try {
+        for (const width of [390, 1280]) {
+          await page.viewport(width, 1400);
+          expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
+          await page.screenshot({
+            path: `__screenshots__/a1188-master-key-${locale}-${theme}-${width}.png`,
+          });
+        }
+      } finally {
+        await page.viewport(1280, 720);
+      }
+    }
     expect(use.disabled).toBe(true);
     await typeBackupMasterKey(el, OLDER_MASTER_KEY);
     expect(use.disabled).toBe(false);
