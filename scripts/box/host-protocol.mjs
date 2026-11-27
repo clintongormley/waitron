@@ -37,6 +37,9 @@ export const NETWORK_SCAN_MAX = 32;
 export const PERSON_ID_MAX = 64;
 export const STORAGE_DRIVES_MAX = 16;
 export const STORAGE_FILE_SYSTEMS = Object.freeze(["vfat", "exfat", "ntfs", "other"]);
+/** Where the host mounts each drive, read-only, as `<root>/<drive>`; the app sees the same path. */
+export const STORAGE_DRIVES_ROOT = "/run/waitron-drives";
+export const STORAGE_DRIVE_NAME = /^sd[a-z]{1,3}[0-9]{0,3}$/;
 
 /** The permission the server must have checked before sending a person's request. */
 export const VERB_PERMISSION = Object.freeze({
@@ -332,13 +335,11 @@ function checkedNetworks(networks) {
   return ssids.size === checked.length ? checked : null;
 }
 
-const DRIVE_NAME = /^sd[a-z]{1,3}[0-9]{0,3}$/;
-
 /** @param {unknown} drive */
 function checkedDrive(drive) {
   if (!exactRecord(drive, ["drive", "fileSystem", "readable"])) return null;
   const { drive: name, fileSystem, readable } = /** @type {Record<string, any>} */ (drive);
-  if (typeof name !== "string" || !DRIVE_NAME.test(name)) return null;
+  if (typeof name !== "string" || !STORAGE_DRIVE_NAME.test(name)) return null;
   if (!STORAGE_FILE_SYSTEMS.includes(fileSystem) || typeof readable !== "boolean") return null;
   if (fileSystem === "other" && readable) return null;
   return { drive: name, fileSystem, readable };

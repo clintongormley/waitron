@@ -11,6 +11,8 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import { encryptArtifact } from "./artifact-cipher.js";
+import { backupArchiveKey } from "./backup-keys.js";
+import { takeDriveFile } from "./drive-backup-files.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import { formatEnvFile } from "./env-file.js";
@@ -268,4 +270,29 @@ it("protects a reserve even when the whole upload would fit on the filesystem", 
   ).rejects.toMatchObject({ code: "restore.archive_resource_limit" });
   expect(consumed).toBeLessThan(4 * MIB);
   expect(await readdir(dir)).toEqual([]);
+});
+
+it("a disk that fills during a drive copy answers restore.archive_resource_limit and leaves no partial copy", async (ctx) => {
+  const small = needDisk(ctx);
+  const dir = small.folder("drive-copy");
+  const drives = await mkdtemp(join(tmpdir(), "waitron-restore-full-disk-drives-"));
+  try {
+    const name = backupArchiveKey(new Date("2026-06-01T10:00:00Z"), {
+      nodeId: "c0000000-0000-4000-8000-000000000008",
+    });
+    await mkdir(join(drives, "sda1"));
+    await writeFile(join(drives, "sda1", name), Buffer.alloc(4 * MIB, 5));
+    small.fill(MIB);
+    expect(small.free()).toBeLessThan(4 * MIB);
+    await expect(
+      takeDriveFile(
+        { drive: "sda1", path: name },
+        { root: drives, stagingDir: dir, freeBytes: async () => 1024 ** 4 },
+      ),
+    ).rejects.toMatchObject({ code: "restore.archive_resource_limit" });
+    expect(await readdir(dir)).toEqual([]);
+    expect((await readFile(join(drives, "sda1", name))).length).toBe(4 * MIB);
+  } finally {
+    await rm(drives, { recursive: true, force: true });
+  }
 });

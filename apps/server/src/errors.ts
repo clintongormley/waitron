@@ -2055,6 +2055,9 @@ declare module "@waitron/shared" {
     "restore.manifest_invalid": { reason: "invalid" | "unsupported" };
     /** A staging or decoding capacity refusal is not evidence that the archive is damaged. */
     "restore.archive_resource_limit": Record<string, never>;
+    /** A backup file chosen on a USB drive is gone or cannot be read: the drive was probably
+     * pulled after the list. */
+    "restore.drive_file_unreadable": Record<string, never>;
     /**
      * The restore met a top-level archive entry it does not know how to route. Fails loud rather
      * than drop data on the cold-recovery path; the fix is to teach the restore to

@@ -12,17 +12,17 @@ import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import {
   STORAGE_DRIVES_MAX,
+  STORAGE_DRIVES_ROOT,
+  STORAGE_DRIVE_NAME,
   VERB_PERMISSION,
   formatHostReply,
   parseHostRequest,
 } from "./host-protocol.mjs";
 
-export const DRIVES_ROOT = "/run/waitron-drives";
 const STATE_DIR = "/run/waitron-box-state";
 const MOUNT_LIMIT_MS = 5000;
 const MOUNT_OPTIONS = "ro,nosuid,nodev,noexec,noatime,nosymfollow,fmask=0133,dmask=0022";
 const MOUNT_TYPES = Object.freeze({ vfat: "vfat", exfat: "exfat", ntfs: "ntfs3" });
-const DRIVE_NAME = /^sd[a-z]{1,3}[0-9]{0,3}$/;
 const HOLDER_TYPE = /^(crypt|lvm|raid)/;
 const HOLDER_FSTYPES = Object.freeze(["crypto_LUKS", "LVM2_member", "linux_raid_member"]);
 
@@ -65,7 +65,7 @@ function usbDrives(rows, root) {
     if (holder || mountedElsewhere) continue;
     const parts = (below.get(disk.kname) ?? []).filter((entry) => entry.type === "part");
     for (const entry of parts.length > 0 ? parts : [disk]) {
-      if (!entry.fstype || !DRIVE_NAME.test(entry.kname)) continue;
+      if (!entry.fstype || !STORAGE_DRIVE_NAME.test(entry.kname)) continue;
       drives.push({
         drive: entry.kname,
         type: Object.hasOwn(MOUNT_TYPES, entry.fstype) ? entry.fstype : null,
@@ -193,7 +193,7 @@ export async function handleStorageRequest(
   line,
   {
     run = storageCommand(),
-    root = DRIVES_ROOT,
+    root = STORAGE_DRIVES_ROOT,
     stateDir = STATE_DIR,
     log = (entry) => console.error(JSON.stringify(entry)),
   } = {},
