@@ -4,8 +4,10 @@ import type { BillPaymentView } from "../api/payments-api.js";
 import type { CurrentOrderRow } from "../api/kitchen-api.js";
 import type { BillEditExpected } from "../api/order-types.js";
 import type { CloseDeferredRequest } from "../api/deferred-close-types.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { CapabilityFlag } from "../layout.js";
+import type { DeferredCloseBill } from "../widgets/deferred-close-dialog.js";
 import { shownReceiptLanguage } from "../widgets/receipt-language.js";
 
 /** Whether Pay offers Close as deferred payment: not at all, switched off with why, or usable. */
@@ -145,5 +147,50 @@ export function deferredCloseRequest(input: DeferredRequestInput): CloseDeferred
             expectedPartyRevision: party.revision,
             expectedEdits: party.expectedEdits,
           },
+  };
+}
+
+/** The window asking before a bill is closed as a deferred payment: the bill row it shows, read
+ * when it opened or again after a refusal, from which every confirm builds a new request. */
+export interface DeferredClosing {
+  id: number;
+  /** The Pay window it was opened from, which Cancel returns to: a table bill's, a presented
+   * bill's, or the Counter's, whose `visit` is the operator session. */
+  from: "bill" | "presented" | "counter";
+  counterPayPanel?: boolean;
+  billId: string;
+  visit: number;
+  label: string;
+  bill: DeferredBill;
+  busy: boolean;
+  refusal: string;
+  /** The last send got no answer: a table bill's next confirm reads the bill again first, and
+   * Cancel reads the bill or the Counter's order again instead of returning to Pay. */
+  reread: boolean;
+  /** Every submission id this window has sent. */
+  sent: string[];
+}
+
+/** A deferred close's refusal: its code, the server's reason, and the sentence for both. */
+export function deferredRefusal(error: unknown): {
+  code: string;
+  reason: string | undefined;
+  said: string;
+} {
+  const refused = error as { code?: unknown; reason?: unknown } | undefined;
+  const code = typeof refused?.code === "string" ? refused.code : "server.internal";
+  const reason = typeof refused?.reason === "string" ? refused.reason : undefined;
+  return { code, reason, said: codeMessage(code, undefined, { reason }) };
+}
+
+export function deferredView(open: DeferredClosing): DeferredCloseBill {
+  const { bill } = open;
+  const recipient = bill.invoiceType === "F1" ? bill.recipient : null;
+  return {
+    label: open.label,
+    total: bill.total,
+    customer:
+      recipient === null ? null : { legalName: recipient.legalName, taxId: recipient.taxId },
+    issued: bill.invoiceNumber !== undefined,
   };
 }

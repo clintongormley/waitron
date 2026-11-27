@@ -304,6 +304,7 @@ export class TillBillPayDialog extends LitElement {
   @property({ type: Boolean }) takesManualCard = false;
   /** On a handheld, the table the title names. */
   @property() tableName = "";
+  @property({ attribute: false }) openingBack = "";
   @property({ type: Boolean }) quiet = false;
   @property() billName = "";
   /** On a handheld, the reader and printer row's inputs, passed straight to it. */
@@ -1120,7 +1121,8 @@ export class TillBillPayDialog extends LitElement {
     return quietPay({
       title: t("action.pay"),
       subtitle: this.billName,
-      back: this.tableName || t("action.back"),
+      back: this.openingBack || this.tableName || t("action.back"),
+      wrapBack: this.openingBack !== "",
       close: () => this.#requestClose(),
       equipment: quietEquipmentButton(
         this.rowOpen,

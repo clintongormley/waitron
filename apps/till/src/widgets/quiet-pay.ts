@@ -20,6 +20,11 @@ const [contribution, share, items, whole] = BILL_PAY_WAYS;
 const payWays = [whole, share, items, contribution];
 
 export const quietPayStyles = css`
+  wt-top-bar[data-wrap-back]::part(back-label) {
+    overflow-wrap: anywhere;
+    text-wrap: wrap;
+  }
+
   .quiet-pay-ways-label {
     ${visuallyHiddenStyles}
   }
@@ -118,6 +123,7 @@ export function quietPay(panel: {
   subtitle: string;
   equipment: TemplateResult;
   back: string;
+  wrapBack: boolean;
   close: () => void;
   amount: string;
   breakdown?: TemplateResult;
@@ -130,6 +136,7 @@ export function quietPay(panel: {
       .heading=${panel.title}
       .subtitle=${panel.subtitle}
       .backLabel=${panel.back}
+      ?data-wrap-back=${panel.wrapBack}
       @wt-back=${panel.close}
     >
       ${panel.equipment}

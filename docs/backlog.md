@@ -596,9 +596,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The wide floor bar, All zones, table jobs, order, menu,
   table-move and bill action panels, and Send and move allergy prompts remain.
   The saved-invoice summary and presented whole payment follow Table Pay.
-  PR 15b brings Table Pay to Counter and docks it in the wide order column. Table Pay shows the
-  checked amount and receipt questions, starts the reader from **Charge**, and opens cash entry
-  from **Cash**.
+  Dock Pay in the wide order column once PR 12 supplies the wide order shell. PR 14a supplies the
+  shared inset. Table and Counter Pay already show the checked amount and receipt questions,
+  start the reader from **Charge**, and open cash entry from **Cash**.
   [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
   Pass 3's third part (27 November; §7.14, not started): clocking in and out with breaks, My hours,

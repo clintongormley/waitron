@@ -14,8 +14,10 @@ import {
 import { t } from "./i18n/t.js";
 import { setMenuCopyOf } from "@waitron/shared";
 import {
+  answerOwnReceipt,
   balanceOf,
   cash,
+  choosePayWay,
   dialog,
   emit,
   flush as flushCounter,
@@ -23,6 +25,7 @@ import {
   invoiceOf,
   line,
   lock,
+  money,
   offers,
   paymentOf,
   press,
@@ -33,6 +36,7 @@ import {
   type,
 } from "../test/bill-pay-app.js";
 import type { TillApp } from "./till-app.js";
+import type { BillPaymentAsk } from "./api/payments-api.js";
 import type { TabLine } from "./api/kitchen-api.js";
 import { liveReadFixture } from "../test/live-connection.js";
 import { daily, bill, special } from "../test/set-menu-widgets.js";
@@ -254,6 +258,7 @@ async function takeawaySetMenuOnCounter(
     ],
   };
   const placed = { ...order, ...(invoiceNumber === undefined ? {} : { invoiced: true }) };
+  let wholeAmount = "14.00";
   const api = counterApi({
     getTabLines: vi.fn(async () => ({
       lines: [line({ id: "soup-line", lineNo: 2, name: "Soup", unitPriceGross: "0.00" })],
@@ -282,7 +287,9 @@ async function takeawaySetMenuOnCounter(
     getBillBalance: vi.fn(async () =>
       balanceOf({ workingOrderId: id, total: "14.00", outstanding: "14.00" }),
     ),
-    previewBillPayment: vi.fn().mockResolvedValue(cash("4.00", "0.00")),
+    previewBillPayment: vi.fn(async (_id, ask: BillPaymentAsk) =>
+      cash(ask.kind === "contribution" ? ask.amount! : wholeAmount, "0.00"),
+    ),
     ...overrides,
   });
   const { el } = await mountWidget<TillApp>("till-app", { api });
@@ -291,6 +298,7 @@ async function takeawaySetMenuOnCounter(
   await flushCounter(el);
   const counter = () => el.shadowRoot!.querySelector("till-counter-screen")!;
   async function pay({ outstanding = "14.00" } = {}) {
+    wholeAmount = outstanding;
     await vi.waitFor(() => expect(counter().store.id).toBe(id));
     await flushCounter(el);
     expect(counter().store.total.toString()).toBe("0.00");
@@ -300,12 +308,22 @@ async function takeawaySetMenuOnCounter(
     await flushCounter(el);
     expect(api.getBillBalance).toHaveBeenCalledWith(id);
     expect(dialog(el)!.balance).toMatchObject({ total: "14.00", outstanding });
-    expect(dialog(el)!.shadowRoot!.textContent).toContain("€14.00");
+    await expect.poll(() => inDialog(el, "[data-quiet-pay-cash]")?.disabled).toBe(false);
+    expect(inDialog(el, "[data-quiet-pay-amount]")?.textContent).toContain(money(outstanding));
   }
   async function toTakePart() {
-    inDialog(el, '[name="way"][value="contribution"]')!.click();
-    await flushCounter(el);
+    await choosePayWay(el, "contribution");
     await type(el, "amount", "4");
+    if (dialog(el)!.quiet) {
+      await expect
+        .poll(() => dialog(el)!.checkedQuote?.request.asked.choice)
+        .toEqual({
+          kind: "contribution",
+          amount: "4",
+        });
+      await answerOwnReceipt(el, "no", { ifUnanswered: true });
+      await expect.poll(() => inDialog(el, "[data-quiet-pay-cash]")?.disabled).toBe(false);
+    }
     await type(el, "tendered", "4");
     await press(el, "[data-pay-continue]");
     expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
@@ -487,6 +505,7 @@ it.each([undefined, "F1/7"])(
     emit(counter(), "collect-card", {});
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
     await flushCounter(el);
+    expect(dialog(el)!.quiet).toBe(false);
     await toTakePart();
     expect(inDialog(el, "[data-pay-own-receipt]") !== null).toBe(invoiceNumber === undefined);
   },
