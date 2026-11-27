@@ -11,9 +11,10 @@ export interface WaitingMasterKey {
   readonly backupKeyNumber: number;
 }
 
-/** Holds at most one waiting key. Any later pack, and any Change the backup key, ends the wait: a
- * confirm after them would replace the backup key they relied on. Makes, key changes and confirms
- * take the backup turns, so nothing replaces the key between a confirm's check and its `forget`. */
+/** Holds at most one waiting key. A later pack, once recorded, and a Change the backup key that
+ * passes its checks end the wait: a confirm after them would replace the backup key they relied
+ * on. Makes, key changes and confirms take the backup turns, so nothing replaces the key between a
+ * confirm's check and its `forget`. */
 export class WaitingMasterKeyHolder {
   #waiting: WaitingMasterKey | undefined;
 

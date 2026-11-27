@@ -35,8 +35,7 @@ or stop and change nothing.
 Choose **Make a new master key** on the card. The dialog says until when to keep the old pack;
 choose **Make a new master key** and confirm it is you as above. It makes a new master key in a
 new pack, but the box keeps the current master key until the pack has reached this browser: the
-browser then sends the new key back, and only then does the box take it. A box that restarts
-before then keeps the current key.
+browser then sends the new key back, and only then does the box take it.
 Once the box has taken it, the dialog shows the master key with its name: use **Download** or **Print**, then
 **Continue**. **Copy** copies the master key alone and does not count: the pack holds more than the key, so use
 **Download** or **Print** before **Continue**. It is shown only this once, so **Stop** and Escape do nothing while the box is making
