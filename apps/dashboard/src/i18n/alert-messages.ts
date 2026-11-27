@@ -413,6 +413,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "The AEAT certificate expires on {date:date}, in {days} day(s). Install the new one in Venue settings before then, or fiscal records will wait.",
     es: "El certificado de la AEAT caduca el {date:date}, dentro de {days} día(s). Instala el nuevo en Ajustes del local antes de esa fecha o los registros fiscales quedarán en espera.",
   },
+  "fiscal.certificate_not_accepted": {
+    en: "AEAT did not accept the installed AEAT certificate on {date:date}. Sales continue, but fiscal records wait. Install a new one in Venue settings.",
+    es: "La AEAT no aceptó el certificado de la AEAT instalado el {date:date}. Las ventas continúan, pero los registros fiscales esperan. Instala uno nuevo en Ajustes del local.",
+  },
   "fiscal.certificate_expired": {
     en: "The AEAT certificate expired on {date:date}. Sales continue, but fiscal records wait until you install a new one in Venue settings.",
     es: "El certificado de la AEAT caducó el {date:date}. Las ventas continúan, pero los registros fiscales esperan hasta que instales uno nuevo en Ajustes del local.",

@@ -67,6 +67,8 @@ const REFUSAL_KEYS: Record<string, AeatCertificateKey> = {
   other_taxpayer: "aeat_certificate.refused.other_taxpayer",
   unreachable: "aeat_certificate.refused.unreachable",
   closed: "aeat_certificate.refused.closed",
+  not_accepted: "aeat_certificate.refused.not_accepted",
+  aeat_refused: "aeat_certificate.refused.aeat_refused",
   aeat_fault: "aeat_certificate.refused.aeat_fault",
   aeat_http: "aeat_certificate.refused.aeat_http",
   check_failed: "aeat_certificate.refused.check_failed",

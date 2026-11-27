@@ -1410,6 +1410,11 @@ for (const locale of ["en", "es"] as const) {
         records.columns.push({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
         for (const row of Object.values(records.rows)) row[name] = null;
       }
+      const sendingState = expected[phase].tables.verifactu_sending_state!;
+      for (const name of ["certificate_refused_fingerprint", "certificate_refused_at"]) {
+        sendingState.columns.push({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
+        for (const row of Object.values(sendingState.rows)) row[name] = null;
+      }
       records.columns.splice(
         records.columns.findIndex((column) => column.name === "destinatarios"),
         0,

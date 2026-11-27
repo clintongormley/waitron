@@ -215,7 +215,10 @@ CREATE TABLE `verifactu_sending_state` (
 	`proximo_envio_en` text NOT NULL,
 	`tiempo_espera_seg` integer NOT NULL,
 	`technical_incident_token` text,
-	CONSTRAINT "verifactu_sending_state_singleton_ck" CHECK("verifactu_sending_state"."id" = 1)
+	`certificate_refused_fingerprint` text,
+	`certificate_refused_at` text,
+	CONSTRAINT "verifactu_sending_state_singleton_ck" CHECK("verifactu_sending_state"."id" = 1),
+	CONSTRAINT "verifactu_sending_state_certificate_refused_ck" CHECK(("verifactu_sending_state"."certificate_refused_fingerprint" is null) = ("verifactu_sending_state"."certificate_refused_at" is null))
 );
 --> statement-breakpoint
 CREATE TABLE `verifactu_series_conflicts` (

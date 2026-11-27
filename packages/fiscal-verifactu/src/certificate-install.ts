@@ -32,6 +32,8 @@ export const CERTIFICATE_REFUSAL_REASONS = [
   "other_taxpayer",
   "unreachable",
   "closed",
+  "not_accepted",
+  "aeat_refused",
   "aeat_fault",
   "aeat_http",
   "check_failed",

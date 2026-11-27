@@ -1,3 +1,5 @@
+import { createServer as createHttpsServer } from "node:https";
+import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Agent, errors as undiciErrors, fetch as undiciFetch } from "undici";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
@@ -13,6 +15,7 @@ import {
   readCertMaterial,
 } from "./aeat-transport.js";
 import type { CertKind, CertMaterial } from "./aeat-transport.js";
+import { openCertificate } from "./certificate-open.js";
 import {
   mintMtlsMaterial,
   startMtlsServer,
@@ -200,6 +203,53 @@ describe("the resolved client over a real client-certificate handshake", () => {
   });
 });
 
+describe("aeatClientResolver names the certificate it sends with", () => {
+  it.each([false, true])(
+    "as the install opener fingerprints it, observing authority time=%s",
+    async (observing) => {
+      await provision("sello");
+      const resolver = aeatClientResolver({
+        db: suite.db,
+        ring,
+        endpointFor: () => "https://example.test/soap",
+        fetchFor: () => ({
+          fetch: (() => Promise.reject(new Error("not this test's subject"))) as typeof fetch,
+          close: () => Promise.resolve(),
+        }),
+        ...(observing ? { observeAuthorityTime: () => {} } : {}),
+      });
+      const client = await resolver.resolve();
+      const opened = await openCertificate(material.clientPfx, material.clientPassphrase);
+      if (!opened.ok) throw new Error(`the fixture did not open: ${opened.reason}`);
+      expect(client.certificateFingerprint?.()).toBe(opened.details.fingerprint);
+    },
+  );
+
+  it("names none when the vault's file does not open", async () => {
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, ring, {
+        personId: null,
+        purpose: "fiscal.aeat",
+        value: {
+          pfxBase64: material.clientPfx.toString("base64"),
+          passphrase: "not-the-passphrase",
+          certKind: "sello",
+        },
+      }),
+    );
+    const resolver = aeatClientResolver({
+      db: suite.db,
+      ring,
+      endpointFor: () => "https://example.test/soap",
+      fetchFor: () => ({
+        fetch: (() => Promise.reject(new Error("not this test's subject"))) as typeof fetch,
+        close: () => Promise.resolve(),
+      }),
+    });
+    expect((await resolver.resolve()).certificateFingerprint?.()).toBeNull();
+  });
+});
+
 describe("aeatClientResolver lifetime", () => {
   // `resolve` appends a transport on EVERY call, so the transports to release track resolve calls.
   it("closes one transport per client it resolved", async () => {
@@ -383,6 +433,159 @@ describe("aeatClientResolver lifetime", () => {
     await transport.fetch(server.origin);
     await transport.close();
     await expect(transport.fetch(server.origin)).rejects.toThrow();
+  });
+});
+
+describe("mtlsFetch and AEAT's redirects", () => {
+  // AEAT's two certificate error pages: erro4011 (certificate not verified), erro4033 (none arrived).
+  // Receipt: docs/compliance/first-aeat-contact.md (2026-11-25).
+  let redirector: { origin: string; close: () => Promise<void> } | undefined;
+
+  beforeAll(async () => {
+    const httpsServer = createHttpsServer(
+      {
+        key: material.serverKeyPem,
+        cert: material.serverCertPem,
+        ca: material.caPem,
+        requestCert: true,
+        rejectUnauthorized: true,
+      },
+      (req, res) => {
+        const url = new URL(req.url ?? "/", "https://127.0.0.1");
+        const to = url.searchParams.get("to");
+        if (url.pathname === "/redirect" && to !== null) {
+          res.writeHead(302, { Location: to, "Content-Type": "text/html" });
+          res.end("<html>moved</html>");
+          return;
+        }
+        if (url.pathname === "/big") {
+          res.writeHead(302, {
+            Location: "/static_files/erro4011.html",
+            "Content-Type": "text/html",
+          });
+          res.end(Buffer.alloc(5 * 1024 * 1024, "x"));
+          return;
+        }
+        if (url.pathname === "/bare/erro4011.html") {
+          res.writeHead(307);
+          res.end();
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end(`<html>page ${url.pathname}</html>`);
+      },
+    );
+    await new Promise<void>((resolve) => httpsServer.listen(0, "127.0.0.1", resolve));
+    const { port } = httpsServer.address() as AddressInfo;
+    redirector = {
+      origin: `https://127.0.0.1:${port}`,
+      close: () =>
+        new Promise<void>((resolve, reject) => {
+          httpsServer.closeAllConnections();
+          httpsServer.close((error) => (error ? reject(error) : resolve()));
+        }),
+    };
+  });
+
+  afterAll(async () => {
+    if (redirector !== undefined) await redirector.close();
+  });
+
+  const certMaterial = (): CertMaterial => ({
+    pfx: material.clientPfx,
+    passphrase: material.clientPassphrase,
+    certKind: "representante",
+  });
+
+  const redirectTo = (location: string) =>
+    `${redirector!.origin}/redirect?to=${encodeURIComponent(location)}`;
+
+  it.each([
+    ["/static_files/common/internet/dep/aplicaciones/es/aeat/erro4011.html", "erro4011.html"],
+    ["/static_files/common/internet/dep/aplicaciones/es/aeat/erro4033.html", "erro4033.html"],
+    ["https://www1.agenciatributaria.gob.es/static_files/erro4011.html", "erro4011.html"],
+    ["/static_files/erro4033.html?lang=es&code=1", "erro4033.html"],
+    ["erro4011.html", "erro4011.html"],
+  ])("throws fiscal.certificate_not_accepted for a redirect to %s", async (location, page) => {
+    const transport = mtlsFetch(certMaterial(), material.caPem);
+    try {
+      const error = await captureError(() =>
+        transport.fetch(redirectTo(location), { method: "POST", body: "x" }),
+      );
+      expect(isAppError(error) && error.code).toBe("fiscal.certificate_not_accepted");
+      expect(isAppError(error) && error.params).toEqual({ page });
+    } finally {
+      await transport.close();
+    }
+  });
+
+  it("releases the connection after refusing a redirect with a large body", async () => {
+    const transport = mtlsFetch(certMaterial(), material.caPem);
+    const error = await captureError(() => transport.fetch(`${redirector!.origin}/big`));
+    expect(isAppError(error) && error.code).toBe("fiscal.certificate_not_accepted");
+    let timer: NodeJS.Timeout | undefined;
+    const closed = await Promise.race([
+      transport.close().then(() => "closed"),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve("hung"), 3_000);
+      }),
+    ]);
+    clearTimeout(timer);
+    expect(closed).toBe("closed");
+  });
+
+  it("refuses the error page even when the caller asks to follow redirects", async () => {
+    const transport = mtlsFetch(certMaterial(), material.caPem);
+    try {
+      const error = await captureError(() =>
+        transport.fetch(redirectTo("/static_files/erro4011.html"), { redirect: "follow" }),
+      );
+      expect(isAppError(error) && error.code).toBe("fiscal.certificate_not_accepted");
+    } finally {
+      await transport.close();
+    }
+  });
+
+  it.each(["/static_files/erro4011.html.bak", "https://[erro4011.html"])(
+    "hands any other redirect back as the redirect's own answer (%s)",
+    async (location) => {
+      const transport = mtlsFetch(certMaterial(), material.caPem);
+      try {
+        const response = await transport.fetch(redirectTo(location));
+        expect(response.status).toBe(302);
+        expect(response.headers.get("location")).toBe(location);
+      } finally {
+        await transport.close();
+      }
+    },
+  );
+
+  it("hands back a redirect status that names no Location, even from a refusal page's address", async () => {
+    const transport = mtlsFetch(certMaterial(), material.caPem);
+    try {
+      const response = await transport.fetch(`${redirector!.origin}/bare/erro4011.html`);
+      expect(response.status).toBe(307);
+    } finally {
+      await transport.close();
+    }
+  });
+
+  it("control: without manual redirects, undici follows to the error page and answers 200", async () => {
+    const dispatcher = new Agent({
+      connect: {
+        pfx: material.clientPfx,
+        passphrase: material.clientPassphrase,
+        ca: material.caPem,
+      },
+    });
+    try {
+      const response = await undiciFetch(redirectTo("/static_files/erro4011.html"), { dispatcher });
+      expect(response.status).toBe(200);
+      expect(response.url).toBe(`${redirector!.origin}/static_files/erro4011.html`);
+      expect(await response.text()).toContain("erro4011.html");
+    } finally {
+      await dispatcher.close();
+    }
   });
 });
 

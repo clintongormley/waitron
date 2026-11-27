@@ -1225,3 +1225,15 @@ it("shows the differing-records words, and the missing-records words when record
     "El servidor principal anterior tiene registros de facturación u horas trabajadas que este servidor no tiene, así que se le ha indicado que, al borrarse, aparte sus bases de datos en lugar de eliminarlas. Se quedan en ese servidor, pero ya no se usan; sus copias de seguridad locales se eliminan. Conserva ese servidor en lugar de deshacerte de él. Después del borrado, ya no se pueden descargar sus datos desde su página.",
   );
 });
+
+describe("fiscal.certificate_not_accepted", () => {
+  it("names the day AEAT refused the installed certificate, in English and Spanish", () => {
+    const params = { date: "2026-10-25" };
+    expect(alertMessage("fiscal.certificate_not_accepted", params, "en")).toBe(
+      "AEAT did not accept the installed AEAT certificate on 25 Oct 2026. Sales continue, but fiscal records wait. Install a new one in Venue settings.",
+    );
+    expect(alertMessage("fiscal.certificate_not_accepted", params, "es")).toBe(
+      "La AEAT no aceptó el certificado de la AEAT instalado el 25 oct 2026. Las ventas continúan, pero los registros fiscales esperan. Instala uno nuevo en Ajustes del local.",
+    );
+  });
+});

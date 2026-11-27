@@ -48,6 +48,16 @@ function statusLine(c: Installed, timeZone: string): string {
   return t(`aeat_certificate.warning_${c.kind}`, { date });
 }
 
+function cardStatus(c: Installed, timeZone: string): { stage: string; text: string } | null {
+  if (c.notAcceptedAt !== undefined) {
+    return {
+      stage: "not-accepted",
+      text: t("aeat_certificate.not_accepted_on", { date: day(c.notAcceptedAt, timeZone) }),
+    };
+  }
+  return c.stage === null ? null : { stage: c.stage, text: statusLine(c, timeZone) };
+}
+
 @customElement("dashboard-aeat-certificate-card")
 export class AeatCertificateCard extends LitElement {
   static override styles = [
@@ -91,7 +101,8 @@ export class AeatCertificateCard extends LitElement {
         border-radius: var(--wt-radius-md);
       }
       .status[data-stage="urgent"],
-      .status[data-stage="expired"] {
+      .status[data-stage="expired"],
+      .status[data-stage="not-accepted"] {
         border-color: var(--wt-color-danger);
       }
       .status[data-stage="installed"] {
@@ -105,7 +116,8 @@ export class AeatCertificateCard extends LitElement {
         background: var(--wt-color-warning);
       }
       .status[data-stage="urgent"] .dot,
-      .status[data-stage="expired"] .dot {
+      .status[data-stage="expired"] .dot,
+      .status[data-stage="not-accepted"] .dot {
         background: var(--wt-color-danger);
       }
       .status[data-stage="installed"] .dot {
@@ -199,7 +211,9 @@ export class AeatCertificateCard extends LitElement {
 
   #action(card: CertificateCardView): TemplateResult | typeof nothing {
     if (this.readOnly || !card.filing) return nothing;
-    const urgent = card.installed?.stage === "urgent" || card.installed?.stage === "expired";
+    const stage =
+      card.installed === null ? undefined : cardStatus(card.installed, card.timeZone)?.stage;
+    const urgent = stage === "urgent" || stage === "expired" || stage === "not-accepted";
     const label = card.revision === null ? "aeat_certificate.install" : "aeat_certificate.replace";
     return html`<wt-button
       data-test="certificate-action"
@@ -247,7 +261,10 @@ export class AeatCertificateCard extends LitElement {
     const until =
       c.stage === "expired"
         ? remaining(c, zone)
-        : `${day(c.validUntil, zone)} · ${remaining(c, zone)}`;
+        : c.notAcceptedAt !== undefined
+          ? day(c.validUntil, zone)
+          : `${day(c.validUntil, zone)} · ${remaining(c, zone)}`;
+    const status = cardStatus(c, zone);
     return html`${
         this.checkedAt === undefined
           ? nothing
@@ -258,11 +275,11 @@ export class AeatCertificateCard extends LitElement {
               >
             </p>`
       }${
-        c.stage === null
+        status === null
           ? nothing
           : html`<wt-notice duration="0">
-              <p class="status" data-test="certificate-status" data-stage=${c.stage}>
-                <span class="dot" aria-hidden="true"></span><span>${statusLine(c, zone)}</span>
+              <p class="status" data-test="certificate-status" data-stage=${status.stage}>
+                <span class="dot" aria-hidden="true"></span><span>${status.text}</span>
               </p>
             </wt-notice>`
       }

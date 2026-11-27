@@ -290,3 +290,29 @@ describe("readCertificateCard", () => {
     expect(nameOf).not.toHaveBeenCalled();
   });
 });
+
+describe("the refused-certificate mark on the card", () => {
+  async function markRefused(fingerprint: string): Promise<void> {
+    await suite.db.execute(sql`
+      insert into verifactu_sending_state
+        (id, proximo_envio_en, tiempo_espera_seg, certificate_refused_fingerprint, certificate_refused_at)
+      values (1, ${NOW.toISOString()}, 0, ${fingerprint}, '2026-10-12T07:30:00.000Z')
+    `);
+  }
+
+  it("says when AEAT refused the installed certificate", async () => {
+    await seedTaxpayerNodeSif(suite.db);
+    await sealSetup(TAXPAYER_A.nodeId);
+    await markRefused(certificate.fingerprint);
+    const card = await readCertificateCard(depsFor(TAXPAYER_A.nodeId), NOW);
+    expect(card.installed?.notAcceptedAt).toBe("2026-10-12T07:30:00.000Z");
+  });
+
+  it("hides a refusal of another certificate", async () => {
+    await seedTaxpayerNodeSif(suite.db);
+    await sealSetup(TAXPAYER_A.nodeId);
+    await markRefused(authority.issue().fingerprint);
+    const card = await readCertificateCard(depsFor(TAXPAYER_A.nodeId), NOW);
+    expect(card.installed).not.toHaveProperty("notAcceptedAt");
+  });
+});

@@ -6,6 +6,7 @@ import { calendarDaysLeft, certificateStage, type CertificateStage } from "./cer
 import { normaliseTaxId } from "./certificate-file.js";
 import { venueTimeZone } from "./certificate-install.js";
 import { latestInstall } from "./certificate-record.js";
+import { certificateRefusedAt } from "./certificate-refusal.js";
 import { verifactuSubmissions } from "./schema/index.js";
 
 export interface CertificateCard {
@@ -25,6 +26,8 @@ export interface CertificateCard {
     source: "setup" | "dashboard";
     installedByName: string | null;
     lastAcceptedAt: string | null;
+    /** Present only while AEAT's refusal names this install's certificate. */
+    notAcceptedAt?: string;
   };
 }
 
@@ -78,6 +81,7 @@ export async function readCertificateCard(
     }
     const installedByName = row.personId === null ? null : await deps.nameOf(tx, row.personId);
     const lastAccepted = await lastAcceptedSince(tx, row.installedAt);
+    const notAcceptedAt = await certificateRefusedAt(tx, row.fingerprint);
     return {
       revision,
       timeZone,
@@ -95,6 +99,7 @@ export async function readCertificateCard(
         source: row.source,
         installedByName,
         lastAcceptedAt: lastAccepted?.toISOString() ?? null,
+        ...(notAcceptedAt === null ? {} : { notAcceptedAt: notAcceptedAt.toISOString() }),
       },
     };
   });

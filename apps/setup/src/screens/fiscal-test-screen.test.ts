@@ -48,6 +48,17 @@ describe("SetupFiscalTestScreen", () => {
     ]);
   });
 
+  it("says AEAT did not accept the certificate in place of the general refusal", async () => {
+    const { el } = await mountWidget<SetupFiscalTestScreen>("setup-fiscal-test-screen", {
+      status: "rejected",
+      rejections: [{ code: "fiscal.certificate_not_accepted", message: null }],
+    });
+    const alert = el.shadowRoot!.querySelector("[role=alert]");
+    expect(alert?.textContent?.replace(/\s+/g, " ").trim()).toBe(
+      "AEAT did not accept this certificate. Select Back to choose another certificate, then run the fiscal test again.",
+    );
+  });
+
   it("announces a request failure when there is no AEAT result", async () => {
     const { el } = await mountWidget<SetupFiscalTestScreen>("setup-fiscal-test-screen", {
       errorMessage: "The fiscal test could not be started.",
@@ -72,6 +83,19 @@ describe("SetupFiscalTestScreen in Spanish", () => {
     );
     expect(el.shadowRoot!.querySelector("[data-test=run]")?.textContent).toBe(
       "Hacer la prueba fiscal",
+    );
+  });
+
+  it("says in Spanish that AEAT did not accept the certificate", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupFiscalTestScreen>("setup-fiscal-test-screen", {
+      status: "rejected",
+      rejections: [{ code: "fiscal.certificate_not_accepted", message: null }],
+    });
+    expect(
+      el.shadowRoot!.querySelector("[role=alert]")?.textContent?.replace(/\s+/g, " ").trim(),
+    ).toBe(
+      "La AEAT no ha aceptado este certificado. Pulsa Volver para elegir otro certificado y repite la prueba fiscal.",
     );
   });
 

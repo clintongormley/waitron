@@ -14,6 +14,9 @@ Correct the passphrase or choose a replacement file, then select **Next** and ru
 again. For a file with no private key or old encryption, export the certificate again with its
 private key and modern encryption. The export instructions are on the certificate screen.
 
+If the fiscal test says AEAT did not accept the certificate, select **Back**, choose another
+certificate and run the test again.
+
 If a certificate is refused while finishing an interrupted setup, correct it first. Setup then
 asks you to confirm ownership again before you continue.
 
@@ -30,6 +33,9 @@ certificate stays installed. Check the internet connection, or choose another fi
 type in the dialog. Select **Save** to check again. Select **Cancel** to stop without replacing
 the current certificate.
 An HTTP status alone does not tell you whether waiting will help.
+
+If the card says AEAT did not accept the certificate, fiscal records wait. Install a new
+certificate.
 
 ## Find out what a check observed {#diagnosis}
 

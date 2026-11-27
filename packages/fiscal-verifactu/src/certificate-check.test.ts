@@ -9,6 +9,7 @@ import {
   type Candidate,
 } from "../test/certificate-fixtures.js";
 import { mtlsFetch, type CertMaterial, type AeatTransport } from "./aeat-transport.js";
+import { AppError } from "@waitron/shared";
 import { checkWithAuthority, type CheckTransport } from "./certificate-check.js";
 
 const authority = makeAuthority();
@@ -164,6 +165,33 @@ describe("checkWithAuthority", () => {
     });
   });
 
+  const faultBody = (faultstring: string) =>
+    `<?xml version="1.0"?><env:Envelope xmlns:env="http://schemas.xmlsoap.org/soap/envelope/"><env:Body><env:Fault><faultcode>env:Client</faultcode><faultstring>${faultstring}</faultstring></env:Fault></env:Body></env:Envelope>`;
+
+  it("reports aeat_refused with AEAT's number and the venue's tax number for a 4112 fault", async () => {
+    const server = await serve({
+      status: 200,
+      body: faultBody("Codigo[4112].El titular del certificado debe ser Obligado Emisión."),
+    });
+    await expect(check(transportTo(server.origin))).resolves.toEqual({
+      ok: false,
+      reason: "aeat_refused",
+      details: { codigo: "4112", taxpayerNif: "89890001K" },
+    });
+  });
+
+  it.each(["Codigo[4102].El XML no cumple el esquema.", "Codigo[4112]", "x Codigo[4112]."])(
+    "keeps the raw fault for a fault AEAT numbered otherwise (%s)",
+    async (faultstring) => {
+      const server = await serve({ status: 200, body: faultBody(faultstring) });
+      await expect(check(transportTo(server.origin))).resolves.toEqual({
+        ok: false,
+        reason: "aeat_fault",
+        details: { faultCode: "env:Client", faultReason: faultstring },
+      });
+    },
+  );
+
   it("reports aeat_fault with empty details for a fault that names neither", async () => {
     const emptyFault =
       '<?xml version="1.0"?><env:Envelope xmlns:env="http://schemas.xmlsoap.org/soap/envelope/"><env:Body><env:Fault></env:Fault></env:Body></env:Envelope>';
@@ -197,6 +225,53 @@ describe("checkWithAuthority", () => {
       ok: false,
       reason: "aeat_http",
       details: { status: 403 },
+    });
+  });
+
+  it.each([
+    "/static_files/erro4011.html",
+    "https://www1.agenciatributaria.gob.es/x/erro4033.html?a=1",
+  ])("reports not_accepted when AEAT redirects to its refusal page %s", async (location) => {
+    const server = await serve({ status: 302, body: "", headers: { Location: location } });
+    await expect(check(transportTo(server.origin))).resolves.toEqual({
+      ok: false,
+      reason: "not_accepted",
+    });
+  });
+
+  it("reports not_accepted from the code in the cause chain, ahead of a timeout", async () => {
+    const transport: CheckTransport = {
+      endpointFor: () => "https://127.0.0.1:1",
+      fetchFor: () => ({
+        fetch: (() =>
+          new Promise((_, reject) =>
+            setTimeout(
+              () =>
+                reject(
+                  new TypeError("wrapped", {
+                    cause: new AppError("fiscal.certificate_not_accepted", {
+                      page: "erro4011.html",
+                    }),
+                  }),
+                ),
+              100,
+            ),
+          )) as typeof globalThis.fetch,
+        close: () => Promise.resolve(),
+      }),
+    };
+    await expect(check(transport, { timeoutMs: 10 })).resolves.toEqual({
+      ok: false,
+      reason: "not_accepted",
+    });
+  });
+
+  it("reports aeat_http with the status for a redirect to any other page", async () => {
+    const server = await serve({ status: 302, body: "", headers: { Location: "/other.html" } });
+    await expect(check(transportTo(server.origin))).resolves.toEqual({
+      ok: false,
+      reason: "aeat_http",
+      details: { status: 302 },
     });
   });
 

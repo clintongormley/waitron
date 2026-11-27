@@ -701,7 +701,14 @@ it("keeps the sending gate while the drainer can update its wait and clear an in
     SENDING_STATE_DELETE_REFUSAL,
   );
   expect(connection.prepare("select * from verifactu_sending_state").all()).toEqual([
-    { id: 1, proximo_envio_en: next, tiempo_espera_seg: 90, technical_incident_token: null },
+    {
+      id: 1,
+      proximo_envio_en: next,
+      tiempo_espera_seg: 90,
+      technical_incident_token: null,
+      certificate_refused_fingerprint: null,
+      certificate_refused_at: null,
+    },
   ]);
 });
 

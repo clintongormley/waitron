@@ -18,6 +18,12 @@ import type {
   VerifactuClient,
   RegistroAlta,
 } from "@waitron/verifactu";
+import type { DrainClient } from "./aeat-transport.js";
+import {
+  certificateNotAccepted,
+  clearCertificateRefusal,
+  markCertificateRefused,
+} from "./certificate-refusal.js";
 import { recordConflictEvidence, type ConflictComparison } from "./conflict-evidence.js";
 import type { FacturaParams, LineaParams, Operacion } from "./errors.js";
 import {
@@ -107,7 +113,7 @@ export interface DrainDeps {
    * The venue's AEAT transport. A FUNCTION, not a fixed client, so the certificate is decrypted
    * only when this pass actually has something to send.
    */
-  resolveClient: () => Promise<VerifactuClient>;
+  resolveClient: () => Promise<DrainClient>;
   /** How long after a skipped pass to report work due again. Required, so a caller that forgets
    * is a compile error rather than a silent cadence. */
   skipRetryMs: number;
@@ -236,7 +242,7 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
  */
 async function drainDue(
   db: Database,
-  client: VerifactuClient,
+  client: DrainClient,
   environment: Entorno,
   now: Date,
   result: DrainResult,
@@ -293,7 +299,7 @@ async function drainDue(
           }
           flushedFailure = technicalFailures.get(db)?.get(environment);
           if (flushedFailure !== undefined) {
-            await openTechnicalIncident(tx, environment, flushedFailure.now, flushedFailure.ids);
+            await openTechnicalIncident(tx, environment, flushedFailure);
           }
           const c = await claimBatch(
             tx,
@@ -319,7 +325,7 @@ async function drainDue(
           if (waitPending && sendable.length > 0 && sendable.length < maxPorEnvio) {
             throw deferredBatch;
           }
-          const incidentToken = await technicalIncidentToken(tx);
+          const incidentToken = (await readSendingMarks(tx)).technicalIncidentToken;
           if (incidentToken !== null && sendable.length > 0) {
             await tx.execute(sql`
               update verifactu_submissions set technical_incidence = true
@@ -368,6 +374,7 @@ async function drainDue(
       batch.some((row) => row.technical_incidence === 1),
     );
     const registros: EnvioRegistro[] = batch.map(toEnvioRegistro);
+    let refused: string | null = null;
     try {
       const respuesta = await client.submit(cabecera, registros);
       // Counted as soon as AEAT has answered: the envío was sent whether or not its reply is kept.
@@ -375,10 +382,16 @@ async function drainDue(
       result.recordsSubmitted += batch.length;
       waitPending = true;
       const resolved = await resolveLines(client, batch, registros, respuesta);
+      const lookupRefused = resolved.lines.some(
+        ({ lookup }) =>
+          lookup !== null && "failed" in lookup && certificateNotAccepted(lookup.failed),
+      );
+      if (lookupRefused) refused = client.certificateFingerprint?.() ?? null;
 
       dueCount = await countOnCommit(db, result, async (tx, counts) => {
         await persistResponse(tx, batch, resolved, respuesta.CSV ?? null, now, counts);
-        await closeTechnicalIncident(tx, environment, now, claimed.incidentToken ?? null);
+        await closeOnAnswer(tx, environment, now, claimed.incidentToken ?? null, lookupRefused);
+        if (refused !== null) await markCertificateRefused(tx, refused, now);
         return countDue(tx, now, environment);
       });
       // `@waitron/verifactu` leaves the wait undefined when AEAT's reply has no usable one. The
@@ -388,21 +401,24 @@ async function drainDue(
       if (respuesta.TiempoEsperaEnvio === undefined) break;
       t = respuesta.TiempoEsperaEnvio;
       if (dueCount < maxPorEnvio) break;
-    } catch {
+    } catch (error) {
       // The claim is committed, so back the batch off rather than leave it stuck `enviando`, and
       // stop. A probe's next send is an hour after its stamped `enviado_en`, so it leaves the
       // count; the batch's ordinary rows stay counted, so the next sending slot is still reported
       // unless a retry instant `backoffBatch` recorded is earlier.
+      if (certificateNotAccepted(error)) refused = client.certificateFingerprint?.() ?? null;
       const failure = rememberTechnicalFailure(
         db,
         environment,
         now,
         batch.map((row) => row.id),
+        refused,
       );
       await countOnCommit(db, result, async (tx, counts) => {
-        await openTechnicalIncident(tx, environment, failure.now, [
-          ...new Set([...failure.ids, ...batch.map((row) => row.id)]),
-        ]);
+        await openTechnicalIncident(tx, environment, {
+          ...failure,
+          ids: [...new Set([...failure.ids, ...batch.map((row) => row.id)])],
+        });
         await backoffBatch(tx, batch, now, counts);
       });
       forgetTechnicalFailure(db, environment, failure);
@@ -544,7 +560,7 @@ export async function resetInFlightClaims(db: Database, now: Date): Promise<void
   const environment = await readDeploymentEnvironment(db);
   await withTransaction(db, async (tx) => {
     if (environment !== null && (await pendingWasSendable(tx, now, environment))) {
-      await openTechnicalIncident(tx, environment, now, []);
+      await openTechnicalIncident(tx, environment, { now, ids: [] });
     }
     await requeueClaims(tx, now, false, environment);
   });
@@ -565,12 +581,10 @@ async function requeueClaims(
   `);
   for (const env of new Set(interrupted.rows.map((row) => row.entorno))) {
     if (env === null || (environment !== null && env !== environment)) continue;
-    await openTechnicalIncident(
-      tx,
-      env,
+    await openTechnicalIncident(tx, env, {
       now,
-      interrupted.rows.filter((row) => row.entorno === env).map((row) => row.id),
-    );
+      ids: interrupted.rows.filter((row) => row.entorno === env).map((row) => row.id),
+    });
   }
   await tx.execute(sql`
     update verifactu_submissions set estado = 'pendiente', incidencia = true, proximo_intento_en = ${now.toISOString()}
@@ -1208,11 +1222,21 @@ async function backoffBatch(
   }
 }
 
-async function technicalIncidentToken(tx: Transaction): Promise<string | null> {
-  const { rows } = await tx.execute<{ technical_incident_token: string | null }>(sql`
-    select technical_incident_token from verifactu_sending_state where id = 1
+async function readSendingMarks(tx: Transaction): Promise<{
+  technicalIncidentToken: string | null;
+  certificateRefusedFingerprint: string | null;
+}> {
+  const { rows } = await tx.execute<{
+    technical_incident_token: string | null;
+    certificate_refused_fingerprint: string | null;
+  }>(sql`
+    select technical_incident_token, certificate_refused_fingerprint
+    from verifactu_sending_state where id = 1
   `);
-  return rows[0]?.technical_incident_token ?? null;
+  return {
+    technicalIncidentToken: rows[0]?.technical_incident_token ?? null,
+    certificateRefusedFingerprint: rows[0]?.certificate_refused_fingerprint ?? null,
+  };
 }
 
 async function markTechnicalCohort(
@@ -1238,24 +1262,31 @@ async function markTechnicalCohort(
 async function openTechnicalIncident(
   tx: Transaction,
   environment: Entorno,
-  now: Date,
-  attemptedIds: string[],
+  { now, ids, refusedFingerprint }: TechnicalFailure,
 ): Promise<void> {
   await tx.execute(sql`
     insert into verifactu_sending_state (id, proximo_envio_en, tiempo_espera_seg, technical_incident_token)
     values (1, ${now.toISOString()}, 0, ${randomUUID()})
     on conflict (id) do update set technical_incident_token = excluded.technical_incident_token
   `);
-  await markTechnicalCohort(tx, environment, now, attemptedIds);
+  if (refusedFingerprint !== undefined) await markCertificateRefused(tx, refusedFingerprint, now);
+  await markTechnicalCohort(tx, environment, now, ids);
 }
 
-async function closeTechnicalIncident(
+/** Ends what an answer from AEAT ends: the interruption its request observed, and AEAT's refusal
+ * of the certificate unless a lookup in this batch was refused for it. */
+async function closeOnAnswer(
   tx: Transaction,
   environment: Entorno,
   now: Date,
   observedToken: string | null,
+  lookupRefusedCertificate: boolean,
 ): Promise<void> {
-  if ((await technicalIncidentToken(tx)) === null) return;
+  const marks = await readSendingMarks(tx);
+  if (marks.certificateRefusedFingerprint !== null && !lookupRefusedCertificate) {
+    await clearCertificateRefusal(tx);
+  }
+  if (marks.technicalIncidentToken === null) return;
   await markTechnicalCohort(tx, environment, now);
   if (observedToken === null) return;
   await tx.execute(sql`
@@ -1266,7 +1297,7 @@ async function closeTechnicalIncident(
 
 // At most one failed metadata transaction per environment is retained: no more work is claimed
 // until it can commit. A process loss cannot preserve this uncommitted evidence.
-type TechnicalFailure = { now: Date; ids: string[] };
+type TechnicalFailure = { now: Date; ids: string[]; refusedFingerprint?: string };
 const technicalFailures = new WeakMap<Database, Map<Entorno, TechnicalFailure>>();
 
 function rememberTechnicalFailure(
@@ -1274,13 +1305,16 @@ function rememberTechnicalFailure(
   environment: Entorno,
   now: Date,
   ids: string[],
+  refusedFingerprint: string | null = null,
 ): TechnicalFailure {
   let failures = technicalFailures.get(db);
   if (failures === undefined) {
     failures = new Map();
     technicalFailures.set(db, failures);
   }
-  const failure = failures.get(environment) ?? { now, ids };
+  const failure =
+    failures.get(environment) ??
+    (refusedFingerprint === null ? { now, ids } : { now, ids, refusedFingerprint });
   failures.set(environment, failure);
   return failure;
 }
@@ -1297,9 +1331,7 @@ function forgetTechnicalFailure(
 async function flushTechnicalFailure(db: Database, environment: Entorno): Promise<void> {
   const failure = technicalFailures.get(db)?.get(environment);
   if (failure === undefined) return;
-  await withTransaction(db, (tx) =>
-    openTechnicalIncident(tx, environment, failure.now, failure.ids),
-  );
+  await withTransaction(db, (tx) => openTechnicalIncident(tx, environment, failure));
   forgetTechnicalFailure(db, environment, failure);
 }
 

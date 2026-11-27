@@ -872,22 +872,10 @@ its limits: [first-aeat-contact.md](../compliance/first-aeat-contact.md#2026-11-
   40-bit RC2, which the box's Node cannot open, and setup's and the dialog's own export guides send
   Mac users to Keychain Access. The refusal says to export again with AES; whether Keychain Access
   offers that was not checked. Either the box opens RC2 files or the Mac guide names a way that works.
-- **AEAT's refusal of a certificate is shown as "failed for an unexpected reason".** AEAT answers
-  HTTP 302 to its page `erro4011.html` ("401", certificate not verified), or `erro4033.html` when no
-  certificate arrived. `mtlsFetch` follows the redirect, the library cannot read the page, and
-  `classify` in `certificate-check.ts` falls through to `check_failed`. Keep the redirect and say that
-  AEAT did not accept the certificate.
-- **Nothing names the certificate when AEAT refuses the installed one before its expiry date.** FNMT
-  had revoked the session's refused certificate as superseded 17 days before it expired. A filing
-  answered that way is retried; the card still shows days left, and the alert is the general
-  `fiscal.submission_delayed`.
 - **A wrong certificate type passes the live check.** AEAT's seal addresses answer a representative
   certificate's query. Setup and the dialog both start on company seal, so leaving it there goes
   unnoticed; whether a filing is accepted there is not known. Read the type from the certificate's
   policy, or at least start on representative (owner, 2026-11-25: "each owner has their own cert").
-- **The sentence "AEAT refused this certificate for {taxpayerNif} ({codigo})" can be built** (the
-  plan's decision 11). AEAT's number arrives in the SOAP fault's `faultstring`, as `Codigo[4112].`
-  followed by its text, with HTTP 200 and `faultcode` `env:Client`.
 - **Opening a Firefox export takes about 0.9 of the opener's 2 seconds** on an idle i5-6400T box, so
   a slower or busy box may answer `unavailable` for a sound file.
 
@@ -1498,8 +1486,8 @@ assertions remain outside the change. See the [implementation plan](https://gith
 
 - **Pre-squash certificate metadata (A889).** Until a pre-A795 test box is reset under
   [A760](../operations/a760-migration-squash.md), reinstall its certificate through the
-  certificate card if it shows **Installed: not recorded**. The card's expiry alerts and
-  reminder emails use an install record. A direct `waitron-credentials set --purpose fiscal.aeat`
+  certificate card if it shows **Installed: not recorded**. The card, its certificate alerts (AEAT's
+  refusal and expiry) and the reminder emails use an install record. A direct `waitron-credentials set --purpose fiscal.aeat`
   write still creates no install record; use the card when you need that metadata. Removing
   A889 from open work does not mean the planned A760 reset has run.
 

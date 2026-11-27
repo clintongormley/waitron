@@ -151,7 +151,7 @@ export async function submitFiscalReadiness(args: {
       return { status: "uncertain" };
     }
     if (result.recordsAccepted > 0) return { status: "accepted" };
-    const rejections = await args.contribution.readinessRejections?.(db);
+    const rejections = await args.contribution.readinessRejections?.(db, venue.nodeId);
     if (result.recordsHalted > 0 || (rejections?.length ?? 0) > 0) {
       return rejections === undefined ? { status: "rejected" } : { status: "rejected", rejections };
     }

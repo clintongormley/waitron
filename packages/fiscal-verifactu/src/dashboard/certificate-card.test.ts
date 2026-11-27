@@ -175,6 +175,39 @@ describe("dashboard-aeat-certificate-card", () => {
     expect(button(card)?.getAttribute("variant")).toBe("primary");
   });
 
+  it("says AEAT refused the certificate in place of the days-left line, in English and Spanish", async () => {
+    // 00:30 Madrid on 12 Oct 2026 is 22:30 UTC on the 11th.
+    const refused = view({
+      validUntil: "2026-10-31T23:59:00.000Z",
+      daysLeft: 14,
+      stage: "urgent",
+      notAcceptedAt: "2026-10-11T22:30:00.000Z",
+    });
+    const { card } = await mount(async () => refused);
+    const status = card.shadowRoot!.querySelector("[data-test=certificate-status]")!;
+    expect(status.getAttribute("data-stage")).toBe("not-accepted");
+    expect(text(card, "[data-test=certificate-status]")).toBe(
+      "AEAT did not accept this certificate on 12 Oct 2026. Install a new one.",
+    );
+    expect(text(card, "[data-test=valid-until]")).toBe("1 Nov 2026");
+    expect(button(card)?.getAttribute("variant")).toBe("primary");
+
+    setLocale("es");
+    const spanish = await mount(async () => refused);
+    expect(text(spanish.card, "[data-test=certificate-status]")).toBe(
+      "La AEAT no aceptó este certificado el 12 oct 2026. Instala uno nuevo.",
+    );
+    expect(text(spanish.card, "[data-test=valid-until]")).toBe("1 nov 2026");
+  });
+
+  it("shows the refusal for a certificate with no expiry stage", async () => {
+    const { card } = await mount(async () => view({ notAcceptedAt: "2026-10-11T22:30:00.000Z" }));
+    expect(text(card, "[data-test=certificate-status]")).toBe(
+      "AEAT did not accept this certificate on 12 Oct 2026. Install a new one.",
+    );
+    expect(button(card)?.getAttribute("variant")).toBe("primary");
+  });
+
   it("shows the expired line", async () => {
     const { card } = await mount(async () =>
       view({ validUntil: "2026-10-24T23:30:00.000Z", daysLeft: -3, stage: "expired" }),

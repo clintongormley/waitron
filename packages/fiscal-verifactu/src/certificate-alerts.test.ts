@@ -1,4 +1,5 @@
 import { nodes, withTransaction } from "@waitron/db";
+import { sql } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import type { CertKind } from "./aeat-transport.js";
@@ -148,5 +149,39 @@ describe("certificateAlerts", () => {
     await expect(alertsAt("2026-10-19T10:00:00Z", TAXPAYER_A.nodeId2)).resolves.toMatchObject([
       { code: "fiscal.certificate_expiring", params: { days: 6, date: "2026-10-25" } },
     ]);
+  });
+});
+
+describe("the installed certificate AEAT refused", () => {
+  async function markRefused(fingerprint: string): Promise<void> {
+    // 00:30 Madrid on 25 Oct: the venue's day differs from the UTC one.
+    await suite.db.execute(sql`
+      insert into verifactu_sending_state
+        (id, proximo_envio_en, tiempo_espera_seg, certificate_refused_fingerprint, certificate_refused_at)
+      values (1, '2026-10-24T22:30:00.000Z', 0, ${fingerprint}, '2026-10-24T22:30:00.000Z')
+    `);
+  }
+
+  it("raises an error since AEAT first refused the installed certificate", async () => {
+    await seedTaxpayerNodeSif(suite.db);
+    await install(TAXPAYER_A.nodeId, "sello", new Date("2028-01-01T00:00:00Z"));
+    await markRefused(`fp-${TAXPAYER_A.nodeId}-sello`);
+    await expect(alertsAt("2026-10-26T10:00:00Z")).resolves.toEqual([
+      {
+        key: "fiscal.certificate_not_accepted",
+        code: "fiscal.certificate_not_accepted",
+        params: { date: "2026-10-25" },
+        severity: "error",
+        since: "2026-10-24T22:30:00.000Z",
+        screen: "venue-settings",
+      },
+    ]);
+  });
+
+  it("raises nothing for a refusal of a certificate no longer installed", async () => {
+    await seedTaxpayerNodeSif(suite.db);
+    await install(TAXPAYER_A.nodeId, "sello", new Date("2028-01-01T00:00:00Z"));
+    await markRefused("fp-an-earlier-certificate");
+    await expect(alertsAt("2026-10-26T10:00:00Z")).resolves.toEqual([]);
   });
 });

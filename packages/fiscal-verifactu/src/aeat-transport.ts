@@ -7,6 +7,7 @@ import type { KeyRing } from "@waitron/credentials";
 import { SOAP_ENDPOINTS, SOAP_ENDPOINTS_SELLO, createClient } from "@waitron/verifactu";
 import type { VerifactuClient } from "@waitron/verifactu";
 import type { FiscalDutyDeps, FiscalDutyLog } from "@waitron/fiscal";
+import { openCertificateFile } from "./certificate-file.js";
 import "./errors.js";
 
 /** The two FNMT certificate kinds this host routes on. `CertKind` is derived from this array, so
@@ -63,6 +64,18 @@ export async function readCertMaterial(db: Database, ring: KeyRing): Promise<Cer
   return certMaterialFrom(payload, { purpose: "fiscal.aeat" });
 }
 
+/** A drain's client. `certificateFingerprint` names the certificate it sends with, as an install
+ * record's `fingerprint` names it, or null when the file does not open; it is read only after AEAT
+ * refuses the certificate. */
+export type DrainClient = VerifactuClient & {
+  readonly certificateFingerprint?: () => string | null;
+};
+
+function fingerprintOf(material: CertMaterial): string | null {
+  const opened = openCertificateFile(material.pfx, material.passphrase);
+  return opened.ok ? opened.details.fingerprint : null;
+}
+
 /**
  * A sello de entidad certificate submits to a DIFFERENT HOST — `www10`/`prewww10` rather than
  * `www1`/`prewww1`. That is why the certificate's kind is provisioned data and not something this
@@ -101,13 +114,44 @@ export function mtlsFetch(material: CertMaterial, ca?: string): AeatTransport {
     },
   });
   return {
-    fetch: ((input, init) =>
-      undiciFetch(
+    fetch: (async (input, init) => {
+      const response = await undiciFetch(
         input as string,
-        { ...init, dispatcher } as Parameters<typeof undiciFetch>[1],
-      ) as unknown as Promise<Response>) as typeof globalThis.fetch,
+        {
+          ...init,
+          dispatcher,
+          redirect: "manual",
+        } as Parameters<typeof undiciFetch>[1],
+      );
+      const page = refusalPage(response);
+      if (page !== null) {
+        await response.body?.cancel();
+        throw new AppError("fiscal.certificate_not_accepted", { page });
+      }
+      return response as unknown as Response;
+    }) as typeof globalThis.fetch,
     close: () => dispatcher.close(),
   };
+}
+
+const REFUSAL_PAGES = new Set(["erro4011.html", "erro4033.html"]);
+
+function refusalPage(response: {
+  status: number;
+  url: string;
+  headers: { get(name: string): string | null };
+}): string | null {
+  if (response.status < 300 || response.status > 399) return null;
+  const location = response.headers.get("location");
+  if (location === null) return null;
+  let target: URL;
+  try {
+    target = new URL(location, response.url);
+  } catch {
+    return null;
+  }
+  const page = target.pathname.split("/").pop() ?? "";
+  return REFUSAL_PAGES.has(page) ? page : null;
 }
 
 export interface TransportDeps {
@@ -120,7 +164,7 @@ export interface TransportDeps {
 
 export interface ClientResolver {
   /** `DrainDeps.resolveClient`: `@waitron/fiscal` knows nothing about mTLS. */
-  resolve: () => Promise<VerifactuClient>;
+  resolve: () => Promise<DrainClient>;
   /** Releases every transport this resolver built, and NEVER throws — neither for a transport whose
    * own `close()` rejects, nor for a logger that throws while reporting one. */
   closeAll: () => Promise<void>;
@@ -142,8 +186,10 @@ export function aeatClientResolver(deps: TransportDeps, log?: FiscalDutyLog): Cl
         endpoint: deps.endpointFor(material.certKind),
         fetch: transport.fetch,
       });
-      if (deps.observeAuthorityTime === undefined) return client;
+      const certificateFingerprint = () => fingerprintOf(material);
+      if (deps.observeAuthorityTime === undefined) return { ...client, certificateFingerprint };
       return {
+        certificateFingerprint,
         consultar: (header, filter) => client.consultar(header, filter),
         submit: async (header, records) => {
           const sentAt = new Date();
