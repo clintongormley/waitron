@@ -170,6 +170,11 @@ export {
   readCustomerMenuOnlineSettings,
   saveCustomerMenuOnlineSettings,
 } from "./customer-menu-online-settings.js";
+export {
+  checkedCustomerMenuAppearance,
+  customerMenuAppearanceFor,
+  defaultCustomerMenuStyle,
+} from "./customer-menu-styles.js";
 export { duplicateMenu } from "./menu-copy.js";
 export {
   addSetMenuDishes,
