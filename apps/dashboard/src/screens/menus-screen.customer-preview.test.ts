@@ -296,8 +296,8 @@ describe("the customer menu Online preview", () => {
       await expect.element(set).toBeVisible();
       await expect.element(page.getByRole("link", { name: "Bakery" })).not.toBeInTheDocument();
       await expect
-        .element(page.getByRole("status").filter({ hasText: "1 hidden." }))
-        .toHaveTextContent("1 hidden. 1 had unreviewed allergens.");
+        .element(page.getByRole("status").filter({ hasText: "Hidden dishes (1)." }))
+        .toHaveTextContent("Hidden dishes (1). Of those, 1 had unreviewed allergens.");
       await expect.element(page.getByText("Check the choices for allergens.")).toBeVisible();
       await expectNoA11yViolations(host);
 
@@ -331,15 +331,19 @@ describe("the customer menu Online preview", () => {
       await back.click();
       await search.fill("two courses");
       await expect.element(set).toBeVisible();
-      await expect.element(page.getByText("No dishes match these filters.")).toBeVisible();
-      await expect.element(page.getByText("0 hidden. 0 had unreviewed allergens.")).toBeVisible();
+      await expect
+        .element(page.getByText("No dishes match your search and filters."))
+        .toBeVisible();
+      await expect
+        .element(page.getByText("Hidden dishes (0). Of those, 0 had unreviewed allergens."))
+        .toBeVisible();
       await expectNoA11yViolations(host);
 
       await filters.click();
       await page.getByRole("button", { name: "Clear filters" }).click();
       await close.click();
       await expect
-        .element(page.getByText("0 hidden. 0 had unreviewed allergens."))
+        .element(page.getByText("Hidden dishes (0). Of those, 0 had unreviewed allergens."))
         .not.toBeInTheDocument();
       await expect.element(search).toHaveValue("two courses");
       await search.fill("");

@@ -56,11 +56,12 @@ selectedCount|{count} selected|{count} seleccionados|{count} seleccionats|{count
 clearFilters|Clear filters|Quitar filtros|Treure els filtres|Quitar os filtros
 closeFilters|Close|Cerrar|Tanca|Pechar
 noFilteredDishes|No dishes match these filters.|Ningún plato coincide con estos filtros.|Cap plat coincideix amb aquests filtres.|Ningún prato coincide con estes filtros.
-hiddenDishes|{hidden} hidden. {unreviewed} had unreviewed allergens.|{hidden} ocultos. {unreviewed} tenían alérgenos sin revisar.|{hidden} amagats. {unreviewed} tenien al·lèrgens sense revisar.|{hidden} ocultos. {unreviewed} tiñan alérxenos sen revisar.
+noDishesSearchAndFilters|No dishes match your search and filters.|Ningún plato coincide con tu búsqueda y tus filtros.|Cap plat coincideix amb la teva cerca i els teus filtres.|Ningún prato coincide coa túa busca e os teus filtros.
+hiddenDishes|Hidden dishes ({hidden}). Of those, {unreviewed} had unreviewed allergens.|Platos ocultos ({hidden}). De ellos, {unreviewed} con alérgenos sin revisar.|Plats amagats ({hidden}). D’aquests, {unreviewed} amb al·lèrgens sense revisar.|Pratos ocultos ({hidden}). Deles, {unreviewed} con alérxenos sen revisar.
 askAboutAllergens|Ask staff about allergens, even when no icons appear.|Pregunta al personal por los alérgenos, aunque no veas iconos.|Pregunta al personal pels al·lèrgens, encara que no vegis icones.|Pregunta ao persoal polos alérxenos, aínda que non vexas iconas.
 askAboutSetMenu|Ask staff about the choices in this set menu.|Pregunta al personal por las opciones de este menú.|Pregunta al personal per les opcions d’aquest menú.|Pregunta ao persoal polas opcións deste menú.
 checkChoices|Check the choices for allergens.|Consulta los alérgenos de las opciones.|Consulta els al·lèrgens de les opcions.|Consulta os alérxenos das opcións.
-selectedAllergen|Contains a selected allergen|Contiene un alérgeno seleccionado|Conté un al·lèrgen seleccionat|Contén un alérxeno seleccionado
+selectedAllergen|Contains a selected allergen|Contiene un alérgeno seleccionado|Conté un al·lergen seleccionat|Contén un alérxeno seleccionado
 unreviewedAllergens|Allergens not reviewed|Alérgenos sin revisar|Al·lèrgens sense revisar|Alérxenos sen revisar
 variants|Variants|Variantes|Variants|Variantes
 perPerson|{price} per person|{price} por persona|{price} per persona|{price} por persoa

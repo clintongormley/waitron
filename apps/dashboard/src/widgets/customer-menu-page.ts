@@ -17,6 +17,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { classMap } from "lit/directives/class-map.js";
 import { choiceCaution, filterCustomerMenu, hasCautionedChoice } from "./customer-menu-filters.js";
 
 registerIcons(NUTRITION_ICONS);
@@ -779,6 +780,11 @@ export class CustomerMenuPage extends LitElement {
     const filtered = this.excluded.length > 0 || this.diet !== "";
     const noResults =
       (filtered && dishes === 0) || (!filtered && query.length > 0 && visible.length === 0);
+    const emptyMessage = !filtered
+      ? words.text.noDishes
+      : query
+        ? words.text.noDishesSearchAndFilters
+        : words.text.noFilteredDishes;
     const number = new Intl.NumberFormat(words.language);
     const hiddenSummary = words.text
       .hiddenDishes!.replace("{hidden}", number.format(hidden))
@@ -915,9 +921,9 @@ export class CustomerMenuPage extends LitElement {
         <div
           role="status"
           lang=${words.language}
-          class=${this.excluded.length ? "filter-summary" : noResults ? "no-results" : nothing}
+          class=${classMap({ "filter-summary": this.excluded.length > 0, "no-results": noResults })}
         >
-          ${noResults ? (filtered ? words.text.noFilteredDishes : words.text.noDishes) : nothing}
+          ${noResults ? emptyMessage : nothing}
           ${
             this.excluded.length
               ? html`<p>${hiddenSummary}</p>
