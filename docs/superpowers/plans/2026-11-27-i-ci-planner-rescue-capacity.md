@@ -2,37 +2,42 @@
 
 A waiting PR planner should keep its server place while a current reading shows every server slot
 occupied. When a cancelled attempt cannot safely be retried, the health log should name the check
-that refused it. This is the watcher's 27 November 06:26 CI routing assignment to Lane I.
+that refused it. The watcher assigned this investigation on 27 November at 06:26 CET.
 
 [#4452 attempt 1](https://github.com/clintongormley/waitron/actions/runs/45943582508/attempts/1)
-selected 29 server jobs plus the planner, and all 30 passed there. Its remaining placements were
-made when the planner ran. [#4465 attempt 1](https://github.com/clintongormley/waitron/actions/runs/45943852902/attempts/1)
-queued its planner on the server at 05:07:05 UTC. The controller's oldest-run-first selection and
-completed job records show #4452 taking the available work ahead of it. At cancellation, the job
-timestamps show 12 concurrent #4452 server jobs. The
-[health run](https://github.com/clintongormley/waitron/actions/runs/45943751778) used the 05:04:54 UTC
-capacity reading, outside its five-minute limit by 05:12:21. It refused to retry with a generic
-message. The later reads show the original planner cancelled with no assigned runner. The specific
-reply that failed the intervening check is unavailable. Attempt 2 used the existing hosted fallback.
+used the server for 29 jobs and its planner. All 30 passed. The planner placed the other work when
+it ran, and those labels persisted after the server finished. [#4465 attempt 1](https://github.com/clintongormley/waitron/actions/runs/45943852902/attempts/1)
+queued its server planner at 05:07:05 UTC while the controller was filling slots with #4452's older
+jobs. At cancellation at 05:12:21 UTC, #4452 had 12 server jobs in progress. The
+[health job](https://github.com/clintongormley/waitron/actions/runs/45943751778/job/140323637910)
+used the 05:04:54 UTC snapshot of 1 running on 12 slots, already outside its five-minute limit.
+Controller request counts show successful variable updates at 05:10:41 and 05:12:08 UTC. The counts
+omit values, so the exact server occupancy a fresh read would have returned remains unverified.
 
-- In `.github/workflows/server-health.yml`, give only the planner recovery step the existing
-  repository variables read secret. In `scripts/ci-server-health.mjs`, let `main` reuse the route
-  command's capacity read and source report for `recover-planners`. `serverFull` keeps the existing
-  five-minute and full-slot checks. A failed read retains the workflow snapshot. Missing or stale
-  data still permits rescue when the existing PR and job checks pass.
-- In `recoverServer`, report the existing final verification refusal reason after cancellation for
-  a still-current PR, with the run, attempt and planner job IDs already used for skip diagnostics.
-  Keep the obsolete-head handling, intervention failure and all retry conditions as they are.
-- In `scripts/ci-server-health.test.mjs`, use the existing planner fixture to first show that an old
-  workflow snapshot makes `main('recover-planners')` cancel even when a fresh full snapshot is
-  available. After the change, expect one capacity read with the dedicated token, a full-server skip
-  and zero writes. The free-capacity control must still cancel then retry. Exercise the cancelled
-  planner's existing label-refusal case and assert the logged reason and absence of a retry. Run
-  `pnpm exec vitest run scripts/ci-server-health.test.mjs scripts/ci-hosted-route.test.mjs scripts/ci-server-first.test.mjs scripts/ci-workflow.test.mjs`.
-- Update `docs/developers/ci-and-gates.md` and the routing entry in `docs/backlog/ci.md` with the actual
-  behavior and run evidence. Read the first normal main health run that consults capacity. Keep the
-  full-day measurement open. Existing placements and the controller's movement policy are outside
-  this slice. No synthetic cancellation of another lane's run.
+The post-cancel check gave a generic refusal. Later API reads show the same open owned PR head,
+matching run and label, planner cancelled with runner ID 0 and its original 05:07:05 start (317s
+before completion), and one skipped sibling. Those readings satisfy the retry checks retrospectively.
+The response that failed immediately after cancellation is unavailable. The later
+[attempt 2 planner](https://github.com/clintongormley/waitron/actions/runs/45943852902/job/140329740152)
+logged `CI route: hosted; A previous attempt waited for the server and was cancelled.` The route
+returns there before reading current capacity. Both runs had useful checks underway when inspected.
+The controller's supported move is from the server to GitHub for an untouched run.
 
-Estimate about 15 production and workflow lines and 55 test lines. Allow one PR for both changes to
-this recovery path.
+- Give only the recovery step in `.github/workflows/server-health.yml` the existing capacity read
+  secret. Let `main` in `scripts/ci-server-health.mjs` reuse the route command's read and source
+  report for `recover-planners`. Keep the five-minute and full-slot checks in `serverFull`. A failed
+  read retains the workflow snapshot. Keep the separate read-only queue alarm on its current
+  snapshot and observed progress rules.
+- In `recoverServer`, log the existing post-cancel verification refusal with the run, attempt and
+  planner job IDs. Keep each retry condition, obsolete-head handling and intervention failure.
+- In `scripts/ci-server-health.test.mjs`, use the planner fixture to show that a stale workflow
+  snapshot currently causes cancellation despite a fresh full snapshot being available. Expect one
+  dedicated-token read, a full-server skip and zero writes after the change. Fresh free capacity
+  must still cancel then retry. Extend the cancelled-planner label-refusal case with the reason
+  and absence of a retry. Pin the workflow step's token scope in `scripts/ci-server-first.test.mjs`.
+  Run those suites plus `scripts/ci-hosted-route.test.mjs` and `scripts/ci-workflow.test.mjs`.
+- Update the capacity and skip reporting paragraphs in `docs/developers/ci-and-gates.md` and the
+  routing entry in `docs/backlog/ci.md`. Read a normal main health run that consults capacity. Keep
+  the full-day measurement open. Existing job placement and controller movement stay out of scope.
+
+Estimate about 15 production and workflow lines and 65 test lines in one PR.
