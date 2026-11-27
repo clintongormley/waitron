@@ -19,19 +19,13 @@ export async function openSentDish(
   kind: "fired" | "held" | "served" = "fired",
 ): Promise<WtDialog> {
   const panel = await sentPanelFor(screen);
-  for (const selector of [
-    "[data-sent-toggle]",
-    ...(kind === "fired" ? [] : [`[data-${kind}-toggle]`]),
-  ]) {
-    const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
-    if (toggle.getAttribute("aria-expanded") === "false") {
-      await userEvent.click(toggle);
-      await panel.updateComplete;
-    }
-  }
-  const info = panel.shadowRoot!.querySelector<HTMLElement>(
-    `[data-${kind}-line="${lineId}"] [data-sent-info]`,
-  )!;
+  const info = (kind === "served" ? ["served", "fired"] : [kind])
+    .map((rowKind) =>
+      panel.shadowRoot!.querySelector<HTMLElement>(
+        `[data-${rowKind}-line="${lineId}"] [data-sent-info]`,
+      ),
+    )
+    .find((found) => found !== null)!;
   expect(info.checkVisibility(), `Sent information for ${lineId} is visible`).toBe(true);
   await userEvent.click(info);
   await screen.updateComplete;

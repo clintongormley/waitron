@@ -51,11 +51,11 @@ async function openLine(kind: "held" | "served", over: Partial<TillTableOrderScr
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-toggle]`)!);
-  await panel.updateComplete;
   await userEvent.click(
     panel.shadowRoot!.querySelector<HTMLElement>(
-      `[data-sent-info="${kind === "held" ? "l-flan" : "l-croq"}"]`,
+      kind === "held"
+        ? '[data-sent-info="l-flan"]'
+        : '[data-served-line="l-croq"] [data-sent-info="l-croq"]',
     )!,
   );
   await el.updateComplete;
@@ -720,7 +720,11 @@ it("Comp from the live portions of a part-cancelled dish starts at the whole dis
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   const infos = panel.shadowRoot!.querySelectorAll<HTMLElement>('[data-sent-info="l-croq"]');
   expect(infos).toHaveLength(2);
-  await userEvent.click(infos[1]!);
+  const live = panel.shadowRoot!.querySelector<HTMLElement>(
+    '[data-fired-line="l-croq"] [data-sent-info="l-croq"]',
+  )!;
+  expect([...infos]).toContain(live);
+  await userEvent.click(live);
   await el.updateComplete;
   expect(q(el, "[data-sent-line-dialog]").textContent).not.toContain("Cancelled, charged");
   const events = capture(el, "adjust");

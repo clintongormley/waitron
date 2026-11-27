@@ -89,7 +89,7 @@ const coffee = (over: Partial<TabLine> = {}) =>
 const q = <T extends HTMLElement = HTMLElement>(el: TillTableOrderScreen, selector: string) =>
   el.shadowRoot!.querySelector<T>(selector);
 
-/** Opens the Sent window of `lineId`, unfolding `fold` first. */
+/** Opens the Sent window of `lineId`, from its wholly served row when `fold` is `served`. */
 async function openRow(
   over: Partial<TillTableOrderScreen>,
   lineId = "l-flan",
@@ -106,12 +106,10 @@ async function openRow(
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  if (fold !== null) {
-    await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>(`[data-${fold}-toggle]`)!);
-    await panel.updateComplete;
-  }
   await userEvent.click(
-    panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${lineId}"]`)!,
+    panel.shadowRoot!.querySelector<HTMLElement>(
+      `${fold === "served" ? `[data-served-line="${lineId}"] ` : ""}[data-sent-info="${lineId}"]`,
+    )!,
   );
   await el.updateComplete;
   expect(q<WtDialog>(el, "[data-sent-line-dialog]")!.open).toBe(true);
@@ -410,10 +408,6 @@ async function openInApp(lines?: TabLine[], lineId = "l-flan") {
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  if (lineId === "l-flan") {
-    await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
-    await panel.updateComplete;
-  }
   await userEvent.click(
     panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="${lineId}"]`)!,
   );
