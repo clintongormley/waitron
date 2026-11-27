@@ -557,8 +557,9 @@ marca toda la cantidad como servida.
 En una mesa o en el mostrador puedes añadir hasta 99 porciones de un mismo plato cada vez.
 
 En una mesa, toca un plato de **Nuevo pedido** para abrirlo en su sitio: − y + cambian cuántos,
-**Opciones** abre sus detalles y **Nota** los abre en su nota. Vuelve a tocarlo para cerrarlo. Un
-plato al peso, o de un menú, no tiene − ni +: usa **Opciones**. Para quitar platos, marca sus
+**Opciones** abre sus detalles y **Nota** los abre en su nota. Con 1, − es una papelera que quita el
+plato. Vuelve a tocarlo para cerrarlo. Un plato al peso, o de un menú, no tiene − ni +: usa
+**Opciones**. Para quitar platos, marca sus
 casillas y toca **Quitar** en la barra bajo el pedido.
 
 En el mostrador, un pedido que aparcas y vuelves a abrir muestra sus 2 × Hamburguesa como una sola

@@ -32,3 +32,27 @@ describe.each(["light", "dark"] as const)("wt-stepper a11y (%s theme)", (theme) 
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)("wt-stepper bin a11y (%s theme)", (theme) => {
+  test("at min with a remove label: the bin is a named, enabled button", async () => {
+    const el = (await mountThemed(
+      '<wt-stepper label="Burger" value="1" min="1"></wt-stepper>',
+      theme,
+    )) as HTMLElementTagNameMap["wt-stepper"];
+    el.removeLabel = (label) => `Remove ${label}`;
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+    await expect.element(page.getByRole("button", { name: "Remove Burger" })).toBeEnabled();
+  });
+
+  test("the bin while disabled", async () => {
+    const el = (await mountThemed(
+      '<wt-stepper label="Burger" value="1" min="1" disabled></wt-stepper>',
+      theme,
+    )) as HTMLElementTagNameMap["wt-stepper"];
+    el.removeLabel = (label) => `Remove ${label}`;
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+    await expect.element(page.getByRole("button", { name: "Remove Burger" })).toBeDisabled();
+  });
+});

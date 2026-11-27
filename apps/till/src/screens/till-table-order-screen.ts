@@ -4743,7 +4743,10 @@ export class TillTableOrderScreen extends LitElement {
         ${draftSelectBox(selected)}
       </button>
       ${marked} ${draftSplitArrow(line, index, current, () => this.#splitDraftLine(store, line))}
-      ${this.#openRow.controls(store, line, index)}
+      ${this.#openRow.controls(store, line, index, {
+        allowed: this.#canEditDraftLine(store, line),
+        run: () => void this.#removeDraftLines(store, [line]),
+      })}
       ${
         tools.length === 0
           ? nothing
@@ -5001,20 +5004,23 @@ export class TillTableOrderScreen extends LitElement {
       data-draft-remove
       variant=${disabled ? "secondary" : "primary"}
       ?disabled=${disabled}
-      @click=${async () => {
-        const lines = removable();
-        if (lines.length === 0) return;
-        for (const line of lines.reverse()) {
-          store.removeLine(store.lines.indexOf(line));
-          this.#selected.delete(line);
-        }
-        this.requestUpdate();
-        // Remove turns disabled once nothing is ticked, so focus goes to the order's heading.
-        await this.updateComplete;
-        this.renderRoot.querySelector<HTMLElement>("#draft-title")?.focus();
-      }}
+      @click=${() => void this.#removeDraftLines(store, removable())}
       >${t("action.remove")}</wt-button
     >`;
+  }
+
+  /** The draft bar's Remove, and an opened row's bin. */
+  async #removeDraftLines(store: WorkingOrderStore, chosen: readonly OrderLine[]): Promise<void> {
+    const lines = chosen.filter((line) => this.#canEditDraftLine(store, line));
+    if (lines.length === 0) return;
+    for (const line of lines.reverse()) {
+      store.removeLine(store.lines.indexOf(line));
+      this.#selected.delete(line);
+    }
+    this.requestUpdate();
+    // Remove turns disabled once nothing is ticked, so focus goes to the order's heading.
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>("#draft-title")?.focus();
   }
 
   #moveDraftSelection(

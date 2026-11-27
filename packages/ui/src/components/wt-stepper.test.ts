@@ -210,3 +210,135 @@ test("a disabled button fades its mark", async () => {
   expect(getComputedStyle(minus.querySelector("[data-mark]")!).opacity).toBe("0.3");
   expect(getComputedStyle(plus.querySelector("[data-mark]")!).opacity).toBe("1");
 });
+
+function bin(el: Element) {
+  return el.shadowRoot!.querySelector<HTMLButtonElement>("button[data-remove]");
+}
+
+function removals(el: Element): number[] {
+  const seen: number[] = [];
+  el.addEventListener("wt-remove", (e) =>
+    seen.push((e as CustomEvent<{ value: number }>).detail.value),
+  );
+  return seen;
+}
+
+test("with removeLabel, − becomes an enabled bin at min, named by it", async () => {
+  const el = (await mount('<wt-stepper label="Burger" value="1" min="1"></wt-stepper>')) as Stepper;
+  expect(bin(el)).toBeNull();
+  el.removeLabel = (label) => `Remove ${label}`;
+  await el.updateComplete;
+  const button = bin(el)!;
+  expect(button.disabled).toBe(false);
+  expect(button.type).toBe("button");
+  expect(button.getAttribute("aria-label")).toBe("Remove Burger");
+  const icon = button.querySelector("wt-icon")!;
+  expect(icon.getAttribute("name")).toBe("menu-delete");
+  await icon.updateComplete;
+  // The stepper registers the icon itself: this file imports nothing else.
+  expect(icon.shadowRoot!.querySelector("path")?.getAttribute("d")).toMatch(/^M4\.67 14/);
+  expect(button.querySelector("[data-mark]")).toBeNull();
+  expect(el.shadowRoot!.querySelector('button[data-step="-1"]')).toBeNull();
+  // In −'s place: before the count.
+  const buttons = [...el.shadowRoot!.querySelectorAll('[role="group"] > *')];
+  expect(buttons.indexOf(button)).toBe(0);
+});
+
+test("above min the bin is − again, and stepping down to min brings the bin", async () => {
+  const el = (await mount('<wt-stepper label="Burger" value="2" min="1"></wt-stepper>')) as Stepper;
+  el.removeLabel = (label) => `Remove ${label}`;
+  await el.updateComplete;
+  expect(bin(el)).toBeNull();
+  expect(parts(el).minus.disabled).toBe(false);
+  parts(el).minus.click();
+  await el.updateComplete;
+  expect(el.value).toBe(1);
+  expect(bin(el)).not.toBeNull();
+});
+
+test("the bin sends wt-remove with the count, out of a shadow root, and steps nothing", async () => {
+  const el = (await mountInShadowRoot(
+    '<wt-stepper label="Burger" value="1" min="1"></wt-stepper>',
+  )) as Stepper;
+  el.removeLabel = (label) => `Remove ${label}`;
+  await el.updateComplete;
+  const seen = changes(el);
+  let clicks = 0;
+  el.addEventListener("click", () => clicks++);
+  const outside: number[] = [];
+  const listener = (e: Event) => {
+    expect((e as CustomEvent).bubbles).toBe(true);
+    expect((e as CustomEvent).composed).toBe(true);
+    outside.push((e as CustomEvent<{ value: number }>).detail.value);
+  };
+  document.addEventListener("wt-remove", listener);
+  try {
+    bin(el)!.click();
+  } finally {
+    document.removeEventListener("wt-remove", listener);
+  }
+  await el.updateComplete;
+  expect(outside).toEqual([1]);
+  expect(seen).toEqual([]);
+  expect(clicks).toBe(0);
+  expect(el.value).toBe(1);
+});
+
+test("a disabled stepper's bin is disabled, and a click straight after disabling sends nothing", async () => {
+  const el = (await mount('<wt-stepper label="Burger" value="1" min="1"></wt-stepper>')) as Stepper;
+  el.removeLabel = (label) => `Remove ${label}`;
+  await el.updateComplete;
+  const seen = removals(el);
+  let clicks = 0;
+  el.addEventListener("click", () => clicks++);
+  el.disabled = true;
+  bin(el)!.click();
+  await el.updateComplete;
+  expect(bin(el)!.disabled).toBe(true);
+  bin(el)!.click();
+  expect(seen).toEqual([]);
+  expect(clicks).toBe(0);
+});
+
+test("removeLabel is a property only, never read from an attribute", async () => {
+  const el = await mount('<wt-stepper label="Q" value="0" removelabel="Bin {label}"></wt-stepper>');
+  expect(bin(el)).toBeNull();
+  expect(parts(el).minus.disabled).toBe(true);
+});
+
+test("paints the bin in −'s place, size and colour from the tokens", async () => {
+  const el = (await mount('<wt-stepper label="Burger" value="1" min="1"></wt-stepper>')) as Stepper;
+  el.removeLabel = (label) => `Remove ${label}`;
+  el.style.setProperty("--wt-tap-min", "50px");
+  el.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
+  el.style.setProperty("--wt-font-size-lg", "21px");
+  el.style.setProperty("--wt-opacity-disabled", "0.3");
+  await el.updateComplete;
+  const button = bin(el)!;
+  const icon = button.querySelector("wt-icon")!;
+  const box = button.getBoundingClientRect();
+  expect([box.width, box.height]).toEqual([50, 50]);
+  const drawn = icon.getBoundingClientRect();
+  expect([drawn.width, drawn.height]).toEqual([21, 21]);
+  expect([drawn.left + drawn.width / 2 - box.left, drawn.top + drawn.height / 2 - box.top]).toEqual(
+    [25, 25],
+  );
+  expect(getComputedStyle(icon).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(icon).opacity).toBe("1");
+  el.disabled = true;
+  await el.updateComplete;
+  expect(getComputedStyle(icon).opacity).toBe("0.3");
+});
+
+test("a bin click straight after the count rises past min, before the redraw, sends nothing", async () => {
+  const el = (await mount('<wt-stepper label="Burger" value="1" min="1"></wt-stepper>')) as Stepper;
+  el.removeLabel = (label) => `Remove ${label}`;
+  await el.updateComplete;
+  const seen = removals(el);
+  const button = bin(el)!;
+  el.value = 2;
+  button.click();
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(bin(el)).toBeNull();
+});

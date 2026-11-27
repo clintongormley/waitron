@@ -111,11 +111,13 @@ export class OpenDraftRow implements ReactiveController {
     return opened.line;
   }
 
-  /** The open row's controls, for its `opened-<n>` slot. */
+  /** The open row's controls, for its `opened-<n>` slot. Given `remove`, and while it is
+   * `allowed`, the stepper's − is a bin at 1 that calls `run`. */
   controls(
     store: WorkingOrderStore,
     line: OrderLine,
     index: number,
+    remove?: { allowed: boolean; run: () => void },
   ): TemplateResult | typeof nothing {
     if (this.line(store) !== line) return nothing;
     const name = lineProductName(line.product);
@@ -145,6 +147,15 @@ export class OpenDraftRow implements ReactiveController {
               ?disabled=${disabled}
               .decreaseLabel=${(label: string) => fill(t("action.decrease"), { label })}
               .increaseLabel=${(label: string) => fill(t("action.increase"), { label })}
+              .removeLabel=${
+                remove?.allowed === true
+                  ? (label: string) => fill(t("action.remove_named"), { label })
+                  : null
+              }
+              @wt-remove=${(event: Event) => {
+                event.stopPropagation();
+                if (live()) remove?.run();
+              }}
               @wt-change=${(event: CustomEvent<{ value: number }>) => {
                 event.stopPropagation();
                 if (live())

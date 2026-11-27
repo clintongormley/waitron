@@ -64,6 +64,8 @@ const stepper = (el: TillTableOrderScreen, index: number) =>
   controls(el, index)?.querySelector<WtStepper>("wt-stepper") ?? null;
 const step = (el: TillTableOrderScreen, index: number, delta: -1 | 1) =>
   stepper(el, index)!.shadowRoot!.querySelector<HTMLButtonElement>(`[data-step="${delta}"]`)!;
+const bin = (el: TillTableOrderScreen, index: number) =>
+  stepper(el, index)!.shadowRoot!.querySelector<HTMLButtonElement>("[data-remove]");
 const options = (el: TillTableOrderScreen, index: number) =>
   controls(el, index)!.querySelector<HTMLButtonElement>("[data-draft-open-options]")!;
 const note = (el: TillTableOrderScreen, index: number) =>
@@ -131,9 +133,61 @@ it("+ and − change the dish's count, its row's price and the order total at on
   expect(draft.lines[0]!.quantity).toBe("1");
   expect(price()).toBe("€3.00");
   expect(total()).toBe("€6.00");
-  expect(step(el, 0, -1).disabled).toBe(true);
+  expect(stepper(el, 0)!.shadowRoot!.querySelector('[data-step="-1"]')).toBeNull();
+  expect(bin(el, 0)!.disabled).toBe(false);
   expect(step(el, 0, 1).disabled).toBe(false);
   expect(controls(el, 0)).not.toBeNull();
+});
+
+describe("the bin in −'s place at a count of 1", () => {
+  it("is named Remove <dish>; a row of 2 has − instead", async () => {
+    const { el } = await open();
+    await tapRow(el, 1);
+    expect(bin(el, 1)!.getAttribute("aria-label")).toBe("Remove Flan");
+    await tapRow(el, 0);
+    expect(bin(el, 0)).toBeNull();
+    expect(step(el, 0, -1).disabled).toBe(false);
+    expect(step(el, 0, -1).getAttribute("aria-label")).toBe("Decrease Beer");
+  });
+
+  it("is named in Spanish", async () => {
+    setLocale("es");
+    const { el } = await open();
+    await tapRow(el, 1);
+    expect(bin(el, 1)!.getAttribute("aria-label")).toBe("Quitar Flan");
+  });
+
+  it("removes the dish as the draft bar's Remove does: its tick goes and focus moves to the order's heading", async () => {
+    const { el, draft } = await open();
+    const select = el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select="1"]')!;
+    await userEvent.click(select);
+    await settled(el);
+    const remove = () => el.shadowRoot!.querySelector<HTMLElement>("[data-draft-remove]")!;
+    expect(remove().hasAttribute("disabled")).toBe(false);
+    await tapRow(el, 1);
+    await userEvent.click(bin(el, 1)!);
+    await settled(el);
+    expect(draft.lines.map((line) => line.product.id)).toEqual(["beer"]);
+    expect(draft.dirty).toBe(true);
+    expect(controls(el, 1)).toBeNull();
+    expect(remove().hasAttribute("disabled")).toBe(true);
+    expect(el.shadowRoot!.activeElement?.id).toBe("draft-title");
+  });
+
+  it("is not offered while Remove would refuse, and a press Remove refuses leaves the dish", async () => {
+    const { el, draft } = await open();
+    await tapRow(el, 1);
+    const shown = stepper(el, 1)!;
+    el.draftActionsAllowed = false;
+    shown.dispatchEvent(
+      new CustomEvent("wt-remove", { detail: { value: 1 }, bubbles: true, composed: true }),
+    );
+    await settled(el);
+    await shown.updateComplete;
+    expect(draft.lines.map((line) => line.product.id)).toEqual(["beer", "flan"]);
+    expect(bin(el, 1)).toBeNull();
+    expect(step(el, 1, -1).disabled).toBe(true);
+  });
 });
 
 it("a dish's name reaches the stepper's button names unchanged", async () => {

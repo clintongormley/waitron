@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, svg } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange } from "../interactive.js";
+import "./wt-icon.js";
 
 /** In a 10-unit square: bars 10 long and 2.5 thick, crossed for +. */
 const mark = (plus: boolean) =>
@@ -10,7 +11,8 @@ const mark = (plus: boolean) =>
     ${plus ? svg`<rect x="3.75" y="0" width="2.5" height="10"></rect>` : nothing}
   </svg>`;
 
-/** A count with − and + buttons and nothing to type. */
+/** A count with − and + buttons and nothing to type. Given `removeLabel`, − is a bin at `min` that
+ * sends `wt-remove` instead of stepping. */
 @customElement("wt-stepper")
 export class WtStepper extends LitElement {
   static override shadowRootOptions = delegatesFocusShadowRootOptions;
@@ -59,7 +61,8 @@ export class WtStepper extends LitElement {
         fill: currentColor;
       }
 
-      button[data-step="-1"] .mark {
+      button[data-step="-1"] .mark,
+      button[data-remove] wt-icon {
         color: var(--wt-color-text);
       }
 
@@ -71,7 +74,8 @@ export class WtStepper extends LitElement {
         cursor: not-allowed;
       }
 
-      button:disabled .mark {
+      button:disabled .mark,
+      button:disabled wt-icon {
         opacity: var(--wt-opacity-disabled);
       }
 
@@ -98,6 +102,8 @@ export class WtStepper extends LitElement {
     `Decrease ${label}`;
   @property({ attribute: false }) increaseLabel: (label: string) => string = (label) =>
     `Increase ${label}`;
+  /** Names the bin, given `label`; with none, − is disabled at `min` and there is no bin. */
+  @property({ attribute: false }) removeLabel: ((label: string) => string) | null = null;
 
   get #atMin(): boolean {
     return this.value <= this.min;
@@ -118,20 +124,46 @@ export class WtStepper extends LitElement {
     dispatchWtChange(this, event, { value: next });
   }
 
+  private pressBin(event: Event): void {
+    event.stopPropagation();
+    // As `step`: the bin's disabled state is drawn a render late.
+    if (this.disabled || !this.#atMin) return;
+    this.dispatchEvent(
+      new CustomEvent("wt-remove", {
+        detail: { value: this.value },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   override render() {
     const atMin = this.#atMin;
     const atMax = this.#atMax;
+    const removeLabel = this.removeLabel;
     return html`
       <div class="stepper" part="stepper" role="group" aria-label=${this.label}>
-        <button
-          type="button"
-          data-step="-1"
-          aria-label=${this.decreaseLabel(this.label)}
-          ?disabled=${this.disabled || atMin}
-          @click=${(event: Event) => this.step(-1, event)}
-        >
-          ${mark(false)}
-        </button>
+        ${
+          removeLabel !== null && atMin
+            ? html`<button
+                type="button"
+                data-remove
+                aria-label=${removeLabel(this.label)}
+                ?disabled=${this.disabled}
+                @click=${(event: Event) => this.pressBin(event)}
+              >
+                <wt-icon name="menu-delete" size="lg"></wt-icon>
+              </button>`
+            : html`<button
+                type="button"
+                data-step="-1"
+                aria-label=${this.decreaseLabel(this.label)}
+                ?disabled=${this.disabled || atMin}
+                @click=${(event: Event) => this.step(-1, event)}
+              >
+                ${mark(false)}
+              </button>`
+        }
         <span class="count" aria-live="polite">${this.value}</span>
         <button
           type="button"
