@@ -447,7 +447,12 @@ la vista previa. Tras publicar, comprueba la versión y la hora en el encabezado
 
 ## Comprueba la carta publicada para clientes {#customer-menu}
 
-Abre **Carta para clientes**. Elige **Ordenador** para comprobar los precios junto al nombre de
+Abre **Carta para clientes** para configurar **En línea**, la dirección y el tamaño de las fotos.
+Publica la carta desde su pestaña **Vista previa** antes de activarla. Elige **Ninguna**, **Pequeñas**
+o **Grandes** para ver cómo quedan las fotos y pulsa **Guardar**. En el móvil, alterna entre
+**Ajustes** y **Vista previa** dentro de **Carta para clientes**.
+
+En la vista previa para clientes, elige **Ordenador** para comprobar los precios junto al nombre de
 cada plato o **Móvil** para revisar la lista. En **Idioma** puedes revisar el texto en cada idioma
 del contenido. Usa **Buscar platos** para encontrar un plato o menú por su nombre, o elige una
 sección para ir a ella. Abre **Alergias y dietas** para excluir alérgenos o elegir una dieta.

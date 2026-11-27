@@ -106,6 +106,7 @@ import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { menuEditorHeading, menuEditorHeadingStyles } from "./menu-editor-heading.js";
 import "../widgets/menu-online-preview.js";
+import { MenuOnlineSave, menuOnlineStyles } from "../widgets/menu-online-save.js";
 
 const TABS = ["structure", "home", "preview", "customer-menu"] as const;
 type Tab = (typeof TABS)[number];
@@ -269,6 +270,7 @@ export class MenusScreen extends LitElement {
   @property({ attribute: false }) reportLateSave?: (name: string) => void;
   static override styles = [
     baseStyles,
+    menuOnlineStyles,
     pageTitleStyles,
     menuListStyles,
     menuEditorHeadingStyles,
@@ -694,8 +696,13 @@ export class MenusScreen extends LitElement {
     () => this.api,
   );
   readonly #homeSave = new MenuHomeSave(this, () => this.api);
+  readonly #onlineSave = new MenuOnlineSave(this, () => this.api);
   get pendingMenuSave(): Promise<void> | undefined {
-    return this.#structureSave.pendingWrite ?? this.#homeSave.pendingWrite;
+    return (
+      this.#structureSave.pendingWrite ??
+      this.#homeSave.pendingWrite ??
+      this.#onlineSave.pendingWrite
+    );
   }
 
   override connectedCallback(): void {
@@ -728,6 +735,7 @@ export class MenusScreen extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues): void {
+    this.#onlineSave.show(this.view === "customer-menu" ? this.menuId : null);
     this.#structureSave.watchIncludes(this.view === "structure");
     this.#followUsage();
     if (this.busy || changed.has("structureSelecting")) this.#productEditor.cancelRead();
@@ -3289,6 +3297,8 @@ export class MenusScreen extends LitElement {
   }
 
   #renderFullMenuEditor(menuId: string, name: string) {
+    const previewHref = tabAddress(menuId, "preview");
+    const openPreview = (event: MouseEvent) => this.#openTab(event, menuId, "preview");
     return html`${this.#renderClashes(menuId)}
       ${this.statusesError && this.statusesResetRequired ? html`<p class="error" role="alert" data-test="status-reset-error">${codeMessage("menu.reset_required")}</p>` : nothing}
       <wt-tabs
@@ -3315,17 +3325,24 @@ export class MenusScreen extends LitElement {
         <div slot="structure">${this.#renderStructure()}</div>
         <div slot="home" class="home">${this.#renderHome()}</div>
         <div slot="preview">${this.#renderPreview()}</div>
-        <div slot="customer-menu">
+        <div slot="customer-menu" class="online-editor">
           ${
             this.view === "customer-menu"
-              ? html`<dashboard-menu-online-preview
-                  .api=${this.api.background ?? this.api}
-                  .menuId=${menuId}
-                  .status=${this.status}
-                  .defaultLanguage=${this.contentLanguages?.defaultLanguage ?? "en"}
-                  .previewHref=${tabAddress(menuId, "preview")}
-                  .openPreview=${(event: MouseEvent) => this.#openTab(event, menuId, "preview")}
-                ></dashboard-menu-online-preview>`
+              ? html`${this.#onlineSave.viewControl()}
+                  <div class="online-workspace" data-view=${this.#onlineSave.view}>
+                    ${this.#onlineSave.settings(this.status?.state === "unpublished", previewHref, openPreview)}
+                    <dashboard-menu-online-preview
+                      .api=${this.api.background ?? this.api}
+                      .menuId=${menuId}
+                      .status=${this.status}
+                      .defaultLanguage=${this.contentLanguages?.defaultLanguage ?? "en"}
+                      .previewHref=${previewHref}
+                      .openPreview=${openPreview}
+                      .photos=${this.#onlineSave.draft?.photos ?? "none"}
+                      .waitingForSettings=${this.#onlineSave.loading}
+                    ></dashboard-menu-online-preview>
+                  </div>
+                  ${this.#onlineSave.actions(this.busy)}`
               : nothing
           }
         </div>

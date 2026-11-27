@@ -2,6 +2,7 @@ import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import {
   contentLanguageDisplayName,
   type CustomerMenuPreview,
+  type CustomerMenuPhotoSize,
   type MenuStatus,
 } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
@@ -67,6 +68,8 @@ export class MenuOnlinePreview extends LitElement {
   @property({ attribute: false }) menuId = "";
   @property({ attribute: false }) status: MenuStatus | null = null;
   @property({ attribute: false }) defaultLanguage = "en";
+  @property({ attribute: false }) photos: CustomerMenuPhotoSize = "large";
+  @property({ attribute: false }) waitingForSettings = false;
   @property({ attribute: false }) previewHref = "";
   @property({ attribute: false }) openPreview?: (event: MouseEvent) => void;
 
@@ -173,14 +176,15 @@ export class MenuOnlinePreview extends LitElement {
       <dashboard-customer-menu-page
         class=${this.size}
         .menu=${this.answer.menu}
+        .photos=${this.photos}
         .defaultLanguage=${this.defaultLanguage}
       ></dashboard-customer-menu-page>
     </div>`;
   }
 
   protected override render() {
+    if (this.waitingForSettings) return nothing;
     return html`
-      <p>${t("customer_menu.not_public")}</p>
       ${
         this.status?.state === "changed" && this.answer?.state === "published"
           ? html`<p>${t("customer_menu.published_only")}</p>`

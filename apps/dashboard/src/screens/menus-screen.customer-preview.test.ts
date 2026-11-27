@@ -146,10 +146,14 @@ async function open(
   preview: (url: URL) => Response | Promise<Response>,
   theme: Theme = "light",
   readStatus: () => MenuStatus = () => status,
+  readOnlineSettings: () => Response | Promise<Response> = () =>
+    Response.json({ enabled: false, address: null, photos: "large" }),
 ) {
   const fetcher = new DashboardApi("", async (input) => {
     const url = new URL(input, location.origin);
     if (url.pathname === path) return preview(url);
+    if (url.pathname === "/management-api/menus/lunch/customer-online-settings")
+      return readOnlineSettings();
     const currentStatus = readStatus();
     const draft = {
       status: currentStatus,
@@ -240,6 +244,89 @@ describe("the customer menu Online preview", () => {
     }
   });
 
+  it.each(["light", "dark"] as const)("previews draft photo sizes in %s", async (theme) => {
+    const viewport = [innerWidth, innerHeight] as const;
+    await page.viewport(1280, 800);
+    try {
+      const { el, host } = await open(() => Response.json(published()), theme);
+      await expect.element(page.getByRole("heading", { name: "Lunch for guests" })).toBeVisible();
+      const photo = () => customerPage(el)?.shadowRoot?.querySelector(".dish img");
+      const width = () => photo()?.getBoundingClientRect().width ?? 0;
+      const large = width();
+      expect(large).toBeGreaterThan(0);
+      await page.getByRole("radio", { name: "Small", exact: true }).click();
+      await vi.waitFor(() => {
+        expect(width()).toBeGreaterThan(0);
+        expect(width()).toBeLessThan(large);
+      });
+      await page.getByRole("radio", { name: "None", exact: true }).click();
+      await vi.waitFor(() => expect(photo()).toBeNull());
+      await page.getByRole("button", { name: "Roast pepper", exact: true }).click();
+      expect(customerPage(el)?.shadowRoot?.querySelector(".detail img")).toBeNull();
+      await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(...viewport);
+    }
+  });
+
+  it("waits for the saved photo setting before showing the phone preview", async () => {
+    const viewport = [innerWidth, innerHeight] as const;
+    const settings = gate<Response>();
+    const readPreview = vi.spyOn(DashboardApi.prototype, "getCustomerPreview");
+    await page.viewport(390, 800);
+    try {
+      const { el } = await open(
+        () => Response.json(published()),
+        "light",
+        () => status,
+        () => settings.promise,
+      );
+      const title = page.getByRole("heading", { name: "Lunch for guests" });
+      await vi.waitFor(() => expect(readPreview).toHaveBeenCalled());
+      await readPreview.mock.results[0]?.value;
+      await expect.element(page.getByText("Loading Online settings…")).toBeVisible();
+      await new Promise(requestAnimationFrame);
+      expect(title.query()).toBeNull();
+      settings.resolve(Response.json({ enabled: false, address: null, photos: "none" }));
+      await expect.element(title).toBeVisible();
+      expect(customerPage(el)?.shadowRoot?.querySelector(".dish img")).toBeNull();
+    } finally {
+      readPreview.mockRestore();
+      settings.resolve(Response.json({ enabled: false, address: null, photos: "none" }));
+      await page.viewport(...viewport);
+    }
+  });
+
+  it("offers Retry in the phone preview when loading settings fails", async () => {
+    const viewport = [innerWidth, innerHeight] as const;
+    await page.viewport(390, 800);
+    try {
+      const getSettings = vi
+        .fn()
+        .mockReturnValueOnce(new Response(null, { status: 503 }))
+        .mockImplementation(() =>
+          Response.json({ enabled: false, address: null, photos: "large" }),
+        );
+      const { el } = await open(
+        () => Response.json(published()),
+        "light",
+        () => status,
+        getSettings,
+      );
+      await expect
+        .element(page.getByText("Could not load the Online settings."), { timeout: 2000 })
+        .toBeVisible();
+      await expect.element(page.getByRole("button", { name: "Roast pepper" })).toBeVisible();
+      expect(customerPage(el)?.shadowRoot?.querySelector(".dish img")).toBeNull();
+      await page.getByRole("button", { name: "Try again", exact: true }).click();
+      await vi.waitFor(() =>
+        expect(customerPage(el)?.shadowRoot?.querySelector(".dish img")).toBeTruthy(),
+      );
+    } finally {
+      await page.viewport(...viewport);
+    }
+  });
+
   it.each(["light", "dark"] as const)(
     "filters the published menu and marks choices in %s",
     async (theme) => {
@@ -313,14 +400,15 @@ describe("the customer menu Online preview", () => {
       await expectNoA11yViolations(host);
 
       await dish.click();
+      const previewRegion = page.getByRole("region", { name: "Online preview" });
       for (const name of ["Large", "Almond dressing · 0.2 kg"]) {
-        expect(page.getByText(name, { exact: true }).element().closest("li")).toHaveTextContent(
-          "Contains a selected allergen",
-        );
+        expect(
+          previewRegion.getByText(name, { exact: true }).element().closest("li"),
+        ).toHaveTextContent("Contains a selected allergen");
       }
-      expect(page.getByText("Large", { exact: true }).element().closest("li")).toHaveTextContent(
-        "Cereals containing gluten (Wheat)",
-      );
+      expect(
+        previewRegion.getByText("Large", { exact: true }).element().closest("li"),
+      ).toHaveTextContent("Cereals containing gluten (Wheat)");
       await expectNoA11yViolations(host);
       await back.click();
       const dishControl = dish.element();
@@ -544,7 +632,11 @@ describe("the customer menu Online preview", () => {
     expect(Number(getComputedStyle(setPrice).fontWeight)).toBeGreaterThan(
       Number(getComputedStyle(summary).fontWeight),
     );
-    await expect.element(page.getByText("Large", { exact: true })).not.toBeInTheDocument();
+    await expect
+      .element(
+        page.getByRole("region", { name: "Online preview" }).getByText("Large", { exact: true }),
+      )
+      .not.toBeInTheDocument();
     await expect
       .element(page.getByText("Almond dressing", { exact: false }))
       .not.toBeInTheDocument();
