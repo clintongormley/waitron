@@ -544,6 +544,21 @@ describe("set-menu folders", () => {
     expect(names(entries(el, "structure"))).toEqual(["Café"]);
   });
 
+  it("closes an open set menu when the till switches to another menu", async () => {
+    const { el } = await mount({
+      menu: lunch({ structure: { members: [sectionWithSetMenu] } }),
+      setMenuCopies: [{ copy: daily, versionId: "lunch" }],
+    });
+    await tap(el, entry(el, "structure", "Lunch choices"));
+    await tap(el, entry(el, "section", daily.name));
+    expect(root(el).querySelector("till-set-menu-folder")).not.toBeNull();
+    el.menu = lunch({ id: "menu-dinner", structure: { members: [member("cafe")] } });
+    await el.updateComplete;
+    expect(root(el).querySelector("till-set-menu-folder")).toBeNull();
+    expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+    expect(names(entries(el, "structure"))).toEqual(["Café"]);
+  });
+
   it("does not offer to place a dish whose set menu or dish has gone", async () => {
     const { el, store } = await mount({
       setMenuCopies: [{ copy: daily, versionId: "lunch" }],
@@ -2973,6 +2988,20 @@ describe("till-menu-browser", () => {
       expect(notice(el)).toBe("Not found");
       expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
       expect(names(entries(el, "structure"))).toEqual(["Favourites (EN)", "Comida (ES)"]);
+    });
+
+    it("goes home with no notice when the till switches to another menu, and again on the way back", async () => {
+      const { el } = await mount();
+      await tap(el, entry(el, "structure", "Drinks (EN)"));
+      el.menu = lunch({ id: "menu-dinner", structure: { members: [favourites, food] } });
+      await el.updateComplete;
+      expect(notice(el)).toBeNull();
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+      el.menu = lunch();
+      await el.updateComplete;
+      expect(notice(el)).toBeNull();
+      expect(regions(el)).toEqual(["search", "shortcuts", "structure"]);
+      expect(names(entries(el, "structure"))).toContain("Drinks (EN)");
     });
 
     it("says Not found when the open section's parent no longer holds it", async () => {

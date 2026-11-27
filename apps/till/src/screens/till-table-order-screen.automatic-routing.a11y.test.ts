@@ -1,14 +1,18 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
-import type { WtButton } from "@waitron/ui";
+import { page } from "vitest/browser";
 import type { DeadEndAnswer } from "../api/drafts-api.js";
 import type { OrderLine } from "../state/working-order.js";
 import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
-import { beer, flan, menuOf, resized, showView } from "./till-table-order-screen.test-helpers.js";
-import type { TillBasket } from "../widgets/basket.js";
-import type { TillModifierPicker } from "../widgets/modifier-picker.js";
+import {
+  beer,
+  flan,
+  menuOf,
+  openDraftLine,
+  resized,
+  showView,
+} from "./till-table-order-screen.test-helpers.js";
 import type { TillDeadEndsSection } from "../widgets/dead-ends-section.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
@@ -80,13 +84,7 @@ describe.each(["en", "es"] as const)("automatic routing %s", (locale) => {
         element: pane,
         path: `__screenshots__/a773-automatic-routing-${locale}-${theme}-${width}.png`,
       });
-      const basket = [...el.shadowRoot!.querySelectorAll<TillBasket>("till-basket")].find((row) =>
-        row.lineIndexes?.includes(0),
-      )!;
-      await basket.updateComplete;
-      await userEvent.click(basket.shadowRoot!.querySelector<WtButton>('[data-line-detail="0"]')!);
-      const picker = basket.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
-      await picker.updateComplete;
+      await openDraftLine(el, 0);
       const detail = el.shadowRoot!.querySelector<TillDeadEndsSection>(
         "[data-draft-routing-detail] till-dead-ends-section",
       )!;

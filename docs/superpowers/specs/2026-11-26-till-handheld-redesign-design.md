@@ -144,6 +144,11 @@ clicking move), selectable to say 'send these'".
   on a new dish; serving part of the row on a sent one. Remove, Comp, Void and Move to station are in
   the selection foot instead (owner chose this split, 2026-11-26); this replaces the pass-1 lists of
   what a new and a sent row open to, above.
+- (2026-11-27, owner, on 7a's pictures, relayed by the watcher) **At a count of 1 an opened new row's
+  − is a bin** that removes the dish ("instead of remove, if the quantity is 1 then make the "-" a
+  dustbin instead"), and **the opened row shows the dish's description, allergens and diet labels**
+  under its line, as the information window does, without its Sold out switches or Add to order ("i
+  don't think this should be here"; "add to order we don't need"; "agreed for the rest").
 
 **The foot of the screen, always visible:** "Menu" on the left, then "Pay €73.20", then "Send 6"
 in teal (the number counts the new dishes). (pass 2) In a table zone set to be paid before sending
@@ -1317,8 +1322,8 @@ How to read it:
 - `d`, `f`, `g`, `i`, `j`, `u`: back reads "‹ Tables". With the tabs gone it reads "‹ Floor", as
   `af` draws it (§4: "back to the floor").
 - `f` 2 and 3, `g` 3: an opened new row shows Remove and "Split into 3". Remove moved to the
-  selection foot and splitting is the row's arrow (§4), so an opened new row holds only the
-  quantity, Options and Note.
+  selection foot and splitting is the row's arrow (§4), so an opened new row holds the dish's
+  description, allergens and diet labels, then the quantity (a bin at 1), Options and Note.
 - `af` 1 draws "Menu" in the foot without its ⌃; it keeps it, as `d`, `g`, `i` and `j` draw it.
 - `af` 3 draws the selection foot as "Move to…" and "Send these 3 now". It is `bi` 1's: a bin, "Move"
   and "Send these 3 now" (2026-11-27). `af` 2's foot gives way to `bi` 2's bin while a row is dragged.

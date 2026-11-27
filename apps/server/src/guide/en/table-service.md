@@ -523,12 +523,16 @@ sent**. A dish on hold shows what is published now until you release it.
 Each weighed dish goes on its own line and moves to another bill whole. For a measure such as
 juice sold by the ml, tap the dish, type the amount into its field or use the till keypad,
 then choose **Add**. For example, 250 ml goes on one line. Before sending, tap its amount at the
-counter, or its row at a table, to edit it. **Mark served** marks the whole amount as served.
+counter to edit it, or at a table tap its row and choose **Options**. **Mark served** marks the
+whole amount as served.
 
 At a table or at the counter you can add up to 99 portions of one dish at a time.
 
-At a table, tap a dish in **New order** to change how many, its options or its note. To take dishes
-off, tick their boxes and tap **Remove** in the bar under the order.
+At a table, tap a dish in **New order** to open it in place, with its description, allergens and
+diet labels: − and + change how many, **Options**
+opens its details and **Note** opens them at its note. At 1, − is a bin that takes the dish off.
+Tap it again to close it. A weighed dish, or one in a set menu, has no − and +: use **Options**. To
+take dishes off, tick their boxes and tap **Remove** in the bar under the order.
 
 At the counter, an order you park and open again shows its 2 × Burger as one row while none of it
 is paid.

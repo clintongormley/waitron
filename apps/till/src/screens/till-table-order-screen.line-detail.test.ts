@@ -7,7 +7,14 @@ import { DraftStore } from "../state/draft-sync.js";
 import type { TillDeadEndsSection } from "../widgets/dead-ends-section.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import { beer, draftRow, mount, resized, store } from "./till-table-order-screen.test-helpers.js";
+import {
+  beer,
+  draftRow,
+  mount,
+  openRowControls,
+  resized,
+  store,
+} from "./till-table-order-screen.test-helpers.js";
 import { heldViews, placeFor } from "../state/draft-place.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
@@ -52,9 +59,8 @@ async function open(el: TillTableOrderScreen, index = 0) {
     each.lineIndexes?.includes(index),
   )!;
   await basket.updateComplete;
-  const info = basket.shadowRoot!.querySelector<HTMLElement>(`[data-line-detail="${index}"]`);
-  expect(info).not.toBeNull();
-  await userEvent.click(info!);
+  const controls = await openRowControls(el, index);
+  await userEvent.click(controls.querySelector<HTMLElement>("[data-draft-open-options]")!);
   await basket.updateComplete;
   const picker = basket.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
   await picker.updateComplete;
@@ -64,13 +70,16 @@ function save(picker: TillModifierPicker) {
   return picker.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(".confirm")!;
 }
 
-it("A738 a mouse double click on a row opens one table line window without changing its quantity or selection", async () => {
+it("A738 a mouse double click on a row opens and closes it in place, opening no line window and changing neither its quantity nor its selection", async () => {
   const { el } = await holding();
   const control = el.shadowRoot!.querySelector<HTMLElement>('[data-draft-select="0"]')!;
   await userEvent.dblClick(draftRow(el, 0)!);
   const basket = el.shadowRoot!.querySelector<TillBasket>("till-basket")!;
+  await el.updateComplete;
   await basket.updateComplete;
-  expect(basket.shadowRoot!.querySelectorAll("till-modifier-picker")).toHaveLength(1);
+  expect(basket.shadowRoot!.querySelectorAll("till-modifier-picker")).toHaveLength(0);
+  expect(draftRow(el, 0)!.getAttribute("aria-expanded")).toBe("false");
+  expect(el.shadowRoot!.querySelector("[data-draft-open]")).toBeNull();
   expect(store(el).lines[0]!.quantity).toBe("2");
   expect(control.getAttribute("aria-checked")).toBe("false");
 });

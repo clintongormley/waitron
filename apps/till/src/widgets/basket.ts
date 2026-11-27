@@ -35,6 +35,7 @@ import type {
 import {
   draftRow,
   draftRowStyles,
+  draftRowTap,
   lineMarks,
   notOfferedMarker,
   pickQuantityBadge,
@@ -443,6 +444,7 @@ export class TillBasket extends LitElement {
   @property({ type: Boolean }) compactRows = false;
   /** The compact rows held ready to drag. */
   @property({ attribute: false }) draggedLines?: readonly OrderLine[];
+  @property({ attribute: false }) openedLine?: OrderLine;
   @property({ type: Boolean }) readOnly = false;
   @property({ type: Boolean }) allowPickRemoval = false;
   @property({ attribute: false }) draftParent?: object;
@@ -484,6 +486,7 @@ export class TillBasket extends LitElement {
   #modifierProduct?: TillProduct;
   #modifierCourse?: string;
   #modifierRemoval?: StagedRemoval;
+  #modifierNote = false;
 
   /** Detects a whole-basket swap: `clear` mints a fresh id and `loadFrom` adopts the retrieved order's,
    * while an in-basket add / remove / edit keeps it. */
@@ -496,9 +499,10 @@ export class TillBasket extends LitElement {
     this.#pressedLine = null;
   };
 
-  openLineDetails(line: OrderLine): void {
+  openLineDetails(line: OrderLine, { note = false }: { note?: boolean } = {}): void {
     if (!this.isConnected || !this.store.lines.includes(line)) return;
     this.#openModifierPicker(line);
+    if (this.modifierLine === line) this.#modifierNote = note;
   }
 
   #lineReadOnly(line: OrderLine): boolean {
@@ -579,6 +583,7 @@ export class TillBasket extends LitElement {
     this.#modifierProduct = undefined;
     this.#modifierCourse = undefined;
     this.#modifierRemoval = undefined;
+    this.#modifierNote = false;
   }
 
   #stageRemoval(line: OrderLine, removal: StagedRemoval): void {
@@ -880,11 +885,12 @@ export class TillBasket extends LitElement {
               nutrition: this.#nutrition(line),
               extraNutrition: (extra) => this.#extraOwnNutrition(line, extra),
               lastAdded: this.store.lastAdded === line,
+              opened: this.openedLine === line,
               dragging: this.draggedLines?.includes(line) ?? false,
               disabled: this.#rowBlocked(),
               // A click can arrive before a lock or send has redrawn the row disabled.
               open: () => {
-                if (!this.#rowBlocked()) this.openLineDetails(line);
+                if (!this.#rowBlocked()) this.dispatchEvent(draftRowTap(this.store, line, index));
               },
             });
           return html`
@@ -1087,6 +1093,7 @@ export class TillBasket extends LitElement {
               .product=${this.#modifierProduct}
               .lineDetails=${this.lineDetails}
               .withNote=${this.lineDetails}
+              .focusNote=${this.#modifierNote}
               .readOnly=${this.lineDetails && this.#lineReadOnly(this.modifierLine)}
               .recordedWhenSent=${recordedLine !== undefined}
               .nutrition=${

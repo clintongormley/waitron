@@ -745,7 +745,8 @@ only when the menu is published.
 Tapping a parent sold as whole portions opens the picker at once
 (`pickProduct`, `apps/till/src/widgets/product-pick.ts`). For a measure, a unit that accepts
 decimals or a unit mapped to a scale, enter the amount in the product's field with its fixed
-unit, directly or with the till keypad. Tap an unsent line's amount to edit it.
+unit, directly or with the till keypad. To change an unsent line's amount, tap the amount at the
+counter; at a table, open the line's row and choose **Options**.
 **Add** opens the same picker
 (`#addWeight`, `apps/till/src/widgets/tender-pay.ts`). The picker lists the variants in the one variant order,
 `products.variant_order`, set by the product editor (`writeProductVariants` writes the order the

@@ -97,6 +97,11 @@ export const GRAPHIC_USES: readonly GraphicUse[] = [
     selector: "button.unit wt-icon",
     draws: "the unit link's chevron",
   },
+  {
+    file: "packages/ui/src/components/wt-stepper.ts",
+    selector: 'button[data-step="1"] .mark',
+    draws: "the + mark",
+  },
 ];
 
 const DECLARATION = /(?<![\w-])color\s*:\s*var\(\s*--wt-color-primary\s*[,)]/gi;

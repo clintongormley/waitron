@@ -11,7 +11,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { BlockReason } from "../state/menu-refresh.js";
 import { quantityLabel } from "../state/order-line.js";
-import type { OrderLine, SelectedExtra } from "../state/working-order.js";
+import type { OrderLine, SelectedExtra, WorkingOrderStore } from "../state/working-order.js";
 import { extraNutrition } from "./diet-badges.js";
 import { quantityText } from "./dish-format.js";
 import { optionAnswers } from "./option-snapshot.js";
@@ -79,11 +79,27 @@ export interface DraftRowView {
     extra: SelectedExtra,
   ) => { addAllergens: ProductAllergens | null; suitableFor: readonly string[] } | undefined;
   lastAdded: boolean;
+  /** Open in place: boxed, with the screen's controls in `opened-<n>` under the row. */
+  opened: boolean;
   /** Held ready to drag: the row is outlined. */
   dragging: boolean;
   disabled: boolean;
   open: () => void;
 }
+
+/** What a compact row's tap sends; the screen holding the basket decides what it opens. */
+export interface DraftRowTap {
+  store: WorkingOrderStore;
+  line: OrderLine;
+  index: number;
+}
+
+export const draftRowTap = (store: WorkingOrderStore, line: OrderLine, index: number) =>
+  new CustomEvent<DraftRowTap>("draft-row-tap", {
+    detail: { store, line, index },
+    bubbles: true,
+    composed: true,
+  });
 
 const isCounted = (line: OrderLine) => line.notOffered === true || soldByTheUnit(line.product);
 
@@ -107,8 +123,8 @@ export function draftSelectLabel(line: OrderLine, guest: string | undefined): st
 
 /**
  * A new dish as one row. The screen fills `lead-<n>` (the selection box), `mark-<n>` (beside the
- * name: the guest allergy mark), `end-<n>` (the split control), and `before-<n>` and `after-<n>`
- * around it.
+ * name: the guest allergy mark), `end-<n>` (the split control), `opened-<n>` (an opened row's
+ * controls), and `before-<n>` and `after-<n>` around it.
  */
 export function draftRow(view: DraftRowView): TemplateResult {
   const { line, index } = view;
@@ -141,8 +157,9 @@ export function draftRow(view: DraftRowView): TemplateResult {
   return html`<slot name=${`before-${index}`}></slot>
     <div
       class=${ended ? "entry draft-row period-ended-entry" : "entry draft-row"}
-      part="entry"
+      part=${view.opened ? "entry opened-entry" : "entry"}
       ?data-last-added=${view.lastAdded}
+      ?data-open=${view.opened}
       ?data-draft-dragging=${view.dragging}
     >
       <slot class="draft-row-lead" name=${`lead-${index}`}></slot>
@@ -151,6 +168,7 @@ export function draftRow(view: DraftRowView): TemplateResult {
         class="draft-row-open"
         data-line-detail=${index}
         data-draft-row=${index}
+        aria-expanded=${view.opened}
         ?disabled=${view.disabled}
         @click=${view.open}
         @contextmenu=${preventTouchContextMenu}
@@ -173,11 +191,15 @@ export function draftRow(view: DraftRowView): TemplateResult {
         <span class="draft-row-price">${price}</span>
       </button>
       <slot class="draft-row-end" name=${`end-${index}`}></slot>
+      <slot class="draft-row-opened" name=${`opened-${index}`}></slot>
       <div class="line-after draft-row-after"><slot name=${`after-${index}`}></slot></div>
     </div>`;
 }
 
 const LEAD_WIDTH = css`var(--wt-tap-min)`;
+const OPEN_BORDER = css`2px`;
+/** How far an opened row's box sits in from a closed row's end: its side margin and border. */
+const OPEN_INSET = css`calc(var(--wt-space-2) + ${OPEN_BORDER})`;
 
 /** Last in the basket's styles; each rule matches the specificity of the line-details grid it overrides. */
 export const draftRowStyles = css`
@@ -199,6 +221,24 @@ export const draftRowStyles = css`
   /* --wt-color-success text is under 4.5:1 on the lifted surface in light; the border keeps the green. */
   :host .draft-row[data-last-added] .diet-badge {
     color: var(--wt-color-text);
+  }
+  /* Without a split arrow the price ends --wt-space-2 in from the box's edge, as frame g 3 draws
+     it; with one, the end column reaches out over the box's margin and border, so the price and
+     arrow keep the closed rows' column. */
+  :host .order-lines > .entry.draft-row[data-open] {
+    grid-template-columns: ${LEAD_WIDTH} minmax(0, 1fr) auto;
+    grid-template-rows: minmax(calc(var(--wt-tap-min) + var(--wt-space-2)), auto) auto;
+    margin: var(--wt-space-1) var(--wt-space-2);
+    border: ${OPEN_BORDER} solid var(--wt-color-primary);
+    border-radius: var(--wt-radius-md);
+    background: var(--wt-color-surface);
+    box-shadow: none;
+  }
+  /* The box's border replaces a period-ended row's amber edge and its padding; the stripe is drawn
+     inside the box instead, so the tick keeps every opened row's inset. */
+  :host .order-lines > .entry.draft-row.period-ended-entry[data-open] {
+    padding-inline-start: 0;
+    box-shadow: inset var(--wt-space-1) 0 0 var(--wt-color-warning);
   }
   :host .order-lines > .entry.draft-row[data-draft-dragging] {
     outline: 2px solid var(--wt-color-primary);
@@ -266,6 +306,16 @@ export const draftRowStyles = css`
     display: grid;
     grid-column: 3;
     align-self: stretch;
+  }
+  /* The negative margin takes OPEN_INSET off the column, so an arrow's column ends with the
+     closed rows' and an empty one is --wt-space-2 wide. */
+  :host .draft-row[data-open] > .draft-row-end {
+    min-width: calc(var(--wt-space-2) + ${OPEN_INSET});
+    margin-inline-end: calc(-1 * ${OPEN_INSET});
+  }
+  :host .draft-row > .draft-row-opened {
+    display: block;
+    grid-column: 1 / -1;
   }
   :host .draft-row > .draft-row-after {
     grid-column: 1 / -1;

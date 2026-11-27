@@ -104,19 +104,16 @@ import {
 } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { lineNutrition } from "../widgets/line-nutrition.js";
-import {
-  takesExtras,
-  toWireLineExtras,
-  toWireModifiers,
-  toWireProductIdentity,
-} from "../state/order-line.js";
+import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
 import "../widgets/basket.js";
+import { draftSelectBox, draftSelectLabel } from "../widgets/draft-row.js";
 import {
-  draftRowSlotStyles,
-  draftSelectBox,
-  draftSelectLabel,
-  draftSplitChevron,
-} from "../widgets/draft-row.js";
+  draftFamilyHeader,
+  draftSplitArrow,
+  foldDraftFamily,
+  splitDraftLine,
+} from "../widgets/draft-portions.js";
+import { OpenDraftRow, draftSlotStyles } from "../widgets/draft-row-open.js";
 import "../widgets/last-added.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
@@ -696,7 +693,7 @@ export class TillTableOrderScreen extends LitElement {
     guestsStepperStyles,
     formMessageStyles,
     floorChipStyles,
-    draftRowSlotStyles,
+    draftSlotStyles,
     css`
       .split-lines {
         display: flex;
@@ -1364,6 +1361,12 @@ export class TillTableOrderScreen extends LitElement {
       .round-bar till-basket::part(entry) {
         scroll-margin-block-end: calc(var(--draft-bar-size, 0px) + var(--order-dock-size, 0px));
       }
+      /* An opened row's box keeps a space clear above the bar. */
+      .round-bar till-basket::part(opened-entry) {
+        scroll-margin-block-end: calc(
+          var(--draft-bar-size, 0px) + var(--order-dock-size, 0px) + var(--wt-space-2)
+        );
+      }
 
       .action-panel {
         scroll-margin-block-end: var(--order-dock-size, 0px);
@@ -1550,9 +1553,11 @@ export class TillTableOrderScreen extends LitElement {
   #resizing?: ResizeObserver;
   #barSizing?: ResizeObserver;
   #sizedBar?: HTMLElement;
+  #sizedBarHolder?: HTMLElement;
   #sizedBarShown = false;
   #dockSizing?: ResizeObserver;
   #sizedDock?: HTMLElement;
+  #sizedDockHolder?: HTMLElement;
   #sizedDockShown = false;
   /** Where browsing was scrolled when Order was shown, put back on Menu. */
   #browsingScroll?: { scroller: Element; top: number };
@@ -2040,12 +2045,32 @@ export class TillTableOrderScreen extends LitElement {
     void this.updateComplete.then(() => {
       this.#placeOrderPanels();
       this.#dispatch("order-pane-resized", {});
+      void this.#revealOpenRowAgain();
     });
+  }
+
+  /** Brings an open row back above the bar after the screen's width changes. The bar was measured when
+   * drawn, before its buttons were, and its watcher reports only after the next layout. */
+  async #revealOpenRowAgain(): Promise<void> {
+    const bar = this.#sizedBar;
+    await Promise.all(
+      [...(bar?.querySelectorAll("*") ?? [])].flatMap((node) =>
+        node instanceof LitElement ? [node.updateComplete] : [],
+      ),
+    );
+    if (bar?.isConnected) barSize(bar, bar.getBoundingClientRect().height);
+    await this.#openRow.reveal();
   }
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
   #selected = new WeakSet<OrderLine>();
   #draftGestures?: Gestures;
+  readonly #openRow = new OpenDraftRow(
+    this,
+    () => this.groupCommandBusy,
+    () => this.#draftStore,
+    () => this.#scroller(),
+  );
   #draftEpoch = 0;
   @state() private draftDragging = false;
   #suppressDraftClick = false;
@@ -2197,13 +2222,10 @@ export class TillTableOrderScreen extends LitElement {
     const press = this.#draftPress;
     if (press !== undefined && press.group === undefined && this.#draftPressCurrent()) {
       const index = Number(press.control.dataset.draftSelect ?? press.control.dataset.draftRow);
-      const basket = [...this.renderRoot.querySelectorAll<TillBasket>("till-basket")].find(
-        (basket) => basket.lineIndexes?.includes(index),
-      );
-      // The row is itself the details control, so this click must pass #draftClick; the release's
-      // own click after it must not.
-      this.#suppressDraftClick = false;
-      basket?.shadowRoot?.querySelector<HTMLElement>(`[data-line-detail="${index}"]`)?.click();
+      [...this.renderRoot.querySelectorAll<TillBasket>("till-basket")]
+        .find((basket) => basket.lineIndexes?.includes(index))
+        ?.openLineDetails(press.store.lines[index]!);
+      this.#openRow.close();
       this.#suppressDraftClick = true;
     }
     this.#endDraftDrag();
@@ -2689,7 +2711,9 @@ export class TillTableOrderScreen extends LitElement {
     });
     if (bar !== this.#sizedBar) {
       if (this.#sizedBar !== undefined) this.#barSizing.unobserve(this.#sizedBar);
+      this.#sizedBarHolder?.style.removeProperty("--draft-bar-size");
       this.#sizedBar = bar;
+      this.#sizedBarHolder = bar?.parentElement ?? undefined;
       if (bar !== undefined) this.#barSizing.observe(bar);
     }
     if (bar !== undefined) barSize(bar, bar.getBoundingClientRect().height);
@@ -2709,8 +2733,9 @@ export class TillTableOrderScreen extends LitElement {
     });
     if (dock !== this.#sizedDock) {
       if (this.#sizedDock !== undefined) this.#dockSizing.unobserve(this.#sizedDock);
-      this.#sizedDock?.parentElement?.style.removeProperty("--order-dock-size");
+      this.#sizedDockHolder?.style.removeProperty("--order-dock-size");
       this.#sizedDock = dock;
+      this.#sizedDockHolder = dock?.parentElement ?? undefined;
       if (dock !== undefined) this.#dockSizing.observe(dock);
     }
     if (dock !== undefined) dockSize(dock, dock.getBoundingClientRect().height);
@@ -4644,6 +4669,7 @@ export class TillTableOrderScreen extends LitElement {
                       .draftParent=${this}
                       .courses=${this.courses}
                       .orderInFlight=${this.groupCommandBusy}
+                      .openedLine=${this.#openRow.line(store)}
                       .draggedLines=${this.draftDragging && this.#draftPress?.group === undefined ? this.#draftPress?.chosen : undefined}
                       stacked
                       .store=${store}
@@ -4674,13 +4700,7 @@ export class TillTableOrderScreen extends LitElement {
       !this.busy &&
       scope === this.#draftArrangementScope() &&
       api === this.api;
-    const name = lineProductName(line.product);
     const selected = this.#selected.has(line);
-    const family = store.splitFamily(line);
-    const splits =
-      takesExtras(line.product) &&
-      Number.isInteger(Number(line.quantity)) &&
-      Number(line.quantity) > 1;
     const isFlagged = flagged(line);
     const tools = [
       ...(isFlagged ? [this.#flagChoice(store, line, index)] : []),
@@ -4690,27 +4710,7 @@ export class TillTableOrderScreen extends LitElement {
     const guest = this.#draftAllergyGuest(line);
     const marked = mark === nothing ? nothing : html`<span slot=${`mark-${index}`}>${mark}</span>`;
     if (store.editsLocked) return marked;
-    return html`${
-        family?.[0] === line
-          ? html`<button
-              type="button"
-              slot=${`before-${index}`}
-              class="option draft-family-header"
-              data-fold-draft-family
-              aria-expanded="true"
-              ?disabled=${!current()}
-              @click=${() => {
-                if (current()) this.#foldDraftFamily(store, line);
-              }}
-            >
-              <span
-                >${name}
-                ×${quantityText(family.reduce((total, member) => addDecimal(total, decimal(member.quantity)), decimal("0")))}</span
-              >
-              <span aria-hidden="true">⌃</span>
-            </button>`
-          : nothing
-      }
+    return html`${draftFamilyHeader(store, line, index, current, () => this.#foldDraftFamily(store, line))}
       <button
         slot=${`lead-${index}`}
         type="button"
@@ -4727,24 +4727,11 @@ export class TillTableOrderScreen extends LitElement {
       >
         ${draftSelectBox(selected)}
       </button>
-      ${marked}
-      ${
-        splits
-          ? html`<button
-              type="button"
-              slot=${`end-${index}`}
-              class="draft-row-split"
-              data-split-draft-line=${index}
-              aria-label=${`${t("table.split_group_line")} · ${name}`}
-              ?disabled=${!current()}
-              @click=${() => {
-                if (current()) this.#splitDraftLine(store, line);
-              }}
-            >
-              ${draftSplitChevron()}
-            </button>`
-          : nothing
-      }
+      ${marked} ${draftSplitArrow(line, index, current, () => this.#splitDraftLine(store, line))}
+      ${this.#openRow.controls(store, line, index, {
+        allowed: this.#canEditDraftLine(store, line),
+        run: () => void this.#removeDraftLines(store, [line]),
+      })}
       ${
         tools.length === 0
           ? nothing
@@ -4808,44 +4795,17 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
+  #draftActionable(store: WorkingOrderStore): boolean {
+    return this.isConnected && store === this.#draftStore && !this.groupCommandBusy;
+  }
+
   #splitDraftLine(store: WorkingOrderStore, line: OrderLine): void {
-    const index = store.lines.indexOf(line);
-    if (
-      !this.isConnected ||
-      store !== this.#draftStore ||
-      index < 0 ||
-      store.sending ||
-      store.editsLocked ||
-      this.groupCommandBusy ||
-      !takesExtras(line.product) ||
-      !Number.isInteger(Number(line.quantity)) ||
-      Number(line.quantity) <= 1
-    )
-      return;
-    store.splitLine(index);
+    if (this.#draftActionable(store)) splitDraftLine(store, line);
   }
 
   #foldDraftFamily(store: WorkingOrderStore, line: OrderLine): void {
-    if (
-      !this.isConnected ||
-      store !== this.#draftStore ||
-      store.sending ||
-      store.editsLocked ||
-      this.groupCommandBusy
-    )
-      return;
-    const family = store.splitFamily(line);
-    if (family === undefined) return;
-    const selected = family.every((member) => this.#selected.has(member));
-    store.foldSplitFamily(line);
-    if (
-      store.lines.includes(family[0]!) &&
-      family.slice(1).every((member) => !store.lines.includes(member))
-    ) {
-      for (const member of family) this.#selected.delete(member);
-      if (selected) this.#selected.add(family[0]!);
+    if (this.#draftActionable(store) && foldDraftFamily(store, line, this.#selected))
       this.requestUpdate();
-    }
   }
 
   #flagChoice(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
@@ -5029,20 +4989,23 @@ export class TillTableOrderScreen extends LitElement {
       data-draft-remove
       variant=${disabled ? "secondary" : "primary"}
       ?disabled=${disabled}
-      @click=${async () => {
-        const lines = removable();
-        if (lines.length === 0) return;
-        for (const line of lines.reverse()) {
-          store.removeLine(store.lines.indexOf(line));
-          this.#selected.delete(line);
-        }
-        this.requestUpdate();
-        // Remove turns disabled once nothing is ticked, so focus goes to the order's heading.
-        await this.updateComplete;
-        this.renderRoot.querySelector<HTMLElement>("#draft-title")?.focus();
-      }}
+      @click=${() => void this.#removeDraftLines(store, removable())}
       >${t("action.remove")}</wt-button
     >`;
+  }
+
+  /** The draft bar's Remove, and an opened row's bin. */
+  async #removeDraftLines(store: WorkingOrderStore, chosen: readonly OrderLine[]): Promise<void> {
+    const lines = chosen.filter((line) => this.#canEditDraftLine(store, line));
+    if (lines.length === 0) return;
+    for (const line of lines.reverse()) {
+      store.removeLine(store.lines.indexOf(line));
+      this.#selected.delete(line);
+    }
+    this.requestUpdate();
+    // The pressed Remove turns disabled, or the pressed bin leaves with its row, so focus goes to the order's heading.
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>("#draft-title")?.focus();
   }
 
   #moveDraftSelection(

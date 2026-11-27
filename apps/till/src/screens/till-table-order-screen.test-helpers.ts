@@ -186,6 +186,29 @@ export function draftRowLabel(row: Element): string {
   return `${name.trim()} ×${quantity.trim()}`;
 }
 
+/** Taps line `index`'s row, unless it is already open in place, and returns its controls. */
+export async function openRowControls(
+  el: TillTableOrderScreen,
+  index: number,
+): Promise<HTMLElement> {
+  const open = el.shadowRoot!.querySelector<HTMLElement>(`[data-draft-open="${index}"]`);
+  if (open !== null) return open;
+  const basket = [...el.shadowRoot!.querySelectorAll<TillBasket>("till-basket")].find((each) =>
+    each.lineIndexes?.includes(index),
+  );
+  if (basket === undefined) throw new Error(`No draft basket for line ${index}`);
+  await basket.updateComplete;
+  const row = basket.shadowRoot!.querySelector<HTMLElement>(`[data-draft-row="${index}"]`);
+  if (row === null) throw new Error(`No row for line ${index}`);
+  await userEvent.click(row);
+  await el.updateComplete;
+  await basket.updateComplete;
+  const controls = el.shadowRoot!.querySelector<HTMLElement>(`[data-draft-open="${index}"]`);
+  if (controls === null) throw new Error(`Line ${index}'s row did not open`);
+  return controls;
+}
+
+/** Opens line `index`'s row in place, then its details through Options. */
 export async function openDraftLine(
   el: TillTableOrderScreen,
   index: number,
@@ -196,9 +219,8 @@ export async function openDraftLine(
   );
   if (basket === undefined) throw new Error(`No draft basket for line ${index}`);
   await basket.updateComplete;
-  const info = basket.shadowRoot!.querySelector<HTMLElement>(`[data-line-detail="${index}"]`);
-  if (info === null) throw new Error(`No detail control for line ${index}`);
-  await userEvent.click(info);
+  const controls = await openRowControls(el, index);
+  await userEvent.click(controls.querySelector<HTMLElement>("[data-draft-open-options]")!);
   await basket.updateComplete;
   const picker = basket.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker");
   if (picker === null) throw new Error(`No line window for ${index}`);
