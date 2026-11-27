@@ -6517,8 +6517,8 @@ the light theme. A tap opens the row in place, and a second tap closes it; one r
 (`OpenDraftRow`, `apps/till/src/widgets/draft-row-open.ts`). The opened row is boxed: a 2px
 `--wt-color-primary` edge, `--wt-radius-md`, on `--wt-color-surface`, inset `--wt-space-1` above and
 below and `--wt-space-2` at the sides. Its line keeps a closed row's height. On a row of more than
-one, the split control keeps its full `--wt-tap-min` width inside the box and the price ends where
-it starts; on a row of one, the price ends `--wt-space-2` in from the box's edge, as frame `g` 3
+one, the split control keeps its full `--wt-tap-min` width and, with the price, the closed rows'
+column, reaching over the box's side margin and border while its arrow stays inside; on a row of one, the price ends `--wt-space-2` in from the box's edge, as frame `g` 3
 draws it. Opening a row whose box would end under the draft bar scrolls the list until the box's
 lower edge sits `--wt-space-2` above the bar; a box taller than the list shows keeps its lower edge, with
 Note, in view. Under its line sit, wrapping, a `wt-stepper` for the count

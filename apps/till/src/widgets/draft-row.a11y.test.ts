@@ -235,7 +235,7 @@ describe.each(["light", "dark"] as const)("compact draft rows a11y (%s theme)", 
     expect(getComputedStyle(added).backgroundColor).not.toBe(plain.backgroundColor);
   });
 
-  it("an opened row keeps a closed row's height; its price ends at its arrow, or near the box's edge without one", async () => {
+  it("an opened row keeps a closed row's height; its price and arrow keep the closed rows' column, or its price sits near the box's edge without an arrow", async () => {
     const store = new WorkingOrderStore();
     store.loadFrom("draft", [
       { product: croquettes, quantity: "2" },
@@ -245,9 +245,9 @@ describe.each(["light", "dark"] as const)("compact draft rows a11y (%s theme)", 
     const { el } = await mountWidget<OpenedRowHost>("test-opened-row-host", { store }, theme);
     const basket = el.shadowRoot!.querySelector<TillBasket>("till-basket")!;
     await basket.updateComplete;
-    const measure = async (index: number) => {
+    const measure = async (index: number, open = true) => {
       const row = basket.shadowRoot!.querySelector<HTMLElement>(`[data-draft-row="${index}"]`)!;
-      if (row.getAttribute("aria-expanded") !== "true") {
+      if (open && row.getAttribute("aria-expanded") !== "true") {
         await userEvent.click(row);
         await el.updateComplete;
         await basket.updateComplete;
@@ -265,15 +265,20 @@ describe.each(["light", "dark"] as const)("compact draft rows a11y (%s theme)", 
           ?.getBoundingClientRect(),
       };
     };
-    const closed = await measure(1);
+    const closed = await measure(1, false);
+    expect(closed.entry.hasAttribute("data-open")).toBe(false);
     const several = await measure(0);
     expect(several.entry.hasAttribute("data-open")).toBe(true);
-    expect(closed.entry.hasAttribute("data-open")).toBe(false);
     expect(several.lead.height).toBeCloseTo(closed.lead.height, 1);
     expect(several.split!.width).toBeGreaterThanOrEqual(44);
     expect(several.split!.height).toBeGreaterThanOrEqual(44);
-    expect(Math.abs(several.split!.right - several.inner)).toBeLessThanOrEqual(0.5);
-    expect(Math.abs(several.price.right - several.split!.left)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(several.price.right - closed.price.right)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(several.split!.left - closed.split!.left)).toBeLessThanOrEqual(0.5);
+    expect(Math.abs(several.split!.right - closed.split!.right)).toBeLessThanOrEqual(0.5);
+    const chevron = el
+      .shadowRoot!.querySelector(`[data-split-draft-line="0"] wt-icon`)!
+      .getBoundingClientRect();
+    expect(chevron.right).toBeLessThanOrEqual(several.inner + 0.5);
     const one = await measure(2);
     expect(one.entry.hasAttribute("data-open")).toBe(true);
     expect(one.split).toBeUndefined();
