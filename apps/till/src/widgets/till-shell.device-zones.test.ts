@@ -436,14 +436,14 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
 });
 
 it.each([
-  ["en-GB", "working", "16:02", "Clocked in at 17:02", "Clock out"],
-  ["es-ES", "on_break", "00:02", "Entrada fichada a la 01:02", "Fichar salida"],
-  ["es-ES", "working", "16:02", "Entrada fichada a las 17:02", "Fichar salida"],
+  ["en-GB", "working", "16:02", "Clocked in at 17:02", "Clock out", 390, "at 17:02"],
+  ["es-ES", "on_break", "00:02", "Entrada fichada a la 01:02", "Fichar salida", 320, "a la 01:02"],
+  ["es-ES", "working", "16:02", "Entrada fichada a las 17:02", "Fichar salida", 360, "a las 17:02"],
 ] as const)(
   "shows the recorded start in narrow Floor More (%s, %s, %s)",
-  async (locale, state, utcTime, label, action) => {
+  async (locale, state, utcTime, label, action, width, timePhrase) => {
     setLocale(locale);
-    await page.viewport(390, 844);
+    await page.viewport(width, 844);
     try {
       const clockState: TillClockState = {
         personId: "person",
@@ -472,6 +472,15 @@ it.each([
         name.getBoundingClientRect().bottom,
       );
       expect(getComputedStyle(start.element()).fontSize).toBe("13px");
+      const text = [...start.element().childNodes].find(
+        (node): node is Text => node instanceof Text,
+      )!;
+      const time = document.createRange();
+      time.setStart(text, text.length - timePhrase.length);
+      time.setEnd(text, text.length);
+      const lines = time.getClientRects();
+      expect(lines, `${timePhrase} at ${width}px`).toHaveLength(1);
+      expect(lines[0]!.right).toBeLessThanOrEqual(start.element().getBoundingClientRect().right);
       const clockOut = page.getByRole("button", { name: action, exact: true });
       expect(clockOut.elements()).toHaveLength(1);
 
