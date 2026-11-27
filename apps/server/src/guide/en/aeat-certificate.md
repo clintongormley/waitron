@@ -13,6 +13,7 @@ has no private key, has expired, is not valid yet or is for another tax ID is ex
 Correct the passphrase or choose a replacement file, then select **Next** and run the fiscal test
 again. For a file with no private key or old encryption, export the certificate again with its
 private key and modern encryption. The export instructions are on the certificate screen.
+If a file exported from a Mac is still refused, export it from Firefox instead.
 
 If the fiscal test says AEAT did not accept the certificate, select **Back**, choose another
 certificate and run the test again.

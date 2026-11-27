@@ -13,6 +13,7 @@ otro NIF, la explicación aparece bajo **Archivo del certificado**.
 Corrige la contraseña o elige otro archivo, pulsa **Siguiente** y repite la prueba fiscal. Si falta
 la clave privada o el cifrado es antiguo, exporta de nuevo el certificado con su clave privada y un
 cifrado moderno. Las instrucciones de exportación están en la pantalla del certificado.
+Si un archivo exportado desde un Mac sigue rechazado, expórtalo desde Firefox.
 
 Si la prueba fiscal dice que la AEAT no ha aceptado el certificado, pulsa **Volver**, elige otro
 certificado y repite la prueba.
