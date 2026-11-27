@@ -394,3 +394,67 @@ test("with + disabled at max, Enter on − that brings the bin moves focus to th
   bin(el)!.focus();
   expect(group.hasAttribute("tabindex")).toBe(false);
 });
+
+test('variant="round" draws − and + as separate circles beside a large number, from the tokens', async () => {
+  const el = (await mount(
+    '<wt-stepper variant="round" label="Guests" value="3"></wt-stepper>',
+  )) as Stepper;
+  el.style.setProperty("--wt-tap-min", "50px");
+  el.style.setProperty("--wt-space-1", "8px");
+  el.style.setProperty("--wt-space-3", "10px");
+  el.style.setProperty("--wt-space-4", "20px");
+  el.style.setProperty("--wt-space-5", "30px");
+  el.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+  el.style.setProperty("--wt-color-surface", "rgb(4, 5, 6)");
+  el.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
+  el.style.setProperty("--wt-color-primary", "rgb(10, 11, 12)");
+  el.style.setProperty("--wt-font-size-payment-amount", "47px");
+  el.style.setProperty("--wt-font-weight-bold", "700");
+  el.style.setProperty("--wt-field-line-width", "1px");
+  const { group, minus, plus, count } = parts(el);
+  const box = getComputedStyle(group);
+  expect(box.borderTopStyle).toBe("none");
+  expect(box.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  for (const button of [minus, plus]) {
+    const circle = getComputedStyle(button);
+    const { width, height } = button.getBoundingClientRect();
+    // calc(--wt-tap-min + --wt-space-3) square.
+    expect([width, height]).toEqual([60, 60]);
+    expect(circle.borderTopWidth).toBe("1px");
+    expect(circle.borderTopStyle).toBe("solid");
+    expect(circle.borderTopColor).toBe("rgb(1, 2, 3)");
+    expect(circle.borderTopLeftRadius).toBe("50%");
+    expect(circle.backgroundColor).toBe("rgb(4, 5, 6)");
+  }
+  expect(getComputedStyle(minus.querySelector("[data-mark]")!).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(plus.querySelector("[data-mark]")!).color).toBe("rgb(10, 11, 12)");
+  const number = getComputedStyle(count);
+  // At least calc(--wt-tap-min + --wt-space-5) wide.
+  expect(count.getBoundingClientRect().width).toBeGreaterThanOrEqual(80);
+  expect(number.fontSize).toBe("47px");
+  expect(number.fontWeight).toBe("700");
+  expect(number.fontVariantNumeric).toBe("tabular-nums");
+  // Apart, with calc(--wt-space-4 + --wt-space-1 / 2) between each circle and the number.
+  expect(count.getBoundingClientRect().left - minus.getBoundingClientRect().right).toBe(24);
+  expect(plus.getBoundingClientRect().left - count.getBoundingClientRect().right).toBe(24);
+});
+
+test('variant="round" steps as the default one does', async () => {
+  const el = (await mount(
+    '<wt-stepper variant="round" label="Guests" value="2" min="1"></wt-stepper>',
+  )) as Stepper;
+  const seen = changes(el);
+  parts(el).minus.click();
+  await el.updateComplete;
+  expect(parts(el).minus.disabled).toBe(true);
+  parts(el).plus.click();
+  expect(seen).toEqual([1, 2]);
+});
+
+test("the default variant keeps its one box", async () => {
+  const el = (await mount('<wt-stepper label="Burger" value="2"></wt-stepper>')) as Stepper;
+  expect(el.variant).toBe("box");
+  const { minus } = parts(el);
+  expect(getComputedStyle(minus).borderTopStyle).toBe("none");
+  expect(getComputedStyle(parts(el).group).borderTopStyle).toBe("solid");
+});

@@ -89,6 +89,28 @@ export class WtStepper extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         font-variant-numeric: tabular-nums;
       }
+
+      .stepper.round {
+        align-items: center;
+        gap: calc(var(--wt-space-4) + var(--wt-space-1) / 2);
+        height: auto;
+        border: none;
+        background-color: transparent;
+      }
+
+      .round button {
+        width: calc(var(--wt-tap-min) + var(--wt-space-3));
+        height: calc(var(--wt-tap-min) + var(--wt-space-3));
+        margin-block: 0;
+        border: var(--wt-field-line-width) solid var(--wt-color-border);
+        border-radius: 50%;
+        background-color: var(--wt-color-surface);
+      }
+
+      .round .count {
+        min-width: calc(var(--wt-tap-min) + var(--wt-space-5));
+        font-size: var(--wt-font-size-payment-amount);
+      }
     `,
   ];
 
@@ -97,6 +119,8 @@ export class WtStepper extends LitElement {
   @property({ type: Number }) max: number | null = null;
   @property() label = "";
   @property({ type: Boolean, reflect: true }) disabled = false;
+  /** `round`: − and + as separate circles beside a larger number. */
+  @property() variant: "box" | "round" = "box";
   /** Each is given `label`, naming the button after what it counts. */
   @property({ attribute: false }) decreaseLabel: (label: string) => string = (label) =>
     `Decrease ${label}`;
@@ -167,7 +191,12 @@ export class WtStepper extends LitElement {
     const atMax = this.#atMax;
     const removeLabel = this.removeLabel;
     return html`
-      <div class="stepper" part="stepper" role="group" aria-label=${this.label}>
+      <div
+        class=${this.variant === "round" ? "stepper round" : "stepper"}
+        part="stepper"
+        role="group"
+        aria-label=${this.label}
+      >
         ${
           removeLabel !== null && atMin
             ? html`<button
