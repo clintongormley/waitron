@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { decimal } from "@waitron/shared";
 import {
-  filedRowLine,
+  spreadOverFiledGroups,
   workOutBillDiscounts,
   type BillDiscountLine,
   type BillDiscountTarget,
@@ -657,30 +658,48 @@ describe("workOutBillDiscounts: bound portions", () => {
   });
 });
 
-describe("filedRowLine", () => {
-  const subject = (id: string, lineNo: number, parentLineId: string | null) => ({
-    row: line(id, lineNo, 500, { parentLineId }),
+describe("spreadOverFiledGroups", () => {
+  const subject = (id: string, lineNo: number, unit: number, parentLineId: string | null) => ({
+    row: line(id, lineNo, unit, { parentLineId }),
     quantity: 1000,
     exact: false,
     exactWhenShort: false,
   });
+  type Member = ReturnType<typeof subject>;
+  const spread = (groups: Member[][], cents: string) =>
+    spreadOverFiledGroups(groups, decimal(cents), ({ row }) => row.lineNo).map(
+      ({ rows, shares }) => ({
+        rows: rows.map(({ quantity, unitGross }) => `${quantity}@${unitGross}`),
+        shares: shares.map(({ row, reduction }) => `${row.id} ${reduction}`),
+      }),
+    );
 
-  it("makes a row of one-unit dishes exact, at its first member's price and line number", () => {
-    expect(filedRowLine([subject("p1", 4, null), subject("p2", 5, null)])).toMatchObject({
-      lineId: "p1",
-      addedOrder: 4,
-      gross: "10.00",
-      quantity: "2.000",
-      exact: true,
-      exactWhenShort: false,
-    });
+  it("spreads one-unit dishes as one exact row, at its first member's price and line number", () => {
+    // The tie for the cent goes to the lower line number: the row's 4, not its second portion's 6.
+    expect(
+      spread(
+        [
+          [subject("p1", 4, 500, null), subject("p2", 6, 500, null)],
+          [subject("wine", 5, 1000, null)],
+        ],
+        "0.01",
+      ),
+    ).toEqual([
+      { rows: ["1.000@5.00", "1.000@4.99"], shares: ["p1 0.00", "p2 0.01"] },
+      { rows: ["1.000@10.00"], shares: ["wine 0.00"] },
+    ]);
   });
 
-  it("makes a row of one-unit extras exact only when short", () => {
-    expect(filedRowLine([subject("e1", 2, "d"), subject("e2", 3, "d")])).toMatchObject({
-      exact: false,
-      exactWhenShort: true,
-    });
+  it("spreads one-unit extras as one row that is exact only when the bill would fall short", () => {
+    const extras = () => [subject("e1", 2, 500, "d"), subject("e2", 3, 500, "d")];
+    // 0.02 and 0.01 asked: the extras' row stays at 10.00 and the dish takes the cent it left.
+    expect(spread([[subject("dish", 1, 1000, null)], extras()], "0.03")).toEqual([
+      { rows: ["1.000@9.97"], shares: ["dish 0.03"] },
+      { rows: ["2.000@5.00"], shares: ["e1 0.00", "e2 0.00"] },
+    ]);
+    expect(spread([extras()], "0.01")).toEqual([
+      { rows: ["1.000@5.00", "1.000@4.99"], shares: ["e1 0.00", "e2 0.01"] },
+    ]);
   });
 });
 
@@ -695,6 +714,10 @@ describe("workOutBillDiscounts: refusals of what the caller passed", () => {
     expect(() => workOutBillDiscounts([{ ...line("wine", 1, 800), lineTotal: 799 }], [])).toThrow(
       RangeError,
     );
+  });
+
+  it("refuses an extra whose dish is not on the bill", () => {
+    expect(() => workOutBillDiscounts([extra("chips", 2, "burger", 200)], [])).toThrow(RangeError);
   });
 
   it("refuses Free on the whole bill", () => {

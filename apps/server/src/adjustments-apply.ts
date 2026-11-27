@@ -11,15 +11,15 @@ import {
   findAdjustmentReason,
   handOutRows,
   isPercentBp,
+  lineGross,
   percentReduction,
   policySnapshotOf,
   portionExactness,
   readAdjustmentSettings,
   readReasonStanding,
   recordAdjustment,
-  spreadLineOf,
   spreadOverFiledGroups,
-  spreadReaching,
+  spreadSubjects,
   standingOff,
   takesAlone,
   withExactness,
@@ -66,7 +66,6 @@ import {
 import {
   canonical,
   familyAt,
-  gross,
   listValue,
   readRows,
   stageOf,
@@ -310,12 +309,9 @@ interface Subject extends SpreadSubject<Row> {
 
 /** Spread `discount` over `subjects` (plan D4, D15) and keep the rows whose price moves. */
 function spread(subjects: readonly Subject[], discount: Decimal): Change[] {
-  const results = spreadReaching(subjects.map(spreadLineOf), discount);
-  return subjects.flatMap(({ row, carved }) => {
-    const result = results.get(row.id)!;
-    if (compareDecimal(result.reduction, ZERO) === 0) return [];
-    return [{ row, carved, rows: result.rows, reduction: result.reduction }];
-  });
+  return spreadSubjects(subjects, discount).filter(
+    ({ reduction }) => compareDecimal(reduction, ZERO) !== 0,
+  );
 }
 
 /**
@@ -473,7 +469,7 @@ export async function planAdjustment(
   if (ask.lineId === null) {
     if (ask.action === "cancel" || ask.action === "comp") throw invalid("lineId");
     if (ask.quantity !== undefined) throw invalid("quantity");
-    before = sumDecimals(rows.map((row) => gross(row, row.quantity)));
+    before = sumDecimals(rows.map((row) => lineGross(row, row.quantity)));
     changes = await spreadOverFiledRows(
       tx,
       orderId,
@@ -526,7 +522,7 @@ export async function planAdjustment(
       const left = familyAt(family, target.quantity - covered);
       reduction = sumDecimals(
         family.map((row) =>
-          subtractDecimal(gross(row, row.quantity), gross(row, left.get(row.id)!)),
+          subtractDecimal(lineGross(row, row.quantity), lineGross(row, left.get(row.id)!)),
         ),
       );
       nominal = sumDecimals(family.map((row) => listValue(row, row.quantity - left.get(row.id)!)));
@@ -575,7 +571,7 @@ export async function planAdjustment(
           exactness,
         );
       }
-      before = sumDecimals(subjects.map(({ row, quantity }) => gross(row, quantity)));
+      before = sumDecimals(subjects.map(({ row, quantity }) => lineGross(row, quantity)));
       const discount = requestedDiscount(ask, before);
       changes = ask.action === "comp" ? zeroedRows(subjects) : spread(subjects, discount);
       if (row !== null) {
@@ -709,7 +705,7 @@ async function judgeComp(
   );
   const billComped = sumDecimals(
     rows.map((row) => {
-      const off = subtractDecimal(listValue(row, row.quantity), gross(row, row.quantity));
+      const off = subtractDecimal(listValue(row, row.quantity), lineGross(row, row.quantity));
       return compareDecimal(off, ZERO) > 0 ? off : ZERO;
     }),
   );
@@ -762,7 +758,7 @@ function dishPrices(
         const quantity = decimalToThousandths(priced.quantity);
         dishes.push({
           list: listValue(dish, quantity),
-          after: gross(dish, quantity, decimalToCents(priced.unitGross)),
+          after: lineGross(dish, quantity, decimalToCents(priced.unitGross)),
           allowance: allowanceOf([{ row: dish, quantity }]),
         });
       }
@@ -781,10 +777,14 @@ function dishPrices(
       const quantity = change === undefined ? at.get(row.id)! : quantityOf(change);
       const after =
         change === undefined
-          ? gross(row, quantity)
+          ? lineGross(row, quantity)
           : sumDecimals(
               change.rows.map((priced) =>
-                gross(row, decimalToThousandths(priced.quantity), decimalToCents(priced.unitGross)),
+                lineGross(
+                  row,
+                  decimalToThousandths(priced.quantity),
+                  decimalToCents(priced.unitGross),
+                ),
               ),
             );
       return { row, quantity, list: listValue(row, quantity), after };
@@ -956,8 +956,8 @@ async function reprice(
       await setPrice(tx, second.id, lower!, change.row.priceQuantity);
       const quantity = decimalToThousandths(lower!.quantity);
       const reduction = subtractDecimal(
-        gross(change.row, quantity),
-        gross(change.row, quantity, decimalToCents(lower!.unitGross)),
+        lineGross(change.row, quantity),
+        lineGross(change.row, quantity, decimalToCents(lower!.unitGross)),
       );
       firstReduction = subtractDecimal(change.reduction, reduction);
       taken.push({ lineId: second.id, reduction, quantity });

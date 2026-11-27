@@ -1,10 +1,5 @@
 import { eq } from "drizzle-orm";
-import {
-  lineGross as gross,
-  type AdjustmentStage,
-  type Approval,
-  type Ending,
-} from "@waitron/adjustments";
+import { lineGross, type AdjustmentStage, type Approval, type Ending } from "@waitron/adjustments";
 import { orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -57,11 +52,9 @@ export interface Row {
   firedQuantity: number;
 }
 
-export { gross };
-
 /** A row's value before any adjustment (plan D21), for `quantity` of it. */
 export function listValue(row: Row, quantity: number): Decimal {
-  return gross(row, quantity, row.list ?? row.unit);
+  return lineGross(row, quantity, row.list ?? row.unit);
 }
 
 /** The bill's rows, each `ending` gives back at the price it gives it back at. */
