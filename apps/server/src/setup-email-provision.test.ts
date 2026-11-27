@@ -62,12 +62,15 @@ const result = {
   seriesIds: ["66666666-6666-6666-6666-666666666666"],
   seeded: [],
 };
-function body(mode: "live" | "demo" | "prepare" = "live"): Record<string, unknown> {
+function body(
+  mode: "live" | "demo" | "prepare" = "live",
+  taxId = "50000000R",
+): Record<string, unknown> {
   return {
     mode,
     venue: {
       country: "ES",
-      taxId: "50000000R",
+      taxId,
       legalName: "Email SL",
       taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
       seriesCode: "A",
@@ -171,7 +174,7 @@ it("seals a Mac export so plain Node opens it while the readiness check reads th
       checked.push(secret);
     },
   });
-  const response = await post(made.app, { ...body(), aeatCert, email });
+  const response = await post(made.app, { ...body("live", "89890001K"), aeatCert, email });
   expect(response.status).toBe(200);
   expect(checked).toEqual([aeatCert]);
   const sealed = (await withTransaction(suite.db, (tx) =>
@@ -224,10 +227,14 @@ it("provisions a Mac export in production after its accepted fiscal test, throug
           ring.current.key,
         ).assertReady(readinessInput(input)),
     });
-    const tested = await post(made.app, { ...body(), aeatCert }, "/setup-api/fiscal-test");
+    const tested = await post(
+      made.app,
+      { ...body("live", "89890001K"), aeatCert },
+      "/setup-api/fiscal-test",
+    );
     expect(await tested.json()).toEqual({ status: "accepted", testedAt: expect.any(String) });
     expect(submitted).toHaveLength(1);
-    const response = await post(made.app, { ...body(), aeatCert, email });
+    const response = await post(made.app, { ...body("live", "89890001K"), aeatCert, email });
     expect(await response.json()).toMatchObject({ provisioned: true });
     expect(response.status).toBe(200);
     const sealed = (await withTransaction(suite.db, (tx) =>

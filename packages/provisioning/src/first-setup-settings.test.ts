@@ -44,7 +44,12 @@ describe("first setup publication settings", () => {
 
   it("accepts an RC2 file and keeps the file as sent", async () => {
     const aeatCert = { ...RC2_SIGNED_CANDIDATE, certKind: "sello" };
-    const settings = await parseFirstSetupSettings(contribution, "production", { aeatCert, email });
+    const settings = await parseFirstSetupSettings(
+      contribution,
+      "production",
+      { aeatCert, email },
+      taxId,
+    );
     expect(settings.aeatCert).toBe(aeatCert);
   });
 

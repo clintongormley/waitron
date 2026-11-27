@@ -989,9 +989,14 @@ const productionEmail = {
   from: "elena@example.test",
 };
 
-async function productionFixture(accepted: boolean, certificate = productionCertificate) {
+async function productionFixture(
+  accepted: boolean,
+  certificate = productionCertificate,
+  taxId = request.taxId,
+) {
   const { mkdir, writeFile } = await import("node:fs/promises");
   const f = await realActivationFixture({ WAITRON_BUILD_ID: "synthetic-production-build" });
+  f.args[f.args.indexOf("--tax-id") + 1] = taxId;
   f.deps.env.WAITRON_ENV = "production";
   f.env.WAITRON_ENV = "production";
   const settingsPath = join(f.root, "publication-settings.json");
@@ -1012,6 +1017,7 @@ async function productionFixture(accepted: boolean, certificate = productionCert
   const readiness = fiscalReadinessInput({
     venue: {
       ...request,
+      taxId,
       admin: {
         displayName: request.admin.displayName,
         email: request.admin.email,
@@ -1116,7 +1122,7 @@ it.each(["certificate", "build", "key"] as const)(
 
 it("the production venue command seals a Mac export from its settings file so plain Node opens it", async () => {
   const mac = { ...MAC_ACCENTED_CANDIDATE, certKind: "sello" };
-  const f = await productionFixture(true, mac);
+  const f = await productionFixture(true, mac, "89890001K");
   expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
   const { withTransaction } = await import("@waitron/db");

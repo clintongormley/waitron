@@ -413,7 +413,7 @@ it("keeps a supported vault with unsupported PFX encryption unsupported", async 
   expect(await verify()).toEqual(result("unsupported"));
 });
 const validated = async (raw: object) => {
-  await FISCAL_SLOT.provisioningSecret!.validate(raw);
+  await FISCAL_SLOT.provisioningSecret!.validate(raw, { taxId: "89890001K" });
   return raw;
 };
 const unvalidated = async (raw: object) => raw;
