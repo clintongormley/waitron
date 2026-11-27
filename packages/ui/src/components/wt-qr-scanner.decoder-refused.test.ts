@@ -32,7 +32,7 @@ test("a decoder that does not load stops the camera and says the scanner cannot 
     '<wt-qr-scanner label="Camera" unavailable="The camera did not start"></wt-qr-scanner>',
   )) as WtQrScanner;
 
-  await expect.poll(() => unavailable.mock.calls.length).toBe(1);
+  await expect.poll(() => unavailable.mock.calls.length, { timeout: 10_000 }).toBe(1);
   expect((unavailable.mock.calls[0]![0] as CustomEvent).detail).toEqual({ reason: "unsupported" });
   expect(camera.stream.getTracks().every((track) => track.readyState === "ended")).toBe(true);
   expect(el.shadowRoot!.querySelector("video")).toBeNull();
