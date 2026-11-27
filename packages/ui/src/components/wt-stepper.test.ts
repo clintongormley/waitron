@@ -104,13 +104,62 @@ test("the buttons are named by decreaseLabel and increaseLabel, given label", as
   const el = (await mount('<wt-stepper label="Burger" value="2"></wt-stepper>')) as Stepper;
   expect(parts(el).minus.getAttribute("aria-label")).toBe("Decrease Burger");
   expect(parts(el).plus.getAttribute("aria-label")).toBe("Increase Burger");
-  el.decreaseLabel = (label) => `Uno menos de ${label}`;
-  el.increaseLabel = (label) => `Uno más de ${label}`;
+  el.decreaseLabel = (label) => `One fewer ${label}`;
+  el.increaseLabel = (label) => `One more ${label}`;
   await el.updateComplete;
-  expect(parts(el).minus.getAttribute("aria-label")).toBe("Uno menos de Burger");
-  expect(parts(el).plus.getAttribute("aria-label")).toBe("Uno más de Burger");
+  expect(parts(el).minus.getAttribute("aria-label")).toBe("One fewer Burger");
+  expect(parts(el).plus.getAttribute("aria-label")).toBe("One more Burger");
   expect(parts(el).group.getAttribute("aria-label")).toBe("Burger");
   expect(parts(el).count.getAttribute("aria-live")).toBe("polite");
+});
+
+test("the button names are properties only, never read from an attribute", async () => {
+  const el = await mount(
+    '<wt-stepper label="Q" decreaselabel="Fewer {label}" increaselabel="More {label}"></wt-stepper>',
+  );
+  expect(parts(el).minus.getAttribute("aria-label")).toBe("Decrease Q");
+  expect(parts(el).plus.getAttribute("aria-label")).toBe("Increase Q");
+});
+
+test("the buttons are plain buttons, not submit buttons", async () => {
+  const el = await mount('<wt-stepper label="Q"></wt-stepper>');
+  expect(parts(el).minus.type).toBe("button");
+  expect(parts(el).plus.type).toBe("button");
+});
+
+test("two clicks in one turn never step past min or max", async () => {
+  const low = (await mount(
+    '<wt-stepper label="Burger" value="2" min="1"></wt-stepper>',
+  )) as Stepper;
+  const lowSeen = changes(low);
+  parts(low).minus.click();
+  parts(low).minus.click();
+  await low.updateComplete;
+  expect(lowSeen).toEqual([1]);
+  expect(low.value).toBe(1);
+  const high = (await mount(
+    '<wt-stepper label="Burger" value="4" max="5"></wt-stepper>',
+  )) as Stepper;
+  const highSeen = changes(high);
+  parts(high).plus.click();
+  parts(high).plus.click();
+  await high.updateComplete;
+  expect(highSeen).toEqual([5]);
+  expect(high.value).toBe(5);
+});
+
+test("a click straight after disabling, before the redraw, emits nothing", async () => {
+  const el = (await mount('<wt-stepper label="Burger" value="2"></wt-stepper>')) as Stepper;
+  const seen = changes(el);
+  let clicks = 0;
+  el.addEventListener("click", () => clicks++);
+  el.disabled = true;
+  parts(el).plus.click();
+  parts(el).minus.click();
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  expect(el.value).toBe(2);
+  expect(clicks).toBe(0);
 });
 
 test("paints its box, buttons and number from the tokens", async () => {

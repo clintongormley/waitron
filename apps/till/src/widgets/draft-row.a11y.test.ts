@@ -22,7 +22,11 @@ registerIcons({
 class OpenedRowHost extends LitElement {
   static override styles = draftSlotStyles;
   store!: WorkingOrderStore;
-  readonly opener = new OpenDraftRow(this, () => false);
+  readonly opener = new OpenDraftRow(
+    this,
+    () => false,
+    () => this.store,
+  );
   override render() {
     return html`<till-basket
       .store=${this.store}

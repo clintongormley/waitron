@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtStepper } from "@waitron/ui";
-import { DraftStore } from "../state/draft-sync.js";
+import { DraftStore, DraftSync } from "../state/draft-sync.js";
 import type { TillBasket } from "../widgets/basket.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
-import { cleanupWidgets } from "../widgets/test-helpers.js";
+import { cleanupWidgets, draftServer } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { beer, burger, flan, ham, mount, resized } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -125,6 +125,52 @@ it("+ and − change the dish's count, its row's price and the order total at on
   expect(step(el, 0, -1).disabled).toBe(true);
   expect(step(el, 0, 1).disabled).toBe(false);
   expect(controls(el, 0)).not.toBeNull();
+});
+
+it("a dish's name reaches the stepper's button names unchanged", async () => {
+  const { el } = await open([
+    { product: { ...beer, name: "Fish $& chips $'" }, quantity: "2", place: { kind: "fire" } },
+  ]);
+  await tapRow(el, 0);
+  expect(step(el, 0, 1).getAttribute("aria-label")).toBe("Increase Fish $& chips $'");
+  expect(step(el, 0, -1).getAttribute("aria-label")).toBe("Decrease Fish $& chips $'");
+});
+
+it("a step pressed while the draft is saving reaches the server in the next save", async () => {
+  const server = draftServer();
+  const sync = new DraftSync({
+    api: server,
+    partyId: "v1",
+    billId: "wo-4",
+    personId: "p1",
+    rebuild: (lines) =>
+      lines.map((line) => ({ product: beer, quantity: line.quantity.replace(/\.0+$/, "") })),
+    onRefused: () => {},
+    requestLimitMs: 5_000,
+  });
+  await sync.load();
+  const save = server.saveDraft.getMockImplementation()!;
+  let release!: () => void;
+  server.saveDraft.mockImplementationOnce(async (...args) => {
+    const answer = await save(...args);
+    await new Promise<void>((resolve) => (release = resolve));
+    return answer;
+  });
+  sync.store.addProduct(beer, "2");
+  await vi.waitFor(() => expect(server.saveDraft).toHaveBeenCalledOnce());
+  const { el } = await mount({ draftStore: sync.store });
+  el.style.width = "1280px";
+  await resized(el);
+  await settled(el);
+  await tapRow(el, 0);
+  await userEvent.click(step(el, 0, 1));
+  await settled(el);
+  expect(sync.store.lines[0]!.quantity).toBe("3");
+  expect(controls(el, 0)).not.toBeNull();
+  release();
+  await vi.waitFor(() => expect(server.saveDraft).toHaveBeenCalledTimes(2));
+  expect(server.saveDraft.mock.calls[0]![1].lines[0]!.quantity).toBe("2");
+  expect(server.saveDraft.mock.calls[1]![1].lines[0]!.quantity).toBe("3");
 });
 
 it("+ is disabled when the dish cannot be added", async () => {
@@ -263,6 +309,22 @@ it("holding a row opens its details without opening it in place", async () => {
   expect(controls(el, 0)).toBeNull();
 });
 
+it("holding an open row opens its details and closes the row", async () => {
+  const { el } = await open();
+  await tapRow(el, 0);
+  expect(row(el, 0).getAttribute("aria-expanded")).toBe("true");
+  const at = point(row(el, 0));
+  vi.useFakeTimers();
+  pointer(row(el, 0), "pointerdown", at);
+  await vi.advanceTimersByTimeAsync(500);
+  pointer(window, "pointerup", at);
+  vi.useRealTimers();
+  await settled(el);
+  expect(picker(el, 0)).not.toBeNull();
+  expect(row(el, 0).getAttribute("aria-expanded")).toBe("false");
+  expect(controls(el, 0)).toBeNull();
+});
+
 it("dragging a row to another group opens nothing", async () => {
   const { el, draft } = await open();
   const at = point(row(el, 0));
@@ -293,4 +355,34 @@ it("a step, Options or Note pressed after an order goes in flight, before the ro
   expect(draft.lines[0]!.quantity).toBe("2");
   expect(picker(el, 0)).toBeNull();
   expect(controls(el, 0)).toBeNull();
+});
+
+it("a step, Options or Note pressed after the screen moves to another order, before the redraw, does nothing", async () => {
+  const { el, draft } = await open();
+  await tapRow(el, 0);
+  const plus = step(el, 0, 1);
+  const buttons = [options(el, 0), note(el, 0)];
+  const quantity = vi.spyOn(draft, "setLineQuantity");
+  const details = vi.spyOn(basketOf(el, 0), "openLineDetails");
+  const other = new DraftStore();
+  other.loadFrom("other", [{ product: beer, quantity: "2", place: { kind: "fire" } }]);
+  el.draftStore = other;
+  plus.click();
+  for (const button of buttons) button.click();
+  await settled(el);
+  expect(quantity).not.toHaveBeenCalled();
+  expect(details).not.toHaveBeenCalled();
+  expect(draft.lines[0]!.quantity).toBe("2");
+});
+
+it("a step pressed after its dish leaves the order, before the redraw, does nothing", async () => {
+  const { el, draft } = await open();
+  await tapRow(el, 0);
+  const plus = step(el, 0, 1);
+  const quantity = vi.spyOn(draft, "setLineQuantity");
+  draft.removeLine(0);
+  plus.click();
+  await settled(el);
+  expect(quantity).not.toHaveBeenCalled();
+  expect(draft.lines.map((line) => line.quantity)).toEqual(["1"]);
 });

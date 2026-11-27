@@ -8,7 +8,7 @@ import {
   html,
   nothing,
 } from "lit";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
 import type { TillBasket } from "./basket.js";
 import { type DraftRowTap, draftRowSlotStyles } from "./draft-row.js";
@@ -17,16 +17,24 @@ import { lineProductName, soldByTheUnit } from "./product-name.js";
 /**
  * Which new dish's row is open in place, one at a time. A tap on a row opens it and a second tap
  * closes it. The row closes for good once its dish leaves the order, the order is swapped or read
- * again, or it is sending, locked or has an order in flight.
+ * again, or it is sending, locked or has an order in flight, or the screen closes it, as holding a
+ * row does.
  */
 export class OpenDraftRow implements ReactiveController {
   #opened?: { store: WorkingOrderStore; line: OrderLine; generation: number };
   readonly #host: ReactiveControllerHost & HTMLElement;
   readonly #inFlight: () => boolean;
+  readonly #current: () => WorkingOrderStore | null;
 
-  constructor(host: ReactiveControllerHost & HTMLElement, inFlight: () => boolean) {
+  /** `current` is the order the screen shows now, which a control drawn earlier may no longer be. */
+  constructor(
+    host: ReactiveControllerHost & HTMLElement,
+    inFlight: () => boolean,
+    current: () => WorkingOrderStore | null,
+  ) {
     this.#host = host;
     this.#inFlight = inFlight;
+    this.#current = current;
     host.addController(this);
   }
 
@@ -46,6 +54,11 @@ export class OpenDraftRow implements ReactiveController {
         : { store, line, generation: store.loadGeneration };
     this.#host.requestUpdate();
   };
+
+  close(): void {
+    this.#opened = undefined;
+    this.#host.requestUpdate();
+  }
 
   #blocked(store: WorkingOrderStore): boolean {
     return store.sending || store.editsLocked || this.#inFlight();
@@ -83,8 +96,9 @@ export class OpenDraftRow implements ReactiveController {
       !line.notOfferedExtras?.some((extra) => extra.listId !== null && extra.productId !== null);
     // As the row button: open only while nothing blocks it, so these are drawn enabled.
     const disabled = this.#blocked(store);
+    const live = () => this.line(this.#current()) === line;
     const details = (event: Event, note: boolean) => {
-      if (this.#blocked(store)) return;
+      if (!live()) return;
       (event.currentTarget as Element)
         .closest<TillBasket>("till-basket")
         ?.openLineDetails(line, { note });
@@ -98,11 +112,11 @@ export class OpenDraftRow implements ReactiveController {
               .max=${addable ? null : count}
               .label=${name}
               ?disabled=${disabled}
-              .decreaseLabel=${(label: string) => t("action.decrease").replace("{label}", label)}
-              .increaseLabel=${(label: string) => t("action.increase").replace("{label}", label)}
+              .decreaseLabel=${(label: string) => fill(t("action.decrease"), { label })}
+              .increaseLabel=${(label: string) => fill(t("action.increase"), { label })}
               @wt-change=${(event: CustomEvent<{ value: number }>) => {
                 event.stopPropagation();
-                if (!this.#blocked(store))
+                if (live())
                   store.setLineQuantity(store.lines.indexOf(line), String(event.detail.value));
                 (event.currentTarget as WtStepper).value = Number(line.quantity);
               }}

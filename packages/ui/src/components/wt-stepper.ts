@@ -90,15 +90,28 @@ export class WtStepper extends LitElement {
   @property({ attribute: false }) increaseLabel: (label: string) => string = (label) =>
     `Increase ${label}`;
 
+  get #atMin(): boolean {
+    return this.value <= this.min;
+  }
+
+  get #atMax(): boolean {
+    return this.max !== null && this.value >= this.max;
+  }
+
+  // The buttons' disabled state is drawn a render late, so a click can still reach a refused step.
   private step(delta: -1 | 1, event: Event): void {
+    if (this.disabled || (delta < 0 ? this.#atMin : this.#atMax)) {
+      event.stopPropagation();
+      return;
+    }
     const next = this.value + delta;
     this.value = next;
     dispatchWtChange(this, event, { value: next });
   }
 
   override render() {
-    const atMin = this.value <= this.min;
-    const atMax = this.max !== null && this.value >= this.max;
+    const atMin = this.#atMin;
+    const atMax = this.#atMax;
     return html`
       <div class="stepper" part="stepper" role="group" aria-label=${this.label}>
         <button

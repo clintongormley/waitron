@@ -2053,7 +2053,11 @@ export class TillTableOrderScreen extends LitElement {
    * line leaves it. */
   #selected = new WeakSet<OrderLine>();
   #draftGestures?: Gestures;
-  readonly #openRow = new OpenDraftRow(this, () => this.groupCommandBusy);
+  readonly #openRow = new OpenDraftRow(
+    this,
+    () => this.groupCommandBusy,
+    () => this.#draftStore,
+  );
   #draftEpoch = 0;
   @state() private draftDragging = false;
   #suppressDraftClick = false;
@@ -2208,6 +2212,7 @@ export class TillTableOrderScreen extends LitElement {
       [...this.renderRoot.querySelectorAll<TillBasket>("till-basket")]
         .find((basket) => basket.lineIndexes?.includes(index))
         ?.openLineDetails(press.store.lines[index]!);
+      this.#openRow.close();
       this.#suppressDraftClick = true;
     }
     this.#endDraftDrag();
