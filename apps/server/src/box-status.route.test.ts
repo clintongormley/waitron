@@ -302,6 +302,11 @@ it.each([
       expect((await request(admin, false, decision)).status).toBe(403);
       expect((await request(manager, true, decision)).status).toBe(403);
       expect((await request(admin, true, "unknown")).status).toBe(400);
+      const unsupported = await request(admin, true, "continue-shutdown");
+      expect(unsupported.status).toBe(400);
+      expect(await unsupported.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "decision" } },
+      });
       expect(shutdown.status().phase).toBe(phase);
       expect((await request(admin, true, decision)).status).toBe(202);
       await vi.waitFor(() =>

@@ -25,7 +25,8 @@ paths.
   upload. Keep the existing 15-minute default for each destination, including time spent paused.
   `backup-supervisor.test.ts` checks that the same staged backup reaches the existing readback and
   restore rehearsal. `admin-shutdown.ts` owns cancellation per check and the decision before writing
-  the mark. If checks pass while the prompt is visible, offer **Continue shutdown**.
+  the mark. At 12:10 on 27 November the watcher cleared removing **Continue shutdown** after both
+  reviews showed that a paused upload waits for Keep waiting before it completes.
   `admin-shutdown-duties.ts` uses one attempt identity for the email across all check runs.
   `admin-shutdown.test.ts` covers mark order and cleanup before either exit.
 - Extend the existing HTTPS `node.manage` route in `apps/server/src/box-status.ts` and its route

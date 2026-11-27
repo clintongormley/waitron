@@ -229,11 +229,8 @@ it("requires confirmation before switching off with an unchecked backup", async 
   expect(resolveBoxShutdown.mock.calls).toEqual([["shut-down-anyway"], ["shut-down-anyway"]]);
 });
 
-it.each([
-  ["stalled", "Keep waiting", "keep-waiting"],
-  ["checked", "Continue shutdown", "continue-shutdown"],
-] as const)("offers the right shutdown action while %s", async (phase, label, decision) => {
-  const before = { phase, available: true } as const;
+it("offers Keep waiting while an upload is stalled", async () => {
+  const before = { phase: "stalled", available: true } as const;
   const after = { phase: "checking", available: true } as const;
   const getBoxHealth = vi.fn().mockResolvedValue(health({ shutdown: before }));
   const resolveBoxShutdown = vi.fn(async () => {
@@ -244,14 +241,14 @@ it.each([
   el.canCheckClock = true;
   await el.updateComplete;
 
-  const action = q(el, `[data-test="box-shutdown-${decision}"]`);
+  const action = q(el, '[data-test="box-shutdown-keep-waiting"]');
   expect(action).not.toBeNull();
-  expect(text(action)).toBe(label);
+  expect(text(action)).toBe("Keep waiting");
   expect(q(el, '[data-test="box-shutdown-retry"]')).toBeNull();
   expect(q(el, '[data-test="box-shutdown-cancel"]')).not.toBeNull();
-  expect(q(el, '[data-test="box-shutdown-anyway"]') !== null).toBe(phase === "stalled");
+  expect(q(el, '[data-test="box-shutdown-anyway"]')).not.toBeNull();
   await userEvent.click(action!);
-  expect(resolveBoxShutdown).toHaveBeenCalledExactlyOnceWith(decision);
+  expect(resolveBoxShutdown).toHaveBeenCalledExactlyOnceWith("keep-waiting");
 });
 
 it("mentions both restore keys before pausing work for a downloadable backup", async () => {

@@ -9,7 +9,7 @@ export const SHUTDOWN_PATH = "/api/box/shutdown";
 type ShutdownMode = { paired?: true; downloadOnly?: true };
 
 export type ShutdownStatus =
-  | { phase: "idle" | "checking" | "stalled" | "checked" }
+  | { phase: "idle" | "checking" | "stalled" }
   | { phase: "ready"; checked?: false }
   | { phase: "paused"; errorCode: string }
   | { phase: "download"; name: string; bytes: number; delivered: boolean; errorCode?: string };
@@ -26,11 +26,11 @@ type ShutdownCheck = {
   checkSpare?: (signal: AbortSignal) => Promise<void>;
 };
 
-export type ShutdownDecision = "retry" | "keep-waiting" | "continue-shutdown" | "shut-down-anyway";
+export type ShutdownDecision = "retry" | "keep-waiting" | "shut-down-anyway";
 
 type ShutdownRun = {
   controller: AbortController;
-  waiting?: { promise: Promise<void>; resume(): void };
+  waiting?: { promise: Promise<void>; resume(): void; uploads: number };
 };
 
 export async function waitForShutdownDrain(
@@ -122,16 +122,26 @@ export function createAdminShutdown(deps: {
     current.run = active;
     const attemptSignal = current.controller.signal;
     const signal = AbortSignal.any([attemptSignal, active.controller.signal]);
-    function waitForUpload(uploadSignal: AbortSignal): Promise<void> {
+    async function waitForUpload(uploadSignal: AbortSignal): Promise<void> {
       const waitingSignal = AbortSignal.any([signal, uploadSignal]);
       waitingSignal.throwIfAborted();
       if (active.waiting === undefined) {
         let resume!: () => void;
         const promise = new Promise<void>((resolve) => (resume = resolve));
-        active.waiting = { promise, resume };
+        active.waiting = { promise, resume, uploads: 0 };
       }
+      const waiting = active.waiting;
+      waiting.uploads += 1;
       current.state = { phase: "stalled" };
-      return waitForShutdownDrain(active.waiting.promise, waitingSignal);
+      try {
+        await waitForShutdownDrain(waiting.promise, waitingSignal);
+      } finally {
+        waiting.uploads -= 1;
+        if (waiting.uploads === 0 && active.waiting === waiting && current.run === active) {
+          active.waiting = undefined;
+          current.state = { phase: "checking" };
+        }
+      }
     }
     current.settled = (async () => {
       try {
@@ -166,10 +176,6 @@ export function createAdminShutdown(deps: {
           current.checkSpare = undefined;
         }
         signal.throwIfAborted();
-        if (current.state.phase === "stalled") {
-          current.state = { phase: "checked" };
-          return;
-        }
         current.saving = true;
         current.markMayExist = true;
         await deps.save();
@@ -237,7 +243,6 @@ export function createAdminShutdown(deps: {
       const phase = current.state.phase;
       if (phase === "paused" && decision === "retry") return run(current, "check");
       if (phase === "paused" && decision === "shut-down-anyway") return run(current, "unchecked");
-      if (phase === "checked" && decision === "continue-shutdown") return run(current, "confirm");
       const active = current.run;
       if (phase === "stalled" && active?.waiting !== undefined) {
         if (decision === "keep-waiting") {

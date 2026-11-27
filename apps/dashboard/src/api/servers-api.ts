@@ -198,14 +198,14 @@ export interface BoxUpgradeSettings extends BoxUpgradeSettingsEdit {
   version: 1;
 }
 export type ShutdownStatus =
-  | { phase: "idle" | "checking" | "stalled" | "checked" }
+  | { phase: "idle" | "checking" | "stalled" }
   | { phase: "ready"; checked?: false }
   | { phase: "paused"; errorCode: string }
   | { phase: "download"; name: string; bytes: number; delivered: boolean; errorCode?: string };
 
 export type ShutdownStaffMember = { displayName: string; state: "working" | "on_break" };
 
-export type ShutdownDecision = "retry" | "keep-waiting" | "continue-shutdown" | "shut-down-anyway";
+export type ShutdownDecision = "retry" | "keep-waiting" | "shut-down-anyway";
 
 /** LOCAL copy of the server's `BoxHealth` (`apps/server/src/box-health.ts`). */
 export interface BoxHealth {

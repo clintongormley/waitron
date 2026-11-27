@@ -30,7 +30,10 @@ import { writeArchiveSettings } from "./archive-settings.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import * as atomic from "./fs-atomic.js";
 import { startServer as bootServer } from "./boot.js";
-import { SHUTDOWN_PAUSED_EMAIL_WORDS } from "./i18n/box-emails.js";
+import {
+  SHUTDOWN_PAUSED_EMAIL_WORDS,
+  SHUTDOWN_UPLOAD_STALLED_EMAIL_WORDS,
+} from "./i18n/box-emails.js";
 import { boxHostnameFor } from "./box-name.js";
 import * as boxEmail from "./box-alert-email.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
@@ -326,11 +329,11 @@ it.each([
             .find((mail) => mail.includes("To: owner@example.test"))!
             .replace(/=\r?\n/g, "");
           expect(message).toContain("To: owner@example.test");
-          expect(message).toContain(
+          const words =
             scenario === "stalled"
-              ? "decide en Estado del servidor."
-              : SHUTDOWN_PAUSED_EMAIL_WORDS.es.text.split(" ").slice(-3).join(" "),
-          );
+              ? SHUTDOWN_UPLOAD_STALLED_EMAIL_WORDS
+              : SHUTDOWN_PAUSED_EMAIL_WORDS;
+          expect(message).toContain(words.es.text.split(" ").slice(-4).join(" "));
           expect((await readMail(suite.db, "ordinary-during-shutdown"))?.status).toBe("pending");
           const retry = await app.request(
             "https://box.example/api/box/shutdown",

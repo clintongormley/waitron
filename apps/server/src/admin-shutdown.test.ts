@@ -159,28 +159,40 @@ it.each(["keep-waiting", "cancel", "shut-down-anyway"] as const)(
   },
 );
 
-it("asks for Continue shutdown if the check passes while the stall prompt is open", async () => {
-  const checked = signalGate();
-  const save = vi.fn(async () => {});
+it("removes the stall prompt when the last waiting upload expires", async () => {
+  const first = new AbortController();
+  const second = new AbortController();
+  const firstSettled = signalGate();
+  const secondSettled = signalGate();
+  const cleaned = signalGate();
   const shutdown = createAdminShutdown({
-    async check(signal, context) {
-      void context?.waitForUpload(signal).catch(() => {});
-      await checked.promise;
+    async check(_signal, { waitForUpload }) {
+      await Promise.allSettled([
+        waitForUpload(first.signal).finally(firstSettled.resolve),
+        waitForUpload(second.signal).finally(secondSettled.resolve),
+      ]);
+      await cleaned.promise;
+      throw new Error("The backup destinations timed out");
     },
-    save,
+    save: async () => {},
     clear: async () => {},
   });
   try {
     shutdown.start();
     await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "stalled" }));
-    checked.resolve();
-    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "checked" }));
-    expect(save).not.toHaveBeenCalled();
-    shutdown.resolvePaused("continue-shutdown");
-    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready" }));
-    expect(save).toHaveBeenCalledTimes(1);
+    first.abort();
+    await firstSettled.promise;
+    expect(shutdown.status()).toEqual({ phase: "stalled" });
+    second.abort();
+    await secondSettled.promise;
+    expect(shutdown.status()).toEqual({ phase: "checking" });
+    expect(() => shutdown.resolvePaused("keep-waiting")).toThrow(
+      expect.objectContaining({ code: "box.shutdown_in_progress" }),
+    );
+    cleaned.resolve();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
   } finally {
-    checked.resolve();
+    cleaned.resolve();
     await shutdown.close();
   }
 });

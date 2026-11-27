@@ -72,10 +72,11 @@ function signalGate<T = void>() {
 describe("a checked shutdown's timed-out upload", () => {
   it.each([false, true])("continues from the saved file (multipart: %s)", async (multipart) => {
     let attempts = 0;
+    let prompts = 0;
     const bucket = await bucketWith({
       answer(seen, _request, response) {
         if (seen.kind !== "put" && seen.partNumber !== 2) return false;
-        if (++attempts > 3) return false;
+        if (++attempts > (multipart ? 5 : 3)) return false;
         if (!multipart) return true;
         response.writeHead(400, xml);
         response.end(errorXml("RequestTimeout"));
@@ -89,6 +90,7 @@ describe("a checked shutdown's timed-out upload", () => {
       storeFor(bucket, undefined, 150).putFile("a.enc", path, {
         ...live(),
         async onUploadTimeout() {
+          prompts += 1;
           paused.resolve("paused");
           await choice.promise;
         },
@@ -105,11 +107,12 @@ describe("a checked shutdown's timed-out upload", () => {
       await upload;
     }
     expect(await upload).toBe("resolved");
+    expect(prompts).toBe(1);
     expect(bucket.objects.get("a.enc")!.body.equals(body)).toBe(true);
     if (multipart) {
       const parts = bucket.seen.filter(({ kind }) => kind === "part");
-      expect(parts.map(({ partNumber }) => partNumber)).toEqual([1, 2, 2, 2, 2]);
-      expect(parts.map(({ uploadId }) => uploadId)).toEqual(Array(5).fill("upload-1"));
+      expect(parts.map(({ partNumber }) => partNumber)).toEqual([1, 2, 2, 2, 2, 2, 2]);
+      expect(parts.map(({ uploadId }) => uploadId)).toEqual(Array(7).fill("upload-1"));
       expect(bucket.record.completedIds).toEqual(["upload-1"]);
     }
   });

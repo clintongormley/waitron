@@ -4816,11 +4816,8 @@ export const en = {
   "box_status.shutdown.paused": "Shutdown is paused. Leave the box on while you decide.",
   "box_status.shutdown.retry": "Retry backup",
   "box_status.shutdown.stalled":
-    "The backup upload timed out. Work is paused while you decide what to do.",
-  "box_status.shutdown.checked":
-    "Waitron checked the backup. Continue when you’re ready to shut down.",
+    "The backup upload timed out. Work is paused. If Keep waiting is no longer available, you can start a new backup.",
   "box_status.shutdown.keep_waiting": "Keep waiting",
-  "box_status.shutdown.continue_shutdown": "Continue shutdown",
   "box_status.shutdown.anyway": "Shut down anyway",
   "box_status.shutdown.anyway_question": "Shut down without making another backup?",
   "box_status.shutdown.anyway_warning":
@@ -9766,11 +9763,8 @@ export const es: Record<StringKey, string> = {
     "El apagado está en pausa. Deja el servidor encendido mientras decides.",
   "box_status.shutdown.retry": "Volver a hacer la copia",
   "box_status.shutdown.stalled":
-    "Se agotó el tiempo de espera al enviar la copia. El trabajo está en pausa mientras decides qué hacer.",
-  "box_status.shutdown.checked":
-    "Waitron comprobó la copia de seguridad. Continúa cuando quieras apagar el servidor.",
+    "Se agotó el tiempo de espera al enviar la copia. El trabajo está en pausa. Si ya no puedes elegir Seguir esperando, puedes hacer una nueva copia.",
   "box_status.shutdown.keep_waiting": "Seguir esperando",
-  "box_status.shutdown.continue_shutdown": "Continuar con el apagado",
   "box_status.shutdown.anyway": "Apagar de todos modos",
   "box_status.shutdown.anyway_question": "¿Apagar sin hacer otra copia?",
   "box_status.shutdown.anyway_warning":

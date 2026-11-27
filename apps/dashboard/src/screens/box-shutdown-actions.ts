@@ -9,13 +9,11 @@ export function renderShutdownPauseActions(
   confirmUnchecked: () => void,
 ) {
   const { phase } = status;
-  if (phase !== "paused" && phase !== "stalled" && phase !== "checked") return nothing;
+  if (phase !== "paused" && phase !== "stalled") return nothing;
   const [decision, label] =
     phase === "stalled"
       ? (["keep-waiting", "keep_waiting"] as const)
-      : phase === "checked"
-        ? (["continue-shutdown", "continue_shutdown"] as const)
-        : (["retry", status.paired ? "retry_check" : "retry"] as const);
+      : (["retry", status.paired ? "retry_check" : "retry"] as const);
   return html`
     <wt-button
       variant="primary"
@@ -24,16 +22,12 @@ export function renderShutdownPauseActions(
       @click=${() => choose(decision)}
       >${t(`box_status.shutdown.${label}`)}</wt-button
     >
-    ${
-      phase === "checked"
-        ? nothing
-        : html`<wt-button
-            variant="danger"
-            data-test="box-shutdown-anyway"
-            ?disabled=${busy}
-            @click=${confirmUnchecked}
-            >${t("box_status.shutdown.anyway")}</wt-button
-          >`
-    }
+    <wt-button
+      variant="danger"
+      data-test="box-shutdown-anyway"
+      ?disabled=${busy}
+      @click=${confirmUnchecked}
+      >${t("box_status.shutdown.anyway")}</wt-button
+    >
   `;
 }

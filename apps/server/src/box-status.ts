@@ -189,7 +189,6 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         const decision = requireEnum(body?.decision, "decision", [
           "retry",
           "keep-waiting",
-          "continue-shutdown",
           "shut-down-anyway",
           "backup-saved",
         ]);
