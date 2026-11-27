@@ -25,8 +25,8 @@ const FILING: Record<string, Filing | undefined> = {
  * submission state, including one this code does not know, refuses. A full invoice AEAT refused
  * waits (`filing_refused`) only while its open case has a fix the Fiscal filing page offers
  * (`putRightFor`); otherwise it is `refused_no_fix`. An original on a chain other than the open
- * installation of `issuingNodeId`, the box that would issue the correction, waits while AEAT has
- * not answered it (`filing_pending`).
+ * installation of `issuingNodeId`, the box that would issue the correction, or on any chain when
+ * that box has none open, waits while AEAT has not answered it (`filing_pending`).
  */
 export async function correctionAdmissionFor(
   tx: Transaction,
@@ -73,10 +73,10 @@ export async function correctionAdmissionFor(
   }
   const { estado } = alta;
   // Nothing orders a corrective on this chain behind its original on another, so it waits for
-  // AEAT's answer; on this chain the queue files the original first.
+  // AEAT's answer; on this chain the queue files the original first. With no open installation
+  // every chain is another.
   if (estado === null || estado === "pendiente" || estado === "enviando") {
-    const open = await openSifId(tx, issuingNodeId);
-    if (open !== undefined && alta.sifId !== open) {
+    if (alta.sifId !== (await openSifId(tx, issuingNodeId))) {
       return { eligible: false, reason: "filing_pending", ...marked };
     }
   }

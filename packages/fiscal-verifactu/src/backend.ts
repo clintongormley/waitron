@@ -158,11 +158,6 @@ export function toDetalleDesglose(line: VatBreakdownLine): DetalleDesgloseInput 
 }
 
 /**
- * The real Veri*Factu `FiscalBackend`. Every record method builds its registro through
- * `appendToChain`, which computes the huella and advances the chain head, then inserts a
- * `pendiente` `verifactu_submissions` row — all on the caller's transaction. Nothing here contacts AEAT.
- */
-/**
  * Throws `fiscal.original_unanswered` while a version of the sale's receipt on a chain other than
  * `sifId` waits on AEAT. "Another chain" is another installation, as the drain's `originalSettled`
  * reads it: an earlier installation on this same box is another chain too.
@@ -182,6 +177,11 @@ async function refuseUnansweredElsewhere(
   if (rows.length > 0) throw new AppError("fiscal.original_unanswered", { saleId });
 }
 
+/**
+ * The real Veri*Factu `FiscalBackend`. Every record method builds its registro through
+ * `appendToChain`, which computes the huella and advances the chain head, then inserts a
+ * `pendiente` `verifactu_submissions` row — all on the caller's transaction. Nothing here contacts AEAT.
+ */
 export class VerifactuBackend implements FiscalBackend {
   readonly id = BACKEND_ID;
 

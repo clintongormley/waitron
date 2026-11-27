@@ -489,7 +489,8 @@ export interface FiscalBackend {
    * Throws this regime's refusal when the authority refused the current version of the invoice
    * `saleId`, the one a corrective would be filed against: its newest version, which nothing
    * replaced; or when a version filed on a chain other than `issuingNodeId`'s open one is still
-   * unanswered. Reads only. Absent when the regime has no such refusal.
+   * unanswered (with no open one it refuses nothing for that, and the corrective's write refuses).
+   * Reads only. Absent when the regime has no such refusal.
    */
   refuseCreditOf?(tx: Transaction, saleId: SaleId, issuingNodeId: NodeId): Promise<void>;
 

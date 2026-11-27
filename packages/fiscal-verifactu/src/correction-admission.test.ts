@@ -4,7 +4,12 @@ import { captureError, newId, withTransaction } from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { CorrectionAdmission, FiledFigures } from "@waitron/fiscal";
-import { saleId as brandSaleId, decimal, type SaleId } from "@waitron/shared";
+import {
+  saleId as brandSaleId,
+  nodeId as brandNodeId,
+  decimal,
+  type SaleId,
+} from "@waitron/shared";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import type { DetalleDesgloseInput } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -307,6 +312,20 @@ describe("an invoice filed on another chain is judged by its filing, as this box
       const other = await seedNode(suite.db, "B");
       const { saleId } = await file({ ...kind, on: other, estado });
       expect(await admission(saleId)).toStrictEqual(as(refused("filing_pending")));
+    },
+  );
+
+  it.each(
+    kinds.flatMap(([name, kind, as]) =>
+      (["pendiente", "enviando", null] as const).map((estado) => [name, estado, kind, as] as const),
+    ),
+  )(
+    "%s waits while AEAT has not answered it when the issuing box has no open installation (%s)",
+    async (_n, estado, kind, as) => {
+      const { saleId } = await file({ ...kind, estado });
+      expect(await admission(saleId, brandNodeId(newId()))).toStrictEqual(
+        as(refused("filing_pending")),
+      );
     },
   );
 
