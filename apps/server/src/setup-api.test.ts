@@ -395,6 +395,32 @@ it("refuses an unusable certificate before calling any legacy provision step", a
   expect(calls).toEqual([]);
 });
 
+it("refuses another taxpayer's certificate before calling any legacy provision step", async () => {
+  const { deps, calls } = makeDeps();
+  const app = new Hono();
+  mountSetup(app, deps, noopLog);
+  const other = makeAuthority().issue({ organizationIdentifier: "VATES-B12345674" });
+  const response = await postProvision(app, {
+    ...liveBody(),
+    aeatCert: { ...CERT, pfxBase64: other.pfx.toString("base64"), passphrase: other.passphrase },
+  });
+  expect({ status: response.status, body: await response.json() }).toEqual({
+    status: 422,
+    body: {
+      error: {
+        code: "setup.certificate_refused",
+        params: {
+          field: "pfxBase64",
+          reason: "other_taxpayer",
+          certificateTaxId: "B12345674",
+          taxId: "50000000R",
+        },
+      },
+    },
+  });
+  expect(calls).toEqual([]);
+});
+
 /** A full set of provision deps, each a spy that records its invocation ORDER into `calls`. The
  * default `provision` also captures every request it saw into `provisionRequests`. */
 function makeDeps(overrides: Partial<SetupDeps> = {}): {
