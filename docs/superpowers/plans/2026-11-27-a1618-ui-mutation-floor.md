@@ -1,0 +1,16 @@
+# Restore the shared UI mutation gate (A1618)
+
+The shared UI tests should catch regressions in the handheld floor map and the new menu and payment controls. The finish line is a passing UI mutation aggregate on main after the test-only pull request lands.
+
+## Evidence and size
+
+Running `node scripts/mutation-aggregate.mjs <reports> --package ui --shards 32 --break 90` gave 90.57% for the 26 November passing run (45786406477, 13,403 of 14,798) and 89.47% for the 27 November failure (45943691418, 13,873 of 15,505). That failure needs 82 more detections at the same denominator. The largest increases in survived or uncovered mutations were the map and compact geometry (+81 and +44, #4408 and #4443), the QR scanner (+23, #4411), row actions (+16, including #4449), and choice tile, full-screen panel and top bar (+13, +8, +8, #4446). The 26 November scheduled failure (45759317198) was 89.82% before #4395 strengthened the previous tests.
+
+Expect approximately 300–400 lines of browser tests and zero production lines. Reuse the package's real Chromium, browser viewport, fixture, token and pointer helpers. Keep the existing till integration tests and assertions. No mutation exclusions, threshold, runner or production changes.
+
+## Tests and checks
+
+- [ ] Create `packages/ui/src/components/wt-floor-map.compact.test.ts`. Draw named tables at distinct nonzero plan coordinates. Measure the minimum target on an overflowing plan, its inset on a fitting plan, and the initial fit in portrait and landscape. Show that the hint appears only where needed and sits outside the plan; move to the far table with a gesture and with the keyboard, checking that the visible plan bounds stop further travel and the keyboard reaches the right table. Replace the tables before and after a pan to check when the fit changes. Extend `wt-floor-map.today.test.ts` for a mixed row of fixed and movable round tables, where the enlarged stool targets must give way to the real table positions.
+- [ ] Extend `wt-row-actions.test.ts` to cover the action divider with no tail, a mixed tail and a tail on its own, plus scrim dismissal and accessible sheet naming with and without a heading. Extend `wt-choice-tile.test.ts`, `wt-top-bar.test.ts` and `wt-full-screen-panel.test.ts` to check the tile's named hint and start/end selection mark, the heading with and without its subtitle, and a scrollable body named and focusable after a layout resize even when its content was unchanged.
+- [ ] For each added behavior, first show that its assertion fails against a matching survivor in a disposable copy or Stryker's sandbox. Run all changed test files on the original source. Run `pnpm --filter @waitron/ui mutation --mutate <changed source files and floor-map-compact.ts>` and compare the same mutations with the nightly report. Look for at least 82 additional detections with a small margin, counting reported kills rather than relying on timeouts. If the named cases leave a material shortfall, bring the measured gap to the watcher before extending the scope.
+- [ ] Finish and land the single test-only PR after the required branch review and CI. Dispatch `gh workflow run mutation.yml --ref main -f packages=ui`, record the run's head and confirm its 32-shard aggregate meets 90 before closing the queue item.
