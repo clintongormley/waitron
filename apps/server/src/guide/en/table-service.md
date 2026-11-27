@@ -1041,9 +1041,11 @@ that amount. If the venue takes tips, **Keep €5.00 as tip** keeps it as a tip 
 If the bill comes to €0.00, choose **Close** after you see the refund confirmation. Back on the
 bill, choose **Cash** or **Card** and **Confirm payment** for €0.00 to close it.
 
-**A receipt of their own.** When a guest pays part of a bill that has no invoice yet and is set
-for a receipt, Pay asks whether they want their own receipt for that amount. **Yes** prints them a ticket
-of its own, and the table's receipt takes it off. **No** lists it on the table's receipt.
+**A receipt of their own.** When a guest pays part of a bill that has no invoice yet and is set for
+a receipt, ask whether they want their own receipt for that amount. On a table's Pay screen, answer before
+choosing **Charge** or **Cash**. For **Other card machine** or at the Counter, answer on the
+confirmation. **Yes** prints them a ticket of its own, and the table's receipt takes it off.
+**No** lists it on the table's receipt.
 To see which table's receipt took a part payment off, open its receipt in **Find a bill**.
 
 **Cash and change.** Choose **Cash** and enter the actual **Cash handed over**. The confirmation

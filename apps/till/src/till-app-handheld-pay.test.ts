@@ -267,6 +267,54 @@ describe("till-app: paying a table from a handheld", () => {
       ]);
   });
 
+  it("shows a changed amount from the Charge check before sending a payment", async () => {
+    const before = { ...wholeCard, applied: "117.00", charged: "117.00" };
+    const now = { ...wholeCard, applied: "100.00", charged: "100.00" };
+    const previewBillPayment = vi.fn().mockResolvedValueOnce(before).mockResolvedValue(now);
+    const { el } = await mountApp(onPhone({ previewBillPayment }));
+    await pressPaySheet(el, await openPhoneTable(el));
+
+    const charge = () => inDialog(el, "[data-quiet-pay-card]");
+    await expect.poll(() => text(charge())).toBe(`Charge ${money("117.00")}`);
+    await userEvent.click(charge()!);
+    await expect.poll(() => text(charge())).toBe(`Charge ${money("100.00")}`);
+    expect(inDialog(el, "wt-form-actions")?.error).toBe(codeMessage("bill.allocation_changed"));
+    expect(sent()).toEqual([]);
+
+    await userEvent.click(charge()!);
+    expect(sent()).toMatchObject([{ method: "card", applied: "100.00" }]);
+  });
+
+  it("offers Cash for a contribution above the bill when card tips are refused", async () => {
+    const previewBillPayment = vi.fn(async (_id, ask: BillPaymentAsk) => {
+      if (ask.kind === "share") return wholeCard;
+      if (ask.method === "card")
+        throw { code: "bill.tip_not_allowed", status: 409, chargeable: "120.00" };
+      return cash("120.00", "30.00");
+    });
+    const { el } = await mountApp(onPhone({ previewBillPayment }, { tipsEnabled: false }));
+    await pressPaySheet(el, await openPhoneTable(el));
+    await choosePayWay(el, "contribution");
+    await type(el, "amount", "150");
+
+    const cashButton = () => inDialog(el, "[data-quiet-pay-cash]");
+    await expect.poll(() => cashButton()?.disabled).toBe(false);
+    expect(inDialog(el, "[data-quiet-pay-card]")?.disabled).toBe(true);
+    expect(previewBillPayment).toHaveBeenCalledWith(
+      "wo-4",
+      expect.objectContaining({
+        kind: "contribution",
+        method: "cash",
+        amount: "150",
+        tendered: "150",
+      }),
+      { signal: expect.any(AbortSignal) },
+    );
+    await userEvent.click(cashButton()!);
+    expect(inDialog(el, 'wt-input[name="tendered"]')).not.toBeNull();
+    expect(sent()).toEqual([]);
+  });
+
   it("keeps the receipt answer through a rejected cash tender and takes cash only at confirmation", async () => {
     const previewBillPayment = vi.fn().mockImplementation((_id, request) => {
       if (request.method === "card")
@@ -310,6 +358,28 @@ describe("till-app: paying a table from a handheld", () => {
     ).toBe(true);
     await userEvent.click(inDialog(el, "[data-pay-confirm]")!);
     expect(sent()).toMatchObject([{ method: "cash", applied: "30.00", ownReceipt: true }]);
+  });
+
+  it("asks for the own-receipt answer again after staff change the contribution", async () => {
+    const previewBillPayment = vi.fn(async (_id, ask: BillPaymentAsk) => {
+      if (ask.kind === "share") return wholeCard;
+      const applied = ask.amount === "30" ? "30.00" : "40.00";
+      return { ...wholeCard, applied, charged: applied };
+    });
+    const { el } = await mountApp(onPhone({ previewBillPayment }));
+    await pressPaySheet(el, await openPhoneTable(el));
+    await choosePayWay(el, "contribution");
+    await type(el, "amount", "30");
+    await expect.poll(() => inDialog(el, "[data-pay-own-receipt]")).not.toBeNull();
+    await answerOwnReceipt(el, "yes");
+
+    await type(el, "amount", "40");
+    const charge = () => inDialog(el, "[data-quiet-pay-card]");
+    await expect.poll(() => text(charge())).toBe(`Charge ${money("40.00")}`);
+    await expect.poll(() => inDialog(el, "[data-pay-own-receipt]")).not.toBeNull();
+    expect(inDialog(el, 'input[name="ownReceipt"]:checked')).toBeNull();
+    expect(charge()?.disabled).toBe(true);
+    expect(sent()).toEqual([]);
   });
 
   it("returns to Pay with the changed allocation after a refused Charge", async () => {

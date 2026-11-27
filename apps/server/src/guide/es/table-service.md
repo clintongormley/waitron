@@ -1101,8 +1101,10 @@ Si la cuenta suma 0,00 €, pulsa **Cerrar** cuando veas la confirmación de la 
 cuenta, elige **Efectivo** o **Tarjeta** y pulsa **Confirmar cobro** por 0,00 € para cerrarla.
 
 **Un ticket propio.** Cuando un cliente paga una parte de una cuenta que aún no tiene factura y que
-va con ticket, en Cobrar se pregunta si quiere su propio ticket por ese importe. **Sí** le imprime un ticket
-propio, y el ticket de la mesa lo descuenta. **No** lo deja en el ticket de la mesa.
+va con ticket, pregúntale si quiere su propio ticket por ese importe. En una mesa, responde antes
+de elegir **Cobrar** o **Efectivo**. Con **Otro datáfono** o en Mostrador, responde en la confirmación.
+**Sí** le imprime un ticket propio, y el ticket de la mesa lo descuenta. **No** lo deja en el ticket
+de la mesa.
 Para ver qué ticket de la mesa descontó un pago parcial, abre su ticket en **Buscar cuenta**.
 
 **Efectivo y cambio.** Elige **Efectivo** e introduce el **Efectivo entregado** real. La

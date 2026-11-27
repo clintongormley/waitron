@@ -188,6 +188,29 @@ it("asks again when the bill changed while a payment action was busy", async () 
   expect(reads).toMatchObject([{ context: "changed bill" }]);
 });
 
+it("ignores the previous quote while the next contribution is waiting to be checked", async () => {
+  const el = await mount({ quiet: true, way: "contribution", cardReader: "simulator" });
+  await type(el, "amount", "30");
+  await showCardQuote(el, "30.00");
+  const previous = el.checkedQuote!;
+  el.checkedQuote = null;
+  await el.updateComplete;
+  const reads = capture<TablePayQuoteRequest>(el, "bill-pay-quote");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  onTestFinished(() => void vi.useRealTimers());
+
+  await type(el, "amount", "40");
+  el.checkedQuote = previous;
+  await el.updateComplete;
+  const charge =
+    root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-quiet-pay-card]")!;
+  expect(charge.disabled).toBe(true);
+  expect(text(charge)).toBe(`Charge ${money("40.00")}`);
+
+  await vi.runOnlyPendingTimersAsync();
+  expect(reads).toMatchObject([{ asked: { choice: { kind: "contribution", amount: "40" } } }]);
+});
+
 it("keeps the receipt guest field while checking a changed card tip", async () => {
   const el = await mount({
     quiet: true,
