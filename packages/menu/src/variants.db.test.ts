@@ -108,7 +108,7 @@ async function fixture() {
 async function storedVariants(parentId: string) {
   const { rows } = await suite.db.execute<Record<string, unknown>>(sql`
     select id, parent_id, variant_order, active, available, ordering, unit_price,
-      vat_class, unit_id, dietary_declarations, description, category_id,
+      unit_id, dietary_declarations, description, category_id,
       course_id, image, allergens,
       diet_override
     from products where parent_id = ${parentId} order by variant_order`);
@@ -117,7 +117,6 @@ async function storedVariants(parentId: string) {
 
 /** Every inherited column, as the explicit NULL a new variant stores so it reads its parent's. */
 const INHERITING = {
-  vat_class: null,
   unit_id: null,
   dietary_declarations: null,
   description: null,
@@ -447,8 +446,9 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
   it("reads and saves a variant's own editor, and never takes a product's body for it", async () => {
     const f = await variantOfParent();
     const value = await app((tx) => readProductEditor(tx, f.variantId));
-    expect(value).toMatchObject({ id: f.variantId, parentId: f.parentId, vatClass: null });
+    expect(value).toMatchObject({ id: f.variantId, parentId: f.parentId });
     const parent = await app((tx) => readProductEditor(tx, f.parentId));
+    const stored = (await storedVariants(f.parentId))[0];
     // The parent's body names no parent, so it is refused on the variant, writing nothing. Its unit
     // is left out, which a variant's body refuses first.
     await expect(
@@ -461,15 +461,15 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
         ),
       ),
     ).rejects.toMatchObject({ code: "product.invalid", params: { field: "parentId" } });
-    expect((await storedVariants(f.parentId))[0]).toMatchObject({ vat_class: null });
+    expect((await storedVariants(f.parentId))[0]).toEqual(stored);
     await expect(
       app((tx) => saveProductEditor(tx, f.variantId, { ...value, vatClass: "general" }, "en")),
     ).rejects.toMatchObject({ code: "product.invalid", params: { field: "vatClass" } });
-    expect((await storedVariants(f.parentId))[0]).toMatchObject({ vat_class: null });
+    expect((await storedVariants(f.parentId))[0]).toEqual(stored);
     await expect(
       app((tx) => saveProductEditor(tx, f.variantId, saveBodyOf(value), "en")),
-    ).resolves.toMatchObject({ id: f.variantId, vatClass: null });
-    expect((await storedVariants(f.parentId))[0]).toMatchObject({ vat_class: null });
+    ).resolves.toMatchObject({ id: f.variantId });
+    expect((await storedVariants(f.parentId))[0]).toEqual(stored);
     await expect(
       app((tx) => saveProductEditor(tx, f.parentId, saveBodyOf(parent), "en")),
     ).resolves.toMatchObject({ id: f.parentId });
@@ -858,8 +858,6 @@ describe("selectMenuVariant resolves the chosen product and its parent's names",
       variantKitchenName: "LG",
       unitPrice: "3.50",
       unit: bottle,
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
       category: "Hot drinks",
       courseId: large.courseId,
     });
@@ -883,8 +881,6 @@ describe("selectMenuVariant resolves the chosen product and its parent's names",
       variantKitchenName: null,
       unitPrice: "8.00",
       unit: glass,
-      vatClass: "general",
-      takeawayVatClass: "general",
       category: "Drinks",
       courseId: null,
     });

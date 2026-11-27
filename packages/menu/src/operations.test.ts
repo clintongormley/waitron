@@ -31,6 +31,7 @@ import {
   UNDECLARED_DIET,
   type DietOverride,
   customerPresentationText,
+  VAT_RATE_TABLE,
 } from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import { readDefaultMenuId } from "./operations.js";
@@ -320,7 +321,7 @@ describe("menu operations", () => {
         abbreviation: { en: "u" },
       });
       expect(seenHam.unitPrice).toBe("24.90");
-      expect(seenHam.vatClass).toBe("reduced");
+      expect(seenHam).not.toHaveProperty("vatClass");
       expect(seenHam.name).toBe("sliced ham");
       expect(seenHam.active).toBe(true);
     });
@@ -453,7 +454,6 @@ describe("menu operations", () => {
           name: "Stray",
           unitId: "",
           unitPrice: "1.00",
-          vatClass: "general",
         }),
       ).rejects.toMatchObject({ code: "unit.not_found", params: { unitId: "" } });
       expect(await listProducts(tx)).toEqual([]);
@@ -482,7 +482,6 @@ describe("menu operations", () => {
           name: "Stray",
           unitId: eachUnitId,
           unitPrice: "1.00",
-          vatClass: "general",
         }),
       ).rejects.toMatchObject({ code: "category.not_found", params: { categoryId: missing } });
       // Read inside the same transaction, which a refused create leaves open for the caller.
@@ -499,7 +498,6 @@ describe("menu operations", () => {
           name: "Stray",
           unitId: eachUnitId,
           unitPrice: "1.00",
-          vatClass: "general",
         }),
       ),
     ).rejects.toMatchObject({ code: "category.not_found", params: { categoryId: missing } });
@@ -512,7 +510,6 @@ describe("menu operations", () => {
           categoryId: null,
           name: "mystery",
           unitPrice: "0.00",
-          vatClass: "general",
         }),
       ).rejects.toMatchObject({ code: "product.invalid", params: { field: "unitId" } });
     });
@@ -527,7 +524,6 @@ describe("menu operations", () => {
           // A stray legacy value must be rejected at the boundary, not treated as weight.
           pricingUnit: "portion" as PricingUnit,
           unitPrice: "0.00",
-          vatClass: "general",
         }),
       ).rejects.toMatchObject({
         code: "product.invalid",
@@ -584,7 +580,6 @@ describe("menu operations", () => {
           name: "salami",
           pricingUnit: "weight",
           unitPrice: "24.90",
-          vatClass: "reduced",
         }),
       ).rejects.toMatchObject({ code: "product.invalid", params: { field: "unitId" } });
       await expect(updateProduct(tx, ham.id, { pricingUnit: "weight" })).rejects.toMatchObject({
@@ -902,7 +897,6 @@ describe("menu operations", () => {
           name: "mystery",
           unitId: eachUnitId,
           unitPrice: "1.00",
-          vatClass: "general",
           allergens: { nope: { presence: "contains" } } as never,
         }),
       ).rejects.toMatchObject({ code: "allergen.invalid_code" });
@@ -1107,7 +1101,6 @@ describe("menu operations", () => {
           name: "x",
           unitId: eachUnitId,
           unitPrice: "1.00",
-          vatClass: "general",
           dietOverride: { addContains: ["fish"], removeContains: ["fish"] },
         }),
       ).rejects.toMatchObject({ code: "diet.add_remove_conflict" });
@@ -1198,7 +1191,7 @@ describe("menu operations", () => {
       expect(available[0]!.category).toBe("Food");
       expect(available[0]!.unitPrice).toBe("24.90");
       expect(available[0]!.unit).toMatchObject({ id: kgUnitId, name: { en: "kg" }, precision: 3 });
-      expect(available[0]!.vatClass).toBe("reduced");
+      expect(available[0]).not.toHaveProperty("vatClass");
     });
   });
 
@@ -1381,7 +1374,10 @@ describe("menu operations", () => {
       // The till prices menu rows by first resolving each one's customer-facing text; the
       // resolved rows feed straight into priceBasket.
       const priced = priceBasket(
-        available.map((product) => ({ product: toPriceable(product), quantity: "1" })),
+        available.map((product) => ({
+          product: { ...toPriceable(product), vatRates: VAT_RATE_TABLE.general },
+          quantity: "1",
+        })),
         "2026-09-27",
       );
       expect(priced.lines.length).toBe(2);
@@ -2176,7 +2172,7 @@ describe("a new product's takeaway VAT rate", () => {
   it("refuses a rate the area does not offer before writing the product, so a caller that catches it keeps none", async () => {
     const left = await run(async (tx) => {
       await expect(
-        createProduct(tx, { ...tea, name: "Juice", vatClass: "general", takeawayVatRate: "5.00" }),
+        createProduct(tx, { ...tea, name: "Juice", takeawayVatRate: "5.00" }),
       ).rejects.toMatchObject({ code: "product.invalid", params: { field: "takeawayVatRate" } });
       return productsNamed(tx, "Juice");
     });
@@ -2206,7 +2202,6 @@ describe("a new product's takeaway VAT rate", () => {
         createProduct(tx, {
           ...tea,
           name: "Juice",
-          vatClass: "general",
           takeawayVatRate: null as unknown as string,
         }),
       ).rejects.toMatchObject({ code: "product.invalid", params: { field: "takeawayVatRate" } });

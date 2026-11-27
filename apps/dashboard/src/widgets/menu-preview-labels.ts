@@ -42,7 +42,6 @@ export const PRODUCT_FIELDS: Record<ProductChangeField, StringKey> = {
   unit: "menu_preview.field_unit",
   allergens: "menu_preview.field_allergens",
   diet: "menu_preview.field_diet",
-  vat: "menu_preview.field_vat",
   ordering: "menu_preview.field_ordering",
   variants: "menu_preview.field_variants",
   extras: "menu_preview.field_extras",

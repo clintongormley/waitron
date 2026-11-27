@@ -277,7 +277,7 @@ describe("preview live snapshot", () => {
       hardwareUnit: null,
     });
     expect(preview.document.offers[soupId]!.unitPrice).toBe("4.20");
-    expect(offer.vatClass).toBe("reduced");
+    expect(offer).not.toHaveProperty("vatClass");
     expect(offer.name).toBe("Lemonade");
     expect(offer.kitchenName).toBe("LEMONADE");
     const presentation = {
@@ -966,12 +966,12 @@ describe("a live version published before its document froze the takeaway VAT cl
 
 describe("a live version published while its document froze a VAT rate", () => {
   /** Makes the menu's live version a copy of its current one that also holds a `vatRate` beside
-   * every `vatClass`, as a version published before the rate left the document does. */
+   * every `unitPrice`, as a version published before the rate left the document does. */
   async function liveWithFrozenRates(menuId: string): Promise<string> {
     return liveAsCopy(menuId, (published) => {
       const document = JSON.parse(
         JSON.stringify({ ...published, format: MENU_DOCUMENT_FORMAT }, (_key, value: unknown) =>
-          typeof value === "object" && value !== null && "vatClass" in value
+          typeof value === "object" && value !== null && "unitPrice" in value
             ? { ...value, vatRate: "10.00" }
             : value,
         ),
@@ -1280,54 +1280,6 @@ describe("menuStatus", () => {
       const f = await published();
       await app((tx) => updateProduct(tx, f.lemonade, { categoryId: f.coldDrinks }));
       expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
-    });
-
-    it("flags both for Lemonade's VAT class, each naming the shared product", async () => {
-      const f = await published();
-      await app((tx) => updateProduct(tx, f.lemonade, { vatClass: "general" }));
-      expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
-      for (const [menuId, other] of [
-        [f.lunch, "Dinner Menu"],
-        [f.dinner, "Lunch Menu"],
-      ] as const)
-        expect(changeBodies((await app((tx) => previewMenu(tx, menuId))).changes)).toEqual([
-          {
-            kind: "product_changed",
-            productId: f.lemonade,
-            name: "Lemonade",
-            fields: ["vat"],
-            source: "shared_product",
-            alsoOn: [other],
-          },
-        ]);
-    });
-
-    it("flags both for the VAT class of Lemonade's Large variant", async () => {
-      const f = await published();
-      await app((tx) => updateProduct(tx, f.large, { vatClass: "general" }));
-      expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
-    });
-
-    it("flags both for Extra lemon's VAT class, used only as an extra, naming the shared product", async () => {
-      const f = await published();
-      await app((tx) => updateProduct(tx, f.extraLemon, { vatClass: "general" }));
-      expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
-      expect(changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)).toEqual([
-        {
-          kind: "product_changed",
-          productId: f.extraLemon,
-          name: "Extra lemon",
-          fields: ["vat"],
-          source: "shared_product",
-          alsoOn: ["Dinner Menu"],
-        },
-      ]);
-    });
-
-    it("flags Dinner alone for Burger's VAT class", async () => {
-      const f = await published();
-      await app((tx) => updateProduct(tx, f.burger, { vatClass: "general" }));
-      expect(await states(f)).toEqual({ lunch: "current", dinner: "changed" });
     });
 
     it("flags both for an included product price while Lunch keeps its own price", async () => {
@@ -2030,19 +1982,17 @@ describe("previewMenu", () => {
     });
   });
 
-  it("names allergens and VAT on Lemonade and its extra", async () => {
+  it("names allergens on Lemonade and its extra", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
     await publish(f.dinner);
     await app(async (tx) => {
       await updateProduct(tx, f.lemonade, {
         allergens: { sulphites: {} },
-        vatClass: "general",
         available: false,
       });
       await updateProduct(tx, f.extraLemon, {
         allergens: { sulphites: {} },
-        vatClass: "general",
       });
     });
     expect(changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)).toEqual([
@@ -2050,7 +2000,7 @@ describe("previewMenu", () => {
         kind: "product_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["allergens", "vat"],
+        fields: ["allergens"],
         source: "shared_product",
         alsoOn: ["Dinner Menu"],
       },
@@ -2058,7 +2008,7 @@ describe("previewMenu", () => {
         kind: "product_changed",
         productId: f.extraLemon,
         name: "Extra lemon",
-        fields: ["allergens", "vat"],
+        fields: ["allergens"],
         source: "shared_product",
         alsoOn: ["Dinner Menu"],
       },

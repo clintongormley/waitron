@@ -73,7 +73,7 @@ export interface SeedSalesProduct {
   customerName: Record<string, string> | null;
   /** GROSS (VAT-inclusive). */
   unitPrice: string;
-  vatClass: VatClass;
+  vatClass?: VatClass;
   takeawayVatClass?: VatClass | null;
 }
 

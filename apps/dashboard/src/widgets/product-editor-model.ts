@@ -25,7 +25,7 @@ export type ProductEditorDraft = ProductEditorBody & {
   inherited?: InheritedValues | null;
 };
 /** The editor's read without the `vatClass` its save refuses. */
-export function withoutVatClass<T extends { vatClass: unknown }>(value: T): Omit<T, "vatClass"> {
+export function withoutVatClass<T extends { vatClass?: unknown }>(value: T): Omit<T, "vatClass"> {
   const { vatClass, ...body } = value;
   void vatClass;
   return body;

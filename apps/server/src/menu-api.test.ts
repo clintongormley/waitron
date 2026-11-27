@@ -24,7 +24,6 @@ import {
   menuReleases,
   menuVersions,
   readTakeawayVatSchedules,
-  saveMenuSettings,
   sectionMembers,
   setMenuVariants,
   setProductVariants,
@@ -2010,7 +2009,6 @@ describe("mountMenuApi — products", () => {
       name: string;
       customerName: Record<string, string> | null;
       unitPrice: string;
-      vatClass: string;
       pricingUnit: string;
       active: boolean;
       allergens: unknown;
@@ -2022,7 +2020,6 @@ describe("mountMenuApi — products", () => {
       name: "ES black coffee",
       customerName: { es: "ES coffee con leche" },
       unitPrice: "1.20",
-      vatClass: "general",
       pricingUnit: "each",
       active: true,
       allergens: { milk: {} },
@@ -2334,8 +2331,8 @@ describe("mountMenuApi — products", () => {
     const variantId = parent.variants[0]!.id;
     const variantRow = async () =>
       (
-        await suite.db.execute<{ vat_class: string | null; category_id: string | null }>(
-          sql`select vat_class, category_id from products where id = ${variantId}`,
+        await suite.db.execute<{ category_id: string | null }>(
+          sql`select category_id from products where id = ${variantId}`,
         )
       ).rows[0];
 
@@ -2363,7 +2360,7 @@ describe("mountMenuApi — products", () => {
       (await suite.db.execute(sql`select id from products where parent_id = ${variantId}`)).rows,
     ).toEqual([]);
 
-    expect(await variantRow()).toEqual({ vat_class: null, category_id: null });
+    expect(await variantRow()).toEqual({ category_id: null });
 
     const saveParent = await send(app, "PUT", `/management-api/products/${parent.id}/editor`, {
       body: await editorBody(app, { name: "Wine", variants: [variant] }),
@@ -2470,7 +2467,6 @@ describe("mountMenuApi — products", () => {
       kitchenName: "DOUBLE",
       description: null,
       unitPrice: "2.40",
-      vatClass: null,
       primaryCategoryId: null,
       allergens: null,
       dietaryDeclarations: null,
@@ -2480,7 +2476,6 @@ describe("mountMenuApi — products", () => {
         name: "ES coffee",
         description: { es: "Tostado natural" },
         unitPrice: "2.00",
-        vatClass: "general",
         primaryCategoryId: categoryId,
         allergens: { milk: {} },
         dietaryDeclarations: ["vegan"],
@@ -2499,12 +2494,11 @@ describe("mountMenuApi — products", () => {
     const stored = async () =>
       (
         await suite.db.execute<Record<string, unknown>>(
-          sql`select vat_class, unit_price, category_id, allergens
+          sql`select unit_price, category_id, allergens
               from products where id = ${variantId}`,
         )
       ).rows[0];
     const blank = {
-      vat_class: null,
       unit_price: null,
       category_id: null,
       allergens: null,
@@ -2532,13 +2526,11 @@ describe("mountMenuApi — products", () => {
     });
     expect(overridden.status).toBe(200);
     expect(await overridden.json()).toMatchObject({
-      vatClass: null,
       unitPrice: "2.60",
       allergens: { eggs: {} },
       courseId,
     });
     expect(await stored()).toEqual({
-      vat_class: null,
       unit_price: 260,
       category_id: null,
       allergens: JSON.stringify({ eggs: {} }),
@@ -2872,11 +2864,11 @@ describe("mountMenuApi — products", () => {
     const listed = (await (await send(app, "GET", "/management-api/products")).json()) as {
       id: string;
       unitPrice: string;
-      vatClass: string;
       variants: unknown[];
     }[];
     const row = listed.find((product) => product.id === parentId)!;
-    expect(row).toMatchObject({ unitPrice: "2.00", vatClass: "general" });
+    expect(row).toMatchObject({ unitPrice: "2.00" });
+    expect(row).not.toHaveProperty("vatClass");
     expect(row.variants).toEqual([
       expect.objectContaining({
         id: variantId,
@@ -2887,7 +2879,6 @@ describe("mountMenuApi — products", () => {
         effective: {
           allergens: { milk: {} },
           unitPrice: "2.40",
-          vatClass: "general",
           takeawayVatRate: "4.00",
           primaryCategoryId: categoryId,
           courseId: null,
@@ -3317,26 +3308,6 @@ describe("mountMenuApi — products", () => {
     });
     const stored = await suite.db.execute(sql`select id from products where name = ${name}`);
     expect(stored.rows).toEqual([]);
-  });
-
-  it("POST /management-api/products without an eat-in class stores the venue's hidden default", async () => {
-    const app = mountApp();
-    await withTransaction(suite.db, (tx) =>
-      saveMenuSettings(tx, { defaultProductVatClass: "zero" }),
-    );
-    try {
-      const res = await send(app, "POST", "/management-api/products", {
-        body: { categoryId: null, name: "Water", pricingUnit: "each", unitPrice: "1.00" },
-      });
-      expect(res.status).toBe(201);
-      const { id } = (await res.json()) as { id: string };
-      const stored = await suite.db.execute(sql`select vat_class from products where id = ${id}`);
-      expect(stored.rows).toEqual([{ vat_class: "zero" }]);
-    } finally {
-      await withTransaction(suite.db, (tx) =>
-        saveMenuSettings(tx, { defaultProductVatClass: "general" }),
-      );
-    }
   });
 
   it.each(["POST", "PUT"] as const)(

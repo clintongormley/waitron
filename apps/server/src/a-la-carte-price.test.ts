@@ -288,7 +288,7 @@ async function groupInto(billId: string, copy: typeof daily, chargeCents = 0) {
   );
 }
 
-it("probe D4: the set-menu copy and the holding menu's ordinary offer agree on category and VAT", async () => {
+it("probe D4: the set-menu copy and the holding menu's ordinary offer agree on category", async () => {
   const flan = venue.productId("Flan");
   const { ordinary, copy } = await inTx(venue, async (tx) => {
     const zone = await VENUE_SERVICE.listZoneOffers(tx, venue.tables.zoneId, {
@@ -312,15 +312,11 @@ it("probe D4: the set-menu copy and the holding menu's ordinary offer agree on c
   });
   const pick = (offer: typeof ordinary) => ({
     menuId: offer.menuId,
-    vatClass: offer.vatClass,
-    takeawayVatClass: offer.takeawayVatClass,
     category: offer.category,
     unit: offer.unit,
   });
   expect(pick(ordinary)).toEqual({
     menuId: venue.tables.menuId,
-    vatClass: "reduced",
-    takeawayVatClass: "reduced",
     category: "Desserts",
     unit: expect.objectContaining({ id: expect.any(String) }),
   });

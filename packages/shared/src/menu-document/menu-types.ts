@@ -32,8 +32,8 @@ export interface MenuOffer extends MenuItem {
   /** The dish's own setting; a variant has none, and is ordered under its dish. */
   ordering: ProductOrdering;
   unit: SellableUnit;
-  vatClass: VatClass;
-  takeawayVatClass: VatClass;
+  vatClass?: VatClass;
+  takeawayVatClass?: VatClass;
   category: string | null;
   allergens: ProductAllergens | null;
   diet: DietProfile | null;
@@ -65,8 +65,8 @@ export interface MenuOfferVariant {
   available: boolean;
   unit: SellableUnit;
   pricingUnit: PricingUnit;
-  vatClass: VatClass;
-  takeawayVatClass: VatClass;
+  vatClass?: VatClass;
+  takeawayVatClass?: VatClass;
   category: string | null;
   allergens: ProductAllergens | null;
   diet: DietProfile | null;
@@ -115,8 +115,8 @@ export interface AvailableProduct {
   unit: SellableUnit;
   pricingUnit: PricingUnit;
   unitPrice: string;
-  vatClass: VatClass;
-  takeawayVatClass: VatClass;
+  vatClass?: VatClass;
+  takeawayVatClass?: VatClass;
   category: string | null;
   allergens: ProductAllergens | null;
   diet: DietProfile | null;
@@ -164,8 +164,8 @@ export interface OfferedExtraItem {
   /** GROSS, in the money shape `unitPrice` uses. Never null: the inheritance is already resolved. */
   price: string;
   /** Always the extra PRODUCT's effective rate, never the dish's. */
-  vatClass: VatClass;
-  takeawayVatClass: VatClass;
+  vatClass?: VatClass;
+  takeawayVatClass?: VatClass;
   maxQuantity: number | null;
   preselected: boolean;
   addAllergens: ProductAllergens | null;

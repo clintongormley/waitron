@@ -84,7 +84,7 @@ export interface ListedVariant extends ProductVariant {
   effective: {
     allergens: ProductAllergens | null;
     unitPrice: string;
-    vatClass: VatClass;
+    vatClass?: VatClass;
     takeawayVatRate: string;
     primaryCategoryId: string | null;
     courseId: string | null;
@@ -119,7 +119,7 @@ export interface Product {
   pricingUnit: PricingUnit;
   /** GROSS (VAT-inclusive): per selected unit. */
   unitPrice: string;
-  vatClass: VatClass;
+  vatClass?: VatClass;
   /** The takeaway VAT rate in force on the venue's date today ("10.00"): a variant's own, else its
    * parent's. */
   takeawayVatRate: string;
@@ -173,7 +173,7 @@ export interface ProductEditorInput {
   active: boolean;
   /** Writes `products.available`: "sold out for now". */
   available: boolean;
-  vatClass: VatClass | null;
+  vatClass?: VatClass | null;
   /** One of the area's pickable rates ("10.00"), required in the body. Null only on a variant, which
    * then takes its parent's. Read back, it is the rate in force on the venue's date today. A save
    * that sends back that rate keeps the product's rates; any other replaces them with this one from
@@ -216,7 +216,7 @@ export interface InheritedValues {
   description: Record<string, string> | null;
   image: string | null;
   unitPrice: string;
-  vatClass: VatClass;
+  vatClass?: VatClass;
   /** The parent's takeaway rate today, which a variant without one of its own takes. */
   takeawayVatRate: string;
   /** The parent's unit, which is always the variant's. */

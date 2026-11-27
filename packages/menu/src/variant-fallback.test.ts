@@ -25,7 +25,6 @@ import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductEditor } from "./product-editor.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { createUnit, EACH_UNIT } from "./units.js";
-import { selectMenuVariant } from "./variants.js";
 import { setTakeawayVatRate } from "./takeaway-vat-rates.js";
 import {
   effectiveProductColumns,
@@ -189,7 +188,6 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
       customerName: { en: "House wine" },
       kitchenName: "WINE",
       unitPrice: "4.00",
-      vatClass: "reduced",
       categoryId: f.wines,
       unitId: f.glass,
     });
@@ -212,7 +210,6 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         courseId: null,
         effective: {
           unitPrice: "4.00",
-          vatClass: "reduced",
           takeawayVatRate: "21.00",
           primaryCategoryId: f.wines,
           allergens: { sulphites: {} },
@@ -232,7 +229,6 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         courseId: f.ownCourseId,
         effective: {
           unitPrice: "5.50",
-          vatClass: "general",
           takeawayVatRate: "0.00",
           primaryCategoryId: f.wines,
           allergens: { milk: {} },
@@ -253,7 +249,6 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
         active: true,
         effective: {
           unitPrice: "5.50",
-          vatClass: "general",
           takeawayVatRate: "0.00",
           primaryCategoryId: f.wines,
           allergens: { milk: {} },
@@ -330,7 +325,6 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
       menuPrice: null,
       available: true,
       image: libraryImageName("parent.jpg"),
-      vatClass: "reduced",
       pricingUnit: "each",
       unit: { id: f.glass },
       category: "Wines",
@@ -345,7 +339,6 @@ describe("listMenuOffers reads a variant's blanks from its parent", () => {
       kitchenName: "W175",
       unitPrice: "5.50",
       image: libraryImageName("large.jpg"),
-      vatClass: "general",
       pricingUnit: "each",
       unit: { id: f.glass },
       category: "Wines",
@@ -457,7 +450,6 @@ describe("readOfferedModifiers", () => {
         name: "Wine by the glass (125 ml)",
         customerName: { en: "House wine (125 ml)" },
         kitchenName: "WINE (125 ml)",
-        vatClass: "reduced",
         price: "4.00",
         addAllergens: PARENT_ALLERGENS,
       }),
@@ -473,7 +465,6 @@ describe("readProductEditor", () => {
     description: { en: "A dry white from Rueda" },
     image: libraryImageName("parent.jpg"),
     unitPrice: "4.00",
-    vatClass: "reduced",
     unitId: f.glass,
     primaryCategoryId: f.wines,
     courseId: f.courseId,
@@ -490,7 +481,6 @@ describe("readProductEditor", () => {
       description: null,
       image: null,
       unitPrice: null,
-      vatClass: null,
       unitId: null,
       primaryCategoryId: null,
       courseId: null,
@@ -509,7 +499,6 @@ describe("readProductEditor", () => {
       description: { en: "A sweet red from Toro" },
       image: libraryImageName("large.jpg"),
       unitPrice: "5.50",
-      vatClass: "general",
       unitId: null,
       primaryCategoryId: null,
       courseId: f.ownCourseId,
@@ -525,7 +514,6 @@ describe("readProductEditor", () => {
       inherited: null,
       name: "Wine by the glass",
       unitPrice: "4.00",
-      vatClass: "reduced",
     });
   });
 });
@@ -563,12 +551,9 @@ describe("effectiveProductColumns, entry by entry", () => {
   });
 });
 
-/** Each inherited column's STORED value, keyed like {@link effectiveProductColumns}. A copy's
- * takeaway class is read from the served-class column. */
+/** Each inherited column's STORED value, keyed like {@link effectiveProductColumns}. */
 function pickRaw() {
-  const source = (key: (typeof INHERITED_KEYS)[number]) =>
-    key === "takeawayVatClass" ? "vatClass" : key;
-  return Object.fromEntries(INHERITED_KEYS.map((key) => [key, products[source(key)]])) as {
+  return Object.fromEntries(INHERITED_KEYS.map((key) => [key, products[key]])) as {
     [K in (typeof INHERITED_KEYS)[number]]: (typeof products)[K];
   };
 }
@@ -590,7 +575,6 @@ describe("createProduct", () => {
     expect(created).toMatchObject({
       name: "Cava",
       unitPrice: "6.25",
-      vatClass: "general",
       image: libraryImageName("cava.jpg"),
       unitId: f.largeGlass,
       categoryId: f.bottles,
@@ -694,61 +678,9 @@ describe("dietary declarations on a variant", () => {
   }
 });
 
-describe("a copy's takeaway VAT class", () => {
-  // The served class, its own else its parent's: a product line taken away files at its product's
-  // takeaway rate, so the label a copy carries is the served one, whatever the column holds.
-  it("is its own main class, else the parent's, never the stored takeaway class", async () => {
-    const ids = await run(async (tx) => {
-      const cola = await createProduct(tx, {
-        categoryId: f.bottles,
-        name: "Cola",
-        unitId: null,
-        unitPrice: "1.80",
-        vatClass: "reduced",
-      });
-      await tx
-        .update(products)
-        .set({ takeawayVatClass: "general" })
-        .where(eq(products.id, cola.id));
-      const variant = (name: string, order: number, own: Partial<typeof products.$inferInsert>) =>
-        tx
-          .insert(products)
-          .values({
-            parentId: cola.id,
-            name,
-            unitPrice: null,
-            vatClass: null,
-            dietaryDeclarations: null,
-            variantOrder: order,
-            ...own,
-          })
-          .returning({ id: products.id })
-          .then(([row]) => row!.id);
-      await addProductToMenu(tx, { menuId: f.menuId, productId: cola.id, grossPrice: null });
-      return {
-        cola: cola.id,
-        plain: await variant("Can", 0, {}),
-        ownMain: await variant("Bottle", 1, { vatClass: "super_reduced" }),
-        ownTakeaway: await variant("Jug", 2, { takeawayVatClass: "zero" }),
-      };
-    });
-    const offers = await run((tx) => listMenuOffers(tx, [f.menuId]));
-    const cola = offers.find((o) => o.productId === ids.cola)!;
-    expect(cola.takeawayVatClass).toBe("reduced");
-    const takeaway = (id: string) => cola.variants.find((v) => v.id === id)!.takeawayVatClass;
-    expect(takeaway(ids.plain)).toBe("reduced");
-    expect(takeaway(ids.ownMain)).toBe("super_reduced");
-    expect(takeaway(ids.ownTakeaway)).toBe("reduced");
-    expect(selectMenuVariant(cola, ids.ownMain)).toMatchObject({
-      vatClass: "super_reduced",
-      takeawayVatClass: "super_reduced",
-    });
-  });
-});
-
 describe("INHERITED_KEYS", () => {
-  // Every key below is read from the parent when a variant leaves it blank (the takeaway class is
-  // the served one); the three names never are.
+  // Every key below is read from the parent when a variant leaves it blank; the three names never
+  // are.
   // Pinned whole, so a key added or dropped is a decision somebody makes here rather than by accident.
   it("inherits exactly this set, and none of the names, flags or identity", () => {
     expect([...INHERITED_KEYS].sort()).toEqual(
@@ -762,8 +694,6 @@ describe("INHERITED_KEYS", () => {
         "dietaryDeclarations",
         "image",
         "unitPrice",
-        "vatClass",
-        "takeawayVatClass",
       ].sort(),
     );
   });

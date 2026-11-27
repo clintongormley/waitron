@@ -250,9 +250,8 @@ export interface ZoneMenuOffer {
     /** Present only on a unit that measures an amount (ml, g…); a dish sold in one takes no extras. */
     readonly measure?: true;
   };
-  /** The VAT class the live version froze. */
-  readonly vatClass: string;
-  readonly takeawayVatClass: string;
+  readonly vatClass?: string;
+  readonly takeawayVatClass?: string;
   readonly category: string | null;
   readonly allergens: Readonly<AllergenMap> | null;
   readonly diet: unknown;
@@ -307,8 +306,8 @@ export type ZoneOfferedModifier =
           readonly precision: number;
           readonly hardwareUnit: "kg" | "g" | "mg" | null;
         };
-        readonly vatClass: string;
-        readonly takeawayVatClass: string;
+        readonly vatClass?: string;
+        readonly takeawayVatClass?: string;
         readonly maxQuantity: number | null;
         readonly preselected: boolean;
         readonly available: boolean;
@@ -460,8 +459,8 @@ export interface ZoneMenuOfferVariant {
   readonly available: boolean;
   readonly unit: ZoneMenuOffer["unit"];
   readonly pricingUnit: string;
-  readonly vatClass: string;
-  readonly takeawayVatClass: string;
+  readonly vatClass?: string;
+  readonly takeawayVatClass?: string;
   readonly category: string | null;
   readonly courseId: string | null;
   readonly allergens: ZoneMenuOffer["allergens"];

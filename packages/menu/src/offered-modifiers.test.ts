@@ -286,8 +286,6 @@ describe("what a product offers", () => {
           price: "1.50",
           portion: "1.000",
           unit: EACH_UNIT,
-          vatClass: "reduced",
-          takeawayVatClass: "reduced",
           maxQuantity: 2,
           preselected: true,
           addAllergens: { mustard: {} },
@@ -309,8 +307,6 @@ describe("what a product offers", () => {
           price: "2.00",
           portion: "1.000",
           unit: EACH_UNIT,
-          vatClass: "general",
-          takeawayVatClass: "general",
           maxQuantity: 1,
           preselected: false,
           addAllergens: { milk: {} },
@@ -334,8 +330,6 @@ describe("what a product offers", () => {
           price: "0.75",
           portion: "1.000",
           unit: EACH_UNIT,
-          vatClass: "reduced",
-          takeawayVatClass: "reduced",
           maxQuantity: 1,
           preselected: false,
           addAllergens: null,
@@ -476,91 +470,6 @@ describe("an extra that is a parent with Active variants", () => {
         ids.cheese,
         ids.olives,
       ]);
-    }
-  });
-});
-
-describe("a variant offered as an extras item", () => {
-  it("carries the served class its variant resolves to as its takeaway class, on every path", async () => {
-    const items = await run(async (tx) => {
-      const parent = async (name: string, vatClass: "reduced" | "zero") =>
-        (
-          await createProduct(tx, {
-            categoryId: null,
-            unitId: null,
-            name,
-            unitPrice: "2.00",
-            vatClass,
-          })
-        ).id;
-      const cola = await parent("cola staff", "reduced");
-      const juice = await parent("juice staff", "zero");
-      const variant = (
-        parentId: string,
-        name: string,
-        own: Partial<typeof productRows.$inferInsert>,
-      ) =>
-        tx
-          .insert(productRows)
-          .values({
-            parentId,
-            name,
-            unitPrice: null,
-            vatClass: null,
-            dietaryDeclarations: null,
-            variantOrder: 0,
-            ...own,
-          })
-          .returning({ id: productRows.id })
-          .then(([row]) => row!.id);
-      const variants = {
-        ownTakeaway: await variant(cola, "Jug", {
-          vatClass: "super_reduced",
-          takeawayVatClass: "zero",
-        }),
-        ownServed: await variant(cola, "Bottle", { vatClass: "super_reduced" }),
-        parentsTakeaway: await variant(cola, "Can", {}),
-        parentsServed: await variant(juice, "Carton", {}),
-      };
-      const list = await createExtraList(
-        tx,
-        {
-          name: "Drinks staff",
-          customerName: { en: "Add a drink" },
-          kitchenName: "DRK",
-          minPicks: 0,
-          maxPicks: 1,
-          items: Object.values(variants).map((productId) => ({ productId })),
-        },
-        "en",
-      );
-      await writeProductModifiers(tx, ids.burger, [{ kind: "extras", id: list.id }]);
-      return variants;
-    });
-
-    const offered = await run((tx) =>
-      readOfferedModifiers(tx, [
-        { productId: ids.burger, menuItemId: null },
-        { productId: ids.burger, menuItemId: offerId },
-      ]),
-    );
-    const { products: available } = await run((tx) => listAvailableProducts(tx));
-    const paths = {
-      product: offered.get(ids.burger)!,
-      offer: offered.get(offerId)!,
-      listAvailableProducts: available.find((product) => product.id === ids.burger)!
-        .offeredModifiers,
-    };
-
-    for (const [holder, [list]] of Object.entries(paths)) {
-      const classes = (productId: string) => {
-        const item = list!.kind === "extras" && list!.items.find((i) => i.productId === productId);
-        return item ? [item.vatClass, item.takeawayVatClass] : null;
-      };
-      expect(classes(items.ownTakeaway), holder).toEqual(["super_reduced", "super_reduced"]);
-      expect(classes(items.ownServed), holder).toEqual(["super_reduced", "super_reduced"]);
-      expect(classes(items.parentsTakeaway), holder).toEqual(["reduced", "reduced"]);
-      expect(classes(items.parentsServed), holder).toEqual(["zero", "zero"]);
     }
   });
 });

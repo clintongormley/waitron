@@ -182,7 +182,6 @@ const PRODUCT_KEYS = {
   unit: ["unit", "pricingUnit"],
   allergens: ["allergens"],
   diet: ["diet", "dietOverride", "dietaryDeclarations"],
-  vat: ["vatClass", "takeawayVatClass"],
   ordering: ["ordering"],
 } as const;
 
@@ -257,7 +256,7 @@ function nestedFields(
         );
         continue;
       }
-      add(productFields(was, now, ["names", "image", "unit", "allergens", "diet", "vat"]), {
+      add(productFields(was, now, ["names", "image", "unit", "allergens", "diet"]), {
         variantId: id,
       });
     }
@@ -360,7 +359,6 @@ function extraFields(
     image: ["image"],
     allergens: ["addAllergens"],
     diet: ["suitableFor"],
-    vat: ["vatClass", "takeawayVatClass"],
   } as const;
   for (const field of fields) {
     if (field === "names") {

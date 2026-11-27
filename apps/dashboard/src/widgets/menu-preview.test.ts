@@ -568,61 +568,6 @@ it("names an extra's change to no quantity limit in both languages", async () =>
   );
 });
 
-/** A dish's VAT change, a variant's own (named in the variants too), and an extra's. */
-const VAT_CHANGES: MenuChange[] = [
-  {
-    id: "fixture-src/widgets/menu-preview.test.ts-12",
-    targets: { before: [], after: [] },
-    kind: "product_changed",
-    productId: "p-lemonade",
-    name: "Lemonade",
-    fields: ["vat"],
-    source: "shared_product",
-    alsoOn: ["Dinner Menu"],
-  },
-  {
-    id: "fixture-src/widgets/menu-preview.test.ts-11",
-    targets: { before: [], after: [] },
-    kind: "product_changed",
-    productId: "p-burger",
-    name: "Burger",
-    fields: ["color", "vat", "variants"],
-    source: "shared_product",
-  },
-  {
-    id: "fixture-src/widgets/menu-preview.test.ts-10",
-    targets: { before: [], after: [] },
-    kind: "product_changed",
-    productId: "p-cheese",
-    name: "Cheese",
-    fields: ["vat"],
-    source: "shared_product",
-  },
-];
-
-it("names a VAT change among a product's changed facts", async () => {
-  const el = await mount({ preview: preview(VAT_CHANGES) });
-  expect(items(el, "changes")).toEqual(
-    [
-      "Lemonade: VAT changed in Products, also on Dinner Menu",
-      "Burger: colour, VAT, variants changed in Products",
-      "Cheese: VAT changed in Products",
-    ].sort(),
-  );
-});
-
-it("names a VAT change in Spanish", async () => {
-  setLocale("es-ES");
-  const el = await mount({ preview: preview(VAT_CHANGES) });
-  expect(items(el, "changes")).toEqual(
-    [
-      "Lemonade: IVA cambio en Productos, también en Dinner Menu",
-      "Burger: color, IVA, variantes cambio en Productos",
-      "Cheese: IVA cambio en Productos",
-    ].sort(),
-  );
-});
-
 it.each([
   ["en", "Lemonade: colour changed in Products"],
   ["es-ES", "Lemonade: color cambio en Productos"],

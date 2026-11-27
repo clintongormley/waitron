@@ -17,7 +17,6 @@ import { createCategory } from "./categories.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
 import { setProductVariants } from "./variants.js";
-import { saveMenuSettings } from "./settings.js";
 import { readTakeawayVatSchedules } from "./takeaway-vat-rates.js";
 import {
   countingSettingsReads,
@@ -180,23 +179,10 @@ it("reads a product with no unit as unitId null", async () => {
   expect(value.unitId).toBeNull();
 });
 
-it("gives a new product the eat-in class saved as the menu settings' hidden default", async () => {
-  await withTransaction(fx.db, (tx) => saveMenuSettings(tx, { defaultProductVatClass: "zero" }));
-  const saved = await withTransaction(fx.db, (tx) => saveProductEditor(tx, null, input, "en"));
-  expect(saved.vatClass).toBe("zero");
-  const [row] = await fx.db
-    .select({ vatClass: products.vatClass })
-    .from(products)
-    .where(eq(products.id, saved.id));
-  expect(row).toEqual({ vatClass: "zero" });
-});
-
 it("saves and reads the canonical editor shape with independent content and variants", async () => {
   const saved = await withTransaction(fx.db, (tx) => saveProductEditor(tx, null, input, "en"));
   expect(saved).toEqual({
     ...input,
-    // The menu settings' hidden default for new products.
-    vatClass: "general",
     id: saved.id,
     parentId: null,
     inherited: null,
@@ -820,7 +806,6 @@ describe("a variant's own page", () => {
       await fx.db
         .select({
           unitPrice: products.unitPrice,
-          vatClass: products.vatClass,
           unitId: products.unitId,
           categoryId: products.categoryId,
           allergens: products.allergens,
@@ -844,7 +829,6 @@ describe("a variant's own page", () => {
       image: null,
       unitId: null,
       unitPrice: "2.00",
-      vatClass: null,
       takeawayVatRate: null,
       primaryCategoryId: null,
       color: null,
@@ -858,7 +842,6 @@ describe("a variant's own page", () => {
         description: { en: "Freshly roasted" },
         image: libraryImageName("coffee.webp"),
         unitPrice: "9.00",
-        vatClass: "general",
         takeawayVatRate: "21.00",
         unitId: kgUnitId,
         primaryCategoryId: categories.parent,
@@ -904,7 +887,6 @@ describe("a variant's own page", () => {
     expect(await save(variantId, value)).toEqual(value);
     expect(await storedRow(variantId)).toEqual({
       unitPrice: 200,
-      vatClass: null,
       unitId: null,
       categoryId: null,
       allergens: null,
@@ -922,7 +904,6 @@ describe("a variant's own page", () => {
     });
     expect(overridden).toMatchObject({
       unitPrice: "2.50",
-      vatClass: null,
       allergens: { eggs: {} },
       dietaryDeclarations: ["halal"],
       inherited: value.inherited,
@@ -932,7 +913,6 @@ describe("a variant's own page", () => {
     expect(cleared).toEqual(value);
     expect(await storedRow(variantId)).toEqual({
       unitPrice: 200,
-      vatClass: null,
       unitId: null,
       categoryId: null,
       allergens: null,

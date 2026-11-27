@@ -1063,7 +1063,6 @@ const PRODUCT_FIELD_ORDER: readonly ProductChangeField[] = [
   "unit",
   "allergens",
   "diet",
-  "vat",
   "ordering",
   "variants",
   "extras",
@@ -1077,7 +1076,6 @@ const PRODUCT_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["unit", ["unit", "pricingUnit"]],
   ["allergens", ["allergens"]],
   ["diet", ["diet", "dietOverride", "dietaryDeclarations"]],
-  ["vat", ["vatClass", "takeawayVatClass"]],
 ];
 
 const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
@@ -1085,7 +1083,6 @@ const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["image", ["image"]],
   ["allergens", ["addAllergens"]],
   ["diet", ["suitableFor"]],
-  ["vat", ["vatClass", "takeawayVatClass"]],
 ];
 
 function changedFacts(
@@ -1258,7 +1255,7 @@ function productFields(
     for (const [field, keys] of PRODUCT_FACTS)
       if (keys.some((key) => !same(read(was, key), read(variant, key))) && !inherited(keys)) {
         shared.add("variants");
-        if (field === "vat" || DECLARATIONS.includes(field)) shared.add(field);
+        if (DECLARATIONS.includes(field)) shared.add(field);
       }
   }
   if (!same(extrasTerms(a), extrasTerms(b))) shared.add("extras");

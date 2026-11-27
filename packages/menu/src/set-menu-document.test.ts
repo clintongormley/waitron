@@ -373,7 +373,7 @@ it("keeps a mixed-rate dish and its surcharge in the published copy", async () =
   const copy = await fromLive();
   expect(copy?.terms).not.toHaveProperty("vatClass");
   expect(copy?.terms).not.toHaveProperty("takeawayVatClass");
-  expect(copy?.offers[f.sirloinItem]).toMatchObject({ vatClass: "general", unitPrice: "5.00" });
+  expect(copy?.offers[f.sirloinItem]).toMatchObject({ unitPrice: "5.00" });
 });
 
 it("refuses to publish or live-edit a set menu on its own", async () => {

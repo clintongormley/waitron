@@ -390,13 +390,6 @@ describe("navigateMenuChanges", () => {
       [{ kind: "diet" }],
     ],
     [
-      "vat",
-      (o: FrozenOffer) => {
-        o.vatClass = "reduced";
-      },
-      [{ kind: "vat" }],
-    ],
-    [
       "ordering",
       (o: FrozenOffer) => {
         o.ordering = "staff_only";
@@ -730,34 +723,6 @@ describe("nested change subjects", () => {
       ],
       after: [],
     });
-  });
-  it("addresses a takeaway-class-only change as VAT on the dish and on an extra", () => {
-    const live = document(),
-      proposed = document();
-    soup(live).offeredModifiers = [extras("citrus")];
-    soup(proposed).offeredModifiers = [extras("citrus")];
-    soup(proposed).takeawayVatClass = "reduced";
-    const [dish] = navigateMenuChanges(live, proposed, [
-      change({ kind: "product_changed", productId: "soup", name: "Same", fields: ["vat"] }),
-    ]);
-    expect(dish!.targets).toEqual({
-      before: atOccurrences([{ field: { kind: "vat" } }]),
-      after: atOccurrences([{ field: { kind: "vat" } }]),
-    });
-    const extra = soup(proposed).offeredModifiers[0]!;
-    if (extra.kind !== "extras") throw new Error("extras");
-    extra.items[0]!.takeawayVatClass = "zero";
-    const [item] = navigateMenuChanges(live, proposed, [
-      {
-        kind: "product_changed",
-        productId: "lemon",
-        name: "Same",
-        fields: ["vat"],
-        source: "shared_product",
-      },
-    ]);
-    const expected = repeated({ kind: "vat" }, { listId: "citrus", extraProductId: "lemon" });
-    expect(item!.targets).toEqual({ before: expected, after: expected });
   });
   it("addresses an extra-only translated name edit at its parent, never as a phantom dish", () => {
     const live = document(),
