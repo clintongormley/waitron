@@ -108,6 +108,92 @@ function signalGate() {
   return { promise, resolve };
 }
 
+it.each(["checked", "download", "unchecked", "save-failed"] as const)(
+  "requests host power-off only after a saved hold (%s)",
+  async (kind) => {
+    const saving = signalGate();
+    const saved = signalGate();
+    const hostReply = signalGate();
+    const removed = vi.fn(async () => {});
+    const powerOff = vi.fn(async () => {
+      await hostReply.promise;
+      return { available: true } as const;
+    });
+    const archive = { name: "final.enc", path: "unused", bytes: 1, remove: removed };
+    const actor = { source: "person", person: "00000000-0000-4000-8000-000000000111" } as const;
+    const shutdown = createAdminShutdown({
+      async check() {
+        if (kind === "unchecked") throw new Error("Backup failed");
+        if (kind === "download") return { archive };
+      },
+      async save() {
+        saving.resolve();
+        await saved.promise;
+        if (kind === "save-failed") throw new Error("Mark write failed");
+      },
+      clear: async () => {},
+      powerOff,
+    });
+    try {
+      shutdown.start(actor);
+      if (kind === "download") {
+        await vi.waitFor(() => expect(shutdown.status().phase).toBe("download"));
+        (await shutdown.beginDownload(archive.name)).finish(true);
+        shutdown.confirmDownload(archive.name);
+      }
+      if (kind === "unchecked") {
+        await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+        shutdown.resolvePaused("shut-down-anyway");
+      }
+      await saving.promise;
+      expect(powerOff).not.toHaveBeenCalled();
+      saved.resolve();
+      if (kind === "save-failed") {
+        await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+        await shutdown.close();
+        expect(powerOff).not.toHaveBeenCalled();
+      } else {
+        await vi.waitFor(() => expect(powerOff.mock.calls).toEqual([[actor]]));
+        expect(shutdown.status()).toMatchObject({ phase: "ready", powerOff: "requesting" });
+        if (kind === "download") expect(removed).toHaveBeenCalledOnce();
+        await shutdown.close();
+        hostReply.resolve();
+        await vi.waitFor(() =>
+          expect(shutdown.status()).toMatchObject({ phase: "ready", powerOff: "requested" }),
+        );
+        expect(powerOff).toHaveBeenCalledOnce();
+      }
+    } finally {
+      saved.resolve();
+      hostReply.resolve();
+      await shutdown.close();
+    }
+  },
+);
+
+it.each([
+  { available: false, reason: "missing", detail: "ENOENT" },
+  { available: false, reason: "refused", refusal: "unknown_request" },
+] as const)(
+  "gives manual switch-off instructions on a box with no power-off service (%j)",
+  async (answer) => {
+    const powerOff = vi.fn(async () => answer);
+    const shutdown = createAdminShutdown({
+      check: async () => {},
+      save: async () => {},
+      clear: async () => {},
+      powerOff,
+    });
+    shutdown.start({ source: "person", person: "00000000-0000-4000-8000-000000000111" });
+    try {
+      await vi.waitFor(() => expect(powerOff).toHaveBeenCalledOnce());
+      expect(shutdown.status()).toEqual({ phase: "ready" });
+    } finally {
+      await shutdown.close();
+    }
+  },
+);
+
 it.each(["keep-waiting", "cancel", "shut-down-anyway"] as const)(
   "settles one stalled check when the administrator chooses %s",
   async (decision) => {
@@ -348,7 +434,7 @@ it.each(["retry", "cancel", "shut-down-anyway"] as const)(
       },
     });
     try {
-      shutdown.start({ paired: true, downloadOnly: true });
+      shutdown.start(undefined, { paired: true, downloadOnly: true });
       expect(shutdown.view()).toEqual({ phase: "checking", paired: true, downloadOnly: true });
       await vi.waitFor(() => expect(shutdown.status().phase).toBe("download"));
       expect(checkedSpare).toBe(0);

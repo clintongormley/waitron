@@ -199,7 +199,7 @@ export interface BoxUpgradeSettings extends BoxUpgradeSettingsEdit {
 }
 export type ShutdownStatus =
   | { phase: "idle" | "checking" | "stalled" }
-  | { phase: "ready"; checked?: false }
+  | { phase: "ready"; checked?: false; powerOff?: "requesting" | "requested" | "unconfirmed" }
   | { phase: "paused"; errorCode: string }
   | { phase: "download"; name: string; bytes: number; delivered: boolean; errorCode?: string };
 

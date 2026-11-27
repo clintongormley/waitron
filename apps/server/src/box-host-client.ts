@@ -33,9 +33,10 @@ export type ClockServiceStatus =
 export type ClockSetAnswer =
   | { available: false; reason: Unavailable; refusal?: string; detail?: string }
   | { available: true; beforeMs: number; afterMs: number };
-export type TimeServiceOnAnswer =
+type HostActionAnswer =
   | { available: false; reason: Unavailable; refusal?: string; detail?: string }
   | { available: true };
+export type TimeServiceOnAnswer = HostActionAnswer;
 export interface LastOfferedUpgrade {
   attemptId: string;
   finishedAt: string;
@@ -74,6 +75,7 @@ export function upgradeSettingsEdit(value: unknown): UpgradeSettingsEdit | null 
 }
 
 export interface BoxHostClient {
+  powerOff?(actor: PersonActor): Promise<HostActionAnswer>;
   readUpgradeSettings?(): Promise<UpgradeSettingsAnswer>;
   saveUpgradeSettings?(edit: UpgradeSettingsEdit): Promise<UpgradeSettingsAnswer>;
   lastOfferedUpgrade?(): Promise<LastOfferedUpgrade | null>;
@@ -195,6 +197,14 @@ const isMs = (value: unknown): value is number =>
   Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= MAX_DATE_MS;
 const SERVICES: ReadonlySet<unknown> = new Set(["on", "off", "stopped"]);
 
+function requesterJson(requester: Record<string, string | null>): string {
+  // The host accepts printable ASCII, so other characters travel as JSON escapes.
+  return JSON.stringify(requester).replace(
+    /[^\x20-\x7e]/g,
+    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+}
+
 export function boxHostClient(
   deps: { socketPath?: string; statusMs?: number; setMs?: number; retryMs?: number } = {},
 ): Required<BoxHostClient> {
@@ -220,6 +230,11 @@ export function boxHostClient(
     return { ok: true, settings: { version: 1, ...fields } };
   }
   return {
+    async powerOff(actor) {
+      const json = requesterJson(actor);
+      if (json.length > MAX_REQUESTER_BYTES) return { available: false, reason: "malformed" };
+      return askToAct(`poweroff ${json}`, deps.statusMs ?? DEFAULT_STATUS_MS);
+    },
     readUpgradeSettings: () =>
       askUpgradeSettings("upgrade.settings", deps.statusMs ?? DEFAULT_STATUS_MS),
     saveUpgradeSettings: (edit) =>
@@ -283,11 +298,7 @@ export function boxHostClient(
       return { attemptId, finishedAt, fromVersion, toVersion, status };
     },
     async setClock({ targetMs, requester }) {
-      // The host takes printable ASCII only, so a letter beyond it travels as a JSON escape.
-      const json = JSON.stringify(requester).replace(
-        /[^\x20-\x7e]/g,
-        (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`,
-      );
+      const json = requesterJson(requester);
       if (!Number.isSafeInteger(targetMs) || json.length > MAX_REQUESTER_BYTES) {
         return { available: false, reason: "malformed" };
       }
@@ -312,7 +323,7 @@ export function boxHostClient(
     retryTimeService: () => askToAct("clock.retry", deps.retryMs ?? DEFAULT_RETRY_MS),
   };
 
-  async function askToAct(line: string, limitMs: number): Promise<TimeServiceOnAnswer> {
+  async function askToAct(line: string, limitMs: number): Promise<HostActionAnswer> {
     const result = await exchange(socketPath, line, limitMs);
     if (!result.ok) {
       return {

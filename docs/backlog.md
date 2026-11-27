@@ -1280,7 +1280,7 @@ Not in any track until the standalone primary is done.
   with the same staged backup. A standalone main box that streams to a bucket confirms the bucket
   has its final update before recording the next-start hold. The administrator can retry the bucket
   check with the same checked backup. The remaining shutdown work covers Cloud backups, shutdown
-  of a spare and appliance power-off. On a paired main box, Box status offers checked shutdown or opens
+  of a spare. On a paired main box, Box status offers checked shutdown or opens
   Servers for a controlled handover. Checked shutdown confirms the upload to the spare's store
   before recording the administrator hold. Decide separately whether a spare's answer can ever
   clear that hold when it might have missed an off-box restore. Box status names the failed

@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
+import type { BoxHostClient, PersonActor } from "./box-host-client.js";
 import { SAFE_METHODS } from "./read-only-gate.js";
 import "./errors.js";
 
@@ -10,7 +11,7 @@ export type ShutdownMode = { paired?: true; downloadOnly?: true; directBucket?: 
 
 export type ShutdownStatus =
   | { phase: "idle" | "checking" | "stalled" }
-  | { phase: "ready"; checked?: false }
+  | { phase: "ready"; checked?: false; powerOff?: "requesting" | "requested" | "unconfirmed" }
   | { phase: "paused"; errorCode: string }
   | { phase: "download"; name: string; bytes: number; delivered: boolean; errorCode?: string };
 
@@ -64,6 +65,7 @@ export function createAdminShutdown(deps: {
   ): Promise<void | ShutdownCheck>;
   save(): Promise<void>;
   clear(): Promise<void>;
+  powerOff?: BoxHostClient["powerOff"];
   pauseDuties?(): { settled: Promise<void>; drainRefunds(): Promise<unknown>; resume(): void };
 }) {
   const writers = new Set<Promise<void>>();
@@ -71,6 +73,7 @@ export function createAdminShutdown(deps: {
     state: ShutdownStatus;
     failedDestination?: string;
     mode: ShutdownMode;
+    actor?: PersonActor;
     controller: AbortController;
     settled: Promise<void>;
     run?: ShutdownRun;
@@ -114,6 +117,27 @@ export function createAdminShutdown(deps: {
     errorCode?: string,
   ): ShutdownStatus {
     return { phase: "download", name: archive.name, bytes: archive.bytes, delivered, errorCode };
+  }
+
+  async function requestPowerOff(
+    current: Attempt,
+    ready: Extract<ShutdownStatus, { phase: "ready" }>,
+  ) {
+    if (current.actor === undefined || deps.powerOff === undefined) return;
+    current.state = { ...ready, powerOff: "requesting" };
+    try {
+      const answer = await deps.powerOff(current.actor);
+      if (answer.available) {
+        current.state = { ...ready, powerOff: "requested" };
+        return;
+      }
+      const manual =
+        (answer.reason === "missing" && answer.detail === "ENOENT") ||
+        (answer.reason === "refused" && answer.refusal === "unknown_request");
+      current.state = manual ? ready : { ...ready, powerOff: "unconfirmed" };
+    } catch {
+      current.state = { ...ready, powerOff: "unconfirmed" };
+    }
   }
 
   function run(
@@ -194,6 +218,8 @@ export function createAdminShutdown(deps: {
           current.checked && !current.replicaCheckPending
             ? { phase: "ready" }
             : { phase: "ready", checked: false };
+        // The host can signal the server to stop before it replies.
+        void requestPowerOff(current, current.state);
       } catch (error) {
         if (current.run !== active) return;
         const errorCode = codeOf(error);
@@ -238,11 +264,12 @@ export function createAdminShutdown(deps: {
               ? { failedDestination: attempt.failedDestination }
               : undefined),
           },
-    start(mode: ShutdownMode = {}): void {
+    start(actor?: PersonActor, mode: ShutdownMode = {}): void {
       if (attempt !== undefined || closing) throw new AppError("box.shutdown_in_progress", {});
       const current: Attempt = {
         state: { phase: "checking" },
         mode,
+        actor,
         controller: new AbortController(),
         settled: Promise.resolve(),
         drained: false,

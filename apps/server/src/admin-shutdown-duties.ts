@@ -10,6 +10,7 @@ import { createAdminShutdown } from "./admin-shutdown.js";
 import { clearShutdownMark, writeShutdownMark } from "./admin-shutdown-hold.js";
 import { readArchiveSettingsWithMeta } from "./archive-settings.js";
 import { loadBackupKey } from "./backup-config.js";
+import type { BoxHostClient, PersonActor } from "./box-host-client.js";
 import type { BackupSupervisor } from "./backup-supervisor.js";
 import type { ServerConfig } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -51,6 +52,7 @@ export function adminShutdownDuties(deps: {
   config: ServerConfig;
   runner: JobRunner;
   backup: BackupSupervisor;
+  host: BoxHostClient;
   streamHost: StreamHost;
   readSpare(): Promise<SpareFollowView | null>;
   readBoxEnv(): Promise<Record<string, string | undefined>>;
@@ -116,6 +118,7 @@ export function adminShutdownDuties(deps: {
     return reportedPause.pending;
   }
   const shutdown = createAdminShutdown({
+    powerOff: deps.host.powerOff?.bind(deps.host),
     async check(signal, { attemptSignal, waitForUpload, reportFailedDestination }) {
       const dest = await destination();
       if (dest === undefined) throw new AppError("box.shutdown_unavailable", {});
@@ -182,10 +185,10 @@ export function adminShutdownDuties(deps: {
   });
   return {
     ...shutdown,
-    async start() {
+    async start(actor: PersonActor) {
       const dest = await destination();
       if (dest === undefined) throw new AppError("box.shutdown_unavailable", {});
-      shutdown.start(dest.mode);
+      shutdown.start(actor, dest.mode);
     },
     available: async () => (await destination()) !== undefined,
     readStaff: () => (deps.workforceEnabled ? readShutdownStaff(db) : Promise.resolve([])),

@@ -4017,6 +4017,7 @@ async function bootServer(
     config,
     runner: jobRunner,
     backup: backupSupervisor,
+    host: hostClient,
     streamHost,
     readSpare: () => spareFollow?.status() ?? Promise.resolve(null),
     readBoxEnv: () => loadBoxEnv(base, config.stateDir),

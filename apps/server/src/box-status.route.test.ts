@@ -7,11 +7,12 @@ import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { join } from "node:path";
 import { Hono } from "hono";
+import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDLE_TIMEOUT_MS } from "@waitron/identity";
+import { IDLE_TIMEOUT_MS, persons } from "@waitron/identity";
 import { jobOrigin } from "@waitron/shared";
 import { WorkforceBackend } from "@waitron/workforce";
 import { readShutdownStaff } from "./admin-shutdown-duties.js";
@@ -212,6 +213,11 @@ it("lets an administrator sign in again and cancel while payments are paused", a
     save: async () => {},
     clear: async () => {},
   });
+  const start = vi.spyOn(shutdown, "start");
+  const [owner] = await suite.db
+    .select({ id: persons.id })
+    .from(persons)
+    .where(eq(persons.email, "owner@example.test"));
   const app = buildApp(nodeId, {
     now: new Date(),
     tlsCertPath: undefined,
@@ -243,6 +249,7 @@ it("lets an administrator sign in again and cancel while payments are paused", a
     });
     expect(proved.status).toBe(204);
     expect((await changeShutdown("POST", cookie)).status).toBe(202);
+    expect(start.mock.calls).toEqual([[{ source: "person", person: owner!.id }]]);
     vi.setSystemTime(Date.now() + IDLE_TIMEOUT_MS + 1_000);
     const expired = await changeShutdown("DELETE", cookie);
     expect(expired.status).toBe(401);

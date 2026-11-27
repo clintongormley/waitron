@@ -7,10 +7,10 @@ saves the next-start hold before requesting power-off. This applies to eligible 
 main boxes, including the existing download and streaming flows. A box without the host service
 still gives the manual instruction. Spare shutdown, Cloud backup and handover stay outside this slice.
 
-1. **Authority and order.** In `apps/server/src/box-status.ts` pass the authorized person's id to
-   the existing start and decision calls. Keep HTTPS, Manage boxes and the fresh password check on
-   start. Use the person whose action leads to completion, including download confirmation, retry
-   or **Shut down anyway**. **Keep waiting** resumes the original action. In `admin-shutdown.ts` add
+1. **Authority and order.** In `apps/server/src/box-status.ts` pass the id of the person who
+   starts shutdown to the existing start call after the HTTPS, Manage boxes and fresh password
+   checks. Keep that person for download confirmation, retry, **Keep waiting** and
+   **Shut down anyway**. In `admin-shutdown.ts` add
    one call after the existing durable hold write, archive cleanup and transition to `ready`.
    This order lets a host stop signal see the completed shutdown. Start the bounded host call without
    adding it to the promise `close()` waits for. Keep the saved hold and trading pause through every
@@ -40,12 +40,14 @@ still gives the manual instruction. Spare shutdown, Cloud backup and handover st
    actor log and refusal through stubs. Dashboard's `box-status-screen.test.ts` checks manual,
    automatic, disconnected and unconfirmed wording. Run the changed files and Lane H's fiscal and
    menu checks. Inspect Box status in both languages, themes and widths.
-5. **Appliance proof before landing.** Reserve `waitron-spare.local` with a person available to turn
-   it back on. Use a separate synthetic standalone venue and local backup folder. Preserve the
-   spare's normal configuration. Install the candidate app and host script together and confirm the
-   app connects to that host socket. Observe physical power-off and record the message Box status
-   showed. After power-on, collect the previous boot's app and host logs. Check the eight-second
-   app stop deadline and a refused sale before **Carry on**, then complete a sale. Return the spare
-   to its normal configuration. Land once this rehearsal is recorded.
+5. **Appliance proof before landing.** Reserve `waitron-spare.local` with the owner there to turn
+   it back on. Build the PR head into a separate container with its own state, logs and backup
+   folders. Use a loopback HTTPS port through an SSH tunnel and a synthetic preproduction venue.
+   Start a temporary copy of the host socket unit with its own path and the candidate handler.
+   Bind only this socket into the candidate container. Leave the spare's normal app, data and host
+   unit in place. Record the browser message, the host request and physical power-off. After power-on,
+   collect the stop logs, check the eight-second deadline and start the candidate with the same
+   test state. Verify a refused sale before **Carry on**, then complete one. Remove the candidate
+   container and runtime units, and confirm the original spare answers at its usual address.
 
 Estimate 90–130 product and 100–160 test lines. One PR within three active hours.

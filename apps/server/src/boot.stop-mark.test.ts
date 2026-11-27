@@ -215,6 +215,10 @@ it.each([
   let app!: Hono;
   let started!: Awaited<ReturnType<typeof startServer>>;
   let stateDir!: string;
+  const markAtPowerOff = vi.fn(async () => {
+    expect((await stat(join(stateDir, "admin-shutdown.json"))).isFile()).toBe(true);
+    return { available: false, reason: "refused", refusal: "host_failed" } as const;
+  });
   try {
     await withTradingBootServer(
       {
@@ -293,7 +297,10 @@ it.each([
               );
           });
           started = await startServer(env, env, {
-            boxHost: synchronisedBoxHost(),
+            boxHost: {
+              ...synchronisedBoxHost(),
+              ...(scenario === "multiple" ? { powerOff: markAtPowerOff } : {}),
+            },
             ...(scenario === "paired-streaming"
               ? {
                   peerCheck: async () => ({
@@ -387,10 +394,26 @@ it.each([
           expect(wroteMark()).toBe(false);
           finishCheck();
           await vi.waitFor(async () => {
-            expect(await (await health()).json()).toMatchObject({ shutdown: { phase: "ready" } });
+            expect(await (await health()).json()).toMatchObject({
+              shutdown: { phase: "ready", powerOff: "unconfirmed" },
+            });
           });
           expect(wroteMark()).toBe(true);
+          expect(markAtPowerOff).toHaveBeenCalledOnce();
+          await expect(markAtPowerOff.mock.results[0]?.value).resolves.toHaveProperty(
+            "refusal",
+            "host_failed",
+          );
+          expect(await (await fetch(`${base}/api/node`)).json()).toMatchObject({
+            acceptingSales: false,
+          });
+          await started.markRestart!();
+          await started.close();
           expect((await stat(mark)).isFile()).toBe(true);
+          await expect(stat(join(stateDir, "stop-mark.json"))).rejects.toHaveProperty(
+            "code",
+            "ENOENT",
+          );
           return;
         }
         if (smtp) {

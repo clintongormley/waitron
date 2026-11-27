@@ -1117,6 +1117,7 @@ export class BoxStatusScreen extends LitElement {
     )
       return nothing;
     const phase = status.phase;
+    const powerOff = phase === "ready" ? status.powerOff : undefined;
     const shutdownLabel = status.paired
       ? "box_status.shutdown.check_and_shut_down"
       : "box_status.shutdown.title";
@@ -1126,17 +1127,24 @@ export class BoxStatusScreen extends LitElement {
       <h2>${t("box_status.shutdown.title")}</h2>
       <p role="status" data-test="box-shutdown-status">
         ${
-          phase === "ready" && status.checked === false
-            ? t("box_status.shutdown.unchecked")
-            : phase === "idle"
-              ? ""
-              : t(
-                  phase === "checking" && status.paired
-                    ? "box_status.shutdown.checking_pair"
-                    : phase === "checking" && status.directBucket
-                      ? "box_status.shutdown.checking_bucket"
-                      : `box_status.shutdown.${phase}`,
-                )
+          powerOff !== undefined
+            ? t(`box_status.shutdown.power_off_${powerOff}`)
+            : phase === "ready" && status.checked === false
+              ? t("box_status.shutdown.unchecked")
+              : phase === "idle"
+                ? ""
+                : t(
+                    phase === "checking" && status.paired
+                      ? "box_status.shutdown.checking_pair"
+                      : phase === "checking" && status.directBucket
+                        ? "box_status.shutdown.checking_bucket"
+                        : `box_status.shutdown.${phase}`,
+                  )
+        }
+        ${
+          powerOff !== undefined && phase === "ready" && status.checked === false
+            ? t("box_status.shutdown.older_backup")
+            : nothing
         }
         ${(phase === "paused" || phase === "download") && status.errorCode ? codeMessage(status.errorCode) : nothing}
         ${
@@ -1252,6 +1260,7 @@ export class BoxStatusScreen extends LitElement {
                   }
                   <p>${t("box_status.shutdown.password_reason")}</p>`
         }
+        <p>${t("box_status.shutdown.may_disconnect")}</p>
         <wt-form-actions slot="footer" .error=${this.shutdownError}>
           <wt-button
             slot="cancel"

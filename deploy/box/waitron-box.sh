@@ -145,13 +145,31 @@ clock_status() {
   answer "{\"ok\":true,\"service\":\"$service\",\"unit\":$unit_json,\"synchronised\":$([ "$synced" = yes ] && echo true || echo false),\"lastSyncAt\":$last,\"nowMs\":$(date +%s%3N)}"
 }
 
+valid_requester() {
+  [ ${#1} -le 512 ] && [[ $1 =~ $REQUESTER ]]
+}
+
+power_off() {
+  local requester="$1"
+  if ! valid_requester "$requester"; then
+    refuse requester_invalid
+    return
+  fi
+  logger -t waitron-box "poweroff requester=$requester"
+  if systemctl poweroff --no-block > /dev/null; then
+    answer '{"ok":true}'
+  else
+    refuse host_failed
+  fi
+}
+
 clock_set() {
   local instance="$1" target="$2" requester="$3" arrived="$4" units unit target_ms seconds millis before after
   if ! [[ $target =~ $TARGET ]] || [ $((10#$target)) -lt $FIRST_TARGET_MS ] || [ $((10#$target)) -ge $END_TARGET_MS ]; then
     refuse target_invalid
     return
   fi
-  if [ ${#requester} -gt 512 ] || ! [[ $requester =~ $REQUESTER ]]; then
+  if ! valid_requester "$requester"; then
     refuse requester_invalid
     return
   fi
@@ -361,6 +379,7 @@ main() {
     "upgrade.settings.set "*) upgrade_settings save-upgrade-settings "${line#upgrade.settings.set }" ;;
     clock.sync-on) clock_sync_on ;;
     clock.retry) clock_retry ;;
+    "poweroff "*) power_off "${line#poweroff }" ;;
     "clock.set "*)
       rest="${line#clock.set }"
       target="${rest%% *}"
