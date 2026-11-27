@@ -737,7 +737,7 @@ are built with TILL-REDESIGN-1 and deleted as each lands. They were separate ent
 - **Serving part of a row (A773's physical trial, owner, 2026-11-25).** It works, in four taps: the
   row's details, **Mark served**, −, **Mark 1 served**; nothing says it will ask how many. Owner: "i think being able to
   expand/collapse the rows will be more useful but i'm going to have a big design session on this
-  with impeccable. currently it is pretty bad". Seen on the same phone screens: a **Held ·** heading with nothing held, a
+  with impeccable. currently it is pretty bad". Seen on the same phone screens: a
   **Quantity** box beside **Change dish** in Dish details, and the Served toast over the totals.
 - **A893. Review every table state and its look (owner, 2026-10-18)**, with A936 (Waiting's minutes
   on the map), A856 and A859 below.
@@ -1309,7 +1309,7 @@ or editor, a different warning, a removed line or a cleared warning ends that ch
 languages at 390 and 1280 px, local-to-saved identity, and those boundaries. This is an in-memory
 choice; it is not saved for another screen or session.
 
-Sent's counters, Served and Held headings, dish slices, companions and extras use the screen's
+The sent rows, companions and extras use the screen's
 decimal mark. Extras retain their stored decimal places. The fractional native-browser cases in
 `apps/till/src/widgets/sent-orders.test.ts` cover both languages, leave punctuation in names alone
 and check that serving still emits the exact dot-decimal quantity.
@@ -1334,7 +1334,7 @@ case measures the replacement held-group controls, Fire confirmation and Move ea
 Its twice-pressed Fire/Move cases use scripted clicks.
 
 The native Sent integration cases in `apps/till/src/till-app-parties.test.ts` double-click a
-dish, All served and group Fire on till and phone while the API reply waits. They check one
+dish, a group's Serve all and group Fire on till and phone while the API reply waits. They check one
 request, disabled service controls and no premature display change, then the accepted snapshot.
 A subsequent dish press or Undo uses the accepted party revision. These are application checks
 with controlled API replies, not server transaction or physical-till tests.

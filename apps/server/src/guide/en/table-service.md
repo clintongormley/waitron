@@ -513,7 +513,7 @@ burgers, each with its own cheese, rather than one line of two. That way you can
 with it, and the bill and the station agree on which burger is which.
 
 While the dishes are the same you still see one row, **2 × Burger**, on the bill and in **Sent**. A
-row parts as soon as one dish differs, for example once one burger is served or comped. Tapping a
+row parts as soon as one dish differs, for example once one burger is comped. Tapping a
 row in **Sent** marks all of it served; **Mark served** in the row's details asks how many.
 [**Move dishes**](table-service.md#move-dishes) lets you choose how many of a row go to another bill, each with
 its own extras. **Comp** and **Void** work on the row and let you choose how many of its dishes.
