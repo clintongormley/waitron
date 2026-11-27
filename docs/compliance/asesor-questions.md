@@ -4126,7 +4126,7 @@ Today Waitron refuses the replacement once the receipt has any corrective
 to be allowed (27 Nov 2026, A1619): "the important thing is that a correction points to the previous
 invoice/receipt, even if that document has been refused by AEAT".
 
-> Un ticket de 50,00 € se emite a las 23:58 del 31 de marzo con el reloj del equipo adelantado un día,
+> Un ticket de 50,00 € se emite a las 23:58 del 31 de marzo con el reloj del servidor adelantado un día,
 > así que lleva fecha de 1 de abril. Antes de que llegue el rechazo de la AEAT (fecha posterior a la
 > actual, error 1112), se devuelven 5,00 € al cliente: el sistema emite una rectificativa por
 > diferencias (R5, tipo I) que identifica el ticket. Después llega el rechazo. Para corregir la fecha
@@ -4148,6 +4148,83 @@ invoice/receipt, even if that document has been refused by AEAT".
 **Proposed interim treatment (owner, 2026-11-27):** "we shouldn't wait for confirmation on anything";
 the date fix stays possible after an earlier refund, and each correction names the previous
 document. Built by A1619 without waiting for this answer.
+
+This records a question; no enquiry has been sent.
+
+### Q65. A correction filed whatever AEAT has said about the original (added 2026-11-27)
+
+**Why we ask.** Since A1619 part 1 (#4527, 27 Nov 2026), Waitron files a correction (Correct
+invoice), a refund (Give money back) or a credit (Cancel and credit, Pay for items) as soon as staff
+make it, whatever AEAT has said about the original: not yet sent, sent with no answer yet, or
+refused, on this box's chain or a previous main box's. Before, it waited for AEAT's answer. This
+includes a receipt AEAT refused because its date was in the future (error 1112). The owner (27 Nov
+2026): "we don't need to wait for a reply on the old invoice. We can even issue a correction to an
+invoice that the aeat will never accept".
+
+Until A1619 part 2 lands, a refund on a receipt refused for its date is filed at once as a
+corrective by difference, and the date fix (Q64) is then refused (`sale.replacement_not_first`);
+the guide tells an administrator to send the date fix first. Part 2 allows the date fix after a
+refund.
+
+> Desde el 27 de noviembre de 2026, el sistema emite una rectificativa (una corrección, una
+> devolución o un abono) en cuanto el personal la hace, sea cual sea la respuesta de la AEAT sobre la
+> factura original: todavía no enviada, enviada y aún sin respuesta, o rechazada, tanto en la cadena
+> de este servidor como en la de un servidor principal anterior. Antes esperaba la respuesta. Esto
+> incluye un ticket rechazado por tener una fecha posterior a la actual (error 1112).
+>
+> **(a)** ¿Puede emitirse una rectificativa que identifica una factura que la AEAT todavía no ha
+> recibido, aún no ha contestado o ha rechazado?
+>
+> **(b)** Hasta que el sistema permita sustituir un ticket que ya tiene una devolución (pregunta
+> Q64), la devolución se emite de inmediato y después no se permite la sustitución que corrige la
+> fecha; la guía indica al administrador que envíe primero la corrección de fecha. ¿Es aceptable
+> mientras tanto?
+
+**Proposed interim treatment (owner, 2026-11-27):** file every correction at once, without waiting
+for this answer ("Land it and add a confirmation request for the adviser").
+
+This records a question; no enquiry has been sent.
+
+### Q66. The type of an AEAT certificate, read from the certificate itself (added 2026-11-27)
+
+**Why we ask.** Since A1571 part 3 (#4524, 27 Nov 2026), the box no longer asks whether a
+certificate is a company seal (sello de entidad) or a representative's: it reads the certificate's
+policy list. It treats it as a company seal only when it carries QCP-l (`0.4.0.194112.1.1`) or
+QCP-l-qscd (`0.4.0.194112.1.3`), from ETSI EN 319 411-2 V2.6.1 §5.3, or FNMT's Sello de Entidad
+policies (`1.3.6.1.4.1.5734.3.11.4` and its G2 `1.3.6.1.4.1.5734.3.22.1.0`). Anything else,
+FNMT's representative certificates (QCP-n) included, is treated as a representative's, and its
+records go to the address AEAT gives for that kind (a company seal's go to AEAT's `www10` host).
+Sources: [the A1571 plan, Task 8](../superpowers/plans/2026-11-26-a1571-aeat-certificate-answers.md).
+
+> El sistema ya no pregunta si un certificado es de sello de entidad o de representante: lo deduce
+> de sus políticas. Lo trata como sello de entidad solo si lleva QCP-l (`0.4.0.194112.1.1`) o
+> QCP-l-qscd (`0.4.0.194112.1.3`), de la norma ETSI EN 319 411-2 V2.6.1 §5.3, o las políticas de
+> Sello de Entidad de la FNMT (`1.3.6.1.4.1.5734.3.11.4` y su versión G2
+> `1.3.6.1.4.1.5734.3.22.1.0`). Cualquier otro, incluidos los certificados de representante de la
+> FNMT (QCP-n), lo trata como certificado de representante y envía los registros a la dirección de
+> la AEAT para ese tipo de certificado.
+>
+> ¿Es correcta esta clasificación? ¿Hay certificados de sello o de representante que la AEAT admita
+> y que quedarían mal clasificados?
+
+**Proposed interim treatment (owner, 2026-11-27, "A853 yes and the two adviser points"):** as
+built, without waiting for this answer.
+
+This records a question; no enquiry has been sent.
+
+### Q67. A company seal that is not qualified (added 2026-11-27)
+
+**Why we ask.** Some providers sell a company seal that is not qualified (Camerfirma sells one). It
+carries none of Q66's seal policies, so the box treats it as a representative's certificate and
+sends its records to the representatives' address. Is that acceptable to AEAT, or must the box
+refuse such a certificate?
+
+> Algunos proveedores venden un sello de entidad no cualificado (Camerfirma, por ejemplo). No lleva
+> ninguna de las políticas de sello de la pregunta Q66, así que el sistema lo trata como certificado
+> de representante y envía sus registros a la dirección de la AEAT para representantes. ¿Lo acepta
+> la AEAT, o el sistema debe rechazar ese certificado?
+
+**Proposed interim treatment (owner, 2026-11-27):** as built, without waiting for this answer.
 
 This records a question; no enquiry has been sent.
 
