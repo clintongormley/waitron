@@ -649,8 +649,8 @@ Para pasar un menú a otra cuenta, abre **Mover platos** y selecciona el menú. 
 mueven con él.
 
 En el **Mostrador**, elige **Para llevar** y añade los platos desde cualquier carpeta: la
-cuenta los agrupa en menús igual que en una mesa. Para añadir platos después, busca la cuenta
-en **Pedidos abiertos** y tócalo para recuperarlo.
+cuenta los agrupa en menús igual que en una mesa. Para añadir platos después, toca el pedido
+aparcado en **Pedidos abiertos**.
 
 ## Dar a una mesa un nombre corto {#short-names}
 
