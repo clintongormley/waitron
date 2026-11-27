@@ -266,13 +266,15 @@ export const billControlStyles = css`
   }
   .bill-switcher-menu wt-menu-row {
     --wt-menu-row-padding-start: var(--wt-space-2);
-    --wt-menu-row-check-color: var(--wt-color-text-muted);
     --wt-font-size-md: var(--wt-menu-row-label-size);
     font-variant-numeric: tabular-nums;
     overflow-wrap: anywhere;
   }
   .bill-switcher-menu wt-menu-row::part(trailing) {
     white-space: nowrap;
+  }
+  .bill-switcher-menu wt-menu-row::part(check) {
+    color: var(--wt-color-text-muted);
   }
   .bill-switcher-menu [data-row-choice] > wt-icon {
     --wt-action-native-icon-color: var(--wt-color-primary);

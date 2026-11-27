@@ -66,7 +66,7 @@ export class WtMenuRow extends LitElement {
         flex: none;
       }
       .trailing wt-icon[name="check"] {
-        color: var(--wt-menu-row-check-color, var(--wt-color-primary));
+        color: var(--wt-color-primary);
       }
       .row ::slotted(*) {
         flex: none;
@@ -125,7 +125,7 @@ export class WtMenuRow extends LitElement {
         ? html`<span class="trailing" part="trailing">
             ${this.value === "" ? nothing : html`<span class="value">${this.value}</span>`}
             ${this.chevron ? html`<wt-icon part="chevron" name="chevron-right" size="lg"></wt-icon>` : nothing}
-            ${this.check ? html`<wt-icon name="check" size="lg"></wt-icon>` : nothing}
+            ${this.check ? html`<wt-icon part="check" name="check" size="lg"></wt-icon>` : nothing}
           </span>`
         : nothing;
     if (this.action)
