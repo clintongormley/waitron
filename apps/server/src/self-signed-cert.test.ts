@@ -182,6 +182,53 @@ describe("reissueServerLeaf", () => {
     expect(cert.checkPrivateKey(createPrivateKey(leaf.serverKeyPem))).toBe(true);
   });
 
+  it.each([
+    { later: "root", signerStartHoursAgo: 36, leafStartHoursAgo: 24 },
+    { later: "signer", signerStartHoursAgo: 12, leafStartHoursAgo: 12 },
+  ])(
+    "serves a replacement leaf to a correctly timed client with the $later starting later",
+    async ({ signerStartHoursAgo, leafStartHoursAgo }) => {
+      const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+      const hourMs = 3_600_000;
+      const original = mint({ now, hostnames: ["waitron.local"] });
+      const [signerBlock, keyBlock] = forge.pem.decode(original.caKeyPem);
+      const signer = forge.pki.certificateFromPem(forge.pem.encode(signerBlock!));
+      signer.validity.notBefore = new Date(now.getTime() - signerStartHoursAgo * hourMs);
+      signer.validity.notAfter = new Date(now.getTime() + 365 * 86_400_000);
+      signer.sign(sharedKeys[0]!.privateKey, forge.md.sha256.create());
+      const { serverCertPem, serverKeyPem } = reissueServerLeaf({
+        caCertPem: original.caCertPem,
+        caKeyPem: forge.pki.certificateToPem(signer) + forge.pem.encode(keyBlock!),
+        hostnames: ["waitron.local", "localhost"],
+        ipAddresses: ["127.0.0.1"],
+        now: new Date(now.getTime() + 3 * 86_400_000),
+        keypair: () => sharedKeys[2]!,
+      });
+      const server = createHttpsServer({ key: serverKeyPem, cert: serverCertPem });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      const { port } = server.address() as AddressInfo;
+      const client = tlsConnect({
+        port,
+        host: "127.0.0.1",
+        servername: "localhost",
+        ca: original.caCertPem,
+      });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          client.once("secureConnect", resolve);
+          client.once("error", reject);
+        });
+        expect(client.authorized).toBe(true);
+        const leaf = new X509Certificate(serverCertPem);
+        expect(leaf.validFromDate).toEqual(new Date(now.getTime() - leafStartHoursAgo * hourMs));
+        expect(leaf.validToDate).toEqual(signer.validity.notAfter);
+      } finally {
+        client.destroy();
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    },
+  );
+
   it.each(["same key", "wrong path length"])("refuses a signer with the %s", (damage) => {
     const original = mint(damage === "same key" ? { keypair: () => sharedKeys[0]! } : {});
     const [signerData, keyData] = forge.pem.decode(original.caKeyPem);
