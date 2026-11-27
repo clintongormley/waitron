@@ -1007,7 +1007,7 @@ describe("a lost answer", () => {
     expect(words(el.shadowRoot!.querySelector("[data-test=lost]"))).toBe(text);
   });
 
-  it("names no pack when the unreceived pack holding the current key was not setup's", async () => {
+  it("names a person's unreceived pack that holds the current master key, as it names setup's", async () => {
     const { el } = await lose({
       masterKey: true,
       after: status({
@@ -1015,9 +1015,8 @@ describe("a lost answer", () => {
         masterKey: { name: "2026-10-12 · QZJV", pack: 3 },
       }),
     });
-    const lost = words(el.shadowRoot!.querySelector("[data-test=lost]"));
-    expect(lost).toBe(
-      `${t("recovery_pack_dialog.lost_new_key")} ${t("recovery_pack_dialog.lost_new_key_choices")}`,
+    expect(words(el.shadowRoot!.querySelector("[data-test=lost]"))).toBe(
+      `${t("recovery_pack_dialog.lost_new_key")} ${fill("recovery_pack_dialog.lost_new_key_named", { number: "3", date: "12 October" })} ${t("recovery_pack_dialog.lost_new_key_choices")}`,
     );
   });
 

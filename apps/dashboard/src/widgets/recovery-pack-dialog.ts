@@ -540,7 +540,7 @@ export class RecoveryPackDialog extends LitElement {
       <p>
         ${t("recovery_pack_dialog.lost_new_key")}
         ${
-          unreceived?.offeredAtSetup && unreceived.holdsCurrentMasterKey
+          unreceived?.holdsCurrentMasterKey
             ? fill("recovery_pack_dialog.lost_new_key_named", {
                 number: String(unreceived.number),
                 date: packDate(unreceived.madeAt, this.#zone),
