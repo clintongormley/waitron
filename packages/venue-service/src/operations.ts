@@ -1494,7 +1494,8 @@ export async function lineContextColumns(
             seedKey: seedKeyById.get(unitId) ?? null,
           }),
           hardwareUnit: line.unit === undefined ? offer.unit.hardwareUnit : line.unit.hardwareUnit,
-          // `working_order_lines_context_ck` requires one beside a menu item; nothing decides anything by it.
+          // `working_order_lines_context_ck` requires one beside a menu item; nothing decides
+          // anything by it.
           offerVatClass: "reduced",
           latePeriodId: line.late?.periodId ?? null,
           lateStationId: line.late?.stationId ?? null,

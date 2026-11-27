@@ -177,10 +177,9 @@ line. Neither table has a `variant_id` column.
 
 **Eaten here, every line files at the dine-in rate in force on the day of the sale: the day the invoice is issued, or the earlier day the meal ended (`issueMoment`, below).
 Taken away, a line files at its product's own
-takeaway rate on that day, read when the line is rated.** Each published menu version records the
-eat-in VAT class of each dish, variant and extras item, and no rate (`buildMenuDocument`,
-`packages/menu/src/menu-document.ts`), and a till is served those classes rather than the
-product's current ones. A line added to a held order or a tab stores its gross price, which is
+takeaway rate on that day, read when the line is rated.** `buildMenuDocument`
+(`packages/menu/src/menu-document.ts`) writes no VAT rate or label into a new menu version; a
+version published before may still hold either. A line added to a held order or a tab stores its gross price, which is
 the same either way. Its `working_order_lines.vat_class` and `takeaway_vat_class` decide no rate:
 no server writer names them, and the schema's default (`packages/db/src/schema/orders.ts`) fills
 both with the placeholder `reduced`, a set menu's line included, until the columns go in VAT rates
@@ -601,7 +600,7 @@ may have any number of variants, one included.
 
 **Every field a variant leaves blank reads its parent's, except its three names.** A variant
 with no takeaway rate rows of its own takes its parent's (`readTakeawayVatSchedules`,
-`packages/menu/src/takeaway-vat-rates.ts`). Among the others its VAT class, course, description, image and allergen and dietary declarations
+`packages/menu/src/takeaway-vat-rates.ts`). Among the others its course, description, image and allergen and dietary declarations
 are its parent's while its own column is blank and its own once it sets them
 (`effectiveProductColumns`, whose keys are `INHERITED_KEYS`,
 `packages/menu/src/variant-fallback.ts`). Its main reporting category is always its parent's,

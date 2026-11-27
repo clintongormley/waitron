@@ -27,7 +27,7 @@ import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed
 import { deviceRequestCfg } from "./testing/session-device.js";
 
 // A menu patch reprices what is sold from then on; a line already on an open order keeps the price
-// and VAT class it locked when it was added.
+// it locked when it was added.
 const LOCALE = "es-ES";
 const EDITOR = "0000ffff-2222-4000-8000-0000000000cc";
 

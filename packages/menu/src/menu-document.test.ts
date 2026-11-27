@@ -27,12 +27,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { seedPerson, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import {
-  decimal,
-  DEFAULT_HOME_ORDER,
-  expandDietaryDeclarations,
-  shownMembers,
-} from "@waitron/shared";
+import { DEFAULT_HOME_ORDER, expandDietaryDeclarations, shownMembers } from "@waitron/shared";
 import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { plantStoredCategory, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import {
@@ -55,7 +50,6 @@ import {
   type MenuDocument,
 } from "./menu-document.js";
 import { BATCH_SIZE } from "./batches.js";
-import * as vatRates from "@waitron/shared";
 import { createCategory, updateCategory } from "./categories.js";
 import * as settings from "./settings.js";
 import { writeContentLanguages } from "./content-languages.js";
@@ -777,19 +771,10 @@ describe("menuDocumentHash", () => {
     await app((tx) => change(tx, f));
     expect(menuDocumentHash(await build(f.dinner))).not.toBe(before);
   });
-
-  it("stays when the rate of a class the menu uses changes", async () => {
-    const f = await menusFixture(fx.db);
-    const before = menuDocumentHash(await build(f.dinner));
-    vi.spyOn(vatRates, "vatRateOn").mockImplementation((vatClass) =>
-      decimal(vatClass === "reduced" ? "11.00" : "21.00"),
-    );
-    expect(menuDocumentHash(await build(f.dinner))).toBe(before);
-  });
 });
 
 describe("applyLiveFields", () => {
-  it("puts availability, course and category back from the current rows, and not VAT", async () => {
+  it("puts availability, course and category back from the current rows", async () => {
     const f = await menusFixture(fx.db);
     await app(async (tx) =>
       updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.soup), { grossPrice: "4.20" }),

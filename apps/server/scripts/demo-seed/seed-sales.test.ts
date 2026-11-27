@@ -86,7 +86,7 @@ const CENT_SPLIT_DELI_PRODUCTS: SeedSalesDeliProduct[] = [
   },
 ];
 
-// Two takeaway rates; only the cola keeps a takeaway class for its stored line.
+// Two takeaway rates.
 const DELI_PRODUCTS: SeedSalesDeliProduct[] = [
   {
     id: "p-deli-cola",

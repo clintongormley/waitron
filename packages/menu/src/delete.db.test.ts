@@ -17,7 +17,6 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useMenuDb } from "../test/fixtures.js";
-import { saveBodyOf } from "../test/save-body.js";
 import { menusFixture, product, section } from "../test/menus-fixture.js";
 import {
   deleteProducts,
@@ -551,7 +550,7 @@ describe("deleting products", () => {
         tx,
         f.lemonade,
         {
-          ...saveBodyOf(value),
+          ...value,
           active: false,
           name: "Renamed",
           variants: value.variants.map((v) => ({ ...v, name: `${v.name} x` })),

@@ -4,7 +4,7 @@ A dish can ask the diner two kinds of question, and the dashboard puts both unde
 screen:
 
 - an **options** list — a reusable, named list of labels the diner picks exactly one of ("Cooked":
-  rare, medium, well done). It is a kitchen instruction. It owns no price, no VAT class and no
+  rare, medium, well done). It is a kitchen instruction. It owns no price and no
   allergens, and it never becomes a line of its own: the answer freezes onto the dish's own line.
 - an **extras** list — a reusable, named list of PRODUCTS the diner may add ("Sides": chips, salad).
   Each pick becomes its own child line at its own price, so an extra is sold, reported and filed as
@@ -90,7 +90,7 @@ An **extras list** bounds how many picks it takes — `minPicks` 0 makes it opti
 it required, and `maxPicks` null leaves it uncapped. A maximum must be at least 1. Each item bounds
 its own product with
 `maxQuantity` (at least 1, where 1 means "one or none", or null for no item limit). An item names a product and adds only the
-terms of the offer: it duplicates none of the product's names, VAT class, allergens, dietary labels
+terms of the offer: it duplicates none of the product's names, allergens, dietary labels
 or photo, which all come from the product. Each item stores the amount one pick adds in the
 product's unit; an Each item stores one. A product may appear at most once in
 one list (`extra_list_items_list_product_uq`).
@@ -395,7 +395,7 @@ Six things it is worth knowing about that payload:
   refuses to send it again on one it has" in `apps/server/src/tabs.test.ts`. The filter's own tests:
   "refuses an extras pick of an Unavailable or an Inactive product as a pick the list does not
   offer" in `apps/server/src/till-sale.test.ts`, and "puts availability, course and category back
-  from the current rows, and not VAT" in `packages/menu/src/menu-document.test.ts`, which clears an
+  from the current rows" in `packages/menu/src/menu-document.test.ts`, which clears an
   extras item's flag from the product's current availability.
   An extras list also leaves out a product that has an Active variant (it is never sold as
   itself; `readExtraProducts`), and a basket priced afresh refuses a pick of one with a

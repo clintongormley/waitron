@@ -44,7 +44,6 @@ import { createCourse } from "./kitchen.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { retainHttpListener } from "./testing/retained-http-listener.js";
-import { saveBodyOf } from "@waitron/menu/test/save-body.js";
 import "./errors.js";
 
 // The menu ROUTES end to end in-process: the body and id screens and the permission gate. The
@@ -713,7 +712,7 @@ function mountApp(venueLocale = "es-ES", contentLanguageRules?: ContentLanguageR
   return app;
 }
 
-/** The menu routes beside the venue-defaults route, which saves the new-product VAT class. */
+/** The menu routes beside the venue-defaults route. */
 function mountWithVenueDefaults(): Hono {
   const app = mountApp();
   mountVenueSettingsApi(
@@ -1761,7 +1760,7 @@ describe("mountMenuApi — labels", () => {
     const editorPath = `/management-api/products/${productId}/editor`;
     const value = (await (await send(app, "GET", editorPath)).json()) as Record<string, unknown>;
     expect(value).not.toHaveProperty("labelIds");
-    expect((await send(app, "PUT", editorPath, { body: saveBodyOf(value) })).status).toBe(200);
+    expect((await send(app, "PUT", editorPath, { body: value })).status).toBe(200);
     const res = await send(app, "PUT", editorPath, { body: { ...value, labelIds: [] } });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
@@ -2208,7 +2207,7 @@ describe("mountMenuApi — products", () => {
       const variantId = saved.variants[0]!.id;
       const saveWith = async (productId: string, allergens: Record<string, object>) => {
         const read = await send(app, "GET", `/management-api/products/${productId}/editor`);
-        const body = saveBodyOf((await read.json()) as Record<string, unknown>);
+        const body = (await read.json()) as Record<string, unknown>;
         const put = await send(app, "PUT", `/management-api/products/${productId}/editor`, {
           body: { ...body, allergens },
         });
@@ -2490,7 +2489,7 @@ describe("mountMenuApi — products", () => {
     const read = (await (
       await send(app, "GET", `/management-api/products/${variantId}/editor`)
     ).json()) as Record<string, unknown>;
-    const value = saveBodyOf(read);
+    const value = read;
     const stored = async () =>
       (
         await suite.db.execute<Record<string, unknown>>(
@@ -2574,7 +2573,7 @@ describe("mountMenuApi — products", () => {
       });
       const put = (active: boolean) =>
         send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-          body: { ...saveBodyOf(value), active },
+          body: { ...value, active },
         });
       const removed = await put(true);
       expect(removed.status).toBe(200);
@@ -2641,7 +2640,7 @@ describe("mountMenuApi — products", () => {
       expect(value.inherited.unitId).not.toBe(kgUnitId);
       const put = (active: boolean) =>
         send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-          body: { ...saveBodyOf(value), active },
+          body: { ...value, active },
         });
       const removed = await put(true);
       expect(removed.status).toBe(200);
@@ -2684,7 +2683,7 @@ describe("mountMenuApi — products", () => {
         await send(app, "GET", `/management-api/products/${parentId}/editor`)
       ).json()) as Editor;
     const put = (body: Record<string, unknown>) =>
-      send(app, "PUT", `/management-api/products/${parentId}/editor`, { body: saveBodyOf(body) });
+      send(app, "PUT", `/management-api/products/${parentId}/editor`, { body });
     const flags = (value: Editor) => value.variants.map(({ name, active }) => ({ name, active }));
     const shortVariant = {
       name: "Short ES coffee",
@@ -2746,7 +2745,7 @@ describe("mountMenuApi — products", () => {
     };
     const put = (active: boolean) =>
       send(app, "PUT", `/management-api/products/${parentId}/editor`, {
-        body: { ...saveBodyOf(parent), variants: [...parent.variants, { ...french, active }] },
+        body: { ...parent, variants: [...parent.variants, { ...french, active }] },
       });
     expect((await put(false)).status).toBe(200);
     const saved = await put(true);
@@ -2776,7 +2775,7 @@ describe("mountMenuApi — products", () => {
       `/management-api/products/${activeVariant}/editor`,
       {
         body: {
-          ...saveBodyOf(await editor(activeVariant)),
+          ...(await editor(activeVariant)),
           customerName: { fr: "ES coffee double" },
           active: true,
         },
@@ -2799,7 +2798,7 @@ describe("mountMenuApi — products", () => {
     expect(
       (
         await send(app, "PUT", `/management-api/products/${parentId}/editor`, {
-          body: { ...saveBodyOf(parent), variants: [...parent.variants, french] },
+          body: { ...parent, variants: [...parent.variants, french] },
         })
       ).status,
     ).toBe(200);
@@ -2809,7 +2808,7 @@ describe("mountMenuApi — products", () => {
     const own = await editor(id);
     const put = (active: boolean) =>
       send(app, "PUT", `/management-api/products/${id}/editor`, {
-        body: { ...saveBodyOf(own), active },
+        body: { ...own, active },
       });
     expect(own).toMatchObject({ customerName: { fr: "FR short coffee" }, active: false });
     for (const active of [false, true]) {
@@ -2834,7 +2833,7 @@ describe("mountMenuApi — products", () => {
     expect(
       (
         await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-          body: { ...saveBodyOf(own), takeawayVatRate: "4.00" },
+          body: { ...own, takeawayVatRate: "4.00" },
         })
       ).status,
     ).toBe(200);
@@ -2856,7 +2855,7 @@ describe("mountMenuApi — products", () => {
     expect(
       (
         await send(app, "PUT", `/management-api/products/${parentId}/editor`, {
-          body: { ...saveBodyOf(parent), variants: [...parent.variants, shortVariant] },
+          body: { ...parent, variants: [...parent.variants, shortVariant] },
         })
       ).status,
     ).toBe(200);
@@ -2937,7 +2936,7 @@ describe("mountMenuApi — products", () => {
     expect(
       (
         await send(app, "PUT", `/management-api/products/${variantId}/editor`, {
-          body: { ...saveBodyOf(value), unitPrice: null },
+          body: { ...value, unitPrice: null },
         })
       ).status,
     ).toBe(200);
@@ -2946,7 +2945,7 @@ describe("mountMenuApi — products", () => {
     ).json()) as { variants: { unitPrice: string | null }[] };
     expect(parent.variants.map((variant) => variant.unitPrice)).toEqual([null]);
     const saved = await send(app, "PUT", `/management-api/products/${parentId}/editor`, {
-      body: saveBodyOf(parent),
+      body: parent,
     });
     expect(saved.status).toBe(200);
     expect(
@@ -2986,8 +2985,8 @@ describe("mountMenuApi — products", () => {
       error: { code: "product.invalid", params: { field: "parentId" } },
     };
     for (const [id, body] of [
-      [variantId, { ...saveBodyOf(value), parentId: crypto.randomUUID() }],
-      [variantId, { ...saveBodyOf(value), parentId: null }],
+      [variantId, { ...value, parentId: crypto.randomUUID() }],
+      [variantId, { ...value, parentId: null }],
       [parentId, await editorBody(app, { parentId: variantId })],
     ] as const) {
       const refused = await send(app, "PUT", `/management-api/products/${id}/editor`, { body });
@@ -3676,7 +3675,7 @@ async function saveEditorFixture(app: Hono, productId: string, changes: Record<s
   const read = await send(app, "GET", `/management-api/products/${productId}/editor`);
   expect(read.status).toBe(200);
   return send(app, "PUT", `/management-api/products/${productId}/editor`, {
-    body: { ...saveBodyOf((await read.json()) as Record<string, unknown>), ...changes },
+    body: { ...((await read.json()) as Record<string, unknown>), ...changes },
   });
 }
 
@@ -4377,9 +4376,7 @@ describe("mountMenuApi — extras lists", () => {
 describe("mountMenuApi — extras lists and products with variants", () => {
   type Editor = Record<string, unknown> & { variants: { id: string; name: string }[] };
   const editor = async (app: Hono, id: string) =>
-    saveBodyOf(
-      await (await send(app, "GET", `/management-api/products/${id}/editor`)).json(),
-    ) as Editor;
+    (await (await send(app, "GET", `/management-api/products/${id}/editor`)).json()) as Editor;
   const glassVariant = (active: boolean) => ({
     name: "Wine glass",
     customerName: null,

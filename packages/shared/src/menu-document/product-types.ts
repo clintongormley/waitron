@@ -73,7 +73,7 @@ export type ProductVariantInput = Omit<ProductVariant, "id"> & { id?: string };
 /**
  * One variant as the product list nests it under its parent: the variant as the editor reads it
  * (`unitPrice` and `courseId` its OWN, null where it takes its parent's) and, in `effective`, what
- * it actually carries: its allergens, price and VAT class once its blanks read as its parent's, its
+ * it actually carries: its allergens and price once its blanks read as its parent's, its
  * takeaway VAT rate today (its own, else its parent's: `readTakeawayVatSchedules`,
  * `packages/menu/src/takeaway-vat-rates.ts`), its parent's main category, and the course it is fired
  * in (`variant-fallback.ts`).

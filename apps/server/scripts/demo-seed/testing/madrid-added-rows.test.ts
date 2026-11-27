@@ -449,11 +449,9 @@ it.each([
     /declared image differs: cola.webp/,
   ],
   [
-    "with the declared offer at a variant at another VAT class",
+    "with the declared offer at another variant list",
     deliWith((deli) => {
-      deli.offers[colaItem]!.variants = [
-        { id: "large", name: "Large", unitPrice: "2.50", vatClass: "reduced" },
-      ];
+      deli.offers[colaItem]!.variants = [{ id: "large", name: "Large", unitPrice: "2.50" }];
     }),
     /declared variants differs: cola.webp/,
   ],

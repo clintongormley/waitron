@@ -1,12 +1,5 @@
 import { eq } from "drizzle-orm";
-import {
-  decodeSettingsRow,
-  now,
-  products,
-  settings,
-  VENUE_SETTINGS,
-  type Transaction,
-} from "@waitron/db";
+import { now, products, readSettings, VENUE_SETTINGS, type Transaction } from "@waitron/db";
 import { AppError, validateDietaryDeclarations } from "@waitron/shared";
 import { readCategory } from "./categories.js";
 import { contentLanguagesOr, savedContentLanguagesIn } from "./content-languages.js";
@@ -166,16 +159,7 @@ export async function saveProductEditor(
     await deleteProducts(tx, [productId], personId);
     return readProductEditor(tx, productId);
   }
-  const [venueRow] = await tx
-    .select({
-      module: settings.module,
-      version: settings.version,
-      revision: settings.revision,
-      doc: settings.doc,
-    })
-    .from(settings)
-    .where(eq(settings.module, VENUE_SETTINGS.module));
-  const venue = decodeSettingsRow(venueRow, VENUE_SETTINGS);
+  const venue = await readSettings(tx, VENUE_SETTINGS);
   const config = contentLanguagesOr(savedContentLanguagesIn(venue.doc), fallbackLanguage);
   const body = input as Record<string, unknown>;
   if (productId !== null) {

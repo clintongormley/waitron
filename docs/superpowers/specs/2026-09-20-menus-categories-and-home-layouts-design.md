@@ -519,6 +519,10 @@ that includes the product. §11.4's note has the detail._
 _2026-09-27, later (A68): the version freezes the class, not the rate; a line stores its class, and
 the invoice files that class's rate in force on the day it is issued. §11.4's A68 note._
 
+_2026-11-27 (VAT rates B3): a menu version published from B3 on freezes no VAT label, and a label
+change flags no menu;
+see `docs/developers/products.md`._
+
 Asesor question Q26 (`docs/compliance/asesor-questions.md`) asks the venue's tax adviser to confirm
 that the rate in force when the invoice is issued is the right one, including across a legal rate
 change while a table is open (§11.4 states the issuance moment per path).

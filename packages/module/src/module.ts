@@ -767,8 +767,7 @@ export interface LineContextInput {
   /** A set-menu dish and its extras use the full-menu version that supplied the tapped offer. */
   setMenuOffer?: { offer: ZoneMenuOffer; versionId: string };
   /**
-   * The variant the line sells, as listed in its offer's `variants`: its VAT class is recorded in
-   * place of the dish's. A variant the offer does not list records the dish's.
+   * The variant the line sells, as listed in its offer's `variants`.
    */
   variantId?: string;
   unit?: {

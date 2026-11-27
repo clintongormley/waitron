@@ -16,7 +16,6 @@ import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { racePair } from "../test/fixtures.js";
 import { createMenu, createProduct, addProductToMenu } from "./operations.js";
 import { readProductEditor, saveProductEditor } from "./product-editor.js";
-import { saveBodyOf } from "../test/save-body.js";
 import {
   listMenuVariants,
   listProductVariants,
@@ -423,7 +422,7 @@ describe("the product editor", () => {
       { id: w175!.id, active: false },
     ]);
 
-    await app((tx) => saveProductEditor(tx, f.parentId, saveBodyOf(value), "en"));
+    await app((tx) => saveProductEditor(tx, f.parentId, value, "en"));
     expect((await storedVariants(f.parentId)).map(({ id, active }) => ({ id, active }))).toEqual([
       { id: w125!.id, active: 1 },
       { id: w175!.id, active: 0 },
@@ -453,12 +452,7 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
     // is left out, which a variant's body refuses first.
     await expect(
       app((tx) =>
-        saveProductEditor(
-          tx,
-          f.variantId,
-          { ...saveBodyOf(parent), unitId: null, variants: [] },
-          "en",
-        ),
+        saveProductEditor(tx, f.variantId, { ...parent, unitId: null, variants: [] }, "en"),
       ),
     ).rejects.toMatchObject({ code: "product.invalid", params: { field: "parentId" } });
     expect((await storedVariants(f.parentId))[0]).toEqual(stored);
@@ -467,11 +461,11 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
     ).rejects.toMatchObject({ code: "product.invalid", params: { field: "vatClass" } });
     expect((await storedVariants(f.parentId))[0]).toEqual(stored);
     await expect(
-      app((tx) => saveProductEditor(tx, f.variantId, saveBodyOf(value), "en")),
+      app((tx) => saveProductEditor(tx, f.variantId, value, "en")),
     ).resolves.toMatchObject({ id: f.variantId });
     expect((await storedVariants(f.parentId))[0]).toEqual(stored);
     await expect(
-      app((tx) => saveProductEditor(tx, f.parentId, saveBodyOf(parent), "en")),
+      app((tx) => saveProductEditor(tx, f.parentId, parent, "en")),
     ).resolves.toMatchObject({ id: f.parentId });
   });
 

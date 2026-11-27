@@ -1485,7 +1485,7 @@ for (const locale of ["en", "es"] as const) {
         0,
         { name: "custom_item_key", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
       );
-      // No writer names a label, so every row holds the column's default.
+      // No writer names a label, so every row holds the schema's insert-time default.
       for (const row of Object.values(products.rows)) {
         row.vat_class = "reduced";
         row.takeaway_vat_class = null;
