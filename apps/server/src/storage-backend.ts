@@ -1,4 +1,4 @@
-import type { BucketConfig, FileCall } from "@waitron/stream";
+import type { BucketConfig, FileCall, FileUploadCall } from "@waitron/stream";
 import { AppError } from "@waitron/shared";
 import "@waitron/stream";
 import "./errors.js";
@@ -40,7 +40,7 @@ export interface StorageBackend {
   /** The folder a local destination writes to; absent for a bucket. */
   readonly localDir?: string;
   put(key: string, bytes: Uint8Array, call: StorageCall): Promise<void>;
-  putFile(key: string, path: string, call: StorageCall): Promise<void>;
+  putFile(key: string, path: string, call: FileUploadCall): Promise<void>;
   getFile(key: string, outPath: string, call: StorageCall): Promise<void>;
   /** An object of at most `SMALL_OBJECT_MAX_BYTES`; a larger one is refused with
    * `backup.destination_object_too_large`. */

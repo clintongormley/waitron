@@ -96,30 +96,34 @@ export function adminShutdownDuties(deps: {
       ? undefined
       : { target: key, peerNodeId, mode: { ...mode, downloadOnly: true as const } };
   };
-  let reportedPause: AbortSignal | undefined;
-  async function reportPause(error: unknown, signal: AbortSignal): Promise<never> {
-    // Retry reuses the shutdown's signal, so an alert covers the whole attempt.
-    if (!signal.aborted && signal !== reportedPause) {
-      await recordShutdownPause(db, codeOf(error), deps.now())
-        .then(() => {
-          reportedPause = signal;
-          runner.wake("box.alert_mail");
-        })
-        .catch((failure: unknown) =>
-          deps.log("warn", "server.shutdown_alert_failed", { errorCode: codeOf(failure) }),
-        );
+  let reportedPause: { signal: AbortSignal; pending: Promise<void> } | undefined;
+  function reportPause(errorCode: string | null, signal: AbortSignal): Promise<void> {
+    if (signal.aborted) return Promise.resolve();
+    if (reportedPause?.signal !== signal) {
+      const pending = recordShutdownPause(db, errorCode, deps.now())
+        .then(() => runner.wake("box.alert_mail"))
+        .catch((failure: unknown) => {
+          if (reportedPause?.signal === signal) reportedPause = undefined;
+          deps.log("warn", "server.shutdown_alert_failed", { errorCode: codeOf(failure) });
+        });
+      reportedPause = { signal, pending };
     }
-    throw error;
+    return reportedPause.pending;
   }
   const shutdown = createAdminShutdown({
-    async check(signal) {
+    async check(signal, { attemptSignal, waitForUpload }) {
       const dest = await destination();
       if (dest === undefined) throw new AppError("box.shutdown_unavailable", {});
       const { target, peerNodeId } = dest;
       try {
         let archive;
-        if (target === "saved") await backup.runForShutdown(signal, config.migrationsRoot);
-        else archive = await backup.runForShutdownDownload(signal, target, config.migrationsRoot);
+        if (target === "saved") {
+          await backup.runForShutdown(signal, config.migrationsRoot, async (uploadSignal) => {
+            const waiting = waitForUpload(uploadSignal);
+            const reporting = reportPause(null, attemptSignal);
+            await waiting.finally(() => reporting);
+          });
+        } else archive = await backup.runForShutdownDownload(signal, target, config.migrationsRoot);
         return {
           archive,
           checkSpare:
@@ -130,12 +134,14 @@ export function adminShutdownDuties(deps: {
                     if (!(await deps.streamHost.checkShutdownUpload(peerNodeId, activeSignal)))
                       throw new AppError("box.shutdown_spare_unchecked", {});
                   } catch (error) {
-                    await reportPause(error, activeSignal);
+                    if (!activeSignal.aborted) await reportPause(codeOf(error), attemptSignal);
+                    throw error;
                   }
                 },
         };
       } catch (error) {
-        return reportPause(error, signal);
+        if (!signal.aborted) await reportPause(codeOf(error), attemptSignal);
+        throw error;
       }
     },
     save: () => writeShutdownMark(config.stateDir),

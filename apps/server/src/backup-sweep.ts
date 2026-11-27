@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { Database, NodeDatabase } from "@waitron/db";
 import type { ClockStep } from "@waitron/fiscal";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
+import type { FileUploadCall } from "@waitron/stream";
 import type { WaitronModule } from "@waitron/module";
 import {
   assembleArchiveEntries,
@@ -206,6 +207,7 @@ type CheckSavedArchive = (archive: SavedArchive, signal: AbortSignal) => Promise
 
 type BackupRunDeps = Omit<BackupSweepDeps, "schedule" | "sleep" | "jitterSeed" | "readClock"> & {
   checkSavedArchive?: CheckSavedArchive;
+  onUploadTimeout?: FileUploadCall["onUploadTimeout"];
 };
 
 type DownloadCapture = Pick<
@@ -400,7 +402,12 @@ async function stageBackup(
         let failure: unknown;
         try {
           await withDestinationCall(deps.signal, deps.destinationTimeoutMs, async (call) => {
-            await backend.putFile(key, ciphertext!, call);
+            const { onUploadTimeout } = deps;
+            await backend.putFile(
+              key,
+              ciphertext!,
+              onUploadTimeout === undefined ? call : { ...call, onUploadTimeout },
+            );
             stored = true;
             deps.onUploaded?.(backend.id);
             if (deps.outcomes)
@@ -686,6 +693,7 @@ export function createBackupSchedule(
     kind: ActiveBackupRun["kind"],
     signal: AbortSignal,
     checkSavedArchive?: CheckSavedArchive,
+    onUploadTimeout?: FileUploadCall["onUploadTimeout"],
   ): Promise<void> | undefined {
     if (active !== undefined) return;
     const startedAt = clockNow().toISOString();
@@ -693,7 +701,7 @@ export function createBackupSchedule(
       .then(() => {
         if (checkSavedArchive) {
           signal.throwIfAborted();
-          return runOnce({ ...deps, signal, checkSavedArchive });
+          return runOnce({ ...deps, signal, checkSavedArchive, onUploadTimeout });
         }
         if (!signal.aborted) return tick({ ...deps, signal });
       })

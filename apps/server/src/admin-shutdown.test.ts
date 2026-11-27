@@ -102,6 +102,89 @@ it("waits for admitted work and keeps new work out until Cancel has settled", as
   }
 });
 
+function signalGate() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => (resolve = done));
+  return { promise, resolve };
+}
+
+it.each(["keep-waiting", "cancel", "shut-down-anyway"] as const)(
+  "settles one stalled check when the administrator chooses %s",
+  async (decision) => {
+    const cleaned = signalGate();
+    const order: string[] = [];
+    const shutdown = createAdminShutdown({
+      async check(signal, context) {
+        order.push("captured");
+        try {
+          await context?.waitForUpload(signal);
+          order.push("verified");
+        } finally {
+          await cleaned.promise;
+          order.push("settled");
+        }
+      },
+      save: async () => void order.push("saved"),
+      clear: async () => {},
+    });
+    try {
+      shutdown.start();
+      await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "stalled" }));
+      expect(order).toEqual(["captured"]);
+      expect(() => shutdown.resolvePaused("retry")).toThrow();
+      const cancelling = decision === "cancel" ? shutdown.cancel() : undefined;
+      if (decision !== "cancel") shutdown.resolvePaused(decision);
+      expect(shutdown.status().phase).not.toBe("ready");
+      cleaned.resolve();
+      await cancelling;
+      if (decision === "cancel") {
+        expect(shutdown.status()).toEqual({ phase: "idle" });
+        expect(order).toEqual(["captured", "settled"]);
+      } else {
+        await vi.waitFor(() =>
+          expect(shutdown.status()).toEqual(
+            decision === "keep-waiting" ? { phase: "ready" } : { phase: "ready", checked: false },
+          ),
+        );
+        expect(order).toEqual(
+          decision === "keep-waiting"
+            ? ["captured", "verified", "settled", "saved"]
+            : ["captured", "settled", "saved"],
+        );
+      }
+    } finally {
+      cleaned.resolve();
+      await shutdown.close();
+    }
+  },
+);
+
+it("asks for Continue shutdown if the check passes while the stall prompt is open", async () => {
+  const checked = signalGate();
+  const save = vi.fn(async () => {});
+  const shutdown = createAdminShutdown({
+    async check(signal, context) {
+      void context?.waitForUpload(signal).catch(() => {});
+      await checked.promise;
+    },
+    save,
+    clear: async () => {},
+  });
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "stalled" }));
+    checked.resolve();
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "checked" }));
+    expect(save).not.toHaveBeenCalled();
+    shutdown.resolvePaused("continue-shutdown");
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready" }));
+    expect(save).toHaveBeenCalledTimes(1);
+  } finally {
+    checked.resolve();
+    await shutdown.close();
+  }
+});
+
 it("captures a new backup on Retry while sales stay paused", async () => {
   let passes = 0;
   let pauses = 0;

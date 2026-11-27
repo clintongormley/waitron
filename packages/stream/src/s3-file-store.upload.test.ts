@@ -38,9 +38,10 @@ async function bucketWith(options: Parameters<typeof loopbackBucket>[0] = {}) {
   return bucket;
 }
 
-function storeFor(bucket: LoopbackBucket, cleanupMs?: number): S3FileStore {
+function storeFor(bucket: LoopbackBucket, cleanupMs?: number, idleMs?: number): S3FileStore {
   const store = createS3FileStore(bucket.config, {
     sleep: async () => {},
+    idleMs,
     ...(cleanupMs === undefined ? {} : { cleanupMs }),
   });
   cleanups.push(async () => store.close());
@@ -61,6 +62,94 @@ const live = () => ({ signal: new AbortController().signal });
 const kinds = (bucket: LoopbackBucket) => bucket.seen.map((seen) => seen.kind);
 const abortsSent = (bucket: LoopbackBucket) =>
   bucket.seen.filter((seen) => seen.kind === "abort").map((seen) => seen.uploadId);
+
+function signalGate<T = void>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => (resolve = done));
+  return { promise, resolve };
+}
+
+describe("a checked shutdown's timed-out upload", () => {
+  it.each([false, true])("continues from the saved file (multipart: %s)", async (multipart) => {
+    let attempts = 0;
+    const bucket = await bucketWith({
+      answer(seen, _request, response) {
+        if (seen.kind !== "put" && seen.partNumber !== 2) return false;
+        if (++attempts > 3) return false;
+        if (!multipart) return true;
+        response.writeHead(400, xml);
+        response.end(errorXml("RequestTimeout"));
+        return true;
+      },
+    });
+    const { path, body } = await patterned(await scratch(), multipart ? 9 * MiB : 1000);
+    const paused = signalGate<"paused">();
+    const choice = signalGate();
+    const upload = outcome(
+      storeFor(bucket, undefined, 150).putFile("a.enc", path, {
+        ...live(),
+        async onUploadTimeout() {
+          paused.resolve("paused");
+          await choice.promise;
+        },
+      }),
+    );
+    try {
+      expect(await Promise.race([paused.promise, upload])).toBe("paused");
+      expect(kinds(bucket)).toEqual(
+        multipart ? ["create", "part", "part", "part", "part"] : ["put", "put", "put"],
+      );
+      expect(bucket.objects.has("a.enc")).toBe(false);
+    } finally {
+      choice.resolve();
+      await upload;
+    }
+    expect(await upload).toBe("resolved");
+    expect(bucket.objects.get("a.enc")!.body.equals(body)).toBe(true);
+    if (multipart) {
+      const parts = bucket.seen.filter(({ kind }) => kind === "part");
+      expect(parts.map(({ partNumber }) => partNumber)).toEqual([1, 2, 2, 2, 2]);
+      expect(parts.map(({ uploadId }) => uploadId)).toEqual(Array(5).fill("upload-1"));
+      expect(bucket.record.completedIds).toEqual(["upload-1"]);
+    }
+  });
+
+  it("abandons the retained ID when the caller cancels while deciding", async () => {
+    const controller = new AbortController();
+    const bucket = await bucketWith({
+      answer(seen, _request, response) {
+        if (seen.partNumber !== 2) return false;
+        response.writeHead(400, xml);
+        response.end(errorXml("RequestTimeout"));
+        return true;
+      },
+    });
+    const { path } = await patterned(await scratch(), 9 * MiB);
+    const paused = signalGate<"paused">();
+    const upload = outcome(
+      storeFor(bucket).putFile("a.enc", path, {
+        signal: controller.signal,
+        async onUploadTimeout(signal: AbortSignal) {
+          paused.resolve("paused");
+          await delay(60_000, undefined, { signal });
+        },
+      }),
+    );
+    try {
+      expect(await Promise.race([paused.promise, upload])).toBe("paused");
+    } finally {
+      controller.abort();
+      await upload;
+    }
+    expect(await upload).toMatchObject({
+      code: "backup.destination_request_failed",
+      params: { operation: "upload_part", name: "AbortError" },
+    });
+    expect(kinds(bucket)).toEqual(["create", "part", "part", "part", "part", "abort"]);
+    expect(bucket.record.abortedIds).toEqual(["upload-1"]);
+    expect(bucket.record.completedIds).toEqual([]);
+  });
+});
 
 describe("a file of at most 8 MiB", () => {
   it("goes up in one request that states its length", async () => {

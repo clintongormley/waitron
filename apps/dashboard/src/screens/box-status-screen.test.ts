@@ -229,6 +229,31 @@ it("requires confirmation before switching off with an unchecked backup", async 
   expect(resolveBoxShutdown.mock.calls).toEqual([["shut-down-anyway"], ["shut-down-anyway"]]);
 });
 
+it.each([
+  ["stalled", "Keep waiting", "keep-waiting"],
+  ["checked", "Continue shutdown", "continue-shutdown"],
+] as const)("offers the right shutdown action while %s", async (phase, label, decision) => {
+  const before = { phase, available: true } as const;
+  const after = { phase: "checking", available: true } as const;
+  const getBoxHealth = vi.fn().mockResolvedValue(health({ shutdown: before }));
+  const resolveBoxShutdown = vi.fn(async () => {
+    getBoxHealth.mockResolvedValue(health({ shutdown: after }));
+    return after;
+  });
+  const { el } = await mount(stubApi({ getBoxHealth, resolveBoxShutdown }));
+  el.canCheckClock = true;
+  await el.updateComplete;
+
+  const action = q(el, `[data-test="box-shutdown-${decision}"]`);
+  expect(action).not.toBeNull();
+  expect(text(action)).toBe(label);
+  expect(q(el, '[data-test="box-shutdown-retry"]')).toBeNull();
+  expect(q(el, '[data-test="box-shutdown-cancel"]')).not.toBeNull();
+  expect(q(el, '[data-test="box-shutdown-anyway"]') !== null).toBe(phase === "stalled");
+  await userEvent.click(action!);
+  expect(resolveBoxShutdown).toHaveBeenCalledExactlyOnceWith(decision);
+});
+
 it("mentions both restore keys before pausing work for a downloadable backup", async () => {
   const { el } = await mount(
     stubApi({}, health({ shutdown: { phase: "idle", available: true, downloadOnly: true } })),

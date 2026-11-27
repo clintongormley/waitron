@@ -1877,6 +1877,7 @@ declare module "@waitron/shared" {
     "start.unplanned_stop": { lastRunningAt: string; lastRunningOffsetMinutes: number };
     "start.selling_unconfirmed": Record<string, never>;
     "start.shutdown_paused": { errorCode: string };
+    "start.shutdown_upload_stalled": Record<string, never>;
     "start.replaced": Record<string, never>;
     /** A backup run deleted `count` of its oldest backups to make room for itself; `date` and
      * `lastDate` are the venue's calendar days the oldest and newest of them were taken,

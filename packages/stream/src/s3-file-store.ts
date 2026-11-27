@@ -40,6 +40,11 @@ export interface FileCall {
   signal: AbortSignal;
 }
 
+export interface FileUploadCall extends FileCall {
+  /** Waits for the caller to continue, or rejects when the caller or destination stops. */
+  onUploadTimeout?: (signal: AbortSignal) => Promise<void>;
+}
+
 export interface ListedFile {
   /** Relative to the configured prefix. */
   key: string;
@@ -60,7 +65,7 @@ export interface S3FileStore {
    * upload, and deletes `key` when the bucket may have stored it, so `key` must be one nothing else
    * holds.
    */
-  putFile(key: string, path: string, call: FileCall): Promise<void>;
+  putFile(key: string, path: string, call: FileUploadCall): Promise<void>;
   /** As `putFile`, in one request whatever its size: the caller bounds it. */
   putBytes(key: string, bytes: Uint8Array, call: FileCall): Promise<void>;
   /** Replaces `outPath` only once the whole object has arrived; a file system error is passed on. */
@@ -101,7 +106,9 @@ const RETRY_BACKOFF_MS = 200;
  * copied. An answer on neither list, such as 501 NotImplemented, is not sent again.
  */
 const RETRIED_STATUSES = new Set([429, 500, 502, 503, 504]);
+const TIMEOUT_NAMES = new Set(["TimeoutError", "RequestTimeout", "RequestTimeoutException"]);
 const RETRIED_NAMES = new Set([
+  ...TIMEOUT_NAMES,
   "BandwidthLimitExceeded",
   "EC2ThrottledException",
   "LimitExceededException",
@@ -116,9 +123,6 @@ const RETRIED_NAMES = new Set([
   "ThrottlingException",
   "TooManyRequestsException",
   "TransactionInProgressException",
-  "TimeoutError",
-  "RequestTimeout",
-  "RequestTimeoutException",
 ]);
 /** How long cleanup after a failed upload may take, counted from the failure. */
 const CLEANUP_MS = 10_000;
@@ -251,6 +255,7 @@ export function createS3FileStore(
     signal: AbortSignal,
     makeBody: () => Readable,
     send: (body: Readable, abortSignal: AbortSignal) => Promise<T>,
+    onUploadTimeout?: FileUploadCall["onUploadTimeout"],
     uncertain: () => void = () => {},
   ): Promise<T> {
     for (let attempt = 1; ; attempt += 1) {
@@ -264,28 +269,41 @@ export function createS3FileStore(
         readError = error;
         readFailed.abort();
       });
-      let out: T;
+      let answer: { out: T } | { error: unknown };
       try {
-        out = await send(body, AbortSignal.any([signal, readFailed.signal]));
+        answer = { out: await send(body, AbortSignal.any([signal, readFailed.signal])) };
       } catch (error) {
-        if (readError !== undefined && !signal.aborted) throw readError;
-        const status = statusOf(error);
-        if (signal.aborted || status === null || status >= 500) uncertain();
-        if (signal.aborted) throw cancelled(operation, key);
-        const retryable =
-          status === null || RETRIED_STATUSES.has(status) || RETRIED_NAMES.has(nameOf(error));
-        if (!retryable || attempt === ATTEMPTS)
-          throw requestFailed(operation, key, status, nameOf(error));
-        await wait(RETRY_BACKOFF_MS * attempt, signal);
-        continue;
+        answer = { error };
       } finally {
         body.destroy();
       }
-      if (signal.aborted) {
-        uncertain();
-        throw cancelled(operation, key);
+      if ("out" in answer) {
+        if (signal.aborted) {
+          uncertain();
+          throw cancelled(operation, key);
+        }
+        return answer.out;
       }
-      return out;
+      if (readError !== undefined && !signal.aborted) throw readError;
+      const status = statusOf(answer.error);
+      const name = nameOf(answer.error);
+      if (signal.aborted || status === null || status >= 500) uncertain();
+      if (signal.aborted) throw cancelled(operation, key);
+      const retryable = status === null || RETRIED_STATUSES.has(status) || RETRIED_NAMES.has(name);
+      if (retryable && attempt < ATTEMPTS) {
+        await wait(RETRY_BACKOFF_MS * attempt, signal);
+      } else if (onUploadTimeout !== undefined && TIMEOUT_NAMES.has(name)) {
+        uncertain();
+        try {
+          await onUploadTimeout(signal);
+        } catch (error) {
+          if (signal.aborted) throw cancelled(operation, key);
+          throw error;
+        }
+        attempt = 0;
+      } else {
+        throw requestFailed(operation, key, status, name);
+      }
     }
   }
 
@@ -363,6 +381,7 @@ export function createS3FileStore(
     size: number,
     makeBody: () => Readable,
     signal: AbortSignal,
+    onUploadTimeout?: FileUploadCall["onUploadTimeout"],
   ) {
     let mayBeStored = false;
     try {
@@ -376,6 +395,7 @@ export function createS3FileStore(
             new PutObjectCommand({ Bucket: bucket, Key: at(key), Body: body, ContentLength: size }),
             { abortSignal },
           ),
+        onUploadTimeout,
         () => (mayBeStored = true),
       );
     } catch (error) {
@@ -384,7 +404,8 @@ export function createS3FileStore(
     }
   }
 
-  async function putInParts(key: string, handle: FileHandle, size: number, signal: AbortSignal) {
+  async function putInParts(key: string, handle: FileHandle, size: number, call: FileUploadCall) {
+    const { signal, onUploadTimeout } = call;
     const { partBytes, parts } = planParts(size);
     let creation: Promise<CreateMultipartUploadCommandOutput> | undefined;
     let created: CreateMultipartUploadCommandOutput;
@@ -436,6 +457,7 @@ export function createS3FileStore(
               }),
               { abortSignal },
             ),
+          onUploadTimeout,
         );
         if (out.ETag === undefined)
           throw answerRefused("upload_part", key, out.$metadata.httpStatusCode, "MissingETag");
@@ -500,15 +522,16 @@ export function createS3FileStore(
   }
 
   return {
-    async putFile(key, path, { signal }) {
+    async putFile(key, path, call) {
+      const { signal, onUploadTimeout } = call;
       if (!isSafeKey(key)) throw keyInvalid("key");
       if (signal.aborted) throw cancelled("put", key);
       const handle = await open(path, "r");
       try {
         const { size } = await handle.stat();
         if (size <= SINGLE_PUT_MAX_BYTES)
-          await putWhole(key, size, () => rangeOf(handle, key, 0, size), signal);
-        else await putInParts(key, handle, size, signal);
+          await putWhole(key, size, () => rangeOf(handle, key, 0, size), signal, onUploadTimeout);
+        else await putInParts(key, handle, size, call);
       } finally {
         await handle.close();
       }

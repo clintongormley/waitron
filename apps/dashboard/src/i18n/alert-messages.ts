@@ -94,6 +94,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "The final backup check failed during shutdown. If shutdown is still paused, you can see the reason in Box status with Manage the system and Manage boxes.",
     es: "Falló la comprobación de la última copia durante el apagado. Si el apagado sigue en pausa, puedes consultar el motivo en Estado del servidor con los permisos Gestionar el sistema y Gestionar servidores.",
   },
+  "start.shutdown_upload_stalled": {
+    en: "The final backup upload timed out. If shutdown is still paused, open Box status to choose what to do.",
+    es: "Se agotó el tiempo de espera al enviar la última copia de seguridad. Si el apagado sigue en pausa, abre Estado del servidor para decidir qué hacer.",
+  },
   "start.unplanned_stop": {
     en: "The box stopped without warning.",
     es: "El servidor se detuvo sin aviso.",

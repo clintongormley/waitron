@@ -6,6 +6,7 @@ import { publishState } from "./live-publish.js";
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { openVenueDatabase, type SingletonRole, type VenueDatabase } from "@waitron/db";
+import type { FileUploadCall } from "@waitron/stream";
 import type { WaitronModule } from "@waitron/module";
 import { archiveInWorker, VENUE_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
@@ -407,7 +408,11 @@ export class BackupSupervisor {
     return running;
   }
 
-  async runForShutdown(signal: AbortSignal, migrationsRoot: string | null): Promise<void> {
+  async runForShutdown(
+    signal: AbortSignal,
+    migrationsRoot: string | null,
+    onUploadTimeout?: FileUploadCall["onUploadTimeout"],
+  ): Promise<void> {
     if (this.#deps.readSingletonRole() !== "primary") throw new AppError("backup.not_primary", {});
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
     const schedule = this.#schedule;
@@ -427,14 +432,18 @@ export class BackupSupervisor {
     const stopping = AbortSignal.any([signal, controller.signal]);
     await waitForShutdownDrain(schedule.running, stopping);
     stopping.throwIfAborted();
-    const running = schedule.start("manual", stopping, (archive, signal) =>
-      rehearseShutdownBackup(archive, {
-        ...this.#deps,
-        recoveryKey,
-        migrationsRoot,
-        destinationTimeoutMs: cfg.destinationTimeoutMs,
-        signal,
-      }),
+    const running = schedule.start(
+      "manual",
+      stopping,
+      (archive, signal) =>
+        rehearseShutdownBackup(archive, {
+          ...this.#deps,
+          recoveryKey,
+          migrationsRoot,
+          destinationTimeoutMs: cfg.destinationTimeoutMs,
+          signal,
+        }),
+      onUploadTimeout,
     );
     if (running === undefined) throw new AppError("backup.run_in_progress", {});
     await running;
