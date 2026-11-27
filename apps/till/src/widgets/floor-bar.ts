@@ -4,6 +4,7 @@ import type { TableState } from "../api/floor-api.js";
 import { helpBadgeLabel, helpText, type HelpKey } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
 import { countText, currentLocale, t } from "../i18n/t.js";
+import type { TillClockAction } from "../state/clocking.js";
 import { kindCue, kindWords, mapKinds, topTabKind, type MapKind } from "../state/floor-look.js";
 
 import "@waitron/ui/src/components/wt-menu-row.js";
@@ -102,8 +103,22 @@ export const floorBarStyles = css`
       pointer-events: none;
     }
   }
+  .floor-bar wt-row-actions::part(popup) {
+    overflow: visible;
+    box-shadow: none;
+  }
+  .floor-bar wt-row-actions::part(popup)::after {
+    content: "";
+    position: absolute;
+    inset-inline: var(--wt-row-actions-sheet-inline-inset);
+    inset-block-start: calc(100% + var(--wt-field-line-width));
+    block-size: calc(var(--wt-space-3) + var(--wt-space-1) / 2);
+    background: linear-gradient(var(--wt-color-menu-sheet-edge-shadow), transparent);
+    pointer-events: none;
+  }
   .floor-bar wt-row-actions::part(sheet) {
     padding-block-end: 0;
+    box-shadow: none;
   }
   .floor-bar > [data-view-toggle]::part(button) {
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
@@ -125,7 +140,7 @@ export const floorBarStyles = css`
   .floor-zone-trigger {
     display: inline-flex;
     align-items: center;
-    gap: calc(var(--wt-space-2) + var(--wt-space-1));
+    gap: var(--wt-space-2);
   }
   .floor-bar .floor-menu::part(trigger) {
     min-inline-size: calc(var(--wt-tap-min) + var(--wt-space-1));
@@ -157,63 +172,23 @@ export const floorBarStyles = css`
   .floor-bar .settings-heading,
   .floor-bar [data-menu-heading] {
     margin: 0;
-    padding: var(--wt-space-2) var(--wt-space-4) var(--wt-space-1);
+    padding: var(--wt-space-2) var(--wt-menu-row-padding-start) var(--wt-space-1);
     border-block-end: 1px solid var(--wt-color-border);
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
     font-weight: var(--wt-font-weight-bold);
     text-transform: uppercase;
   }
-  .floor-bar summary.settings-heading,
-  .floor-help {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-sizing: border-box;
-    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
-    padding-inline: var(--wt-space-4);
-    border-block-end: 1px solid var(--wt-color-border);
-    color: var(--wt-color-text);
-    font-size: var(--wt-floor-menu-font-size);
-    font-weight: var(--wt-font-weight-normal);
-    text-transform: none;
-  }
-  .floor-bar summary.settings-heading {
+  .floor-menu summary {
+    display: block;
     cursor: pointer;
   }
-  .floor-bar summary.settings-heading::after {
-    content: "›" / "";
+  .floor-menu details[open] > summary wt-menu-row::part(chevron) {
+    rotate: 90deg;
   }
-  .floor-bar details[open] > summary.settings-heading::after {
-    content: "⌄" / "";
-  }
-  .floor-bar .floor-menu wt-button::part(button) {
-    min-block-size: var(--wt-tap-min);
-    padding-inline: var(--wt-space-4);
-  }
-  .floor-bar .floor-menu wt-button:not([data-clock-action="out"]) {
-    inline-size: 100%;
-  }
-  .floor-bar .floor-menu wt-button:not([data-clock-action="out"])::part(button) {
-    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
-    border-radius: 0;
-    font-size: var(--wt-floor-menu-font-size);
-  }
-  .floor-bar .floor-menu wt-button:not([data-clock-action="out"], .logout)::part(button) {
-    border-block-end: 1px solid var(--wt-color-border);
-  }
-  .floor-bar
-    .floor-menu
-    wt-button:is([data-clock-action]:not([data-clock-action="out"]), [data-clock-retry])::part(
-      button
-    )::after {
-    content: "›" / "";
-    margin-inline-start: auto;
-    color: var(--wt-color-text-muted);
-  }
-  .floor-bar .floor-menu .logout::part(button) {
+  .floor-menu .logout {
+    --wt-font-weight-normal: var(--wt-font-weight-bold);
     color: var(--wt-color-primary-text);
-    font-weight: var(--wt-font-weight-bold);
   }
   .floor-operator {
     display: flex;
@@ -287,6 +262,12 @@ export function floorMoreSheet(count: number | undefined, contents: TemplateResu
   </wt-row-actions>`;
 }
 
+export function onFloorRowClick(press: (event: Event) => void) {
+  return (event: Event) => {
+    if (event.composedPath().some((node) => node instanceof HTMLButtonElement)) press(event);
+  };
+}
+
 export function floorMoreRow(
   label: string,
   press: (event: Event) => void,
@@ -296,12 +277,18 @@ export function floorMoreRow(
     help?: HelpKey;
     transfers?: boolean;
     report?: boolean;
+    clock?: TillClockAction | "retry";
+    disabled?: boolean;
   },
 ) {
+  const logout = options.className === "logout";
   return html`<wt-menu-row
     action
-    divider
-    chevron
+    ?divider=${!logout}
+    .chevron=${!logout}
+    .disabled=${options.disabled ?? false}
+    data-clock-action=${options.clock === "retry" ? nothing : (options.clock ?? nothing)}
+    ?data-clock-retry=${options.clock === "retry"}
     class=${options.className ?? nothing}
     .label=${label}
     .value=${options.value ?? ""}
@@ -309,8 +296,25 @@ export function floorMoreRow(
     help-label=${helpBadgeLabel(label)}
     ?data-open-transfers=${options.transfers}
     ?data-report-problem=${options.report}
-    @click=${press}
+    @click=${onFloorRowClick(press)}
   ></wt-menu-row>`;
+}
+
+export function floorDeviceRows(
+  language: TemplateResult | typeof nothing,
+  help: TemplateResult,
+  settings: TemplateResult,
+) {
+  return html`
+    <wt-menu-row>${language}</wt-menu-row>
+    <wt-menu-row divider .label=${helpText("help.label")}>${help}</wt-menu-row>
+    <details class="settings-group">
+      <summary>
+        <wt-menu-row divider chevron .label=${t("device_zones.settings")}></wt-menu-row>
+      </summary>
+      ${settings}
+    </details>
+  `;
 }
 
 export function floorHoursRows(busy: boolean, press: (type: "my-hours" | "fix-my-hours") => void) {
@@ -322,7 +326,7 @@ export function floorHoursRows(busy: boolean, press: (type: "my-hours" | "fix-my
       data-my-hours
       .disabled=${busy}
       .label=${t("hours.mine")}
-      @click=${() => press("my-hours")}
+      @click=${onFloorRowClick(() => press("my-hours"))}
     ></wt-menu-row>
     <wt-menu-row
       action
@@ -333,7 +337,7 @@ export function floorHoursRows(busy: boolean, press: (type: "my-hours" | "fix-my
       .label=${label}
       help=${helpText("help.person.fix_hours")}
       help-label=${helpBadgeLabel(label)}
-      @click=${() => press("fix-my-hours")}
+      @click=${onFloorRowClick(() => press("fix-my-hours"))}
     ></wt-menu-row>`;
 }
 

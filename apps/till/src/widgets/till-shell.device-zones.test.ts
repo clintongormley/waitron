@@ -353,6 +353,10 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     await openMore();
     await expect.element(page.getByRole("button", { name: /^Transfers.*2/ })).toBeVisible();
     await expect.element(page.getByRole("button", { name: "Close the drawer" })).toBeVisible();
+    const opensDrawer = vi.fn();
+    el.addEventListener("open-drawer-close", opensDrawer);
+    more().querySelector<HTMLElement>(".drawer-close")!.click();
+    expect(opensDrawer).not.toHaveBeenCalled();
     const person = more().querySelector(".operator")!;
     expect(person.parentElement?.querySelector('[data-clock-action="out"]')).not.toBeNull();
     await expect.element(page.getByRole("button", { name: "Taken off 0" })).toBeVisible();
@@ -454,9 +458,8 @@ it("shows the active language in the joined floor menu choice and gives Log out 
     expect(getComputedStyle(chooser.shadowRoot!.querySelector(".group-label")!).fontSize).toBe(
       "16px",
     );
-    const logoutRow = more().querySelector(".logout")!;
-    const logout = logoutRow.shadowRoot!.querySelector("button")!;
-    expect(logoutRow.shadowRoot!.querySelector('wt-icon[name="chevron-right"]')).toBeNull();
+    const logout = more().querySelector(".logout")!.shadowRoot!.querySelector("button")!;
+    expect(getComputedStyle(logout, "::after").content).toBe("none");
     expect(getComputedStyle(logout).fontWeight).toBe("600");
   } finally {
     await page.viewport(1280, 900);
@@ -494,13 +497,13 @@ it.each([
       await userEvent.click(trigger);
       const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
       const sheet = popup.querySelector<HTMLElement>('[part="sheet"]')!;
-      expect(popup.getBoundingClientRect().bottom).toBeCloseTo(
-        footer.getBoundingClientRect().top,
-        0,
-      );
-      await expect
-        .poll(() => sheet.getBoundingClientRect().bottom)
-        .toBeCloseTo(footer.getBoundingClientRect().top, 0);
+      const docked = (element: Element) =>
+        expect(element.getBoundingClientRect().bottom).toBeCloseTo(
+          footer.getBoundingClientRect().top,
+          0,
+        );
+      docked(popup);
+      await vi.waitFor(() => docked(sheet));
       if (width === 390) {
         const lastRow = menu.querySelector<HTMLElement>(
           selector === ".floor-menu" ? ".logout" : "[data-open-device-zones]",
@@ -521,9 +524,12 @@ it.each([
       if (selector === "[data-floor-zone-chooser]") {
         await expect.element(page.elementLocator(sheet)).toHaveAccessibleName("Zones");
       }
+      await page.viewport(width, height + 24);
+      await vi.waitFor(() => docked(popup));
       await expectNoA11yViolations(host);
       await userEvent.click(footer.querySelector<HTMLElement>("[data-view-toggle]")!);
       expect(popup.matches(":popover-open")).toBe(false);
+      await page.viewport(width, height);
     }
   } finally {
     await page.viewport(1280, 900);

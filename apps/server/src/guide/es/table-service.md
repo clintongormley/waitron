@@ -573,8 +573,8 @@ izquierda y derecha para pasar de **Sala** a tus mesas. Inicio abre **Sala** y F
 mesa. En una pantalla estrecha, usa Tab para llegar al botón de una mesa y Enter para abrirla.
 
 Elige **Sala** después de una mesa para abrir su zona, si este dispositivo la muestra. En una
-pantalla estrecha, toca el nombre de la zona abajo y elige una zona en la lista. La marca indica
-en qué zona estás. Abre **Más** (☰) en la misma barra para fichar, cambiar el plano de hoy,
+pantalla estrecha, toca el nombre de la zona abajo y elige una zona. Con el teclado, usa las
+flechas arriba y abajo y pulsa Enter para elegir. Abre **Más** (☰) en la misma barra para fichar, cambiar el plano de hoy,
 buscar cuentas, gestionar el efectivo, consultar tu jornada, pedir ayuda o abrir los ajustes. En un móvil o una tableta con la sala en pantalla ancha,
 abre **Más** arriba para encontrar **Equipo**, **Idioma** y **Tema** en **Ajustes**.
 

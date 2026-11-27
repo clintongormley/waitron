@@ -77,7 +77,6 @@ export class WtRowActions extends LitElement {
     baseStyles,
     css`
       :host {
-        --wt-row-actions-bottom-offset: 0px;
         display: inline-block;
       }
       button {
@@ -542,7 +541,8 @@ export class WtRowActions extends LitElement {
       const target = event.composedPath()[0] as HTMLElement;
       const current = controls.indexOf(target);
       if (current >= 0 && controls[current + (event.shiftKey ? -1 : 1)]) return;
-      if (target === this.actions && !event.shiftKey && controls.length > 0) return;
+      if (this.focusSheet && target === this.actions && !event.shiftKey && controls.length > 0)
+        return;
       event.preventDefault();
       this.hide({ restoreFocus: true });
       return;

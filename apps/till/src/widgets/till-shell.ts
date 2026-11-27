@@ -26,6 +26,7 @@ import { countText, currentLocale, t } from "../i18n/t.js";
 import type { TillFloorScreen } from "../screens/till-floor-screen.js";
 import {
   floorBarStyles,
+  floorDeviceRows,
   floorHoursRows,
   floorMenuSection,
   floorMoreRow,
@@ -458,7 +459,7 @@ export class TillShell extends LitElement {
         ${actionDividerStyles}
       }
 
-      wt-row-actions > span {
+      wt-row-actions > span:not(.floor-zone-trigger) {
         padding: var(--wt-space-2) var(--wt-space-4);
       }
 
@@ -808,7 +809,6 @@ export class TillShell extends LitElement {
             continue;
           }
           this.#setNarrowFloor(entry.contentRect.width < 800);
-          if (this.#floorControls) measureFloorControls(this.#floorControls);
           if (this.formFactor === "till") {
             void this.#measureCounterLogo();
             continue;
@@ -1255,15 +1255,19 @@ export class TillShell extends LitElement {
   #operatorActions(theme: boolean, inFloorMenu = false): TemplateResult {
     const state = this.clockState;
     const disabled = this.clockBusy || state === null;
-    const action = (kind: TillClockAction, label: string) =>
-      html`<wt-button
-        icon=${inFloorMenu ? nothing : { in: "menu-clock-in", out: "menu-logout", "break-start": "menu-start-break", "break-end": "menu-end-break" }[kind]}
-        data-clock-action=${kind}
-        variant=${disabled || (inFloorMenu && kind === "out") ? "secondary" : "primary"}
-        .disabled=${disabled}
-        @click=${() => this.#emit("clock-action", { action: kind })}
-        >${label}</wt-button
-      >`;
+    const action = (kind: TillClockAction, label: string) => {
+      const click = () => this.#emit("clock-action", { action: kind });
+      return inFloorMenu && kind !== "out"
+        ? floorMoreRow(label, click, { clock: kind, disabled })
+        : html`<wt-button
+            icon=${inFloorMenu ? nothing : { in: "menu-clock-in", out: "menu-logout", "break-start": "menu-start-break", "break-end": "menu-end-break" }[kind]}
+            data-clock-action=${kind}
+            variant=${disabled || inFloorMenu ? "secondary" : "primary"}
+            .disabled=${disabled}
+            @click=${click}
+            >${label}</wt-button
+          >`;
+    };
     const clockOut =
       this.clockAvailable && state !== null && state.state !== "out"
         ? action("out", t("clock.out"))
@@ -1275,13 +1279,18 @@ export class TillShell extends LitElement {
             ${this.clockError ? html`<span class="clock-message" role="status">${this.clockError}</span>` : nothing}
             ${
               state === null
-                ? html`<wt-button
-                    icon=${inFloorMenu ? nothing : "menu-retry"}
-                    data-clock-retry
-                    .disabled=${this.clockBusy}
-                    @click=${() => this.#emit("retry-clock-read")}
-                    >${t("clock.retry")}</wt-button
-                  >`
+                ? inFloorMenu
+                  ? floorMoreRow(t("clock.retry"), () => this.#emit("retry-clock-read"), {
+                      clock: "retry",
+                      disabled: this.clockBusy,
+                    })
+                  : html`<wt-button
+                      icon="menu-retry"
+                      data-clock-retry
+                      .disabled=${this.clockBusy}
+                      @click=${() => this.#emit("retry-clock-read")}
+                      >${t("clock.retry")}</wt-button
+                    >`
                 : state.state === "out"
                   ? action("in", t("clock.in"))
                   : html` ${state.state === "working" ? action("break-start", t("clock.break_start")) : action("break-end", t("clock.break_end"))}
@@ -1395,17 +1404,12 @@ export class TillShell extends LitElement {
         ${items.zones}${items.equipment}${this.#chooser("group")}${this.#themeChoices()}
       </div>
       <hr class="menu-rule" />
-      ${this.#reportOption()}${this.#aboutOption()} ${this.#logoutButton()} ${this.#poweredBy()}
+      ${this.#reportOption()}${this.#aboutOption()}
+      <wt-button icon="menu-logout" class="logout" @click=${() => this.#emit("logout")}
+        >${t("shell.logout")}</wt-button
+      >
+      ${this.#poweredBy()}
     </wt-row-actions>`;
-  }
-
-  #logoutButton(inFloorMenu = false): TemplateResult {
-    return html`<wt-button
-      icon=${inFloorMenu ? nothing : "menu-logout"}
-      class="logout"
-      @click=${() => this.#emit("logout")}
-      >${t("shell.logout")}</wt-button
-    >`;
   }
 
   #floorShortcuts(counterLabel: string): TemplateResult {
@@ -1435,16 +1439,10 @@ export class TillShell extends LitElement {
         ${floorMenuSection(
           "floor.menu_device",
           html`
-            ${this.#chooser("segmented")}
-            <div class="floor-help">
-              <span aria-hidden="true">${helpText("help.label")}</span>${this.#helpSwitch()}
-            </div>
-            <details class="settings-group">
-              <summary class="settings-heading">${t("device_zones.settings")}</summary>
-              ${items.equipment}${items.profile}${this.#themeChoices()}
-            </details>
+            ${floorDeviceRows(this.#chooser("segmented"), this.#helpSwitch(), html`${items.equipment}${items.profile}${this.#themeChoices()}`)}
             ${items.expo}${this.formFactor !== "till" || this.testingKitchen ? items.station : nothing}
-            ${this.#reportOption(true)}${this.#aboutOption(true)} ${this.#logoutButton(true)}
+            ${this.#reportOption(true)}${this.#aboutOption(true)}
+            ${floorMoreRow(t("shell.logout"), () => this.#emit("logout"), { className: "logout" })}
             ${this.#poweredBy()}
           `,
         )}
