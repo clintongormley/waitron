@@ -362,7 +362,9 @@ export class CustomerMenuPage extends LitElement {
         --wt-action-radius: var(--wt-radius-full);
       }
       .back[variant="ghost"] {
-        --wt-button-padding-inline: 0;
+        /* Align the inset chevron with the title and leave room inside the hover outline. */
+        --wt-button-padding-inline: var(--wt-space-2);
+        margin-inline-start: calc(-1 * var(--wt-space-3));
       }
       img {
         display: block;

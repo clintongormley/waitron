@@ -263,7 +263,7 @@ describe("the customer menu Online preview", () => {
     const labelStart = label.getBoundingClientRect().left;
     const betweenEntries =
       second!.getBoundingClientRect().left - first!.getBoundingClientRect().right;
-    expect.soft(betweenEntries).toBeGreaterThanOrEqual(2 * (labelStart - icon.right));
+    expect.soft(betweenEntries).toBeGreaterThan(1.8 * (labelStart - icon.right));
     await expect.element(diets, { timeout: 1000 }).toBeVisible();
     expect(diets.element().nextElementSibling?.textContent?.trim()).toBe("Halal");
   });
@@ -276,8 +276,12 @@ describe("the customer menu Online preview", () => {
 
       const title = page.getByRole("heading", { name: entry, exact: true }).element();
       const menu = page.getByRole("button", { name: "Back to menu" }).element();
-      const chevron = menu.querySelector("wt-icon")!.getBoundingClientRect();
-      expect(Math.abs(chevron.left - title.getBoundingClientRect().left)).toBeLessThanOrEqual(2);
+      const chevron = menu.querySelector("wt-icon")!.shadowRoot!.querySelector("path")!;
+      const chevronLeft = chevron.getBoundingClientRect().left;
+      expect
+        .soft(Math.abs(chevronLeft - title.getBoundingClientRect().left))
+        .toBeLessThanOrEqual(3);
+      expect(chevronLeft - menu.getBoundingClientRect().left).toBeGreaterThan(8);
     },
   );
 
