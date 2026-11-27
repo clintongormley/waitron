@@ -4,6 +4,7 @@ import {
   MEDIA_FILENAME,
   formatMoney,
   guestMenuWords,
+  type GuestChoice,
   type GuestDeclarations,
   type GuestMember,
   type PublicGuestMenu,
