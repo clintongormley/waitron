@@ -616,18 +616,16 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
     expect(asked).toEqual([]);
   });
 
-  it.each([
-    "sale.correction_unsupported",
-    "working_order.not_placed",
-    "fiscal.original_refused",
-    "fiscal.original_unanswered",
-  ])("says %s in its own sentence above the action", async (code) => {
-    const el = await mount({ mode: "split", refusal: { code } });
+  it.each(["sale.correction_unsupported", "working_order.not_placed"])(
+    "says %s in its own sentence above the action",
+    async (code) => {
+      const el = await mount({ mode: "split", refusal: { code } });
 
-    expect(actions(el).error).toBe(codeMessage(code));
-    expect(actions(el).error).not.toBe(codeMessage("some.unmapped_code"));
-    expect(unservedBox(el)).toBeNull();
-  });
+      expect(actions(el).error).toBe(codeMessage(code));
+      expect(actions(el).error).not.toBe(codeMessage("some.unmapped_code"));
+      expect(unservedBox(el)).toBeNull();
+    },
+  );
 
   it("says the dishes are not served even when the refusal lists none", async () => {
     const el = await mount({ mode: "split", refusal: { code: "bill.unserved_dishes" } });

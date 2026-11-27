@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { invoiceSeries, sales, workingOrderLines, workingOrders } from "@waitron/db";
+import { sales, workingOrderLines, workingOrders } from "@waitron/db";
 import { createProduct } from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -532,10 +532,7 @@ describe("Pay for items on a printed bill", () => {
     const party = await printed(await seated("soup", "hake"));
     const original = await fixture.invoiceOf(venue, party.tabId);
     await inTx(venue, (tx) => heldFromSending(tx, original.id));
-    const box = await takeOver(venue);
-    await inTx(venue, (tx) =>
-      tx.insert(invoiceSeries).values({ nodeId: box, code: `S${box}`, purpose: "standard" }),
-    );
+    await takeOver(venue, { standard: true });
     const body = await itemsBody(
       party,
       [{ lineId: await lineOf(party.tabId, "hake") }],

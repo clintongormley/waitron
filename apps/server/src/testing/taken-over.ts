@@ -13,21 +13,28 @@ let takeovers = 0;
 /**
  * Makes `venue` the box that took over from the one that issued its sales so far: a new node with
  * its own open installation and corrective series, recorded as a finished handover from the old
- * box, whose records stay as they are.
+ * box, whose records stay as they are. With `standard`, the new box also gets a standard series, for
+ * a test that issues a new sale there.
  * `venue.cfg`, and every app `venue.appWith` mounts from now on, name the new box until the test
  * finishes; `venue.app` keeps the old one. Answers the new node.
  */
-export async function takeOver(venue: BillVenue): Promise<NodeId> {
+export async function takeOver(
+  venue: BillVenue,
+  { standard = false }: { standard?: boolean } = {},
+): Promise<NodeId> {
   const was = venue.cfg.nodeId;
   // Invoice numbers are unique across the taxpayer's boxes, so each new box numbers its own series.
   const series = `T${++takeovers}`;
   const nodeId = await withTransaction(venue.db, async (tx) => {
     const node = await seedNode(tx);
     await openSuccessorInstallation(tx, was, node);
-    await tx.insert(invoiceSeries).values([
-      { nodeId: node, code: `${series}R`, purpose: "corrective" },
-      { nodeId: node, code: `${series}F`, purpose: "full_corrective" },
-    ]);
+    await tx
+      .insert(invoiceSeries)
+      .values([
+        { nodeId: node, code: `${series}R`, purpose: "corrective" },
+        { nodeId: node, code: `${series}F`, purpose: "full_corrective" },
+        ...(standard ? [{ nodeId: node, code: `${series}S`, purpose: "standard" as const }] : []),
+      ]);
     return node;
   });
   await recordTakeover(venue.db, was, nodeId);

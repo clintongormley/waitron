@@ -284,7 +284,7 @@ async function filedOnChainOf(correctionId: string, box: string, saleId: string)
 }
 
 describe("a full invoice another box issued", () => {
-  it("once AEAT accepted it, Give back files one R1 on this box's chain naming it", async () => {
+  it("Give back files one R1 on this box's chain naming it", async () => {
     const saleId = await fullInvoice({ cash: "37.00" });
     await acceptedByAeat(venue.db, saleId);
     const box = await takeOver(venue);

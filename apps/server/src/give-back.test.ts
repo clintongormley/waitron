@@ -647,7 +647,7 @@ describe("readGiveBack: the lines", () => {
     expect(lineOf(view, "Paella").givenFree).toBe(false);
   });
 
-  it("lists a receipt another box filed, once AEAT accepted it, with each line's left at its gross and goodwill offered", async () => {
+  it("lists a receipt another box filed with each line's left at its gross and goodwill offered", async () => {
     const b = await tab(["Paella", "Cheesecake"]);
     const saleId = await pay(b, [{ cash: "25.00" }]);
     await acceptedByAeat(venue.db, saleId);
@@ -1155,7 +1155,7 @@ describe("planGiveBack: goodwill and the extra", () => {
     );
   });
 
-  it("gives goodwill back on a receipt another box filed, once AEAT accepted it, as a correction", async () => {
+  it("gives goodwill back as a correction on a receipt another box filed", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ cash: "34.00" }]);
     await acceptedByAeat(venue.db, saleId);
@@ -1584,7 +1584,7 @@ describe("POST …/give-back in cash", () => {
     ]);
   });
 
-  it("files goodwill on a receipt another box filed, once AEAT accepted it, on this box's chain naming the original", async () => {
+  it("files goodwill on a receipt another box filed on this box's chain naming the original", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ cash: "34.00" }]);
     await acceptedByAeat(venue.db, saleId);

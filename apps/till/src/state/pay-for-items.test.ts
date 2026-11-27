@@ -219,15 +219,6 @@ describe("itemsRefusal", () => {
     );
   });
 
-  it.each(["fiscal.original_refused", "fiscal.original_unanswered"])(
-    "leaves %s in the words its code shares",
-    (code) => {
-      const refusal = refusalOf({ code });
-
-      expect(itemsRefusal(refusal)).toBe(refusal);
-    },
-  );
-
   it("keeps the general words for a comped or discounted dish the refusal does not name", () => {
     const refusal = refusalOf({ code: "set_menu.move_adjusted", dishNames: [] });
 
