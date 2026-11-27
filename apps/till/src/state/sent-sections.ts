@@ -95,7 +95,7 @@ function joinRows(
   return groups.map(({ slices: members }) => members.sort((a, b) => a.row.lineNo - b.row.lineNo));
 }
 
-function compareRows(a: SentRow, b: SentRow): number {
+function compareRows(a: SentRow, b: SentRow, readOrder: Map<CurrentOrderRow, number>): number {
   const aLeft = a.left[0]?.row;
   const bLeft = b.left[0]?.row;
   if (aLeft === undefined || bLeft === undefined)
@@ -104,8 +104,9 @@ function compareRows(a: SentRow, b: SentRow): number {
         ? 1
         : -1
       : a.slices[0]!.row.lineNo - b.slices[0]!.row.lineNo;
+  // Held rows have no firing time to sort by, so they keep the order the read lists them in.
   if (a.state === "held" && b.state === "held")
-    return aLeft.lineNo - bLeft.lineNo || aLeft.lineId.localeCompare(bLeft.lineId);
+    return readOrder.get(aLeft)! - readOrder.get(bLeft)!;
   const aReady = aLeft.readyAt !== null;
   const bReady = bLeft.readyAt !== null;
   if (aReady !== bReady) return aReady ? -1 : 1;
@@ -126,7 +127,13 @@ export function sentSections(
 ): SentSection[] {
   const panel = sentPanel(current, billId);
   const groupOf = new Map<CurrentOrderRow, CurrentOrderGroup>();
-  for (const group of current.groups) for (const row of group.rows) groupOf.set(row, group);
+  const readOrder = new Map<CurrentOrderRow, number>();
+  for (const group of current.groups)
+    for (const row of group.rows) {
+      groupOf.set(row, group);
+      readOrder.set(row, readOrder.size);
+    }
+  for (const row of current.ungrouped) readOrder.set(row, readOrder.size);
   const sliced = new Map<CurrentOrderGroup | null, SentSlice[]>();
   for (const slice of [...panel.served, ...panel.fired, ...panel.held.flatMap((g) => g.rows)]) {
     const group = groupOf.get(slice.row) ?? null;
@@ -142,7 +149,9 @@ export function sentSections(
     const slices = sliced.get(group);
     if (slices === undefined) continue;
     const heldEntry = panel.held.find((entry) => entry.group === group);
-    const rows = joinRows(slices, portionKey).map(toRow).sort(compareRows);
+    const rows = joinRows(slices, portionKey)
+      .map(toRow)
+      .sort((a, b) => compareRows(a, b, readOrder));
     const companions = heldEntry?.companions ?? [];
     const courseIds = [
       ...new Set([...slices.map((slice) => slice.row), ...companions].map((row) => row.courseId)),

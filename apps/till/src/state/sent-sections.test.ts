@@ -185,6 +185,20 @@ describe("sentSections (till redesign PR 8a)", () => {
     expect(ids(section!.rows).flat()).toEqual(["z-first", "a-second"]);
   });
 
+  it("lists a held group's rows as the read lists them, even when line numbers disagree", () => {
+    const [section] = sentSections(
+      current([
+        group("held", "held", [
+          row("z-steak", { lineNo: 3, released: false, firedAt: null }),
+          row("a-steak-part", { lineNo: 6, released: false, firedAt: null }),
+          row("m-fish", { lineNo: 4, released: false, firedAt: null }),
+        ]),
+      ]),
+      "bill-1",
+    );
+    expect(ids(section!.rows).flat()).toEqual(["z-steak", "a-steak-part", "m-fish"]);
+  });
+
   it("orders groups at one position by id, and sorts a course it does not know first", () => {
     const sections = sentSections(
       current([

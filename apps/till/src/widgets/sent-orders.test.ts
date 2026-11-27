@@ -8,6 +8,7 @@ import type {
   CurrentOrders,
   TabLine,
 } from "../api/kitchen-api.js";
+import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget, touchContextMenu } from "./test-helpers.js";
@@ -930,6 +931,32 @@ it("labels an unknown companion as another bill without exposing its internal id
   );
   expect(find(el, "[data-companion=other]").textContent).toContain("Another bill");
   expect(find(el, "[data-companion=other]").textContent).not.toContain("internal-bill-id");
+});
+
+it("marks a sent row's and a companion's dish name in the venue's content language", async () => {
+  const previous = currentContentLanguages();
+  setContentLanguages({ defaultLanguage: "ca", languages: ["ca"] });
+  try {
+    const el = await mount(
+      current(
+        [row("fired")],
+        [
+          group("g", [
+            row("own", { released: false }),
+            row("other", { released: false, workingOrderId: "bill-2" }),
+          ]),
+        ],
+      ),
+    );
+    for (const selector of [
+      "[data-fired-line=fired]",
+      "[data-held-line=own]",
+      "[data-companion=other]",
+    ])
+      expect(find(el, `${selector} .product-name`).getAttribute("lang"), selector).toBe("ca");
+  } finally {
+    setContentLanguages(previous);
+  }
 });
 
 it("defers a newly due banner until the pressed row is released", async () => {

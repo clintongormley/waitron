@@ -7430,17 +7430,15 @@ describe("till-app: the order's groups", () => {
         ]);
         expect(server.moveLinesToGroup).not.toHaveBeenCalled();
         expect((await heldGroupsList(el))[2]!.lines).toEqual([
-          "Steak ×1",
+          ...Array<string>(quantity).fill("Steak ×1"),
           "Fish ×1",
-          ...Array<string>(quantity - 1).fill("Steak ×1"),
         ]);
         expect(tableOrder(el)!.shadowRoot!.querySelector("[data-split-group-line]")).toBeNull();
         expect(banner(el)).toBeNull();
         await reorderFromSent(el, "g3", "earlier");
         expect((await heldGroupsList(el))[1]!.lines).toEqual([
-          "Steak ×1",
+          ...Array<string>(quantity).fill("Steak ×1"),
           "Fish ×1",
-          ...Array<string>(quantity - 1).fill("Steak ×1"),
         ]);
         emit(tableOrder(el)!, "move-guests", { toTableId: "t9" });
         await flush(el);
@@ -7565,10 +7563,10 @@ describe("till-app: the order's groups", () => {
       expect(banner(el)!.textContent).toContain(t("table.error"));
       expect((await heldGroupsList(el))[2]!.lines).toEqual([
         "Steak ×1",
+        "Steak ×1",
+        "Steak ×1",
+        "Steak ×1",
         "Fish ×1",
-        "Steak ×1",
-        "Steak ×1",
-        "Steak ×1",
       ]);
       emit(tableOrder(el)!, "move-guests", { toTableId: "t9" });
       await flush(el);
@@ -7650,9 +7648,9 @@ describe("till-app: the order's groups", () => {
       expect(banner(el)).toBeNull();
       expect((await heldGroupsList(el))[2]!.lines).toEqual([
         "Steak ×1",
+        "Steak ×1",
+        "Steak ×1",
         "Fish ×1",
-        "Steak ×1",
-        "Steak ×1",
       ]);
     });
 

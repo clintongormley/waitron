@@ -1,4 +1,4 @@
-import { preventTouchContextMenu } from "@waitron/ui";
+import { currentContentLanguages, preventTouchContextMenu } from "@waitron/ui";
 import { type TemplateResult, css, html, nothing } from "lit";
 import type { CurrentOrderRow } from "../api/kitchen-api.js";
 import { t } from "../i18n/t.js";
@@ -68,7 +68,10 @@ function secondLine(parts: readonly (TemplateResult | string)[]) {
 }
 
 function name(dish: CurrentOrderRow, marks: TemplateResult) {
-  return html`<span class="row-name"><span class="product-name">${dish.name}</span>${marks}</span>`;
+  return html`<span class="row-name"
+    ><span class="product-name" lang=${currentContentLanguages().defaultLanguage}>${dish.name}</span
+    >${marks}</span
+  >`;
 }
 
 /** One sent dish: its served and unserved portions together, or its cancelled-but-charged part. */
