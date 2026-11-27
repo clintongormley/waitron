@@ -109,6 +109,20 @@ describe("Customer menu page", () => {
     expect(getComputedStyle(selected).borderBlockEndColor).toBe(accent);
   });
 
+  it.each(["light", "dark"] as const)(
+    "makes secondary menu text warm and readable in %s",
+    async (scheme) => {
+      const { customer } = await openMenu(published().menu);
+      customer.appearance = menuAppearances[scheme];
+      await customer.updateComplete;
+      const description = customer.shadowRoot!.querySelector(".description")!;
+      const channels = getComputedStyle(description).color.match(/\d+/g)!.map(Number);
+      expect.soft(channels[0]).toBeGreaterThan(channels[2]!);
+      const hex = `#${channels.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+      expect(contrastRatio(hex, menuAppearances[scheme].pageColor)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
   it("paints the light menu's fields, pills and cards with its page colour", async () => {
     const { customer } = await openMenu(published().menu);
     customer.appearance = menuAppearances.light;

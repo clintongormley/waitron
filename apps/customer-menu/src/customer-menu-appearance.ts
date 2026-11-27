@@ -1,11 +1,27 @@
 import { isStoredColor, type CustomerMenuAppearance } from "@waitron/shared";
-import { contrastRatio, type Mode, typefaceStack, WAITRON_CHOICES } from "@waitron/ui-core/theme";
+import {
+  contrastRatio,
+  fromOklch,
+  type Mode,
+  toOklch,
+  typefaceStack,
+  WAITRON_CHOICES,
+} from "@waitron/ui-core/theme";
 import { deriveTheme, WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 
 function menuColorScheme(pageColor?: string): Mode {
   return pageColor && contrastRatio(pageColor, "#ffffff") > contrastRatio(pageColor, "#000000")
     ? "dark"
     : "light";
+}
+
+function tintedSecondaryText(palette: Readonly<Record<string, string>>, tint: string): string {
+  const muted = palette["--wt-color-text-muted"]!;
+  const { L } = toOklch(muted);
+  const { C, H } = toOklch(tint);
+  const colored = fromOklch({ L, C: Math.min(C, 0.025), H });
+  const grounds = ["--wt-color-bg", "--wt-color-surface", "--wt-color-surface-raised"];
+  return grounds.every((token) => contrastRatio(colored, palette[token]!) >= 4.5) ? colored : muted;
 }
 
 function menuAppearanceTokens(
@@ -26,8 +42,10 @@ function menuAppearanceTokens(
     },
     text: textFont ? { family: textFont } : {},
   });
+  const tint = textColor ?? pageColor;
   return {
     ...palette,
+    ...(tint && { "--wt-color-text-muted": tintedSecondaryText(palette, tint) }),
     "--wt-menu-heading-font": typefaceStack(headingFont ?? "system", WAITRON_DEFAULTS),
     ...(headingFont === "serif" && {
       "--wt-menu-heading-weight": "var(--wt-font-weight-normal)",
