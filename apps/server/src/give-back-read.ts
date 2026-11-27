@@ -342,19 +342,20 @@ export async function readFacts(
   const usableHere = waysHere.map(({ way, here }) => ({ ...way, reason: here }));
   const money = moneyAvailability(usableHere);
   const { lines: filed, toLine } = await receiptLines(tx, saleId);
+  const linesRead = correctable.lines !== null;
   const { cancelled, cancelIds, members, partOf, free, filedBack } = await cancelsAndFreeByLine(
     tx,
     saleId,
     toLine,
+    { filedLegs: correctable.fullInvoice && linesRead },
   );
   const correctableLeft = new Map(correctable.lines?.map((line) => [line.id, line.left]));
   const grossOf = new Map(filed.map((line) => [line.id, line.lineGross ?? 0]));
   const leftOf = (id: string) =>
     decimalToCents(correctableLeft.get(id) ?? centsToDecimal(grossOf.get(id) ?? 0));
   const familyOf = (id: string) => [...(members.get(id) ?? [id])];
-  // A filed corrective's legs paid what it took off the dish, so the lines' `left` already counts
-  // their links; the gross, read where the lines cannot be, counts none.
-  const linesRead = correctable.lines !== null;
+  // A filed corrective's links never exceed what it took off the dish, which the lines' `left`
+  // already counts; the gross, read where the lines cannot be, counts none.
   const lines = filed.map((line) => {
     const cancel = cancelled.get(line.id);
     const dish = partOf.get(line.id);

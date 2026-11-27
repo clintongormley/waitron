@@ -91,42 +91,39 @@ export interface CancelOwing {
   createdAt: string;
 }
 
-/** The cancels with Refund ticked and the free dishes of the receipt `saleId`, keyed by the line
- * of `toLine` each filed row becomes: a cancel by its dish's line, which `members` maps to every
- * line of the dish's family and `partOf` maps each extra's line back to. `owing` lists each dish's
- * cancels not all paid back, oldest first; `filedBack` is the part of `back`, in cents, that legs
- * of filed correctives paid, which those correctives already took off the dish. */
-export async function cancelsAndFreeByLine(
-  tx: Transaction,
-  saleId: SaleId,
+type SaleCancels = Awaited<ReturnType<typeof readCancelsOf>>;
+
+/** The cancels with Refund ticked on the receipt `saleId`'s bill, with that bill; null when the
+ * sale has none. */
+async function saleCancels(tx: Transaction, saleId: SaleId) {
+  const [sale] = await tx
+    .select({ workingOrderId: sales.workingOrderId })
+    .from(sales)
+    .where(eq(sales.id, saleId));
+  if (sale?.workingOrderId == null) return null;
+  return {
+    workingOrderId: sale.workingOrderId,
+    cancels: await readCancelsOf(tx, sale.workingOrderId),
+  };
+}
+
+function cancelsByLine(
+  familyOf: (lineId: string) => readonly { rowId: string }[] | undefined,
+  cancels: SaleCancels,
   toLine: (filedRowId: string) => string | undefined,
+  /** In cents, by cancel. */
+  waitingOf: ReadonlyMap<string, number>,
+  filedOf: ReadonlyMap<string, number>,
 ) {
   const cancelled = new Map<string, CancelShare>();
   const cancelIds = new Map<string, string[]>();
   const members = new Map<string, Set<string>>();
   const partOf = new Map<string, string>();
-  const free = new Set<string>();
   const owing = new Map<string, CancelOwing[]>();
   const filedBack = new Map<string, number>();
-  const [sale] = await tx
-    .select({ workingOrderId: sales.workingOrderId })
-    .from(sales)
-    .where(eq(sales.id, saleId));
-  if (sale?.workingOrderId == null)
-    return { cancelled, cancelIds, members, partOf, free, owing, filedBack };
-  const filing = await readBillFiling(tx, sale.workingOrderId, saleId);
-  const pairs = pairFiling(filing);
-  for (const line of filing.stored.filter(isFree)) {
-    const dish = filedFamilyOf(filing, pairs, line.id)?.[0];
-    const id = dish === undefined ? undefined : toLine(dish.rowId);
-    if (id !== undefined) free.add(id);
-  }
-  const waitingOf = await waitingByCancel(tx, sale.workingOrderId);
-  const filedOf = await filedLegsByCancel(tx, sale.workingOrderId);
-  for (const cancel of await readCancelsOf(tx, sale.workingOrderId)) {
+  for (const cancel of cancels) {
     if (cancel.lineId === null || cancel.refundValue === null) continue;
-    const family = filedFamilyOf(filing, pairs, cancel.lineId);
-    const ids = [...new Set(family?.flatMap((row) => toLine(row.rowId) ?? []))];
+    const ids = [...new Set(familyOf(cancel.lineId)?.flatMap((row) => toLine(row.rowId) ?? []))];
     const dish = ids[0];
     if (dish === undefined) continue;
     const value = decimalToCents(cancel.refundValue);
@@ -157,7 +154,45 @@ export async function cancelsAndFreeByLine(
   }
   for (const [dish, lines] of members)
     for (const id of lines) if (id !== dish && !members.has(id)) partOf.set(id, dish);
-  return { cancelled, cancelIds, members, partOf, free, owing, filedBack };
+  return { cancelled, cancelIds, members, partOf, owing, filedBack };
+}
+
+const NONE: ReadonlyMap<string, number> = new Map();
+
+/** The cancels with Refund ticked and the free dishes of the receipt `saleId`, keyed by the line
+ * of `toLine` each filed row becomes: a cancel by its dish's line, which `members` maps to every
+ * line of the dish's family and `partOf` maps each extra's line back to. `owing` lists each dish's
+ * cancels not all paid back, oldest first; with `filedLegs`, `filedBack` is the part of `back`, in
+ * cents, that legs of filed correctives paid, which those correctives already took off the dish. */
+export async function cancelsAndFreeByLine(
+  tx: Transaction,
+  saleId: SaleId,
+  toLine: (filedRowId: string) => string | undefined,
+  { filedLegs }: { filedLegs: boolean },
+) {
+  const free = new Set<string>();
+  const found = await saleCancels(tx, saleId);
+  if (found === null) return { free, ...cancelsByLine(() => undefined, [], toLine, NONE, NONE) };
+  const filing = await readBillFiling(tx, found.workingOrderId, saleId);
+  const pairs = pairFiling(filing);
+  for (const line of filing.stored.filter(isFree)) {
+    const dish = filedFamilyOf(filing, pairs, line.id)?.[0];
+    const id = dish === undefined ? undefined : toLine(dish.rowId);
+    if (id !== undefined) free.add(id);
+  }
+  const some = found.cancels.length > 0;
+  const waitingOf = some ? await waitingByCancel(tx, found.workingOrderId) : NONE;
+  const filedOf = some && filedLegs ? await filedLegsByCancel(tx, found.workingOrderId) : NONE;
+  return {
+    free,
+    ...cancelsByLine(
+      (lineId) => filedFamilyOf(filing, pairs, lineId),
+      found.cancels,
+      toLine,
+      waitingOf,
+      filedOf,
+    ),
+  };
 }
 
 const filedLines = (tx: Transaction, saleId: string) =>
@@ -237,10 +272,10 @@ export type CorrectionEnd =
 
 /**
  * Links the completed `legs` of a full invoice's correction on `saleId`, in order, to its dishes'
- * cancels. Filed, each dish's cancels recorded before the correction opened take what the
- * corrective takes off the dish ({@link cancelLinks}); closed unrecorded, the cancels on the dishes
- * of `lineIds` (none named: every dish) take the money back in their order, as a plain refund pays
- * them.
+ * cancels. Filed, each dish's cancels recorded before the correction opened take up to what they
+ * owe, and together no more than what the corrective takes off the dish ({@link cancelLinks});
+ * closed unrecorded, the cancels on the dishes of `lineIds` (none named: every dish) take the money
+ * back in their order, as a plain refund pays them.
  */
 export async function linkCorrectionToCancels(
   tx: Transaction,
@@ -248,8 +283,26 @@ export async function linkCorrectionToCancels(
   legs: readonly { id: string; appliedAmount: number }[],
   end: CorrectionEnd,
 ): Promise<void> {
+  const found = await saleCancels(tx, saleId);
+  if (
+    found === null ||
+    !found.cancels.some(
+      (cancel) =>
+        cancel.refundValue !== null &&
+        decimalToCents(cancel.refundValue) > decimalToCents(cancel.linked),
+    )
+  )
+    return;
   const { toLine } = await receiptLines(tx, saleId);
-  const { members, owing } = await cancelsAndFreeByLine(tx, saleId, toLine);
+  const filing = await readBillFiling(tx, found.workingOrderId, saleId);
+  const pairs = pairFiling(filing);
+  const { members, owing } = cancelsByLine(
+    (lineId) => filedFamilyOf(filing, pairs, lineId),
+    found.cancels,
+    toLine,
+    NONE,
+    NONE,
+  );
   const familyOf = (dish: string) => members.get(dish) ?? new Set([dish]);
   let dishes: { off: number; cancels: CancelOwing[] }[];
   if ("filed" in end) {

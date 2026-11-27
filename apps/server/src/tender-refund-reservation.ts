@@ -213,7 +213,7 @@ export async function authorizeStoredTenderRefund(
   refund: typeof refunds.$inferSelect,
   authorize: (cancelledBy?: string) => Promise<Authorization>,
 ): Promise<void> {
-  // A leg's links are its filed corrective's, which no cancel's approval covers (D4).
+  // No cancel's approval covers a correction's leg (D4).
   const [leg] = await tx
     .select({ id: invoiceCorrectionRefunds.id })
     .from(invoiceCorrectionRefunds)

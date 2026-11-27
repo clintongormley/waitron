@@ -633,8 +633,8 @@ async function issueAdvanceBill(
   await issueHeldBill(tx, deps, cfg, advance.workingOrderId, operatorId);
 }
 
-/** The money `correction`'s refunds have given back; refused `invoice_correction.refund_pending`
- * while one of them is still pending. */
+/** The money `correction`'s refunds have given back, and its completed refunds in order; refused
+ * `invoice_correction.refund_pending` while one of them is still pending. */
 async function readSettledMoney(tx: Transaction, correction: InvoiceCorrectionRow) {
   const { money, refunds } = await readCorrectionLegs(tx, correction.id);
   if (money.pendingRefundId !== null)
@@ -655,8 +655,8 @@ async function openCorrection(tx: Transaction, correctionId: string) {
 
 /**
  * What filing `selection` off the sale would file, or the refusal it meets and whether Close may
- * end the correction over it (`closableRefusal`); `kindSeen` is told whether it is a full
- * invoice's, as core's `FullInvoiceCorrection` tells it.
+ * end the correction over it (`closableRefusal`); `kindSeen` is passed to core's
+ * `FullInvoiceCorrection`.
  */
 export async function previewOrRefusal(
   tx: Transaction,

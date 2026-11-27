@@ -1,8 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustments";
 import { taxpayer } from "@waitron/db";
+import {
+  createCategory,
+  createExtraList,
+  createProduct,
+  writeProductModifiers,
+} from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { correctiveRecordsOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import {
@@ -14,6 +20,8 @@ import type { GiveBackRequest } from "./give-back-plan.js";
 import type { GiveBackLine, GiveBackView } from "./give-back-read.js";
 import { createTable } from "./testing/live-table.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import { writeGroupedLines } from "./testing/grouped-counter-order.js";
 import * as fixture from "./testing/full-invoice-give-back.js";
@@ -24,6 +32,14 @@ let venue: BillVenue;
 let reasonId: string;
 let voidReasonId: string;
 let adminCookie: string;
+/** A Paella (€18.50) offering an Aioli (€3.00) from its extras list, and a Cheesecake (€6.50). */
+let withExtra: {
+  offers: ZoneOffers;
+  paella: string;
+  cheesecake: string;
+  aioli: string;
+  sauces: string;
+};
 
 useVenueDb({
   resetPerTest: false,
@@ -36,9 +52,45 @@ useVenueDb({
       reasonId = (await listAdjustmentReasons(tx))[0]!.id;
       voidReasonId = (await createAdjustmentReason(tx, REASONS.houseVoid)).id;
       adminCookie = await fixture.adminTillCookie(tx, venue);
+      withExtra = await paellaWithAioli(tx);
     });
   },
 });
+
+async function paellaWithAioli(tx: Parameters<typeof createCategory>[0]) {
+  const category = await createCategory(tx, { name: "Rice" });
+  const product = (name: string, customer: string, unitPrice: string) =>
+    createProduct(tx, {
+      categoryId: category.id,
+      name,
+      customerName: { es: customer },
+      kitchenName: name.toUpperCase(),
+      pricingUnit: "each",
+      unitPrice,
+      vatClass: "general",
+    });
+  const paella = (await product("Paella", "Paella valenciana", "18.50")).id;
+  const cheesecake = (await product("Cheesecake", "Tarta de queso", "6.50")).id;
+  const aioli = (await product("Aioli", "Garlic mayonnaise", "3.00")).id;
+  const sauces = (
+    await createExtraList(
+      tx,
+      {
+        name: "Sauces",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: 1,
+        active: true,
+        items: [{ productId: aioli, maxQuantity: 1, preselected: false, price: "3.00" }],
+      },
+      "es-ES",
+    )
+  ).id;
+  await writeProductModifiers(tx, paella, [{ kind: "extras", id: sauces }]);
+  const offers = await offerProducts(tx, { zone: "tables", productIds: [paella, cheesecake] });
+  return { offers, paella, cheesecake, aioli, sauces };
+}
 
 const supervisor = () => ({ personId: venue.adminId, pin: "1234" });
 
@@ -297,5 +349,126 @@ describe("links of a corrective given back over two payments", () => {
       { cancel: cancelId, method: "cash", refund: 1000, amount: 1000 },
     ]);
     expect(await shown(saleId, "18.00")).toEqual({ left: "8.00", owed: "8.00", back: "10.00" });
+  });
+});
+
+describe("which cancels a corrective's money pays", () => {
+  /** A full invoice for a Paella with an Aioli (€21.50) and a Cheesecake (€6.50), paid in cash. */
+  async function paellaWithAioliInvoice() {
+    const billId = await inTx(venue, async (tx) => {
+      const table = await createTable(tx, {
+        label: `A-${randomUUID().slice(0, 8)}`,
+        zoneId: withExtra.offers.zoneId,
+      });
+      const opened = await openPartyTab(tx, venue.cfg, { tableId: table.id });
+      await placeGroups(tx, venue.cfg, opened.partyId, {
+        groups: [
+          {
+            lines: [
+              {
+                menuItemId: withExtra.offers.offerFor(withExtra.paella),
+                quantity: "1",
+                extras: [
+                  {
+                    listId: withExtra.sauces,
+                    picks: [{ productId: withExtra.aioli, quantity: 1 }],
+                  },
+                ],
+              },
+              { menuItemId: withExtra.offers.offerFor(withExtra.cheesecake), quantity: "1" },
+            ],
+            release: "hold",
+          },
+        ],
+        operatorId: venue.operatorId,
+        billId: opened.tabId,
+      });
+      return opened.tabId;
+    });
+    await fixture.chooseFullInvoice(venue, billId);
+    await fixture.payPart(venue, billId, { cash: "28.00" });
+    const [paella] = venue.db.all<{ lineNo: number }>(
+      sql`select line_no as lineNo from working_order_lines
+          where working_order_id = ${billId} and product_id = ${withExtra.paella}`,
+    );
+    return { billId, saleId: await fixture.saleOf(venue, billId), paellaLine: paella!.lineNo };
+  }
+
+  /** AEAT refuses the sale's filing for good, and Finish ends its open give-back unrecorded. */
+  async function finishRefused(saleId: string, correctionId: string) {
+    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+    const finished = await send(
+      venue.app,
+      adminCookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/close`,
+      {},
+    );
+    expect(finished.status, JSON.stringify(finished.json)).toBe(200);
+    expect(finished.json).toMatchObject({ state: "closed", correctiveSaleId: null });
+  }
+
+  it("counts a cancelled dish's priced extra in what goodwill takes off it", async () => {
+    const { billId, saleId, paellaLine } = await paellaWithAioliInvoice();
+    const cancelId = await cancel(billId, paellaLine);
+    await press(saleId, ask("goodwill", "14.00"));
+    expect(correctivesOf(saleId)).toEqual([r1(-1400)]);
+    expect(linksOf(saleId)).toEqual([
+      { cancel: cancelId, method: "cash", refund: 1400, amount: 1075 },
+    ]);
+    expect(await shown(saleId, "18.50")).toEqual({ left: "10.75", owed: "10.75", back: "10.75" });
+  });
+
+  it("ended unrecorded with another dish ticked, pays nothing to the cancelled dish", async () => {
+    const { billId, saleId } = await fullInvoiceOf(
+      ["Tarta", "Octopus"],
+      { cash: "10.00" },
+      { reader: "28.00" },
+    );
+    await cancel(billId, 1);
+    const octopus = await lineOf(saleId, "20.00");
+    const { correctionId } = await press(saleId, ask("dishes", "20.00", { lineIds: [octopus.id] }));
+    await finishRefused(saleId, correctionId!);
+    expect(linksOf(saleId)).toEqual([]);
+    expect(await shown(saleId, "18.00")).toEqual({ left: "18.00", owed: "18.00", back: "0.00" });
+  });
+
+  it("ended unrecorded on goodwill, which names no dish, pays the cancelled dish's cancel", async () => {
+    const { billId, saleId } = await fullInvoiceOf(
+      ["Tarta", "Octopus"],
+      { cash: "10.00" },
+      { reader: "28.00" },
+    );
+    const cancelId = await cancel(billId, 1);
+    const { correctionId } = await press(saleId, ask("goodwill", "19.00"));
+    await finishRefused(saleId, correctionId!);
+    expect(linksOf(saleId)).toEqual([
+      { cancel: cancelId, method: "cash", refund: 1000, amount: 1000 },
+    ]);
+    expect(await shown(saleId, "18.00")).toEqual({ left: "8.00", owed: "8.00", back: "10.00" });
+  });
+
+  it("on a receipt, ended unrecorded, links nothing to a cancel made between the legs", async () => {
+    const billId = await tabWith(venue, "Tarta", "Octopus");
+    await fixture.payPart(venue, billId, { cash: "10.00" });
+    await fixture.payPart(venue, billId, { reader: "28.00" });
+    const saleId = await fixture.saleOf(venue, billId);
+    const { correctionId } = await press(saleId, ask("goodwill", "19.00"));
+    await cancel(billId, 1);
+    // Another box's receipt: a refusal Finish ends a receipt's give-back over.
+    const spy = vi
+      .spyOn(venue.backend, "correctionAdmissionFor")
+      .mockResolvedValue({ eligible: false, reason: "wrong_node" } as never);
+    onTestFinished(() => spy.mockRestore());
+    const finished = await send(
+      venue.app,
+      adminCookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/close`,
+      {},
+    );
+    expect(finished.status, JSON.stringify(finished.json)).toBe(200);
+    expect(finished.json).toMatchObject({ state: "closed", correctiveSaleId: null });
+    expect(linksOf(saleId)).toEqual([]);
   });
 });
