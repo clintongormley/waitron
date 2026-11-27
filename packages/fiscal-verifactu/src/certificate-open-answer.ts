@@ -8,8 +8,9 @@ export type RewrittenResult =
   { ok: true; details: CertificateDetails; rewritten?: Buffer } | Exclude<OpenResult, { ok: true }>;
 
 /**
- * macOS's export derives every key from the passphrase's UTF-8 bytes taken one character each, as
- * OpenSSL 1.0 did, so Node calls a passphrase outside ASCII wrong; forge reads that spelling.
+ * macOS's `security export` derives every key from the passphrase's UTF-8 bytes taken one character
+ * each, as OpenSSL 1.0 did, so Node calls a passphrase outside ASCII wrong; forge reads that
+ * spelling.
  */
 function readSpelling(reason: string, passphrase: string): string | null {
   if (reason === "old_encryption") return passphrase;
@@ -19,9 +20,10 @@ function readSpelling(reason: string, passphrase: string): string | null {
 }
 
 /**
- * Opens the file; one Node refuses as old encryption, or a macOS export under a passphrase outside
- * ASCII, is opened again once rewritten under the passphrase as typed. The converter is loaded
- * only then: loading node-forge costs every other open time inside the opener's deadline.
+ * Opens the file; one Node refuses as old encryption, or a file macOS's `security` command exported
+ * under a passphrase outside ASCII, is opened again once rewritten under the passphrase as typed.
+ * The converter is loaded only then: loading node-forge costs every other open time inside the
+ * opener's deadline.
  */
 export async function openOrRewrite(pfx: Buffer, passphrase: string): Promise<RewrittenResult> {
   const opened = openCertificateFile(pfx, passphrase);

@@ -120,7 +120,7 @@ not following redirects, then showed AEAT's raw answers and added the controls. 
 - **An accented password** opens a Firefox export, and passes the password check on a file from the
   macOS API. The `security` command stores it misencoded, so a file made that way is refused as a wrong
   password. *(Dated note, 2026-11-27: A1571 PR 2 also opens such a file through the dashboard or setup:
-  it reads the passphrase as macOS wrote it and stores an AES copy under the passphrase as typed.)*
+  it reads the passphrase as the `security` command wrote it and stores an AES copy under the passphrase as typed.)*
 - **Time to open a Firefox export** (600,000 rounds of PBKDF2): about 885 ms for the whole child
   process on an idle i5-6400T box, in its own app image. The opener's limit is 2,000 ms.
 - **Not run:** a company seal at either address (owner: "i don't need it - each owner has their own

@@ -24,9 +24,10 @@ function openerInput(pfx: Buffer, passphrase: string, rewriteOld: boolean): stri
 const OUTPUT_MAX_BYTES = 8192 + Math.ceil(CERTIFICATE_MAX_BYTES / 3) * 4;
 
 /**
- * With `rewriteOld`, a file Node cannot open but node-forge can (old encryption, or a macOS export
- * under a passphrase outside ASCII) comes back rewritten with AES-256 under the same passphrase, as `rewritten`; store those bytes, not the
- * original, so every later reader opens it with plain Node.
+ * With `rewriteOld`, a file Node cannot open but node-forge can (old encryption, or a file macOS's
+ * `security` command exported under a passphrase outside ASCII) comes back rewritten with AES-256
+ * under the same passphrase, as `rewritten`; store those bytes, not the original, so every later
+ * reader opens it with plain Node.
  */
 export async function openCertificate(
   pfx: Buffer,

@@ -451,7 +451,7 @@ is refused with `fiscal.certificate_changed` (409). The next filing pass reads t
 so no restart is needed.
 
 `waitron-credentials set --purpose fiscal.aeat` still writes the certificate, but it stores the
-file as given, so a file exported by macOS (40-bit RC2, which plain Node cannot open) must be
+file as given, so a file exported by macOS (40-bit RC2, or a `security` export under a passphrase outside ASCII, which plain Node cannot open) must be
 installed through the dashboard or setup instead, and it records no install. The dashboard card, the certificate alerts and the reminder emails read the latest install
 record, so after a write from the command line they go on describing the previous certificate. Use
 the dashboard unless you have no other way in.
