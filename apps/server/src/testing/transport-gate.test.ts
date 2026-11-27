@@ -381,6 +381,18 @@ describe("gatedSpawn", () => {
     expect(pids).toEqual([gated.pid]);
   });
 
+  it("keeps relative socket paths in the requested process directory", async () => {
+    const g = await gate();
+    const child = gatedSpawn(g)(
+      process.execPath,
+      ["-p", "process.cwd()"],
+      {},
+      { cwd: import.meta.dirname },
+    );
+    expect(await child.exited).toBe(0);
+    expect(child.output().trim()).toBe(import.meta.dirname);
+  });
+
   it("stops the child and rethrows when reporting its pid throws", async () => {
     const g = await gate();
     let pid: number | undefined;

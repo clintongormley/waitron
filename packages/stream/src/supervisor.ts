@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -10,6 +11,7 @@ import { CommitLog, computeLag } from "./freshness.js";
 import { claimGeneration, generationPrefix, markerKey, pruneGenerations } from "./generations.js";
 import {
   LITESTREAM_VERSION,
+  SYNC_SOCKET_ENV,
   litestreamConfig,
   litestreamEnv,
   litestreamMetaDir,
@@ -18,6 +20,8 @@ import {
 import {
   KILL_GRACE_MS,
   readCommandLine,
+  checkReplicatedPosition,
+  litestreamExecutable,
   spawnLitestream,
   type ChildHandle,
   type SpawnFn,
@@ -89,6 +93,7 @@ type StreamCore = Omit<StreamStatus, "lagMs" | "lastConfirmedUploadAt">;
 export interface SupervisorDeps {
   litestreamBin: string;
   preserveBucketProblemSince?: boolean;
+  prepareShutdownSync?: boolean;
   onStateChange?: () => void;
   /** Absolute path of `venue.db`. */
   venueDbPath: string;
@@ -239,6 +244,8 @@ function failureFields(error: unknown): FailureFields {
  */
 export const steadyMs = (): number => Number(process.hrtime.bigint()) / 1e6;
 
+type ShutdownReplica = { socket: string; stopped: AbortController };
+
 interface Keeper {
   stop(): Promise<void>;
 }
@@ -273,6 +280,7 @@ export class StreamSupervisor {
   #controller: AbortController | undefined;
   #run: Promise<void> = Promise.resolve();
   #keeper: Keeper | undefined;
+  #shutdownReplica: ShutdownReplica | undefined;
   /** Settles once every Litestream a pause, a failure or stop() began stopping has exited. */
   #retiring: Promise<void> = Promise.resolve();
   #versionExit: Promise<unknown> = Promise.resolve();
@@ -320,6 +328,33 @@ export class StreamSupervisor {
       lagMs: this.#lagWith(this.#newestUploadAt).lagMs,
       lastConfirmedUploadAt: this.#newestUploadAt?.toISOString() ?? null,
     };
+  }
+
+  async checkShutdownUpload(
+    signal: AbortSignal,
+    sameTarget: () => Promise<boolean> = async () => true,
+  ): Promise<boolean> {
+    const replica = this.#shutdownReplica;
+    const generation = this.#status.generation;
+    if (replica === undefined || this.#keeper === undefined || this.#status.state !== "streaming")
+      return false;
+    const checked = await checkReplicatedPosition(
+      this.#spawn,
+      this.#deps.litestreamBin,
+      this.#deps.configDir,
+      replica.socket,
+      this.#deps.venueDbPath,
+      AbortSignal.any([signal, replica.stopped.signal]),
+    );
+    return (
+      checked &&
+      (await sameTarget()) &&
+      this.#shutdownReplica === replica &&
+      this.#keeper !== undefined &&
+      this.#status.generation === generation &&
+      this.#status.state === "streaming" &&
+      !signal.aborted
+    );
   }
 
   /** Schedules the work and returns: nothing here waits for the bucket. */
@@ -958,15 +993,17 @@ export class StreamSupervisor {
     }
     await rm(pidPath, { force: true });
     if (!Number.isSafeInteger(pid) || pid <= 1) return;
-    // Compared as the text `readCommandLine` gives, the arguments joined by spaces, against the
-    // binary as configured: an argument holding a space cannot be told from two arguments, and the
-    // same binary started by another path does not match.
-    const ours = [
-      this.#deps.litestreamBin,
-      ...replicateArgs(join(this.#deps.configDir, CONFIG_FILE)),
-    ].join(" ");
-    const isOurs = async () =>
-      (await (this.#deps.readCommandLine ?? readCommandLine)(pid)) === ours;
+    // Paired children resolve a relative binary path before entering the socket directory.
+    // Match both spellings with this box's configuration path.
+    const { litestreamBin, configDir } = this.#deps;
+    const args = replicateArgs(join(configDir, CONFIG_FILE));
+    const ours = [litestreamBin, litestreamExecutable(litestreamBin, configDir)].map((bin) =>
+      [bin, ...args].join(" "),
+    );
+    const isOurs = async () => {
+      const command = await (this.#deps.readCommandLine ?? readCommandLine)(pid);
+      return command !== null && ours.includes(command);
+    };
     if (!(await isOurs())) return;
     if (!sendSignal(pid, "SIGTERM")) return;
     this.#deps.log("warn", "stream.leftover_stopped", { pid });
@@ -1048,6 +1085,7 @@ export class StreamSupervisor {
       litestreamConfig({
         dbPath: venueDbPath,
         replicaUrl: replicaUrl(bucket, generation),
+        enableSyncSocket: this.#deps.prepareShutdownSync,
       }),
       { mode: 0o600 },
     );
@@ -1066,9 +1104,35 @@ export class StreamSupervisor {
       let attempt = 0;
       while (!wake.signal.aborted) {
         const startedAt = this.#deps.now().getTime();
-        current = this.#spawn(this.#deps.litestreamBin, replicateArgs(configPath), this.#env);
-        if (current.pid !== undefined) await this.#recordPid(pidPath, current.pid);
-        const code = await current.exited;
+        const replica = this.#deps.prepareShutdownSync
+          ? {
+              socket: `sync-${randomBytes(8).toString("hex")}.sock`,
+              stopped: new AbortController(),
+            }
+          : undefined;
+        let code: number | null;
+        try {
+          // Resolve the socket relative to the private config directory to fit sockaddr_un.
+          const cwd = replica === undefined ? undefined : this.#deps.configDir;
+          const env =
+            replica === undefined ? this.#env : { ...this.#env, [SYNC_SOCKET_ENV]: replica.socket };
+          current = this.#spawn(this.#deps.litestreamBin, replicateArgs(configPath), env, { cwd });
+          this.#shutdownReplica = replica;
+          if (current.pid !== undefined) await this.#recordPid(pidPath, current.pid);
+          code = await current.exited;
+        } finally {
+          this.#shutdownReplica = undefined;
+          if (replica !== undefined) {
+            replica.stopped.abort();
+            await rm(join(this.#deps.configDir, replica.socket), { force: true }).catch(
+              (error: unknown) => {
+                this.#deps.log("warn", "stream.sync_socket_cleanup_failed", {
+                  errorCode: codeOf(error),
+                });
+              },
+            );
+          }
+        }
         if (wake.signal.aborted) return;
         if (this.#deps.now().getTime() - startedAt >= HEALTHY_RUN_MS) attempt = 0;
         const delay = RESTART_BACKOFF_MS[Math.min(attempt, RESTART_BACKOFF_MS.length - 1)]!;

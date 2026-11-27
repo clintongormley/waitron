@@ -2,6 +2,8 @@
 // which does not map `.js` specifiers onto `.ts` files.
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { resolve as resolvePath } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -39,6 +41,7 @@ export type SpawnFn = (
   bin: string,
   args: readonly string[],
   env: Readonly<Record<string, string>>,
+  options?: { cwd?: string },
 ) => ChildHandle;
 
 export const KILL_GRACE_MS = 5_000;
@@ -56,6 +59,10 @@ process.on("exit", () => {
   for (const child of live) child.kill("SIGTERM");
 });
 
+export function litestreamExecutable(bin: string, cwd?: string): string {
+  return cwd !== undefined && bin.includes("/") ? resolvePath(bin) : bin;
+}
+
 /**
  * Starts `bin` with `args`, giving it `PATH`, `HOME` and `env` — never the rest of this process's
  * environment, which holds the vault key.
@@ -68,10 +75,11 @@ export function spawnLitestream(
   bin: string,
   args: readonly string[],
   env: Readonly<Record<string, string>>,
-  killGraceMs = KILL_GRACE_MS,
+  { cwd, killGraceMs = KILL_GRACE_MS }: { cwd?: string; killGraceMs?: number } = {},
 ): ChildHandle {
   // Node leaves out a variable whose value is undefined, rather than passing the text "undefined".
-  const child = spawn(bin, [...args], {
+  const child = spawn(litestreamExecutable(bin, cwd), [...args], {
+    cwd,
     env: { PATH: process.env.PATH, HOME: process.env.HOME, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -112,4 +120,46 @@ export function spawnLitestream(
       void exited.then(() => clearTimeout(escalate));
     },
   };
+}
+
+export async function checkReplicatedPosition(
+  spawn: SpawnFn,
+  bin: string,
+  cwd: string,
+  socket: string,
+  dbPath: string,
+  signal: AbortSignal,
+): Promise<boolean> {
+  if (signal.aborted) return false;
+  const command = spawn(bin, ["sync", "-wait", "-json", "-socket", socket, dbPath], {}, { cwd });
+  const timer = new AbortController();
+  // Leave the CLI its 30-second request deadline, then bound a child that fails to exit.
+  const timeout = AbortSignal.any([signal, timer.signal]);
+  try {
+    const code = await Promise.race([
+      command.exited,
+      delay(35_000, undefined, { signal: timeout }).catch(() => undefined),
+    ]);
+    if (code === undefined) {
+      command.kill();
+      await command.exited;
+    }
+    if (code !== 0 || signal.aborted) return false;
+    const reply = JSON.parse(command.output()) as {
+      db_path?: unknown;
+      txid?: number;
+      replica_txid?: number;
+    } | null;
+    return (
+      reply?.db_path === dbPath &&
+      Number.isSafeInteger(reply.txid) &&
+      reply.txid! > 0 &&
+      Number.isSafeInteger(reply.replica_txid) &&
+      reply.replica_txid! >= reply.txid!
+    );
+  } catch {
+    return false;
+  } finally {
+    timer.abort();
+  }
 }

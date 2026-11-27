@@ -15,7 +15,8 @@ import type { ServerConfig } from "./config.js";
 import type { Logger } from "./logger.js";
 import { recordShutdownPause } from "./stop-alert.js";
 import type { JobRunner } from "./job-runner.js";
-import { readStreamSettings } from "./stream-host.js";
+import { readStreamSettings, type StreamHost } from "./stream-host.js";
+import type { SpareFollowView } from "./spare-follow.js";
 import { startTenderRefundResolvers, stopTenderRefundResolvers } from "./tender-refund-sends.js";
 import "./errors.js";
 
@@ -50,6 +51,8 @@ export function adminShutdownDuties(deps: {
   config: ServerConfig;
   runner: JobRunner;
   backup: BackupSupervisor;
+  streamHost: StreamHost;
+  readSpare(): Promise<SpareFollowView | null>;
   readBoxEnv(): Promise<Record<string, string | undefined>>;
   isMain(): boolean;
   now(): Date;
@@ -65,39 +68,74 @@ export function adminShutdownDuties(deps: {
       readPairLink(node, nodeId),
       readStreamSettings(db, ring),
     ]);
-    if (
-      pair !== null ||
-      stream !== null ||
-      membership?.body.nodes.some((box) => box.nodeId !== nodeId && box.standing !== "evicted")
-    )
-      return undefined;
-    if (status.enabled && status.destinations.length > 0) return "saved" as const;
+    const peers =
+      membership?.body.nodes.filter((box) => box.nodeId !== nodeId && box.standing !== "evicted") ??
+      [];
+    if (stream !== null) return undefined;
+    let peerNodeId: string | undefined;
+    if (pair !== null || peers.length > 0) {
+      const peer = peers.length === 1 ? peers[0] : undefined;
+      if (
+        pair?.role !== "streams" ||
+        pair.state !== "streaming" ||
+        peer?.standing !== "serving-secondary" ||
+        peer.nodeId !== pair.peerNodeId
+      )
+        return undefined;
+      const spare = await deps.readSpare();
+      if (spare?.peerNodeId !== peer.nodeId || spare.state === "unknown") return undefined;
+      peerNodeId = peer.nodeId;
+    }
+    const mode = peerNodeId === undefined ? {} : { paired: true as const };
+    if (status.enabled && status.destinations.length > 0)
+      return { target: "saved" as const, peerNodeId, mode };
     const { meta, settings } = await readArchiveSettingsWithMeta(db, ring);
     if (meta !== null || settings !== null) return undefined;
-    return loadBackupKey(await deps.readBoxEnv());
+    const key = loadBackupKey(await deps.readBoxEnv());
+    return key === undefined
+      ? undefined
+      : { target: key, peerNodeId, mode: { ...mode, downloadOnly: true as const } };
   };
   let reportedPause: AbortSignal | undefined;
+  async function reportPause(error: unknown, signal: AbortSignal): Promise<never> {
+    // Retry reuses the shutdown's signal, so an alert covers the whole attempt.
+    if (!signal.aborted && signal !== reportedPause) {
+      await recordShutdownPause(db, codeOf(error), deps.now())
+        .then(() => {
+          reportedPause = signal;
+          runner.wake("box.alert_mail");
+        })
+        .catch((failure: unknown) =>
+          deps.log("warn", "server.shutdown_alert_failed", { errorCode: codeOf(failure) }),
+        );
+    }
+    throw error;
+  }
   const shutdown = createAdminShutdown({
     async check(signal) {
-      const target = await destination();
-      if (target === undefined) throw new AppError("box.shutdown_unavailable", {});
+      const dest = await destination();
+      if (dest === undefined) throw new AppError("box.shutdown_unavailable", {});
+      const { target, peerNodeId } = dest;
       try {
-        if (target !== "saved")
-          return await backup.runForShutdownDownload(signal, target, config.migrationsRoot);
-        await backup.runForShutdown(signal, config.migrationsRoot);
+        let archive;
+        if (target === "saved") await backup.runForShutdown(signal, config.migrationsRoot);
+        else archive = await backup.runForShutdownDownload(signal, target, config.migrationsRoot);
+        return {
+          archive,
+          checkSpare:
+            peerNodeId === undefined
+              ? undefined
+              : async (activeSignal) => {
+                  try {
+                    if (!(await deps.streamHost.checkShutdownUpload(peerNodeId, activeSignal)))
+                      throw new AppError("box.shutdown_spare_unchecked", {});
+                  } catch (error) {
+                    await reportPause(error, activeSignal);
+                  }
+                },
+        };
       } catch (error) {
-        // Retry reuses the shutdown's signal, so an alert covers the whole attempt.
-        if (!signal.aborted && signal !== reportedPause) {
-          await recordShutdownPause(db, codeOf(error), deps.now())
-            .then(() => {
-              reportedPause = signal;
-              runner.wake("box.alert_mail");
-            })
-            .catch((failure: unknown) =>
-              deps.log("warn", "server.shutdown_alert_failed", { errorCode: codeOf(failure) }),
-            );
-        }
-        throw error;
+        return reportPause(error, signal);
       }
     },
     save: () => writeShutdownMark(config.stateDir),
@@ -117,14 +155,20 @@ export function adminShutdownDuties(deps: {
   });
   return {
     ...shutdown,
+    async start() {
+      const dest = await destination();
+      if (dest === undefined) throw new AppError("box.shutdown_unavailable", {});
+      shutdown.start(dest.mode);
+    },
     available: async () => (await destination()) !== undefined,
     readStaff: () => (deps.workforceEnabled ? readShutdownStaff(db) : Promise.resolve([])),
     view: async () => {
-      const target = await destination().catch(() => undefined);
+      const dest = await destination().catch(() => undefined);
+      const status = shutdown.view();
       return {
-        available: target !== undefined,
-        ...(typeof target === "object" ? { downloadOnly: true as const } : {}),
-        ...shutdown.status(),
+        available: dest !== undefined,
+        ...(status.phase === "idle" ? dest?.mode : undefined),
+        ...status,
       };
     },
   };

@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { once } from "node:events";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { BucketOperation } from "./errors.js";
@@ -20,7 +20,7 @@ import {
 import { CommitLog } from "./freshness.js";
 import { PROBE_PREFIX } from "./probe.js";
 import { createS3ObjectStore, type BucketConfig } from "./s3-store.js";
-import { FakeLitestream } from "./testing/fake-litestream.js";
+import { FakeChild, FakeLitestream } from "./testing/fake-litestream.js";
 import { ManualClock } from "./testing/manual-clock.js";
 import { silentBucket } from "./testing/silent-bucket.js";
 import { SwitchableStore } from "./testing/switchable-store.js";
@@ -64,6 +64,7 @@ interface HarnessOptions {
   streamId?: string;
   bucket?: BucketConfig;
   version?: string;
+  sync?: (args: readonly string[], env: Readonly<Record<string, string>>) => FakeChild;
   versionExitCode?: number | null;
   versionHangs?: boolean;
   /** What successive fold-backs report, or throw; `true` once the list runs out. */
@@ -154,7 +155,9 @@ async function harness(options: HarnessOptions = {}) {
     now: clock.now,
     monotonic: clock.monotonic,
     log: (level, event, fields) => logs.push({ level, event, fields }),
+    prepareShutdownSync: options.sync !== undefined,
     spawn: (bin, args, env) => {
+      if (args[0] === "sync" && options.sync !== undefined) return options.sync(args, env);
       if (options.replicateThrows === true && args[0] === "replicate") {
         throw new Error("spawn refused its arguments");
       }
@@ -232,6 +235,80 @@ async function streaming(options: HarnessOptions = {}) {
   await h.clock.until(() => h.supervisor.status().state === "streaming");
   return { ...h, generation };
 }
+
+describe("checking the spare's upload before shutdown", () => {
+  it.each([
+    [0, { txid: 9, replica_txid: 10 }, true],
+    [0, { txid: 9, replica_txid: 8 }, false],
+    [0, { db_path: "/another/venue.db", txid: 9, replica_txid: 9 }, false],
+    [0, { txid: 0, replica_txid: 0 }, false],
+    [0, { txid: 9 }, false],
+    [0, "invalid response", false],
+    [1, "request timed out", false],
+  ])(
+    "checks the committed and uploaded positions (exit %s, %j)",
+    async (code, output, expected) => {
+      const h = await streaming({
+        sync(args, env) {
+          const result =
+            typeof output === "string"
+              ? output
+              : JSON.stringify({
+                  db_path: args.at(-1),
+                  duration_ms: 12,
+                  ...output,
+                });
+          const command = new FakeChild(args, env, result, []);
+          command.exit(code);
+          return command;
+        },
+      });
+      await expect(h.supervisor.checkShutdownUpload(new AbortController().signal)).resolves.toBe(
+        expected,
+      );
+    },
+  );
+
+  it("restarts the paired replica with a new socket even if its existing config is read only", async () => {
+    const h = await streaming({ sync: (args, env) => new FakeChild(args, env, "", []) });
+    const first = h.litestream.running()!;
+    const config = first.args[2]!;
+    const configBefore = await readFile(config, "utf8");
+    mkdirSync(join(h.directory, "stream", first.env.LITESTREAM_SYNC_SOCKET!));
+    chmodSync(config, 0o400);
+    try {
+      first.exit(1);
+      await h.clock.until(
+        () => h.litestream.replicas().length === 2 || h.supervisor.status().state === "off",
+      );
+      expect(h.supervisor.status()).toMatchObject({ state: "streaming", generation: h.generation });
+      const next = h.litestream.running()!;
+      expect(next.env.LITESTREAM_SYNC_SOCKET).toMatch(/^sync-[a-f0-9]+\.sock$/);
+      expect(next.env.LITESTREAM_SYNC_SOCKET).not.toBe(first.env.LITESTREAM_SYNC_SOCKET);
+      expect(await readFile(config, "utf8")).toBe(configBefore);
+      expect(h.logs.some(({ event }) => event === "stream.sync_socket_cleanup_failed")).toBe(true);
+    } finally {
+      chmodSync(config, 0o600);
+    }
+  });
+
+  it("stops the sync command when the administrator cancels", async () => {
+    let command: FakeChild | undefined;
+    const h = await streaming({
+      sync(args, env) {
+        command = new FakeChild(args, env, "", []);
+        return command;
+      },
+    });
+    const controller = new AbortController();
+    const checked = h.supervisor.checkShutdownUpload(controller.signal);
+    expect(command).toBeDefined();
+    controller.abort();
+    await expect(checked).resolves.toBe(false);
+    await expect(command!.exited).resolves.toBeNull();
+    expect(h.supervisor.status().state).toBe("streaming");
+  });
+});
 
 /**
  * Sends each call `pick` chooses, until `answering` is set, through the real S3 store to a bucket
@@ -2121,19 +2198,25 @@ describe("a Litestream left running by a server that died", () => {
     expect(existsSync(join(h.directory, "stream", "litestream.pid"))).toBe(false);
   });
 
-  it("stops a leftover whose PID and command line are this box's Litestream, before starting its own", async () => {
-    const binDir = await binDirectory();
-    const h = await harness({ litestreamBin: join(binDir, "litestream") });
-    const configDir = join(h.directory, "stream");
-    mkdirSync(configDir, { recursive: true });
-    const leftover = await processNamed(binDir, "litestream", join(configDir, "litestream.yml"));
-    const gone = once(leftover, "exit");
-    writeFileSync(join(configDir, "litestream.pid"), `${leftover.pid}\n`);
-    await h.supervisor.start();
-    expect((await gone)[1]).toBe("SIGTERM");
-    await h.clock.until(() => h.litestream.running() !== undefined);
-    expect(h.logs.some((line) => line.event === "stream.leftover_stopped")).toBe(true);
-  });
+  it.each(["absolute", "relative"])(
+    "stops its own leftover configured with an %s path",
+    async (kind) => {
+      const binDir = await binDirectory();
+      const absolute = join(binDir, "litestream");
+      const h = await harness({
+        litestreamBin: kind === "absolute" ? absolute : relative(process.cwd(), absolute),
+      });
+      const configDir = join(h.directory, "stream");
+      mkdirSync(configDir, { recursive: true });
+      const leftover = await processNamed(binDir, "litestream", join(configDir, "litestream.yml"));
+      const gone = once(leftover, "exit");
+      writeFileSync(join(configDir, "litestream.pid"), `${leftover.pid}\n`);
+      await h.supervisor.start();
+      await h.clock.until(() => h.litestream.running() !== undefined);
+      expect(h.logs.some((line) => line.event === "stream.leftover_stopped")).toBe(true);
+      expect((await gone)[1]).toBe("SIGTERM");
+    },
+  );
 
   it("kills a leftover that ignores the polite signal, after the grace", async () => {
     const binDir = await binDirectory();

@@ -29,6 +29,7 @@ export function resolveLitestreamBin(env: Readonly<Record<string, string | undef
 export const ENV_ACCESS_KEY_ID = "WAITRON_STREAM_ACCESS_KEY_ID";
 export const ENV_SECRET_ACCESS_KEY = "WAITRON_STREAM_SECRET_ACCESS_KEY";
 export const ENV_ENCRYPTION_KEY = "WAITRON_STREAM_ENCRYPTION_KEY";
+export const SYNC_SOCKET_ENV = "LITESTREAM_SYNC_SOCKET";
 
 const BUCKET_NAME = /^[a-z0-9.-]+$/;
 const LONE_SURROGATE = /\p{Cs}/u;
@@ -83,8 +84,13 @@ export function litestreamEnv(
  * - The path and the address are double-quoted YAML scalars (JSON's escaping is valid there), so a
  *   `:` or `#` in either cannot change the structure.
  */
-export function litestreamConfig(input: { dbPath: string; replicaUrl: string }): string {
-  for (const [field, value] of Object.entries(input)) {
+export function litestreamConfig(input: {
+  dbPath: string;
+  replicaUrl: string;
+  enableSyncSocket?: boolean;
+}): string {
+  const { dbPath, replicaUrl } = input;
+  for (const [field, value] of Object.entries({ dbPath, replicaUrl })) {
     if (value.includes("$")) throw new AppError("backup.stream_config_unsafe", { field });
   }
   return [
@@ -97,6 +103,9 @@ export function litestreamConfig(input: { dbPath: string; replicaUrl: string }):
     "l0-retention-check-interval: 5m",
     `shutdown-timeout: ${LITESTREAM_SHUTDOWN_TIMEOUT_MS}ms`,
     "",
+    ...(input.enableSyncSocket
+      ? ["socket:", "  enabled: true", `  path: '\${${SYNC_SOCKET_ENV}}'`, ""]
+      : []),
     "dbs:",
     `  - path: ${JSON.stringify(input.dbPath)}`,
     "    replica:",

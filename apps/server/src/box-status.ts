@@ -116,8 +116,9 @@ export type BoxStatusDeps = {
   readBackup: (() => Promise<BackupStatus>) | undefined;
   shutdown?: Pick<
     AdminShutdown,
-    "status" | "start" | "resolvePaused" | "cancel" | "beginDownload" | "confirmDownload"
+    "status" | "resolvePaused" | "cancel" | "beginDownload" | "confirmDownload"
   > & {
+    start(): Promise<void> | void;
     available(): Promise<boolean>;
     readStaff: () => ReturnType<typeof readShutdownStaff>;
   };
@@ -168,8 +169,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
       run(c, log, async () => {
         requireNodeOperationHttps(c);
         await authorize(c, true);
-        if (!(await shutdown.available())) throw new AppError("box.shutdown_unavailable", {});
-        shutdown.start();
+        await shutdown.start();
         return c.json(shutdown.status(), 202);
       }),
     );

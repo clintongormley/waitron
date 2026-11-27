@@ -132,6 +132,32 @@ const qa = (el: BoxStatusScreen, selector: string) => [
 ];
 const freeButton = (el: BoxStatusScreen) => q(el, "[data-test=free]") as HTMLElement | null;
 const text = (node: Element | null) => node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+it("offers checked shutdown and opens Servers for a paired handover", async () => {
+  const idle = health({ shutdown: { phase: "idle", available: true, paired: true } });
+  const checking = { phase: "checking", available: true, paired: true } as const;
+  const getBoxHealth = vi.fn().mockResolvedValue(idle);
+  const startBoxShutdown = vi.fn(async () => {
+    getBoxHealth.mockResolvedValue(health({ shutdown: checking }));
+    return checking;
+  });
+  const { el } = await mount(
+    stubApi({ getBoxHealth, startBoxShutdown }, idle),
+    (screen) => screen === "servers",
+  );
+  el.canCheckClock = true;
+  await el.updateComplete;
+  expect(q(el, 'a[data-test="box-shutdown-handover"]')?.getAttribute("href")).toBe("/servers");
+  expect(startBoxShutdown).not.toHaveBeenCalled();
+  const checked = q(el, '[data-test="box-shutdown"]')!;
+  expect(text(checked)).toBe("Check and shut down");
+  await userEvent.click(checked);
+  const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
+  expect(text(confirm.closest("wt-dialog"))).toContain("Leave the spare box on");
+  await userEvent.click(confirm);
+  await vi.waitFor(() => expect(startBoxShutdown).toHaveBeenCalledOnce());
+  await vi.waitFor(() => expect(q(el, 'a[data-test="box-shutdown-handover"]')).toBeNull());
+});
+
 it("shows that the box can be switched off only when the shutdown check is ready", async () => {
   const startBoxShutdown = vi.fn().mockResolvedValue({ phase: "checking" });
   const getBoxHealth = vi

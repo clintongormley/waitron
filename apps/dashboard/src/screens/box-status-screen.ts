@@ -1093,6 +1093,7 @@ export class BoxStatusScreen extends LitElement {
             ...status,
             available: previous?.available ?? false,
             downloadOnly: previous?.downloadOnly,
+            paired: previous?.paired,
           },
         };
       this.shutdownConfirmation = null;
@@ -1113,6 +1114,9 @@ export class BoxStatusScreen extends LitElement {
     )
       return nothing;
     const phase = status.phase;
+    const shutdownLabel = status.paired
+      ? "box_status.shutdown.check_and_shut_down"
+      : "box_status.shutdown.title";
     const anyway = this.shutdownConfirmation === "shut-down-anyway";
     const file = typeof this.shutdownConfirmation === "object" ? this.shutdownConfirmation : null;
     return html`<section class="box-restart">
@@ -1123,20 +1127,33 @@ export class BoxStatusScreen extends LitElement {
             ? t("box_status.shutdown.unchecked")
             : phase === "idle"
               ? ""
-              : t(`box_status.shutdown.${phase}`)
+              : t(
+                  phase === "checking" && status.paired
+                    ? "box_status.shutdown.checking_pair"
+                    : `box_status.shutdown.${phase}`,
+                )
         }
         ${(phase === "paused" || phase === "download") && status.errorCode ? codeMessage(status.errorCode) : nothing}
       </p>
       ${
         phase === "idle"
           ? html`<wt-button
-              variant="secondary"
-              data-test="box-shutdown"
-              ?disabled=${this.shutdownBusy}
-              ?loading=${this.shutdownBusy}
-              @click=${() => void this.#openShutdown()}
-              >${t("box_status.shutdown.title")}</wt-button
-            >`
+                variant="secondary"
+                data-test="box-shutdown"
+                ?disabled=${this.shutdownBusy}
+                ?loading=${this.shutdownBusy}
+                @click=${() => void this.#openShutdown()}
+                >${t(shutdownLabel)}</wt-button
+              >
+              ${
+                status.paired && this.canOpen("servers")
+                  ? html`
+                      <a data-test="box-shutdown-handover" href="/servers"
+                        >${t("box_status.shutdown.handover")}</a
+                      >
+                    `
+                  : nothing
+              }`
           : nothing
       }
       ${
@@ -1147,7 +1164,7 @@ export class BoxStatusScreen extends LitElement {
                 data-test="box-shutdown-retry"
                 ?disabled=${this.shutdownBusy}
                 @click=${() => void this.#shutdown("retry")}
-                >${t("box_status.shutdown.retry")}</wt-button
+                >${t(status.paired ? "box_status.shutdown.retry_check" : "box_status.shutdown.retry")}</wt-button
               >
               <wt-button
                 variant="danger"
@@ -1222,6 +1239,7 @@ export class BoxStatusScreen extends LitElement {
                     ${t(status.downloadOnly ? "box_status.shutdown.download_what" : "box_status.shutdown.what")}
                   </p>
                   ${status.downloadOnly ? html`<p>${t("box_status.shutdown.keys")}</p>` : nothing}
+                  ${status.paired ? html`<p>${t("box_status.shutdown.spare_check")}</p>` : nothing}
                   ${this.canMakeRecoveryPack ? html`<p><a href="/backup?recovery-pack=make">${t("recovery_pack.make")}</a></p>` : nothing}
                   ${
                     this.shutdownStaff.length === 0
@@ -1252,7 +1270,7 @@ export class BoxStatusScreen extends LitElement {
               const action = this.shutdownConfirmation;
               if (action !== null) void this.#shutdown(action);
             }}
-            >${t(file ? "box_status.shutdown.backup_saved" : anyway ? "box_status.shutdown.anyway" : "box_status.shutdown.title")}</wt-button
+            >${t(file ? "box_status.shutdown.backup_saved" : anyway ? "box_status.shutdown.anyway" : shutdownLabel)}</wt-button
           >
         </wt-form-actions>
       </wt-dialog>

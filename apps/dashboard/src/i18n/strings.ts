@@ -4763,6 +4763,13 @@ export const en = {
     "Deletes old crash reports and logs, and files left by an interrupted backup. Your sales, settings and backups are kept.",
   "box_status.free_help_guide": "More about freeing space",
   "box_status.shutdown.title": "Shut down this box",
+  "box_status.shutdown.check_and_shut_down": "Check and shut down",
+  "box_status.shutdown.handover": "Hand over to the spare",
+  "box_status.shutdown.spare_check":
+    "Leave the spare box on. Waitron checks that it received the final update before telling you to switch off this box.",
+  "box_status.shutdown.checking_pair":
+    "Waiting for work to finish, then checking the final backup and the copy on the spare box. Leave both boxes on.",
+  "box_status.shutdown.retry_check": "Retry check",
   "box_status.shutdown.download_what":
     "Waitron pauses work and checks a final backup on this box for you to download.",
   "box_status.shutdown.download":
@@ -9677,6 +9684,13 @@ export const es: Record<StringKey, string> = {
     "Borra informes de fallos y registros de actividad antiguos, y archivos que dejó una copia interrumpida. Conserva tus ventas, ajustes y copias de seguridad.",
   "box_status.free_help_guide": "Más sobre liberar espacio",
   "box_status.shutdown.title": "Apagar este servidor",
+  "box_status.shutdown.check_and_shut_down": "Comprobar y apagar",
+  "box_status.shutdown.handover": "Transferir al servidor de reserva",
+  "box_status.shutdown.spare_check":
+    "Deja encendido el servidor de reserva. Waitron comprueba que ha recibido la última actualización antes de indicarte que apagues este servidor.",
+  "box_status.shutdown.checking_pair":
+    "Waitron espera a que termine el trabajo y comprueba la copia final y la del servidor de reserva. Deja ambos servidores encendidos.",
+  "box_status.shutdown.retry_check": "Volver a comprobar",
   "box_status.shutdown.download_what":
     "Waitron pausa el trabajo y comprueba en este servidor una última copia de seguridad que podrás descargar.",
   "box_status.shutdown.download":

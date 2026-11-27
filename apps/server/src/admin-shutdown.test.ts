@@ -196,6 +196,95 @@ it.each([
   }
 });
 
+it("retries the spare check after checking a saved backup", async () => {
+  const checkSpare = vi.fn().mockRejectedValueOnce(new Error("The spare is behind"));
+  const check = vi.fn(async () => ({ checkSpare }));
+  const save = vi.fn(async () => {});
+  const shutdown = createAdminShutdown({ check, save, clear: async () => {} });
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    expect(save).not.toHaveBeenCalled();
+    shutdown.resolvePaused("retry");
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready" }));
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(checkSpare).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenCalledTimes(1);
+  } finally {
+    await shutdown.close();
+  }
+});
+
+it.each(["retry", "cancel", "shut-down-anyway"] as const)(
+  "keeps the hold absent after a spare check fails, then handles %s",
+  async (decision) => {
+    let backedUp = 0;
+    let checkedSpare = 0;
+    let marked = false;
+    let removed = false;
+    const name = "final.backup.enc";
+    const shutdown = createAdminShutdown({
+      async check() {
+        backedUp += 1;
+        return {
+          archive: {
+            name,
+            path: "/unused",
+            bytes: 10,
+            remove: async () => {
+              removed = true;
+            },
+          },
+          async checkSpare() {
+            if (++checkedSpare === 1) throw new Error("The spare did not confirm the upload");
+          },
+        };
+      },
+      save: async () => {
+        marked = true;
+      },
+      clear: async () => {
+        marked = false;
+      },
+    });
+    try {
+      shutdown.start({ paired: true, downloadOnly: true });
+      expect(shutdown.view()).toEqual({ phase: "checking", paired: true, downloadOnly: true });
+      await vi.waitFor(() => expect(shutdown.status().phase).toBe("download"));
+      expect(checkedSpare).toBe(0);
+      (await shutdown.beginDownload(name)).finish(true);
+      shutdown.confirmDownload(name);
+      await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+      expect(shutdown.view()).toMatchObject({ paired: true, downloadOnly: true });
+      expect({ backedUp, checkedSpare, marked, removed }).toEqual({
+        backedUp: 1,
+        checkedSpare: 1,
+        marked: false,
+        removed: false,
+      });
+      if (decision === "cancel") {
+        await shutdown.cancel();
+        expect(shutdown.status()).toEqual({ phase: "idle" });
+      } else {
+        shutdown.resolvePaused(decision);
+        await vi.waitFor(() =>
+          expect(shutdown.status()).toEqual(
+            decision === "retry" ? { phase: "ready" } : { phase: "ready", checked: false },
+          ),
+        );
+      }
+      expect({ backedUp, checkedSpare, marked, removed }).toEqual({
+        backedUp: 1,
+        checkedSpare: decision === "retry" ? 2 : 1,
+        marked: decision !== "cancel",
+        removed: true,
+      });
+    } finally {
+      await shutdown.close();
+    }
+  },
+);
+
 it("clears a partly written shutdown hold when cancelling after a failed save", async () => {
   let mark = false;
   const shutdown = createAdminShutdown({
@@ -229,11 +318,13 @@ it("holds sales until the named archive is delivered and the administrator confi
   const name = "final-backup.wbackup";
   const shutdown = createAdminShutdown({
     check: async () => ({
-      name,
-      path: "/private/checked-archive",
-      bytes: 123,
-      remove: async () => {
-        removed = true;
+      archive: {
+        name,
+        path: "/private/checked-archive",
+        bytes: 123,
+        remove: async () => {
+          removed = true;
+        },
       },
     }),
     save: async () => {
@@ -291,11 +382,13 @@ it("waits for an interrupted download to close before removing the archive and r
   let removed = false;
   const shutdown = createAdminShutdown({
     check: async () => ({
-      name,
-      path: "/private/checked-archive",
-      bytes: 123,
-      remove: async () => {
-        removed = true;
+      archive: {
+        name,
+        path: "/private/checked-archive",
+        bytes: 123,
+        remove: async () => {
+          removed = true;
+        },
       },
     }),
     save: async () => {},
@@ -332,7 +425,7 @@ it.each(["cancels", "retries"] as const)(
     const folder = await mkdtemp(join(tmpdir(), "waitron-cancel-download-"));
     const path = join(folder, name);
     const shutdown = createAdminShutdown({
-      check: async () => ({ name, path, bytes, remove: async () => {} }),
+      check: async () => ({ archive: { name, path, bytes, remove: async () => {} } }),
       save: async () => {},
       clear: async () => {},
     });

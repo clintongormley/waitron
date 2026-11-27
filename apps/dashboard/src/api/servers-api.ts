@@ -222,7 +222,7 @@ export interface BoxHealth {
   filing: boolean;
   outbox: { lastAcceptedAt: string | null; waiting: number; awaitingCertificate: boolean } | null;
   stream: StreamStatusView;
-  shutdown?: ShutdownStatus & { available: boolean; downloadOnly?: true };
+  shutdown?: ShutdownStatus & { available: boolean; downloadOnly?: true; paired?: true };
   spare?: SpareFollowView | null;
   lastOfferedUpgrade?: {
     attemptId: string;
