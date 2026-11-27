@@ -45,6 +45,7 @@
   --wt-menu-row-padding-start: 20px;
   --wt-menu-row-value-gap: 6px;
   --wt-menu-sheet-bottom-offset: 0px;
+  --wt-row-actions-bottom-offset: 0px;
   --wt-menu-sheet-handle-width: 40px;
   --wt-menu-sheet-handle-height: 5px;
   --wt-menu-sheet-heading-padding-top: 10px;
@@ -136,6 +137,7 @@
 
   --wt-shadow-1: 0 1px 2px rgb(0 0 0 / 0.08);
   --wt-shadow-2: 0 8px 24px rgb(0 0 0 / 0.16);
+  --wt-color-menu-sheet-edge-shadow: color-mix(in srgb, var(--wt-color-scrim) 8%, transparent);
   --wt-menu-sheet-shadow: 0 -8px 24px rgb(0 0 0 / 0.2);
 
   --wt-focus-ring: 2px solid var(--wt-color-focus);

@@ -111,7 +111,7 @@ export class WtLanguageChooser extends LitElement {
 
       :host([layout="segmented"]) .group {
         min-block-size: calc(var(--wt-tap-min) + var(--wt-space-2));
-        padding-inline: var(--wt-space-4);
+        padding-inline: var(--wt-menu-row-padding-start) var(--wt-space-4);
         border-block-end: 1px solid var(--wt-color-border);
       }
 
@@ -128,7 +128,7 @@ export class WtLanguageChooser extends LitElement {
 
       :host([layout="segmented"]) .choice {
         border-radius: 0;
-        font-weight: var(--wt-font-weight-bold);
+        font-weight: var(--wt-font-weight-normal);
       }
 
       :host([layout="segmented"]) .choice:first-child {

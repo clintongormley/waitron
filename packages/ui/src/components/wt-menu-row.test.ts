@@ -63,7 +63,7 @@ test("keeps the help badge beside the new action", async () => {
   setHelpMode(true);
   const sheet = await mount(
     `<wt-row-actions bottom-sheet sheet-variant="menu" label="Table actions">
-      <wt-menu-row action label="Guests" help="Change the guest count." help-label="Help: Guests"></wt-menu-row>
+      <wt-menu-row action divider label="Guests" help="Change the guest count." help-label="Help: Guests"></wt-menu-row>
     </wt-row-actions>`,
   );
   const popup = sheet.shadowRoot!.querySelector("[popover]")!;
@@ -74,6 +74,8 @@ test("keeps the help badge beside the new action", async () => {
   const action = page.getByRole("button", { name: "Guests", exact: true });
   const help = page.getByRole("button", { name: "Help: Guests" });
   await expect.element(action).toBeVisible();
+  row.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  expect(picked).not.toHaveBeenCalled();
   expect(help.element().getBoundingClientRect().left).toBeGreaterThanOrEqual(
     action.element().getBoundingClientRect().right,
   );

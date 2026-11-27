@@ -103,6 +103,17 @@ export class WtMenuRow extends LitElement {
   @property({ type: Boolean }) disabled = false;
   @property({ type: Boolean, reflect: true }) divider = false;
 
+  constructor() {
+    super();
+    this.addEventListener(
+      "click",
+      (event) => {
+        if (this.action && event.composedPath()[0] === this) event.stopImmediatePropagation();
+      },
+      { capture: true },
+    );
+  }
+
   private stopHelpClick(event: MouseEvent): void {
     event.stopPropagation();
   }
@@ -113,7 +124,7 @@ export class WtMenuRow extends LitElement {
       this.value !== "" || this.chevron || this.check
         ? html`<span class="trailing">
             ${this.value === "" ? nothing : html`<span class="value">${this.value}</span>`}
-            ${this.chevron ? html`<wt-icon name="chevron-right" size="lg"></wt-icon>` : nothing}
+            ${this.chevron ? html`<wt-icon part="chevron" name="chevron-right" size="lg"></wt-icon>` : nothing}
             ${this.check ? html`<wt-icon name="check" size="lg"></wt-icon>` : nothing}
           </span>`
         : nothing;

@@ -1,5 +1,5 @@
-import { userEvent } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
@@ -162,6 +162,9 @@ describe("A773 pass screen: app", () => {
   ] as const)(
     "offers only %s navigation allowed by capabilities %j",
     async (kind, capabilities, stationShown, passShown) => {
+      const viewport = [innerWidth, innerHeight] as const;
+      onTestFinished(() => page.viewport(...viewport));
+      await page.viewport(390, 844);
       const api = stubApi({
         getTill: vi.fn().mockResolvedValue({
           ...till,
@@ -175,6 +178,7 @@ describe("A773 pass screen: app", () => {
           kitchenScreens:
             kind === null ? [] : [{ kind, available: true, stations: [], zones: null }],
         }),
+        getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFixture([], ["room"])),
       });
       const { el } = await mountWidget<TillApp>("till-app", { api });
       await flush(el);
@@ -185,9 +189,15 @@ describe("A773 pass screen: app", () => {
       });
       await flush(el);
       const shell = el.shadowRoot!.querySelector("till-shell")!;
-      await shell.updateComplete;
-      expect(Boolean(shell.shadowRoot!.querySelector("wt-button.station"))).toBe(stationShown);
-      expect(Boolean(shell.shadowRoot!.querySelector("wt-button.expo"))).toBe(passShown);
+      const menu = await vi.waitFor(() => {
+        const floorMenu = shell.shadowRoot!.querySelector("wt-row-actions.floor-menu");
+        expect(floorMenu).not.toBeNull();
+        return floorMenu!;
+      });
+      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      expect(Boolean(menu.querySelector(".station"))).toBe(stationShown);
+      expect(Boolean(menu.querySelector(".expo"))).toBe(passShown);
     },
   );
 

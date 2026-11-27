@@ -1,11 +1,11 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { chooseTheme, type WtButton, type WtTextarea } from "@waitron/ui";
 import { clockApp, signIn, working } from "../test/clock-app.js";
 import type { TillApi } from "./api/client.js";
-import { cleanupWidgets, resetPage } from "./widgets/test-helpers.js";
+import { cleanupWidgets, pageAt, resetPage } from "./widgets/test-helpers.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
-import { currentLocale, setLocale } from "./i18n/t.js";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { setReportBuild } from "./diagnostics.js";
 
 const locale = currentLocale();
@@ -46,18 +46,24 @@ it.each([
 it.each(["till", "phone-portrait"] as const)(
   "opens from the %s More menu without leaving the working screen",
   async (formFactor) => {
+    const narrow = formFactor === "phone-portrait";
+    await pageAt(narrow ? 390 : 1280, 844);
     const { el } = await clockApp({ enabled: false });
     await signIn(el);
     await working(el);
     Object.assign(el, { formFactor });
     await el.updateComplete;
     const shell = el.shadowRoot!.querySelector("till-shell")!;
-    await shell.updateComplete;
-    const menu = shell.shadowRoot!.querySelector("[data-test=more-menu]")!;
-    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
-    const entry = menu.querySelector<WtButton>("[data-report-problem]");
-    expect(entry).not.toBeNull();
-    await userEvent.click(entry!);
+    const menu = await vi.waitFor(() => {
+      const menu = shell.shadowRoot!.querySelector(
+        `${narrow ? "[data-floor-bar]" : ".head"} [data-test=more-menu]`,
+      );
+      expect(menu).not.toBeNull();
+      return menu!;
+    });
+    await page.getByRole("button", { name: t("shell.more"), exact: true }).click();
+    expect(menu.querySelector("[data-report-problem]")).not.toBeNull();
+    await page.getByRole("button", { name: t("problem_report.title"), exact: true }).click();
     await expect.poll(() => dialogOf(el).open).toBe(true);
     expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
     expect(el.shadowRoot!.querySelector("till-shell")).toBe(shell);

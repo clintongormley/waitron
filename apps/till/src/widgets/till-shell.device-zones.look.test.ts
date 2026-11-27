@@ -5,6 +5,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TillShell } from "./till-shell.js";
 import type { TillFloorScreen } from "../screens/till-floor-screen.js";
 import type { TableState } from "../api/floor-api.js";
+import { table } from "../../test/allergy-app-fixture.js";
 import "../till-app.js";
 import "./till-shell.js";
 import "../screens/till-floor-screen.js";
@@ -150,3 +151,82 @@ for (const locale of ["en-GB", "es-ES"]) {
     }
   }
 }
+
+it("keeps at least six full table targets and a one-line Spanish hint on the landscape floor", async () => {
+  setLocale("es-ES");
+  await page.viewport(700, 390);
+  const { el } = await mountWidget<TillShell>("till-shell", {
+    activeScreen: "floor",
+    formFactor: "phone-portrait",
+    operatorName: "Ana",
+  });
+  el.style.position = "fixed";
+  el.style.inset = "24px";
+  el.style.height = "auto";
+  el.style.setProperty("--wt-page-padding", "24px");
+  const floor = document.createElement("till-floor-screen");
+  floor.zones = [
+    {
+      id: "z1",
+      name: "Dining room",
+      displayOrder: 0,
+      active: true,
+      closed: false,
+      hasPlan: true,
+      layoutSetName: "Dinner",
+      serviceMode: "table_tab",
+      closesAt: null,
+      layoutDue: null,
+    },
+  ];
+  floor.tables = Array.from({ length: 8 }, (_, index) => ({
+    ...table(`t${index + 1}`, String(index + 1), null),
+    today: {
+      placement: {
+        x: (index % 2) * 4,
+        y: index < 6 ? Math.floor(index / 2) * 3 : 13,
+        width: 2,
+        height: 2,
+        shape: index === 0 ? "round" : "rect",
+        rotation: 0,
+      },
+      seats: 4,
+      fixed: false,
+      takenOff: false,
+      joinId: null,
+      joinSeats: null,
+      zoneRevision: 0,
+    },
+  }));
+  el.append(floor);
+  await vi.waitFor(() => {
+    const map = floor.shadowRoot!.querySelector("wt-floor-map")!.shadowRoot!;
+    const plan = map.querySelector(".plan")!.getBoundingClientRect();
+    const hint = map.querySelector(".pan-hint");
+    expect(hint).not.toBeNull();
+    const hintBox = hint!.getBoundingClientRect();
+    const visible = Array.from(map.querySelectorAll('[part="shape"]'), (shape) =>
+      shape.getBoundingClientRect(),
+    ).filter(
+      (box) =>
+        box.left >= plan.left &&
+        box.right <= plan.right &&
+        box.top >= plan.top &&
+        box.bottom <= plan.bottom,
+    );
+    expect(visible.length).toBeGreaterThanOrEqual(6);
+    for (const box of visible) {
+      expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+      expect(
+        hintBox.right <= box.left ||
+          hintBox.left >= box.right ||
+          hintBox.bottom <= box.top ||
+          hintBox.top >= box.bottom,
+      ).toBe(true);
+    }
+    const text = document.createRange();
+    text.selectNodeContents(hint!);
+    expect(text.getClientRects()).toHaveLength(1);
+    expect(hint!.textContent!.trim().length).toBeLessThanOrEqual(23);
+  });
+});

@@ -322,6 +322,7 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
         serviceMode: "table_tab",
       },
     ];
+    floor.zones = [...floor.zones, { ...floor.zones[0]!, id: "terrace", name: "Terrace" }];
     el.append(floor);
     const root = el.shadowRoot!;
     const bar = () => root.querySelector<HTMLElement>("[data-floor-bar]");
@@ -336,21 +337,32 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(48);
     const more = () => root.querySelector<HTMLElement>('[data-test="more-menu"]')!;
     const openMore = () => userEvent.click(more().shadowRoot!.querySelector("button")!);
+    const moreTrigger = more().shadowRoot!.querySelector("button")!;
+    const clockAction = vi.fn();
+    el.addEventListener("clock-action", clockAction);
+    moreTrigger.focus();
+    await userEvent.keyboard("{Enter}{Enter}");
+    expect(clockAction).not.toHaveBeenCalled();
+    await userEvent.tab();
+    expect(more().querySelector('[data-clock-action="out"]')?.shadowRoot?.activeElement).toBe(
+      more().querySelector('[data-clock-action="out"]')?.shadowRoot?.querySelector("button"),
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(more().shadowRoot!.activeElement).toBe(moreTrigger);
+
     await openMore();
-    expect(more().querySelector("[data-open-transfers] [data-floor-count]")?.textContent).toBe("2");
-    expect(more().querySelector(".drawer-close")?.textContent?.trim()).toBe("Close the drawer");
+    await expect.element(page.getByRole("button", { name: /^Transfers.*2/ })).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Close the drawer" })).toBeVisible();
+    expect(more().querySelector("wt-menu-row:not([action], [divider]):empty")).toBeNull();
     const person = more().querySelector(".operator")!;
     expect(person.parentElement?.querySelector('[data-clock-action="out"]')).not.toBeNull();
-    expect(
-      more()
-        .querySelector('[data-menu-item="taken-off"]')
-        ?.textContent?.trim()
-        .replace(/\s+/g, " "),
-    ).toBe("Taken off 0");
-    expect(more().querySelector('[data-menu-item="reset"]')?.textContent?.trim()).toBe(
-      "Back to the Dinner plan",
+    await expect.element(page.getByRole("button", { name: "Taken off 0" })).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Back to the Dinner plan" }))
+      .toBeVisible();
+    await userEvent.click(
+      more().querySelector('[data-menu-item="spares"]')!.shadowRoot!.querySelector("button")!,
     );
-    await userEvent.click(more().querySelector<HTMLElement>('[data-menu-item="spares"]')!);
     const zoneMenu = floor.shadowRoot!.querySelector("till-floor-zone-menu")!;
     await vi.waitFor(() =>
       expect(zoneMenu.shadowRoot!.querySelector('[data-dialog="spares"]')).toHaveProperty(
@@ -377,6 +389,16 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     await vi.waitFor(() => expect(bar()).not.toBeNull());
     expect(floor.shadowRoot!.querySelector(".zone-toolbar [data-zone]")).toBeNull();
     expect(zoneMenu.shadowRoot!.querySelector("wt-row-actions")?.hidden).toBe(true);
+    const zoneChooser = bar()!.querySelector<HTMLElement>("[data-floor-zone-chooser]")!;
+    await userEvent.click(zoneChooser.shadowRoot!.querySelector("button")!);
+    const selected = zoneChooser.querySelector<HTMLButtonElement>('[aria-checked="true"]')!;
+    expect(selected.matches(":focus")).toBe(true);
+    expect(selected.firstElementChild?.matches("[data-row-check]")).toBe(true);
+    expect(getComputedStyle(selected.firstElementChild!).visibility).toBe("visible");
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    await expect
+      .element(page.elementLocator(zoneChooser.shadowRoot!.querySelector("button")!))
+      .toHaveAccessibleName("Terrace");
     await openMore();
     await page.viewport(800, 844);
     await vi.waitFor(() => {
@@ -400,7 +422,7 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     await vi.waitFor(() => {
       expect(bar()).toBeNull();
       expect(floor.shadowRoot!.activeElement).toBe(
-        floor.shadowRoot!.querySelector('[data-zone="room"]'),
+        floor.shadowRoot!.querySelector('[data-zone="terrace"]'),
       );
       expect(floor.shadowRoot!.activeElement).not.toBeNull();
     });
@@ -434,8 +456,77 @@ it("shows the active language in the joined floor menu choice and gives Log out 
       "16px",
     );
     const logout = more().querySelector(".logout")!.shadowRoot!.querySelector("button")!;
-    expect(getComputedStyle(logout, "::after").content).toBe("none");
+    expect(logout.querySelector('[part="chevron"]')).toBeNull();
     expect(getComputedStyle(logout).fontWeight).toBe("600");
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+it.each([
+  ["light", 390, 844],
+  ["dark", 700, 390],
+] as const)("docks both floor sheets at the bar in %s at %i × %i", async (theme, width, height) => {
+  setLocale("en-GB");
+  await page.viewport(width, height);
+  try {
+    const { el, host } = await mountWidget<TillShell>(
+      "till-shell",
+      {
+        activeScreen: "floor",
+        operatorName: "Ana",
+      },
+      theme,
+    );
+    el.style.setProperty("--wt-page-padding", "8px");
+    el.style.position = "fixed";
+    el.style.inset = "8px";
+    el.style.height = "auto";
+    el.append(document.createElement("till-floor-screen"));
+    const footer = await vi.waitFor(() => {
+      const footer = el.shadowRoot!.querySelector<HTMLElement>("[data-floor-bar]");
+      expect(footer).not.toBeNull();
+      return footer!;
+    });
+    for (const selector of ["[data-floor-zone-chooser]", ".floor-menu"]) {
+      const menu = footer.querySelector<HTMLElement>(selector)!;
+      const trigger = menu.shadowRoot!.querySelector("button")!;
+      await userEvent.click(trigger);
+      const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      const sheet = popup.querySelector<HTMLElement>('[part="sheet"]')!;
+      const docked = (element: Element) =>
+        expect(element.getBoundingClientRect().bottom).toBeCloseTo(
+          footer.getBoundingClientRect().top,
+          0,
+        );
+      docked(popup);
+      await vi.waitFor(() => docked(sheet));
+      if (width === 390) {
+        const lastRow = menu.querySelector<HTMLElement>(
+          selector === ".floor-menu" ? ".logout" : "[data-open-device-zones]",
+        )!;
+        expect(lastRow.getBoundingClientRect().width).toBe(width);
+        expect([
+          selector,
+          getComputedStyle(sheet).borderBlockEndWidth,
+          getComputedStyle(lastRow).borderBlockEndWidth,
+          getComputedStyle(footer).borderBlockStartWidth,
+        ]).toEqual([selector, "0px", "0px", "1px"]);
+        const gutter = getComputedStyle(footer, "::after");
+        expect(footer.getBoundingClientRect().bottom + parseFloat(gutter.height)).toBe(height);
+        expect(gutter.backgroundColor).toBe(getComputedStyle(footer).backgroundColor);
+      }
+      expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
+      if (selector === "[data-floor-zone-chooser]") {
+        await expect.element(page.elementLocator(sheet)).toHaveAccessibleName("Zones");
+      }
+      await page.viewport(width, height + 24);
+      await vi.waitFor(() => docked(popup));
+      await expectNoA11yViolations(host);
+      await userEvent.click(footer.querySelector<HTMLElement>("[data-view-toggle]")!);
+      expect(popup.matches(":popover-open")).toBe(false);
+      await page.viewport(width, height);
+    }
   } finally {
     await page.viewport(1280, 900);
   }

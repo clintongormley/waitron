@@ -120,6 +120,18 @@ test("the visible bar stays active and its sheet trigger closes on the second ta
   expect(document.activeElement).toBe(map);
 });
 
+test("a sheet can start focus on its dialog and tab into the first action", async () => {
+  const { el, trigger, popup } = await menuSheet(
+    "<button disabled>Unavailable</button><button>Clock out</button>",
+    "focus-sheet",
+  );
+  expect(el.shadowRoot!.activeElement).toBe(popup.querySelector('[role="dialog"]'));
+  await userEvent.tab();
+  expect(el.querySelector("button:enabled")!.matches(":focus")).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect(el.shadowRoot!.activeElement).toBe(trigger);
+});
+
 test.each(["forward", "backward", "Escape"])(
   "the menu sheet dismisses from the keyboard (%s)",
   async (direction) => {
@@ -873,7 +885,7 @@ describe("opens-below", () => {
       expect(getComputedStyle(sheet).backgroundColor).toBe("rgb(12, 13, 14)");
       expect(getComputedStyle(popup).backgroundColor).toBe("rgb(9, 10, 11)");
       expect(sheet.scrollHeight).toBeGreaterThan(sheet.clientHeight);
-      el.style.setProperty("--wt-row-actions-bottom-offset", "72px");
+      host.style.setProperty("--wt-row-actions-bottom-offset", "72px");
       await vi.waitFor(() => {
         expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(innerHeight - 72, 0);
       });

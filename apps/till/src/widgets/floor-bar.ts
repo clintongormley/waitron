@@ -1,9 +1,13 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import type { FloorCueIcon, ZoneTab } from "@waitron/ui";
 import type { TableState } from "../api/floor-api.js";
+import { helpBadgeLabel, helpText, type HelpKey } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, t } from "../i18n/t.js";
+import type { TillClockAction } from "../state/clocking.js";
 import { kindCue, kindWords, mapKinds, topTabKind, type MapKind } from "../state/floor-look.js";
+
+import "@waitron/ui/src/components/wt-menu-row.js";
 
 type Marks = ReadonlyMap<string, { kind: MapKind; words: string }>;
 
@@ -71,15 +75,8 @@ export const floorBarStyles = css`
   .floor-bar {
     --wt-floor-menu-font-size: calc((var(--wt-font-size-md) + var(--wt-font-size-lg)) / 2);
     --wt-floor-name-font-size: calc((var(--wt-floor-menu-font-size) + var(--wt-font-size-lg)) / 2);
-    --wt-floor-bar-height: 0px;
     --wt-row-actions-sheet-inline-inset: var(--wt-page-padding, 0px);
-    --wt-row-actions-bottom-offset: calc(
-      var(--wt-floor-bar-height, 0px) + var(--wt-page-padding, 0px)
-    );
-    --wt-row-actions-sheet-scrim: linear-gradient(
-      var(--wt-color-scrim) calc(100% - var(--wt-row-actions-bottom-offset)),
-      transparent 0
-    );
+    position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: var(--wt-space-2);
@@ -89,6 +86,12 @@ export const floorBarStyles = css`
     background: var(--wt-color-surface);
     border-block-start: 1px solid var(--wt-color-border);
   }
+  .floor-bar::after {
+    content: "";
+    position: absolute;
+    background: inherit;
+    pointer-events: none;
+  }
   @media (orientation: portrait) {
     .shell:has(> .floor-controls) > .region,
     .floor-controls {
@@ -97,6 +100,41 @@ export const floorBarStyles = css`
     .floor-bar {
       --wt-row-actions-sheet-inline-inset: 0px;
     }
+    .floor-bar::after {
+      inset: 100% 0 auto;
+      block-size: var(--wt-page-padding, 0px);
+    }
+  }
+  @media (orientation: landscape) {
+    .floor-controls {
+      margin-block-end: calc(-1 * max(0px, var(--wt-page-padding, 0px) - var(--wt-space-2)));
+    }
+    .floor-bar {
+      isolation: isolate;
+    }
+    .floor-bar::after {
+      inset: calc(-1 * var(--wt-field-line-width)) calc(-1 * var(--wt-page-padding, 0px))
+        calc(-1 * min(var(--wt-page-padding, 0px), var(--wt-space-2)));
+      z-index: -1;
+      border-block-start: inherit;
+    }
+  }
+  .floor-bar wt-row-actions::part(popup) {
+    overflow: visible;
+    box-shadow: none;
+  }
+  .floor-bar wt-row-actions::part(popup)::after {
+    content: "";
+    position: absolute;
+    inset-inline: var(--wt-row-actions-sheet-inline-inset);
+    inset-block-start: calc(100% + var(--wt-field-line-width));
+    block-size: calc(var(--wt-space-3) + var(--wt-space-1) / 2);
+    background: linear-gradient(var(--wt-color-menu-sheet-edge-shadow), transparent);
+    pointer-events: none;
+  }
+  .floor-bar wt-row-actions::part(sheet) {
+    padding-block-end: 0;
+    box-shadow: none;
   }
   .floor-bar > [data-view-toggle]::part(button) {
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
@@ -108,32 +146,35 @@ export const floorBarStyles = css`
     background: var(--wt-color-surface);
   }
   .floor-bar [data-floor-zone-chooser]::part(trigger) {
+    padding-inline: var(--wt-space-3);
     overflow-wrap: anywhere;
     justify-content: start;
     font-size: var(--wt-font-size-lg);
     font-weight: var(--wt-font-weight-bold);
     text-align: start;
   }
+  .floor-zone-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--wt-space-2);
+  }
+  .floor-zone-trigger [aria-hidden] {
+    font-size: var(--wt-font-size-md);
+  }
   .floor-bar .floor-menu::part(trigger) {
     min-inline-size: calc(var(--wt-tap-min) + var(--wt-space-1));
+  }
+  .floor-menu wt-icon[slot="trigger"] {
+    inline-size: var(--wt-font-size-xl);
+    block-size: var(--wt-font-size-xl);
   }
   .floor-bar [slot="badge"] {
     inset-block-start: calc(-1 * var(--wt-space-1));
     inset-inline-end: calc(-1 * var(--wt-space-1));
   }
-  .floor-bar wt-row-actions::part(sheet)::before {
-    content: "";
-    display: block;
-    inline-size: var(--wt-tap-min);
-    block-size: var(--wt-space-1);
-    flex: none;
-    align-self: center;
-    margin-block: var(--wt-space-1) var(--wt-space-2);
-    border-radius: var(--wt-radius-full);
-    background: var(--wt-color-border);
-  }
   .floor-bar [data-floor-zone] {
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-4));
+    padding-inline: var(--wt-menu-row-padding-start) var(--wt-space-4);
     border-block-end: 1px solid var(--wt-color-border);
     border-radius: 0;
     font-size: var(--wt-floor-name-font-size);
@@ -144,6 +185,7 @@ export const floorBarStyles = css`
     color: var(--wt-action-native-icon-color);
   }
   .floor-bar [data-open-device-zones] {
+    min-block-size: var(--wt-menu-row-height);
     justify-content: center;
     color: var(--wt-color-primary-text);
     font-size: calc((var(--wt-font-size-md) + var(--wt-floor-menu-font-size)) / 2);
@@ -153,70 +195,29 @@ export const floorBarStyles = css`
   .floor-bar .settings-heading,
   .floor-bar [data-menu-heading] {
     margin: 0;
-    padding: var(--wt-space-2) var(--wt-space-4) var(--wt-space-1);
+    padding: var(--wt-space-2) var(--wt-menu-row-padding-start) var(--wt-space-1);
     border-block-end: 1px solid var(--wt-color-border);
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
     font-weight: var(--wt-font-weight-bold);
     text-transform: uppercase;
   }
-  .floor-bar summary.settings-heading,
-  .floor-help {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-sizing: border-box;
-    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
-    padding-inline: var(--wt-space-4);
-    border-block-end: 1px solid var(--wt-color-border);
-    color: var(--wt-color-text);
-    font-size: var(--wt-floor-menu-font-size);
-    font-weight: var(--wt-font-weight-normal);
-    text-transform: none;
-  }
-  .floor-bar summary.settings-heading {
+  .floor-menu summary {
+    display: block;
     cursor: pointer;
   }
-  .floor-bar summary.settings-heading::after {
-    content: "›" / "";
+  .floor-menu details[open] > summary wt-menu-row::part(chevron) {
+    rotate: 90deg;
   }
-  .floor-bar details[open] > summary.settings-heading::after {
-    content: "⌄" / "";
-  }
-  .floor-bar .floor-menu wt-button::part(button) {
-    min-block-size: var(--wt-tap-min);
-    padding-inline: var(--wt-space-4);
-  }
-  .floor-bar .floor-menu wt-button:not([data-clock-action="out"]) {
-    inline-size: 100%;
-  }
-  .floor-bar .floor-menu wt-button:not([data-clock-action="out"])::part(button) {
-    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
-    border-block-end: 1px solid var(--wt-color-border);
-    border-radius: 0;
-    font-size: var(--wt-floor-menu-font-size);
-  }
-  .floor-bar .floor-menu wt-button:not([data-clock-action="out"], .logout)::part(button)::after {
-    content: "›" / "";
-    margin-inline-start: auto;
-    color: var(--wt-color-text-muted);
-  }
-  .floor-bar .floor-menu .logout::part(button) {
+  .floor-menu .logout {
+    --wt-font-weight-normal: var(--wt-font-weight-bold);
     color: var(--wt-color-primary-text);
-    font-weight: var(--wt-font-weight-bold);
-  }
-  .floor-bar [data-floor-count] {
-    margin-inline-start: auto;
-    color: var(--wt-color-text-muted);
-  }
-  .floor-bar .floor-menu wt-button:has([data-floor-count])::part(button)::after {
-    margin-inline-start: 0;
   }
   .floor-operator {
     display: flex;
     align-items: center;
     gap: var(--wt-space-2);
-    padding: var(--wt-space-2) var(--wt-space-3);
+    padding: var(--wt-space-2) var(--wt-menu-row-padding-start);
   }
   .floor-operator-initials {
     display: grid;
@@ -240,6 +241,7 @@ export const floorBarStyles = css`
   .floor-operator [data-clock-action]::part(button) {
     border: 1px solid var(--wt-color-border);
     border-radius: var(--wt-radius-md);
+    font-weight: var(--wt-font-weight-bold);
   }
   [data-floor-other-zone] {
     margin: var(--wt-space-1) max(var(--wt-space-3), env(safe-area-inset-right)) var(--wt-space-2)
@@ -249,11 +251,15 @@ export const floorBarStyles = css`
     min-block-size: var(--wt-tap-min);
     justify-content: start;
     background: var(--wt-color-tab-warning-tint);
+    border-color: transparent;
+    font-size: calc((3 * var(--wt-font-size-md) + var(--wt-font-size-lg)) / 4);
     font-weight: var(--wt-font-weight-normal);
     text-align: start;
   }
-  [data-floor-other-zone] [aria-hidden] {
+  [data-floor-other-zone] wt-icon {
+    flex: none;
     margin-inline-start: auto;
+    color: var(--wt-color-text-muted);
   }
   .floor-zone-mark {
     margin-inline-start: auto;
@@ -266,6 +272,96 @@ export const floorBarStyles = css`
     color: var(--wt-color-on-success);
   }
 `;
+
+export function floorMoreSheet(count: number | undefined, contents: TemplateResult) {
+  const pending = count !== undefined && count > 0;
+  return html`<wt-row-actions
+    class="floor-menu"
+    data-test="more-menu"
+    icon="hamburger"
+    bottom-sheet
+    sheet-variant="menu"
+    focus-sheet
+    label=${pending ? countText(count, "shell.more_transfers", "shell.more_transfers_one") : t("shell.more")}
+  >
+    <wt-icon slot="trigger" aria-hidden="true" name="hamburger"></wt-icon>
+    ${pending ? html`<wt-count-badge slot="badge" tone="warning" .count=${count}></wt-count-badge>` : nothing}
+    ${contents}
+  </wt-row-actions>`;
+}
+
+export function floorMoreRow(
+  label: string,
+  press: (event: Event) => void,
+  options: {
+    className?: string;
+    value?: number;
+    help?: HelpKey;
+    transfers?: boolean;
+    report?: boolean;
+    clock?: TillClockAction | "retry";
+    disabled?: boolean;
+  },
+) {
+  const logout = options.className === "logout";
+  return html`<wt-menu-row
+    action
+    ?divider=${!logout}
+    .chevron=${!logout}
+    .disabled=${options.disabled ?? false}
+    data-clock-action=${options.clock === "retry" ? nothing : (options.clock ?? nothing)}
+    ?data-clock-retry=${options.clock === "retry"}
+    class=${options.className ?? nothing}
+    .label=${label}
+    .value=${options.value ?? ""}
+    help=${options.help === undefined ? nothing : helpText(options.help)}
+    help-label=${helpBadgeLabel(label)}
+    ?data-open-transfers=${options.transfers}
+    ?data-report-problem=${options.report}
+    @click=${press}
+  ></wt-menu-row>`;
+}
+
+export function floorDeviceRows(
+  language: TemplateResult | typeof nothing,
+  help: TemplateResult,
+  settings: TemplateResult,
+) {
+  return html`
+    ${language === nothing ? nothing : html`<wt-menu-row>${language}</wt-menu-row>`}
+    <wt-menu-row divider .label=${helpText("help.label")}>${help}</wt-menu-row>
+    <details class="settings-group">
+      <summary>
+        <wt-menu-row divider chevron .label=${t("device_zones.settings")}></wt-menu-row>
+      </summary>
+      ${settings}
+    </details>
+  `;
+}
+
+export function floorHoursRows(busy: boolean, press: (type: "my-hours" | "fix-my-hours") => void) {
+  const label = t("attendance.fix_hours");
+  return html`<wt-menu-row
+      action
+      divider
+      chevron
+      data-my-hours
+      .disabled=${busy}
+      .label=${t("hours.mine")}
+      @click=${() => press("my-hours")}
+    ></wt-menu-row>
+    <wt-menu-row
+      action
+      divider
+      chevron
+      data-fix-hours
+      .disabled=${busy}
+      .label=${label}
+      help=${helpText("help.person.fix_hours")}
+      help-label=${helpBadgeLabel(label)}
+      @click=${() => press("fix-my-hours")}
+    ></wt-menu-row>`;
+}
 
 export function floorMenuSection(label: StringKey, rows: TemplateResult) {
   return html`<section class="settings-group" aria-label=${t(label)}>
@@ -292,7 +388,10 @@ export function floorOperatorLine(
 
 export function measureFloorControls(controls: HTMLElement): number {
   const bar = controls.querySelector("footer")!;
-  bar.style.setProperty("--wt-floor-bar-height", `${bar.getBoundingClientRect().height}px`);
+  bar.style.setProperty(
+    "--wt-menu-sheet-bottom-offset",
+    `${Math.max(0, innerHeight - bar.getBoundingClientRect().top)}px`,
+  );
   return controls.getBoundingClientRect().height;
 }
 
@@ -306,8 +405,16 @@ export function floorZoneControls(
   choose: () => void,
 ) {
   const name = tabs.find((tab) => tab.key === active)?.name ?? t("floor.zones");
-  return html`<wt-row-actions data-floor-zone-chooser bottom-sheet label=${name}>
-      <span slot="trigger">${name} <span aria-hidden="true">⌃</span></span>
+  return html`<wt-row-actions
+      data-floor-zone-chooser
+      bottom-sheet
+      sheet-variant="menu"
+      label=${name}
+      sheet-label=${t("floor.zones")}
+    >
+      <span slot="trigger" class="floor-zone-trigger"
+        ><span>${name}</span><span aria-hidden="true">⌃</span></span
+      >
       <div role="menu" aria-label=${t("floor.zones")}>
         ${tabs.map(({ key, name }) => {
           const mark = marks.get(key);
@@ -352,7 +459,7 @@ export function floorOtherZone(
     ? nothing
     : html`<wt-button data-floor-other-zone variant="secondary" @click=${() => select(zone.key)}>
         <span><strong>${zone.name}</strong> · ${marks.get(zone.key)!.words}</span>
-        <span aria-hidden="true">›</span>
+        <wt-icon aria-hidden="true" name="chevron-right" size="lg"></wt-icon>
       </wt-button>`;
 }
 

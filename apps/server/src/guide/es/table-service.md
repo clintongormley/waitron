@@ -576,9 +576,9 @@ izquierda y derecha para pasar de **Sala** a tus mesas. Inicio abre **Sala** y F
 mesa. En una pantalla estrecha, usa Tab para llegar al botón de una mesa y Enter para abrirla.
 
 Elige **Sala** después de una mesa para abrir su zona, si este dispositivo la muestra. En una
-pantalla estrecha, toca el nombre de la zona abajo para cambiar de zona. Abre **Más** (☰) abajo
-para fichar, cambiar el plano de hoy, buscar cuentas, gestionar el efectivo, consultar tu
-jornada, pedir ayuda o abrir los ajustes. En un móvil o una tableta con la sala en pantalla ancha,
+pantalla estrecha, toca el nombre de la zona abajo y busca la marca junto a tu zona actual. Toca
+otra zona para cambiar, o usa las flechas arriba y abajo y pulsa Enter. Abre **Más** (☰) en la misma barra para fichar, cambiar el plano de hoy,
+buscar cuentas, gestionar el efectivo, consultar tu jornada, pedir ayuda o abrir los ajustes. En un móvil o una tableta con la sala en pantalla ancha,
 abre **Más** arriba para encontrar **Equipo**, **Idioma** y **Tema** en **Ajustes**.
 
 ## Tomar un pedido en un móvil {#phone-order}
@@ -954,7 +954,7 @@ Toca **Lista** o **Mapa** para cambiar la vista. En una pantalla estrecha, el bo
 que la zona se abre igual la próxima vez, y cambiar una zona no cambia las demás. Una zona que no
 has cambiado se abre como mapa cuando tiene mesas colocadas en su plano, y como lista cuando no
 tiene ninguna. Si las mesas están demasiado juntas para tocarlas en el mapa, cambia esa zona a
-**Lista**. Cuando el mapa muestre **Arrastra para ver más mesas**, arrástralo para ver las demás.
+**Lista**. Cuando el mapa muestre **Arrastra para ver más**, arrástralo para ver las demás.
 
 ## Unir y separar mesas {#join-tables}
 

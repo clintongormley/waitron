@@ -546,8 +546,9 @@ and the table buttons. Home opens **Floor** and End opens the last table. On a n
 to reach a table shortcut and Enter to open it.
 
 Choose **Floor** after a table to open that table's zone, if this device shows it. On a narrow
-floor, choose another zone by tapping its name at the bottom. Open **More** (☰) there for your
-clock actions, changes to today's floor, bills and cash, hours and schedule, Help and settings.
+floor, tap the zone name at the bottom and look for the check beside your current zone. Tap another
+zone to switch, or use Up and Down and press Enter. Open **More** (☰) from the same bar for your clock actions, changes to today's floor,
+bills and cash, hours and schedule, Help and settings.
 On a wide handheld floor, open **More** at the top for **Equipment**, **Language** and
 **Theme** under **Settings**.
 

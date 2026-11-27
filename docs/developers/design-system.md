@@ -975,11 +975,12 @@ trigger. Plain action disclosures keep their ordinary Tab order.
 
 Use `bottom-sheet sheet-variant="menu"` on `wt-row-actions` for the till's menu sheet.
 Set `sheet-heading` to show a title and name the dialog. A sheet without a heading takes
-its name from the trigger's `label`. Use `data-sheet-heading` on a direct child to label a
+its name from `sheet-label`, or from the trigger's `label` when you omit it. Use `data-sheet-heading` on a direct child to label a
 section. If the sheet needs to stop above a bottom bar, set `--wt-menu-sheet-bottom-offset`
-to the bar's height. The dimming stops there too. Pressing a visible bar button closes the sheet
+to the distance from the bar's top to the bottom of the viewport. The dimming stops there too. Pressing a visible bar button closes the sheet
 and runs that button's action. Pressing the sheet's trigger again closes it. Opening a sheet of
-plain actions focuses the first enabled control. Escape and Tab past either end close it and
+plain actions focuses the first enabled control. Set `focus-sheet` to focus the dialog itself,
+so the next Tab reaches its first action. Escape and Tab past either end close it and
 return focus to its trigger.
 A sheet with a slotted `role="menu"` follows the menu's selection and keyboard rules above.
 
@@ -6429,7 +6430,8 @@ opens on that table's zone instead when this device shows that zone, as "Navigat
 sign-in says so, holds no choice and shows every permitted zone until a later read applies one.
 Below 800 CSS px of shell width, the floor has a bottom bar with a zone chooser, one button
 naming the other view (Map or List), and ☰. The zone chooser marks the selected zone with a check.
-Both menus open above the bar and reach the screen edges in portrait. An urgent cue from another
+Both menus meet the top of the bar and reach the screen edges in portrait. The bar stays
+tappable, and its surface fills the gutters at the screen edges in either orientation. An urgent cue from another
 zone appears above the bar. The outlined map shares its side edges with the cue and controls.
 In landscape, the drag hint sits beside the map area when part of the plan is off-screen.
 The wide floor keeps the top toolbar and shows pills only when there's more than one zone.
