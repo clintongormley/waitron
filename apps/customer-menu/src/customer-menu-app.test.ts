@@ -131,11 +131,17 @@ it.each([
 );
 
 it.each(["light", "dark"] as const)(
-  "opens the language chooser in the published %s style",
+  "opens the language chooser in the prepared %s style",
   async (scheme) => {
     await page.viewport(390, 900);
     const longTitle = { ...menu, name: "Lunch for our guests today" };
-    const root = openMenu("none", {}, longTitle, menuAppearances[scheme]);
+    const root = openMenu("none", {}, longTitle, {
+      scheme,
+      tokens: {
+        "--wt-menu-heading-color": menuAppearances[scheme].headingColor,
+        "--wt-color-bg": menuAppearances[scheme].pageColor,
+      },
+    });
     const heading = page.getByRole("heading", { level: 1, name: longTitle.name });
     await expect.element(heading).toBeVisible();
     expect.soft(getComputedStyle(document.documentElement).colorScheme).toBe(scheme);

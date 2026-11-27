@@ -1,11 +1,14 @@
 import type { PublicGuestMenu } from "@waitron/shared";
 import { contrastRatio, hexToRgb } from "@waitron/ui-core/theme";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
 import { menuAppearances, published, publishedSections } from "../test/published-menu.js";
+import { prepareMenuAppearance } from "./customer-menu-appearance.js";
 import "./customer-menu-page.js";
 
+const prepared = prepareMenuAppearance.bind(null, WAITRON_DEFAULTS);
 const noResults = "No dishes match your search.";
 const photo = "data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'/%3E";
 
@@ -19,7 +22,7 @@ async function openMenu(
   host.id = "renderer-test";
   const customer = document.createElement("customer-menu-page");
   customer.menu = menu;
-  customer.appearance = theme === "dark" ? menuAppearances.dark : undefined;
+  customer.appearance = theme === "dark" ? prepared(menuAppearances.dark) : undefined;
   customer.standalone = standalone;
   customer.photoSource = () => photo;
   if (canvas) {
@@ -49,7 +52,7 @@ describe("Customer menu page", () => {
     expect.soft(getComputedStyle(article).backgroundColor).toBe("rgb(247, 247, 248)");
     expect.soft(getComputedStyle(article).color).toBe("rgb(35, 31, 32)");
 
-    customer.appearance = menuAppearances.light;
+    customer.appearance = prepared(menuAppearances.light);
     await customer.updateComplete;
     expect.soft(getComputedStyle(title).fontFamily).toContain("Georgia");
     expect.soft(getComputedStyle(section).fontFamily).toBe(getComputedStyle(title).fontFamily);
@@ -57,21 +60,21 @@ describe("Customer menu page", () => {
     expect.soft(getComputedStyle(title).fontWeight).toBe("400");
     expect.soft(getComputedStyle(article).fontFamily).toBe(fallbackFont);
 
-    customer.appearance = menuAppearances.dark;
+    customer.appearance = prepared(menuAppearances.dark);
     await customer.updateComplete;
     expect.soft(getComputedStyle(title).fontFamily).toBe(fallbackFont);
     expect.soft(getComputedStyle(title).fontWeight).toBe("600");
     expect.soft(getComputedStyle(article).fontFamily).toContain("Georgia");
     expect.soft(getComputedStyle(article.querySelector(".entry-name")!).fontWeight).toBe("500");
 
-    customer.appearance = { headingFont: "serif" };
+    customer.appearance = prepared({ headingFont: "serif" });
     await customer.updateComplete;
     expect.soft(getComputedStyle(title).fontFamily).toContain("Georgia");
     expect.soft(getComputedStyle(article).fontFamily).toBe(fallbackFont);
     expect.soft(getComputedStyle(article).backgroundColor).toBe("rgb(247, 247, 248)");
     expect.soft(getComputedStyle(article).color).toBe("rgb(35, 31, 32)");
 
-    customer.appearance = { textFont: "serif" };
+    customer.appearance = prepared({ textFont: "serif" });
     await customer.updateComplete;
     expect.soft(getComputedStyle(title).fontFamily).toBe(fallbackFont);
     expect.soft(getComputedStyle(article).fontFamily).toContain("Georgia");
@@ -85,7 +88,7 @@ describe("Customer menu page", () => {
     await page.getByRole("button", { name: "Roast pepper", exact: true }).click();
     const heading = page.getByRole("heading", { name: "Cooking", exact: true }).element();
     expect.soft(getComputedStyle(heading).fontWeight).toBe("700");
-    customer.appearance = menuAppearances.light;
+    customer.appearance = prepared(menuAppearances.light);
     await customer.updateComplete;
     expect(getComputedStyle(heading).fontWeight).toBe("400");
   });
@@ -94,7 +97,7 @@ describe("Customer menu page", () => {
     const { customer } = await openMenu(published().menu);
     const article = customer.shadowRoot!.querySelector("article")!;
     const defaultAction = getComputedStyle(article).getPropertyValue("--wt-color-primary").trim();
-    customer.appearance = { ...menuAppearances.light, headingColor: "#d6d4d0" };
+    customer.appearance = prepared({ ...menuAppearances.light, headingColor: "#d6d4d0" });
     await customer.updateComplete;
     const action = getComputedStyle(article).getPropertyValue("--wt-color-primary").trim();
     expect(getComputedStyle(article.querySelector("h2")!).color).toBe("rgb(214, 212, 208)");
@@ -113,7 +116,7 @@ describe("Customer menu page", () => {
     "makes secondary menu text warm and readable in %s",
     async (scheme) => {
       const { customer } = await openMenu(published().menu);
-      customer.appearance = menuAppearances[scheme];
+      customer.appearance = prepared(menuAppearances[scheme]);
       await customer.updateComplete;
       const description = customer.shadowRoot!.querySelector(".description")!;
       const channels = getComputedStyle(description).color.match(/\d+/g)!.map(Number);
@@ -125,7 +128,7 @@ describe("Customer menu page", () => {
 
   it("paints the light menu's fields, pills and cards with its page colour", async () => {
     const { customer } = await openMenu(published().menu);
-    customer.appearance = menuAppearances.light;
+    customer.appearance = prepared(menuAppearances.light);
     await customer.updateComplete;
     const article = customer.shadowRoot!.querySelector("article")!;
     const search = article.querySelector("wt-input")!.shadowRoot!.querySelector(".field")!;
@@ -654,7 +657,7 @@ describe("Customer menu page", () => {
     "keeps the standalone menu and its details accessible in %s",
     async (theme) => {
       const { customer, host } = await openMenu(published().menu, theme, true);
-      customer.appearance = menuAppearances[theme];
+      customer.appearance = prepared(menuAppearances[theme]);
       await customer.updateComplete;
       const canvas = customer.shadowRoot!.querySelector<HTMLElement>("article")!;
       await expectNoA11yViolations(host);

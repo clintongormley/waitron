@@ -4,8 +4,11 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath, URL } from "node:url";
 import { chromium } from "playwright";
 import { preview } from "vite";
+import "../../server/node_modules/tsx/dist/loader.mjs";
 import { menuAppearances, photoReference, published } from "./published-menu.ts";
 
+const { SERVER_THEME_DEFAULTS } = await import("../../server/src/theme-defaults.ts");
+const { prepareMenuAppearance } = await import("../src/customer-menu-appearance.ts");
 const template = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 const slot = '<script type="application/json" id="customer-menu-data">';
 assert.ok(template.includes(slot), "built menu must have a snapshot slot");
@@ -18,7 +21,7 @@ const snapshot = {
   address: "lunch",
   defaultLanguage: "en",
   photos: "large",
-  appearance: menuAppearances.dark,
+  appearance: prepareMenuAppearance(SERVER_THEME_DEFAULTS, menuAppearances.dark),
   menu: published().menu,
   photoUrls: { [photoReference]: photoUrl },
 };

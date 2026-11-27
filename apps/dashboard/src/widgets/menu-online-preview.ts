@@ -1,4 +1,5 @@
 import "@waitron/customer-menu";
+import { prepareMenuAppearance } from "@waitron/customer-menu/appearance";
 import { installedContentLanguagePresentation } from "@waitron/country-packs";
 import {
   contentLanguageDisplayName,
@@ -10,6 +11,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-segmented-control.js";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { MenuApi } from "../api/menu-api.js";
@@ -181,7 +183,7 @@ export class MenuOnlinePreview extends LitElement {
       <customer-menu-page
         class=${this.size}
         .menu=${this.answer.menu}
-        .appearance=${this.answer.appearance}
+        .appearance=${prepareMenuAppearance(WAITRON_DEFAULTS, this.answer.appearance)}
         .photos=${this.photos}
         .photoSource=${previewPhoto}
         .defaultLanguage=${this.defaultLanguage}

@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/customer-menu-page.ts",
+    "./appearance": "./src/customer-menu-appearance.ts",
     "./testing": "./test/published-menu.ts"
   },
   "scripts": {
