@@ -43,7 +43,7 @@ it("requires one reviewed variant that passes every exclusion and a reviewed dis
   expect(result.unreviewed).toBe(2);
 });
 
-it("blocks declared allergens in served defaults and leaves optional and unknown extras to the detail", () => {
+it("hides dishes served with a default extra that declares an exclusion or lacks review", () => {
   function withExtra(
     name: string,
     preselected: boolean,
@@ -68,6 +68,10 @@ it("blocks declared allergens in served defaults and leaves optional and unknown
       withExtra("Default", true, { nuts: { kinds: ["almonds"] } }, { allergens: null }),
       withExtra("Optional", false, { nuts: { kinds: ["almonds"] } }),
       withExtra("Unknown default", true, null),
+      withExtra("Unknown default on a dish that declares nuts", true, null, {
+        allergens: { nuts: { kinds: ["almonds"] } },
+      }),
+      withExtra("Unknown optional", false, null),
       withExtra("Reviewed default", true, {}),
     ],
     "",
@@ -77,11 +81,11 @@ it("blocks declared allergens in served defaults and leaves optional and unknown
   );
   expect(result.entries.map(({ member }) => member.name)).toEqual([
     "Optional",
-    "Unknown default",
+    "Unknown optional",
     "Reviewed default",
   ]);
-  expect(result.hidden).toBe(1);
-  expect(result.unreviewed).toBe(0);
+  expect(result.hidden).toBe(3);
+  expect(result.unreviewed).toBe(1);
 });
 
 it("counts placements after name and diet matching, keeping nonempty sections and set menus", () => {
@@ -112,4 +116,26 @@ it("counts placements after name and diet matching, keeping nonempty sections an
     unreviewed: 2,
     dishes: 1,
   });
+});
+
+it.each([
+  ["vegan", ["Vegan stew"]],
+  ["vegetarian", ["Vegan stew", "Vegetarian pie"]],
+  ["no_meat", ["Vegan stew", "Vegetarian pie"]],
+  ["no_fish", ["Vegan stew", "Vegetarian pie"]],
+  ["halal", ["Halal chicken"]],
+])("matches %s using the till's published diet implications", (diet, expected) => {
+  const result = filterCustomerMenu(
+    [
+      dish("Vegan stew", { dietary: ["vegan"] }),
+      dish("Vegetarian pie", { dietary: ["vegetarian"] }),
+      dish("Halal chicken", { dietary: ["halal"] }),
+      dish("Unlabelled salad", { variants: [{ ...choice({}), dietary: ["vegan"] }] }),
+    ],
+    "",
+    "en",
+    diet,
+    [],
+  );
+  expect(result.entries.map(({ member }) => member.name)).toEqual(expected);
 });

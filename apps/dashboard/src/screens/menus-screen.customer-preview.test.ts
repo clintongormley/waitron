@@ -251,8 +251,15 @@ describe("the customer menu Online preview", () => {
       if (pepper?.kind !== "product" || bread?.kind !== "product")
         throw new Error("Expected two dishes");
       pepper.dietary = ["vegan"];
+      pepper.allergens = {};
       pepper.variants.push({ name: "Small", price: "6.50", unit: "", allergens: {}, dietary: [] });
       bread.dietary = ["vegan"];
+      bread.allergens = {};
+      const sides = pepper.modifiers[1]!;
+      if (sides.kind !== "extras") throw new Error("Expected an extras list");
+      bread.modifiers = [
+        { ...sides, items: [{ ...sides.items[0]!, allergens: null, preselected: true }] },
+      ];
       setMenu.lines[0]!.choices[0]!.allergens = null;
       oven.members = [pepper];
       preview.menu.members.push({ kind: "section", name: "Bakery", members: [bread] });
@@ -287,7 +294,7 @@ describe("the customer menu Online preview", () => {
       await page.getByRole("option", { name: "Eggs" }).click();
       await userEvent.keyboard("{Escape}");
       await diet.click();
-      await page.getByRole("option", { name: "Vegan", exact: true }).click();
+      await page.getByRole("option", { name: "Vegetarian", exact: true }).click();
       await close.click();
 
       const filtersControl = filters.element();
@@ -297,7 +304,7 @@ describe("the customer menu Online preview", () => {
       await expect.element(page.getByRole("link", { name: "Bakery" })).not.toBeInTheDocument();
       await expect
         .element(page.getByRole("status").filter({ hasText: "Hidden dishes (1)." }))
-        .toHaveTextContent("Hidden dishes (1). Of those, 1 had unreviewed allergens.");
+        .toHaveTextContent("Hidden dishes (1). Hidden because allergens need review (1).");
       await expect.element(page.getByText("Check the choices for allergens.")).toBeVisible();
       await expectNoA11yViolations(host);
 
@@ -335,7 +342,7 @@ describe("the customer menu Online preview", () => {
         .element(page.getByText("No dishes match your search and filters."))
         .toBeVisible();
       await expect
-        .element(page.getByText("Hidden dishes (0). Of those, 0 had unreviewed allergens."))
+        .element(page.getByText("Hidden dishes (0). Hidden because allergens need review (0)."))
         .toBeVisible();
       await expectNoA11yViolations(host);
 
@@ -343,7 +350,7 @@ describe("the customer menu Online preview", () => {
       await page.getByRole("button", { name: "Clear filters" }).click();
       await close.click();
       await expect
-        .element(page.getByText("Hidden dishes (0). Of those, 0 had unreviewed allergens."))
+        .element(page.getByText("Hidden dishes (0). Hidden because allergens need review (0)."))
         .not.toBeInTheDocument();
       await expect.element(search).toHaveValue("two courses");
       await search.fill("");

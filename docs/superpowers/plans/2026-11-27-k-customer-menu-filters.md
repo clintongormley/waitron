@@ -46,3 +46,8 @@ own declaration, and missing extra reviews get a mark. Required groups can need 
 as `apps/till/src/menu-filter.ts` accounts for. Checking whether a full order can be put together
 would need that capacity rule and the extras of set-menu choices. This slice follows the published
 menu rules in §3 and describes them as a filter on declarations.
+
+**Watcher clearance, 27 November at 05:08, Lane K `questions.md`.** Use the till's diet implications
+on the dish's own labels. Hide dishes served with an unreviewed default extra and count them as
+unreviewed if recording that extra as empty would let the dish appear. Keep the ask-staff advisory
+under the declarations in picture 18.

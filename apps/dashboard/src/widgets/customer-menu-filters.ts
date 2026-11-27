@@ -1,4 +1,8 @@
-import type { GuestDeclarations, GuestMember } from "@waitron/shared";
+import {
+  expandDietaryDeclarations,
+  type GuestDeclarations,
+  type GuestMember,
+} from "@waitron/shared";
 
 type Dish = Extract<GuestMember, { kind: "product" }>;
 
@@ -18,17 +22,19 @@ export function hasCautionedChoice(dish: Dish, excluded: readonly string[]) {
 
 function dishCaution(dish: Dish, excluded: readonly string[]) {
   if (!excluded.length) return;
-  if (
-    extrasOf(dish).some(
-      (extra) => extra.preselected && choiceCaution(extra, excluded) === "selectedAllergen",
-    )
-  )
-    return "selectedAllergen";
-  if (!dish.variants.length) return choiceCaution(dish, excluded);
+  const extras = extrasOf(dish)
+    .filter((extra) => extra.preselected)
+    .map((extra) => choiceCaution(extra, excluded));
+  if (extras.includes("selectedAllergen")) return "selectedAllergen";
+  const unreviewedExtra = extras.includes("unreviewedAllergens")
+    ? "unreviewedAllergens"
+    : undefined;
+  if (!dish.variants.length) return choiceCaution(dish, excluded) ?? unreviewedExtra;
   const variants = dish.variants.map((choice) => choiceCaution(choice, excluded));
   if (variants.every((caution) => caution === "selectedAllergen")) return "selectedAllergen";
   if (dish.allergens === null || variants.every((caution) => caution !== undefined))
     return "unreviewedAllergens";
+  return unreviewedExtra;
 }
 
 export function filterCustomerMenu(
@@ -48,7 +54,8 @@ export function filterCustomerMenu(
     }
     if (query && !member.name.toLocaleLowerCase(language).includes(query)) return [];
     if (member.kind === "set_menu") return [member];
-    if (diet && !member.dietary.some((label) => label === diet)) return [];
+    if (diet && !expandDietaryDeclarations(member.dietary).some((label) => label === diet))
+      return [];
     const caution = dishCaution(member, excluded);
     if (caution) {
       hidden++;
