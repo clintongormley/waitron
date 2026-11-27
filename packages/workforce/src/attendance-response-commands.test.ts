@@ -905,6 +905,173 @@ it("a worker dispute retains 480 minutes and both original and proposed times", 
   });
   await intact();
 });
+
+it.each([false, true])(
+  "accepting one full-day edit uses the day the manager saw (later shift: %s)",
+  async (laterShift) => {
+    const { automaticEntryId } = await automaticQuestion();
+    const start = (await readRecordedEntries(suite.db, { personId })).find(
+      (entry) => entry.entryKind === "in",
+    )!;
+    const edit = await command({
+      action: "propose",
+      personId,
+      date: "2026-01-05",
+      reason: "Correct both clocked times",
+      changes: [
+        { target: { entryId: start.entryId }, at: "2026-01-05T08:00:00Z", offsetMinutes: 0 },
+        { target: { entryId: automaticEntryId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
+      ],
+    });
+    await send(edit, manager);
+    const inbox = await run((tx) => api.readAttendanceInbox(tx, personId));
+    expect(
+      inbox.prompts.filter((prompt) => prompt.kind === "proposal").map((prompt) => prompt.itemId),
+    ).toEqual([edit.commandId]);
+    if (laterShift) {
+      await clock("2026-01-05T19:00:00Z");
+      await run((tx) =>
+        backend.clockOut(tx, {
+          nodeId,
+          personId,
+          at: "2026-01-05T20:00:00Z",
+          offsetMinutes: 0,
+          origin,
+        }),
+      );
+    }
+    await send(await command({ action: "accept", itemId: edit.commandId }));
+    const day = await run((tx) => api.readAttendanceDay(tx, { personId, date: "2026-01-05" }));
+    expect(day.record.sessions.map((session) => session.workedMinutes)).toEqual(
+      laterShift ? [600, 60] : [600],
+    );
+    expect(day.approval?.status).toBe(laterShift ? "pending" : "approved");
+    await intact();
+  },
+);
+it("replacing a request and then a dispute keeps both histories and can settle on the worker's request", async () => {
+  const { questionId, automaticEntryId } = await automaticQuestion();
+  const request = await send(
+    await command({
+      action: "request",
+      questionId,
+      reason: "I left at six",
+      changes: [
+        { target: { entryId: automaticEntryId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
+      ],
+    }),
+  );
+  let replaces = request.entryIds[0]!;
+  for (const [time, reason] of [
+    ["18:30", "First edit"],
+    ["19:00", "Second edit"],
+  ]) {
+    const edit = await command({
+      action: "propose",
+      personId,
+      date: "2026-01-05",
+      replaces,
+      reason: reason!,
+      changes: [
+        { target: { entryId: automaticEntryId }, at: `2026-01-05T${time}:00Z`, offsetMinutes: 0 },
+      ],
+    });
+    await send(edit, manager);
+    const inbox = await run((tx) => api.readAttendanceInbox(tx, personId));
+    expect(inbox.prompts.map((prompt) => prompt.itemId)).toEqual([edit.commandId]);
+    const disagree = await command({
+      action: "disagree",
+      itemId: edit.commandId,
+      reason: "Six was right",
+    });
+    await send(disagree);
+    replaces = edit.commandId;
+    const queue = await run((tx) => api.readAttendanceManagerQueue(tx));
+    expect(queue.items.map(({ id, status }) => [id, status])).toEqual([[replaces, "disputed"]]);
+  }
+  const settle = await command({ action: "approve", itemId: replaces });
+  const result = await send(settle, manager);
+  expect(await send(settle, manager)).toEqual({ ...result, replayed: true });
+  const day = await run((tx) => api.readAttendanceDay(tx, { personId, date: "2026-01-05" }));
+  expect(day.record.sessions.map((session) => session.endedAt)).toEqual([
+    "2026-01-05T18:00:00.000Z",
+  ]);
+  expect(
+    day.record.entries
+      .filter(({ entry }) => entry.correctionStatus === "disputed")
+      .map(({ entry }) => entry.correctionReason),
+  ).toEqual(["Six was right", "Six was right"]);
+  expect(day.approval?.status).toBe("approved");
+  expect(await run((tx) => api.readAttendanceManagerQueue(tx))).toEqual({
+    items: [],
+    finishedDays: [],
+  });
+  await intact();
+});
+
+it.each([false, true])(
+  "taking the worker's clocked time settles a dispute (earlier manager edit: %s)",
+  async (earlierEdit) => {
+    await clock("2026-01-05T09:00:00Z");
+    await run((tx) =>
+      backend.clockOut(tx, {
+        nodeId,
+        personId,
+        at: "2026-01-05T17:00:00Z",
+        offsetMinutes: 0,
+        origin,
+      }),
+    );
+    const end = (await readRecordedEntries(suite.db, { personId })).find(
+      (entry) => entry.entryKind === "out",
+    )!;
+    let target = end.entryId;
+    if (earlierEdit) {
+      const first = await command({
+        action: "propose",
+        personId,
+        date: "2026-01-05",
+        reason: "Earlier edit",
+        changes: [{ target: { entryId: target }, at: "2026-01-05T17:30:00Z", offsetMinutes: 0 }],
+      });
+      await send(first, manager);
+      const accepted = await send(await command({ action: "accept", itemId: first.commandId }));
+      target = accepted.entryIds[0]!;
+    }
+    const edit = await command({
+      action: "propose",
+      personId,
+      date: "2026-01-05",
+      reason: "Thought the worker stayed",
+      changes: [{ target: { entryId: target }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 }],
+    });
+    await send(edit, manager);
+    await send(
+      await command({
+        action: "disagree",
+        itemId: edit.commandId,
+        reason: "I clocked out correctly",
+      }),
+    );
+    const decision = await command({ action: "approve", itemId: edit.commandId });
+    await send(decision, manager);
+    const day = await run((tx) => api.readAttendanceDay(tx, { personId, date: "2026-01-05" }));
+    expect(day.record.entries.find(({ entry }) => entry.entryId === end.entryId)).toMatchObject({
+      entry: { eventAt: "2026-01-05T17:00:00.000Z" },
+      effective: !earlierEdit,
+    });
+    expect(day.record.sessions.map((session) => session.endedAt)).toEqual([
+      "2026-01-05T17:00:00.000Z",
+    ]);
+    expect(day.approval?.status).toBe("approved");
+    expect(await run((tx) => api.readAttendanceManagerQueue(tx))).toEqual({
+      items: [],
+      finishedDays: [],
+    });
+    await intact();
+  },
+);
+
 it("approval after a frozen 480-minute period adds a live 60-minute impact without changing the closure", async () => {
   const { questionId, automaticEntryId } = await automaticQuestion();
   const frozen = await run((tx) =>
@@ -952,6 +1119,10 @@ it("approval after a frozen 480-minute period adds a live 60-minute impact witho
     },
   ]);
   expect(await suite.db.select().from(api.payPeriodClosures)).toEqual(stored);
+  expect(
+    (await run((tx) => api.readAttendanceDay(tx, { personId, date: "2026-01-05" }))).approval
+      ?.status,
+  ).toBe("approved");
   await intact();
 });
 

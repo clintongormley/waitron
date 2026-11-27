@@ -51,6 +51,23 @@ it.each(
 )("parses manager action $action", (value) => {
   expect(parse(value, "manager")).toEqual(value);
 });
+it("accepts a day edit with two retimes and a replaced item only on the manager path", () => {
+  const proposal = {
+    ...base,
+    action: "propose",
+    personId,
+    date: "2026-01-05",
+    replaces: itemId,
+    reason: "Fix both times",
+    changes: [
+      { ...change, target: { entryId: questionId } },
+      { ...change, target: { entryId: extraId }, at: "2026-01-05T17:00:00Z" },
+    ],
+  };
+  expect(parse(proposal, "manager")).toEqual(proposal);
+  invalid(proposal);
+  invalid({ ...proposal, date: null }, "manager");
+});
 it("normalizes UUID spellings and trims the reason without changing the chosen instant or offset", () => {
   expect(
     parse({

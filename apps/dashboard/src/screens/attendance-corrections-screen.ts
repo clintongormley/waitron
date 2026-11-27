@@ -34,18 +34,20 @@ import {
   attendanceFinishedDaysStyles,
   renderAttendanceFinishedDays,
 } from "./attendance-finished-days.js";
+import {
+  attendanceDisputeStyles,
+  dayEditorRows,
+  renderDisputeComparison,
+} from "./attendance-day-editor.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { wallClock } from "../date-utils.js";
+import { hoursDate, periodLabel, periodStep, requestedPeriodLabel } from "../hours-format.js";
 import {
-  hoursDate,
-  hoursTime,
-  periodLabel,
-  periodStep,
-  requestedPeriodLabel,
-} from "../hours-format.js";
-import { storedAttendanceTime } from "../widgets/attendance-history.js";
+  attendanceStatus as statusLabel,
+  managerAttendanceHistory,
+} from "../widgets/attendance-history.js";
 import "../widgets/attendance-proposal-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -55,22 +57,6 @@ import "@waitron/ui/src/components/wt-button.js";
 const validCloseGrace = (value: string) => /^(?:[0-9]|10)$/.test(value);
 
 type Entry = AttendanceDayView["record"]["entries"][number]["entry"];
-function statusLabel(status: CorrectionItem["status"]): string {
-  switch (status) {
-    case "waiting-manager":
-      return t("attendance.waiting_manager");
-    case "waiting-worker":
-      return t("attendance.waiting_worker");
-    case "approved":
-      return t("attendance.approved");
-    case "declined":
-      return t("attendance.declined");
-    case "disputed":
-      return t("attendance.disputed");
-    case "overtaken":
-      return t("attendance.overtaken");
-  }
-}
 
 @customElement("dashboard-attendance-corrections-screen")
 export class AttendanceCorrectionsScreen extends LitElement {
@@ -82,6 +68,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
     baseStyles,
     pageTitleStyles,
     attendanceFinishedDaysStyles,
+    attendanceDisputeStyles,
     css`
       :host {
         display: block;
@@ -107,6 +94,9 @@ export class AttendanceCorrectionsScreen extends LitElement {
       }
       .selectors {
         grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--wt-form-max-width)), 1fr));
+      }
+      .screen[hidden] {
+        display: none;
       }
       .close-grace {
         display: grid;
@@ -174,6 +164,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
   @state() private reasonRefusal = "";
   @state() private editorOpen = false;
   @state() private editorChanges: AttendanceChange[] = [];
+  @state() private editorRequested: AttendanceChange[] = [];
   @state() private uncertain = false;
   @state() private retry = false;
   #api?: AttendanceApi;
@@ -181,6 +172,8 @@ export class AttendanceCorrectionsScreen extends LitElement {
   #initialized = false;
   #actionWait?: AbortController;
   #editorRevision = "";
+  #editorReplaces?: string;
+  #editorReturnFocus?: HTMLElement;
   #pending: AttendanceCommand | null = null;
   readonly #queries = new QueryController(
     this,
@@ -219,6 +212,12 @@ export class AttendanceCorrectionsScreen extends LitElement {
         changed.has("mode"))
     )
       void this.#start();
+  }
+  override updated(changed: PropertyValues): void {
+    if (changed.has("editorOpen") && !this.editorOpen) {
+      this.#editorReturnFocus?.focus();
+      this.#editorReturnFocus = undefined;
+    }
   }
   async #loadExportOptions(): Promise<void> {
     const read = ++this.#exportRead;
@@ -603,10 +602,10 @@ export class AttendanceCorrectionsScreen extends LitElement {
     this.selectedItemId = item.id;
     this.view = null;
     const change = item.changes[0]!;
-    this.date = wallClock(change.at, change.offsetMinutes).date;
+    this.date = item.date ?? wallClock(change.at, change.offsetMinutes).date;
     void this.#day();
   }
-  #edit(changes: AttendanceChange[]): void {
+  #edit(changes: AttendanceChange[], item?: CorrectionItem): void {
     if (
       !this.isConnected ||
       this.#blocked ||
@@ -615,10 +614,19 @@ export class AttendanceCorrectionsScreen extends LitElement {
     )
       return;
     this.#editorRevision = this.view.revision;
-    this.editorChanges = structuredClone(changes);
+    this.#editorReplaces = item?.id;
+    this.#editorReturnFocus = this.shadowRoot?.activeElement as HTMLElement | undefined;
+    this.editorRequested = item ? structuredClone(changes) : [];
+    this.editorChanges = dayEditorRows(this.view, changes);
     this.actionError = "";
     this.reasonRefusal = "";
     this.editorOpen = true;
+  }
+  #editSelected(item: CorrectionItem): void {
+    this.#edit(
+      item.direction === "worker_request" ? item.changes : (item.workerVersion?.changes ?? []),
+      item,
+    );
   }
   #retime(entry: Entry): void {
     this.#edit([
@@ -629,6 +637,12 @@ export class AttendanceCorrectionsScreen extends LitElement {
     this.#edit(kinds.map((missingKind) => ({ target: { missingKind }, at: "", offsetMinutes: 0 })));
   }
   #canApprove(item: CorrectionItem): boolean {
+    if (item.direction === "manager_proposal")
+      return (
+        item.status === "disputed" &&
+        !!item.workerVersion &&
+        item.personId !== this.lookups?.viewer.personId
+      );
     return (
       item.direction === "worker_request" &&
       item.status === "waiting-manager" &&
@@ -677,6 +691,8 @@ export class AttendanceCorrectionsScreen extends LitElement {
       commandId: crypto.randomUUID(),
       expectedRevision: this.#editorRevision,
       personId: this.view.personId,
+      date: this.view.date,
+      ...(this.#editorReplaces !== undefined && { replaces: this.#editorReplaces }),
       ...event.detail,
     });
   }
@@ -809,40 +825,19 @@ export class AttendanceCorrectionsScreen extends LitElement {
     if (this.retry && this.#pending) void this.#send(this.#pending, true);
   }
   #history(entry: Entry) {
-    const author = entry.extension?.authorKind ?? "worker";
-    const label =
-      entry.extension?.respondsToEntryId || entry.entryKind === "confirmation"
-        ? t("attendance.response")
-        : entry.entryKind === "correction"
-          ? t("attendance.proposed")
-          : t("attendance.original");
     const timeZone = this.mode === "hours" ? this.view?.timeZone : undefined;
-    const time = timeZone
-      ? hoursTime(entry.eventAt, entry.offsetMinutes, timeZone, undefined, this.periodFrom?.start)
-      : storedAttendanceTime(entry.eventAt, entry.offsetMinutes);
-    const recordedAt = timeZone
-      ? dateTimeFormat(currentLocale(), {
-          dateStyle: "medium",
-          timeStyle: "short",
-          timeZone,
-        }).format(new Date(entry.recordedAt))
-      : entry.recordedAt;
-    return html`<li>
-      <span data-entry-kind
-        >${["in", "out", "break_start", "break_end"].includes(entry.entryKind) ? t(`clock.${entry.entryKind as "in" | "out" | "break_start" | "break_end"}`) : entry.extension?.missingEntryKind ? t(`clock.${entry.extension.missingEntryKind}`) : nothing}</span
-      ><span> · ${label}: </span><time datetime=${entry.eventAt}>${time}</time>
-      <p>
-        ${author === "automatic" ? t("attendance.author_automatic") : this.#person(entry.recordedByPersonId ?? entry.personId)}
-        · ${t("attendance.recorded")}: <time datetime=${entry.recordedAt}>${recordedAt}</time>
-      </p>
-      ${entry.correctionReason ? html`<p>${entry.correctionReason}</p>` : nothing}${entry.extension?.selfApproved ? html`<p>${t("attendance.self_approved")}</p>` : nothing}
-    </li>`;
+    return managerAttendanceHistory(
+      entry,
+      (id) => this.#person(id),
+      timeZone,
+      this.periodFrom?.start,
+    );
   }
   override render() {
     const selected = this.#selected;
     const disabled = this.#blocked || this.editorOpen || !this.lookups;
     const ownDay = this.view?.personId === this.lookups?.viewer.personId;
-    return html`<div class="screen">
+    const screen = html`<div class="screen" ?hidden=${this.editorOpen}>
       <h1>${t(this.mode === "hours" ? "hours.tab" : "attendance.queue_heading")}</h1>
       ${this.mode === "hours" ? this.#periodControls(disabled) : nothing}
       <div class="selectors">
@@ -899,9 +894,9 @@ export class AttendanceCorrectionsScreen extends LitElement {
               html`<article>
                 <p>
                   <strong>${this.#person(item.personId)}</strong> ·
-                  ${wallClock(item.changes[0]!.at, item.changes[0]!.offsetMinutes).date}
+                  ${item.date ?? wallClock(item.changes[0]!.at, item.changes[0]!.offsetMinutes).date}
                 </p>
-                <p>${item.reason}</p>
+                ${item.status === "disputed" ? renderDisputeComparison(item, item.date ?? wallClock(item.changes[0]!.at, item.changes[0]!.offsetMinutes).date) : html`<p>${item.reason}</p>`}
                 <wt-button
                   data-detail
                   .disabled=${disabled}
@@ -945,7 +940,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
                   </article>`,
               )}
               ${selected?.status === "waiting-manager" && !selected.readyToApply ? html`<p>${t("attendance.sequence_blocked")}</p>` : nothing}
-              ${selected ? html`<div class="actions">${this.#canApprove(selected) ? html`<wt-button data-approve variant="primary" .disabled=${disabled} @click=${() => this.#settle("approve")}>${t("attendance.approve")}</wt-button>` : nothing}${this.#canDecline(selected) ? html`<wt-button data-decline variant="danger" .disabled=${disabled} @click=${() => this.#settle("decline")}>${t("attendance.decline")}</wt-button>` : nothing}</div>` : nothing}
+              ${selected ? html`<div class="actions">${this.#canApprove(selected) ? html`<wt-button data-approve variant="primary" .disabled=${disabled} @click=${() => this.#settle("approve")}>${t(selected.status === "disputed" ? "attendance.take_worker_time" : "attendance.approve")}</wt-button>` : nothing}${!ownDay && (selected.status === "waiting-manager" || selected.status === "disputed") ? html`<wt-button data-edit-day variant="secondary" .disabled=${disabled} @click=${() => this.#editSelected(selected)}>${t("action.edit")}</wt-button>` : nothing}${this.#canDecline(selected) ? html`<wt-button data-decline variant="danger" .disabled=${disabled} @click=${() => this.#settle("decline")}>${t("attendance.decline")}</wt-button>` : nothing}</div>` : nothing}
               ${ownDay ? html`<p><a data-own-hours href="/my-schedule/view/hours">${t("attendance.self_change")}</a></p>` : html`<div class="actions">${(["in", "out", "break_start", "break_end"] as const).map((kind) => html`<wt-button data-add-kind=${kind} variant="primary" .disabled=${disabled} @click=${() => this.#missing([kind])}>${t("attendance.add_missing")} · ${t(`clock.${kind}`)}</wt-button>`)}<wt-button data-add-shift variant="primary" .disabled=${disabled} @click=${() => this.#missing(["in", "out"])}>${t("attendance.add_shift")}</wt-button><wt-button data-add-break variant="primary" .disabled=${disabled} @click=${() => this.#missing(["break_start", "break_end"])}>${t("attendance.add_break")}</wt-button></div>`}
             </section>`
           : nothing
@@ -969,9 +964,13 @@ export class AttendanceCorrectionsScreen extends LitElement {
           this.exportOpen = false;
         }}
       ></dashboard-attendance-export-dialog>
+    </div>`;
+    return html`${screen}
       <dashboard-attendance-proposal-dialog
         .view=${this.view}
         .open=${this.editorOpen}
+        .workerName=${this.view ? this.#person(this.view.personId) : ""}
+        .requestedChanges=${this.editorRequested}
         .initialChanges=${this.editorChanges}
         .timeZone=${this.view?.timeZone ?? "UTC"}
         .busy=${this.busy}
@@ -985,8 +984,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
         }}
         @retry-attendance=${() => void this.#retryRead()}
         @retry-attendance-command=${() => this.#retryCommand()}
-      ></dashboard-attendance-proposal-dialog>
-    </div>`;
+      ></dashboard-attendance-proposal-dialog>`;
   }
 }
 declare global {

@@ -88,7 +88,7 @@ describe.each(["light", "dark"] as const)("manager Hours accessibility in %s", (
               await click(m.root, "[data-add-shift]");
               const editor = m.root.querySelector("dashboard-attendance-proposal-dialog")!;
               await editor.updateComplete;
-              await editor.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+              expect(editor.shadowRoot!.querySelector("h1")).not.toBeNull();
               expect(editor.open).toBe(true);
             } else {
               const count = m.reads.length;

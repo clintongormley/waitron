@@ -1,6 +1,11 @@
 import type { AttendanceResponseReceipt, CorrectionItem } from "./attendance-contract.js";
 import type { TimeEntryRecord } from "./projection.js";
-import { compareRecording, effectiveClockEntries, sameSubject } from "./effective-entries.js";
+import {
+  compareRecording,
+  effectiveClockEntries,
+  originalEntry,
+  sameSubject,
+} from "./effective-entries.js";
 import { recordRoot } from "./record-projection.js";
 import { correctionGroupCanApply } from "./corrections.js";
 import { createHash } from "node:crypto";
@@ -61,14 +66,22 @@ export function projectCorrectionItems(
     .sort(compareRecording);
   const byId = new Map(entries.map((e) => [e.entryId, e]));
   const requestById = new Map(requests.map((r) => [r.entryId, r]));
-  const effectiveIds = new Set(effectiveClockEntries(entries).map((e) => e.entryId));
+  const effective = new Map(effectiveClockEntries(entries).map((entry) => [entry.entryId, entry]));
+  const replacements = new Set<string>();
+  const approvals = new Set<string>();
+  const receipts = new Map(commands.map((command) => [command.id, command.input]));
+  for (const { input } of commands) {
+    if (input.action === "propose" && input.replaces) replacements.add(input.replaces);
+    if (input.action === "approve") approvals.add(input.itemId);
+  }
   const assigned = new Set<string>();
-  const groups: { id: string; requests: TimeEntryRecord[] }[] = [];
+  const groups: { id: string; requests: TimeEntryRecord[]; fullDay?: boolean }[] = [];
   for (const command of commands) {
+    const fullDay = command.input.action === "propose" && command.input.date !== undefined;
     if (
       (command.action !== "request" && command.action !== "propose") ||
-      command.entryIds.length !== 2 ||
-      new Set(command.entryIds).size !== 2
+      (!fullDay && command.entryIds.length !== 2) ||
+      new Set(command.entryIds).size !== command.entryIds.length
     )
       continue;
     const members = command.entryIds.map((id) => requestById.get(id));
@@ -77,40 +90,49 @@ export function projectCorrectionItems(
     const pair = members as TimeEntryRecord[];
     const statuses = pair.map((r) => responses(entries, r).at(-1)?.correctionStatus);
     if (new Set(statuses).size !== 1) continue;
-    groups.push({ id: command.id, requests: pair });
+    groups.push({ id: command.id, requests: pair, fullDay });
     pair.forEach((r) => assigned.add(r.entryId));
   }
   for (const request of requests) {
     if (!assigned.has(request.entryId)) groups.push({ id: request.entryId, requests: [request] });
   }
   groups.sort((a, b) => compareRecording(a.requests[0]!, b.requests[0]!));
-  return groups.map((group) => {
+  const items = groups.map((group): CorrectionItem => {
     const first = group.requests[0]!;
     const answers = group.requests.flatMap((r) => responses(entries, r)).sort(compareRecording);
     const lastAnswer = answers.at(-1);
     const overtaken = group.requests.some(
-      (r) => r.correctsEntryId && !effectiveIds.has(r.correctsEntryId),
+      (r) => r.correctsEntryId && !effective.has(r.correctsEntryId),
     );
+    const replaced = replacements.has(group.id);
+    const settled = lastAnswer?.correctionStatus === "disputed" && approvals.has(group.id);
     const status: CorrectionItem["status"] =
       lastAnswer?.correctionStatus === "approved"
         ? "approved"
         : lastAnswer?.correctionStatus === "declined"
           ? "declined"
-          : lastAnswer?.correctionStatus === "disputed"
-            ? "disputed"
-            : overtaken
-              ? "overtaken"
-              : first.extension!.direction === "manager_proposal"
-                ? "waiting-worker"
-                : "waiting-manager";
+          : replaced || settled
+            ? "overtaken"
+            : lastAnswer?.correctionStatus === "disputed"
+              ? "disputed"
+              : overtaken
+                ? "overtaken"
+                : first.extension!.direction === "manager_proposal"
+                  ? "waiting-worker"
+                  : "waiting-manager";
     const roots = new Set(group.requests.map((r) => recordRoot(r, byId).entryId));
+    const input = receipts.get(group.id);
     return {
       id: group.id,
       requestEntryIds: group.requests.map((r) => r.entryId),
       personId: first.personId,
       direction: first.extension!.direction!,
       status,
-      readyToApply: !lastAnswer && !overtaken && correctionGroupCanApply(entries, group.requests),
+      readyToApply:
+        !lastAnswer &&
+        !overtaken &&
+        !replaced &&
+        correctionGroupCanApply(entries, group.requests, group.fullDay),
       responseEntryIds: answers.map((e) => e.entryId),
       changes: group.requests.map((r) => ({
         target: r.correctsEntryId
@@ -121,10 +143,40 @@ export function projectCorrectionItems(
       })),
       reason: first.correctionReason!,
       requestedByPersonId: first.recordedByPersonId!,
+      ...(input?.action === "propose" && input.date && { date: input.date }),
+      ...(replaced && { replaced: true }),
       selfApproved: answers.some((e) => e.extension?.selfApproved === true),
       history: entries
         .filter((e) => sameSubject(e, first) && roots.has(recordRoot(e, byId).entryId))
         .sort(compareRecording),
     };
   });
+  const byItemId = new Map(items.map((item) => [item.id, item]));
+  for (const item of items) {
+    if (item.status !== "disputed") continue;
+    let previous = receipts.get(item.id);
+    while (previous?.action === "propose" && previous.replaces) {
+      const request = byItemId.get(previous.replaces);
+      if (request?.direction === "worker_request") {
+        const requests = request.requestEntryIds.map((id) => requestById.get(id)!);
+        if (correctionGroupCanApply(entries, requests))
+          item.workerVersion = { itemId: request.id, changes: request.changes };
+        break;
+      }
+      previous = receipts.get(previous.replaces);
+    }
+    if (item.workerVersion) continue;
+    const changes = item.changes.flatMap(({ target }) => {
+      const time = "entryId" in target ? effective.get(target.entryId) : undefined;
+      const workerTime =
+        time?.extension?.direction === "worker_request" ? time : time && originalEntry(time, byId);
+      return workerTime &&
+        (workerTime.recordedByPersonId === item.personId ||
+          workerTime.extension?.direction === "worker_request")
+        ? [{ target, at: workerTime.eventAt, offsetMinutes: workerTime.offsetMinutes }]
+        : [];
+    });
+    if (changes.length === item.changes.length) item.workerVersion = { changes };
+  }
+  return items;
 }

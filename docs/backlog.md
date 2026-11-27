@@ -602,8 +602,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
   Pass 3's third part (27 November; §7.14): the working-time record stores daily approvals and
   the Hours reads carry the status for each finished day. In the dashboard's **To approve** list,
-  managers see requests and disputes and can approve the displayed finished days together. Still
-  open: clocking in and out with breaks, My hours, the manager's day editor and dispute resolution,
+  managers can approve the displayed finished days together, edit a whole day for the worker to
+  review, and settle a dispute in favour of the worker's time or send another edit. Still
+  open: clocking in and out with breaks, My hours,
   **To approve** on the till, export markers for approval and disputes (the labour adviser is asked
   L8), the cash drawer's screens, and waiter floats (A240).
   Pass 3's last part (27 November; §7.16–§7.18, not started): no blank screen while loading (grey

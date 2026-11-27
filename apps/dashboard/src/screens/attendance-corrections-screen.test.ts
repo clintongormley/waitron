@@ -391,6 +391,13 @@ describe("dashboard attendance corrections", () => {
           expect(rect.right, element.outerHTML).toBeLessThanOrEqual(boundary.right + 1);
           expect(rect.left, element.outerHTML).toBeGreaterThanOrEqual(boundary.left - 1);
         }
+        await click(m.root, "[data-edit-day]");
+        const editor = m.root.querySelector("dashboard-attendance-proposal-dialog")!;
+        await editor.updateComplete;
+        const save = editor.shadowRoot!.querySelector("[data-save]")!;
+        const bounds = save.getBoundingClientRect();
+        expect(bounds.right).toBeLessThanOrEqual(boundary.right + 1);
+        expect(bounds.width).toBeGreaterThan(0);
       } finally {
         await page.viewport(previous.width, previous.height);
       }
@@ -467,6 +474,7 @@ describe("dashboard attendance corrections", () => {
       ...event,
       action: "propose",
       personId: "worker",
+      date: "2026-10-14",
       expectedRevision: "revision-1",
       commandId: expect.any(String),
     });
@@ -539,6 +547,48 @@ describe("dashboard attendance corrections", () => {
     await expect.poll(() => m.root.querySelector("[data-approve]")).toBeNull();
     expect(m.root.textContent).toContain("replaced this request");
   });
+});
+
+it("edits the whole day on one page and sends only changed times with the worker request link", async () => {
+  const m = await mount();
+  const out = m.data.day.record.entries[0]!;
+  m.data.day.record.entries.unshift({
+    ...out,
+    author: { kind: "worker", personId: "worker" },
+    entry: {
+      ...out.entry,
+      entryId: "in-1",
+      entryKind: "in",
+      eventAt: "2026-10-14T08:00:00.000Z",
+      sequenceNo: 1,
+    },
+  });
+  await details(m.root);
+  await click(m.root, "[data-edit-day]");
+  const editor = m.root.querySelector("dashboard-attendance-proposal-dialog")!;
+  await editor.updateComplete;
+  const form = editor.shadowRoot!;
+  expect(form.querySelector("h1")?.textContent).toContain("Ana Worker");
+  expect(form.querySelector("[name=attendanceTime0]")).toHaveProperty("value", "10:00");
+  expect(form.querySelector("[name=attendanceTime1]")).toHaveProperty("value", "18:30");
+  expect(form.textContent).toContain("Waitron recorded 18:00");
+  expect(form.textContent).toContain("Worker asked for 18:30");
+  await change(form, "attendanceTime1", "19:00");
+  expect(form.textContent).toContain("Worked would be 9 hours");
+  await change(form, "attendanceReason", "Confirmed with the shift lead");
+  expect(form.querySelector("[data-save]")?.textContent).toContain("Save and send to Ana Worker");
+  await click(form, "[data-save]");
+  await expect
+    .poll(() => m.commands[0])
+    .toMatchObject({
+      action: "propose",
+      date: "2026-10-14",
+      replaces: "request-1",
+      reason: "Confirmed with the shift lead",
+      changes: [
+        { target: { entryId: "out-1" }, at: "2026-10-14T17:00:00.000Z", offsetMinutes: 120 },
+      ],
+    });
 });
 
 it("a changed live day preserves an edited proposal, blocks its stale submission, and retains the new history", async () => {
@@ -650,6 +700,7 @@ it("a refused proposal naming reason marks the field and retains the draft for a
   const dialog = m.root.querySelector<LitElement>("dashboard-attendance-proposal-dialog")!;
   await dialog.updateComplete;
   await change(dialog.shadowRoot!, "attendanceReason", "The real end");
+  await change(dialog.shadowRoot!, "attendanceTime0", "19:00");
   m.refuse("management.request_invalid", "reason");
   await click(dialog.shadowRoot!, "[data-save]");
   await expect
@@ -698,6 +749,12 @@ it("a worker's dispute delivered by the live feed updates the mounted manager de
     {
       ...m.data.items[0]!,
       status: "disputed",
+      responseEntryIds: ["worker-response"],
+      workerVersion: {
+        changes: [
+          { target: { entryId: "out-1" }, at: "2026-10-14T16:00:00.000Z", offsetMinutes: 120 },
+        ],
+      },
       history: [
         ...item.history,
         {
@@ -718,6 +775,16 @@ it("a worker's dispute delivered by the live feed updates the mounted manager de
     .toContain("I left at the original time");
   expect(m.root.querySelector("[data-day]")!.textContent).toContain("Recorded response");
   expect(m.root.textContent).toContain("Disputed");
+  await expect
+    .poll(() => m.root.querySelector("[data-dispute-comparison]")?.textContent)
+    .toContain("Manager proposed 18:30");
+  const card = m.root.querySelector("[data-dispute-comparison]")!;
+  expect(card.textContent).toContain("Worker’s time 18:00");
+  expect(card.textContent).toContain("I left at the original time");
+  await details(m.root);
+  expect(m.root.querySelector("[data-approve]")?.textContent).toContain("Take the worker’s time");
+  await click(m.root, "[data-approve]");
+  await expect.poll(() => m.commands[0]).toMatchObject({ action: "approve", itemId: item.id });
 });
 
 it("names the recorded event kind and can propose one missing clock-out without inventing a clock-in", async () => {
@@ -727,9 +794,9 @@ it("names the recorded event kind and can propose one missing clock-out without 
   await click(m.root, '[data-add-kind="out"]');
   const form = m.root.querySelector<LitElement>("dashboard-attendance-proposal-dialog")!;
   await form.updateComplete;
-  expect(form.shadowRoot!.querySelectorAll("wt-input[type=date]")).toHaveLength(1);
-  await change(form.shadowRoot!, "attendanceDate0", "2026-10-14");
-  await change(form.shadowRoot!, "attendanceTime0", "20:30");
+  expect(form.shadowRoot!.querySelectorAll("wt-input[type=date]")).toHaveLength(2);
+  await change(form.shadowRoot!, "attendanceDate1", "2026-10-14");
+  await change(form.shadowRoot!, "attendanceTime1", "20:30");
   await change(form.shadowRoot!, "attendanceReason", "Missed the finish");
   await click(form.shadowRoot!, "[data-save]");
   await expect.poll(() => m.commands.length).toBe(1);
@@ -742,6 +809,7 @@ it("names the recorded event kind and can propose one missing clock-out without 
       { target: { missingKind: "out" }, at: "2026-10-14T18:30:00.000Z", offsetMinutes: 120 },
     ],
     reason: "Missed the finish",
+    date: "2026-10-14",
   });
 });
 
@@ -931,6 +999,7 @@ it("the proposal's own recovery controls check a lost command before explicitly 
   )!;
   await form.updateComplete;
   await change(form.shadowRoot!, "attendanceReason", "Late close");
+  await change(form.shadowRoot!, "attendanceTime0", "19:00");
   m.refuse("lost");
   m.receipt(null, true);
   await click(form.shadowRoot!, "[data-save]");
@@ -959,10 +1028,10 @@ it("proposes an explicit missing break pair as one command", async () => {
   const form = m.root.querySelector<LitElement>("dashboard-attendance-proposal-dialog")!;
   await form.updateComplete;
   for (const [name, value] of [
-    ["attendanceDate0", "2026-10-14"],
-    ["attendanceTime0", "12:00"],
     ["attendanceDate1", "2026-10-14"],
-    ["attendanceTime1", "12:30"],
+    ["attendanceTime1", "12:00"],
+    ["attendanceDate2", "2026-10-14"],
+    ["attendanceTime2", "12:30"],
     ["attendanceReason", "Forgot the break"],
   ])
     await change(form.shadowRoot!, name!, value!);
@@ -971,6 +1040,7 @@ it("proposes an explicit missing break pair as one command", async () => {
   expect(m.commands[0]).toEqual({
     action: "propose",
     personId: "worker",
+    date: "2026-10-14",
     expectedRevision: "revision-1",
     commandId: expect.any(String),
     changes: [

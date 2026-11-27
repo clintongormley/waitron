@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, index } from "drizzle-orm/sqlite-core";
 import { enumCheck, enumType, id, json, table, tsString } from "@waitron/db";
 import { persons } from "@waitron/identity";
-import type { AttendanceCommandPayload } from "../attendance-contract.js";
+import type { AttendanceResponseReceipt } from "../attendance-contract.js";
 import { attendanceQuestions } from "./attendance.js";
 
 const responseAction = enumType([
@@ -29,7 +29,7 @@ export const attendanceAnswers = table(
       .references(() => persons.id, { onDelete: "restrict" }),
     questionId: id("question_id"),
     action: responseAction("action").notNull(),
-    input: json<AttendanceCommandPayload>("input").notNull(),
+    input: json<AttendanceResponseReceipt["input"]>("input").notNull(),
     entryIds: json<string[]>("entry_ids").notNull(),
     createdAt: tsString("created_at").notNull(),
   },

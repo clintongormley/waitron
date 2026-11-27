@@ -243,6 +243,7 @@ it("a lost proposal recovers its receipt, closes the editor and reports a follow
   const editor = m.root.querySelector("dashboard-attendance-proposal-dialog")!;
   await editor.updateComplete;
   await change(editor.shadowRoot!, "attendanceReason", "Closed late");
+  await change(editor.shadowRoot!, "attendanceTime0", "19:30");
   await editor.updateComplete;
   const receipt = deferred<unknown>();
   m.refuse("lost");
@@ -313,6 +314,7 @@ it("retries an absent proposal receipt with the original UUID and body", async (
   const editor = m.root.querySelector("dashboard-attendance-proposal-dialog")!;
   await editor.updateComplete;
   await change(editor.shadowRoot!, "attendanceReason", "Finish was later");
+  await change(editor.shadowRoot!, "attendanceTime0", "19:30");
   await editor.updateComplete;
   m.refuse("lost");
   await click(editor.shadowRoot!, "[data-save]");

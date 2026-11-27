@@ -171,11 +171,12 @@ function assertDecisionPair(requests: readonly TimeEntryRecord[]): void {
 export function correctionGroupCanApply(
   entries: readonly TimeEntryRecord[],
   requests: readonly TimeEntryRecord[],
+  fullDay = false,
 ): boolean {
   const first = requests[0];
   if (
     !first ||
-    requests.length > 2 ||
+    (!fullDay && requests.length > 2) ||
     new Set(requests.map((r) => r.entryId)).size !== requests.length
   )
     return false;
@@ -195,7 +196,8 @@ export function correctionGroupCanApply(
     )
   )
     return false;
-  if (requests.length === 2 && !isMissingPair([...requests].sort(compareEvents))) return false;
+  if (!fullDay && requests.length === 2 && !isMissingPair([...requests].sort(compareEvents)))
+    return false;
   const effective = effectiveClockEntries(entries).filter((e) => e.personId === first.personId);
   const targets = new Set<string>();
   const additions: TimeEntryRecord[] = [];
@@ -447,12 +449,15 @@ export async function requestCorrectionGroup(
   tx: Transaction,
   inputs: readonly CorrectionRequestInput[],
   mode: "request" | "propose",
+  fullDay = false,
+  settles?: string,
 ): Promise<string[]> {
-  if (inputs.length === 1) return [await requestCorrection(tx, inputs[0]!, mode === "propose")];
+  if (!fullDay && inputs.length === 1)
+    return [await requestCorrection(tx, inputs[0]!, mode === "propose")];
   const firstInput = inputs[0];
   if (
     !firstInput ||
-    inputs.length !== 2 ||
+    (!fullDay && inputs.length !== 2) ||
     inputs.some(
       (input) =>
         input.nodeId !== firstInput.nodeId ||
@@ -469,18 +474,27 @@ export async function requestCorrectionGroup(
     prepared.push(next);
   }
   const first = prepared[0]!;
-  if (!isMissingPair(prepared.map((p) => p.change))) correctionInvalid("invalid_group");
+  if (!fullDay && !isMissingPair(prepared.map((p) => p.change))) correctionInvalid("invalid_group");
   const entries = await readRecordedEntries(tx, { personId: first.change.personId });
   if (
     !correctionGroupCanApply(
       entries,
       prepared.map((p) => p.change),
+      fullDay,
     )
   )
     correctionInvalid("invalid_group");
   const ids: string[] = [];
-  for (const [index, { entry }] of prepared.entries())
-    ids.push((await appendToChain(tx, { nodeId: inputs[index]!.nodeId }, entry)).id);
+  for (const [index, { entry }] of prepared.entries()) {
+    const final: TimeEntryAppend = settles
+      ? {
+          ...entry,
+          correctionStatus: "approved",
+          extension: { ...entry.extension!, respondsToEntryId: settles },
+        }
+      : entry;
+    ids.push((await appendToChain(tx, { nodeId: inputs[index]!.nodeId }, final)).id);
+  }
   return ids;
 }
 
@@ -488,17 +502,21 @@ export async function decideCorrectionGroup(
   tx: Transaction,
   input: Omit<CorrectionDecisionInput, "correctionId"> & { correctionIds: readonly string[] },
   action: "approve" | "accept" | "decline" | "disagree",
+  fullDay = false,
 ): Promise<string[]> {
   if (input.correctionIds.length === 1)
     return [
       await decideCorrection(tx, { ...input, correctionId: input.correctionIds[0]! }, action),
     ];
-  if (input.correctionIds.length !== 2 || new Set(input.correctionIds).size !== 2)
+  if (
+    (!fullDay && input.correctionIds.length !== 2) ||
+    new Set(input.correctionIds).size !== input.correctionIds.length
+  )
     correctionInvalid("invalid_group");
   const prepared = [];
   for (const correctionId of input.correctionIds)
     prepared.push(await prepareDecision(tx, { ...input, correctionId }, action));
-  assertDecisionPair(prepared.map((p) => p.request));
+  if (!fullDay) assertDecisionPair(prepared.map((p) => p.request));
   const first = prepared[0]!;
   const entries = await readRecordedEntries(tx, { personId: first.request.personId });
   if (
@@ -506,6 +524,7 @@ export async function decideCorrectionGroup(
     !correctionGroupCanApply(
       entries,
       prepared.map((p) => p.request),
+      fullDay,
     )
   )
     correctionInvalid("invalid_group");
