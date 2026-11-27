@@ -407,7 +407,7 @@ it.each([
   await replace(value);
   expect(await verify()).toEqual(result("invalid"));
 });
-it("binds the vault's and the latest install's type to the type the PFX names", async () => {
+it("passes a vault and latest install that agree on a type the PFX's policies do not name", async () => {
   await capture();
   await replace({ ...payload(), certKind: "sello" });
   both((db) =>
@@ -415,6 +415,11 @@ it("binds the vault's and the latest install's type to the type the PFX names", 
       .prepare("update verifactu_certificates set kind='sello' where node_id=? and installed_at=?")
       .run(TAXPAYER_A.nodeId, createdAt),
   );
+  expect(await verify()).toEqual(result("passed"));
+});
+it("refuses a vault type that differs from the latest install's", async () => {
+  await capture();
+  await replace({ ...payload(), certKind: "sello" });
   expect(await verify()).toEqual(result("invalid"));
 });
 it("keeps a supported vault with unsupported PFX encryption unsupported", async () => {
