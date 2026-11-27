@@ -1,5 +1,7 @@
 import { X509Certificate } from "node:crypto";
 import { createSecureContext, type PeerCertificate, TLSSocket } from "node:tls";
+import type { CertKind } from "./aeat-transport.js";
+import { certificateKind } from "./certificate-policy.js";
 
 export type OpenRefusal = "passphrase_wrong" | "old_encryption" | "no_private_key" | "unreadable";
 
@@ -10,6 +12,7 @@ export interface CertificateDetails {
   validFrom: Date;
   validUntil: Date;
   fingerprint: string;
+  kind: CertKind;
 }
 
 export type OpenResult =
@@ -66,6 +69,7 @@ export function openCertificateFile(pfx: Buffer, passphrase: string): OpenResult
         validFrom: x509.validFromDate,
         validUntil: x509.validToDate,
         fingerprint: x509.fingerprint256,
+        kind: certificateKind(x509.raw),
       },
     };
   } catch (error) {

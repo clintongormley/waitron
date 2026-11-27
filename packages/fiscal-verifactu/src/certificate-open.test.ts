@@ -39,6 +39,18 @@ describe("bounded certificate opening", () => {
     });
   });
 
+  it("carries the certificate's kind through the opener", async () => {
+    const seal = makeAuthority().issue({ policies: ["0.4.0.194112.1.3"] });
+    expect(await openCertificate(seal.pfx, seal.passphrase)).toMatchObject({
+      ok: true,
+      details: { kind: "sello" },
+    });
+    expect(await openCertificate(candidate.pfx, candidate.passphrase)).toMatchObject({
+      ok: true,
+      details: { kind: "representante" },
+    });
+  });
+
   it("ends hostile-cost opening while other work keeps running", async () => {
     const asn = forge.asn1.fromDer(candidate.pfx.toString("binary"));
     const mac = (asn.value as forge.asn1.Asn1[])[2]!;

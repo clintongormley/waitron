@@ -21,7 +21,26 @@ describe("openCertificateFile", () => {
         validFrom: new Date("2026-01-01T00:00:00Z"),
         validUntil: new Date("2030-01-01T00:00:00Z"),
         fingerprint: candidate.fingerprint,
+        kind: "representante",
       },
+    });
+  });
+
+  it("reads a certificate carrying a seal policy as a seal, and its other details as before", () => {
+    const seal = authority.issue({ policies: ["1.3.6.1.4.1.5734.3.11.4", "0.4.0.194112.1.1"] });
+    expect(openCertificateFile(seal.pfx, seal.passphrase)).toMatchObject({
+      ok: true,
+      details: { kind: "sello", organisation: "WAITRON SL", fingerprint: seal.fingerprint },
+    });
+  });
+
+  it("reads a certificate carrying a representative policy as a representative", () => {
+    const representative = authority.issue({
+      policies: ["1.3.6.1.4.1.5734.3.11.1", "0.4.0.194112.1.0"],
+    });
+    expect(openCertificateFile(representative.pfx, representative.passphrase)).toMatchObject({
+      ok: true,
+      details: { kind: "representante" },
     });
   });
 
