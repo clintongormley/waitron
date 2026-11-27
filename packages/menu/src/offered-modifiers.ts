@@ -301,6 +301,7 @@ function offeredFrom(
           maxPicks: entry.list.maxPicks,
           items: entry.list.items.flatMap((item): OfferedExtraItem[] => {
             const product = facts.get(item.productId);
+            const { measure, ...unit } = item.unit;
             return product === undefined
               ? []
               : [
@@ -308,7 +309,7 @@ function offeredFrom(
                     ...product,
                     price: item.price,
                     portion: item.portion,
-                    unit: item.unit,
+                    unit: includeEveryModifierItem ? { ...unit, measure } : unit,
                     maxQuantity: item.maxQuantity,
                     preselected: item.preselected,
                   },

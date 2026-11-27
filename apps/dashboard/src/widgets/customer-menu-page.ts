@@ -10,6 +10,7 @@ import {
   type PublicGuestMenu,
 } from "@waitron/shared";
 import { applyTokens, baseStyles, NUTRITION_ICONS, registerIcons } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
@@ -19,6 +20,13 @@ registerIcons(NUTRITION_ICONS);
 
 type Words = ReturnType<typeof guestMenuWords>;
 type PageMember = { member: GuestMember; sectionId?: string };
+type MenuEntry = Exclude<GuestMember, { kind: "section" }>;
+type OpenDetail = {
+  member: MenuEntry;
+  button: HTMLElement;
+  top: number;
+  left: number;
+};
 
 function matchingMember(member: GuestMember, query: string, language: string): GuestMember | null {
   if (member.kind !== "section")
@@ -50,21 +58,193 @@ function icon(name: string, label: string) {
   return html`<wt-icon name=${name} role="img" aria-label=${label} title=${label}></wt-icon>`;
 }
 
+function allergenLabels(allergens: GuestDeclarations["allergens"], { text }: Words) {
+  return ALLERGEN_CODES.filter((code) => allergens && Object.hasOwn(allergens, code)).map(
+    (code) => {
+      const kinds = allergens![code]!.kinds?.map((kind) => text[kind]!).join(", ");
+      return { code, kinds, label: kinds ? `${text[code]} (${kinds})` : text[code]! };
+    },
+  );
+}
+
 function declarations({ allergens, dietary }: GuestDeclarations, { language, text }: Words) {
   return html`<span class="declarations" lang=${language}>
-    ${
-      allergens === null
-        ? nothing
-        : ALLERGEN_CODES.filter((code) => Object.hasOwn(allergens, code)).map((code) => {
-            const kinds = allergens[code]!.kinds?.map((kind) => text[kind]!).join(", ");
-            return html`<span>
-              ${icon(`allergen-${code}`, kinds ? `${text[code]} (${kinds})` : text[code]!)}
-              ${kinds ? html`<span aria-hidden="true">${kinds}</span>` : nothing}
-            </span>`;
-          })
-    }
+    ${allergenLabels(allergens, { language, text }).map(
+      ({ code, kinds, label }) =>
+        html`<span>
+          ${icon(`allergen-${code}`, label)}
+          ${kinds ? html`<span aria-hidden="true">${kinds}</span>` : nothing}
+        </span>`,
+    )}
     ${dietary.map((diet) => icon(`diet-${diet}`, text[diet]!))}
   </span>`;
+}
+
+function declarationLabels({ allergens, dietary }: GuestDeclarations, words: Words) {
+  return {
+    allergens: allergenLabels(allergens, words).map(({ code, label }) => ({
+      icon: `allergen-${code}`,
+      label,
+    })),
+    diets: dietary.map((diet) => ({ icon: `diet-${diet}`, label: words.text[diet]! })),
+  };
+}
+
+function namedAllergenLabels(
+  { name, allergens }: Pick<GuestChoice, "name" | "allergens">,
+  words: Words,
+) {
+  return allergenLabels(allergens, words).map(({ code, kinds, label }) => ({
+    icon: `allergen-${code}`,
+    label: `${name}: ${kinds || label}`,
+    category: kinds ? words.text[code] : undefined,
+  }));
+}
+
+function detailDeclarations(
+  heading: string,
+  labels: { icon: string; label: string; category?: string }[],
+  language: string,
+) {
+  return labels.length
+    ? html`<div lang=${language}>
+        <h3>${heading}</h3>
+        <div class="declarations">
+          ${labels.map(
+            ({ icon: glyph, label, category }) =>
+              html`<span>
+                ${category ? icon(glyph, category) : html`<wt-icon name=${glyph} aria-hidden="true"></wt-icon>`}
+                ${label}
+              </span>`,
+          )}
+        </div>
+      </div>`
+    : nothing;
+}
+
+function courseLabel(
+  { count, courses }: Extract<MenuEntry, { kind: "set_menu" }>["lines"][number],
+  language: string,
+) {
+  const text = new Intl.ListFormat(language, { type: "disjunction" }).format(courses);
+  return count === 1 ? text : `${new Intl.NumberFormat(language).format(count)} × ${text}`;
+}
+
+function unitRate(unit: string) {
+  return unit === "" ? "" : `/${unit}`;
+}
+
+function dishPrice(
+  { price: { min, max }, unit }: Extract<MenuEntry, { kind: "product" }>,
+  language: string,
+) {
+  const minimum = formatMoney(min, language);
+  return `${min === max ? minimum : `${minimum}–${formatMoney(max, language)}`}${unitRate(unit)}`;
+}
+
+function choiceRow(
+  name: string,
+  price: string,
+  value: GuestDeclarations,
+  words: Words,
+  showAllergenIcons = false,
+) {
+  const { allergens, diets } = declarationLabels(value, words);
+  const labels = (showAllergenIcons ? diets : [...allergens, ...diets]).map(({ label }) => label);
+  return html`<li>
+    <span>
+      ${name}
+      ${
+        showAllergenIcons && allergens.length
+          ? html`<span class="declarations" lang=${words.language}>
+              ${allergens.map(({ icon: glyph, label }) => icon(glyph, label))}
+            </span>`
+          : nothing
+      }
+    </span>
+    ${price ? html`<span class="choice-price">${price}</span>` : nothing}
+    ${
+      labels.length
+        ? html`<span class="description" lang=${words.language}>${labels.join(", ")}</span>`
+        : nothing
+    }
+  </li>`;
+}
+
+function detailContent(member: MenuEntry, words: Words, language: string) {
+  const money = (value: string) => formatMoney(value, language);
+  if (member.kind === "set_menu") {
+    const allergens = member.lines.flatMap(({ choices }) =>
+      choices.flatMap((choice) => namedAllergenLabels(choice, words)),
+    );
+    return html`<p class="set-price" lang=${words.language}>
+        ${words.text.perPerson!.replace("{price}", money(member.price))}
+      </p>
+      ${member.lines.map(
+        (line) =>
+          html`<h3>${courseLabel(line, language)}</h3>
+            ${
+              line.choices.length
+                ? html`<ul class="choices" role="list">
+                    ${line.choices.map((choice) =>
+                      choiceRow(
+                        choice.name,
+                        choice.price === "0.00" ? "" : `+ ${money(choice.price)}`,
+                        choice,
+                        words,
+                        true,
+                      ),
+                    )}
+                  </ul>`
+                : nothing
+            }`,
+      )}
+      ${detailDeclarations(words.text.allergens!, allergens, words.language)}`;
+  }
+  const quantity = new Intl.NumberFormat(language, { maximumFractionDigits: 3 });
+  const { allergens, diets } = declarationLabels(member, words);
+  const extraAllergens = member.modifiers.flatMap((group) =>
+    group.kind === "extras" ? group.items.flatMap((item) => namedAllergenLabels(item, words)) : [],
+  );
+  return html`
+    <p class="set-price"><strong>${dishPrice(member, language)}</strong></p>
+    ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
+    ${
+      member.variants.length
+        ? html`<h3 lang=${words.language}>${words.text.variants}</h3>
+            <ul class="choices" role="list">
+              ${member.variants.map((value) =>
+                choiceRow(value.name, `${money(value.price)}${unitRate(value.unit)}`, value, words),
+              )}
+            </ul>`
+        : nothing
+    }
+    ${member.modifiers.map((group) => {
+      if (group.kind === "options") {
+        return group.labels.length
+          ? html`<h3>${group.name}</h3>
+              <p class="description">${group.labels.join(" · ")}</p>`
+          : nothing;
+      }
+      return group.items.length
+        ? html`<h3>${group.name}</h3>
+            <ul class="choices" role="list">
+              ${group.items.map((value) => {
+                const amount = Number(value.portion);
+                let size = "";
+                if (value.servingUnit !== undefined) {
+                  if (amount !== 1) size = ` · ${quantity.format(amount)} × ${value.servingUnit}`;
+                } else if (value.unit) {
+                  size = ` · ${quantity.format(amount)} ${value.unit}`;
+                }
+                return choiceRow(`${value.name}${size}`, money(value.price), value, words, true);
+              })}
+            </ul>`
+        : nothing;
+    })}
+    ${detailDeclarations(words.text.allergens!, [...allergens, ...extraAllergens], words.language)}
+    ${detailDeclarations(words.text.diet!, diets, words.language)}
+  `;
 }
 
 function legend({ language, text }: Words) {
@@ -90,11 +270,12 @@ export class CustomerMenuPage extends LitElement {
         container-type: inline-size;
       }
       article {
+        --menu-padding: var(--wt-space-4);
         background: var(--wt-color-bg);
         color: var(--wt-color-text);
         font-family: var(--wt-font-family);
         font-size: var(--wt-font-size-md);
-        padding: var(--wt-space-4);
+        padding: var(--menu-padding);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-lg);
         overflow-wrap: anywhere;
@@ -176,15 +357,17 @@ export class CustomerMenuPage extends LitElement {
         grid-column: 1 / -1;
       }
       .set-menu {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        justify-content: space-between;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
         gap: var(--wt-space-2);
         padding: var(--wt-space-4);
         border: 1px solid var(--wt-color-primary);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface);
+      }
+      .set-menu .set-price {
+        white-space: nowrap;
       }
       .dish {
         display: grid;
@@ -193,10 +376,36 @@ export class CustomerMenuPage extends LitElement {
         align-items: start;
         gap: var(--wt-space-3);
       }
-      .dish strong,
-      .set-menu strong {
+      .entry-name,
+      .set-price {
         font-size: var(--wt-font-size-lg);
         font-weight: var(--wt-font-weight-bold);
+      }
+      .entry-name {
+        background: transparent;
+        border: 0;
+        padding: 0;
+        font-family: inherit;
+        color: var(--wt-color-primary-text);
+        text-align: start;
+        cursor: pointer;
+      }
+      .entry-name:hover,
+      .entry-name:focus-visible {
+        text-decoration: underline;
+      }
+      .entry-name:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      .back {
+        --wt-action-text: var(--wt-color-primary-text);
+        --wt-action-radius: var(--wt-radius-full);
+      }
+      .back[variant="ghost"] {
+        /* Align the inset chevron with the title and leave room inside the hover outline. */
+        --wt-button-padding-inline: var(--wt-space-2);
+        margin-inline-start: calc(-1 * var(--wt-space-3));
       }
       img {
         display: block;
@@ -204,6 +413,34 @@ export class CustomerMenuPage extends LitElement {
         aspect-ratio: 1;
         object-fit: cover;
         border-radius: var(--wt-radius-md);
+      }
+      .detail-lead:has(img) {
+        position: relative;
+        margin-block-start: calc(-1 * var(--menu-padding));
+        margin-inline: calc(-1 * var(--menu-padding));
+        margin-block-end: var(--wt-space-4);
+      }
+      .detail-lead:has(img) .back {
+        position: absolute;
+        inset-block-start: var(--menu-padding);
+        inset-inline-start: var(--menu-padding);
+      }
+      .detail-lead img {
+        inline-size: 100%;
+        max-block-size: 320px;
+        aspect-ratio: 4 / 3;
+        border-radius: calc(var(--wt-radius-lg) - 1px) calc(var(--wt-radius-lg) - 1px) 0 0;
+      }
+      .detail h2 {
+        font-size: calc(1.4 * var(--wt-font-size-xl));
+        margin-block-end: var(--wt-space-1);
+      }
+      .detail .set-price {
+        margin: 0;
+      }
+      .detail h3 {
+        margin: var(--wt-space-4) 0 var(--wt-space-2);
+        color: var(--wt-color-primary-text);
       }
       .description,
       .declarations {
@@ -222,12 +459,35 @@ export class CustomerMenuPage extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-1);
       }
-      .choices {
-        padding-inline-start: var(--wt-space-4);
+      .detail .declarations {
+        column-gap: var(--wt-space-2);
       }
-      .choices li + li,
-      .extra {
-        margin-block-start: var(--wt-space-1);
+      .detail div.declarations {
+        column-gap: var(--wt-space-4);
+      }
+      .detail .declarations wt-icon[name^="allergen-"] {
+        color: inherit;
+      }
+      .choices .declarations {
+        margin-inline-start: var(--wt-space-1);
+        vertical-align: text-bottom;
+      }
+      .choices {
+        padding: 0;
+        list-style: none;
+      }
+      .choices li {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        column-gap: var(--wt-space-3);
+        padding-block: var(--wt-space-2);
+        border-block-end: 1px solid var(--wt-color-border);
+      }
+      .choices .description {
+        grid-column: 1;
+      }
+      .choice-price {
+        text-align: end;
       }
       footer {
         border-block-start: 1px solid var(--wt-color-border);
@@ -242,7 +502,7 @@ export class CustomerMenuPage extends LitElement {
       }
       @container (min-width: 640px) {
         article {
-          padding: var(--wt-space-6);
+          --menu-padding: var(--wt-space-6);
         }
         header {
           grid-template-columns: minmax(0, 1fr) minmax(0, 24ch);
@@ -268,6 +528,7 @@ export class CustomerMenuPage extends LitElement {
   @property({ attribute: "data-theme" }) theme: "light" | "dark" = "light";
 
   @state() private query = "";
+  @state() private detail?: OpenDetail;
   #source?: Element | Document;
   #jumpedAt?: number;
   #resize = new ResizeObserver(() => this.#watchScroll());
@@ -301,6 +562,7 @@ export class CustomerMenuPage extends LitElement {
   }
 
   #markSection = (): void => {
+    if (this.detail) return;
     const strip = this.renderRoot.querySelector("nav");
     if (!strip) return;
     const links = Array.from(strip.querySelectorAll("a"));
@@ -351,6 +613,48 @@ export class CustomerMenuPage extends LitElement {
     this.#selectLink(strip, link);
   }
 
+  async #openDetail(member: MenuEntry, event: MouseEvent): Promise<void> {
+    const scroller = this.#scroller();
+    this.detail = {
+      member,
+      button: event.currentTarget as HTMLElement,
+      top: scroller?.scrollTop ?? 0,
+      left: scroller?.scrollLeft ?? 0,
+    };
+    await this.updateComplete;
+    const heading = this.renderRoot.querySelector<HTMLElement>(".detail h2")!;
+    if (scroller) {
+      const edge = this.#source instanceof Document ? 0 : scroller.getBoundingClientRect().top;
+      scroller.scrollTop += heading.parentElement!.getBoundingClientRect().top - edge;
+      scroller.scrollLeft = 0;
+    }
+    // A pointer click on the already-focused button can leave its keyboard focus ring visible.
+    heading.focus({ preventScroll: true, focusVisible: event.detail === 0 });
+  }
+
+  async #closeDetail({ button, top, left }: OpenDetail): Promise<void> {
+    this.detail = undefined;
+    await this.updateComplete;
+    this.#scroller()?.scrollTo(left, top);
+    const box = button.getBoundingClientRect();
+    const hit = this.shadowRoot!.elementFromPoint(
+      box.left + box.width / 2,
+      box.top + box.height / 2,
+    );
+    if (hit !== button) button.scrollIntoView({ block: "center", inline: "nearest" });
+    button.focus({ preventScroll: true });
+  }
+
+  #entryName(member: MenuEntry) {
+    return html`<button
+      class="entry-name"
+      type="button"
+      @click=${(event: MouseEvent) => void this.#openDetail(member, event)}
+    >
+      ${member.name}
+    </button>`;
+  }
+
   protected override updated(): void {
     const root = this.renderRoot.querySelector<HTMLElement>("article");
     if (root && !root.hasAttribute("data-wt-theme-root")) applyTokens(root);
@@ -361,6 +665,7 @@ export class CustomerMenuPage extends LitElement {
   protected override render() {
     const menu = this.menu;
     if (!menu) return nothing;
+    const detail = this.detail;
     const words = guestMenuWords(menu.language, this.defaultLanguage);
     const query = this.query.trim().toLocaleLowerCase(menu.language);
     const visible = menu.members.flatMap((item, index): PageMember[] => {
@@ -370,18 +675,6 @@ export class CustomerMenuPage extends LitElement {
     const sections = visible.filter(({ member }) => member.kind === "section");
     const noResults = query.length > 0 && visible.length === 0;
     const money = (value: string) => formatMoney(value, menu.language);
-    const unit = (value: string) => (value === "" ? "" : `/${value}`);
-    const quantity = new Intl.NumberFormat(menu.language, { maximumFractionDigits: 3 });
-    const choice = (value: GuestChoice & { portion?: string }) => {
-      const size =
-        value.portion !== undefined && value.unit
-          ? ` · ${quantity.format(Number(value.portion))} ${value.unit}`
-          : "";
-      const rate = value.portion === undefined ? unit(value.unit) : "";
-      return html`<li>
-        ${value.name}${size} ${money(value.price)}${rate} ${declarations(value, words)}
-      </li>`;
-    };
     let firstPhoto = true;
 
     const members = (items: PageMember[], level: number): TemplateResult =>
@@ -406,37 +699,27 @@ export class CustomerMenuPage extends LitElement {
               </section>`;
             case "set_menu":
               return html`<div class="set-menu">
-                <strong>${member.name}</strong><span>${money(member.price)}</span>
+                <div>
+                  ${this.#entryName(member)}
+                  ${
+                    member.lines.length
+                      ? html`<p class="description">
+                          ${member.lines.map((line) => courseLabel(line, menu.language)).join(", ")}
+                        </p>`
+                      : nothing
+                  }
+                </div>
+                <strong class="set-price">${money(member.price)}</strong>
               </div>`;
             case "product": {
-              const { min, max } = member.price;
               const image = member.image && MEDIA_FILENAME.test(member.image) ? member.image : null;
               const eager = firstPhoto && image !== null;
               if (image !== null) firstPhoto = false;
               return html`<div class="dish">
                 <div>
-                  <strong>${member.name}</strong> ${declarations(member, words)}
+                  ${this.#entryName(member)} ${declarations(member, words)}
                   ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
-                  <p class="price">
-                    ${min === max ? money(min) : `${money(min)}–${money(max)}`}${unit(member.unit)}
-                  </p>
-                  ${
-                    member.variants.length
-                      ? html`<ul class="choices">
-                          ${member.variants.map(choice)}
-                        </ul>`
-                      : nothing
-                  }
-                  ${member.modifiers.map((group) =>
-                    group.kind === "extras" && group.items.length
-                      ? html`<div class="extra">
-                          ${group.name}
-                          <ul class="choices">
-                            ${group.items.map(choice)}
-                          </ul>
-                        </div>`
-                      : nothing,
-                  )}
+                  <p class="price">${dishPrice(member, menu.language)}</p>
                 </div>
                 ${
                   image === null
@@ -453,42 +736,66 @@ export class CustomerMenuPage extends LitElement {
           }
         })}
       </div>`;
+    const photo = detail?.member.kind === "product" ? detail.member.image : null;
+    const detailImage = photo && MEDIA_FILENAME.test(photo) ? photo : null;
     return html`<article lang=${menu.language} data-theme=${this.theme}>
-      <header>
-        <h2>${menu.name}</h2>
-        <search lang=${words.language}>
-          <wt-input
-            name="dish-search"
-            type="search"
-            hide-label
-            label=${words.text.searchDishes!}
-            placeholder=${words.text.searchDishes!}
-            autocapitalize="none"
-            autocorrect="off"
-            spellcheck="false"
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              this.query = event.detail.value;
-            }}
-          ></wt-input>
-        </search>
-      </header>
       ${
-        sections.length
-          ? html`<nav lang=${words.language} aria-label=${words.text.menuSections!}>
-              ${sections.map(
-                ({ member, sectionId }) =>
-                  html`<a href=${`#${sectionId}`} lang=${menu.language} @click=${this.#jump}
-                    >${member.name}</a
-                  >`,
-              )}
-            </nav>`
+        detail
+          ? html`<div class="detail" data-detail>
+              <div class="detail-lead">
+                ${detailImage ? html`<img src=${liveMediaImage(detailImage, "display")} alt="" />` : nothing}
+                <wt-button
+                  class="back"
+                  variant=${detailImage ? "secondary" : "ghost"}
+                  icon="chevron-left"
+                  lang=${words.language}
+                  aria-label=${words.text.backToMenu!}
+                  @click=${() => void this.#closeDetail(detail)}
+                  >${words.text.menu}</wt-button
+                >
+              </div>
+              <h2 tabindex="-1">${detail.member.name}</h2>
+              ${detailContent(detail.member, words, menu.language)}
+            </div>`
           : nothing
       }
-      <div role="status" lang=${words.language} class=${noResults ? "no-results" : nothing}>
-        ${noResults ? words.text.noDishes : nothing}
+      <div ?hidden=${detail !== undefined}>
+        <header>
+          <h2>${menu.name}</h2>
+          <search lang=${words.language}>
+            <wt-input
+              name="dish-search"
+              type="search"
+              hide-label
+              label=${words.text.searchDishes!}
+              placeholder=${words.text.searchDishes!}
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                event.stopPropagation();
+                this.query = event.detail.value;
+              }}
+            ></wt-input>
+          </search>
+        </header>
+        ${
+          sections.length
+            ? html`<nav lang=${words.language} aria-label=${words.text.menuSections!}>
+                ${sections.map(
+                  ({ member, sectionId }) =>
+                    html`<a href=${`#${sectionId}`} lang=${menu.language} @click=${this.#jump}
+                      >${member.name}</a
+                    >`,
+                )}
+              </nav>`
+            : nothing
+        }
+        <div role="status" lang=${words.language} class=${noResults ? "no-results" : nothing}>
+          ${noResults ? words.text.noDishes : nothing}
+        </div>
+        ${members(visible, 3)} ${legend(words)}
       </div>
-      ${members(visible, 3)} ${legend(words)}
     </article>`;
   }
 }

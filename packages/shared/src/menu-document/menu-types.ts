@@ -157,6 +157,7 @@ export interface OfferedExtraItem {
     abbreviation: Record<string, string>;
     precision: number;
     hardwareUnit: "kg" | "g" | "mg" | null;
+    measure?: boolean;
   };
   name: string;
   customerName: Record<string, string> | null;

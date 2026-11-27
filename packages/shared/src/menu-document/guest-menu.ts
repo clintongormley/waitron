@@ -3,7 +3,12 @@ import { matchLanguage } from "../language-match.js";
 import { ALLERGEN_CODES, type ProductAllergens } from "./allergens.js";
 import { DIETARY_LABELS, type DietaryLabel } from "./dietary-declarations.js";
 import { menuPriceRange, resolveMenuText } from "./customer-menu-presentation.js";
-import type { DocumentMember, MenuDocument } from "./menu-document-types.js";
+import type {
+  DocumentMember,
+  FrozenOffer,
+  MenuDocument,
+  PublishedSetMenu,
+} from "./menu-document-types.js";
 
 export interface GuestDeclarations {
   allergens: ProductAllergens | null;
@@ -15,11 +20,20 @@ export interface GuestChoice extends GuestDeclarations {
   unit: string;
 }
 export type GuestModifier =
-  | { kind: "extras"; name: string; items: (GuestChoice & { portion: string })[] }
+  | {
+      kind: "extras";
+      name: string;
+      items: (GuestChoice & { portion: string; servingUnit?: string })[];
+    }
   | { kind: "options"; name: string; labels: string[] };
 export type GuestMember =
   | { kind: "section"; name: string; members: GuestMember[] }
-  | { kind: "set_menu"; name: string; price: string }
+  | {
+      kind: "set_menu";
+      name: string;
+      price: string;
+      lines: { count: number; courses: string[]; choices: GuestChoice[] }[];
+    }
   | (GuestDeclarations & {
       kind: "product";
       name: string;
@@ -73,6 +87,43 @@ export function publicGuestMenu(
     abbreviation: Record<string, string>;
     staffAbbreviation: string;
   }) => (value.id === eachUnitId ? "" : text(value.abbreviation, value.staffAbbreviation));
+  const choice = (
+    offer: Pick<FrozenOffer, "unitPrice" | "unit" | "allergens" | "dietaryDeclarations">,
+    name: string,
+  ): GuestChoice => ({
+    name,
+    price: offer.unitPrice,
+    unit: unit(offer.unit),
+    ...declarations(offer.allergens, offer.dietaryDeclarations),
+  });
+  const setMenu = (set: PublishedSetMenu): GuestMember => {
+    const choices = set.root.members.flatMap(
+      (member): { course: string; choice: GuestChoice }[] => {
+        if (member.kind !== "product") return [];
+        const offer = set.offers[member.menuItemId]!;
+        if (offer.ordering === "staff_only") return [];
+        const name = text(offer.customerName, offer.name);
+        return offer.variants.length
+          ? offer.variants.map((variant) => ({
+              course: variant.countsAsCourseId,
+              choice: choice(variant, `${name} (${text(variant.customerName, variant.name)})`),
+            }))
+          : [{ course: offer.countsAsCourseId!, choice: choice(offer, name) }];
+      },
+    );
+    return {
+      kind: "set_menu",
+      name: text(set.terms.names, set.name),
+      price: set.terms.price,
+      lines: set.terms.lines.map(({ count, courseIds }) => ({
+        count,
+        courses: courseIds.map((id) => text(set.courses[id]!.names, set.courses[id]!.name)),
+        choices: choices
+          .filter(({ course }) => courseIds.includes(course))
+          .map((item) => item.choice),
+      })),
+    };
+  };
   const walk = (members: DocumentMember[]): GuestMember[] =>
     members.flatMap((member): GuestMember[] => {
       if (member.kind === "section") {
@@ -83,9 +134,7 @@ export function publicGuestMenu(
       }
       if (member.kind === "set_menu") {
         const set = document.setMenus?.[member.menuId];
-        return set === undefined
-          ? []
-          : [{ kind: "set_menu", name: text(set.terms.names, set.name), price: set.terms.price }];
+        return set === undefined ? [] : [setMenu(set)];
       }
       const offer = document.offers[member.menuItemId]!;
       if (offer.ordering !== undefined && offer.ordering !== "public") return [];
@@ -98,12 +147,7 @@ export function publicGuestMenu(
           price: menuPriceRange(offer),
           unit: unit(offer.unit),
           ...declarations(offer.allergens, offer.dietaryDeclarations),
-          variants: offer.variants.map((v) => ({
-            name: text(v.customerName, v.name),
-            price: v.unitPrice,
-            unit: unit(v.unit),
-            ...declarations(v.allergens, v.dietaryDeclarations),
-          })),
+          variants: offer.variants.map((v) => choice(v, text(v.customerName, v.name))),
           modifiers: offer.offeredModifiers.map((modifier) =>
             modifier.kind === "options"
               ? {
@@ -117,6 +161,8 @@ export function publicGuestMenu(
                   items: modifier.items.map((extra) => {
                     const p = extra.presentation;
                     const parent = text(p.customerName, p.name);
+                    const { id, measure, hardwareUnit, name, staffName } = extra.unit;
+                    const serving = id !== eachUnitId && measure === false && hardwareUnit === null;
                     return {
                       name:
                         p.variantName === null
@@ -125,6 +171,7 @@ export function publicGuestMenu(
                       price: extra.price,
                       portion: extra.portion,
                       unit: unit(extra.unit),
+                      ...(serving ? { servingUnit: text(name, staffName) } : {}),
                       ...declarations(extra.addAllergens, extra.suitableFor),
                     };
                   }),

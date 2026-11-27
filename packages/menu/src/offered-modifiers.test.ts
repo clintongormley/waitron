@@ -33,6 +33,7 @@ expectTypeOf<OfferedExtraItem["unit"]>().toEqualTypeOf<{
   abbreviation: Record<string, string>;
   precision: number;
   hardwareUnit: "kg" | "g" | "mg" | null;
+  measure?: boolean;
 }>();
 
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });

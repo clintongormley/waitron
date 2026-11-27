@@ -448,8 +448,17 @@ la vista previa. Tras publicar, comprueba la versión y la hora en el encabezado
 Abre **Carta para clientes** y elige **Móvil** u **Ordenador** para comprobar el diseño publicado.
 En **Idioma** puedes revisar el texto en cada idioma del contenido. Usa **Buscar platos** para
 encontrar un plato o menú por su nombre, o elige una sección para ir a ella. Debajo de los platos
-verás la leyenda de alérgenos. Los clientes aún no pueden abrir esta página. Para
-revisar o publicar tus cambios, abre **Vista previa**.
+verás la leyenda de alérgenos. Abre un plato para comprobar sus variantes, opciones y extras.
+Consulta **Alérgenos** y **Declaraciones dietéticas** para el plato. Los iconos de alérgenos de
+cada extra aparecen junto a su nombre. También puedes consultar ese extra en **Alérgenos**.
+Consulta las declaraciones de cada variante debajo de su nombre.
+Comprueba las cantidades de los extras que se miden y el nombre completo de la unidad en los
+extras de varias raciones.
+Abre un menú para ver los órdenes de plato, las opciones y los suplementos. Consulta
+**Alérgenos** para ver los alérgenos junto al nombre de cada opción. Si una opción declara
+alérgenos o dietas, consulta los iconos de alérgenos junto a su nombre y las declaraciones dietéticas debajo.
+Elige **Carta** para seguir donde estabas. Los clientes aún no pueden abrir esta
+página. Para revisar o publicar tus cambios, abre **Vista previa**.
 
 ## Corrige la carta publicada en una emergencia {#patch-live-menu}
 
