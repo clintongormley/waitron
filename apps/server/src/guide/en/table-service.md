@@ -516,6 +516,8 @@ While the dishes are the same you still see one row, **2 × Burger**, on the bil
 dishes at the top of the order. A row parts as soon as one dish differs, for example once one burger
 is comped. Among the sent dishes a served burger stays in its row, which then reads **1 of 2
 served**. Tapping a sent row marks all of it served; **Mark served** in the row's details asks how many.
+To void or comp the burger already served, choose **Void served…** or **Comp served…** from the
+row's **More** menu; **Void…** and **Comp…** there take only the burgers not yet served.
 [**Move dishes**](table-service.md#move-dishes) lets you choose how many of a row go to another bill, each with
 its own extras. **Comp** and **Void** work on the row and let you choose how many of its dishes.
 **Change dish**, in the row's details, changes every dish of the row and lets you increase its

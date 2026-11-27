@@ -382,9 +382,10 @@ it("A803 portion grouping: a served row whose portions became ready at different
   ]);
 });
 
-/** Three identical steaks drawn as one row, s-1 served and s-2 and s-3 not, with its window open. */
-async function openPartServed(over: Partial<TillTableOrderScreen> = {}) {
-  const kindOf = (lineNo: number): Kind => (lineNo === 1 ? "served" : "fired");
+/** Three identical steaks drawn as one row, s-1 (and s-2 when `served` is 2) served and the rest
+ * not, with its window open. */
+async function openPartServed(over: Partial<TillTableOrderScreen> = {}, served = 1) {
+  const kindOf = (lineNo: number): Kind => (lineNo <= served ? "served" : "fired");
   const numbers = [3, 2, 1];
   const orders = current({
     reminder: null,
@@ -411,7 +412,9 @@ async function openPartServed(over: Partial<TillTableOrderScreen> = {}) {
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
   expect(panel.shadowRoot!.querySelectorAll("[data-sent-info]")).toHaveLength(1);
-  await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="s-2"]')!);
+  await userEvent.click(
+    panel.shadowRoot!.querySelector<HTMLElement>(`[data-sent-info="s-${served + 1}"]`)!,
+  );
   await el.updateComplete;
   return el;
 }
@@ -467,6 +470,84 @@ it.each(["open", "settled"] as const)(
     expect(q(el, "[data-sent-line-unserve]") === null).toBe(status === "settled");
     await userEvent.click(q(el, "[data-sent-line-void]"));
     expect(events).toEqual([{ lineId: "s-2", lineIds: ["s-2", "s-3"] }]);
+  },
+);
+
+it("A803 portion grouping: a part-served row's window voids and comps its served portion by itself", async () => {
+  const el = await openPartServed();
+  const cancels = capture(el, "cancel-item");
+  await openMore(el);
+  expect(text(q(el, "[data-sent-line-void-served]"))).toBe("Void served…");
+  await userEvent.click(q(el, "[data-sent-line-void-served]"));
+  expect(cancels).toEqual([{ lineId: "s-1" }]);
+  expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
+  cleanupWidgets();
+
+  const again = await openPartServed();
+  const comps = capture(again, "adjust");
+  await openMore(again);
+  expect(text(q(again, "[data-sent-line-comp-served]"))).toBe("Comp served…");
+  await userEvent.click(q(again, "[data-sent-line-comp-served]"));
+  expect(comps).toEqual([
+    {
+      kind: "comp",
+      target: expect.objectContaining({ lineId: "s-1", quantity: "1", total: "10.50" }),
+    },
+  ]);
+  expect((comps[0] as { target: object }).target).not.toHaveProperty("lineIds");
+});
+
+it("A803 portion grouping: two served portions of a part-served row are voided and comped together", async () => {
+  const el = await openPartServed({}, 2);
+  const cancels = capture(el, "cancel-item");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-void-served]"));
+  expect(cancels).toEqual([{ lineId: "s-1", lineIds: ["s-1", "s-2"] }]);
+  cleanupWidgets();
+
+  const again = await openPartServed({}, 2);
+  const comps = capture(again, "adjust");
+  await openMore(again);
+  await userEvent.click(q(again, "[data-sent-line-comp-served]"));
+  expect(comps).toEqual([
+    {
+      kind: "comp",
+      target: expect.objectContaining({ lineIds: ["s-1", "s-2"], quantity: "2", total: "21.00" }),
+    },
+  ]);
+});
+
+it("A803 portion grouping: a paid part-served row offers no Void or Comp of its served portion", async () => {
+  const el = await openPartServed({ bills: [{ ...bill, status: "settled" }] });
+  await openMore(el);
+  expect(q(el, "[data-sent-line-void]")).not.toBeNull();
+  expect(q(el, "[data-sent-line-void-served]")).toBeNull();
+  expect(q(el, "[data-sent-line-comp-served]")).toBeNull();
+});
+
+it.each(["paid", "another dish"] as const)(
+  "A803 portion grouping: a retained served Void or Comp sends nothing once %s",
+  async (change) => {
+    for (const action of ["void", "comp"] as const) {
+      const el = await openPartServed();
+      const events = capture(el, action === "void" ? "cancel-item" : "adjust");
+      await openMore(el);
+      const button = q(el, `[data-sent-line-${action}-served]`);
+      expect(button).not.toBeNull();
+      const orders = structuredClone(el.currentOrders!);
+      if (change === "paid") {
+        for (const each of orders.groups[0]!.rows) each.billStatus = "settled";
+        el.bills = [{ ...bill, status: "settled" }];
+      } else {
+        orders.groups[0]!.rows.find((each) => each.lineId === "s-1")!.note = "Rare";
+        el.lines = el.lines.map((line) => (line.id === "s-1" ? { ...line, note: "Rare" } : line));
+      }
+      el.currentOrders = orders;
+      button.click();
+      await el.updateComplete;
+      expect(events, action).toEqual([]);
+      cleanupWidgets();
+    }
   },
 );
 

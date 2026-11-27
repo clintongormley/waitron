@@ -1455,6 +1455,8 @@ export const en = {
   "table.change_dish_served_void":
     "{dish} has already been served and can no longer be changed. Use Void… to take it off the bill.",
   "table.void_line": "Void…",
+  "table.void_served": "Void served…",
+  "table.comp_served": "Comp served…",
   "table.cancel_line": "Cancel",
   "table.cancel_started": "The station has started this — cancel and bin it?",
   "table.cancel_sent": "It comes off the bill.",
@@ -3916,6 +3918,8 @@ export const es: Record<StringKey, string> = {
   "table.change_dish_served_void":
     "{dish} ya se ha servido y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
   "table.void_line": "Cancelar…",
+  "table.void_served": "Cancelar servido…",
+  "table.comp_served": "Descuento servido…",
   "table.cancel_line": "Cancelar",
   "table.cancel_started": "La estación ya lo ha empezado — ¿cancelar y tirarlo?",
   "table.cancel_sent": "Se quitará de la cuenta.",

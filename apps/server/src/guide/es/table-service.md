@@ -547,7 +547,9 @@ entre los platos enviados, arriba del pedido. La fila se separa en cuanto un pla
 ejemplo cuando a una hamburguesa se le aplica un descuento. Entre los platos enviados, una
 hamburguesa servida sigue en su fila, que entonces dice **1 de 2 servidos**. Al tocar una fila
 enviada se marca entera como servida; **Marcar
-servido** en los detalles de la fila pregunta cuántos. [**Mover platos**](table-service.md#move-dishes) te deja
+servido** en los detalles de la fila pregunta cuántos. Para cancelar o hacer un descuento a la
+hamburguesa ya servida, elige **Cancelar servido…** o **Descuento servido…** en el menú **Más** de
+la fila; **Cancelar…** y **Descuento…** solo toman las hamburguesas aún no servidas. [**Mover platos**](table-service.md#move-dishes) te deja
 elegir cuántos platos de una fila pasan a otra cuenta, cada uno con sus extras. **Descuento** y
 **Cancelar** actúan sobre la fila y te dejan elegir cuántos de sus platos. **Cambiar plato**, en los
 detalles de la fila, cambia todos los platos de la fila y permite aumentar la cantidad.

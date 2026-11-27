@@ -3477,6 +3477,16 @@ export class TillTableOrderScreen extends LitElement {
     return dishes.every((dish) => dish !== undefined && dish === dishes[0]) ? served : undefined;
   }
 
+  /** The served portions the sheet's row joins to other lines, for Void and Comp to take alone. */
+  #sentServedApart(
+    members: readonly SentSlice[] | undefined = this.#sentLineMembers(),
+  ): readonly SentSlice[] | undefined {
+    const served = this.#sentTakeBack(members);
+    return served?.some((slice) => members!.some((member) => member.row === slice.row))
+      ? undefined
+      : served;
+  }
+
   #sentLineInfo(): SentLineInfo | undefined {
     const pending = this.sentLinePending;
     if (
@@ -3754,7 +3764,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #actOnSentLine(
     pending: typeof this.sentLinePending,
-    action: "fire" | "station" | "void" | "comp",
+    action: "fire" | "station" | "void" | "comp" | "void-served" | "comp-served",
     asked = false,
   ): void {
     if (
@@ -3769,8 +3779,10 @@ export class TillTableOrderScreen extends LitElement {
       this.#askSentChangeLeave(() => this.#actOnSentLine(pending, action, true));
       return;
     }
-    const members = this.#sentLineMembers();
+    const apart = action === "void-served" || action === "comp-served";
+    const members = apart ? this.#sentServedApart() : this.#sentLineMembers();
     const slice = members?.[0];
+    if (apart) action = action === "void-served" ? "void" : "comp";
     if (
       members === undefined ||
       slice === undefined ||
@@ -3814,15 +3826,20 @@ export class TillTableOrderScreen extends LitElement {
     const takeBack = this.#sentTakeBack(members);
     const unserve =
       takeBack !== undefined && takeBack.every((member) => this.#sentBillOpen(member.row));
-    if (!fire && !station && !unserve && !canVoid && !comp) return nothing;
+    const apart = this.#sentServedApart(members);
+    const voidServed = apart !== undefined && this.#canVoidSent(apart[0]!);
+    const compServed = apart !== undefined && this.#sentCompTarget(apart) !== undefined;
+    if (!fire && !station && !unserve && !canVoid && !comp && !voidServed && !compServed)
+      return nothing;
     const pending = this.sentLinePending;
     const disabled = this.busy || this.groupCommandBusy;
     return html`<wt-row-actions label=${t("shell.more")}>
       ${fire ? html`<wt-button icon="menu-fire" variant=${disabled ? "secondary" : "primary"} data-sent-line-fire ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "fire")}>${t("table.destination_fire_now")}</wt-button>` : nothing}
       ${station ? html`<wt-button icon="menu-move" data-sent-line-station ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "station")}>${t("table.move_station")}</wt-button>` : nothing}
       ${comp ? html`<wt-button icon="menu-discount" data-sent-line-comp ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp")}>${t("comp.title")}</wt-button>` : nothing}
+      ${compServed ? html`<wt-button icon="menu-discount" data-sent-line-comp-served ?disabled=${disabled} @click=${() => this.#actOnSentLine(pending, "comp-served")}>${t("table.comp_served")}</wt-button>` : nothing}
       ${unserve ? html`<wt-button icon="menu-undo" data-sent-line-unserve aria-label=${`${t("table.unserve")} · ${slice.row.name}`} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, true)}>${t("table.unserve")}</wt-button>` : nothing}
-      ${rowActionTail(fire || station || comp || unserve, [
+      ${rowActionTail(fire || station || comp || compServed || unserve, [
         canVoid
           ? html`<wt-button
               icon="menu-remove"
@@ -3830,6 +3847,15 @@ export class TillTableOrderScreen extends LitElement {
               ?disabled=${disabled}
               @click=${() => this.#actOnSentLine(pending, "void")}
               >${t("table.void_line")}</wt-button
+            >`
+          : nothing,
+        voidServed
+          ? html`<wt-button
+              icon="menu-remove"
+              data-sent-line-void-served
+              ?disabled=${disabled}
+              @click=${() => this.#actOnSentLine(pending, "void-served")}
+              >${t("table.void_served")}</wt-button
             >`
           : nothing,
       ])}
