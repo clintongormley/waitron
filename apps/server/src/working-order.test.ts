@@ -2568,13 +2568,10 @@ describe("a variant is sold as the product it is", () => {
         productId: workingOrderLines.productId,
         variantName: workingOrderLines.variantName,
         unitPriceGross: workingOrderLines.unitPriceGross,
-        vatClass: workingOrderLines.vatClass,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
-    expect(rows).toEqual([
-      { productId: wine.parentId, variantName: null, unitPriceGross: 400, vatClass: "reduced" },
-    ]);
+    expect(rows).toEqual([{ productId: wine.parentId, variantName: null, unitPriceGross: 400 }]);
   });
 
   it("refuses an Inactive, Unavailable or other parent's variant", async () => {

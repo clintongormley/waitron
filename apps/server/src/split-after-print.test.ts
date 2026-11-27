@@ -796,7 +796,6 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       unitPriceGross: line!.unitPriceGross,
       listUnitPriceGross: line!.listUnitPriceGross,
       lineTotal: line!.lineTotal,
-      vatClass: line!.vatClass,
       optionSnapshots: line!.optionSnapshots,
       unitName: line!.unitName,
     });

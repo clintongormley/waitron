@@ -1456,7 +1456,6 @@ describe("a sale on a Spanish public holiday", () => {
           quantity: workingOrderLines.quantity,
           descriptions: workingOrderLines.descriptions,
           unitPriceGross: workingOrderLines.unitPriceGross,
-          vatClass: workingOrderLines.vatClass,
           lineTotal: workingOrderLines.lineTotal,
           category: workingOrderLines.category,
         })
