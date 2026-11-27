@@ -150,6 +150,10 @@ clicking move), selectable to say 'send these'".
   under its line, as the information window does, without its Sold out switches or Add to order ("i
   don't think this should be here"; "add to order we don't need"; "agreed for the rest").
 
+(2026-11-27) **A bill with a set menu** gains a Courses | Bill switch under the bill dropdown: Courses is
+this screen, Bill lists the set menus with their plates and the total
+([set-menu design, section 2a](2026-11-24-set-menus-automatic-grouping-design.md#2a-how-set-menus-show-on-the-tills-order-screen)).
+
 **The foot of the screen, always visible:** "Menu" on the left, then "Pay €73.20", then "Send 6"
 in teal (the number counts the new dishes). (pass 2) In a table zone set to be paid before sending
 (§9.8), Pay and Send become one button, **Pay and send**.

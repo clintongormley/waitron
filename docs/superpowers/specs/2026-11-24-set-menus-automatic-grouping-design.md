@@ -123,6 +123,8 @@ What changes:
 - **Gone from the till:** the count per set-menu type and its − and + buttons, **Add a Menú
   especial**, the "No place for this dish" question with its suggested moves, and removing an empty
   set menu. None of these mean anything once the bill does the grouping.
+- _27 November 2026: the summary and the tags below are replaced by the Courses and Bill views of
+  [section 2a](#2a-how-set-menus-show-on-the-tills-order-screen)._
 - **The summary.** At the top of the order, one folded line with the bill's set menus. Unfolded, it
   shows which dishes are in each set menu and which are à la carte (**owner**):
 
@@ -145,6 +147,100 @@ What changes:
   yet sent sit in the bill's draft (one open draft per bill, `order_drafts`,
   `packages/db/src/schema/order-drafts.ts`) and are not yet charged; the till shows the grouping
   as it would be with them, and it is saved once they are sent (**my call**).
+
+### 2a. How set menus show on the till's order screen
+
+Decided by the **owner** on 27 November 2026, in a design session over the pictures named below.
+It replaces section 2's folded summary and its tag on each dish. The owner turned down lane E's
+drawing of that summary ("no this is confusing") because it showed the grouping twice, its prices
+did not add up to the total, it put too much on screen, and it nested the à la carte dishes under
+the set menus. The owner asked for "an order line for each menu, with the relevant plates grouped
+underneath it, including any supplements", and noted that a set menu's plates are at different
+stages: "the starter may be served but the main hasn't been fired yet or is sent". The owner chose
+two views over one list grouped by set menu ("B — Courses | Bill"), then agreed the details below
+("Yes, as described"). The order screen is the one in the
+[till redesign](2026-11-26-till-handheld-redesign-design.md), section 4.
+
+- **Two views of one order, Courses and Bill**, chosen by a switch under the bill dropdown.
+- **Courses** is the redesign's order screen, unchanged: fire groups, grips, dragging, selecting,
+  rows that open, the foot. Only the price column changes on a bill with set menus. It shows what a
+  row adds on top of the set menus' prices: "in menu" for a plate a set menu covers with nothing
+  extra, "+€5.00" for a supplement or a paid extra, and an à la carte dish's own price. A folded
+  row of several of one dish shows what its plates add together, and "in menu" only when they add
+  nothing (**my call**).
+- **Bill** lists one line per set menu with its price, its plates under it with their supplements,
+  then the à la carte dishes, then the total. Every amount in it adds up to the total.
+- **An order always opens on Courses.**
+- **The switch shows only on a bill with a set menu**, counting dishes not yet sent. Any other bill
+  shows the order screen exactly as the redesign draws it.
+- **Bill is for reading.** Only its arrows do anything, folding and unfolding set menus. Sending,
+  firing, moving, removing and opening a row stay in Courses.
+- **A set menu's free place** shows as a muted plate row named after the set menu's line, "Dessert
+  or coffee · still to order", so the waiter knows it costs nothing more. A line that takes two
+  dishes shows one row per free place (**my call**).
+- **Dishes not yet sent count**, as Pay's amount on the redesign's foot already does (section 2:
+  "the till shows the grouping as it would be with them"). Their plate rows say "not sent yet".
+- **Six set menus or fewer** show each set menu as its own line, unfolded. **More than six** start
+  folded, one line per kind, with the count and the sum of their prices, supplements included
+  ("15 Lunch menu €275.00"). Its arrow unfolds it into one line per set menu, each unfolded, as a
+  row of several of one dish unfolds into rows of one.
+- **When the calculation could not try every grouping** (section 4, the search limit), a note at
+  the top of Bill says so: "With this many dishes not every way of grouping could be checked, so
+  this may not be the cheapest."
+- **On a till**, the same switch and views sit in the order column on the right (redesign section
+  8).
+- **Order of lines in Bill** (**my call**): set menus by kind in the order the menu lists them,
+  then within a kind by their earliest-added dish. À la carte dishes in the order they were added,
+  one row per dish and its options, as Courses merges them. The plates under a set menu follow the
+  order of its lines.
+
+**Words.** English: "Courses", "Bill", "in menu", "still to order", "not sent yet", "Total" and
+the note above. Spanish (**my call**, for the redesign's Spanish wording pass, section 10 there):
+"Platos", "Cuenta" (as the till already says, `floor.cue_bill`), "en el menú", "por pedir", "sin
+enviar", "Total", and "Con tantos platos no se han podido probar todas las formas de agrupar, así
+que puede que no sea la más barata."
+
+**Pictures**, outside the repository in
+`~/waitron-campaign-shared/mockups/2026-11-27-set-menus-on-the-till/`, light and dark, with their
+HTML and the script that draws them in `html/`:
+
+- `sm-ab`: frame 1 is option A, which the owner turned down (one list grouped by set menu, each
+  plate showing its own state). Frames 2 and 3 are the chosen Courses and Bill views on the same
+  table.
+- `sm-ac`: Bill with a free place (frame 1) and a very large bill (frame 2).
+- `sm-ad`: the wide till in Bill and the upright till in Courses.
+
+#### How it looks
+
+Sizes are as drawn, in pixels, built with the declared values as redesign section 14 says; the
+colour words (teal, light blue, outlined, dark, muted, small capitals) are that section's.
+
+- **The switch** (`sm-ab` 2 and 3): under the bill dropdown, 12 in from each side, 8 above it and 4
+  below. One outlined box, 8 radius, split into two halves of equal width, each 44 tall, with the
+  word centred, 15 bold, and no icon. The chosen half is dark (`--wt-color-text` fill,
+  `--wt-color-surface` text); the other is white with text in `--wt-color-text`.
+- **Courses' price column** (`sm-ab` 2): "in menu" in muted, 15 regular, where the price would
+  stand; a supplement as "+€5.00" in the price's own style. Nothing else on the rows changes.
+- **A set menu line** (`sm-ab` 3): a row as the order's rows are (redesign section 14.4), white, a
+  line under it, no grip. The quantity column is empty, or holds the count on a folded kind (16
+  semibold). The name is 16 bold, the price 15 semibold at the right, then `chevron-up` when
+  unfolded or `chevron-down` when folded at the far right, muted like a dish row's arrow.
+- **A plate under it** (`sm-ab` 3): indented 22 under the line on the page background, at least 40
+  tall, a line under it. The dish's name is 15 medium. Under it, a muted 13 line: the place it fills,
+  then its options, then "not sent yet" when it is new, joined with " · " ("Main · Medium · not
+  sent yet"). Its supplement and paid extras sit at the right, "+€5.00", in the price's style. No
+  quantity, grip or arrow.
+- **A free place** (`sm-ac` 1): a plate row whose name, the set menu line's own name, is 15 regular
+  and muted, with "still to order" muted 13 under it.
+- **À la carte rows** (`sm-ab` 3): as Courses' rows, white, with quantity, name, options and price,
+  and no grip or arrow. They follow the set menus directly, with no heading.
+- **Total** (`sm-ab` 3): a white row at least 50 tall, a line under it, "Total" at the left and the
+  amount at the right, both 18 bold, tabular figures.
+- **The note** (`sm-ac` 2): at the top of Bill, 12 in from each side and 10 from the switch and the
+  first line. An outlined box, 8 radius, padded 10 by 12. A muted information icon at the left (new:
+  a circle with an "i", 18), then the sentence, muted 14.
+- **On a till** (`sm-ad`): the order column as in the redesign's `m`, with the switch under its bill
+  dropdown.
 
 ### 3. Which set menus a bill can use
 
