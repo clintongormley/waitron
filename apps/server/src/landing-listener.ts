@@ -12,13 +12,6 @@ import type { VenueNameState } from "./mdns.js";
 import { buildServeOptions } from "./tls.js";
 
 /**
- * Bind the plain-HTTP trust/landing listener on `config.landingPort`, beside the HTTPS one. A phone
- * opening the HTTPS origin on an untrusted self-signed leaf hits the certificate interstitial before
- * any of our JS runs, so the "trust the CA" page must be served over plain HTTP. It never redirects
- * and sends no HSTS — both would strand the phone back on the interstitial.
- *
- * Public bootstrap may precede a usable leaf; operator TLS and port 0 still disable this listener.
- *
  * Takes only the fields it reads so the recovery entrypoint, which never runs `loadConfig`, can build
  * one (`node-entry.ts`).
  */
@@ -38,6 +31,14 @@ export function landingHostFor(
   return spare ? { ...config, httpHost: "127.0.0.1" } : config;
 }
 
+/**
+ * Bind the plain-HTTP trust/landing listener on `config.landingPort`, beside the HTTPS one. A phone
+ * opening the HTTPS origin on an untrusted self-signed leaf hits the certificate interstitial before
+ * any of our JS runs, so the "trust the CA" page must be served over plain HTTP. It never redirects
+ * and sends no HSTS — both would strand the phone back on the interstitial.
+ *
+ * Public bootstrap may precede a usable leaf; operator TLS and port 0 still disable this listener.
+ */
 export function startLandingListener(
   config: LandingListenerConfig,
   log: Logger,
