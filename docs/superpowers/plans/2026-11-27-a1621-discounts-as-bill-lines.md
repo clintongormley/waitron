@@ -766,6 +766,12 @@ payment covers the bill (`bill-payments.ts:1831-1836` (†)), and in Pay for ite
 6. D23 (b): Place order writes nothing; the reopen that lets crystallising write a placed order's
    lines is 7a's, so here crystallising a placed order is reached only by tests, and none inserts a
    row on a placed order except the figure's test below.
+7. One grouping of bound portions (the watcher, 27 Nov 17:00, on PR 1's review): the invoice code
+   (`projectPortionSale`, `apps/server/src/portion-sale-projection.ts`) and PR 1's calculator
+   (`filedRows`, `packages/adjustments/src/bill-discounts.ts`) share one function for which bound
+   dishes file as one row, instead of keeping two copies. PR 1's agreement test
+   (`apps/server/src/bill-discounts-filing.test.ts`) keeps running unedited over the shared function.
+   This touches the invoice path, which is why it is here and not in PR 1.
 
 **Tests (failing first).** `apps/server/src/bill-discounts-crystallise.test.ts`, with inserted rows:
 - **the shown total equals the invoice**: for each fixture of Review focus 1, `readBillDiscounts`'
