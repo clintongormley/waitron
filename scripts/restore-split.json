@@ -1,0 +1,65 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/restore.ts",
+      "targets": {
+        "apps/server/src/restore-file-placement.ts": [
+          "DB_DUMP_NAME",
+          "VENUE_FILE_MODE",
+          "restoreDatabase",
+          "PlacementFs",
+          "putBackMoved",
+          "removeIncoming",
+          "clearReplacedDatabases",
+          "replacedDatabaseFolders",
+          "discardRestoreSetAside"
+        ]
+      },
+      "keep": [
+        "MANIFEST_NAME",
+        "NODE_DUMP_NAME",
+        "SECRETS_PREFIX",
+        "TRADING_ENV_ENTRY",
+        "REPLACED_SUFFIX",
+        "IDENTITY_KEYS",
+        "RestoreDeps",
+        "PlacementDeps",
+        "RestoreHookResult",
+        "RestoreOperationRunner",
+        "ValidationDeps",
+        "ValidatedArtifact",
+        "writeStagedNodeCopy",
+        "assertStagedNodeCopy",
+        "nodeSetApplied",
+        "openStagedCopy",
+        "copyStagedCopy",
+        "validateArtifact",
+        "EntryValidationDeps",
+        "validateDatabaseEntries",
+        "validateEntryMetadata",
+        "placeValidated",
+        "writeValidated",
+        "assertArchiveNotAhead",
+        "lockRestoreTarget",
+        "restoreFromArtifact",
+        "restoreOwned",
+        "restoreSecrets",
+        "setAsideExistingIdentity",
+        "putIdentityBack",
+        "readArtifactIdentity",
+        "resolveArtifactNode",
+        "requireCopyNode",
+        "readArtifactNode",
+        "readCopyNode",
+        "wrapHookError",
+        "runRestoreHooks",
+        "openVenue",
+        "RestoreFileDeps",
+        "ValidationFileDeps",
+        "validateArtifactFile",
+        "restoreFromArtifactFile"
+      ]
+    }
+  ]
+}

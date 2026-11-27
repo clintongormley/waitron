@@ -1,0 +1,37 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/node-entry.ts",
+      "targets": {
+        "apps/server/src/node-entry-deps.ts": ["EntryDeps", "StartedEntryServer"],
+        "apps/server/src/node-entry-recovery-state.ts": [
+          "changeState",
+          "persistState",
+          "CountCheck",
+          "countWritable"
+        ]
+      },
+      "keep": [
+        "STAYED_UP_MS",
+        "CLOCK_WAIT_REASONS",
+        "CLOCK_LOOK_MS",
+        "DEFAULT_EXIT",
+        "paramsLine",
+        "failureDetail",
+        "pageLog",
+        "argumentsRefused",
+        "releaseSpareToStart",
+        "runEntry",
+        "serveStartClockWaiting",
+        "clockWaitReason",
+        "waitForClockReason",
+        "recordedCodes",
+        "recordedStartFailureCode",
+        "runAdmittedEntry",
+        "recordRefusal",
+        "bootThisProcess"
+      ]
+    }
+  ]
+}

@@ -323,7 +323,7 @@ describe("the full invoice's delivery status", () => {
     const el = await open(
       stubApi(
         f1(deliveries(history[0]!, { history }), {
-          // The server sends downloads oldest first (`readPdfDownloads`, apps/server/src/orders-list.ts).
+          // The server sends downloads oldest first (`readPdfDownloads`, apps/server/src/orders-detail.ts).
           invoicePdfDownloads: [
             download("10:00:00", "Rosa"),
             download("10:30:00", "Pepe"),

@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import * as disk from "./sync-path.js";
 import * as atomic from "./fs-atomic.js";
-import { restoreDatabase } from "./restore.js";
+import { restoreDatabase } from "./restore-file-placement.js";
 
 const roots: string[] = [];
 afterEach(async () => {

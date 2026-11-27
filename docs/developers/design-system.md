@@ -6509,7 +6509,7 @@ Move dishes picker, Items in Pay (`portionGroups`, `tabLinePortionKey`,
 `sentSlicePortionKey`, `apps/till/src/state/portion-groups.ts`), the station screen's cards and the
 pass ("2× Burger", `kitchenPortionKey`), the counter basket's retrieved order while none of it is
 paid (`foldRetrievedPortions`, `apps/till/src/state/counter-portion-rows.ts`), and the dashboard's
-order detail (`readBillLines`, `apps/server/src/orders-list.ts`). Two rows stay apart when anything
+order detail (`readBillLines`, `apps/server/src/orders-detail.ts`). Two rows stay apart when anything
 the row draws or acts on
 differs: the dish, its names and answers, note, course, release group, station, preparation state,
 held or asked for, served or not, cancellation, prices, the extras as a set with their counts, and whatever else the

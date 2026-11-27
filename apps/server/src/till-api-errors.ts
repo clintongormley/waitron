@@ -26,7 +26,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "device.forbidden_action": 403,
   "device.cash_not_allowed": 403,
   "session.not_open": 401,
-  // The same codes and statuses `device-api.ts`'s map assigns.
+  // The same codes and statuses `device-api-errors.ts`'s map assigns.
   "device.unauthorized": 401,
   ...SESSION_STATUS,
   "locale.unsupported": 400,

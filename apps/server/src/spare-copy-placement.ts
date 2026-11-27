@@ -8,7 +8,7 @@ import { NODE_FILE, PAIR_COPY_DIR, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitr
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
 import type { Logger } from "./logger.js";
-import { VENUE_FILE_MODE } from "./restore.js";
+import { VENUE_FILE_MODE } from "./restore-file-placement.js";
 import { PAIR_COPY_READY_FILE } from "./spare-copy.js";
 import { reachDisk } from "./sync-path.js";
 import {

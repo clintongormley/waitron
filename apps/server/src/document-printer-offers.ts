@@ -9,7 +9,7 @@ import { AppError } from "@waitron/shared";
 import { assertDeviceStillProven, assertProfileAction } from "./device-session.js";
 import { assertSubjectZones } from "./zone-access.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
-import { readVisibleOrder } from "./orders-list.js";
+import { readVisibleOrder } from "./orders-detail.js";
 import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
 import { expireInvoiceDeliveryClaims } from "./invoice-delivery.js";
 import { canEmailInvoice } from "./invoice-email-contact.js";

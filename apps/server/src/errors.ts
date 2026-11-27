@@ -2081,15 +2081,15 @@ declare module "@waitron/shared" {
      * without learning any module's namespaces. A non-`AppError` throw is not wrapped. */
     "restore.hook_failed": { module: string; code: string };
     /** Placing the restored database failed after part of the old one had been moved aside
-     * (`restoreDatabase`, restore.ts). `previous`: every part was put back, so the server's old
+     * (`restoreDatabase`, restore-file-placement.ts). `previous`: every part was put back, so the server's old
      * database is unchanged. `set_aside`: a part could not be put back, and what was not is in
      * `folder`, a folder inside the venue folder, which must be moved back before the server starts.
      * Carries no filesystem error text, which can name paths. */
     "restore.placement_failed": { kept: "previous" } | { kept: "set_aside"; folder: string };
     /** A start found no `venue.db` but a folder inside the venue folder, `folder`, into which a
      * restore moved the old database and which still holds files (`clearReplacedDatabases`,
-     * restore.ts). They may be the venue's only copy, so the folder is kept and the start refused
-     * until they are moved back or a restore is run again. */
+     * restore-file-placement.ts). They may be the venue's only copy, so the folder is kept and the
+     * start refused until they are moved back or a restore is run again. */
     "restore.database_set_aside": { folder: string };
     /** The owner's bucket holds no `current.json` for the kit's venue: nothing to rebuild from. */
     "restore.stream_pointer_missing": Record<string, never>;

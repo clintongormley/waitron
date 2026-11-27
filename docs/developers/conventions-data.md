@@ -3486,8 +3486,9 @@ under `FULL_DISK_BYTES`, 16 MiB, and the cause chain carries an engine result co
 code (`errcode & 0xff`) is 10 or 14, or an `ENOSPC`. `classifyStartFailure` uses it to turn
 `provisioning.database_unreachable` or `unknown` into `storage.disk_full`; a known `AppError` keeps
 its own code. The start's write-back of its unchanged count uses it to decide whether to serve the
-recovery page at once (`countWritable`, `apps/server/src/node-entry.ts`). The repair page's recover,
-summary and start-again routes and its inspection read use it too (`diskFullOr`, and the inspection's own catch, in `apps/server/src/setup-first-fiscal-api.ts`). Why 16 MiB: every
+recovery page at once (`countWritable`, `apps/server/src/node-entry-recovery-state.ts`). The repair
+page's recover, summary and start-again routes and its inspection read use it too (`diskFullOr`,
+and the inspection's own catch, in `apps/server/src/setup-first-fiscal-api.ts`). Why 16 MiB: every
 full-disk failure measured happened with at most 48 KiB free on HFS+, tmpfs and ext4 (F6, F11, F14)
 and with about 1.2 MB reported free on APFS (F1, F2, F5), and a missing folder raises 14 with room
 to spare, so the clean-up floor of 256 MiB cannot be the test.
@@ -5675,7 +5676,7 @@ So a comparison of two venue databases leaves the two tables out, as the stream 
 `tableContents` does (`apps/server/src/testing/stream-loop-scenario.ts`), and a check that lists a live or
 restored database's tables has to leave them out explicitly. The directory goes with the database it
 describes: `wipeVenueDatabases` (`apps/server/src/db-wipe.ts`), `restoreDatabase`
-(`apps/server/src/restore.ts`), placing a handover's accepted copy (`swapIn`,
+(`apps/server/src/restore-file-placement.ts`), placing a handover's accepted copy (`swapIn`,
 `apps/server/src/handover-place-copy.ts`) and placing a spare's first copy (`placeFirstCopy`,
 `apps/server/src/spare-copy-placement.ts`) remove it with `venue.db`, and the stream supervisor removes it before
 it starts Litestream on a new generation (`packages/stream/src/supervisor.ts`). What Litestream itself
@@ -6124,8 +6125,8 @@ a step's rewrite cannot land after a reload deleted the note.
 from the reset:
 
 - `wipeVenueDatabases` (`apps/server/src/db-wipe.ts`), and so every wipe;
-- `restoreDatabase` and `placeValidated` (`apps/server/src/restore.ts`), the latter before it sets
-  the old identity aside; `placeBackupDatabase` reaches `restoreDatabase` with the state folder it is
+- `restoreDatabase` (`apps/server/src/restore-file-placement.ts`) and `placeValidated`
+  (`apps/server/src/restore.ts`), which deletes the note before setting the old identity aside; `placeBackupDatabase` reaches `restoreDatabase` with the state folder it is
   given, which for a backup verification is the scratch one;
 - Start again: `deleteMarkedAttempt` (`packages/provisioning/src/first-setup-start-again-deletion.ts`),
   and `moveStartAgainUnits` and `resumeStartAgainSetAside`

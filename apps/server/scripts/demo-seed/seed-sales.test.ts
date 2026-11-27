@@ -23,7 +23,8 @@ import {
   saleId as brandSaleId,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import { listOrders, readOrderDetail } from "../../src/orders-list.js";
+import { listOrders } from "../../src/orders-list.js";
+import { readOrderDetail } from "../../src/orders-detail.js";
 import { nodeBackend, seedSales } from "./seed-sales.js";
 import type { SeedSalesDeliProduct, SeedSalesProduct, SeedSalesVenue } from "./seed-sales.js";
 

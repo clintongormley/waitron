@@ -12,7 +12,7 @@ import {
 } from "@waitron/reporting";
 import { nodeId as brandNodeId, subtractDecimal, decimal } from "@waitron/shared";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
-import { readOrderDetail } from "./orders-list.js";
+import { readOrderDetail } from "./orders-detail.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { inTx, type PartyVenue } from "./testing/party-venue.js";
 import {

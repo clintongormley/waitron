@@ -36,7 +36,8 @@ import { oldBoxStillMain } from "./handover-chart.js";
 import { destinationOperationFolders, HANDOVER_EVENT, waitHandoverTx } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import { isReadableChart } from "./membership-trust.js";
-import { INCOMING_SUFFIX, VENUE_FILE_MODE } from "./restore.js";
+import { INCOMING_SUFFIX } from "./restore.js";
+import { VENUE_FILE_MODE } from "./restore-file-placement.js";
 import { reachDisk } from "./sync-path.js";
 import "./errors.js";
 

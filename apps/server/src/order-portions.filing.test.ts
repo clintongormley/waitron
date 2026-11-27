@@ -38,7 +38,7 @@ import { resolveKitchenAllergyBlocks } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill } from "./move-bill.js";
 import type { LineNutrition } from "./line-nutrition.js";
-import { readOrderDetail } from "./orders-list.js";
+import { readOrderDetail } from "./orders-detail.js";
 import type { PortionRef } from "./testing/portion-bill.js";
 import { partyRevision } from "./parties.js";
 import { receiptLines } from "./receipt-adjustments.js";

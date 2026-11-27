@@ -33,7 +33,7 @@ import { enqueueReceiptReprint } from "./receipt-print.js";
 import { readSettledTicket } from "./till-sale.js";
 import { previewPrintJob } from "./print-job-preview.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
-import { readOrderDetail } from "./orders-list.js";
+import { readOrderDetail } from "./orders-detail.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { orderWatchZones } from "./watch-zones.js";
 

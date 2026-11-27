@@ -1553,7 +1553,7 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   Decided by the campaign watcher on 2026-11-07 (A1390 question 1): the dev stack is not a
   venue.** Only the box's entry clears them, before the server opens `venue.db`; the dev stack
   starts `src/bin.ts` and leaves them. Boot cannot clear them instead, because its first open
-  creates `venue.db` (`clearReplacedDatabases`, `apps/server/src/restore.ts`).
+  creates `venue.db` (`clearReplacedDatabases`, `apps/server/src/restore-file-placement.ts`).
 - **The first start's bucket pointer read and an operator's restore keep their own time limits and
   codes. Decided by the campaign watcher on 2026-11-07 (A1390 question 2).** 15 seconds and
   `restore.pointer_unreadable` for the read that holds a restored box's first start (it is tried
