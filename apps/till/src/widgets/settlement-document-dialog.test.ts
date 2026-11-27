@@ -803,7 +803,7 @@ describe("one line about the receipt printer while the original is unsent", () =
   const patio = equipmentItem("patio", "Patio", { kind: "receipt" });
   const noPrintersNote = {
     en: "No receipt printer is available to this device. Print the receipt from another device.",
-    es: "Este dispositivo no tiene ninguna impresora de tickets disponible. Imprime el recibo desde otro dispositivo.",
+    es: "Este dispositivo no tiene ninguna impresora de tickets disponible. Imprime el ticket desde otro dispositivo.",
   };
   const printerLines = (el: TillSettlementDocumentDialog) =>
     [

@@ -183,10 +183,10 @@ describe("Devolución names the receipt's action in Spanish", () => {
     ["give_back.under_way", "Devolución en curso"],
     ["find_page.corrections", "Devoluciones en curso"],
     ["find_page.refund", "Devolución"],
-    ["cancel_item.refund_at_till", "Devuélvelo en una caja: elige Devolución en el recibo."],
+    ["cancel_item.refund_at_till", "Devuélvelo en una caja: elige Devolución en el ticket."],
     [
       "cancel_item.free_served",
-      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuélvelo desde el recibo.",
+      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuélvelo desde el ticket.",
     ],
   ] as const)("%s", (key, wording) => {
     expect(es[key]).toBe(wording);

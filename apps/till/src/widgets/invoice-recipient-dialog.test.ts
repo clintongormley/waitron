@@ -686,7 +686,7 @@ describe("till-invoice-recipient-dialog email delivery", () => {
     ],
     [
       "es-ES",
-      "No se ofrece el correo: el recibo de esta cuenta no tiene correo de contacto. Añádelo en la pestaña Recibos del departamento en Departamentos y zonas, en el panel.",
+      "No se ofrece el correo: el ticket de esta cuenta no tiene correo de contacto. Añádelo en la pestaña Recibos del departamento en Departamentos y zonas, en el panel.",
     ],
   ])(
     "says why Email is missing when mail is set up but the receipt has no contact email, with or without an invoice printer (%s)",

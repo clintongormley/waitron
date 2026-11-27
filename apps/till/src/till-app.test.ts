@@ -5004,7 +5004,7 @@ describe("till-app", () => {
     it("shows the venue's language until staff choose another, then sends the chosen one with the sale", async () => {
       const { el, c } = await counterWith();
       const id = c.store.id;
-      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Ticket: Catalán");
 
       languageButton(el)!.click();
       await flush(el);
@@ -5017,7 +5017,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(languageDialog(el)).toBeNull();
-      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Español");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Ticket: Español");
       expect(currentApi.setOrderReceiptLanguage).not.toHaveBeenCalled();
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
@@ -5046,7 +5046,7 @@ describe("till-app", () => {
       await flush(el);
 
       expect(languageDialog(el)).toBeNull();
-      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Ticket: Catalán");
     });
 
     it("sends the chosen language with an integrated card payment", async () => {
@@ -5085,7 +5085,7 @@ describe("till-app", () => {
       expect(
         vi.mocked(currentApi.setOrderReceiptLanguage).mock.invocationCallOrder[0],
       ).toBeLessThan(placeOrder.mock.invocationCallOrder[0]!);
-      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Español");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Ticket: Español");
       emit(c, "collect-order", { method: "cash", amount: "5" });
       await flush(el);
       expect(currentApi.collectOrder).toHaveBeenCalledWith(
@@ -5122,12 +5122,12 @@ describe("till-app", () => {
         language: "es-ES",
       });
       expect(c.store.id).not.toBe(held);
-      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Ticket: Catalán");
 
       emit(c, "retrieve-order", { id: held });
       await flush(el);
       expect(c.store.id).toBe(held);
-      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Español");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Ticket: Español");
     });
 
     it("waits for a held order's chosen language to be saved before a pressed Reload reloads", async () => {
@@ -5171,7 +5171,7 @@ describe("till-app", () => {
       expect(c.store.id).not.toBe(held);
       expect(c.store.lineCount).toBe(0);
       expect(alert(el)!.textContent).toContain(
-        "Aparcado sin su idioma del recibo: ábrelo y vuelve a elegir",
+        "Aparcado sin su idioma del ticket: ábrelo y vuelve a elegir",
       );
     });
 
@@ -5200,7 +5200,7 @@ describe("till-app", () => {
       );
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
-      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Español");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Ticket: Español");
 
       await choose(el, "ca-ES");
 
@@ -5209,7 +5209,7 @@ describe("till-app", () => {
         revision: 3,
         language: "ca-ES",
       });
-      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Ticket: Catalán");
       expect(c.store.revision).toBe(4);
       c.store.addProduct(coffee, "1");
       await flush(el);
@@ -5256,7 +5256,7 @@ describe("till-app", () => {
       emit(c, "retrieve-order", { id: "wo-1" });
       await flush(el);
 
-      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Ticket: Catalán");
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       expect(currentApi.recordSale).toHaveBeenCalledWith(
@@ -5284,7 +5284,7 @@ describe("till-app", () => {
 
       expect(currentApi.setOrderReceiptLanguage).not.toHaveBeenCalled();
       expect(c.store.revision).toBe(3);
-      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Ticket: Catalán");
     });
 
     it("reads the order again when its language was saved from a copy changed elsewhere", async () => {
@@ -5332,7 +5332,7 @@ describe("till-app", () => {
       await choose(el, "es-ES");
 
       expect(c.store.revision).toBe(5);
-      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Español");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Ticket: Español");
       expect(alert(el)!.textContent).toContain(t("held.changed_elsewhere"));
     });
 
@@ -5348,10 +5348,10 @@ describe("till-app", () => {
 
       await choose(el, "es-ES");
 
-      expect(languageButton(el)!.textContent!.trim()).toBe("Recibo: Catalán");
+      expect(languageButton(el)!.textContent!.trim()).toBe("Ticket: Catalán");
       expect(c.store.revision).toBe(3);
       expect(alert(el)!.textContent).toContain(
-        "No se pudo guardar el idioma del recibo, inténtalo de nuevo",
+        "No se pudo guardar el idioma del ticket, inténtalo de nuevo",
       );
     });
   });
@@ -21658,7 +21658,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     const button = () =>
       tenderPay(el).shadowRoot!.querySelector<HTMLElement>("[data-receipt-language]")!;
     expect(tenderPay(el).stage).toBe("collect");
-    expect(button().textContent!.trim()).toBe("Recibo: Catalán");
+    expect(button().textContent!.trim()).toBe("Ticket: Catalán");
 
     button().click();
     await flush(el);
@@ -21673,7 +21673,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
       language: "es-ES",
     });
     expect(c.store.revision).toBe(3);
-    expect(button().textContent!.trim()).toBe("Recibo: Español");
+    expect(button().textContent!.trim()).toBe("Ticket: Español");
     emit(counter(el)!, "collect-order", { method: "cash", amount: "5" });
     await flush(el);
     expect(currentApi.collectOrder).toHaveBeenCalledWith(

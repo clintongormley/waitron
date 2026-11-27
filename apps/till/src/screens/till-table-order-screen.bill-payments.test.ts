@@ -491,7 +491,7 @@ describe("till-table-order-screen: a bill's receipt language", () => {
 
     const button = languageButton(el)!;
     expect(el.shadowRoot!.querySelector("[data-bill-payments]")!.contains(button)).toBe(true);
-    expect(text(button)).toBe("Recibo: Gallego");
+    expect(text(button)).toBe("Ticket: Gallego");
   });
 
   it("draws the language button as quiet as the invoice action, and holds it while the till is busy", async () => {

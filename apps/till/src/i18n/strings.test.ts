@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fill } from "./t.js";
 import { codeMessage } from "./codes.js";
+import { helpEs } from "./help-strings.js";
 import { catalogues, en, es, type StringKey } from "./strings.js";
 
 it.each([
@@ -389,7 +390,7 @@ it("says a receipt has no printer on this device, and what to do, in both langua
 it("says no receipt printer is available to the device, and to print elsewhere, in both languages", () => {
   expect([en["document.no_printers_note"], es["document.no_printers_note"]]).toEqual([
     "No receipt printer is available to this device. Print the receipt from another device.",
-    "Este dispositivo no tiene ninguna impresora de tickets disponible. Imprime el recibo desde otro dispositivo.",
+    "Este dispositivo no tiene ninguna impresora de tickets disponible. Imprime el ticket desde otro dispositivo.",
   ]);
 });
 
@@ -442,24 +443,24 @@ it("says what closing the documents window does with the receipt, in both langua
   expect(keys.map((key) => [en[key], es[key]])).toEqual([
     [
       "Closing prints the receipt unless you email it.",
-      "Al cerrar se imprime el recibo, salvo que lo envíes por correo electrónico.",
+      "Al cerrar se imprime el ticket, salvo que lo envíes por correo electrónico.",
     ],
-    ["Closing prints the receipt.", "Al cerrar se imprime el recibo."],
+    ["Closing prints the receipt.", "Al cerrar se imprime el ticket."],
     [
       "{printer} is switched off. The receipt will print when it is switched back on.",
-      "{printer} está desactivada. El recibo se imprimirá cuando vuelva a activarse.",
+      "{printer} está desactivada. El ticket se imprimirá cuando vuelva a activarse.",
     ],
     [
       "This device has no receipt printer. Choose one above or email the receipt, or it prints if this device gets one within a day.",
-      "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el recibo por correo; si no, se imprimirá si este dispositivo pasa a tener una en el plazo de un día.",
+      "Este dispositivo no tiene impresora de tickets. Elige una arriba o envía el ticket por correo; si no, se imprimirá si este dispositivo pasa a tener una en el plazo de un día.",
     ],
     [
       "This device has no receipt printer. Choose one above, or the receipt prints if this device gets one within a day.",
-      "Este dispositivo no tiene impresora de tickets. Elige una arriba; si no, el recibo se imprimirá si este dispositivo pasa a tener una en el plazo de un día.",
+      "Este dispositivo no tiene impresora de tickets. Elige una arriba; si no, el ticket se imprimirá si este dispositivo pasa a tener una en el plazo de un día.",
     ],
     [
       "This device may not print or email receipts. Print it from Find a bill on a till that can.",
-      "Este dispositivo no puede imprimir ni enviar recibos. Imprímelo desde Buscar cuenta en una caja que pueda.",
+      "Este dispositivo no puede imprimir ni enviar tickets. Imprímelo desde Buscar cuenta en una caja que pueda.",
     ],
   ]);
 });
@@ -582,7 +583,7 @@ describe("the Finish table and Cancel item lines on a dish given free", () => {
     [
       "es-ES",
       "cancel_item.free_served",
-      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuélvelo desde el recibo.",
+      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuélvelo desde el ticket.",
     ],
   ])("reads in %s for %s", (locale, key, line) => {
     expect(catalogues[locale]?.[key as StringKey]).toBe(line);
@@ -650,5 +651,44 @@ describe("a corrective receipt corrects a receipt, a corrective invoice a full i
       /money[- ]back receipt|ticket de devolución/i.test(text),
     );
     expect(named).toEqual([]);
+  });
+});
+
+describe("the till's Spanish uses one word per thing (design §7.18)", () => {
+  // Reads only the till's catalogue in strings.ts and its Spanish help text, not codes.ts.
+  const KITCHEN_STATION_COMANDA_KEYS = new Set<string>([
+    "station.bump_ticket",
+    "station.whole_ticket",
+    "station.printer_down",
+    "move_station.refused.ticket.made_here",
+    "help:help.kitchen.card",
+  ]);
+  const PHYSICAL_READ_KEYS = new Set<string>(["equipment.nfc_read_error"]);
+  const dropped: [RegExp, (key: string) => boolean][] = [
+    [/(?<!\p{L})recibos?(?!\p{L})/iu, () => false],
+    [/(?<!\p{L})comandas?(?!\p{L})/iu, (key) => KITCHEN_STATION_COMANDA_KEYS.has(key)],
+    [/(?<!\p{L})TPV(?!\p{L})/u, () => false],
+    [/(?<!\p{L})terminal(?! de camarero| de mano)/iu, () => false],
+    [/intentar de nuevo/iu, () => false],
+    [/volver a consultar/iu, () => false],
+    [/reinténtalo/iu, () => false],
+    [/no se han? podido (volver a )?(cargar|consultar)/iu, () => false],
+    [/no se han? podido (volver a )?leer/iu, (key) => PHYSICAL_READ_KEYS.has(key)],
+    [/orden de plato/iu, () => false],
+  ];
+
+  it("says none of the dropped words", () => {
+    const texts: [string, string][] = [
+      ...Object.entries(es),
+      ...Object.entries(helpEs).map(([key, text]): [string, string] => [`help:${key}`, text]),
+    ];
+    const offenders = texts.flatMap(([key, text]) => {
+      // The dashboard's own tab name, quoted as the dashboard shows it.
+      const prose = text.replace(/\{[^}]*\}/g, "").replace(/pestaña Recibos/g, "");
+      return dropped
+        .filter(([word, allowed]) => word.test(prose) && !allowed(key))
+        .map(([word]) => `${key} (${String(word)}): ${text}`);
+    });
+    expect(offenders).toEqual([]);
   });
 });

@@ -63,10 +63,10 @@ describe("till-reprint-language-dialog", () => {
     const el = await mountDialog({ purpose: "receipt" });
     const seen = captured(el);
 
-    expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Idioma del recibo");
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Idioma del ticket");
     expect(el.shadowRoot!.querySelector("legend")).toBeNull();
     expect(el.shadowRoot!.querySelector("fieldset")!.getAttribute("aria-label")).toBe(
-      "Idioma del recibo",
+      "Idioma del ticket",
     );
     expect(button(el, "confirm").textContent!.trim()).toBe("Elegir");
     radios(el)[2]!.click();
