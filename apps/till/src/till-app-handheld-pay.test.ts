@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { formatEquipmentCode } from "@waitron/shared";
-import type { WtCombobox, WtShareList } from "@waitron/ui";
+import type { WtCombobox, WtShareList, WtTopBar } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
@@ -3582,6 +3582,52 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
         );
         await start(el);
         await expect.poll(quoted).toMatchObject({ kind: "share", shareOf: 4 });
+      });
+
+      it("a card declined, then Back, leaves Pay with no count, and Split equally starts again among every guest", async () => {
+        const getBillBalance = vi.fn(async () => ownIs("pending"));
+        const el = await openOverPendingCard(getBillBalance);
+        getBillBalance.mockResolvedValue(ownIs("declined"));
+        await tick(el);
+        expect(text(inSplit(el, "wt-button[data-split-start]"))).toBe(
+          `Start with Guest 1 · ${money("30.00")}`,
+        );
+
+        inSplit(el, "wt-top-bar").dispatchEvent(
+          new CustomEvent("wt-back", { bubbles: true, composed: true }),
+        );
+        await flush(el);
+
+        expect(split(el)).toBeNull();
+        expect(text(inDialog(el, "[data-quiet-pay-amount]"))).toBe(money("120.00"));
+        expect(inDialog(el, "[data-quiet-pay-card]")?.disabled).toBe(true);
+        const bar = dialog(el)!.shadowRoot!.querySelector<WtTopBar>("[data-quiet-pay] wt-top-bar")!;
+        expect(bar.backLabel).not.toBe(t("bill_pay.way_share"));
+        await press(el, '[data-quiet-pay-way="share"]');
+        expect(text(inSplit(el, "wt-button[data-split-start]"))).toBe(
+          `Start with Guest 1 · ${money("30.00")}`,
+        );
+        await start(el);
+        await expect.poll(quoted).toMatchObject({ kind: "share", shareOf: 4 });
+      });
+
+      it("a card declined, then Back, closes Pay without asking about unsaved changes", async () => {
+        const getBillBalance = vi.fn(async () => ownIs("pending"));
+        const el = await openOverPendingCard(getBillBalance);
+        getBillBalance.mockResolvedValue(ownIs("declined"));
+        await tick(el);
+        const back = async (bar: Element) => {
+          bar.dispatchEvent(new CustomEvent("wt-back", { bubbles: true, composed: true }));
+          await flush(el);
+        };
+
+        await back(inSplit(el, "wt-top-bar"));
+        await back(inDialog(el, "[data-quiet-pay] wt-top-bar")!);
+
+        const asked = () => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open ?? false;
+        await expect.poll(() => asked() || dialog(el) === null).toBe(true);
+        expect(asked()).toBe(false);
+        expect(dialog(el)).toBeNull();
       });
 
       it("a card received shows its guest paid, and Start shares among the rest", async () => {

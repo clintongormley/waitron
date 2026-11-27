@@ -646,13 +646,13 @@ export class TillBillPayDialog extends LitElement {
 
   /** A card in progress, shown as `taken`, ended after the sheet moved on. Charged, the run no
    * longer waits on it; not charged, a run that counted it ends, and the count it lowered goes
-   * only while the form is off screen. */
+   * only while the form is off screen: under the next-guest sheet or Split equally. */
   cardEnded(taken: PayTaken, charged: boolean): void {
     if (!this.#run.counts(taken)) return;
     this.requestUpdate();
     if (charged) return this.#run.received(taken);
-    if (this.nextOffered && this.#dropLoweredCount()) {
-      this.#entryBaseline = this.#draft();
+    if ((this.nextOffered || this.splitShown !== null) && this.#dropLoweredCount()) {
+      this.#entryBaseline = { ...(this.#entryBaseline ?? this.#draft()), people: "" };
       this.#entry?.commit(this.#entryBaseline);
     }
     this.#run.end();

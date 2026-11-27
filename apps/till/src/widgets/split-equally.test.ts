@@ -248,6 +248,20 @@ describe("till-split-equally", () => {
     expect(stepper(el).value).toBe(2);
   });
 
+  it("starts again by the starting rule when only what is left changes", async () => {
+    const el = await mount({
+      left: "48.86",
+      taken: true,
+      startCount: 3,
+      paid: [{ amount: "24.44", state: "received" }],
+    });
+    await press(el, 1);
+    expect(stepper(el).value).toBe(4);
+    el.left = "24.43";
+    await el.updateComplete;
+    expect(stepper(el).value).toBe(3);
+  });
+
   it("takes keyboard focus to its back control when it opens", async () => {
     const el = await mount({ startCount: 3 });
     const back = topBar(el).shadowRoot!.querySelector("wt-button")!;
@@ -282,6 +296,18 @@ describe("till-split-equally", () => {
     );
     startButton(el).click();
     expect(started).toEqual([{ guests: 4, amount: "18.33" }]);
+  });
+
+  it("starts with the count it shows when the table's count is more than the cents left", async () => {
+    const el = await mount({ left: "0.03", startCount: 10 });
+    expect(stepper(el).value).toBe(3);
+    expect(startButton(el).textContent!.trim()).toBe("Start with Guest 1 · €0.01");
+    const started: SplitEquallyStartDetail[] = [];
+    el.addEventListener("split-equally-start", (event) =>
+      started.push((event as CustomEvent<SplitEquallyStartDetail>).detail),
+    );
+    startButton(el).click();
+    expect(started).toEqual([{ guests: 3, amount: "0.01" }]);
   });
 
   it("goes back to Pay's ways", async () => {

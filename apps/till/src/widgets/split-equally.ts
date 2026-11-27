@@ -26,14 +26,6 @@ export interface SplitEquallyStartDetail {
 
 const money = (amount: string): string => formatMoney(decimal(amount), currentLocale());
 
-/** `ShareRun.paid` is a new array on every read, so only a change in what it holds counts. */
-const paidChanged = (next: readonly PaidShare[], previous?: readonly PaidShare[]): boolean =>
-  previous === undefined ||
-  next.length !== previous.length ||
-  next.some(
-    (share, i) => share.amount !== previous[i]!.amount || share.state !== previous[i]!.state,
-  );
-
 /** Split equally: the number of guests with − and +, and every guest's share of what is left. */
 @customElement("till-split-equally")
 export class TillSplitEqually extends LitElement {
@@ -78,7 +70,7 @@ export class TillSplitEqually extends LitElement {
   /** The count chosen before the share's Pay was opened; set, it is where the screen starts. */
   @property({ attribute: false }) keptCount: number | null = null;
   /** The guests the record counts as paid, in order. */
-  @property({ attribute: false, hasChanged: paidChanged }) paid: readonly PaidShare[] = [];
+  @property({ attribute: false }) paid: readonly PaidShare[] = [];
 
   /** The count chosen; the count shown and started is this held inside the limits. */
   @state() private count = 2;
@@ -109,7 +101,6 @@ export class TillSplitEqually extends LitElement {
     const paidBefore = changed.get("paid") as readonly PaidShare[] | undefined;
     // A card received changes no count, so the count being chosen stays.
     if (
-      !this.hasUpdated ||
       changed.has("startCount") ||
       changed.has("keptCount") ||
       changed.has("taken") ||
