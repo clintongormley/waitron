@@ -452,8 +452,8 @@ Publica la carta desde su pestaña **Vista previa** antes de activarla. Elige **
 o **Grandes** para ver cómo quedan las fotos y pulsa **Guardar**. En el móvil, alterna entre
 **Ajustes** y **Vista previa** dentro de **Carta para clientes**.
 
-En la vista previa para clientes, elige **Ordenador** para comprobar los precios junto al nombre de
-cada plato o **Móvil** para revisar la lista. En el móvil, desplaza la vista **Ordenador** hacia los
+En la vista previa para clientes, elige **Ordenador** para ver la carta más ancha o **Móvil** para
+revisar la lista. En el móvil, desplaza la vista **Ordenador** hacia los
 lados para ver todo el ancho de la carta. En **Idioma** puedes revisar el texto en cada idioma
 del contenido. Usa **Buscar platos** para encontrar un plato o menú por su nombre, o elige una
 sección para ir a ella. Abre **Alergias y dietas** para excluir alérgenos o elegir una dieta.

@@ -501,7 +501,13 @@ describe("the customer menu Online preview", () => {
     const viewport = [innerWidth, innerHeight] as const;
     try {
       await page.viewport(1280, 800);
-      const { el } = await open(() => Response.json(published()));
+      const answer = published();
+      const section = answer.menu.members[1]!;
+      if (section.kind !== "section") throw new Error("Expected a section");
+      const bread = section.members[1]!;
+      if (bread.kind !== "product") throw new Error("Expected a dish");
+      bread.price = { min: "6.50", max: "6.50" };
+      const { el } = await open(() => Response.json(answer));
       await expect.element(page.getByRole("searchbox", { name: "Search dishes" })).toBeVisible();
       const customer = customerPage(el)!;
       const canvas = customer.parentElement!;
@@ -512,6 +518,12 @@ describe("the customer menu Online preview", () => {
         canvas.getBoundingClientRect().right,
       );
       preview.style.inlineSize = "662px";
+      const dish = page.getByRole("button", { name: "House bread", exact: true }).element();
+      const price = dish.closest(".dish-heading")!.querySelector(".price")!;
+      expect(price.getBoundingClientRect().left).toBeGreaterThan(
+        dish.getBoundingClientRect().right,
+      );
+      expect(price.getBoundingClientRect().top).toBeLessThan(dish.getBoundingClientRect().bottom);
       const searchHost = customer.shadowRoot!.querySelector("wt-input[type=search]")!;
       const input = searchHost.shadowRoot!.querySelector("input")!;
       const style = getComputedStyle(input);

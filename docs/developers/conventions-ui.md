@@ -1119,7 +1119,8 @@ template in a non-test `.ts` on disk under `apps/customer-menu/src`, `apps/dashb
 `scripts/no-till-as-issuer.mjs` ignores, such as `node_modules` and `dist`), and refuses hex, the
 colour functions, the same short list of named colours, and `rem`/`em` (a `var()` fallback
 included). It does not see `px` sizes; styles outside a `css` tag (inline `style=` attributes,
-`unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`, `index.html`);
+`unsafeCSS` strings, string constants such as `DRAWER_BREAKPOINT` or `PHONE_WIDTH`, `index.html`,
+standalone stylesheets);
 selectors, quoted strings and the contents of `url(…)`; the condition of an at-rule that opens a
 block (`@media`, `@container`, `@supports`, …; a `@media` or `@container` size condition cannot use
 `var()`, so app breakpoints stay literal); a value interpolated with `${…}`, and part or all of the

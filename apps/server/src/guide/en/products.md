@@ -417,8 +417,8 @@ menu's **Preview** tab before switching it on. Choose **None**, **Small** or **L
 photos will look, then choose **Save**. On a phone, switch between **Settings** and **Preview**
 within **Customer menu**.
 
-In the customer menu preview, choose **Computer** to check prices beside dish names or **Phone**
-to review the list. On a phone, scroll the **Computer** preview sideways to see the full menu width.
+In the customer menu preview, choose **Computer** for a wider view or **Phone** to review the list.
+On a phone, scroll the **Computer** preview sideways to see the full menu width.
 Use **Language** to check the words for each content language. Use **Search dishes**
 to find a dish or set menu by name, or choose a section to jump to it. Open **Allergies and diets**
 to select allergens to exclude or choose a diet. Open a dish or set menu to see which choices are

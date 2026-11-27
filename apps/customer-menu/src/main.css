@@ -52,6 +52,7 @@ body {
 
 .menu-languages a[aria-current]::after {
   margin-inline-start: auto;
+  content: "✓";
   content: "✓" / "";
 }
 
