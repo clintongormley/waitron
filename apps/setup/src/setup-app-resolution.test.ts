@@ -9,7 +9,7 @@ import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { initial, wizardApi } from "../test/first-setup-browser.js";
 import { refusedCause } from "../test/held-database-browser.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { REVIEWED_BUCKET, cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 
 const inspection: FirstSetupInspection = {
   version: 2,
@@ -723,7 +723,12 @@ it.each(["en-GB", "es-ES"])(
     app.shadowRoot!.querySelector("main")!.dispatchEvent(
       new CustomEvent("bucket-restore-requested", {
         detail: {
-          request: { kit: "k", environment: "production", oldBoxGone: false, venueConfirmed: null },
+          request: {
+            ...REVIEWED_BUCKET,
+            environment: "production",
+            oldBoxGone: false,
+            venueConfirmed: null,
+          },
         },
         bubbles: true,
         composed: true,

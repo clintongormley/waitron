@@ -3,7 +3,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import type { DashboardApi } from "../api/client.js";
-import type { RecoveryPackReason, RecoveryPackStatus } from "../api/backup-api.js";
+import type { RecoveryPackStatus } from "../api/backup-api.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -15,46 +15,6 @@ import "../widgets/backup-key-dialog.js";
 import { keepDate, packDate, withStrong } from "../widgets/recovery-pack-words.js";
 
 type Status = RecoveryPackStatus;
-/** The Cloud reason is worded into the out-of-date sentence itself. */
-type CloudReason = Extract<RecoveryPackReason, { part: "emergency" }>;
-type Listed = Exclude<RecoveryPackReason, CloudReason>;
-type Worded = Exclude<Listed, { kind: "key_changed" }>;
-
-const isCloud = (reason: RecoveryPackReason): reason is CloudReason => reason.part === "emergency";
-
-const REASON_WORDS: {
-  [K in Worded["kind"]]: Record<Extract<Worded, { kind: K }>["part"], StringKey>;
-} = {
-  settings_changed: {
-    bucket: "recovery_pack.reason.bucket_settings",
-  },
-  set_up_after: {
-    bucket: "recovery_pack.reason.bucket_set_up",
-  },
-  removed: {
-    bucket: "recovery_pack.reason.bucket_removed",
-  },
-};
-
-function reasonWords(reason: Worded): StringKey {
-  switch (reason.kind) {
-    case "settings_changed":
-      return REASON_WORDS.settings_changed[reason.part];
-    case "set_up_after":
-      return REASON_WORDS.set_up_after[reason.part];
-    case "removed":
-      return REASON_WORDS.removed[reason.part];
-  }
-}
-
-function reasonSentences(reasons: Listed[], date: (iso: string) => string): string[] {
-  return reasons.map((reason) =>
-    reason.kind === "key_changed"
-      ? fill("recovery_pack.reason.key_changed", { date: date(reason.at) })
-      : t(reasonWords(reason)),
-  );
-}
-
 /**
  * The Backups screen's Recovery pack card: what the box knows of the last pack, and the button that
  * makes a new one.
@@ -394,27 +354,23 @@ export class RecoveryPackCard extends LitElement {
       );
     } else if (latest.received || offered?.number === latest.number) {
       const pack = { number: String(latest.number), date: date(latest.madeAt) };
-      const listed = status.reasons.filter((reason): reason is Listed => !isCloud(reason));
-      const cloud = listed.length < status.reasons.length;
-      const reasons = reasonSentences(listed, date);
+      const cloud = status.reasons.some((reason) => reason.part === "emergency");
       if (status.incomplete) {
         const fixed = noMasterKey
           ? "recovery_pack.make_new_master_key_once_fixed"
           : "recovery_pack.make_new_once_fixed";
         lines.push(
           html`<strong>${fill("recovery_pack.incomplete", pack)}</strong> ${[
-              ...reasons,
               ...(cloud ? [t("recovery_pack.reason.cloud_missing")] : []),
               t(fixed),
             ].join(" ")}`,
         );
-      } else if ((latest.received && !status.upToDate) || reasons.length > 0 || cloud) {
+      } else if ((latest.received && !status.upToDate) || cloud) {
         lines.push(
           html`<strong
               >${fill(cloud ? "recovery_pack.out_of_date_cloud" : "recovery_pack.out_of_date", pack)}</strong
             >
             ${[
-              ...reasons,
               t(noMasterKey ? "recovery_pack.make_new_master_key" : "recovery_pack.make_new"),
             ].join(" ")}`,
         );
@@ -437,8 +393,6 @@ export class RecoveryPackCard extends LitElement {
         ),
       );
     if (offered !== null && lines.length === 0) warn = false;
-    const keep = this.#keep(status, warn);
-    if (keep.length > 0) lines.push(keep.join(" "));
     if (status.backupsUseOlderKey) lines.push(t("recovery_pack.older_key"));
     if (status.masterKey !== null && status.backupKey?.fromCurrentMasterKey === false) {
       warn = true;
@@ -460,21 +414,6 @@ export class RecoveryPackCard extends LitElement {
             </div>`
       }
     `;
-  }
-
-  /** The keep-until sentences, from the server's list; never one naming an unreceived pack. */
-  #keep(status: Status, warn: boolean): string[] {
-    const unreceived = status.unreceived?.number;
-    return status.keep
-      .filter((pack) => pack.number !== unreceived)
-      .filter((pack) => warn || pack.number !== status.latest?.number)
-      .map((pack) =>
-        fill("recovery_pack.keep_backup_key", {
-          number: String(pack.number),
-          date: this.#date(pack.madeAt),
-          until: this.#date(pack.until),
-        }),
-      );
   }
 
   #rows(status: Status): TemplateResult {

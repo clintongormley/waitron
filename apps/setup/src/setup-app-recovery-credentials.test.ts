@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
 import { SetupApi } from "./api/client.js";
 import { SetupApp } from "./setup-app.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { REVIEWED_BUCKET, cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { setLocale } from "./i18n/t.js";
 
 afterEach(() => {
@@ -67,7 +67,7 @@ it.each(["archive", "bucket"])(
                   ...credentials,
                 }
               : {
-                  kit: "outside-bucket-kit",
+                  ...REVIEWED_BUCKET,
                   environment: "production",
                   oldBoxGone: true,
                   venueConfirmed: null,
@@ -89,8 +89,8 @@ it.each(["archive", "bucket"])(
     expect(kept!.nodeRecoverySecret).toBeUndefined();
     expect(kept!.recoveryOperation).toBeUndefined();
     // Kept in page memory only, so a file restore can be sent again without typing the key.
-    expect(kind === "archive" ? kept!.masterKey : kept!.kit).toBe(
-      kind === "archive" ? credentials.nodeRecoverySecret : "outside-bucket-kit",
+    expect(kept!.masterKey).toBe(
+      kind === "archive" ? credentials.nodeRecoverySecret : REVIEWED_BUCKET.masterKey,
     );
   },
 );
@@ -231,7 +231,7 @@ it.each(["archive", "bucket", "cloud"])(
                           ...common,
                         }
                       : {
-                          kit: "private kit",
+                          ...REVIEWED_BUCKET,
                           environment: "production",
                           venueConfirmed: null,
                           ...common,
@@ -288,7 +288,7 @@ it.each(["archive", "bucket"])(
                   artifact: new File(["encrypted"], "copy.backup"),
                   masterKey: "archive password",
                 }
-              : { kit: "private kit", venueConfirmed: null }),
+              : { ...REVIEWED_BUCKET, venueConfirmed: null }),
           },
         },
       }),
@@ -376,7 +376,7 @@ it.each([
                           ...common,
                         }
                       : {
-                          kit: "private kit",
+                          ...REVIEWED_BUCKET,
                           environment: "production",
                           venueConfirmed: null,
                           ...common,
@@ -453,7 +453,7 @@ it.each(["archive", "bucket", "cloud"])(
                           ...common,
                         }
                       : {
-                          kit: "private kit",
+                          ...REVIEWED_BUCKET,
                           environment: "production",
                           venueConfirmed: null,
                           ...common,
@@ -470,7 +470,7 @@ it.each(["archive", "bucket", "cloud"])(
       );
     for (const value of held(done()!)) {
       expect(value).not.toContain("archive password");
-      expect(value).not.toContain("private kit");
+      expect(value).not.toContain(REVIEWED_BUCKET.bucket.secretAccessKey);
     }
     for (const value of held(el)) expect(value).not.toContain("node-key-secret");
     const stored = [

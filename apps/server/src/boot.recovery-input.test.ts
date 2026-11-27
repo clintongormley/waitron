@@ -8,7 +8,7 @@ import { join, relative } from "node:path";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, nodes, stampDeployment, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { encodeRecoveryKit } from "@waitron/stream";
+import { TEST_BUCKET, TEST_MASTER_KEY } from "../test/bucket-restore-command.js";
 import { authorityKey, makeMasterKey } from "@waitron/credentials";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
@@ -40,7 +40,6 @@ vi.mock("./restore-stream.js", async (original) => ({
 }));
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const NODE = "d0000000-0000-4000-8000-000000000001";
-const LOCATION = "d0000000-0000-4000-8000-000000000002";
 let scratch: string;
 beforeEach(async () => {
   await seedPersons(suite.db, {
@@ -104,6 +103,7 @@ it.each(["archive", "bucket"])(
       entries,
       nodeId: NODE,
       generation: "generation",
+      sourceId: "stream:reviewed-copy",
       venue: { legalName: "Old venue", taxId: "89890001K", venueName: "Old venue" },
       discard: async () => {},
     });
@@ -145,19 +145,6 @@ it.each(["archive", "bucket"])(
       form.set("oldBoxGone", "1");
       form.set("recoveryOperation", JSON.stringify(operation));
       form.set("nodeRecoverySecret", PAPER_KEY);
-      const kit = encodeRecoveryKit({
-        version: 2 as const,
-        streamId: LOCATION,
-        recoveryKey: "archive-key",
-        pointerSignerPublicKey: "MCowBQYDK2VwAyEA0000000000000000000000000000000000000000000=",
-        bucket: {
-          region: "local",
-          bucket: "copy",
-          prefix: "",
-          accessKeyId: "unused",
-          secretAccessKey: "unused",
-        },
-      });
       const response = await fetch(
         `https://127.0.0.1:${httpPort()}/setup-api/${kind === "archive" ? "restore" : "restore-bucket"}`,
         {
@@ -168,7 +155,9 @@ it.each(["archive", "bucket"])(
             kind === "archive"
               ? form
               : JSON.stringify({
-                  kit,
+                  bucket: TEST_BUCKET,
+                  masterKey: TEST_MASTER_KEY,
+                  selectedSourceId: "stream:reviewed-copy",
                   environment: "preproduction",
                   oldBoxGone: true,
                   venueConfirmed: "89890001K",

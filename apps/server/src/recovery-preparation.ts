@@ -45,7 +45,6 @@ import type {
   DiscardStagedRecovery,
 } from "./setup-recovery-preparation-api.js";
 import { prepareStreamRestore, type PrepareStreamDeps } from "./restore-stream.js";
-import { parseRecoveryKit } from "@waitron/stream";
 import type { createCloudRecoveryClient } from "./cloud-recovery.js";
 import type { ArchiveRequest } from "./restore-request.js";
 import { VENUE_FILE } from "@waitron/store";
@@ -448,7 +447,10 @@ export function createSetupRecoveryPreparation(
   options: Parameters<typeof createInteractiveRecoveryPreparation>[0] & {
     stagingDir: string;
     cloudRecovery?: Pick<ReturnType<typeof createCloudRecoveryClient>, "preview">;
-    bucket: Omit<PrepareStreamDeps, "kit" | "stateDir" | "migrationsRoot" | "oldBoxGone">;
+    bucket: Omit<
+      PrepareStreamDeps,
+      "bucket" | "masterKey" | "stateDir" | "migrationsRoot" | "oldBoxGone"
+    >;
   },
 ): PrepareRecovery & {
   stage: StageRecovery;
@@ -531,11 +533,11 @@ export function createSetupRecoveryPreparation(
       if (options.cloudRecovery === undefined) throw new AppError("setup.not_ready", {});
       return options.cloudRecovery.preview(archive, source.pointId);
     }
-    const kit = parseRecoveryKit(source.kit);
     const prepared = await prepareStreamRestore({
       ...options,
       ...options.bucket,
-      kit,
+      bucket: source.bucket,
+      masterKey: source.masterKey,
       oldBoxGone: request.context.oldBoxGone,
       signal,
     });

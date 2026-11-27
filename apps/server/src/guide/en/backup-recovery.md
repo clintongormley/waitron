@@ -1,6 +1,6 @@
 # Recover from backup
 
-Keep the previous recovery pack when you change the backup key. Until the new bucket copy is ready, the previous pack still matches the copy offered for recovery. If the page says the pack does not match the copy or the bucket login cannot read it, try the matching pack, or correct the bucket access and try again.
+Keep the recovery pack for each master key your backups still need.
 
 Scheduled backups and the bucket copy each use the folder you choose, with no extra venue folder. Choose separate folders for scheduled backups and the bucket copy. Neither folder can be inside the other.
 
@@ -60,8 +60,7 @@ If the setup’s own record is damaged, the page may offer a warned **Start agai
 
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
 or recover an existing restaurant", where you choose **Restore from backup** or **Restore from my
-bucket**, as on a new box; restoring needs that backup's master key and, for your bucket, the
-recovery pack or kit. After
+bucket**, as on a new box; restoring needs that backup's master key and, for your bucket, storage details and access keys. After
 **Start again**, **Reconnect** opens "Set up this box", where you choose how to set up this box. If the page is reloaded before you press **Reconnect**, it does not remember which you
 chose and opens its first screen. If that screen asks "Is this page secure?", choose **Join or recover**
 there to restore.
@@ -108,11 +107,14 @@ Once it has joined, it can take over: see [Hand over to a spare box](servers.md#
 that is already gone: to recover then, choose a restore option.
 
 For a backup file, choose it in **Backup file**, type its master key in **Master key** or choose the
-recovery pack that holds it, and choose its **Backup environment**. For your bucket, choose your recovery pack or kit file in
-**Recovery pack or kit file**, or paste the kit in **Recovery kit**, and choose the **Environment**
-the old box ran in. If the pack was made before the box had a bucket copy, is not a Waitron recovery
-pack, or is damaged or was changed after it was made, the page says so under the field. For Waitron
-Cloud, choose **Start Cloud recovery**, enter the code the page shows in your Waitron Cloud account
+recovery pack that holds it, and choose its **Backup environment**.
+
+For your bucket, enter the bucket name, region, folder and both access keys from your storage
+provider. Enter its storage address if you use a provider other than Amazon S3. Enter the backup’s
+**Master key** or choose its recovery pack, then choose the **Environment** the old box ran in.
+If Review backup finds several folders, choose the one the old box used and review it again.
+
+For Waitron Cloud, choose **Start Cloud recovery**, enter the code the page shows in your Waitron Cloud account
 (**Open Waitron Cloud**) and approve the request there. Back on the box, choose **Check approval**.
 The box selects the copy named in Cloud approval or the latest checked copy if approval named
 none. Check the selected copy’s date and time. You can choose a different copy before choosing
@@ -132,7 +134,7 @@ date, node and master key. Check those details before continuing. Keep productio
 preproduction separate. If the manifest is damaged or incomplete, choose another complete backup.
 If the format is unsupported, install a Waitron version that supports it before trying again.
 
-A backup file opens with the master key that was current when it was made. For a bucket or Cloud copy, use the bucket kit or Cloud approval. Keep the earlier pack too if it holds that key.
+A backup file or bucket copy opens with the master key that was current when it was made. Keep the earlier pack if it holds that key. For a Cloud copy, get approval in Waitron Cloud.
 
 On a test box restored from Waitron Cloud, if **Cloud services** says the saved reconnection
 request cannot be read, choose **Get a fresh reconnection request**, then ask the Cloud owner to
@@ -144,10 +146,9 @@ At the end of Preparation, the **Recovery pack** step shows the master key once.
 **Download**, **Print** or **Copy**, keep the pack or the copied key somewhere other than the box, then choose
 **Continue**. Open **Backups** from the dashboard alert to set up your copies.
 
-For a bucket or Cloud copy, below the review, under "Recover this box", choose the recovery pack that holds this backup's
+For a Cloud copy, below the review, under "Recover this box", choose the recovery pack that holds this backup's
 master key with **Choose the recovery pack PDF**, or scan its master key QR code with **Scan the recovery pack**; or type the master key printed on it in **Master key**. A pack with
-a newer master key does not open an older backup. For a backup file, the master key you typed
-above is used. If the copy inside needs a different master key, a second **Master key** field
+a newer master key does not open an older backup. For a backup file or bucket copy, use the master key you entered above. If the copy inside needs a different master key, a second **Master key** field
 appears there with the date of the key it needs. Tick "The old box has been shut down.", "I am the only
 person recovering this venue." and "These details are correct."
 
@@ -244,11 +245,11 @@ If the downloaded copy did not pass its checks, try again or choose another back
 If an earlier restore choice is still saved, it will run when the box starts. Choose another restore to replace it.
 
 Until you choose the restore button, the page keeps what you entered only while it stays open.
-Changing the file, key or environment discards what it checked, and a reload opens the page's
+Changing the file, bucket details, key or environment discards what it checked, and a reload opens the page's
 first screen; from there choose **Join or recover**, or on "Set up this box" **Join or recover a
 restaurant** (**Recover a restaurant** when that page has found another Waitron box), and start the
 restore again. If the box refuses the
-restore, the page returns to the form. For a backup file it keeps the master key you typed; for your bucket or a Cloud copy you enter the master key again.
+restore, the page returns to the form. The page keeps the key you used to open a backup file or bucket copy. Enter the key again when the recovery details ask for it.
 
 Once you choose the restore button, the page says "Provisioning this box" and asks you to keep it
 open. The box saves the request and restarts. If it stops after saving the request, the next start

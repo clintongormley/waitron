@@ -7,6 +7,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import {
   SetupApi,
   type ApiError,
+  type RecoveryBucket,
   type RecoveryBackupPreview,
   type RecoveryRestoreCredentials,
 } from "../api/client.js";
@@ -76,7 +77,7 @@ export class SetupRecoveryCopy extends LitElement {
   @property({ attribute: false }) artifact?: File;
   @property({ attribute: false }) masterKey = "";
   @property() environment: "production" | "preproduction" = "production";
-  @property({ attribute: false }) bucketKit?: string;
+  @property({ attribute: false }) bucket?: RecoveryBucket;
   @property({ attribute: false }) cloudPointId?: string;
   @property({ attribute: false }) selectionId?: string;
   @property({ type: Boolean }) reviewDisabled = false;
@@ -90,7 +91,6 @@ export class SetupRecoveryCopy extends LitElement {
     | "namedKey"
     | "environment"
     | "file"
-    | "kit"
     | "capacity"
     | "interrupted"
     | "manifest"
@@ -112,10 +112,8 @@ export class SetupRecoveryCopy extends LitElement {
         this.#endIfSetupConflict(cause);
         const error = cause as ApiError | undefined;
         if (error?.code === "restore.upload_interrupted") this.error = "interrupted";
-        // A backup file's master key is typed on the screen around this one, unless it opened the
-        // file but the copy's current master key is another (named, with no key number): the
-        // recovery form then asks for that one. A key the form asked for itself stays the form's.
-        if (this.#fileSource && request.nodeRecoverySecret === this.masterKey) {
+        // A named refusal without a backup key number asks for the copy's current master key.
+        if (this.cloudPointId === undefined && request.nodeRecoverySecret === this.masterKey) {
           const keyName = refusedKeyName(error);
           if (keyName !== undefined && error?.params?.keyNumber === undefined)
             this.ownKeyName = keyName;
@@ -139,10 +137,15 @@ export class SetupRecoveryCopy extends LitElement {
     request: Parameters<NonNullable<SetupRecoveryAllocation["prepare"]>>[0],
     current: () => boolean,
   ): Promise<unknown> {
-    if (this.bucketKit !== undefined || this.cloudPointId !== undefined) {
+    if (this.bucket !== undefined || this.cloudPointId !== undefined) {
       const source =
-        this.bucketKit !== undefined
-          ? { kind: "bucket" as const, kit: this.bucketKit, environment: this.environment }
+        this.bucket !== undefined
+          ? {
+              kind: "bucket" as const,
+              bucket: this.bucket,
+              masterKey: this.masterKey,
+              environment: this.environment,
+            }
           : { kind: "cloud" as const, pointId: this.cloudPointId! };
       const result = await this.api.prepareRecovery(source, request);
       if (!current()) throw new Error("Selected recovery copy changed");
@@ -211,7 +214,7 @@ export class SetupRecoveryCopy extends LitElement {
           "artifact",
           "masterKey",
           "environment",
-          "bucketKit",
+          "bucket",
           "cloudPointId",
           "selectionId",
           "oldBoxGone",
@@ -251,9 +254,7 @@ export class SetupRecoveryCopy extends LitElement {
           ? "environment"
           : this.error === "file"
             ? "artifact"
-            : this.error === "kit"
-              ? "kit"
-              : undefined;
+            : cause?.params?.field;
     this.dispatchEvent(
       new CustomEvent("preview-refusal", {
         detail: { field, cause },
@@ -285,11 +286,17 @@ export class SetupRecoveryCopy extends LitElement {
     );
   }
   get #fileSource(): boolean {
-    return this.bucketKit === undefined && this.cloudPointId === undefined;
+    return this.bucket === undefined && this.cloudPointId === undefined;
   }
   get #canReview(): boolean {
-    return this.bucketKit !== undefined
-      ? this.bucketKit.trim() !== ""
+    return this.bucket !== undefined
+      ? this.masterKey !== "" &&
+          [
+            this.bucket.bucket,
+            this.bucket.region,
+            this.bucket.accessKeyId,
+            this.bucket.secretAccessKey,
+          ].every((value) => value.trim() !== "")
       : this.cloudPointId !== undefined
         ? this.cloudPointId !== ""
         : this.artifact !== undefined && this.masterKey !== "";
@@ -303,7 +310,7 @@ export class SetupRecoveryCopy extends LitElement {
   async #review(): Promise<void> {
     if (!this.#canReview || this.busy || this.reviewDisabled) return;
     const artifact = this.artifact;
-    const bucketKit = this.bucketKit;
+    const bucket = this.bucket;
     const cloudPointId = this.cloudPointId;
     const selectionId = this.selectionId;
     const oldBoxGone = this.oldBoxGone;
@@ -315,7 +322,7 @@ export class SetupRecoveryCopy extends LitElement {
       this.isConnected &&
       attempt === this.#attempt &&
       this.api === api &&
-      this.bucketKit === bucketKit &&
+      this.bucket === bucket &&
       this.cloudPointId === cloudPointId &&
       this.selectionId === selectionId &&
       this.oldBoxGone === oldBoxGone &&
@@ -330,8 +337,8 @@ export class SetupRecoveryCopy extends LitElement {
     this.#notifyRefusal();
     try {
       const preview =
-        bucketKit !== undefined
-          ? await api.previewBucketRestore(bucketKit, environment, oldBoxGone)
+        bucket !== undefined
+          ? await api.previewBucketRestore({ bucket, masterKey, environment }, oldBoxGone)
           : cloudPointId !== undefined
             ? await api.previewCloudRestore(cloudPointId)
             : await api.previewRestore(artifact!, masterKey, environment);
@@ -368,12 +375,10 @@ export class SetupRecoveryCopy extends LitElement {
                           error?.code === "recovery.passphrase_invalid" ||
                           field === "artifact"
                         ? "file"
-                        : error?.code === "backup.stream_kit_invalid" || field === "kit"
-                          ? "kit"
-                          : error?.code === "provisioning.database_ahead" ||
-                              error?.code === "restore.schema_too_new"
-                            ? "version"
-                            : "failed";
+                        : error?.code === "provisioning.database_ahead" ||
+                            error?.code === "restore.schema_too_new"
+                          ? "version"
+                          : "failed";
         this.#notifyRefusal(error);
       }
     } finally {
@@ -392,7 +397,7 @@ export class SetupRecoveryCopy extends LitElement {
         | "artifact"
         | "masterKey"
         | "environment"
-        | "bucketKit"
+        | "bucket"
         | "cloudPointId"
         | "selectionId"
         | "oldBoxGone"
@@ -423,13 +428,12 @@ export class SetupRecoveryCopy extends LitElement {
       key: "restore.check.master_key",
       environment: "restore.preview_environment_error",
       file: "restore.preview_file_error",
-      kit: "restore.preview_kit_error",
       failed: "restore.preview_failed",
       noMasterKey: "restore.preview_no_master_key",
       capacity: "shell.restore.archive_resource_limit",
       interrupted: "shell.restore.upload_interrupted",
       version:
-        this.bucketKit !== undefined
+        this.bucket !== undefined
           ? "shell.bucket.other_version"
           : this.cloudPointId !== undefined
             ? "shell.cloud.other_version"
@@ -470,7 +474,7 @@ export class SetupRecoveryCopy extends LitElement {
                   this.#invalidate();
                 }}
                 .preview=${preview}
-                .masterKey=${this.#fileSource ? this.masterKey : undefined}
+                .masterKey=${this.cloudPointId === undefined ? this.masterKey : undefined}
                 .prepare=${this.#prepare}
                 .boxAddress=${this.boxAddress}
                 .errorMessage=${

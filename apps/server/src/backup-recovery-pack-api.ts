@@ -1,7 +1,7 @@
 import { isSecure } from "./encrypted-connection.js";
 import { inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
-import { credentialRevision, masterKeyMatches, type KeyRing } from "@waitron/credentials";
+import { masterKeyMatches, type KeyRing } from "@waitron/credentials";
 import {
   insertMasterKey,
   insertRecoveryPack,
@@ -28,8 +28,7 @@ import {
 import { AppError, decodeMasterKeyCode, encodeMasterKeyCode, isAppError } from "@waitron/shared";
 import { errnoOf } from "./errno.js";
 import { inTurn } from "./attempt-turns.js";
-import { loadKeyRotatedAt, loadRecoveryKey, readHeldKey } from "./backup-config.js";
-import { backupKeyEnv } from "./backup-env-writer.js";
+import { loadRecoveryKey, readHeldKey } from "./backup-config.js";
 import {
   backupKeyFacts,
   backupKeyRecord,
@@ -37,24 +36,17 @@ import {
   heldBackupKeyNumber,
   type BackupKeyChangeDeps,
 } from "./backup-key-record.js";
-import { buildBucketPart, type PartsContext } from "./backup-recovery-pack-parts.js";
 import {
   drawRecoveryPack,
   masterKeyHolders,
   type PackMasterKey,
 } from "./backup-recovery-pack-output.js";
-import {
-  keepOldPackUntil,
-  namedMasterKeyPack,
-  packStatus,
-  type CurrentChecks,
-} from "./backup-recovery-pack-status.js";
+import { keepOldPackUntil, namedMasterKeyPack, packStatus } from "./backup-recovery-pack-status.js";
 import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { Turns } from "./backup-turns.js";
 import type { Logger } from "./logger.js";
 import { createLiveOperationRateLimit } from "./live-operation-rate-limit.js";
 import { checkTypedMasterKey } from "./master-key-record.js";
-import { STREAM_PURPOSE } from "./stream-host.js";
 import { knownZone } from "./venue-time-zone.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import type { CloudConnection } from "./cloud-client.js";
@@ -145,17 +137,6 @@ function makeRequest(body: unknown): MakeRequest {
   return fields as MakeRequest;
 }
 
-async function currentChecks(
-  tx: Transaction,
-  env: Readonly<Record<string, string | undefined>>,
-): Promise<CurrentChecks> {
-  const streamRevision = await credentialRevision(tx, { purpose: STREAM_PURPOSE });
-  return {
-    keyChangedAt: loadKeyRotatedAt(env),
-    bucket: streamRevision === null ? null : { revision: streamRevision },
-  };
-}
-
 /**
  * The venue's Cloud start address, from a fresh read that says emergency start is open; `null` for
  * a closed, stale or unreadable one, of which the pack and its status say nothing.
@@ -194,7 +175,6 @@ type MakeInput = {
   token: string;
   personId: string;
   request: MakeRequest;
-  env: Readonly<Record<string, string | undefined>>;
   madeAt: string;
   newMasterKey: NewMasterKey | undefined;
 };
@@ -209,8 +189,7 @@ async function makePack(
   number: number;
   madeAt: string;
   pdf: Uint8Array<ArrayBuffer>;
-  /** For the log: each recorded part, and the code a failed one failed with. */
-  parts: { part: string; state: string; failedWith: string | undefined }[];
+  parts: { part: string; state: string }[];
 }> {
   const { request, madeAt, newMasterKey } = input;
   const nodeId = deps.node.nodeId;
@@ -222,16 +201,6 @@ async function makePack(
       : { ...newMasterKey.made, number: await nextMasterKeyNumber(tx) };
   const venue = await readVenue(tx);
   const number = await nextRecoveryPackNumber(tx, nodeId);
-  const context: PartsContext = {
-    locale: request.locale,
-    timeZone: venue.timeZone,
-    madeAt,
-    nodeId,
-    ring: deps.ring,
-    env: input.env,
-  };
-  const bucket = await buildBucketPart(tx, context);
-  const parts = [bucket];
   const { pdf, record } = await drawRecoveryPack(
     {
       locale: request.locale,
@@ -242,22 +211,16 @@ async function makePack(
     {
       nodeId,
       madeBy: input.personId,
-      parts,
       cloudAddress: deps.cloud?.isPrimary() ? input.cloudAddress : null,
       masterKey,
     },
   );
   await insertRecoveryPack(tx, record);
-  const failedWith = new Map(parts.map((part) => [part.record.part, part.failedWith]));
   return {
     number,
     madeAt,
     pdf,
-    parts: record.parts.map(({ part, state }) => ({
-      part,
-      state,
-      failedWith: failedWith.get(part),
-    })),
+    parts: record.parts.map(({ part, state }) => ({ part, state })),
   };
 }
 
@@ -304,18 +267,12 @@ export function mountBackupRecoveryPackMakeApi(
                   newMasterKey.publicKey,
                   newMasterKey.made.masterKeyName,
                 );
-          // `backup.env` as it will be once the new key is written, for a pack made before it is.
-          const env =
-            nextKey === undefined
-              ? held
-              : { ...held, ...backupKeyEnv(nextKey), WAITRON_BACKUP_KEY_ROTATED_AT: madeAt };
           const pack = await withTransaction(deps.db, (tx) =>
             makePack(tx, deps, {
               cloudAddress,
               token,
               personId,
               request,
-              env,
               madeAt,
               newMasterKey,
             }),
@@ -339,11 +296,7 @@ export function mountBackupRecoveryPackMakeApi(
       log("info", "recovery.pack_made", {
         personId,
         number: made.number,
-        parts: made.parts.map(({ part, state, failedWith }) => ({
-          part,
-          state,
-          ...(failedWith === undefined ? {} : { failedWith }),
-        })),
+        parts: made.parts,
       });
       return c.body(made.pdf, 200, {
         "Content-Type": "application/pdf",
@@ -401,7 +354,6 @@ export function mountBackupRecoveryPackMakeApi(
             madeByName: r.madeBy === null ? null : (names.get(r.madeBy) ?? null),
           })),
           current: {
-            ...(await currentChecks(tx, env)),
             cloudOpen: deps.cloud?.isPrimary() === true && cloudAddress !== null,
           },
           backupsUseOlderKey:
@@ -409,7 +361,6 @@ export function mountBackupRecoveryPackMakeApi(
             fileKey !== undefined &&
             loaded.recoveryKey !== fileKey,
           masterKeyPacks: holders,
-          now,
         });
         return {
           ...status,

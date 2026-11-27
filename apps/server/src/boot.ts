@@ -564,12 +564,7 @@ import {
 import { mountStreamApi, settingsBucketProbe } from "./stream-api.js";
 import { createTurns } from "./backup-turns.js";
 import { replaceBackupSettings } from "./backup-env-writer.js";
-import {
-  createS3ObjectStore,
-  parseRecoveryKit,
-  prepareBucketEncryption,
-  type BucketConfig,
-} from "@waitron/stream";
+import { createS3FolderStore, prepareBucketEncryption, type BucketConfig } from "@waitron/stream";
 import { Server as HttpsServer } from "node:https";
 import "./errors.js";
 
@@ -1381,7 +1376,7 @@ async function bootServer(
     // which is why it may be echoed.
     const ownerDatabaseName = config.venueDir;
     const openBoundedBucket = (bucket: BucketConfig) =>
-      boundObjectStore(createS3ObjectStore(bucket));
+      boundObjectStore(createS3FolderStore(bucket));
     let cloudRecoveryTarget: ReturnType<typeof currentBackupVerificationTarget> | undefined;
     const cloudRecovery =
       cloudOrigin && config.environment === "preproduction"
@@ -1527,16 +1522,14 @@ async function bootServer(
                     }),
                   pointId,
                 ),
-        previewBucketRestore: async ({ kit, environment, oldBoxGone }, signal) =>
+        previewBucketRestore: async (source, signal) =>
           previewRecoveryStream({
-            kit: parseRecoveryKit(kit),
+            ...source,
             stateDir: config.stateDir,
             stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
             migrationsRoot: config.migrationsRoot,
             modules: availableModules,
-            environment,
             litestreamBin: config.litestreamBin,
-            oldBoxGone,
             signal,
             now,
             log,
@@ -1558,31 +1551,14 @@ async function bootServer(
             ),
           ),
         stageReset: (operationId) => stageResetRequest(config.stateDir, operationId),
-        stageBucketRestore: async (
-          {
-            kit,
-            environment,
-            oldBoxGone,
-            venueConfirmed,
-            recoveryOperation,
-            nodeRecoverySecret,
-            recoveryContext,
-          },
-          signal,
-        ) =>
+        stageBucketRestore: async (input, signal) =>
           stageStreamRestore({
-            kit: parseRecoveryKit(kit),
+            ...input,
             stateDir: config.stateDir,
             stagingDir: join(config.stateDir, RESTORE_STAGING_DIR),
             migrationsRoot: config.migrationsRoot,
             modules: availableModules,
-            environment,
             litestreamBin: config.litestreamBin,
-            oldBoxGone,
-            venueConfirmed,
-            recoveryOperation,
-            nodeRecoverySecret,
-            recoveryContext,
             signal,
             now,
             log,

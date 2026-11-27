@@ -66,7 +66,8 @@ import { decodeRegistroRow, fromRegistroRow } from "@waitron/fiscal-verifactu/sr
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { createCloudRecoveryClient } from "../src/cloud-recovery.js";
 import { generateNodeKeyPair } from "@waitron/membership";
-import { encodeRecoveryKit, signPointer, writePointer } from "@waitron/stream";
+import { signPointer, writePointer } from "@waitron/stream";
+import { bucketRecovery, bucketRestoreArgs, bucketRestoreEnv } from "./bucket-restore-command.js";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { sealNodeState, writeSealedStateRow } from "../src/sealed-state.js";
 import { deriveStreamKey } from "../src/stream-key.js";
@@ -409,20 +410,15 @@ export async function bucketCommand(given?: Awaited<ReturnType<typeof archiveHos
   const command = await archiveCommand(f);
   const signer = generateNodeKeyPair();
   const generation = `gen-0-${node.nodeId}-20261016T124000Z`;
-  const kit = {
-    version: 2 as const,
-    streamId: node.streamId,
-    bucket: {
-      endpoint: "",
-      region: "eu-west-1",
-      bucket: "synthetic-hour-recovery",
-      prefix: "",
-      accessKeyId: "synthetic-access",
-      secretAccessKey: "synthetic-secret",
-    },
-    recoveryKey: "separate bucket password",
-    pointerSignerPublicKey: signer.publicKey,
+  const bucket = {
+    endpoint: "",
+    region: "eu-west-1",
+    bucket: "synthetic-hour-recovery",
+    prefix: "",
+    accessKeyId: "synthetic-access",
+    secretAccessKey: "synthetic-secret",
   };
+  const recoveryKey = heldBackupKey(decodeMasterKeyCode(key.secret), 2).key;
   const server = createServer((req, res) => {
     const url = new URL(req.url!, "http://local");
     if (url.searchParams.has("list-type")) {
@@ -434,7 +430,7 @@ export async function bucketCommand(given?: Awaited<ReturnType<typeof archiveHos
     } else if (
       req.headers.range === "bytes=0-0" &&
       req.headers["x-amz-server-side-encryption-customer-key"] ===
-        deriveStreamKey(kit.recoveryKey, kit.streamId)
+        deriveStreamKey(recoveryKey, node.streamId)
     ) {
       res.writeHead(206);
       res.end(Buffer.from([0]));
@@ -447,27 +443,26 @@ export async function bucketCommand(given?: Awaited<ReturnType<typeof archiveHos
   const listening = once(server, "listening");
   server.listen(0, "127.0.0.1");
   await listening;
-  kit.bucket.endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  bucket.endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   await writeSealedStateRow(
     suite.db,
     node.nodeId,
-    await sealNodeState(f.entries, kit.recoveryKey),
+    await sealNodeState(f.entries, recoveryKey),
     new Date(),
   );
   await suite.db.archiveTo(f.database);
-  const kitPath = join(root, "bucket-kit.txt");
-  await writeFile(kitPath, encodeRecoveryKit(kit));
   const store = createMemoryObjectStore({ now: () => new Date() });
   await writePointer(
     store,
-    kit.streamId,
+    node.streamId,
     signPointer(
       {
-        streamId: kit.streamId,
+        streamId: node.streamId,
         nodeId: node.nodeId,
         generation,
         term: 0,
         writtenAt: new Date().toISOString(),
+        recovery: bucketRecovery(signer.publicKey, key.secret),
       },
       signer.privateKey,
     ),
@@ -475,7 +470,8 @@ export async function bucketCommand(given?: Awaited<ReturnType<typeof archiveHos
   );
   const selected = await previewRecoveryStream({
     ...f.restore,
-    kit,
+    bucket,
+    masterKey: key.secret,
     oldBoxGone: true,
     now: () => new Date(),
     litestreamBin: "/unused",
@@ -516,15 +512,14 @@ export async function bucketCommand(given?: Awaited<ReturnType<typeof archiveHos
   return {
     f,
     command,
-    kitPath,
-    kit,
+    bucket,
+    recoveryKey,
+    selected,
     failures,
     deps: {
-      env: command.env,
+      env: Object.assign(command.env, bucketRestoreEnv(bucket, key.secret)),
       argv: [
-        "restore",
-        "--from-bucket",
-        kitPath,
+        ...bucketRestoreArgs(bucket),
         "--confirm-venue",
         scope.taxpayerNif,
         "--confirm-old-box-gone",
@@ -610,9 +605,9 @@ export async function stageBucketRoute(given?: Awaited<ReturnType<typeof archive
     role: "admin",
     passwordHash: hashPassword("fixture-restore-password"),
   });
-  const { f, command, deps, kit } = await bucketCommand(given);
+  const { f, command, deps, bucket, selected } = await bucketCommand(given);
   const recoveryContext = {
-    selectedSourceId: `stream:${node.streamId}:gen-0-${node.nodeId}-20261016T124000Z`,
+    selectedSourceId: selected.sourceId,
     oldBoxGone: true,
     soleRecovery: true,
   };
@@ -621,7 +616,6 @@ export async function stageBucketRoute(given?: Awaited<ReturnType<typeof archive
       stageStreamRestore({
         ...f.restore,
         ...input,
-        kit,
         litestreamBin: "/unused",
         now: () => new Date(),
         openStore: deps.openStore,
@@ -634,7 +628,9 @@ export async function stageBucketRoute(given?: Awaited<ReturnType<typeof archive
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      kit: encodeRecoveryKit(kit),
+      bucket,
+      masterKey: key.secret,
+      selectedSourceId: selected.sourceId,
       environment: "preproduction",
       oldBoxGone: true,
       venueConfirmed: scope.taxpayerNif,

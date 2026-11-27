@@ -1,3 +1,4 @@
+import { REVIEWED_BUCKET } from "../widgets/test-helpers.js";
 import { expect, it, vi } from "vitest";
 import { SetupApi } from "./client.js";
 const input = {
@@ -13,7 +14,12 @@ const input = {
   proposal: { action: "clock-challenge" },
 };
 it.each([
-  { kind: "bucket" as const, kit: "private kit", environment: "production" as const },
+  {
+    kind: "bucket" as const,
+    bucket: REVIEWED_BUCKET.bucket,
+    masterKey: REVIEWED_BUCKET.masterKey,
+    environment: "production" as const,
+  },
   { kind: "cloud" as const, pointId: "00000000-0000-4000-8000-000000000002" },
 ])("prepares the selected $kind through the authenticated source endpoint", async (source) => {
   const transport = vi.fn<typeof fetch>(async () => Response.json({ id: "clock-comparison" }));

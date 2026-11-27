@@ -82,7 +82,8 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import { writeStreamSettings } from "./stream-host.js";
 import { endorseKey, generateNodeKeyPair } from "@waitron/membership";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
-import { encodeRecoveryKit, signPointer } from "@waitron/stream";
+import { signPointer } from "@waitron/stream";
+import { TEST_MASTER_KEY, bucketRecovery } from "../test/bucket-restore-command.js";
 import { loadNodeIdentity } from "./node-config.js";
 import type { TradingContext } from "./trading-context.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -1828,7 +1829,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     secretAccessKey: "secret-0123456789",
   };
 
-  it("refuses a pasted kit it cannot read, and gives up on a bucket that never answers, staging nothing", async () => {
+  it("refuses a missing bucket name, and gives up on a bucket that never answers, staging nothing", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
     try {
@@ -1839,22 +1840,24 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           async ({ post, kills, stateDir }) => {
             const unreadable = await post("/setup-api/restore-bucket", {
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ kit: "not a recovery kit", environment: "preproduction" }),
+              body: JSON.stringify({
+                bucket: { ...SILENT_BUCKET, bucket: "" },
+                masterKey: TEST_MASTER_KEY,
+                environment: "preproduction",
+              }),
             });
             expect(unreadable.status).toBe(400);
             expect(await unreadable.json()).toEqual({
-              error: { code: "backup.stream_kit_invalid", params: { reason: "not_found" } },
-            });
-            const kit = encodeRecoveryKit({
-              version: 2 as const,
-              streamId: "c0000000-0000-4000-8000-000000000002",
-              bucket: { ...SILENT_BUCKET, endpoint },
-              recoveryKey: "recovery-key-one-strong",
-              pointerSignerPublicKey: "unused",
+              error: { code: "setup.request_invalid", params: { field: "bucket" } },
             });
             const response = await post("/setup-api/restore-bucket", {
               headers: { "content-type": "application/json" },
-              body: JSON.stringify({ kit, environment: "preproduction" }),
+              body: JSON.stringify({
+                bucket: { ...SILENT_BUCKET, endpoint },
+                masterKey: TEST_MASTER_KEY,
+                selectedSourceId: "stream:reviewed-copy",
+                environment: "preproduction",
+              }),
               signal: AbortSignal.timeout(20_000),
             });
             expect(response.status).toBe(502);
@@ -1891,13 +1894,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     });
     await new Promise<void>((resolve) => bucket.listen(0, "127.0.0.1", resolve));
     const endpoint = `http://127.0.0.1:${(bucket.address() as AddressInfo).port}`;
-    const kit = encodeRecoveryKit({
-      version: 2 as const,
-      streamId: "c0000000-0000-4000-8000-000000000002",
-      bucket: { ...SILENT_BUCKET, endpoint },
-      recoveryKey: "recovery-key-one-strong",
-      pointerSignerPublicKey: "unused",
-    });
     try {
       await withCapturedStdout(async (lines) => {
         await withSetupBoot(
@@ -1908,7 +1904,12 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               refusal = code;
               const response = await post("/setup-api/restore-bucket", {
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ kit, environment: "preproduction" }),
+                body: JSON.stringify({
+                  bucket: { ...SILENT_BUCKET, endpoint },
+                  masterKey: TEST_MASTER_KEY,
+                  selectedSourceId: "stream:reviewed-copy",
+                  environment: "preproduction",
+                }),
               });
               expect(response.status).toBe(502);
               return response.text();
@@ -1980,6 +1981,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           nodeId,
           generation: `gen-0-${nodeId}-20260923T090000Z`,
           writtenAt: "2026-09-23T09:00:05.000Z",
+          recovery: bucketRecovery(signer.publicKey),
         },
         signer.privateKey,
       ),
@@ -2004,13 +2006,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     });
     await new Promise<void>((resolve) => bucket.listen(0, "127.0.0.1", resolve));
     const endpoint = `http://127.0.0.1:${(bucket.address() as AddressInfo).port}`;
-    const kit = encodeRecoveryKit({
-      version: 2 as const,
-      streamId,
-      bucket: { ...SILENT_BUCKET, endpoint },
-      recoveryKey: "recovery-key-one-strong",
-      pointerSignerPublicKey: signer.publicKey,
-    });
     const raws = ["StrayProviderFolder", "sk_live_", "script"];
     try {
       await withCapturedStdout(async (lines) => {
@@ -2027,7 +2022,12 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               stray = key;
               const response = await post("/setup-api/restore-bucket", {
                 headers: { "content-type": "application/json" },
-                body: JSON.stringify({ kit, environment: "preproduction" }),
+                body: JSON.stringify({
+                  bucket: { ...SILENT_BUCKET, endpoint },
+                  masterKey: TEST_MASTER_KEY,
+                  selectedSourceId: "stream:reviewed-copy",
+                  environment: "preproduction",
+                }),
               });
               expect(response.status).toBe(400);
               const body = await response.text();

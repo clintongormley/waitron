@@ -48,7 +48,6 @@ import {
   encodeMasterKeyCode,
   type ResourceIdentity,
 } from "@waitron/shared";
-import { parseRecoveryKit } from "@waitron/stream";
 import { writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
 import {
   mountBackupRecoveryPackMakeApi,
@@ -421,7 +420,8 @@ describe("a made pack", () => {
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
     expect(file.number).toBe(1);
     expect(file.madeAt).toBe("2026-10-30T09:00:00.000Z");
-    expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(KEY);
+    expect(file.bucketCode).toBeNull();
+    expect(JSON.stringify(file)).not.toContain(BUCKET.secretAccessKey);
     for (const key of ["serverKey", "serverKeyName", "serverKeyHeldBy", "archiveCode", "backupKey"])
       expect(file).not.toHaveProperty(key);
     const [record] = await packs();
@@ -433,7 +433,6 @@ describe("a made pack", () => {
     });
     expect(record!.parts.map((p) => [p.part, p.state])).toEqual([
       ["emergency", "absent"],
-      ["bucket", "included"],
       ["master-key", "included"],
     ]);
     const stored = JSON.stringify(record);
@@ -538,7 +537,7 @@ describe("a made pack", () => {
       const text = await pdfText(bytes);
       expect(text).not.toMatch(/server key|box key/i);
       const [record] = await packs();
-      expect(record!.parts.map((p) => p.part)).toEqual(["emergency", "bucket", "master-key"]);
+      expect(record!.parts.map((p) => p.part)).toEqual(["emergency", "master-key"]);
     },
   );
 
@@ -739,7 +738,7 @@ describe("a made pack", () => {
     expect(await packs()).toHaveLength(1);
   });
 
-  it("logs the made pack's parts, why a part failed, and the person, and no code, key, secret or error message in the log or headers", async () => {
+  it("logs the made pack's parts, and the person, and no code, key, secret or error message in the log or headers", async () => {
     const f = fixture();
     const response = await f.make(true);
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
@@ -752,7 +751,6 @@ describe("a made pack", () => {
         number: 1,
         parts: [
           { part: "emergency", state: "absent" },
-          { part: "bucket", state: "included" },
           { part: "master-key", state: "included" },
         ],
       },
@@ -768,7 +766,6 @@ describe("a made pack", () => {
         number: 2,
         parts: [
           { part: "emergency", state: "absent" },
-          { part: "bucket", state: "failed", failedWith: "backup.recovery_key_too_short" },
           { part: "master-key", state: "included" },
         ],
       },
@@ -793,7 +790,7 @@ describe("a made pack", () => {
       [...failing.headers],
       [...cloudFailing.headers],
     ]);
-    for (const value of [KEY, BUCKET.secretAccessKey, file.bucketCode!, "jane-doe"])
+    for (const value of [KEY, BUCKET.secretAccessKey, "jane-doe"])
       expect(seen).not.toContain(value);
     const printed = JSON.stringify([logs, [...failing.headers], [...cloudFailing.headers]]);
     expect(printed).not.toContain(file.masterKey!);
@@ -839,17 +836,6 @@ describe("a made pack", () => {
     )!;
     expect((await f.confirm(laterReply)).status).toBe(204);
     expect((await storedMasterKeys()).at(-1)!.name).toBe(later.masterKeyName);
-  });
-
-  it("takes the backup key from the box's settings file, never the key the backups loaded", async () => {
-    boxEnv = {};
-    const response = await print(fixture());
-    expect(response.status).toBe(200);
-    expect((await packs())[0]!.parts.map((p) => [p.part, p.state])).toEqual([
-      ["emergency", "absent"],
-      ["bucket", "failed"],
-      ["master-key", "included"],
-    ]);
   });
 
   it("logs no session token", async () => {
@@ -1129,10 +1115,7 @@ describe("the status route", () => {
         number,
         madeAt,
         madeBy: null,
-        parts: [
-          { part: "bucket", state: "not-set-up" },
-          { part: "archives", state: "not-set-up" },
-        ],
+        parts: [{ part: "archives", state: "not-set-up" }],
       });
       if (receivedAt !== null) await markRecoveryPackReceived(tx, node.nodeId, number, receivedAt);
     });
@@ -1311,7 +1294,7 @@ describe("the status route", () => {
     expect(await read(fixture())).toMatchObject({ keepOldPackUntil: "2026-11-07T09:00:00.000Z" });
   });
 
-  it("says no pack has been made, then up to date once one is received, then out of date when the key changes", async () => {
+  it("says no pack has been made, then up to date once one is received, and still current when the backup key changes", async () => {
     const f = fixture();
     expect(await read(f)).toMatchObject({ latest: null, upToDate: false });
     await (await print(f)).arrayBuffer();
@@ -1328,9 +1311,7 @@ describe("the status route", () => {
       .where(eq(persons.id, admin.personId));
     expect(fresh.latest!.madeByName).toBe(person!.name);
     boxEnv = { ...boxEnv, WAITRON_BACKUP_KEY_ROTATED_AT: "2026-10-29T08:00:00.000Z" };
-    expect((await read(f)).reasons).toEqual([
-      { part: "bucket", kind: "key_changed", at: "2026-10-29T08:00:00.000Z" },
-    ]);
+    expect(await read(f)).toMatchObject({ upToDate: true, reasons: [] });
   });
 
   it("says the box's backups still use the older key when the loaded key differs from the settings file's", async () => {
@@ -1344,7 +1325,7 @@ describe("the status route", () => {
     expect((await read(f)).backupsUseOlderKey).toBe(false);
   });
 
-  it("answers when the backup key is too short; a pack made under it is incomplete", async () => {
+  it("prints a complete pack even when the backup key is too short", async () => {
     boxEnv = { ...boxEnv, WAITRON_BACKUP_RECOVERY_KEY: "short" };
     const f = fixture();
     expect((await print(f)).status).toBe(200);
@@ -1352,7 +1333,7 @@ describe("the status route", () => {
     const response = await f.status();
     expect(response.status).toBe(200);
     const answer = (await response.json()) as Answer & { incomplete: boolean };
-    expect(answer).toMatchObject({ incomplete: true, upToDate: false, backupsUseOlderKey: false });
+    expect(answer).toMatchObject({ incomplete: false, upToDate: true, backupsUseOlderKey: false });
     for (const key of [KEY, "short"]) expect(JSON.stringify(answer)).not.toContain(key);
   });
 
@@ -1393,22 +1374,6 @@ describe("the status route", () => {
       ),
     );
     expect(await read(f)).toMatchObject({ upToDate: true, reasons: [] });
-  });
-
-  it("keeps one pack for a backup key that was never changed before its first change", async () => {
-    delete boxEnv.WAITRON_BACKUP_KEY_ROTATED_AT;
-    let instant = "2026-10-01T09:00:00.000Z";
-    const f = fixture({ now: () => new Date(instant) });
-    await (await print(f)).arrayBuffer();
-    await f.received(1);
-    instant = "2026-10-02T09:00:00.000Z";
-    await (await print(f)).arrayBuffer();
-    await f.received(2);
-    boxEnv = { ...boxEnv, WAITRON_BACKUP_KEY_ROTATED_AT: "2026-10-03T09:00:00.000Z" };
-    instant = "2026-10-04T09:00:00.000Z";
-    expect((await read(f)).keep).toEqual([
-      expect.objectContaining({ number: 2, why: "backup_key" }),
-    ]);
   });
 
   it("answers for this node only", async () => {
@@ -1486,7 +1451,7 @@ it.each(["en", "es"] as const)(
     expect(await firstPageCodes(bytes)).toEqual([masterKey, CLOUD_ADDRESS]);
     const text = await pdfText(bytes);
     expect(text).not.toMatch(/emergenc/i);
-    expect(text).toContain(PACK_WORDS[locale].page(2, 2));
+    expect(text).not.toContain(PACK_WORDS[locale].page(2, 2));
     const [record] = await packs();
     expect(record!.parts[0]).toEqual({ part: "emergency", state: "included" });
     for (const value of [
@@ -1546,10 +1511,9 @@ it.each([
     expect(await firstPageCodes(bytes)).toEqual([shownMasterKey(response).masterKey, null]);
     const text = await pdfText(bytes);
     expect(text).not.toMatch(/Cloud|emergency|jane-doe/i);
-    expect(text).toContain("Page 2 of 2");
+    expect(text).not.toContain("Page 2 of 2");
     expect((await packs())[0]!.parts.map((p) => [p.part, p.state])).toEqual([
       ["emergency", "absent"],
-      ["bucket", "included"],
       ["master-key", "included"],
     ]);
     expect(JSON.stringify(logs)).not.toContain("jane-doe");

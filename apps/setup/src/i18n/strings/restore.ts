@@ -31,7 +31,6 @@ export const restoreEn = {
     "This backup holds no master key, so it cannot be restored. Choose a newer backup.",
   "restore.preview_older_key": "An older backup brings back its older master key.",
   "restore.preview_keep_keys": "Keep older master keys until no older backup remains.",
-  "restore.preview_kit_error": "Check the recovery pack or kit file.",
   "restore.preview_environment_error": "Check the backup environment.",
   "restore.preview_file_error": "Check the backup file.",
   "restore.preview_failed": "Couldn't review this backup.",
@@ -69,20 +68,19 @@ export const restoreEn = {
 
   "restore_bucket.heading": "Restore from my bucket",
   "restore_bucket.intro":
-    "Rebuild this box from the copy the old box kept in your storage bucket. Use this only when the old box is gone. You need the recovery pack or kit file, and nothing else.",
-  "restore_bucket.sensitive":
-    "A recovery pack or kit file is as sensitive as the backup encryption key: the bucket copy code inside lets anyone read every sale and every stored credential in the bucket copy. Enter it only here.",
-  "restore_bucket.kit_file": "Recovery pack or kit file",
-  "restore_bucket.pack_no_code":
-    "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the kit.",
-  "restore_bucket.pack_not_a_pack":
-    "This PDF is not a Waitron recovery pack. Choose the venue's recovery pack or kit file, or paste the kit.",
-  "restore_bucket.pack_damaged":
-    "This recovery pack is damaged, or was changed after it was made. Choose the pack as it was saved, or paste the kit.",
-  "restore_bucket.kit": "Recovery kit",
-  "restore_bucket.kit_hint":
-    "Or paste the kit here: one long line starting with WAITRON-RECOVERY-KIT-2",
-  "restore_bucket.kit_missing": "Choose your recovery pack or kit file, or paste the kit.",
+    "Enter the bucket details and access keys from your storage provider, then enter the master key.",
+  "restore_bucket.field.endpoint": "Storage address",
+  "restore_bucket.field.bucket": "Bucket name",
+  "restore_bucket.field.region": "Region",
+  "restore_bucket.field.prefix": "Folder",
+  "restore_bucket.field.accessKeyId": "Access key ID",
+  "restore_bucket.field.secretAccessKey": "Secret access key",
+  "restore_bucket.endpoint_hint": "For storage other than Amazon S3",
+  "restore_bucket.choose_folder":
+    "This folder holds several copies. Choose the folder the old box used.",
+  "restore_bucket.folder_required":
+    "Enter the exact folder the old box used and review the backup again.",
+  "restore_bucket.check.bucket": "Check the bucket details.",
   "restore_bucket.environment": "Environment",
   "restore_bucket.environment_help_label": "Help with environment",
   "restore_bucket.environment_help":
@@ -98,7 +96,6 @@ export const restoreEn = {
   "restore_bucket.venue_confirm": "This is my business. Restore it onto this box.",
   "restore_bucket.venue_missing": "Confirm that this is your business.",
   "restore_bucket.fix_fields": "Correct the highlighted fields to continue.",
-  "restore_bucket.check.kit": "Check the recovery pack or kit file.",
   "restore_bucket.check.environment": "Check the environment.",
   "restore_bucket.check.old_box": "Check your answer about the old box.",
   "restore_bucket.check.venue": "Check the confirmation that this is your business.",
@@ -228,7 +225,6 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.preview_older_key": "Una copia antigua recupera la clave maestra de entonces.",
   "restore.preview_keep_keys":
     "Conserva las claves maestras antiguas mientras queden copias que las necesiten.",
-  "restore.preview_kit_error": "Revisa el paquete de recuperación o el archivo del kit.",
   "restore.preview_environment_error": "Revisa el entorno de la copia.",
   "restore.preview_file_error": "Revisa el archivo de copia.",
   "restore.preview_failed": "No se ha podido revisar esta copia.",
@@ -270,21 +266,19 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
 
   "restore_bucket.heading": "Restaurar desde mi bucket",
   "restore_bucket.intro":
-    "Reconstruye este servidor a partir de la copia que el servidor anterior guardaba en tu bucket de almacenamiento. Úsalo solo cuando el servidor anterior ya no esté. Necesitas el paquete de recuperación o el archivo del kit, y nada más.",
-  "restore_bucket.sensitive":
-    "Un paquete de recuperación o un archivo del kit es tan delicado como la clave de cifrado de copias: con el código de la copia en el bucket que lleva dentro, cualquiera puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Introdúcelo solo aquí.",
-  "restore_bucket.kit_file": "Paquete de recuperación o archivo del kit",
-  "restore_bucket.pack_no_code":
-    "Este paquete de recuperación no contiene el código de la copia en el bucket: el servidor no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el kit.",
-  "restore_bucket.pack_not_a_pack":
-    "Este PDF no es un paquete de recuperación de Waitron. Elige el paquete de recuperación o el archivo del kit del local, o pega el kit.",
-  "restore_bucket.pack_damaged":
-    "Este paquete de recuperación está dañado o se modificó después de hacerse. Elige el paquete tal como se guardó o pega el kit.",
-  "restore_bucket.kit": "Kit de recuperación",
-  "restore_bucket.kit_hint":
-    "O pega aquí el kit: una sola línea larga que empieza por WAITRON-RECOVERY-KIT-2",
-  "restore_bucket.kit_missing":
-    "Elige tu paquete de recuperación o el archivo del kit, o pega el kit.",
+    "Introduce los datos del bucket y las claves de acceso de tu proveedor de almacenamiento. Después, introduce la clave maestra.",
+  "restore_bucket.field.endpoint": "Dirección de almacenamiento",
+  "restore_bucket.field.bucket": "Nombre del bucket",
+  "restore_bucket.field.region": "Región",
+  "restore_bucket.field.prefix": "Carpeta",
+  "restore_bucket.field.accessKeyId": "ID de la clave de acceso",
+  "restore_bucket.field.secretAccessKey": "Clave secreta de acceso",
+  "restore_bucket.endpoint_hint": "Para proveedores distintos de Amazon S3",
+  "restore_bucket.choose_folder":
+    "Esta carpeta contiene varias copias. Elige la carpeta que usaba el servidor anterior.",
+  "restore_bucket.folder_required":
+    "Introduce la carpeta exacta que usaba el servidor anterior y revisa la copia de nuevo.",
+  "restore_bucket.check.bucket": "Revisa los datos del bucket.",
   "restore_bucket.environment": "Entorno",
   "restore_bucket.environment_help_label": "Ayuda sobre el entorno",
   "restore_bucket.environment_help":
@@ -302,7 +296,6 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore_bucket.venue_confirm": "Este es mi negocio. Restáuralo en este servidor.",
   "restore_bucket.venue_missing": "Confirma que este es tu negocio.",
   "restore_bucket.fix_fields": "Corrige los campos marcados para continuar.",
-  "restore_bucket.check.kit": "Revisa el paquete de recuperación o el archivo del kit.",
   "restore_bucket.check.environment": "Revisa el entorno.",
   "restore_bucket.check.old_box": "Revisa tu respuesta sobre el servidor anterior.",
   "restore_bucket.check.venue": "Revisa la confirmación de que este es tu negocio.",

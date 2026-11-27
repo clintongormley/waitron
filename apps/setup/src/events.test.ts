@@ -11,7 +11,7 @@ import {
   dispatchSetupPatch,
   dispatchTaxpayerChosen,
 } from "./events.js";
-import { REVIEWED_CREDENTIALS } from "./widgets/test-helpers.js";
+import { REVIEWED_BUCKET, REVIEWED_CREDENTIALS } from "./widgets/test-helpers.js";
 
 function capture(type: string, fire: (el: EventTarget) => void): CustomEvent {
   const el = document.createElement("div");
@@ -93,7 +93,7 @@ test("dispatchRestoreRequested fires a composed, bubbling restore-requested wrap
 
 test("dispatchBucketRestoreRequested fires a composed, bubbling bucket-restore-requested wrapping the request", () => {
   const request = {
-    kit: "restore kit",
+    ...REVIEWED_BUCKET,
     environment: "preproduction" as const,
     oldBoxGone: false,
     venueConfirmed: null,

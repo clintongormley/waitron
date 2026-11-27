@@ -4,9 +4,9 @@ import type { OperationBinding, OperationClient } from "@waitron/module";
 import type { FirstSetupHold } from "@waitron/provisioning";
 import { AppError, isUuid } from "@waitron/shared";
 import { openingKeyFor } from "./backup-file-key.js";
-import { asMasterKey } from "./setup-request-fields.js";
+import { asMasterKey, bucketRestoreSource } from "./setup-request-fields.js";
 import type { Logger } from "./logger.js";
-import type { SetupDeps } from "./setup-api-deps.js";
+import type { BucketRestoreSource, SetupDeps } from "./setup-api-deps.js";
 import { readFirstFiscalBody } from "./setup-first-fiscal-api.js";
 import { parseRecoveryEntryContext, type RecoveryEntryContext } from "./recovery-entry.js";
 import { requestFromBox } from "./request-from-box.js";
@@ -27,7 +27,7 @@ export type RecoveryPreparationSource =
       recoveryKey: string;
       environment: "production" | "preproduction";
     }
-  | { kind: "bucket"; kit: string; environment: "production" | "preproduction" }
+  | ({ kind: "bucket" } & BucketRestoreSource)
   | { kind: "cloud"; pointId: string }
   | { kind: "staged"; stagedId: string };
 export type ArchivePreparationSource =
@@ -260,11 +260,11 @@ export function mountRecoveryPreparationApi(
         if (artifact !== undefined) invalid("artifact");
         source = { kind: "staged", stagedId: stagedId(raw.stagedId) };
       } else if (rawSource?.kind === "bucket") {
-        const raw = exact(rawSource, ["kind", "kit", "environment"]);
+        const raw = exact(rawSource, ["kind", "bucket", "masterKey", "environment"]);
         if (artifact !== undefined) invalid("artifact");
         source = {
           kind: "bucket",
-          kit: text(raw.kit, "kit", 65536),
+          ...bucketRestoreSource(raw),
           environment: environment(raw.environment),
         };
       } else {

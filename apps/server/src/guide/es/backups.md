@@ -32,7 +32,7 @@ Si Cloud deja de estar disponible, abre **Cambiar el destino o la programación*
 
 La clave maestra, en la primera página de tu paquete de recuperación, abre un archivo de copia y autoriza su restauración. Conserva el paquete con la clave maestra que necesita cada copia.
 
-Para cambiar la clave de las copias, elige **Cambiar la clave de las copias** en la tarjeta **Paquete de recuperación** y escribe la clave maestra. Las copias nuevas usan entonces la clave siguiente, que un servidor que hayas quitado no puede leer. Después elige **Imprimir el paquete de recuperación** y guarda el paquete nuevo: lo necesitarás para restaurar tu copia en el bucket después del cambio.
+Para cambiar la clave de las copias, elige **Cambiar la clave de las copias** en la tarjeta **Paquete de recuperación** y escribe la clave maestra. Las copias nuevas usan entonces la clave siguiente, que un servidor que hayas quitado no puede leer.
 
 Conserva las claves y los paquetes antiguos de las copias que aún guardes. Consulta [Identifícate ante la copia elegida](backup-recovery.md#proof) para saber qué necesitas al restaurar.
 

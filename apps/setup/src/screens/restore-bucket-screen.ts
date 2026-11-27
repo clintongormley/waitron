@@ -8,12 +8,16 @@ import {
   focusFirstInvalid,
   leaveCoordinatorFor,
   type DraftScope,
+  type MasterKeyChangeDetail,
+  type WtMasterKeyInput,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
-import "@waitron/ui/src/components/wt-textarea.js";
+import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-master-key-input.js";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
+import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
-import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, errorStyles, fieldStyles, statusStyles } from "../form-styles.js";
 import {
@@ -21,12 +25,17 @@ import {
   dispatchBucketRestoreRequested,
   dispatchSetupGoto,
 } from "../events.js";
-import { SetupApi, type ApiError, type RecoveryBackupPreview } from "../api/client.js";
+import {
+  SetupApi,
+  type ApiError,
+  type BucketRestoreSource,
+  type RecoveryBackupPreview,
+  type RecoveryBucket,
+} from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy, copyEnvironmentFrom } from "./recovery-copy.js";
-import { bucketCodeFromFile, type PackFileRefusal } from "../pack-file-input.js";
-import { currentLocale, t, format } from "../i18n/t.js";
-import { fileInputCopy } from "../file-input-copy.js";
+import { t, format } from "../i18n/t.js";
+import { masterKeyFieldWords, refusedKeyName } from "../i18n/master-key-words.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
 
@@ -36,20 +45,36 @@ export interface RestoredVenue {
   venueName: string;
 }
 
-interface BucketForm {
-  kit: string;
-  environment: "production" | "preproduction";
+const initialBucket = {
+  endpoint: "",
+  bucket: "",
+  region: "",
+  prefix: "",
+  accessKeyId: "",
+  secretAccessKey: "",
+};
+const bucketFields = [
+  "endpoint",
+  "bucket",
+  "region",
+  "prefix",
+  "accessKeyId",
+  "secretAccessKey",
+] as const;
+function sameBucket(a: RecoveryBucket, b: RecoveryBucket): boolean {
+  return bucketFields.every((field) => (a[field] ?? "") === (b[field] ?? ""));
 }
 
+const requiredBucketFields = ["bucket", "region", "accessKeyId", "secretAccessKey"] as const;
+export type BucketLocationField = (typeof bucketFields)[number];
 export type BucketField =
-  "kit" | "environment" | "oldBoxGone" | "venueConfirmed" | RecoveryEntryField;
+  | BucketLocationField
+  | "masterKey"
+  | "environment"
+  | "oldBoxGone"
+  | "venueConfirmed"
+  | RecoveryEntryField;
 
-/**
- * Rebuild this server from the owner's bucket. It asks for the recovery pack or kit and
- * the environment, which the restore's compatibility check compares with the copy's own. The shell
- * sets `liveSince`/`liveUnknown` and `venue` from the server's refusals, and hands back the request
- * it last sent as `request`, so answering a refusal never means pasting the kit again.
- */
 @customElement("setup-restore-bucket-screen")
 export class SetupRestoreBucketScreen extends LitElement {
   static override styles = [
@@ -65,12 +90,6 @@ export class SetupRestoreBucketScreen extends LitElement {
       }
       .status {
         margin-bottom: var(--wt-space-4);
-      }
-      .sensitive {
-        font-weight: var(--wt-font-weight-bold);
-      }
-      wt-textarea::part(control) {
-        font-family: var(--wt-font-family-mono);
       }
     `,
   ];
@@ -89,33 +108,32 @@ export class SetupRestoreBucketScreen extends LitElement {
   @property({ attribute: false }) venue?: RestoredVenue;
   /** The request the shell last sent, returned with a refusal so the owner's entries are kept. */
   @property({ attribute: false }) request?: KeptBucketRestoreRequest;
-  @state() private kit = "";
+  @state() private bucket: RecoveryBucket = initialBucket;
+  @state() private masterKey = "";
   @state() private environment: "production" | "preproduction" = "production";
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
   @state() private venueConfirmed = false;
-  @state() private previewVenue?: RestoredVenue;
+  @state() private preview?: RecoveryBackupPreview;
   /** As `setup-recovery-copy` last announced. */
   @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
 
-  @state() private previewField?: "kit" | "environment";
-  @state() private previewOldKit = false;
+  @state() private previewField?: BucketLocationField | "masterKey" | "environment";
+  @state() private previewKeyName?: string;
+  @state() private folders?: string[];
   @state() private previewLiveSince?: string;
   @state() private previewLiveUnknown = false;
-  @state() private packRefusal?: PackFileRefusal;
-  @state() private kitFile?: File;
-  /** The environment Review switched the field to, until the person changes the kit or the field. */
+  /** The environment Review switched the field to, until the person changes the source or the field. */
   @state() private followedEnvironment?: "production" | "preproduction";
   private readonly feedback = new FormFeedback(this);
-  #baseline?: BucketForm;
-  #scope?: DraftScope<BucketForm>;
-  #fileRead = 0;
+  #baseline?: BucketRestoreSource;
+  #scope?: DraftScope<BucketRestoreSource>;
   /** Set once Review has switched the environment to the copy's, so it never switches back and forth. */
   #followedCopy = false;
 
-  #form(): BucketForm {
-    return { kit: this.kit, environment: this.environment };
+  #form(): BucketRestoreSource {
+    return { bucket: this.bucket, masterKey: this.masterKey, environment: this.environment };
   }
 
   override connectedCallback(): void {
@@ -124,7 +142,6 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    ++this.#fileRead;
     this.#scope?.dispose();
     this.#scope = undefined;
     super.disconnectedCallback();
@@ -136,18 +153,21 @@ export class SetupRestoreBucketScreen extends LitElement {
       id: this,
       current: () => this.#form(),
       snapshot: (form) => ({ ...form }),
-      equal: (a, b) => a.kit === b.kit && a.environment === b.environment,
+      equal: (a, b) =>
+        sameBucket(a.bucket, b.bucket) &&
+        a.masterKey === b.masterKey &&
+        a.environment === b.environment,
       restore: (form) => {
-        ++this.#fileRead;
-        this.packRefusal = undefined;
-        this.kit = form.kit;
+        this.bucket = form.bucket;
+        this.masterKey = form.masterKey;
+        this.#fillMasterKey();
         this.environment = form.environment;
         this.followedEnvironment = undefined;
         this.acknowledged = false;
         this.oldBoxGone = false;
         this.venueConfirmed = false;
         this.feedback.attempted = false;
-        this.kitFile = undefined;
+        this.folders = undefined;
         this.requestUpdate();
       },
     });
@@ -164,7 +184,8 @@ export class SetupRestoreBucketScreen extends LitElement {
     if (changed.has("refusal")) this.feedback.newRefusal("refusal");
     if (changed.has("invalidField")) this.feedback.newRefusal("field");
     if (changed.has("request") && this.request !== undefined) {
-      this.kit = this.request.kit;
+      this.bucket = this.request.bucket;
+      this.masterKey = this.request.masterKey;
       this.environment = this.request.environment;
       // A request is only sent once the owner has ticked this.
       this.acknowledged = true;
@@ -179,6 +200,7 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   override updated(changed: PropertyValues<this>): void {
     this.#registerScope();
+    if (changed.has("request") && this.request !== undefined) this.#fillMasterKey();
     if (changed.has("invalidField") && this.#refusalUnder(this.#shownRefusal) !== undefined) {
       void focusFirstInvalid(this.shadowRoot!);
     }
@@ -203,18 +225,42 @@ export class SetupRestoreBucketScreen extends LitElement {
     return field !== undefined;
   }
 
+  #fillMasterKey(): void {
+    this.shadowRoot?.querySelector<WtMasterKeyInput>("wt-master-key-input")?.fill(this.masterKey);
+  }
+
   #edited(field: BucketField): void {
     this.#followedCopy = false;
-    if (field === "kit" || field === "environment") {
+    if (
+      field === "masterKey" ||
+      field === "environment" ||
+      bucketFields.some((name) => name === field)
+    ) {
       this.followedEnvironment = undefined;
       this.#scope?.changed();
-      if (this.previewVenue !== undefined) {
-        this.previewVenue = undefined;
-        this.venueConfirmed = false;
+      this.preview = undefined;
+      this.venueConfirmed = false;
+      this.folders = undefined;
+      if (field !== "environment") {
+        this.previewLiveSince = undefined;
+        this.previewLiveUnknown = false;
+        this.oldBoxGone = false;
+        if (
+          this.#sourceChanged &&
+          (this.invalidField === "oldBoxGone" || this.invalidField === "venueConfirmed")
+        )
+          this.feedback.dismiss("field");
       }
     }
     if (field === this.previewField) this.previewField = undefined;
+    if (field === "masterKey") this.previewKeyName = undefined;
     if (field === this.invalidField) this.feedback.dismiss("field");
+  }
+
+  #bucketChanged(field: BucketLocationField, event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.bucket = { ...this.bucket, [field]: event.detail.value };
+    this.#edited(field);
   }
 
   async #followCopyEnvironment(environment: "production" | "preproduction"): Promise<void> {
@@ -228,46 +274,32 @@ export class SetupRestoreBucketScreen extends LitElement {
     await copy?.review();
   }
 
-  /**
-   * The owner has replaced the kit the shell's refusal was about. The server checked the old server
-   * and named the copy for THAT kit, so neither its question nor an answer to it applies to this one.
-   */
-  get #kitReplaced(): boolean {
-    return this.request !== undefined && this.kit !== this.request.kit;
+  get #sourceChanged(): boolean {
+    return (
+      this.request !== undefined &&
+      (!sameBucket(this.bucket, this.request.bucket) || this.masterKey !== this.request.masterKey)
+    );
   }
 
   get #askingOldBox(): boolean {
     return (
-      !this.#kitReplaced &&
-      (this.liveSince !== undefined ||
-        this.liveUnknown ||
-        this.previewLiveSince !== undefined ||
-        this.previewLiveUnknown)
+      (!this.#sourceChanged && (this.liveSince !== undefined || this.liveUnknown)) ||
+      this.previewLiveSince !== undefined ||
+      this.previewLiveUnknown
     );
   }
 
   get #venue(): RestoredVenue | undefined {
-    return this.previewVenue ?? (this.#kitReplaced ? undefined : this.venue);
+    if (this.preview !== undefined)
+      return { ...this.preview.taxpayer, venueName: this.preview.venueName };
+    return this.#sourceChanged ? undefined : this.venue;
   }
 
-  #setKit(kit: string): void {
-    ++this.#fileRead;
-    this.packRefusal = undefined;
-    this.previewLiveSince = undefined;
-    this.previewLiveUnknown = false;
-    this.oldBoxGone = false;
-    this.kit = kit;
-    this.#edited("kit");
-    if (this.#kitReplaced) {
-      this.oldBoxGone = false;
-      this.venueConfirmed = false;
-      this.#edited("oldBoxGone");
-      this.#edited("venueConfirmed");
-    }
-  }
-
-  get #kitMissing(): boolean {
-    return this.kit.trim() === "";
+  #missing(field: BucketLocationField): boolean {
+    return (
+      requiredBucketFields.some((name) => name === field) &&
+      (this.bucket[field] ?? "").trim() === ""
+    );
   }
 
   get #oldBoxUnanswered(): boolean {
@@ -280,7 +312,8 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   get #incomplete(): boolean {
     return (
-      this.#kitMissing ||
+      requiredBucketFields.some((field) => this.#missing(field)) ||
+      this.masterKey === "" ||
       !this.acknowledged ||
       this.recoveryInvalid ||
       this.#oldBoxUnanswered ||
@@ -297,30 +330,61 @@ export class SetupRestoreBucketScreen extends LitElement {
     const credentials = this.shadowRoot!.querySelector<SetupRecoveryCopy>(
       "setup-recovery-copy",
     )?.readCredentials({
-      bucketKit: this.kit,
+      bucket: this.bucket,
+      masterKey: this.masterKey,
       environment: this.environment,
       oldBoxGone: this.#askingOldBox && this.oldBoxGone,
     });
-    if (!credentials) return;
+    if (!credentials || this.preview === undefined) return;
     dispatchBucketRestoreRequested(this, {
       ...credentials,
-      kit: this.kit,
-      environment: this.environment,
+      ...this.#form(),
+      selectedSourceId: this.preview.sourceId,
       oldBoxGone: this.#askingOldBox && this.oldBoxGone,
       venueConfirmed: this.#venue !== undefined && this.venueConfirmed ? this.#venue.taxId : null,
     });
   }
 
-  async #readFile(event: CustomEvent<{ files: File[] }>): Promise<void> {
-    event.stopPropagation();
-    const file = event.detail.files[0];
-    this.kitFile = file;
-    const read = ++this.#fileRead;
-    if (file === undefined) return;
-    const chosen = await bucketCodeFromFile(file);
-    if (!this.isConnected || read !== this.#fileRead) return;
-    if ("refused" in chosen) this.packRefusal = chosen.refused;
-    else this.#setKit(chosen.text);
+  #renderBucketField(field: BucketLocationField, refused: BucketField | undefined) {
+    const error =
+      field === "prefix" && this.folders !== undefined
+        ? t(
+            this.folders.length === 0
+              ? "restore_bucket.folder_required"
+              : "restore_bucket.choose_folder",
+          )
+        : refused === field
+          ? this.errorMessage
+          : this.previewField === field || (this.feedback.attempted && this.#missing(field))
+            ? t("restore_bucket.check.bucket")
+            : undefined;
+    if (field === "prefix" && this.folders?.length) {
+      return html`<wt-combobox
+        class="field"
+        name="bucket-folder"
+        data-test="folder-choice"
+        required
+        label=${t("restore_bucket.field.prefix")}
+        error=${error ?? ""}
+        .options=${this.folders.map((value) => ({ value, label: value }))}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#bucketChanged(field, event)}
+      ></wt-combobox>`;
+    }
+    return html`<wt-input
+      class="field"
+      name=${field}
+      data-test=${field}
+      label=${t(`restore_bucket.field.${field}`)}
+      type=${field === "secretAccessKey" ? "password" : "text"}
+      ?required=${requiredBucketFields.some((name) => name === field)}
+      autocomplete="off"
+      autocapitalize="none"
+      .spellcheck=${false}
+      hint=${field === "endpoint" ? t("restore_bucket.endpoint_hint") : ""}
+      error=${error ?? ""}
+      .value=${this.bucket[field] ?? ""}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => this.#bucketChanged(field, event)}
+    ></wt-input>`;
   }
 
   #renderVenue(refused: BucketField | undefined): TemplateResult | typeof nothing {
@@ -358,16 +422,14 @@ export class SetupRestoreBucketScreen extends LitElement {
   override render(): TemplateResult {
     const shownRefusal = this.#shownRefusal;
     const refused = this.#refusalUnder(shownRefusal);
-    const kitError =
-      this.feedback.attempted && this.#kitMissing
-        ? t("restore_bucket.kit_missing")
-        : this.previewField === "kit"
-          ? t(this.previewOldKit ? "shell.bucket.kit_old_version" : "restore.preview_kit_error")
-          : refused === "kit"
-            ? this.errorMessage
+    const keyError =
+      refused === "masterKey"
+        ? this.errorMessage
+        : this.previewKeyName !== undefined
+          ? masterKeyFieldWords().wrongKey(this.previewKeyName)
+          : this.previewField === "masterKey"
+            ? t("restore.check.master_key")
             : undefined;
-    const packError =
-      this.packRefusal === undefined ? undefined : t(`restore_bucket.pack_${this.packRefusal}`);
     const environmentError =
       this.previewField === "environment"
         ? t("restore.preview_environment_error")
@@ -378,7 +440,10 @@ export class SetupRestoreBucketScreen extends LitElement {
     const fieldsInvalid = this.feedback.attempted && this.#incomplete;
     const bottom = bottomMessage(
       this.#shows(this.invalidField) ? null : (shownRefusal ?? null),
-      fieldsInvalid || refused !== undefined || this.previewField !== undefined
+      fieldsInvalid ||
+        refused !== undefined ||
+        this.previewField !== undefined ||
+        this.folders !== undefined
         ? t("restore_bucket.fix_fields")
         : null,
       this.reviewNeeded ? t("restore.review_first") : null,
@@ -387,39 +452,23 @@ export class SetupRestoreBucketScreen extends LitElement {
       <h1>${t("restore_bucket.heading")}</h1>
       <p>${t("restore_bucket.intro")}</p>
       <p>${t("restore.replace_warning")}</p>
-      <p class="sensitive" data-test="kit-sensitive">${t("restore_bucket.sensitive")}</p>
-      <wt-file-input
+      ${bucketFields.map((field) => this.#renderBucketField(field, refused))}
+      <wt-master-key-input
         class="field"
-        name="recovery-kit-file"
-        label=${t("restore_bucket.kit_file")}
-        data-test="kit-file"
-        .files=${this.kitFile ? [this.kitFile] : []}
-        .copy=${fileInputCopy()}
-        .locale=${currentLocale()}
-        .error=${packError ?? ""}
-        ?invalid=${packError !== undefined}
-        @wt-change=${(event: CustomEvent<{ files: File[] }>) => void this.#readFile(event)}
-      ></wt-file-input>
-      <wt-textarea
-        class="field"
-        label=${t("restore_bucket.kit")}
-        name="recovery-kit"
-        hint=${t("restore_bucket.kit_hint")}
+        data-test="master-key"
         required
-        rows="6"
-        autocapitalize="none"
-        autocorrect="off"
-        autocomplete="off"
-        .spellcheck=${false}
-        data-test="kit"
-        error=${kitError ?? ""}
-        .value=${this.kit}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => {
-          e.stopPropagation();
-          this.#setKit(e.detail.value);
+        .draftParent=${this}
+        .copy=${masterKeyFieldWords()}
+        .readPack=${loadRecoveryPackReader}
+        .maxPdfBytes=${MAX_PACK_PDF}
+        .attempted=${this.feedback.attempted}
+        .error=${keyError ?? ""}
+        @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
+          event.stopPropagation();
+          this.masterKey = event.detail.masterKey ?? "";
+          this.#edited("masterKey");
         }}
-      >
-      </wt-textarea>
+      ></wt-master-key-input>
       <wt-combobox
         class="field"
         label=${t("restore_bucket.environment")}
@@ -473,8 +522,8 @@ export class SetupRestoreBucketScreen extends LitElement {
       </label>
       ${acknowledgeInvalid ? html`<p class="error" id="acknowledge-error">${t("restore_bucket.acknowledge_missing")}</p>` : nothing}
       ${oldBoxQuestion({
-        liveSince: this.#askingOldBox ? (this.liveSince ?? this.previewLiveSince) : undefined,
-        liveUnknown: this.#askingOldBox && (this.liveUnknown || this.previewLiveUnknown),
+        liveSince: this.previewLiveSince ?? (this.#sourceChanged ? undefined : this.liveSince),
+        liveUnknown: this.previewLiveUnknown || (!this.#sourceChanged && this.liveUnknown),
         checked: this.oldBoxGone,
         invalid: this.feedback.attempted && this.#oldBoxUnanswered,
         refusal: refused === "oldBoxGone" ? this.errorMessage : undefined,
@@ -490,16 +539,8 @@ export class SetupRestoreBucketScreen extends LitElement {
         }}
         @recovery-preview=${(event: CustomEvent<{ preview?: RecoveryBackupPreview }>) => {
           event.stopPropagation();
-          const preview = event.detail.preview;
-          if (preview === undefined && this.previewVenue === undefined) return;
-          this.previewVenue =
-            preview === undefined
-              ? undefined
-              : {
-                  legalName: preview.taxpayer.legalName,
-                  taxId: preview.taxpayer.taxId,
-                  venueName: preview.venueName,
-                };
+          if (event.detail.preview === this.preview) return;
+          this.preview = event.detail.preview;
           this.venueConfirmed = false;
         }}
         .errorMessage=${shownRefusal}
@@ -514,9 +555,11 @@ export class SetupRestoreBucketScreen extends LitElement {
         }}
         .api=${this.api}
         .boxAddress=${this.boxAddress}
-        .bucketKit=${this.kit}
+        .bucket=${this.bucket}
+        .masterKey=${this.masterKey}
         .environment=${this.environment}
         .oldBoxGone=${this.oldBoxGone}
+        .reviewDisabled=${Boolean(this.folders?.length)}
         @preview-refusal=${(event: CustomEvent<{ cause?: ApiError; field?: string }>) => {
           event.stopPropagation();
           const error = event.detail.cause;
@@ -525,12 +568,20 @@ export class SetupRestoreBucketScreen extends LitElement {
             void this.#followCopyEnvironment(copied);
             return;
           }
-          this.previewOldKit =
-            error?.code === "backup.stream_kit_invalid" && error.params?.reason === "version";
+          const field = event.detail.field;
+          this.previewKeyName = field === "masterKey" ? refusedKeyName(error) : undefined;
           this.previewField =
-            event.detail.field === "kit" || event.detail.field === "environment"
-              ? event.detail.field
-              : undefined;
+            field === "masterKey" || field === "environment"
+              ? field
+              : bucketFields.find((name) => name === field);
+          if (
+            error?.code === "restore.stream_folder_required" &&
+            Array.isArray(error.params?.folders)
+          ) {
+            this.folders = error.params.folders.filter(
+              (folder): folder is string => typeof folder === "string",
+            );
+          }
           if (error?.code === "restore.stream_source_live")
             this.previewLiveSince =
               typeof error.params?.lastChangeAt === "string"

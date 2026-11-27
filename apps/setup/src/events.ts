@@ -1,4 +1,4 @@
-import type { RecoveryRestoreCredentials } from "./api/client.js";
+import type { BucketRestoreBody, RecoveryRestoreCredentials } from "./api/client.js";
 import type { DeepPartial, Screen } from "./setup-app.js";
 import type { ProvisionBody } from "./api/client.js";
 
@@ -73,18 +73,9 @@ export function dispatchRestoreRequested(el: EventTarget, request: RestoreReques
   );
 }
 
-export interface BucketRestoreRequestDetail extends RecoveryRestoreCredentials {
-  kit: string;
-  environment: "production" | "preproduction";
-  oldBoxGone: boolean;
-  /** The tax id of the restored copy the owner confirmed; null until one has been shown. */
-  venueConfirmed: string | null;
-}
+export type BucketRestoreRequestDetail = BucketRestoreBody;
 
-/**
- * What the shell keeps, in page memory only, of a refused bucket request to draw it again: never
- * its recovery operation or the master key typed for it.
- */
+/** Kept only in page memory. The separate proof for authorising placement is entered again. */
 export type KeptBucketRestoreRequest = Omit<
   BucketRestoreRequestDetail,
   keyof RecoveryRestoreCredentials

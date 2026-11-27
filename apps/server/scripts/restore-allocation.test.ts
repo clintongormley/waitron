@@ -35,7 +35,11 @@ import { restoreFromArtifactFile } from "../src/restore.js";
 import { writeStreamRestore } from "../src/restore-stream.js";
 import { encryptArtifact } from "../src/artifact-cipher.js";
 import { packArchive } from "../src/backup-archive.js";
-import { encodeRecoveryKit } from "@waitron/stream";
+import {
+  bucketRestoreArgs,
+  bucketRestoreEnv,
+  TEST_BUCKET,
+} from "../test/bucket-restore-command.js";
 const modules = vi.hoisted(() => [] as WaitronModule[]);
 vi.mock("../src/modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -233,37 +237,23 @@ it.each(["archive", "bucket"])(
         bytes: Buffer.from(`WAITRON_NODE_ID=${NODE}\n`),
       },
     ];
-    const kit = {
-      version: 2 as const,
-      streamId: "c0000000-0000-4000-8000-000000000002",
-      bucket: {
-        endpoint: "https://s3.example.net",
-        region: "eu-west-1",
-        bucket: "venue-copy",
-        prefix: "waitron/",
-        accessKeyId: "AKIAEXAMPLE",
-        secretAccessKey: "synthetic-secret-0123456789",
-      },
-      recoveryKey: backupKey,
-      pointerSignerPublicKey: "MCowBQYDK2VwAyEA0000000000000000000000000000000000000000000=",
-    };
     const artifact = join(root, "cold-input");
-    await writeFile(
-      artifact,
-      kind === "bucket"
-        ? encodeRecoveryKit(kit)
-        : encryptArtifact(
-            packArchive([...entries, { name: "db.dump", bytes: await readFile(source) }]),
-            backupKey,
-          ),
-    );
+    if (kind === "archive")
+      await writeFile(
+        artifact,
+        encryptArtifact(
+          packArchive([...entries, { name: "db.dump", bytes: await readFile(source) }]),
+          backupKey,
+        ),
+      );
     const replacement = join(root, "replacement-venue");
     const lines: string[] = [];
     let failure: unknown;
     const attempt = runRestore({
-      argv: kind === "archive" ? ["restore", artifact] : ["restore", "--from-bucket", artifact],
+      argv: kind === "archive" ? ["restore", artifact] : bucketRestoreArgs(TEST_BUCKET),
       env: {
         ...env(),
+        ...(kind === "bucket" ? bucketRestoreEnv(TEST_BUCKET, secret) : {}),
         WAITRON_STATE_DIR: stateDir,
         WAITRON_VENUE_DIR: replacement,
         WAITRON_BACKUP_RECOVERY_KEY: backupKey,

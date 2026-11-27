@@ -32,6 +32,17 @@ const operation = {
   },
   input: { outsideAllocation: "opaque-signed-envelope" },
 };
+const bucketSource = {
+  bucket: {
+    bucket: "saved-copies",
+    region: "test-region",
+    prefix: "restaurant/box",
+    accessKeyId: "storage-user",
+    secretAccessKey: "bucket-password",
+  },
+  masterKey: MASTER_KEY_TEXT,
+  selectedSourceId: "stream:reviewed-copy",
+};
 const credentials = { recoveryOperation: operation, nodeRecoverySecret: "node-paper-key" };
 
 function setup(
@@ -103,7 +114,7 @@ function request(kind: string, supplied: Record<string, unknown> = credentials) 
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...(kind === "bucket"
-          ? { kit: "bucket-kit", environment: "preproduction", venueConfirmed: "89890001K" }
+          ? { ...bucketSource, environment: "preproduction", venueConfirmed: "89890001K" }
           : { pointId }),
         oldBoxGone: true,
         ...supplied,
@@ -124,7 +135,7 @@ it.each(["archive", "bucket", "cloud"])(
     if (kind === "bucket") {
       expect(stageBucketRestore).toHaveBeenCalledWith(
         {
-          kit: "bucket-kit",
+          ...bucketSource,
           environment: "preproduction",
           oldBoxGone: true,
           venueConfirmed: "89890001K",

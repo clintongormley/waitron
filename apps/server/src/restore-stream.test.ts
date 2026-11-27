@@ -24,7 +24,6 @@ import {
   writePointer,
   type BucketConfig,
   type ObjectStore,
-  type RecoveryKit,
   type RestoreGenerationArgs,
   type StreamPointer,
 } from "@waitron/stream";
@@ -168,18 +167,12 @@ afterAll(async () => {
   await rm(dirname(fixtureDb), { recursive: true, force: true });
 });
 
-const KIT: RecoveryKit = {
-  version: 2 as const,
-  streamId: T.streamId,
-  bucket: {
-    region: "eu-west-1",
-    bucket: "venue-copy",
-    prefix: "",
-    accessKeyId: "AKIA",
-    secretAccessKey: "secret-0123456789",
-  },
-  recoveryKey: RECOVERY_KEY,
-  pointerSignerPublicKey: signer.publicKey,
+const BUCKET: BucketConfig = {
+  region: "eu-west-1",
+  bucket: "venue-copy",
+  prefix: "",
+  accessKeyId: "AKIA",
+  secretAccessKey: "secret-0123456789",
 };
 
 const POINTER: StreamPointer = {
@@ -188,6 +181,7 @@ const POINTER: StreamPointer = {
   nodeId: T.nodeId,
   generation: GENERATION,
   writtenAt: "2026-09-23T09:00:05.000Z",
+  recovery: { signerPublicKey: signer.publicKey, keyNumber: 2, masterKeyId: "1caa45f2d2fe567b" },
 };
 
 /**
@@ -220,10 +214,11 @@ const copyFixture = vi.fn(async (args: RestoreGenerationArgs) => {
 
 async function prepareDeps(
   store: ObjectStore,
-  overrides: Partial<Extract<PrepareStreamDeps, { kit: RecoveryKit }>> = {},
-): Promise<Extract<PrepareStreamDeps, { kit: RecoveryKit }>> {
+  overrides: Partial<PrepareStreamDeps> = {},
+): Promise<PrepareStreamDeps> {
   return {
-    kit: KIT,
+    bucket: BUCKET,
+    masterKey: MASTER_KEY,
     stateDir: await fresh("waitron-stream-state-"),
     migrationsRoot: null,
     litestreamBin: "/unused",
@@ -244,20 +239,7 @@ async function expectStateUntouched(stateDir: string): Promise<void> {
 }
 
 async function numberedBucket(signWith = signer.privateKey) {
-  const store = await bucket();
-  const pointer = signPointer(
-    {
-      ...POINTER,
-      recovery: {
-        signerPublicKey: signer.publicKey,
-        keyNumber: 2,
-        masterKeyId: "1caa45f2d2fe567b",
-      },
-    },
-    signWith,
-  );
-  await store.put(pointerKey(), Buffer.from(JSON.stringify(pointer)));
-  return store;
+  return bucket({ signWith });
 }
 
 async function masterKeyDeps(
@@ -265,8 +247,7 @@ async function masterKeyDeps(
   masterKey = MASTER_KEY,
   restore: typeof copyFixture = copyFixture,
 ) {
-  const { kit, ...deps } = await prepareDeps(store);
-  return { ...deps, bucket: kit.bucket, masterKey, restoreGeneration: restore };
+  return prepareDeps(store, { masterKey, restoreGeneration: restore });
 }
 
 describe("prepareStreamRestore", () => {
@@ -366,7 +347,7 @@ describe("prepareStreamRestore", () => {
       expect.objectContaining({
         generation: GENERATION,
         streamId: T.streamId,
-        bucket: KIT.bucket,
+        bucket: BUCKET,
         streamKey: STREAM_KEY,
       }),
     );
@@ -385,36 +366,6 @@ describe("prepareStreamRestore", () => {
     await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
       code: "restore.stream_pointer_missing",
     });
-    await expectStateUntouched(deps.stateDir);
-  });
-
-  it("refuses a pointer signed by any key other than the kit's, before downloading anything", async () => {
-    const restore = vi.fn();
-    const deps = await prepareDeps(await bucket({ signWith: generateNodeKeyPair().privateKey }), {
-      restoreGeneration: restore,
-    });
-    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
-      code: "restore.stream_pointer_unverified",
-      params: { reason: "signature" },
-    });
-    expect(restore).not.toHaveBeenCalled();
-    await expectStateUntouched(deps.stateDir);
-  });
-
-  it("refuses a pointer naming another venue, before downloading anything", async () => {
-    const store = await bucket();
-    const other = signPointer(
-      { ...POINTER, streamId: "c0000000-0000-4000-8000-0000000000ff" },
-      signer.privateKey,
-    );
-    await store.put(pointerKey(), Buffer.from(JSON.stringify(other)));
-    const restore = vi.fn();
-    const deps = await prepareDeps(store, { restoreGeneration: restore });
-    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
-      code: "restore.stream_pointer_unverified",
-      params: { reason: "venue_mismatch" },
-    });
-    expect(restore).not.toHaveBeenCalled();
     await expectStateUntouched(deps.stateDir);
   });
 
@@ -550,46 +501,6 @@ describe("prepareStreamRestore", () => {
     await expectStateUntouched(deps.stateDir);
   });
 
-  it("refuses the wrong recovery key", async () => {
-    const deps = await prepareDeps(await bucket(), {
-      kit: { ...KIT, recoveryKey: "a-different-key-entirely" },
-    });
-    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
-      code: "recovery.passphrase_invalid",
-    });
-    await expectStateUntouched(deps.stateDir);
-  });
-
-  // Review Focus 2: the owner supplies the wrong kit. Each is refused before anything on the box
-  // changes, naming what is wrong.
-  it("refuses another stream's kit before downloading anything", async () => {
-    const restore = vi.fn();
-    const deps = await prepareDeps(await bucket(), {
-      kit: { ...KIT, streamId: "c0000000-0000-4000-8000-0000000000ff" },
-      restoreGeneration: restore,
-    });
-    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
-      code: "restore.stream_pointer_unverified",
-      params: { reason: "venue_mismatch" },
-    });
-    expect(restore).not.toHaveBeenCalled();
-    await expectStateUntouched(deps.stateDir);
-  });
-
-  it("refuses a kit whose signing key is another venue's, before downloading anything", async () => {
-    const restore = vi.fn();
-    const deps = await prepareDeps(await bucket(), {
-      kit: { ...KIT, pointerSignerPublicKey: generateNodeKeyPair().publicKey },
-      restoreGeneration: restore,
-    });
-    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
-      code: "restore.stream_pointer_unverified",
-      params: { reason: "signature" },
-    });
-    expect(restore).not.toHaveBeenCalled();
-    await expectStateUntouched(deps.stateDir);
-  });
-
   // Review Focus 5: the disk fills during the download.
   it("says the disk is full, removes the partial download and changes nothing", async () => {
     const deps = await prepareDeps(await bucket(), {
@@ -719,12 +630,9 @@ describe("prepareStreamRestore", () => {
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     try {
       const deps = await prepareDeps(await bucket(), {
-        kit: {
-          ...KIT,
-          bucket: {
-            ...KIT.bucket,
-            endpoint: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
-          },
+        bucket: {
+          ...BUCKET,
+          endpoint: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
         },
         litestreamBin: join(tmpdir(), "waitron-no-such-litestream"),
         restoreGeneration: undefined,
@@ -740,9 +648,9 @@ describe("prepareStreamRestore", () => {
     }
   });
 
-  it("opens the kit's bucket itself when no store is given", async () => {
+  it("opens the bucket itself when no store is given", async () => {
     const deps = await prepareDeps(createMemoryObjectStore(), {
-      kit: { ...KIT, bucket: { ...KIT.bucket, endpoint: "http://127.0.0.1:1" } },
+      bucket: { ...BUCKET, endpoint: "http://127.0.0.1:1" },
       openStore: undefined,
     });
     await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
@@ -813,7 +721,7 @@ describe("prepareStreamRestore", () => {
 
   it("confirms the restored copy's venue whatever venue id the backup settings name", async () => {
     const streamId = "c0000000-0000-4000-8000-0000000000ff";
-    const deps = await prepareDeps(await bucket({ streamId }), { kit: { ...KIT, streamId } });
+    const deps = await prepareDeps(await bucket({ streamId }));
     const prepared = await prepareStreamRestore(deps);
     expect(prepared.venue.venueName).toBe(VENUE.venueName);
     await prepared.discard();
@@ -916,7 +824,7 @@ describe("refuseIfArchiveSourceLive", () => {
   async function archive(
     withSettings: boolean,
     secrets = true,
-    settingsBucket: BucketConfig = KIT.bucket,
+    settingsBucket: BucketConfig = BUCKET,
     missingField?: string,
   ): Promise<ValidatedArtifact> {
     const file = join(await fresh("waitron-archive-db-"), "venue.db");
@@ -968,7 +876,7 @@ describe("refuseIfArchiveSourceLive", () => {
 
   it("asks for confirmation when an archive's sealed bucket lacks an endpoint", async () => {
     const openStore = vi.fn();
-    const a = await args(await archive(true, true, KIT.bucket, "endpoint"), openStore);
+    const a = await args(await archive(true, true, BUCKET, "endpoint"), openStore);
     await expect(refuseIfArchiveSourceLive(a)).rejects.toMatchObject({
       code: "restore.stream_source_unchecked",
       params: { reason: "bucket" },
@@ -998,7 +906,7 @@ describe("refuseIfArchiveSourceLive", () => {
         },
       }),
     ).rejects.toMatchObject({ code: "restore.stream_source_live" });
-    expect(opened).toEqual([KIT.bucket]);
+    expect(opened).toEqual([BUCKET]);
     await expectStateUntouched(a.stateDir);
     await refuseIfArchiveSourceLive({ ...a, oldBoxGone: true });
     await expectStateUntouched(a.stateDir);
@@ -1034,7 +942,7 @@ describe("refuseIfArchiveSourceLive", () => {
   });
 
   it("opens the settings' bucket itself when no store is given, and one that cannot be reached asks for confirmation", async () => {
-    const unreachable = { ...KIT.bucket, endpoint: "http://127.0.0.1:1" };
+    const unreachable = { ...BUCKET, endpoint: "http://127.0.0.1:1" };
     const a = await args(await archive(true, true, unreachable), () => {
       throw new Error("unused");
     });

@@ -1,4 +1,5 @@
 import { AppError } from "@waitron/shared";
+import { readBucketConfig } from "@waitron/stream";
 import "./errors.js";
 
 export const MAX_RESTORE_UPLOAD_BYTES = 256 * 1024 * 1024;
@@ -27,4 +28,11 @@ export function asMasterKey(value: unknown, field: string): string {
   if (key.trim().length === 0 || Buffer.byteLength(key) > MAX_MASTER_KEY_BYTES)
     invalidRequest(field);
   return key;
+}
+
+export function bucketRestoreSource(body: Record<string, unknown>) {
+  return {
+    bucket: readBucketConfig(body.bucket, invalidRequest),
+    masterKey: asMasterKey(body.masterKey, "masterKey"),
+  };
 }

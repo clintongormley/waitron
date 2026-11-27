@@ -23,7 +23,6 @@ import {
   verifyPointer,
   type BucketConfig,
   type ObjectStore,
-  type RecoveryKit,
   type S3ObjectStore,
 } from "@waitron/stream";
 import type { ArchiveEntry } from "./backup-archive.js";
@@ -67,7 +66,7 @@ type RecoveryStore = ObjectStore & Partial<Pick<S3ObjectStore, "listFolders">>;
 
 type BucketRecoveryInput = { bucket: BucketConfig; masterKey: string };
 
-export type PrepareStreamDeps = ({ kit: RecoveryKit } | BucketRecoveryInput) & {
+export type PrepareStreamDeps = BucketRecoveryInput & {
   stateDir: string;
   migrationsRoot: string | null;
   litestreamBin: string;
@@ -289,28 +288,6 @@ async function readRestoredCopy(args: {
   }
 }
 
-async function readVerifiedPointer(store: ObjectStore, kit: RecoveryKit) {
-  let read;
-  try {
-    read = await readPointer(store, kit.streamId);
-  } catch (error) {
-    if (
-      isAppError(error) &&
-      hasCode(error, "backup.stream_pointer_invalid") &&
-      error.params.reason === "other_venue"
-    ) {
-      throw new AppError("restore.stream_pointer_unverified", { reason: "venue_mismatch" });
-    }
-    throw error;
-  }
-  if (read === null) throw new AppError("restore.stream_pointer_missing", {});
-  // The kit's key, never one found in the bucket.
-  if (!verifyPointer(read.pointer, kit.pointerSignerPublicKey)) {
-    throw new AppError("restore.stream_pointer_unverified", { reason: "signature" });
-  }
-  return read.pointer.body;
-}
-
 const DISCOVERY_LIMIT = 24;
 
 function checkedRestoreBucket(bucket: BucketConfig): BucketConfig {
@@ -402,27 +379,16 @@ async function openBucketCopy(
   };
 }
 
-async function openKitCopy(kit: RecoveryKit, openStore: (bucket: BucketConfig) => ObjectStore) {
-  const store = openStore(kit.bucket);
-  const body = await readVerifiedPointer(store, kit);
-  return {
-    bucket: kit.bucket,
-    store,
-    body,
-    recoveryKey: kit.recoveryKey,
-    sourceId: `stream:${body.streamId}:${body.generation}`,
-  };
-}
-
 /**
  * Verify, download and unlock the selected copy before placement. Each attempt owns its scratch
  * folder so a failed preparation can discard it.
  */
 export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<PreparedStream> {
-  const { bucket, store, body, recoveryKey, sourceId } =
-    "kit" in deps
-      ? await openKitCopy(deps.kit, deps.openStore ?? createS3ObjectStore)
-      : await openBucketCopy(deps, deps.openStore ?? createS3FolderStore, deps.signal);
+  const { bucket, store, body, recoveryKey, sourceId } = await openBucketCopy(
+    deps,
+    deps.openStore ?? createS3FolderStore,
+    deps.signal,
+  );
   const { streamId, generation, nodeId } = body;
   await refuseIfSourceLive({
     store,

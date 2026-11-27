@@ -3,6 +3,7 @@ import { SetupApi } from "../api/client.js";
 import {
   REVIEWED_PREVIEW,
   cleanupWidgets,
+  enterBucket,
   expectNoA11yViolations,
   mountWidget,
 } from "../widgets/test-helpers.js";
@@ -137,11 +138,7 @@ describe.each(["light", "dark"] as const)(
         { api },
         theme,
       );
-      const area = el
-        .shadowRoot!.querySelector("[data-test=kit]")!
-        .shadowRoot!.querySelector("textarea")!;
-      area.value = "selected-private-kit";
-      area.dispatchEvent(new Event("input"));
+      enterBucket(el);
       await el.updateComplete;
       const copy = el.shadowRoot!.querySelector("setup-recovery-copy")! as HTMLElement & {
         updateComplete: Promise<unknown>;

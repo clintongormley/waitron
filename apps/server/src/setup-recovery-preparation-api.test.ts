@@ -8,8 +8,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeMasterKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
 import { AppError, encodeMasterKeyCode } from "@waitron/shared";
-import { encodeRecoveryKit } from "@waitron/stream";
-import { generateNodeKeyPair } from "@waitron/membership";
 import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import { prepareStreamRestore } from "./restore-stream.js";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
@@ -39,7 +37,18 @@ const preparation = {
   nodeRecoverySecret: "matching named key",
   proposal: { action: "clock-challenge" },
 };
-const bucket = { kind: "bucket", kit: "private bucket kit", environment: "preproduction" };
+const bucket = {
+  kind: "bucket" as const,
+  bucket: {
+    bucket: "saved-copies",
+    region: "test-region",
+    prefix: "restaurant/box",
+    accessKeyId: "storage-user",
+    secretAccessKey: "bucket-password",
+  },
+  masterKey: "private opening key",
+  environment: "preproduction" as const,
+};
 const FILE_MASTER_KEY = makeMasterKey();
 const FILE_MASTER_KEY_TEXT = encodeMasterKeyCode(FILE_MASTER_KEY);
 const FILE_PLAINTEXT = Uint8Array.from([7, 2, 9]);
@@ -102,7 +111,8 @@ it("prepares a bucket recovery within the existing setup hold without reflecting
     expect.any(AbortSignal),
   );
   expect(JSON.stringify(log.mock.calls)).not.toContain(preparation.nodeRecoverySecret);
-  expect(JSON.stringify(log.mock.calls)).not.toContain(bucket.kit);
+  for (const secret of [bucket.masterKey, bucket.bucket.secretAccessKey])
+    expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
 });
 it("tells the preparation whether the request came from the box itself", async () => {
   const from = (address: string) => {
@@ -697,29 +707,10 @@ it("keeps the request cancellation through the bucket preparation service", asyn
     coordinator: createFirstSetupCoordinator(),
     bucket: { litestreamBin: "/unused", now: () => new Date(), log: () => {} },
   });
-  const kit = encodeRecoveryKit({
-    version: 2,
-    streamId: "d0000000-0000-4000-8000-000000000002",
-    recoveryKey: "synthetic-recovery-key",
-    pointerSignerPublicKey: generateNodeKeyPair().publicKey,
-    bucket: {
-      region: "local",
-      bucket: "copy",
-      prefix: "",
-      accessKeyId: "unused",
-      secretAccessKey: "unused",
-    },
-  });
   try {
-    await expect(
-      service(
-        { kind: "bucket", kit, environment: "preproduction" },
-        preparation,
-        undefined,
-        { onBox: true },
-        signal,
-      ),
-    ).rejects.toBe(reason);
+    await expect(service(bucket, preparation, undefined, { onBox: true }, signal)).rejects.toBe(
+      reason,
+    );
   } finally {
     download.mockRestore();
   }

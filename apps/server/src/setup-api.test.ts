@@ -1,3 +1,4 @@
+import { TEST_BUCKET, TEST_MASTER_KEY } from "../test/bucket-restore-command.js";
 import { useSetupStateDir } from "./testing/setup-state-dir.js";
 import { readFile, readdir } from "node:fs/promises";
 import { receiveSetupArchive } from "./setup-archive-upload.js";
@@ -2858,6 +2859,12 @@ describe("POST /setup-api/restore", () => {
   });
 });
 
+const bucketSource = {
+  bucket: TEST_BUCKET,
+  masterKey: TEST_MASTER_KEY,
+  selectedSourceId: "stream:reviewed-copy",
+};
+
 async function postBucketRestore(
   app: Hono,
   body: unknown,
@@ -2884,14 +2891,14 @@ describe("POST /setup-api/restore-bucket", () => {
         noopLog,
       );
       const response = await postBucketRestore(app, {
-        kit: "WAITRON-RECOVERY-KIT-2:abc",
+        ...bucketSource,
         environment: "production",
       });
       expect(response.status).toBe(202);
       expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
       expect(stageBucketRestore).toHaveBeenCalledWith(
         {
-          kit: "WAITRON-RECOVERY-KIT-2:abc",
+          ...bucketSource,
           environment: "production",
           oldBoxGone: false,
           venueConfirmed: null,
@@ -2926,7 +2933,7 @@ describe("POST /setup-api/restore-bucket", () => {
         },
         noopLog,
       );
-      const first = await postBucketRestore(app, { kit: "k", environment: "production" });
+      const first = await postBucketRestore(app, { ...bucketSource, environment: "production" });
       expect(first.status).toBe(409);
       expect(await first.json()).toEqual({
         error: {
@@ -2935,14 +2942,14 @@ describe("POST /setup-api/restore-bucket", () => {
         },
       });
       const second = await postBucketRestore(app, {
-        kit: "k",
+        ...bucketSource,
         environment: "production",
         oldBoxGone: true,
       });
       expect(second.status).toBe(202);
       expect(stageBucketRestore).toHaveBeenLastCalledWith(
         {
-          kit: "k",
+          ...bucketSource,
           environment: "production",
           oldBoxGone: true,
           venueConfirmed: null,
@@ -2965,11 +2972,11 @@ describe("POST /setup-api/restore-bucket", () => {
       { environment: "preproduction", stageBucketRestore, requestRestart: vi.fn() },
       noopLog,
     );
-    expect((await postBucketRestore(app, { kit: "k", environment: "production" })).status).toBe(
-      409,
-    );
+    expect(
+      (await postBucketRestore(app, { ...bucketSource, environment: "production" })).status,
+    ).toBe(409);
     const retry = await postBucketRestore(app, {
-      kit: "k",
+      ...bucketSource,
       environment: "production",
       oldBoxGone: true,
     });
@@ -2977,14 +2984,14 @@ describe("POST /setup-api/restore-bucket", () => {
   });
 
   it.each<[string, Record<string, unknown>]>([
-    ["kit", { environment: "production" }],
-    ["kit", { kit: "", environment: "production" }],
-    ["kit", { kit: 7, environment: "production" }],
-    ["kit", { kit: "k".repeat(64 * 1024 + 1), environment: "production" }],
-    ["environment", { kit: "k", environment: "dev" }],
-    ["environment", { kit: "k" }],
-    ["oldBoxGone", { kit: "k", environment: "production", oldBoxGone: "yes" }],
-    ["venueConfirmed", { kit: "k", environment: "production", venueConfirmed: 89890001 }],
+    ["region", { environment: "production" }],
+    ["masterKey", { ...bucketSource, masterKey: "", environment: "production" }],
+    ["masterKey", { ...bucketSource, masterKey: 7, environment: "production" }],
+    ["masterKey", { ...bucketSource, masterKey: "k".repeat(4097), environment: "production" }],
+    ["environment", { ...bucketSource, environment: "dev" }],
+    ["environment", { ...bucketSource }],
+    ["oldBoxGone", { ...bucketSource, environment: "production", oldBoxGone: "yes" }],
+    ["venueConfirmed", { ...bucketSource, environment: "production", venueConfirmed: 89890001 }],
   ])("refuses a request with a bad %s without staging (%#)", async (field, body) => {
     const stageBucketRestore = vi.fn(async () => {});
     const app = new Hono();
@@ -3000,9 +3007,9 @@ describe("POST /setup-api/restore-bucket", () => {
     });
     expect(stageBucketRestore).not.toHaveBeenCalled();
     // A refused request releases the latch, so a corrected one is accepted.
-    expect((await postBucketRestore(app, { kit: "k", environment: "production" })).status).toBe(
-      202,
-    );
+    expect(
+      (await postBucketRestore(app, { ...bucketSource, environment: "production" })).status,
+    ).toBe(202);
   });
 
   it.each(["stageBucketRestore", "requestRestart"] as const)(
@@ -3019,7 +3026,7 @@ describe("POST /setup-api/restore-bucket", () => {
         },
         noopLog,
       );
-      const res = await postBucketRestore(app, { kit: "k", environment: "production" });
+      const res = await postBucketRestore(app, { ...bucketSource, environment: "production" });
       expect(res.status).toBe(503);
       expect(await res.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
     },
@@ -3027,7 +3034,7 @@ describe("POST /setup-api/restore-bucket", () => {
 
   it("maps each refusal a rebuild can meet to its status", async () => {
     const cases: [AppError, number][] = [
-      [new AppError("backup.stream_kit_invalid", { reason: "shape" }), 400],
+      [new AppError("restore.stream_copy_changed", {}), 409],
       [new AppError("restore.manifest_invalid", { reason: "invalid" }), 422],
       [new AppError("restore.stream_pointer_missing", {}), 422],
       [new AppError("restore.stream_pointer_unverified", { reason: "signature" }), 422],
@@ -3087,7 +3094,7 @@ describe("POST /setup-api/restore-bucket", () => {
         },
         noopLog,
       );
-      const res = await postBucketRestore(app, { kit: "k", environment: "production" });
+      const res = await postBucketRestore(app, { ...bucketSource, environment: "production" });
       expect((await res.json()) as unknown).toMatchObject({ error: { code: error.code } });
       seen.push([error.code, res.status]);
     }
@@ -3114,20 +3121,20 @@ describe("POST /setup-api/restore-bucket", () => {
         },
         noopLog,
       );
-      const first = await postBucketRestore(app, { kit: "k", environment: "production" });
+      const first = await postBucketRestore(app, { ...bucketSource, environment: "production" });
       expect(first.status).toBe(409);
       expect(await first.json()).toEqual({
         error: { code: "restore.stream_venue_unconfirmed", params: venue },
       });
       const second = await postBucketRestore(app, {
-        kit: "k",
+        ...bucketSource,
         environment: "production",
         venueConfirmed: "89890001K",
       });
       expect(second.status).toBe(202);
       expect(stageBucketRestore).toHaveBeenLastCalledWith(
         {
-          kit: "k",
+          ...bucketSource,
           environment: "production",
           oldBoxGone: false,
           venueConfirmed: "89890001K",
@@ -3255,7 +3262,7 @@ describe("POST /setup-api/restore-bucket", () => {
     );
     const archive = postRestore(app, Uint8Array.from([1]));
     await vi.waitFor(() => expect(stageRestore).toHaveBeenCalledOnce());
-    const bucket = await postBucketRestore(app, { kit: "k", environment: "production" });
+    const bucket = await postBucketRestore(app, { ...bucketSource, environment: "production" });
     expect(bucket.status).toBe(409);
     expect(await bucket.json()).toMatchObject({ error: { code: "setup.already_provisioning" } });
     expect(stageBucketRestore).not.toHaveBeenCalled();
@@ -3291,7 +3298,7 @@ describe("the restore routes restart only once their reply has been written", ()
     [
       "bucket restore",
       (app: Hono, env: Record<string, unknown>) =>
-        postBucketRestore(app, { kit: "k", environment: "production" }, env),
+        postBucketRestore(app, { ...bucketSource, environment: "production" }, env),
     ],
     [
       "Cloud restore",
@@ -3750,7 +3757,7 @@ describe("POST /setup-api/adopt — Finish joining: adopt + restart, sharing pro
       ["restore", (app: Hono) => postRestore(app, Uint8Array.from([1])), 202],
       [
         "restore-bucket",
-        (app: Hono) => postBucketRestore(app, { kit: "k", environment: "production" }),
+        (app: Hono) => postBucketRestore(app, { ...bucketSource, environment: "production" }),
         202,
       ],
       [
@@ -4517,7 +4524,7 @@ describe("the setup latch after a request refused before its work starts", () =>
     ["restore", (app: Hono) => postRestore(app, Uint8Array.from([1]))],
     [
       "restore-bucket",
-      (app: Hono) => postBucketRestore(app, { kit: "k", environment: "production" }),
+      (app: Hono) => postBucketRestore(app, { ...bucketSource, environment: "production" }),
     ],
   ] as const)(
     "%s: a request refused for another recorded operation leaves the next one free",

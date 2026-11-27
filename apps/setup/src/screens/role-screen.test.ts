@@ -106,7 +106,7 @@ describe("setup-role-screen in Spanish", () => {
     });
     expect(row(el, "choose-restore-bucket")).toEqual({
       heading: "Restaurar desde mi bucket",
-      copy: "Reconstruye el restaurante en este servidor nuevo a partir de la copia continua de tu propio bucket de almacenamiento, cuando el servidor anterior ya no esté. Necesitas el paquete de recuperación o el archivo del kit.",
+      copy: "Reconstruye el restaurante en este servidor nuevo a partir de la copia continua de tu propio bucket de almacenamiento, cuando el servidor anterior ya no esté. Necesitas los datos del bucket, las claves de acceso y la clave maestra.",
     });
     expect(text(q(el, "[data-test=back]")!)).toBe("Volver");
   });

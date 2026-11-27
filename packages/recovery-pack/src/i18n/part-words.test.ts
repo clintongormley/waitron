@@ -4,7 +4,6 @@ import { partFailure } from "./part-words.js";
 const CODES = [
   "backup.recovery_key_missing",
   "backup.recovery_key_too_short",
-  "backup.stream_signer_missing",
   "anything.else",
 ] as const;
 

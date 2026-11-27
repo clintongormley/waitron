@@ -5,7 +5,6 @@ import { masterKeyHolders } from "./backup-recovery-pack-output.js";
 import {
   keepOldPackUntil,
   packStatus,
-  type CurrentChecks,
   type PackStatusInput,
   type StatusRecord,
 } from "./backup-recovery-pack-status.js";
@@ -38,17 +37,11 @@ function pack(
   };
 }
 
-const current: CurrentChecks = {
-  keyChangedAt: "2026-09-20T08:00:00.000Z",
-  bucket: { revision: "rev-b" },
-};
-
 const base: PackStatusInput = {
   records: [],
-  current,
+  current: {},
   backupsUseOlderKey: false,
   masterKeyPacks: [],
-  now: new Date("2026-10-30T09:00:00.000Z"),
 };
 
 /** Newest first, as `readRecoveryPacks` answers. */
@@ -83,56 +76,6 @@ describe("the latest pack", () => {
     expect(
       status([pack(1, "2026-10-12T10:00:00.000Z", { name: null })]).latest!.madeByName,
     ).toBeNull();
-  });
-
-  it.each<[string, Partial<CurrentChecks>, { part: string; kind: string; at?: string }[]]>([
-    [
-      "the backup key changed",
-      { keyChangedAt: "2026-10-20T07:00:00.000Z" },
-      [{ part: "bucket", kind: "key_changed", at: "2026-10-20T07:00:00.000Z" }],
-    ],
-    [
-      "the bucket settings changed",
-      { bucket: { revision: "rev-b2" } },
-      [{ part: "bucket", kind: "settings_changed" }],
-    ],
-    ["the bucket copy was switched off", { bucket: null }, [{ part: "bucket", kind: "removed" }]],
-  ])("is out of date when %s", (_name, change, reasons) => {
-    const answer = status([pack(1, "2026-10-12T10:00:00.000Z")], {
-      current: { ...current, ...change },
-    });
-    expect(answer.reasons).toEqual(reasons);
-    expect(answer.upToDate).toBe(false);
-  });
-
-  it("is out of date when the bucket part was absent and is set up now", () => {
-    const parts = [{ part: "bucket" as const, state: "absent" as const }];
-    const answer = status([pack(1, "2026-10-12T10:00:00.000Z", { parts })]);
-    expect(answer.reasons).toEqual([{ part: "bucket", kind: "set_up_after" }]);
-  });
-
-  it("stays up to date for a part absent then and absent now", () => {
-    const parts = [{ part: "bucket" as const, state: "absent" as const }];
-    expect(
-      status([pack(1, "2026-10-12T10:00:00.000Z", { parts })], {
-        current: { ...current, bucket: null },
-      }).upToDate,
-    ).toBe(true);
-  });
-
-  it("lets the pack's own time stand in for a key never changed, until a change after it", () => {
-    const parts = [{ ...included.bucket, keyChangedAt: "2026-10-12T10:00:00.000Z" }];
-    const made = pack(1, "2026-10-12T10:00:00.000Z", { parts });
-    expect(status([made], { current: { ...current, keyChangedAt: undefined } }).upToDate).toBe(
-      true,
-    );
-    expect(
-      status([made], { current: { ...current, keyChangedAt: "2026-10-12T09:00:00.000Z" } })
-        .upToDate,
-    ).toBe(true);
-    expect(
-      status([made], { current: { ...current, keyChangedAt: "2026-10-13T09:00:00.000Z" } }).reasons,
-    ).toEqual([{ part: "bucket", kind: "key_changed", at: "2026-10-13T09:00:00.000Z" }]);
   });
 
   it("is incomplete, and not up to date, when a part failed — as when the box had no backup key yet", () => {
@@ -317,101 +260,6 @@ describe("a pack no browser confirmed receiving", () => {
   });
 });
 
-describe("the packs to keep", () => {
-  it("keeps the newest pack with an older backup key until the bucket copy's seven days have passed", () => {
-    const change = "2026-10-25T07:00:00.000Z";
-    const answer = status(
-      [pack(2, "2026-10-12T10:00:00.000Z"), pack(1, "2026-10-01T10:00:00.000Z")],
-      {
-        current: { ...current, keyChangedAt: change },
-      },
-    );
-    expect(answer.keep).toEqual([
-      {
-        number: 2,
-        madeAt: "2026-10-12T10:00:00.000Z",
-        until: new Date(Date.parse(change) + 7 * DAY).toISOString(),
-        why: "backup_key",
-      },
-    ]);
-  });
-
-  it("keeps one pack, the newest, for the key that had never been changed when they were made", () => {
-    const standIn = (madeAt: string): RecoveryPackPartRecord[] => [
-      { ...included.bucket, keyChangedAt: madeAt, keyNeverChanged: true },
-    ];
-    const change = "2026-10-25T07:00:00.000Z";
-    const answer = status(
-      [
-        pack(2, "2026-10-12T10:00:00.000Z", { parts: standIn("2026-10-12T10:00:00.000Z") }),
-        pack(1, "2026-10-01T10:00:00.000Z", { parts: standIn("2026-10-01T10:00:00.000Z") }),
-      ],
-      { current: { ...current, keyChangedAt: change } },
-    );
-    expect(answer.keep).toEqual([
-      {
-        number: 2,
-        madeAt: "2026-10-12T10:00:00.000Z",
-        until: new Date(Date.parse(change) + 7 * DAY).toISOString(),
-        why: "backup_key",
-      },
-    ]);
-  });
-
-  it("drops a pack whose keep date has passed", () => {
-    const parts = [{ ...included.bucket, keyChangedAt: "2026-08-01T08:00:00.000Z" }];
-    const made = pack(1, "2026-08-12T10:00:00.000Z", { parts });
-    // A change on 1 September: kept until 8 September, long before now.
-    expect(
-      status([made], { current: { ...current, keyChangedAt: "2026-09-01T07:00:00.000Z" } }).keep,
-    ).toEqual([]);
-    // The same pack after a recent change is kept, so the empty list above is the date's doing.
-    expect(
-      status([made], { current: { ...current, keyChangedAt: "2026-10-25T07:00:00.000Z" } }).keep,
-    ).toHaveLength(1);
-  });
-});
-
-describe("a backup-key change", () => {
-  const change = "2026-10-25T07:00:00.000Z";
-  const archivesPart = {
-    part: "archives",
-    state: "included",
-    keyChangedAt: "2026-09-20T08:00:00.000Z",
-    settingsRevision: "rev-a",
-    destination: "bucket",
-  } satisfies RecoveryPackPartRecord;
-
-  it("a backup-key change does not mark a pack out of date for archives", () => {
-    const onlyArchives = pack(1, "2026-10-12T10:00:00.000Z", {
-      parts: [{ part: "bucket", state: "absent" }, archivesPart],
-    });
-    const answer = status([onlyArchives], {
-      current: { ...current, keyChangedAt: change, bucket: null },
-    });
-    expect(answer.reasons).toEqual([]);
-    expect(answer.upToDate).toBe(true);
-    expect(answer.keep).toEqual([]);
-  });
-
-  it("with a bucket copy, a backup-key change still marks the pack out of date and names the pack to keep until the bucket copy's date", () => {
-    const answer = status(
-      [pack(1, "2026-10-12T10:00:00.000Z", { parts: [included.bucket, archivesPart] })],
-      { current: { ...current, keyChangedAt: change } },
-    );
-    expect(answer.reasons).toEqual([{ part: "bucket", kind: "key_changed", at: change }]);
-    expect(answer.upToDate).toBe(false);
-    expect(answer.keep).toEqual([
-      {
-        number: 1,
-        madeAt: "2026-10-12T10:00:00.000Z",
-        until: new Date(Date.parse(change) + 7 * DAY).toISOString(),
-        why: "backup_key",
-      },
-    ]);
-  });
-});
-
 describe("the date a pack made before a master-key change can go", () => {
   const now = new Date("2026-10-25T07:00:00.000Z");
   const daily = { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } } as const;
@@ -484,7 +332,7 @@ describe("the Cloud QR code", () => {
     const record = pack(1, made, {
       parts: state === "unrecorded" ? [] : [{ part: "emergency", state }],
     });
-    const answer = status([record], { current: { ...current, cloudOpen } });
+    const answer = status([record], { current: { cloudOpen } });
     expect(answer.reasons).toEqual(reasons);
     expect(answer.incomplete).toBe(false);
     expect(answer.upToDate).toBe(reasons.length === 0);

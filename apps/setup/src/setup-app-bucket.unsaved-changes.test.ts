@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { leaveCoordinatorFor, type WtFileInput } from "@waitron/ui";
+import { leaveCoordinatorFor, type WtInput } from "@waitron/ui";
 import { SetupApp, type Screen } from "./setup-app.js";
 import type { SetupApi } from "./api/client.js";
 import type { SetupRestoreBucketScreen } from "./screens/restore-bucket-screen.js";
-import type { WtTextarea } from "@waitron/ui/src/components/wt-textarea.js";
 import type { WtUnsavedChanges } from "@waitron/ui/src/components/wt-unsaved-changes.js";
-import { chooseFiles, drawnFileName } from "@waitron/ui/src/test-helpers.js";
 import {
   cleanupWidgets,
+  enterBucket,
+  REVIEWED_BUCKET,
   mountWidget,
   REVIEWED_CREDENTIALS,
   reviewBackup,
@@ -25,7 +25,7 @@ const warning = (el: SetupApp) =>
 const screen = (el: SetupApp) => (el as unknown as { screen: Screen }).screen;
 const q = <T extends HTMLElement>(form: SetupRestoreBucketScreen, selector: string) =>
   form.shadowRoot!.querySelector<T>(selector)!;
-const kit = (form: SetupRestoreBucketScreen) => q<WtTextarea>(form, "[data-test=kit]");
+const folder = (form: SetupRestoreBucketScreen) => q<WtInput>(form, "[data-test=prefix]");
 async function mount() {
   const api = {
     firstSetupStatus: vi.fn().mockResolvedValue({ claimed: false }),
@@ -44,7 +44,11 @@ async function mount() {
   await form.updateComplete;
   return { el, form, host, api };
 }
-async function edit(form: SetupRestoreBucketScreen, field = "kit", value = " kit bytes \n") {
+async function edit(
+  form: SetupRestoreBucketScreen,
+  field = "prefix",
+  value = "restaurant/new-folder",
+) {
   q(form, `[data-test=${field}]`).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
@@ -73,7 +77,7 @@ async function review(form: SetupRestoreBucketScreen) {
   await form.updateComplete;
 }
 async function fill(form: SetupRestoreBucketScreen) {
-  await edit(form);
+  enterBucket(form, { ...REVIEWED_BUCKET.bucket, prefix: "restaurant/new-folder" });
   await edit(form, "environment", "preproduction");
   const ack = q<HTMLInputElement>(form, "[data-test=acknowledge]");
   ack.checked = true;
@@ -82,7 +86,7 @@ async function fill(form: SetupRestoreBucketScreen) {
 }
 
 describe("setup bucket restore unsaved changes", () => {
-  it.each(["kit", "environment"])(
+  it.each(["prefix", "environment"])(
     "Back preserves edited %s until Discard, restoring only the child",
     async (field) => {
       const { el, form } = await mount();
@@ -93,20 +97,20 @@ describe("setup bucket restore unsaved changes", () => {
           composed: true,
         }),
       );
-      await edit(form, field, field === "kit" ? " kit bytes \n" : "preproduction");
+      await edit(form, field, field === "prefix" ? "restaurant/new-folder" : "preproduction");
       back(form);
       await expect.poll(() => warning(el).open).toBe(true);
       expect(screen(el)).toBe("restore-bucket");
       await choose(el, "keep");
-      expect((q(form, `[data-test=${field}]`) as WtTextarea).value).toBe(
-        field === "kit" ? " kit bytes \n" : "preproduction",
+      expect((q(form, `[data-test=${field}]`) as WtInput).value).toBe(
+        field === "prefix" ? "restaurant/new-folder" : "preproduction",
       );
       back(form);
       await expect.poll(() => warning(el).open).toBe(true);
       await choose(el, "discard");
       await expect.poll(() => screen(el)).toBe("role");
-      expect(kit(form).value).toBe("");
-      expect((q(form, "[data-test=environment]") as WtTextarea).value).toBe("production");
+      expect(folder(form).value).toBe("");
+      expect((q(form, "[data-test=environment]") as WtInput).value).toBe("production");
       expect(leaveCoordinatorFor(el)!.isDirty([el])).toBe(true);
     },
   );
@@ -137,18 +141,19 @@ describe("setup bucket restore unsaved changes", () => {
   });
   it("reverting authoring fields clears unload and leaves directly", async () => {
     const { el, form } = await mount();
-    await fill(form);
+    await edit(form);
+    await edit(form, "environment", "preproduction");
     expect(unload()).toBe(true);
-    await edit(form, "kit", "");
+    await edit(form, "prefix", "");
     await edit(form, "environment", "production");
     expect(unload()).toBe(false);
     back(form);
     await expect.poll(() => screen(el)).toBe("role");
   });
-  it("native warning Escape retains kit and returns focus", async () => {
+  it("native warning Escape retains the folder and returns focus", async () => {
     const { el, form } = await mount();
-    const input = kit(form).shadowRoot!.querySelector<HTMLTextAreaElement>("textarea")!;
-    await userEvent.fill(page.elementLocator(input), " kit bytes \n");
+    const input = folder(form).shadowRoot!.querySelector<HTMLInputElement>("input")!;
+    await userEvent.fill(page.elementLocator(input), "restaurant/new-folder");
     const button = q(form, "[data-test=back]");
     await userEvent.click(page.elementLocator(button));
     await expect.poll(() => warning(el).open).toBe(true);
@@ -163,7 +168,7 @@ describe("setup bucket restore unsaved changes", () => {
     await userEvent.keyboard("{Escape}");
     await closed;
     await expect.poll(() => warning(el).open).toBe(false);
-    expect(input.value).toBe(" kit bytes \n");
+    expect(input.value).toBe("restaurant/new-folder");
     expect(screen(el)).toBe("restore-bucket");
     await expect.poll(() => form.shadowRoot!.activeElement).toBe(button);
   });
@@ -175,7 +180,8 @@ describe("setup bucket restore unsaved changes", () => {
     q(form, "[data-test=restore]").click();
     await expect.poll(() => screen(el)).toBe("done");
     expect(api.restoreFromBucket).toHaveBeenCalledExactlyOnceWith({
-      kit: " kit bytes \n",
+      ...REVIEWED_BUCKET,
+      bucket: { ...REVIEWED_BUCKET.bucket, prefix: "restaurant/new-folder" },
       environment: "preproduction",
       oldBoxGone: false,
       venueConfirmed: "89890001K",
@@ -184,7 +190,7 @@ describe("setup bucket restore unsaved changes", () => {
     expect(warning(el).open).toBe(false);
     expect(unload()).toBe(false);
   });
-  it("refusal keeps returned kit dirty against the empty baseline", async () => {
+  it("refusal keeps returned folder dirty against the empty baseline", async () => {
     const { el, form, api } = await mount();
     vi.mocked(api.restoreFromBucket).mockRejectedValue({ code: "restore.environment_mismatch" });
     await fill(form);
@@ -194,9 +200,9 @@ describe("setup bucket restore unsaved changes", () => {
       .poll(
         () =>
           el.shadowRoot!.querySelector<SetupRestoreBucketScreen>("setup-restore-bucket-screen")
-            ?.request?.kit,
+            ?.request?.bucket.prefix,
       )
-      .toBe(" kit bytes \n");
+      .toBe("restaurant/new-folder");
     const returned = el.shadowRoot!.querySelector<SetupRestoreBucketScreen>(
       "setup-restore-bucket-screen",
     )!;
@@ -205,9 +211,9 @@ describe("setup bucket restore unsaved changes", () => {
     back(returned);
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "keep");
-    expect(kit(returned).value).toBe(" kit bytes \n");
+    expect(folder(returned).value).toBe("restaurant/new-folder");
   });
-  it("invalid submission retains typed kit", async () => {
+  it("invalid submission retains typed folder", async () => {
     const { el, form, api } = await mount();
     await edit(form);
     q(form, "[data-test=restore]").click();
@@ -216,7 +222,7 @@ describe("setup bucket restore unsaved changes", () => {
     back(form);
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "keep");
-    expect(kit(form).value).toBe(" kit bytes \n");
+    expect(folder(form).value).toBe("restaurant/new-folder");
   });
   it("editing aborts an unanswered Back", async () => {
     const { el, form } = await mount();
@@ -227,10 +233,10 @@ describe("setup bucket restore unsaved changes", () => {
     await expect.poll(() => warning(el).open).toBe(false);
     await choose(el, "discard");
     expect(screen(el)).toBe("restore-bucket");
-    expect(kit(form).value).toBe(" kit bytes \n");
+    expect(folder(form).value).toBe("restaurant/new-folder");
     expect(unload()).toBe(true);
   });
-  it("disconnect removes unload and reconnect retains dirty kit", async () => {
+  it("disconnect removes unload and reconnect retains dirty folder", async () => {
     const { el, form, host } = await mount();
     await fill(form);
     expect(unload()).toBe(true);
@@ -238,7 +244,7 @@ describe("setup bucket restore unsaved changes", () => {
     expect(unload()).toBe(false);
     host.append(el);
     await el.updateComplete;
-    expect(kit(form).value).toBe(" kit bytes \n");
+    expect(folder(form).value).toBe("restaurant/new-folder");
     expect(unload()).toBe(true);
   });
   it.each(["departed", "reconnected", "superseded"])(
@@ -297,7 +303,7 @@ describe("setup bucket restore unsaved changes", () => {
         ).toBe(retained);
         if (lifetime === "departed") {
           expect((retained as SetupRestoreBucketScreen).request).toBeUndefined();
-          expect(kit(retained as SetupRestoreBucketScreen).value).toBe(" kit bytes \n");
+          expect(folder(retained as SetupRestoreBucketScreen).value).toBe("restaurant/new-folder");
         }
         if (lifetime === "superseded") {
           resolveSecond();
@@ -305,58 +311,6 @@ describe("setup bucket restore unsaved changes", () => {
         }
         cleanupWidgets();
       }
-    },
-  );
-  it("loading a kit file protects its resulting text", async () => {
-    const { el, form } = await mount();
-    const input = q<WtFileInput>(form, "[data-test=kit-file]");
-    chooseFiles(input, new File([" kit from file \n"], "recovery.txt"));
-    await expect.poll(() => kit(form).value).toBe(" kit from file \n");
-    await input.updateComplete;
-    expect(drawnFileName(input)).toBe("recovery.txt");
-    expect(unload()).toBe(true);
-    back(form);
-    await expect.poll(() => warning(el).open).toBe(true);
-    await choose(el, "discard");
-    await expect.poll(() => screen(el)).toBe("role");
-    expect(kit(form).value).toBe("");
-    expect(input.files).toHaveLength(0);
-    await form.updateComplete;
-    await input.updateComplete;
-    expect(drawnFileName(input)).toBeNull();
-  });
-  it.each(["edit", "discard", "disconnect"])(
-    "a late kit file read cannot undo %s",
-    async (action) => {
-      const { el, form, host } = await mount();
-      await edit(form);
-      let open!: (value: ArrayBuffer) => void;
-      vi.spyOn(File.prototype, "arrayBuffer").mockImplementationOnce(
-        () =>
-          new Promise<ArrayBuffer>((resolve) => {
-            open = resolve;
-          }),
-      );
-      const finish = (text: string) => open(new TextEncoder().encode(text).buffer);
-      chooseFiles(q(form, "[data-test=kit-file]"), new File(["old"], "kit.txt"));
-      if (action === "edit") await edit(form, "kit", "new kit");
-      else if (action === "discard") {
-        back(form);
-        await expect.poll(() => warning(el).open).toBe(true);
-        await choose(el, "discard");
-        await expect.poll(() => screen(el)).toBe("role");
-      } else {
-        el.remove();
-        host.append(el);
-        await el.updateComplete;
-      }
-      finish("late kit");
-      await new Promise((done) => setTimeout(done, 20));
-      await form.updateComplete;
-      expect(kit(form).value).toBe(
-        action === "edit" ? "new kit" : action === "discard" ? "" : " kit bytes \n",
-      );
-      vi.restoreAllMocks();
     },
   );
   it("removing only the bucket child releases its unload scope", async () => {
@@ -368,13 +322,13 @@ describe("setup bucket restore unsaved changes", () => {
     expect(form.isConnected).toBe(false);
     expect(unload()).toBe(false);
   });
-  it("whitespace-only kit is distinct from an empty authoring field", async () => {
+  it("whitespace-only folder is distinct from an empty authoring field", async () => {
     const { el, form } = await mount();
-    await edit(form, "kit", " ");
+    await edit(form, "prefix", " ");
     expect(unload()).toBe(true);
     back(form);
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "keep");
-    expect(kit(form).value).toBe(" ");
+    expect(folder(form).value).toBe(" ");
   });
 });

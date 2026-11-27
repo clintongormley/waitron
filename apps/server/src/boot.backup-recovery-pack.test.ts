@@ -1,6 +1,5 @@
 import { seriesWithNextNumber, advanceSeriesTo } from "@waitron/db/testing/seed.js";
 import { seedModuleSettings } from "../test/module-settings.js";
-import { readStreamId } from "@waitron/db";
 import { ensureStreamId } from "@waitron/db";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -20,7 +19,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
-import { parseRecoveryKit } from "@waitron/stream";
 import { seedTaxpayers, TAXPAYER_A, TAXPAYER_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { seedFixtureSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
 import { writeArchiveSettings } from "./archive-settings.js";
@@ -192,11 +190,7 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
       const makeQueue = turnsUsed.handed.slice(beforeMake);
       expect(made.headers.has("x-waitron-recovery-pack-key")).toBe(false);
       const file = await readRecoveryPackPdf(new Uint8Array(await made.arrayBuffer()));
-      expect(parseRecoveryKit(file.bucketCode!)).toMatchObject({
-        streamId: await readStreamId(suite.db),
-        recoveryKey: KEY,
-        pointerSignerPublicKey: "SIGNER_PUBLIC_KEY",
-      });
+      expect(file).toMatchObject({ bucketCode: null, masterKey: master.secret });
       for (const key of ["archiveCode", "backupKey"]) expect(file).not.toHaveProperty(key);
 
       const received = await fetch(at(`/api/backup/recovery-pack/${file.number}/received`), {
@@ -221,7 +215,6 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
       const fresh = await status();
       expect(fresh.latest.parts).toEqual([
         { part: "emergency", state: "absent" },
-        { part: "bucket", state: "included" },
         { part: "master-key", state: "included" },
       ]);
       expect(fresh.upToDate).toBe(true);
@@ -237,15 +230,11 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
       // The make waited in the same queue as the backup API's key change.
       expect(makeQueue).toHaveLength(1);
       expect(turnsUsed.handed.slice(beforeRotate)).toEqual(makeQueue);
-      const stale = await status();
-      expect(stale.upToDate).toBe(false);
-      expect(stale.reasons).toContainEqual(
-        expect.objectContaining({ part: "bucket", kind: "key_changed" }),
-      );
+      const afterRotation = await status();
+      expect(afterRotation).toMatchObject({ upToDate: true, reasons: [] });
       const log = await readFile(join(scratch, "logs", "waitron.log"), "utf8");
       expect(log).toContain('"event":"recovery.pack_made"');
-      for (const secret of [KEY, BUCKET.secretAccessKey, file.bucketCode!])
-        expect(log).not.toContain(secret);
+      for (const secret of [KEY, BUCKET.secretAccessKey]) expect(log).not.toContain(secret);
     } finally {
       await close();
     }

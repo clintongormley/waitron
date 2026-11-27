@@ -19,7 +19,7 @@ import { invoiceSeries, nodes, openVenueDatabase, taxpayer, withTransaction } fr
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { generateNodeKeyPair } from "@waitron/membership";
-import { signPointer, writePointer, type RecoveryKit } from "@waitron/stream";
+import { signPointer, writePointer, type BucketConfig } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { bucketRestoreArgs, bucketRestoreEnv } from "../test/bucket-restore-command.js";
 import { ALL_MODULES } from "./modules.js";
@@ -213,18 +213,12 @@ describe.each(paths)("invoice email after %s", (path) => {
       if (path.includes("bucket")) {
         const signer = generateNodeKeyPair();
         const store = createMemoryObjectStore({ now: () => NOW });
-        const kit: RecoveryKit = {
-          version: 2 as const,
-          streamId: T.streamId,
-          bucket: {
-            region: "eu-west-1",
-            bucket: "synthetic",
-            prefix: "",
-            accessKeyId: "synthetic-access",
-            secretAccessKey: "synthetic-secret",
-          },
-          recoveryKey: RECOVERY_KEY,
-          pointerSignerPublicKey: signer.publicKey,
+        const bucket: BucketConfig = {
+          region: "eu-west-1",
+          bucket: "synthetic",
+          prefix: "",
+          accessKeyId: "synthetic-access",
+          secretAccessKey: "synthetic-secret",
         };
         await writePointer(
           store,
@@ -248,7 +242,8 @@ describe.each(paths)("invoice email after %s", (path) => {
         );
         const preparation = {
           ...common,
-          kit,
+          bucket,
+          masterKey: HELD_MASTER_KEY_TEXT,
           litestreamBin: "/unused",
           oldBoxGone: true,
           now: () => NOW,
@@ -262,13 +257,13 @@ describe.each(paths)("invoice email after %s", (path) => {
           expect(
             await runRestore({
               argv: [
-                ...bucketRestoreArgs(kit.bucket),
+                ...bucketRestoreArgs(bucket),
                 "--confirm-venue",
                 "89890001K",
                 "--confirm-old-box-gone",
               ],
               env: {
-                ...bucketRestoreEnv(kit.bucket, HELD_MASTER_KEY_TEXT),
+                ...bucketRestoreEnv(bucket, HELD_MASTER_KEY_TEXT),
                 WAITRON_STATE_DIR: stateDir,
                 WAITRON_VENUE_DIR: venueDir,
                 WAITRON_ENV: environment,

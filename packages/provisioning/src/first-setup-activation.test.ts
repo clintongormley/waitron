@@ -695,10 +695,7 @@ it("publication records recovery pack 1, received, for the node it sets up", asy
       number: 1,
       madeBy: null,
       receivedAt: expect.any(Date),
-      parts: [
-        { part: "bucket", state: "not-set-up" },
-        { part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName },
-      ],
+      parts: [{ part: "master-key", state: "included", masterKeyNumber: 1, masterKeyName }],
     },
   ]);
 });

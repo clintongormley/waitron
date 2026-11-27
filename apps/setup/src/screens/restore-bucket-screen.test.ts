@@ -1,16 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  chooseFiles,
-  chooseOption,
-  drawnFileName,
-  fileControl,
-  fileError,
-} from "@waitron/ui/src/test-helpers.js";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { SetupApi } from "../api/client.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
-import type { WtFileInput } from "@waitron/ui";
+import { setLocale } from "../i18n/t.js";
+import { encodeMasterKeyCode } from "@waitron/shared";
 import {
   cleanupWidgets,
+  enterBucket,
+  REVIEWED_BUCKET,
   mountWidget,
   mountWithLeave,
   REVIEWED_CREDENTIALS,
@@ -19,25 +15,13 @@ import {
 } from "../widgets/test-helpers.js";
 import type { BucketRestoreRequestDetail, KeptBucketRestoreRequest } from "../events.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
-import {
-  BUCKET_CODE,
-  damaged,
-  heldFile,
-  plainPdf,
-  recoveryPackPdf,
-} from "../../test/recovery-pack-pdf.js";
+import { recoveryPackPdf } from "../../test/recovery-pack-pdf.js";
 
 afterEach(cleanupWidgets);
 const q = <T extends HTMLElement>(el: SetupRestoreBucketScreen, selector: string): T | null =>
   el.shadowRoot!.querySelector<T>(selector);
-const kitPicker = (el: SetupRestoreBucketScreen) => q<WtFileInput>(el, "[data-test=kit-file]")!;
-/** The message `wt-file-input` shows under the kit file, or null when there is none. */
-const kitFileError = (el: SetupRestoreBucketScreen) => fileError(kitPicker(el));
-
-function paste(el: SetupRestoreBucketScreen, text: string): void {
-  const area = q(el, "[data-test=kit]")!.shadowRoot!.querySelector("textarea")!;
-  area.value = text;
-  area.dispatchEvent(new Event("input"));
+function fillBucket(el: SetupRestoreBucketScreen, name = REVIEWED_BUCKET.bucket.bucket): void {
+  enterBucket(el, { ...REVIEWED_BUCKET.bucket, bucket: name });
 }
 function tick(el: SetupRestoreBucketScreen, selector: string): void {
   const box = q<HTMLInputElement>(el, selector)!;
@@ -68,67 +52,22 @@ async function bottomOf(el: SetupRestoreBucketScreen): Promise<string> {
 function fieldMessages(el: SetupRestoreBucketScreen): string[] {
   return [
     ...el.shadowRoot!.querySelectorAll<HTMLElement & { error?: string }>(
-      "p.error[id$='-error'], wt-file-input, wt-textarea, wt-combobox",
+      "p.error[id$='-error'], wt-input, wt-combobox",
     ),
   ]
     .map((node) => (node instanceof HTMLParagraphElement ? node.textContent! : node.error!).trim())
     .filter((message) => message !== "");
 }
 /** The shared field's own control, which carries its invalid state. */
-function controlOf(
-  el: SetupRestoreBucketScreen,
-  field: "kit-file" | "kit" | "environment",
-): HTMLElement {
+function controlOf(el: SetupRestoreBucketScreen, field: "bucket" | "environment"): HTMLElement {
   return q(el, `[data-test=${field}]`)!.shadowRoot!.querySelector<HTMLElement>(
-    { "kit-file": "input[type=file]", kit: "textarea", environment: ".trigger" }[field],
+    { bucket: "input", environment: ".trigger" }[field],
   )!;
 }
 const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
-it("names the old bucket code when Review backup refuses it", async () => {
-  const previous = currentLocale();
-  setLocale("en-GB");
-  try {
-    const api = new SetupApi("", async () =>
-      Response.json(
-        {
-          error: {
-            code: "backup.stream_kit_invalid",
-            params: { reason: "version" },
-          },
-        },
-        { status: 400 },
-      ),
-    );
-    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
-      api,
-    });
-    paste(el, "WAITRON-RECOVERY-KIT-1:old");
-    await el.updateComplete;
-    const copy = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
-      "setup-recovery-copy",
-    )!;
-    await copy.updateComplete;
-    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
-    await vi.waitFor(() =>
-      expect(fieldMessages(el)).toContain(
-        "This bucket recovery code was made before this version of Waitron and cannot be used. Choose a newer recovery pack, or restore an archive backup.",
-      ),
-    );
-    paste(el, "different kit");
-    await el.updateComplete;
-    expect(fieldMessages(el)).not.toContain(
-      "This bucket recovery code was made before this version of Waitron and cannot be used. Choose a newer recovery pack, or restore an archive backup.",
-    );
-  } finally {
-    setLocale(previous);
-  }
-});
-
-/** The kit file, kit and environment are shared fields, whose invalid marking is inside their own
- * shadow roots, where a `[aria-invalid=true]` query of the screen cannot see it. */
 async function expectSharedFieldsUnmarked(el: SetupRestoreBucketScreen): Promise<void> {
-  for (const field of ["kit-file", "kit", "environment"] as const) {
+  for (const field of ["bucket", "environment"] as const) {
     const box = q<
       HTMLElement & { error: string; invalid: boolean; updateComplete: Promise<unknown> }
     >(el, `[data-test=${field}]`)!;
@@ -145,7 +84,7 @@ async function expectSharedFieldsUnmarked(el: SetupRestoreBucketScreen): Promise
 const VENUE = { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" };
 
 describe("SetupRestoreBucketScreen", () => {
-  it("marks the kit and the confirmation required and sends nothing when blank", async () => {
+  it("marks the bucket and the confirmation required and sends nothing when blank", async () => {
     const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
       "setup-restore-bucket-screen",
       {},
@@ -156,13 +95,13 @@ describe("SetupRestoreBucketScreen", () => {
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
-    expect(el.shadowRoot!.querySelectorAll("[required]")).toHaveLength(3); // kit, environment, confirmation
+    expect(el.shadowRoot!.querySelectorAll("[required]")).toHaveLength(7);
     expect(fieldMessages(el)).toEqual([
-      "Choose your recovery pack or kit file, or paste the kit.",
+      ...Array<string>(4).fill("Check the bucket details."),
       "Confirm that no other running box has newer data.",
     ]);
-    expect((q(el, "[data-test=kit]") as unknown as { error: string }).error).toBe(
-      "Choose your recovery pack or kit file, or paste the kit.",
+    expect((q(el, "[data-test=bucket]") as unknown as { error: string }).error).toBe(
+      "Check the bucket details.",
     );
     expect(q(el, "#acknowledge-error")!.textContent).toBe(
       "Confirm that no other running box has newer data.",
@@ -176,7 +115,7 @@ describe("SetupRestoreBucketScreen", () => {
     );
     const listener = vi.fn();
     host.addEventListener("bucket-restore-requested", listener);
-    paste(el, "WAITRON-RECOVERY-KIT-2:abc");
+    fillBucket(el);
     tick(el, "[data-test=acknowledge]");
     await el.updateComplete;
     q(el, "[data-test=restore]")!.click();
@@ -187,12 +126,12 @@ describe("SetupRestoreBucketScreen", () => {
     );
   });
 
-  it("drops the Review backup line, and gives Restore back, when the kit it was for is discarded", async () => {
+  it("drops the Review backup line, and gives Restore back, when the bucket it was for is discarded", async () => {
     const { el, discard } = await mountWithLeave<SetupRestoreBucketScreen>(
       "setup-restore-bucket-screen",
       {},
     );
-    paste(el, "WAITRON-RECOVERY-KIT-2:abc");
+    fillBucket(el);
     tick(el, "[data-test=acknowledge]");
     await el.updateComplete;
     q(el, "[data-test=restore]")!.click();
@@ -207,72 +146,24 @@ describe("SetupRestoreBucketScreen", () => {
     expect(restore.disabled).toBe(false);
   });
 
-  it("says the kit is as sensitive as the backup encryption key", async () => {
-    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
-    expect(q(el, "[data-test=kit-sensitive]")!.textContent).toContain(
-      "as sensitive as the backup encryption key",
-    );
-    // Browsers may send spell-checked text to an outside service.
-    expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.spellcheck).toBe(false);
-  });
-
-  it("sends the pasted kit, the environment and no old-box confirmation", async () => {
+  it("sends the bucket details, the environment and no old-box confirmation", async () => {
     const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
       "setup-restore-bucket-screen",
       {},
     );
-    paste(el, "WAITRON-RECOVERY-KIT-2:abc");
+    fillBucket(el);
     tick(el, "[data-test=acknowledge]");
     await el.updateComplete;
     const outcome = requested(host);
     await reviewed(el);
     q(el, "[data-test=restore]")!.click();
     await expect(outcome).resolves.toEqual({
-      kit: "WAITRON-RECOVERY-KIT-2:abc",
+      ...REVIEWED_BUCKET,
       environment: "production",
       oldBoxGone: false,
       venueConfirmed: "89890001K",
       ...REVIEWED_CREDENTIALS,
     });
-  });
-
-  it("takes the kit in the shared multi-line field, in the monospace font and never spell-checked", async () => {
-    const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
-      "setup-restore-bucket-screen",
-      {},
-    );
-    host.style.setProperty("--wt-font-family-mono", "fantasy");
-    host.style.setProperty("--wt-font-size-sm", "11px");
-    const kit = q<HTMLElement & { label: string; required: boolean; rows: number }>(
-      el,
-      'wt-textarea[name="recovery-kit"]',
-    );
-    expect(kit).not.toBeNull();
-    expect({ label: kit!.label, required: kit!.required, rows: kit!.rows }).toEqual({
-      label: "Recovery kit",
-      required: true,
-      rows: 6,
-    });
-    const control = kit!.shadowRoot!.querySelector("textarea")!;
-    expect({
-      spellcheck: control.spellcheck,
-      autocapitalize: control.getAttribute("autocapitalize"),
-      autocorrect: control.getAttribute("autocorrect"),
-      autocomplete: control.getAttribute("autocomplete"),
-      font: getComputedStyle(control).fontFamily,
-      size: getComputedStyle(control).fontSize,
-    }).toEqual({
-      spellcheck: false,
-      autocapitalize: "none",
-      autocorrect: "off",
-      autocomplete: "off",
-      font: "fantasy",
-      size: "16px",
-    });
-    expect(kit!.getAttribute("hint")).toBe(
-      "Or paste the kit here: one long line starting with WAITRON-RECOVERY-KIT-2",
-    );
-    expect(kit!.querySelector("wt-help-tooltip")).toBeNull();
   });
 
   it("picks the environment from the shared dropdown, with its help beside the box", async () => {
@@ -309,7 +200,7 @@ describe("SetupRestoreBucketScreen", () => {
     expect(
       environment!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label"),
     ).toBe("Help with environment");
-    paste(el, "k");
+    fillBucket(el);
     tick(el, "[data-test=acknowledge]");
     await chooseOption(environment!, "preproduction");
     await el.updateComplete;
@@ -324,7 +215,7 @@ describe("SetupRestoreBucketScreen", () => {
       "setup-restore-bucket-screen",
       {},
     );
-    paste(el, "k");
+    fillBucket(el);
     tick(el, "[data-test=acknowledge]");
     await chooseOption(q(el, "[data-test=environment]")!, "preproduction");
     await el.updateComplete;
@@ -342,7 +233,7 @@ describe("SetupRestoreBucketScreen", () => {
     );
     const shown = q(el, "[data-test=venue]")!.textContent!;
     for (const part of ["Waitron SL", "89890001K", "Local"]) expect(shown).toContain(part);
-    paste(el, "k");
+    fillBucket(el);
     tick(el, "[data-test=acknowledge]");
     await el.updateComplete;
     const listener = vi.fn();
@@ -371,110 +262,32 @@ describe("SetupRestoreBucketScreen", () => {
     expect(q(el, "[data-test=old-box-gone]")).not.toBeNull();
   });
 
-  it("reads an uploaded kit file into the kit field", async () => {
-    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
-    chooseFiles(kitPicker(el), new File(["WAITRON-RECOVERY-KIT-2:fromfile\n"], "kit.txt"));
-    await vi.waitFor(() =>
-      expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(
-        "WAITRON-RECOVERY-KIT-2:fromfile\n",
-      ),
-    );
-  });
-
-  it("reads the bucket code out of a chosen recovery pack PDF and sends the code, not the PDF", async () => {
+  it("opens the bucket with the master key from a pack without a bucket code", async () => {
     const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
       "setup-restore-bucket-screen",
       {},
     );
-    chooseFiles(kitPicker(el), await recoveryPackPdf(BUCKET_CODE));
+    fillBucket(el);
+    const key = el.shadowRoot!.querySelector("wt-master-key-input")!;
+    await key.updateComplete;
+    const picker = key.shadowRoot!.querySelector<HTMLInputElement>("input[type=file]")!;
+    const selected = new DataTransfer();
+    selected.items.add(await recoveryPackPdf(null));
+    picker.files = selected.files;
+    picker.dispatchEvent(new Event("change"));
+    const packKey = encodeMasterKeyCode(new Uint8Array(16).fill(1));
+    const input = key.shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("input")!;
     await vi.waitFor(() =>
-      expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(BUCKET_CODE),
+      expect(input.value.replaceAll(" ", "")).toBe(packKey.replaceAll(" ", "")),
     );
     tick(el, "[data-test=acknowledge]");
-    await el.updateComplete;
     const outcome = requested(host);
     await reviewed(el);
     q(el, "[data-test=restore]")!.click();
-    await expect(outcome).resolves.toMatchObject({ kit: BUCKET_CODE });
-    expect(fieldMessages(el)).toEqual([]);
-  });
-
-  it.each([
-    [
-      "a pack made with no bucket copy",
-      () => recoveryPackPdf(null),
-      "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the kit.",
-      "Este paquete de recuperación no contiene el código de la copia en el bucket: el servidor no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el kit.",
-    ],
-    [
-      "a PDF that is not a pack",
-      plainPdf,
-      "This PDF is not a Waitron recovery pack. Choose the venue's recovery pack or kit file, or paste the kit.",
-      "Este PDF no es un paquete de recuperación de Waitron. Elige el paquete de recuperación o el archivo del kit del local, o pega el kit.",
-    ],
-    [
-      "a pack whose attached file was changed",
-      async () => damaged(await recoveryPackPdf(BUCKET_CODE)),
-      "This recovery pack is damaged, or was changed after it was made. Choose the pack as it was saved, or paste the kit.",
-      "Este paquete de recuperación está dañado o se modificó después de hacerse. Elige el paquete tal como se guardó o pega el kit.",
-    ],
-  ])(
-    "says so under the file field for %s and keeps the kit already there",
-    async (_, pdf, said, saidEs) => {
-      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
-      paste(el, "WAITRON-RECOVERY-KIT-2:kept");
-      const refused = await pdf();
-      chooseFiles(kitPicker(el), refused);
-      await vi.waitFor(() => expect(kitFileError(el)?.textContent).toBe(said));
-      expect(drawnFileName(kitPicker(el))).toBe(refused.name);
-      expect(fileControl(kitPicker(el)).getAttribute("aria-describedby")).toBe(
-        kitFileError(el)!.id,
-      );
-      expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(
-        "WAITRON-RECOVERY-KIT-2:kept",
-      );
-      setLocale("es-ES");
-      try {
-        await el.updateComplete;
-        await kitPicker(el).updateComplete;
-        expect(kitFileError(el)?.textContent).toBe(saidEs);
-      } finally {
-        setLocale("en-GB");
-      }
-      paste(el, "WAITRON-RECOVERY-KIT-2:typed");
-      await el.updateComplete;
-      await kitPicker(el).updateComplete;
-      expect(kitFileError(el)).toBeNull();
-      expect(drawnFileName(kitPicker(el))).toBe(refused.name);
-    },
-  );
-
-  it("keeps what was typed when a file chosen before it finishes reading later", async () => {
-    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
-    const late = heldFile("WAITRON-RECOVERY-KIT-2:late");
-    chooseFiles(kitPicker(el), late.file);
-    paste(el, "WAITRON-RECOVERY-KIT-2:typed");
-    await late.release();
-    await el.updateComplete;
-    expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(
-      "WAITRON-RECOVERY-KIT-2:typed",
-    );
-  });
-
-  it("names the field for a pack or a kit, in English and Spanish", async () => {
-    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
-    expect(kitPicker(el).shadowRoot!.textContent).toContain("Recovery pack or kit file");
-    setLocale("es-ES");
-    try {
-      el.requestUpdate();
-      await el.updateComplete;
-      await kitPicker(el).updateComplete;
-      expect(kitPicker(el).shadowRoot!.textContent).toContain(
-        "Paquete de recuperación o archivo del kit",
-      );
-    } finally {
-      setLocale("en-GB");
-    }
+    await expect(outcome).resolves.toMatchObject({
+      masterKey: packKey,
+      nodeRecoverySecret: packKey,
+    });
   });
 
   it("when the old box looks alive, says when it last wrote and requires confirming it is gone", async () => {
@@ -483,7 +296,7 @@ describe("SetupRestoreBucketScreen", () => {
       { liveSince: "2026-09-23T11:58:00.000Z" },
     );
     expect(q(el, "[data-test=live-warning]")!.textContent).toContain("2026-09-23T11:58:00.000Z");
-    paste(el, "k");
+    fillBucket(el);
     tick(el, "[data-test=acknowledge]");
     await el.updateComplete;
     const listener = vi.fn();
@@ -522,33 +335,9 @@ describe("SetupRestoreBucketScreen", () => {
     expect(time.textContent).toContain("2026");
   });
 
-  it("keeps the kit already entered when a file choice carries no file", async () => {
-    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
-    paste(el, "WAITRON-RECOVERY-KIT-2:pasted");
-    chooseFiles(kitPicker(el));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await el.updateComplete;
-    expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(
-      "WAITRON-RECOVERY-KIT-2:pasted",
-    );
-  });
-
-  it("draws no file after an empty choice, through later edits", async () => {
-    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
-    chooseFiles(kitPicker(el), new File(["WAITRON-RECOVERY-KIT-2:file"], "kit.txt"));
-    await vi.waitFor(() => expect(drawnFileName(kitPicker(el))).toBe("kit.txt"));
-    chooseFiles(kitPicker(el));
-    paste(el, "WAITRON-RECOVERY-KIT-2:typed");
-    await el.updateComplete;
-    await kitPicker(el).updateComplete;
-    expect(drawnFileName(kitPicker(el))).toBeNull();
-  });
-
-  // A refusal the owner answers (the old-server question, whose copy it is) is sent again with the
-  // same kit; the shell hands the last request back so nothing has to be pasted twice.
   it("comes back from a refusal with the owner's entries kept", async () => {
     const request: KeptBucketRestoreRequest = {
-      kit: "WAITRON-RECOVERY-KIT-2:abc",
+      ...REVIEWED_BUCKET,
       environment: "preproduction",
       oldBoxGone: true,
       venueConfirmed: null,
@@ -557,7 +346,7 @@ describe("SetupRestoreBucketScreen", () => {
       "setup-restore-bucket-screen",
       { request, liveSince: "2026-09-23T11:58:00.000Z", venue: VENUE },
     );
-    expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(request.kit);
+    expect(q<HTMLInputElement>(el, "[data-test=bucket]")!.value).toBe(request.bucket.bucket);
     expect(q<HTMLSelectElement>(el, "[data-test=environment]")!.value).toBe("preproduction");
     expect(q<HTMLInputElement>(el, "[data-test=acknowledge]")!.checked).toBe(true);
     expect(q<HTMLInputElement>(el, "[data-test=old-box-gone]")!.checked).toBe(true);
@@ -574,52 +363,42 @@ describe("SetupRestoreBucketScreen", () => {
     });
   });
 
-  // The server checked the old server and named the copy for the kit it was sent. A different kit is
-  // a different copy, so an answer given for the first must not travel with the second.
-  it.each(["pasted", "read from a file"])(
-    "drops the old-server and venue answers when a different kit is %s",
-    async (how) => {
-      const request: KeptBucketRestoreRequest = {
-        kit: "WAITRON-RECOVERY-KIT-2:first",
-        environment: "production",
-        oldBoxGone: true,
-        venueConfirmed: null,
-      };
-      const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
-        "setup-restore-bucket-screen",
-        { request, liveSince: "2026-09-23T11:58:00.000Z", venue: VENUE },
-      );
-      tick(el, "[data-test=venue-confirmed]");
-      await el.updateComplete;
-      if (how === "pasted") {
-        paste(el, "WAITRON-RECOVERY-KIT-2:second");
-      } else {
-        chooseFiles(kitPicker(el), new File(["WAITRON-RECOVERY-KIT-2:second"], "kit.txt"));
-      }
-      await vi.waitFor(() =>
-        expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(
-          "WAITRON-RECOVERY-KIT-2:second",
-        ),
-      );
-      await el.updateComplete;
-      expect(q(el, "[data-test=live-warning]")).toBeNull();
-      expect(q(el, "[data-test=venue]")).toBeNull();
-      const outcome = requested(host);
-      await reviewed(el);
-      q(el, "[data-test=restore]")!.click();
-      await expect(outcome).resolves.toEqual({
-        kit: "WAITRON-RECOVERY-KIT-2:second",
-        environment: "production",
-        oldBoxGone: false,
-        venueConfirmed: "89890001K",
-        ...REVIEWED_CREDENTIALS,
-      });
-    },
-  );
-
-  it("asks again when the kit is changed and then changed back", async () => {
+  it("drops the old-server and venue answers when the bucket changes", async () => {
     const request: KeptBucketRestoreRequest = {
-      kit: "WAITRON-RECOVERY-KIT-2:first",
+      ...REVIEWED_BUCKET,
+      environment: "production",
+      oldBoxGone: true,
+      venueConfirmed: null,
+    };
+    const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
+      "setup-restore-bucket-screen",
+      { request, liveSince: "2026-09-23T11:58:00.000Z", venue: VENUE },
+    );
+    tick(el, "[data-test=venue-confirmed]");
+    await el.updateComplete;
+    fillBucket(el, "other-bucket");
+    await vi.waitFor(() =>
+      expect(q<HTMLInputElement>(el, "[data-test=bucket]")!.value).toBe("other-bucket"),
+    );
+    await el.updateComplete;
+    expect(q(el, "[data-test=live-warning]")).toBeNull();
+    expect(q(el, "[data-test=venue]")).toBeNull();
+    const outcome = requested(host);
+    await reviewed(el);
+    q(el, "[data-test=restore]")!.click();
+    await expect(outcome).resolves.toEqual({
+      ...REVIEWED_BUCKET,
+      bucket: { ...REVIEWED_BUCKET.bucket, bucket: "other-bucket" },
+      environment: "production",
+      oldBoxGone: false,
+      venueConfirmed: "89890001K",
+      ...REVIEWED_CREDENTIALS,
+    });
+  });
+
+  it("asks again when the bucket is changed and then changed back", async () => {
+    const request: KeptBucketRestoreRequest = {
+      ...REVIEWED_BUCKET,
       environment: "production",
       oldBoxGone: true,
       venueConfirmed: "89890001K",
@@ -629,9 +408,9 @@ describe("SetupRestoreBucketScreen", () => {
       liveUnknown: true,
       venue: VENUE,
     });
-    paste(el, "WAITRON-RECOVERY-KIT-2:second");
+    fillBucket(el, "second");
     await el.updateComplete;
-    paste(el, request.kit);
+    fillBucket(el, request.bucket.bucket);
     await el.updateComplete;
     expect(q<HTMLInputElement>(el, "[data-test=old-box-gone]")!.checked).toBe(false);
     expect(q<HTMLInputElement>(el, "[data-test=venue-confirmed]")!.checked).toBe(false);
@@ -652,38 +431,39 @@ describe("SetupRestoreBucketScreen", () => {
 
   it("shows the server's refusal above Restore and leaves Restore working", async () => {
     const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
-      errorMessage: "The bucket in this kit holds no copy of this restaurant.",
+      errorMessage: "No copy was found here.",
     });
-    expect(await bottomOf(el)).toBe("The bucket in this kit holds no copy of this restaurant.");
+    expect(await bottomOf(el)).toBe("No copy was found here.");
     expect(q(el, "[data-test=server-error]")).toBeNull();
     expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
   });
 
   describe("a refusal about one field", () => {
     const REQUEST: KeptBucketRestoreRequest = {
-      kit: "WAITRON-RECOVERY-KIT-2:abc",
+      ...REVIEWED_BUCKET,
       environment: "production",
       oldBoxGone: false,
       venueConfirmed: null,
     };
-    const REFUSAL =
-      "This is not a Waitron recovery kit. Choose your recovery pack or kit file, or paste the whole kit.";
+    const REFUSAL = "Check the bucket details.";
 
     it("shows it under that field and focuses it, leaving Restore working", async () => {
       const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
         request: REQUEST,
         errorMessage: REFUSAL,
-        invalidField: "kit",
+        invalidField: "bucket",
       });
-      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=kit]")));
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=bucket]")),
+      );
       expect(fieldMessages(el)).toEqual([REFUSAL]);
-      expect(controlOf(el, "kit").getAttribute("aria-invalid")).toBe("true");
+      expect(controlOf(el, "bucket").getAttribute("aria-invalid")).toBe("true");
       expect(await bottomOf(el)).toBe(FIX_FIELDS);
       expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=restore]")!.disabled).toBe(
         false,
       );
 
-      paste(el, "WAITRON-RECOVERY-KIT-2:def");
+      fillBucket(el, "def");
       await el.updateComplete;
       expect(fieldMessages(el)).toEqual([]);
       expect(await bottomOf(el)).toBe("");
@@ -742,7 +522,7 @@ describe("SetupRestoreBucketScreen", () => {
     });
 
     it("keeps a pressed-away refusal away when the server then names a field for it", async () => {
-      const refusal = "The bucket in this kit holds no copy of this restaurant.";
+      const refusal = "No copy was found here.";
       const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
         errorMessage: refusal,
       });
@@ -759,13 +539,13 @@ describe("SetupRestoreBucketScreen", () => {
     it("drops it on the next press and sends the request again", async () => {
       const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
         "setup-restore-bucket-screen",
-        { request: REQUEST, errorMessage: REFUSAL, invalidField: "kit" },
+        { request: REQUEST, errorMessage: REFUSAL, invalidField: "bucket" },
       );
       const sent = requested(host);
       await reviewed(el);
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
-      expect((await sent).kit).toBe(REQUEST.kit);
+      expect((await sent).bucket.bucket).toBe(REQUEST.bucket.bucket);
       expect(fieldMessages(el)).toEqual([]);
       expect(await bottomOf(el)).toBe("");
     });
@@ -786,7 +566,7 @@ describe("SetupRestoreBucketScreen", () => {
     ] as const;
 
     it.each(TICK_BOXES)(
-      "keeps the %s tick box's dismissed refusal away from Restore once another kit hides the box",
+      "keeps the %s tick box's dismissed refusal away from Restore once another bucket hides the box",
       async (field, question, box, message) => {
         const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
           request: REQUEST,
@@ -797,7 +577,7 @@ describe("SetupRestoreBucketScreen", () => {
         tick(el, `[data-test=${box}]`);
         await el.updateComplete;
         expect(fieldMessages(el)).toEqual([]);
-        paste(el, "WAITRON-RECOVERY-KIT-2:def");
+        fillBucket(el, "def");
         await el.updateComplete;
         expect(q(el, `[data-test=${box}]`)).toBeNull();
         expect(await bottomOf(el)).toBe("");
@@ -807,7 +587,7 @@ describe("SetupRestoreBucketScreen", () => {
     );
 
     it.each(TICK_BOXES)(
-      "drops the %s tick box's refusal when another kit hides the box",
+      "drops the %s tick box's refusal when another bucket hides the box",
       async (field, question, box, message) => {
         const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
           request: REQUEST,
@@ -817,7 +597,7 @@ describe("SetupRestoreBucketScreen", () => {
         });
         expect(q(el, `[data-test=${box}]`)!.getAttribute("aria-invalid")).toBe("true");
         expect(fieldMessages(el)).toEqual([message]);
-        paste(el, "WAITRON-RECOVERY-KIT-2:def");
+        fillBucket(el, "def");
         await el.updateComplete;
         expect(q(el, `[data-test=${box}]`)).toBeNull();
         expect(fieldMessages(el)).toEqual([]);
@@ -828,7 +608,7 @@ describe("SetupRestoreBucketScreen", () => {
     );
 
     it.each(TICK_BOXES)(
-      "shows the %s refusal above Restore while its tick box is not on screen, and drops it when another kit is pasted",
+      "shows the %s refusal above Restore while its tick box is not on screen, and drops it when another bucket is entered",
       async (field, _question, box, message) => {
         const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
           request: REQUEST,
@@ -837,7 +617,7 @@ describe("SetupRestoreBucketScreen", () => {
         });
         expect(q(el, `[data-test=${box}]`)).toBeNull();
         expect(await bottomOf(el)).toBe(message);
-        paste(el, "WAITRON-RECOVERY-KIT-2:def");
+        fillBucket(el, "def");
         await el.updateComplete;
         expect(await bottomOf(el)).toBe("");
         expect(q(el, "[aria-invalid=true]")).toBeNull();
@@ -863,23 +643,25 @@ describe("SetupRestoreBucketScreen", () => {
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
       expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
-      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=kit]")));
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=bucket]")),
+      );
     });
 
     it("clears each message as it is answered, marks one undone again, and gives Restore back at the end", async () => {
       const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
-      paste(el, "k");
+      fillBucket(el);
       await el.updateComplete;
       expect(fieldMessages(el)).toEqual(["Confirm that no other running box has newer data."]);
-      paste(el, " ");
+      fillBucket(el, " ");
       await el.updateComplete;
       expect(fieldMessages(el)).toEqual([
-        "Choose your recovery pack or kit file, or paste the kit.",
+        "Check the bucket details.",
         "Confirm that no other running box has newer data.",
       ]);
-      paste(el, "k");
+      fillBucket(el);
       tick(el, "[data-test=acknowledge]");
       await el.updateComplete;
       expect(fieldMessages(el)).toEqual([]);
@@ -889,7 +671,7 @@ describe("SetupRestoreBucketScreen", () => {
 
     it("drops the server's refusal on the next press", async () => {
       const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
-        errorMessage: "The bucket in this kit holds no copy of this restaurant.",
+        errorMessage: "No copy was found here.",
       });
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
@@ -901,63 +683,44 @@ describe("SetupRestoreBucketScreen", () => {
 describe("SetupRestoreBucketScreen in Spanish", () => {
   afterEach(() => setLocale("en-GB"));
 
-  it("explains the kit with a Spanish hint", async () => {
+  it("explains the bucket with a Spanish hint", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
-    expect(q(el, "[data-test=kit]")!.getAttribute("hint")).toBe(
-      "O pega aquí el kit: una sola línea larga que empieza por WAITRON-RECOVERY-KIT-2",
+    expect(q(el, "[data-test=endpoint]")!.getAttribute("hint")).toBe(
+      "Para proveedores distintos de Amazon S3",
     );
   });
 
-  it("asks for the kit and the confirmations in Spanish", async () => {
+  it("asks for the bucket and the confirmations in Spanish", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
       venue: VENUE,
     });
     expect(q(el, "h1")!.textContent).toBe("Restaurar desde mi bucket");
-    expect(q(el, "[data-test=kit-sensitive]")!.textContent).toContain(
-      "tan delicado como la clave de cifrado de copias",
-    );
+    expect(q(el, "[data-test=secretAccessKey]")!.getAttribute("type")).toBe("password");
     expect(q(el, "[data-test=venue]")!.textContent).toContain("(NIF 89890001K), local Local.");
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(fieldMessages(el)).toEqual([
-      "Elige tu paquete de recuperación o el archivo del kit, o pega el kit.",
+      ...Array<string>(4).fill("Revisa los datos del bucket."),
       "Confirma que ningún otro servidor en funcionamiento tiene datos más recientes.",
       "Confirma que este es tu negocio.",
     ]);
     expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
   });
 
-  it("switches language live, keeping the kit already pasted", async () => {
+  it("switches language live, keeping the bucket already entered", async () => {
     const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
-    paste(el, "WAITRON-RECOVERY-KIT-2:abc");
+    fillBucket(el);
     await el.updateComplete;
     setLocale("es-ES");
     await el.updateComplete;
     expect(q(el, "h1")!.textContent).toBe("Restaurar desde mi bucket");
-    expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe("WAITRON-RECOVERY-KIT-2:abc");
+    expect(q<HTMLInputElement>(el, "[data-test=bucket]")!.value).toBe(
+      REVIEWED_BUCKET.bucket.bucket,
+    );
   });
 });
-
-it.each(["16px", "32px"])(
-  "the recovery kit uses the scalable typing minimum at %s root text",
-  async (rootSize) => {
-    const rootStyle = document.documentElement.getAttribute("style");
-    try {
-      document.documentElement.style.fontSize = rootSize;
-      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
-      const field = q(el, "[data-test=kit]") as HTMLElementTagNameMap["wt-textarea"];
-      await field.updateComplete;
-      expect(getComputedStyle(field.shadowRoot!.querySelector("textarea")!).fontSize).toBe(
-        rootSize,
-      );
-    } finally {
-      if (rootStyle === null) document.documentElement.removeAttribute("style");
-      else document.documentElement.setAttribute("style", rootStyle);
-    }
-  },
-);
 
 describe("SetupRestoreBucketScreen environment from Review backup", () => {
   /** A bucket preview that refuses any environment but the copy's own, as `restore-gate.ts` does. */
@@ -986,7 +749,7 @@ describe("SetupRestoreBucketScreen environment from Review backup", () => {
     const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
       api,
     });
-    paste(el, "selected-private-kit");
+    fillBucket(el);
     await el.updateComplete;
     const copy = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "setup-recovery-copy")!;
     await copy.updateComplete;
@@ -1011,12 +774,15 @@ describe("SetupRestoreBucketScreen environment from Review backup", () => {
   });
 
   it("leaves the environment alone when Review is refused for another reason", async () => {
-    const { api, sent } = previewsAs("preproduction", { code: "backup.stream_kit_invalid" });
+    const { api, sent } = previewsAs("preproduction", {
+      code: "setup.request_invalid",
+      params: { field: "bucket" },
+    });
     const { el, copy } = await mountWith(api);
     copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
     await vi.waitFor(() =>
-      expect(q<HTMLElement & { error: string }>(el, "[data-test=kit]")!.error).toBe(
-        "Check the recovery pack or kit file.",
+      expect(q<HTMLElement & { error: string }>(el, "[data-test=bucket]")!.error).toBe(
+        "Check the bucket details.",
       ),
     );
     expect(sent).toEqual(["production"]);
@@ -1095,12 +861,15 @@ describe("SetupRestoreBucketScreen environment from Review backup", () => {
   });
 
   it("says nothing about the environment when Review is refused for another reason", async () => {
-    const { api } = previewsAs("preproduction", { code: "backup.stream_kit_invalid" });
+    const { api } = previewsAs("preproduction", {
+      code: "setup.request_invalid",
+      params: { field: "bucket" },
+    });
     const { el, copy } = await mountWith(api);
     copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
     await vi.waitFor(() =>
-      expect(q<HTMLElement & { error: string }>(el, "[data-test=kit]")!.error).toBe(
-        "Check the recovery pack or kit file.",
+      expect(q<HTMLElement & { error: string }>(el, "[data-test=bucket]")!.error).toBe(
+        "Check the bucket details.",
       ),
     );
     expect(followedNote(el)).toBeUndefined();
@@ -1134,7 +903,7 @@ describe("SetupRestoreBucketScreen environment from Review backup", () => {
     expect(followedNote(el)).toBeUndefined();
   });
 
-  it("drops the note and switches again after the person changes the kit", async () => {
+  it("drops the note and switches again after the person changes the bucket", async () => {
     const sent: string[] = [];
     let copyEnvironment = "preproduction";
     const api = new SetupApi("", async (_input, init) => {
@@ -1157,7 +926,7 @@ describe("SetupRestoreBucketScreen environment from Review backup", () => {
     expect(environmentField(el).value).toBe("preproduction");
 
     copyEnvironment = "production";
-    paste(el, "another-private-kit");
+    fillBucket(el, "another-bucket");
     await el.updateComplete;
     await copy.updateComplete;
     expect(followedNote(el)).toBeUndefined();

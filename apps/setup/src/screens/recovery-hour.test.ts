@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import { SetupApi, type RecoveryBackupPreview } from "../api/client.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { REVIEWED_BUCKET, cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
 import { encodeMasterKeyCode } from "@waitron/shared";
 
@@ -88,7 +88,8 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
       ? { artifact, masterKey: MASTER_KEY, environment: "production" as const }
       : kind === "bucket"
         ? {
-            bucketKit: "private selected kit",
+            bucket: REVIEWED_BUCKET.bucket,
+            masterKey: MASTER_KEY,
             environment: "production" as const,
             oldBoxGone: true,
           }
@@ -173,7 +174,12 @@ it.each(["archive", "bucket", "cloud"] as const)(
         kind === "archive"
           ? { kind: "staged", stagedId: "5c1d6c43-4f61-4c4a-9e0b-0a8f2f8d9a11" }
           : kind === "bucket"
-            ? { kind, kit: "private selected kit", environment: "production" }
+            ? {
+                kind,
+                bucket: REVIEWED_BUCKET.bucket,
+                masterKey: MASTER_KEY,
+                environment: "production",
+              }
             : { kind, pointId: "selected-cloud-point" },
       );
       expect(request.artifact).toBeUndefined();
@@ -186,7 +192,7 @@ it.each(["archive", "bucket", "cloud"] as const)(
       });
       expect(await stages[0]!.artifact.text()).toBe(await artifact.text());
     }
-    if (kind === "bucket") el.bucketKit = "different kit";
+    if (kind === "bucket") el.bucket = { ...REVIEWED_BUCKET.bucket, prefix: "replacement" };
     else if (kind === "cloud") el.selectionId = "approval-2";
     else el.masterKey = "different password";
     expect(el.readCredentials()).toBeNull();

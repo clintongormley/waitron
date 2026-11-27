@@ -79,7 +79,7 @@ export const startEn = {
     "Recover onto this fresh box from an encrypted Waitron backup when no other box is still running with newer restaurant data.",
   "role.bucket.heading": "Restore from my bucket",
   "role.bucket.copy":
-    "Rebuild onto this fresh box from the continuous copy in your own storage bucket, when the old box is gone. You need the recovery pack or kit file.",
+    "Rebuild onto this fresh box from the continuous copy in your own storage bucket, when the old box is gone. You need the bucket details, access keys and master key.",
   "role.back": "Back",
 
   "connect.heading": "Join the main box",
@@ -320,7 +320,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
     "Recupera el restaurante en este servidor nuevo desde una copia de seguridad cifrada de Waitron cuando no haya ningún otro servidor funcionando con datos más recientes del restaurante.",
   "role.bucket.heading": "Restaurar desde mi bucket",
   "role.bucket.copy":
-    "Reconstruye el restaurante en este servidor nuevo a partir de la copia continua de tu propio bucket de almacenamiento, cuando el servidor anterior ya no esté. Necesitas el paquete de recuperación o el archivo del kit.",
+    "Reconstruye el restaurante en este servidor nuevo a partir de la copia continua de tu propio bucket de almacenamiento, cuando el servidor anterior ya no esté. Necesitas los datos del bucket, las claves de acceso y la clave maestra.",
   "role.back": "Volver",
 
   "connect.heading": "Unirse al servidor principal",

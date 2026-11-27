@@ -1,3 +1,4 @@
+import type { BucketConfig } from "@waitron/stream";
 import type { KeyRing } from "@waitron/credentials";
 import type { DeploymentEnvironment, Database, NodeDatabase } from "@waitron/db";
 import type { FiscalContribution } from "@waitron/fiscal";
@@ -28,13 +29,18 @@ import type {
 import type { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { TradingConfig } from "./trading-config.js";
 
-/** What the owner sends to rebuild this box from their bucket. */
-export interface BucketRestoreInput {
-  /** The recovery kit's text, as downloaded or pasted. */
-  kit: string;
+export interface BucketRestoreSource {
+  bucket: BucketConfig;
+  masterKey: string;
   environment: DeploymentEnvironment;
-  /** The owner says the old server is switched off for good. */
+}
+
+export interface BucketRestorePreviewInput extends BucketRestoreSource {
   oldBoxGone: boolean;
+}
+
+export interface BucketRestoreInput extends BucketRestorePreviewInput {
+  selectedSourceId: string;
   /** The tax id of the restored copy the owner confirmed; null until they have seen one. */
   venueConfirmed: string | null;
   recoveryOperation?: RecoveryOperationInput;
@@ -108,7 +114,7 @@ export interface SetupDeps {
   requestFromBox?: (c: Context) => boolean;
   previewRestore?: (request: ArchiveRequest) => Promise<RecoveryBackupPreview>;
   previewBucketRestore?: (
-    input: Omit<BucketRestoreInput, "venueConfirmed">,
+    input: BucketRestorePreviewInput,
     signal?: AbortSignal,
   ) => Promise<RecoveryBackupPreview>;
   previewCloudRestore?: (pointId: string) => Promise<RecoveryBackupPreview>;
