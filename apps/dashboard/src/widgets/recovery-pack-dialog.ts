@@ -104,7 +104,8 @@ export class RecoveryPackDialog extends LitElement {
   #sent = false;
   /** The new master key's pack while the box has not confirmed taking it. */
   #unconfirmed: NewKeyPack | null = null;
-  /** Drops the confirm still out: the box refuses a confirm whose request is gone. */
+  /** Drops the confirm still out: the box refuses a confirm whose request is gone before it takes
+   * the key. */
   #confirming: AbortController | null = null;
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
