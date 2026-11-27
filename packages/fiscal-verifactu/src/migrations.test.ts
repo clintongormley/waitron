@@ -113,6 +113,25 @@ describe("verifactu_sending_state migration", () => {
     );
     expect(isRefusal(second, CHECK_VIOLATION)).toBe(true); // verifactu_sending_state_singleton_ck
   });
+
+  it.each([
+    ["a revision without a date", "'revision-a'", "null"],
+    ["a date without a revision", "null", "'2026-07-21T00:00:00.000Z'"],
+  ])("refuses a certificate refusal mark with %s", async (_name, revision, at) => {
+    const error = await captureError(async () =>
+      suite.db.execute(
+        sql.raw(`
+          insert into verifactu_sending_state
+            (id, proximo_envio_en, tiempo_espera_seg, certificate_refused_revision, certificate_refused_at)
+          values (1, '2026-07-21T00:00:00Z', 60, ${revision}, ${at})
+        `),
+      ),
+    );
+    expect(isRefusal(error, CHECK_VIOLATION)).toBe(true);
+    expect(JSON.stringify(error, Object.getOwnPropertyNames(error)) + String(error)).toContain(
+      "verifactu_sending_state_certificate_refused_ck",
+    );
+  });
 });
 
 describe("verifactu_submissions.reconciled_resubmit_at migration", () => {

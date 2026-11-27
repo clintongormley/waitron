@@ -252,7 +252,9 @@ export class AeatCertificateCard extends LitElement {
     const until =
       c.stage === "expired"
         ? remaining(c, zone)
-        : `${day(c.validUntil, zone)} · ${remaining(c, zone)}`;
+        : c.notAcceptedAt !== undefined
+          ? day(c.validUntil, zone)
+          : `${day(c.validUntil, zone)} · ${remaining(c, zone)}`;
     return html`${
         this.checkedAt === undefined
           ? nothing

@@ -189,6 +189,7 @@ describe("dashboard-aeat-certificate-card", () => {
     expect(text(card, "[data-test=certificate-status]")).toBe(
       "AEAT did not accept this certificate on 12 Oct 2026. Install a new one.",
     );
+    expect(text(card, "[data-test=valid-until]")).toBe("1 Nov 2026");
     expect(button(card)?.getAttribute("variant")).toBe("primary");
 
     setLocale("es");
@@ -196,6 +197,7 @@ describe("dashboard-aeat-certificate-card", () => {
     expect(text(spanish.card, "[data-test=certificate-status]")).toBe(
       "La AEAT no aceptó este certificado el 12 oct 2026. Instala uno nuevo.",
     );
+    expect(text(spanish.card, "[data-test=valid-until]")).toBe("1 nov 2026");
   });
 
   it("shows the refusal for a certificate with no expiry stage", async () => {
