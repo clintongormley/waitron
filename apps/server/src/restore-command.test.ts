@@ -72,7 +72,7 @@ describe("waitron-restore restore", () => {
     expect(out).toEqual([expect.stringMatching(/usage/i)]);
   });
 
-  it("returns 1 and names the variable when the recovery key is missing", async () => {
+  it("returns 1 and names both key settings when no key is given", async () => {
     const out: string[] = [];
     const code = await runRestore({
       argv: ["restore", "/does/not/matter"],
@@ -80,7 +80,9 @@ describe("waitron-restore restore", () => {
       out: (line) => out.push(line),
     });
     expect(code).toBe(1);
-    expect(out).toEqual([expect.stringMatching(/WAITRON_BACKUP_RECOVERY_KEY/)]);
+    expect(out).toEqual([
+      expect.stringMatching(/WAITRON_MASTER_KEY.*--master-key-file.*WAITRON_BACKUP_RECOVERY_KEY/),
+    ]);
   });
 
   it("takes the default venue directory when WAITRON_VENUE_DIR is EMPTY, never the working directory", async () => {
@@ -326,6 +328,26 @@ describe("waitron-restore restore", () => {
       out: (line) => out.push(line),
       restore: async () => {
         throw new AppError("recovery.passphrase_invalid", {});
+      },
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([
+      COLD_RESTORE_NOTICE,
+      "restore failed: wrong recovery key or corrupt artifact",
+    ]);
+  });
+
+  it("words backup.archive_key_invalid as a key or file refusal, not by its prefix", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-archive-key-"));
+    const artifactPath = await makeArtifact(dir);
+    const out: string[] = [];
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+      lockVenue: unlockedVenue,
+      out: (line) => out.push(line),
+      restore: async () => {
+        throw new AppError("backup.archive_key_invalid", { input: "backup_key" });
       },
     });
     expect(code).toBe(1);

@@ -111,6 +111,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.archive_namespace_overlap": 400,
   "backup.stream_not_configured": 409,
   "backup.recovery_key_missing": 409,
+  "backup.key_number_unknown": 409,
   "backup.archive_test_failed": 422,
   "backup.archive_settings_invalid": 500,
   "backup.rotation_metadata_failed": 500,
@@ -520,9 +521,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }),
   );
 
-  // A key change writes backup key N+1 of the venue's master key (1 when none is held) to
-  // `backup.env`, then stores the held settings unchanged under a new revision and reloads. With no
-  // readable record and nothing loaded, only the key file changes.
+  // A key change writes backup key N+1 of the venue's master key (1 when `backup.env` names no
+  // number; refused when the number it names is not a key number) to `backup.env`, then stores the
+  // held settings unchanged under a new revision and reloads. With no readable record and nothing
+  // loaded, only the key file changes.
   app.post("/api/backup/rotate", (c) =>
     run(c, log, async () => {
       const personId = await authorize(c);
@@ -533,11 +535,9 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
         const { bytes, current } = await checkedMasterKey(deps.db, masterKey);
-        const record = backupKeyRecord(
-          bytes,
-          heldBackupKeyNumber(await deps.readBoxEnv()) + 1,
-          current.publicKey,
-        );
+        const heldNumber = heldBackupKeyNumber(await deps.readBoxEnv());
+        if (heldNumber === undefined) throw new AppError("backup.key_number_unknown", {});
+        const record = backupKeyRecord(bytes, heldNumber + 1, current.publicKey, current.name);
         const recoveryKey = record.key;
         const keyRotatedAt = new Date().toISOString();
         const read = await readHeldSettings();

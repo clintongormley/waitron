@@ -25,7 +25,14 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { wizardApi } from "../test/first-setup-browser.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
-import { REVIEWED_CREDENTIALS, reviewBackup } from "./widgets/test-helpers.js";
+import {
+  REVIEWED_CREDENTIALS,
+  REVIEWED_PREVIEW,
+  enterRecoveryDetails,
+  reviewBackup,
+  typeMasterKey,
+} from "./widgets/test-helpers.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import {
   APPROVED,
   JOIN_HANDLE,
@@ -135,7 +142,7 @@ function restoreRequest(
   el: SetupApp,
   request: {
     artifact: File;
-    recoveryKey: string;
+    masterKey: string;
     environment: "production" | "preproduction";
     oldBoxGone?: boolean;
   },
@@ -310,7 +317,7 @@ async function reloadOntoHeldFirstSetup(): Promise<void> {
  * screen's `#<name>-error` paragraph. */
 function messageUnder(screen: HTMLElement, name: string): string | null {
   const field = screen.shadowRoot!.querySelector<HTMLElement & { error: string }>(
-    `:is(wt-file-input, wt-input, wt-textarea, wt-combobox)[data-test="${name}"]`,
+    `:is(wt-file-input, wt-master-key-input, wt-input, wt-textarea, wt-combobox)[data-test="${name}"]`,
   );
   if (field !== null) return field.error;
   return screen.shadowRoot!.querySelector(`#${name}-error`)?.textContent ?? null;
@@ -1120,14 +1127,14 @@ describe("setup-app", () => {
     const el = await mountSetupApp(stubApi({ restore }));
     const request = {
       artifact: new File(["encrypted"], "waitron.backup"),
-      recoveryKey: "recovery-key",
+      masterKey: "recovery-key",
       environment: "production" as const,
     };
     restoreRequest(el, request);
     await flush(el);
     expect(restore).toHaveBeenCalledWith(
       request.artifact,
-      request.recoveryKey,
+      request.masterKey,
       request.environment,
       false,
       REVIEWED_CREDENTIALS,
@@ -1140,7 +1147,7 @@ describe("setup-app", () => {
     const el = await mountSetupApp(stubApi({ restore }));
     restoreRequest(el, {
       artifact: new File(["encrypted"], "waitron.backup"),
-      recoveryKey: "recovery-key",
+      masterKey: "recovery-key",
       environment: "production",
     });
     await flush(el);
@@ -2810,7 +2817,7 @@ describe("resetting a join that stopped partway", () => {
       (el: SetupApp) =>
         restoreRequest(el, {
           artifact: new File(["encrypted"], "waitron.backup"),
-          recoveryKey: "k",
+          masterKey: "k",
           environment: "production",
         }),
     ],
@@ -3605,7 +3612,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     );
     restoreRequest(el, {
       artifact: new File(["encrypted"], "waitron.backup"),
-      recoveryKey: "recovery-key",
+      masterKey: "recovery-key",
       environment: "production",
     });
     await flush(el);
@@ -3717,7 +3724,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       const el = await mountSetupApp(stubApi({ restore }));
       restoreRequest(el, {
         artifact: new File(["backup"], "venue.waitron-backup"),
-        recoveryKey: "recovery key",
+        masterKey: "recovery key",
         environment: "production",
       });
       await flush(el);
@@ -4561,6 +4568,11 @@ describe("restore from my bucket", () => {
       "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
     ],
     [
+      "backup.archive_key_invalid",
+      { input: "backup_key" },
+      "The latest copy in the bucket could not be opened. It is damaged, or the backup encryption key in this kit does not open it. If the backup encryption key was changed, use the newest recovery pack or kit. Otherwise choose Back, then Restore from backup, to restore from a backup file.",
+    ],
+    [
       "backup.stream_restore_failed",
       { exitCode: 1, diskFull: false },
       "The copy could not be downloaded from the bucket. Check this box's internet connection and that the bucket still exists, then try again.",
@@ -4908,7 +4920,7 @@ describe("restore from my bucket", () => {
 describe("restoring a backup file whose old server may still be running", () => {
   const backup = {
     artifact: new File([Uint8Array.from([1])], "b.wbk"),
-    recoveryKey: "k",
+    masterKey: "k",
     environment: "production" as const,
   };
 
@@ -4956,7 +4968,7 @@ describe("restoring a backup file whose old server may still be running", () => 
   );
 
   it.each([
-    ["recovery.passphrase_invalid", {}, "recoveryKey", "Check the backup encryption key."],
+    ["recovery.passphrase_invalid", {}, "artifact", "Check the backup file."],
     [
       "restore.environment_mismatch",
       { backup: "preproduction", target: "production" },
@@ -4964,11 +4976,12 @@ describe("restoring a backup file whose old server may still be running", () => 
       "The backup comes from the other environment. Choose the environment it came from.",
     ],
     ["setup.request_invalid", { field: "artifact" }, "artifact", "Check the backup file."],
+    ["setup.request_invalid", { field: "masterKey" }, "masterKey", "Check the master key."],
     [
-      "setup.request_invalid",
-      { field: "recoveryKey" },
-      "recoveryKey",
-      "Check the backup encryption key.",
+      "promotion.break_glass_invalid",
+      { masterKeyId: "13b5f8e1798205df", keyNumber: 2, keyName: "2026-11-02 · QZJV" },
+      "masterKey",
+      "Wrong master key. Use the one dated 2026-11-02 · QZJV.",
     ],
     [
       "setup.request_invalid",
@@ -4986,7 +4999,7 @@ describe("restoring a backup file whose old server may still be running", () => 
       await flush(el);
       const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
       expect(screen.invalidField).toBe(field);
-      const id = field === "recoveryKey" ? "recovery-key" : field;
+      const id = field === "masterKey" ? "master-key" : field;
       expect(messageUnder(screen, id)).toBe(message);
       expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
       const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
@@ -4995,6 +5008,103 @@ describe("restoring a backup file whose old server may still be running", () => 
       expect(button.disabled).toBe(false);
     },
   );
+
+  it("shows a refused authorisation that names no key under the one master-key field when that key was the authorisation", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        restore: vi
+          .fn()
+          .mockRejectedValue({ code: "promotion.break_glass_invalid", params: {}, status: 400 }),
+      }),
+    );
+    restoreRequest(el, { ...backup, masterKey: REVIEWED_CREDENTIALS.nodeRecoverySecret });
+    await flush(el);
+    const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
+    expect(screen.invalidField).toBe("masterKey");
+    expect(messageUnder(screen, "master-key")).toBe("Check the master key.");
+  });
+
+  it("sends a refusal naming the copy's current master key, with no key number, to a second key field, leaving the file's key field clear", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        restore: vi.fn().mockRejectedValue({
+          code: "promotion.break_glass_invalid",
+          params: { keyName: "2026-11-02 · QZJV" },
+          status: 400,
+        }),
+      }),
+    );
+    restoreRequest(el, { ...backup, masterKey: REVIEWED_CREDENTIALS.nodeRecoverySecret });
+    await flush(el);
+    const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
+    expect(screen.invalidField).toBe("nodeRecoverySecret");
+    expect(screen.errorMessage).toBe("Wrong master key. Use the one dated 2026-11-02 · QZJV.");
+    expect(messageUnder(screen, "master-key")).toBe("");
+  });
+
+  it("a backup file whose copy needs another master key asks for it in a second field after Review, and Restore sends it as nodeRecoverySecret beside the file's key", async () => {
+    const fileKey = MASTER_KEY;
+    const copyKey = REVIEWED_CREDENTIALS.nodeRecoverySecret;
+    const named = "Wrong master key. Use the one dated 2026-11-02 · QZJV.";
+    const restore = vi
+      .fn()
+      .mockRejectedValueOnce({
+        code: "promotion.break_glass_invalid",
+        params: { keyName: "2026-11-02 · QZJV" },
+        status: 400,
+      })
+      .mockResolvedValueOnce({ restoreStaged: true, restarting: true });
+    const el = await mountSetupApp(
+      stubApi({ restore, previewRestore: vi.fn(async () => structuredClone(REVIEWED_PREVIEW)) }),
+    );
+    goto(el, "restore");
+    await flush(el);
+    const first = (await screenHost(el, "restore")) as SetupRestoreScreen;
+    chooseFiles(first.shadowRoot!.querySelector("[data-test=artifact]")!, backup.artifact);
+    await typeMasterKey(first, fileKey);
+    const ack = first.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!;
+    ack.checked = true;
+    ack.dispatchEvent(new Event("change"));
+    await reviewBackup(first);
+    first.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
+    await vi.waitFor(() => expect(restore).toHaveBeenCalledTimes(1));
+    expect(restore.mock.calls[0]![4]).toEqual({
+      ...REVIEWED_CREDENTIALS,
+      nodeRecoverySecret: fileKey,
+    });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=screen-restore]")).not.toBe(first),
+    );
+    await flush(el);
+    const second = (await screenHost(el, "restore")) as SetupRestoreScreen;
+    const copy = second.shadowRoot!.querySelector<LitElement>("setup-recovery-copy")!;
+    await copy.updateComplete;
+    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await vi.waitFor(() =>
+      expect(copy.shadowRoot!.querySelector("setup-recovery-allocation")).not.toBeNull(),
+    );
+    const allocation = copy.shadowRoot!.querySelector<LitElement>("setup-recovery-allocation")!;
+    await allocation.updateComplete;
+    const secondKey = allocation.shadowRoot!.querySelector<LitElement>("wt-master-key-input");
+    expect(secondKey).not.toBeNull();
+    await secondKey!.updateComplete;
+    const secondField = secondKey!.shadowRoot!.querySelector<LitElement & { error: string }>(
+      '[name="master-key"]',
+    )!;
+    await secondField.updateComplete;
+    expect(secondField.error).toBe(named);
+    expect(messageUnder(second, "master-key")).toBe("");
+    await enterRecoveryDetails(allocation, REVIEWED_CREDENTIALS.recoveryOperation, copyKey);
+    // Typing the second key leaves its field on the screen.
+    expect(allocation.shadowRoot!.querySelector("wt-master-key-input")).toBe(secondKey);
+    await second.updateComplete;
+    second.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
+    await vi.waitFor(() => expect(restore).toHaveBeenCalledTimes(2));
+    const [, masterKey, , , credentials] = restore.mock.calls[1]!;
+    expect(masterKey).toBe(fileKey);
+    expect(credentials).toEqual(REVIEWED_CREDENTIALS);
+    expect(credentials.nodeRecoverySecret).not.toBe(masterKey);
+  });
 
   it.each([
     ["restore.schema_too_new", { module: "core", backup: 207, target: 1 }],
@@ -5488,6 +5598,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     ["recovery.passphrase_invalid", 422, cloudUnopenable],
     ["backup.artifact_invalid", 422, cloudUnopenable],
     ["backup.archive_invalid", 422, cloudUnopenable],
+    ["backup.archive_key_invalid", 422, cloudUnopenable],
     [
       "restore.environment_mismatch",
       409,
@@ -5805,7 +5916,7 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
 describe("an answer that arrives after the element is detached", () => {
   const backup = {
     artifact: new File(["encrypted"], "waitron.backup"),
-    recoveryKey: "recovery-key",
+    masterKey: "recovery-key",
     environment: "production" as const,
   };
   const configFile = new File(["encrypted"], "prepared.waitron-config");
@@ -6327,7 +6438,7 @@ describe("first setup owner refusals", () => {
           (el: SetupApp) =>
             restoreRequest(el, {
               artifact: new File([Uint8Array.from([1])], "b.wbk"),
-              recoveryKey: "k",
+              masterKey: "k",
               environment: "production",
             }),
         ],
@@ -6583,7 +6694,7 @@ describe("a recovery request refused because another setup holds the server", ()
     const host = (await screenHost(el, screen)) as HTMLElement & Record<string, unknown>;
     if (source === "archive") {
       host.artifact = new File(["encrypted selected copy"], "backup.waitron");
-      host.recoveryKey = "archive password";
+      host.masterKey = "archive password";
     } else if (source === "bucket") host.kit = "private selected kit";
     await (host as unknown as LitElement).updateComplete;
     const copy = host.shadowRoot!.querySelector<LitElement>("setup-recovery-copy")!;
@@ -6591,7 +6702,10 @@ describe("a recovery request refused because another setup holds the server", ()
     return { el, host, copy, calls };
   }
 
-  /** Fills the fiscal module's recovery form and presses Proceed, which stages and prepares. */
+  /**
+   * Fills the fiscal module's recovery form and presses Proceed, which stages and prepares. The
+   * form asks for the master key only where the restore screen does not.
+   */
   async function fillRecoveryHour(copy: LitElement) {
     await vi.waitFor(() =>
       expect(copy.shadowRoot!.querySelector("setup-recovery-allocation")).not.toBeNull(),
@@ -6600,13 +6714,8 @@ describe("a recovery request refused because another setup holds the server", ()
     await allocation.updateComplete;
     const entry = allocation.shadowRoot!.querySelector<LitElement>("vf-recovery-hour")!;
     await entry.updateComplete;
-    const key = entry.shadowRoot!.querySelector<LitElement>("wt-master-key-input")!;
-    await key.updateComplete;
-    const field = key.shadowRoot!.querySelector<LitElement>('[name="master-key"]')!;
-    await field.updateComplete;
-    const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    input.value = MASTER_KEY.replaceAll(" ", "").toLowerCase();
-    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    if (entry.shadowRoot!.querySelector("wt-master-key-input"))
+      await typeMasterKey(entry, MASTER_KEY.replaceAll(" ", "").toLowerCase());
     for (const name of [
       "recovery-old-box-stopped",
       "recovery-sole-operation",
@@ -6696,6 +6805,243 @@ describe("a recovery request refused because another setup holds the server", ()
       await reloadOntoHeldFirstSetup();
     },
   );
+  /** Every `wt-master-key-input` drawn under `root`, through every shadow root. */
+  const keyFields = (root: ParentNode): HTMLElement[] =>
+    [...root.querySelectorAll<HTMLElement>("*")].flatMap((node) => [
+      ...(node.localName === "wt-master-key-input" ? [node] : []),
+      ...(node.shadowRoot ? keyFields(node.shadowRoot) : []),
+    ]);
+  const fiscalEntry = (copy: LitElement) =>
+    copy
+      .shadowRoot!.querySelector<LitElement>("setup-recovery-allocation")!
+      .shadowRoot!.querySelector<LitElement>("vf-recovery-hour")!;
+  it.each(["archive", "bucket", "cloud"] as const)(
+    "a filing backup's %s restore asks for the master key once, and the fiscal form sends that key as nodeRecoverySecret",
+    async (source) => {
+      const prepareRecovery = vi.fn().mockRejectedValue({ code: "server.internal" });
+      const { host, copy } = await recoveryApp(source, "preparation", "server.internal", {
+        prepareRecovery,
+      });
+      if (source === "archive") {
+        await typeMasterKey(host, MASTER_KEY.replaceAll(" ", "").toLowerCase());
+        await (host as unknown as LitElement).updateComplete;
+        await copy.updateComplete;
+      }
+      copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+      await fillRecoveryHour(copy);
+      await vi.waitFor(() => expect(prepareRecovery).toHaveBeenCalled());
+      const entryFields = fiscalEntry(copy).shadowRoot!.querySelectorAll("wt-master-key-input");
+      if (source === "archive") {
+        expect(entryFields).toHaveLength(0);
+        expect(keyFields(host.shadowRoot!)).toEqual([
+          host.shadowRoot!.querySelector("[data-test=master-key]"),
+        ]);
+      } else expect(entryFields).toHaveLength(1);
+      expect(keyFields(host.shadowRoot!)).toHaveLength(1);
+      for (const [, request] of prepareRecovery.mock.calls)
+        expect((request as { nodeRecoverySecret: string }).nodeRecoverySecret).toBe(MASTER_KEY);
+    },
+  );
+  it.each([
+    [
+      "en-GB",
+      "en",
+      {
+        code: "promotion.break_glass_invalid",
+        params: { masterKeyId: "13b5f8e1798205df", keyNumber: 2, keyName: "2026-11-02 · QZJV" },
+        status: 400,
+      },
+    ],
+    [
+      "es-ES",
+      "es",
+      {
+        code: "promotion.break_glass_invalid",
+        params: { masterKeyId: "13b5f8e1798205df", keyNumber: 2, keyName: "2026-11-02 · QZJV" },
+        status: 400,
+      },
+    ],
+    [
+      "en-GB",
+      "en",
+      { code: "setup.request_invalid", params: { field: "nodeRecoverySecret" }, status: 400 },
+    ],
+  ] as const)(
+    "a wrong master key on a filing backup's restore shows under the restore screen's one field (%s, %s, %j)",
+    async (locale, words, refusal) => {
+      try {
+        const prepareRecovery = vi.fn().mockRejectedValue(refusal);
+        const { host, copy } = await recoveryApp("archive", "preparation", "server.internal", {
+          prepareRecovery,
+        });
+        setLocale(locale);
+        await typeMasterKey(host, MASTER_KEY.replaceAll(" ", "").toLowerCase());
+        await (host as unknown as LitElement).updateComplete;
+        await copy.updateComplete;
+        copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+        await fillRecoveryHour(copy);
+        await vi.waitFor(() => expect(prepareRecovery).toHaveBeenCalledTimes(1));
+        const field = host.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+          "[data-test=master-key]",
+        )!;
+        const expected =
+          refusal.code === "promotion.break_glass_invalid"
+            ? MASTER_KEY_FIELD_WORDS[words].wrongKey("2026-11-02 · QZJV")
+            : t("restore.check.master_key");
+        await vi.waitFor(() => expect(field.error).toBe(expected));
+        expect(keyFields(host.shadowRoot!)).toEqual([field]);
+        const entry = fiscalEntry(copy);
+        await entry.updateComplete;
+        expect(
+          entry.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+            .error,
+        ).toBe("");
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+  /** A preparation route that answers the clock check and makes the series, after `refusals`. */
+  function preparing(...refusals: unknown[]) {
+    const instant = Date.now();
+    return vi.fn(
+      async (
+        _source: unknown,
+        request: { binding: unknown; nodeRecoverySecret: string; proposal: { action: string } },
+      ) => {
+        if (refusals.length > 0) throw refusals.shift();
+        const action = request.proposal.action;
+        if (action === "clock-challenge")
+          return { id: "challenge", boxInstantMs: instant, expiresInMs: 5000 };
+        if (action === "compare-clocks")
+          return {
+            id: "comparison",
+            clock: {
+              usable: ["box", "browser", "internet"].map((source) => ({
+                source,
+                lowerMs: instant,
+                upperMs: instant,
+              })),
+              unavailable: [],
+              secondClock: true,
+              disagreement: false,
+              releaseBlocked: false,
+              rangeBlocked: false,
+            },
+          };
+        return {
+          status: "selected",
+          identity: "0CSQW",
+          binding: request.binding,
+          input: {
+            allocation: {
+              installationIdentity: "0CSQW",
+              series: [{ code: "A-0CSQW", purpose: "standard" }],
+            },
+          },
+        };
+      },
+    );
+  }
+  const PAGE_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(3));
+  const NAMED = MASTER_KEY_FIELD_WORDS.en.wrongKey("2026-11-02 · QZJV");
+  const NAMED_REFUSAL = {
+    code: "promotion.break_glass_invalid",
+    params: { keyName: "2026-11-02 · QZJV" },
+    status: 400,
+  };
+  /** The fiscal form's own master-key field, once drawn, and the text field inside it. */
+  async function entryKeyField(entry: LitElement) {
+    await entry.updateComplete;
+    const entryKey = entry.shadowRoot!.querySelector<LitElement>("wt-master-key-input");
+    expect(entryKey).not.toBeNull();
+    await entryKey!.updateComplete;
+    const entryField = entryKey!.shadowRoot!.querySelector<LitElement & { error: string }>(
+      '[name="master-key"]',
+    )!;
+    await entryField.updateComplete;
+    return entryField;
+  }
+  /** Ticks the restore screen's acknowledgement and presses Restore, returning what it sent. */
+  async function pressRestore(host: HTMLElement) {
+    const screen = host as unknown as SetupRestoreScreen;
+    const ack = host.shadowRoot!.querySelector<HTMLInputElement>("[data-test=acknowledge]")!;
+    ack.checked = true;
+    ack.dispatchEvent(new Event("change"));
+    await screen.updateComplete;
+    host.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
+  }
+  async function reviewed(copy: LitElement) {
+    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await vi.waitFor(() =>
+      expect(
+        copy
+          .shadowRoot!.querySelector<LitElement>("setup-recovery-allocation")
+          ?.shadowRoot?.querySelector("vf-recovery-hour"),
+      ).toBeTruthy(),
+    );
+    return fiscalEntry(copy);
+  }
+  /**
+   * A filing backup's restore whose first preparation, sent with the file's master key, the server
+   * refuses because the copy's current master key is another one; the fiscal form then draws its
+   * own key field.
+   */
+  async function askedForAnotherKey() {
+    const prepareRecovery = preparing(NAMED_REFUSAL);
+    const restore = vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true });
+    const { host, copy } = await recoveryApp("archive", "preparation", "server.internal", {
+      prepareRecovery,
+      restore,
+    });
+    await typeMasterKey(host, PAGE_KEY.replaceAll(" ", "").toLowerCase());
+    await copy.updateComplete;
+    const entry = await reviewed(copy);
+    expect(entry.shadowRoot!.querySelector("wt-master-key-input")).toBeNull();
+    await fillRecoveryHour(copy);
+    await vi.waitFor(() => expect(prepareRecovery).toHaveBeenCalledTimes(1));
+    expect(prepareRecovery.mock.calls[0]![1].nodeRecoverySecret).toBe(PAGE_KEY);
+    await vi.waitFor(() =>
+      expect(entry.shadowRoot!.querySelector("wt-master-key-input")).not.toBeNull(),
+    );
+    const entryField = await entryKeyField(entry);
+    return { host, copy, entry, entryField, restore, prepareRecovery };
+  }
+  it("a filing backup whose preparation is refused naming the copy's current master key asks for that key in the fiscal form, and Restore sends it as nodeRecoverySecret beside the file's master key", async () => {
+    const { host, copy, entry, entryField, restore, prepareRecovery } = await askedForAnotherKey();
+    expect(entryField.error).toBe(NAMED);
+    expect(messageUnder(host, "master-key")).toBe("");
+    expect(keyFields(host.shadowRoot!)).toHaveLength(2);
+    await fillRecoveryHour(copy);
+    await vi.waitFor(() =>
+      expect((entry as unknown as { readCredentials(): unknown }).readCredentials()).not.toBeNull(),
+    );
+    await pressRestore(host);
+    await vi.waitFor(() => expect(restore).toHaveBeenCalledTimes(1));
+    const [, masterKey, , , credentials] = restore.mock.calls[0]!;
+    expect(masterKey).toBe(PAGE_KEY);
+    expect(credentials.nodeRecoverySecret).toBe(MASTER_KEY);
+    for (const [, request] of prepareRecovery.mock.calls.slice(1))
+      expect((request as { nodeRecoverySecret: string }).nodeRecoverySecret).toBe(MASTER_KEY);
+  });
+  it("a refusal of the key the fiscal form asked for itself shows under that form's field, not the restore screen's", async () => {
+    const { host, copy, entryField, prepareRecovery } = await askedForAnotherKey();
+    const calls = prepareRecovery.mock.calls.length;
+    prepareRecovery.mockRejectedValueOnce({
+      code: "promotion.break_glass_invalid",
+      params: { keyName: "2026-11-09 · ABCD" },
+      status: 400,
+    });
+    await fillRecoveryHour(copy);
+    await vi.waitFor(() => expect(prepareRecovery).toHaveBeenCalledTimes(calls + 1));
+    await vi.waitFor(() =>
+      expect(entryField.error).toBe(MASTER_KEY_FIELD_WORDS.en.wrongKey("2026-11-09 · ABCD")),
+    );
+    const screenField = host.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      "[data-test=master-key]",
+    )!;
+    expect(screenField.error).toBe("");
+  });
   it.each([
     ["archive", "preview", "Couldn't review this backup."],
     ["cloud", "preview", "Couldn't review this backup."],
@@ -6792,7 +7138,7 @@ describe("a finish refused while a clock step's note is unsaved", () => {
       const el = await mountSetupApp(stubApi({ restore: vi.fn().mockRejectedValue(refusal) }));
       restoreRequest(el, {
         artifact: new File(["encrypted"], "waitron.backup"),
-        recoveryKey: "recovery-key",
+        masterKey: "recovery-key",
         environment: "production",
       });
       await flush(el);

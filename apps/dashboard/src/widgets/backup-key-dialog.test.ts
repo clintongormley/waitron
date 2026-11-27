@@ -89,7 +89,7 @@ async function type(el: BackupKeyDialog, text: string) {
 describe.each([
   [
     "en-GB",
-    "New backups will use backup key 4. A box you removed can't read them.",
+    "New backups will use backup key 4. A box you removed can't read them. Older backups still open with your master key.",
     "Change the backup key",
     "Cancel",
   ],
@@ -115,6 +115,23 @@ describe.each([
     expect(button(el, "change-backup-key")!.disabled).toBe(false);
   });
 });
+
+it.each([
+  [
+    "en-GB",
+    "New backups will use backup key 4. A box you removed can't read them. Older backups still open with your master key.",
+  ],
+  ["es-ES", es["backup_key_dialog.text"].replace("{number}", "4")],
+] as const)(
+  "the Change the backup key dialog says older backups open with the master key (%s)",
+  async (locale, text) => {
+    setLocale(locale);
+    const { el } = await open(stubApi(vi.fn()));
+    const intro = words(el.shadowRoot!.querySelector("[data-test=intro]"));
+    expect(intro).toBe(text);
+    expect(intro.split(". ")).toHaveLength(3);
+  },
+);
 
 it("Change the backup key sends the typed master key and shows 'Backups now use backup key N+1.'", async () => {
   const rotate = vi.fn().mockResolvedValue(ANSWER);
@@ -383,7 +400,7 @@ it("after a failed reload, says backups still use the old key only when the box 
 });
 
 it.each([
-  ["en-GB", "Saved, but the box could not load the new settings."],
+  ["en-GB", "Saved, but the box could not load the new settings. Reload the page."],
   ["es-ES", es["backup_key_dialog.saved_not_loaded"]],
 ] as const)(
   "after a failed reload with the new key loaded, says only that the settings did not load (%s)",
@@ -397,6 +414,28 @@ it.each([
     button(el, "change-backup-key")!.click();
     await expect.poll(() => words(el.shadowRoot!.querySelector("[data-test=done]"))).toBe(sentence);
     expect(el.shadowRoot!.textContent).not.toContain(t("recovery_pack.older_key"));
+  },
+);
+
+it.each(["en-GB", "es-ES"] as const)(
+  "after a change the box saved but could not load, the dialog says to reload the page (%s)",
+  async (locale) => {
+    setLocale(locale);
+    // The unconfirmed line's second sentence is the reload instruction in each language.
+    const reload = `${fill("backup_key_dialog.unconfirmed", { number: "4" }).split(". ")[1]}.`;
+    const rotate = vi
+      .fn()
+      .mockResolvedValue({ ...ANSWER, reloadErrorCode: "backup.destination_key_invalid" });
+    const { el } = await open(stubApi(rotate, status(4)));
+    await type(el, KEY);
+    button(el, "change-backup-key")!.click();
+    await expect
+      .poll(() => words(el.shadowRoot!.querySelector("[data-test=done]")))
+      .toBe(t("backup_key_dialog.saved_not_loaded"));
+    expect(words(el.shadowRoot!.querySelector("[data-test=done]")).endsWith(`. ${reload}`)).toBe(
+      true,
+    );
+    if (locale === "en-GB") expect(reload).toBe("Reload the page.");
   },
 );
 

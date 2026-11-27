@@ -60,8 +60,8 @@ If the setup’s own record is damaged, the page may offer a warned **Start agai
 
 Once the setup is deleted the box restarts. After **Recover from backup**, **Reconnect** opens "Join
 or recover an existing restaurant", where you choose **Restore from backup** or **Restore from my
-bucket**, as on a new box; restoring needs the backup encryption key (for a backup file) or the recovery kit
-(for your bucket), and that backup's master key. After
+bucket**, as on a new box; restoring needs that backup's master key and, for your bucket, the
+recovery pack or kit. After
 **Start again**, **Reconnect** opens "Set up this box", where you choose how to set up this box. If the page is reloaded before you press **Reconnect**, it does not remember which you
 chose and opens its first screen. If that screen asks "Is this page secure?", choose **Join or recover**
 there to restore.
@@ -107,8 +107,8 @@ Once it has joined, it can take over: see [Hand over to a spare box](servers.md#
 [Start here when the main box has failed](servers.md#emergency). A new box cannot join a primary
 that is already gone: to recover then, choose a restore option.
 
-For a backup file, choose it in **Backup file**, enter the key that unlocks it in **Backup encryption key**,
-and choose its **Backup environment**. For your bucket, choose your recovery pack or kit file in
+For a backup file, choose it in **Backup file**, type its master key in **Master key** or choose the
+recovery pack that holds it, and choose its **Backup environment**. For your bucket, choose your recovery pack or kit file in
 **Recovery pack or kit file**, or paste the kit in **Recovery kit**, and choose the **Environment**
 the old box ran in. If the pack was made before the box had a bucket copy, is not a Waitron recovery
 pack, or is damaged or was changed after it was made, the page says so under the field. For Waitron
@@ -132,7 +132,7 @@ date, node and master key. Check those details before continuing. Keep productio
 preproduction separate. If the manifest is damaged or incomplete, choose another complete backup.
 If the format is unsupported, install a Waitron version that supports it before trying again.
 
-Use the **Backup encryption key** to open an encrypted backup file. For a bucket or Cloud copy, use the bucket kit or Cloud approval. You need the master key that was current when the selected copy was made. Keep the earlier pack too if it holds that key.
+A backup file opens with the master key that was current when it was made. For a bucket or Cloud copy, use the bucket kit or Cloud approval. Keep the earlier pack too if it holds that key.
 
 On a test box restored from Waitron Cloud, if **Cloud services** says the saved reconnection
 request cannot be read, choose **Get a fresh reconnection request**, then ask the Cloud owner to
@@ -144,9 +144,11 @@ At the end of Preparation, the **Recovery pack** step shows the master key once.
 **Download**, **Print** or **Copy**, keep the pack or the copied key somewhere other than the box, then choose
 **Continue**. Open **Backups** from the dashboard alert to set up your copies.
 
-Below the review, under "Recover this box", choose the recovery pack that holds this backup's
+For a bucket or Cloud copy, below the review, under "Recover this box", choose the recovery pack that holds this backup's
 master key with **Choose the recovery pack PDF**, or scan its master key QR code with **Scan the recovery pack**; or type the master key printed on it in **Master key**. A pack with
-a newer master key does not open an older backup. Tick "The old box has been shut down.", "I am the only
+a newer master key does not open an older backup. For a backup file, the master key you typed
+above is used. If the copy inside needs a different master key, a second **Master key** field
+appears there with the date of the key it needs. Tick "The old box has been shut down.", "I am the only
 person recovering this venue." and "These details are correct."
 
 If **Backups** cannot confirm the saved key, keep both the previous key and the key you just
@@ -203,7 +205,7 @@ fetch observations from other devices.
 
 Restoring replaces the database already on this box.
 
-Enter the master key in **Master key**, tick both statements and "These details are correct.", then choose
+Enter the master key in **Master key** (for a backup file the page uses the one typed with the file, and asks here only when the copy needs a different master key), tick both statements and "These details are correct.", then choose
 **Proceed**. After **Proceed** the page compares the clocks and creates the invoice series
 by itself, including after any wait it shows; there is no installation code to type. If the box
 cannot check its time over the internet, the page first shows the box's time and this device's:
@@ -246,7 +248,7 @@ Changing the file, key or environment discards what it checked, and a reload ope
 first screen; from there choose **Join or recover**, or on "Set up this box" **Join or recover a
 restaurant** (**Recover a restaurant** when that page has found another Waitron box), and start the
 restore again. If the box refuses the
-restore, the page returns to the form and you enter the master key again.
+restore, the page returns to the form. For a backup file it keeps the master key you typed; for your bucket or a Cloud copy you enter the master key again.
 
 Once you choose the restore button, the page says "Provisioning this box" and asks you to keep it
 open. The box saves the request and restarts. If it stops after saving the request, the next start

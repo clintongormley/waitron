@@ -75,8 +75,10 @@ export {
   LARGEST_BACKUP_KEY_NUMBER,
   makeMasterKey,
   masterKeyCheckValue,
+  masterKeyDayOf,
   masterKeyId,
   masterKeyMatches,
   masterKeyName,
+  masterKeyNameOf,
   sealingPublicKey,
 } from "./master-key.js";

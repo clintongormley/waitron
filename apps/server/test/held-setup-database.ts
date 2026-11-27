@@ -48,13 +48,16 @@ export interface HeldSetupOptions {
   crash?: { databaseBytes?: number; walBytes: number; invoices?: number; checkpointed?: boolean };
   /** Activation installs a real certificate through the fiscal module's own secret seat. */
   certificate?: boolean;
+  /** How `archiveHost` seals the backup file; `password` is the shape a Waitron Cloud copy has. */
+  sealing?: "password" | "master-key";
 }
 
 interface HeldSetup {
   roots: { stateDir: string; venueDir: string };
   host: Awaited<ReturnType<typeof hourFirstFiscalFixture>>["host"];
   installationName: string;
-  /** `archiveHost()`'s backup. A wipe deletes its hour choice, so a restore after one chooses again. */
+  /** The backup file, sealed as `sealing` asks. A wipe deletes its hour choice, so a restore after
+   * one chooses again. */
   archive: Awaited<ReturnType<typeof archiveHost>>;
 }
 
@@ -70,7 +73,7 @@ const heldTemplate = migratedTemplate("held-setup-template-", TEST_MIGRATIONS);
  */
 export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSetup> {
   const status = options.status ?? "committed";
-  const f = await archiveHost();
+  const f = await archiveHost("archive", options.sealing ?? "master-key");
   await mkdir(join(f.roots.stateDir, SCRATCH_DIR), { recursive: true });
   const migrated = await heldTemplate();
   await Promise.all(

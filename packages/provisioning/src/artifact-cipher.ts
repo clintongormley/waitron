@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
-import { AppError } from "@waitron/shared";
+import { AppError, isCalendarDate } from "@waitron/shared";
 import { deriveKey, deriveKeyAsync, type ScryptParams } from "./scrypt-kdf.js";
 import "./errors.js";
 
@@ -20,17 +20,20 @@ export const ARTIFACT_TAG_BYTES = 16;
 const BACKUP_KEY_VERSION = 2;
 const MASTER_KEY_ID_LEN = 8;
 const KEY_NUMBER_LEN = 4;
+/** The master key's day, `YYYY-MM-DD` in ASCII. */
+const MASTER_KEY_DAY_LEN = 10;
 /** Everything before the tag. These bytes are bound into the GCM tag as AAD, so a flipped header
- * byte fails authentication. v1: MAGIC|version|salt|iv; v2: MAGIC|version|master key id|N|salt|iv. */
+ * byte fails authentication. v1: MAGIC|version|salt|iv; v2: MAGIC|version|master key id|N|master
+ * key day|salt|iv. */
 const AUTHENTICATED_LEN = {
   1: MAGIC.length + 1 + SALT_LEN + IV_LEN,
-  2: MAGIC.length + 1 + MASTER_KEY_ID_LEN + KEY_NUMBER_LEN + SALT_LEN + IV_LEN,
+  2: MAGIC.length + 1 + MASTER_KEY_ID_LEN + KEY_NUMBER_LEN + MASTER_KEY_DAY_LEN + SALT_LEN + IV_LEN,
 } as const;
 const BACKUP_KEY_INFO = Buffer.from("waitron.archive.v2");
 
 export type ArtifactVersion = 1 | 2;
 export type ArtifactHeader =
-  { version: 1 } | { version: 2; masterKeyId: Buffer; keyNumber: number };
+  { version: 1 } | { version: 2; masterKeyId: Buffer; keyNumber: number; masterKeyDay: string };
 /** A header as read, nothing in it authenticated yet. `bytes` is the whole header, tag last; the
  * ciphertext follows it. */
 export type ParsedArtifactHeader = ArtifactHeader & {
@@ -50,6 +53,8 @@ export interface BackupKeyFrameInput {
   backupKey: Uint8Array;
   keyNumber: number;
   masterKeyId: Uint8Array;
+  /** `YYYY-MM-DD`: the day the master key's name begins with. */
+  masterKeyDay: string;
 }
 
 /** Everything an artifact of this version holds besides its ciphertext, which is as long as its
@@ -82,7 +87,10 @@ export function parseArtifactHeader(
     const keyNumber = buf.readUInt32BE(off);
     off += KEY_NUMBER_LEN;
     if (keyNumber === 0) invalid("bad_key_number");
-    named = { version, masterKeyId, keyNumber };
+    const day = buf.subarray(off, (off += MASTER_KEY_DAY_LEN));
+    const masterKeyDay = day.toString("latin1");
+    if (!isCalendarDate(masterKeyDay)) invalid("bad_key_day");
+    named = { version, masterKeyId, keyNumber, masterKeyDay };
   }
   const salt = buf.subarray(off, (off += SALT_LEN));
   const iv = buf.subarray(off, (off += IV_LEN));
@@ -101,7 +109,12 @@ export function parseArtifactHeader(
 export function readArtifactHeader(framed: Uint8Array): ArtifactHeader {
   const header = parseArtifactHeader(framed);
   if (header.version === 1) return { version: 1 };
-  return { version: 2, masterKeyId: header.masterKeyId, keyNumber: header.keyNumber };
+  return {
+    version: 2,
+    masterKeyId: header.masterKeyId,
+    keyNumber: header.keyNumber,
+    masterKeyDay: header.masterKeyDay,
+  };
 }
 
 function passphraseFrame(salt: Buffer) {
@@ -121,12 +134,16 @@ export function startBackupKeyFrame({
   backupKey,
   keyNumber,
   masterKeyId,
+  masterKeyDay,
 }: BackupKeyFrameInput): FrameStart {
   if (masterKeyId.length !== MASTER_KEY_ID_LEN) {
     throw new AppError("backup.archive_key_invalid", { input: "master_key_id" });
   }
   if (!Number.isInteger(keyNumber) || keyNumber < 1 || keyNumber > 0xffffffff) {
     throw new AppError("backup.archive_key_invalid", { input: "key_number" });
+  }
+  if (!isCalendarDate(masterKeyDay)) {
+    throw new AppError("backup.archive_key_invalid", { input: "master_key_day" });
   }
   const salt = randomBytes(SALT_LEN);
   const iv = randomBytes(IV_LEN);
@@ -137,6 +154,7 @@ export function startBackupKeyFrame({
     Buffer.from([BACKUP_KEY_VERSION]),
     masterKeyId,
     n,
+    Buffer.from(masterKeyDay, "ascii"),
     salt,
     iv,
   ]);
@@ -219,7 +237,7 @@ export async function decryptArtifactAsync(
   return open(copy, header, key);
 }
 
-/** Frame version 2: MAGIC|2|master key id|N (uint32 BE)|salt|iv|tag|ciphertext. */
+/** Frame version 2: MAGIC|2|master key id|N (uint32 BE)|master key day|salt|iv|tag|ciphertext. */
 export function encryptArtifactUnderBackupKey(
   plaintext: Uint8Array,
   input: BackupKeyFrameInput,

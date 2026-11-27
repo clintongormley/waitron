@@ -13,7 +13,14 @@ import { checkHandoverCopy, type WaitronModule } from "@waitron/module";
 import { writeFileDurable } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 import { openBackupQuery, PAIR_COPY_DIR, SCRATCH_DIR, VENUE_FILE } from "@waitron/store";
-import { checkedNewRecoveryKey, readHeldKey } from "./backup-config.js";
+import { readArtifactFileHeader } from "./artifact-cipher-file.js";
+import type { BackupKeyRecord } from "./backup-env-writer.js";
+import {
+  headerKeyName,
+  headerOpeningKey,
+  heldKeyOpens,
+  masterKeyHeader,
+} from "./backup-file-key.js";
 import { COPY_READY_FILE, type SelectedCopy } from "./handover-copy-selection.js";
 import { readStoredTrustSet, type StoredTrustDeps } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -82,17 +89,28 @@ export async function stageCheckedCopy(
   }
 }
 
+/** Opens the file with the box's held backup key when its header names that key, and otherwise
+ * only with the typed master key it names. */
 export async function stageBackupAsCopy(
   deps: CheckedCopyDeps & {
     artifactPath: string;
-    recoveryKey?: string;
-    readRecoveryKey(): Promise<string | undefined>;
+    masterKey?: string;
+    readBackupKey(): Promise<Omit<BackupKeyRecord, "masterKeyDay"> | undefined>;
     environment: DeploymentEnvironment;
   },
 ): Promise<SelectedCopy> {
-  const recoveryKey =
-    checkedNewRecoveryKey(deps.recoveryKey) ?? (await readHeldKey(deps.readRecoveryKey)).key;
-  if (recoveryKey === undefined) throw new AppError("handover.backup_key_missing", {});
+  const header = masterKeyHeader(await readArtifactFileHeader(deps.artifactPath));
+  let recoveryKey: string;
+  if (deps.masterKey !== undefined) {
+    recoveryKey = headerOpeningKey(header, deps.masterKey);
+  } else {
+    const held = await deps.readBackupKey();
+    if (held === undefined || !heldKeyOpens(header, held))
+      throw new AppError("handover.backup_needs_master_key", {
+        keyName: headerKeyName(header),
+      });
+    recoveryKey = held.key;
+  }
   const validated = await validateArtifactFile({
     ...deps,
     recoveryKey,

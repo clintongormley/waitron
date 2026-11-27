@@ -29,7 +29,7 @@ it.each(["light", "dark"] as const)(
         {
           api: new SetupApi("", async () => new Response(JSON.stringify(saved))),
           artifact: new File(["synthetic encrypted backup"], "olivo.backup"),
-          recoveryKey: "synthetic-archive-password",
+          masterKey: "synthetic-archive-password",
         },
         theme,
       );

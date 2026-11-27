@@ -347,13 +347,6 @@ it("has English and Spanish copy for a failed archive bucket test and a key chan
   }
 });
 
-it("has English and Spanish copy for a new recovery key that is too short", () => {
-  const code = "backup.new_recovery_key_too_short";
-  expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
-  expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
-  expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
-});
-
 it("has English and Spanish copy for a test email with no account address and a backup change with no settings", () => {
   for (const code of ["email.test_recipient_missing", "backup.not_configured"]) {
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
@@ -946,6 +939,15 @@ it("words the backup key change's refusals: a wrong master key when the venue ha
   );
   expect(codeMessage("backup.recovery_key_too_short", "es")).toBe(
     "La clave de las copias que tiene este servidor es demasiado corta. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para sustituirla.",
+  );
+});
+
+it("words the backup key change's refusal of a held key number the box cannot read", () => {
+  expect(codeMessage("backup.key_number_unknown", "en")).toBe(
+    "This box holds a backup key but cannot read its number, so changing it could make a key a removed box still has. Nothing was changed. Use “Make a new master key” on the Recovery pack card instead: it moves backups to a key no other box has.",
+  );
+  expect(codeMessage("backup.key_number_unknown", "es")).toBe(
+    "Este servidor tiene una clave de las copias pero no puede leer su número, así que cambiarla podría crear una clave que aún tiene un servidor retirado. No se ha cambiado nada. Usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación: pasa las copias a una clave que ningún otro servidor tiene.",
   );
 });
 

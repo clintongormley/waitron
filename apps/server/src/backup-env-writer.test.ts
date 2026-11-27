@@ -81,6 +81,7 @@ const KEY_ONE = {
   key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   keyNumber: 1,
   masterKeyId: "0123456789abcdef",
+  masterKeyDay: "2026-11-23",
 };
 
 describe("writeBackupKey", () => {
@@ -101,6 +102,7 @@ describe("writeBackupKey", () => {
         WAITRON_BACKUP_RECOVERY_KEY: "old-key-0123456789",
         WAITRON_BACKUP_KEY_NUMBER: "3",
         WAITRON_BACKUP_MASTER_KEY_ID: "fedcba9876543210",
+        WAITRON_BACKUP_MASTER_KEY_DAY: "2026-01-02",
         WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-23T00:00:00.000Z",
       }),
       { mode: 0o644 },
@@ -112,6 +114,7 @@ describe("writeBackupKey", () => {
       WAITRON_BACKUP_RECOVERY_KEY: KEY_ONE.key,
       WAITRON_BACKUP_KEY_NUMBER: "1",
       WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
+      WAITRON_BACKUP_MASTER_KEY_DAY: "2026-11-23",
       WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-23T00:00:00.000Z",
     });
     expect((await stat(path)).mode & 0o777).toBe(0o600);
@@ -125,6 +128,7 @@ describe("writeBackupKey", () => {
       WAITRON_BACKUP_RECOVERY_KEY: KEY_ONE.key,
       WAITRON_BACKUP_KEY_NUMBER: "1",
       WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
+      WAITRON_BACKUP_MASTER_KEY_DAY: "2026-11-23",
     });
     expect((await stat(path)).mode & 0o777).toBe(0o600);
   });
@@ -145,6 +149,7 @@ describe("writeBackupKey", () => {
       key: "new-key-0123456789",
       keyNumber: 2,
       masterKeyId: "0123456789abcdef",
+      masterKeyDay: "2026-10-01",
       rotatedAt: "2026-09-23T00:00:00.000Z",
     });
     expect(parseEnvFile(await readFile(join(dir, "backup.env"), "utf8"))).toEqual({
@@ -155,6 +160,7 @@ describe("writeBackupKey", () => {
       WAITRON_BACKUP_TEST_AGE: "30",
       WAITRON_BACKUP_KEY_NUMBER: "2",
       WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
+      WAITRON_BACKUP_MASTER_KEY_DAY: "2026-10-01",
       WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-23T00:00:00.000Z",
     });
   });

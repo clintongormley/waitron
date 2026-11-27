@@ -63,7 +63,7 @@ async function mounted(
   });
   const { el } = await mountWidget<SetupRecoveryCopy>("setup-recovery-copy", { api });
   el.artifact = new File(["encrypted-copy"], "copy.backup");
-  el.recoveryKey = "archive-key";
+  el.masterKey = "archive-key";
   el.environment = "preproduction";
   await el.updateComplete;
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
@@ -87,7 +87,7 @@ it("uploads the backup once and sends every clock and selection request as small
   const form = staged[0]!.init.body as FormData;
   expect(JSON.parse(form.get("request") as string)).toEqual({
     eventId: "event-1",
-    source: { kind: "archive", recoveryKey: "archive-key", environment: "preproduction" },
+    source: { kind: "archive", masterKey: "archive-key", environment: "preproduction" },
   });
   expect(await (form.get("artifact") as Blob).text()).toBe("encrypted-copy");
   const preparations = at(calls, "/setup-api/recovery/preparation");
@@ -200,7 +200,7 @@ const discarded = (calls: { path: string; init: RequestInit }[]) =>
 it("sends nothing once the chosen copy has changed before a clock request", async () => {
   const { el, calls, prepare } = await mounted();
   const send = prepare();
-  el.recoveryKey = "another-key";
+  el.masterKey = "another-key";
   await el.updateComplete;
   await expect(send(request())).rejects.toMatchObject(changed);
   expect(at(calls, "/setup-api/recovery/stage")).toHaveLength(0);
@@ -212,7 +212,7 @@ it("sends no clock request for a copy whose upload finished after the choice cha
   const { el, calls, prepare } = await mounted(() => upload.promise);
   const pending = prepare()(request());
   await vi.waitFor(() => expect(at(calls, "/setup-api/recovery/stage")).toHaveLength(1));
-  el.recoveryKey = "another-key";
+  el.masterKey = "another-key";
   await el.updateComplete;
   upload.resolve(new Response(JSON.stringify({ stagedId: stagedIds[0] })));
   await expect(pending).rejects.toMatchObject(changed);
@@ -241,7 +241,7 @@ it("asks the box to remove nothing when an upload abandoned by a changed choice 
     const { el, calls, prepare } = await mounted(() => upload.promise);
     const pending = prepare()(request());
     await vi.waitFor(() => expect(at(calls, "/setup-api/recovery/stage")).toHaveLength(1));
-    el.recoveryKey = "another-key";
+    el.masterKey = "another-key";
     await el.updateComplete;
     upload.resolve(refusedStaged("setup.restore_failed", {}, 500));
     await expect(pending).rejects.toMatchObject({ code: "setup.restore_failed" });
@@ -373,7 +373,7 @@ it.each(["invalid", "unsupported"])(
     );
     const { el } = await mountWidget<SetupRecoveryCopy>("setup-recovery-copy", { api });
     el.artifact = new File(["backup"], "copy.backup");
-    el.recoveryKey = "key";
+    el.masterKey = "key";
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
     await expect
@@ -400,7 +400,7 @@ it.each([
     "restore.schema_too_new",
     (el: SetupRecoveryCopy) => {
       el.artifact = new File(["backup"], "copy.backup");
-      el.recoveryKey = "key";
+      el.masterKey = "key";
     },
     "This backup file was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another file.",
   ],
@@ -410,7 +410,7 @@ it.each([
     "provisioning.database_ahead",
     (el: SetupRecoveryCopy) => {
       el.artifact = new File(["backup"], "copy.backup");
-      el.recoveryKey = "key";
+      el.masterKey = "key";
     },
     "This backup file was made by a different version of Waitron. This box's version cannot restore it. Install that version on this box and try again, or choose another file.",
   ],

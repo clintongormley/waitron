@@ -282,8 +282,8 @@ run the production selector.
 
 Configure backup destinations, schedule and retention on the dashboard's **Backups** screen.
 Backups previously configured in `deploy/.env` stop until you configure them there. Keep the old recovery
-key from `deploy/.env` to open existing archives. The dashboard stores its recovery key in
-`backup.env`; keep each key with your recovery documents.
+key from `deploy/.env` to open existing archives. The dashboard keeps its backup key in
+`backup.env`; the backups it makes open with the master key in your recovery pack.
 
 The compose project is named `waitron`. On a developer machine that is also running the repository's
 dev stack (`docker-compose.yml`, started by `wa-wt`, which sets `COMPOSE_PROJECT_NAME=waitron`) the
@@ -875,7 +875,17 @@ command against it treat that entrypoint differently:
   any bare `docker run` against this image.
 
 - **A restore takes one of three sources.** `restore <backup-file>` restores an encrypted backup
-  file, with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`.
+  file. The file opens with the master key, set in `WAITRON_MASTER_KEY` or given with
+  `--master-key-file <path>`, where `<path>` is a text file holding the key or the venue's
+  recovery pack PDF when it holds the key. That file must be visible inside the container and
+  readable by the image's user, as for the bucket form's file below, or the command stops with
+  `cannot read the master key file`, without naming the path, so a key pasted in its place is
+  not printed. Giving both is refused, and the key itself is never a
+  command-line value. A master key that is not the backup's stops the command with
+  `promotion.break_glass_invalid` and the date of the master key the backup needs. A Waitron
+  Cloud copy opens instead with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`; that variable
+  opens only a version 1 file such as a Cloud copy, never a backup file the box keeps in its backup
+  folders or bucket, which opens only with the master key.
   `restore --from-bucket <pack-or-kit-file>` rebuilds the box from the copy the old box kept in the
   owner's bucket. `<pack-or-kit-file>` is the venue's recovery pack PDF, made with **Make recovery
   pack** on the dashboard's Backups screen, or a recovery kit file saved before the pack replaced
@@ -895,7 +905,7 @@ command against it treat that entrypoint differently:
   [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected
   backup's master key in `WAITRON_MASTER_KEY`, a fresh allocation and current outside evidence. The source examples below
   show archive and bucket access only; add that procedure's recovery override and credentials
-  when restoring Veri*Factu. The recovery key alone does not authorise activation.
+  when restoring Veri*Factu. A bucket kit's or Cloud copy's recovery key alone does not authorise activation.
   When the series check cannot confirm the box's time (`sif.allocation_invalid` with reason
   `second_clock_missing` or `clock_unconfirmed`), the command prints one line naming the code and
   that reason, says no invoice series was made, and asks you to check that `timedatectl` shows
@@ -923,8 +933,8 @@ command against it treat that entrypoint differently:
   `<name>` is the archive's file name as the bucket lists it. This form takes neither a backup
   file, `--from-bucket` nor `--confirm-venue`, and uses the pack's recovery key even when
   `WAITRON_BACKUP_RECOVERY_KEY` is set. An archive file downloaded from the bucket by hand
-  opens with `restore <backup-file>` and its recovery key in
-  `WAITRON_BACKUP_RECOVERY_KEY`. A filing node still needs the separate fiscal recovery inputs.
+  opens with `restore <backup-file>` and the master key. A filing node still needs the separate
+  fiscal recovery inputs.
 
   ```bash
   docker compose run --rm -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \
@@ -940,8 +950,9 @@ command against it treat that entrypoint differently:
   current when the backup was made, and the restored box then answers to that key again, not to a
   master key made after the backup. Keep each older master key until every backup made before its
   replacement has been deleted. When the restored copy contains a key name,
-  `restore.recovery_key_selected` names it. The master key authorises recovery; the separate
-  recovery key opens the backup file.
+  `restore.recovery_key_selected` names it. Normally the same master key opens the backup file and
+  authorises the recovery. When those keys differ, the command takes only one, so restore that
+  backup through setup's Restore from backup.
 
   A restore that fails while it writes the backup's secrets or moves its database into place
   leaves the box's database, identity file (`trading.env`) and other secrets as they were. One that

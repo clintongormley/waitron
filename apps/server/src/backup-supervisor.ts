@@ -290,6 +290,7 @@ export class BackupSupervisor {
         cfg.recoveryKey === undefined ||
         cfg.keyNumber === undefined ||
         cfg.masterKeyId === undefined ||
+        cfg.masterKeyDay === undefined ||
         !this.#loadedAsPrimary
       ) {
         // #config is kept so `current()` can report the destinations/schedule; enabled stays false
@@ -339,6 +340,7 @@ export class BackupSupervisor {
           key: cfg.recoveryKey,
           keyNumber: cfg.keyNumber,
           masterKeyId: cfg.masterKeyId,
+          masterKeyDay: cfg.masterKeyDay,
         }),
         schedule: cfg.schedule,
         retain: cfg.retain,

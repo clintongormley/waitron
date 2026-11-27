@@ -701,7 +701,7 @@ describe("selected-hour admission before archive placement", () => {
 
   it("carries explicit HTTP archive isolation through staging and reconstructed activation", async () => {
     const history = await recoveryInvoices();
-    const f = await archiveHost();
+    const f = await archiveHost("archive", "master-key");
     const app = restoreApp({
       stageRestore: (request) => stageRestoreRequest(f.roots.stateDir, request),
     });
@@ -748,7 +748,7 @@ describe("selected-hour admission before archive placement", () => {
     { selectedSourceId: "selected", oldBoxGone: true, soleRecovery: 1 },
     { selectedSourceId: "selected", oldBoxGone: true, soleRecovery: true, extra: true },
   ])("refuses malformed HTTP archive recovery context %j before staging", async (context) => {
-    const f = await archiveHost();
+    const f = await archiveHost("archive", "master-key");
     const app = restoreApp({
       stageRestore: (request) => stageRestoreRequest(f.roots.stateDir, request),
     });

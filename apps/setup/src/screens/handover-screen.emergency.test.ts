@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { WtFileInput } from "@waitron/ui";
-import { formatDuration } from "@waitron/shared";
+import { encodeMasterKeyCode, formatDuration } from "@waitron/shared";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import { SetupApi } from "../api/client.js";
 import { format, setLocale, t } from "../i18n/t.js";
 import { handoverEs } from "../i18n/strings/handover.js";
@@ -12,6 +13,9 @@ import { SetupHandoverScreen } from "./handover-screen.js";
 
 const MAIN = "https://box-aaaa.waitron.local";
 const signIn = { email: "owner@example.com", password: "correct horse", totp: "123456" };
+const OLDER_MASTER_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(5));
+const WRONG_MASTER_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(9));
+const OLDER_KEY_NAME = "2026-10-02 · RW7M";
 const saved = {
   operationId: "emergency-one",
   reason: "The old box has failed",
@@ -104,7 +108,8 @@ async function mount(
     changeBeforeDeclare?: boolean;
     backupRefusal?: string;
     backupRefusalReason?: string;
-    backupNeedsKeyCode?: string;
+    /** The chosen backup was made under an older master key, so only OLDER_MASTER_KEY opens it. */
+    olderBackup?: boolean;
     theme?: "light" | "dark";
     /** The spare still holds its joining copy; takes answer these in turn, the last repeating. */
     held?: boolean;
@@ -277,22 +282,28 @@ async function mount(
     if (path.endsWith("/emergency/backup")) {
       expect(init!.body).toBeInstanceOf(FormData);
       expect((init!.body as FormData).get("artifact")).toBeInstanceOf(File);
-      if (typeof body.recoveryKey === "string" && body.recoveryKey.length < 12) {
+      if (options.backupRefusal) {
         return new Response(
           JSON.stringify({
-            error: { code: "backup.new_recovery_key_too_short", params: { min: 12 } },
+            error: {
+              code: options.backupRefusal,
+              params: { reason: options.backupRefusalReason },
+            },
           }),
-          { status: 400 },
+          { status: 409 },
         );
       }
-      if (options.backupRefusal || body.recoveryKey === undefined) {
-        const code =
-          options.backupRefusal ?? options.backupNeedsKeyCode ?? "handover.backup_key_missing";
+      // An older backup: the spare's own key does not open it, so the page must send its master key.
+      if (options.olderBackup && body.masterKey !== OLDER_MASTER_KEY) {
+        const keyParams = { keyName: OLDER_KEY_NAME, keyNumber: 1, masterKeyId: "older-key" };
         return new Response(
           JSON.stringify({
-            error: { code, params: { reason: options.backupRefusalReason } },
+            error:
+              body.masterKey === undefined
+                ? { code: "handover.backup_needs_master_key", params: keyParams }
+                : { code: "promotion.break_glass_invalid", params: keyParams },
           }),
-          { status: code === "recovery.passphrase_invalid" ? 422 : 409 },
+          { status: body.masterKey === undefined ? 409 : 422 },
         );
       }
       sent = true;
@@ -739,28 +750,87 @@ it("writes the chosen backup's size in the chooser's language", async () => {
   expect(picker.shadowRoot!.textContent!).toContain("48,2 kB");
 });
 
-it.each(
-  ["en-GB", "es-ES"].flatMap((locale) =>
-    ["light", "dark"].map((theme) => ({ locale, theme: theme as "light" | "dark" })),
-  ),
-)(
-  "asks for the archive key, resumes its preview, and declares that source ($locale, $theme)",
+const localesAndThemes = ["en-GB", "es-ES"].flatMap((locale) =>
+  ["light", "dark"].map((theme) => ({ locale, theme: theme as "light" | "dark" })),
+);
+const keyField = (el: SetupHandoverScreen) =>
+  q<HTMLElement & { error: string; keyName?: string; updateComplete: Promise<unknown> }>(
+    el,
+    "wt-master-key-input",
+  );
+/** The text field the master-key field draws, with the label and line a person sees. */
+const drawnKeyField = (el: SetupHandoverScreen) =>
+  keyField(el).shadowRoot!.querySelector<HTMLElement & { label: string; error: string }>(
+    'wt-input[name="master-key"]',
+  )!;
+const backupPosts = (posts: { path: string; body: Record<string, unknown> }[]) =>
+  posts.filter(({ path }) => path.endsWith("/backup")).map(({ body }) => body);
+/** Chooses a backup file and presses Use this backup once. */
+async function useBackupFile(el: SetupHandoverScreen, name = "venue.enc") {
+  await failAutomaticPreparation(el);
+  await useDifferentCopy(el);
+  chooseFiles(q(el, 'wt-file-input[name="handover-backup"]'), new File(["archive"], name));
+  await el.updateComplete;
+  await userEvent.click(q(el, "[data-test=emergency-backup]"));
+}
+async function typeBackupMasterKey(el: SetupHandoverScreen, text: string) {
+  const field = keyField(el);
+  await field.updateComplete;
+  const inner = field.shadowRoot!.querySelector<LitElement>('[name="master-key"]')!;
+  await inner.updateComplete;
+  const input = inner.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  input.value = text;
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await el.updateComplete;
+}
+
+it.each(localesAndThemes)(
+  "a current backup is used on the first press with no key field ($locale, $theme)",
   async ({ locale, theme }) => {
     setLocale(locale);
-    const { el, posts } = await mount({
-      later: failedAutomaticCopy,
-      theme,
-      backupNeedsKeyCode:
-        theme === "dark" ? "recovery.passphrase_invalid" : "handover.backup_key_missing",
-    });
-    await failAutomaticPreparation(el);
-    await useDifferentCopy(el);
-    const input = q(el, 'wt-file-input[name="handover-backup"]');
-    expect(input).not.toBeNull();
-    chooseFiles(input, new File(["archive"], "venue.enc"));
-    await el.updateComplete;
-    q(el, "[data-test=emergency-backup]").click();
-    await vi.waitFor(() => expect(q(el, '[name="handover-backup-key"]')).not.toBeNull());
+    const { el, posts } = await mount({ later: failedAutomaticCopy, theme });
+    await useBackupFile(el);
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=emergency-copy]").textContent).toContain(
+        t("handover.emergency.selected_backup"),
+      ),
+    );
+    expect(backupPosts(posts)).toEqual([{ signIn }]);
+    expect(Object.keys(backupPosts(posts)[0]!)).toEqual(["signIn"]);
+    expect(keyField(el)).toBeNull();
+    expect(q(el, "[data-test=choose-another-backup]")).toBeNull();
+  },
+);
+
+it.each(localesAndThemes)(
+  "an older backup names its master key and shows the master-key field with Use this backup and Choose another file ($locale, $theme)",
+  async ({ locale, theme }) => {
+    setLocale(locale);
+    const { el, posts } = await mount({ later: failedAutomaticCopy, theme, olderBackup: true });
+    await useBackupFile(el);
+    await vi.waitFor(() => expect(keyField(el)).not.toBeNull());
+    const needs = format("handover.emergency.backup_needs_master_key", { name: OLDER_KEY_NAME });
+    expect(needs).toContain(OLDER_KEY_NAME);
+    expect(q(el, "[data-test=backup-needs-master-key]").textContent!.trim()).toBe(needs);
+    const field = keyField(el);
+    await field.updateComplete;
+    // Announced, and focus moves to the field, as a refused field's would.
+    expect(q(el, "[data-test=backup-needs-master-key]").getAttribute("role")).toBe("alert");
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(field));
+    expect(field.shadowRoot!.activeElement).toBe(drawnKeyField(el));
+    expect(field.keyName).toBe(OLDER_KEY_NAME);
+    expect(drawnKeyField(el).label).toBe(
+      MASTER_KEY_FIELD_WORDS[locale === "es-ES" ? "es" : "en"].label,
+    );
+    // The line, then the field, then the two buttons, in that order.
+    const line = q(el, "[data-test=backup-needs-master-key]");
+    expect(line.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const use = q<HTMLElement & { disabled: boolean }>(el, "[data-test=emergency-backup]");
+    const another = q(el, "[data-test=choose-another-backup]");
+    expect(field.compareDocumentPosition(use) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(use.textContent!.trim()).toBe(t("handover.emergency.use_backup"));
+    expect(another.textContent!.trim()).toBe(t("handover.emergency.choose_another_file"));
+    expect(actions(el)).toBe("");
     if (import.meta.env.VITE_A1188_VISUAL === "1") {
       const { page } = await import("vitest/browser");
       try {
@@ -768,31 +838,28 @@ it.each(
           await page.viewport(width, 1400);
           expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
           await page.screenshot({
-            path: `__screenshots__/a1188-key-${locale}-${theme}-${width}.png`,
+            path: `__screenshots__/a1188-master-key-${locale}-${theme}-${width}.png`,
           });
         }
       } finally {
         await page.viewport(1280, 720);
       }
     }
-    await edit(el, "handover-backup-key", "synthetic-recovery-key");
-    q(el, "[data-test=emergency-backup]").click();
+    expect(use.disabled).toBe(true);
+    await typeBackupMasterKey(el, OLDER_MASTER_KEY);
+    expect(use.disabled).toBe(false);
+    use.click();
     await vi.waitFor(() =>
       expect(q(el, "[data-test=emergency-copy]").textContent).toContain(
         t("handover.emergency.selected_backup"),
       ),
     );
-    expect(posts.filter(({ path }) => path.endsWith("/backup")).map(({ body }) => body)).toEqual([
-      { signIn },
-      { signIn, recoveryKey: "synthetic-recovery-key" },
-    ]);
+    expect(backupPosts(posts)).toEqual([{ signIn }, { signIn, masterKey: OLDER_MASTER_KEY }]);
     await proceed(el);
     await edit(el, "emergency-reason", saved.reason);
-    for (const field of el.shadowRoot!.querySelectorAll<HTMLInputElement>(
-      'input[type="checkbox"]',
-    )) {
-      field.checked = true;
-      field.dispatchEvent(new Event("change", { bubbles: true }));
+    for (const box of el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
+      box.checked = true;
+      box.dispatchEvent(new Event("change", { bubbles: true }));
     }
     await el.updateComplete;
     q(el, "[data-test=emergency-declare]").click();
@@ -806,24 +873,66 @@ it.each(
 );
 
 it.each(["en-GB", "es-ES"])(
-  "says a typed archive key is too short and keeps asking for it (%s)",
+  "Choose another file clears the file and the key (%s)",
   async (locale) => {
     setLocale(locale);
-    const { el, posts } = await mount({ later: failedAutomaticCopy });
-    await failAutomaticPreparation(el);
-    await useDifferentCopy(el);
-    chooseFiles(q(el, 'wt-file-input[name="handover-backup"]'), new File(["archive"], "venue.enc"));
-    await el.updateComplete;
-    q(el, "[data-test=emergency-backup]").click();
-    await vi.waitFor(() => expect(q(el, '[name="handover-backup-key"]')).not.toBeNull());
-    await edit(el, "handover-backup-key", "short");
+    const { el, posts } = await mount({ later: failedAutomaticCopy, olderBackup: true });
+    await useBackupFile(el, "older.enc");
+    await vi.waitFor(() => expect(keyField(el)).not.toBeNull());
+    await typeBackupMasterKey(el, WRONG_MASTER_KEY);
     q(el, "[data-test=emergency-backup]").click();
     await vi.waitFor(() =>
-      expect(actions(el)).toContain(t("handover.emergency.backup_key_too_short")),
+      expect(keyField(el)!.error).toBe(
+        MASTER_KEY_FIELD_WORDS[locale === "es-ES" ? "es" : "en"].wrongKey(OLDER_KEY_NAME),
+      ),
     );
-    expect(actions(el)).not.toContain(t("handover.emergency.backup_key_missing"));
-    expect(q(el, '[name="handover-backup-key"]')).not.toBeNull();
+    // Read before the page redraws: the key field also empties itself once it leaves the page.
+    q(el, "[data-test=choose-another-backup]").click();
+    expect(Reflect.get(el, "masterKey")).toBe("");
+    await vi.waitFor(() => expect(keyField(el)).toBeNull());
+    const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
+    expect(picker.files).toEqual([]);
+    expect(q(el, "[data-test=backup-needs-master-key]")).toBeNull();
+    expect(q(el, "[data-test=choose-another-backup]")).toBeNull();
+    expect(q(el, "[data-test=emergency-backup]")).toBeNull();
+    expect(actions(el)).toBe("");
+    expect(el.shadowRoot!.activeElement).toBe(picker);
+    // The next file is sent as a first press again, with no key.
+    chooseFiles(picker, new File(["archive"], "current.enc"));
+    await el.updateComplete;
+    expect(keyField(el)).toBeNull();
+    q(el, "[data-test=emergency-backup]").click();
+    await vi.waitFor(() => expect(backupPosts(posts)).toHaveLength(3));
+    expect(backupPosts(posts)[2]).toEqual({ signIn });
+  },
+);
+
+it.each(localesAndThemes)(
+  "a wrong master key shows the wrong-key line naming the backup's key ($locale, $theme)",
+  async ({ locale, theme }) => {
+    setLocale(locale);
+    const { el, posts } = await mount({ later: failedAutomaticCopy, theme, olderBackup: true });
+    await useBackupFile(el);
+    await vi.waitFor(() => expect(keyField(el)).not.toBeNull());
+    await typeBackupMasterKey(el, WRONG_MASTER_KEY);
+    await userEvent.click(q(el, "[data-test=emergency-backup]"));
+    const line = MASTER_KEY_FIELD_WORDS[locale === "es-ES" ? "es" : "en"].wrongKey(OLDER_KEY_NAME);
+    await vi.waitFor(() => expect(keyField(el)!.error).toBe(line));
+    expect(line).toContain(OLDER_KEY_NAME);
+    await keyField(el)!.updateComplete;
+    expect(drawnKeyField(el).error).toBe(line);
+    expect(actions(el)).toBe(t("handover.fix"));
+    expect(q(el, ".form-message").getAttribute("role")).toBe("alert");
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(keyField(el)));
+    expect(keyField(el).shadowRoot!.activeElement).toBe(drawnKeyField(el));
+    expect(q(el, "[data-test=choose-another-backup]")).not.toBeNull();
+    // A key to correct is not a refused copy check, so the page offers no Try again.
+    expect(q(el, "[data-test=emergency-preview]")).toBeNull();
+    expect(backupPosts(posts)).toEqual([{ signIn }, { signIn, masterKey: WRONG_MASTER_KEY }]);
     expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
+    // Typing again clears the server's line.
+    await typeBackupMasterKey(el, OLDER_MASTER_KEY);
+    expect(keyField(el)!.error).toBe("");
   },
 );
 
@@ -835,6 +944,8 @@ it.each([
   ["restore.manifest_invalid", "shell.restore.manifest_invalid", "es-ES", "invalid"],
   ["restore.manifest_invalid", "shell.restore.manifest_unsupported", "en-GB", "unsupported"],
   ["restore.manifest_invalid", "shell.restore.manifest_unsupported", "es-ES", "unsupported"],
+  ["backup.artifact_invalid", "handover.emergency.backup_invalid", "en-GB", "bad_version"],
+  ["backup.artifact_invalid", "handover.emergency.backup_invalid", "es-ES", "bad_version"],
 ] as const)(
   "keeps the archive choice after admission is refused: %s (%s, %s)",
   async (code, key, locale, reason) => {
@@ -856,6 +967,7 @@ it.each([
     expect(picker.files[0]?.name).toBe("venue.enc");
     await picker.updateComplete;
     expect(drawnFileName(picker)).toBe("venue.enc");
+    expect(keyField(el)).toBeNull();
     expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
   },
 );
@@ -1927,20 +2039,24 @@ it("the held copy is offered with no sign-in field left to empty, and a refused 
   expect(button(el, "sign-in-password").disabled).toBe(false);
 });
 
+/** Chooses an older backup, presses Use this backup, gives its master key, and presses twice more. */
 async function chooseBackup(el: SetupHandoverScreen) {
   await failAutomaticPreparation(el);
   await useDifferentCopy(el);
   chooseFiles(q(el, 'wt-file-input[name="handover-backup"]'), new File(["archive"], "venue.enc"));
   await el.updateComplete;
   q(el, "[data-test=emergency-backup]").click();
-  await vi.waitFor(() => expect(q(el, '[name="handover-backup-key"]')).not.toBeNull());
-  await edit(el, "handover-backup-key", "synthetic-recovery-key");
+  await vi.waitFor(() => expect(keyField(el)).not.toBeNull());
+  await typeBackupMasterKey(el, OLDER_MASTER_KEY);
   q(el, "[data-test=emergency-backup]").click();
   q(el, "[data-test=emergency-backup]").click();
 }
 
 it("after choosing a backup, the page keeps waiting until the box shows that backup in place", async () => {
-  const { el, posts } = await mount({ later: [...failedAutomaticCopy, "unplaced"] });
+  const { el, posts } = await mount({
+    later: [...failedAutomaticCopy, "unplaced"],
+    olderBackup: true,
+  });
   await chooseBackup(el);
   await vi.waitFor(() =>
     expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.backup_restarting")),
@@ -1965,6 +2081,7 @@ it("after choosing a backup, the page keeps waiting until the box shows that bac
 it("after choosing a backup, a changed copy is waited out but a refused check ends the wait and says why", async () => {
   const { el, posts } = await mount({
     later: [...failedAutomaticCopy, "handover.copy_mismatch", "password.throttled"],
+    olderBackup: true,
   });
   await chooseBackup(el);
   await vi.waitFor(() => expect(actions(el)).toContain(t("handover.emergency.throttled")), {
@@ -2824,6 +2941,7 @@ it("a backup chosen while the box restarts may open the prompt though the restar
     proof,
     takes: ["taken", "catching-up", "restarting"],
     later: failedAutomaticCopy,
+    olderBackup: true,
     backupGate: () => hold.gate ?? Promise.resolve(),
   });
   await choosePasskey(el);
@@ -2836,10 +2954,10 @@ it("a backup chosen while the box restarts may open the prompt though the restar
     () => expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting")),
     { timeout: 5000 },
   );
-  // A first Use this backup asks for the backup's key.
+  // A first Use this backup asks for the older backup's master key.
   q(el, "[data-test=emergency-backup]").click();
-  await vi.waitFor(() => expect(q(el, '[name="handover-backup-key"]')).not.toBeNull());
-  await edit(el, "handover-backup-key", "synthetic-recovery-key");
+  await vi.waitFor(() => expect(keyField(el)).not.toBeNull());
+  await typeBackupMasterKey(el, OLDER_MASTER_KEY);
   expect(el.shadowRoot!.textContent).toContain(t("handover.emergency.followed_restarting"));
   const last = (step: string) => posts.map(({ path }) => path.endsWith(step)).lastIndexOf(true);
   await vi.waitFor(() => expect(last("/preview")).toBeGreaterThan(last("/followed")));

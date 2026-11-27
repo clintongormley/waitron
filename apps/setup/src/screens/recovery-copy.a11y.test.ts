@@ -35,7 +35,7 @@ it.each(["light", "dark"] as const)(
     );
     await expectNoA11yViolations(host);
     el.artifact = new File(["encrypted-copy"], "copy.backup");
-    el.recoveryKey = "archive-key";
+    el.masterKey = "archive-key";
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
     await el.updateComplete;
@@ -46,13 +46,13 @@ it.each(["light", "dark"] as const)(
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
     await el.updateComplete;
     complete(
-      new Response(JSON.stringify({ error: { code: "recovery.passphrase_invalid" } }), {
-        status: 422,
+      new Response(JSON.stringify({ error: { code: "promotion.break_glass_invalid" } }), {
+        status: 400,
       }),
     );
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.textContent).toContain(
-        "Check the backup encryption key.",
+        "Check the master key.",
       ),
     );
     await expectNoA11yViolations(host);

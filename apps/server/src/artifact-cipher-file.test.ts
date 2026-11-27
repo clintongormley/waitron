@@ -229,13 +229,19 @@ describe("file artifact cipher, version 2 under a backup key", () => {
   const backupKey = randomBytes(32);
   const masterKeyId = Buffer.from("8899aabbccddeeff", "hex");
   const keyNumber = 3;
-  const input = { backupKey, keyNumber, masterKeyId };
+  const masterKeyDay = "2026-11-23";
+  const input = { backupKey, keyNumber, masterKeyId, masterKeyDay };
 
-  it("names its master key id and N before it is opened", async () => {
+  it("names its master key id, N and day before it is opened", async () => {
     const dir = await scratch();
     const path = join(dir, "artifact");
     await encryptArtifactFileUnderBackupKey(chunks(Buffer.alloc(200000, 5)), path, input);
-    expect(await readArtifactFileHeader(path)).toEqual({ version: 2, masterKeyId, keyNumber });
+    expect(await readArtifactFileHeader(path)).toEqual({
+      version: 2,
+      masterKeyId,
+      keyNumber,
+      masterKeyDay,
+    });
     await writeFile(join(dir, "v1"), encryptArtifact(Buffer.alloc(10), "right"));
     expect(await readArtifactFileHeader(join(dir, "v1"))).toEqual({ version: 1 });
     expect(await readdir(dir)).toEqual(["artifact", "v1"]);
@@ -245,7 +251,7 @@ describe("file artifact cipher, version 2 under a backup key", () => {
     [Buffer.alloc(3), "too_short"],
     [Buffer.alloc(61), "bad_magic"],
     [Buffer.concat([Buffer.from("WBK1"), Buffer.from([9]), Buffer.alloc(56)]), "bad_version"],
-    [Buffer.concat([Buffer.from("WBK1"), Buffer.from([2]), Buffer.alloc(55)]), "too_short"],
+    [Buffer.concat([Buffer.from("WBK1"), Buffer.from([2]), Buffer.alloc(65)]), "too_short"],
   ])("reads no header from malformed frame %s", async (bytes, reason) => {
     const dir = await scratch();
     await writeFile(join(dir, "artifact"), bytes);
@@ -264,7 +270,7 @@ describe("file artifact cipher, version 2 under a backup key", () => {
       const writes = vi.spyOn(fileIo, "writeAll");
       await encryptArtifactFileUnderBackupKey(chunks(payload), path, input);
       const artifact = await readFile(path);
-      expect(artifact.length).toBe(size + 61);
+      expect(artifact.length).toBe(size + 71);
       expect((await stat(path)).mode & 0o777).toBe(0o600);
       expect(decryptArtifactUnderBackupKey(artifact, backupKey).equals(payload)).toBe(true);
       const digest = await decryptArtifactFileUnderBackupKey(path, join(dir, "out"), backupKey);
@@ -348,6 +354,7 @@ describe("file artifact cipher, version 2 under a backup key", () => {
       [{ backupKey: randomBytes(16) }, "backup_key"],
       [{ masterKeyId: randomBytes(4) }, "master_key_id"],
       [{ keyNumber: 0 }, "key_number"],
+      [{ masterKeyDay: "2026-02-30" }, "master_key_day"],
     ] as const) {
       await expect(
         encryptArtifactFileUnderBackupKey(chunks(Buffer.from("x")), join(dir, "out"), {
@@ -372,6 +379,7 @@ describe("file artifact cipher, version 2 under a backup key", () => {
         Buffer.from([2]),
         masterKeyId,
         number,
+        Buffer.from(masterKeyDay),
         salt,
         iv,
       ]);
@@ -410,6 +418,7 @@ const backupKeyInput = {
   backupKey: randomBytes(32),
   keyNumber: 3,
   masterKeyId: Buffer.from("8899aabbccddeeff", "hex"),
+  masterKeyDay: "2026-11-23",
 };
 describe.each([
   {
@@ -422,7 +431,7 @@ describe.each([
   },
   {
     version: 2,
-    authenticatedBytes: 45,
+    authenticatedBytes: 55,
     encrypt: (plaintext: AsyncIterable<Uint8Array>, path: string, signal?: AbortSignal) =>
       encryptArtifactFileUnderBackupKey(plaintext, path, backupKeyInput, signal),
     frame: (plaintext: Buffer) => encryptArtifactUnderBackupKey(plaintext, backupKeyInput),
@@ -522,7 +531,12 @@ describe.each([
 
 describe("opening a backup file of either frame version", () => {
   const backupKey = randomBytes(32);
-  const input = { backupKey, keyNumber: 1, masterKeyId: Buffer.from("8899aabbccddeeff", "hex") };
+  const input = {
+    backupKey,
+    keyNumber: 1,
+    masterKeyId: Buffer.from("8899aabbccddeeff", "hex"),
+    masterKeyDay: "2026-11-23",
+  };
 
   it("a version 2 backup file opens with backup key N's text and a version 1 file with its passphrase", async () => {
     const dir = await scratch();

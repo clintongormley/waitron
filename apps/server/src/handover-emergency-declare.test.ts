@@ -22,10 +22,15 @@ import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { dashboardSessions, persons, webauthnCredentials } from "@waitron/identity";
 import { signingPasskey } from "@waitron/identity/test/passkey-signer.js";
 import { signEnvelope, verifyEnvelope } from "@waitron/handover";
-import { nodeSigningPublicKey, setPairLinkStateTx, writePairLinkTx } from "@waitron/credentials";
+import {
+  makeMasterKey,
+  nodeSigningPublicKey,
+  setPairLinkStateTx,
+  writePairLinkTx,
+} from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverOperation, readOpenHandoverOperation } from "@waitron/node-db";
-import { AppError } from "@waitron/shared";
+import { AppError, encodeMasterKeyCode } from "@waitron/shared";
 import { createPasswordThrottle } from "./password-throttle.js";
 import { checkEmergencyCopy } from "./handover-emergency-check.js";
 import { mountHandoverEmergencyApi } from "./handover-emergency-api.js";
@@ -34,6 +39,8 @@ import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { buildManifest } from "./backup-manifest.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
+import { heldBackupKey, heldBackupKeyName } from "./testing/backup-key.js";
+import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 import { placeFirstCopy } from "./spare-copy-placement.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import { SWITCH_PROOF_COOKIE, makeSwitchProof } from "./handover-switch-proof.js";
@@ -150,6 +157,7 @@ function service(
           ),
         );
       },
+      ...backupDeps(),
       ...overrides,
     },
     log,
@@ -202,7 +210,16 @@ function service(
   return { post, emergency, log };
 }
 
-const backupKey = "synthetic-selected-backup-key";
+const masterKey = makeMasterKey();
+const held = heldBackupKey(masterKey);
+const backupDeps = (restart = vi.fn()) => ({
+  backup: {
+    readBackupKey: async () => held,
+    environment: "preproduction" as const,
+    migrationsRoot: null,
+    restart,
+  },
+});
 const upload = (payload: unknown, artifact: Uint8Array = new Uint8Array([1])) => {
   const body = new FormData();
   body.append("request", JSON.stringify(payload));
@@ -221,23 +238,16 @@ it("uploads a checked archive, waits for restart, then signs its provenance and 
     environment: "preproduction",
     now: new Date(),
   });
-  const artifact = encryptArtifact(
+  const artifact = masterKeyArchiveBytes(
     packArchive([
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       { name: "db.dump", bytes: await readFile(path) },
       await nodeDumpEntry(mainBox.node, root),
     ]),
-    backupKey,
+    masterKey,
   );
   const restart = vi.fn();
-  const s = service("https://spare.example", {
-    backup: {
-      readRecoveryKey: async () => backupKey,
-      environment: "preproduction",
-      migrationsRoot: null,
-      restart,
-    },
-  });
+  const s = service("https://spare.example", backupDeps(restart));
   expect(
     (await s.post(upload({ signIn: request.signIn }, artifact), true, "backup")).body,
   ).toMatchObject({ restarting: true });
@@ -275,15 +285,8 @@ it("uploads a checked archive, waits for restart, then signs its provenance and 
 });
 
 it.each(["invalid", "unsupported"])("answers an %s backup manifest with 422", async (reason) => {
-  const s = service("https://spare.example", {
-    backup: {
-      readRecoveryKey: async () => backupKey,
-      environment: "preproduction",
-      migrationsRoot: null,
-      restart: vi.fn(),
-    },
-  });
-  const bytes = encryptArtifact(
+  const s = service("https://spare.example", backupDeps());
+  const bytes = masterKeyArchiveBytes(
     packArchive([
       {
         name: "manifest.json",
@@ -292,48 +295,122 @@ it.each(["invalid", "unsupported"])("answers an %s backup manifest with 422", as
         ),
       },
     ]),
-    backupKey,
+    masterKey,
   );
   const answer = await s.post(upload({ signIn: request.signIn }, bytes), true, "backup");
   expect(answer.status).toBe(422);
   expect(answer.body.error).toEqual({ code: "restore.manifest_invalid", params: { reason } });
 });
 
-it("answers a too-short typed backup key with 400, naming the key the request sent", async () => {
-  const restart = vi.fn();
-  const s = service("https://spare.example", {
-    backup: {
-      readRecoveryKey: async () => backupKey,
-      environment: "preproduction",
-      migrationsRoot: null,
-      restart,
-    },
+async function selectableBackup() {
+  const path = join(root, "archive.db");
+  await mainBox.db.archiveTo(path);
+  const manifest = await buildManifest({
+    db: mainBox.db,
+    node: mainBox.node,
+    modules: fiscalModules,
+    environment: "preproduction",
+    now: new Date(),
   });
-  const answer = await s.post(
-    upload({ signIn: request.signIn, recoveryKey: "short" }),
+  return packArchive([
+    { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+    { name: "db.dump", bytes: await readFile(path) },
+    await nodeDumpEntry(mainBox.node, root),
+  ]);
+}
+type Refusal = { code: string; params?: Record<string, unknown> };
+
+it("a file under an older key asks for the master key and names it, then opens with it", async () => {
+  const restart = vi.fn();
+  const s = service("https://spare.example", backupDeps(restart));
+  const older = masterKeyArchiveBytes(await selectableBackup(), masterKey, 2);
+  const asked = await s.post(upload({ signIn: request.signIn }, older), true, "backup");
+  expect(asked.status).toBe(409);
+  expect(asked.body.error as Refusal).toEqual({
+    code: "handover.backup_needs_master_key",
+    params: { keyName: heldBackupKeyName(masterKey) },
+  });
+  await expect(readFile(join(dirs().spareState, "pair-copy", "ready.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(restart).not.toHaveBeenCalled();
+  const opened = await s.post(
+    upload({ signIn: request.signIn, masterKey: encodeMasterKeyCode(masterKey) }, older),
     true,
     "backup",
   );
-  expect(answer.status).toBe(400);
-  expect(answer.body.error).toEqual({
-    code: "backup.new_recovery_key_too_short",
-    params: { min: 12 },
+  expect(opened.body).toEqual({ restarting: true });
+  await vi.waitFor(() => expect(restart).toHaveBeenCalledOnce());
+});
+
+it.each([
+  ["an empty", ""],
+  ["a whitespace-only", " \t "],
+])("reads %s master key as none sent, so the held key opens a current file", async (_, typed) => {
+  const restart = vi.fn();
+  const s = service("https://spare.example", backupDeps(restart));
+  const current = masterKeyArchiveBytes(await selectableBackup(), masterKey);
+  const answer = await s.post(
+    upload({ signIn: request.signIn, masterKey: typed }, current),
+    true,
+    "backup",
+  );
+  expect(answer.body).toEqual({ restarting: true });
+  await vi.waitFor(() => expect(restart).toHaveBeenCalledOnce());
+});
+
+it("a wrong master key is refused with 422 naming the backup's key", async () => {
+  const restart = vi.fn();
+  const s = service("https://spare.example", backupDeps(restart));
+  const older = masterKeyArchiveBytes(await selectableBackup(), masterKey, 2);
+  const answer = await s.post(
+    upload({ signIn: request.signIn, masterKey: encodeMasterKeyCode(makeMasterKey()) }, older),
+    true,
+    "backup",
+  );
+  expect(answer.status).toBe(422);
+  expect(answer.body.error as Refusal).toMatchObject({
+    code: "promotion.break_glass_invalid",
+    params: { keyName: heldBackupKeyName(masterKey), keyNumber: 2 },
   });
   expect(restart).not.toHaveBeenCalled();
+});
+
+it("refuses a version 1 file as an invalid backup, and a master key that is not text", async () => {
+  const s = service("https://spare.example", backupDeps());
+  const v1 = encryptArtifact(await selectableBackup(), held.key);
+  const answer = await s.post(upload({ signIn: request.signIn }, v1), true, "backup");
+  expect(answer.status).toBe(422);
+  expect(answer.body.error).toEqual({
+    code: "backup.artifact_invalid",
+    params: { reason: "bad_version" },
+  });
+  const typed = await s.post(upload({ signIn: request.signIn, masterKey: 7 }, v1), true, "backup");
+  expect(typed.status).toBe(400);
+  expect(typed.body.error?.code).toBe("handover.request_invalid");
+});
+
+it("never sends or logs the held backup key or a typed master key", async () => {
+  const s = service("https://spare.example", backupDeps());
+  const older = masterKeyArchiveBytes(await selectableBackup(), masterKey, 2);
+  const typed = encodeMasterKeyCode(makeMasterKey());
+  const answers = [
+    await s.post(upload({ signIn: request.signIn }, older), true, "backup"),
+    await s.post(upload({ signIn: request.signIn, masterKey: typed }, older), true, "backup"),
+  ];
+  expect(answers.map((answer) => answer.status)).toEqual([409, 422]);
+  const seen = JSON.stringify([answers, s.log.mock.calls]);
+  expect(seen).not.toContain(held.key);
+  expect(seen).not.toContain(Buffer.from(held.key, "base64url").toString("hex"));
+  expect(seen).not.toContain(typed);
+  expect(seen).not.toContain(typed.replaceAll(" ", ""));
 });
 
 it("answers a compressed-backup capacity refusal with 507", async () => {
   const space = vi.spyOn(freeSpace, "freeBytes").mockResolvedValue(0);
   try {
-    const s = service("https://spare.example", {
-      backup: {
-        readRecoveryKey: async () => backupKey,
-        environment: "preproduction",
-        migrationsRoot: null,
-        restart: vi.fn(),
-      },
-    });
-    const bytes = encryptArtifact(gzipSync(packArchive([])), backupKey);
+    const s = service("https://spare.example", backupDeps());
+    const bytes = masterKeyArchiveBytes(gzipSync(packArchive([])), masterKey);
     const answer = await s.post(upload({ signIn: request.signIn }, bytes), true, "backup");
     expect(answer.status).toBe(507);
     expect(answer.body.error?.code).toBe("restore.archive_resource_limit");
@@ -869,9 +946,9 @@ describe("the switch's passkey and proof", () => {
     async (step) => {
       const s = service();
       const accepted = await s.post(bodies[step](), true, step, await proofCookie());
-      // A backup step with no backup configured gets past the sign-in to this refusal.
+      // A backup step's one-byte file gets past the sign-in to the file's own refusal.
       expect(accepted.body.error?.code ?? accepted.status).toBe(
-        step === "backup" ? "handover.backup_key_missing" : 200,
+        step === "backup" ? "backup.artifact_invalid" : 200,
       );
       expect(accepted.setCookie?.startsWith(`${SWITCH_PROOF_COOKIE}=`)).toBe(true);
       const refused = await s.post(bodies[step](), true, step, await proofCookie("not-a-proof"));

@@ -79,7 +79,7 @@ import { LocaleChangeController } from "./i18n/locale-controller.js";
 import { matchBrowserLocale } from "./i18n/match-browser-locale.js";
 import type { StringKey } from "./i18n/strings.js";
 import { currentLocale, format, setLocale, t } from "./i18n/t.js";
-import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { masterKeyFieldWords, refusedKeyName } from "./i18n/master-key-words.js";
 
 const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" : "en");
 
@@ -511,7 +511,7 @@ function recoveryCredentials({
 
 const RESTORE_FIELD_CODES: Record<string, RestoreField> = {
   "promotion.break_glass_invalid": "nodeRecoverySecret",
-  "recovery.passphrase_invalid": "recoveryKey",
+  "recovery.passphrase_invalid": "artifact",
   "restore.environment_mismatch": "environment",
 };
 
@@ -519,9 +519,24 @@ const RESTORE_FIELD_PATHS: Record<string, RestoreField> = {
   recoveryOperation: "recoveryOperation",
   nodeRecoverySecret: "nodeRecoverySecret",
   artifact: "artifact",
-  recoveryKey: "recoveryKey",
+  masterKey: "masterKey",
   environment: "environment",
 };
+
+/** A master key that does not open the file is refused naming the file's key number. One that
+ * opens it but is not the copy's current master key is refused naming the current one, without a
+ * key number: that key goes in a second field, while the file's stays in the first. */
+function restoreRefusedField(
+  code: unknown,
+  params: Record<string, unknown> | undefined,
+  request: RestoreRequestDetail,
+): RestoreField | undefined {
+  return code === "promotion.break_glass_invalid" &&
+    (params?.keyNumber !== undefined ||
+      (params?.keyName === undefined && request.nodeRecoverySecret === request.masterKey))
+    ? "masterKey"
+    : refusedField(code, params, RESTORE_FIELD_CODES, RESTORE_FIELD_PATHS);
+}
 
 const BUCKET_FIELD_CODES: Record<string, BucketField> = {
   "promotion.break_glass_invalid": "nodeRecoverySecret",
@@ -548,7 +563,7 @@ const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
   recoveryOperation: "restore.allocation_invalid",
   nodeRecoverySecret: "restore.allocation_key_missing",
   artifact: "restore.check.backup_file",
-  recoveryKey: "restore.check.recovery_key",
+  masterKey: "restore.check.master_key",
   environment: "restore.check.environment",
 };
 
@@ -580,11 +595,12 @@ const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
   "restore.stream_state_missing": "shell.bucket.state_missing",
   "restore.identity_unknown": "shell.bucket.identity_unknown",
   "restore.administrator_password_missing": "shell.restore.administrator_password_missing",
-  // One sentence for all three, as the command line gives (`DECRYPT_PHASE_CODES`,
+  // One sentence for all of these, as the command line gives (`DECRYPT_PHASE_CODES`,
   // apps/server/src/restore-command.ts).
   "recovery.passphrase_invalid": "shell.bucket.unopenable",
   "backup.artifact_invalid": "shell.bucket.unopenable",
   "backup.archive_invalid": "shell.bucket.unopenable",
+  "backup.archive_key_invalid": "shell.bucket.unopenable",
   "backup.stream_restore_failed": "shell.bucket.restore_failed",
   "backup.stream_request_failed": "shell.bucket.request_failed",
   "restore.stream_disk_full": "shell.bucket.disk_full",
@@ -612,6 +628,7 @@ const CLOUD_ERROR_MESSAGES: Record<string, StringKey> = {
   "recovery.passphrase_invalid": "shell.cloud.unopenable",
   "backup.artifact_invalid": "shell.cloud.unopenable",
   "backup.archive_invalid": "shell.cloud.unopenable",
+  "backup.archive_key_invalid": "shell.cloud.unopenable",
   "restore.environment_mismatch": "shell.cloud.environment_mismatch",
 };
 
@@ -632,10 +649,8 @@ function keyNamedInRefusal(
   code: unknown,
   params: Record<string, unknown> | undefined,
 ): Message | undefined {
-  const keyName = params?.keyName;
-  return code === "promotion.break_glass_invalid" && typeof keyName === "string"
-    ? () => MASTER_KEY_FIELD_WORDS[setupLocale()].wrongKey(keyName)
-    : undefined;
+  const keyName = refusedKeyName({ code, params });
+  return keyName === undefined ? undefined : () => masterKeyFieldWords().wrongKey(keyName);
 }
 
 function describeBucketRefusal(
@@ -2289,7 +2304,7 @@ export class SetupApp extends LitElement {
     try {
       await this.api.restore(
         request.artifact,
-        request.recoveryKey,
+        request.masterKey,
         request.environment,
         request.oldBoxGone,
         recoveryCredentials(request),
@@ -2321,12 +2336,7 @@ export class SetupApp extends LitElement {
         this.restoreLiveSince = undefined;
         this.restoreLiveUnknown = true;
       } else {
-        this.restoreInvalidField = refusedField(
-          code,
-          params,
-          RESTORE_FIELD_CODES,
-          RESTORE_FIELD_PATHS,
-        );
+        this.restoreInvalidField = restoreRefusedField(code, params, request);
         const finishKey =
           manifestRefusalKey(code, params) ?? finishRefusalKey(error, "shell.clock_step_unsaved");
         this.restoreError =

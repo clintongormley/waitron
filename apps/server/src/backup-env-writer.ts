@@ -60,9 +60,21 @@ export interface BackupKeyRecord {
   keyNumber: number;
   /** 16 lower-case hex characters. */
   masterKeyId: string;
+  /** `YYYY-MM-DD`: the day the master key's name begins with. */
+  masterKeyDay: string;
 }
 
-/** Sets the backup key, its number and its master key's id (and the rotation time when one is
+/** The `backup.env` settings that hold `record`. */
+export function backupKeyEnv(record: BackupKeyRecord): Record<string, string> {
+  return {
+    WAITRON_BACKUP_RECOVERY_KEY: record.key,
+    WAITRON_BACKUP_KEY_NUMBER: String(record.keyNumber),
+    WAITRON_BACKUP_MASTER_KEY_ID: record.masterKeyId,
+    WAITRON_BACKUP_MASTER_KEY_DAY: record.masterKeyDay,
+  };
+}
+
+/** Sets the backup key, its number and its master key's id and day (and the rotation time when one is
  * given), keeping every other setting the file holds. `0o600` because the file carries the key. */
 export async function writeBackupKey(
   stateDir: string,
@@ -70,9 +82,7 @@ export async function writeBackupKey(
 ): Promise<void> {
   await mergeBackupSettings(stateDir, (existing) => ({
     ...existing,
-    WAITRON_BACKUP_RECOVERY_KEY: input.key,
-    WAITRON_BACKUP_KEY_NUMBER: String(input.keyNumber),
-    WAITRON_BACKUP_MASTER_KEY_ID: input.masterKeyId,
+    ...backupKeyEnv(input),
     ...(input.rotatedAt === undefined ? {} : { WAITRON_BACKUP_KEY_ROTATED_AT: input.rotatedAt }),
   }));
 }

@@ -204,6 +204,15 @@ export class WtMasterKeyInput extends LitElement {
     this.#notify();
   }
 
+  /**
+   * Shows `masterKey`, a key the host already holds, without firing `wt-change`; text that is not
+   * a whole key leaves the field empty.
+   */
+  fill(masterKey: string): void {
+    this.#empty();
+    this.value = printed(normalise(masterKey)) ?? "";
+  }
+
   #empty(): void {
     this.scanning = false;
     this.#reading = undefined;

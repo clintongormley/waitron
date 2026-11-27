@@ -872,6 +872,27 @@ test("the host's line shows while the field has none of its own", async () => {
   expect(message(el)).toBe(EN.notWhole);
 });
 
+test("fill shows a key the host already holds, without telling the host, and typing goes on from it", async () => {
+  const { el, seen } = await field();
+  el.fill(KEY.replaceAll(" ", "").toLowerCase());
+  await el.updateComplete;
+  await inner(el).updateComplete;
+  expect(native(el).value).toBe(KEY);
+  expect(seen).toEqual([]);
+  await type(el, OTHER_KEY);
+  expect(seen).toEqual([{ masterKey: OTHER_KEY }]);
+});
+
+test("fill leaves the field empty for text that is not a whole key", async () => {
+  const { el, seen } = await field();
+  await type(el, KEY);
+  el.fill("not a key");
+  await el.updateComplete;
+  await inner(el).updateComplete;
+  expect(native(el).value).toBe("");
+  expect(seen).toEqual([{ masterKey: KEY }]);
+});
+
 const visibilityButton = (name: string) => page.getByRole("button", { name, exact: true });
 
 /** A field holding `text`, typed and then shown, with the caret after its last symbol. */

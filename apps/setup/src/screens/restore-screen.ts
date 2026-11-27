@@ -8,17 +8,21 @@ import {
   focusFirstInvalid,
   leaveCoordinatorFor,
   type DraftScope,
+  type MasterKeyChangeDetail,
+  type WtMasterKeyInput,
 } from "@waitron/ui";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
+import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
-import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-master-key-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { passwordIcon } from "../password-icon.js";
 import { actionsStyles, errorStyles, fieldStyles, statusStyles } from "../form-styles.js";
 import { type KeptRestoreRequest, dispatchRestoreRequested, dispatchSetupGoto } from "../events.js";
 import { currentLocale, format, t } from "../i18n/t.js";
+import { masterKeyFieldWords, refusedKeyName } from "../i18n/master-key-words.js";
 import { fileInputCopy } from "../file-input-copy.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
@@ -28,11 +32,11 @@ import { SetupRecoveryCopy, copyEnvironmentFrom } from "./recovery-copy.js";
 
 interface RestoreForm {
   artifact?: File;
-  recoveryKey: string;
+  masterKey: string;
   environment: "production" | "preproduction";
 }
 
-export type RestoreField = "artifact" | "recoveryKey" | "environment" | RecoveryEntryField;
+export type RestoreField = "artifact" | "masterKey" | "environment" | RecoveryEntryField;
 
 @customElement("setup-restore-screen")
 export class SetupRestoreScreen extends LitElement {
@@ -67,8 +71,7 @@ export class SetupRestoreScreen extends LitElement {
   /** The request the shell last sent, returned with a refusal so the owner's entries are kept. */
   @property({ attribute: false }) request?: KeptRestoreRequest;
   @state() private artifact?: File;
-  @state() private recoveryKey = "";
-  @state() private recoveryKeyVisible = false;
+  @state() private masterKey = "";
   @state() private environment: "production" | "preproduction" = "production";
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
@@ -76,6 +79,8 @@ export class SetupRestoreScreen extends LitElement {
   @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
   @state() private previewRefusal?: RestoreField;
+  /** The master key Review's refusal named, when the typed one did not open the file. */
+  @state() private previewKeyName?: string;
   /** The environment Review switched the field to, until the person changes the file or the field. */
   @state() private followedEnvironment?: "production" | "preproduction";
 
@@ -88,7 +93,7 @@ export class SetupRestoreScreen extends LitElement {
   #form(): RestoreForm {
     return {
       artifact: this.artifact,
-      recoveryKey: this.recoveryKey,
+      masterKey: this.masterKey,
       environment: this.environment,
     };
   }
@@ -111,12 +116,10 @@ export class SetupRestoreScreen extends LitElement {
       current: () => this.#form(),
       snapshot: (form) => ({ ...form }),
       equal: (a, b) =>
-        a.artifact === b.artifact &&
-        a.recoveryKey === b.recoveryKey &&
-        a.environment === b.environment,
+        a.artifact === b.artifact && a.masterKey === b.masterKey && a.environment === b.environment,
       restore: (form) => {
         this.artifact = form.artifact;
-        this.recoveryKey = form.recoveryKey;
+        this.masterKey = form.masterKey;
         this.environment = form.environment;
         this.followedEnvironment = undefined;
         this.acknowledged = false;
@@ -139,7 +142,7 @@ export class SetupRestoreScreen extends LitElement {
     if (changed.has("invalidField")) this.feedback.newRefusal("field");
     if (changed.has("request") && this.request !== undefined) {
       this.artifact = this.request.artifact;
-      this.recoveryKey = this.request.recoveryKey;
+      this.masterKey = this.request.masterKey;
       this.environment = this.request.environment;
       // A request is only sent once the owner has ticked this.
       this.acknowledged = true;
@@ -150,6 +153,10 @@ export class SetupRestoreScreen extends LitElement {
 
   override updated(changed: PropertyValues<this>): void {
     this.#registerScope();
+    if (changed.has("request") && this.request !== undefined)
+      this.shadowRoot!.querySelector<WtMasterKeyInput>("wt-master-key-input")!.fill(
+        this.request.masterKey,
+      );
     if (changed.has("invalidField") && this.#refusalUnder(this.#shownRefusal) !== undefined) {
       void focusFirstInvalid(this.shadowRoot!);
     }
@@ -188,16 +195,18 @@ export class SetupRestoreScreen extends LitElement {
 
   /** The message under `field`: the client's own when it is missing, else a refusal about it. */
   #fieldError(
-    field: "artifact" | "recoveryKey" | "environment",
+    field: "artifact" | "masterKey" | "environment",
     missing: string | undefined,
     refused: RestoreField | undefined,
   ): string | undefined {
     if (missing !== undefined) return missing;
     if (refused === field) return this.errorMessage;
     if (this.previewRefusal === field) {
+      if (field === "masterKey" && this.previewKeyName !== undefined)
+        return masterKeyFieldWords().wrongKey(this.previewKeyName);
       const messages = {
         artifact: "restore.preview_file_error",
-        recoveryKey: "restore.preview_key_error",
+        masterKey: "restore.check.master_key",
         environment: "restore.preview_environment_error",
       } as const;
       return t(messages[field]);
@@ -221,7 +230,7 @@ export class SetupRestoreScreen extends LitElement {
   get #incomplete(): boolean {
     return (
       this.artifact === undefined ||
-      this.recoveryKey === "" ||
+      this.masterKey === "" ||
       !this.acknowledged ||
       this.recoveryInvalid ||
       this.#oldBoxUnanswered
@@ -240,14 +249,14 @@ export class SetupRestoreScreen extends LitElement {
       "setup-recovery-copy",
     )?.readCredentials({
       artifact: this.artifact,
-      recoveryKey: this.recoveryKey,
+      masterKey: this.masterKey,
       environment: this.environment,
     });
     if (!credentials) return;
     dispatchRestoreRequested(this, {
       ...credentials,
       artifact,
-      recoveryKey: this.recoveryKey,
+      masterKey: this.masterKey,
       environment: this.environment,
       oldBoxGone: this.#askingOldBox && this.oldBoxGone,
     });
@@ -265,9 +274,9 @@ export class SetupRestoreScreen extends LitElement {
       refused,
     );
     const keyError = this.#fieldError(
-      "recoveryKey",
-      this.feedback.attempted && this.recoveryKey === ""
-        ? t("restore.recovery_key_missing")
+      "masterKey",
+      this.feedback.attempted && this.masterKey === ""
+        ? t("restore.master_key_missing")
         : undefined,
       refused,
     );
@@ -314,39 +323,22 @@ export class SetupRestoreScreen extends LitElement {
           >${t("restore.backup_file_help")}</wt-help-tooltip
         >
       </wt-file-input>
-      <wt-input
+      <wt-master-key-input
         class="field"
-        label=${t("restore.recovery_key")}
-        name="recovery-key"
-        autocapitalize="none"
-        autocorrect="off"
-        spellcheck="false"
-        hint=${t("restore.recovery_key_hint")}
-        type=${this.recoveryKeyVisible ? "text" : "password"}
-        autocomplete="off"
+        data-test="master-key"
         required
-        data-test="recovery-key"
-        error=${keyError ?? ""}
-        .value=${this.recoveryKey}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        .draftParent=${this}
+        .copy=${masterKeyFieldWords()}
+        .readPack=${loadRecoveryPackReader}
+        .maxPdfBytes=${MAX_PACK_PDF}
+        .attempted=${this.feedback.attempted}
+        .error=${keyError ?? ""}
+        @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
           event.stopPropagation();
-          this.recoveryKey = event.detail.value;
-          this.#edited("recoveryKey");
+          this.masterKey = event.detail.masterKey ?? "";
+          this.#edited("masterKey");
         }}
-      >
-        <wt-button
-          slot="end"
-          variant="ghost"
-          data-test="toggle-recovery-key"
-          aria-label=${
-            this.recoveryKeyVisible
-              ? t("restore.hide_recovery_key")
-              : t("restore.show_recovery_key")
-          }
-          @click=${() => (this.recoveryKeyVisible = !this.recoveryKeyVisible)}
-          >${passwordIcon(this.recoveryKeyVisible)}</wt-button
-        >
-      </wt-input>
+      ></wt-master-key-input>
       <wt-combobox
         class="field"
         label=${t("restore.environment")}
@@ -401,7 +393,7 @@ export class SetupRestoreScreen extends LitElement {
         .api=${this.api}
         .boxAddress=${this.boxAddress}
         .artifact=${this.artifact}
-        .recoveryKey=${this.recoveryKey}
+        .masterKey=${this.masterKey}
         .environment=${this.environment}
         @preview-refusal=${(event: CustomEvent<{ cause?: ApiError; field?: RestoreField }>) => {
           event.stopPropagation();
@@ -411,6 +403,7 @@ export class SetupRestoreScreen extends LitElement {
             return;
           }
           this.previewRefusal = event.detail.field;
+          this.previewKeyName = refusedKeyName(event.detail.cause);
         }}
       ></setup-recovery-copy>
       <label class="field">

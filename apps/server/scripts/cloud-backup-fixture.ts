@@ -82,7 +82,12 @@ if (request.command === "capture") {
   try {
     // A Cloud copy is frame version 1 under Cloud's key. The real Cloud target flushes with fsync,
     // which the permission model refuses, so the sweep's archive is sealed again as one.
-    const sweepKey = { backupKey: randomBytes(32), keyNumber: 1, masterKeyId: randomBytes(8) };
+    const sweepKey = {
+      backupKey: randomBytes(32),
+      keyNumber: 1,
+      masterKeyId: randomBytes(8),
+      masterKeyDay: "2026-11-23",
+    };
     let swept: Uint8Array | undefined;
     await runOnce({
       nodeId: readVariable(

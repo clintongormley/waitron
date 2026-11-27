@@ -36,6 +36,8 @@ import { signPointer, writePointer } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { copyFile } from "node:fs/promises";
 import { mintMasterKey } from "./testing/master-key.js";
+import { heldBackupKey } from "./testing/backup-key.js";
+import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
 import { validateArtifact } from "./restore.js";
 import type { StartedServer } from "./boot.js";
@@ -57,6 +59,7 @@ const LOCATION = "d0000000-0000-4000-8000-000000000002";
 let scratch: string;
 let artifact: Uint8Array;
 let oldName: string | null;
+let oldMasterKey: string;
 const occupied: Server[] = [];
 async function occupiedPort(): Promise<number> {
   const server = createServer((_request, response) => {
@@ -91,7 +94,9 @@ beforeEach(async () => {
   });
   await seedBusinessDay(suite.db, {});
   await suite.db.insert(nodes).values({ id: NODE, name: "Old node" });
-  oldName = (await mintMasterKey(suite.db)).name;
+  const old = await mintMasterKey(suite.db);
+  oldName = old.name;
+  oldMasterKey = old.secret;
   artifact = await packSelected();
 });
 
@@ -224,15 +229,20 @@ it("the real setup listener previews the selected copy without restarting or pub
     await awaitListening(port);
     const client = httpsVia(await readFile(join(stateDir, "tls/ca.crt")));
     closeClient = client.close;
+    // The copy's backup file as a person holds it: made under its own master key.
+    const file = masterKeyArchiveBytes(
+      decryptArtifact(artifact, "archive-key-separate"),
+      decodeMasterKeyCode(oldMasterKey),
+    );
     const response = await fetch(`https://127.0.0.1:${port}/setup-api/restore/preview`, {
       ...client.via,
       method: "POST",
       headers: {
         "content-type": "application/octet-stream",
-        "x-waitron-recovery-key": "archive-key-separate",
+        "x-waitron-master-key": oldMasterKey,
         "x-waitron-restore-environment": "preproduction",
       },
-      body: new Uint8Array(artifact),
+      body: new Uint8Array(file),
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -248,9 +258,9 @@ it("the real setup listener previews the selected copy without restarting or pub
     const status = await fetch(`https://127.0.0.1:${port}/setup-api/status`, client.via);
     expect(status.status).toBe(200);
     expect(await status.json()).toMatchObject({ provisioned: false, environment: "preproduction" });
-    expect(await readFile(join(scratch, "logs/waitron.log"), "utf8")).not.toContain(
-      "archive-key-separate",
-    );
+    const written = await readFile(join(scratch, "logs/waitron.log"), "utf8");
+    expect(written).not.toContain(oldMasterKey);
+    expect(written).not.toContain(heldBackupKey(decodeMasterKeyCode(oldMasterKey)).key);
     expect((await fetch(`http://127.0.0.1:${configuredPort}`)).status).toBe(503);
   } finally {
     await closeClient?.();

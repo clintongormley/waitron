@@ -13,7 +13,6 @@ import {
   type MasterKeyChangeDetail,
   type MasterKeyInputCopy,
 } from "@waitron/ui";
-import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
 import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 import "@waitron/ui/src/components/wt-master-key-input.js";
@@ -22,7 +21,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { RecoveryBackupPreview, RecoveryRestoreCredentials } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
-import { t, currentLocale } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
+import { masterKeyFieldWords, wordsLanguage } from "../i18n/master-key-words.js";
 import { fieldStyles, errorStyles } from "../form-styles.js";
 
 export type RecoveryEntryField = "recoveryOperation" | "nodeRecoverySecret";
@@ -95,6 +95,12 @@ export class SetupRecoveryAllocation extends LitElement {
   @property({ attribute: false }) boxAddress?: string;
   @property() errorMessage?: string;
   @property() refusedField?: string;
+  /**
+   * The master key a backup file was opened with. It normally also authorises, so no second field
+   * asks; a refusal for the authorisation (`refusedField` of `nodeRecoverySecret`) brings that
+   * field back.
+   */
+  @property({ attribute: false }) masterKey?: string;
   @state() private refusalDismissed = false;
   @state() private draft = empty();
   @state() private attempted = false;
@@ -107,7 +113,12 @@ export class SetupRecoveryAllocation extends LitElement {
   }
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("errorMessage") || changed.has("refusedField")) this.refusalDismissed = false;
-    if (changed.has("preview") || changed.has("prepare") || changed.has("binding")) {
+    if (
+      changed.has("preview") ||
+      changed.has("prepare") ||
+      changed.has("binding") ||
+      changed.has("masterKey")
+    ) {
       this.#clear();
       const preview = this.preview;
       const contribution = SETUP_MODULES.find(
@@ -116,7 +127,7 @@ export class SetupRecoveryAllocation extends LitElement {
       this.#recoveryEntry =
         preview?.fiscalSelection && preview.nodeRecoveryKeyName && this.prepare
           ? contribution?.createRecovery?.({
-              locale: currentLocale() === "es-ES" ? "es" : "en",
+              locale: wordsLanguage(),
               selection: {
                 ...preview.fiscalSelection,
                 sourceId: preview.sourceId,
@@ -134,11 +145,12 @@ export class SetupRecoveryAllocation extends LitElement {
               },
               prepare: this.prepare,
               boxAddress: this.boxAddress,
+              masterKey: this.masterKey,
             })
           : undefined;
     }
     if (this.#recoveryEntry) {
-      this.#recoveryEntry.locale = currentLocale() === "es-ES" ? "es" : "en";
+      this.#recoveryEntry.locale = wordsLanguage();
       this.#recoveryEntry.errorMessage = this.errorMessage;
       this.#recoveryEntry.refusedField = this.refusedField;
     }
@@ -279,7 +291,7 @@ export class SetupRecoveryAllocation extends LitElement {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return null;
     }
-    return { recoveryOperation: operation, nodeRecoverySecret: this.draft.nodeKey };
+    return { recoveryOperation: operation, nodeRecoverySecret: this.#nodeKey };
   }
   get #hasDraft(): boolean {
     return (
@@ -287,18 +299,40 @@ export class SetupRecoveryAllocation extends LitElement {
       Object.values(this.draft).some((value) => value !== "" && value !== false)
     );
   }
+  get #pageKey(): string | undefined {
+    return this.refusedField === "nodeRecoverySecret" ? undefined : this.masterKey;
+  }
+  get #nodeKey(): string {
+    return this.#pageKey ?? this.draft.nodeKey;
+  }
   get #keyInvalid(): boolean {
-    return this.draft.nodeKey === "";
+    return this.#nodeKey === "";
   }
   #refusal(field: RecoveryEntryField): string {
     return !this.refusalDismissed && this.refusedField === field ? (this.errorMessage ?? "") : "";
+  }
+  #keyField(keyInvalid: boolean) {
+    const copy: MasterKeyInputCopy = masterKeyFieldWords();
+    return html`<wt-master-key-input
+      class="field"
+      .draftParent=${this}
+      ?required=${this.#hasDraft}
+      .keyName=${this.preview?.nodeRecoveryKeyName ?? undefined}
+      .copy=${copy}
+      .readPack=${loadRecoveryPackReader}
+      .maxPdfBytes=${MAX_PACK_PDF}
+      .attempted=${this.attempted}
+      .error=${keyInvalid ? t("restore.allocation_key_missing") : this.#refusal("nodeRecoverySecret")}
+      @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
+        event.stopPropagation();
+        this.#edit("nodeKey", event.detail.masterKey ?? "");
+      }}
+    ></wt-master-key-input>`;
   }
   override render() {
     if (this.#recoveryEntry) return this.#recoveryEntry;
     const recordInvalid = this.attempted && !this.#operation();
     const keyInvalid = this.attempted && this.#keyInvalid;
-    const copy: MasterKeyInputCopy =
-      MASTER_KEY_FIELD_WORDS[currentLocale() === "es-ES" ? "es" : "en"];
     const isolatedInvalid = this.attempted && !this.draft.isolated;
     const retainedInvalid = this.attempted && !this.draft.retained;
     return html` <h3>${t("restore.allocation_heading")}</h3>
@@ -318,21 +352,7 @@ export class SetupRecoveryAllocation extends LitElement {
           this.#edit("record", event.detail.value);
         }}
       ></wt-textarea>
-      <wt-master-key-input
-        class="field"
-        .draftParent=${this}
-        ?required=${this.#hasDraft}
-        .keyName=${this.preview?.nodeRecoveryKeyName ?? undefined}
-        .copy=${copy}
-        .readPack=${loadRecoveryPackReader}
-        .maxPdfBytes=${MAX_PACK_PDF}
-        .attempted=${this.attempted}
-        .error=${keyInvalid ? t("restore.allocation_key_missing") : this.#refusal("nodeRecoverySecret")}
-        @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
-          event.stopPropagation();
-          this.#edit("nodeKey", event.detail.masterKey ?? "");
-        }}
-      ></wt-master-key-input>
+      ${this.#pageKey === undefined ? this.#keyField(keyInvalid) : nothing}
       ${
         this.#review
           ? html`<section

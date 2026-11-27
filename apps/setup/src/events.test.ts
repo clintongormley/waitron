@@ -80,7 +80,7 @@ test("dispatchTaxpayerChosen fires a composed, bubbling taxpayer-chosen carrying
 test("dispatchRestoreRequested fires a composed, bubbling restore-requested wrapping the request", () => {
   const request = {
     artifact: new File(["archive"], "venue.waitron-backup"),
-    recoveryKey: "recovery key",
+    masterKey: "recovery key",
     environment: "production" as const,
     oldBoxGone: true,
     ...REVIEWED_CREDENTIALS,

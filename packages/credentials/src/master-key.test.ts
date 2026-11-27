@@ -8,9 +8,11 @@ import {
   backupKey,
   makeMasterKey,
   masterKeyCheckValue,
+  masterKeyDayOf,
   masterKeyId,
   masterKeyMatches,
   masterKeyName,
+  masterKeyNameOf,
   sealingPublicKey,
 } from "./master-key.js";
 
@@ -126,9 +128,11 @@ describe("making a master key", () => {
       "backupKey",
       "makeMasterKey",
       "masterKeyCheckValue",
+      "masterKeyDayOf",
       "masterKeyId",
       "masterKeyMatches",
       "masterKeyName",
+      "masterKeyNameOf",
       "sealingPublicKey",
     ]);
   });
@@ -193,6 +197,19 @@ describe("the master key's name", () => {
     expect(masterKeyName(publicKey, "2027-02-01").slice(-4)).toBe(name.slice(-4));
   });
 
+  it("is the same name when read from the master key id alone", () => {
+    const publicKey = sealingPublicKey(makeMasterKey());
+    expect(masterKeyNameOf(masterKeyId(publicKey), "2027-01-31")).toBe(
+      masterKeyName(publicKey, "2027-01-31"),
+    );
+    expect(masterKeyNameOf(masterKeyId(sealingPublicKey(fixedKey)), "2026-11-23")).toBe(
+      "2026-11-23 · EG6B",
+    );
+    expect(refusal(() => masterKeyNameOf(masterKeyId(publicKey), "2026-02-29")).code).toBe(
+      "master_key.name_day_invalid",
+    );
+  });
+
   it("takes a leap day in a leap year", () => {
     expect(masterKeyName(sealingPublicKey(fixedKey), "2028-02-29")).toBe("2028-02-29 · EG6B");
   });
@@ -218,6 +235,21 @@ describe("the master key's name", () => {
       const error = refusal(() => masterKeyName(sealingPublicKey(fixedKey), day));
       expect(JSON.stringify(error)).toContain("master_key.name_day_invalid");
       expect(JSON.stringify(error)).not.toContain(day);
+    },
+  );
+});
+
+describe("masterKeyDayOf", () => {
+  it("takes the day a master key's name begins with", () => {
+    expect(masterKeyDayOf("2026-11-23 · ABCD")).toBe("2026-11-23");
+  });
+
+  it.each(["ABCD · 2026-11-23", "2026-02-30 · ABCD", ""])(
+    "refuses %j, whose first ten characters are not a calendar date",
+    (name) => {
+      expect(() => masterKeyDayOf(name)).toThrow(
+        expect.objectContaining({ code: "master_key.name_day_invalid" }),
+      );
     },
   );
 });

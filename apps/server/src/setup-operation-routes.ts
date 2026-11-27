@@ -21,6 +21,7 @@ import { isUnset, AppError, isAppError, FALLBACK_LOCALE } from "@waitron/shared"
 import type { Hono, Context } from "hono";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
+import { openingKeyFor } from "./backup-file-key.js";
 import { makeMasterKeyRecoveryPack } from "./backup-recovery-pack-output.js";
 import { writeBackupKeyOne } from "./backup-key-record.js";
 import type { JoinedBox } from "./box-join-attempt.js";
@@ -61,6 +62,7 @@ import {
   invalidRequest,
   MAX_RESTORE_UPLOAD_BYTES,
   asObject,
+  asMasterKey,
   asString,
 } from "./setup-request-fields.js";
 import type { TradingConfig } from "./trading-config.js";
@@ -701,7 +703,7 @@ export function mountSetupOperationRoutes(
       try {
         if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream"))
           invalidRequest("artifact");
-        const recoveryKey = asString(c.req.header("x-waitron-recovery-key"), "recoveryKey");
+        const masterKey = asMasterKey(c.req.header("x-waitron-master-key"), "masterKey");
         const environment = c.req.header("x-waitron-restore-environment");
         if (environment !== "production" && environment !== "preproduction")
           invalidRequest("environment");
@@ -712,7 +714,7 @@ export function mountSetupOperationRoutes(
             await preview({
               kind: "archive-file",
               artifactPath: upload.artifactPath,
-              recoveryKey,
+              recoveryKey: await openingKeyFor(upload, masterKey),
               environment,
             }),
             200,
@@ -756,7 +758,7 @@ export function mountSetupOperationRoutes(
             invalidRequest("artifact");
           const headerKey = multipart
             ? undefined
-            : asString(c.req.header("x-waitron-recovery-key"), "recoveryKey");
+            : asMasterKey(c.req.header("x-waitron-master-key"), "masterKey");
           const headerEnvironment = c.req.header("x-waitron-restore-environment");
           if (
             !multipart &&
@@ -768,7 +770,7 @@ export function mountSetupOperationRoutes(
             invalidRequest("recoveryOperation");
           upload = await deps.receiveArchive!(c.req.raw, {
             fields: [
-              "recoveryKey",
+              "masterKey",
               "environment",
               "oldBoxGone",
               "recoveryOperation",
@@ -781,8 +783,8 @@ export function mountSetupOperationRoutes(
             const answer = form.get("oldBoxGone");
             if (answer != null && answer !== "0" && answer !== "1") invalidRequest("oldBoxGone");
           }
-          const recoveryKey =
-            form === undefined ? headerKey! : asString(form.get("recoveryKey"), "recoveryKey");
+          const masterKey =
+            form === undefined ? headerKey! : asMasterKey(form.get("masterKey"), "masterKey");
           const rawEnvironment = form === undefined ? headerEnvironment : form.get("environment");
           if (rawEnvironment !== "production" && rawEnvironment !== "preproduction")
             invalidRequest("environment");
@@ -804,7 +806,7 @@ export function mountSetupOperationRoutes(
           const credentials = recoveryCredentials(
             deps.recoveryOperationPath,
             suppliedOperation,
-            form?.get("nodeRecoverySecret") ?? undefined,
+            form?.get("nodeRecoverySecret") ?? (rawOperation == null ? undefined : masterKey),
             (() => {
               const raw = form?.get("recoveryContext");
               if (raw === undefined || raw === null) return undefined;
@@ -821,7 +823,7 @@ export function mountSetupOperationRoutes(
           const hash = createHash("sha256")
             .update(rawEnvironment)
             .update(oldBoxGone ? "\0confirmed\0" : "\0")
-            .update(recoveryKey)
+            .update(masterKey)
             .update("\0");
           for await (const bytes of createReadStream(upload.artifactPath))
             hash.update(bytes as Buffer);
@@ -832,7 +834,7 @@ export function mountSetupOperationRoutes(
                 kind: "archive-file",
                 artifactPath: upload!.artifactPath,
                 signal: c.req.raw.signal,
-                recoveryKey,
+                recoveryKey: await openingKeyFor(upload!, masterKey),
                 environment: rawEnvironment,
                 ...credentials,
               },

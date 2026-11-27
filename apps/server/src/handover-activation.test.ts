@@ -304,6 +304,12 @@ async function emergencySpare(gate = true) {
     rpId: "box.test",
     credentialKeyRing: TOTP_KEY_RING,
     fetch: exchange,
+    backup: {
+      readBackupKey: async () => undefined,
+      environment: "preproduction" as const,
+      migrationsRoot: null,
+      restart: () => {},
+    },
   };
   const emergency = mountHandoverEmergencyApi(declarationApp, emergencyDeps);
   const declarationBody = {

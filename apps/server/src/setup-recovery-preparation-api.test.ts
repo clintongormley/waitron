@@ -2,8 +2,12 @@ import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { Socket } from "node:net";
 import { Hono } from "hono";
 import { TLSSocket } from "node:tls";
-import { afterEach, expect, it, vi } from "vitest";
-import { AppError } from "@waitron/shared";
+import { afterEach, expect, it, onTestFinished, vi } from "vitest";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { makeMasterKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
+import { AppError, encodeMasterKeyCode } from "@waitron/shared";
 import { encodeRecoveryKit } from "@waitron/stream";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
@@ -12,6 +16,9 @@ import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { mountSetup } from "./setup-api.js";
 import { type SetupDeps } from "./setup-api-deps.js";
 import type { PrepareRecovery } from "./setup-recovery-preparation-api.js";
+import { decryptArtifactUnderBackupKey, encryptArtifact } from "./artifact-cipher.js";
+import { heldBackupKey, heldBackupKeyName } from "./testing/backup-key.js";
+import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 
 vi.mock("./restore-stream.js", { spy: true });
 
@@ -33,6 +40,20 @@ const preparation = {
   proposal: { action: "clock-challenge" },
 };
 const bucket = { kind: "bucket", kit: "private bucket kit", environment: "preproduction" };
+const FILE_MASTER_KEY = makeMasterKey();
+const FILE_MASTER_KEY_TEXT = encodeMasterKeyCode(FILE_MASTER_KEY);
+const FILE_PLAINTEXT = Uint8Array.from([7, 2, 9]);
+// Backup key 2, so a route that took backup key 1 would not open it.
+const FILE = masterKeyArchiveBytes(FILE_PLAINTEXT, FILE_MASTER_KEY, 2);
+const OPENING_KEY = heldBackupKey(FILE_MASTER_KEY, 2).key;
+const wrongMasterKey = {
+  code: "promotion.break_glass_invalid",
+  params: {
+    masterKeyId: masterKeyId(sealingPublicKey(FILE_MASTER_KEY)).toString("hex"),
+    keyNumber: 2,
+    keyName: heldBackupKeyName(FILE_MASTER_KEY),
+  },
+};
 function fixture(extra: Partial<SetupDeps> = {}) {
   const app = new Hono();
   const log = vi.fn();
@@ -111,21 +132,63 @@ it("forwards a managed Cloud point without accepting client-supplied archive cre
     expect.any(AbortSignal),
   );
 });
-it("reads archive bytes and the separate backup password from multipart input", async () => {
-  const { app, execute } = fixture();
-  const source = { kind: "archive", recoveryKey: "archive password", environment: "production" };
+it("reads a backup file's bytes from multipart input and opens it with the master key", async () => {
+  const { app, execute, log } = fixture();
+  const source = { kind: "archive", masterKey: FILE_MASTER_KEY_TEXT, environment: "production" };
   const form = new FormData();
   form.set("request", JSON.stringify({ source, preparation }));
-  form.set("artifact", new Blob([new Uint8Array([7, 2, 9])]), "selected.wbk");
+  form.set("artifact", new Blob([Uint8Array.from(FILE)]), "selected.wbk");
   const response = await app.request(path, { method: "POST", body: form }, tls());
   expect(response.status).toBe(200);
   expect(execute).toHaveBeenCalledWith(
-    { ...source, artifact: new Uint8Array([7, 2, 9]) },
+    {
+      kind: "archive",
+      recoveryKey: OPENING_KEY,
+      environment: "production",
+      artifact: Uint8Array.from(FILE),
+    },
     preparation,
     expect.any(Object),
     { onBox: true },
     expect.any(AbortSignal),
   );
+  expect(JSON.stringify(log.mock.calls)).not.toContain(FILE_MASTER_KEY_TEXT);
+});
+it("a wrong master key at preparation is refused naming the backup's key, before dispatch", async () => {
+  const { app, execute, log } = fixture();
+  const typed = encodeMasterKeyCode(makeMasterKey());
+  const source = { kind: "archive", masterKey: typed, environment: "production" };
+  const form = new FormData();
+  form.set("request", JSON.stringify({ source, preparation }));
+  form.set("artifact", new Blob([Uint8Array.from(FILE)]), "selected.wbk");
+  const response = await app.request(path, { method: "POST", body: form }, tls());
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: wrongMasterKey });
+  expect(execute).not.toHaveBeenCalled();
+  expect(JSON.stringify(log.mock.calls)).not.toContain(typed);
+});
+it.each([
+  [
+    "an old backup key field",
+    { kind: "archive", recoveryKey: "k", environment: "production" },
+    "body",
+  ],
+  [
+    "an empty master key",
+    { kind: "archive", masterKey: "", environment: "production" },
+    "masterKey",
+  ],
+])("refuses a preparation archive source with %s", async (_name, source, field) => {
+  const { app, execute } = fixture();
+  const form = new FormData();
+  form.set("request", JSON.stringify({ source, preparation }));
+  form.set("artifact", new Blob([Uint8Array.from(FILE)]), "selected.wbk");
+  const response = await app.request(path, { method: "POST", body: form }, tls());
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: { code: "setup.request_invalid", params: { field } },
+  });
+  expect(execute).not.toHaveBeenCalled();
 });
 it.each(["plain", "forwarded", "origin", "site"])(
   "refuses %s transport before consuming recovery secrets",
@@ -216,7 +279,7 @@ it("stops reading an oversized streamed archive even without Content-Length", as
   let consumed = 0;
   let cancelled = false;
   const encoder = new TextEncoder();
-  const source = { kind: "archive", recoveryKey: "archive password", environment: "production" };
+  const source = { kind: "archive", masterKey: FILE_MASTER_KEY_TEXT, environment: "production" };
   const prefix = encoder.encode(
     `--bounded\r\nContent-Disposition: form-data; name="request"\r\n\r\n${JSON.stringify({ source, preparation })}\r\n--bounded\r\nContent-Disposition: form-data; name="artifact"; filename="copy.wbk"\r\nContent-Type: application/octet-stream\r\n\r\n`,
   );
@@ -262,7 +325,7 @@ function stageFixture() {
 }
 function stageForm(
   request: unknown,
-  artifact: Uint8Array<ArrayBuffer> | null = new Uint8Array([7, 2, 9]),
+  artifact: Uint8Array<ArrayBuffer> | null = Uint8Array.from(FILE),
 ) {
   const form = new FormData();
   form.set("request", JSON.stringify(request));
@@ -271,7 +334,7 @@ function stageForm(
 }
 const archiveSource = {
   kind: "archive",
-  recoveryKey: "archive password",
+  masterKey: FILE_MASTER_KEY_TEXT,
   environment: "production",
 };
 it("stages a checked archive once for its restore event and answers only its id", async () => {
@@ -285,17 +348,78 @@ it("stages a checked archive once for its restore event and answers only its id"
   expect(await response.json()).toEqual({ stagedId });
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(stageRecovery).toHaveBeenCalledWith("interactive-restore", {
-    ...archiveSource,
     kind: "archive-file",
     artifactPath: expect.stringContaining("upload-"),
+    recoveryKey: OPENING_KEY,
+    environment: "production",
   });
-  expect(JSON.stringify(log.mock.calls)).not.toContain("archive password");
+  expect(JSON.stringify(log.mock.calls)).not.toContain(FILE_MASTER_KEY_TEXT);
+  expect(JSON.stringify(log.mock.calls)).not.toContain(OPENING_KEY);
+});
+it("staging a backup file for recovery takes the master key", async () => {
+  const opened: Buffer[] = [];
+  const keys: string[] = [];
+  const { app } = fixture({
+    stageRecovery: async (_eventId, source) => {
+      if (source.kind !== "archive-file") throw new Error("expected a received file");
+      keys.push(source.recoveryKey);
+      opened.push(
+        decryptArtifactUnderBackupKey(
+          await readFile(source.artifactPath),
+          Buffer.from(source.recoveryKey, "base64url"),
+        ),
+      );
+      return { stagedId };
+    },
+  });
+  const response = await app.request(
+    "/setup-api/recovery/stage",
+    stageForm({ eventId: "interactive-restore", source: archiveSource }),
+    tls(),
+  );
+  expect(response.status).toBe(200);
+  expect(opened).toEqual([Buffer.from(FILE_PLAINTEXT)]);
+  expect(keys).not.toContain(FILE_MASTER_KEY_TEXT);
+});
+it("a wrong master key at staging is refused naming the backup's key", async () => {
+  const { app, stageRecovery, log } = stageFixture();
+  const typed = encodeMasterKeyCode(makeMasterKey());
+  const response = await app.request(
+    "/setup-api/recovery/stage",
+    stageForm({ eventId: "interactive-restore", source: { ...archiveSource, masterKey: typed } }),
+    tls(),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ error: wrongMasterKey });
+  expect(stageRecovery).not.toHaveBeenCalled();
+  expect(JSON.stringify(log.mock.calls)).not.toContain(typed);
+  const right = await app.request(
+    "/setup-api/recovery/stage",
+    stageForm({ eventId: "interactive-restore", source: archiveSource }),
+    tls(),
+  );
+  expect(right.status).toBe(200);
 });
 it.each([
   ["no artifact", { eventId: "e", source: archiveSource }, null, "artifact"],
   ["a bucket source", { eventId: "e", source: bucket }, new Uint8Array([1]), "body"],
   ["no event", { source: archiveSource }, new Uint8Array([1]), "body"],
   ["an empty event", { eventId: "", source: archiveSource }, new Uint8Array([1]), "eventId"],
+  [
+    "an old backup key in place of the master key",
+    {
+      eventId: "e",
+      source: { kind: "archive", recoveryKey: OPENING_KEY, environment: "production" },
+    },
+    Uint8Array.from(FILE),
+    "body",
+  ],
+  [
+    "an empty master key",
+    { eventId: "e", source: { ...archiveSource, masterKey: "" } },
+    Uint8Array.from(FILE),
+    "masterKey",
+  ],
 ])("refuses a stage with %s", async (_name, request, artifact, field) => {
   const { app, stageRecovery } = stageFixture();
   const response = await app.request(
@@ -309,6 +433,29 @@ it.each([
   });
   expect(stageRecovery).not.toHaveBeenCalled();
 });
+it.each(["stage", "preparation"] as const)(
+  "refuses a version 1 file at %s as not a backup file, before staging or preparing",
+  async (route) => {
+    const { app, execute, stageRecovery } = stageFixture();
+    const versionOne = Uint8Array.from(encryptArtifact(Buffer.from("payload"), "a passphrase"));
+    const response = await app.request(
+      `/setup-api/recovery/${route}`,
+      stageForm(
+        route === "stage"
+          ? { eventId: "interactive-restore", source: archiveSource }
+          : { source: archiveSource, preparation },
+        versionOne,
+      ),
+      tls(),
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      error: { code: "backup.artifact_invalid", params: { reason: "bad_version" } },
+    });
+    expect(stageRecovery).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  },
+);
 it("refuses a stage over plain transport", async () => {
   const { app, stageRecovery } = stageFixture();
   const response = await app.request(
@@ -378,6 +525,9 @@ it("discards a staged copy by its id", async () => {
   expect(bad.status).toBe(400);
   expect(discardStagedRecovery).toHaveBeenCalledTimes(1);
 });
+const RESTORE_MASTER_KEY = makeMasterKey();
+const RESTORE_MASTER_KEY_TEXT = encodeMasterKeyCode(RESTORE_MASTER_KEY);
+const RESTORE_FILE = masterKeyArchiveBytes(Uint8Array.from([7, 2, 9]), RESTORE_MASTER_KEY);
 it("discards the staged copy once the restore is staged, and keeps it when the restore is refused", async () => {
   const clearStagedRecovery = vi.fn(async () => {});
   const stageRestore = vi.fn<NonNullable<SetupDeps["stageRestore"]>>(async () => {});
@@ -387,10 +537,10 @@ it("discards the staged copy once the restore is staged, and keeps it when the r
       method: "POST",
       headers: {
         "content-type": "application/octet-stream",
-        "x-waitron-recovery-key": "archive password",
+        "x-waitron-master-key": RESTORE_MASTER_KEY_TEXT,
         "x-waitron-restore-environment": "preproduction",
       },
-      body: new Uint8Array([7, 2, 9]),
+      body: Uint8Array.from(RESTORE_FILE),
     });
   stageRestore.mockRejectedValueOnce(new Error("refused"));
   expect((await restore()).status).toBe(500);
@@ -409,10 +559,10 @@ it("accepts a staged restore and restarts even when the staged copy cannot be de
     method: "POST",
     headers: {
       "content-type": "application/octet-stream",
-      "x-waitron-recovery-key": "archive password",
+      "x-waitron-master-key": RESTORE_MASTER_KEY_TEXT,
       "x-waitron-restore-environment": "preproduction",
     },
-    body: new Uint8Array([7, 2, 9]),
+    body: Uint8Array.from(RESTORE_FILE),
   });
   expect(response.status).toBe(202);
   expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
@@ -466,8 +616,12 @@ it("holds the shared upload gate through staging and releases it after refusal",
   expect(stageRecovery).toHaveBeenCalledTimes(2);
 });
 it("releases the upload gate even when removing the received file fails", async () => {
+  const scratch = await mkdtemp(join(tmpdir(), "stage-upload-"));
+  onTestFinished(() => rm(scratch, { recursive: true, force: true }));
+  const artifactPath = join(scratch, "upload");
+  await writeFile(artifactPath, FILE);
   const upload = {
-    artifactPath: "/owned/upload",
+    artifactPath,
     byteLength: 1,
     fields: new Map([
       ["request", JSON.stringify({ eventId: "interactive-restore", source: archiveSource })],

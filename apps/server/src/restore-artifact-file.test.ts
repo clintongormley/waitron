@@ -156,6 +156,7 @@ it("validates a version 2 file sealed under backup key N, opened with that key's
     backupKey: key,
     keyNumber: 2,
     masterKeyId: masterKeyId(sealingPublicKey(masterKey)),
+    masterKeyDay: "2026-11-23",
   });
   await writeFile(f.artifactPath, sealed);
   await expect(validateArtifactFile(f)).rejects.toMatchObject({

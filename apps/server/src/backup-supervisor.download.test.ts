@@ -29,7 +29,7 @@ import { previewRecoveryArchive } from "./recovery-backup-preview.js";
 import { restoreFromArtifactFile } from "./restore.js";
 import { receiveSetupArchive } from "./setup-archive-upload.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
-import { backupKeySettings, heldBackupKey } from "./testing/backup-key.js";
+import { backupKeyEnv, heldBackupKey } from "./testing/backup-key.js";
 import { TRADING_BOOT_KEY_ENV } from "./testing/boot-trading-fixture.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 import { formatEnvFile } from "./env-file.js";
@@ -74,7 +74,7 @@ it("restores the latest sale, fiscal record and local role from the checked shut
     await writeFile(output, value);
   }
   const held = heldBackupKey(decodeMasterKeyCode(key.secret));
-  await replaceBackupSettings(source, backupKeySettings(held));
+  await replaceBackupSettings(source, backupKeyEnv(held));
   const venueFile = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
   const supervisor = new BackupSupervisor({
     buildConfig: async () => undefined,

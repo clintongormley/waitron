@@ -2,7 +2,7 @@
 
 Choose a usable archive, bucket copy or Waitron Cloud backup, then find the recovery pack that
 holds that copy's master key. A pack made with a newer master key does not open an older
-backup. Keep the archive password or Cloud login separate from the master key.
+backup. A backup file opens with that master key; keep your Cloud login separate from it.
 
 ## Switch a running box after an invoice identity conflict
 
@@ -59,8 +59,8 @@ not AEAT acceptance or proof of another machine's isolation.
 ## Check the selected copy
 
 Open Restore in setup and select the copy. Review its taxpayer, environment, source, saved node
-and key name. Keep production and preproduction separate. Choose **Choose the recovery pack PDF** and
-pick the pack that holds this backup's master key, scan its master key QR code with **Scan the recovery
+and key name. Keep production and preproduction separate. For a backup file, the page uses the master key typed with the file, and shows a second **Master key** field only when the copy needs a different master key. For a bucket or Cloud copy, or in that second field, choose **Choose the recovery pack PDF** and
+pick the pack that holds the master key it asks for, scan its master key QR code with **Scan the recovery
 pack**, or type the master key in **Master key**. There is no
 installation code to type: the form has no field for one and sends none (`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no
 installation-code field" and "sends no installation code"). A typed key still has to
@@ -116,7 +116,9 @@ page goes back to choosing the backup and sends nothing"). Once the series are m
 read.
 
 There is no "last hour" question (`recovery-hour.browser.test.ts`, "asks no last-hour question and
-offers no clock confirmation while the internet time service vouches for the clock"). Enter the master key, tick both statements and "These details are correct.", in any order, and
+offers no clock confirmation while the internet time service vouches for the clock"). Enter the master key (for a backup
+file the page uses the one typed with the file, and asks here only when the copy needs a different
+master key), tick both statements and "These details are correct.", in any order, and
 press **Proceed**. The invoice series is the code at the start of every invoice number; recovery
 creates new ones so the box never repeats the old box's. Until **Proceed** the page sends nothing
 to the box (the same file's "the key, both statements and the details tick send nothing until

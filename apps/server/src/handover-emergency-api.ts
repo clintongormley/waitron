@@ -1,5 +1,6 @@
 import { type KeyRing } from "@waitron/credentials";
 import { peerBodyLimit } from "./peer-route-limits.js";
+import { isUnset } from "./env-value.js";
 import "./errors.js";
 import { isDeepStrictEqual } from "node:util";
 import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
@@ -81,6 +82,7 @@ import type { Logger } from "./logger.js";
 import { assertHeldDocumentReadable } from "./membership-trust.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
+import type { BackupKeyRecord } from "./backup-env-writer.js";
 import { stageBackupAsCopy } from "./handover-copy-from-backup.js";
 import { followedCopyId, stageFollowedAsCopy } from "./handover-copy-from-follow.js";
 import {
@@ -131,8 +133,8 @@ interface Deps {
     restart(): void;
     migrationsRoot: string | null;
   };
-  backup?: {
-    readRecoveryKey(): Promise<string | undefined>;
+  backup: {
+    readBackupKey(): Promise<Omit<BackupKeyRecord, "masterKeyDay"> | undefined>;
     environment: DeploymentEnvironment;
     migrationsRoot: string | null;
     restart(): void;
@@ -165,8 +167,8 @@ const STATUS = {
   "node.read_only": 409,
   "setup.request_invalid": 400,
   "handover.copy_predates_destination": 409,
-  "handover.backup_key_missing": 409,
-  "backup.new_recovery_key_too_short": 400,
+  "handover.backup_needs_master_key": 409,
+  "promotion.break_glass_invalid": 422,
   "recovery.passphrase_invalid": 422,
   "backup.artifact_invalid": 422,
   "backup.archive_invalid": 422,
@@ -398,11 +400,12 @@ export function mountHandoverEmergencyApi(
       requireNodeOperationHttps(c);
       const { payload, artifact } = await readUpload(
         c,
-        deps.backup?.uploadLimit ?? MAX_RESTORE_UPLOAD_BYTES,
+        deps.backup.uploadLimit ?? MAX_RESTORE_UPLOAD_BYTES,
       );
       if (!isRecord(payload) || artifact === undefined) refuseRequest("artifact");
-      if (payload.recoveryKey !== undefined && typeof payload.recoveryKey !== "string")
-        refuseRequest("recoveryKey");
+      if (payload.masterKey !== undefined && typeof payload.masterKey !== "string")
+        refuseRequest("masterKey");
+      const masterKey = payload.masterKey as string | undefined;
       return inTurn(deps.node, "handover-emergency", async () => {
         await authenticate(c, parseSwitchSignIn(c, payload.signIn));
         const { sourceNodeId } = await mirrorSource();
@@ -410,7 +413,6 @@ export function mountHandoverEmergencyApi(
         if (open !== null)
           throw new AppError("handover.controlled_unresolved", { operationId: open.operationId });
         await sourceSilent(sourceNodeId, false);
-        if (deps.backup === undefined) throw new AppError("handover.backup_key_missing", {});
         const parent = join(deps.stateDir, SCRATCH_DIR);
         await mkdir(parent, { recursive: true, mode: 0o700 });
         const folder = await mkdtemp(join(parent, "handover-upload-"));
@@ -422,9 +424,7 @@ export function mountHandoverEmergencyApi(
             ...deps.backup,
             signal: c.req.raw.signal,
             artifactPath,
-            ...(payload.recoveryKey === undefined
-              ? {}
-              : { recoveryKey: payload.recoveryKey as string }),
+            ...(isUnset(masterKey?.trim()) ? {} : { masterKey }),
           });
         } finally {
           await rm(folder, { recursive: true, force: true });

@@ -6,17 +6,23 @@ import {
   drawnFileName,
   fileControl,
 } from "@waitron/ui/src/test-helpers.js";
-import type { WtFileInput } from "@waitron/ui";
+import { canFilm, type WtFileInput } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import { SetupApi } from "../api/client.js";
+import { encodeMasterKeyCode } from "@waitron/shared";
 import {
   cleanupWidgets,
   mountWidget,
   mountWithLeave,
   REVIEWED_CREDENTIALS,
   REVIEWED_PREVIEW,
+  enterRecoveryDetails,
   reviewBackup,
+  typeMasterKey,
 } from "../widgets/test-helpers.js";
+import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
+import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 import type { KeptRestoreRequest, RestoreRequestDetail } from "../events.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
 
@@ -26,9 +32,15 @@ const q = <T extends HTMLElement>(el: SetupRestoreScreen, selector: string): T |
 
 const BACKUP = new File(["encrypted"], "waitron.backup");
 
-/** The recovery key's own `<input>`, inside the shared field. */
+/** A whole master key, as the field prints it; the recovery details `reviewBackup` enters use it too. */
+const KEY = REVIEWED_CREDENTIALS.nodeRecoverySecret;
+const OTHER_KEY = encodeMasterKeyCode(new Uint8Array(16).fill(3));
+
+/** The master key's own `<input>`, inside the shared field. */
 const keyControl = (el: SetupRestoreScreen): HTMLInputElement =>
-  q(el, "[data-test=recovery-key]")!.shadowRoot!.querySelector("input")!;
+  q(el, "[data-test=master-key]")!
+    .shadowRoot!.querySelector('wt-input[name="master-key"]')!
+    .shadowRoot!.querySelector("input")!;
 
 const artifactPicker = (el: SetupRestoreScreen) => q<WtFileInput>(el, "[data-test=artifact]")!;
 const chooseBackup = (el: SetupRestoreScreen, backup: File) =>
@@ -38,20 +50,19 @@ const chooseBackup = (el: SetupRestoreScreen, backup: File) =>
 const fileField = (el: SetupRestoreScreen): Element =>
   artifactPicker(el).shadowRoot!.querySelector("[part=field]")!;
 
-function typeKey(el: SetupRestoreScreen, value: string): void {
-  const key = keyControl(el);
-  key.value = value;
-  key.dispatchEvent(new Event("input"));
+async function typeKey(el: SetupRestoreScreen, value: string): Promise<void> {
+  await typeMasterKey(el, value);
+  await el.updateComplete;
 }
 
 async function fill(
   el: SetupRestoreScreen,
-  decisions: { artifact?: boolean; recoveryKey?: boolean; acknowledge?: boolean },
+  decisions: { artifact?: boolean; masterKey?: boolean; acknowledge?: boolean },
 ): Promise<void> {
   if (decisions.artifact) {
     chooseBackup(el, BACKUP);
   }
-  if (decisions.recoveryKey) typeKey(el, "recovery-key");
+  if (decisions.masterKey) await typeKey(el, KEY);
   if (decisions.acknowledge) {
     const ack = q<HTMLInputElement>(el, "[data-test=acknowledge]")!;
     ack.checked = true;
@@ -72,7 +83,7 @@ async function bottomOf(el: SetupRestoreScreen): Promise<string> {
 function fieldMessages(el: SetupRestoreScreen): string[] {
   return [
     ...el.shadowRoot!.querySelectorAll<HTMLElement & { error?: string }>(
-      "p.error[id$='-error'], wt-file-input, wt-input, wt-combobox",
+      "p.error[id$='-error'], wt-file-input, wt-master-key-input, wt-input, wt-combobox",
     ),
   ]
     .map((node) => (node instanceof HTMLParagraphElement ? node.textContent! : node.error!).trim())
@@ -121,7 +132,7 @@ describe("SetupRestoreScreen", () => {
       const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
       const listener = vi.fn();
       host.addEventListener("restore-requested", listener);
-      await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+      await fill(el, { artifact: true, masterKey: true, acknowledge: true });
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
       expect(listener).not.toHaveBeenCalled();
@@ -133,7 +144,7 @@ describe("SetupRestoreScreen", () => {
 
   it("drops the Review backup line, and gives Restore back, when the file it was for is discarded", async () => {
     const { el, discard } = await mountWithLeave<SetupRestoreScreen>("setup-restore-screen", {});
-    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    await fill(el, { artifact: true, masterKey: true, acknowledge: true });
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     const restore = q<HTMLElement & { disabled: boolean }>(el, "[data-test=restore]")!;
@@ -148,7 +159,7 @@ describe("SetupRestoreScreen", () => {
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     const listener = vi.fn();
     host.addEventListener("restore-requested", listener);
-    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    await fill(el, { artifact: true, masterKey: true, acknowledge: true });
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(await bottomOf(el)).toBe(REVIEW_FIRST);
@@ -162,7 +173,7 @@ describe("SetupRestoreScreen", () => {
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     const listener = vi.fn();
     host.addEventListener("restore-requested", listener);
-    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    await fill(el, { artifact: true, masterKey: true, acknowledge: true });
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(await bottomOf(el)).toBe(REVIEW_FIRST);
@@ -180,7 +191,7 @@ describe("SetupRestoreScreen", () => {
     });
     const listener = vi.fn();
     host.addEventListener("restore-requested", listener);
-    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    await fill(el, { artifact: true, masterKey: true, acknowledge: true });
     const copy = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "setup-recovery-copy")!;
     await copy.updateComplete;
     copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
@@ -193,20 +204,11 @@ describe("SetupRestoreScreen", () => {
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
   });
 
-  it("turns off autocorrect, the capital first letter and spellcheck on a shown recovery key", async () => {
-    const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
-    expect(
-      ["autocapitalize", "autocorrect", "spellcheck"].map((name) =>
-        keyControl(el).getAttribute(name),
-      ),
-    ).toEqual(["none", "off", "false"]);
-  });
-
-  it("emits the artifact, recovery key, environment and acknowledgement", async () => {
+  it("emits the artifact, master key, environment and acknowledgement", async () => {
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     const artifact = new File(["encrypted"], "waitron.backup");
     chooseBackup(el, artifact);
-    typeKey(el, "recovery-key");
+    await typeKey(el, KEY);
     const ack = q<HTMLInputElement>(el, "[data-test=acknowledge]")!;
     ack.checked = true;
     ack.dispatchEvent(new Event("change"));
@@ -222,37 +224,10 @@ describe("SetupRestoreScreen", () => {
     await expect(outcome).resolves.toEqual({
       ...REVIEWED_CREDENTIALS,
       artifact,
-      recoveryKey: "recovery-key",
+      masterKey: KEY,
       environment: "production",
       oldBoxGone: false,
     });
-  });
-
-  it("asks for the recovery key in the shared field, hidden until the owner reveals it", async () => {
-    const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
-    const key = q<HTMLElement & { label: string; required: boolean; type: string }>(
-      el,
-      'wt-input[name="recovery-key"]',
-    );
-    expect(key).not.toBeNull();
-    expect({ label: key!.label, required: key!.required, type: key!.type }).toEqual({
-      label: "Backup encryption key",
-      required: true,
-      type: "password",
-    });
-    expect(key!.shadowRoot!.querySelector("input")!.autocomplete).toBe("off");
-    expect(key!.getAttribute("hint")).toBe("The key that unlocks this backup");
-    expect(key!.querySelector("wt-help-tooltip")).toBeNull();
-    const reveal = key!.querySelector<HTMLElement>("wt-button[slot=end]")!;
-    expect(reveal.getAttribute("aria-label")).toBe("Show backup encryption key");
-    expect(reveal.querySelector("svg")).not.toBeNull();
-    reveal.click();
-    await el.updateComplete;
-    expect(key!.type).toBe("text");
-    expect(reveal.getAttribute("aria-label")).toBe("Hide backup encryption key");
-    reveal.click();
-    await el.updateComplete;
-    expect(key!.type).toBe("password");
   });
 
   it("picks the environment from the shared dropdown, with its help beside the box", async () => {
@@ -286,7 +261,7 @@ describe("SetupRestoreScreen", () => {
     expect(
       environment!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label"),
     ).toBe("Help with backup environment");
-    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    await fill(el, { artifact: true, masterKey: true, acknowledge: true });
     await chooseOption(environment!, "preproduction");
     await el.updateComplete;
     const listener = vi.fn();
@@ -301,7 +276,7 @@ describe("SetupRestoreScreen", () => {
 
   it("restores a preparation backup when the operator picks that environment", async () => {
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
-    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    await fill(el, { artifact: true, masterKey: true, acknowledge: true });
     await chooseOption(q(el, "[data-test=environment]")!, "preproduction");
     await el.updateComplete;
     const listener = vi.fn();
@@ -312,7 +287,7 @@ describe("SetupRestoreScreen", () => {
       {
         ...REVIEWED_CREDENTIALS,
         artifact: BACKUP,
-        recoveryKey: "recovery-key",
+        masterKey: KEY,
         environment: "preproduction",
         oldBoxGone: false,
       },
@@ -320,11 +295,11 @@ describe("SetupRestoreScreen", () => {
   });
 
   it.each([
-    ["the backup file", { recoveryKey: true, acknowledge: true }, "Choose a backup file."],
-    ["the recovery key", { artifact: true, acknowledge: true }, "Enter the backup encryption key."],
+    ["the backup file", { masterKey: true, acknowledge: true }, "Choose a backup file."],
+    ["the master key", { artifact: true, acknowledge: true }, "Enter the master key."],
     [
       "the confirmation",
-      { artifact: true, recoveryKey: true },
+      { artifact: true, masterKey: true },
       "Confirm that no other running box has newer data.",
     ],
   ])("lists only %s when it is the one decision missing", async (_, decisions, message) => {
@@ -344,7 +319,7 @@ describe("SetupRestoreScreen", () => {
       liveSince: "2026-09-23T11:58:00.000Z",
     });
     expect(q(el, "[data-test=live-warning]")!.textContent).toContain("2026-09-23T11:58:00.000Z");
-    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    await fill(el, { artifact: true, masterKey: true, acknowledge: true });
     const listener = vi.fn();
     host.addEventListener("restore-requested", listener);
     q(el, "[data-test=restore]")!.click();
@@ -379,7 +354,7 @@ describe("SetupRestoreScreen", () => {
   it("sends no old-server answer when it was not asked", async () => {
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     expect(q(el, "[data-test=live-warning]")).toBeNull();
-    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    await fill(el, { artifact: true, masterKey: true, acknowledge: true });
     const listener = vi.fn();
     host.addEventListener("restore-requested", listener);
     await reviewBackup(el);
@@ -395,7 +370,7 @@ describe("SetupRestoreScreen", () => {
   it("comes back from a refusal with the backup, the key and the answers kept", async () => {
     const request: KeptRestoreRequest = {
       artifact: BACKUP,
-      recoveryKey: "recovery-key",
+      masterKey: KEY,
       environment: "preproduction",
       oldBoxGone: false,
     };
@@ -406,7 +381,7 @@ describe("SetupRestoreScreen", () => {
     expect(artifactPicker(el).files[0]).toBe(BACKUP);
     await artifactPicker(el).updateComplete;
     expect(drawnFileName(artifactPicker(el))).toBe("waitron.backup");
-    expect(q<HTMLInputElement>(el, "[data-test=recovery-key]")!.value).toBe("recovery-key");
+    expect(keyControl(el).value).toBe(KEY);
     expect(q<HTMLSelectElement>(el, "[data-test=environment]")!.value).toBe("preproduction");
     expect(q<HTMLInputElement>(el, "[data-test=acknowledge]")!.checked).toBe(true);
     const box = q<HTMLInputElement>(el, "[data-test=old-box-gone]")!;
@@ -426,7 +401,7 @@ describe("SetupRestoreScreen", () => {
   it("drops the old-server answer when a different backup file is chosen", async () => {
     const request: KeptRestoreRequest = {
       artifact: BACKUP,
-      recoveryKey: "recovery-key",
+      masterKey: KEY,
       environment: "production",
       oldBoxGone: true,
     };
@@ -474,7 +449,7 @@ describe("SetupRestoreScreen", () => {
       const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
-      await fill(el, { artifact: true, recoveryKey: true });
+      await fill(el, { artifact: true, masterKey: true });
       expect(fieldMessages(el)).toEqual(["Confirm that no other running box has newer data."]);
       expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
       await fill(el, { acknowledge: true });
@@ -488,11 +463,10 @@ describe("SetupRestoreScreen", () => {
       await fill(el, { artifact: true, acknowledge: true });
       q(el, "[data-test=restore]")!.click();
       await el.updateComplete;
-      await fill(el, { recoveryKey: true });
+      await fill(el, { masterKey: true });
       expect(fieldMessages(el)).toEqual([]);
-      typeKey(el, "");
-      await el.updateComplete;
-      expect(fieldMessages(el)).toEqual(["Enter the backup encryption key."]);
+      await typeKey(el, "");
+      expect(fieldMessages(el)).toEqual(["Enter the master key."]);
       expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
     });
 
@@ -573,25 +547,25 @@ describe("SetupRestoreScreen", () => {
   describe("a refusal about one field", () => {
     const REQUEST: KeptRestoreRequest = {
       artifact: BACKUP,
-      recoveryKey: "recovery-key",
+      masterKey: KEY,
       environment: "production",
       oldBoxGone: false,
     };
     const REFUSAL = {
       artifact: "Check the backup file.",
-      recoveryKey: "Check the backup encryption key.",
+      masterKey: "Check the master key.",
       environment: "Check the backup environment.",
     } as const;
 
     it("shows it under that field and focuses it, leaving Restore working", async () => {
       const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
         request: REQUEST,
-        errorMessage: REFUSAL.recoveryKey,
-        invalidField: "recoveryKey",
+        errorMessage: REFUSAL.masterKey,
+        invalidField: "masterKey",
       });
       await new Promise((resolve) => setTimeout(resolve));
-      const key = q<HTMLInputElement>(el, "[data-test=recovery-key]")!;
-      expect(fieldMessages(el)).toEqual([REFUSAL.recoveryKey]);
+      const key = q<HTMLInputElement>(el, "[data-test=master-key]")!;
+      expect(fieldMessages(el)).toEqual([REFUSAL.masterKey]);
       expect(keyControl(el).getAttribute("aria-invalid")).toBe("true");
       expect(el.shadowRoot!.activeElement).toBe(key);
       expect(await bottomOf(el)).toBe(FIX_FIELDS);
@@ -599,8 +573,7 @@ describe("SetupRestoreScreen", () => {
         false,
       );
 
-      typeKey(el, "another-key");
-      await el.updateComplete;
+      await typeKey(el, OTHER_KEY);
       await (key as unknown as { updateComplete: Promise<unknown> }).updateComplete;
       expect(fieldMessages(el)).toEqual([]);
       expect(keyControl(el).getAttribute("aria-invalid")).toBe("false");
@@ -689,17 +662,6 @@ describe("SetupRestoreScreen", () => {
 describe("SetupRestoreScreen in Spanish", () => {
   afterEach(() => setLocale("en-GB"));
 
-  it("explains the recovery key with a Spanish hint", async () => {
-    setLocale("es-ES");
-    const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
-    expect(q(el, 'wt-input[name="recovery-key"]')!.getAttribute("label")).toBe(
-      "Clave de cifrado de copias",
-    );
-    expect(q(el, 'wt-input[name="recovery-key"]')!.getAttribute("hint")).toBe(
-      "La clave que abre esta copia",
-    );
-  });
-
   it("asks for the backup, the key and the confirmation in Spanish", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
@@ -712,7 +674,7 @@ describe("SetupRestoreScreen in Spanish", () => {
     await el.updateComplete;
     expect(fieldMessages(el)).toEqual([
       "Elige un archivo de copia de seguridad.",
-      "Introduce la clave de cifrado de copias.",
+      "Escribe la clave maestra.",
       "Confirma que ningún otro servidor en funcionamiento tiene datos más recientes.",
     ]);
     expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
@@ -727,7 +689,7 @@ describe("SetupRestoreScreen in Spanish", () => {
     expect(warning).toContain("El servidor anterior escribió en su bucket el");
     expect(warning).toContain("Apágalo para siempre antes de continuar.");
     expect(q(el, "[data-test=live-warning] time")!.textContent).toContain("sept");
-    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    await fill(el, { artifact: true, masterKey: true, acknowledge: true });
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(q(el, "#old-box-gone-error")!.textContent).toBe(
@@ -735,13 +697,13 @@ describe("SetupRestoreScreen in Spanish", () => {
     );
   });
 
-  it("switches language live, keeping the recovery key already typed", async () => {
+  it("switches language live, keeping the master key already typed", async () => {
     const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
-    await fill(el, { recoveryKey: true });
+    await fill(el, { masterKey: true });
     setLocale("es-ES");
     await el.updateComplete;
     expect(q(el, "h1")!.textContent).toBe("Restaurar desde una copia de seguridad");
-    expect(q<HTMLInputElement>(el, "[data-test=recovery-key]")!.value).toBe("recovery-key");
+    expect(keyControl(el).value).toBe(KEY);
   });
 });
 
@@ -770,7 +732,7 @@ describe("SetupRestoreScreen environment from Review backup", () => {
 
   async function mountWith(api: SetupApi) {
     const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", { api });
-    await fill(el, { artifact: true, recoveryKey: true });
+    await fill(el, { artifact: true, masterKey: true });
     const copy = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "setup-recovery-copy")!;
     await copy.updateComplete;
     return { el, copy };
@@ -794,10 +756,10 @@ describe("SetupRestoreScreen environment from Review backup", () => {
   });
 
   it("leaves the environment alone when Review is refused for another reason", async () => {
-    const { api, sent } = previewsAs("preproduction", { code: "recovery.passphrase_invalid" });
+    const { api, sent } = previewsAs("preproduction", { code: "promotion.break_glass_invalid" });
     const { el, copy } = await mountWith(api);
     copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
-    await vi.waitFor(() => expect(fieldMessages(el)).toEqual(["Check the backup encryption key."]));
+    await vi.waitFor(() => expect(fieldMessages(el)).toEqual(["Check the master key."]));
     expect(sent).toEqual(["production"]);
     expect(environmentField(el).value).toBe("production");
   });
@@ -863,10 +825,10 @@ describe("SetupRestoreScreen environment from Review backup", () => {
   });
 
   it("says nothing about the environment when Review is refused for another reason", async () => {
-    const { api } = previewsAs("preproduction", { code: "recovery.passphrase_invalid" });
+    const { api } = previewsAs("preproduction", { code: "promotion.break_glass_invalid" });
     const { el, copy } = await mountWith(api);
     copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
-    await vi.waitFor(() => expect(fieldMessages(el)).toEqual(["Check the backup encryption key."]));
+    await vi.waitFor(() => expect(fieldMessages(el)).toEqual(["Check the master key."]));
     expect(followedNote(el)).toBeUndefined();
   });
 
@@ -889,13 +851,12 @@ describe("SetupRestoreScreen environment from Review backup", () => {
     expect(followedNote(el)).toBeUndefined();
   });
 
-  it("keeps the note when the person types a new recovery key", async () => {
+  it("keeps the note when the person types a new master key", async () => {
     const { api } = previewsAs("preproduction");
     const { el, copy } = await mountWith(api);
     await reviewAndWait(el, copy);
-    typeKey(el, "another-recovery-key");
-    await el.updateComplete;
-    expect(keyControl(el).value).toBe("another-recovery-key");
+    await typeKey(el, OTHER_KEY);
+    expect(keyControl(el).value).toBe(OTHER_KEY);
     expect(followedNote(el)).toBe(
       "This backup is from “Preparation or demo”, so Backup environment now matches it.",
     );
@@ -944,5 +905,183 @@ describe("SetupRestoreScreen environment from Review backup", () => {
     expect(followedNote(el)).toBe(
       "This backup is from “Live”, so Backup environment now matches it.",
     );
+  });
+});
+
+describe("Restore from backup's master key", () => {
+  afterEach(() => setLocale("en-GB"));
+  const KEY = REVIEWED_CREDENTIALS.nodeRecoverySecret;
+  const KEY_NAME = "2026-11-23 · QZJV";
+  type KeyField = HTMLElement & {
+    updateComplete: Promise<unknown>;
+    copy?: { label: string };
+    error: string;
+    required: boolean;
+    readPack?: unknown;
+    maxPdfBytes?: number;
+    pdfRead: Promise<void> | null;
+  };
+  const keyField = (el: SetupRestoreScreen) => q<KeyField>(el, "wt-master-key-input")!;
+  /** The text input inside the master-key field, and the shared field drawing it. */
+  async function keyText(el: SetupRestoreScreen) {
+    await keyField(el).updateComplete;
+    const input = keyField(el).shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown>; label: string; hint?: string }
+    >('wt-input[name="master-key"]')!;
+    await input.updateComplete;
+    return { field: input, control: input.shadowRoot!.querySelector("input")! };
+  }
+  async function acknowledged(el: SetupRestoreScreen) {
+    chooseBackup(el, BACKUP);
+    const ack = q<HTMLInputElement>(el, "[data-test=acknowledge]")!;
+    ack.checked = true;
+    ack.dispatchEvent(new Event("change"));
+    await el.updateComplete;
+  }
+  function requested(host: HTMLElement): Promise<RestoreRequestDetail> {
+    return new Promise((resolve) =>
+      host.addEventListener("restore-requested", (event: Event) =>
+        resolve((event as CustomEvent<{ request: RestoreRequestDetail }>).detail.request),
+      ),
+    );
+  }
+
+  it("asks for the master key in the shared field, with the scan and PDF controls", async () => {
+    const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    const field = keyField(el);
+    expect(field).not.toBeNull();
+    expect(q(el, 'wt-input[name="recovery-key"]')).toBeNull();
+    expect(field.required).toBe(true);
+    expect(field.readPack).toBe(loadRecoveryPackReader);
+    expect(field.maxPdfBytes).toBe(MAX_PACK_PDF);
+    const { field: text } = await keyText(el);
+    expect(text.label).toBe("Master key");
+    expect(text.getAttribute("hint")).toBeNull();
+    expect(canFilm()).toBe(true);
+    expect(
+      [...field.shadowRoot!.querySelectorAll("wt-button")].map((button) =>
+        button.textContent!.trim(),
+      ),
+    ).toEqual(expect.arrayContaining(["Scan the recovery pack", "Choose the recovery pack PDF"]));
+  });
+
+  it("a pack PDF fills the master key", async () => {
+    const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    await acknowledged(el);
+    const field = keyField(el);
+    field.readPack = async () => async () => ({
+      masterKey: KEY,
+      masterKeyName: KEY_NAME,
+      masterKeyHeldBy: null,
+    });
+    const chooser = field.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const files = new DataTransfer();
+    files.items.add(new File(["%PDF-1.7"], "pack.pdf", { type: "application/pdf" }));
+    chooser.files = files.files;
+    chooser.dispatchEvent(new Event("change", { bubbles: true }));
+    await expect.poll(() => field.pdfRead).not.toBeNull();
+    await field.pdfRead;
+    await el.updateComplete;
+    const outcome = requested(host);
+    await reviewBackup(el);
+    q(el, "[data-test=restore]")!.click();
+    expect((await outcome).masterKey).toBe(KEY);
+  });
+
+  it("the master key typed once opens the backup and authorises recovery", async () => {
+    const opened: Array<string | null> = [];
+    const api = new SetupApi("", async (_url, init) => {
+      opened.push(new Headers(init?.headers).get("x-waitron-master-key"));
+      return Response.json(REVIEWED_PREVIEW);
+    });
+    const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", { api });
+    await acknowledged(el);
+    await typeMasterKey(el, KEY);
+    await el.updateComplete;
+    const copy = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "setup-recovery-copy")!;
+    await copy.updateComplete;
+    copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+    await vi.waitFor(() =>
+      expect(copy.shadowRoot!.querySelector("setup-recovery-allocation")).not.toBeNull(),
+    );
+    expect(opened).toEqual([KEY]);
+    const allocation = copy.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >("setup-recovery-allocation")!;
+    await allocation.updateComplete;
+    expect(allocation.shadowRoot!.querySelector("wt-master-key-input")).toBeNull();
+    await enterRecoveryDetails(allocation);
+    const outcome = requested(host);
+    q(el, "[data-test=restore]")!.click();
+    const request = await outcome;
+    expect({
+      masterKey: request.masterKey,
+      nodeRecoverySecret: request.nodeRecoverySecret,
+    }).toEqual({ masterKey: KEY, nodeRecoverySecret: KEY });
+  });
+
+  it.each([
+    ["en-GB", "en"],
+    ["es-ES", "es"],
+  ] as const)(
+    "a wrong master key at Review shows the key to use under the field in %s",
+    async (locale, words) => {
+      setLocale(locale);
+      const api = new SetupApi("", async () =>
+        Response.json(
+          {
+            error: {
+              code: "promotion.break_glass_invalid",
+              params: { masterKeyId: "key-2", keyNumber: 2, keyName: KEY_NAME },
+            },
+          },
+          { status: 400 },
+        ),
+      );
+      const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", { api });
+      await acknowledged(el);
+      await typeMasterKey(el, KEY);
+      await el.updateComplete;
+      const copy = q<HTMLElement & { updateComplete: Promise<unknown> }>(
+        el,
+        "setup-recovery-copy",
+      )!;
+      await copy.updateComplete;
+      copy.shadowRoot!.querySelector<HTMLElement>("[data-test=preview]")!.click();
+      const line = MASTER_KEY_FIELD_WORDS[words].wrongKey(KEY_NAME);
+      await vi.waitFor(() => expect(keyField(el).error).toBe(line));
+      expect(line).toContain(KEY_NAME);
+      // The field says which key to use, so Review backup adds no vaguer line of its own.
+      const actions = copy.shadowRoot!.querySelector<
+        HTMLElement & { error: string; updateComplete: Promise<unknown> }
+      >("wt-form-actions")!;
+      await actions.updateComplete;
+      expect(actions.error).toBe("");
+    },
+  );
+
+  it("the typed master key survives a refusal and a language switch", async () => {
+    const request: KeptRestoreRequest = {
+      artifact: BACKUP,
+      masterKey: KEY,
+      environment: "production",
+      oldBoxGone: false,
+    };
+    const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
+      request,
+      errorMessage: "Check the master key.",
+      invalidField: "masterKey",
+    });
+    const shown = async () => (await keyText(el)).control.value.replaceAll(" ", "");
+    expect(await shown()).toBe(KEY.replaceAll(" ", ""));
+    expect(keyField(el).error).toBe("Check the master key.");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(await shown()).toBe(KEY.replaceAll(" ", ""));
+    expect((await keyText(el)).field.label).toBe("Clave maestra");
+    const outcome = requested(host);
+    await reviewBackup(el);
+    q(el, "[data-test=restore]")!.click();
+    expect((await outcome).masterKey).toBe(KEY);
   });
 });

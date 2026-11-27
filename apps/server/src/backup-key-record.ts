@@ -1,8 +1,8 @@
-import { backupKey, masterKeyId } from "@waitron/credentials";
+import { backupKey, masterKeyDayOf, masterKeyId } from "@waitron/credentials";
 import type { BackupKeyFrameInput } from "@waitron/provisioning";
 import { AppError, decodeMasterKeyCode, isAppError } from "@waitron/shared";
 import { backupKeyBytes } from "./artifact-cipher-file.js";
-import { loadBackupKey, loadKeyRotatedAt } from "./backup-config.js";
+import { loadHeldKeyNumber, loadKeyRotatedAt, loadNumberedBackupKey } from "./backup-config.js";
 import { writeBackupKey, type BackupKeyRecord } from "./backup-env-writer.js";
 import { keyFingerprint } from "./backup-key-fingerprint.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
@@ -10,27 +10,35 @@ import type { StreamHost } from "./stream-host.js";
 
 type Env = Readonly<Record<string, string | undefined>>;
 
-/** `publicKey` is the master key's sealing public key, the one its `master_keys` row keeps. */
+/** `publicKey` and `masterKeyName` are what the master key's `master_keys` row keeps. */
 export function backupKeyRecord(
   masterKey: Uint8Array,
   n: number,
   publicKey: Uint8Array,
+  masterKeyName: string,
 ): BackupKeyRecord {
+  const masterKeyDay = masterKeyDayOf(masterKeyName);
   return {
     key: backupKey(masterKey, n).toString("base64url"),
     keyNumber: n,
     masterKeyId: masterKeyId(publicKey).toString("hex"),
+    masterKeyDay,
   };
 }
 
 /** What every kind of setup writes for the master key it has just made and shows. */
 export function writeBackupKeyOne(
   stateDir: string,
-  masterKey: { made: { masterKey: string }; publicKey: Uint8Array },
+  masterKey: { made: { masterKey: string; masterKeyName: string }; publicKey: Uint8Array },
 ): Promise<void> {
   return writeBackupKey(
     stateDir,
-    backupKeyRecord(decodeMasterKeyCode(masterKey.made.masterKey), 1, masterKey.publicKey),
+    backupKeyRecord(
+      decodeMasterKeyCode(masterKey.made.masterKey),
+      1,
+      masterKey.publicKey,
+      masterKey.made.masterKeyName,
+    ),
   );
 }
 
@@ -44,18 +52,16 @@ export function backupKeyFrameInput(record: BackupKeyRecord): BackupKeyFrameInpu
     backupKey,
     keyNumber: record.keyNumber,
     masterKeyId: Buffer.from(record.masterKeyId, "hex"),
+    masterKeyDay: record.masterKeyDay,
   };
 }
 
-/** The number of the backup key `backup.env` holds; 0 when it holds none with a number, one whose
- * text it cannot read as a backup key, or one under the length floor, so the next key is 1. */
-export function heldBackupKeyNumber(env: Env): number {
-  try {
-    return loadBackupKey(env)?.keyNumber ?? 0;
-  } catch (error) {
-    if (isAppError(error) && error.code === "backup.recovery_key_too_short") return 0;
-    throw error;
-  }
+/** The number of the backup key `backup.env` holds, so the next key is one more. 0 when it names
+ * no number: a box set up before keys were numbered holds a random key, so key 1 was never handed
+ * out there. `undefined` when it names a number that is not a backup key's. */
+export function heldBackupKeyNumber(env: Env): number | undefined {
+  const number = loadHeldKeyNumber(env);
+  return number === null ? 0 : number;
 }
 
 export interface BackupKeyChangeDeps {
@@ -91,9 +97,9 @@ export function backupKeyFacts(
   env: Env,
   currentPublicKey: Uint8Array | null,
 ): BackupKeyFacts | null {
-  let held: ReturnType<typeof loadBackupKey>;
+  let held: ReturnType<typeof loadNumberedBackupKey>;
   try {
-    held = loadBackupKey(env);
+    held = loadNumberedBackupKey(env);
   } catch (error) {
     if (isAppError(error) && error.code === "backup.recovery_key_too_short") return null;
     throw error;

@@ -137,8 +137,9 @@ del local. Puede faltar lo posterior. Después elige **Seguir**.
 
 Si falla la preparación automática, puedes usar una copia de seguridad cifrada. En **Preparando
 el local**, elige **Subir un archivo de copia de seguridad en su lugar**, elige el archivo y pulsa
-**Usar esta copia de seguridad**.
-Si se te pide, introduce la **Clave de cifrado de copias** de esa copia. El servidor conserva su clave guardada.
+**Usar esta copia**. Si la clave propia del servidor de reserva no la abre, la página dice «Esta
+copia necesita la clave maestra del …»: escribe esa clave maestra o elige su paquete de
+recuperación y vuelve a pulsar **Usar esta copia**, o elige **Elegir otro archivo**.
 Mantén la página abierta mientras se reinicia y revisa **Copia de seguridad seleccionada** y su
 última venta o pedido antes de elegir **Seguir**. Elige una copia hecha después de que este
 servidor de reserva se uniera a su principal actual.

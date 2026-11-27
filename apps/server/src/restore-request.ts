@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createArchiveKeySlot, type ArchiveKeySlot } from "./artifact-cipher-file.js";
 import { errnoOf } from "./errno.js";
-import { readCurrentMasterKeyName } from "@waitron/db";
+import { readCurrentMasterKeyCheck } from "@waitron/db";
 import { listAdminHolders } from "@waitron/identity";
 import {
   openBackupQuery,
@@ -34,9 +34,13 @@ import {
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { removeReplacedResetMarker } from "./replaced-reset.js";
 import { join } from "node:path";
-import { authorityKey } from "@waitron/credentials";
+import { authorityKey, authorityKeyMatches } from "@waitron/credentials";
 import { AppError, decodeMasterKeyCode } from "@waitron/shared";
-import { stagedAuthorityKey, type StagedAuthorityKey } from "./operation-authentication.js";
+import {
+  stagedAuthorityKey,
+  wrongMasterKey,
+  type StagedAuthorityKey,
+} from "./operation-authentication.js";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
@@ -44,6 +48,7 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import type { ModuleOperationHost } from "@waitron/module";
 import { RESTORE_ENTRY_PREFIX, RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
+import { MAX_MASTER_KEY_BYTES } from "./setup-request-fields.js";
 import {
   assertArchiveNotAhead,
   lockRestoreTarget,
@@ -112,7 +117,6 @@ const STREAM_ENTRIES = "entries";
 const STREAM_PLACEMENT = "placement.db";
 const SETUP_OPERATION = SETUP_OPERATION_FILE;
 const NODE_KEY = "node-key";
-const MAX_NODE_KEY_BYTES = 4096;
 const STAGED_KEY_LENGTH = 64;
 
 async function flushPath(path: string): Promise<void> {
@@ -141,10 +145,14 @@ function assertSource(operation: RecoveryOperationInput, sourceId: string): void
 
 /** The authority key of a typed master key, as staged: lower-case hex of its 32 bytes. */
 function stagedForm(value: unknown): string {
-  if (typeof value !== "string" || Buffer.byteLength(value) > MAX_NODE_KEY_BYTES)
+  return stagedAuthority(value).toString("hex");
+}
+
+function stagedAuthority(value: unknown): Buffer {
+  if (typeof value !== "string" || Buffer.byteLength(value) > MAX_MASTER_KEY_BYTES)
     return invalidNodeKey();
   try {
-    return authorityKey(decodeMasterKeyCode(value)).toString("hex");
+    return authorityKey(decodeMasterKeyCode(value));
   } catch {
     return invalidNodeKey();
   }
@@ -247,7 +255,8 @@ export interface StagingChecks {
 export async function stageRestoreRequest<R extends RestoreRequest>(
   stateDir: string,
   request: R,
-  validate?: (request: R) => Promise<StagingChecks | void>,
+  /** `authority` is the authority key of the request's typed master key, when it carries one. */
+  validate?: (request: R, authority: Buffer | undefined) => Promise<StagingChecks | void>,
 ): Promise<void> {
   if (request.kind === "stream" && "snapshotVerification" in request) cloudRecoveryUnavailable();
   const archiveId = () =>
@@ -289,13 +298,16 @@ export async function stageRestoreRequest<R extends RestoreRequest>(
       variable: "WAITRON_RECOVERY_OPERATION_FILE",
       reason: "invalid_operation",
     });
-  const secret =
-    request.nodeRecoverySecret === undefined ? undefined : stagedForm(request.nodeRecoverySecret);
+  const authority =
+    request.nodeRecoverySecret === undefined
+      ? undefined
+      : stagedAuthority(request.nodeRecoverySecret);
+  const secret = authority?.toString("hex");
   if (secret !== undefined && recoveryOperation === undefined) invalidNodeKey();
   const context = recoveryContext(request.recoveryContext);
   if (context !== undefined && (secret === undefined || recoveryOperation === undefined))
     invalidRecoveryContext();
-  const checked = await validate?.(request);
+  const checked = await validate?.(request, authority);
   const keyName = secret === undefined ? null : (checked?.masterKeyName ?? null);
   if (secret !== undefined && recoveryOperation !== undefined) {
     assertSource(recoveryOperation, await archiveId());
@@ -713,12 +725,23 @@ async function runHeld(
   return true;
 }
 
-async function readStagingChecks(databasePath: string): Promise<StagingChecks> {
+/** Refuses an `authority` that is not the copy's current master key here, before the restart, as
+ * well as at the staged restore's start. */
+async function readStagingChecks(
+  databasePath: string,
+  authority?: Uint8Array,
+): Promise<StagingChecks> {
   const opened = await openBackupQuery(databasePath);
   try {
+    const current = await readCurrentMasterKeyCheck(opened.query);
+    if (
+      authority !== undefined &&
+      (current === null || !authorityKeyMatches(authority, current.checkValue))
+    )
+      throw wrongMasterKey(current?.name);
     return {
       adminVerifiers: await adminVerifiersIn(opened.query),
-      masterKeyName: await readCurrentMasterKeyName(opened.query),
+      masterKeyName: current?.name ?? null,
     };
   } finally {
     await opened.close();
@@ -755,11 +778,13 @@ async function adminVerifiersIn(query: BackupQuery): Promise<readonly string[]> 
   return hashes;
 }
 
-/** The setup page's checks on an archive before staging it; answers what staging keeps of it. */
+/** The setup page's checks on an archive before staging it, `authority` (the typed master key's
+ * authority key) included; answers what staging keeps of it. */
 export async function validateArchiveForStaging(
   candidate: ArchiveRequest,
   deps: Pick<ValidationDeps, "stateDir" | "migrationsRoot" | "modules"> &
     Omit<Parameters<typeof refuseIfArchiveSourceLive>[0], "validated">,
+  authority: Buffer | undefined,
 ): Promise<StagingChecks> {
   const validation = {
     recoveryKey: candidate.recoveryKey,
@@ -776,7 +801,7 @@ export async function validateArchiveForStaging(
   try {
     await assertArchiveNotAhead(validated, deps);
     await refuseIfArchiveSourceLive({ ...deps, validated });
-    return await readStagingChecks(validated.databasePath);
+    return await readStagingChecks(validated.databasePath, authority);
   } finally {
     await validated.discard();
   }

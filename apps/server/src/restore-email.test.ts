@@ -1,5 +1,9 @@
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
-import { HELD_BACKUP_FRAME, HELD_BACKUP_KEY } from "./testing/recovery-key.js";
+import {
+  HELD_BACKUP_FRAME,
+  HELD_BACKUP_KEY,
+  HELD_MASTER_KEY_TEXT,
+} from "./testing/recovery-key.js";
 import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { seedVenueSettings, seedBusinessDay } from "@waitron/db/testing/seed.js";
@@ -292,7 +296,7 @@ describe.each(paths)("invoice email after %s", (path) => {
               WAITRON_STATE_DIR: stateDir,
               WAITRON_VENUE_DIR: venueDir,
               WAITRON_ENV: environment,
-              WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY,
+              WAITRON_MASTER_KEY: HELD_MASTER_KEY_TEXT,
             },
             out: (line) => {
               lines.push(line);

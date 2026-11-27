@@ -4,7 +4,12 @@ import { join } from "node:path";
 import type { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { makeMasterKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
+import {
+  makeMasterKey,
+  masterKeyId,
+  masterKeyNameOf,
+  sealingPublicKey,
+} from "@waitron/credentials";
 import { masterKeys, readCurrentMasterKey, readRecoveryPacks, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -21,7 +26,7 @@ import { keyFingerprint } from "./backup-key-fingerprint.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import { createTurns } from "./backup-turns.js";
 import { loadBoxEnv } from "./box-env.js";
-import { parseEnvFile } from "./env-file.js";
+import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -169,15 +174,24 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
     const response = await f.make(true);
     expect(response.status).toBe(200);
     const next = heldBackupKey(shownBytes(response), 4);
+    const shownName = decodeURIComponent(response.headers.get("x-waitron-master-key-name")!);
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
     expect(decodeArchiveRecoveryPack(file.archiveCode!).recoveryKey).toBe(next.key);
     expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(next.key);
-    expect(await keyFile(stateDir)).toMatchObject({
+    const held = await keyFile(stateDir);
+    expect(held).toMatchObject({
       WAITRON_BACKUP_RECOVERY_KEY: next.key,
       WAITRON_BACKUP_KEY_NUMBER: "4",
       WAITRON_BACKUP_MASTER_KEY_ID: next.masterKeyId,
+      WAITRON_BACKUP_MASTER_KEY_DAY: MADE_AT.slice(0, 10),
       WAITRON_BACKUP_KEY_ROTATED_AT: MADE_AT,
     });
+    expect(
+      masterKeyNameOf(
+        Buffer.from(held.WAITRON_BACKUP_MASTER_KEY_ID!, "hex"),
+        held.WAITRON_BACKUP_MASTER_KEY_DAY!,
+      ),
+    ).toBe(shownName);
     // The stream is stopped around the write and the sealed copy follows it, as a key change does.
     expect(f.steps).toEqual(["stream stopped", "sealed", "stream started", "backups reloaded"]);
   });
@@ -206,6 +220,21 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
       WAITRON_BACKUP_RECOVERY_KEY: next.key,
       WAITRON_BACKUP_KEY_NUMBER: "1",
       WAITRON_BACKUP_MASTER_KEY_ID: next.masterKeyId,
+    });
+  });
+
+  it("with a backup key held whose number backup.env lacks, a new master key writes its key 1", async () => {
+    const stateDir = await stateFolder(3);
+    const held = await keyFile(stateDir);
+    delete held.WAITRON_BACKUP_KEY_NUMBER;
+    await writeFile(join(stateDir, "backup.env"), formatEnvFile(held), { mode: 0o600 });
+    const response = await fixture(stateDir).make(true);
+    expect(response.status).toBe(200);
+    const next = heldBackupKey(shownBytes(response), 1);
+    await response.arrayBuffer();
+    expect(await keyFile(stateDir)).toMatchObject({
+      WAITRON_BACKUP_RECOVERY_KEY: next.key,
+      WAITRON_BACKUP_KEY_NUMBER: "1",
     });
   });
 
@@ -525,7 +554,11 @@ describe("a backup written after a new master key", () => {
       version: 2,
       masterKeyId: masterKeyId(sealingPublicKey(newBytes)),
       keyNumber: 4,
+      masterKeyDay: MADE_AT.slice(0, 10),
     });
+    expect(masterKeyNameOf(header.masterKeyId, header.masterKeyDay)).toBe(
+      (await withTransaction(suite.db, (tx) => readCurrentMasterKey(tx)))!.name,
+    );
     await expect(
       decryptBackupFile(path, join(out, "opened"), heldBackupKey(newBytes, 4).key),
     ).resolves.toMatch(/^[0-9a-f]{64}$/);

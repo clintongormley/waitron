@@ -1,8 +1,8 @@
 import { access, cp, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { encodeMasterKeyCode } from "@waitron/shared";
-import { makeMasterKey } from "@waitron/credentials";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
+import { authorityKey, makeMasterKey } from "@waitron/credentials";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { invoiceSeries, nodes, openVenueDatabase, taxpayer, withTransaction } from "@waitron/db";
 import {
@@ -327,14 +327,18 @@ describe("the setup page staging an archive file", () => {
         environment: "preproduction",
         ...keyed,
       },
-      (candidate) =>
-        validateArchiveForStaging(candidate, {
-          stateDir,
-          migrationsRoot: null,
-          modules: ALL_MODULES,
-          oldBoxGone: true,
-          now: () => new Date(),
-        }),
+      (candidate, authority) =>
+        validateArchiveForStaging(
+          candidate,
+          {
+            stateDir,
+            migrationsRoot: null,
+            modules: ALL_MODULES,
+            oldBoxGone: true,
+            now: () => new Date(),
+          },
+          authority,
+        ),
     ).then(
       () => "staged" as const,
       (error: unknown) => ({ refusal: (error as { code?: string }).code ?? String(error) }),
@@ -369,16 +373,21 @@ describe("the setup page staging an archive file", () => {
   it("stages the copy's current master key name beside a typed master key", async () => {
     const venue = await venueFolder(null, "Keyed venue");
     const store = await openVenueDatabase(venue);
+    const currentKey = makeMasterKey();
     let current: string;
     try {
       await mintMasterKey(store.venue, { madeAt: new Date("2026-11-01T00:00:00Z") });
-      current = (await mintMasterKey(store.venue, { madeAt: new Date("2026-11-02T00:00:00Z") }))
-        .name;
+      current = (
+        await mintMasterKey(store.venue, {
+          bytes: currentKey,
+          madeAt: new Date("2026-11-02T00:00:00Z"),
+        })
+      ).name;
     } finally {
       await store.close();
     }
     const stateDir = await mkdtemp(join(scratch, "state-"));
-    const typed = encodeMasterKeyCode(makeMasterKey());
+    const typed = encodeMasterKeyCode(currentKey);
     expect(await stage(await archiveOf(venue), typed, stateDir)).toEqual({
       staged: "staged",
       recorded: true,
@@ -386,6 +395,55 @@ describe("the setup page staging an archive file", () => {
     const record = JSON.parse(await readFile(join(stateDir, "flows/restore/record.json"), "utf8"));
     expect(record.request).toMatchObject({ nodeRecoveryKey: true, masterKeyName: current });
   }, 120_000);
+
+  it.each([
+    ["is another one", true],
+    ["is missing", false],
+  ])(
+    "refuses a typed master key when the copy's current one %s, staging nothing",
+    async (_, minted) => {
+      const venue = await venueFolder(null, "Keyed venue");
+      const store = await openVenueDatabase(venue);
+      let current: string | undefined;
+      try {
+        if (minted) current = (await mintMasterKey(store.venue)).name;
+      } finally {
+        await store.close();
+      }
+      const typed = encodeMasterKeyCode(makeMasterKey());
+      const stateDir = await mkdtemp(join(scratch, "state-"));
+      const artifactPath = await archiveOf(venue);
+      const refusal = await validateArchiveForStaging(
+        {
+          kind: "archive-file",
+          artifactPath,
+          recoveryKey: RECOVERY_KEY,
+          environment: "preproduction",
+          nodeRecoverySecret: typed,
+        },
+        {
+          stateDir,
+          migrationsRoot: null,
+          modules: ALL_MODULES,
+          oldBoxGone: true,
+          now: () => new Date(),
+        },
+        authorityKey(decodeMasterKeyCode(typed)),
+      ).then(
+        () => undefined,
+        (error: unknown) => error as { code: string; params: unknown },
+      );
+      expect({ code: refusal?.code, params: refusal?.params }).toEqual({
+        code: "promotion.break_glass_invalid",
+        params: current === undefined ? {} : { keyName: current },
+      });
+      expect(await stage(artifactPath, typed, stateDir)).toEqual({
+        staged: { refusal: "promotion.break_glass_invalid" },
+        recorded: false,
+      });
+    },
+    120_000,
+  );
 });
 
 describe("the review of an archive file", () => {

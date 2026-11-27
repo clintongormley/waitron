@@ -340,6 +340,7 @@ describe("devSetup against a real venue directory", () => {
       WAITRON_BACKUP_RECOVERY_KEY: backupKey(bytes, 1).toString("base64url"),
       WAITRON_BACKUP_KEY_NUMBER: "1",
       WAITRON_BACKUP_MASTER_KEY_ID: masterKeyId(sealingPublicKey(bytes)).toString("hex"),
+      WAITRON_BACKUP_MASTER_KEY_DAY: first.masterKey!.masterKeyName.slice(0, 10),
     });
     expect(statSync(path).mode & 0o777).toBe(0o600);
     const before = statSync(path).mtimeMs;

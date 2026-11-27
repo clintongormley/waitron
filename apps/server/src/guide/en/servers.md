@@ -123,8 +123,10 @@ from when it joined, with nothing newer. When the copy is checked, read **Latest
 this copy** in the venue’s time zone. Anything newer may be missing. Then choose **Proceed**.
 
 If automatic preparation fails, you can use an encrypted backup. On **Preparing the venue**,
-choose **Upload a backup file instead**, choose the file and select **Use this backup**. If asked, enter that backup's **Backup
-encryption key**. The box keeps its saved key. Keep this page open while the spare restarts, then
+choose **Upload a backup file instead**, choose the file and select **Use this backup**. If the
+spare's own key does not open it, the page says "This backup needs the master key dated …": type
+that master key or choose its recovery pack, then select **Use this backup** again, or choose
+**Choose another file**. Keep this page open while the spare restarts, then
 check **Selected backup** and its latest sale or order before you choose **Proceed**. Choose a
 backup made after this spare joined its current main box.
 

@@ -518,7 +518,7 @@ import {
   sealedStateJob,
   type SealedStateStatus,
 } from "./sealed-state.js";
-import { loadBackupSettings, loadRecoveryKey } from "./backup-config.js";
+import { loadBackupSettings, loadRecoveryKey, loadUsableBackupKey } from "./backup-config.js";
 import { readArchiveSettingsWithMeta } from "./archive-settings.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import { recordStartDeletions } from "./start-backup-room-record.js";
@@ -1620,15 +1620,19 @@ async function bootServer(
             openStore: openBoundedBucket,
           }),
         stageRestore: (request, { oldBoxGone }) =>
-          stageRestoreRequest(config.stateDir, request, (candidate) =>
-            validateArchiveForStaging(candidate, {
-              stateDir: config.stateDir,
-              migrationsRoot: config.migrationsRoot,
-              modules: availableModules,
-              oldBoxGone,
-              now,
-              openStore: openBoundedBucket,
-            }),
+          stageRestoreRequest(config.stateDir, request, (candidate, authority) =>
+            validateArchiveForStaging(
+              candidate,
+              {
+                stateDir: config.stateDir,
+                migrationsRoot: config.migrationsRoot,
+                modules: availableModules,
+                oldBoxGone,
+                now,
+                openStore: openBoundedBucket,
+              },
+              authority,
+            ),
           ),
         stageReset: (operationId) => stageResetRequest(config.stateDir, operationId),
         stageBucketRestore: async (
@@ -4532,7 +4536,7 @@ async function bootServer(
             },
           }),
       backup: {
-        readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv(base, config.stateDir)),
+        readBackupKey: async () => loadUsableBackupKey(await loadBoxEnv(base, config.stateDir)),
         environment: config.environment,
         migrationsRoot: config.migrationsRoot,
         uploadLimit: MAX_RESTORE_UPLOAD_BYTES,

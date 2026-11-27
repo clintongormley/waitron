@@ -39,6 +39,7 @@ import {
   masterKeyId,
   sealingPublicKey,
   backupKey,
+  masterKeyNameOf,
   credentialRevision,
   putCredential,
   venueCredentials,
@@ -64,7 +65,7 @@ import type {
 import { buildBackupBackend } from "./backup-backends.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { writeBackupKey } from "./backup-env-writer.js";
-import { backupKeySettings, heldBackupKey } from "./testing/backup-key.js";
+import { backupKeyEnv, heldBackupKey } from "./testing/backup-key.js";
 import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import {
   BackupSupervisor,
@@ -72,7 +73,7 @@ import {
   type BackupSupervisorDeps,
 } from "./backup-supervisor.js";
 import { loadBoxEnv } from "./box-env.js";
-import { parseEnvFile } from "./env-file.js";
+import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
 import { mountManagementApi } from "./management-api.js";
@@ -97,8 +98,8 @@ const KEY_2 = heldBackupKey(MASTER_BYTES, 2).key;
 const KEY_3 = heldBackupKey(MASTER_BYTES, 3).key;
 /** The key the box env holds, which the next archive is locked with. */
 const fileKey = async (stateDir: string) => loadRecoveryKey(await loadBoxEnv({}, stateDir));
-/** `backup.env` as setup leaves it: backup key 1, its number and its master key's id. */
-const KEY_ONE_FILE = backupKeySettings(heldBackupKey(MASTER_BYTES, 1));
+/** `backup.env` as setup leaves it: backup key 1, its number and its master key's id and day. */
+const KEY_ONE_FILE = backupKeyEnv(heldBackupKey(MASTER_BYTES, 1));
 const keyFileOf = async (stateDir: string) =>
   parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
 /** What "Change the backup key" sends. */
@@ -1044,6 +1045,7 @@ describe("backup admin routes", () => {
       keyRotatedAt: undefined,
       keyNumber: undefined,
       masterKeyId: undefined,
+      masterKeyDay: undefined,
     };
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
@@ -1093,6 +1095,7 @@ describe("backup admin routes", () => {
       keyRotatedAt: undefined,
       keyNumber: undefined,
       masterKeyId: undefined,
+      masterKeyDay: undefined,
     };
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
@@ -1259,9 +1262,110 @@ describe("backup admin routes", () => {
     const rotated = await rot.json();
     expect(rotated).toMatchObject({ enabled: false, recoveryKeySet: true });
     expect(rotated.recoveryKeyTooShort).toBe(false);
-    // A key with no number counts as none held, so the change writes key 1.
+    // A too-short key with no number counts as none held, so the change writes key 1.
     const file = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
     expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
+  }, 60_000);
+
+  /** Takes `names` out of `backup.env`, as a file written before the box kept them would be. */
+  async function dropFromKeyFile(stateDir: string, ...names: string[]): Promise<void> {
+    const file = await keyFileOf(stateDir);
+    for (const name of names) delete file[name];
+    await writeFile(join(stateDir, "backup.env"), formatEnvFile(file), { mode: 0o600 });
+  }
+
+  it("changes a held key whose master key day backup.env lacks to the next number, never key 1 again", async () => {
+    const stateDir = await makeStateDir();
+    await dropFromKeyFile(stateDir, "WAITRON_BACKUP_MASTER_KEY_DAY");
+    const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
+    await sup.reload();
+    const app = buildApp(sup, stateDir);
+    const cookie = await login(app);
+    const rot = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(changeKey()),
+    });
+    expect(rot.status).toBe(200);
+    const file = await keyFileOf(stateDir);
+    expect(file.WAITRON_BACKUP_KEY_NUMBER).toBe("2");
+    expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_2);
+  }, 60_000);
+
+  it("after changing a held key that lacked its master key day, backups load again under the next key", async () => {
+    const stateDir = await makeStateDir();
+    await holdKey(stateDir, 2);
+    const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
+    const app = buildApp(sup, stateDir);
+    const cookie = await login(app);
+    const applied = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(applied.status).toBe(200);
+    await dropFromKeyFile(stateDir, "WAITRON_BACKUP_MASTER_KEY_DAY");
+    await sup.reload().catch(() => undefined);
+    const rot = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(changeKey()),
+    });
+    expect(rot.status).toBe(200);
+    expect(await rot.json()).toMatchObject({ enabled: true });
+    const file = await keyFileOf(stateDir);
+    expect(file.WAITRON_BACKUP_KEY_NUMBER).toBe("3");
+    expect(file.WAITRON_BACKUP_MASTER_KEY_DAY).toBe(MASTER.name.slice(0, 10));
+    expect(sup.current()).toMatchObject({ enabled: true, recoveryKey: KEY_3 });
+  }, 60_000);
+
+  it("changes the random key a box set up before backup keys were numbered holds to key 1", async () => {
+    const stateDir = await makeStateDir();
+    const random = randomBytes(32).toString("base64url");
+    await writeFile(join(stateDir, "backup.env"), `WAITRON_BACKUP_RECOVERY_KEY=${random}\n`, {
+      mode: 0o600,
+    });
+    const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
+    await sup.reload();
+    const app = buildApp(sup, stateDir);
+    const cookie = await login(app);
+    const rot = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(changeKey()),
+    });
+    expect(rot.status).toBe(200);
+    const file = await keyFileOf(stateDir);
+    expect(file.WAITRON_BACKUP_KEY_NUMBER).toBe("1");
+    expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
+    expect(file.WAITRON_BACKUP_MASTER_KEY_DAY).toBe(MASTER.name.slice(0, 10));
+  }, 60_000);
+
+  it("refuses to change a held backup key whose number backup.env gives but is not a key number", async () => {
+    const stateDir = await makeStateDir();
+    await holdKey(stateDir, 3);
+    await writeFile(
+      join(stateDir, "backup.env"),
+      formatEnvFile({ ...(await keyFileOf(stateDir)), WAITRON_BACKUP_KEY_NUMBER: "three" }),
+      { mode: 0o600 },
+    );
+    const before = await readFile(join(stateDir, "backup.env"), "utf8");
+    const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
+    await sup.reload();
+    const app = buildApp(sup, stateDir);
+    const cookie = await login(app);
+    const rot = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(changeKey()),
+    });
+    expect(rot.status).toBe(409);
+    expect(await rot.json()).toMatchObject({ error: { code: "backup.key_number_unknown" } });
+    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before);
   }, 60_000);
 
   it("still refuses to turn archives on with a too-short held key", async () => {
@@ -1820,8 +1924,16 @@ describe("backup admin routes", () => {
         WAITRON_BACKUP_RECOVERY_KEY: derived(4),
         WAITRON_BACKUP_KEY_NUMBER: "4",
         WAITRON_BACKUP_MASTER_KEY_ID: MASTER_KEY_ID,
+        WAITRON_BACKUP_MASTER_KEY_DAY: MASTER.name.slice(0, 10),
         WAITRON_BACKUP_KEY_ROTATED_AT: expect.any(String),
       });
+      const held = await keyFile(stateDir);
+      expect(
+        masterKeyNameOf(
+          Buffer.from(held.WAITRON_BACKUP_MASTER_KEY_ID!, "hex"),
+          held.WAITRON_BACKUP_MASTER_KEY_DAY!,
+        ),
+      ).toBe(MASTER.name);
       expect(reload).toHaveBeenCalledTimes(1);
       expect(refresh).toHaveBeenCalledTimes(1);
     }, 60_000);
@@ -1836,6 +1948,7 @@ describe("backup admin routes", () => {
         WAITRON_BACKUP_RECOVERY_KEY: derived(1),
         WAITRON_BACKUP_KEY_NUMBER: "1",
         WAITRON_BACKUP_MASTER_KEY_ID: MASTER_KEY_ID,
+        WAITRON_BACKUP_MASTER_KEY_DAY: MASTER.name.slice(0, 10),
         WAITRON_BACKUP_KEY_ROTATED_AT: expect.any(String),
       });
     }, 60_000);
@@ -2169,6 +2282,7 @@ describe("backup admin routes", () => {
         "WAITRON_BACKUP_RECOVERY_KEY",
         "WAITRON_BACKUP_KEY_NUMBER",
         "WAITRON_BACKUP_MASTER_KEY_ID",
+        "WAITRON_BACKUP_MASTER_KEY_DAY",
       ]);
     }, 60_000);
 

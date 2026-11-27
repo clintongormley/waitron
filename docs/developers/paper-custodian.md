@@ -24,6 +24,11 @@
 > **2026-11-26, A1323 PR 3c:** the **Master key** field also takes the key from **Scan the recovery
 > pack**, which reads the pack's master key QR code with the device's camera.
 
+> **2026-11-27, A1323 PR 4b:** a backup file now opens with the master key, not a separate backup
+> encryption key. Setup's archive form sends it as `masterKey` in place of `recoveryKey`, and
+> `nodeRecoverySecret` only when the copy needs a different master key; the `restore` command
+> takes it in `WAITRON_MASTER_KEY` or `--master-key-file`.
+
 > **2026-11-24, A1323 PR 2c:** the node recovery pack (Backups → Create pack) and the custodian's
 > `sign-register` command, whose output only that pack read, were removed.
 

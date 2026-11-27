@@ -76,18 +76,15 @@ export const handoverEn = {
   "handover.emergency.backup_intro":
     "Choose an encrypted backup file. It replaces the copy on this spare, and the box restarts before you go on.",
   "handover.emergency.backup_file": "Encrypted backup file",
-  "handover.emergency.backup_key": "Backup encryption key",
   "handover.emergency.use_backup": "Use this backup",
+  "handover.emergency.choose_another_file": "Choose another file",
+  "handover.emergency.backup_needs_master_key": "This backup needs the master key dated {name}.",
   "handover.emergency.backup_restarting":
     "Placing the selected backup. Keep this page open while this box restarts.",
   "handover.emergency.backup_too_old":
     "This backup does not admit this spare under its current main box. Choose a backup made after this spare joined that main box.",
-  "handover.emergency.backup_key_missing":
-    "Enter the backup encryption key for this backup and try again. The box's saved key stays unchanged.",
-  "handover.emergency.backup_key_too_short":
-    "That backup encryption key is too short. Check the key for this backup and try again.",
   "handover.emergency.backup_invalid":
-    "The backup could not be opened. Check the encrypted file and its backup encryption key, then try again.",
+    "The backup could not be opened. Check the file and try again.",
   "handover.emergency.copy_changed":
     "The copy changed while you were reading. Check its latest sale or order, then Proceed and confirm all three statements again.",
   "handover.emergency.latest_activity": "Latest sale or order in this copy",
@@ -211,18 +208,15 @@ export const handoverEs: Record<keyof typeof handoverEn, string> = {
   "handover.emergency.backup_intro":
     "Elige un archivo de copia de seguridad cifrada. Sustituye la copia de este servidor de reserva, y el servidor se reinicia antes de que sigas.",
   "handover.emergency.backup_file": "Archivo de copia de seguridad cifrada",
-  "handover.emergency.backup_key": "Clave de cifrado de copias",
-  "handover.emergency.use_backup": "Usar esta copia de seguridad",
+  "handover.emergency.use_backup": "Usar esta copia",
+  "handover.emergency.choose_another_file": "Elegir otro archivo",
+  "handover.emergency.backup_needs_master_key": "Esta copia necesita la clave maestra del {name}.",
   "handover.emergency.backup_restarting":
     "Colocando la copia seleccionada. Mantén esta página abierta mientras se reinicia el servidor.",
   "handover.emergency.backup_too_old":
     "Esta copia no admite este servidor de reserva bajo su servidor principal actual. Elige una copia hecha después de que este servidor se uniera al principal.",
-  "handover.emergency.backup_key_missing":
-    "Introduce la clave de cifrado de copias de esta copia y vuelve a intentarlo. La clave guardada en el servidor no cambia.",
-  "handover.emergency.backup_key_too_short":
-    "Esa clave de cifrado de copias es demasiado corta. Comprueba la clave de esta copia y vuelve a intentarlo.",
   "handover.emergency.backup_invalid":
-    "No se ha podido abrir la copia. Comprueba el archivo cifrado y su clave de cifrado de copias y vuelve a intentarlo.",
+    "No se ha podido abrir la copia. Comprueba el archivo y vuelve a intentarlo.",
   "handover.heading": "Traspasar el local",
   "handover.loading": "Consultando el progreso del traspaso…",
   "handover.copy":

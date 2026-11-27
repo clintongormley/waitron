@@ -322,6 +322,8 @@ export class RecoveryHourEntry extends LitElement {
   @state() private attempted = false;
   @state() private refusalDismissed = false;
   #secret?: string;
+  /** The page refused its own master key as this recovery's authority, so this entry asks for one. */
+  @state() private ownKeyAsked = false;
   #generation = 0;
   #scope?: DraftScope<Draft>;
   #wait = new ClockWait<Selected>(this, () => void this.#run(true));
@@ -357,7 +359,14 @@ export class RecoveryHourEntry extends LitElement {
     if (changed.has("context")) {
       this.clear();
       this.#autoStart = true;
+      this.ownKeyAsked = false;
     }
+    if (
+      this.refusedField === "nodeRecoverySecret" &&
+      !isPromotion(this.context) &&
+      this.context.masterKey !== undefined
+    )
+      this.ownKeyAsked = true;
     this.#register();
     if (this.#autoStart && this.isConnected && isEmergency(this.context)) {
       this.#autoStart = false;
@@ -487,11 +496,22 @@ export class RecoveryHourEntry extends LitElement {
       }),
     );
   }
+  /**
+   * The page's own master key, when the page asked for it and has not refused it as this
+   * recovery's authority; this entry then draws no key field.
+   */
+  get #pageKey(): string | undefined {
+    return isPromotion(this.context) || this.ownKeyAsked ? undefined : this.context.masterKey;
+  }
+  get #key(): string | undefined {
+    return this.#pageKey ?? this.#secret;
+  }
   #credentials(): ModuleRecoveryCredentials | null {
     if (isPromotion(this.context)) return null;
+    const key = this.#key;
     if (
       this.busy ||
-      !this.#secret ||
+      !key ||
       !this.draft.oldBoxGone ||
       !this.draft.soleRecovery ||
       !this.draft.detailsCorrect ||
@@ -503,7 +523,7 @@ export class RecoveryHourEntry extends LitElement {
         binding: { ...this.context.binding },
         input: structuredClone(this.#wait.result.input),
       },
-      nodeRecoverySecret: this.#secret,
+      nodeRecoverySecret: key,
       recoveryContext: {
         selectedSourceId: this.context.selection.sourceId,
         oldBoxGone: true,
@@ -556,7 +576,7 @@ export class RecoveryHourEntry extends LitElement {
   get #canCompare(): boolean {
     if (isPromotion(this.context)) return this.draft.detailsCorrect;
     return Boolean(
-      this.#secret && this.draft.oldBoxGone && this.draft.soleRecovery && this.draft.detailsCorrect,
+      this.#key && this.draft.oldBoxGone && this.draft.soleRecovery && this.draft.detailsCorrect,
     );
   }
   #request(context: RecoveryContext) {
@@ -567,7 +587,7 @@ export class RecoveryHourEntry extends LitElement {
         oldBoxGone: this.draft.oldBoxGone,
         soleRecovery: this.draft.soleRecovery,
       },
-      nodeRecoverySecret: this.#secret!,
+      nodeRecoverySecret: this.#key!,
     };
   }
   #begin(): { call: (proposal: unknown) => Promise<unknown>; current: () => boolean } {
@@ -750,23 +770,27 @@ export class RecoveryHourEntry extends LitElement {
         ${
           promote
             ? nothing
-            : html`<wt-master-key-input
-                  .draftParent=${this}
-                  required
-                  .keyName=${context.selection.keyName}
-                  .copy=${keyWords}
-                  .readPack=${loadRecoveryPackReader}
-                  .maxPdfBytes=${MAX_PACK_PDF}
-                  .attempted=${this.attempted}
-                  .error=${this.keyError && this.#refusedKeyName !== undefined ? keyWords.wrongKey(this.#refusedKeyName) : this.keyError || (this.attempted && !this.#secret) ? words.key : !this.refusalDismissed && this.refusedField === "nodeRecoverySecret" ? (this.errorMessage ?? "") : ""}
-                  @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
-                    event.stopPropagation();
-                    this.#secret = event.detail.masterKey;
-                    this.#edited("nodeRecoverySecret");
-                    this.#invalidate();
-                    this.#notify();
-                  }}
-                ></wt-master-key-input>
+            : html`${
+                  this.#pageKey !== undefined
+                    ? nothing
+                    : html`<wt-master-key-input
+                        .draftParent=${this}
+                        required
+                        .keyName=${context.selection.keyName}
+                        .copy=${keyWords}
+                        .readPack=${loadRecoveryPackReader}
+                        .maxPdfBytes=${MAX_PACK_PDF}
+                        .attempted=${this.attempted}
+                        .error=${this.keyError && this.#refusedKeyName !== undefined ? keyWords.wrongKey(this.#refusedKeyName) : this.keyError || (this.attempted && !this.#secret) ? words.key : !this.refusalDismissed && this.refusedField === "nodeRecoverySecret" ? (this.errorMessage ?? "") : ""}
+                        @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {
+                          event.stopPropagation();
+                          this.#secret = event.detail.masterKey;
+                          this.#edited("nodeRecoverySecret");
+                          this.#invalidate();
+                          this.#notify();
+                        }}
+                      ></wt-master-key-input>`
+                }
                 <label
                   ><input
                     type="checkbox"
@@ -870,7 +894,7 @@ export class RecoveryHourEntry extends LitElement {
           : nothing
       }
       <wt-form-actions
-        .error=${this.error ? (promote ? this.#refusal(this.#failure) : words.failed) : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : !promote && this.attempted && !this.#credentials() ? words.missing : ""}
+        .error=${this.keyError && this.ownKeyAsked ? "" : this.error && !(this.keyError && this.#pageKey !== undefined) ? (promote ? this.#refusal(this.#failure) : words.failed) : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : !promote && this.attempted && !this.#credentials() ? words.missing : ""}
       >
         ${
           action

@@ -85,7 +85,7 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
   const artifact = new File(["encrypted selected copy"], "backup.waitron");
   const source =
     kind === "archive"
-      ? { artifact, recoveryKey: "archive password", environment: "production" as const }
+      ? { artifact, masterKey: MASTER_KEY, environment: "production" as const }
       : kind === "bucket"
         ? {
             bucketKit: "private selected kit",
@@ -108,14 +108,15 @@ async function mounted(kind: "archive" | "bucket" | "cloud") {
   await entry!.updateComplete;
   return { el, entry: entry!, requests, artifact, stages };
 }
+/** A backup file's master key was typed on the screen around the form, which then asks for none. */
 async function fill(entry: LitElement) {
-  const key = entry.shadowRoot!.querySelector<LitElement>("wt-master-key-input")!;
-  await key.updateComplete;
-  for (const [name, value] of [["master-key", MASTER_KEY.replaceAll(" ", "").toLowerCase()]]) {
-    const field = key.shadowRoot!.querySelector<LitElement>(`[name="${name}"]`)!;
+  const key = entry.shadowRoot!.querySelector<LitElement>("wt-master-key-input");
+  if (key) {
+    await key.updateComplete;
+    const field = key.shadowRoot!.querySelector<LitElement>('[name="master-key"]')!;
     await field.updateComplete;
     const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    input.value = value!;
+    input.value = MASTER_KEY.replaceAll(" ", "").toLowerCase();
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   }
   for (const name of [
@@ -181,13 +182,13 @@ it.each(["archive", "bucket", "cloud"] as const)(
     if (kind === "archive") {
       expect(stages[0]!.request).toEqual({
         eventId: credentials.recoveryOperation.binding.eventId,
-        source: { kind, recoveryKey: "archive password", environment: "production" },
+        source: { kind, masterKey: MASTER_KEY, environment: "production" },
       });
       expect(await stages[0]!.artifact.text()).toBe(await artifact.text());
     }
     if (kind === "bucket") el.bucketKit = "different kit";
     else if (kind === "cloud") el.selectionId = "approval-2";
-    else el.recoveryKey = "different password";
+    else el.masterKey = "different password";
     expect(el.readCredentials()).toBeNull();
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("setup-recovery-allocation")).toBeNull();

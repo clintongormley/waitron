@@ -50,13 +50,17 @@ export function dispatchResetRequested(el: EventTarget): void {
 
 export interface RestoreRequestDetail extends RecoveryRestoreCredentials {
   artifact: File;
-  recoveryKey: string;
+  masterKey: string;
   environment: "production" | "preproduction";
   /** The owner answered the old-server question (#646). */
   oldBoxGone: boolean;
 }
 
-/** What the shell keeps of a refused request to draw it again: never its recovery details. */
+/**
+ * What the shell keeps, in page memory only, of a refused request to draw it again: never its
+ * recovery operation or a second master key typed for the authorisation. It keeps the master key
+ * that opens the file, so the form can be sent again.
+ */
 export type KeptRestoreRequest = Omit<RestoreRequestDetail, keyof RecoveryRestoreCredentials>;
 
 export function dispatchRestoreRequested(el: EventTarget, request: RestoreRequestDetail): void {
@@ -77,7 +81,10 @@ export interface BucketRestoreRequestDetail extends RecoveryRestoreCredentials {
   venueConfirmed: string | null;
 }
 
-/** What the shell keeps of a refused request to draw it again: never its recovery details. */
+/**
+ * What the shell keeps, in page memory only, of a refused bucket request to draw it again: never
+ * its recovery operation or the master key typed for it.
+ */
 export type KeptBucketRestoreRequest = Omit<
   BucketRestoreRequestDetail,
   keyof RecoveryRestoreCredentials

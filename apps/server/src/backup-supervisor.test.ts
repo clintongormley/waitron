@@ -161,6 +161,7 @@ function localFsConfig(dirs: string[], recoveryKey: string): BackupConfig {
     keyRotatedAt: undefined,
     keyNumber: record.keyNumber,
     masterKeyId: record.masterKeyId,
+    masterKeyDay: record.masterKeyDay,
   };
 }
 
@@ -602,7 +603,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
     );
   }, 60_000);
 
-  it("a backup file names its master key id and N and opens with key N only", async () => {
+  it("a backup file names its master key id, day and N and opens with key N only", async () => {
     const dest = await makeDestDir();
     const refs: Refs = {
       config: localFsConfig([dest], STRONG_KEY_2),
@@ -621,6 +622,7 @@ describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {
         version: 2,
         masterKeyId: Buffer.from(KEY_RECORDS[1]!.masterKeyId, "hex"),
         keyNumber: 2,
+        masterKeyDay: KEY_RECORDS[1]!.masterKeyDay,
       });
       await expect(decryptBackupFile(path, join(out, "under-2"), STRONG_KEY_2)).resolves.toMatch(
         /^[0-9a-f]{64}$/,

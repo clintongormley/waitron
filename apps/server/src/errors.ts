@@ -375,8 +375,9 @@ declare module "@waitron/shared" {
     "handover.copy_damaged": Record<string, never>;
     /** The archive does not admit this mirror's key under its held main box. */
     "handover.copy_predates_destination": Record<string, never>;
-    /** No typed key and no usable held key. */
-    "handover.backup_key_missing": Record<string, never>;
+    /** The selected backup file is not under the backup key this box holds; only the master key
+     * `keyName` names opens it. */
+    "handover.backup_needs_master_key": { keyName: string };
     /** A declaration got an answer, or activation got no restriction naming this successor. */
     "handover.source_still_answering": { sourceServersUrl?: string };
     /** Neither a verified answer nor one of the allowed silence reasons was obtained. */
@@ -1474,9 +1475,11 @@ declare module "@waitron/shared" {
      * This request could not use the venue’s master key. On a wrong or replaced key, `keyName` is
      * the name of the current master key of the database checked, when it has one; on the restore
      * clock routes it is the name staging read from the backup copy and saved beside the key, when
-     * it saved one. The binding refusals carry none.
+     * it saved one. The binding refusals carry none. When a typed master key does not open a backup
+     * file, `masterKeyId` (16 hex characters), `keyNumber` and `keyName` are what the file's header
+     * names.
      */
-    "promotion.break_glass_invalid": { keyName?: string };
+    "promotion.break_glass_invalid": { keyName?: string; masterKeyId?: string; keyNumber?: number };
     /** "Change the backup key" was sent a master key that is not the venue's current one; `keyName`
      * names the current key, when there is one. */
     "master_key.wrong": { keyName?: string };
@@ -1715,10 +1718,12 @@ declare module "@waitron/shared" {
      * Save or the bucket copy's Save finds no key held, which only "Change the backup key" then
      * writes. */
     "backup.recovery_key_missing": Record<string, never>;
+    /** "Change the backup key" found a `WAITRON_BACKUP_KEY_NUMBER` in `backup.env` that is not a
+     * backup key's number: guessing one could give back a key a removed box still holds. A new
+     * master key, made with a new recovery pack, starts its own numbers safely. */
+    "backup.key_number_unknown": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };
-    /** A recovery key a request sends is shorter than `min` characters. */
-    "backup.new_recovery_key_too_short": { min: number };
     "backup.destinations_invalid": { reason: string };
     /** A box's backup settings this box would not take: a message over 64 KiB (`size`), one that
      * is malformed or of another kind (`envelope`), a body that is not exactly

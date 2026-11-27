@@ -656,7 +656,8 @@ describe("selected-hour admission before archive placement", () => {
     "interactive HTTP %s preparation authenticates the actual selected copy and preserves comparisons",
     async (kind) => {
       const bucket = kind === "bucket" ? await bucketCommand() : undefined;
-      const f = bucket?.f ?? (await archiveHost());
+      const f =
+        bucket?.f ?? (await archiveHost("archive", kind === "archive" ? "master-key" : "password"));
       vi.setSystemTime(
         new Date(kind === "bucket" ? "2026-10-16T14:40:00Z" : "2026-10-16T13:40:00Z"),
       );
@@ -757,7 +758,7 @@ describe("selected-hour admission before archive placement", () => {
         ? { kind: "bucket", kit: encodeRecoveryKit(bucket.kit), environment: "preproduction" }
         : kind === "cloud"
           ? { kind: "cloud", pointId }
-          : { kind: "archive", recoveryKey: "archive password", environment: "preproduction" };
+          : { kind: "archive", masterKey: key.secret, environment: "preproduction" };
       const prior = bucket
         ? JSON.parse(await readFile(bucket.command.operationPath, "utf8")).binding
         : f.options.binding;
@@ -821,6 +822,7 @@ describe("selected-hour admission before archive placement", () => {
       const journal = JSON.stringify(await readModulePreparationHistory(f.roots, binding.module));
       expect(journal).not.toContain(key.secret);
       expect(journal).not.toContain("archive password");
+      expect(journal).not.toContain(f.restore.recoveryKey);
       expect(journal).not.toContain("synthetic-secret");
       expect(
         await readdir(join(root, "interactive-validation")).catch(

@@ -177,7 +177,7 @@ export function backupKeyBytes(keyText: string): Buffer | undefined {
   return bytes.length === 32 && bytes.toString("base64url") === keyText ? bytes : undefined;
 }
 
-/** The version and, for version 2, the master key id and N, read without opening the file. */
+/** The file's header, read without opening the file. */
 export async function readArtifactFileHeader(artifactPath: string): Promise<ArtifactHeader> {
   const input = await open(artifactPath, "r");
   try {

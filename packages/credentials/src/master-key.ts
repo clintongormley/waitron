@@ -65,10 +65,23 @@ export function masterKeyId(publicKey: Uint8Array): Buffer {
   return createHash("sha256").update(publicKey).digest().subarray(0, 8);
 }
 
-/** `YYYY-MM-DD · XXXX`: the day given, then the first 4 of the 13 symbols that print the id. */
 export function masterKeyName(publicKey: Uint8Array, day: string): string {
+  return masterKeyNameOf(masterKeyId(publicKey), day);
+}
+
+/** `YYYY-MM-DD · XXXX`: the day given, then the first 4 of the 13 symbols that print the id. */
+export function masterKeyNameOf(id: Uint8Array, day: string): string {
   if (!isCalendarDate(day)) {
     throw new AppError("master_key.name_day_invalid", {});
   }
-  return `${day} · ${keySymbols(masterKeyId(publicKey)).slice(0, 4)}`;
+  return `${day} · ${keySymbols(id).slice(0, 4)}`;
+}
+
+/** The day a master key's name begins with: `YYYY-MM-DD · XXXX`. */
+export function masterKeyDayOf(name: string): string {
+  const day = name.slice(0, 10);
+  if (!isCalendarDate(day)) {
+    throw new AppError("master_key.name_day_invalid", {});
+  }
+  return day;
 }

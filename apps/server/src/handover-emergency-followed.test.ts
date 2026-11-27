@@ -163,6 +163,12 @@ function service(
           ),
         );
       },
+      backup: {
+        readBackupKey: async () => undefined,
+        environment: "preproduction",
+        migrationsRoot: null,
+        restart: () => {},
+      },
     },
     options.log,
   );

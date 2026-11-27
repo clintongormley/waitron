@@ -13,6 +13,10 @@
 
 > **2026-11-24, A1323 PR 2b:** the node recovery key named below is now the venue's master key.
 
+> **2026-11-27, A1323 PR 4b:** a backup file now opens with the master key, not a separate backup
+> encryption key; `WAITRON_BACKUP_RECOVERY_KEY` opens only a Waitron Cloud copy. The `restore`
+> command takes the master key in `WAITRON_MASTER_KEY` or `--master-key-file`.
+
 # Retain an emergency allocation outside the box
 
 When you cannot establish the current short-name register, an emergency allocation uses a fresh
@@ -193,7 +197,7 @@ files, so your browser can reconnect. You can then restore another backup or set
 This choice covers restores started from setup. If the first-start record becomes unreadable
 after the box has served, the box starts by itself and leaves first start pending. A successful
 first start removes the unreadable record. If a command-line restore is stuck at first start,
-run `waitron-restore restore` again with the backup and its recovery credentials. The command
+run `waitron-restore restore` again with the same backup and inputs as the first run. The command
 retries the restore over the pending first-start record. Its within-attempt file rollback is
 unchanged.
 

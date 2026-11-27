@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseFiles } from "@waitron/ui/src/test-helpers.js";
 import { SetupApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
@@ -75,6 +76,7 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
           "explanation",
           "declaration",
           "different-copy",
+          "older-backup",
           "resume",
           "refusal",
           "clock",
@@ -109,8 +111,18 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                 : new Response(JSON.stringify({ error: { code: "handover.chain_broken" } }), {
                     status: 409,
                   });
+            if (String(input).endsWith("/emergency/backup"))
+              return new Response(
+                JSON.stringify({
+                  error: {
+                    code: "handover.backup_needs_master_key",
+                    params: { keyName: "2026-10-02 · RW7M", keyNumber: 1, masterKeyId: "older" },
+                  },
+                }),
+                { status: 409 },
+              );
             if (String(input).endsWith("/preview")) {
-              if (stage === "refusal" || stage === "different-copy")
+              if (stage === "refusal" || stage === "different-copy" || stage === "older-backup")
                 return new Response(JSON.stringify({ error: { code: "handover.copy_mismatch" } }), {
                   status: 409,
                 });
@@ -210,7 +222,7 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                 expect(el.shadowRoot!.querySelector("[data-test=emergency-held]")).not.toBeNull(),
               { timeout: 10_000 },
             );
-          if (stage === "different-copy") {
+          if (stage === "different-copy" || stage === "older-backup") {
             await vi.waitFor(() =>
               expect(el.shadowRoot!.querySelector("[data-test=upload-backup]")).not.toBeNull(),
             );
@@ -222,6 +234,18 @@ describe.each(["en-GB", "es-ES"])("emergency handover %s", (locale) => {
                 el.shadowRoot!.querySelector('wt-file-input[name="handover-backup"]'),
               ).not.toBeNull(),
             );
+          }
+          if (stage === "older-backup") {
+            chooseFiles(
+              el.shadowRoot!.querySelector('wt-file-input[name="handover-backup"]')!,
+              new File(["archive"], "venue.enc"),
+            );
+            await el.updateComplete;
+            el.shadowRoot!.querySelector<HTMLElement>("[data-test=emergency-backup]")!.click();
+            await vi.waitFor(() =>
+              expect(el.shadowRoot!.querySelector("wt-master-key-input")).not.toBeNull(),
+            );
+            await el.updateComplete;
           }
           if (stage === "clock") {
             el.shadowRoot!.querySelector<HTMLElement>("[data-test=authenticate]")!.click();

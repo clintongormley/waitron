@@ -1,6 +1,6 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { HELD_BACKUP_KEY, holdRecoveryKey, openUnderHeldKey } from "./testing/recovery-key.js";
-import { backupKeySettings } from "./testing/backup-key.js";
+import { backupKeyEnv } from "./testing/backup-key.js";
 import { keyFingerprint } from "./backup-supervisor.js";
 import { parseEnvFile } from "./env-file.js";
 import { ensureStreamId } from "@waitron/db";
@@ -303,7 +303,7 @@ it("starts, completes a decryptable backup with venue data, sells and answers he
     async (dir) => {
       scratch = dir;
       await storeArchiveRecord(boxRing(), join(dir, "backups"));
-      return backupKeySettings(HELD_BACKUP_KEY);
+      return backupKeyEnv(HELD_BACKUP_KEY);
     },
     async (lines) => {
       const completed = await waitForEvent(lines, "backup.destination_completed");
@@ -333,7 +333,7 @@ describe("trading with an archive destination the box cannot use", () => {
         const notAFolder = join(scratch, "backup-destination-is-a-file");
         await writeFile(notAFolder, "not a folder");
         await storeArchiveRecord(boxRing(), notAFolder);
-        return backupKeySettings(HELD_BACKUP_KEY);
+        return backupKeyEnv(HELD_BACKUP_KEY);
       },
       async (lines) => {
         const failed = await waitForEvent(lines, "backup.destination_failed");
@@ -351,7 +351,7 @@ describe("trading with an archive destination the box cannot use", () => {
       async (scratch) => {
         await storeArchiveRecord(boxRing(), join(scratch, "backups"));
         cookie = await managerCookie();
-        return backupKeySettings(HELD_BACKUP_KEY);
+        return backupKeyEnv(HELD_BACKUP_KEY);
       },
       async (_lines, { base, via }) => {
         await vi.waitFor(() => expect(stall.started).toEqual(["putFile"]), { timeout: 30_000 });
@@ -470,7 +470,7 @@ describe("trading when the backup duty cannot open the venue database", () => {
       async (scratch) => {
         await storeArchiveRecord(boxRing(), join(scratch, "backups"));
         cookie = await managerCookie();
-        return backupKeySettings(HELD_BACKUP_KEY);
+        return backupKeyEnv(HELD_BACKUP_KEY);
       },
       async (lines, { base, via }) => {
         await waitForEvent(lines, "backup.disabled_open_failed");
@@ -525,7 +525,7 @@ describe("trading with a saved archive bucket", () => {
           ),
         );
         cookie = await managerCookie();
-        return backupKeySettings(HELD_BACKUP_KEY);
+        return backupKeyEnv(HELD_BACKUP_KEY);
       },
       async (_lines, { base, via }) => {
         const res = await fetch(`${base}/api/backup/stream`, {
@@ -583,7 +583,7 @@ describe("stream encryption checks at the real trading boot", () => {
             null,
           ),
         );
-        return backupKeySettings(HELD_BACKUP_KEY);
+        return backupKeyEnv(HELD_BACKUP_KEY);
       },
       async (_lines, { base, via }) => {
         expect(litestream.children).toHaveLength(0);
@@ -645,7 +645,7 @@ describe("stream encryption checks at the real trading boot", () => {
         });
         // The refused Save left the held key file exactly as it was.
         expect(parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"))).toEqual(
-          backupKeySettings(HELD_BACKUP_KEY),
+          backupKeyEnv(HELD_BACKUP_KEY),
         );
       },
     );

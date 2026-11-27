@@ -15,6 +15,7 @@ import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 import { SetupCloudRestoreScreen } from "./cloud-restore-screen.js";
 import { setLocale } from "../i18n/t.js";
 import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
+import { encodeMasterKeyCode } from "@waitron/shared";
 
 const preview = REVIEWED_PREVIEW;
 const operation: RecoveryRestoreCredentials["recoveryOperation"] =
@@ -28,15 +29,23 @@ afterEach(() => {
   setLocale("en-GB");
 });
 
-async function selected(extra: Record<string, unknown> = {}) {
-  const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
-    api: new SetupApi("", async () => new Response(JSON.stringify({ ...preview, ...extra }))),
-  });
-  chooseFiles(
-    el.shadowRoot!.querySelector("[data-test=artifact]")!,
-    new File(["encrypted"], "selected.backup"),
-  );
-  change(el, "recovery-key", "archive-key");
+/**
+ * Reviews a copy on the file restore screen, whose master key normally also authorises, or on the
+ * bucket screen, where the allocation asks for the copy's master key itself.
+ */
+async function selected(extra: Record<string, unknown> = {}, kind: "file" | "bucket" = "file") {
+  const api = new SetupApi("", async () => new Response(JSON.stringify({ ...preview, ...extra })));
+  const { el, host } =
+    kind === "file"
+      ? await mountWidget<SetupRestoreScreen>("setup-restore-screen", { api })
+      : await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", { api });
+  if (kind === "file") {
+    chooseFiles(
+      el.shadowRoot!.querySelector("[data-test=artifact]")!,
+      new File(["encrypted"], "selected.backup"),
+    );
+    await typeMasterKey(el, nodeKey);
+  } else change(el, "kit", "outside-recovery-kit");
   await el.updateComplete;
   const copy = el.shadowRoot!.querySelector<LitElement>("setup-recovery-copy")!;
   await copy.updateComplete;
@@ -70,7 +79,7 @@ async function keyField(entry: LitElement) {
 }
 
 it("pairs the public recovery record with the selected copy's separate master key", async () => {
-  const { entry } = await selected();
+  const { entry } = await selected({}, "bucket");
   expect(entry.readCredentials()).toBeNull();
   await fill(entry);
   expect(entry.readCredentials()).toEqual({
@@ -121,7 +130,7 @@ it("uses the prepared stream digest rather than the generation's display locator
   expect(entry.readCredentials()).toBeNull();
 });
 it("requires the master key and both operator confirmations after entering a record", async () => {
-  const { entry } = await selected();
+  const { entry } = await selected({}, "bucket");
   change(entry, "record", JSON.stringify(operation));
   expect(entry.readCredentials()).toBeNull();
   await entry.updateComplete;
@@ -148,13 +157,13 @@ it("forwards credentials from the archive screen after the operator's confirmati
   expect((await delivered).detail.request).toMatchObject({
     recoveryOperation: operation,
     nodeRecoverySecret: nodeKey,
-    recoveryKey: "archive-key",
+    masterKey: nodeKey,
   });
 });
 it("clears the key and public record when leaving or changing the selected copy", async () => {
   const { el, entry, host } = await selected();
   await fill(entry);
-  change(el, "recovery-key", "different-archive-key");
+  await typeMasterKey(el, encodeMasterKeyCode(new Uint8Array(16).fill(4)));
   await el.updateComplete;
   await vi.waitFor(() => expect(entry.isConnected).toBe(false));
   expect(entry.readCredentials()).toBeNull();
@@ -198,7 +207,7 @@ it("holds Restore after an invalid record and releases it after the fields are f
 });
 
 it("shows a request's master-key refusal beside that field and clears it when edited", async () => {
-  const { el, entry } = await selected();
+  const { el, entry } = await selected({}, "bucket");
   Object.assign(el, {
     invalidField: "nodeRecoverySecret",
     errorMessage: "Check the selected backup's master key.",
@@ -272,7 +281,7 @@ it.each(["bucket", "cloud"])("forwards the selected %s copy's credentials", asyn
 });
 
 it("allocation draws the master-key field labelled Master key with no hint, and sends its printed key", async () => {
-  const { entry } = await selected();
+  const { entry } = await selected({}, "bucket");
   const key = entry.shadowRoot!.querySelector<
     LitElement & { keyName?: string; maxPdfBytes?: number }
   >("wt-master-key-input");
@@ -294,7 +303,7 @@ it("allocation draws the master-key field labelled Master key with no hint, and 
 });
 const WRONG_KEY = "Wrong master key. Use the one dated 2026-11-02 · QZJV.";
 it("a refused key shows the refusal's line under the field until the key changes", async () => {
-  const { el, entry } = await selected();
+  const { el, entry } = await selected({}, "bucket");
   await fill(entry);
   Object.assign(el, { invalidField: "nodeRecoverySecret", errorMessage: WRONG_KEY });
   await el.updateComplete;
@@ -305,7 +314,7 @@ it("a refused key shows the refusal's line under the field until the key changes
   expect(field.error).toBe("");
 });
 it("a key refused twice shows the refusal's line both times", async () => {
-  const { el, entry } = await selected();
+  const { el, entry } = await selected({}, "bucket");
   await fill(entry);
   const refuse = async () => {
     Object.assign(el, {

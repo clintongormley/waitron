@@ -1,6 +1,6 @@
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { HELD_BACKUP_KEY } from "./testing/recovery-key.js";
-import { backupKeySettings } from "./testing/backup-key.js";
+import { backupKeyEnv } from "./testing/backup-key.js";
 import { seedModuleSettings } from "../test/module-settings.js";
 import { writeArchiveSettings } from "./archive-settings.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
@@ -97,7 +97,7 @@ async function prepareBox(
     WAITRON_NODE_ID: venue.cfg.nodeId,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
-    ...backupKeySettings(HELD_BACKUP_KEY),
+    ...backupKeyEnv(HELD_BACKUP_KEY),
   };
   beforeServerStarts();
   await withTransaction(suite.db, (tx) =>

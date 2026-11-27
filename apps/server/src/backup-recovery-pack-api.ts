@@ -28,7 +28,7 @@ import { readHeldArchiveSettingsIn } from "./archive-settings.js";
 import { errnoOf } from "./errno.js";
 import { inTurn } from "./attempt-turns.js";
 import { loadKeyRotatedAt, loadRecoveryKey, readHeldKey } from "./backup-config.js";
-import type { BackupKeyRecord } from "./backup-env-writer.js";
+import { backupKeyEnv } from "./backup-env-writer.js";
 import {
   backupKeyFacts,
   backupKeyRecord,
@@ -121,16 +121,6 @@ function requireSecurePackRequest(c: Context): void {
   if (c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
     invalid("shape");
   }
-}
-
-/** `backup.env`'s settings once `record` is written at `rotatedAt`, for a pack made before it is. */
-function keyEnv(record: BackupKeyRecord, rotatedAt: string): Record<string, string> {
-  return {
-    WAITRON_BACKUP_RECOVERY_KEY: record.key,
-    WAITRON_BACKUP_KEY_NUMBER: String(record.keyNumber),
-    WAITRON_BACKUP_MASTER_KEY_ID: record.masterKeyId,
-    WAITRON_BACKUP_KEY_ROTATED_AT: rotatedAt,
-  };
 }
 
 type MakeRequest = { locale: PackLocale; newMasterKey: boolean };
@@ -352,10 +342,16 @@ export function mountBackupRecoveryPackMakeApi(
               ? undefined
               : backupKeyRecord(
                   decodeMasterKeyCode(newMasterKey.made.masterKey),
-                  heldBackupKeyNumber(held) + 1,
+                  // Any number is a fresh key under a new master key, so an unknown one is 0.
+                  (heldBackupKeyNumber(held) ?? 0) + 1,
                   newMasterKey.publicKey,
+                  newMasterKey.made.masterKeyName,
                 );
-          const env = nextKey === undefined ? held : { ...held, ...keyEnv(nextKey, madeAt) };
+          // `backup.env` as it will be once the new key is written, for a pack made before it is.
+          const env =
+            nextKey === undefined
+              ? held
+              : { ...held, ...backupKeyEnv(nextKey), WAITRON_BACKUP_KEY_ROTATED_AT: madeAt };
           const pack = await withTransaction(deps.db, (tx) =>
             makePack(tx, deps, {
               emergency,

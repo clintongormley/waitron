@@ -12,6 +12,7 @@ import {
   mountWidget,
   REVIEWED_CREDENTIALS,
   reviewBackup,
+  typeMasterKey,
 } from "./widgets/test-helpers.js";
 import { setLocale, t } from "./i18n/t.js";
 
@@ -24,7 +25,13 @@ const warning = (el: SetupApp) =>
 const screen = (el: SetupApp) => (el as unknown as { screen: Screen }).screen;
 const q = <T extends HTMLElement>(form: SetupRestoreScreen, selector: string) =>
   form.shadowRoot!.querySelector<T>(selector)!;
-const key = (form: SetupRestoreScreen) => q<WtInput>(form, "[data-test=recovery-key]");
+const KEY = REVIEWED_CREDENTIALS.nodeRecoverySecret;
+/** The master-key field's own text input. */
+const keyInput = (form: SetupRestoreScreen) =>
+  q(form, "[data-test=master-key]")
+    .shadowRoot!.querySelector('wt-input[name="master-key"]')!
+    .shadowRoot!.querySelector("input")!;
+const keyValue = (form: SetupRestoreScreen) => keyInput(form).value;
 const artifact = (form: SetupRestoreScreen) => q<WtFileInput>(form, "[data-test=artifact]");
 async function drawn(form: SetupRestoreScreen): Promise<string | null> {
   await form.updateComplete;
@@ -51,10 +58,12 @@ async function mount() {
 async function edit(form: SetupRestoreScreen, field: string) {
   if (field === "artifact") {
     chooseFiles(artifact(form), backup);
+  } else if (field === "master-key") {
+    await typeMasterKey(form, KEY);
   } else {
     q(form, `[data-test=${field}]`).dispatchEvent(
       new CustomEvent("wt-change", {
-        detail: { value: field === "environment" ? "preproduction" : " secret " },
+        detail: { value: "preproduction" },
         bubbles: true,
         composed: true,
       }),
@@ -78,7 +87,7 @@ function unload() {
 }
 async function fill(form: SetupRestoreScreen) {
   await edit(form, "artifact");
-  await edit(form, "recovery-key");
+  await edit(form, "master-key");
   await edit(form, "environment");
   const ack = q<HTMLInputElement>(form, "[data-test=acknowledge]");
   ack.checked = true;
@@ -87,7 +96,7 @@ async function fill(form: SetupRestoreScreen) {
 }
 
 describe("setup archive restore unsaved changes", () => {
-  it.each(["artifact", "recovery-key", "environment"])(
+  it.each(["artifact", "master-key", "environment"])(
     "Back preserves edited %s until Discard, restoring only the child",
     async (field) => {
       const { el, form } = await mount();
@@ -107,16 +116,18 @@ describe("setup archive restore unsaved changes", () => {
         expect(artifact(form).files[0]).toBe(backup);
         expect(await drawn(form)).toBe("waitron.backup");
       } else
-        expect((q(form, `[data-test=${field}]`) as WtInput).value).toBe(
-          field === "environment" ? "preproduction" : " secret ",
-        );
+        expect(
+          field === "environment"
+            ? (q(form, `[data-test=${field}]`) as WtInput).value
+            : keyValue(form),
+        ).toBe(field === "environment" ? "preproduction" : KEY);
       back(form);
       await expect.poll(() => warning(el).open).toBe(true);
       await choose(el, "discard");
       await expect.poll(() => screen(el)).toBe("role");
       expect(artifact(form).files).toHaveLength(0);
       expect(await drawn(form)).toBeNull();
-      expect(key(form).value).toBe("");
+      expect(keyValue(form)).toBe("");
       expect((q(form, "[data-test=environment]") as WtInput).value).toBe("production");
       expect(leaveCoordinatorFor(el)!.isDirty([el])).toBe(true);
     },
@@ -128,7 +139,7 @@ describe("setup archive restore unsaved changes", () => {
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "keep");
     expect(screen(el)).toBe("restore");
-    expect(key(form).value).toBe(" secret ");
+    expect(keyValue(form)).toBe(KEY);
     expect(artifact(form).files[0]).toBe(backup);
     expect(await drawn(form)).toBe("waitron.backup");
     back(form, "cloud-restore");
@@ -160,22 +171,23 @@ describe("setup archive restore unsaved changes", () => {
     await fill(form);
     expect(unload()).toBe(true);
     chooseFiles(artifact(form));
-    for (const [field, value] of [
-      ["recovery-key", ""],
-      ["environment", "production"],
-    ])
-      q(form, `[data-test=${field}]`).dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
-      );
+    await typeMasterKey(form, "");
+    q(form, "[data-test=environment]").dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "production" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
     await form.updateComplete;
     expect(unload()).toBe(false);
     back(form);
     await expect.poll(() => screen(el)).toBe("role");
   });
-  it("native warning Escape preserves the exact recovery key and returns focus", async () => {
+  it("native warning Escape preserves the exact master key and returns focus", async () => {
     const { el, form } = await mount();
-    const input = key(form).shadowRoot!.querySelector<HTMLInputElement>("input")!;
-    await userEvent.fill(page.elementLocator(input), " secret ");
+    const input = keyInput(form);
+    await userEvent.fill(page.elementLocator(input), KEY);
     const button = q(form, "[data-test=back]");
     await userEvent.click(page.elementLocator(button));
     await expect.poll(() => warning(el).open).toBe(true);
@@ -190,7 +202,7 @@ describe("setup archive restore unsaved changes", () => {
     await userEvent.keyboard("{Escape}");
     await closed;
     await expect.poll(() => warning(el).open).toBe(false);
-    expect(input.value).toBe(" secret ");
+    expect(input.value).toBe(KEY);
     expect(screen(el)).toBe("restore");
     await expect.poll(() => form.shadowRoot!.activeElement).toBe(button);
   });
@@ -203,7 +215,7 @@ describe("setup archive restore unsaved changes", () => {
     await expect.poll(() => screen(el)).toBe("done");
     expect(api.restore).toHaveBeenCalledExactlyOnceWith(
       backup,
-      " secret ",
+      KEY,
       "preproduction",
       false,
       REVIEWED_CREDENTIALS,
@@ -270,38 +282,38 @@ describe("setup archive restore unsaved changes", () => {
     const returned = el.shadowRoot!.querySelector<SetupRestoreScreen>("setup-restore-screen")!;
     await returned.updateComplete;
     expect(unload()).toBe(true);
-    expect(key(returned).value).toBe(" secret ");
+    expect(keyValue(returned)).toBe(KEY);
     expect(artifact(returned).files[0]).toBe(backup);
     expect(await drawn(returned)).toBe("waitron.backup");
     back(returned);
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "keep");
-    expect(key(returned).value).toBe(" secret ");
+    expect(keyValue(returned)).toBe(KEY);
   });
   it("invalid submission retains and protects typed credentials", async () => {
     const { el, form, api } = await mount();
-    await edit(form, "recovery-key");
+    await edit(form, "master-key");
     q(form, "[data-test=restore]").click();
     await form.updateComplete;
     expect(api.restore).not.toHaveBeenCalled();
     back(form);
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "keep");
-    expect(key(form).value).toBe(" secret ");
+    expect(keyValue(form)).toBe(KEY);
   });
   it("editing during a question invalidates its old Discard", async () => {
     const { el, form } = await mount();
-    await edit(form, "recovery-key");
+    await edit(form, "master-key");
     back(form);
     await expect.poll(() => warning(el).open).toBe(true);
     await edit(form, "environment");
     await expect.poll(() => warning(el).open).toBe(false);
     await choose(el, "discard");
     expect(screen(el)).toBe("restore");
-    expect(key(form).value).toBe(" secret ");
+    expect(keyValue(form)).toBe(KEY);
     expect(unload()).toBe(true);
   });
-  it("disconnect removes unload and reconnect restores the retained dirty draft", async () => {
+  it("disconnect removes unload and reconnect restores the retained dirty draft, less the master key", async () => {
     const { el, form, host } = await mount();
     await fill(form);
     expect(unload()).toBe(true);
@@ -309,8 +321,15 @@ describe("setup archive restore unsaved changes", () => {
     expect(unload()).toBe(false);
     host.append(el);
     await el.updateComplete;
-    expect(key(form).value).toBe(" secret ");
+    // The master-key field forgets its key whenever it leaves the page, and says so to the form.
+    expect(keyValue(form)).toBe("");
+    expect(artifact(form).files[0]).toBe(backup);
     expect(unload()).toBe(true);
+    q(form, "[data-test=restore]").click();
+    await form.updateComplete;
+    expect(q<HTMLElement & { error: string }>(form, "[data-test=master-key]").error).toBe(
+      "Enter the master key.",
+    );
   });
   it.each(["success", "refusal"])(
     "a departed restore %s cannot replace a new form",
@@ -332,7 +351,7 @@ describe("setup archive restore unsaved changes", () => {
       await el.updateComplete;
       const replacement = el.shadowRoot!.querySelector<SetupRestoreScreen>("setup-restore-screen")!;
       await replacement.updateComplete;
-      await edit(replacement, "recovery-key");
+      await edit(replacement, "master-key");
       if (result === "success") resolve();
       else reject({ code: "restore.environment_mismatch" });
       await new Promise((done) => setTimeout(done, 20));
@@ -341,7 +360,7 @@ describe("setup archive restore unsaved changes", () => {
       expect(el.shadowRoot!.querySelector("setup-restore-screen")).toBe(replacement);
       expect(replacement.request).toBeUndefined();
       expect(replacement.errorMessage).toBeUndefined();
-      expect(key(replacement).value).toBe(" secret ");
+      expect(keyValue(replacement)).toBe(KEY);
       expect(unload()).toBe(true);
     },
   );
@@ -386,17 +405,15 @@ describe("setup archive restore unsaved changes", () => {
     expect(unload()).toBe(false);
   });
 
-  it("recovery-key whitespace remains significant", async () => {
+  it("a partly typed master key is unsaved work", async () => {
     const { el, form } = await mount();
-    key(form).dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: " " }, bubbles: true, composed: true }),
-    );
+    await typeMasterKey(form, "q");
     await form.updateComplete;
     expect(unload()).toBe(true);
     back(form);
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "keep");
-    expect(key(form).value).toBe(" ");
+    expect(keyValue(form)).toBe("Q");
   });
 
   it.each(["success", "refusal"])(

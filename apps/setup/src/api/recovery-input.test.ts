@@ -33,12 +33,29 @@ it("sends the archive and separate recovery credentials in multipart fields, lea
   expect(init.credentials).toBe("include");
   const form = init.body as FormData;
   expect(form).toBeInstanceOf(FormData);
-  expect(form.get("recoveryKey")).toBe("archive-key");
+  expect(form.get("masterKey")).toBe("archive-key");
+  expect(form.has("recoveryKey")).toBe(false);
   expect(form.get("environment")).toBe("preproduction");
   expect(form.get("oldBoxGone")).toBe("1");
   expect(form.get("nodeRecoverySecret")).toBe("node-key-separate");
   expect(JSON.parse(String(form.get("recoveryOperation")))).toEqual(credentials.recoveryOperation);
   expect(await (form.get("artifact") as Blob).text()).toBe("encrypted-copy");
+});
+
+it("a file restore sends the master key once, as masterKey, and never a backup key", async () => {
+  const transport = vi.fn<typeof fetch>(async () =>
+    Response.json({ restoreStaged: true, restarting: true }, { status: 202 }),
+  );
+  const api = new SetupApi("", transport);
+  await api.restore(new Blob(["encrypted-copy"]), "typed master key", "production", false, {
+    ...credentials,
+    nodeRecoverySecret: "typed master key",
+  });
+  const form = transport.mock.calls[0]![1]!.body as FormData;
+  expect(form.getAll("masterKey")).toEqual(["typed master key"]);
+  expect(form.has("nodeRecoverySecret")).toBe(false);
+  expect(form.has("recoveryKey")).toBe(false);
+  expect(JSON.parse(String(form.get("recoveryOperation")))).toEqual(credentials.recoveryOperation);
 });
 
 it("forwards Cloud recovery credentials in JSON, with no credential in the URL", async () => {

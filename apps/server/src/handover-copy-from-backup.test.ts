@@ -3,13 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
+import { loadKeyRing, makeMasterKey, sealNodeSigningKeyTx } from "@waitron/credentials";
 import { CORE_MIGRATIONS, nodes, withNodeTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { generateNodeKeyPair, signDocumentBody } from "@waitron/membership";
 import { NODE_MIGRATIONS, pinPrimaryKeyTx, setNodeModeTx } from "@waitron/node-db";
-import { AppError } from "@waitron/shared";
+import { encodeMasterKeyCode } from "@waitron/shared";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { packArchive } from "./backup-archive.js";
 import { buildManifest } from "./backup-manifest.js";
@@ -18,7 +18,9 @@ import { nodeDumpEntry } from "./testing/node-copy.js";
 import { placeFirstCopy } from "./spare-copy-placement.js";
 import { checkEmergencyCopy } from "./handover-emergency-check.js";
 import { loadBoxEnv } from "./box-env.js";
-import { loadRecoveryKey } from "./backup-config.js";
+import { loadBackupKey, loadUsableBackupKey } from "./backup-config.js";
+import { backupKeyEnv, heldBackupKey, heldBackupKeyName } from "./testing/backup-key.js";
+import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 
 const copyFault = vi.hoisted(() => ({ interrupt: false, markerAtWrite: [] as boolean[] }));
 vi.mock("node:fs/promises", async (original) => {
@@ -43,7 +45,8 @@ const ring = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 6).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
-const key = "synthetic-archive-key";
+const masterKey = makeMasterKey();
+const held = heldBackupKey(masterKey);
 const mainId = "d5000000-0000-4000-8000-000000000001";
 const nodeId = "d5000000-0000-4000-8000-000000000002";
 let root: string;
@@ -94,7 +97,7 @@ it("retires the old marker before replacing a selection, and publishes none afte
   copyFault.interrupt = false;
   await expect(stage()).resolves.toHaveProperty("source", "selected-backup");
 });
-async function archive() {
+async function archive(n = 1, version: 1 | 2 = 2) {
   const path = join(root, "copy.db");
   await rm(path, { force: true });
   await suite.db.archiveTo(path);
@@ -105,15 +108,16 @@ async function archive() {
     environment: "preproduction",
     now: new Date("2026-11-14T00:00:00Z"),
   });
-  const bytes = encryptArtifact(
-    packArchive([
-      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
-      { name: "db.dump", bytes: await readFile(path) },
-      await nodeDumpEntry(suite.node, root),
-      { name: "secrets/trading.env", bytes: Buffer.from("WAITRON_NODE_ID=the-old-box\n") },
-    ]),
-    key,
-  );
+  const packed = packArchive([
+    { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+    { name: "db.dump", bytes: await readFile(path) },
+    await nodeDumpEntry(suite.node, root),
+    { name: "secrets/trading.env", bytes: Buffer.from("WAITRON_NODE_ID=the-old-box\n") },
+  ]);
+  const bytes =
+    version === 2
+      ? masterKeyArchiveBytes(packed, masterKey, n)
+      : encryptArtifact(packed, "synthetic-archive-key");
   await writeFile(artifactPath, bytes);
   return bytes;
 }
@@ -129,7 +133,7 @@ async function stage(overrides = {}) {
     modules: [],
     environment: "preproduction",
     migrationsRoot: null,
-    readRecoveryKey: async () => key,
+    readBackupKey: async () => held,
     ...overrides,
   });
 }
@@ -189,30 +193,105 @@ it.each(["missing-row", "wrong-key", "untrusted-chart", "missing-chart-node", "d
   },
 );
 
-it("uses a typed archive key without changing the saved key", async () => {
-  await expect(stage({ readRecoveryKey: async () => undefined })).rejects.toMatchObject({
-    code: "handover.backup_key_missing",
+it("the emergency switch opens a current backup file with no key typed", async () => {
+  await writeFile(
+    join(root, "backup.env"),
+    Object.entries(backupKeyEnv(held))
+      .map(([name, value]) => `${name}=${value}\n`)
+      .join(""),
+  );
+  await expect(
+    stage({ readBackupKey: async () => loadBackupKey(await loadBoxEnv({}, root)) }),
+  ).resolves.toEqual({ source: "selected-backup", sourceId: recoveryArchiveSourceId(ciphertext) });
+});
+
+it("a file under an older key asks for the master key and names it", async () => {
+  const asks = {
+    code: "handover.backup_needs_master_key",
+    params: { keyName: heldBackupKeyName(masterKey) },
+  };
+  await expect(
+    stage({ readBackupKey: async () => heldBackupKey(masterKey, 2) }),
+  ).rejects.toMatchObject(asks);
+  await expect(
+    stage({ readBackupKey: async () => heldBackupKey(makeMasterKey(), 1) }),
+  ).rejects.toMatchObject(asks);
+  await expect(stat(join(root, "pair-copy", "ready.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  expect(existsSync(join(root, "scratch"))).toBe(false);
+});
+
+it("with the master key it names, the older backup is used, and backup.env is unchanged", async () => {
+  ciphertext = await archive(3);
+  const saved = Object.entries(backupKeyEnv(heldBackupKey(masterKey, 4)))
+    .map(([name, value]) => `${name}=${value}\n`)
+    .join("");
+  await writeFile(join(root, "backup.env"), saved);
+  const readBackupKey = async () => loadBackupKey(await loadBoxEnv({}, root));
+  await expect(stage({ readBackupKey })).rejects.toMatchObject({
+    code: "handover.backup_needs_master_key",
   });
   await expect(
-    stage({
-      readRecoveryKey: async () => {
-        throw new AppError("backup.recovery_key_too_short", { min: 12 });
-      },
-      recoveryKey: key,
-    }),
-  ).resolves.toHaveProperty("source", "selected-backup");
-  await expect(
-    stage({ readRecoveryKey: async () => undefined, recoveryKey: key }),
-  ).resolves.toHaveProperty("source", "selected-backup");
-  const saved = "WAITRON_BACKUP_RECOVERY_KEY=a-newer-rotated-recovery-key\n";
-  await writeFile(join(root, "backup.env"), saved);
-  await expect(
-    stage({
-      readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv({}, root)),
-      recoveryKey: key,
-    }),
-  ).resolves.toHaveProperty("source", "selected-backup");
+    stage({ readBackupKey, masterKey: encodeMasterKeyCode(masterKey) }),
+  ).resolves.toEqual({ source: "selected-backup", sourceId: recoveryArchiveSourceId(ciphertext) });
   expect(await readFile(join(root, "backup.env"), "utf8")).toBe(saved);
+});
+
+it("a wrong master key is refused naming the backup's key", async () => {
+  const other = makeMasterKey();
+  await expect(
+    stage({ readBackupKey: async () => undefined, masterKey: encodeMasterKeyCode(other) }),
+  ).rejects.toMatchObject({
+    code: "promotion.break_glass_invalid",
+    params: { keyName: heldBackupKeyName(masterKey), keyNumber: 1 },
+  });
+  await expect(stat(join(root, "pair-copy", "ready.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("a spare with no backup.env, or one holding a key too short to use, asks for the master key", async () => {
+  await expect(
+    stage({ readBackupKey: async () => loadBackupKey(await loadBoxEnv({}, root)) }),
+  ).rejects.toMatchObject({
+    code: "handover.backup_needs_master_key",
+    params: { keyName: heldBackupKeyName(masterKey) },
+  });
+  await writeFile(
+    join(root, "backup.env"),
+    Object.entries({ ...backupKeyEnv(held), WAITRON_BACKUP_RECOVERY_KEY: "too-short" })
+      .map(([name, value]) => `${name}=${value}\n`)
+      .join(""),
+  );
+  await expect(
+    stage({ readBackupKey: async () => loadUsableBackupKey(await loadBoxEnv({}, root)) }),
+  ).rejects.toMatchObject({ code: "handover.backup_needs_master_key" });
+});
+
+it("a spare holding the file's key with its number and id but no master key day opens it with no key typed", async () => {
+  ciphertext = await archive(4);
+  const withoutDay = backupKeyEnv(heldBackupKey(masterKey, 4));
+  delete withoutDay.WAITRON_BACKUP_MASTER_KEY_DAY;
+  await writeFile(
+    join(root, "backup.env"),
+    Object.entries(withoutDay)
+      .map(([name, value]) => `${name}=${value}\n`)
+      .join(""),
+  );
+  await expect(
+    stage({ readBackupKey: async () => loadUsableBackupKey(await loadBoxEnv({}, root)) }),
+  ).resolves.toEqual({ source: "selected-backup", sourceId: recoveryArchiveSourceId(ciphertext) });
+});
+
+it("refuses a version 1 file, with or without a master key", async () => {
+  await archive(1, 1);
+  for (const typed of [{}, { masterKey: encodeMasterKeyCode(masterKey) }])
+    await expect(stage(typed)).rejects.toMatchObject({
+      code: "backup.artifact_invalid",
+      params: { reason: "bad_version" },
+    });
+  expect(existsSync(join(root, "scratch"))).toBe(false);
 });
 
 it("keeps the placed source after a second selection is interrupted", async () => {

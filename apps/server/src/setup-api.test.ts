@@ -11,11 +11,22 @@ import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { AppError, SUPPORTED_LOCALE_CODES, decodeMasterKeyCode } from "@waitron/shared";
+import {
+  AppError,
+  SUPPORTED_LOCALE_CODES,
+  decodeMasterKeyCode,
+  encodeMasterKeyCode,
+} from "@waitron/shared";
 import type { VenueResult } from "@waitron/provisioning";
 import { verifyPassword, verifyPin } from "@waitron/identity";
 import type { Database } from "@waitron/db";
-import { backupKey, masterKeyId, sealingPublicKey, type KeyRing } from "@waitron/credentials";
+import {
+  backupKey,
+  makeMasterKey,
+  masterKeyId,
+  sealingPublicKey,
+  type KeyRing,
+} from "@waitron/credentials";
 import { parseEnvFile } from "./env-file.js";
 import type { ProvisionRequest } from "./provision.js";
 import type { RestoreRequest } from "./restore-request.js";
@@ -33,6 +44,8 @@ import type { ConfigurationPreview } from "./configuration-import.js";
 import { cloudFixture } from "../test/cloud-fixture.js";
 import { createCloudConnection } from "./cloud-client.js";
 import { STUB_NODE } from "./testing/node-copy.js";
+import { heldBackupKey } from "./testing/backup-key.js";
+import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 
 const SETUP_STATE_DIR = useSetupStateDir();
 
@@ -1510,12 +1523,14 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
         mountSetup(app, deps, noopLog);
         const res = await postProvision(app, body());
         expect(res.status).toBe(200);
-        const bytes = decodeMasterKeyCode((await res.json()).masterKey);
+        const reply = await res.json();
+        const bytes = decodeMasterKeyCode(reply.masterKey);
         expect(parseEnvFile(readFileSync(join(stateDir, "backup.env"), "utf8"))).toEqual({
           WAITRON_BACKUP_TEST_FOLDER: "/srv/backups",
           WAITRON_BACKUP_RECOVERY_KEY: backupKey(bytes, 1).toString("base64url"),
           WAITRON_BACKUP_KEY_NUMBER: "1",
           WAITRON_BACKUP_MASTER_KEY_ID: masterKeyId(sealingPublicKey(bytes)).toString("hex"),
+          WAITRON_BACKUP_MASTER_KEY_DAY: reply.masterKeyName.slice(0, 10),
         });
         await tick();
       } finally {
@@ -2364,9 +2379,25 @@ async function postAdopt(app: Hono, env?: Record<string, unknown>): Promise<Resp
   });
 }
 
+const RESTORE_MASTER_KEY = makeMasterKey();
+const RESTORE_MASTER_KEY_TEXT = encodeMasterKeyCode(RESTORE_MASTER_KEY);
+const RESTORE_OPENING_KEY = heldBackupKey(RESTORE_MASTER_KEY).key;
+const sealedRestores = new Map<string, Buffer>();
+/** `plaintext` as a backup file under {@link RESTORE_MASTER_KEY}; the same bytes for the same
+ * plaintext, so a resent request replays. */
+function sealedRestore(plaintext: Uint8Array): Buffer {
+  const id = Buffer.from(plaintext).toString("hex");
+  let sealed = sealedRestores.get(id);
+  if (sealed === undefined) {
+    sealed = masterKeyArchiveBytes(plaintext, RESTORE_MASTER_KEY);
+    sealedRestores.set(id, sealed);
+  }
+  return sealed;
+}
+
 async function postRestore(
   app: Hono,
-  body: Uint8Array,
+  plaintext: Uint8Array,
   environment = "production",
   env?: Record<string, unknown>,
 ): Promise<Response> {
@@ -2376,10 +2407,10 @@ async function postRestore(
       method: "POST",
       headers: {
         "content-type": "application/octet-stream",
-        "x-waitron-recovery-key": "recovery-secret",
+        "x-waitron-master-key": RESTORE_MASTER_KEY_TEXT,
         "x-waitron-restore-environment": environment,
       },
-      body: body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer,
+      body: Uint8Array.from(sealedRestore(plaintext)),
     },
     env,
   );
@@ -2720,7 +2751,9 @@ describe("POST /setup-api/restore", () => {
       const stageRestore = vi.fn<NonNullable<SetupDeps["stageRestore"]>>(async (request) => {
         expect(request.kind).toBe("archive-file");
         if (request.kind === "archive-file")
-          expect(await readFile(request.artifactPath)).toEqual(Buffer.from([1, 2, 3]));
+          expect(await readFile(request.artifactPath)).toEqual(
+            sealedRestore(Uint8Array.from([1, 2, 3])),
+          );
       });
       const requestRestart = vi.fn();
       const app = new Hono();
@@ -2737,7 +2770,7 @@ describe("POST /setup-api/restore", () => {
           kind: "archive-file",
           artifactPath: expect.stringContaining("upload-"),
           signal: expect.any(AbortSignal),
-          recoveryKey: "recovery-secret",
+          recoveryKey: RESTORE_OPENING_KEY,
           environment: "production",
         },
         { oldBoxGone: false },
@@ -3045,7 +3078,7 @@ describe("POST /setup-api/restore-bucket", () => {
     }
   });
 
-  // The confirmation travels in a header, beside the recovery key's.
+  // The confirmation travels in a header, beside the master key's.
   it("passes the archive restore's old-box confirmation through, and answers its refusal with 409", async () => {
     const stageRestore = vi
       .fn()
@@ -3065,11 +3098,11 @@ describe("POST /setup-api/restore-bucket", () => {
         method: "POST",
         headers: {
           "content-type": "application/octet-stream",
-          "x-waitron-recovery-key": "key",
+          "x-waitron-master-key": RESTORE_MASTER_KEY_TEXT,
           "x-waitron-restore-environment": "production",
           ...headers,
         },
-        body: Uint8Array.from([1]),
+        body: Uint8Array.from(sealedRestore(Uint8Array.from([1]))),
       });
     const first = await send({});
     expect(first.status).toBe(409);
@@ -3095,7 +3128,7 @@ describe("POST /setup-api/restore-bucket", () => {
         kind: "archive-file",
         artifactPath: expect.stringContaining("upload-"),
         signal: expect.any(AbortSignal),
-        recoveryKey: "key",
+        recoveryKey: RESTORE_OPENING_KEY,
         environment: "production",
       },
       { oldBoxGone: true },
@@ -3135,11 +3168,11 @@ describe("POST /setup-api/restore-bucket", () => {
         method: "POST",
         headers: {
           "content-type": "application/octet-stream",
-          "x-waitron-recovery-key": "recovery-secret",
+          "x-waitron-master-key": RESTORE_MASTER_KEY_TEXT,
           "x-waitron-restore-environment": "production",
           "x-waitron-old-box-gone": "1",
         },
-        body: Uint8Array.from([1]),
+        body: Uint8Array.from(sealedRestore(Uint8Array.from([1]))),
       });
       expect(confirmed.status).toBe(409);
       expect(await confirmed.json()).toMatchObject({ error: { code: "setup.operation_conflict" } });
@@ -4179,7 +4212,7 @@ describe("setup routes — remaining refusals and resumption paths", () => {
         method: "POST",
         headers: {
           "content-type": "application/octet-stream",
-          "x-waitron-recovery-key": "recovery-secret",
+          "x-waitron-master-key": RESTORE_MASTER_KEY_TEXT,
           "x-waitron-restore-environment": "production",
           ...headers,
         },
@@ -4231,7 +4264,7 @@ describe("setup routes — remaining refusals and resumption paths", () => {
           kind: "archive-file",
           artifactPath: expect.stringContaining("upload-"),
           signal: expect.any(AbortSignal),
-          recoveryKey: "recovery-secret",
+          recoveryKey: RESTORE_OPENING_KEY,
           environment: "preproduction",
         },
         { oldBoxGone: false },
