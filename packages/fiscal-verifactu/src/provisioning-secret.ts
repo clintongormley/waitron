@@ -103,7 +103,7 @@ export async function validateSetupAeatCert(raw: unknown, venue: { taxId: string
 }
 
 /**
- * Seal a venue's AEAT certificate into the `fiscal.aeat` vault purpose. Re-checks only the blob's
+ * Seal a venue's AEAT certificate into the `fiscal.aeat` vault purpose. Re-checks the blob's
  * shape, because `putCredential` accepts any non-empty `certKind` and `pfxBase64`.
  */
 export async function sealAeatSecret(

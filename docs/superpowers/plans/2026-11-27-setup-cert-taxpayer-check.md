@@ -73,7 +73,7 @@ person's number), so a sole trader's personal certificate goes on as today (D5).
    choices: "This certificate is for tax ID {certificateTaxId}, not the venue's {taxId}. Choose the
    certificate for {taxId}, or, if the venue's tax ID is wrong, select Back to enter the setup
    details again." / "Este certificado es del NIF {certificateTaxId}, no del {taxId} del local. Elige
-   el certificado del {taxId} o, si el NIF del local es incorrecto, selecciona Volver para introducir
+   el certificado del {taxId} o, si el NIF del local es incorrecto, pulsa Volver para introducir
    de nuevo los datos." `#mapCertificateError` already routes a `pfxBase64` refusal to this page.
 4. **Guide** (`apps/server/src/guide/{en,es}/aeat-certificate.md`, `#refusals`): the refusals under
    **Certificate file** gain "is for another tax ID", and what to do: choose the venue's

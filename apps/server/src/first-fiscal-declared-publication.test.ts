@@ -163,6 +163,7 @@ it("browser setup refuses another taxpayer's certificate before making anything"
     passphrase: other.passphrase,
     certKind: "sello",
   });
+  const before = await f.store.read();
   await expect(f.activate()).rejects.toMatchObject({
     code: "setup.certificate_refused",
     params: {
@@ -179,4 +180,5 @@ it("browser setup refuses another taxpayer's certificate before making anything"
   expect(await suite.db.select().from(verifactuCertificates)).toEqual([]);
   expect(await allocationRows(suite.db)).toEqual([]);
   expect(await readNodeSigningKey(suite.node, f.ring, f.staged.stage.nodeId)).toBeNull();
+  expect(await f.store.read()).toEqual(before);
 });
