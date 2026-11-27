@@ -50,8 +50,8 @@ it("shows an unplaced dish's own price and its extra in the row and order total"
         offer: {
           ...offer,
           aLaCartePrices: {
-            lunch: { [offer.productId]: "18.00" },
             dinner: { [offer.productId]: "21.00" },
+            lunch: { [offer.productId]: "18.00" },
           },
         },
         setMenuId: daily.menuId,

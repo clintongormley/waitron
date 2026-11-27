@@ -7,7 +7,7 @@ import {
   toDraftLineInput as draftInput,
 } from "./draft-lines.js";
 import { lineBlock } from "./menu-refresh.js";
-import { draftLayout } from "./draft-layout.js";
+import { draftLayout, draftLinePrice } from "./draft-layout.js";
 import { productAsVariant } from "./order-line.js";
 import { asServedAllergens, asServedDiet } from "./as-served.js";
 import { nutritionDietLabels } from "../diet-labels.js";
@@ -942,6 +942,16 @@ describe("a set-menu draft line whose own version is not the copy on sale", () =
     ),
   });
   const unknown = [null, []];
+
+  it("prices a restored variant from the copy on sale while its own price is unknown", () => {
+    const offer = { ...onSale, aLaCartePrices: { d1: { "v-small": "22.00" } } };
+    const restored = fromDraftLine(line("v-small"), new Map(), undefined, () => ({
+      offer,
+      versionId: "d1",
+    }));
+    expect(restored.earlierPriceUnknown).toBe(true);
+    expect(draftLinePrice(restored)).toBe("22.00");
+  });
 
   it.each([null, "v-small"])(
     "is not reviewed, with its extras, when its own menu's dish is not known (variant %s)",
