@@ -123,13 +123,13 @@ que puedes seguir vendiendo. Una venta que necesita que una persona la resuelva 
 así que mientras alguna de las ventas pendientes lo necesite, la indicación dice **Avisa al
 encargado**.
 
-**Impresora «Cocina» no imprime · desde 21:16** es ámbar. Una comanda enviada a esa impresora a
-las 21:16 lleva dos minutos o más sin imprimirse, o el servidor ha dejado de intentar enviarla. El
+**Impresora «Cocina» no imprime · desde 21:16** es ámbar. Un trabajo enviado a esa impresora a
+las 21:16 lleva dos minutos o más sin imprimirse, o el servidor ha dejado de intentar enviarlo. El
 aviso de una impresora de estación aparece en todas las cajas registradoras y todos los terminales de
 camarero; el de cualquier otra impresora, solo en los que imprimen en ella sus tickets, sus
 justificantes de pago o sus facturas completas. Revisa el papel, la corriente y el cable de la
-impresora. El aviso desaparece cuando la impresora imprime algo que se le envió después de esa
-comanda. Si el servidor dejó de intentar enviar alguna comanda, las cajas muestran entonces
+impresora. El aviso desaparece cuando la impresora imprime algo que se le envió después de ese
+trabajo. Si el servidor dejó de intentar enviar algún trabajo, las cajas muestran entonces
 **Impresora «Cocina» no pudo imprimir un ticket · Vuelve a imprimirlo** en ámbar hasta que se
 imprima una reimpresión (una comanda desde la mesa, un ticket desde su venta) o un reenvío desde
 **Impresoras**. Un ticket original que no se imprimió también se vuelve a intentar por sí solo cada

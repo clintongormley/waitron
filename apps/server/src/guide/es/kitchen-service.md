@@ -264,12 +264,12 @@ caja, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pedido
 pendiente de recoger; una pantalla de estación en la que nadie inicia sesión no muestra ninguno de los
 dos.
 
-Si falla un ticket de corrección de un plato, pulsa **Reimprimir** en la caja para ver qué
-platos quedan en el pedido. El problema de impresión desaparece cuando el nuevo ticket sale en
+Si falla una comanda de corrección de un plato, pulsa **Reimprimir** en la caja para ver qué
+platos quedan en el pedido. El problema de impresión desaparece cuando la nueva comanda sale en
 la misma impresora de esa estación. Si la tarjeta ya no aparece, abre **Impresoras** y pulsa
-**Reimprimir** en el ticket que falló para reenviarlo a su impresora original. Los tickets de
+**Reimprimir** en la comanda que falló para reenviarla a su impresora original. Las comandas de
 alergias que fallan aparecen en la alerta de impresión. Abre **Impresoras** y pulsa **Reimprimir**
-en el ticket que falló para que las instrucciones actualizadas lleguen en papel.
+en la comanda que falló para que las instrucciones actualizadas lleguen en papel.
 
 Un plato desaparece de las pantallas de estación en cuanto el camarero lo marca como servido; si se
 sirve solo en parte, se queda con lo que falta.
@@ -501,7 +501,7 @@ elimina** cuando aparezcan esas secciones, y decide si quieres eliminar la estac
 
 ## Elige el idioma del papel de estación {#paper-language}
 
-Para cambiar las palabras fijas de los tickets de estación y los comprobantes del número de recogida,
+Para cambiar las palabras fijas de las comandas de estación y los comprobantes del número de recogida,
 cambia el idioma predeterminado en **Idiomas del contenido**, dentro de **Productos y cartas**. Con español como
 predeterminado, las cabeceras salen en español; con otros idiomas, salen en inglés hasta que esté
 disponible su traducción de estación. Sin un idioma del contenido guardado, el papel sale en inglés.

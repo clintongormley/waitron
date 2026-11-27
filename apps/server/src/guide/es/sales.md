@@ -18,7 +18,7 @@ El importe de tarjeta muestra los cobros antes de las devoluciones.
 ## Revisa un cierre de caja pendiente {#drawer-close-reminders}
 
 Si queda un cajón por cerrar después del horario de apertura, revisa **Avisos** en el panel. En la
-caja asignada, elige **Más → Cerrar cajón**. Si el aviso indica que el cajón no tiene una caja asignada,
+caja asignada, elige **Más → Cerrar cajón**. Si el aviso indica que el cajón no tiene un terminal asignado,
 asígnalo primero en **Dispositivos**.
 
 Si recibes el correo diario de ventas, usa el enlace para abrir **Ventas y recaudación** y buscar cierres
