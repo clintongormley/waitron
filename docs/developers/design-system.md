@@ -3831,8 +3831,8 @@ The box carries data attributes its primitive sets, and `fieldStyles` draws each
 
 - **The label rests or floats** (`data-label`, from `fieldLabelState`; `wt-number-stepper`'s
   always floats, see its row). It rests — centred in the
-  box (in `wt-textarea`, on its first line) at the field box's font size, `--wt-font-size-md`
-  (14px at the normal root), smaller than the value, which an input, a textarea and `wt-combobox`'s
+  box (in `wt-textarea`, on its first line) at `--wt-font-size-md`, which the primitive's own
+  host sets whatever the text around it (14px at the normal root), smaller than the value, which an input, a textarea and `wt-combobox`'s
   trigger draw at `--wt-text-control-font-size` — while the field is empty and unfocused, has no hint and no placeholder, and is
   not a date or time type (`date`, `time`, `datetime-local`, `month`, `week`), whose empty field
   the browser fills with its own format text. Otherwise it floats, at `--wt-font-size-sm` at the
