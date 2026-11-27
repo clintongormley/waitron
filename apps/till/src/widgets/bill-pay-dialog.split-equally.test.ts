@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import type { WtStepper, WtTopBar } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -75,6 +76,21 @@ async function choose(el: TillBillPayDialog, way: string): Promise<void> {
 async function back(bar: WtTopBar, el: TillBillPayDialog): Promise<void> {
   bar.dispatchEvent(new CustomEvent("wt-back", { bubbles: true, composed: true }));
   await settle(el);
+}
+
+const startText = (el: TillBillPayDialog) =>
+  screen(el)!.shadowRoot!.querySelector("wt-button[data-split-start]")!.textContent!.trim();
+const splitBar = (el: TillBillPayDialog) =>
+  screen(el)!.shadowRoot!.querySelector<WtTopBar>("wt-top-bar")!;
+const backButton = (bar: WtTopBar) =>
+  bar.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button");
+const shareTile = (el: TillBillPayDialog) =>
+  root(el).querySelector<HTMLElement>('[data-quiet-pay-way="share"]')!;
+
+function deepActive(): Element | null {
+  let focused = document.activeElement;
+  while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+  return focused;
 }
 
 function capture<T>(el: TillBillPayDialog, type: string): T[] {
@@ -166,6 +182,102 @@ describe("till-bill-pay-dialog: Split equally on a table's Pay", () => {
     root(el).querySelector<HTMLElement>("[data-pay-continue]")!.click();
     await settle(el);
     expect(previews.at(-1)!.choice).toEqual({ kind: "share", shareOf: 3 });
+  });
+
+  it.each([
+    ["before the balance is read", null],
+    ["while the balance read showed nothing taken", balanceOf()],
+  ])(
+    "follows a balance with money taken that arrives while it is open, %s",
+    async (_when, first) => {
+      const el = await mount({ receiptGuests: 4, balance: first });
+      const quotes = capture<TablePayQuoteRequest>(el, "bill-pay-quote");
+      el.quoteContext = "table bill";
+      await choose(el, "share");
+
+      el.balance = balanceOf({ received: "24.44", outstanding: "48.86" });
+      await settle(el);
+
+      expect(stepper(el).value).toBe(2);
+      expect(question(el)).toBe(t("split_equally.question_left"));
+      expect(startText(el)).toBe(`Start with Guest 1 · ${money("24.43")}`);
+      screen(el)!.shadowRoot!.querySelector<HTMLElement>("wt-button[data-split-start]")!.click();
+      await settle(el);
+      await expect.poll(() => quotes.at(-1)?.asked.choice).toEqual({ kind: "share", shareOf: 2 });
+    },
+  );
+
+  it("starts at the table's count once a balance with nothing taken arrives after opening", async () => {
+    const el = await mount({ receiptGuests: 4, balance: null });
+    await choose(el, "share");
+
+    el.balance = balanceOf();
+    await settle(el);
+
+    expect(stepper(el).value).toBe(4);
+    expect(question(el)).toBe(t("split_equally.question"));
+  });
+
+  it("chosen again from another way, starts by the starting rule; tapped again while chosen, keeps its count", async () => {
+    const el = await mount({
+      receiptGuests: 4,
+      balance: balanceOf({ received: "24.44", outstanding: "48.86" }),
+    });
+    await choose(el, "share");
+    await splitAmong(el, 3);
+
+    await choose(el, "whole");
+    await choose(el, "share");
+    expect(stepper(el).value).toBe(2);
+
+    await splitAmong(el, 3);
+    await choose(el, "share");
+    expect(stepper(el).value).toBe(3);
+  });
+
+  it("on the form after a payment, a share chosen from another way starts by the starting rule", async () => {
+    const el = await mount({
+      receiptGuests: 4,
+      balance: balanceOf({ received: "24.44", outstanding: "48.86" }),
+      taken: { change: null },
+    });
+    const radio = (way: string) =>
+      root(el).querySelector<HTMLInputElement>(`input[name="way"][value="${way}"]`)!;
+    radio("share").click();
+    await settle(el);
+    await splitAmong(el, 3);
+    expect(radio("share").checked).toBe(true);
+
+    radio("share").click();
+    await settle(el);
+    expect(stepper(el).value).toBe(3);
+    await splitAmong(el, 3);
+
+    radio("whole").click();
+    await settle(el);
+    radio("share").click();
+    await settle(el);
+    expect(stepper(el).value).toBe(2);
+  });
+
+  it("takes keyboard focus into Split equally, and back to the way or to the share's Pay", async () => {
+    const el = await mount({ receiptGuests: 3 });
+    shareTile(el).focus();
+    await userEvent.keyboard("{Enter}");
+    await settle(el);
+    await expect.poll(deepActive).toBe(backButton(splitBar(el)));
+
+    await userEvent.keyboard("{Enter}");
+    await settle(el);
+    expect(screen(el)).toBeNull();
+    await expect.poll(deepActive).toBe(shareTile(el).shadowRoot!.querySelector("button"));
+
+    await userEvent.keyboard("{Enter}");
+    await settle(el);
+    await expect.poll(deepActive).toBe(backButton(splitBar(el)));
+    screen(el)!.shadowRoot!.querySelector<HTMLElement>("wt-button[data-split-start]")!.click();
+    await settle(el);
+    await expect.poll(deepActive).toBe(backButton(payTopBar(el)));
   });
 
   it("takes nothing for a share chosen with no count", async () => {

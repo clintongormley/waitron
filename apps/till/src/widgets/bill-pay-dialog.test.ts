@@ -3330,6 +3330,24 @@ describe("till-bill-pay-dialog: the next guest on a handheld", () => {
     expect(await guestsStillToPay(el)).toBe(2);
   });
 
+  it("a card not charged while Split equally is open drops its guest from the screen at once", async () => {
+    const el = await handheld();
+    await share(el, "3");
+    const pending = { change: null, pending: "20.80" };
+    await pay(el, "41.60", pending);
+    await click(el, "[data-pay-next]");
+    el.quiet = true;
+    await pick(el, "way", "share");
+    const split = root(el).querySelector("till-split-equally")!;
+    await split.updateComplete;
+    expect(split.paid).toEqual([{ amount: "20.80", state: "card" }]);
+
+    el.cardEnded(pending, false);
+    await el.updateComplete;
+
+    expect(split.paid).toEqual([]);
+  });
+
   it("a card not charged ends no run that did not count it in progress", async () => {
     const el = await handheld();
     await share(el, "3");

@@ -66,7 +66,7 @@ import type { PayEquipmentRole, PayNotice } from "./pay-equipment.js";
 import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from "./guest-count.js";
 import { trackDialog } from "./track-dialog.js";
 import { nextShareLabel } from "./next-share-label.js";
-import { splitEquallyScreen, splitOpening, type SplitOpening } from "./split-equally-pay.js";
+import { SplitOpening, splitEquallyScreen } from "./split-equally-pay.js";
 import { currentLocale, fill, t, vatSplitText } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import type {
@@ -649,6 +649,7 @@ export class TillBillPayDialog extends LitElement {
    * only while the form is off screen. */
   cardEnded(taken: PayTaken, charged: boolean): void {
     if (!this.#run.counts(taken)) return;
+    this.requestUpdate();
     if (charged) return this.#run.received(taken);
     if (this.nextOffered && this.#dropLoweredCount()) {
       this.#entryBaseline = this.#draft();
@@ -1242,13 +1243,13 @@ export class TillBillPayDialog extends LitElement {
     return this.quiet && !this.counter;
   }
 
+  /** Back to the share already chosen keeps its count; from another way, the starting rule. */
   #openSplit(): void {
     const people = this.people.trim();
-    this.splitShown = splitOpening(
-      this.balance,
-      this.receiptGuests,
-      this.#run,
-      PEOPLE.test(people) ? Number(people) : null,
+    const kept = this.chosenWay === "share" && PEOPLE.test(people) ? Number(people) : null;
+    this.splitShown = new SplitOpening(
+      () => ({ balance: this.balance, receiptGuests: this.receiptGuests, run: this.#run }),
+      kept,
     );
   }
 
@@ -1277,9 +1278,9 @@ export class TillBillPayDialog extends LitElement {
     )
       return null;
     return splitEquallyScreen(
+      this,
       opening,
       this.billName,
-      this.balance?.outstanding ?? "0.00",
       () => (this.splitShown = null),
       ({ guests }) => this.#startSplit(guests),
     );

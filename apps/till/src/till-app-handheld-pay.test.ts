@@ -3533,6 +3533,94 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       expect(rows()).toEqual(ticked);
     });
 
+    describe("while Split equally is open", () => {
+      const split = (el: TillApp) => inDialog(el, "till-split-equally") as TillSplitEqually | null;
+      const rows = (el: TillApp) =>
+        split(el)!
+          .shadowRoot!.querySelector<WtShareList>("wt-share-list")!
+          .shares.map(({ name, detail, amount }) => [name, detail, amount]);
+      const inSplit = (el: TillApp, selector: string) =>
+        split(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!;
+      const quoted = () => vi.mocked(api.previewBillPayment).mock.calls.at(-1)?.[1];
+
+      /** The next guest's Pay, then Split equally chosen again: Guest 1's card still at the
+       * reader. */
+      async function openOverPendingCard(getBillBalance: Mock) {
+        const { el } = await pendingShare(getBillBalance);
+        await press(el, "[data-pay-next]");
+        await press(el, 'input[name="way"][value="share"]');
+        expect(rows(el)).toEqual([
+          ["Guest 1", t("split_equally.card"), money("40.00")],
+          ["Guest 2", t("split_equally.due"), money("40.00")],
+          ["Guest 3", t("split_equally.due"), money("40.00")],
+        ]);
+        return el;
+      }
+
+      async function start(el: TillApp): Promise<void> {
+        inSplit(el, "wt-button[data-split-start]").click();
+        await flush(el);
+      }
+
+      it("a card declined shows every guest still to pay, and Start shares among them all", async () => {
+        const getBillBalance = vi.fn(async () => ownIs("pending"));
+        const el = await openOverPendingCard(getBillBalance);
+        getBillBalance.mockResolvedValue(ownIs("declined"));
+
+        await tick(el);
+
+        expect(rows(el)).toEqual(
+          ["Guest 1", "Guest 2", "Guest 3", "Guest 4"].map((guest) => [
+            guest,
+            t("split_equally.due"),
+            money("30.00"),
+          ]),
+        );
+        expect(text(inSplit(el, "[data-split-question]"))).toBe(t("split_equally.question"));
+        expect(text(inSplit(el, "wt-button[data-split-start]"))).toBe(
+          `Start with Guest 1 · ${money("30.00")}`,
+        );
+        await start(el);
+        await expect.poll(quoted).toMatchObject({ kind: "share", shareOf: 4 });
+      });
+
+      it("a card received shows its guest paid, and Start shares among the rest", async () => {
+        const getBillBalance = vi.fn(async () => ownIs("pending"));
+        const el = await openOverPendingCard(getBillBalance);
+        getBillBalance.mockResolvedValue(ownIs("received"));
+
+        await tick(el);
+
+        expect(rows(el)).toEqual([
+          ["Guest 1", t("split_equally.paid"), money("40.00")],
+          ["Guest 2", t("split_equally.due"), money("40.00")],
+          ["Guest 3", t("split_equally.due"), money("40.00")],
+        ]);
+        expect(text(inSplit(el, "wt-button[data-split-start]"))).toBe(
+          `Start with Guest 2 · ${money("40.00")}`,
+        );
+        await start(el);
+        await expect.poll(quoted).toMatchObject({ kind: "share", shareOf: 2 });
+      });
+
+      it("with a guest paid, asks for every guest paying, and one fewer guest leaves one to pay", async () => {
+        const getBillBalance = vi.fn(async () => ownIs("pending"));
+        const el = await openOverPendingCard(getBillBalance);
+        getBillBalance.mockResolvedValue(ownIs("received"));
+        await tick(el);
+
+        expect(text(inSplit(el, "[data-split-question]"))).toBe(t("split_equally.question"));
+        const stepper = inSplit(el, "wt-stepper");
+        stepper.shadowRoot!.querySelector<HTMLElement>('button[data-step="-1"]')!.click();
+        await flush(el);
+        expect(text(inSplit(el, "wt-button[data-split-start]"))).toBe(
+          `Start with Guest 2 · ${money("80.00")}`,
+        );
+        await start(el);
+        await expect.poll(quoted).toMatchObject({ kind: "share", shareOf: 1 });
+      });
+    });
+
     it("a second card at the reader keeps the first one watched: its decline is said beside the second's warning", async () => {
       const getBillBalance = vi.fn(async () => ownIs("pending"));
       const { el, reads } = await pendingShare(getBillBalance);
