@@ -1154,8 +1154,8 @@ muestra el cobro como realizado.
 
 **Sigue con el siguiente comensal.** Tras un pago parcial, comprueba **Queda por pagar**. En un
 teléfono, pulsa **Cobrar al siguiente** para continuar; un reparto igual también indica qué parte
-va a cobrarse. Si cambia el grupo, cambia el número de comensales: en una mesa, pulsa **Dividir a partes
-iguales** arriba en Cobrar; en Mostrador, cambia cuántas personas quedan por pagar. Tras el último pago, elige el
+va a cobrarse. Si cambia el grupo, cambia el número de comensales: en una mesa, vuelve a elegir **Dividir a partes
+iguales**; en Mostrador, cambia cuántas personas quedan por pagar. Tras el último pago, elige el
 [documento para el cliente](table-service.md#settlement-document). Cerrar la mesa es una acción
 aparte, después del cobro.
 

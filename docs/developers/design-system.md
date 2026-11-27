@@ -7174,7 +7174,8 @@ On a table, Split equally opens its own full-screen panel (`till-split-equally`)
 back says Pay, the muted question, a round `wt-stepper` for the guests, a `wt-share-list` of every
 guest's share with the guests already paid ticked, the cent note only when the shares differ, and
 a foot button naming the next guest and their share. Its button returns to Pay for that share with
-no count field, and Pay's back, labelled Split equally, reopens the panel with the count kept. A
+no count field, and Pay's back, labelled Split equally, reopens the panel with the count kept while who has paid
+and the amount left are unchanged. A
 Counter order keeps the typed people-still-to-pay field.
 
 Pay shows the server's checked amount and any required receipt answers. Charge starts the reader

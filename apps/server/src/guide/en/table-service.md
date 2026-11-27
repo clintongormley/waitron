@@ -1087,7 +1087,7 @@ shows the payment as taken.
 
 **Continue with the next guest.** After a part payment, check **Still to pay**. On a phone, press
 **Take the next** to continue; an equal split also shows which share is next. If your group changes, change
-the number of guests: on a table, press **Split equally** at the top of Pay; at the Counter, change
+the number of guests: on a table, choose **Split equally** again; at the Counter, change
 how many people are still to pay. After the final payment, choose the
 [document to give the guest](table-service.md#settlement-document). Finishing a table is a
 separate action after payment.
