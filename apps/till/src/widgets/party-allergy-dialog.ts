@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
+import { styleMap } from "lit/directives/style-map.js";
 import {
   baseStyles,
   draftScopeFor,
@@ -23,7 +24,10 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-textarea.js";
-import "@waitron/ui/src/components/wt-form-actions.js";
+import { formMessage, formMessageStyles } from "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-foot-button-bar.js";
+import "@waitron/ui/src/components/wt-full-screen-panel.js";
+import "@waitron/ui/src/components/wt-top-bar.js";
 import { allergenLabel, allergenName } from "../i18n/allergen-names.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergyClashes, allergensWithExtras } from "../state/party-allergy.js";
@@ -79,6 +83,7 @@ const clone = (draft: Draft): Draft => JSON.parse(JSON.stringify(draft)) as Draf
 export class TillPartyAllergyDialog extends LitElement {
   static override styles = [
     baseStyles,
+    formMessageStyles,
     nutritionIconStyles,
     css`
       :host {
@@ -90,6 +95,13 @@ export class TillPartyAllergyDialog extends LitElement {
         gap: var(--wt-space-4);
         width: var(--wt-form-max-width);
         max-width: 100%;
+      }
+      wt-full-screen-panel .content {
+        margin: var(--wt-space-4);
+        max-width: calc(100% - 2 * var(--wt-space-4));
+      }
+      .form-message {
+        padding-inline: var(--wt-space-4);
       }
       .guest,
       .dish {
@@ -158,6 +170,7 @@ export class TillPartyAllergyDialog extends LitElement {
   ];
   @property({ attribute: false }) view!: PartyAllergyRead | AllergyMoveRead;
   @property() mode: "send" | "edit" = "send";
+  @property({ attribute: false }) panelInset = 0;
   @property() scopeKey = "";
   @property({ attribute: false }) draftParent?: object;
   @property({ type: Boolean }) busy = false;
@@ -732,87 +745,115 @@ export class TillPartyAllergyDialog extends LitElement {
       );
     });
     const disabled = this.busy || this.retryOnly || this.confirmation !== null;
+    const editing = this.mode === "edit";
+    const title = this.page === "question" ? t("allergy.question") : t("allergy.title");
+    const message = [fieldError ? t("form.fix_fields") : "", this.refusal]
+      .filter(Boolean)
+      .join(" ");
+    const primary = html`${this.page !== "question" ? html`<wt-button data-primary variant=${this.mode === "edit" ? save.variant : "primary"} ?disabled=${this.busy || this.confirmation !== null || (this.mode === "edit" && save.unchanged) || (this.attempted && this.#invalid())} @click=${() => void this.#submit()}>${this.mode === "edit" ? t("allergy.save") : this.page === "guests" ? t("allergy.next") : clash ? t("allergy.anyway") : t("allergy.send")}</wt-button>` : nothing}`;
+    const content = html`<div
+      class="content"
+      @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-primary]"))}
+    >
+      ${
+        this.page === "question"
+          ? html`<div class="actions">
+              <wt-button
+                data-none
+                ?disabled=${this.busy || this.confirmation !== null}
+                @click=${() => this.#none()}
+                >${t("allergy.none")}</wt-button
+              ><wt-button
+                data-allergies
+                ?disabled=${disabled}
+                @click=${() => {
+                  this.#add();
+                  this.page = this.mode === "edit" ? "editor" : "guests";
+                }}
+                >${t("allergy.title")}</wt-button
+              >
+            </div>`
+          : html`
+              ${
+                this.page !== "ticks"
+                  ? html`${this.draft.guests.map((g, i) => this.#guest(g, i))}${!this.draft.guests.length ? html`<p>${t("allergy.empty")}</p>` : nothing}
+                      <div class="actions">
+                        <wt-button
+                          data-add
+                          variant="secondary"
+                          ?disabled=${disabled}
+                          @click=${() => this.#add()}
+                          >${t("allergy.another")}</wt-button
+                        ><wt-button
+                          data-none
+                          variant="secondary"
+                          ?disabled=${disabled}
+                          @click=${() => this.#none()}
+                          >${t("allergy.none")}</wt-button
+                        >
+                      </div>`
+                  : nothing
+              }
+              ${this.page === "ticks" || this.page === "editor" ? this.#dishes().map((d, i) => this.#dish(d, i)) : nothing}
+            `
+      }
+      ${
+        editing
+          ? nothing
+          : html`<wt-form-actions .error=${message}>
+              <wt-button
+                slot="cancel"
+                data-cancel
+                variant="secondary"
+                ?disabled=${disabled}
+                @click=${() => void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel")}
+                >${t("action.cancel")}</wt-button
+              >
+              ${
+                this.page === "ticks"
+                  ? html`<wt-button
+                      slot="secondary"
+                      data-back
+                      variant="secondary"
+                      ?disabled=${disabled}
+                      @click=${() => {
+                        this.page = "guests";
+                      }}
+                      >${t("allergy.back")}</wt-button
+                    >`
+                  : nothing
+              }
+              ${primary}
+            </wt-form-actions>`
+      }
+    </div>`;
     return html`<wt-dialog
         ${trackDialog()}
         .open=${this.active}
-        .heading=${this.page === "question" ? t("allergy.question") : t("allergy.title")}
+        ?full-screen=${editing}
+        style=${styleMap({ "--wt-dialog-inset-inline-start": `${this.panelInset}px` })}
+        .ariaLabel=${editing ? title : null}
+        .heading=${editing ? "" : title}
         .beforeClose=${this.#beforeClose}
         @wt-close=${(e: Event) => this.#closed(e)}
       >
-        <div
-          class="content"
-          @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-primary]"))}
-        >
-          ${
-            this.page === "question"
-              ? html`<div class="actions">
-                  <wt-button
-                    data-none
-                    ?disabled=${this.busy || this.confirmation !== null}
-                    @click=${() => this.#none()}
-                    >${t("allergy.none")}</wt-button
-                  ><wt-button
-                    data-allergies
-                    ?disabled=${disabled}
-                    @click=${() => {
-                      this.#add();
-                      this.page = this.mode === "edit" ? "editor" : "guests";
-                    }}
-                    >${t("allergy.title")}</wt-button
-                  >
-                </div>`
-              : html`
-                  ${
-                    this.page !== "ticks"
-                      ? html`${this.draft.guests.map((g, i) => this.#guest(g, i))}${!this.draft.guests.length ? html`<p>${t("allergy.empty")}</p>` : nothing}
-                          <div class="actions">
-                            <wt-button
-                              data-add
-                              variant="secondary"
-                              ?disabled=${disabled}
-                              @click=${() => this.#add()}
-                              >${t("allergy.another")}</wt-button
-                            ><wt-button
-                              data-none
-                              variant="secondary"
-                              ?disabled=${disabled}
-                              @click=${() => this.#none()}
-                              >${t("allergy.none")}</wt-button
-                            >
-                          </div>`
-                      : nothing
-                  }
-                  ${this.page === "ticks" || this.page === "editor" ? this.#dishes().map((d, i) => this.#dish(d, i)) : nothing}
-                `
-          }
-          <wt-form-actions
-            .error=${[fieldError ? t("form.fix_fields") : "", this.refusal].filter(Boolean).join(" ")}
-          >
-            <wt-button
-              slot="cancel"
-              data-cancel
-              variant="secondary"
-              ?disabled=${disabled}
-              @click=${() => void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel")}
-              >${t("action.cancel")}</wt-button
-            >
-            ${
-              this.page === "ticks"
-                ? html`<wt-button
-                    slot="secondary"
-                    data-back
-                    variant="secondary"
-                    ?disabled=${disabled}
-                    @click=${() => {
-                      this.page = "guests";
-                    }}
-                    >${t("allergy.back")}</wt-button
-                  >`
-                : nothing
-            }
-            ${this.page !== "question" ? html`<wt-button data-primary variant=${this.mode === "edit" ? save.variant : "primary"} ?disabled=${this.busy || this.confirmation !== null || (this.mode === "edit" && save.unchanged) || (this.attempted && this.#invalid())} @click=${() => void this.#submit()}>${this.mode === "edit" ? t("allergy.save") : this.page === "guests" ? t("allergy.next") : clash ? t("allergy.anyway") : t("allergy.send")}</wt-button>` : nothing}
-          </wt-form-actions>
-        </div>
+        ${
+          editing
+            ? html`<wt-full-screen-panel body-label=${title}>
+                <wt-top-bar
+                  slot="header"
+                  .heading=${title}
+                  .backLabel=${t("action.back")}
+                  @wt-back=${() => void this.renderRoot.querySelector("wt-dialog")!.requestClose("navigation")}
+                ></wt-top-bar>
+                ${content}
+                <div slot="footer">
+                  ${formMessage(message)}
+                  <wt-foot-button-bar>${primary}</wt-foot-button-bar>
+                </div>
+              </wt-full-screen-panel>`
+            : content
+        }
       </wt-dialog>
       ${
         this.confirmation

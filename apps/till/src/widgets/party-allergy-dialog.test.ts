@@ -3,7 +3,7 @@ import type { WtInput, WtTextarea } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
 import type { PartyAllergyRead, AllergyPatch } from "@waitron/module";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { TillPartyAllergyDialog } from "./party-allergy-dialog.js";
 
 const original = currentLocale();
@@ -402,7 +402,9 @@ describe("A669 allergy dialog", () => {
     el.busy = false;
     el.refusal = "Connection lost";
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("Connection lost");
+    expect(el.shadowRoot!.querySelector('[slot="footer"] [role="alert"]')?.textContent).toBe(
+      "Connection lost",
+    );
     expect((el.shadowRoot!.querySelector("[data-primary]") as HTMLButtonElement).disabled).toBe(
       false,
     );
@@ -487,7 +489,9 @@ describe("A669 allergy dialog", () => {
     expect(el.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-0-who"]')!.error).toBe(
       "Check this guest",
     );
-    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBeTruthy();
+    expect(el.shadowRoot!.querySelector('[slot="footer"] [role="alert"]')?.textContent).toBe(
+      t("form.fix_fields"),
+    );
     expect((el.shadowRoot!.querySelector("[data-primary]") as HTMLButtonElement).disabled).toBe(
       false,
     );

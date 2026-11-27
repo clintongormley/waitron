@@ -88,7 +88,10 @@ for (const width of [390, 1280])
         await form.updateComplete;
         const native = form.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
         await native.updateComplete;
-        expect(native.shadowRoot!.textContent).toContain(t("allergy.title"));
+        expect(native.shadowRoot!.querySelector("dialog")!.getAttribute("aria-label")).toBe(
+          t("allergy.title"),
+        );
+        await expect.element(page.getByRole("heading", { name: t("allergy.title") })).toBeVisible();
         expect(form.shadowRoot!.textContent).toContain("Roast vegetables");
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
         await page.screenshot({

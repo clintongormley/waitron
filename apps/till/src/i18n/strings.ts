@@ -1588,6 +1588,7 @@ export const en = {
   "table.split_presented": "Presented: this bill goes whole or stays.",
   "table.split_own_unsent": "Your unsent dishes go only with the whole bill.",
   "table.name_title": "Name the party at {tables}",
+  "table.name_panel_title": "Name the party",
   "table.bill_name_title": "Name this bill: {bill}",
   "table.bill_name_taken_over":
     "{name} has dishes on this bill that are not sent yet, so the bill's name was not saved. Choose Take over draft to name it now, or name it once those dishes are sent.",
@@ -4047,6 +4048,7 @@ export const es: Record<StringKey, string> = {
   "table.split_presented": "Presentada: esta cuenta se va entera o se queda.",
   "table.split_own_unsent": "Tus platos sin enviar solo se van con la cuenta entera.",
   "table.name_title": "Poner nombre a los clientes de {tables}",
+  "table.name_panel_title": "Poner nombre",
   "table.bill_name_title": "Poner nombre a esta cuenta: {bill}",
   "table.bill_name_taken_over":
     "{name} tiene platos sin enviar en esta cuenta, así que no se ha guardado el nombre de la cuenta. Elige Tomar el pedido para ponérselo ahora, o pónselo cuando se envíen esos platos.",

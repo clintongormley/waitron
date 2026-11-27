@@ -5056,14 +5056,16 @@ export class TillApp extends LitElement {
   #renderAllergyDialog(): TemplateResult | typeof nothing {
     const open = this.allergyDialog;
     if (open === null) return nothing;
+    const order = this.renderRoot.querySelector("till-table-order-screen");
     return html`<till-party-allergy-dialog
       .view=${open.view}
       .mode=${open.mode ?? "send"}
+      .panelInset=${order?.orderPaneInset ?? 0}
       .scopeKey=${open.key}
       .busy=${open.busy}
       .refusal=${open.refusal ?? ""}
       .fieldRefusal=${open.fieldRefusal ?? null}
-      .draftParent=${this.renderRoot.querySelector("till-table-order-screen") ?? this}
+      .draftParent=${order ?? this}
       @allergy-confirm=${(event: CustomEvent<AllergyConfirmDetail>) => {
         event.stopPropagation();
         if (
@@ -24956,6 +24958,9 @@ export class TillApp extends LitElement {
           this.#onFloorRefresh(event.detail ?? {})}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
+        @order-pane-inset-changed=${() => {
+          if (this.allergyDialog?.mode === "edit") this.requestUpdate();
+        }}
         @edit-party-allergy=${(event: Event) => {
           event.stopPropagation();
           void this.#openTableAllergyEditor();

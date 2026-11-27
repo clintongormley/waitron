@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WtInput } from "@waitron/ui";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import type { AllergySendTarget, PartyAllergyRead } from "@waitron/module";
 import type { TillApi } from "./api/client.js";
 import type { PrintProblem } from "./api/kitchen-api.js";
@@ -1069,6 +1069,46 @@ describe("A669 live table editor", () => {
     expect(screen.shadowRoot!.activeElement).toBe(menu);
     expect(menu.shadowRoot!.activeElement).toBe(menu.shadowRoot!.querySelector("button"));
   });
+
+  it.each(["till", "tablet-landscape"] as const)(
+    "keeps the allergy summary editor over the order and returns focus to Change on a %s",
+    async (formFactor) => {
+      await page.viewport(1280, 900);
+      try {
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue(till(formFactor)),
+          getDeviceIdentity: vi
+            .fn()
+            .mockResolvedValue({ deviceId: "device-1", name: "Device 1", formFactor }),
+        });
+        const screen = await openTable(el);
+        const root = screen.shadowRoot!;
+        await vi.waitFor(() => expect(screen.allergyView?.snapshot.answer).toBe("none"));
+        const change = root.querySelector<HTMLElement>("[data-allergy-change]")!;
+        await userEvent.click(change);
+        await vi.waitFor(() => expect(dialog(el)?.mode).toBe("edit"));
+        const editor = dialog(el)!.shadowRoot!.querySelector("wt-dialog")!;
+        const bounds = () => editor.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
+        const paneLeft = () =>
+          root.querySelector("[data-draft-pane]")!.getBoundingClientRect().left;
+        await expect.poll(paneLeft).toBeGreaterThan(0);
+        await expect.poll(() => Math.round(bounds().left)).toBe(Math.round(paneLeft()));
+        expect(bounds().right).toBe(innerWidth);
+        expect(bounds().top).toBe(0);
+
+        const closed = new Promise<void>((resolve) =>
+          editor.addEventListener("wt-close", () => resolve(), { once: true }),
+        );
+        await page.getByRole("button", { name: "Back", exact: true }).click();
+        await closed;
+        await el.updateComplete;
+        expect(dialog(el)).toBeNull();
+        expect(root.activeElement).toBe(change);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
 
   it("opens Change as an editor and saves an explicit answer with the reviewed revision", async () => {
     const { el } = await mountApp();

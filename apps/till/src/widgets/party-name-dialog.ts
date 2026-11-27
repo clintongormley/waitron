@@ -1,5 +1,6 @@
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
+import { styleMap } from "lit/directives/style-map.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
 import {
@@ -10,7 +11,10 @@ import {
   saveActionState,
 } from "@waitron/ui";
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-form-actions.js";
+import { formMessage, formMessageStyles } from "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-foot-button-bar.js";
+import "@waitron/ui/src/components/wt-full-screen-panel.js";
+import "@waitron/ui/src/components/wt-top-bar.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { PARTY_NAME_MAX, TABLE_SEPARATOR } from "@waitron/shared";
 import { PlaceholderFit } from "./fit-placeholder.js";
@@ -27,19 +31,26 @@ const sameName = (a: string, b: string): boolean => a.trim() === b.trim();
 export class TillPartyNameDialog extends LitElement {
   static override styles = [
     baseStyles,
+    formMessageStyles,
     css`
       .fields {
+        margin: var(--wt-space-4);
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-4);
         width: var(--wt-form-max-width);
-        max-width: 100%;
+        max-width: calc(100% - 2 * var(--wt-space-4));
+      }
+
+      .form-message {
+        padding-inline: var(--wt-space-4);
       }
     `,
   ];
 
   /** The party's tables, as the heading names them. */
   @property() tables = "";
+  @property({ attribute: false }) panelInset = 0;
   @property() value = "";
   @property({ attribute: false }) savedValue: string | undefined;
   @property() refusal = "";
@@ -142,15 +153,6 @@ export class TillPartyNameDialog extends LitElement {
     );
   }
 
-  #cancel(): void {
-    if (!this.isConnected || !this.active) return;
-    if (this.#leave) {
-      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
-      return;
-    }
-    this.#reportClose();
-  }
-
   #closed(event: Event): void {
     event.stopPropagation();
     if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
@@ -167,45 +169,52 @@ export class TillPartyNameDialog extends LitElement {
   override render() {
     const error = this.#fieldError();
     const saveAction = saveActionState(this.#scope);
+    const title = t("table.name_title").replace("{tables}", () => this.tables);
     return html`<wt-dialog
       ${trackDialog()}
+      full-screen
+      style=${styleMap({ "--wt-dialog-inset-inline-start": `${this.panelInset}px` })}
+      aria-label=${title}
       .open=${this.active}
       .beforeClose=${this.#leave ? this.#beforeClose : undefined}
-      .heading=${t("table.name_title").replace("{tables}", () => this.tables)}
       @wt-close=${(event: Event) => this.#closed(event)}
     >
-      <div class="fields">
-        <wt-input
-          name="partyName"
-          autocomplete="off"
-          .maxlength=${PARTY_NAME_MAX}
-          .label=${t("table.name_label")}
-          .inherited=${{ value: this.#placeholder.placeholder, suffix: t("inherit.suffix") }}
-          .value=${live(this.value)}
-          .error=${error}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event)}
-          @keydown=${(event: KeyboardEvent) =>
-            submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-name-save]"))}
-        ></wt-input>
-        <wt-form-actions .error=${error === "" ? "" : t("form.fix_fields")}>
-          <wt-button
-            slot="cancel"
-            data-name-cancel
-            variant="secondary"
-            @click=${() => this.#cancel()}
-          >
-            ${t("action.cancel")}
-          </wt-button>
-          <wt-button
-            data-name-save
-            variant=${saveAction.variant}
-            ?disabled=${saveAction.unchanged || (this.attempted && this.#tooLong())}
-            @click=${() => void this.#save()}
-          >
-            ${t("table.name_save")}
-          </wt-button>
-        </wt-form-actions>
-      </div>
+      <wt-full-screen-panel body-label=${title}>
+        <wt-top-bar
+          slot="header"
+          .heading=${t("table.name_panel_title")}
+          .subtitle=${this.tables}
+          .backLabel=${t("action.back")}
+          @wt-back=${() => void this.renderRoot.querySelector("wt-dialog")!.requestClose("navigation")}
+        ></wt-top-bar>
+        <div class="fields">
+          <wt-input
+            name="partyName"
+            autocomplete="off"
+            .maxlength=${PARTY_NAME_MAX}
+            .label=${t("table.name_label")}
+            .inherited=${{ value: this.#placeholder.placeholder, suffix: t("inherit.suffix") }}
+            .value=${live(this.value)}
+            .error=${error}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event)}
+            @keydown=${(event: KeyboardEvent) =>
+              submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-name-save]"))}
+          ></wt-input>
+        </div>
+        <div slot="footer">
+          ${formMessage(error === "" ? "" : t("form.fix_fields"))}
+          <wt-foot-button-bar>
+            <wt-button
+              data-name-save
+              variant=${saveAction.variant}
+              ?disabled=${saveAction.unchanged || (this.attempted && this.#tooLong())}
+              @click=${() => void this.#save()}
+            >
+              ${t("table.name_save")}
+            </wt-button>
+          </wt-foot-button-bar>
+        </div>
+      </wt-full-screen-panel>
     </wt-dialog>`;
   }
 }

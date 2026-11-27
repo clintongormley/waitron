@@ -871,7 +871,9 @@ becomes a keyboard tab stop. For a modal, put the panel inside `wt-dialog full-s
 dialog's outer body clips its content, so the panel supplies the scrolling. Set the dialog's
 `aria-label` and put any heading or description in the panel itself. Send Back through
 `requestClose` to keep the dialog's leave check. Keep validation messages and recovery links
-immediately above your foot actions.
+immediately above your foot actions. In a wide till order, set `--wt-dialog-inset-inline-start`
+on the full-screen dialog to the measured edge of the order column. The dialog covers the order
+and its backdrop dims the display. Leave the inset at zero on a narrow screen.
 
 `wt-top-bar` centres its heading and optional `subtitle` between the Back and action areas. Supply
 `heading` or put a title button in the `title` slot. Set `back-label` to the previous screen's name

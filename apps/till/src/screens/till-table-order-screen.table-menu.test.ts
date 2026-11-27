@@ -170,6 +170,45 @@ describe("Table and bill actions", () => {
     }
   });
 
+  it.each([
+    ["name", "till-party-name-dialog", "Name the party"],
+    ["guests", "till-party-guests-dialog", "Guests"],
+  ])(
+    "opens the %s editor over the order, keeping the active bill",
+    async (action, editor, title) => {
+      await page.viewport(390, 844);
+      try {
+        const el = await mountScreen();
+        const sheet = partyMenu(el);
+        await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
+        await userEvent.click(item(el, `[data-action="${action}"]`)!);
+        await expect.element(page.getByRole("dialog", { name: new RegExp(title) })).toBeVisible();
+        const panel = el.shadowRoot!.querySelector(editor)!.shadowRoot!.querySelector("wt-dialog")!;
+        const dialog = panel.shadowRoot!.querySelector("dialog")!;
+        const edges = () => {
+          const { left, right, top, bottom } = dialog.getBoundingClientRect();
+          return [Math.round(left), Math.round(right), Math.round(top), Math.round(bottom)];
+        };
+        expect(edges()).toEqual([0, 390, 0, 844]);
+
+        await page.viewport(844, 390);
+        const paneLeft = () =>
+          Math.round(
+            el.shadowRoot!.querySelector("[data-draft-pane]")!.getBoundingClientRect().left,
+          );
+        await expect.poll(paneLeft).toBeGreaterThan(0);
+        await expect.poll(edges).toEqual([paneLeft(), 844, 0, 390]);
+        await expect.element(page.getByRole("button", { name: "Back", exact: true })).toBeVisible();
+        await page.getByRole("button", { name: "Back", exact: true }).click();
+        await expect.poll(() => el.shadowRoot!.querySelector(editor)).toBeNull();
+        expect(el.orderId).toBe("wo-2");
+        expect(focusOnMenu(el, sheet)).toBe(true);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
   it("keeps the table name above the guest count and party name", async () => {
     await page.viewport(390, 844);
     try {
@@ -1084,14 +1123,18 @@ describe("Table and bill actions", () => {
       expect(focusOnMenu(el, el.shadowRoot!.querySelector("[data-bill-switcher]")!)).toBe(true);
     });
 
-    it("Name the party: Cancel, Escape and Save", async () => {
+    it("Name the party: Back, Escape and Save", async () => {
       const el = await mountScreen();
       const dialog = () => el.shadowRoot!.querySelector("till-party-name-dialog")!;
 
       item(el, '[data-action="name"]')!.click();
       await el.updateComplete;
       await dialog().updateComplete;
-      dialog().shadowRoot!.querySelector<HTMLElement>("[data-name-cancel]")!.click();
+      const closed = new Promise<void>((resolve) =>
+        dialog().addEventListener("party-name-cancel", () => resolve(), { once: true }),
+      );
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await closed;
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
       expect(focusOnMenu(el, partyMenu(el))).toBe(true);
@@ -1135,7 +1178,11 @@ describe("Table and bill actions", () => {
       await el.updateComplete;
       const counting = el.shadowRoot!.querySelector("till-party-guests-dialog")!;
       await counting.updateComplete;
-      counting.shadowRoot!.querySelector<HTMLElement>("[data-guests-cancel]")!.click();
+      const closed = new Promise<void>((resolve) =>
+        counting.addEventListener("party-guests-cancel", () => resolve(), { once: true }),
+      );
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await closed;
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBeNull();
       expect(focusOnMenu(el, partyMenu(el))).toBe(true);

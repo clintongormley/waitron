@@ -1567,6 +1567,11 @@ export class TillTableOrderScreen extends LitElement {
       ?.requestLeave(reason) ?? Promise.resolve(true);
   /** The screen is at least {@link DRAFT_SIDE_BY_SIDE_MIN_WIDTH} wide. */
   @state() private wide = false;
+  #paneInset = 0;
+
+  get orderPaneInset(): number {
+    return this.#paneInset;
+  }
   /** Below that width, which of browsing and the order is shown. */
   @state() private view: "menu" | "order" = "menu";
   #resizing?: ResizeObserver;
@@ -6997,11 +7002,17 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #placePartyMenu(): void {
-    const menu = this.renderRoot.querySelector<HTMLElement>("[data-party-menu][data-open]");
-    if (menu === null) return;
     const pane = this.wide ? this.renderRoot.querySelector("[data-draft-pane]") : null;
-    const bounds = pane?.getBoundingClientRect();
-    menu.style.setProperty("--wt-party-menu-left", bounds ? `${Math.max(0, bounds.left)}px` : "");
+    const inset = Math.max(0, pane?.getBoundingClientRect().left ?? 0);
+    const menu = this.renderRoot.querySelector<HTMLElement>("[data-party-menu][data-open]");
+    menu?.style.setProperty("--wt-party-menu-left", `${inset}px`);
+    const name = this.renderRoot.querySelector("till-party-name-dialog");
+    const guests = this.renderRoot.querySelector("till-party-guests-dialog");
+    if (name !== null) name.panelInset = inset;
+    if (guests !== null) guests.panelInset = inset;
+    if (inset === this.#paneInset) return;
+    this.#paneInset = inset;
+    this.#dispatch("order-pane-inset-changed", {});
   }
 
   #partyMenu(): TemplateResult {

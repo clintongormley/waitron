@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./party-guests-dialog.js";
@@ -22,7 +23,8 @@ const nativeInput = (el: TillPartyGuestsDialog) =>
   field(el).shadowRoot!.querySelector<HTMLInputElement>("input")!;
 const save = (el: TillPartyGuestsDialog) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-guests-save]")!;
-const bottom = (el: TillPartyGuestsDialog) => el.shadowRoot!.querySelector("wt-form-actions")!;
+const bottom = (el: TillPartyGuestsDialog) =>
+  el.shadowRoot!.querySelector('[slot="footer"] [role="alert"]')?.textContent ?? "";
 
 async function type(el: TillPartyGuestsDialog, value: string): Promise<void> {
   const input = nativeInput(el);
@@ -52,12 +54,12 @@ describe("till-party-guests-dialog", () => {
         setLocale(locale);
         const el = await mountDialog();
 
-        expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(heading);
+        expect(el.shadowRoot!.querySelector("wt-dialog")!.ariaLabel).toBe(heading);
         expect(nativeInput(el).name).toBe("guestCount");
         expect(field(el).label).toBe(label);
         expect(field(el).required).toBe(false);
         expect(field(el).error).toBe("");
-        expect(bottom(el).error).toBe("");
+        expect(bottom(el)).toBe("");
         expect(save(el).textContent!.trim()).toBe(saveLabel);
       } finally {
         setLocale(previousLocale);
@@ -117,13 +119,13 @@ describe("till-party-guests-dialog", () => {
 
       expect(seen.counted).toEqual([]);
       expect(field(el).error).toBe(t("seat.guest_count_invalid"));
-      expect(bottom(el).error).toBe(t("form.fix_fields"));
+      expect(bottom(el)).toBe(t("form.fix_fields"));
       expect(save(el).disabled).toBe(true);
 
       await type(el, "999");
 
       expect(field(el).error).toBe("");
-      expect(bottom(el).error).toBe("");
+      expect(bottom(el)).toBe("");
       expect(save(el).disabled).toBe(false);
       save(el).click();
       expect(seen.counted).toEqual([{ guestCount: 999 }]);
@@ -152,13 +154,13 @@ describe("till-party-guests-dialog", () => {
     });
 
     expect(field(el).error).toBe(t("seat.guest_count_invalid"));
-    expect(bottom(el).error).toBe(t("form.fix_fields"));
+    expect(bottom(el)).toBe(t("form.fix_fields"));
     expect(save(el).disabled).toBe(false);
 
     await type(el, "5");
 
     expect(field(el).error).toBe("");
-    expect(bottom(el).error).toBe("");
+    expect(bottom(el)).toBe("");
   });
 
   it("saves with Enter from the field", async () => {
@@ -184,7 +186,11 @@ describe("till-party-guests-dialog", () => {
     try {
       await type(el, "3");
       save(el).click();
-      el.shadowRoot!.querySelector<HTMLElement>("[data-guests-cancel]")!.click();
+      const closed = new Promise<void>((resolve) =>
+        el.addEventListener("party-guests-cancel", () => resolve(), { once: true }),
+      );
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await closed;
       await expect.poll(() => seen).toEqual(["party-guests-confirm", "party-guests-cancel"]);
     } finally {
       document.removeEventListener("party-guests-confirm", listen);
@@ -192,11 +198,15 @@ describe("till-party-guests-dialog", () => {
     }
   });
 
-  it("reports Cancel without a count", async () => {
+  it("reports Back without a count", async () => {
     const el = await mountDialog();
     const seen = captured(el);
 
-    el.shadowRoot!.querySelector<HTMLElement>("[data-guests-cancel]")!.click();
+    const closed = new Promise<void>((resolve) =>
+      el.addEventListener("party-guests-cancel", () => resolve(), { once: true }),
+    );
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await closed;
 
     expect(seen).toEqual({ counted: [], cancelled: 1 });
   });

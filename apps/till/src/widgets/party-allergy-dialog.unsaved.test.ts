@@ -63,26 +63,30 @@ async function choice(app: AllergyLeaveApp, answer: "keep" | "discard") {
     ),
   );
 }
-it.each(["escape"])("protects staged allergy edits on %s, then Discard closes", async () => {
-  const { app, el } = await mount();
-  const cancel = vi.fn();
-  el.addEventListener("allergy-cancel", cancel);
-  await userEvent.keyboard("{Escape}");
-  await choice(app, "keep");
-  expect(el.shadowRoot!.querySelector("wt-input")!.value).toBe("Changed guest");
-  expect(cancel).not.toHaveBeenCalled();
-  const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
-  const closed = new Promise<void>((resolve) =>
-    dialog.addEventListener("wt-close", () => resolve(), { once: true }),
-  );
-  await userEvent.keyboard("{Escape}");
-  await choice(app, "discard");
-  await closed;
-  await el.updateComplete;
-  expect(cancel).toHaveBeenCalledTimes(1);
-  expect(app.results).toEqual([]);
-  expect(initial.snapshot.guests[0]!.who).toBe("Original");
-});
+it.each(["Escape", "Back"])(
+  "protects staged allergy edits on %s, then Discard closes",
+  async (action) => {
+    const { app, el } = await mount();
+    const cancel = vi.fn();
+    el.addEventListener("allergy-cancel", cancel);
+    if (action === "Escape") await userEvent.keyboard("{Escape}");
+    else await page.getByRole("button", { name: "Back", exact: true }).click();
+    await choice(app, "keep");
+    expect(el.shadowRoot!.querySelector("wt-input")!.value).toBe("Changed guest");
+    expect(cancel).not.toHaveBeenCalled();
+    const dialog = el.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
+    const closed = new Promise<void>((resolve) =>
+      dialog.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await choice(app, "discard");
+    await closed;
+    await el.updateComplete;
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(app.results).toEqual([]);
+    expect(initial.snapshot.guests[0]!.who).toBe("Original");
+  },
+);
 it("enclosing navigation sees the child draft and Keep preserves it", async () => {
   const { app, el } = await mount();
   const proceeded = vi.fn();
