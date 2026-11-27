@@ -90,6 +90,7 @@ export async function resendInvoicePrintJob(
       saleId: sales.id,
       counterpartyTaxId: sales.counterpartyTaxId,
       correctsSaleId: sales.correctsSaleId,
+      replacesOriginal: sales.replacesOriginal,
       receiptCopy: printJobs.receiptCopy,
     })
     .from(printJobs)

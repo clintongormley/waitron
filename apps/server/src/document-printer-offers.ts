@@ -118,6 +118,7 @@ export async function readDocumentOffers(
       id: sales.id,
       counterpartyTaxId: sales.counterpartyTaxId,
       correctsSaleId: sales.correctsSaleId,
+      replacesOriginal: sales.replacesOriginal,
       locale: sales.locale,
       code: invoiceSeries.code,
       number: sales.invoiceNumber,

@@ -221,6 +221,7 @@ async function readStates(
       id: sales.id,
       counterpartyTaxId: sales.counterpartyTaxId,
       correctsSaleId: sales.correctsSaleId,
+      replacesOriginal: sales.replacesOriginal,
     })
     .from(sales)
     .where(inArray(sales.id, ids));

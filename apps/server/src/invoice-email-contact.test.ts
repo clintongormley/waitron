@@ -158,6 +158,53 @@ describe("independent invoice email contact", () => {
   });
 });
 
+describe("a corrective's contact", () => {
+  /** A sale correcting the fixture's sale, recording no department of its own, as a filed
+   * corrective does; `replaces` makes it the replacement. */
+  async function corrective(f: Awaited<ReturnType<typeof fixture>>, replaces: boolean) {
+    const [original] = await suite.db.select().from(sales).where(eq(sales.id, f.saleId));
+    const [series] = await suite.db
+      .insert(invoiceSeries)
+      .values({ nodeId: original!.nodeId, code: `R${randomUUID().slice(0, 6)}` })
+      .returning();
+    const [row] = await suite.db
+      .insert(sales)
+      .values({
+        ...original!,
+        id: randomUUID(),
+        seriesId: series!.id,
+        invoiceNumber: 1,
+        correctsSaleId: f.saleId,
+        replacesOriginal: replaces,
+        receiptDepartmentId: null,
+        counterpartyTaxId: "B12345674",
+        counterpartyLegalName: "Harbour Foods",
+        counterpartyCountryCode: "ES",
+        counterpartyAddress: "2 Main Street, 28013 Madrid, Madrid",
+      })
+      .returning();
+    return row!.id;
+  }
+
+  it("reads an R1's contact from the department of the invoice it corrects", async () => {
+    const f = await fixture();
+    await authored(f.primary, { email: "dining@example.com" });
+    await authored(f.fallback, { email: "fallback@example.com" });
+    expect(await read({ kind: "sale", saleId: await corrective(f, false) })).toEqual({
+      email: "dining@example.com",
+    });
+  });
+
+  it("keeps an R4 replacement on the designated fallback", async () => {
+    const f = await fixture();
+    await authored(f.primary, { email: "dining@example.com" });
+    await authored(f.fallback, { email: "fallback@example.com" });
+    expect(await read({ kind: "sale", saleId: await corrective(f, true) })).toEqual({
+      email: "fallback@example.com",
+    });
+  });
+});
+
 describe("contact imported-row boundaries", () => {
   it("drops an invalid default phone while retaining its valid email", async () => {
     const f = await fixture();

@@ -366,6 +366,7 @@ describe("deliversAsFullInvoice", () => {
       .select({
         counterpartyTaxId: sales.counterpartyTaxId,
         correctsSaleId: sales.correctsSaleId,
+        replacesOriginal: sales.replacesOriginal,
         inSql: sql<number>`case when ${deliversAsFullInvoiceSql()} then 1 else 0 end`,
       })
       .from(sales);

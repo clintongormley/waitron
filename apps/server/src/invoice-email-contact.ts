@@ -1,4 +1,5 @@
-import type { Transaction } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { sales, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 
@@ -13,8 +14,15 @@ async function departmentOf(
   source: InvoiceEmailContactSource,
 ): Promise<string | null> {
   switch (source.kind) {
-    case "sale":
-      return VENUE_SERVICE.receiptDepartmentForSale(tx, source.saleId);
+    case "sale": {
+      // A filed corrective records no department of its own (corrective-invoice-delivery.test.ts).
+      const [sale] = await tx
+        .select({ corrects: sales.correctsSaleId, replaces: sales.replacesOriginal })
+        .from(sales)
+        .where(eq(sales.id, source.saleId));
+      const from = sale?.corrects != null && !sale.replaces ? sale.corrects : source.saleId;
+      return VENUE_SERVICE.receiptDepartmentForSale(tx, from);
+    }
     case "order":
       return VENUE_SERVICE.receiptDepartmentForOrder(tx, source.orderId);
     case "new-order":

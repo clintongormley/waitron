@@ -516,7 +516,8 @@ async function enrollExplicitInvoiceReceipt(
   personId: string | null | undefined,
   requestKey = jobId,
 ): Promise<void> {
-  if (ticket.invoiceType !== "F1" || personId === undefined) return;
+  if ((ticket.invoiceType !== "F1" && ticket.invoiceType !== "R1") || personId === undefined)
+    return;
   await expireInvoiceDeliveryClaims(tx);
   await reserveInvoiceDelivery(tx, saleId, {
     requestKey,
