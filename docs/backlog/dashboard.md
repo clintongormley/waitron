@@ -144,6 +144,15 @@ Retiring the summary once its last consumer moves away remains open.
 - **The "Continue with Google" button was checked in Chromium only** (the vitest browser suites and
   screenshots); Firefox and Safari not looked at. Left open by A228 (#1078).
 
+## Open bills on Today at a glance (A1633, owner, 2026-11-27) — for when that section is designed
+
+Today at a glance shows Bills closed and a count of Open tables, but not open counter orders or how
+much is still unpaid. Owner, 2026-11-27: "We have bills today, but those are closed. Perhaps we need
+open ones too", then "Add it to the backlog for when we design that section". Proposal to take into
+that design: an Open bills figure beside Bills closed, counting every unpaid bill (tables and counter
+orders, parked and waiting included) with their total, opening the Orders page filtered to open
+orders with each row's zone shown. Not to be built before that section's design.
+
 ## Decisions and deliberate limits
 
 - **Sidebar and account menu (A1606, 2026-11-26).** Rota stays under Team and Calendar under Venue
