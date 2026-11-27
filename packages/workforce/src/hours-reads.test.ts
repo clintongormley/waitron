@@ -280,7 +280,7 @@ it("keeps a midnight retime out of the earlier day's approval", async () => {
   expect(hours.days[5]).toMatchObject({ workedMinutes: 180, approval: { status: "pending" } });
 });
 
-it("requires the self-approval permission to approve your own finished day", async () => {
+it("refuses self-approval for a default manager and permits it for an administrator", async () => {
   await shift("2026-01-05", f.manager);
   const approval = (await read(undefined, f.manager)).days[4]!.approval!;
   await expect(

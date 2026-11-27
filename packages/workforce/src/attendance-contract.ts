@@ -79,7 +79,10 @@ export interface AttendanceInbox {
   items: CorrectionItem[];
   timeZone: string;
 }
-/** Approval covers the effective clock entries. Pending requests, proposals and disputes are reported separately. */
+/**
+ * Approval covers effective clock entries for shifts that started on this work date.
+ * An approved day can still have a pending change in `AttendanceDayView.items` or `PersonHours.pending`.
+ */
 export interface DayApproval {
   status: "pending" | "approved";
   digest: string;

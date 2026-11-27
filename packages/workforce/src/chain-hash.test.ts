@@ -142,7 +142,7 @@ describe("computeEntryHash", () => {
     ).toBe(createHash("sha256").update(canonical, "utf8").digest("hex").toUpperCase());
   });
 
-  it("keeps the stored hash of an automatic clock-out written before day approvals", () => {
+  it("preserves the canonical hash bytes for an automatic clock-out", () => {
     const entry = content({
       entryKind: "out",
       recordedByPersonId: null,
@@ -156,8 +156,15 @@ describe("computeEntryHash", () => {
         payPeriodClosureId: null,
       },
     });
+    const canonical =
+      "SequenceNo=1&PersonId=11111111-1111-4111-8111-111111111111" +
+      "&NodeId=99999999-9999-4999-8999-999999999999&EntryKind=out" +
+      "&EventAtMs=1767603600000&RecordedAtMs=1767603600000&EventOffsetMinutes=0" +
+      "&RecordedByPersonId=&CapturedBySource=dashboard&CapturedByDeviceId=" +
+      "&CorrectsEntryId=&CorrectionReason=&CorrectionStatus=&CorrectionActorId=&PrevEntryHash=" +
+      '&RecordExtension=[false,"automatic",null,null,null,null]';
     expect(computeEntryHash(entry)).toBe(
-      "C8AE45B0FEC775132844B8ACE8F1E89A7F6EC82E681067DE5B95D574CE13395F",
+      createHash("sha256").update(canonical).digest("hex").toUpperCase(),
     );
   });
 
@@ -176,8 +183,18 @@ describe("computeEntryHash", () => {
         approvalDigest: "A".repeat(64),
       },
     });
+    const canonical =
+      "SequenceNo=1&PersonId=11111111-1111-4111-8111-111111111111" +
+      "&NodeId=99999999-9999-4999-8999-999999999999&EntryKind=day_approval" +
+      "&EventAtMs=1767603600000&RecordedAtMs=1767603600000&EventOffsetMinutes=0" +
+      "&RecordedByPersonId=11111111-1111-4111-8111-111111111111" +
+      "&CapturedBySource=dashboard&CapturedByDeviceId=" +
+      "&CorrectsEntryId=&CorrectionReason=&CorrectionStatus=&CorrectionActorId=&PrevEntryHash=" +
+      '&RecordExtension=[true,"manager",null,null,null,null,"' +
+      "A".repeat(64) +
+      '"]';
     expect(computeEntryHash(entry)).toBe(
-      "CDD860E82F3150574D4059EC2B1EAD1793801A61A0F90C64C25082F9595F625A",
+      createHash("sha256").update(canonical).digest("hex").toUpperCase(),
     );
   });
 
