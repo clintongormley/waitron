@@ -15,7 +15,7 @@ import { AppError, isUuid, partyDisplayName } from "@waitron/shared";
 import { guardPathParty } from "./bill-actions.js";
 import { refuseBelowAdvances } from "./bill-advances.js";
 import { money } from "./bill-allocation.js";
-import { readBillExcess } from "./bill-payments.js";
+import { readBillExcess } from "./bill-payment-rows.js";
 import { enqueueMovedSlips } from "./kitchen-ticket-moves.js";
 import { readSentWork, type SentWork } from "./kitchen-ticket-paper.js";
 import { firedQuantity } from "./kitchen-ticket-state.js";

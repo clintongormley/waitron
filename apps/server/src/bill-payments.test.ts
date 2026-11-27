@@ -67,13 +67,12 @@ import {
   seriesId as brandSeriesId,
 } from "@waitron/shared";
 import {
-  assertBillInvariant,
   completeBillPayment,
   failBillPayment,
   issueIfFullyPaid,
-  readBillBalance,
-  readPaymentsByBill,
-} from "./bill-payments.js";
+} from "./bill-payment-settlement.js";
+import { readBillBalance } from "./bill-balance.js";
+import { assertBillInvariant, readPaymentsByBill } from "./bill-payment-rows.js";
 import {
   billRefundFields,
   takeBillPayment,

@@ -72,7 +72,7 @@ import {
 } from "./testing/bill-venue.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
-import { completeBillPayment } from "./bill-payments.js";
+import { completeBillPayment } from "./bill-payment-settlement.js";
 import { seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import {
   BASIC_ACTIONS,

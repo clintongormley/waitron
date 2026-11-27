@@ -10,7 +10,7 @@ import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider
 import { staffActivity } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 
-import { takeReaderBillPayment } from "./bill-payments.js";
+import { takeReaderBillPayment } from "./bill-reader-payment.js";
 import { setupPartyVenue, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
 
 import { openTillSession } from "./testing/session-device.js";

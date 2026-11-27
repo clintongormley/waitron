@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments, type RefundAnswer } from "@waitron/payments";
 import { zonePaymentVenue } from "./testing/zone-payment-venue.js";
-import { takeReaderBillPayment } from "./bill-payments.js";
+import { takeReaderBillPayment } from "./bill-reader-payment.js";
 import { refundBillPayment } from "./bill-refunds.js";
 import { beginSettledTenderRefund } from "./tender-refunds.js";
 import {

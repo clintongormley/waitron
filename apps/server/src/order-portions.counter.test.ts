@@ -25,7 +25,7 @@ import { decimal } from "@waitron/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
-import { takeReaderBillPayment } from "./bill-payments.js";
+import { takeReaderBillPayment } from "./bill-reader-payment.js";
 import {
   billShare,
   payFreshCounterInCash,

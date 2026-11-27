@@ -31,12 +31,9 @@ import { or, and, inArray, isNull, ne, eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { ZERO, previewAllocation, MONEY } from "./bill-allocation.js";
 import { settleFromProviderRow, CHARGED } from "./bill-payments-loop.js";
-import {
-  readBillBalance,
-  billPaymentIsLive,
-  completeBillPayment,
-  failBillPayment,
-} from "./bill-payments.js";
+import { billPaymentIsLive } from "./bill-reader-payment.js";
+import { completeBillPayment, failBillPayment } from "./bill-payment-settlement.js";
+import { readBillBalance } from "./bill-balance.js";
 import { paymentOrderLabelFields, withPaymentOrderLabels } from "./current-order-label.js";
 import { type SettledSlipPrinter, withSettledSlip } from "./payment-slip-print.js";
 import type { PaymentsApiDeps } from "./payments-api-deps.js";

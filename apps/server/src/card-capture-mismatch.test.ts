@@ -24,7 +24,7 @@ import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js"
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
 import { FakeSumUp } from "@waitron/payments-sumup/src/testing/fake-sumup.js";
 import { decimal, saleId, seriesId } from "@waitron/shared";
-import { getBillBalance } from "./bill-payments.js";
+import { getBillBalance } from "./bill-balance.js";
 import {
   provisionBillVenue,
   fiscalRecordCount,

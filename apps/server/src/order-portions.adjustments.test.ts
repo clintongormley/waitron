@@ -42,7 +42,7 @@ import { applyAdjustment, previewAdjustment, type AdjustmentArgs } from "./adjus
 import { mergeCheckedBills } from "./bill-actions.js";
 import { cutParts } from "./testing/bill-action-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
-import { completeBillPayment } from "./bill-payments.js";
+import { completeBillPayment } from "./bill-payment-settlement.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { partyRevision, partyRevisionOfOrder, seatTable } from "./parties.js";
 import { createCourse } from "./kitchen.js";

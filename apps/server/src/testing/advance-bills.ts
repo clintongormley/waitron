@@ -14,7 +14,7 @@ import { formatInvoiceNumber } from "@waitron/core";
 import { createCategory, createProduct } from "@waitron/menu";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { localCalendarDate, type Dining } from "@waitron/shared";
-import type { BillPaymentRequest } from "../bill-payments.js";
+import type { BillPaymentRequest } from "../bill-payment-types.js";
 import { receiptDayNumeric } from "../receipt-dates.js";
 import { formatReceipt } from "../receipt-ticket.js";
 import type { TillSaleResult } from "../till-sale.js";

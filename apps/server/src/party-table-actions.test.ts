@@ -28,7 +28,7 @@ import type { Transaction } from "@waitron/db";
 import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitron/venue-service";
 import { decimal, decimalToCents } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
-import { readBillBalance } from "./bill-payments.js";
+import { readBillBalance } from "./bill-balance.js";
 import { requestBill } from "./bill-request.js";
 import { writeMerge } from "./floor-today-merges.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";

@@ -9,15 +9,14 @@ import { AppError, compareDecimal, decimal } from "@waitron/shared";
 import { readRawJsonBody, requireString, requireUuidParam } from "@waitron/server-kit";
 import { requireDining } from "./order-dining.js";
 import { invalid, MONEY, ZERO } from "./bill-allocation.js";
-import {
-  closeZeroBill,
-  getBillBalance,
-  previewBillPayment,
-  takeBillPayment,
-  takeReaderBillPayment,
-  type ReaderBillPaymentDeps,
-} from "./bill-payments.js";
-import type { BillPaymentAsk, BillPaymentRequest, CounterPaymentBasket } from "./bill-payments.js";
+import { closeZeroBill, previewBillPayment, takeBillPayment } from "./bill-payments.js";
+import { takeReaderBillPayment, type ReaderBillPaymentDeps } from "./bill-reader-payment.js";
+import { getBillBalance } from "./bill-balance.js";
+import type {
+  BillPaymentAsk,
+  BillPaymentRequest,
+  CounterPaymentBasket,
+} from "./bill-payment-types.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { settleFromProviderRow } from "./bill-payments-loop.js";
 import {

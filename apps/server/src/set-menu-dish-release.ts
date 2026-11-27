@@ -4,7 +4,7 @@ import { aLaCarteLineTotal, frozenLinesOf } from "@waitron/orders-sales/set-menu
 import type { Decimal } from "@waitron/shared";
 import type { Row } from "./adjustment-rows.js";
 import type { AdjustmentAsk } from "./adjustments-apply.js";
-import { assertBillInvariant } from "./bill-payments.js";
+import { assertBillInvariant } from "./bill-payment-rows.js";
 import { frozenLineIdSources } from "./set-menu-freeze.js";
 import { regroupBills } from "./set-menu-regroup.js";
 import { refuseOrderOverSimplifiedLimit } from "./stored-order-lines.js";

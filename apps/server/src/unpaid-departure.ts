@@ -23,7 +23,7 @@ import { parseBillEditExpecteds, requireBillEditors } from "./bill-editing.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readPartyFinishReadiness } from "./finish-party-service.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { stillOwedOnIssuedBill } from "./bill-payments.js";
+import { stillOwedOnIssuedBill } from "./bill-payment-rows.js";
 import { issuedBillStanding } from "./bill-payment-money.js";
 import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";

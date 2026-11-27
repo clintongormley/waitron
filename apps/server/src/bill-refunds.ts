@@ -13,15 +13,11 @@ import { money, ZERO } from "./bill-allocation.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { refundPermission } from "./bill-overpaid.js";
 import { withIssuanceTransaction } from "@waitron/core";
-import {
-  findSubmission,
-  issueIfFullyPaid,
-  readBillBalance,
-  readOnePaymentMoney,
-  requireRefundableBill,
-  toRefundView,
-} from "./bill-payments.js";
-import type { BillBalance, BillRefundView } from "./bill-payments.js";
+import { findSubmission, requireRefundableBill } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payment-settlement.js";
+import { readBillBalance, toRefundView } from "./bill-balance.js";
+import { readOnePaymentMoney } from "./bill-payment-rows.js";
+import type { BillBalance, BillRefundView } from "./bill-balance.js";
 import {
   claimTenderRefund,
   resolveClaimedRefund,

@@ -42,7 +42,8 @@ import { openTillSession } from "./testing/session-device.js";
 import { readStoredOrder } from "./stored-order-lines.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import type { ReceiptAdjustment } from "./till-sale.js";
-import { closeZeroBill, completeBillPayment } from "./bill-payments.js";
+import { closeZeroBill } from "./bill-payments.js";
+import { completeBillPayment } from "./bill-payment-settlement.js";
 import "./errors.js";
 
 // What a receipt prints beneath a comped or discounted dish, and after the goods for a discount on

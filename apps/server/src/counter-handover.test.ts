@@ -1,3 +1,5 @@
+import { closeZeroBill } from "./bill-payments.js";
+import { getBillBalance } from "./bill-balance.js";
 import { addFixtureExtra } from "./testing/portion-bill.js";
 import { seedZone } from "@waitron/db/testing/seed.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -29,8 +31,6 @@ import {
   tabWith,
 } from "./testing/bill-venue.js";
 import {
-  closeZeroBill,
-  getBillBalance,
   payFreshCounterInCash,
   paySavedBillInCash,
   takeBillPayment,

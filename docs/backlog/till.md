@@ -1729,7 +1729,7 @@ layout during service, screen plugins and Bizum.
   `device.profile_changed`, charging nothing, when the device is no longer on the profile the
   request was checked under (`insertAttempting`, `packages/payments/src/store.ts`; SumUp and
   Stripe terminal only). A bill reader payment refused this way is marked failed at once
-  (`takeReaderBillPayment`, `apps/server/src/bill-payments.ts`), so its amount is not held, and
+  (`takeReaderBillPayment`, `apps/server/src/bill-reader-payment.ts`), so its amount is not held, and
   the till's next confirm sends a new request id, which the server checks under the device's
   new profile.
 

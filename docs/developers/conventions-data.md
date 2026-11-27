@@ -3086,13 +3086,13 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
 - A card-reader payment checks the stop three times: the free-space read before its first
   transaction; inside it, refused when that read said full or a refusal has been noted since; and
   after it commits, just before the reader is asked, refused when a refusal has been noted, undoing
-  the bill payment's reservation, and putting Pay for items' items back (`collectBegunReaderPayment` in `bill-payments.ts`);
+  the bill payment's reservation, and putting Pay for items' items back (`collectBegunReaderPayment` in `bill-reader-payment.ts`);
   when the items cannot go back and the table's own payments already cover its bill, with no order
   unsent on it, that bill is issued and its receipt queued. Writes take turns in the write queue, so a payment that read "not full" can
   wait behind another till's write that then fails.
 - A card charged on a connected reader whose sale then fails for a full disk answers
   `507 sale.charged_not_recorded { workingOrderId, reason: "disk_full" }`, so the till can say not
-  to charge again (`afterCardCharged`, `bill-payments.ts`). The till's bill payment route asks for
+  to charge again (`afterCardCharged`, `bill-payment-failures.ts`). The till's bill payment route asks for
   it (`sayCardChargedNotRecorded` in `bill-payments-api.ts`). Other callers, including the dashboard's
   bill-payment resolve route, answer `storage.disk_full`. The same 507 answers a card charged
   while the box's clock comes to read before 28 October 2024, with `reason: "clock_unusable"`
@@ -3100,7 +3100,7 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   provider could not save: SumUp's and Stripe's `collect` throw `ChargeNotSavedError`
   (`packages/payments/src/charge-not-saved.ts`) when the processor reported the card charged and
   that save failed for a full disk, and the till route translates only that error
-  (`collectFailure`, `bill-payments.ts`). Its cause is the full disk, so every other caller still
+  (`collectFailure`, `bill-payment-failures.ts`). Its cause is the full disk, so every other caller still
   answers `storage.disk_full`. The provider's row stays `attempting` for a later pass to record the
   confirmed amount once space is available. A full disk on any other save inside `collect` still answers `storage.disk_full`; for the
   attempt's own first row, `card-charged-not-recorded.test.ts` pins it.

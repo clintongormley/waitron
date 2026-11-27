@@ -15,7 +15,7 @@ import {
 import type { Decimal } from "@waitron/shared";
 import { FILTER_TEXT_MAX } from "./find-bill-query.js";
 import { outstandingOf } from "./bill-payment-money.js";
-import { readPaymentsByBill } from "./bill-payments.js";
+import { readPaymentsByBill } from "./bill-payment-rows.js";
 import { readIssuedSales } from "./sale-due.js";
 import {
   LIVE_ORDER_PLACE,

@@ -19,7 +19,7 @@ import { AppError, businessDayAt, centsToDecimal, decimal, decimalToCents } from
 import type { Decimal, ErrorParams, SaleId } from "@waitron/shared";
 import { captureKitchenActivity, type AttendanceRecorder } from "./attendance-capture.js";
 import { invalid } from "./bill-allocation.js";
-import { billsHoldingMoney } from "./bill-payments.js";
+import { billsHoldingMoney } from "./bill-payment-rows.js";
 import { checkedInvoiceRecipient, storedRecipientIdentifier } from "./invoice-selection.js";
 import { requireOrderBillEditor } from "./bill-editing.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";

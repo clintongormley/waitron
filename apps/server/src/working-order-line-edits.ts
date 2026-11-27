@@ -22,7 +22,7 @@ import {
   decimalToCents,
 } from "@waitron/shared";
 import { eq, inArray, or, sql, and } from "drizzle-orm";
-import { readBillExcess, assertLinesKeptExcess } from "./bill-payments.js";
+import { readBillExcess, assertLinesKeptExcess } from "./bill-payment-rows.js";
 import { readStationChanges, refuseChangesAfterSending } from "./changes-after-sending.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { endRepricedDishDiscounts, type VariantSwap } from "./dish-discount-ending.js";

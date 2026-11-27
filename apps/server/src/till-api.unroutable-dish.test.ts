@@ -22,7 +22,7 @@ import { createCategory, createProduct } from "@waitron/menu";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { payments } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
-import type { CounterPaymentBasket } from "./bill-payments.js";
+import type { CounterPaymentBasket } from "./bill-payment-types.js";
 import { setRoutingCell, setStationToday } from "@waitron/venue-service";
 import {
   billRefundFields,

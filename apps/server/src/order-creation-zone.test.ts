@@ -11,7 +11,7 @@ import { setProfileServiceScope, replaceZoneClosedWeek } from "@waitron/venue-se
 import { VENUE_SERVICE } from "./modules.js";
 import { createOpenOrder, parkOrder } from "./working-order-open.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
-import { takeReaderBillPayment } from "./bill-payments.js";
+import { takeReaderBillPayment } from "./bill-reader-payment.js";
 import { payFreshCounterInCash } from "./testing/bill-payment-fixture.js";
 import { setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
 

@@ -9,7 +9,8 @@ import {
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./trading-admission.js";
 import { observedClosingBody } from "./party-close-fixture.js";
-import { getBillBalance, observedPaymentBody } from "./bill-payment-fixture.js";
+import { getBillBalance } from "../bill-balance.js";
+import { observedPaymentBody } from "./bill-payment-fixture.js";
 import { placeOrder } from "./order-writer-fixture.js";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { departments } from "@waitron/venue-service";

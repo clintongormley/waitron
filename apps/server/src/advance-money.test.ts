@@ -21,7 +21,7 @@ import { createCategory, createProduct } from "@waitron/menu";
 import { payments } from "@waitron/payments";
 import { formatInvoiceNumber } from "@waitron/core";
 import { readBillEditState } from "./bill-editing.js";
-import { readBillBalance } from "./bill-payments.js";
+import { readBillBalance } from "./bill-balance.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { endMeal } from "./meal-end.js";
 import { readCancellationContext } from "./line-cancel-context.js";

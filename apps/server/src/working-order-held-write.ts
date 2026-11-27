@@ -4,7 +4,8 @@ import { type Database, withTransaction, workingOrders, type Transaction } from 
 import { AppError, addDecimal, normalisePartyName } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { type OrderEditAuthority, requireOrderBillEditor } from "./bill-editing.js";
-import { issueIfFullyPaid, refuseBillHoldingMoney } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payment-settlement.js";
+import { refuseBillHoldingMoney } from "./bill-payment-rows.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import { VENUE_SERVICE } from "./modules.js";

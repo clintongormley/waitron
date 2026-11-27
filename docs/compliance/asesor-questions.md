@@ -2884,6 +2884,8 @@ collection. The owner decided on 2026-09-27 how the two things that can change a
 
 Since 2026-09-27 this is how the product works (`vatRateOn`, `packages/shared/src/menu-document/vat-rates.ts`;
 the issuing paths in `apps/server/src/till-sale.ts`, `bill-payments.ts` and `working-order-invoice.ts`).
+*2026-11-27 source pointer:* the bill-payment issuing functions now live in
+`apps/server/src/bill-payment-settlement.ts`.
 The invoice is issued at payment on every path except orders invoiced when they are placed and paid
 on collection, where it is issued at placing, so there the placing day's rate applies.
 *2026-10-06 (#1285, A261-2c):* invoicing at placing is retired. Outside test helpers,

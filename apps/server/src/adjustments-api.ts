@@ -21,7 +21,7 @@ import {
   type AdjustmentAsk,
 } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
-import { issueIfFullyPaid } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payment-settlement.js";
 import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
 import { asObject, optionalMoney, submissionIdOf } from "./bill-payments-api.js";
 import type { Logger } from "./logger.js";

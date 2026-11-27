@@ -781,7 +781,7 @@ export class TillTenderPay extends LitElement {
     )
       return;
     const retry = () => this.#collectCard(this.cardRetryDetail ?? this.#lastCollectDetail);
-    // A timeout is still pending (`BillPaymentResult`, apps/server/src/bill-payments.ts), so its
+    // A timeout is still pending (`BillPaymentResult`, apps/server/src/bill-payment-types.ts), so its
     // retry stays as it was; after any other outcome nothing was charged and a retry is a fresh
     // payment.
     if (this.cardOutcome?.outcome === "timeout") {

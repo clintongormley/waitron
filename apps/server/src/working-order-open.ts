@@ -27,7 +27,7 @@ import {
   normalisePartyName,
 } from "@waitron/shared";
 import { eq, and, sql } from "drizzle-orm";
-import { assertLinesKeptExcess, readBillExcess } from "./bill-payments.js";
+import { assertLinesKeptExcess, readBillExcess } from "./bill-payment-rows.js";
 import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import { VENUE_SERVICE } from "./modules.js";

@@ -40,7 +40,7 @@ function servedOrCancelled(row: DeferredDishRow): boolean {
 }
 
 /** Whether these payments hold money as the server's close reads them (`billsHoldingMoney` in
- * apps/server/src/bill-payments.ts): a pending payment, or a received one whose money and tip its
+ * apps/server/src/bill-payment-rows.ts): a pending payment, or a received one whose money and tip its
  * completed refunds have not all given back. */
 export function paymentsHoldMoney(
   payments: readonly Pick<BillPaymentView, "state" | "applied" | "tip" | "refunds">[],

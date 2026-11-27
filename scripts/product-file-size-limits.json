@@ -23,7 +23,6 @@
   "apps/dashboard/src/widgets/product-list.ts": 1750,
   "apps/server/src/adjustments-apply.ts": 1250,
   "apps/server/src/alert-sources.ts": 1250,
-  "apps/server/src/bill-payments.ts": 2750,
   "apps/server/src/boot.ts": 5000,
   "apps/server/src/cloud-client.ts": 1750,
   "apps/server/src/errors.ts": 2250,

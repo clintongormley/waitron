@@ -51,7 +51,13 @@ checks and links. `bill-payment-money` keeps the arithmetic.
 - The existing mover preserved the edited bodies of `readBillBalance` and `movedItemsBack`
   byte for byte from #4423’s original fork `c2f1ded67e0` and PR head `a38ed89723` into their
   proposed files. At PR time, if an open branch touches the file, run the map on it once and
-  report the result. Otherwise cite Lane H’s `receipts/bill-payments-split-plan/replay.log`. [Replay steps](2026-11-24-working-order-file-split.md#carry-an-open-branch-across-the-split)
+  report the result. Otherwise cite `~/waitron-campaign-h/receipts/bill-payments-split-plan/replay.log`
+  for those two bodies. After running the mover, carry the branch’s edits onto the landed split.
+  Keep main’s `retryShapeOf` import, five new error registry imports, `Logger` from `./logger.js`,
+  type-only imports, fixture and dynamic imports, and removal of forwarding exports. Keep the
+  savepoint entry in `scripts/no-bare-transaction.test.ts` and the cap removal in
+  `scripts/product-file-size-limits.json`. Use the landed pointers and run the overlapping tests.
+  [Replay steps](2026-11-24-working-order-file-split.md#carry-an-open-branch-across-the-split)
 - Run Server typecheck, the changed guards and suites, `bill-payments*.test.ts`,
   `counter-bill-payments.test.ts`, `pay-for-items*.test.ts`, `card-charged-not-recorded.test.ts`,
   `close-of-day.test.ts`, `clock-unconfirmed-gate.test.ts` and `till-api.fiscal-sale-paths.test.ts`.

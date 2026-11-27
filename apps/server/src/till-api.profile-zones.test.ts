@@ -25,7 +25,7 @@ import {
   withTransaction,
   floorZones,
 } from "@waitron/db";
-import { completeBillPayment } from "./bill-payments.js";
+import { completeBillPayment } from "./bill-payment-settlement.js";
 import { lookUpInvoices } from "./invoice-lookup-api.js";
 import { orderZoneCondition } from "./zone-access.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";

@@ -22,7 +22,7 @@ import { SimulatorPaymentProvider, payments } from "@waitron/payments";
 import { AppError, centsToDecimal, decimal, deviceId as brandDeviceId } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
-import { failBillPayment, issueIfFullyPaid } from "./bill-payments.js";
+import { failBillPayment, issueIfFullyPaid } from "./bill-payment-settlement.js";
 import { closeInvoiceCorrection } from "./invoice-corrections.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";

@@ -43,7 +43,7 @@ import type { OriginConfig } from "./trading-context.js";
 import { moveSettledBillToCounter } from "./move-bill.js";
 import { releaseHeldWorkOf } from "./order-group-release.js";
 import { invalid } from "./bill-allocation.js";
-import { refuseBillHoldingMoney } from "./bill-payments.js";
+import { refuseBillHoldingMoney } from "./bill-payment-rows.js";
 import type { OrderAttendance } from "./working-order-context.js";
 import { partyFamily, partyRevision, requireOpenParty, runServiceCommand } from "./parties.js";
 import { billOwes, finishTable, readFamilyBills, requirePartyClosingEdits } from "./party-close.js";

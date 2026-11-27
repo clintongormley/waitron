@@ -1,3 +1,4 @@
+import { getBillBalance } from "./bill-balance.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { seedFixtureSif as registerSif } from "@waitron/fiscal-verifactu/test/sif-fixture.js";
@@ -44,7 +45,6 @@ import {
   openTillSession,
 } from "./testing/session-device.js";
 import {
-  getBillBalance,
   payFreshCounterInCash,
   paySavedBillInCash,
   takeBillPayment,

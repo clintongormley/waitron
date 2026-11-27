@@ -17,7 +17,7 @@ import { AppError, partyTablesName, rawCentsToDecimal } from "@waitron/shared";
 import { eq, and, isNull, sql, isNotNull, gt, or, inArray } from "drizzle-orm";
 import { type AttendanceRecorder, captureKitchenActivity } from "./attendance-capture.js";
 import { type OrderEditAuthority, requireOrderBillEditor } from "./bill-editing.js";
-import { refuseBillWithPayments, refuseBillHoldingMoney } from "./bill-payments.js";
+import { refuseBillWithPayments, refuseBillHoldingMoney } from "./bill-payment-rows.js";
 import {
   cancelPermission,
   creditWholeInvoice,

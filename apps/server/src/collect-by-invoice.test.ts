@@ -1,3 +1,4 @@
+import { closeZeroBill } from "./bill-payments.js";
 import { setTipsForTest } from "./testing/payment-settings.js";
 import { billShare } from "./testing/bill-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -24,11 +25,7 @@ import { payments } from "@waitron/payments";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { parkOrder } from "./working-order-open.js";
-import {
-  closeZeroBill,
-  takeBillPayment,
-  type BillPaymentRequest,
-} from "./testing/bill-payment-fixture.js";
+import { takeBillPayment, type BillPaymentRequest } from "./testing/bill-payment-fixture.js";
 import { openTillSession } from "./testing/session-device.js";
 import { readBillEditState } from "./bill-editing.js";
 import { offerProducts } from "./testing/zone-offers.js";

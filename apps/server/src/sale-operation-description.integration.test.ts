@@ -1,8 +1,5 @@
-import {
-  takeReaderBillPayment,
-  type ReaderBillPaymentDeps,
-  type CounterPaymentBasket,
-} from "./bill-payments.js";
+import { takeReaderBillPayment, type ReaderBillPaymentDeps } from "./bill-reader-payment.js";
+import { type CounterPaymentBasket } from "./bill-payment-types.js";
 import {
   billShare,
   payFreshCounterInCash,

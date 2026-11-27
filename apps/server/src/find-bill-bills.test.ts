@@ -46,7 +46,8 @@ import { closingEditsForTest, partyRevision } from "./testing/party-close-fixtur
 import { inTx, seatedWith, send } from "./testing/bill-venue.js";
 
 import { outstandingOf } from "./bill-payment-money.js";
-import { readBillBalance, readPaymentsByBill } from "./bill-payments.js";
+import { readBillBalance } from "./bill-balance.js";
+import { readPaymentsByBill } from "./bill-payment-rows.js";
 import { readIssuedSales } from "./sale-due.js";
 import { endMeal } from "./meal-end.js";
 import { assignProductUnit, clearProductUnit, createUnit, setProductVariants } from "@waitron/menu";

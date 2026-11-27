@@ -13,7 +13,7 @@ import { readOrderKitchenNotes, setOrderKitchenNote } from "./order-kitchen-note
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { inTx, OPERATOR, order, revisionOf, seat, setupPartyVenue } from "./testing/party-venue.js";
 
-import { completeBillPayment } from "./bill-payments.js";
+import { completeBillPayment } from "./bill-payment-settlement.js";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { buildReceiptDocument } from "./receipt-document.js";
 import { layoutA4Invoice } from "./invoice-layout.js";

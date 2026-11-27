@@ -30,23 +30,22 @@ import {
 import { refuseBelowAdvances } from "./bill-advances.js";
 import { invalid, money, previewAllocation, ZERO, type BillFunds } from "./bill-allocation.js";
 import { readBillEditState, requireBillEditors } from "./bill-editing.js";
+import { diskFullBeforePayment, takeBillPaymentIn } from "./bill-payments.js";
 import {
-  afterCardCharged,
   beginReaderBillPayment,
   collectBegunReaderPayment,
-  diskFullBeforePayment,
-  getBillBalance,
-  issueIfFullyPaid,
-  readBillBalance,
-  refuseCoveredWhileAdvanceCorrectionOpen,
-  takeBillPaymentIn,
-  type BillBalance,
+  type ReaderBillPaymentDeps,
+  type ReaderPaymentHold,
+} from "./bill-reader-payment.js";
+import { afterCardCharged } from "./bill-payment-failures.js";
+import { issueIfFullyPaid } from "./bill-payment-settlement.js";
+import {
   type BillPaymentDeps,
   type BillPaymentRequest,
   type BillPaymentResult,
-  type ReaderBillPaymentDeps,
-  type ReaderPaymentHold,
-} from "./bill-payments.js";
+} from "./bill-payment-types.js";
+import { getBillBalance, readBillBalance, type BillBalance } from "./bill-balance.js";
+import { refuseCoveredWhileAdvanceCorrectionOpen } from "./bill-payment-rows.js";
 import { assertProfileAction, type DeviceBinding } from "./device-session.js";
 import { outsideCardDetails } from "./outside-card.js";
 import { withSettledSlip } from "./payment-slip-print.js";
