@@ -1810,9 +1810,13 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "Waitron could not confirm that the spare box received the final update.",
     es: "Waitron no pudo confirmar que el servidor de reserva recibió la última actualización.",
   },
+  "box.shutdown_bucket_unchecked": {
+    en: "Waitron could not confirm that the bucket received the final update. Check the bucket connection and choose Retry check.",
+    es: "Waitron no pudo confirmar que el bucket recibió la última actualización. Comprueba la conexión con el bucket y elige Volver a comprobar.",
+  },
   "box.shutdown_unavailable": {
-    en: "Checked shutdown needs the main box with Cloud off. Keep its joined spare connected, or turn off the bucket copy on a standalone box. Turn on saved backups with at least one destination, or download a copy with a numbered backup key if there are no saved backup settings.",
-    es: "Para apagar con comprobación, usa el servidor principal con Cloud desactivado. Mantén conectado su servidor de reserva vinculado o desactiva la copia en el bucket si solo hay un servidor. Activa las copias guardadas con al menos un destino o descarga una copia con una clave numerada si no hay ajustes de copia guardados.",
+    en: "Checked shutdown needs the main box with Cloud off. If this box has a joined spare, keep it connected for checked shutdown or open Servers to hand over. Turn on saved backups with at least one destination, or download a copy with a numbered backup key if there are no saved backup settings.",
+    es: "Para apagar con comprobación, usa el servidor principal con Cloud desactivado. Si este servidor tiene uno de reserva vinculado, mantenlo conectado para apagar con comprobación o abre Servidores para hacer el traspaso. Activa las copias guardadas con al menos un destino o descarga una copia con una clave numerada si no hay ajustes de copia guardados.",
   },
   "handover.stepping_down": {
     en: "This box is handing over or has handed over the venue, so it refused this action. Use the main box’s address once that box is taking sales.",

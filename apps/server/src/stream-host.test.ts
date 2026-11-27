@@ -1121,6 +1121,58 @@ describe("the live copy's wiring", () => {
         expect(litestream.children).toHaveLength(0);
       });
 
+      it.each(["unchanged", "new credentials", "changed during check", "retired"] as const)(
+        "confirms only the running direct bucket target (%s)",
+        async (change) => {
+          const store = new SwitchableStore(() => new Date());
+          const litestream = new FakeLitestream();
+          let command: FakeChild | undefined;
+          const spawn: SpawnFn = (bin, args, env) => {
+            if (args[0] !== "sync") return litestream.spawn(bin, args, env);
+            command = new FakeChild(
+              args,
+              env,
+              JSON.stringify({ db_path: args.at(-1), txid: 6, replica_txid: 6, duration_ms: 1 }),
+              [],
+            );
+            return command;
+          };
+          const rt = runtime({ spawn, store });
+          const signal = new AbortController().signal;
+          const updateCredentials = () =>
+            withTransaction(db, (tx) =>
+              writeStreamSettings(tx, RING, { ...SETTINGS, secretAccessKey: "new-secret" }, null),
+            );
+          try {
+            const settings = (await readStreamSettings(db, RING))!;
+            expect(await rt.checkDirectShutdownUpload(settings, signal)).toBe(false);
+            await rt.start();
+            await vi.waitFor(() => expect(litestream.running()).toBeDefined());
+            store.upload(`${generationOf(rt.status())}/0000/0000000000000001-0000000000000001.ltx`);
+            await vi.waitFor(() => expect(rt.status().state).toBe("streaming"), {
+              timeout: 10_000,
+            });
+            if (change === "new credentials") {
+              await updateCredentials();
+              const requested = (await readStreamSettings(db, RING))!;
+              expect(await rt.checkDirectShutdownUpload(requested, signal)).toBe(false);
+              expect(await rt.checkDirectShutdownUpload(settings, signal)).toBe(false);
+              expect(command).toBeUndefined();
+              return;
+            }
+            const check = rt.checkDirectShutdownUpload(settings, signal);
+            await vi.waitFor(() => expect(command).toBeDefined());
+            if (change === "changed during check") await updateCredentials();
+            if (change === "retired") await rt.reload();
+            command!.exit(0);
+            expect(await check).toBe(change === "unchanged");
+          } finally {
+            command?.exit(1);
+            await rt.stop();
+          }
+        },
+      );
+
       it.each(["", "another/"])(
         "streams at this node's term and signs the pointer with this node's membership key at prefix %s",
         async (prefix) => {

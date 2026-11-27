@@ -1386,7 +1386,7 @@ jobs:
 
       # `test:shard` emits a blob rather than enforcing thresholds; test-server-merge is where the
       # coverage gate lives. The per-shard `--shard`/`--outputFile` are appended with NO `--` separator
-      # (see test-heavy's shard step for why a bare `--` silently drops both flags). The two stream
+      # (see test-heavy's shard step for why a bare `--` silently drops both flags). The stream
       # tests, the S3 rehearsal scenarios, the send gate's and the rehearsal interrupt's versitygw
       # suites, the suite of the S3 test server they start, the spare's store suite, the full-disk start
       # tests and the backup-room, handover, restore and payment-slip real-disk cases run in test-server-stream instead; `--exclude` adds to the config's own excludes.
@@ -1399,6 +1399,7 @@ jobs:
             --shard=${{ matrix.shard }}/24 \
             --exclude src/stream-loop.e2e.test.ts \
             --exclude src/stream-pause.e2e.test.ts \
+            --exclude src/direct-bucket-shutdown.e2e.test.ts \
             --exclude src/s3-rehearsal-scenarios.e2e.test.ts \
             --exclude src/aws-send-gate.e2e.test.ts \
             --exclude src/aws-rehearsal-interrupt.e2e.test.ts \
@@ -1564,6 +1565,7 @@ jobs:
           node scripts/run-with-deadline.mjs 415 --diagnostics -- pnpm --filter "@waitron/server" test:shard --coverage.enabled=${{ needs.changes.outputs.full }} \
             src/stream-loop.e2e.test.ts \
             src/stream-pause.e2e.test.ts \
+            src/direct-bucket-shutdown.e2e.test.ts \
             src/s3-rehearsal-scenarios.e2e.test.ts \
             src/aws-send-gate.e2e.test.ts \
             src/aws-rehearsal-interrupt.e2e.test.ts \

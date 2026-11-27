@@ -79,7 +79,7 @@ const heartbeatAt = "2026-10-22T09:31:00.000Z";
 
 it.each([
   ["drains the scheduled backup and writes only the restart mark if stopped mid-check", "restart"],
-  ["refuses checked shutdown while streaming is configured", "streaming"],
+  ["checks the saved backup before pausing for an unconfirmed direct bucket", "streaming"],
   ["refuses checked shutdown when saved backups are disabled", "disabled"],
   ["refuses checked shutdown without a destination or backup key", "no-key"],
   ["records and emails a failed final backup while sales stay paused", "failed"],
@@ -138,7 +138,7 @@ it.each([
       await new Promise<void>((resolve) => {
         signal.addEventListener("abort", () => resolve(), { once: true });
         reachedCheck();
-        if (scenario === "multiple") void checkFinished.then(resolve);
+        if (scenario === "multiple" || scenario === "streaming") void checkFinished.then(resolve);
       });
     });
   const smtp = scenario === "failed" || scenario === "stalled" ? await startFakeSmtp() : null;
@@ -265,7 +265,7 @@ it.each([
           expect(await view.json()).toMatchObject({ shutdown: { available: true, phase: "idle" } });
         }
         const response = await begin(token);
-        if (scenario === "streaming" || scenario === "disabled" || scenario === "no-key") {
+        if (scenario === "disabled" || scenario === "no-key") {
           releaseScheduled();
           expect(response.status).toBe(409);
           expect(await response.json()).toMatchObject({
@@ -290,6 +290,23 @@ it.each([
         expect(view.status).toBe(200);
         expect(enteredCheckEarly).toBe(false);
         await checking;
+        if (scenario === "streaming") {
+          finishCheck();
+          await vi.waitFor(async () => {
+            expect(await (await health()).json()).toMatchObject({
+              shutdown: {
+                directBucket: true,
+                phase: "paused",
+                errorCode: "box.shutdown_bucket_unchecked",
+              },
+            });
+          });
+          await expect(stat(join(stateDir, "admin-shutdown.json"))).rejects.toHaveProperty(
+            "code",
+            "ENOENT",
+          );
+          return;
+        }
         if (scenario === "multiple") {
           const mark = join(stateDir, "admin-shutdown.json");
           const wroteMark = () => writeMark!.mock.calls.some(([file]) => file === mark);

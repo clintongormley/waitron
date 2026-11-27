@@ -6,7 +6,7 @@ import "./errors.js";
 
 export const SHUTDOWN_PATH = "/api/box/shutdown";
 
-type ShutdownMode = { paired?: true; downloadOnly?: true };
+export type ShutdownMode = { paired?: true; downloadOnly?: true; directBucket?: true };
 
 export type ShutdownStatus =
   | { phase: "idle" | "checking" | "stalled" }
@@ -23,7 +23,7 @@ export type ShutdownArchive = {
 
 type ShutdownCheck = {
   archive?: ShutdownArchive;
-  checkSpare?: (signal: AbortSignal) => Promise<void>;
+  checkReplica?: (signal: AbortSignal) => Promise<void>;
 };
 
 export type ShutdownDecision = "retry" | "keep-waiting" | "shut-down-anyway";
@@ -73,8 +73,8 @@ export function createAdminShutdown(deps: {
     duties?: ReturnType<NonNullable<typeof deps.pauseDuties>>;
     drained: boolean;
     checked: boolean;
-    checkSpare?: ShutdownCheck["checkSpare"];
-    spareCheckPending?: boolean;
+    checkReplica?: ShutdownCheck["checkReplica"];
+    replicaCheckPending?: boolean;
     saving: boolean;
     markMayExist: boolean;
     archive?: ShutdownArchive;
@@ -157,11 +157,11 @@ export function createAdminShutdown(deps: {
           current.drained = true;
         }
         signal.throwIfAborted();
-        if (action === "check" && !current.spareCheckPending) {
+        if (action === "check" && !current.replicaCheckPending) {
           current.checked = false;
           const result = await deps.check(signal, { attemptSignal, waitForUpload });
           current.archive = result?.archive;
-          current.checkSpare = result?.checkSpare;
+          current.checkReplica = result?.checkReplica;
           current.checked = true;
           if (current.archive !== undefined) {
             current.state = downloadState(current.archive, false);
@@ -169,11 +169,11 @@ export function createAdminShutdown(deps: {
           }
         }
         signal.throwIfAborted();
-        if (action !== "unchecked" && current.checkSpare !== undefined) {
-          current.spareCheckPending = true;
-          await current.checkSpare(signal);
-          current.spareCheckPending = false;
-          current.checkSpare = undefined;
+        if (action !== "unchecked" && current.checkReplica !== undefined) {
+          current.replicaCheckPending = true;
+          await current.checkReplica(signal);
+          current.replicaCheckPending = false;
+          current.checkReplica = undefined;
         }
         signal.throwIfAborted();
         current.saving = true;
@@ -182,14 +182,14 @@ export function createAdminShutdown(deps: {
         await current.archive?.remove();
         current.archive = undefined;
         current.state =
-          current.checked && !current.spareCheckPending
+          current.checked && !current.replicaCheckPending
             ? { phase: "ready" }
             : { phase: "ready", checked: false };
       } catch (error) {
         if (current.run !== active) return;
         const errorCode = codeOf(error);
         current.state =
-          current.archive && !current.spareCheckPending
+          current.archive && !current.replicaCheckPending
             ? downloadState(current.archive, current.delivered, errorCode)
             : { phase: "paused", errorCode };
       } finally {

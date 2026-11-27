@@ -71,9 +71,9 @@ export function adminShutdownDuties(deps: {
     const peers =
       membership?.body.nodes.filter((box) => box.nodeId !== nodeId && box.standing !== "evicted") ??
       [];
-    if (stream !== null) return undefined;
     let peerNodeId: string | undefined;
     if (pair !== null || peers.length > 0) {
+      if (stream !== null) return undefined;
       const peer = peers.length === 1 ? peers[0] : undefined;
       if (
         pair?.role !== "streams" ||
@@ -86,15 +86,20 @@ export function adminShutdownDuties(deps: {
       if (spare?.peerNodeId !== peer.nodeId || spare.state === "unknown") return undefined;
       peerNodeId = peer.nodeId;
     }
-    const mode = peerNodeId === undefined ? {} : { paired: true as const };
+    const mode =
+      peerNodeId !== undefined
+        ? { paired: true as const }
+        : stream !== null
+          ? { directBucket: true as const }
+          : {};
     if (status.enabled && status.destinations.length > 0)
-      return { target: "saved" as const, peerNodeId, mode };
+      return { target: "saved" as const, peerNodeId, stream, mode };
     const { meta, settings } = await readArchiveSettingsWithMeta(db, ring);
     if (meta !== null || settings !== null) return undefined;
     const key = loadBackupKey(await deps.readBoxEnv());
     return key === undefined
       ? undefined
-      : { target: key, peerNodeId, mode: { ...mode, downloadOnly: true as const } };
+      : { target: key, peerNodeId, stream, mode: { ...mode, downloadOnly: true as const } };
   };
   let reportedPause: { signal: AbortSignal; pending: Promise<void> } | undefined;
   function reportPause(errorCode: string | null, signal: AbortSignal): Promise<void> {
@@ -114,7 +119,13 @@ export function adminShutdownDuties(deps: {
     async check(signal, { attemptSignal, waitForUpload }) {
       const dest = await destination();
       if (dest === undefined) throw new AppError("box.shutdown_unavailable", {});
-      const { target, peerNodeId } = dest;
+      const { target, peerNodeId, stream } = dest;
+      const confirmReplica =
+        stream !== null
+          ? (signal: AbortSignal) => deps.streamHost.checkDirectShutdownUpload(stream, signal)
+          : peerNodeId !== undefined
+            ? (signal: AbortSignal) => deps.streamHost.checkShutdownUpload(peerNodeId, signal)
+            : undefined;
       try {
         let archive;
         if (target === "saved") {
@@ -126,13 +137,18 @@ export function adminShutdownDuties(deps: {
         } else archive = await backup.runForShutdownDownload(signal, target, config.migrationsRoot);
         return {
           archive,
-          checkSpare:
-            peerNodeId === undefined
+          checkReplica:
+            confirmReplica === undefined
               ? undefined
               : async (activeSignal) => {
                   try {
-                    if (!(await deps.streamHost.checkShutdownUpload(peerNodeId, activeSignal)))
-                      throw new AppError("box.shutdown_spare_unchecked", {});
+                    if (!(await confirmReplica(activeSignal)))
+                      throw new AppError(
+                        stream === null
+                          ? "box.shutdown_spare_unchecked"
+                          : "box.shutdown_bucket_unchecked",
+                        {},
+                      );
                   } catch (error) {
                     if (!activeSignal.aborted) await reportPause(codeOf(error), attemptSignal);
                     throw error;

@@ -10,10 +10,12 @@ export function renderShutdownPauseActions(
 ) {
   const { phase } = status;
   if (phase !== "paused" && phase !== "stalled") return nothing;
+  const retryCheck =
+    status.paired || (phase === "paused" && status.errorCode === "box.shutdown_bucket_unchecked");
   const [decision, label] =
     phase === "stalled"
       ? (["keep-waiting", "keep_waiting"] as const)
-      : (["retry", status.paired ? "retry_check" : "retry"] as const);
+      : (["retry", retryCheck ? "retry_check" : "retry"] as const);
   return html`
     <wt-button
       variant="primary"

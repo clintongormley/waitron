@@ -1,7 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
-import { createServer, request, type IncomingMessage, type ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import {
   restoreGeneration,
@@ -12,6 +10,7 @@ import {
 import { expect } from "vitest";
 import { hasShutdownMark } from "../admin-shutdown-hold.js";
 import type { httpsVia } from "./boot-harness.js";
+import { holdBucketUploads } from "./hold-bucket-uploads.js";
 import { waitUntil } from "./scenario-stages.js";
 
 const FINAL_NAME = "Final update before shutdown";
@@ -30,36 +29,7 @@ interface PairStore {
 /** Controls the level-zero uploads from the main box to the spare's actual store. */
 export async function pairedShutdownScenario(scratch: string, bin: string) {
   let store: PairStore | undefined;
-  let held = false;
-  let sawUpload = false;
-  const pending = new Set<() => void>();
-  const proxy = createServer((incoming: IncomingMessage, outgoing: ServerResponse) => {
-    const url = incoming.url!;
-    const forward = () => {
-      const upstream = request(
-        new URL(url, store!.bucket.endpoint),
-        {
-          headers: incoming.headers,
-          method: incoming.method,
-          agent: false,
-        },
-        (response) => {
-          outgoing.writeHead(response.statusCode!, response.headers);
-          response.pipe(outgoing);
-        },
-      );
-      upstream.on("error", (error) => outgoing.destroy(error));
-      outgoing.on("close", () => upstream.destroy());
-      incoming.pipe(upstream);
-    };
-    if (held && incoming.method === "PUT" && /\/0000\/[^/?]+\.ltx(?:\?|$)/.test(url)) {
-      sawUpload = true;
-      pending.add(forward);
-      outgoing.once("close", () => pending.delete(forward));
-    } else forward();
-  });
-  await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
-  const endpoint = `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`;
+  const uploads = await holdBucketUploads(() => store!.bucket.endpoint);
 
   const spawn: SpawnFn = (binary, args, env, options) => {
     if (args[0] !== "replicate") return spawnLitestream(binary, args, env, options);
@@ -80,7 +50,7 @@ export async function pairedShutdownScenario(scratch: string, bin: string) {
       generation: url.pathname.split("/").at(-1)!,
       streamKey: env.WAITRON_STREAM_ENCRYPTION_KEY!,
     };
-    url.searchParams.set("endpoint", endpoint);
+    url.searchParams.set("endpoint", uploads.endpoint);
     const gated = join(scratch, "paired-stream.yml");
     writeFileSync(gated, config.replace(urlLine, JSON.stringify(url.href)), { mode: 0o600 });
     return spawnLitestream(
@@ -93,10 +63,7 @@ export async function pairedShutdownScenario(scratch: string, bin: string) {
 
   return {
     spawn,
-    async close() {
-      proxy.closeAllConnections();
-      await new Promise<void>((resolve) => proxy.close(() => resolve()));
-    },
+    close: uploads.close,
     async run(input: {
       url: string;
       headers: Record<string, string>;
@@ -150,7 +117,7 @@ export async function pairedShutdownScenario(scratch: string, bin: string) {
       const before = await fetch(detailsUrl, { ...via, headers });
       expect(before.status).toBe(200);
       const { details } = (await before.json()) as { details: unknown };
-      held = true;
+      uploads.hold((url) => /\/0000\/[^/?]+\.ltx(?:\?|$)/.test(url));
       const changed = await fetch(detailsUrl, {
         ...via,
         headers,
@@ -197,11 +164,9 @@ export async function pairedShutdownScenario(scratch: string, bin: string) {
       expect(await hasShutdownMark(stateDir)).toBe(false);
       await send("PATCH", { decision: "backup-saved", name });
       expect((await phase("paused", PAUSE_MS)).errorCode).toBe("box.shutdown_spare_unchecked");
-      expect(sawUpload).toBe(true);
+      expect(uploads.sawUpload()).toBe(true);
       expect(await hasShutdownMark(stateDir)).toBe(false);
-      held = false;
-      for (const forward of pending) forward();
-      pending.clear();
+      uploads.release();
       await send("PATCH", { decision: "retry" });
       await phase("ready", PAUSE_MS);
       expect(await hasShutdownMark(stateDir)).toBe(true);
