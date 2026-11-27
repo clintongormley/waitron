@@ -123,6 +123,18 @@ const stools = [17, 53, 89].map((x, i) => ({
   fixed: true,
 }));
 
+it("keeps the plan's table sizes when a row mixes stools and movable round tables", async () => {
+  const [left, middle, right] = stools;
+  const el = await map([left!, { ...middle!, fixed: false }, right!], 374, 60);
+  const first = await boxIn(el, button(el, "b0"));
+  const movable = await boxIn(el, button(el, "b1"));
+  const last = await boxIn(el, button(el, "b2"));
+  expect(first.width).toBeLessThan(44);
+  expect(movable.width).toBe(first.width);
+  expect(last.width).toBe(first.width);
+  expect(movable.left - first.left).toBeCloseTo(last.left - movable.left, 1);
+});
+
 it("keeps crowded stools separate when full tap targets would overlap", async () => {
   const [a, b, c] = stools;
   const el = await map([a!, { ...b!, placement: { ...b!.placement, x: 19 } }, c!], 374, 60);

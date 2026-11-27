@@ -1,5 +1,5 @@
 import { registerIcons } from "./wt-icon.js";
-import { html, nothing } from "lit";
+import { html, nothing, render } from "lit";
 import { afterEach, describe, expect, it, test, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import type { WtButton } from "./wt-button.js";
@@ -10,7 +10,7 @@ import { WtDataTable } from "./wt-data-table.js";
 import { cleanup, host, mount } from "../test-helpers.js";
 import { expectNoA11yViolations } from "../a11y-helpers.js";
 import { setHelpMode } from "../help-mode.js";
-import { actionChoiceStyles, WtRowActions } from "./wt-row-actions.js";
+import { actionChoiceStyles, rowActionTail, WtRowActions } from "./wt-row-actions.js";
 
 async function mountWidget<T extends HTMLElement>(tag: string, props: Partial<T>) {
   const el = (await mount(`<${tag}></${tag}>`)) as T & { updateComplete: Promise<unknown> };
@@ -34,6 +34,24 @@ registerIcons({
 });
 
 afterEach(cleanup);
+
+test.each([
+  { ordinary: true, tail: false, order: ["Edit"] },
+  { ordinary: true, tail: true, order: ["Edit", "separator", "Delete"] },
+  { ordinary: false, tail: true, order: ["Delete"] },
+])("adds a divider only between two groups of menu actions ($order)", (scenario) => {
+  const menu = document.createElement("div");
+  render(
+    html`${scenario.ordinary ? html`<button>Edit</button>` : nothing}${rowActionTail(
+      scenario.ordinary,
+      [nothing, scenario.tail ? html`<button>Delete</button>` : nothing],
+    )}`,
+    menu,
+  );
+  expect(
+    [...menu.children].map((child) => (child.localName === "hr" ? "separator" : child.textContent)),
+  ).toEqual(scenario.order);
+});
 
 async function menuSheet(contents: string, attributes = "") {
   const el = await mount(
@@ -889,11 +907,14 @@ describe("opens-below", () => {
     outside.addEventListener("click", otherAction);
     host.append(outside);
     const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-    await userEvent.click(el.shadowRoot!.querySelector("button")!);
+    const trigger = el.shadowRoot!.querySelector("button")!;
+    await userEvent.click(trigger);
     expect(popup.matches(":popover-open")).toBe(true);
+    el.querySelector("button")!.focus();
     await userEvent.click(outside, { force: true });
     expect(popup.matches(":popover-open")).toBe(false);
     expect(otherAction).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.activeElement).toBe(trigger);
   });
 
   it("a menu taller than the room under its trigger opens under it, fits the window and scrolls its last action into reach", async () => {
