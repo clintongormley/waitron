@@ -87,12 +87,17 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
     }
   });
 
-  it("does not ask node-forge again for a wrong passphrase in plain ASCII", () => {
+  it("does not ask node-forge for a wrong passphrase in plain ASCII, or another refusal", () => {
     const read = vi.spyOn(forge.pkcs12, "pkcs12FromAsn1");
     try {
       expect(openOrRewrite(bytes(RC2_ACCENTED_CANDIDATE), "contrasena-nandu")).toEqual({
         ok: false,
         reason: "passphrase_wrong",
+      });
+      const keyless = makeAuthority().issue({ withKey: false, passphrase: "contraseña-ñandú" });
+      expect(openOrRewrite(keyless.pfx, keyless.passphrase)).toEqual({
+        ok: false,
+        reason: "no_private_key",
       });
       expect(read).not.toHaveBeenCalled();
     } finally {
