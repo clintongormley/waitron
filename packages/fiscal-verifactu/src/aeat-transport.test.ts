@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Agent, errors as undiciErrors, fetch as undiciFetch } from "undici";
 import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { loadKeyRing, putCredential } from "@waitron/credentials";
+import { credentialRevision, loadKeyRing, putCredential } from "@waitron/credentials";
 import { isAppError } from "@waitron/shared";
 import type { Cabecera, EnvioRegistro } from "@waitron/verifactu";
 import {
@@ -200,6 +200,31 @@ describe("the resolved client over a real client-certificate handshake", () => {
     // wrong CA or a bad origin, so it complements the `SocketError` check rather than replacing it.
     expect(server.requests()).toBe(requestsBefore);
   });
+});
+
+describe("aeatClientResolver names the revision it read", () => {
+  it.each([false, true])(
+    "carries the vault's revision with the client, observing authority time=%s",
+    async (observing) => {
+      await provision("sello");
+      const resolver = aeatClientResolver({
+        db: suite.db,
+        ring,
+        endpointFor: () => "https://example.test/soap",
+        fetchFor: () => ({
+          fetch: (() => Promise.reject(new Error("not this test's subject"))) as typeof fetch,
+          close: () => Promise.resolve(),
+        }),
+        ...(observing ? { observeAuthorityTime: () => {} } : {}),
+      });
+      const client = await resolver.resolve();
+      const revision = await withTransaction(suite.db, (tx) =>
+        credentialRevision(tx, { purpose: "fiscal.aeat" }),
+      );
+      expect(revision).not.toBeNull();
+      expect(client.certificateRevision).toBe(revision);
+    },
+  );
 });
 
 describe("aeatClientResolver lifetime", () => {

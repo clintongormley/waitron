@@ -18,6 +18,12 @@ import type {
   VerifactuClient,
   RegistroAlta,
 } from "@waitron/verifactu";
+import { certificateNotAccepted } from "./certificate-check.js";
+import {
+  clearCertificateRefusal,
+  markCertificateRefused,
+  type DrainClient,
+} from "./certificate-refusal.js";
 import { recordConflictEvidence, type ConflictComparison } from "./conflict-evidence.js";
 import type { FacturaParams, LineaParams, Operacion } from "./errors.js";
 import {
@@ -107,7 +113,7 @@ export interface DrainDeps {
    * The venue's AEAT transport. A FUNCTION, not a fixed client, so the certificate is decrypted
    * only when this pass actually has something to send.
    */
-  resolveClient: () => Promise<VerifactuClient>;
+  resolveClient: () => Promise<DrainClient>;
   /** How long after a skipped pass to report work due again. Required, so a caller that forgets
    * is a compile error rather than a silent cadence. */
   skipRetryMs: number;
@@ -236,7 +242,7 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
  */
 async function drainDue(
   db: Database,
-  client: VerifactuClient,
+  client: DrainClient,
   environment: Entorno,
   now: Date,
   result: DrainResult,
@@ -388,7 +394,7 @@ async function drainDue(
       if (respuesta.TiempoEsperaEnvio === undefined) break;
       t = respuesta.TiempoEsperaEnvio;
       if (dueCount < maxPorEnvio) break;
-    } catch {
+    } catch (error) {
       // The claim is committed, so back the batch off rather than leave it stuck `enviando`, and
       // stop. A probe's next send is an hour after its stamped `enviado_en`, so it leaves the
       // count; the batch's ordinary rows stay counted, so the next sending slot is still reported
@@ -403,6 +409,10 @@ async function drainDue(
         await openTechnicalIncident(tx, environment, failure.now, [
           ...new Set([...failure.ids, ...batch.map((row) => row.id)]),
         ]);
+        const revision = client.certificateRevision;
+        if (revision != null && certificateNotAccepted(error)) {
+          await markCertificateRefused(tx, revision, now);
+        }
         await backoffBatch(tx, batch, now, counts);
       });
       forgetTechnicalFailure(db, environment, failure);
@@ -1500,6 +1510,7 @@ async function persistResponse(
   result: CommittedCounts,
 ): Promise<void> {
   const sentIds = batch.map((row) => row.id);
+  await clearCertificateRefusal(tx);
 
   for (const line of lines) {
     await applyOutcome(tx, line, csv, now, result);

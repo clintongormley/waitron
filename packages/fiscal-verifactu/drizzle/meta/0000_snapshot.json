@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "fa2656bc-cae5-4d95-8d5b-74ae25f6a574",
+  "id": "ad83e9b5-c161-4403-ab5e-bf5a5f8c43ef",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "declaraciones_responsables": {
@@ -1019,6 +1019,20 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
+        },
+        "certificate_refused_revision": {
+          "name": "certificate_refused_revision",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "certificate_refused_at": {
+          "name": "certificate_refused_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {},
@@ -1029,6 +1043,10 @@
         "verifactu_sending_state_singleton_ck": {
           "name": "verifactu_sending_state_singleton_ck",
           "value": "\"verifactu_sending_state\".\"id\" = 1"
+        },
+        "verifactu_sending_state_certificate_refused_ck": {
+          "name": "verifactu_sending_state_certificate_refused_ck",
+          "value": "(\"verifactu_sending_state\".\"certificate_refused_revision\" is null) = (\"verifactu_sending_state\".\"certificate_refused_at\" is null)"
         }
       }
     },

@@ -25,6 +25,16 @@ export const verifactuSendingState = table(
     tiempoEsperaSeg: count("tiempo_espera_seg").notNull(),
     // A response may close only the interruption its own request observed.
     technicalIncidentToken: id("technical_incident_token"),
+    // The vault revision AEAT last refused at the door, and the first pass that saw it. A reader
+    // shows the mark only while the vault still holds that revision.
+    certificateRefusedRevision: id("certificate_refused_revision"),
+    certificateRefusedAt: ts("certificate_refused_at"),
   },
-  (t) => [check("verifactu_sending_state_singleton_ck", sql`${t.id} = 1`)],
+  (t) => [
+    check("verifactu_sending_state_singleton_ck", sql`${t.id} = 1`),
+    check(
+      "verifactu_sending_state_certificate_refused_ck",
+      sql`(${t.certificateRefusedRevision} is null) = (${t.certificateRefusedAt} is null)`,
+    ),
+  ],
 );

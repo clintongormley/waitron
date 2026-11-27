@@ -28,6 +28,11 @@ const UNREACHABLE_CODES = new Set(["ENOTFOUND", "ECONNREFUSED"]);
 // over TLS 1.3 and `ECONNRESET` over TLS 1.2.
 const CLOSED_CODES = new Set(["UND_ERR_SOCKET", "ECONNRESET"]);
 
+/** Whether `mtlsFetch`'s refusal of the certificate is somewhere in `error`'s cause chain. */
+export function certificateNotAccepted(error: unknown): boolean {
+  return firstCodeInCauseChain(error, (code) => code === NOT_ACCEPTED) !== null;
+}
+
 function classify(error: unknown, timedOut: boolean, taxId: string): CheckRefusal {
   if (!(error instanceof VerifactuTransportError)) return { reason: "check_failed" };
   if (error.kind === "soap") {
@@ -44,9 +49,7 @@ function classify(error: unknown, timedOut: boolean, taxId: string): CheckRefusa
     };
   }
   if (error.kind === "http") return { reason: "aeat_http", details: { status: error.status! } };
-  if (firstCodeInCauseChain(error, (code) => code === NOT_ACCEPTED) !== null) {
-    return { reason: "not_accepted" };
-  }
+  if (certificateNotAccepted(error)) return { reason: "not_accepted" };
   if (timedOut) return { reason: "unreachable" };
   const code = firstCodeInCauseChain(
     error,

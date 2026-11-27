@@ -2,11 +2,11 @@ import { Agent, fetch as undiciFetch } from "undici";
 import { AppError, isAppError } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
-import { getCredential } from "@waitron/credentials";
+import { credentialRevision, getCredential } from "@waitron/credentials";
 import type { KeyRing } from "@waitron/credentials";
 import { SOAP_ENDPOINTS, SOAP_ENDPOINTS_SELLO, createClient } from "@waitron/verifactu";
-import type { VerifactuClient } from "@waitron/verifactu";
 import type { FiscalDutyDeps, FiscalDutyLog } from "@waitron/fiscal";
+import type { DrainClient } from "./certificate-refusal.js";
 import "./errors.js";
 
 /** The two FNMT certificate kinds this host routes on. `CertKind` is derived from this array, so
@@ -57,10 +57,19 @@ export function certMaterialFrom(
 }
 
 export async function readCertMaterial(db: Database, ring: KeyRing): Promise<CertMaterial> {
-  const payload = await withTransaction(db, (tx) =>
-    getCredential(tx, ring, { purpose: "fiscal.aeat" }),
-  );
-  return certMaterialFrom(payload, { purpose: "fiscal.aeat" });
+  return (await readCertMaterialAndRevision(db, ring)).material;
+}
+
+/** One read, so the revision names the material that was decrypted. */
+async function readCertMaterialAndRevision(
+  db: Database,
+  ring: KeyRing,
+): Promise<{ material: CertMaterial; revision: string | null }> {
+  const { payload, revision } = await withTransaction(db, async (tx) => ({
+    payload: await getCredential(tx, ring, { purpose: "fiscal.aeat" }),
+    revision: await credentialRevision(tx, { purpose: "fiscal.aeat" }),
+  }));
+  return { material: certMaterialFrom(payload, { purpose: "fiscal.aeat" }), revision };
 }
 
 /**
@@ -151,7 +160,7 @@ export interface TransportDeps {
 
 export interface ClientResolver {
   /** `DrainDeps.resolveClient`: `@waitron/fiscal` knows nothing about mTLS. */
-  resolve: () => Promise<VerifactuClient>;
+  resolve: () => Promise<DrainClient>;
   /** Releases every transport this resolver built, and NEVER throws — neither for a transport whose
    * own `close()` rejects, nor for a logger that throws while reporting one. */
   closeAll: () => Promise<void>;
@@ -166,15 +175,18 @@ export function aeatClientResolver(deps: TransportDeps, log?: FiscalDutyLog): Cl
   const open: AeatTransport[] = [];
   return {
     resolve: async () => {
-      const material = await readCertMaterial(deps.db, deps.ring);
+      const { material, revision } = await readCertMaterialAndRevision(deps.db, deps.ring);
       const transport = deps.fetchFor(material);
       open.push(transport);
       const client = createClient({
         endpoint: deps.endpointFor(material.certKind),
         fetch: transport.fetch,
       });
-      if (deps.observeAuthorityTime === undefined) return client;
+      if (deps.observeAuthorityTime === undefined) {
+        return { ...client, certificateRevision: revision };
+      }
       return {
+        certificateRevision: revision,
         consultar: (header, filter) => client.consultar(header, filter),
         submit: async (header, records) => {
           const sentAt = new Date();
