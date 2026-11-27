@@ -4764,6 +4764,9 @@ export const en = {
   "box_status.free_help_guide": "More about freeing space",
   "box_status.shutdown.title": "Shut down this box",
   "box_status.shutdown.question": "Shut down this box?",
+  "box_status.shutdown.clock_out_first":
+    "Ask anyone still clocked in to clock out before you continue.",
+  "box_status.shutdown.working": "Working",
   "box_status.shutdown.what":
     "Waitron pauses selling and staff clocking while it saves and checks a full backup. You need the backup and its recovery key to restore. An administrator must choose whether to sell here again when this box starts.",
   "box_status.shutdown.password_reason":
@@ -4772,8 +4775,14 @@ export const en = {
     "You need a password to shut down this box. Set a password in Account settings, then try again. If you only sign in with Google, add a passkey there first.",
   "box_status.shutdown.checking":
     "Waiting for work to finish and checking the saved backup. Leave the box on.",
-  "box_status.shutdown.paused":
-    "Waitron could not finish checking the backup. Leave the box on. You can cancel to resume work.",
+  "box_status.shutdown.paused": "Shutdown is paused. Leave the box on while you decide.",
+  "box_status.shutdown.retry": "Retry backup",
+  "box_status.shutdown.anyway": "Shut down anyway",
+  "box_status.shutdown.anyway_question": "Shut down without making another backup?",
+  "box_status.shutdown.anyway_warning":
+    "If you need to restore, you may have to use an older backup and lose the work done since it was taken.",
+  "box_status.shutdown.unchecked":
+    "You can switch off the box now. A restore may need an older backup.",
   "box_status.shutdown.ready": "Safe to switch off",
   "box_status.shutdown.cancel": "Cancel and resume work",
   "box_status.restart.title": "Restart the box",
@@ -9660,6 +9669,9 @@ export const es: Record<StringKey, string> = {
   "box_status.free_help_guide": "Más sobre liberar espacio",
   "box_status.shutdown.title": "Apagar este servidor",
   "box_status.shutdown.question": "¿Apagar este servidor?",
+  "box_status.shutdown.clock_out_first":
+    "Pide a quienes siguen con el turno abierto que fichen la salida antes de continuar.",
+  "box_status.shutdown.working": "Trabajando",
   "box_status.shutdown.what":
     "Waitron pausa las ventas y los fichajes mientras guarda y comprueba una copia de seguridad completa. Necesitas la copia y su clave de recuperación para restaurarla. Al arrancar, un administrador deberá decidir si se vuelve a vender aquí.",
   "box_status.shutdown.password_reason":
@@ -9669,7 +9681,14 @@ export const es: Record<StringKey, string> = {
   "box_status.shutdown.checking":
     "Esperando a que termine el trabajo y comprobando la copia guardada. Deja el servidor encendido.",
   "box_status.shutdown.paused":
-    "Waitron no pudo terminar de comprobar la copia. Deja el servidor encendido. Puedes cancelar para reanudar el trabajo.",
+    "El apagado está en pausa. Deja el servidor encendido mientras decides.",
+  "box_status.shutdown.retry": "Volver a hacer la copia",
+  "box_status.shutdown.anyway": "Apagar de todos modos",
+  "box_status.shutdown.anyway_question": "¿Apagar sin hacer otra copia?",
+  "box_status.shutdown.anyway_warning":
+    "Si necesitas restaurar, quizá tengas que usar una copia anterior y pierdas el trabajo realizado desde entonces.",
+  "box_status.shutdown.unchecked":
+    "Ya puedes apagar el servidor. Para restaurar, quizá necesites una copia anterior.",
   "box_status.shutdown.ready": "Ya puedes apagar el servidor",
   "box_status.shutdown.cancel": "Cancelar y reanudar el trabajo",
   "box_status.restart.title": "Reiniciar el servidor",

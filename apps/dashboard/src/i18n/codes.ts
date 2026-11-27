@@ -1395,6 +1395,14 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "The backup bucket failed the test, so nothing was saved. Check the address, the key and the bucket's permissions.",
     es: "El bucket de las copias no ha superado la prueba, así que no se ha guardado nada. Revisa la dirección, la clave y los permisos del bucket.",
   },
+  "backup.archive_invalid": {
+    en: "Waitron could not verify the saved backup.",
+    es: "Waitron no pudo verificar la copia de seguridad guardada.",
+  },
+  "backup.staging_space_low": {
+    en: "The box needs more free disk space for the backup.",
+    es: "El servidor necesita más espacio libre en disco para la copia de seguridad.",
+  },
   "backup.destination_timed_out": {
     en: "The backup destination took too long to answer, so the box stopped waiting for it.",
     es: "El destino de las copias ha tardado demasiado en responder, así que el servidor ha dejado de esperarlo.",

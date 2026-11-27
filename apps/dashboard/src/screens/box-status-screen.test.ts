@@ -102,6 +102,7 @@ function stubApi(
   return {
     getBoxNetwork: vi.fn().mockRejectedValue({ code: "box_host.unavailable" }),
     getBoxHealth: vi.fn().mockResolvedValue(answer),
+    getBoxShutdownStaff: async () => [],
     listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts } satisfies AlertsResponse),
     freeBoxSpace: vi.fn().mockResolvedValue(FREED),
     liveData: new LiveData(),
@@ -155,6 +156,66 @@ it("shows that the box can be switched off only when the shutdown check is ready
   api.liveData.refresh();
   await vi.waitFor(() => expect(text(q(el, '[data-test="box-shutdown-status"]'))).toBe(ready));
   expect(q(el, '[data-test="box-shutdown-cancel"]')).toBeNull();
+});
+
+it("requires confirmation before switching off with an unchecked backup", async () => {
+  const paused = health({
+    shutdown: { phase: "paused", available: true, errorCode: "backup.archive_invalid" },
+  });
+  const unchecked = health({ shutdown: { phase: "ready", available: true, checked: false } });
+  const getBoxHealth = vi.fn().mockResolvedValue(paused);
+  const resolveBoxShutdown = vi.fn(async () => {
+    getBoxHealth.mockResolvedValue(unchecked);
+    return unchecked.shutdown;
+  });
+  const { el } = await mount(stubApi({ getBoxHealth, resolveBoxShutdown }));
+  el.canCheckClock = true;
+  await el.updateComplete;
+
+  expect(text(q(el, '[data-test="box-shutdown-status"]'))).toContain(
+    "Waitron could not verify the saved backup.",
+  );
+  const anyway = q(el, '[data-test="box-shutdown-anyway"]');
+  expect(anyway).not.toBeNull();
+  await userEvent.click(anyway!);
+  const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
+  expect(text(confirm.closest("wt-dialog"))).toContain("you may have to use an older backup");
+  expect(resolveBoxShutdown).not.toHaveBeenCalled();
+  await userEvent.click(confirm);
+  await vi.waitFor(() => expect(resolveBoxShutdown).toHaveBeenCalledWith("shut-down-anyway"));
+  await vi.waitFor(() =>
+    expect(text(q(el, '[data-test="box-shutdown-status"]'))).toBe(
+      "You can switch off the box now. A restore may need an older backup.",
+    ),
+  );
+});
+
+it("lists clocked-in staff before confirmation and offers the recovery pack with permission", async () => {
+  const { el } = await mount(
+    stubApi(
+      {
+        getBoxShutdownStaff: async () => [
+          { displayName: "Kitchen lead", state: "working" },
+          { displayName: "Shift manager", state: "on_break" },
+        ],
+      },
+      health({ shutdown: { phase: "idle", available: true } }),
+    ),
+  );
+  el.canCheckClock = true;
+  await el.updateComplete;
+  await userEvent.click(q(el, '[data-test="box-shutdown"]')!);
+  const dialog = q(el, '[data-test="box-shutdown-confirm"]')!.closest("wt-dialog")!;
+  await vi.waitFor(() => {
+    expect(text(dialog)).toContain("Kitchen lead");
+    expect(text(dialog)).toContain("Shift manager");
+    expect(text(dialog)).toContain("On a break");
+  });
+  const pack = () => dialog.querySelector('a[href="/backup?recovery-pack=make"]');
+  expect(pack()).toBeNull();
+  el.canMakeRecoveryPack = true;
+  await el.updateComplete;
+  expect(pack()).not.toBeNull();
 });
 
 const size = (bytes: number) => formatBytes(bytes, currentLocale());

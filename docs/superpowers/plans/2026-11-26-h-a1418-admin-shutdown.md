@@ -25,6 +25,9 @@ Estimate 300–420 production and 220–320 test lines. Open within three active
 
 Offer **Keep waiting**, **Retry**, **Shut down anyway** and **Cancel**. Retry captures again. **Shut down anyway** saves the same hold before the administrator can switch off. Record and email the pause. Offer the existing recovery pack under its own permission with the backup’s key, and show working and on-break staff before confirmation. Extend the route, screen, guide and incident email tests for these choices and the recorded outcome. Estimate 130–220 production and 110–180 test lines. Open within three active hours.
 
+**27 November, 01:09.** The watcher cleared Retry and Shut down anyway for completed failures in
+1B. Keep waiting moves to 1C, after measuring stalled uploads on a dedicated box and bucket.
+
 ## PR 2 — Power off on the appliance
 
 Only the `node.manage` shutdown operation can request host power-off. After the mark is durable, pass who asked through `box-host-client.ts` to `deploy/box/waitron-box.sh`, following `clock.set`’s requester pattern. A hostless box shows the manual instruction. A failed or ambiguous host reply keeps the box paused. Test authority, call order and host refusal, including `waitron-box-sh.test.mjs`. On a dedicated test appliance, check power-off, the next boot and the existing stop deadline. Estimate 55–95 production and 70–120 test lines. Open within three active hours.

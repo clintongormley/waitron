@@ -28,6 +28,7 @@ import {
   CLOCK_CORRECTED_EMAIL_WORDS,
   REPLACED_EMAIL_WORDS,
   SELLING_UNCONFIRMED_EMAIL_WORDS,
+  SHUTDOWN_PAUSED_EMAIL_WORDS,
   UNPLANNED_STOP_EMAIL_WORDS,
   UPGRADE_ROLLBACK_EMAIL_WORDS,
 } from "./i18n/box-emails.js";
@@ -56,6 +57,7 @@ export const INCIDENT_EMAIL_CODES = [
   "backup.archives_deleted",
   "clock.corrected",
   "start.unplanned_stop",
+  "start.shutdown_paused",
   "start.selling_unconfirmed",
   "start.replaced",
 ] as const;
@@ -112,6 +114,7 @@ function wordsFor(
   language: "en" | "es",
   params?: Readonly<Record<string, unknown>>,
 ): { subject: string; text: string; values?: Record<string, string> } {
+  if (code === "start.shutdown_paused") return SHUTDOWN_PAUSED_EMAIL_WORDS[language];
   if (code === "start.unplanned_stop") return UNPLANNED_STOP_EMAIL_WORDS[language];
   if (code === "start.selling_unconfirmed") return SELLING_UNCONFIRMED_EMAIL_WORDS[language];
   if (code === "start.replaced") return REPLACED_EMAIL_WORDS[language];
@@ -602,7 +605,8 @@ export function boxAlertMailJob(
     name: "box.alert_mail",
     applies: () => true,
     firstPassAfterMs: intervalMs,
-    minSleepMs: intervalMs,
+    // A failed shutdown check wakes the job before the normal polling interval.
+    minSleepMs: 0,
     maxSleepMs: intervalMs,
     backoff: { firstMs: intervalMs, maxMs: intervalMs },
     async pass({ signal }) {

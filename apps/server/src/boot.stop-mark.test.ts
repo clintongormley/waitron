@@ -4,6 +4,7 @@ import {
   incidents,
   outgoingMail,
   persons,
+  readMail,
   withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
@@ -25,6 +26,7 @@ import { writeArchiveSettings } from "./archive-settings.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import * as atomic from "./fs-atomic.js";
 import { startServer as bootServer } from "./boot.js";
+import { SHUTDOWN_PAUSED_EMAIL_WORDS } from "./i18n/box-emails.js";
 import { boxHostnameFor } from "./box-name.js";
 import * as boxEmail from "./box-alert-email.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
@@ -55,9 +57,10 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 const heartbeatAt = "2026-10-22T09:31:00.000Z";
 
 it.each([
-  ["drains the scheduled backup and writes only the restart mark if stopped mid-check", false],
-  ["refuses checked shutdown while streaming is configured", true],
-] as const)("%s", async (_description, streaming) => {
+  ["drains the scheduled backup and writes only the restart mark if stopped mid-check", "restart"],
+  ["refuses checked shutdown while streaming is configured", "streaming"],
+  ["records and emails a failed final backup while sales stay paused", "failed"],
+] as const)("%s", async (_description, scenario) => {
   const { cfg } = await setupVenue(suite.db);
   const { token } = await openManagementSession(suite.db, "admin");
   const { token: staleToken } = await openManagementSession(suite.db, "admin");
@@ -82,6 +85,7 @@ it.each([
         signal.removeEventListener("abort", releaseScheduled);
       }
     });
+  let failedChecks = 0;
   let reachedCheck!: () => void;
   const checking = new Promise<void>((resolve) => {
     reachedCheck = resolve;
@@ -90,11 +94,20 @@ it.each([
     .spyOn(BackupSupervisor.prototype, "runForShutdown")
     .mockImplementation(async (signal) => {
       signal.throwIfAborted();
+      if (scenario === "failed") {
+        reachedCheck();
+        if (++failedChecks === 1)
+          throw new AppError("backup.archive_invalid", { reason: "read_back_mismatch" });
+        throw new AppError("backup.destination_timed_out", { timeoutMs: 1_000 });
+      }
       await new Promise<void>((resolve) => {
         signal.addEventListener("abort", () => resolve(), { once: true });
         reachedCheck();
       });
     });
+  const smtp = scenario === "failed" ? await startFakeSmtp() : null;
+  const ordinaryMailDue = new Date(Date.now() + 30_000);
+  if (smtp) vi.useFakeTimers({ toFake: ["Date"] });
   const socket = new TLSSocket(new Socket());
   let app!: Hono;
   let started!: Awaited<ReturnType<typeof startServer>>;
@@ -125,7 +138,25 @@ it.each([
               },
               null,
             );
-            if (streaming)
+            if (smtp) {
+              await saveSmtpForTest(tx, ring, {
+                url: `smtp://127.0.0.1:${smtp.port}`,
+                from: "notices@example.test",
+              });
+              const [owner] = await tx
+                .select({ id: persons.id })
+                .from(persons)
+                .where(eq(persons.email, "owner@example.test"));
+              await enqueueMail(tx, {
+                kind: "security_change",
+                dedupeKey: "ordinary-during-shutdown",
+                personId: owner!.id,
+                params: { change: "password_changed" },
+                nextAttemptAt: ordinaryMailDue,
+                notAfter: new Date(ordinaryMailDue.getTime() + 60_000),
+              });
+            }
+            if (scenario === "streaming")
               await writeStreamSettings(
                 tx,
                 ring,
@@ -150,7 +181,7 @@ it.each([
         },
         httpPort,
       },
-      async () => {
+      async (base) => {
         await scheduled;
         const begin = (session: string) =>
           app.request(
@@ -167,7 +198,7 @@ it.each([
           error: { code: "management_session.proof_required" },
         });
         const response = await begin(token);
-        if (streaming) {
+        if (scenario === "streaming") {
           releaseScheduled();
           expect(response.status).toBe(409);
           expect(await response.json()).toMatchObject({
@@ -181,10 +212,72 @@ it.each([
           headers: { cookie: `waitron_management_session=${token}` },
         });
         const enteredCheckEarly = checkedBackup.mock.calls.length !== 0;
+        if (smtp) vi.setSystemTime(ordinaryMailDue.getTime() + 1_000);
         releaseScheduled();
         expect(view.status).toBe(200);
         expect(enteredCheckEarly).toBe(false);
         await checking;
+        if (smtp) {
+          const rows = () =>
+            suite.db
+              .select({ params: incidents.params })
+              .from(incidents)
+              .where(eq(incidents.code, "start.shutdown_paused"));
+          await vi.waitFor(async () => {
+            expect(await rows()).toEqual([{ params: { errorCode: "backup.archive_invalid" } }]);
+          });
+          const shutdownNotices = () =>
+            suite.db
+              .select({ id: outgoingMail.id })
+              .from(outgoingMail)
+              .innerJoin(incidents, eq(outgoingMail.subjectId, incidents.id))
+              .where(eq(incidents.code, "start.shutdown_paused"))
+              .orderBy(outgoingMail.seq);
+          await vi.waitFor(async () => expect(await shutdownNotices()).not.toHaveLength(0));
+          const firstNotices = await shutdownNotices();
+          await vi.waitFor(() => expect(smtp.messages).toHaveLength(firstNotices.length), {
+            timeout: 10_000,
+          });
+          const message = smtp.messages
+            .find((mail) => mail.includes("To: owner@example.test"))!
+            .replace(/=\r?\n/g, "");
+          expect(message).toContain("To: owner@example.test");
+          expect(message).toContain(
+            SHUTDOWN_PAUSED_EMAIL_WORDS.es.text.split(" ").slice(-3).join(" "),
+          );
+          expect((await readMail(suite.db, "ordinary-during-shutdown"))?.status).toBe("pending");
+          const retry = await app.request(
+            "https://box.example/api/box/shutdown",
+            {
+              method: "PATCH",
+              headers: {
+                cookie: `waitron_management_session=${token}`,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({ decision: "retry" }),
+            },
+            { incoming: { socket } },
+          );
+          expect(retry.status).toBe(202);
+          await vi.waitFor(async () => {
+            const health = await app.request("/api/box/health", {
+              headers: { cookie: `waitron_management_session=${token}` },
+            });
+            expect(await health.json()).toMatchObject({
+              shutdown: { phase: "paused", errorCode: "backup.destination_timed_out" },
+            });
+          });
+          expect(await rows()).toEqual([{ params: { errorCode: "backup.archive_invalid" } }]);
+          expect(await shutdownNotices()).toEqual(firstNotices);
+          expect(smtp.messages).toHaveLength(firstNotices.length);
+          const trading = await fetch(`${base}/api/node`);
+          expect(await trading.json()).toMatchObject({ acceptingSales: false });
+          await expect(stat(join(stateDir, "admin-shutdown.json"))).rejects.toHaveProperty(
+            "code",
+            "ENOENT",
+          );
+          return;
+        }
         await started.markRestart!();
         await started.close();
         expect(await readFile(join(stateDir, "stop-mark.json"), "utf8")).toBe(
@@ -200,6 +293,8 @@ it.each([
     scheduledBackup.mockRestore();
     checkedBackup.mockRestore();
     socket.destroy();
+    if (smtp) vi.useRealTimers();
+    await smtp?.close();
   }
 });
 

@@ -12,6 +12,9 @@ import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDLE_TIMEOUT_MS } from "@waitron/identity";
+import { jobOrigin } from "@waitron/shared";
+import { WorkforceBackend } from "@waitron/workforce";
+import { readShutdownStaff } from "./admin-shutdown-duties.js";
 
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -106,7 +109,8 @@ function buildApp(
     tlsCertPath: string | undefined;
     readBackup?: () => Promise<BackupStatus>;
     readStream?: () => StreamView;
-    shutdown?: BoxStatusDeps["shutdown"] &
+    shutdown?: Omit<NonNullable<BoxStatusDeps["shutdown"]>, "readStaff"> &
+      Partial<Pick<NonNullable<BoxStatusDeps["shutdown"]>, "readStaff">> &
       Partial<Pick<ReturnType<typeof createAdminShutdown>, "middleware">>;
   },
 ): Hono {
@@ -139,7 +143,7 @@ function buildApp(
       now: () => opts.now,
       tlsCertPath: opts.tlsCertPath,
       readBackup: opts.readBackup,
-      shutdown: opts.shutdown,
+      shutdown: opts.shutdown && { readStaff: async () => [], ...opts.shutdown },
       readStream: opts.readStream ?? (() => ({ state: "off" })),
       readMode: () => "primary",
       readSingletonRole: () => "primary",
@@ -171,6 +175,7 @@ it("requires the same HTTPS page and an administrator before admitting shutdown"
     tlsCertPath: undefined,
     shutdown: {
       start,
+      resolvePaused: () => {},
       cancel: async () => {},
       status: () => ({ phase: "idle" }),
       available: async () => true,
@@ -249,6 +254,118 @@ it("lets an administrator sign in again and cancel while payments are paused", a
   } finally {
     vi.useRealTimers();
     await shutdown.close();
+    socket.destroy();
+  }
+});
+
+it("requires a box administrator on HTTPS to resolve a failed shutdown check", async () => {
+  const { nodeId } = await setupVenue();
+  const shutdown = createAdminShutdown({
+    check: async () => {
+      throw new Error("Backup failed");
+    },
+    save: async () => {},
+    clear: async () => {},
+  });
+  const app = buildApp(nodeId, {
+    now: new Date(),
+    tlsCertPath: undefined,
+    shutdown: { ...shutdown, available: async () => true },
+  });
+  const admin = await login(app, "owner@example.test", "dashPass123");
+  await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin, false));
+  const manager = await login(app, MANAGER_EMAIL);
+  const socket = new TLSSocket(new Socket());
+  const request = (cookie: string, secure: boolean, decision: string) =>
+    app.request(
+      "https://box.example/api/box/shutdown",
+      {
+        method: "PATCH",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ decision }),
+      },
+      secure ? { incoming: { socket } } : undefined,
+    );
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    expect((await request(admin, false, "shut-down-anyway")).status).toBe(403);
+    expect((await request(manager, true, "shut-down-anyway")).status).toBe(403);
+    expect((await request(admin, true, "unknown")).status).toBe(400);
+    expect(shutdown.status().phase).toBe("paused");
+    expect((await request(admin, true, "shut-down-anyway")).status).toBe(202);
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready", checked: false }));
+  } finally {
+    await shutdown.close();
+    socket.destroy();
+  }
+});
+
+it("shows the shutdown confirmation who is working or on break to box administrators", async () => {
+  const { nodeId, managerId } = await setupVenue();
+  const workforce = new WorkforceBackend();
+  const input = {
+    personId: managerId,
+    nodeId,
+    at: "2026-11-25T18:00:00.000Z",
+    offsetMinutes: 60,
+    origin: jobOrigin("dashboard"),
+  };
+  const workingId = await withTransaction(suite.db, async (tx) => {
+    const [working, finished] = await seedPersons(tx, [
+      { displayName: "Working staff", pinHash: "seed", role: "staff" },
+      { displayName: "Finished staff", pinHash: "seed", role: "staff" },
+    ]);
+    await workforce.clockIn(tx, { ...input, personId: working!.id });
+    await workforce.clockIn(tx, { ...input, personId: finished!.id });
+    await workforce.clockOut(tx, {
+      ...input,
+      personId: finished!.id,
+      at: "2026-11-25T18:10:00.000Z",
+    });
+    await workforce.clockIn(tx, input);
+    await workforce.breakStart(tx, { ...input, at: "2026-11-25T18:15:00.000Z" });
+    return working!.id;
+  });
+  const app = buildApp(nodeId, {
+    now: new Date(),
+    tlsCertPath: undefined,
+    shutdown: {
+      ...createAdminShutdown({
+        check: async () => {},
+        save: async () => {},
+        clear: async () => {},
+      }),
+      available: async () => true,
+      readStaff: () => readShutdownStaff(suite.db),
+    },
+  });
+  const socket = new TLSSocket(new Socket());
+  const request = (cookie: string) =>
+    app.request(
+      "https://box.example/api/box/shutdown",
+      {
+        headers: { cookie },
+      },
+      { incoming: { socket } },
+    );
+  try {
+    const manager = await login(app, MANAGER_EMAIL);
+    const admin = await login(app, "owner@example.test", "dashPass123");
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, admin));
+    const deactivated = await app.request(`/management-api/staff/${workingId}/deactivate`, {
+      method: "POST",
+      headers: { cookie: admin },
+    });
+    expect(deactivated.status).toBe(204);
+    expect((await request(manager)).status).toBe(403);
+    const response = await request(admin);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual([
+      { displayName: "The Manager", state: "on_break" },
+      { displayName: "Working staff", state: "working" },
+    ]);
+  } finally {
     socket.destroy();
   }
 });

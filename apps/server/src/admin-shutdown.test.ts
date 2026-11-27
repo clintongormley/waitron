@@ -94,3 +94,124 @@ it("waits for admitted work and keeps new work out until Cancel has settled", as
     await sale;
   }
 });
+
+it("captures a new backup on Retry while sales stay paused", async () => {
+  let passes = 0;
+  let pauses = 0;
+  const shutdown = createAdminShutdown({
+    check: async () => {
+      passes++;
+      if (passes === 1) throw new Error("The backup destination is unavailable");
+    },
+    save: async () => {},
+    clear: async () => {},
+    pauseDuties: () => {
+      pauses++;
+      return { settled: Promise.resolve(), drainRefunds: async () => {}, resume() {} };
+    },
+  });
+  const app = new Hono();
+  app.use("*", shutdown.middleware);
+  app.post("/sale", (c) => c.body(null, 204));
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    shutdown.resolvePaused("retry");
+    expect((await app.request("/sale", { method: "POST" })).status).toBe(503);
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("ready"));
+    expect(passes).toBe(2);
+    expect(pauses).toBe(1);
+  } finally {
+    await shutdown.close();
+  }
+});
+
+it("writes the next-start hold only when the administrator chooses Shut down anyway", async () => {
+  let releaseSave!: () => void;
+  const saving = new Promise<void>((resolve) => (releaseSave = resolve));
+  let marked = false;
+  const shutdown = createAdminShutdown({
+    check: async () => {
+      throw new Error("The saved archive could not be opened");
+    },
+    save: async () => {
+      await saving;
+      marked = true;
+    },
+    clear: async () => {},
+  });
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    expect(marked).toBe(false);
+    shutdown.resolvePaused("shut-down-anyway");
+    expect(shutdown.status().phase).toBe("checking");
+    releaseSave();
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready", checked: false }));
+    expect(marked).toBe(true);
+  } finally {
+    releaseSave();
+    await shutdown.close();
+  }
+});
+
+it.each([
+  ["keeps the successful check when only the hold save fails", false, { phase: "ready" }],
+  [
+    "reports an unchecked backup after a later check fails",
+    true,
+    { phase: "ready", checked: false },
+  ],
+])("%s", async (_scenario, retry, outcome) => {
+  let saves = 0;
+  let checks = 0;
+  const shutdown = createAdminShutdown({
+    check: async () => {
+      if (++checks === 2) throw new Error("The retry could not check the copy");
+    },
+    save: async () => {
+      if (++saves === 1) throw new Error("The shutdown hold could not be saved");
+    },
+    clear: async () => {},
+  });
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    if (retry) {
+      shutdown.resolvePaused("retry");
+      await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    }
+    shutdown.resolvePaused("shut-down-anyway");
+    await vi.waitFor(() => expect(shutdown.status()).toEqual(outcome));
+    expect(checks).toBe(retry ? 2 : 1);
+  } finally {
+    await shutdown.close();
+  }
+});
+
+it("clears a partly written shutdown hold when cancelling after a failed save", async () => {
+  let mark = false;
+  const shutdown = createAdminShutdown({
+    check: async () => {
+      throw new Error("The final backup failed");
+    },
+    save: async () => {
+      mark = true;
+      throw new Error("The hold could not be synced");
+    },
+    clear: async () => {
+      mark = false;
+    },
+  });
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    shutdown.resolvePaused("shut-down-anyway");
+    await vi.waitFor(() => expect(mark && shutdown.status().phase === "paused").toBe(true));
+    await shutdown.cancel();
+    expect(mark).toBe(false);
+    expect(shutdown.status()).toEqual({ phase: "idle" });
+  } finally {
+    await shutdown.close();
+  }
+});

@@ -495,6 +495,8 @@ proveedor.
 
 ## Apagar este servidor {#shutdown}
 
-En un servidor principal sin servidor de reserva, con un destino de copia guardado y sin transmisión continua, abre **Estado del servidor** y elige **Apagar este servidor**. Introduce tu contraseña de administrador cuando se te pida. Si necesitas una contraseña, créala primero en **Configuración de la cuenta**. Waitron pausa el trabajo y comprueba la copia que acaba de guardar. Deja el servidor encendido hasta que veas **Ya puedes apagar el servidor**. Puedes cancelar mientras se comprueba la copia o si la comprobación se detiene.
+En un servidor principal sin servidor de reserva, con un destino de copia guardado y sin transmisión continua, abre **Estado del servidor** y elige **Apagar este servidor**. Introduce tu contraseña de administrador cuando se te pida. Si necesitas una contraseña, créala primero en **Configuración de la cuenta**. Pide a las personas de la lista que fichen la salida antes de continuar. Para guardar la clave que necesitarás para restaurar, elige **Hacer paquete de recuperación** si tienes el permiso **Gestionar el sistema**.
+
+Waitron pausa el trabajo y comprueba la copia que acaba de guardar. Deja el servidor encendido hasta que veas **Ya puedes apagar el servidor**. Si falla la comprobación, lee el motivo y elige **Volver a hacer la copia** para guardar una nueva o **Cancelar y reanudar el trabajo** para seguir usando el servidor. Usa **Apagar de todos modos** solo si tienes que apagarlo antes de tener una copia comprobada. Espera a que el servidor te indique que ya puedes apagarlo. Si más adelante necesitas restaurar, quizá tengas que usar una copia anterior.
 
 Al volver a arrancar, inicia sesión y elige **Seguir vendiendo en este servidor** para reabrirlo. Elige **Mantenerlo detenido** si otro servidor tomó el relevo.
