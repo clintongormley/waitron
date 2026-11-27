@@ -6261,8 +6261,9 @@ it("shows office printer holds and allows viewing uncertain invoice pages", asyn
   expect(text(el, "[data-test=job-wait-held-page]")).toBe(
     "Back office is out of paper. Add paper and it will print.",
   );
-  expect(text(el, "[data-test=job-wait-cover-open-page]")).toContain("Back office");
-  expect(text(el, "[data-test=job-wait-cover-open-page]")).toContain("a cover is open");
+  expect(text(el, "[data-test=job-wait-cover-open-page]")).toBe(
+    "Waiting at Back office (a cover is open). Check the printer. It will print when ready.",
+  );
   expect(text(el, "[data-test=job-status-held-page]")).toBe("Held");
   expect(text(el, "[data-test=job-status-queued-page]")).toBe("Held");
   expect(text(el, "[data-test=job-status-printing-page]")).toBe("Printing");
@@ -13797,15 +13798,23 @@ describe("one table for every printer", () => {
       const shown = () =>
         [
           ...table(el).shadowRoot!.querySelectorAll(
-            '[data-test="printer-row-pp1"], [data-test="printer-row-pp2"]',
+            '[data-test="printer-row-pp1"], [data-test="printer-row-pp2"], [data-test="printer-row-pp3"]',
           ),
         ].map((row) => row.getAttribute("data-test"));
       await vi.waitFor(() =>
-        expect(shown()).toEqual([`printer-row-${first}`, `printer-row-${second}`]),
+        expect(shown()).toEqual([
+          `printer-row-${first}`,
+          `printer-row-${second}`,
+          "printer-row-pp3",
+        ]),
       );
       await userEvent.click(sort);
       await vi.waitFor(() =>
-        expect(shown()).toEqual([`printer-row-${second}`, `printer-row-${first}`]),
+        expect(shown()).toEqual([
+          `printer-row-${second}`,
+          `printer-row-${first}`,
+          "printer-row-pp3",
+        ]),
       );
       expect(textOf(el, "[data-test=page-printer-pending-pp3]")).toBe("—");
     },

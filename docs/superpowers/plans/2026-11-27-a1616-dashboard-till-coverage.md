@@ -1,6 +1,6 @@
 # Restore dashboard and till coverage (A1616)
 
-Both packages pass the existing 98% statement, line and function gates and 95% branch gate.
+Restore both packages to the existing 98% statement, line and function gates and 95% branch gate.
 Use existing fixtures and keep production code, coverage settings and existing assertions intact.
 
 The 26 November nightly's merges (45741432235) passed: dashboard 98.12/95.07/98.50/99.11,
@@ -28,8 +28,6 @@ the dated Git range to name the PRs tied to the drop, distinguishing moved, alre
 code. For the till, #4443 added the missed zone-chooser focus path while #4371 moved the existing
 report requests. Finish and land the branch, then run full `ci.yml` on main and verify both merge jobs for that
 SHA because local V8 coverage and the CI shard merge measure through different paths.
-
-Estimate 0 production lines and 250–400 test lines, plus this plan.
 
 The watcher cleared a split on 27 November at 04:20 CET if the remaining dashboard
 coverage needed more than about 900 net test lines. The first pull request adds the

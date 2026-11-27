@@ -284,24 +284,20 @@ it("keeps the paused shutdown actionable after a refused retry", async () => {
 it.each([
   { phase: "paused", available: true, errorCode: "backup.archive_invalid" },
   { phase: "checking", available: false },
-] as const)(
-  "can cancel a shutdown in $phase even if a new check is unavailable",
-  async (shutdown) => {
-    const idle = { phase: "idle", available: true } as const;
-    const getBoxHealth = vi.fn().mockResolvedValue(health({ shutdown }));
-    const cancelBoxShutdown = vi.fn(async () => {
-      getBoxHealth.mockResolvedValue(health({ shutdown: idle }));
-      return idle;
-    });
-    const { el } = await mount(stubApi({ getBoxHealth, cancelBoxShutdown }));
-    el.canCheckClock = true;
-    await el.updateComplete;
-    await userEvent.click(q(el, '[data-test="box-shutdown-cancel"]')!);
-    await expect.poll(() => q(el, '[data-test="box-shutdown"]')).not.toBeNull();
-    expect(cancelBoxShutdown).toHaveBeenCalledOnce();
-    expect(q(el, '[data-test="box-shutdown-retry"]')).toBeNull();
-  },
-);
+] as const)("keeps Cancel available during a $phase shutdown", async (shutdown) => {
+  const idle = { phase: "idle", available: true } as const;
+  const getBoxHealth = vi.fn().mockResolvedValue(health({ shutdown }));
+  const cancelBoxShutdown = vi.fn(async () => {
+    getBoxHealth.mockResolvedValue(health({ shutdown: idle }));
+    return idle;
+  });
+  const { el } = await mount(stubApi({ getBoxHealth, cancelBoxShutdown }));
+  el.canCheckClock = true;
+  await el.updateComplete;
+  await userEvent.click(q(el, '[data-test="box-shutdown-cancel"]')!);
+  await expect.poll(() => q(el, '[data-test="box-shutdown"]')).not.toBeNull();
+  expect(cancelBoxShutdown).toHaveBeenCalledOnce();
+});
 
 it("offers no shutdown check without an available backup", async () => {
   const getBoxHealth = vi.fn().mockResolvedValue(

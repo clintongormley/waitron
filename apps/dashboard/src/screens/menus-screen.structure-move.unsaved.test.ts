@@ -232,7 +232,10 @@ it.each([undefined, "prices.1.price", "rootMembers.1.ref", "sections.1.internalN
   "keeps the arrangement and allows retry when a Structure Save refusal has no visible field (%s)",
   async (field) => {
     const api = client(async () => {
-      throw { code: "menu_section.member_duplicate", params: { field } };
+      throw {
+        code: "menu_section.member_duplicate",
+        ...(field === undefined ? {} : { params: { field } }),
+      };
     });
     const { app, screen, window, destination } = await mount(api);
     await chooseOption(destination(), "s-drinks");
