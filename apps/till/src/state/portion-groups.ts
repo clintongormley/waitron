@@ -143,6 +143,53 @@ export function sentSlicePortionKey(
       ]);
 }
 
+/** What makes two sent portions one row: `dish`, the facts serving does not change, and
+ * `progress`, how far the kitchen got with an unserved portion (null once served). */
+export interface SentRowPortionKey {
+  dish: string;
+  progress: string | null;
+}
+
+/**
+ * {@link sentSlicePortionKey} for the sent rows, which draw a dish's served and unserved portions
+ * as one row. Serving changes the slice's kind, the line's served time, state and movability and
+ * the kitchen's progress, so `dish` leaves them out and an unserved portion's progress travels
+ * apart; the basket's and the kitchen's keys still keep them in.
+ */
+export function sentRowPortionKey(
+  slice: SentSlice,
+  lines: readonly TabLine[],
+  shown: unknown = null,
+): SentRowPortionKey | null {
+  const { row } = slice;
+  const dish = lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo);
+  if (dish === undefined || slice.quantity !== "1" || trimQuantity(row.quantity) !== "1")
+    return null;
+  const bill = tabLinePortionKey(
+    { ...dish, servedAt: null, state: null, movable: false },
+    lines,
+    shown,
+  );
+  if (bill === null) return null;
+  return {
+    dish: JSON.stringify([
+      bill,
+      slice.kind === "cancelled_charged",
+      row.workingOrderId,
+      row.netAmount,
+      row.released,
+      row.firedAt,
+      row.kitchen === null ? null : row.kitchen.stationId,
+      row.sentAt !== undefined,
+      nutritionFacts(row.nutrition),
+    ]),
+    progress:
+      slice.kind === "served"
+        ? null
+        : JSON.stringify([dish.state, dish.movable, row.readyAt, row.kitchen]),
+  };
+}
+
 /** The facts a kitchen screen draws for a dish, shared by the station queue's items and the pass's. */
 type KitchenDish = Pick<
   StationQueueItem & ExpoItem,
