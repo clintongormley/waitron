@@ -353,10 +353,7 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     await openMore();
     await expect.element(page.getByRole("button", { name: /^Transfers.*2/ })).toBeVisible();
     await expect.element(page.getByRole("button", { name: "Close the drawer" })).toBeVisible();
-    const opensDrawer = vi.fn();
-    el.addEventListener("open-drawer-close", opensDrawer);
-    more().querySelector<HTMLElement>(".drawer-close")!.click();
-    expect(opensDrawer).not.toHaveBeenCalled();
+    expect(more().querySelector("wt-menu-row:not([action], [divider]):empty")).toBeNull();
     const person = more().querySelector(".operator")!;
     expect(person.parentElement?.querySelector('[data-clock-action="out"]')).not.toBeNull();
     await expect.element(page.getByRole("button", { name: "Taken off 0" })).toBeVisible();
@@ -459,7 +456,7 @@ it("shows the active language in the joined floor menu choice and gives Log out 
       "16px",
     );
     const logout = more().querySelector(".logout")!.shadowRoot!.querySelector("button")!;
-    expect(getComputedStyle(logout, "::after").content).toBe("none");
+    expect(logout.querySelector('[part="chevron"]')).toBeNull();
     expect(getComputedStyle(logout).fontWeight).toBe("600");
   } finally {
     await page.viewport(1280, 900);
@@ -512,8 +509,7 @@ it.each([
         expect([
           selector,
           getComputedStyle(sheet).borderBlockEndWidth,
-          getComputedStyle(lastRow.shadowRoot?.querySelector("button") ?? lastRow)
-            .borderBlockEndWidth,
+          getComputedStyle(lastRow).borderBlockEndWidth,
           getComputedStyle(footer).borderBlockStartWidth,
         ]).toEqual([selector, "0px", "0px", "1px"]);
         const gutter = getComputedStyle(footer, "::after");

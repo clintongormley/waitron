@@ -809,6 +809,8 @@ export class TillShell extends LitElement {
             continue;
           }
           this.#setNarrowFloor(entry.contentRect.width < 800);
+          // The bar can move when the shell resizes without changing the bar's height.
+          if (this.#floorControls) measureFloorControls(this.#floorControls);
           if (this.formFactor === "till") {
             void this.#measureCounterLogo();
             continue;

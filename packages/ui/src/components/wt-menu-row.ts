@@ -103,6 +103,17 @@ export class WtMenuRow extends LitElement {
   @property({ type: Boolean }) disabled = false;
   @property({ type: Boolean, reflect: true }) divider = false;
 
+  constructor() {
+    super();
+    this.addEventListener(
+      "click",
+      (event) => {
+        if (this.action && event.composedPath()[0] === this) event.stopImmediatePropagation();
+      },
+      { capture: true },
+    );
+  }
+
   private stopHelpClick(event: MouseEvent): void {
     event.stopPropagation();
   }

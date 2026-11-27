@@ -6,7 +6,6 @@ import "@waitron/ui/src/components/wt-menu-row.js";
 import type { FloorZone, TableState } from "../api/floor-api.js";
 import { t } from "../i18n/t.js";
 import { shownName, sparesOf, takenOffOf } from "../state/floor-today.js";
-import { onFloorRowClick } from "./floor-bar.js";
 import { trackDialog } from "./track-dialog.js";
 
 type Dialog = "spares" | "taken-off" | "reset";
@@ -175,7 +174,7 @@ export class TillFloorZoneMenu extends LitElement {
             .label=${label}
             .value=${count ?? ""}
             data-menu-item=${item}
-            @click=${onFloorRowClick(() => this.openPlanAction(item))}
+            @click=${() => this.openPlanAction(item)}
           ></wt-menu-row>`
         : html`<wt-button
             icon=${icon}

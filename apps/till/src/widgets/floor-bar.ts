@@ -86,6 +86,12 @@ export const floorBarStyles = css`
     background: var(--wt-color-surface);
     border-block-start: 1px solid var(--wt-color-border);
   }
+  .floor-bar::after {
+    content: "";
+    position: absolute;
+    background: inherit;
+    pointer-events: none;
+  }
   @media (orientation: portrait) {
     .shell:has(> .floor-controls) > .region,
     .floor-controls {
@@ -95,12 +101,19 @@ export const floorBarStyles = css`
       --wt-row-actions-sheet-inline-inset: 0px;
     }
     .floor-bar::after {
-      content: "";
-      position: absolute;
       inset: 100% 0 auto;
       block-size: var(--wt-page-padding, 0px);
-      background: inherit;
-      pointer-events: none;
+    }
+  }
+  @media (orientation: landscape) {
+    .floor-bar {
+      isolation: isolate;
+    }
+    .floor-bar::after {
+      inset: calc(-1 * var(--wt-field-line-width)) calc(-1 * var(--wt-page-padding, 0px))
+        calc(-1 * var(--wt-page-padding, 0px));
+      z-index: -1;
+      border-block-start: inherit;
     }
   }
   .floor-bar wt-row-actions::part(popup) {
@@ -194,7 +207,7 @@ export const floorBarStyles = css`
     display: flex;
     align-items: center;
     gap: var(--wt-space-2);
-    padding: var(--wt-space-2) var(--wt-space-3);
+    padding: var(--wt-space-2) var(--wt-menu-row-padding-start);
   }
   .floor-operator-initials {
     display: grid;
@@ -218,6 +231,7 @@ export const floorBarStyles = css`
   .floor-operator [data-clock-action]::part(button) {
     border: 1px solid var(--wt-color-border);
     border-radius: var(--wt-radius-md);
+    font-weight: var(--wt-font-weight-bold);
   }
   [data-floor-other-zone] {
     margin: var(--wt-space-1) max(var(--wt-space-3), env(safe-area-inset-right)) var(--wt-space-2)
@@ -227,11 +241,14 @@ export const floorBarStyles = css`
     min-block-size: var(--wt-tap-min);
     justify-content: start;
     background: var(--wt-color-tab-warning-tint);
+    font-size: calc((3 * var(--wt-font-size-md) + var(--wt-font-size-lg)) / 4);
     font-weight: var(--wt-font-weight-normal);
     text-align: start;
   }
-  [data-floor-other-zone] [aria-hidden] {
+  [data-floor-other-zone] wt-icon {
+    flex: none;
     margin-inline-start: auto;
+    color: var(--wt-color-text-muted);
   }
   .floor-zone-mark {
     margin-inline-start: auto;
@@ -262,12 +279,6 @@ export function floorMoreSheet(count: number | undefined, contents: TemplateResu
   </wt-row-actions>`;
 }
 
-export function onFloorRowClick(press: (event: Event) => void) {
-  return (event: Event) => {
-    if (event.composedPath().some((node) => node instanceof HTMLButtonElement)) press(event);
-  };
-}
-
 export function floorMoreRow(
   label: string,
   press: (event: Event) => void,
@@ -296,7 +307,7 @@ export function floorMoreRow(
     help-label=${helpBadgeLabel(label)}
     ?data-open-transfers=${options.transfers}
     ?data-report-problem=${options.report}
-    @click=${onFloorRowClick(press)}
+    @click=${press}
   ></wt-menu-row>`;
 }
 
@@ -306,7 +317,7 @@ export function floorDeviceRows(
   settings: TemplateResult,
 ) {
   return html`
-    <wt-menu-row>${language}</wt-menu-row>
+    ${language === nothing ? nothing : html`<wt-menu-row>${language}</wt-menu-row>`}
     <wt-menu-row divider .label=${helpText("help.label")}>${help}</wt-menu-row>
     <details class="settings-group">
       <summary>
@@ -326,7 +337,7 @@ export function floorHoursRows(busy: boolean, press: (type: "my-hours" | "fix-my
       data-my-hours
       .disabled=${busy}
       .label=${t("hours.mine")}
-      @click=${onFloorRowClick(() => press("my-hours"))}
+      @click=${() => press("my-hours")}
     ></wt-menu-row>
     <wt-menu-row
       action
@@ -337,7 +348,7 @@ export function floorHoursRows(busy: boolean, press: (type: "my-hours" | "fix-my
       .label=${label}
       help=${helpText("help.person.fix_hours")}
       help-label=${helpBadgeLabel(label)}
-      @click=${onFloorRowClick(() => press("fix-my-hours"))}
+      @click=${() => press("fix-my-hours")}
     ></wt-menu-row>`;
 }
 
@@ -437,7 +448,7 @@ export function floorOtherZone(
     ? nothing
     : html`<wt-button data-floor-other-zone variant="secondary" @click=${() => select(zone.key)}>
         <span><strong>${zone.name}</strong> · ${marks.get(zone.key)!.words}</span>
-        <span aria-hidden="true">›</span>
+        <wt-icon aria-hidden="true" name="chevron-right" size="lg"></wt-icon>
       </wt-button>`;
 }
 

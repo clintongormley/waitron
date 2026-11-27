@@ -6412,7 +6412,7 @@ sign-in says so, holds no choice and shows every permitted zone until a later re
 Below 800 CSS px of shell width, the floor has a bottom bar with a zone chooser, one button
 naming the other view (Map or List), and ☰. The zone chooser marks the selected zone with a check.
 Both menus meet the top of the bar and reach the screen edges in portrait. The bar stays
-tappable, and its surface fills the portrait gutter below the controls. An urgent cue from another
+tappable, and its surface fills the gutters at the screen edges in either orientation. An urgent cue from another
 zone appears above the bar. The outlined map shares its side edges with the cue and controls.
 In landscape, the drag hint sits beside the map area when part of the plan is off-screen.
 The wide floor keeps the top toolbar and shows pills only when there's more than one zone.
