@@ -1040,18 +1040,6 @@ was found in the inspected main/product trees. The [A739 owner-flow revision](..
 records the missing recipient/address, request recovery, bill/delivery and no-charge integration
 here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is created.
 
-## A1270. Verify the fake AEAT's invoice-date comparison at midnight
-
-The readiness fixture uses a controlled clock. The library's `1112` check compares invoice dates
-at UTC midnight; AEAT validations §3.1.3.1 and the error wording do not name the comparison zone.
-Establish it from an authoritative definition or controlled preproduction probe, then correct and
-release `@waitron/verifactu` if needed. Keep this separate from A696's venue-zone implementation.
-The handover simulation now uses an advancing noon clock after its first filing reproduced
-`1112` at 23:28 UTC on 6 November, on both main and the certificate-worker branch.
-Audit the other server fixtures found by `rg 'createFakeAeat.*serverNow: new Date' apps/server`;
-their exposure to the same date boundary has not been reproduced.
-[Reproduction and sources](../developers/testing-guide.md#give-a-fake-fiscal-service-and-its-sample-one-controlled-clock).
-
 ## Bundle: Settle the hold and the brake once
 
 2 entries, size S. Their text is unchanged from the index they came from (backlog review, 2026-11-06).

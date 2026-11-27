@@ -182,9 +182,19 @@ its handover assertions. Its teardown restores the real clock after both boxes c
 | [AEAT validations v1.2.2, §3.1.3.1](https://www.agenciatributaria.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Validaciones_Errores_Veri-Factu.pdf), checked 1 November 2026 | “La FechaExpedicionFactura no podrá ser superior a la fecha actual.” | The date may not exceed the current date. This section does not name its comparison time zone. |
 | [AEAT error catalogue](https://prewww2.aeat.es/static_files/common/internet/dep/aplicaciones/es/aeat/tikeV1.0/cont/ws/errores.properties), archived source SHA-256 `06519ceb23422bd6b0ad3bfb659e3007615050da4920781d12cff536481d5902` | “El campo FechaExpedicionFactura es superior a la fecha actual.” | The wording of `1112`. It does not resolve the comparison zone. |
 
-Do not infer that the fake's UTC comparison matches AEAT from a passing synthetic sample.
-The [remaining verification](../backlog.md) needs an authoritative time-zone definition or a
-controlled preproduction boundary probe before changing the library's calendar rule.
+A1270's probe answered the zone on 28 November 2026. At 00:10:13 Madrid (23:10:13 UTC on
+27 November), AEAT's TEST service accepted a record dated 27-11-2026 and one dated 28-11-2026,
+both with the generation time written in Madrid time, plus one dated 28-11-2026 with that time
+written in UTC. It refused one dated 29-11-2026 with `1112`. So AEAT compares the invoice date
+with today's date in Madrid (or with UTC, allowing at least 50 minutes; this run cannot tell the
+two apart, and both accept every Madrid-dated record a box writes). The owner ran the probe with
+a real certificate; its code is kept off `main`, on the branch `feat/a1270-aeat-midnight-probe` at
+[`4aa61ba4a8`](https://github.com/clintongormley/waitron/tree/4aa61ba4a8f7d39301449c75137fa902ddf7ada1/apps/server/scripts)
+(`apps/server/scripts/aeat-midnight-probe.sh` and `apps/server/src/aeat-midnight-date.preprod.test.ts`).
+`@waitron/verifactu` 0.2.1's fake still compares with midnight UTC, so between 22:00 or 23:00
+and midnight UTC it refuses a record dated today in Madrid that AEAT accepts. The library's fix
+([waitron-io/verifactu#157](https://github.com/waitron-io/verifactu/pull/157)) is unreleased and
+rides in 0.3.0; keep the fixtures above on noon clocks until Waitron moves to it.
 
 ## A recent timestamp can belong to the previous business day
 
