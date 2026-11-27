@@ -4110,6 +4110,7 @@ async function bootServer(
     config,
     runner: jobRunner,
     backup: backupSupervisor,
+    readBoxEnv: () => loadBoxEnv(base, config.stateDir),
     workforceEnabled,
     now,
     log,

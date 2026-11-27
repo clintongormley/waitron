@@ -4763,6 +4763,15 @@ export const en = {
     "Deletes old crash reports and logs, and files left by an interrupted backup. Your sales, settings and backups are kept.",
   "box_status.free_help_guide": "More about freeing space",
   "box_status.shutdown.title": "Shut down this box",
+  "box_status.shutdown.download_what":
+    "Waitron pauses work and checks a final backup on this box for you to download.",
+  "box_status.shutdown.download":
+    "Waitron checked the backup on this box. Download it before switching off.",
+  "box_status.shutdown.download_backup": "Download checked backup",
+  "box_status.shutdown.backup_saved": "I saved the backup",
+  "box_status.shutdown.saved_question": "Have you saved the backup and its keys?",
+  "box_status.shutdown.check_file": "Check that you saved {name} ({bytes} bytes) in Downloads.",
+  "box_status.shutdown.keys": "To restore this backup, you need its encryption key and master key.",
   "box_status.shutdown.question": "Shut down this box?",
   "box_status.shutdown.clock_out_first":
     "Ask anyone still clocked in to clock out before you continue.",
@@ -9668,6 +9677,17 @@ export const es: Record<StringKey, string> = {
     "Borra informes de fallos y registros de actividad antiguos, y archivos que dejó una copia interrumpida. Conserva tus ventas, ajustes y copias de seguridad.",
   "box_status.free_help_guide": "Más sobre liberar espacio",
   "box_status.shutdown.title": "Apagar este servidor",
+  "box_status.shutdown.download_what":
+    "Waitron pausa el trabajo y comprueba en este servidor una última copia de seguridad que podrás descargar.",
+  "box_status.shutdown.download":
+    "Waitron ha comprobado la copia de seguridad en este servidor. Descárgala antes de apagarlo.",
+  "box_status.shutdown.download_backup": "Descargar la copia comprobada",
+  "box_status.shutdown.backup_saved": "He guardado la copia",
+  "box_status.shutdown.saved_question": "¿Has guardado la copia de seguridad y sus claves?",
+  "box_status.shutdown.check_file":
+    "Comprueba que has guardado {name} ({bytes} bytes) en Descargas.",
+  "box_status.shutdown.keys":
+    "Para restaurar esta copia necesitas su clave de cifrado y su clave maestra.",
   "box_status.shutdown.question": "¿Apagar este servidor?",
   "box_status.shutdown.clock_out_first":
     "Pide a quienes siguen con el turno abierto que fichen la salida antes de continuar.",

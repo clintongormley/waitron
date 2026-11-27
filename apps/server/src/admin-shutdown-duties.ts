@@ -8,6 +8,8 @@ import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { createAdminShutdown } from "./admin-shutdown.js";
 import { clearShutdownMark, writeShutdownMark } from "./admin-shutdown-hold.js";
+import { readArchiveSettingsWithMeta } from "./archive-settings.js";
+import { loadBackupKey } from "./backup-config.js";
 import type { BackupSupervisor } from "./backup-supervisor.js";
 import type { ServerConfig } from "./config.js";
 import type { Logger } from "./logger.js";
@@ -48,32 +50,40 @@ export function adminShutdownDuties(deps: {
   config: ServerConfig;
   runner: JobRunner;
   backup: BackupSupervisor;
+  readBoxEnv(): Promise<Record<string, string | undefined>>;
   isMain(): boolean;
   now(): Date;
   workforceEnabled: boolean;
   log: Logger;
 }) {
   const { backup, config, db, node, nodeId, ring, runner } = deps;
-  const available = async () => {
+  const destination = async () => {
     const status = backup.current();
-    if (!deps.isMain() || !status.enabled || status.cloud || status.destinations.length !== 1)
-      return false;
+    if (!deps.isMain() || status.cloud) return undefined;
     const [membership, pair, stream] = await Promise.all([
       readNodeMembership(db),
       readPairLink(node, nodeId),
       readStreamSettings(db, ring),
     ]);
-    return (
-      pair === null &&
-      stream === null &&
-      !membership?.body.nodes.some((box) => box.nodeId !== nodeId && box.standing !== "evicted")
-    );
+    if (
+      pair !== null ||
+      stream !== null ||
+      membership?.body.nodes.some((box) => box.nodeId !== nodeId && box.standing !== "evicted")
+    )
+      return undefined;
+    if (status.enabled && status.destinations.length === 1) return "saved" as const;
+    const { meta, settings } = await readArchiveSettingsWithMeta(db, ring);
+    if (meta !== null || settings !== null) return undefined;
+    return loadBackupKey(await deps.readBoxEnv());
   };
   let reportedPause: AbortSignal | undefined;
   const shutdown = createAdminShutdown({
     async check(signal) {
-      if (!(await available())) throw new AppError("box.shutdown_unavailable", {});
+      const target = await destination();
+      if (target === undefined) throw new AppError("box.shutdown_unavailable", {});
       try {
+        if (target !== "saved")
+          return await backup.runForShutdownDownload(signal, target, config.migrationsRoot);
         await backup.runForShutdown(signal, config.migrationsRoot);
       } catch (error) {
         // Retry reuses the shutdown's signal, so an alert covers the whole attempt.
@@ -107,8 +117,15 @@ export function adminShutdownDuties(deps: {
   });
   return {
     ...shutdown,
-    available,
+    available: async () => (await destination()) !== undefined,
     readStaff: () => (deps.workforceEnabled ? readShutdownStaff(db) : Promise.resolve([])),
-    view: async () => ({ available: await available().catch(() => false), ...shutdown.status() }),
+    view: async () => {
+      const target = await destination().catch(() => undefined);
+      return {
+        available: target !== undefined,
+        ...(typeof target === "object" ? { downloadOnly: true as const } : {}),
+        ...shutdown.status(),
+      };
+    },
   };
 }

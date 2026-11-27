@@ -215,3 +215,87 @@ it("clears a partly written shutdown hold when cancelling after a failed save", 
     await shutdown.close();
   }
 });
+
+it("holds sales until the named archive is delivered and the administrator confirms it", async () => {
+  let marked = false;
+  let removed = false;
+  const name = "final-backup.wbackup";
+  const shutdown = createAdminShutdown({
+    check: async () => ({
+      name,
+      path: "/private/checked-archive",
+      bytes: 123,
+      remove: async () => {
+        removed = true;
+      },
+    }),
+    save: async () => {
+      marked = true;
+    },
+    clear: async () => {},
+  });
+  const app = new Hono();
+  app.use("*", shutdown.middleware);
+  app.post("/sale", (c) => c.body(null, 204));
+  try {
+    shutdown.start();
+    await vi.waitFor(() =>
+      expect(shutdown.status()).toEqual({ phase: "download", name, bytes: 123, delivered: false }),
+    );
+    expect((await app.request("/sale", { method: "POST" })).status).toBe(503);
+    const interrupted = shutdown.beginDownload(name);
+    interrupted.finish(false);
+    expect(() => shutdown.confirmDownload(name)).toThrow(
+      expect.objectContaining({ code: "box.shutdown_in_progress" }),
+    );
+    const transfer = shutdown.beginDownload(name);
+    transfer.finish(true);
+    expect(() => shutdown.confirmDownload("earlier-backup.wbackup")).toThrow(
+      expect.objectContaining({ code: "box.shutdown_in_progress" }),
+    );
+    expect(marked).toBe(false);
+    shutdown.confirmDownload(name);
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready" }));
+    expect({ marked, removed }).toEqual({ marked: true, removed: true });
+  } finally {
+    await shutdown.close();
+  }
+});
+
+it("waits for an interrupted download to close before removing the archive and reopening sales", async () => {
+  const name = "final-backup.wbackup";
+  let removed = false;
+  const shutdown = createAdminShutdown({
+    check: async () => ({
+      name,
+      path: "/private/checked-archive",
+      bytes: 123,
+      remove: async () => {
+        removed = true;
+      },
+    }),
+    save: async () => {},
+    clear: async () => {},
+  });
+  const app = new Hono();
+  app.use("*", shutdown.middleware);
+  app.post("/sale", (c) => c.body(null, 204));
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("download"));
+    const transfer = shutdown.beginDownload(name);
+    const cancelling = shutdown.cancel();
+    try {
+      expect(transfer.signal.aborted).toBe(true);
+      expect((await app.request("/sale", { method: "POST" })).status).toBe(503);
+      expect(removed).toBe(false);
+    } finally {
+      transfer.finish(false);
+      await cancelling;
+    }
+    expect(removed).toBe(true);
+    expect((await app.request("/sale", { method: "POST" })).status).toBe(204);
+  } finally {
+    await shutdown.close();
+  }
+});

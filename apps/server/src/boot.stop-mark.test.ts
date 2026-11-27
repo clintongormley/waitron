@@ -16,8 +16,11 @@ import { AppError } from "@waitron/shared";
 import { pointerKey, signPointer } from "@waitron/stream";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import { eq } from "drizzle-orm";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, truncate, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
+import { request as httpsRequest } from "node:https";
+import { tmpdir } from "node:os";
+import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import type { Hono } from "hono";
@@ -34,8 +37,12 @@ import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import * as stopAlert from "./stop-alert.js";
 import { readPreviousStop } from "./stop-mark.js";
 import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
-import { startFakeSmtp } from "./testing/boot-harness.js";
-import { TRADING_BOOT_KEY_ENV } from "./testing/boot-trading-fixture.js";
+import { httpsVia, startFakeSmtp } from "./testing/boot-harness.js";
+import {
+  copyMigrationsRoot,
+  tradingBootEnv,
+  TRADING_BOOT_KEY_ENV,
+} from "./testing/boot-trading-fixture.js";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
@@ -45,6 +52,11 @@ import {
 } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { saveSmtpForTest } from "./testing/saved-smtp.js";
+import {
+  retainHttpListener,
+  startWithRetainedListeners,
+} from "./testing/retained-http-listener.js";
+import { seedModuleSettings } from "../test/module-settings.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -52,7 +64,7 @@ vi.mock("@hono/node-server", async () => {
   return ephemeralHttpMock();
 });
 
-const { startServer, httpPort } = ephemeralServerFixture();
+const { startServer, startConfiguredServer, httpPort } = ephemeralServerFixture();
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const heartbeatAt = "2026-10-22T09:31:00.000Z";
 
@@ -322,6 +334,116 @@ async function configureStartupBucket() {
   const { streamId } = (await readStreamSettings(suite.db, ring))!;
   return { cfg, key, streamId, ring };
 }
+
+it("holds the next start only after a complete shutdown download and confirmation on HTTPS", async () => {
+  const { cfg } = await setupVenue(suite.db);
+  const { token } = await openManagementSession(suite.db, "admin");
+  const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-shutdown-download-"));
+  const { caPem, serverCertPem, serverKeyPem } = mintMtlsMaterial();
+  const agent = httpsVia(caPem);
+  const name = "checked-backup.backup.enc";
+  const bytes = 16 * 1024 * 1024;
+  const path = join(scratch, name);
+  const mark = join(scratch, "admin-shutdown.json");
+  const migrations = join(scratch, "migrations");
+  const pem = join(scratch, "server.pem");
+  const env = {
+    ...tradingBootEnv(suite.db, scratch, cfg.nodeId, migrations),
+    WAITRON_HTTP_HOST: "127.0.0.1",
+    WAITRON_TLS_CERT_FILE: pem,
+    WAITRON_TLS_KEY_FILE: pem,
+  };
+  const headers = { cookie: `waitron_management_session=${token}` };
+  const capture = vi.spyOn(BackupSupervisor.prototype, "runForShutdownDownload");
+  capture.mockResolvedValue({ name, path, bytes, remove: () => rm(path, { force: true }) });
+  const start = async () => {
+    const held = await retainHttpListener();
+    const server = await startWithRetainedListeners([held], () =>
+      startConfiguredServer({ ...env, WAITRON_HTTP_PORT: String(held.port) }, env, {
+        boxHost: synchronisedBoxHost(),
+      }),
+    );
+    return { server, origin: `https://127.0.0.1:${held.port}` };
+  };
+  let box: Awaited<ReturnType<typeof start>> | undefined;
+  try {
+    await seedModuleSettings(suite.db, { "fiscal-none": false });
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
+    await copyMigrationsRoot(migrations);
+    await holdRecoveryKey(scratch);
+    await writeFile(pem, serverCertPem + serverKeyPem);
+    await writeFile(path, "Checked archive");
+    await truncate(path, bytes);
+    box = await start();
+    const { origin } = box;
+    const target = `${origin}/api/box/shutdown`;
+    const download = `${target}/download/${name}`;
+    const confirm = () =>
+      fetch(target, {
+        ...agent.via,
+        method: "PATCH",
+        headers: { ...headers, origin, "content-type": "application/json" },
+        body: JSON.stringify({ decision: "backup-saved", name }),
+      });
+    const view = async () =>
+      (await fetch(`${origin}/api/box/health`, { ...agent.via, headers })).json();
+    const started = await fetch(target, {
+      ...agent.via,
+      method: "POST",
+      headers: { ...headers, origin },
+    });
+    expect(started.status).toBe(202);
+    expect(await started.json()).toEqual({ phase: "checking" });
+    await vi.waitFor(async () =>
+      expect(await view()).toMatchObject({
+        shutdown: { phase: "download", delivered: false },
+      }),
+    );
+    await new Promise<void>((resolve, reject) => {
+      const request = httpsRequest(download, { headers, ca: caPem, agent: false }, (response) => {
+        response.once("data", () => {
+          request.destroy();
+          resolve();
+        });
+      });
+      request.once("error", reject);
+      request.end();
+    });
+    const incomplete = await confirm();
+    expect(incomplete.status).toBe(409);
+    expect(await incomplete.json()).toMatchObject({ error: { code: "box.shutdown_in_progress" } });
+    await expect(stat(mark)).rejects.toHaveProperty("code", "ENOENT");
+    await vi.waitFor(async () => {
+      const response = await fetch(download, { ...agent.via, headers });
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-disposition")).toBe(`attachment; filename="${name}"`);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect((await response.arrayBuffer()).byteLength).toBe(bytes);
+    });
+    await vi.waitFor(async () =>
+      expect(await view()).toMatchObject({
+        shutdown: { phase: "download", delivered: true },
+      }),
+    );
+    const saved = await confirm();
+    expect(saved.status).toBe(202);
+    await saved.json();
+    await vi.waitFor(async () =>
+      expect(await view()).toMatchObject({ shutdown: { phase: "ready" } }),
+    );
+    expect(await readFile(mark, "utf8")).toBe('{"version":1}');
+    await expect(stat(path)).rejects.toHaveProperty("code", "ENOENT");
+    await box.server.close();
+    box = await start();
+    const held = await fetch(`${box.origin}/api/node`, agent.via);
+    expect(await held.json()).toMatchObject({ acceptingSales: false });
+  } finally {
+    await box?.server.close();
+    await agent.close();
+    capture.mockRestore();
+    await rm(scratch, { recursive: true, force: true });
+  }
+}, 30_000);
 
 it("keeps the deliberate shutdown hold across starts until an administrator carries on", async () => {
   const { cfg } = await setupVenue(suite.db);

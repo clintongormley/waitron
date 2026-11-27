@@ -36,7 +36,7 @@ export interface BoxHealth {
   stream: StreamView;
   spare?: SpareFollowView | null;
   lastOfferedUpgrade?: LastOfferedUpgrade;
-  shutdown?: ShutdownStatus & { available: boolean };
+  shutdown?: ShutdownStatus & { available: boolean; downloadOnly?: true };
   clock: {
     authority: AuthorityClockStatus;
     sync: TimeHealth;

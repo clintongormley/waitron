@@ -178,6 +178,10 @@ it("requires the same HTTPS page and an administrator before admitting shutdown"
       resolvePaused: () => {},
       cancel: async () => {},
       status: () => ({ phase: "idle" }),
+      beginDownload: () => {
+        throw new Error("No archive");
+      },
+      confirmDownload: () => {},
       available: async () => true,
     },
   });
@@ -295,6 +299,56 @@ it("requires a box administrator on HTTPS to resolve a failed shutdown check", a
     expect(shutdown.status().phase).toBe("paused");
     expect((await request(admin, true, "shut-down-anyway")).status).toBe(202);
     await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready", checked: false }));
+  } finally {
+    await shutdown.close();
+    socket.destroy();
+  }
+});
+
+it("restricts the shutdown archive and its confirmation to box administrators on HTTPS", async () => {
+  const { nodeId } = await setupVenue();
+  const shutdown = createAdminShutdown({
+    check: async () => {},
+    save: async () => {},
+    clear: async () => {},
+  });
+  const app = buildApp(nodeId, {
+    now: new Date(),
+    tlsCertPath: undefined,
+    shutdown: { ...shutdown, available: async () => true },
+  });
+  const admin = await login(app, "owner@example.test", "dashPass123");
+  const manager = await login(app, MANAGER_EMAIL);
+  const socket = new TLSSocket(new Socket());
+  const path = "https://box.example/api/box/shutdown";
+  const name = "checked.backup.enc";
+  try {
+    for (const [cookie, secure, code] of [
+      [admin, false, "node.operation_page_required"],
+      [manager, true, "authorization.not_permitted"],
+    ] as const) {
+      const env = secure ? { incoming: { socket } } : undefined;
+      const download = await app.request(`${path}/download/${name}`, { headers: { cookie } }, env);
+      const confirm = await app.request(
+        path,
+        {
+          method: "PATCH",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ decision: "backup-saved", name }),
+        },
+        env,
+      );
+      for (const response of [download, confirm]) {
+        expect(response.status).toBe(403);
+        expect(await response.json()).toMatchObject({ error: { code } });
+      }
+    }
+    const stale = await app.request(
+      `${path}/download/${name}`,
+      { headers: { cookie: admin } },
+      { incoming: { socket } },
+    );
+    expect(await stale.json()).toMatchObject({ error: { code: "box.shutdown_in_progress" } });
   } finally {
     await shutdown.close();
     socket.destroy();

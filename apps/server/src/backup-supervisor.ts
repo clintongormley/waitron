@@ -11,10 +11,16 @@ import { archiveInWorker, VENUE_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { archiveNamespace } from "./archive-settings.js";
-import { waitForShutdownDrain } from "./admin-shutdown.js";
-import { rehearseShutdownBackup } from "./admin-shutdown-backup.js";
+import { waitForShutdownDrain, type ShutdownArchive } from "./admin-shutdown.js";
+import { prepareShutdownDownload, rehearseShutdownBackup } from "./admin-shutdown-backup.js";
+import { backupArchiveKey } from "./backup-keys.js";
 import { buildBackupBackend } from "./backup-backends.js";
-import type { BackupConfig, BackupConfigUnusable, BackupSchedule } from "./backup-config.js";
+import type {
+  BackupConfig,
+  BackupConfigUnusable,
+  BackupSchedule,
+  loadBackupKey,
+} from "./backup-config.js";
 import type { LoadFailure } from "./backup-settings-evidence.js";
 import { foldersOnDisk, installationStartOrNull, type DeletableArchive } from "./backup-room.js";
 import {
@@ -33,6 +39,7 @@ import { StatusClients } from "./backup-status-clients.js";
 import { keyFingerprint } from "./backup-key-fingerprint.js";
 import { backupKeyFrameInput } from "./backup-key-record.js";
 import {
+  captureBackupDownload,
   createBackupSchedule,
   type ActiveBackupRun,
   type BackupSchedulePass,
@@ -206,6 +213,7 @@ export class BackupSupervisor {
   readonly #buildBackend: (dest: BackupDestination) => StorageBackend;
   #controller: AbortController | undefined;
   #running: Promise<BackupSchedulePass> | undefined;
+  #download: { controller: AbortController; pending: Promise<ShutdownArchive> } | undefined;
   #schedule: ReturnType<typeof createBackupSchedule> | undefined;
   #loadedAsPrimary = false;
   #backends: StorageBackend[] = [];
@@ -320,24 +328,13 @@ export class BackupSupervisor {
       this.#controller = controller;
       this.#backends = backends;
       this.#schedule = createBackupSchedule({
-        nodeId: this.#deps.nodeId,
         backends: this.#backends,
         resumeCloudDeadline,
         cloud:
           cfg.cloud && this.#deps.cloudTarget
             ? { target: this.#deps.cloudTarget, readClock: this.#deps.readClock }
             : undefined,
-        db: venue.venue,
-        node: venue.node,
-        modules: this.#deps.modules,
-        environment: this.#deps.environment,
-        resolvers: {},
-        stateDir: this.#deps.stateDir,
-        venueDir: this.#deps.venueDir,
-        stagingDir: join(this.#deps.stateDir, BACKUP_STAGING_DIR),
-        archive: (outFile, signal) =>
-          archiveInWorker(join(this.#deps.venueDir, VENUE_FILE), outFile, signal),
-        stagingEstimateBytes: () => venueStagingEstimate(this.#deps.venueDir),
+        ...this.#captureInputs(venue),
         backupKey: backupKeyFrameInput({
           key: cfg.recoveryKey,
           keyNumber: cfg.keyNumber,
@@ -353,11 +350,9 @@ export class BackupSupervisor {
         outcomes: this.#deps.outcomes,
         onRunStoppedChanged: () => this.#publish(),
         onRunChanged: () => this.#publish(),
-        stagingTurn: this.#deps.stagingTurn,
         installationStartedAt: this.#deps.readInstallationStart,
         latestClockStep: this.#deps.latestClockStep,
         onArchivesDeleted: this.#deps.recordArchivesDeleted,
-        statfs: this.#deps.statfs,
         signal: controller.signal,
         onScheduled: (at) => this.#deps.onScheduled?.(at, cfg.cloud === true),
         onDestinationResult: (result) => {
@@ -368,8 +363,6 @@ export class BackupSupervisor {
         onUploaded: (id) => {
           if (!controller.signal.aborted) this.#recordUpload(id);
         },
-        now: this.#deps.now,
-        log: this.#deps.log,
       });
       await this.#inNoteTurn(() => this.#writeNote(backends));
     } finally {
@@ -444,6 +437,71 @@ export class BackupSupervisor {
     if (running === undefined) throw new AppError("backup.run_in_progress", {});
     await running;
     stopping.throwIfAborted();
+  }
+
+  async runForShutdownDownload(
+    attempt: AbortSignal,
+    key: NonNullable<ReturnType<typeof loadBackupKey>>,
+    migrationsRoot: string | null,
+  ): Promise<ShutdownArchive> {
+    if (this.#deps.readSingletonRole() !== "primary") throw new AppError("backup.not_primary", {});
+    if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
+    if (this.#stopped || this.#schedule) throw new AppError("backup.not_enabled", {});
+    if (this.#download) throw new AppError("backup.run_in_progress", {});
+    const controller = new AbortController();
+    const signal = AbortSignal.any([attempt, controller.signal]);
+    const pending = Promise.resolve().then(async () => {
+      signal.throwIfAborted();
+      const venue = await (this.#deps.openVenue ?? openVenueDatabase)(this.#deps.venueDir);
+      let archive: ShutdownArchive;
+      try {
+        archive = await prepareShutdownDownload(
+          backupArchiveKey(this.#now(), { nodeId: this.#deps.nodeId }),
+          (downloadPath) =>
+            captureBackupDownload({
+              ...this.#captureInputs(venue),
+              backupKey: backupKeyFrameInput(key),
+              downloadPath,
+              signal,
+            }),
+          { ...this.#deps, recoveryKey: key.key, migrationsRoot, signal },
+        );
+      } finally {
+        await venue.close().catch(() => {});
+      }
+      if (signal.aborted) await archive.remove();
+      signal.throwIfAborted();
+      return archive;
+    });
+    this.#download = { controller, pending };
+    try {
+      return await pending;
+    } finally {
+      this.#download = undefined;
+    }
+  }
+
+  #captureInputs(venue: VenueDatabase) {
+    const { modules, environment, venueDir, stateDir, nodeId, stagingTurn, statfs, now, log } =
+      this.#deps;
+    return {
+      db: venue.venue,
+      node: venue.node,
+      modules,
+      environment,
+      resolvers: {},
+      stateDir,
+      venueDir,
+      nodeId,
+      stagingDir: join(stateDir, BACKUP_STAGING_DIR),
+      stagingTurn,
+      statfs,
+      now,
+      log,
+      archive: (outFile: string, signal: AbortSignal) =>
+        archiveInWorker(join(venueDir, VENUE_FILE), outFile, signal),
+      stagingEstimateBytes: () => venueStagingEstimate(venueDir),
+    };
   }
 
   /** Rewrites the note with the box's latest clock step while backups run. Never throws. */
@@ -681,9 +739,10 @@ export class BackupSupervisor {
    * a reconfigure never leaks the old connection nor leaves a tick running against a closing one. */
   async #teardown(): Promise<void> {
     this.#controller?.abort();
+    this.#download?.controller.abort();
     const pass = this.#running;
     const run = this.#schedule?.running;
-    if (pass !== undefined || run !== undefined) await Promise.allSettled([pass, run]);
+    await Promise.allSettled([pass, run, this.#download?.pending]);
     if (this.#schedule !== undefined) this.#deps.onScheduled?.(null, false);
     this.#closeBackends(this.#backends.splice(0));
     if (this.#db !== undefined) await this.#db.close().catch(() => {});
