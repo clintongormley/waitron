@@ -1164,7 +1164,7 @@ the page's padding (`--wt-page-padding`, `apps/till/index.html`) so they sit abo
 floor the shell measures the toolbar for its sheets and the app's toasts
 (`apps/till/src/widgets/floor-bar.ts`).
 
-On the Order screen the New order's button bar (Move to…, Fire, Send all; `.draft-bar`,
+On the Order screen the New order's button bar (Move to… and Remove, then Fire and Send all; `.draft-bar`,
 `apps/till/src/screens/till-table-order-screen.ts`) is `position: sticky` with `bottom: 0`, beside
 the menu and on the narrow screen's Order view alike, with a line along its top and the order pane's own
 colour behind it. While the bar's own place is below the foot of the till's scroll area, it stays
@@ -6787,7 +6787,7 @@ span after the drawn count put a space before the comma in Chromium's accessible
 ### The till's late-send mark and window
 
 An unsent dish whose period ended earlier the same business day carries "⚠ {period} ended"
-(`basket.period_ended`, `periodEndedMarker` in `apps/till/src/widgets/basket.ts`): the "⚠" hidden
+(`basket.period_ended`, `periodEndedMarker` in `apps/till/src/widgets/draft-row.ts`): the "⚠" hidden
 from screen readers, then the words, bold, `--wt-font-size-sm`, in `--wt-color-warning` on the
 line's own background, and a `--wt-space-1` bar in `--wt-color-warning` on the line's leading edge
 (`.period-ended-entry`). Colour and a symbol, never colour alone. It is a warning, not a block: it

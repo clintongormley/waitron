@@ -550,8 +550,9 @@ liberas.
 
 Cada plato al peso va en su propia línea y pasa entero a otra cuenta. Para una medida como un
 zumo vendido por ml, toca el plato, escribe la cantidad en su campo o usa el teclado de la caja
-y elige **Añadir**. Por ejemplo, 250 ml van en una sola línea. Toca su fila antes de enviar
-para editar la cantidad. **Marcar servido** marca toda la cantidad como servida.
+y elige **Añadir**. Por ejemplo, 250 ml van en una sola línea. Antes de enviar, toca la cantidad
+en el mostrador, o su fila en una mesa, para editarla. **Marcar servido** marca toda la cantidad
+como servida.
 
 En una mesa o en el mostrador puedes añadir hasta 99 porciones de un mismo plato cada vez.
 

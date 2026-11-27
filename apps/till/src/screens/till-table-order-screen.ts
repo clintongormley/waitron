@@ -5052,7 +5052,7 @@ export class TillTableOrderScreen extends LitElement {
         }
         this.requestUpdate();
       }}
-      >${t("table.remove_lines")}</wt-button
+      >${t("action.remove")}</wt-button
     >`;
   }
 

@@ -522,8 +522,8 @@ sent**. A dish on hold shows what is published now until you release it.
 
 Each weighed dish goes on its own line and moves to another bill whole. For a measure such as
 juice sold by the ml, tap the dish, type the amount into its field or use the till keypad,
-then choose **Add**. For example, 250 ml goes on one line. Tap its row before sending to edit
-the amount. **Mark served** marks the whole amount as served.
+then choose **Add**. For example, 250 ml goes on one line. Before sending, tap its amount at the
+counter, or its row at a table, to edit it. **Mark served** marks the whole amount as served.
 
 At a table or at the counter you can add up to 99 portions of one dish at a time.
 

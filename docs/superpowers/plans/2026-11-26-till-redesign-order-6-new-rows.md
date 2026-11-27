@@ -75,6 +75,8 @@ acting on the selected rows, until PR 9d's selection foot.
 9. **The selection box** is §14.4's selecting checkbox, in the 36-wide left slot where PR 9c's grip
    will go: 24 square, radius 6, a 2px `--wt-color-border` border; ticked, `--wt-color-primary` with
    a white (`--wt-color-on-primary`) `wt-icon` `check`. It replaces today's ☐ and ☑ characters.
+   (As built, 2026-11-26: the slot is `--wt-tap-min` wide, not 36, so the box has spec §14's
+   full touch size; the box itself is still drawn 24 square.)
 
 ## What the frame drops that stays for now, and why
 
