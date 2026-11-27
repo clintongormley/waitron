@@ -4979,7 +4979,7 @@ describe("restoring a backup file whose old server may still be running", () => 
     ["setup.request_invalid", { field: "masterKey" }, "masterKey", "Check the master key."],
     [
       "promotion.break_glass_invalid",
-      { masterKeyId: "ab".repeat(16), keyNumber: 2, keyName: "2026-11-02 · QZJV" },
+      { masterKeyId: "13b5f8e1798205df", keyNumber: 2, keyName: "2026-11-02 · QZJV" },
       "masterKey",
       "Wrong master key. Use the one dated 2026-11-02 · QZJV.",
     ],
@@ -5030,7 +5030,7 @@ describe("restoring a backup file whose old server may still be running", () => 
         restore: vi.fn().mockRejectedValue({
           code: "promotion.break_glass_invalid",
           params: { keyName: "2026-11-02 · QZJV" },
-          status: 403,
+          status: 400,
         }),
       }),
     );
@@ -5051,7 +5051,7 @@ describe("restoring a backup file whose old server may still be running", () => 
       .mockRejectedValueOnce({
         code: "promotion.break_glass_invalid",
         params: { keyName: "2026-11-02 · QZJV" },
-        status: 403,
+        status: 400,
       })
       .mockResolvedValueOnce({ restoreStaged: true, restarting: true });
     const el = await mountSetupApp(
@@ -6848,8 +6848,8 @@ describe("a recovery request refused because another setup holds the server", ()
       "en",
       {
         code: "promotion.break_glass_invalid",
-        params: { masterKeyId: "ab".repeat(16), keyNumber: 2, keyName: "2026-11-02 · QZJV" },
-        status: 403,
+        params: { masterKeyId: "13b5f8e1798205df", keyNumber: 2, keyName: "2026-11-02 · QZJV" },
+        status: 400,
       },
     ],
     [
@@ -6857,8 +6857,8 @@ describe("a recovery request refused because another setup holds the server", ()
       "es",
       {
         code: "promotion.break_glass_invalid",
-        params: { masterKeyId: "ab".repeat(16), keyNumber: 2, keyName: "2026-11-02 · QZJV" },
-        status: 403,
+        params: { masterKeyId: "13b5f8e1798205df", keyNumber: 2, keyName: "2026-11-02 · QZJV" },
+        status: 400,
       },
     ],
     [
@@ -6948,7 +6948,7 @@ describe("a recovery request refused because another setup holds the server", ()
   const NAMED_REFUSAL = {
     code: "promotion.break_glass_invalid",
     params: { keyName: "2026-11-02 · QZJV" },
-    status: 403,
+    status: 400,
   };
   /** The fiscal form's own master-key field, once drawn, and the text field inside it. */
   async function entryKeyField(entry: LitElement) {
@@ -6983,70 +6983,16 @@ describe("a recovery request refused because another setup holds the server", ()
     return fiscalEntry(copy);
   }
   /**
-   * A filing backup's restore whose first Restore, sent with the file's master key, the server
-   * refuses because the copy's current master key is another one; the screen the shell draws again,
-   * reviewed, with the fiscal form's own key field.
+   * A filing backup's restore whose first preparation, sent with the file's master key, the server
+   * refuses because the copy's current master key is another one; the fiscal form then draws its
+   * own key field.
    */
-  async function askedForAnotherKey(prepareRecovery: ReturnType<typeof preparing>) {
-    const restore = vi
-      .fn()
-      .mockRejectedValueOnce(NAMED_REFUSAL)
-      .mockResolvedValue({ restoreStaged: true, restarting: true });
-    const {
-      el,
-      host: first,
-      copy: firstCopy,
-    } = await recoveryApp("archive", "preparation", "server.internal", {
-      prepareRecovery,
-      restore,
-    });
-    await typeMasterKey(first, PAGE_KEY.replaceAll(" ", "").toLowerCase());
-    await firstCopy.updateComplete;
-    const firstEntry = await reviewed(firstCopy);
-    await fillRecoveryHour(firstCopy);
-    await vi.waitFor(() =>
-      expect(
-        (firstEntry as unknown as { readCredentials(): unknown }).readCredentials(),
-      ).not.toBeNull(),
-    );
-    await pressRestore(first);
-    await vi.waitFor(() => expect(restore).toHaveBeenCalledTimes(1));
-    expect(restore.mock.calls[0]![1]).toBe(PAGE_KEY);
-    expect(restore.mock.calls[0]![4].nodeRecoverySecret).toBe(PAGE_KEY);
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=screen-restore]")).not.toBe(first),
-    );
-    await flush(el);
-    const host = await screenHost(el, "restore");
-    const copy = host.shadowRoot!.querySelector<LitElement>("setup-recovery-copy")!;
-    await copy.updateComplete;
-    const entry = await reviewed(copy);
-    const entryField = await entryKeyField(entry);
-    return { host, copy, entry, entryField, restore };
-  }
-  it("a filing backup's restore whose copy needs another master key asks for it in the fiscal form after the refused Restore, and Restore then sends that key as nodeRecoverySecret beside the file's master key", async () => {
-    const prepareRecovery = preparing();
-    const { host, copy, entry, entryField, restore } = await askedForAnotherKey(prepareRecovery);
-    expect(entryField.error).toBe(NAMED);
-    expect(messageUnder(host, "master-key")).toBe("");
-    expect(keyFields(host.shadowRoot!)).toHaveLength(2);
-    const calls = prepareRecovery.mock.calls.length;
-    await fillRecoveryHour(copy);
-    await vi.waitFor(() =>
-      expect((entry as unknown as { readCredentials(): unknown }).readCredentials()).not.toBeNull(),
-    );
-    await pressRestore(host);
-    await vi.waitFor(() => expect(restore).toHaveBeenCalledTimes(2));
-    const [, masterKey, , , credentials] = restore.mock.calls[1]!;
-    expect(masterKey).toBe(PAGE_KEY);
-    expect(credentials.nodeRecoverySecret).toBe(MASTER_KEY);
-    for (const [, request] of prepareRecovery.mock.calls.slice(calls))
-      expect((request as { nodeRecoverySecret: string }).nodeRecoverySecret).toBe(MASTER_KEY);
-  });
-  it("a filing backup whose preparation is refused naming the copy's current master key asks for that key in the fiscal form, and Restore sends it beside the file's master key", async () => {
+  async function askedForAnotherKey() {
     const prepareRecovery = preparing(NAMED_REFUSAL);
+    const restore = vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true });
     const { host, copy } = await recoveryApp("archive", "preparation", "server.internal", {
       prepareRecovery,
+      restore,
     });
     await typeMasterKey(host, PAGE_KEY.replaceAll(" ", "").toLowerCase());
     await copy.updateComplete;
@@ -7058,33 +7004,33 @@ describe("a recovery request refused because another setup holds the server", ()
     await vi.waitFor(() =>
       expect(entry.shadowRoot!.querySelector("wt-master-key-input")).not.toBeNull(),
     );
-    expect((await entryKeyField(entry)).error).toBe(NAMED);
+    const entryField = await entryKeyField(entry);
+    return { host, copy, entry, entryField, restore, prepareRecovery };
+  }
+  it("a filing backup whose preparation is refused naming the copy's current master key asks for that key in the fiscal form, and Restore sends it as nodeRecoverySecret beside the file's master key", async () => {
+    const { host, copy, entry, entryField, restore, prepareRecovery } = await askedForAnotherKey();
+    expect(entryField.error).toBe(NAMED);
     expect(messageUnder(host, "master-key")).toBe("");
+    expect(keyFields(host.shadowRoot!)).toHaveLength(2);
     await fillRecoveryHour(copy);
     await vi.waitFor(() =>
       expect((entry as unknown as { readCredentials(): unknown }).readCredentials()).not.toBeNull(),
     );
-    const requested = vi.fn();
-    host.addEventListener("restore-requested", (event) => {
-      event.stopPropagation();
-      requested((event as CustomEvent<{ request: unknown }>).detail.request);
-    });
     await pressRestore(host);
-    await vi.waitFor(() => expect(requested).toHaveBeenCalledTimes(1));
-    const detail = requested.mock.calls[0]![0] as { masterKey: string; nodeRecoverySecret: string };
-    expect(detail.masterKey).toBe(PAGE_KEY);
-    expect(detail.nodeRecoverySecret).toBe(MASTER_KEY);
+    await vi.waitFor(() => expect(restore).toHaveBeenCalledTimes(1));
+    const [, masterKey, , , credentials] = restore.mock.calls[0]!;
+    expect(masterKey).toBe(PAGE_KEY);
+    expect(credentials.nodeRecoverySecret).toBe(MASTER_KEY);
     for (const [, request] of prepareRecovery.mock.calls.slice(1))
       expect((request as { nodeRecoverySecret: string }).nodeRecoverySecret).toBe(MASTER_KEY);
   });
   it("a refusal of the key the fiscal form asked for itself shows under that form's field, not the restore screen's", async () => {
-    const prepareRecovery = preparing();
-    const { host, copy, entryField } = await askedForAnotherKey(prepareRecovery);
+    const { host, copy, entryField, prepareRecovery } = await askedForAnotherKey();
     const calls = prepareRecovery.mock.calls.length;
     prepareRecovery.mockRejectedValueOnce({
       code: "promotion.break_glass_invalid",
       params: { keyName: "2026-11-09 · ABCD" },
-      status: 403,
+      status: 400,
     });
     await fillRecoveryHour(copy);
     await vi.waitFor(() => expect(prepareRecovery).toHaveBeenCalledTimes(calls + 1));

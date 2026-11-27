@@ -361,7 +361,12 @@ export class RecoveryHourEntry extends LitElement {
       this.#autoStart = true;
       this.ownKeyAsked = false;
     }
-    if (this.refusedField === "nodeRecoverySecret") this.ownKeyAsked = true;
+    if (
+      this.refusedField === "nodeRecoverySecret" &&
+      !isPromotion(this.context) &&
+      this.context.masterKey !== undefined
+    )
+      this.ownKeyAsked = true;
     this.#register();
     if (this.#autoStart && this.isConnected && isEmergency(this.context)) {
       this.#autoStart = false;
@@ -889,7 +894,7 @@ export class RecoveryHourEntry extends LitElement {
           : nothing
       }
       <wt-form-actions
-        .error=${this.error && !(this.keyError && this.#pageKey !== undefined) ? (promote ? this.#refusal(this.#failure) : words.failed) : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : !promote && this.attempted && !this.#credentials() ? words.missing : ""}
+        .error=${this.keyError && this.ownKeyAsked ? "" : this.error && !(this.keyError && this.#pageKey !== undefined) ? (promote ? this.#refusal(this.#failure) : words.failed) : !this.refusalDismissed && this.errorMessage ? (this.refusedField === "nodeRecoverySecret" ? words.failed : this.errorMessage) : !promote && this.attempted && !this.#credentials() ? words.missing : ""}
       >
         ${
           action

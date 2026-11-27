@@ -604,6 +604,35 @@ it("draws its own master-key field, with the page's named line, once the page sa
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("wt-master-key-input")).not.toBeNull();
 });
+it.each([
+  ["the page supplied the key", "", true],
+  ["the page supplied no key", "Could not complete this step.", false],
+])(
+  "after a refusal naming the copy's current master key, when %s, the form's own line reads %j",
+  async (_, line, pageKey) => {
+    const { prepare } = scripted();
+    prepare.mockImplementationOnce(async () => {
+      throw { ...REFUSED_KEY, status: 400 };
+    });
+    const { el } = await mount(
+      prepare,
+      pageKey ? { masterKey: encodeMasterKeyCode(new Uint8Array(16).fill(3)) } : {},
+    );
+    if (pageKey) {
+      check(el, "recovery-old-box-stopped");
+      check(el, "recovery-sole-operation");
+      check(el, "recovery-details-confirmed");
+      await el.updateComplete;
+      await proceed(el);
+    } else await ready(el);
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledTimes(1));
+    el.refusedField = "nodeRecoverySecret";
+    el.errorMessage = WRONG_KEY;
+    await el.updateComplete;
+    expect(await keyFieldError(el)).toBe(WRONG_KEY);
+    expect(formError(el)).toBe(line);
+  },
+);
 it("does not accept selected material for a different operation", async () => {
   const prepare = vi.fn(async (request: { proposal: unknown }) => {
     const action = (request.proposal as { action: string }).action;
