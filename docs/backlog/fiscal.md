@@ -869,10 +869,6 @@ Left open by A888's session with the owner on 2026-11-25 (A795's design
 [§8](../superpowers/specs/2026-10-18-a795-aeat-certificate-after-setup-design.md)). What was run, and
 its limits: [first-aeat-contact.md](../compliance/first-aeat-contact.md#2026-11-25--real-certificates-against-both-environments).
 
-- **A wrong certificate type passes the live check.** AEAT's seal addresses answer a representative
-  certificate's query. Setup and the dialog both start on company seal, so leaving it there goes
-  unnoticed; whether a filing is accepted there is not known. Read the type from the certificate's
-  policy, or at least start on representative (owner, 2026-11-25: "each owner has their own cert").
 - **Opening a Firefox export takes about 0.9 of the opener's 2 seconds** on an idle i5-6400T box, so
   a slower or busy box may answer `unavailable` for a sound file.
 
