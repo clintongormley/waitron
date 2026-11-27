@@ -415,13 +415,12 @@ describe("correctionAdmissionFor", () => {
     const contract: FiscalBackend = backend;
     const ask = () =>
       suite.db.transaction((tx) => contract.correctionAdmissionFor?.(tx, sale, NODE_A));
-    expect(await ask()).toEqual({
+    expect(await ask()).toStrictEqual({
       eligible: true,
-      filing: "accepted",
       original: { number: "T1-1", issuedAt: "2027-03-14" },
     });
-    backend.setCorrectionAdmission({ eligible: false, reason: "filing_refused" });
-    expect(await ask()).toEqual({ eligible: false, reason: "filing_refused" });
+    backend.setCorrectionAdmission({ eligible: false, reason: "missing" });
+    expect(await ask()).toStrictEqual({ eligible: false, reason: "missing" });
   });
 });
 

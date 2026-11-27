@@ -81,7 +81,6 @@ export async function previewCorrectionAmounts(
   const preview = allocateCorrectionAmounts(history, selection);
   return {
     ...preview,
-    filing: admission.filing,
     original: admission.original,
     lines: correctionLinesFor(invoiceLines, preview.allocations, partsTaken),
     ...(full && { fullInvoice: true as const }),

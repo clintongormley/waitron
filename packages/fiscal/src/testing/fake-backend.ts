@@ -59,7 +59,6 @@ export class FakeFiscalBackend implements FiscalBackend {
   private readonly injectedIssues = new Map<string, IntegrityIssue[]>();
   private admission: CorrectionAdmission = {
     eligible: true,
-    filing: "accepted",
     original: { number: "T1-1", issuedAt: "2027-03-14" },
   };
 

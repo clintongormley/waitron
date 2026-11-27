@@ -49,7 +49,7 @@ import type {
   SistemaInformatico,
 } from "@waitron/verifactu";
 import { appendToChain, latestRecord, refuseUnlessServingPrimary } from "./chain.js";
-import { currentSif, openSifId } from "./registro-sif.js";
+import { currentSif } from "./registro-sif.js";
 import { assertNoActiveConflict } from "./conflict-evidence.js";
 import type { SifRegistration } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
@@ -460,12 +460,8 @@ export class VerifactuBackend implements FiscalBackend {
     return readDeviceReceiptEvidence(tx, saleId);
   }
 
-  correctionAdmissionFor(
-    tx: Transaction,
-    saleId: SaleId,
-    issuingNodeId: NodeId,
-  ): Promise<CorrectionAdmission> {
-    return correctionAdmissionFor(tx, saleId, issuingNodeId);
+  correctionAdmissionFor(tx: Transaction, saleId: SaleId): Promise<CorrectionAdmission> {
+    return correctionAdmissionFor(tx, saleId);
   }
 
   hasReturnedInvoices(tx: Transaction) {
@@ -481,24 +477,6 @@ export class VerifactuBackend implements FiscalBackend {
     saleIds: readonly SaleId[],
   ): Promise<ReadonlyMap<SaleId, FiledFigures>> {
     return filedFiguresFor(tx, saleIds);
-  }
-
-  async refuseCreditOf(tx: Transaction, saleId: SaleId, issuingNodeId: NodeId): Promise<void> {
-    const { rows } = await tx.execute(sql`
-      select 1 from verifactu_records receipt indexed by verifactu_records_sale_idx
-      where receipt.sale_id = ${saleId} and receipt.tipo_registro = 'alta'
-        and receipt.corrects_registro_id is null
-        and ${currentAltaRefused({
-          idEmisorFactura: sql`receipt.id_emisor_factura`,
-          numSerieFactura: sql`receipt.num_serie_factura`,
-          fechaExpedicionFactura: sql`receipt.fecha_expedicion_factura`,
-        })}
-      limit 1
-    `);
-    if (rows.length > 0) throw new AppError("fiscal.original_refused", { saleId });
-    // With no open installation the corrective's own write refuses.
-    const open = await openSifId(tx, issuingNodeId);
-    if (open !== undefined) await refuseUnansweredElsewhere(tx, saleId, open);
   }
 
   /** Voids a previously recorded sale by appending an anulación referencing its identity. */

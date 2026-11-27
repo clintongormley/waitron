@@ -33,7 +33,7 @@ export function altasOfIdentity(alias: string, invoice: InvoiceIdentity): SQL {
 /**
  * True when an alta under the invoice's identity that no later version replaced is refused, with
  * any code or none. The filing queue sets an ordinary cancellation of such an invoice aside
- * (`drain.ts`), and `recordVoid` and `refuseCreditOf` refuse by this same test.
+ * (`drain.ts`), and `recordVoid` refuses by this same test.
  */
 export function currentAltaRefused(invoice: InvoiceIdentity): SQL {
   return sql`exists (
