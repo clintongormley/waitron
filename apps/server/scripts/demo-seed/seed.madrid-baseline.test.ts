@@ -743,7 +743,18 @@ for (const locale of ["en", "es"] as const) {
       alias: (value) =>
         value.replace(/\b[a-f0-9]{64}\b/g, (hash) => photoAliases.get(hash) ?? hash),
     });
+    const menuOnlineDefaults = { online_enabled: 0, online_address: null, online_photos: "large" };
     const historicalSeeded = madridWithRenamedTables(canonical.seeded, { menus: "catalogues" });
+    const historicalMenus = historicalSeeded.tables.catalogues!;
+    for (const [name, value] of Object.entries(menuOnlineDefaults)) {
+      for (const row of Object.values(historicalMenus.rows)) {
+        expect(row[name], `${String(row.id)}/${name}`).toBe(value);
+        delete row[name];
+      }
+    }
+    historicalMenus.columns = historicalMenus.columns.filter(
+      (column) => !Object.hasOwn(menuOnlineDefaults, column.name),
+    );
     for (const row of Object.values(historicalSeeded.tables.sections!.rows))
       if (row.role === "menu_root")
         row.internal_name =
@@ -3186,11 +3197,15 @@ for (const locale of ["en", "es"] as const) {
       const menus = expected[phase].tables.menus!;
       menus.columns.find((column) => column.name === "home_order")!.dflt_value = "'home_first'";
       menus.columns.push(
+        { name: "online_enabled", type: "INTEGER", notnull: 1, dflt_value: "false", pk: 0 },
+        { name: "online_address", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
+        { name: "online_photos", type: "TEXT", notnull: 1, dflt_value: "'large'", pk: 0 },
         { name: "kind", type: "TEXT", notnull: 1, dflt_value: "'menu'", pk: 0 },
         { name: "set_price", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
         { name: "set_vat_class", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
         { name: "set_takeaway_vat_class", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
       );
+      for (const row of Object.values(menus.rows)) Object.assign(row, menuOnlineDefaults);
 
       delete phases[phase]!.menu_details;
       delete phases[phase]!.category_details;
