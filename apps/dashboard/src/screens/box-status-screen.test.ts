@@ -238,7 +238,18 @@ it("shows the checked download and asks the administrator to confirm the named f
   await vi.waitFor(() => expect(saved().hasAttribute("disabled")).toBe(false));
   await userEvent.click(saved());
   const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
-  const dialog = text(confirm.closest("wt-dialog"));
+  const confirmation = confirm.closest("wt-dialog")!;
+  const closed = new Promise<void>((resolve) =>
+    confirmation.addEventListener("wt-close", () => resolve(), { once: true }),
+  );
+  await userEvent.click(confirmation.querySelector('wt-button[slot="cancel"]')!);
+  await expect.poll(() => confirmation.open).toBe(false);
+  await closed;
+  expect(confirmBoxShutdownDownload).not.toHaveBeenCalled();
+  expect(q(el, "a[download]")?.getAttribute("href")).toBe(`/api/box/shutdown/download/${name}`);
+  await userEvent.click(saved());
+
+  const dialog = text(confirmation);
   expect(dialog).toContain(name);
   expect(dialog).toContain(bytes.toLocaleString("en"));
   expect(dialog).toContain("encryption key and master key");

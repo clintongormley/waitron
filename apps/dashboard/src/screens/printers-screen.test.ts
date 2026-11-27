@@ -6212,14 +6212,23 @@ it.each([
   expect(dialog.getBoundingClientRect().width).toBeCloseTo(width, 0);
 });
 
-it("opens an older finished job from Print Queue", async () => {
+it("keeps the current Print Queue after an older page fails and clears the warning on retry", async () => {
   const delivered = Array.from({ length: 100 }, (_, i) => ({
     ...jobs[1]!,
     id: `recent-${i}`,
     status: "done" as const,
   }));
   const older = { ...delivered[0]!, id: "older" };
-  const listRecentJobs = vi.fn().mockResolvedValueOnce(delivered).mockResolvedValue([older]);
+  let showOlder!: (items: (typeof delivered)[number][]) => void;
+  const olderPage = new Promise<typeof delivered>((resolve) => {
+    showOlder = resolve;
+  });
+  const listRecentJobs = vi
+    .fn()
+    .mockResolvedValueOnce(delivered)
+    .mockRejectedValueOnce({ code: "server.internal" })
+    .mockReturnValueOnce(olderPage)
+    .mockResolvedValueOnce(delivered);
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
     api: stubApi({ listRecentJobs }),
   });
@@ -6227,8 +6236,37 @@ it("opens an older finished job from Print Queue", async () => {
   const olderJobs = q(el, "[data-test=older-print-jobs]");
   expect(olderJobs).not.toBeNull();
   olderJobs!.click();
+  await vi.waitFor(() =>
+    expect(text(el, "[data-test=printer-refresh-error]")).toContain(codeMessage("server.internal")),
+  );
+  expect(q(el, "[data-test=resend-job-recent-0]")).not.toBeNull();
+  expect(q(el, "[data-test=resend-job-older]")).toBeNull();
+
+  const retry = q(el, "[data-test=older-print-jobs]")!;
+  retry.focus();
+  expect(el.shadowRoot!.activeElement).toBe(retry);
+  const jobsTable = q(el, "[data-test=jobs-table]")!.shadowRoot!;
+  const search = jobsTable.querySelector<HTMLInputElement>('input[type="search"]')!;
+  try {
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(listRecentJobs).toHaveBeenCalledTimes(3));
+    await userEvent.keyboard("{Enter}");
+    expect(listRecentJobs).toHaveBeenCalledTimes(3);
+    search.focus();
+    expect(jobsTable.activeElement).toBe(search);
+  } finally {
+    showOlder([older]);
+  }
   await vi.waitFor(() => expect(q(el, "[data-test=resend-job-older]")).not.toBeNull());
+  await vi.waitFor(() => expect(q(el, "[data-test=printer-refresh-error]")).toBeNull());
+  expect(q(el, "[data-test=resend-job-recent-0]")).toBeNull();
   expect(listRecentJobs).toHaveBeenLastCalledWith(1);
+  expect(jobsTable.activeElement).toBe(search);
+
+  q(el, "[data-test=newer-print-jobs]")!.click();
+  await vi.waitFor(() => expect(q(el, "[data-test=resend-job-recent-0]")).not.toBeNull());
+  expect(q(el, "[data-test=resend-job-older]")).toBeNull();
+  expect(listRecentJobs).toHaveBeenLastCalledWith();
 });
 
 it("shows office printer holds and allows viewing uncertain invoice pages", async () => {

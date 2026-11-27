@@ -90,6 +90,33 @@ it("refreshes offering links when a placement is added and removed", async () =>
   expect(lunch.elements()).toHaveLength(0);
 });
 
+it("retries a failed set menu list read and follows an offering to Structure", async () => {
+  const listMenus = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "server.internal" })
+    .mockResolvedValue([{ ...daily, heldBy: [{ id: "lunch", name: "Lunch menus" }] }]);
+  history.replaceState(null, "", "/set-menus");
+  await mountWidget<SetMenusScreen>("dashboard-set-menus-screen", {
+    api: {
+      liveData: new LiveData(),
+      listMenus,
+      getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
+    } as unknown as DashboardApi,
+  });
+
+  const error = page.getByText("The menus could not be loaded.", { exact: true });
+  await expect.element(error).toBeVisible();
+  await page.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect.element(error).not.toBeInTheDocument();
+  const link = page.getByRole("link", { name: "Lunch menus" });
+  await expect.element(link).toHaveAttribute("href", "/menus/menu/lunch/view/structure");
+  const route = vi.spyOn(history, "pushState");
+  onTestFinished(() => route.mockRestore());
+  await link.click();
+  await vi.waitFor(() => expect(location.pathname).toBe("/menus/menu/lunch/view/structure"));
+  expect(route).toHaveBeenCalledOnce();
+});
+
 it("opens the set menu at list heading height with Back beside its name", async () => {
   const [width, height] = [window.innerWidth, window.innerHeight];
   onTestFinished(() => page.viewport(width, height));

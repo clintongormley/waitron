@@ -4387,6 +4387,27 @@ describe("A461 selected pointer drag", () => {
     expect(batches).toEqual([{ keys: ["m-burger", "m-drinks"], to: [], position: 1 }]);
   });
 
+  it.each([
+    ["top", 0],
+    ["bottom", 1],
+  ] as const)(
+    "drops selected dishes at the %s of a row in another section",
+    async (band, position) => {
+      const selected = ["m-drinks/m-lager", "m-burger"];
+      const el = await gathered(selected);
+      await toggle(el, "m-drinks");
+      await toggle(el, "m-fav");
+      const batches = listen(el, "wt-members-drop");
+      const from = grip(el, "m-burger")!;
+      const target = "m-fav/m-fav-lemonade";
+      pointer(from, "pointerdown");
+      await dragOver(el, from, target, band);
+      pointer(from, "pointerup", nameAt(el, target), at(el, target, band));
+
+      expect(batches).toEqual([{ keys: selected, to: ["m-fav"], position }]);
+    },
+  );
+
   it("A461 drop sends nothing when a dragged visible key disappears", async () => {
     const el = await gathered();
     await toggle(el, "m-drinks");

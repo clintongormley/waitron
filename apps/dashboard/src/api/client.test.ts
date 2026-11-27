@@ -3225,6 +3225,35 @@ it("asks the box to set its clock to this device's time and answers the step", a
   ]);
 });
 
+it("sends each shutdown action to the box with its own method and decision", async () => {
+  const staff = [{ displayName: "Pat", state: "working" }];
+  const checking = { phase: "checking" };
+  const ready = { phase: "ready" };
+  const idle = { phase: "idle" };
+  const fetchImpl = vi
+    .fn()
+    .mockResolvedValueOnce(jsonResponse(staff))
+    .mockResolvedValueOnce(jsonResponse(checking))
+    .mockResolvedValueOnce(jsonResponse(checking))
+    .mockResolvedValueOnce(jsonResponse(ready))
+    .mockResolvedValueOnce(jsonResponse(idle));
+  const api = new DashboardApi("", fetchImpl);
+
+  expect(await api.getBoxShutdownStaff()).toEqual(staff);
+  expect(await api.startBoxShutdown()).toEqual(checking);
+  expect(await api.resolveBoxShutdown("retry")).toEqual(checking);
+  expect(await api.confirmBoxShutdownDownload("waitron-final.backup.enc")).toEqual(ready);
+  expect(await api.cancelBoxShutdown()).toEqual(idle);
+  const calls = fetchImpl.mock.calls as [string, RequestInit][];
+  expect(calls.map(([url, init]) => [url, init.method, init.body])).toEqual([
+    ["/api/box/shutdown", "GET", undefined],
+    ["/api/box/shutdown", "POST", "{}"],
+    ["/api/box/shutdown", "PATCH", '{"decision":"retry"}'],
+    ["/api/box/shutdown", "PATCH", '{"decision":"backup-saved","name":"waitron-final.backup.enc"}'],
+    ["/api/box/shutdown", "DELETE", "{}"],
+  ]);
+});
+
 it("asks the box to restart its server", async () => {
   const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}, true, 202));
   const api = new DashboardApi("", fetchImpl);

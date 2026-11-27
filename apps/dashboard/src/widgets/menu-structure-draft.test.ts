@@ -195,6 +195,25 @@ it("uses a shared price for both placements and reveals the clash when that pric
   expect(draft.offers(catalog, new Map()).get("coffee")?.price.state).toBe("clash");
 });
 
+it("keeps a second included menu's saved arrangement until its own refresh", () => {
+  const desserts: MenuStructureNode = {
+    ...included,
+    memberId: "desserts-include",
+    includedMenuId: "desserts",
+    ref: { kind: "section", sectionId: "desserts-root" },
+    children: [product("saved-dessert")],
+  };
+  const draft = new MenuStructureDraft();
+  draft.accept(tree(included, desserts), []);
+  const arrangement = () =>
+    draft.structure?.nodes.map(({ children }) => children?.map(({ memberId }) => memberId));
+
+  draft.include("drinks", tree(product("new-drink")), []);
+  expect(arrangement()).toEqual([["new-drink"], ["saved-dessert"]]);
+  draft.include("desserts", tree(product("new-dessert")), []);
+  expect(arrangement()).toEqual([["new-drink"], ["new-dessert"]]);
+});
+
 it("refreshes an included menu's children while holding a dirty draft's existing prices", () => {
   const draft = new MenuStructureDraft();
   draft.accept(tree(included), [coffee("4.00")]);
