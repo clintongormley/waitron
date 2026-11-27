@@ -51,7 +51,7 @@ export class MenuOnlinePreview extends LitElement {
       }
       @container online-editor (inline-size <= 760px) {
         .computer {
-          min-inline-size: 720px;
+          min-inline-size: var(--menu-preview-computer-width, 720px);
         }
         @container (width < 720px) {
           .canvas:has(.computer) {

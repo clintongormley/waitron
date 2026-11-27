@@ -22,7 +22,7 @@ import { cardFrameStyles } from "@waitron/ui-core/components/wt-card";
 import { contrastRatio } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property, query, state } from "lit/decorators.js";
 import type { MenuApi } from "../api/menu-api.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -80,6 +80,9 @@ export class MenuCustomerStyleDialog extends LitElement {
       .fields p:not(.warning) {
         margin: 0;
       }
+      .colour-value > wt-input {
+        flex-grow: 1;
+      }
       .fonts {
         display: grid;
         gap: var(--wt-space-3);
@@ -90,6 +93,9 @@ export class MenuCustomerStyleDialog extends LitElement {
         --menu-preview-space: 0;
       }
       @media (min-width: 900px) {
+        .preview {
+          --menu-preview-computer-width: 0;
+        }
         .layout {
           grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
         }
@@ -111,6 +117,7 @@ export class MenuCustomerStyleDialog extends LitElement {
   @property({ attribute: false }) previewHref = "";
   @property({ attribute: false }) openPreview?: (event: MouseEvent) => void;
 
+  @query("wt-modal") private modal!: HTMLElementTagNameMap["wt-modal"];
   @state() private storedStyle?: CustomerMenuStyle | null;
   @state() private open = false;
   @state() private draft: Draft = {};
@@ -136,10 +143,6 @@ export class MenuCustomerStyleDialog extends LitElement {
   override disconnectedCallback(): void {
     this.#scope?.dispose();
     super.disconnectedCallback();
-  }
-
-  get #modal() {
-    return this.renderRoot.querySelector("wt-modal")!;
   }
 
   async #load(): Promise<void> {
@@ -201,7 +204,7 @@ export class MenuCustomerStyleDialog extends LitElement {
     this.storedStyle = saved;
     this.#scope?.commit(submitted);
     this.dispatchEvent(new CustomEvent("customer-style-saved", { bubbles: true, composed: true }));
-    this.#modal.closeAfter("saved");
+    this.modal.closeAfter("saved");
   }
 
   #color(key: Color, color: string, error: string, warning?: string) {
@@ -274,17 +277,16 @@ export class MenuCustomerStyleDialog extends LitElement {
         ${this.#color("textColor", text, errors.textColor ?? "", contrastRatio(text, page) < 4.5 ? t("customer_menu.style.text_contrast") : undefined)}
         ${this.#color("headingColor", heading, errors.headingColor ?? "", contrastRatio(heading, page) < 4.5 ? t("customer_menu.style.heading_contrast") : undefined)}
       </div>
-      <div class="preview">
-        <dashboard-menu-online-preview
-          .api=${this.readApi}
-          .menuId=${this.menuId}
-          .defaultLanguage=${this.defaultLanguage}
-          .photos=${this.photos}
-          .previewHref=${this.previewHref}
-          .openPreview=${this.openPreview}
-          .draftAppearance=${prepared}
-        ></dashboard-menu-online-preview>
-      </div>
+      <dashboard-menu-online-preview
+        class="preview"
+        .api=${this.readApi}
+        .menuId=${this.menuId}
+        .defaultLanguage=${this.defaultLanguage}
+        .photos=${this.photos}
+        .previewHref=${this.previewHref}
+        .openPreview=${this.openPreview}
+        .draftAppearance=${prepared}
+      ></dashboard-menu-online-preview>
     </div>`;
   }
 
@@ -370,7 +372,7 @@ export class MenuCustomerStyleDialog extends LitElement {
           slot="cancel"
           variant="secondary"
           ?disabled=${this.busy}
-          @click=${() => void this.#modal.requestClose("cancel")}
+          @click=${() => void this.modal.requestClose("cancel")}
           >${t("action.cancel")}</wt-button
         >
         <wt-button

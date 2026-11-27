@@ -111,6 +111,17 @@ it("previews the default style draft and updates the tab after Save style", asyn
   const save = page.getByRole("button", { name: "Save style", exact: true });
   await expect.element(dialog).toBeVisible();
   await expect
+    .poll(() => {
+      const menu = editor
+        .querySelector("dashboard-menu-online-preview")
+        ?.shadowRoot?.querySelector("customer-menu-page");
+      return (
+        menu &&
+        menu.getBoundingClientRect().right - menu.parentElement!.getBoundingClientRect().right
+      );
+    })
+    .toBeLessThanOrEqual(1);
+  await expect
     .element(page.getByText("Saving also changes Dinner.", { exact: true }))
     .toBeVisible();
   await expect.element(save).toBeDisabled();
