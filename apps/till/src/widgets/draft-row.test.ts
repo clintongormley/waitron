@@ -1,12 +1,17 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { formatMoney } from "@waitron/shared";
-import { currentLocale } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { draftLinePrice } from "../state/draft-layout.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import type { TillProduct } from "../api/menu-api.js";
 import "./basket.js";
 import type { TillBasket } from "./basket.js";
-import { draftRowSlotStyles, draftSelectBox, draftSplitChevron } from "./draft-row.js";
+import {
+  draftRowSlotStyles,
+  draftSelectBox,
+  draftSelectLabel,
+  draftSplitChevron,
+} from "./draft-row.js";
 import { cleanupWidgets, mountWidget, tokenColour } from "./test-helpers.js";
 import { render } from "lit";
 
@@ -115,11 +120,11 @@ describe("a new dish's compact row", () => {
           optionSnapshots: [
             {
               listName: { en: "Cooking" },
-              listCustomerName: null,
-              listKitchenName: null,
+              listCustomerName: { en: "How would you like it?" },
+              listKitchenName: "CK",
               labelName: { en: "Medium" },
-              labelCustomerName: null,
-              labelKitchenName: null,
+              labelCustomerName: { en: "Pink in the middle" },
+              labelKitchenName: "MED",
             },
           ],
           extras: [{ ...cheese, quantity: 2 }],
@@ -133,7 +138,7 @@ describe("a new dish's compact row", () => {
     const money = (amount: string) => formatMoney(amount, currentLocale());
     expect(rowsOf(el)).toEqual([
       `1 Steak ${money("10.00")}`,
-      `2 Steak Cheese ×2 · Cooking: Medium · No salt ${money("24.00")}`,
+      `2 Steak Cheese ×2 · Medium · No salt ${money("24.00")}`,
       `250 ml House wine ${money("5.00")}`,
       `1 Hake +${money("5.00")} ${money("5.00")}`,
     ]);
@@ -164,6 +169,30 @@ describe("a new dish's compact row", () => {
     ]);
     expect(drawn(".draft-row-more")[0]).toBe(font("--wt-font-size-sm", "fontSize"));
     expect(drawn(".draft-row-price")[0]).toBe(font("--wt-font-size-md", "fontSize"));
+  });
+
+  it("names the selection box with each answer after its question, so two cookings read apart", () => {
+    const cooked = (label: string): OrderLine => ({
+      product: steak,
+      quantity: "1",
+      optionSnapshots: [
+        {
+          listName: { en: "Cooking" },
+          listCustomerName: { en: "How would you like it?" },
+          listKitchenName: "CK",
+          labelName: { en: label },
+          labelCustomerName: { en: `${label} for the guest` },
+          labelKitchenName: label.slice(0, 3).toUpperCase(),
+        },
+      ],
+    });
+    expect([
+      draftSelectLabel(cooked("Medium"), "Ana"),
+      draftSelectLabel(cooked("Rare"), "Ana"),
+    ]).toEqual([
+      `${t("table.select_line")} · Steak ×1 · Ana · Cooking: Medium`,
+      `${t("table.select_line")} · Steak ×1 · Ana · Cooking: Rare`,
+    ]);
   });
 
   it("shows an extra's own allergens beside it, and an extra no longer offered with its mark", async () => {
@@ -244,12 +273,17 @@ describe("a new dish's compact row", () => {
         "6px",
       ]);
       expect(boxStyle.backgroundColor).toBe(tokenColour(host, "--wt-color-primary"));
+      expect(boxStyle.borderColor).toBe(tokenColour(host, "--wt-color-primary"));
       expect(box.querySelector("wt-icon")!.getAttribute("name")).toBe("check");
       expect(getComputedStyle(box.querySelector("wt-icon")!).color).toBe(
         tokenColour(host, "--wt-color-on-primary"),
       );
       render(draftSelectBox(false), lead);
-      expect(getComputedStyle(box).borderColor).toBe(tokenColour(host, "--wt-color-border"));
+      // The grip's colour: the line colour vanished on the dark theme's tinted last-added row.
+      expect(getComputedStyle(box).borderColor).toBe(tokenColour(host, "--wt-color-text-muted"));
+      expect(tokenColour(host, "--wt-color-text-muted")).not.toBe(
+        tokenColour(host, "--wt-color-border"),
+      );
       // Unticked, the box is a border only, so a tinted row shows through it.
       expect(getComputedStyle(box).backgroundColor).toBe("rgba(0, 0, 0, 0)");
       expect(box.querySelector("wt-icon")).toBeNull();

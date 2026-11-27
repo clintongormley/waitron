@@ -132,8 +132,8 @@ export function draftRow(view: DraftRowView): TemplateResult {
           >${extra.name}${pickQuantityBadge(extra.quantity)}${notOfferedMarker()}</span
         >`,
     ),
-    ...optionAnswers(line.optionSnapshots, { reads: "staff" }).map(
-      (answer) => html`<span>${answer}</span>`,
+    ...(line.optionSnapshots ?? []).map(
+      (snapshot) => html`<span>${Object.values(snapshot.labelName)[0] ?? ""}</span>`,
     ),
     ...(line.note === undefined ? [] : [html`<span>${line.note}</span>`]),
   ];
@@ -318,7 +318,7 @@ export const draftRowSlotStyles = css`
     box-sizing: border-box;
     width: var(--wt-space-5);
     height: var(--wt-space-5);
-    border: 2px solid var(--wt-color-border);
+    border: 2px solid var(--wt-color-text-muted);
     border-radius: calc(var(--wt-radius-sm) * 1.5);
     background: transparent;
   }
