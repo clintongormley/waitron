@@ -188,7 +188,7 @@ async function readAll(stream: Readable): Promise<Buffer> {
 async function uncaughtDuring(run: () => Promise<void>): Promise<unknown[]> {
   const caught: unknown[] = [];
   const record = (error: unknown) => caught.push(error);
-  const runners = process.listeners("uncaughtException");
+  const runners = process.rawListeners("uncaughtException");
   process.removeAllListeners("uncaughtException");
   process.on("uncaughtException", record);
   try {

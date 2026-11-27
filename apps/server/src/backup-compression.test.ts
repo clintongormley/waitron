@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 import { createReadStream } from "node:fs";
 import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import zlib from "node:zlib";
 import { syncBuiltinESMExports } from "node:module";
@@ -111,6 +112,80 @@ it("honours cancellation during decoding and compression", async () => {
     Readable.from(compressArchive(createReadStream(f.input), controller.signal)).toArray(),
   ).rejects.toMatchObject({ name: "AbortError" });
 });
+
+/** Every gzip stream `compressArchive` makes from here on, so a case can wait on its state. */
+function watchGzips(): zlib.Gzip[] {
+  const gzips: zlib.Gzip[] = [];
+  const createGzip = zlib.createGzip;
+  vi.spyOn(zlib, "createGzip").mockImplementation((options) => {
+    const gzip = createGzip(options);
+    gzips.push(gzip);
+    return gzip;
+  });
+  syncBuiltinESMExports();
+  return gzips;
+}
+
+/** Reads one part of a compression whose gzip then takes all its input, leaving output unread. */
+async function compressionPastItsInput(signal?: AbortSignal) {
+  const gzips = watchGzips();
+  const bytes = randomBytes(100_000);
+  async function* source() {
+    for (let at = 0; at < bytes.length; at += 4_000) yield bytes.subarray(at, at + 4_000);
+  }
+  const parts = compressArchive(source(), signal)[Symbol.asyncIterator]();
+  await parts.next();
+  const [gzip] = gzips;
+  await expect.poll(() => gzip?.writableFinished && !gzip.readableEnded).toBe(true);
+  return { gzip: gzip!, parts };
+}
+
+async function readRest(parts: AsyncIterator<Uint8Array>) {
+  while (!(await parts.next()).done);
+}
+
+/** Every exception left uncaught while `run` and the turn after it ran, held from the runner. */
+async function uncaughtDuring(run: () => Promise<void>): Promise<unknown[]> {
+  const caught: unknown[] = [];
+  const record = (error: unknown) => caught.push(error);
+  const runners = process.rawListeners("uncaughtException");
+  process.removeAllListeners("uncaughtException");
+  process.on("uncaughtException", record);
+  try {
+    await run();
+    await new Promise(setImmediate);
+  } finally {
+    process.off("uncaughtException", record);
+    for (const runner of runners) process.on("uncaughtException", runner);
+  }
+  return caught;
+}
+
+it.each(["abort", "return"])(
+  "stopping after compression has taken all input (%s) raises no uncaught error",
+  async (stop) => {
+    const uncaught = await uncaughtDuring(async () => {
+      const controller = new AbortController();
+      const { parts } = await compressionPastItsInput(controller.signal);
+      if (stop === "abort") {
+        controller.abort();
+        await expect(readRest(parts)).rejects.toMatchObject({ name: "AbortError" });
+      } else await parts.return?.();
+    });
+    expect(uncaught.map(String)).toEqual([]);
+  },
+);
+
+it(
+  "passes a gzip failure after compression has taken all input on to the reader",
+  { timeout: 5_000 },
+  async () => {
+    const { gzip, parts } = await compressionPastItsInput();
+    const failure = new Error("late gzip failure");
+    gzip.destroy(failure);
+    await expect(readRest(parts)).rejects.toBe(failure);
+  },
+);
 
 it("keeps half of the free space for extracting the decoded database", async () => {
   const f = await fixture(gzipSync(Buffer.alloc(100_000)));

@@ -14,7 +14,13 @@ export async function* compressArchive(
   source: AsyncIterable<Uint8Array>,
   signal?: AbortSignal,
 ): AsyncIterable<Uint8Array> {
-  yield* Readable.from(source).compose(createGzip({ level: 6 }), { signal });
+  const gzip = createGzip({ level: 6 });
+  const compressed = Readable.from(source).compose(gzip, { signal });
+  // Once gzip has taken all its input, compose no longer listens for gzip's errors. Without this,
+  // stopping the read then raises an uncaught error that ends the server, and a gzip failure never
+  // reaches the reader.
+  gzip.on("error", (error) => compressed.destroy(error));
+  yield* compressed;
 }
 
 export async function decodeArchiveFile(
