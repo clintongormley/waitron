@@ -1268,7 +1268,7 @@ export class MenuStructureTable extends LitElement {
             : this.#nameSpan(row)
         }${
           node.includedMenuId && !row.readOnly
-            ? html`<span part="note" data-test=${`folder-setting-${key}`}
+            ? html`<span part="note structure-folder-setting" data-test=${`folder-setting-${key}`}
                 >${t(
                   (node.folder ?? FOLLOWING_FOLDER).showAsFolder
                     ? "menus.include_as_folder"
@@ -1524,7 +1524,7 @@ export class MenuStructureTable extends LitElement {
   /** Never marked current: the top level is the current place when no row is marked. */
   #rootNameCell(row: RootRow) {
     const swatch = productMediaFrame(row.image, row.color, false, false, "section-menu");
-    return html`<span part="folder-cell"
+    return html`<span part="folder-cell structure-root-label"
       >${folderFrame(swatch)}<span part="name-stack folder-stack"
         ><span part="root-label"
           ><strong part="root-name" data-test="root-name">${row.name}</strong
@@ -1693,7 +1693,7 @@ export class MenuStructureTable extends LitElement {
         ?data-selecting=${this.selecting}
         .rowKey=${rowKey}
         .rowParent=${rowParent}
-        .rowCellParts=${() => "structure-cell"}
+        .rowCellParts=${(row: TableRow) => (row.kind === "root" ? "structure-cell" : "structure-cell structure-member-cell")}
         .rowSpansUnpinnedColumns=${(row: TableRow) => row.kind === "root" || row.node.ref.kind === "section"}
         .selectable=${this.selecting}
         selectAllLabel=${t("menus.select_all")}

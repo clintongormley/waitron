@@ -19,11 +19,27 @@ export const structureRowStyles = css`
     --structure-media-gap: var(--wt-space-1);
     --structure-amount-width: calc(var(--wt-price-field-width) - var(--wt-space-5));
   }
+  :host([reordering]) wt-data-table {
+    --structure-root-inset: var(--wt-space-4);
+  }
+  :host([reordering]) wt-data-table[narrow]:not([data-selecting]) {
+    --structure-root-inset: calc(var(--wt-space-4) + var(--wt-space-1));
+  }
+  wt-data-table[data-selecting]:not([narrow]) {
+    --structure-root-inset: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
+  }
+  wt-data-table[data-selecting][narrow] {
+    --structure-root-inset: calc(var(--wt-space-5) + var(--wt-space-1));
+  }
+  :host([reordering]) wt-data-table[narrow]:not([data-selecting])::part(structure-member-cell) {
+    --structure-member-inset: var(--wt-space-3);
+  }
   wt-data-table::part(toolbar-search) {
     flex-basis: 0;
   }
   wt-data-table::part(tree-cell) {
     align-items: center;
+    margin-inline-start: calc(-1 * var(--structure-member-inset, 0px));
   }
   wt-data-table::part(structure-cell) {
     padding-block: calc(var(--wt-space-1) / 2);
@@ -63,8 +79,15 @@ export const structureRowStyles = css`
   wt-data-table::part(tree-heading),
   wt-data-table[narrow]::part(tree-heading) {
     margin-inline-start: calc(
-      var(--structure-arrow-slot) + var(--structure-media-size) + var(--structure-media-gap)
+      var(--structure-arrow-slot) + var(--structure-media-size) +
+        var(--structure-media-gap) - var(--structure-root-inset, 0px)
     );
+  }
+  wt-data-table::part(structure-root-label) {
+    margin-inline-start: calc(-1 * var(--structure-root-inset, 0px));
+  }
+  wt-data-table:not([narrow])::part(structure-folder-setting)::after {
+    content: " ·";
   }
   wt-data-table::part(thumb-frame),
   wt-data-table::part(thumb-placeholder),
@@ -107,6 +130,7 @@ export const structureRowStyles = css`
   }
   wt-data-table[narrow]::part(narrow-usual-price) {
     display: inline;
+    margin-inline-end: calc(-1 * var(--wt-space-1));
   }
   wt-data-table::part(structure-row-label) {
     display: flex;

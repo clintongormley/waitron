@@ -771,9 +771,9 @@ it("Edit sends wt-include-edit with the list's path and the member", async () =>
 
 it("the row says whether the include is a folder or shown directly", async () => {
   const el = await mount({ nodes: [...lunchNodes(), wines()] });
-  expect(item(el, "folder-setting-included-wine").textContent!.trim()).toBe(
-    t("menus.include_as_folder"),
-  );
+  const setting = item(el, "folder-setting-included-wine");
+  expect(setting.textContent!.trim()).toBe(t("menus.include_as_folder"));
+  expect(getComputedStyle(setting, "::after").content).toBe('" ·"');
   expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
 
   const cava: MenuStructureNode = {
@@ -1136,12 +1136,14 @@ it.each(
       await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(width === 390));
       const rows = DEEP_ROWS.map((key) => ({ key, ...pieces(el, key) }));
       expect(row(el, "root")!.getAttribute("aria-level")).toBe("1");
-      // The menu's own row is level 1, and the same step separates it from its members.
       const root = rootNameLeft(el);
-      const step = rows.find(({ level }) => level === 3)!.name.left - rows[0]!.name.left;
+      const first = rows[0]!.name.left;
+      const step = rows.find(({ level }) => level === 3)!.name.left - first;
       expect(step).toBeCloseTo(width === 390 ? 12 : 18, 0);
+      const rootOffset = reordering ? (width === 390 ? 8 : 16) : 0;
+      expect(first - root).toBeCloseTo(step + rootOffset, 0);
       for (const { key, level, name } of rows)
-        expect(name.left, key).toBeCloseTo(root + (level - 1) * step, 0);
+        expect(name.left, key).toBeCloseTo(first + (level - 2) * step, 0);
       for (const current of rows) {
         const twin = rows.find(
           (other) => other.level === current.level && other.key !== current.key,
@@ -1217,8 +1219,16 @@ it.each([390, 1280])("shows an owned section count with its name at %i px", asyn
   const tr = row(el, "m-drinks")!;
   const name = tr.querySelector('[part~="section-name"]')!.getBoundingClientRect();
   const count = tr.querySelector('[part~="note"]')!.getBoundingClientRect();
-  if (width === 390) expect(count.top).toBeGreaterThanOrEqual(name.bottom - 1);
-  else {
+  if (width === 390) {
+    expect(count.top).toBeGreaterThanOrEqual(name.bottom - 1);
+    const arrow = document.createRange();
+    arrow.selectNodeContents(tr.querySelector(".tree-arrow")!);
+    const gripBox = grip(el, "m-drinks").getBoundingClientRect();
+    const glyph = arrow.getBoundingClientRect();
+    const gap = glyph.left + glyph.width / 2 - gripBox.left - gripBox.width / 2;
+    expect(gap).toBeGreaterThanOrEqual(21);
+    expect(gap).toBeLessThanOrEqual(26);
+  } else {
     expect(count.left).toBeGreaterThan(name.right);
     expect(count.top).toBeLessThan(name.bottom);
   }
@@ -1308,6 +1318,15 @@ it.each(
       const menu = middle(inTable(el, '[data-test="actions-root"]')!.getBoundingClientRect());
       expect(height("root")).toBeLessThanOrEqual(height("m-drinks") + 1);
       expect(Math.abs(centre - menu)).toBeLessThanOrEqual(2);
+      if (mode !== "browsing") {
+        const arrow = document.createRange();
+        const root = row(el, "root")!;
+        arrow.selectNodeContents(root.querySelector(".tree-toggle")!);
+        const picture = root.querySelector('[part~="folder-frame"]')!.getBoundingClientRect();
+        const gap = picture.left - arrow.getBoundingClientRect().right;
+        expect(gap).toBeGreaterThanOrEqual(5);
+        expect(gap).toBeLessThanOrEqual(12);
+      }
     } finally {
       await page.viewport(before.width, before.height);
     }
