@@ -108,7 +108,7 @@ export class WtStepper extends LitElement {
           ?disabled=${this.disabled || atMin}
           @click=${(event: Event) => this.step(-1, event)}
         >
-          <wt-icon name="minus"></wt-icon>
+          <wt-icon name="minus" size="lg"></wt-icon>
         </button>
         <span class="count" aria-live="polite">${this.value}</span>
         <button
@@ -118,7 +118,7 @@ export class WtStepper extends LitElement {
           ?disabled=${this.disabled || atMax}
           @click=${(event: Event) => this.step(1, event)}
         >
-          <wt-icon name="plus"></wt-icon>
+          <wt-icon name="plus" size="lg"></wt-icon>
         </button>
       </div>
     `;

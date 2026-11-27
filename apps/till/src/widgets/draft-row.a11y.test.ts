@@ -11,6 +11,7 @@ import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { OpenDraftRow, draftSlotStyles } from "./draft-row-open.js";
+import { draftSplitArrow } from "./draft-portions.js";
 
 registerIcons({
   minus: "M2.5 7.25H13.5V8.75H2.5Z",
@@ -29,7 +30,15 @@ class OpenedRowHost extends LitElement {
       .compactRows=${true}
       stacked
       .openedLine=${this.opener.line(this.store)}
-      >${this.store.lines.map((line, index) => this.opener.controls(this.store, line, index))}</till-basket
+      >${this.store.lines.map(
+        (line, index) =>
+          html`${this.opener.controls(this.store, line, index)}${draftSplitArrow(
+            line,
+            index,
+            () => true,
+            () => {},
+          )}`,
+      )}</till-basket
     >`;
   }
 }
@@ -219,6 +228,40 @@ describe.each(["light", "dark"] as const)("compact draft rows a11y (%s theme)", 
     await basket.updateComplete;
     expect(added.hasAttribute("data-open")).toBe(false);
     expect(getComputedStyle(added).backgroundColor).not.toBe(plain.backgroundColor);
+  });
+
+  it("an opened row keeps a closed row's height and price edge, and its split arrow a full tap target", async () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("draft", [
+      { product: croquettes, quantity: "2" },
+      { product: bravas, quantity: "2" },
+    ]);
+    const { el } = await mountWidget<OpenedRowHost>("test-opened-row-host", { store }, theme);
+    const basket = el.shadowRoot!.querySelector<TillBasket>("till-basket")!;
+    await basket.updateComplete;
+    await userEvent.click(
+      basket.shadowRoot!.querySelector<HTMLButtonElement>('[data-draft-row="0"]')!,
+    );
+    await el.updateComplete;
+    await basket.updateComplete;
+    const [opened, closed] = [0, 1].map((index) => {
+      const row = basket.shadowRoot!.querySelector<HTMLElement>(`[data-draft-row="${index}"]`)!;
+      const entry = row.closest<HTMLElement>(".entry")!;
+      return {
+        entry,
+        lead: entry.querySelector(".draft-row-lead")!.getBoundingClientRect(),
+        price: row.querySelector(".draft-row-price")!.getBoundingClientRect(),
+        split: el
+          .shadowRoot!.querySelector(`[data-split-draft-line="${index}"]`)!
+          .getBoundingClientRect(),
+      };
+    });
+    expect(opened!.entry.hasAttribute("data-open")).toBe(true);
+    expect(closed!.entry.hasAttribute("data-open")).toBe(false);
+    expect(opened!.lead.height).toBeCloseTo(closed!.lead.height, 1);
+    expect(Math.abs(opened!.price.right - closed!.price.right)).toBeLessThanOrEqual(0.5);
+    expect(opened!.split.width).toBeGreaterThanOrEqual(44);
+    expect(opened!.split.height).toBeGreaterThanOrEqual(44);
   });
 
   it("a disabled row has no violations", async () => {

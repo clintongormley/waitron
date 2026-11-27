@@ -135,6 +135,10 @@ test("paints its box, buttons and number from the tokens", async () => {
   expect(minus.getBoundingClientRect().height).toBe(50);
   expect(getComputedStyle(minus.querySelector("wt-icon")!).color).toBe("rgb(7, 8, 9)");
   expect(getComputedStyle(plus.querySelector("wt-icon")!).color).toBe("rgb(10, 11, 12)");
+  for (const button of [minus, plus]) {
+    const icon = button.querySelector("wt-icon")!.getBoundingClientRect();
+    expect([icon.width, icon.height]).toEqual([21, 21]);
+  }
   const number = getComputedStyle(count);
   expect(count.getBoundingClientRect().width).toBeGreaterThanOrEqual(61);
   expect(number.fontSize).toBe("21px");
