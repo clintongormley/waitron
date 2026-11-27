@@ -102,19 +102,15 @@ import {
 } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { lineNutrition } from "../widgets/line-nutrition.js";
-import {
-  takesExtras,
-  toWireLineExtras,
-  toWireModifiers,
-  toWireProductIdentity,
-} from "../state/order-line.js";
+import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
 import "../widgets/basket.js";
+import { draftRowSlotStyles, draftSelectBox, draftSelectLabel } from "../widgets/draft-row.js";
 import {
-  draftRowSlotStyles,
-  draftSelectBox,
-  draftSelectLabel,
-  draftSplitChevron,
-} from "../widgets/draft-row.js";
+  draftFamilyHeader,
+  draftSplitArrow,
+  foldDraftFamily,
+  splitDraftLine,
+} from "../widgets/draft-portions.js";
 import "../widgets/last-added.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
@@ -4703,13 +4699,7 @@ export class TillTableOrderScreen extends LitElement {
       !this.busy &&
       scope === this.#draftArrangementScope() &&
       api === this.api;
-    const name = lineProductName(line.product);
     const selected = this.#selected.has(line);
-    const family = store.splitFamily(line);
-    const splits =
-      takesExtras(line.product) &&
-      Number.isInteger(Number(line.quantity)) &&
-      Number(line.quantity) > 1;
     const isFlagged = flagged(line);
     const tools = [
       ...(isFlagged ? [this.#flagChoice(store, line, index)] : []),
@@ -4719,27 +4709,7 @@ export class TillTableOrderScreen extends LitElement {
     const guest = this.#draftAllergyGuest(line);
     const marked = mark === nothing ? nothing : html`<span slot=${`mark-${index}`}>${mark}</span>`;
     if (store.editsLocked) return marked;
-    return html`${
-        family?.[0] === line
-          ? html`<button
-              type="button"
-              slot=${`before-${index}`}
-              class="option draft-family-header"
-              data-fold-draft-family
-              aria-expanded="true"
-              ?disabled=${!current()}
-              @click=${() => {
-                if (current()) this.#foldDraftFamily(store, line);
-              }}
-            >
-              <span
-                >${name}
-                ×${quantityText(family.reduce((total, member) => addDecimal(total, decimal(member.quantity)), decimal("0")))}</span
-              >
-              <span aria-hidden="true">⌃</span>
-            </button>`
-          : nothing
-      }
+    return html`${draftFamilyHeader(store, line, index, current, () => this.#foldDraftFamily(store, line))}
       <button
         slot=${`lead-${index}`}
         type="button"
@@ -4756,24 +4726,7 @@ export class TillTableOrderScreen extends LitElement {
       >
         ${draftSelectBox(selected)}
       </button>
-      ${marked}
-      ${
-        splits
-          ? html`<button
-              type="button"
-              slot=${`end-${index}`}
-              class="draft-row-split"
-              data-split-draft-line=${index}
-              aria-label=${`${t("table.split_group_line")} · ${name}`}
-              ?disabled=${!current()}
-              @click=${() => {
-                if (current()) this.#splitDraftLine(store, line);
-              }}
-            >
-              ${draftSplitChevron()}
-            </button>`
-          : nothing
-      }
+      ${marked} ${draftSplitArrow(line, index, current, () => this.#splitDraftLine(store, line))}
       ${
         tools.length === 0
           ? nothing
@@ -4837,44 +4790,17 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
+  #draftActionable(store: WorkingOrderStore): boolean {
+    return this.isConnected && store === this.#draftStore && !this.groupCommandBusy;
+  }
+
   #splitDraftLine(store: WorkingOrderStore, line: OrderLine): void {
-    const index = store.lines.indexOf(line);
-    if (
-      !this.isConnected ||
-      store !== this.#draftStore ||
-      index < 0 ||
-      store.sending ||
-      store.editsLocked ||
-      this.groupCommandBusy ||
-      !takesExtras(line.product) ||
-      !Number.isInteger(Number(line.quantity)) ||
-      Number(line.quantity) <= 1
-    )
-      return;
-    store.splitLine(index);
+    if (this.#draftActionable(store)) splitDraftLine(store, line);
   }
 
   #foldDraftFamily(store: WorkingOrderStore, line: OrderLine): void {
-    if (
-      !this.isConnected ||
-      store !== this.#draftStore ||
-      store.sending ||
-      store.editsLocked ||
-      this.groupCommandBusy
-    )
-      return;
-    const family = store.splitFamily(line);
-    if (family === undefined) return;
-    const selected = family.every((member) => this.#selected.has(member));
-    store.foldSplitFamily(line);
-    if (
-      store.lines.includes(family[0]!) &&
-      family.slice(1).every((member) => !store.lines.includes(member))
-    ) {
-      for (const member of family) this.#selected.delete(member);
-      if (selected) this.#selected.add(family[0]!);
+    if (this.#draftActionable(store) && foldDraftFamily(store, line, this.#selected))
       this.requestUpdate();
-    }
   }
 
   #flagChoice(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
