@@ -1,8 +1,8 @@
 import type { CertKind } from "./aeat-transport.js";
 
 // ETSI EN 319 411-2 V2.6.1 §5.3 (QCP-l, QCP-l-qscd) and FNMT's dpc_sello_entidad.pdf v1.0 (Sello de
-// Entidad and its G2), read 2026-11-26. A seal that is not qualified (Camerfirma sells one) carries
-// no QCP-l and reads as a representative's certificate.
+// Entidad and its G2), read 2026-11-26. A seal carrying none of these reads as a representative's
+// certificate.
 const SEAL_POLICIES = new Set(
   [
     "0.4.0.194112.1.1",

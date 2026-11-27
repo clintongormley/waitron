@@ -433,7 +433,8 @@ not send records to AEAT: a Demo or Prepare box, a preproduction box without
 is refused with `fiscal.certificate_not_used` (409).
 
 The POST body carries `pfxBase64`, `passphrase` and `expectedRevision`, the revision the card read.
-The certificate's type (`sello` or `representante`) is read from the file's policies. Before anything is replaced it checks, in order
+The certificate's type (`sello` or `representante`) is read from the file's policies: a file naming
+no seal policy, or whose policies cannot be read, is a representative's. Before anything is replaced it checks, in order
 (`installCertificate`, `packages/fiscal-verifactu/src/certificate-install.ts`):
 
 1. the file is at most 100 KiB;

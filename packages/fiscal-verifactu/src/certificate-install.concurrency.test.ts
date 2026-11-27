@@ -48,7 +48,6 @@ function bodyOf(file: { pfx: Buffer; passphrase: string }, expectedRevision: str
   return {
     pfxBase64: file.pfx.toString("base64"),
     passphrase: file.passphrase,
-    certKind: "sello",
     expectedRevision,
   };
 }

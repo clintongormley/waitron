@@ -150,7 +150,7 @@ function closed(dialog: AeatCertificateDialog): Promise<Event> {
 }
 
 describe("dashboard-aeat-certificate-dialog", () => {
-  it("opens from the card with the three required fields, the type pre-set, and the guides under them", async () => {
+  it("opens from the card with the two required fields and the guides under them", async () => {
     const { dialog } = await open({});
     const wtDialog = q(dialog, "wt-dialog");
     expect(wtDialog.getAttribute("heading")).toBe("Replace AEAT certificate");
