@@ -16,6 +16,7 @@ import {
 import { ref } from "lit/directives/ref.js";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { guard } from "lit/directives/guard.js";
+import { keyed } from "lit/directives/keyed.js";
 import {
   baseStyles,
   ChangeObserver,
@@ -698,7 +699,6 @@ export class MenusScreen extends LitElement {
   );
   readonly #homeSave = new MenuHomeSave(this, () => this.api);
   readonly #onlineSave = new MenuOnlineSave(this, () => this.api);
-  @state() private customerStyleMenu?: string;
   get pendingMenuSave(): Promise<void> | undefined {
     return (
       this.#structureSave.pendingWrite ??
@@ -738,8 +738,6 @@ export class MenusScreen extends LitElement {
 
   protected override willUpdate(changed: PropertyValues): void {
     this.#onlineSave.show(this.view === "customer-menu" ? this.menuId : null);
-    if (this.view !== "customer-menu" || this.customerStyleMenu !== this.menuId)
-      this.customerStyleMenu = undefined;
     this.#structureSave.watchIncludes(this.view === "structure");
     this.#followUsage();
     if (this.busy || changed.has("structureSelecting")) this.#productEditor.cancelRead();
@@ -3338,12 +3336,19 @@ export class MenusScreen extends LitElement {
                       this.status?.state === "unpublished",
                       previewHref,
                       openPreview,
-                      html`<wt-button
-                        variant="secondary"
-                        @click=${() => (this.customerStyleMenu = menuId)}
-                      >
-                        ${t("customer_menu.style.open")}
-                      </wt-button>`,
+                      keyed(
+                        menuId,
+                        html`<dashboard-menu-customer-style-dialog
+                          .api=${this.api}
+                          .previewApi=${this.api.background ?? this.api}
+                          .menuId=${menuId}
+                          .defaultLanguage=${this.contentLanguages?.defaultLanguage ?? "en"}
+                          .photos=${this.#onlineSave.draft?.photos ?? "none"}
+                          .previewHref=${previewHref}
+                          .openPreview=${openPreview}
+                          @customer-style-saved=${() => void this.renderRoot.querySelector("dashboard-menu-online-preview")?.reload()}
+                        ></dashboard-menu-customer-style-dialog>`,
+                      ),
                     )}
                     <dashboard-menu-online-preview
                       .api=${this.api.background ?? this.api}
@@ -3356,22 +3361,7 @@ export class MenusScreen extends LitElement {
                       .waitingForSettings=${this.#onlineSave.loading}
                     ></dashboard-menu-online-preview>
                   </div>
-                  ${this.#onlineSave.actions(this.busy)}
-                  ${
-                    this.customerStyleMenu === menuId
-                      ? html`<dashboard-menu-customer-style-dialog
-                          .api=${this.api}
-                          .previewApi=${this.api.background ?? this.api}
-                          .menuId=${menuId}
-                          .defaultLanguage=${this.contentLanguages?.defaultLanguage ?? "en"}
-                          .photos=${this.#onlineSave.draft?.photos ?? "none"}
-                          .previewHref=${previewHref}
-                          .openPreview=${openPreview}
-                          @customer-style-close=${() => (this.customerStyleMenu = undefined)}
-                          @customer-style-saved=${() => void this.renderRoot.querySelector("dashboard-menu-online-preview")?.reload()}
-                        ></dashboard-menu-customer-style-dialog>`
-                      : nothing
-                  }`
+                  ${this.#onlineSave.actions(this.busy)}`
               : nothing
           }
         </div>

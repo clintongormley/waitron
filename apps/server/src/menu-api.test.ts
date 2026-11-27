@@ -22,6 +22,7 @@ import { hashPin, startManagementSession } from "@waitron/identity";
 import {
   addMember,
   createMenu,
+  deleteMenu,
   menuReleases,
   menuVersions,
   readTakeawayVatSchedules,
@@ -31,7 +32,7 @@ import {
 } from "@waitron/menu";
 import type { MenuPreview, MenuStatus } from "@waitron/menu";
 import type { ExtraList, ExtraListRow, OptionList, OptionListRow } from "@waitron/menu";
-import { type ContentLanguageRules } from "@waitron/shared";
+import { type ContentLanguageRules, type CustomerMenuStyle } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import type { TradingContext } from "./trading-context.js";
 import { libraryImageName, seedLibraryImages } from "@waitron/menu/test/library-images.js";
@@ -4789,6 +4790,15 @@ describe("publishing a menu", () => {
     const set = await withTransaction(suite.db, (tx) =>
       createMenu(tx, { name: "Chef's lunch", kind: "set_menu", setPrice: "14.00" }),
     );
+    const removed = await withTransaction(suite.db, async (tx) => {
+      const archived = await createMenu(tx, {
+        name: "Archived set menu",
+        kind: "set_menu",
+        setPrice: "12.00",
+      });
+      await deleteMenu(tx, archived.id, managerPersonId);
+      return archived.id;
+    });
     await suite.db.insert(customerMenuStyles).values({
       name: "Default",
       nameKey: "default",
@@ -4806,7 +4816,8 @@ describe("publishing a menu", () => {
     const path = `/management-api/menus/${menuId}/customer-style`;
     const initial = await send(app, "GET", path);
     expect(initial.status).toBe(200);
-    expect(await initial.json()).toMatchObject({
+    const style = (await initial.json()) as CustomerMenuStyle;
+    expect(style).toMatchObject({
       name: "Default",
       appearance: {},
       affectedMenus: expect.arrayContaining([
@@ -4814,6 +4825,9 @@ describe("publishing a menu", () => {
         { id: set.id, name: "Chef's lunch" },
       ]),
     });
+    const affectedIds = style.affectedMenus.map(({ id }) => id);
+    expect(affectedIds).not.toContain(menuId);
+    expect(affectedIds).not.toContain(removed);
     const appearance = { pageColor: "#fbf7ef", headingFont: "serif" };
     const saved = await send(app, "PUT", path, { body: appearance });
     expect(saved.status).toBe(200);

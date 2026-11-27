@@ -33,6 +33,8 @@ const NOT_REFERENCES: Readonly<Record<string, string>> = {
 
 const ID_SHAPED = /_ids?$/;
 const JSON_WITHOUT_IDS: Readonly<Record<string, string>> = {
+  "customer_menu_styles.appearance":
+    "three hex colours and two font choices checked by checkedCustomerMenuAppearance, no row ids",
   "section_members.folder_names":
     "language-to-display-text pairs parsed through isNamesMap (`packages/menu/src/include-folder.ts`), never row ids",
 };

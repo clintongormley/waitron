@@ -32,7 +32,7 @@ export class MenuOnlinePreview extends LitElement {
     css`
       :host {
         display: block;
-        padding-block: var(--wt-space-4);
+        padding-block: var(--menu-preview-space, var(--wt-space-4));
         container-type: inline-size;
       }
       p {
@@ -44,7 +44,7 @@ export class MenuOnlinePreview extends LitElement {
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-3);
-        margin-block: var(--wt-space-4);
+        margin-block: var(--menu-preview-space, var(--wt-space-4));
       }
       wt-combobox {
         inline-size: min(100%, 16ch);

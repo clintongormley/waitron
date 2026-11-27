@@ -90,7 +90,7 @@ const online = () => page.getByRole("switch", { name: "Online", exact: true });
 const address = () => page.getByRole("textbox", { name: "Address" });
 const saveButton = () => page.getByRole("button", { name: "Save", exact: true });
 const warning = () => page.getByText("Customers cannot open this page yet.");
-const styleButton = () => page.getByRole("button", { name: "Style", exact: true });
+const styleButton = () => page.getByRole("button", { name: "Change…", exact: true });
 const styleDialog = () => page.getByRole("dialog", { name: "Customer menu style" });
 const pageColor = () => page.getByRole("textbox", { name: "Page colour", exact: true });
 function canvasColor(root: ShadowRoot) {
@@ -103,20 +103,25 @@ function canvasColor(root: ShadowRoot) {
 
 it("previews the default style draft and updates the tab after Save style", async () => {
   const { app } = await open();
+  await expect.element(page.getByText("Default", { exact: true }), { timeout: 2000 }).toBeVisible();
   await styleButton().click();
   const dialog = styleDialog();
   const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!.shadowRoot!;
   const editor = screen.querySelector("dashboard-menu-customer-style-dialog")!.shadowRoot!;
   const save = page.getByRole("button", { name: "Save style", exact: true });
   await expect.element(dialog).toBeVisible();
-  await expect.element(page.getByText("Dinner", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByText("Saving also changes Dinner.", { exact: true }))
+    .toBeVisible();
   await expect.element(save).toBeDisabled();
   await pageColor().fill("#ffffff");
   await expect.poll(() => canvasColor(editor)).toBe("rgb(255, 255, 255)");
   await page.getByRole("textbox", { name: "Text colour", exact: true }).fill("#eeeeee");
-  await expect
-    .element(page.getByText("Text and page colours may be hard to read together."))
-    .toBeVisible();
+  const contrast = page.getByText("Text and page colours may be hard to read together.");
+  await expect.element(contrast).toBeVisible();
+  expect(contrast.element().closest("p")?.querySelector("wt-icon")?.getAttribute("name")).toBe(
+    "warning",
+  );
   await expect.element(save).toBeEnabled();
   await save.click();
   await expect.element(dialog).not.toBeInTheDocument();

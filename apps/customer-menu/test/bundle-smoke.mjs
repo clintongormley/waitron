@@ -4,11 +4,15 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath, URL } from "node:url";
 import { chromium } from "playwright";
 import { preview } from "vite";
-import "../../server/node_modules/tsx/dist/loader.mjs";
+import "tsx";
 import { menuAppearances, photoReference, published } from "./published-menu.ts";
 
-const { SERVER_THEME_DEFAULTS } = await import("../../server/src/theme-defaults.ts");
+const { readDefaults } = await import("@waitron/ui-core/theme");
 const { prepareMenuAppearance } = await import("../src/customer-menu-appearance.ts");
+const defaults = readDefaults(
+  await readFile(new URL(import.meta.resolve("@waitron/ui-core/tokens/colors.css")), "utf8"),
+  await readFile(new URL(import.meta.resolve("@waitron/ui-core/tokens/structure.css")), "utf8"),
+);
 const template = await readFile(new URL("../dist/index.html", import.meta.url), "utf8");
 const slot = '<script type="application/json" id="customer-menu-data">';
 assert.ok(template.includes(slot), "built menu must have a snapshot slot");
@@ -21,7 +25,7 @@ const snapshot = {
   address: "lunch",
   defaultLanguage: "en",
   photos: "large",
-  appearance: prepareMenuAppearance(SERVER_THEME_DEFAULTS, menuAppearances.dark),
+  appearance: prepareMenuAppearance(defaults, menuAppearances.dark),
   menu: published().menu,
   photoUrls: { [photoReference]: photoUrl },
 };

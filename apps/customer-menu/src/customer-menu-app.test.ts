@@ -2,11 +2,14 @@ import { afterEach, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import {
   contentLanguageDisplayName,
+  type CustomerMenuAppearance,
   type CustomerMenuPhotoSize,
   type PublicGuestMenu,
 } from "@waitron/shared";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { menuAppearances } from "../test/published-menu.js";
+import { prepareMenuAppearance } from "./customer-menu-appearance.js";
 import { mountCustomerMenu } from "./main.js";
 import "./main.css";
 
@@ -118,9 +121,10 @@ it.each([
   { name: "a page colour given as a list", appearance: { pageColor: ["#ffffff"] } },
   { name: "an unsupported font", appearance: { ...menuAppearances.dark, textFont: "display" } },
 ])(
-  "opens the menu in the built-in palette when the snapshot contains $name",
+  "keeps the built-in palette when snapshot preparation receives $name",
   async ({ appearance }) => {
-    const main = openMenu("none", {}, menu, appearance);
+    const prepared = prepareMenuAppearance(WAITRON_DEFAULTS, appearance as CustomerMenuAppearance);
+    const main = openMenu("none", {}, menu, prepared);
     const customer = main.querySelector("customer-menu-page")!;
     await customer.updateComplete;
     const article = customer.shadowRoot!.querySelector("article")!;
