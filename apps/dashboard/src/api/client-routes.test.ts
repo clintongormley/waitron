@@ -2407,7 +2407,7 @@ describe("the recovery pack calls", () => {
         jsonResponse(
           {
             error: {
-              code: "master_key.wrong",
+              code: "promotion.break_glass_invalid",
               params: { keyName: "2026-11-23 · QZJV" },
             },
           },
@@ -2418,7 +2418,7 @@ describe("the recovery pack calls", () => {
     );
 
     await expect(api.makeRecoveryPack({ locale: "en", masterKey: KEY })).rejects.toMatchObject({
-      code: "master_key.wrong",
+      code: "promotion.break_glass_invalid",
       params: { keyName: "2026-11-23 · QZJV" },
       status: 403,
     });
@@ -2606,6 +2606,42 @@ describe("the recovery pack calls", () => {
     expect(new Headers(fetchImpl.mock.calls[2][1].headers).get("content-type")).toBe(
       "application/json",
     );
+  });
+
+  it("confirms a new master key's pack by sending back the key it showed", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+
+    await api.markRecoveryPackReceived(8, "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5");
+
+    expect(callsOf(fetchImpl)).toEqual([
+      [
+        "/api/backup/recovery-pack/8/received",
+        "POST",
+        { masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5" },
+      ],
+    ]);
+  });
+
+  it("drops a confirm's request when its signal aborts", async () => {
+    let sent: AbortSignal | null | undefined;
+    const fetchImpl = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      sent = init?.signal;
+      return new Promise<Response>(() => undefined);
+    });
+    const api = new DashboardApi("", fetchImpl as typeof fetch);
+    const stop = new AbortController();
+
+    const answer = api.markRecoveryPackReceived(
+      8,
+      "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+      stop.signal,
+    );
+    await expect.poll(() => fetchImpl.mock.calls.length).toBe(1);
+    stop.abort();
+
+    await expect(answer).rejects.toEqual({ code: "connection.cancelled" });
+    expect(sent?.aborted).toBe(true);
   });
 });
 

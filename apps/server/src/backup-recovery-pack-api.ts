@@ -1,8 +1,9 @@
 import { isSecure } from "./encrypted-connection.js";
 import { inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
-import { credentialRevision, type KeyRing } from "@waitron/credentials";
+import { credentialRevision, masterKeyMatches, type KeyRing } from "@waitron/credentials";
 import {
+  insertMasterKey,
   insertRecoveryPack,
   markRecoveryPackReceived,
   nextMasterKeyNumber,
@@ -52,11 +53,12 @@ import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { Turns } from "./backup-turns.js";
 import type { Logger } from "./logger.js";
 import { createLiveOperationRateLimit } from "./live-operation-rate-limit.js";
-import { checkTypedMasterKey, insertNewMasterKey } from "./master-key-record.js";
+import { checkTypedMasterKey } from "./master-key-record.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import { knownZone } from "./venue-time-zone.js";
 import { sentFromThisOrigin } from "./own-page.js";
 import type { CloudConnection } from "./cloud-client.js";
+import type { WaitingMasterKey, WaitingMasterKeyHolder } from "./waiting-master-key.js";
 import "./errors.js";
 
 export interface BackupRecoveryPackMakeDeps extends BackupKeyChangeDeps {
@@ -70,6 +72,8 @@ export interface BackupRecoveryPackMakeDeps extends BackupKeyChangeDeps {
   node: ProvisionedNode;
   /** The backup API's own turns, so a Save or a key change waits for a pack being made. */
   turns: Turns;
+  /** Shared with Change the backup key, which forgets it. */
+  waitingMasterKey: WaitingMasterKeyHolder;
   readBoxEnv: () => Promise<Readonly<Record<string, string | undefined>>>;
   /** What the backup supervisor holds now; the key never leaves the server. */
   backups: () => Pick<BackupRuntimeStatus, "schedule" | "retention" | "recoveryKey">;
@@ -87,7 +91,7 @@ const makeRun = createErrorBoundary(
     "recovery.pack_connection_insecure": 403,
     "recovery.pack_origin_refused": 403,
     "recovery.pack_invalid": 400,
-    "master_key.wrong": 403,
+    "promotion.break_glass_invalid": 403,
     "recovery.rate_limited": 429,
     "management.request_invalid": 400,
     "password.invalid": 401,
@@ -193,13 +197,10 @@ type MakeInput = {
   env: Readonly<Record<string, string | undefined>>;
   madeAt: string;
   newMasterKey: NewMasterKey | undefined;
-  signal: AbortSignal;
 };
 
-/**
- * Builds, renders and records one pack, and the new master key's row when it shows one, inside the
- * caller's venue transaction, so a refusal of either leaves neither.
- */
+/** Builds, renders and records one pack inside the caller's venue transaction. A new master key it
+ * shows is not saved here: it waits for the browser to confirm the pack arrived. */
 async function makePack(
   tx: Transaction,
   deps: BackupRecoveryPackMakeDeps,
@@ -247,11 +248,6 @@ async function makePack(
     },
   );
   await insertRecoveryPack(tx, record);
-  if (newMasterKey !== undefined) {
-    // A person who has gone away would never see the master key the box moves its backups onto.
-    input.signal.throwIfAborted();
-    await insertNewMasterKey(tx, newMasterKey, new Date(madeAt), input.personId);
-  }
   const failedWith = new Map(parts.map((part) => [part.record.part, part.failedWith]));
   return {
     number,
@@ -272,6 +268,7 @@ export function mountBackupRecoveryPackMakeApi(
 ): void {
   const nodeId = deps.node.nodeId;
   const typedKeyAdmission = createLiveOperationRateLimit();
+  const holder = deps.waitingMasterKey;
 
   app.post("/api/backup/recovery-pack", (c) => {
     c.header("Cache-Control", "no-store");
@@ -291,8 +288,8 @@ export function mountBackupRecoveryPackMakeApi(
         "masterKey" in request
           ? typedKeyAdmission.withAdmission(() => deps.turns(body))
           : deps.turns(body);
-      const made = await turn(async () => {
-        const result = await inTurn(deps.db, `recovery-document:${nodeId}`, async () => {
+      const made = await turn(() =>
+        inTurn(deps.db, `recovery-document:${nodeId}`, async () => {
           const held = await deps.readBoxEnv();
           const madeAt = deps.now().toISOString();
           const newMasterKey =
@@ -321,28 +318,24 @@ export function mountBackupRecoveryPackMakeApi(
               env,
               madeAt,
               newMasterKey,
-              signal: c.req.raw.signal,
             }),
           );
-          return { ...pack, masterKey: newMasterKey?.made, nextKey };
-        });
-        // After the commit: a failure here still answers the pack, the only time its master key is
-        // shown, and the status then says the backup key is not from the current master key.
-        if (result.nextKey !== undefined) {
-          try {
-            await changeBackupKey(deps, result.nextKey, result.madeAt);
-          } catch (error) {
-            log("warn", "backup.key_change_after_master_key_failed", { errorCode: failure(error) });
+          if (newMasterKey === undefined || nextKey === undefined) {
+            holder.forget();
+          } else {
+            holder.hold({
+              pack: pack.number,
+              personId,
+              name: newMasterKey.made.masterKeyName,
+              checkValue: newMasterKey.checkValue,
+              publicKey: newMasterKey.publicKey,
+              madeAt: pack.madeAt,
+              backupKeyNumber: nextKey.keyNumber,
+            });
           }
-          // Also after a failure: the key file may have been replaced before a later step threw.
-          try {
-            await deps.reloadBackups();
-          } catch (error) {
-            log("warn", "backup.reload_after_write_failed", { errorCode: failure(error) });
-          }
-        }
-        return result;
-      });
+          return { ...pack, masterKey: newMasterKey?.made };
+        }),
+      );
       log("info", "recovery.pack_made", {
         personId,
         number: made.number,
@@ -431,11 +424,88 @@ export function mountBackupRecoveryPackMakeApi(
           }),
           timeZone: knownZone((await readVenue(tx)).timeZone),
           backupKey: backupKeyFacts(env, currentMasterKey?.publicKey ?? null),
+          ...(holder.waiting === undefined ? {} : { newKeyWaiting: true }),
         };
       });
       return c.json(status);
     });
   });
+
+  /** Takes the waiting key as the venue's master key once the browser sends back the key its pack
+   * showed. A confirm repeated after its answer was lost answers again and writes nothing. */
+  async function confirmNewMasterKey(
+    token: string,
+    number: number,
+    typed: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    let bytes: Uint8Array | null = null;
+    try {
+      bytes = decodeMasterKeyCode(typed);
+    } catch (error) {
+      if (!isAppError(error)) throw error;
+    }
+    const waiting = holder.waiting;
+    if (waiting === undefined || waiting.pack !== number) {
+      await withTransaction(deps.db, async (tx) => {
+        const { authorizedBy } = await authorizeManager(tx, {
+          managementSessionId: token,
+          permission: "system.manage",
+        });
+        const pack = await readRecoveryPack(tx, nodeId, number);
+        const current = await readCurrentMasterKey(tx);
+        if (
+          pack === null ||
+          pack.madeBy !== authorizedBy ||
+          pack.receivedAt === null ||
+          current === null ||
+          current.madeAt.getTime() !== pack.madeAt.getTime() ||
+          bytes === null ||
+          !masterKeyMatches(bytes, current.checkValue)
+        )
+          invalid("unknown_pack");
+      });
+      return;
+    }
+    if (bytes === null || !masterKeyMatches(bytes, waiting.checkValue)) invalid("unknown_pack");
+    await withTransaction(deps.db, async (tx) => {
+      const { authorizedBy } = await authorizeManager(tx, {
+        managementSessionId: token,
+        permission: "system.manage",
+      });
+      if (waiting.personId !== authorizedBy) invalid("unknown_pack");
+      // A tab already closed would never learn that the box took the key.
+      if (signal.aborted) invalid("unknown_pack");
+      await insertMasterKey(tx, {
+        name: waiting.name,
+        checkValue: waiting.checkValue,
+        publicKey: waiting.publicKey,
+        madeAt: new Date(waiting.madeAt),
+        madeBy: waiting.personId,
+      });
+      await markRecoveryPackReceived(tx, nodeId, number, deps.now());
+    });
+    holder.forget();
+    await takeBackupKey(waiting, bytes);
+  }
+
+  async function takeBackupKey(waiting: WaitingMasterKey, masterKey: Uint8Array): Promise<void> {
+    try {
+      await changeBackupKey(
+        deps,
+        backupKeyRecord(masterKey, waiting.backupKeyNumber, waiting.publicKey, waiting.name),
+        waiting.madeAt,
+      );
+    } catch (error) {
+      log("warn", "backup.key_change_after_master_key_failed", { errorCode: failure(error) });
+    }
+    // Also after a failure: the key file may have been replaced before a later step threw.
+    try {
+      await deps.reloadBackups();
+    } catch (error) {
+      log("warn", "backup.reload_after_write_failed", { errorCode: failure(error) });
+    }
+  }
 
   app.post("/api/backup/recovery-pack/:number/received", (c) => {
     c.header("Cache-Control", "no-store");
@@ -449,21 +519,29 @@ export function mountBackupRecoveryPackMakeApi(
       });
       // Read outside the write lock, which a slow client would otherwise hold against every sale.
       const body = await readRawJsonBody<unknown>(c);
+      const number = Number(c.req.param("number"));
+      if (body === null || typeof body !== "object") invalid("shape");
+      const keys = Object.keys(body);
+      if (keys.length > 0) {
+        const typed = (body as { masterKey?: unknown }).masterKey;
+        if (keys.length > 1 || typeof typed !== "string") invalid("shape");
+        if (!Number.isSafeInteger(number)) invalid("unknown_pack");
+        await deps.turns(() => confirmNewMasterKey(token, number, typed, c.req.raw.signal));
+        return c.body(null, 204);
+      }
       await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: token,
           permission: "system.manage",
         });
-        if (body === null || typeof body !== "object" || Object.keys(body).length > 0) {
-          invalid("shape");
-        }
-        const number = Number(c.req.param("number"));
         const pack = Number.isSafeInteger(number)
           ? await readRecoveryPack(tx, nodeId, number)
           : null;
         // Another person's pack answers as an unknown one: only the person who asked for a
         // pack can have received it, and the answer does not say whether the number exists.
-        if (pack === null || pack.madeBy !== authorizedBy) invalid("unknown_pack");
+        // A waiting master key's pack is received only with the key it showed.
+        if (pack === null || pack.madeBy !== authorizedBy || holder.waiting?.pack === number)
+          invalid("unknown_pack");
         await markRecoveryPackReceived(tx, nodeId, number, deps.now());
       });
       return c.body(null, 204);

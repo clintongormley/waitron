@@ -110,10 +110,6 @@ const NOT_PERSONAL: ReadonlyMap<string, string> = new Map([
   ["image.hash_conflict.filename", "an uploaded image's file name"],
   ["invoice_correction.split_changed.vatBreakdown", "VAT rates, bases and amounts of tax"],
   ["invoice_correction.split_changed.tax", "an amount of VAT, in euros"],
-  [
-    "master_key.wrong.keyName",
-    "a master key's name: a date and four symbols of the key's id (packages/credentials/src/master-key.ts)",
-  ],
   ["menu_period.ended.periodName", "the name of a menu period"],
   ["menu_period.name_taken.name", "the name of a menu period"],
   ["menu_publication.time_past.activatesAt", "an instant"],

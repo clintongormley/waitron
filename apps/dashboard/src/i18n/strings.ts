@@ -1688,10 +1688,15 @@ export const en = {
   "recovery_pack_dialog.limited":
     "Too many recovery requests are running or have arrived recently. Wait a minute and try again, or choose Cancel.",
   "recovery_pack_dialog.lost_new_key":
-    "The box may have made a new master key that did not reach this browser. If it did, the only copy of your current master key is on a pack you do not have.",
-  "recovery_pack_dialog.lost_new_key_named": "That pack is recovery pack {number}, made on {date}.",
+    "The new master key did not reach this browser, so the box kept the current one.",
+  "recovery_pack_dialog.lost_new_key_named":
+    "The current master key is on recovery pack {number}, made on {date}, which this box never saw arrive.",
   "recovery_pack_dialog.lost_new_key_choices":
-    "Make a new master key replaces the key again and shows it here. Stop closes this window and changes nothing.",
+    "Make a new master key tries again. Stop closes this window.",
+  "recovery_pack_dialog.not_kept":
+    "The box did not take the new master key, so it kept the current one.",
+  "recovery_pack_dialog.not_known":
+    "The box may be using this new master key: this browser could not confirm it. Keep this pack, then choose Try again. Stop closes this window.",
   "recovery_pack_dialog.lost":
     "The box may have made the recovery pack, but it did not reach this browser.",
   "recovery_pack_dialog.lost_choices":
@@ -1745,6 +1750,8 @@ export const en = {
   "backup_key_dialog.text":
     "New backups will use backup key {number}. A box you removed can't read them. Older backups still open with your master key.",
   "backup_key_dialog.done": "Backups now use backup key {number}.",
+  "master_key_refusal.no_master_key":
+    "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
   "backup_key_dialog.saved_not_loaded":
     "Saved, but the box could not load the new settings. Reload the page.",
   "backup_key_dialog.unconfirmed":
@@ -6580,11 +6587,15 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.limited":
     "Hay demasiadas solicitudes de recuperación en curso o recientes. Espera un minuto e inténtalo de nuevo, o elige Cancelar.",
   "recovery_pack_dialog.lost_new_key":
-    "Puede que el servidor haya creado una clave maestra nueva que no llegó a este navegador. Si fue así, la única copia de tu clave maestra actual está en un paquete que no tienes.",
+    "La clave maestra nueva no llegó a este navegador, así que el servidor sigue con la actual.",
   "recovery_pack_dialog.lost_new_key_named":
-    "Ese paquete es el paquete de recuperación {number}, hecho el {date}.",
+    "La clave maestra actual está en el paquete de recuperación {number}, hecho el {date}, que este servidor nunca vio llegar.",
   "recovery_pack_dialog.lost_new_key_choices":
-    "Crear una clave maestra nueva vuelve a sustituir la clave y la muestra aquí. Parar cierra esta ventana y no cambia nada.",
+    "Crear una clave maestra nueva lo vuelve a intentar. Parar cierra esta ventana.",
+  "recovery_pack_dialog.not_kept":
+    "El servidor no aceptó la clave maestra nueva, así que sigue con la actual.",
+  "recovery_pack_dialog.not_known":
+    "Puede que el servidor esté usando esta clave maestra nueva: este navegador no ha podido confirmarlo. Guarda este paquete y elige Volver a intentarlo. Parar cierra esta ventana.",
   "recovery_pack_dialog.lost":
     "Puede que el servidor haya hecho el paquete de recuperación, pero no llegó a este navegador.",
   "recovery_pack_dialog.lost_choices":
@@ -6644,6 +6655,8 @@ export const es: Record<StringKey, string> = {
   "backup_key_dialog.text":
     "Las copias nuevas usarán la clave de las copias número {number}. Un servidor que hayas quitado no podrá leerlas. Las copias anteriores se siguen abriendo con tu clave maestra.",
   "backup_key_dialog.done": "Las copias usan ahora la clave número {number}.",
+  "master_key_refusal.no_master_key":
+    "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",
   "backup_key_dialog.saved_not_loaded":
     "Guardada, pero el servidor no ha podido cargar los ajustes nuevos. Recarga la página.",
   "backup_key_dialog.unconfirmed":

@@ -45,6 +45,7 @@ import { heldBackupKey } from "./testing/backup-key.js";
 import { mintMasterKey } from "./testing/master-key.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { createTurns, type Turns } from "./backup-turns.js";
+import { WaitingMasterKeyHolder } from "./waiting-master-key.js";
 import { loadBoxEnv } from "./box-env.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
@@ -205,6 +206,7 @@ function buildApp(
         },
       },
       turns: createTurns(),
+      waitingMasterKey: new WaitingMasterKeyHolder(),
       ...extra,
     },
     capture(sc),

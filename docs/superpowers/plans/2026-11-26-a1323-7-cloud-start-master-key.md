@@ -52,7 +52,7 @@ are main at c988c431bb, read, not run; notes in `~/waitron-campaign-c/a1323-7/tr
   worded on the dashboard as `conflict_recovery.limited` is). Fresh sign-in stays. Print's answer
   carries no `X-Waitron-Master-Key*` headers (`:340-345`). (2026-11-26, final review: Print
   instead refuses with Change the backup key's `master_key.wrong`, 403, through the shared
-  `checkTypedMasterKey`.)
+  `checkTypedMasterKey`. 2026-11-27, A1323 PR 4f: that code is now `promotion.break_glass_invalid`.)
 - **No current master key:** the card offers only **Make a new master key**, which needs no old key
   (D12); the route refuses with no key name.
 - **The pack that holds the key is recorded.** `drawRecoveryPack` (`output.ts:55-80`) adds

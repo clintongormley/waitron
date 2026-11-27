@@ -39,7 +39,7 @@ const STATUS: RecoveryPackStatus = {
   backupKey: null,
 };
 
-async function fixture(kind: "pack" | "master-key" = "master-key") {
+async function fixture(kind: "pack" | "master-key" = "master-key", confirmed = true) {
   setLocale("en-GB");
   const makeRecoveryPack = vi.fn().mockResolvedValue({
     pdf: new Blob(["%PDF-1.7 pack"], { type: "application/pdf" }),
@@ -49,8 +49,10 @@ async function fixture(kind: "pack" | "master-key" = "master-key") {
   });
   const api = {
     makeRecoveryPack,
-    markRecoveryPackReceived: vi.fn().mockResolvedValue(undefined),
-    getRecoveryPackStatus: vi.fn(),
+    markRecoveryPackReceived: confirmed
+      ? vi.fn().mockResolvedValue(undefined)
+      : vi.fn().mockRejectedValue({ code: "connection.failed" }),
+    getRecoveryPackStatus: vi.fn().mockResolvedValue({ ...STATUS, newKeyWaiting: true }),
   } as unknown as DashboardApi;
   const { el: app } = await mountWidget<RecoveryPackLeaveApp>("recovery-pack-leave-test-app", {
     api,
@@ -202,4 +204,30 @@ it("a shown master key makes the browser ask before the page is left, and closin
   await expect.poll(leaving).toBe(true);
   f.dialog.closeAfter("security");
   await expect.poll(leaving).toBe(false);
+});
+
+it("a key the box may be using, not yet downloaded or printed, asks before Stop", async () => {
+  const f = await fixture("master-key", false);
+  await showKey(f);
+  expect(f.host.shadowRoot!.querySelector("[data-test=not-known]")).not.toBeNull();
+  await expect.poll(() => f.app.leave.coordinator.isDirty()).toBe(true);
+  f.press("stop-pack").click();
+  await expect.poll(async () => (await question(f.app)).open).toBe(true);
+  expect(f.dialog.open).toBe(true);
+});
+
+it("a confirm still out counts as unsaved, so leaving or closing the tab asks first", async () => {
+  const f = await fixture();
+  const api = f.host.api as unknown as { markRecoveryPackReceived: ReturnType<typeof vi.fn> };
+  api.markRecoveryPackReceived.mockReturnValue(new Promise(() => undefined));
+  const leaving = () => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  expect(f.app.leave.coordinator.isDirty()).toBe(false);
+  f.press("make-pack").click();
+  await expect.poll(() => api.markRecoveryPackReceived.mock.calls.length).toBe(1);
+  await expect.poll(() => f.app.leave.coordinator.isDirty()).toBe(true);
+  expect(leaving()).toBe(true);
 });

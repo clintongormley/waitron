@@ -202,7 +202,7 @@ export class BackupKeyDialog extends LitElement {
         outcome = "unconfirmed";
       } else {
         this.busy = false;
-        if (code === "master_key.wrong") {
+        if (code === "promotion.break_glass_invalid") {
           const { keyName } = paramsOf(error);
           const named = typeof keyName === "string" ? keyName : null;
           this.keyRefusal = { keyName: named };
@@ -300,7 +300,7 @@ export class BackupKeyDialog extends LitElement {
           this.keyRefusal === null
             ? ""
             : this.keyRefusal.keyName === null
-              ? codeMessage("master_key.wrong")
+              ? t("master_key_refusal.no_master_key")
               : words.wrongKey(this.keyRefusal.keyName)
         }
         @wt-change=${(event: CustomEvent<MasterKeyChangeDetail>) => {

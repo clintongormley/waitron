@@ -1479,9 +1479,6 @@ declare module "@waitron/shared" {
      * names.
      */
     "promotion.break_glass_invalid": { keyName?: string; masterKeyId?: string; keyNumber?: number };
-    /** "Change the backup key" or Print the recovery pack was sent a master key that is not the
-     * venue's current one; `keyName` names the current key, when there is one. */
-    "master_key.wrong": { keyName?: string };
     /**
      * `retireSelf` was invoked on a node that is NOT fenced (serving, absent from the chart, or with
      * no membership document). Only a fenced node retires itself.

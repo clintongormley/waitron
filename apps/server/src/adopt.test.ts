@@ -64,6 +64,7 @@ import { PAIR_BUNDLE_FIELDS, PAIR_STORE } from "./testing/pair-bundle.js";
 import { mintMasterKey } from "./testing/master-key.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import { createTurns } from "./backup-turns.js";
+import { WaitingMasterKeyHolder } from "./waiting-master-key.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
@@ -281,6 +282,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
           ring: RING,
           node: { nodeId: asNodeId(ownNodeId) },
           turns: createTurns(),
+          waitingMasterKey: new WaitingMasterKeyHolder(),
           readBoxEnv: async () => ({}),
           backups: () => ({ schedule: undefined, retention: undefined, recoveryKey: undefined }),
           loadFonts: loadRecoveryPackFonts,
@@ -308,6 +310,19 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       const shownName = decodeURIComponent(made.headers.get("x-waitron-master-key-name") ?? "");
       expect(made.headers.get("x-waitron-master-key")).toMatch(/^(?:\S{4} ){6}\S{4}$/);
       await made.arrayBuffer();
+      const confirmed = await backups.request(
+        `https://box.test/api/backup/recovery-pack/${made.headers.get("x-waitron-recovery-pack")}/received`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            cookie: `waitron_management_session=${admin.token}`,
+          },
+          body: JSON.stringify({ masterKey: made.headers.get("x-waitron-master-key") }),
+        },
+        { incoming: { socket } },
+      );
+      expect(confirmed.status).toBe(204);
       expect(
         (await suite.db.select().from(masterKeys).orderBy(masterKeys.number)).map((row) => [
           row.number,

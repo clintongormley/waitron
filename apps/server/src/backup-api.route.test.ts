@@ -32,6 +32,7 @@ import { AppError, isAppError } from "@waitron/shared";
 import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
 import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
 import { createTurns, type Turns } from "./backup-turns.js";
+import { WaitingMasterKeyHolder } from "./waiting-master-key.js";
 import {
   deleteCredential,
   loadKeyRing,
@@ -300,6 +301,7 @@ function buildApp(
         },
       },
       turns,
+      waitingMasterKey: new WaitingMasterKeyHolder(),
       ...extra,
     },
     log,
@@ -1957,7 +1959,7 @@ describe("backup admin routes", () => {
       ["another venue's master key", () => WRONG_MASTER_KEY],
       ["text that is no master key", () => "not-a-master-key"],
     ])(
-      "a wrong master key changes nothing and answers master_key.wrong (%s)",
+      "a wrong master key changes nothing and answers promotion.break_glass_invalid (%s)",
       async (_label, masterKey) => {
         const stateDir = await makeStateDir();
         await holdKey(stateDir, 1);
@@ -1966,7 +1968,7 @@ describe("backup admin routes", () => {
         const res = await change({ masterKey: masterKey() });
         expect(res.status).toBe(403);
         expect(await res.json()).toEqual({
-          error: { code: "master_key.wrong", params: { keyName: MASTER.name } },
+          error: { code: "promotion.break_glass_invalid", params: { keyName: MASTER.name } },
         });
         expect(await readFile(join(stateDir, "backup.env"))).toEqual(before);
         expect(reload).not.toHaveBeenCalled();
@@ -1992,7 +1994,7 @@ describe("backup admin routes", () => {
       const res = await change({ masterKey: WRONG_MASTER_KEY });
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual({
-        error: { code: "master_key.wrong", params: { keyName: MASTER.name } },
+        error: { code: "promotion.break_glass_invalid", params: { keyName: MASTER.name } },
       });
       expect(await readSealed()).toEqual(sealed);
       expect(await readFile(join(stateDir, "backup.env"))).toEqual(before);

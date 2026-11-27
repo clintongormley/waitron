@@ -34,11 +34,22 @@ or stop and change nothing.
 
 Choose **Make a new master key** on the card. The dialog says until when to keep the old pack;
 choose **Make a new master key** and confirm it is you as above. It makes a new master key in a
-new pack. The dialog then shows the master key with its name: use **Download** or **Print**, then
+new pack, but the box keeps the current master key until the pack has reached this browser: the
+browser then sends the new key back, and only then does the box take it.
+Once the box has taken it, the dialog shows the master key with its name: use **Download** or **Print**, then
 **Continue**. **Copy** copies the master key alone and does not count: the pack holds more than the key, so use
 **Download** or **Print** before **Continue**. It is shown only this once, so **Stop** and Escape do nothing while the box is making
-it. The button is offered once the card has read the box's status.
+or taking it. The button is offered once the card has read the box's status.
 New backups then use a backup key from the new master key. If the card says backups still use a backup key from the old master key, choose **Change the backup key**.
+
+If the dialog cannot finish, it says which of these happened:
+
+- **The new master key did not reach this browser**, or **the box did not take the new master key**: the
+  box kept the current master key, and the dialog shows no new key. **Make a new master key** tries again; **Stop** closes the window.
+- **The box may be using this new master key**: the browser could not confirm whether the box took
+  it. The dialog still shows the key, with **Download** and **Print**. Save or print the pack, then
+  choose **Try again**, which asks the box again: the dialog then carries on as above, or says the
+  box did not take the key, or asks again. If you choose **Stop** instead, keep that pack anyway: the box may be using its key.
 
 During an unfinished first setup, carry on in the tab that was doing it (reloading that tab
 carries on until activation starts) and use that flow's recovery-pack step. Follow [first Live setup](first-live-fiscal-setup.md); do not start a
@@ -54,9 +65,9 @@ The dashboard card is [recovery-pack-card.ts](../../apps/dashboard/src/screens/r
 and its dialogs [recovery-pack-dialog.ts](../../apps/dashboard/src/widgets/recovery-pack-dialog.ts)
 and [backup-key-dialog.ts](../../apps/dashboard/src/widgets/backup-key-dialog.ts).
 The server's [recovery pack routes](../../apps/server/src/backup-recovery-pack-api.ts) check
-`system.manage`, the secure connection and a fresh sign-in, check a typed master key before printing, make a new master key when asked,
-and keep a record of each pack and each master key's name and check value, never the
+`system.manage`, the secure connection and a fresh sign-in, check a typed master key before printing, make a new master key when asked
+and take it only when the browser sends it back with its pack's receipt, and keep a record of each pack and each master key's name and check value, never the
 key itself or the pack's contents. [Route tests](../../apps/server/src/backup-recovery-pack-api.make.test.ts)
-cover the request boundary; [dialog tests](../../apps/dashboard/src/widgets/recovery-pack-dialog.test.ts)
+and [confirm tests](../../apps/server/src/backup-recovery-pack-api.backup-key.test.ts) cover the request boundary; [dialog tests](../../apps/dashboard/src/widgets/recovery-pack-dialog.test.ts)
 and [card tests](../../apps/dashboard/src/screens/recovery-pack-card.test.ts) cover the actions.
 This procedure grants no restore or fiscal activation authority.
