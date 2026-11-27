@@ -451,6 +451,13 @@ test('variant="round" steps as the default one does', async () => {
   expect(seen).toEqual([1, 2]);
 });
 
+test("variant reflects to its attribute", async () => {
+  const el = (await mount('<wt-stepper label="Guests" value="2"></wt-stepper>')) as Stepper;
+  el.variant = "round";
+  await el.updateComplete;
+  expect(el.getAttribute("variant")).toBe("round");
+});
+
 test("the default variant keeps its one box", async () => {
   const el = (await mount('<wt-stepper label="Burger" value="2"></wt-stepper>')) as Stepper;
   expect(el.variant).toBe("box");

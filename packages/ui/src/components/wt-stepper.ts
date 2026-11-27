@@ -120,7 +120,7 @@ export class WtStepper extends LitElement {
   @property() label = "";
   @property({ type: Boolean, reflect: true }) disabled = false;
   /** `round`: − and + as separate circles beside a larger number. */
-  @property() variant: "box" | "round" = "box";
+  @property({ reflect: true }) variant: "box" | "round" = "box";
   /** Each is given `label`, naming the button after what it counts. */
   @property({ attribute: false }) decreaseLabel: (label: string) => string = (label) =>
     `Decrease ${label}`;

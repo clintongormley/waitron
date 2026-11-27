@@ -29,7 +29,7 @@ on `@waitron/db`.
 
 2026-11-27, after O2a: `equalShare` is in `packages/shared/src/equal-share.ts`, called at
 `bill-allocation.ts:80`, and the till imports it; `bill-pay-dialog.ts` line numbers in this
-plan predate O2a and later changes, and `bill.allocation_changed` is at `bill-allocation.ts:136-152`. The paid tick is drawn in `--wt-color-primary`, not `--wt-color-primary-text` (root `CLAUDE.md`: the primary colour paints icons). The round stepper's number is `--wt-font-size-payment-amount`, 42px, where §7.10 and `ba` 1 draw 44: the difference listed under "Pictures" below.
+plan predate O2a and later changes, and `bill.allocation_changed` is at `bill-allocation.ts:136-152`. The round stepper's number is `--wt-font-size-payment-amount`, 42px, as O2a item 2 names, where §7.10 and `ba` 1 draw 44: no declared font size is 44px.
 
 O2a moves `equalShare` and its tests unchanged to `packages/shared/src/equal-share.ts`, exported
 from `packages/shared/src/index.ts`, and adds `equalShares(left, n)`: `equalShare` applied guest by
@@ -73,7 +73,7 @@ shape is unchanged.
    `detail` in `--wt-font-size-sm`, muted; the amount at the end, `--wt-font-weight-bold`, tabular.
    `due`: a 2px `--wt-color-border` ring. `current`: ring and fill `--wt-color-primary`, row on
    `--wt-color-surface-lifted`, its text `--wt-font-weight-bold`, `aria-current="step"`. `paid`: a
-   2px primary ring holding `check` in `--wt-color-primary-text`, text muted, amount
+   2px primary ring holding `check` in `--wt-color-primary`, text muted, amount
    `--wt-font-weight-medium`. **A card in progress is a `due` row** whose detail reads "card in
    progress": no fourth state; the words carry it, as the marker is hidden from screen readers.
    Tests first: `wt-share-list.test.ts` (each state's tokens, order, `aria-current` only on

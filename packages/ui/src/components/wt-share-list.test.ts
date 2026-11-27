@@ -202,6 +202,16 @@ function textExtent(row: ReturnType<typeof rows>[number]): DOMRect {
   return range.getBoundingClientRect();
 }
 
+/** The text shares the marker's line, to its right, rather than dropping below it. */
+function textBesideMarker(row: ReturnType<typeof rows>[number]): void {
+  const marker = row.marker.getBoundingClientRect();
+  const text = textExtent(row);
+  expect(text.top).toBeLessThan(marker.bottom);
+  expect(text.bottom).toBeGreaterThan(marker.top);
+  expect(text.left).toBeGreaterThanOrEqual(marker.right);
+  expect(row.name.getBoundingClientRect().left).toBeGreaterThanOrEqual(marker.right);
+}
+
 async function narrowList(shares: ShareListShare[]): Promise<WtShareList> {
   const el = (
     await mount('<div style="width: 320px"><wt-share-list label="Partes"></wt-share-list></div>')
@@ -236,6 +246,12 @@ test("at double text size in 320px the amount keeps clear of the text and inside
       expect(overlaps(text, amount)).toBe(false);
       expect(inside(amount, card)).toBe(true);
       expect(inside(text, card)).toBe(true);
+      textBesideMarker(row);
+      // Too wide to fit beside the text, the amount has a line of its own below it.
+      expect(amount.top).toBeGreaterThanOrEqual(text.bottom);
+      expect(Math.round(row.li.getBoundingClientRect().right - amount.right)).toBe(
+        Math.round(parseFloat(getComputedStyle(row.li).paddingRight)),
+      );
     }
   } finally {
     if (rootStyle === null) document.documentElement.removeAttribute("style");
@@ -258,6 +274,7 @@ test("a long unbroken detail at normal size stays clear of the amount", async ()
   expect(overlaps(textExtent(row!), amount)).toBe(false);
   expect(inside(textExtent(row!), card)).toBe(true);
   expect(inside(amount, card)).toBe(true);
+  textBesideMarker(row!);
 });
 
 test("at normal size in 320px the amount stays on the name's line, at the row's end", async () => {
@@ -272,6 +289,7 @@ test("at normal size in 320px the amount stays on the name's line, at the row's 
     2,
   );
   expect(amount.left).toBeGreaterThan(textExtent(row!).right);
+  textBesideMarker(row!);
   expect(Math.round(li.right - amount.right)).toBe(
     Math.round(parseFloat(getComputedStyle(row!.li).paddingRight)),
   );

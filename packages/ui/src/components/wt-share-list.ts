@@ -51,6 +51,15 @@ export class WtShareList extends LitElement {
         border-block-end: none;
       }
 
+      /* One flex item, so the text wraps beside the marker and never drops below it. */
+      .lead {
+        display: flex;
+        flex: 1 1 auto;
+        align-items: center;
+        gap: calc(var(--wt-space-2) + var(--wt-space-1) / 2);
+        min-width: 0;
+      }
+
       .marker {
         display: grid;
         flex: none;
@@ -78,7 +87,6 @@ export class WtShareList extends LitElement {
       .amount {
         flex: none;
         margin-inline-start: auto;
-        white-space: nowrap;
         font-weight: var(--wt-font-weight-bold);
         font-variant-numeric: tabular-nums;
       }
@@ -132,14 +140,18 @@ export class WtShareList extends LitElement {
             data-state=${share.state}
             aria-current=${share.state === "current" ? "step" : nothing}
           >
-            <span class="marker" data-marker aria-hidden="true"
-              >${
-                share.state === "paid" ? html`<wt-icon name="check" size="lg"></wt-icon>` : nothing
-              }</span
-            >
-            <span class="text">
-              <span data-name>${share.name}</span>
-              <span class="detail" data-detail>${share.detail}</span>
+            <span class="lead">
+              <span class="marker" data-marker aria-hidden="true"
+                >${
+                  share.state === "paid"
+                    ? html`<wt-icon name="check" size="lg"></wt-icon>`
+                    : nothing
+                }</span
+              >
+              <span class="text">
+                <span data-name>${share.name}</span>
+                <span class="detail" data-detail>${share.detail}</span>
+              </span>
             </span>
             <span class="amount" data-amount>${share.amount}</span>
           </li>`,
