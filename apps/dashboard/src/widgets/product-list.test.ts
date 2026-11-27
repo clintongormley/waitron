@@ -1670,6 +1670,24 @@ describe("product-list", () => {
       expect
         .soft(labelBox.top)
         .toBeGreaterThanOrEqual(ham.querySelector("strong")!.getBoundingClientRect().bottom);
+      const checkMenuDots = (cell: Element, icon: Element, label: string) => {
+        const bounds = cell.getBoundingClientRect();
+        const line = Number.parseFloat(getComputedStyle(cell, "::before").insetInlineStart);
+        const dots = icon.getBoundingClientRect();
+        expect
+          .soft((dots.left + dots.right) / 2, label)
+          .toBeCloseTo((bounds.left + line + bounds.right) / 2, 0);
+      };
+      const checkActions = (view: string) => {
+        const actions = cellUnder(root, "ham", t("staff.actions"));
+        const heading = root.querySelector('[part~="column-actions"]')!;
+        checkMenuDots(heading, heading.querySelector("wt-icon")!, `${view} Actions heading`);
+        checkMenuDots(
+          actions,
+          actions.querySelector("wt-row-actions")!.shadowRoot!.querySelector("wt-icon")!,
+          `${view} row menu`,
+        );
+      };
       const checkPriceAndSwitch = (view: "list" | "tree") => {
         const cell = cellUnder(root, "ham", t("product.price"));
         const amount = cell.querySelector('[data-test="price"]')!.getBoundingClientRect();
@@ -1697,6 +1715,7 @@ describe("product-list", () => {
           .toBeCloseTo(8, 0);
       };
       checkPriceAndSwitch("list");
+      checkActions("List");
 
       el.view = "tree";
       await el.updateComplete;
@@ -1716,6 +1735,7 @@ describe("product-list", () => {
       toggle.click();
       await table.updateComplete;
       checkPriceAndSwitch("tree");
+      checkActions("Tree");
       for (const key of ["coffee", "coffee:single", "coffee:double"]) {
         const cell = nameCell(key);
         const name =
@@ -1752,6 +1772,7 @@ describe("product-list", () => {
       el.reordering = true;
       await el.updateComplete;
       await table.updateComplete;
+      checkActions("Tree while selecting");
       const coffeeRow = root.querySelector('tr[data-row-key="coffee"]')!;
       const check = coffeeRow.querySelector('td.select input[type="checkbox"]')!;
       const box = check.getBoundingClientRect();

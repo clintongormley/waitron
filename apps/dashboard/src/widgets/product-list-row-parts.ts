@@ -64,6 +64,11 @@ export const productRowStyles = css`
   wt-data-table[data-phone]::part(products-cell)::before {
     inset-inline-start: calc(var(--wt-space-2) - var(--wt-table-cell-padding-inline));
   }
+  wt-data-table[data-phone]::part(column-actions),
+  wt-data-table[data-phone]::part(product-menu-trigger) {
+    /* Shift the centred icon by half the divider inset without shrinking the tap target. */
+    text-indent: calc(var(--wt-space-2) - var(--wt-table-cell-padding-inline));
+  }
   wt-data-table[data-phone]::part(unavailable-label) {
     display: inline;
     border: 0;
