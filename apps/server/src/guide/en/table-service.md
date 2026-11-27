@@ -1039,7 +1039,8 @@ presented for collection, choose **Pay in parts** to see those choices.
 
 Check **To pay** and answer any receipt questions on **Pay**. Choose **Charge** to start
 the connected reader or **Cash** to enter what the guest handed over. Choose **Other card machine**
-to enter the details of a payment taken separately.
+to enter the details of a payment taken separately. If the window asks for a payment method,
+select it, choose **Continue** and check the amount on the confirmation.
 
 **A bill paid more than it comes to.** A bill can take more than it comes to, for example a
 contribution followed by dishes paid on a bill of their own. It then says how much more and
@@ -1061,8 +1062,9 @@ shows how much pays off the bill and the **Change to give**. If the venue takes 
 whether to return all the change, leave all of it as a tip, or leave an amount. Check the change
 again after choosing a tip, then press **Take payment** and give that change to the guest.
 
-**Card and reader.** Use the contactless icon to see the selected reader. Change it if you need
-another one. Check the amount on **Charge** before pressing it.
+**Card and reader.** On a handheld, use the contactless icon to open **Reader and printer**.
+Use **Change** or scan the reader's Waitron label if you have another one. If the contactless icon on a till
+opens a list of readers, choose the one you need. Check the amount on **Charge** before pressing it.
 To use a separate machine, follow [Use another card machine](table-service.md#outside-card).
 
 If the venue takes tips and Waitron drives the reader, use **Enter tip** on the Pay screen.
