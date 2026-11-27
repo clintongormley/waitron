@@ -1,6 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { chooseFiles, chooseOption, fileControl, fileError } from "@waitron/ui/src/test-helpers.js";
+import { chooseFiles, fileControl, fileError } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./cert-screen.js";
@@ -40,11 +40,6 @@ async function typePassphrase(el: SetupCertScreen, value: string): Promise<void>
   q(el, "[data-test=passphrase]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
-  await el.updateComplete;
-}
-
-async function pickKind(el: SetupCertScreen, value: string): Promise<void> {
-  await chooseOption(q(el, "[data-test=certKind]")!, value);
   await el.updateComplete;
 }
 
@@ -102,48 +97,13 @@ describe("setup-cert-screen", () => {
   it("gives every certificate field a stable name", async () => {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     expect(pfxControl(el).name).toBe("certificate-file");
-    expect((q(el, "[data-test=certKind]") as HTMLSelectElement).name).toBe("certificate-kind");
   });
 
-  it("picks the certificate type from the shared dropdown, with its help beside the box", async () => {
-    const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
-    const events = collect(host);
-    const kind = q(el, 'wt-combobox[name="certificate-kind"]') as
-      | (HTMLElement & {
-          options: { value: string; label: string }[];
-          value: string;
-          required: boolean;
-          label: string;
-          search: string;
-        })
-      | null;
-    expect(kind).not.toBeNull();
-    expect({
-      label: kind!.label,
-      required: kind!.required,
-      search: kind!.search,
-      value: kind!.value,
-      options: kind!.options.map(({ value, label }) => ({ value, label: label.trim() })),
-    }).toEqual({
-      label: "Certificate type",
-      required: true,
-      search: "auto",
-      value: "sello",
-      options: [
-        { value: "sello", label: "Company seal (sello)" },
-        { value: "representante", label: "Representative (representante)" },
-      ],
-    });
-    expect(kind!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label")).toBe(
-      "Help with certificate type",
-    );
-    await chooseFile(el, PFX_SOURCE);
-    await typePassphrase(el, "unlock-2026");
-    await chooseOption(kind!, "representante");
-    await el.updateComplete;
-    q(el, "[data-test=next]")!.click();
-    const patch = (events[0]!.detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.aeatCert).toEqual({ pfxBase64: EXPECTED_BASE64, passphrase: "unlock-2026" });
+  it("asks for no certificate type: the server reads it from the file", async () => {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    expect(q(el, "[data-test=certKind]")).toBeNull();
+    expect(q(el, '[name="certificate-kind"]')).toBeNull();
+    expect(q(el, "wt-combobox")).toBeNull();
   });
 
   it("lets the operator reveal and hide the certificate passphrase", async () => {
@@ -182,17 +142,6 @@ describe("setup-cert-screen", () => {
     const pfx = patch.aeatCert?.pfxBase64 ?? "";
     expect(pfx.startsWith("data:")).toBe(false);
     expect(pfx.includes(",")).toBe(false);
-  });
-
-  it("keeps a changed type out of the patch: the server reads it from the file", async () => {
-    const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
-    const events = collect(host);
-    await chooseFile(el, PFX_SOURCE);
-    await typePassphrase(el, "unlock-2026");
-    await pickKind(el, "representante");
-    q(el, "[data-test=next]")!.click();
-    const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.aeatCert).toEqual({ pfxBase64: EXPECTED_BASE64, passphrase: "unlock-2026" });
   });
 
   it("shows the chosen file name in the loaded status (never the bytes)", async () => {
@@ -566,11 +515,6 @@ describe("setup-cert-screen in Spanish", () => {
       expect(help.querySelector("[data-test=export-guide] ol")!.textContent).toContain(
         "Acceso a Llaveros",
       );
-      expect(
-        (q(el, "[data-test=certKind]") as unknown as { options: { label: string }[] }).options.map(
-          (option) => option.label.trim(),
-        ),
-      ).toEqual(["Sello electrónico", "Representante"]);
       q(el, "[data-test=next]")!.click();
       await el.updateComplete;
       expect(pfxError(el)!.textContent?.trim()).toBe("Elige el archivo del certificado.");

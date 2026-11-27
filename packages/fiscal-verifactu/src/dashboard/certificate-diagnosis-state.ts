@@ -5,12 +5,11 @@ import {
   type CertificateDiagnosisRequest,
   type CertificateDiagnosisResult,
 } from "../certificate-diagnosis-contract.js";
-import type { AeatCertificateClient, CertificateCardView, CertificateKind } from "./client.js";
+import type { AeatCertificateClient, CertificateCardView } from "./client.js";
 
 export type DiagnosisCandidate = {
   file: File;
   passphrase: string;
-  certKind: CertificateKind;
   sourceGeneration: number;
 };
 type Source = "installed" | "candidate";

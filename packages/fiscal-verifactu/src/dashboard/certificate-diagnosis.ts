@@ -12,7 +12,7 @@ import {
   copyCertificateDiagnosis,
   type CertificateDiagnosisResult,
 } from "../certificate-diagnosis-contract.js";
-import type { AeatCertificateClient, CertificateCardView, CertificateKind } from "./client.js";
+import type { AeatCertificateClient, CertificateCardView } from "./client.js";
 import {
   DiagnosisState,
   rememberDiagnosisReturn,
@@ -73,12 +73,10 @@ export class AeatCertificateDiagnosis extends LitElement {
   #sourceGeneration = 0;
   #file: File | null = null;
   #passphrase = "";
-  #kind: CertificateKind = "sello";
   override connectedCallback(): void {
     super.connectedCallback();
     this.#file = this.candidate?.file ?? null;
     this.#passphrase = this.candidate?.passphrase ?? "";
-    this.#kind = this.candidate?.certKind ?? "sello";
     this.#controller = new DiagnosisState({
       client: this.client,
       permissionContinuation: this.permissionContinuation,
@@ -129,7 +127,6 @@ export class AeatCertificateDiagnosis extends LitElement {
       ? {
           file: this.#file,
           passphrase: this.#passphrase,
-          certKind: this.#kind,
           sourceGeneration: this.#sourceGeneration,
         }
       : null;
@@ -225,21 +222,7 @@ export class AeatCertificateDiagnosis extends LitElement {
           this.#passphrase = event.detail.value;
           this.#edit();
         }}
-      ></wt-input>
-      <wt-combobox
-        name="diagnosis-certificate-kind"
-        search="never"
-        required
-        label=${t("aeat_certificate.dialog.kind_label")}
-        .value=${this.#kind}
-        .options=${(["sello", "representante"] as const).map((value) => ({ value, label: t(`aeat_certificate.kind.${value}`) }))}
-        ?disabled=${busy}
-        @wt-change=${(event: CustomEvent<{ value: CertificateKind }>) => {
-          event.stopPropagation();
-          this.#kind = event.detail.value;
-          this.#edit();
-        }}
-      ></wt-combobox>`;
+      ></wt-input>`;
   }
   override render(): TemplateResult {
     const controller = this.#controller,

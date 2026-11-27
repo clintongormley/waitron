@@ -10,7 +10,6 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -24,12 +23,6 @@ import { actionsStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { AeatCertDraft, ApiError, ProvisionBody } from "../api/client.js";
-
-type CertKindChoice = "sello" | "representante";
-const CERT_KINDS: ReadonlyArray<{ value: CertKindChoice; label: StringKey }> = [
-  { value: "sello", label: "cert.kind.sello" },
-  { value: "representante", label: "cert.kind.representante" },
-];
 
 export interface CertificateRefusal {
   field: "pfxBase64" | "passphrase" | "body";
@@ -56,7 +49,6 @@ interface CertificateForm {
   pfxBase64: string;
   fileName: string;
   passphrase: string;
-  certKind: CertKindChoice;
   selectedFile: File | null;
   pendingFile: File | null;
   fileReadFailed: boolean;
@@ -136,7 +128,6 @@ export class SetupCertScreen extends LitElement {
   @state() private fileName = "";
 
   @state() private passphrase = "";
-  @state() private certKind: CertKindChoice = "sello";
   @state() private passphraseVisible = false;
 
   @state() private fileReadFailed = false;
@@ -167,7 +158,6 @@ export class SetupCertScreen extends LitElement {
       pfxBase64: this.pfxBase64,
       fileName: this.fileName,
       passphrase: this.passphrase,
-      certKind: this.certKind,
       selectedFile: this.#selectedFile,
       pendingFile: this.#pendingFile,
       fileReadFailed: this.fileReadFailed,
@@ -183,7 +173,6 @@ export class SetupCertScreen extends LitElement {
       equal: (a, b) =>
         a.pfxBase64 === b.pfxBase64 &&
         a.passphrase === b.passphrase &&
-        a.certKind === b.certKind &&
         a.pendingFile === b.pendingFile &&
         a.fileReadFailed === b.fileReadFailed &&
         (a.pfxBase64 !== "" || a.selectedFile === b.selectedFile),
@@ -193,7 +182,6 @@ export class SetupCertScreen extends LitElement {
         this.pfxBase64 = form.pfxBase64;
         this.fileName = form.fileName;
         this.passphrase = form.passphrase;
-        this.certKind = form.certKind;
         this.#selectedFile = form.selectedFile;
         this.#pendingFile = form.pendingFile;
         this.fileReadFailed = form.fileReadFailed;
@@ -268,13 +256,6 @@ export class SetupCertScreen extends LitElement {
     this.#invalidateInspection();
     this.passphrase = event.detail.value;
     if (this.refusal?.field === "passphrase") this.feedback.dismiss("refusal");
-    this.#scope?.changed();
-  }
-
-  #onCertKind(event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.#invalidateInspection();
-    this.certKind = event.detail.value as CertKindChoice;
     this.#scope?.changed();
   }
 
@@ -418,21 +399,6 @@ export class SetupCertScreen extends LitElement {
           >${passwordIcon(this.passphraseVisible)}</wt-button
         >
       </wt-input>
-      <wt-combobox
-        class="field"
-        name="certificate-kind"
-        label=${t("cert.kind_label")}
-        required
-        search="auto"
-        data-test="certKind"
-        .options=${CERT_KINDS.map((kind) => ({ value: kind.value, label: t(kind.label) }))}
-        .value=${this.certKind}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onCertKind(e)}
-      >
-        <wt-help-tooltip slot="help" aria-label=${t("cert.kind_help_label")}
-          >${t("cert.kind_help")}</wt-help-tooltip
-        >
-      </wt-combobox>
       ${this.inspecting ? html`<p role="status" class="file-status">${t("cert.checking")}</p>` : nothing}
       <wt-form-actions .error=${this.feedback.message(errors, fieldKeys, t("cert.fix_fields"))}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}

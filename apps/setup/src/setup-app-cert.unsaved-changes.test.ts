@@ -17,7 +17,7 @@ afterEach(() => {
 });
 
 type State = { screen: Screen; draft: DeepPartial<ProvisionBody> };
-const initialCert = { pfxBase64: "AQID", passphrase: "original-pass", certKind: "sello" as const };
+const initialCert = { pfxBase64: "AQID", passphrase: "original-pass" };
 const warning = (el: SetupApp) =>
   el.shadowRoot!.querySelector<WtUnsavedChanges>("wt-unsaved-changes")!;
 const field = (cert: SetupCertScreen, key: string) =>
@@ -226,26 +226,26 @@ describe("setup certificate unsaved changes", () => {
     expect(await drawn(cert)).toBeNull();
     expect((el as unknown as State).draft.aeatCert).toEqual(initialCert);
   });
-  it.each([
-    ["passphrase", " original-pass "],
-    ["certKind", "representante"],
-  ])("Back protects %s and Discard leaves the staged root unchanged", async (key, value) => {
-    const { el, cert } = await mount();
-    expect(unload()).toBe(false);
-    await edit(cert, key, value);
-    expect(unload()).toBe(true);
-    back(cert);
-    await expect.poll(() => warning(el).open).toBe(true);
-    await choose(el, "keep");
-    expect(field(cert, key).value).toBe(value);
-    expect((el as unknown as State).screen).toBe("cert");
-    back(cert);
-    await expect.poll(() => warning(el).open).toBe(true);
-    await choose(el, "discard");
-    await expect.poll(() => (el as unknown as State).screen).toBe("venue");
-    expect((el as unknown as State).draft.aeatCert).toEqual(initialCert);
-    expect(field(cert, key).value).toBe(initialCert[key as "passphrase" | "certKind"]);
-  });
+  it.each([["passphrase", " original-pass "]])(
+    "Back protects %s and Discard leaves the staged root unchanged",
+    async (key, value) => {
+      const { el, cert } = await mount();
+      expect(unload()).toBe(false);
+      await edit(cert, key, value);
+      expect(unload()).toBe(true);
+      back(cert);
+      await expect.poll(() => warning(el).open).toBe(true);
+      await choose(el, "keep");
+      expect(field(cert, key).value).toBe(value);
+      expect((el as unknown as State).screen).toBe("cert");
+      back(cert);
+      await expect.poll(() => warning(el).open).toBe(true);
+      await choose(el, "discard");
+      await expect.poll(() => (el as unknown as State).screen).toBe("venue");
+      expect((el as unknown as State).draft.aeatCert).toEqual(initialCert);
+      expect(field(cert, key).value).toBe(initialCert[key as "passphrase"]);
+    },
+  );
   it("reverted passphrase and presentation-only reveal leave without asking", async () => {
     const { el, cert } = await mount();
     await edit(cert, "passphrase", "changed");

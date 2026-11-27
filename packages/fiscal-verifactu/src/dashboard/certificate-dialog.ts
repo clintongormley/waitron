@@ -13,7 +13,6 @@ import {
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-file-input.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import {
@@ -23,12 +22,7 @@ import {
   subscribeLocale,
   type DashboardPermissionContinuation,
 } from "@waitron/dashboard-kit";
-import type {
-  AeatCertificateClient,
-  CertificateKind,
-  CertificateCardView,
-  InstallAnswerView,
-} from "./client.js";
+import type { AeatCertificateClient, CertificateCardView, InstallAnswerView } from "./client.js";
 import { t, type AeatCertificateKey } from "./strings.js";
 import { calendarDay } from "./dates.js";
 import { exportGuidesStyles, exportGuidesView } from "./export-guides-view.js";
@@ -36,8 +30,6 @@ import { CERTIFICATE_MAX_BYTES } from "../certificate-limits.js";
 
 import "./certificate-diagnosis.js";
 import type { DiagnosisCandidate } from "./certificate-diagnosis-state.js";
-
-const KINDS: readonly CertificateKind[] = ["sello", "representante"];
 
 /** The conflict, and the request primitive's codes for a POST whose reply was lost, which may have
  * committed. */
@@ -47,12 +39,11 @@ const VAULT_MAY_HAVE_CHANGED = new Set([
   "server.internal",
 ]);
 
-type Draft = { file: File | null; passphrase: string; certKind: CertificateKind };
+type Draft = { file: File | null; passphrase: string };
 type Field = "file" | "passphrase";
 type Refusal = { field?: Field; message: string };
 
-const same = (a: Draft, b: Draft) =>
-  a.file === b.file && a.passphrase === b.passphrase && a.certKind === b.certKind;
+const same = (a: Draft, b: Draft) => a.file === b.file && a.passphrase === b.passphrase;
 
 const REFUSAL_KEYS: Record<string, AeatCertificateKey> = {
   unavailable: "aeat_certificate.refused.unavailable",
@@ -123,14 +114,13 @@ export class AeatCertificateDialog extends LitElement {
   @property({ attribute: false }) client!: AeatCertificateClient;
   /** The card's revision when the dialog opened; the server refuses the install if it moved. */
   @property({ attribute: false }) revision: string | null = null;
-  @property({ attribute: false }) kind: CertificateKind = "sello";
   @property({ attribute: false }) savedCard?: CertificateCardView;
   @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
   @state() private diagnosing = false;
   #diagnosisCandidate: DiagnosisCandidate | null = null;
   #sourceGeneration = 0;
   #unsubscribeAccount?: () => void;
-  @state() private draft: Draft = { file: null, passphrase: "", certKind: "sello" };
+  @state() private draft: Draft = { file: null, passphrase: "" };
   private readonly feedback = new FormFeedback(this);
   @state() private busy = false;
   @state() private visible = false;
@@ -142,7 +132,7 @@ export class AeatCertificateDialog extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#unsubscribeLocale = subscribeLocale(() => this.requestUpdate());
-    this.draft = { file: null, passphrase: "", certKind: this.kind };
+    this.draft = { file: null, passphrase: "" };
     const { scope, coordinator } = draftScopeFor(this, {
       id: this,
       current: () => ({ ...this.draft }),
@@ -161,7 +151,7 @@ export class AeatCertificateDialog extends LitElement {
       generation = snapshot.accountGeneration;
       this.#sourceGeneration++;
       this.#diagnosisCandidate = null;
-      this.draft = { file: null, passphrase: "", certKind: this.kind };
+      this.draft = { file: null, passphrase: "" };
       this.visible = false;
       this.refusal = undefined;
       this.feedback.reset();
@@ -175,7 +165,7 @@ export class AeatCertificateDialog extends LitElement {
     this.#unsubscribeLocale?.();
     this.#unsubscribeAccount?.();
     this.#diagnosisCandidate = null;
-    this.draft = { file: null, passphrase: "", certKind: this.kind };
+    this.draft = { file: null, passphrase: "" };
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -361,21 +351,7 @@ export class AeatCertificateDialog extends LitElement {
             this.#change({ file: event.detail.files[0] ?? null }, "file");
           }}
         ></wt-file-input>
-        ${this.#passphrase()}
-        <wt-combobox
-          name="certificate-kind"
-          label=${t("aeat_certificate.dialog.kind_label")}
-          required
-          search="never"
-          .options=${KINDS.map((kind) => ({ value: kind, label: t(`aeat_certificate.kind.${kind}`) }))}
-          .value=${this.draft.certKind}
-          ?disabled=${this.busy || this.diagnosing}
-          @wt-change=${(event: CustomEvent<{ value: CertificateKind }>) => {
-            event.stopPropagation();
-            this.#change({ certKind: event.detail.value });
-          }}
-        ></wt-combobox>
-        ${exportGuidesView()}
+        ${this.#passphrase()} ${exportGuidesView()}
         ${
           this.refusal
             ? html`<wt-button

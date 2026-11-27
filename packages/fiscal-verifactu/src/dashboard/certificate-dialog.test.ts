@@ -106,8 +106,6 @@ const q = <T extends Element = HTMLElement>(dialog: AeatCertificateDialog, selec
 const fileField = (d: AeatCertificateDialog) =>
   q<HTMLElementTagNameMap["wt-file-input"]>(d, "wt-file-input");
 const passField = (d: AeatCertificateDialog) => q<HTMLElementTagNameMap["wt-input"]>(d, "wt-input");
-const kindField = (d: AeatCertificateDialog) =>
-  q<HTMLElementTagNameMap["wt-combobox"]>(d, "wt-combobox");
 const actions = (d: AeatCertificateDialog) =>
   q<HTMLElementTagNameMap["wt-form-actions"]>(d, "wt-form-actions");
 const save = (d: AeatCertificateDialog) =>
@@ -168,24 +166,15 @@ describe("dashboard-aeat-certificate-dialog", () => {
     expect(pass.getAttribute("name")).toBe("certificate-passphrase");
     expect(pass.type).toBe("password");
     expect(pass.required).toBe(true);
-    const kind = kindField(dialog);
-    expect(kind.getAttribute("name")).toBe("certificate-kind");
-    expect(kind.required).toBe(true);
-    expect(kind.value).toBe("representante");
-    expect(kind.options).toEqual([
-      { value: "sello", label: "Company seal (sello)" },
-      { value: "representante", label: "Representative (representante)" },
-    ]);
     const guides = dialog.shadowRoot!.querySelector("wt-disclosure")!;
     expect(guides.querySelectorAll("[data-test=export-guide]")).toHaveLength(3);
-    expect(kind.compareDocumentPosition(guides) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pass.compareDocumentPosition(guides) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("pre-sets the type to sello when no certificate is recorded", async () => {
-    const { dialog } = await open({
-      reads: [async () => view({ revision: null, installed: null })],
-    });
-    expect(kindField(dialog).value).toBe("sello");
+  it("asks for no certificate type: the server reads it from the file", async () => {
+    const { dialog } = await open({});
+    expect(dialog.shadowRoot!.querySelector("wt-combobox")).toBeNull();
+    expect(dialog.shadowRoot!.querySelector('[name="certificate-kind"]')).toBeNull();
   });
 
   it("keeps Save quiet and disabled until a file is chosen", async () => {
@@ -194,10 +183,6 @@ describe("dashboard-aeat-certificate-dialog", () => {
     expect(save(dialog).variant).toBe("secondary");
     expect(text(save(dialog))).toBe("Save");
     await type(dialog, "secret");
-    kindField(dialog).dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "sello" }, bubbles: true, composed: true }),
-    );
-    await dialog.updateComplete;
     expect(save(dialog).disabled).toBe(true);
     expect(save(dialog).variant).toBe("secondary");
     await choose(dialog, certificate());
@@ -254,18 +239,11 @@ describe("dashboard-aeat-certificate-dialog", () => {
     await vi.waitFor(() => expect(install).toHaveBeenCalledTimes(1));
   });
 
-  it("sends the file's bytes, the passphrase exactly as typed, the type and the card's revision", async () => {
+  it("sends the file's bytes, the passphrase exactly as typed and the card's revision, and no type", async () => {
     const { dialog, install } = await open({
       install: async () => ({ outcome: "refused", reason: "same", field: "file" }),
     });
     await filled(dialog);
-    kindField(dialog).dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "representante" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
     await press(dialog);
     await vi.waitFor(() => expect(install).toHaveBeenCalledTimes(1));
     expect(install.mock.calls[0]![0]).toEqual({
@@ -862,7 +840,6 @@ describe("certificate check self-service choices", () => {
         }
         expect(fileField(dialog).files[0]?.name).toBe("bar-lucia-2026.p12");
         expect(passField(dialog).value).toBe(" cert pass 9 ");
-        expect(kindField(dialog).value).toBe("representante");
         expect(reads()).toBe(1);
         expect(save(dialog).disabled).toBe(false);
         await press(dialog);
@@ -871,14 +848,6 @@ describe("certificate check self-service choices", () => {
         await vi.waitFor(() => expect(actions(dialog).error).toBe(sentence));
         const replacement = new File([new Uint8Array([1, 2, 3])], "replacement.p12");
         await choose(dialog, replacement);
-        kindField(dialog).dispatchEvent(
-          new CustomEvent("wt-change", {
-            detail: { value: "sello" },
-            bubbles: true,
-            composed: true,
-          }),
-        );
-        await dialog.updateComplete;
         const close = closed(dialog);
         await press(dialog);
         await close;
