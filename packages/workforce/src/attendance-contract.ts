@@ -52,7 +52,14 @@ export interface CorrectionItem {
   requestEntryIds: string[];
   personId: string;
   direction: "worker_request" | "manager_proposal";
-  status: "waiting-manager" | "waiting-worker" | "approved" | "declined" | "disputed" | "overtaken";
+  status:
+    | "waiting-manager"
+    | "waiting-worker"
+    | "approved"
+    | "declined"
+    | "disputed"
+    | "settled"
+    | "overtaken";
   readyToApply: boolean;
   responseEntryIds: string[];
   changes: AttendanceChange[];

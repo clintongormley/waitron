@@ -380,6 +380,7 @@ export const en = {
   "attendance.waiting_worker": "Waiting for the worker",
   "attendance.self_approved": "Self-approved by an admin",
   "attendance.disputed": "Disputed — both versions stay on record",
+  "attendance.settled": "Dispute settled",
   "attendance.overtaken": "A newer change replaced this request. Check its history.",
   "attendance.uncertain":
     "The answer was lost. Retry read to check whether your response was recorded before sending again.",
@@ -2859,6 +2860,7 @@ export const es: Record<StringKey, string> = {
   "attendance.waiting_worker": "Pendiente del trabajador",
   "attendance.self_approved": "Aprobado por el propio administrador",
   "attendance.disputed": "En desacuerdo — ambas versiones quedan registradas",
+  "attendance.settled": "Desacuerdo resuelto",
   "attendance.overtaken":
     "Un cambio posterior ha sustituido esta solicitud. Consulta su historial.",
   "attendance.uncertain":

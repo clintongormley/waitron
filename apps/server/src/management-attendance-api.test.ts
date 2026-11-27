@@ -100,6 +100,7 @@ async function proposal() {
     expectedRevision: (await inbox()).revision,
     action: "propose",
     personId: venue.personId,
+    date: "2026-01-05",
     changes: [{ target: { entryId: targetId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 60 }],
     reason: "Check the finish",
   };
@@ -266,7 +267,7 @@ it("proposes with the authenticated manager, then the worker accepts with origin
         commandId: randomUUID(),
         expectedRevision: worker.revision,
         action: "accept",
-        itemId: result.entryIds[0]!,
+        itemId: body.commandId,
       },
     }),
   );
@@ -281,7 +282,7 @@ it("proposes with the authenticated manager, then the worker accepts with origin
   ]);
   expect(await (await request(route("queue"))).json()).toEqual({
     items: [],
-    finishedDays: [expect.objectContaining({ personId: venue.personId, date: "2026-01-05" })],
+    finishedDays: [],
   });
 });
 it("keeps passive reads from extending a management session, but explicit reads do", async () => {

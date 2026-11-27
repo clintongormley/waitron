@@ -896,7 +896,8 @@ export class AttendanceCorrectionsScreen extends LitElement {
                   <strong>${this.#person(item.personId)}</strong> ·
                   ${item.date ?? wallClock(item.changes[0]!.at, item.changes[0]!.offsetMinutes).date}
                 </p>
-                ${item.status === "disputed" ? renderDisputeComparison(item, item.date ?? wallClock(item.changes[0]!.at, item.changes[0]!.offsetMinutes).date) : html`<p>${item.reason}</p>`}
+                <p>${item.reason}</p>
+                ${item.status === "disputed" ? renderDisputeComparison(item, item.date ?? wallClock(item.changes[0]!.at, item.changes[0]!.offsetMinutes).date) : nothing}
                 <wt-button
                   data-detail
                   .disabled=${disabled}

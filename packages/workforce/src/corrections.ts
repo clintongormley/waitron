@@ -450,7 +450,6 @@ export async function requestCorrectionGroup(
   inputs: readonly CorrectionRequestInput[],
   mode: "request" | "propose",
   fullDay = false,
-  settles?: string,
 ): Promise<string[]> {
   if (!fullDay && inputs.length === 1)
     return [await requestCorrection(tx, inputs[0]!, mode === "propose")];
@@ -485,16 +484,8 @@ export async function requestCorrectionGroup(
   )
     correctionInvalid("invalid_group");
   const ids: string[] = [];
-  for (const [index, { entry }] of prepared.entries()) {
-    const final: TimeEntryAppend = settles
-      ? {
-          ...entry,
-          correctionStatus: "approved",
-          extension: { ...entry.extension!, respondsToEntryId: settles },
-        }
-      : entry;
-    ids.push((await appendToChain(tx, { nodeId: inputs[index]!.nodeId }, final)).id);
-  }
+  for (const [index, { entry }] of prepared.entries())
+    ids.push((await appendToChain(tx, { nodeId: inputs[index]!.nodeId }, entry)).id);
   return ids;
 }
 

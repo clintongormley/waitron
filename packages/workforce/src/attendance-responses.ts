@@ -1,11 +1,12 @@
 import type { AttendanceResponseReceipt, CorrectionItem } from "./attendance-contract.js";
 import type { TimeEntryRecord } from "./projection.js";
 import {
+  compareEvents,
   compareRecording,
   effectiveClockEntries,
-  originalEntry,
   sameSubject,
 } from "./effective-entries.js";
+import { entryDate } from "./record-period.js";
 import { recordRoot } from "./record-projection.js";
 import { correctionGroupCanApply } from "./corrections.js";
 import { createHash } from "node:crypto";
@@ -67,6 +68,16 @@ export function projectCorrectionItems(
   const byId = new Map(entries.map((e) => [e.entryId, e]));
   const requestById = new Map(requests.map((r) => [r.entryId, r]));
   const effective = new Map(effectiveClockEntries(entries).map((entry) => [entry.entryId, entry]));
+  const openDates = new Map<string, string>();
+  const workDates = new Map<string, string>();
+  const workerDays = new Set<string>();
+  for (const time of [...effective.values()].sort(compareEvents)) {
+    if (time.entryKind === "in") openDates.set(time.personId, entryDate(time));
+    const date = openDates.get(time.personId) ?? entryDate(time);
+    workDates.set(time.entryId, date);
+    if (time.recordedByPersonId === time.personId) workerDays.add(`${time.personId}/${date}`);
+    if (time.entryKind === "out") openDates.delete(time.personId);
+  }
   const replacements = new Set<string>();
   const approvals = new Set<string>();
   const receipts = new Map(commands.map((command) => [command.id, command.input]));
@@ -111,17 +122,26 @@ export function projectCorrectionItems(
         ? "approved"
         : lastAnswer?.correctionStatus === "declined"
           ? "declined"
-          : replaced || settled
-            ? "overtaken"
-            : lastAnswer?.correctionStatus === "disputed"
-              ? "disputed"
-              : overtaken
-                ? "overtaken"
-                : first.extension!.direction === "manager_proposal"
-                  ? "waiting-worker"
-                  : "waiting-manager";
+          : settled
+            ? "settled"
+            : replaced
+              ? "overtaken"
+              : lastAnswer?.correctionStatus === "disputed"
+                ? "disputed"
+                : overtaken
+                  ? "overtaken"
+                  : first.extension!.direction === "manager_proposal"
+                    ? "waiting-worker"
+                    : "waiting-manager";
     const roots = new Set(group.requests.map((r) => recordRoot(r, byId).entryId));
     const input = receipts.get(group.id);
+    const workDate = first.correctsEntryId ? workDates.get(first.correctsEntryId) : undefined;
+    const date =
+      input?.action === "propose" && input.date
+        ? input.date
+        : workDate !== entryDate(first)
+          ? workDate
+          : undefined;
     return {
       id: group.id,
       requestEntryIds: group.requests.map((r) => r.entryId),
@@ -143,7 +163,7 @@ export function projectCorrectionItems(
       })),
       reason: first.correctionReason!,
       requestedByPersonId: first.recordedByPersonId!,
-      ...(input?.action === "propose" && input.date && { date: input.date }),
+      ...(date !== undefined && { date }),
       ...(replaced && { replaced: true }),
       selfApproved: answers.some((e) => e.extension?.selfApproved === true),
       history: entries
@@ -166,17 +186,22 @@ export function projectCorrectionItems(
       previous = receipts.get(previous.replaces);
     }
     if (item.workerVersion) continue;
-    const changes = item.changes.flatMap(({ target }) => {
+    const retimes = item.changes.filter(({ target }) => "entryId" in target);
+    const changes = retimes.flatMap(({ target }) => {
       const time = "entryId" in target ? effective.get(target.entryId) : undefined;
-      const workerTime =
-        time?.extension?.direction === "worker_request" ? time : time && originalEntry(time, byId);
-      return workerTime &&
-        (workerTime.recordedByPersonId === item.personId ||
-          workerTime.extension?.direction === "worker_request")
-        ? [{ target, at: workerTime.eventAt, offsetMinutes: workerTime.offsetMinutes }]
+      return time &&
+        (time.recordedByPersonId === item.personId ||
+          time.extension?.direction === "worker_request")
+        ? [{ target, at: time.eventAt, offsetMinutes: time.offsetMinutes }]
         : [];
     });
-    if (changes.length === item.changes.length) item.workerVersion = { changes };
+    const first = item.changes[0]!;
+    const date = item.date ?? entryDate({ eventAt: first.at, offsetMinutes: first.offsetMinutes });
+    if (
+      changes.length === retimes.length &&
+      (changes.length > 0 || workerDays.has(`${item.personId}/${date}`))
+    )
+      item.workerVersion = { changes };
   }
   return items;
 }

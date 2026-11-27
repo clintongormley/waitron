@@ -315,7 +315,14 @@ it.each(["current", "changed"] as const)(
           return Response.json({
             items: [
               item,
-              { ...item, id: "disputed", status: "disputed", reason: "I left earlier" },
+              {
+                ...item,
+                id: "disputed",
+                direction: "manager_proposal",
+                status: "disputed",
+                requestedByPersonId: "manager",
+                reason: "I left earlier",
+              },
               {
                 ...item,
                 id: "worker-reply",
@@ -549,47 +556,53 @@ describe("dashboard attendance corrections", () => {
   });
 });
 
-it("edits the whole day on one page and sends only changed times with the worker request link", async () => {
-  const m = await mount();
-  const out = m.data.day.record.entries[0]!;
-  m.data.day.record.entries.unshift({
-    ...out,
-    author: { kind: "worker", personId: "worker" },
-    entry: {
-      ...out.entry,
-      entryId: "in-1",
-      entryKind: "in",
-      eventAt: "2026-10-14T08:00:00.000Z",
-      sequenceNo: 1,
-    },
-  });
-  await details(m.root);
-  await click(m.root, "[data-edit-day]");
-  const editor = m.root.querySelector("dashboard-attendance-proposal-dialog")!;
-  await editor.updateComplete;
-  const form = editor.shadowRoot!;
-  expect(form.querySelector("h1")?.textContent).toContain("Ana Worker");
-  expect(form.querySelector("[name=attendanceTime0]")).toHaveProperty("value", "10:00");
-  expect(form.querySelector("[name=attendanceTime1]")).toHaveProperty("value", "18:30");
-  expect(form.textContent).toContain("Waitron recorded 18:00");
-  expect(form.textContent).toContain("Worker asked for 18:30");
-  await change(form, "attendanceTime1", "19:00");
-  expect(form.textContent).toContain("Worked would be 9 hours");
-  await change(form, "attendanceReason", "Confirmed with the shift lead");
-  expect(form.querySelector("[data-save]")?.textContent).toContain("Save and send to Ana Worker");
-  await click(form, "[data-save]");
-  await expect
-    .poll(() => m.commands[0])
-    .toMatchObject({
-      action: "propose",
-      date: "2026-10-14",
-      replaces: "request-1",
-      reason: "Confirmed with the shift lead",
-      changes: [
-        { target: { entryId: "out-1" }, at: "2026-10-14T17:00:00.000Z", offsetMinutes: 120 },
-      ],
+it.each([
+  ["19:00", "17:00", "9 hours"],
+  ["18:00", "16:00", "8 hours"],
+])(
+  "edits the whole day and explicitly answers the worker's requested time with %s",
+  async (time, utc, total) => {
+    const m = await mount();
+    const out = m.data.day.record.entries[0]!;
+    m.data.day.record.entries.unshift({
+      ...out,
+      author: { kind: "worker", personId: "worker" },
+      entry: {
+        ...out.entry,
+        entryId: "in-1",
+        entryKind: "in",
+        eventAt: "2026-10-14T08:00:00.000Z",
+        sequenceNo: 1,
+      },
     });
-});
+    await details(m.root);
+    await click(m.root, "[data-edit-day]");
+    const editor = m.root.querySelector("dashboard-attendance-proposal-dialog")!;
+    await editor.updateComplete;
+    const form = editor.shadowRoot!;
+    expect(form.querySelector("h1")?.textContent).toContain("Ana Worker");
+    expect(form.querySelector("[name=attendanceTime0]")).toHaveProperty("value", "10:00");
+    expect(form.querySelector("[name=attendanceTime1]")).toHaveProperty("value", "18:30");
+    expect(form.textContent).toContain("Waitron recorded 18:00");
+    expect(form.textContent).toContain("Worker asked for 18:30");
+    await change(form, "attendanceTime1", time!);
+    expect(form.textContent).toContain(`Worked would be ${total}`);
+    await change(form, "attendanceReason", "Confirmed with the shift lead");
+    expect(form.querySelector("[data-save]")?.textContent).toContain("Save and send to Ana Worker");
+    await click(form, "[data-save]");
+    await expect
+      .poll(() => m.commands[0])
+      .toMatchObject({
+        action: "propose",
+        date: "2026-10-14",
+        replaces: "request-1",
+        reason: "Confirmed with the shift lead",
+        changes: [
+          { target: { entryId: "out-1" }, at: `2026-10-14T${utc}:00.000Z`, offsetMinutes: 120 },
+        ],
+      });
+  },
+);
 
 it("a changed live day preserves an edited proposal, blocks its stale submission, and retains the new history", async () => {
   const m = await mount({ live: true });

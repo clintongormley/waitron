@@ -212,6 +212,7 @@ export function attendanceStatus(status: CorrectionItem["status"]): string {
     approved: "attendance.approved",
     declined: "attendance.declined",
     disputed: "attendance.disputed",
+    settled: "attendance.settled",
     overtaken: "attendance.overtaken",
   };
   return t(keys[status]);

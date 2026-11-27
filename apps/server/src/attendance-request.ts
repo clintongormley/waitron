@@ -97,7 +97,7 @@ export function parseAttendanceCommand(
     return { ...base, action, questionId: uuid(body.questionId, "questionId") };
   }
   if (action === "request" || action === "propose") {
-    const fullDay = action === "propose" && Object.hasOwn(body, "date");
+    const fullDay = action === "propose";
     const replaces = fullDay && Object.hasOwn(body, "replaces");
     keys(
       body,

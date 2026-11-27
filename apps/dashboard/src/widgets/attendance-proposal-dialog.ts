@@ -206,6 +206,7 @@ export class AttendanceProposalDialog extends LitElement {
       if (
         this.workerName &&
         !all &&
+        !this.#requested(row) &&
         recorded?.eventAt === choice.at &&
         recorded.offsetMinutes === choice.offset
       )
@@ -223,6 +224,13 @@ export class AttendanceProposalDialog extends LitElement {
     return "entryId" in target
       ? this.view?.record.entries.find(({ entry }) => entry.entryId === target.entryId)?.entry
       : undefined;
+  }
+  #requested({ target }: TimeDraft) {
+    return this.requestedChanges.find(({ target: candidate }) =>
+      "entryId" in target
+        ? "entryId" in candidate && candidate.entryId === target.entryId
+        : "missingKind" in candidate && candidate.missingKind === target.missingKind,
+    );
   }
   #errors(): { rows: { date: string; time: string; offset: string }[]; reason: string } {
     const rows = this.draft.rows.map((row) => ({
@@ -360,9 +368,7 @@ export class AttendanceProposalDialog extends LitElement {
     >
       ${this.draft.rows.map((row, index) => {
         const recorded = this.#recorded(row);
-        const requested = this.requestedChanges.find(
-          (change) => JSON.stringify(change.target) === JSON.stringify(row.target),
-        );
+        const requested = this.#requested(row);
         const kind =
           "missingKind" in row.target
             ? row.target.missingKind

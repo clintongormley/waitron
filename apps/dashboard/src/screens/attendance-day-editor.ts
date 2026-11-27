@@ -56,7 +56,7 @@ export function renderDisputeComparison(item: CorrectionItem, date: string) {
     .at(-1);
   return html`<div class="dispute-comparison" data-dispute-comparison>
     <p>${fill("attendance.manager_proposed_times", { times: list(item.changes) })}</p>
-    ${item.workerVersion ? html`<p>${fill("attendance.worker_version_times", { times: list(item.workerVersion.changes) })}</p>` : ""}
+    ${item.workerVersion?.changes.length ? html`<p>${fill("attendance.worker_version_times", { times: list(item.workerVersion.changes) })}</p>` : ""}
     ${reply?.correctionReason ? html`<blockquote>${reply.correctionReason}</blockquote>` : ""}
   </div>`;
 }

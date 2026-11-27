@@ -33,7 +33,11 @@ import {
   listPendingAttendanceQuestions,
 } from "./attendance-questions.js";
 import * as api from "./index.js";
-import type { AttendanceCommand, AttendanceCommandPayload } from "./attendance-contract.js";
+import type {
+  AttendanceChange,
+  AttendanceCommand,
+  AttendanceCommandPayload,
+} from "./attendance-contract.js";
 import { attendanceAnswers } from "./schema/attendance-responses.js";
 import { timeEntries } from "./schema/time-entries.js";
 import { readChain } from "./chain.js";
@@ -906,6 +910,23 @@ it("a worker dispute retains 480 minutes and both original and proposed times", 
   await intact();
 });
 
+function clockEnd(at: string) {
+  return run((tx) => backend.clockOut(tx, { nodeId, personId, at, offsetMinutes: 0, origin }));
+}
+function retime(entryId: string, at: string): AttendanceChange {
+  return { target: { entryId }, at, offsetMinutes: 0 };
+}
+function workDay(date = "2026-01-05") {
+  return run((tx) => api.readAttendanceDay(tx, { personId, date }));
+}
+function dayEdit(
+  changes: AttendanceChange[],
+  reason: string,
+  scope: { date?: string; replaces?: string } = {},
+) {
+  return command({ action: "propose", personId, date: "2026-01-05", ...scope, reason, changes });
+}
+
 it.each([false, true])(
   "accepting one full-day edit uses the day the manager saw (later shift: %s)",
   async (laterShift) => {
@@ -913,16 +934,13 @@ it.each([false, true])(
     const start = (await readRecordedEntries(suite.db, { personId })).find(
       (entry) => entry.entryKind === "in",
     )!;
-    const edit = await command({
-      action: "propose",
-      personId,
-      date: "2026-01-05",
-      reason: "Correct both clocked times",
-      changes: [
-        { target: { entryId: start.entryId }, at: "2026-01-05T08:00:00Z", offsetMinutes: 0 },
-        { target: { entryId: automaticEntryId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
+    const edit = await dayEdit(
+      [
+        retime(start.entryId, "2026-01-05T08:00:00Z"),
+        retime(automaticEntryId, "2026-01-05T18:00:00Z"),
       ],
-    });
+      "Correct both clocked times",
+    );
     await send(edit, manager);
     const inbox = await run((tx) => api.readAttendanceInbox(tx, personId));
     expect(
@@ -930,18 +948,10 @@ it.each([false, true])(
     ).toEqual([edit.commandId]);
     if (laterShift) {
       await clock("2026-01-05T19:00:00Z");
-      await run((tx) =>
-        backend.clockOut(tx, {
-          nodeId,
-          personId,
-          at: "2026-01-05T20:00:00Z",
-          offsetMinutes: 0,
-          origin,
-        }),
-      );
+      await clockEnd("2026-01-05T20:00:00Z");
     }
     await send(await command({ action: "accept", itemId: edit.commandId }));
-    const day = await run((tx) => api.readAttendanceDay(tx, { personId, date: "2026-01-05" }));
+    const day = await workDay();
     expect(day.record.sessions.map((session) => session.workedMinutes)).toEqual(
       laterShift ? [600, 60] : [600],
     );
@@ -956,9 +966,7 @@ it("replacing a request and then a dispute keeps both histories and can settle o
       action: "request",
       questionId,
       reason: "I left at six",
-      changes: [
-        { target: { entryId: automaticEntryId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
-      ],
+      changes: [retime(automaticEntryId, "2026-01-05T18:00:00Z")],
     }),
   );
   let replaces = request.entryIds[0]!;
@@ -966,19 +974,19 @@ it("replacing a request and then a dispute keeps both histories and can settle o
     ["18:30", "First edit"],
     ["19:00", "Second edit"],
   ]) {
-    const edit = await command({
-      action: "propose",
-      personId,
-      date: "2026-01-05",
-      replaces,
-      reason: reason!,
-      changes: [
-        { target: { entryId: automaticEntryId }, at: `2026-01-05T${time}:00Z`, offsetMinutes: 0 },
-      ],
-    });
+    const changes = [retime(automaticEntryId, `2026-01-05T${time}:00Z`)];
+    const edit = await dayEdit(changes, reason!, { replaces });
     await send(edit, manager);
     const inbox = await run((tx) => api.readAttendanceInbox(tx, personId));
     expect(inbox.prompts.map((prompt) => prompt.itemId)).toEqual([edit.commandId]);
+    await refused(
+      async () => send(await command({ action: "approve", itemId: replaces }), manager),
+      "correction.not_pending",
+    );
+    await refused(
+      async () => send(await dayEdit(changes, reason!, { replaces: edit.commandId }), manager),
+      "correction.not_pending",
+    );
     const disagree = await command({
       action: "disagree",
       itemId: edit.commandId,
@@ -992,7 +1000,7 @@ it("replacing a request and then a dispute keeps both histories and can settle o
   const settle = await command({ action: "approve", itemId: replaces });
   const result = await send(settle, manager);
   expect(await send(settle, manager)).toEqual({ ...result, replayed: true });
-  const day = await run((tx) => api.readAttendanceDay(tx, { personId, date: "2026-01-05" }));
+  const day = await workDay();
   expect(day.record.sessions.map((session) => session.endedAt)).toEqual([
     "2026-01-05T18:00:00.000Z",
   ]);
@@ -1010,41 +1018,24 @@ it("replacing a request and then a dispute keeps both histories and can settle o
 });
 
 it.each([false, true])(
-  "taking the worker's clocked time settles a dispute (earlier manager edit: %s)",
+  "taking the worker's clocked or last accepted time settles a dispute (earlier accepted edit: %s)",
   async (earlierEdit) => {
     await clock("2026-01-05T09:00:00Z");
-    await run((tx) =>
-      backend.clockOut(tx, {
-        nodeId,
-        personId,
-        at: "2026-01-05T17:00:00Z",
-        offsetMinutes: 0,
-        origin,
-      }),
-    );
+    await clockEnd("2026-01-05T17:00:00Z");
     const end = (await readRecordedEntries(suite.db, { personId })).find(
       (entry) => entry.entryKind === "out",
     )!;
     let target = end.entryId;
     if (earlierEdit) {
-      const first = await command({
-        action: "propose",
-        personId,
-        date: "2026-01-05",
-        reason: "Earlier edit",
-        changes: [{ target: { entryId: target }, at: "2026-01-05T17:30:00Z", offsetMinutes: 0 }],
-      });
+      const first = await dayEdit([retime(target, "2026-01-05T17:30:00Z")], "Earlier edit");
       await send(first, manager);
       const accepted = await send(await command({ action: "accept", itemId: first.commandId }));
       target = accepted.entryIds[0]!;
     }
-    const edit = await command({
-      action: "propose",
-      personId,
-      date: "2026-01-05",
-      reason: "Thought the worker stayed",
-      changes: [{ target: { entryId: target }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 }],
-    });
+    const edit = await dayEdit(
+      [retime(target, "2026-01-05T18:00:00Z")],
+      "Thought the worker stayed",
+    );
     await send(edit, manager);
     await send(
       await command({
@@ -1055,13 +1046,13 @@ it.each([false, true])(
     );
     const decision = await command({ action: "approve", itemId: edit.commandId });
     await send(decision, manager);
-    const day = await run((tx) => api.readAttendanceDay(tx, { personId, date: "2026-01-05" }));
+    const day = await workDay();
     expect(day.record.entries.find(({ entry }) => entry.entryId === end.entryId)).toMatchObject({
       entry: { eventAt: "2026-01-05T17:00:00.000Z" },
       effective: !earlierEdit,
     });
     expect(day.record.sessions.map((session) => session.endedAt)).toEqual([
-      "2026-01-05T17:00:00.000Z",
+      earlierEdit ? "2026-01-05T17:30:00.000Z" : "2026-01-05T17:00:00.000Z",
     ]);
     expect(day.approval?.status).toBe("approved");
     expect(await run((tx) => api.readAttendanceManagerQueue(tx))).toEqual({
@@ -1072,59 +1063,63 @@ it.each([false, true])(
   },
 );
 
-it("approval after a frozen 480-minute period adds a live 60-minute impact without changing the closure", async () => {
-  const { questionId, automaticEntryId } = await automaticQuestion();
-  const frozen = await run((tx) =>
-    api.closePayPeriod(tx, {
-      paidBreakPolicy: null,
-      nodeId,
-      period: { start: "2026-01-01", end: "2026-02-01" },
-      clock: { timeZone: "UTC", dayCutover: "04:00", cutoverChanges: [] },
-      now: "2026-02-01T04:00:00Z",
-      ruleset: { workingDaysPerWeek: 5, overtimeModel: "daily-accrual", dailyTargetMinutes: null },
-      origin,
-    }),
-  );
-  const stored = await suite.db.select().from(api.payPeriodClosures);
-  expect(frozen.snapshot.sessions.map((s) => s.workedMinutes)).toEqual([480]);
-  expect(
-    (await run((tx) => listPendingAttendanceQuestions(tx, personId))).map((q) => q.id),
-  ).toEqual([questionId]);
-  const requested = await send(
-    await command({
-      action: "request",
-      questionId,
-      reason: "Worked another hour",
-      changes: [
-        { target: { entryId: automaticEntryId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
-      ],
-    }),
-  );
-  await send(
-    await command({ action: "approve", itemId: requested.entryIds[0]! }),
-    personId,
-    manager,
-  );
-  const record = await run((tx) =>
-    backend.timeRecord(tx, { personId, period: { start: "2026-01-01", end: "2026-02-01" } }),
-  );
-  expect(record.sessions.map((s) => s.workedMinutes)).toEqual([540]);
-  expect(record.closedPeriodImpacts).toEqual([
-    {
-      closureId: frozen.id,
-      personId,
-      beforeWorkedMinutes: 480,
-      afterWorkedMinutes: 540,
-      deltaWorkedMinutes: 60,
-    },
-  ]);
-  expect(await suite.db.select().from(api.payPeriodClosures)).toEqual(stored);
-  expect(
-    (await run((tx) => api.readAttendanceDay(tx, { personId, date: "2026-01-05" }))).approval
-      ?.status,
-  ).toBe("approved");
-  await intact();
-});
+it.each(["worker request", "manager edit"] as const)(
+  "applying a %s after a frozen period updates the day without changing the closure",
+  async (kind) => {
+    const { questionId, automaticEntryId } = await automaticQuestion();
+    const frozen = await run((tx) =>
+      api.closePayPeriod(tx, {
+        paidBreakPolicy: null,
+        nodeId,
+        period: { start: "2026-01-01", end: "2026-02-01" },
+        clock: { timeZone: "UTC", dayCutover: "04:00", cutoverChanges: [] },
+        now: "2026-02-01T04:00:00Z",
+        ruleset: {
+          workingDaysPerWeek: 5,
+          overtimeModel: "daily-accrual",
+          dailyTargetMinutes: null,
+        },
+        origin,
+      }),
+    );
+    const stored = await suite.db.select().from(api.payPeriodClosures);
+    expect(frozen.snapshot.sessions.map((s) => s.workedMinutes)).toEqual([480]);
+    expect(
+      (await run((tx) => listPendingAttendanceQuestions(tx, personId))).map((q) => q.id),
+    ).toEqual([questionId]);
+    const changes = [retime(automaticEntryId, "2026-01-05T18:00:00Z")];
+    if (kind === "worker request") {
+      const request = await send(
+        await command({ action: "request", questionId, reason: "Worked another hour", changes }),
+      );
+      await send(
+        await command({ action: "approve", itemId: request.entryIds[0]! }),
+        personId,
+        manager,
+      );
+    } else {
+      const edit = await dayEdit(changes, "Worked another hour");
+      await send(edit, manager);
+      await send(await command({ action: "accept", itemId: edit.commandId }));
+    }
+    const record = await run((tx) =>
+      backend.timeRecord(tx, { personId, period: { start: "2026-01-01", end: "2026-02-01" } }),
+    );
+    expect(record.sessions.map((s) => s.workedMinutes)).toEqual([540]);
+    expect(record.closedPeriodImpacts).toEqual([
+      {
+        closureId: frozen.id,
+        personId,
+        beforeWorkedMinutes: 480,
+        afterWorkedMinutes: 540,
+        deltaWorkedMinutes: 60,
+      },
+    ]);
+    expect(await suite.db.select().from(api.payPeriodClosures)).toEqual(stored);
+    expect((await workDay()).approval?.status).toBe("approved");
+    await intact();
+  },
+);
 
 it("self-approval follows workforce.self_approve, not the Admin name", async () => {
   await setBuiltInRoleForTest(suite.db, personId, "manager");
@@ -1169,4 +1164,143 @@ beforeEach(async () => {
     startAt: "2026-01-05T04:00:00.000Z",
     endAt: "2026-01-06T04:00:00.000Z",
   });
+});
+
+it("an edit cannot replace a worker request without answering its requested time", async () => {
+  const { questionId, automaticEntryId } = await automaticQuestion();
+  const request = await send(
+    await command({
+      action: "request",
+      questionId,
+      reason: "I left at six",
+      changes: [retime(automaticEntryId, "2026-01-05T18:00:00Z")],
+    }),
+  );
+  const start = (await readRecordedEntries(suite.db, { personId })).find(
+    (entry) => entry.entryKind === "in",
+  )!;
+  const edit = await dayEdit([retime(start.entryId, "2026-01-05T09:30:00Z")], "A different start", {
+    replaces: request.entryIds[0]!,
+  });
+  await refused(() => send(edit, manager), "correction.invalid");
+});
+
+it("a worker can keep the clocked day when disputing an added break", async () => {
+  await automaticQuestion();
+  const edit = await dayEdit(
+    [
+      { target: { missingKind: "break_start" }, at: "2026-01-05T12:00:00Z", offsetMinutes: 0 },
+      { target: { missingKind: "break_end" }, at: "2026-01-05T13:00:00Z", offsetMinutes: 0 },
+    ],
+    "Thought there was a break",
+  );
+  await send(edit, manager);
+  await send(
+    await command({ action: "disagree", itemId: edit.commandId, reason: "I worked through" }),
+  );
+  await send(await command({ action: "approve", itemId: edit.commandId }), manager);
+  const day = await workDay();
+  expect(day.record.sessions.map((shift) => shift.workedMinutes)).toEqual([480]);
+  expect(day.approval?.status).toBe("approved");
+  expect(day.items.find((item) => item.id === edit.commandId)?.status).toBe("settled");
+});
+
+it.each(["new shift on another date", "clock-out two days later"] as const)(
+  "refuses a day edit with %s",
+  async (kind) => {
+    const { automaticEntryId } = await automaticQuestion();
+    const changes =
+      kind === "new shift on another date"
+        ? [
+            {
+              target: { missingKind: "in" as const },
+              at: "2026-01-09T09:00:00Z",
+              offsetMinutes: 0,
+            },
+            {
+              target: { missingKind: "out" as const },
+              at: "2026-01-09T17:00:00Z",
+              offsetMinutes: 0,
+            },
+          ]
+        : [retime(automaticEntryId, "2026-01-07T02:00:00Z")];
+    const edit = await dayEdit(changes, "Change another date");
+    await refused(() => send(edit, manager), "correction.invalid");
+  },
+);
+
+it.each(["target", "replaced dispute"] as const)(
+  "keeps the %s inside the selected day",
+  async (kind) => {
+    const { automaticEntryId } = await automaticQuestion();
+    const earlier = await dayEdit(
+      [retime(automaticEntryId, "2026-01-05T18:00:00Z")],
+      "Worked to six",
+    );
+    await send(earlier, manager);
+    await send(
+      await command({
+        action: "disagree",
+        itemId: earlier.commandId,
+        reason: "Use the clocked time",
+      }),
+    );
+    await clock("2026-01-06T09:00:00Z");
+    await clockEnd("2026-01-06T17:00:00Z");
+    const later = (await readRecordedEntries(suite.db, { personId })).find(
+      (entry) => entry.eventAt === "2026-01-06T17:00:00.000Z",
+    )!;
+    const change =
+      kind === "target"
+        ? retime(automaticEntryId, "2026-01-05T18:30:00Z")
+        : retime(later.entryId, "2026-01-06T18:30:00Z");
+    const edit = await dayEdit([change], "Change only this day", {
+      date: "2026-01-06",
+      ...(kind === "replaced dispute" && { replaces: earlier.commandId }),
+    });
+    await refused(
+      () => send(edit, manager),
+      kind === "target" ? "correction.invalid" : "correction.not_pending",
+    );
+  },
+);
+
+it("opens an overnight end-time request on the day the shift started", async () => {
+  await clock("2026-01-05T22:00:00Z");
+  await clockEnd("2026-01-06T02:00:00Z");
+  const end = (await readRecordedEntries(suite.db, { personId })).find(
+    (entry) => entry.entryKind === "out",
+  )!;
+  await send(
+    await command({
+      action: "request",
+      questionId: null,
+      reason: "Stayed an hour",
+      changes: [retime(end.entryId, "2026-01-06T03:00:00Z")],
+    }),
+  );
+  const queue = await run((tx) => api.readAttendanceManagerQueue(tx));
+  expect(queue.items[0]?.date).toBe("2026-01-05");
+});
+
+it("applying an overnight start-time request does not approve a different work date", async () => {
+  await clock("2026-01-05T22:00:00Z");
+  await clockEnd("2026-01-06T02:00:00Z");
+  await clock("2026-01-06T09:00:00Z");
+  await clockEnd("2026-01-06T17:00:00Z");
+  const first = (await readRecordedEntries(suite.db, { personId })).find(
+    (entry) => entry.eventAt === "2026-01-05T22:00:00.000Z",
+  )!;
+  const result = await send(
+    await command({
+      action: "request",
+      questionId: null,
+      reason: "Started at midnight",
+      changes: [retime(first.entryId, "2026-01-06T00:00:00Z")],
+    }),
+  );
+  await send(await command({ action: "approve", itemId: result.entryIds[0]! }), manager);
+  const day = await workDay("2026-01-06");
+  expect(day.record.sessions.map((shift) => shift.workedMinutes)).toEqual([120, 480]);
+  expect(day.approval?.status).toBe("pending");
 });

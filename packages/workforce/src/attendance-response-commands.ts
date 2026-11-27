@@ -3,6 +3,7 @@ import { type Transaction } from "@waitron/db";
 import { persons, holds, readPersonAuthority } from "@waitron/identity";
 import { AppError, type Origin } from "@waitron/shared";
 import type {
+  AttendanceChange,
   AttendanceCommand,
   AttendanceCommandPayload,
   AttendanceCommandResult,
@@ -14,7 +15,6 @@ import { confirmAutomaticEntry } from "./automatic-entries.js";
 import {
   decideCorrectionGroup,
   maySelfApproveAttendance,
-  recordEntryById,
   recordInstant,
   requestCorrectionGroup,
 } from "./corrections.js";
@@ -22,7 +22,7 @@ import { projectCorrectionItems, readAttendanceRevision } from "./attendance-res
 import { readRecordedEntries } from "./record-reads.js";
 import { approvalsForPerson, writeAttendanceDayApproval } from "./day-approvals.js";
 import { isRecordDate } from "./record-dates.js";
-import { recordInPeriod } from "./record-period.js";
+import { entryDate, recordInPeriod } from "./record-period.js";
 import { projectTimeRecord } from "./record-projection.js";
 import {
   answerForQuestion,
@@ -32,6 +32,9 @@ import "./errors.js";
 
 function invalid(reason: string): never {
   throw new AppError("correction.invalid", { reason });
+}
+function targetOf({ target }: AttendanceChange): string {
+  return "entryId" in target ? target.entryId : target.missingKind;
 }
 export async function readAttendanceCommand(
   tx: Transaction,
@@ -220,11 +223,13 @@ export async function executeAttendanceCommand(
         ? proposal.input.date
         : undefined;
   let reviewedEntries: string[] | undefined;
+  let nextDate: string | undefined;
   if (date !== undefined) {
     const next = new Date(`${date}T00:00:00Z`);
     next.setUTCDate(next.getUTCDate() + 1);
     const end = next.toISOString().slice(0, 10);
     if (!isRecordDate(end)) invalid("date");
+    nextDate = end;
     const rows = recordInPeriod(projectTimeRecord(await readRecordedEntries(tx, { personId })), {
       start: date,
       end,
@@ -235,12 +240,20 @@ export async function executeAttendanceCommand(
       .sort();
     if (payload.action === "propose" && payload.replaces !== undefined) {
       const replaced = await findItem(tx, payload.replaces, false);
+      const first = replaced.changes[0]!;
+      const replacedDate =
+        replaced.date ?? entryDate({ eventAt: first.at, offsetMinutes: first.offsetMinutes });
       if (
         replaced.personId !== personId ||
         (replaced.status !== "waiting-manager" && replaced.status !== "disputed") ||
-        !replaced.history.some((entry) => rows.some((row) => row.entry.entryId === entry.entryId))
+        replacedDate !== date
       )
         throw new AppError("correction.not_pending", { correctionId: payload.replaces });
+      if (replaced.direction === "worker_request") {
+        const targets = new Set(payload.changes.map(targetOf));
+        if (replaced.changes.some((change) => !targets.has(targetOf(change))))
+          invalid("target_scope");
+      }
     }
   }
   let entryIds: string[];
@@ -270,17 +283,30 @@ export async function executeAttendanceCommand(
       ).missingKinds;
     }
     for (const change of payload.changes) {
+      const editedDate =
+        date && entryDate({ eventAt: change.at, offsetMinutes: change.offsetMinutes });
       if ("entryId" in change.target) {
         const [target] = await readRecordedEntries(tx, { entryId: change.target.entryId });
         if (!target || target.personId !== personId) invalid("target_scope");
         if (reviewedEntries && !reviewedEntries.includes(target.entryId)) invalid("target_scope");
+        if (
+          editedDate &&
+          editedDate !== date &&
+          editedDate !== nextDate &&
+          editedDate !== entryDate(target)
+        )
+          invalid("target_scope");
         if (question && question.automaticEntryId !== target.entryId) invalid("question_target");
-      } else if (
-        question &&
-        (question.kind !== "missing-times" ||
-          !missingKinds!.includes(change.target.missingKind as "in" | "out"))
-      )
-        invalid("question_kind");
+      } else {
+        const kind = change.target.missingKind;
+        if (editedDate && editedDate !== date && (editedDate !== nextDate || kind === "in"))
+          invalid("target_scope");
+        if (
+          question &&
+          (question.kind !== "missing-times" || !missingKinds!.includes(kind as "in" | "out"))
+        )
+          invalid("question_kind");
+      }
     }
     entryIds = await requestCorrectionGroup(
       tx,
@@ -308,26 +334,8 @@ export async function executeAttendanceCommand(
       : undefined;
     const keepRecorded = workerVersion && !previous;
     const actor = { nodeId: input.nodeId, actorPersonId: authorizer, origin: input.origin };
-    if (keepRecorded) {
-      const marker = await recordEntryById(tx, item!.responseEntryIds.at(-1)!);
-      const changes = [];
-      for (const { target, at, offsetMinutes } of workerVersion.changes) {
-        if (!("entryId" in target)) invalid("target_scope");
-        const time = await recordEntryById(tx, target.entryId);
-        if (time.eventAt !== at || time.offsetMinutes !== offsetMinutes)
-          changes.push({
-            ...actor,
-            correctsEntryId: target.entryId,
-            at,
-            offsetMinutes,
-            reason: marker.correctionReason!,
-          });
-      }
-      entryIds =
-        changes.length === 0
-          ? []
-          : await requestCorrectionGroup(tx, changes, "propose", true, marker.entryId);
-    } else
+    if (keepRecorded) entryIds = item!.responseEntryIds;
+    else
       entryIds = await decideCorrectionGroup(
         tx,
         {
@@ -345,15 +353,19 @@ export async function executeAttendanceCommand(
       JSON.stringify(reviewedEntries) === JSON.stringify(proposal.input.reviewedEntries);
     if (payload.action === "approve" || reviewedProposal) {
       const days = approvalsForPerson(await readRecordedEntries(tx, { personId }));
-      const timeIds =
-        keepRecorded && entryIds.length === 0
-          ? workerVersion.changes.flatMap(({ target }) =>
-              "entryId" in target ? [target.entryId] : [],
-            )
-          : entryIds;
+      const firstChange = item!.changes[0]!;
+      const reviewedDate =
+        date ??
+        item!.date ??
+        entryDate({ eventAt: firstChange.at, offsetMinutes: firstChange.offsetMinutes });
+      const timeIds = keepRecorded
+        ? workerVersion.changes.flatMap(({ target }) =>
+            "entryId" in target ? [target.entryId] : [],
+          )
+        : entryIds;
       const day = [...days].find(
         ([dayDate, { times }]) =>
-          (date === undefined || date === dayDate) &&
+          reviewedDate === dayDate &&
           timeIds.every((id) => times.some((time) => time.entryId === id)),
       )?.[1];
       if (day)
@@ -366,7 +378,6 @@ export async function executeAttendanceCommand(
           day,
         );
     }
-    if (keepRecorded && entryIds.length === 0) entryIds = item!.responseEntryIds;
   }
   await tx.insert(attendanceAnswers).values({
     id: command.commandId,
