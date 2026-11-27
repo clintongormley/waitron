@@ -5054,7 +5054,6 @@ export class TillApp extends LitElement {
     }
     return null;
   }
-
   #renderAllergyDialog(): TemplateResult | typeof nothing {
     const open = this.allergyDialog;
     if (open === null) return nothing;
@@ -5062,6 +5061,7 @@ export class TillApp extends LitElement {
     return html`<till-party-allergy-dialog
       .view=${open.view}
       .mode=${open.mode ?? "send"}
+      .backLabel=${order?.tableHeading ?? ""}
       .panelInset=${open.mode === "edit" ? (order?.orderPaneInset ?? 0) : 0}
       .scopeKey=${open.key}
       .busy=${open.busy}

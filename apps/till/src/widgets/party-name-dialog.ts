@@ -50,6 +50,7 @@ export class TillPartyNameDialog extends LitElement {
 
   /** The party's tables, as the heading names them. */
   @property() tables = "";
+  @property() backLabel = "";
   @property({ attribute: false }) panelInset = 0;
   @property() value = "";
   @property({ attribute: false }) savedValue: string | undefined;
@@ -183,8 +184,7 @@ export class TillPartyNameDialog extends LitElement {
         <wt-top-bar
           slot="header"
           .heading=${t("table.name_panel_title")}
-          .subtitle=${this.tables}
-          .backLabel=${t("action.back")}
+          .backLabel=${this.backLabel || t("action.back")}
           @wt-back=${() => void this.renderRoot.querySelector("wt-dialog")!.requestClose("navigation")}
         ></wt-top-bar>
         <div class="fields">

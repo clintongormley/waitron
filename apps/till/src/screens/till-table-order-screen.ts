@@ -6108,6 +6108,7 @@ export class TillTableOrderScreen extends LitElement {
     return html`<till-party-name-dialog
       data-order-panel
       .tables=${partyTablesLabel(party, this.tables)}
+      .backLabel=${this.tableHeading}
       .value=${naming.value}
       .savedValue=${party.name ?? ""}
       .refusal=${naming.refusal}
@@ -6176,6 +6177,7 @@ export class TillTableOrderScreen extends LitElement {
     return html`<till-party-guests-dialog
       data-order-panel
       .tables=${partyTablesLabel(party, this.tables)}
+      .backLabel=${this.tableHeading}
       .value=${counting.value}
       .savedValue=${this.#savedGuestCount()}
       .refusal=${counting.refusal}
@@ -7016,17 +7018,21 @@ export class TillTableOrderScreen extends LitElement {
     for (const panel of panels) panel.panelInset = inset;
   }
 
-  #partyMenu(): TemplateResult {
-    const party = this.party;
+  get tableHeading(): string {
     const table =
       this.tables.find((row) => row.id === this.activeTableId) ??
-      this.tables.find((row) => row.id === party?.tableIds[0]);
+      this.tables.find((row) => row.id === this.party?.tableIds[0]);
     const joinedName =
       table?.today?.joinId == null ? null : groupName(mergeMembersOf(this.tables, table));
+    return table
+      ? detailsHeading(table, joinedName)
+      : (this.party?.displayName ?? t("table.actions_title"));
+  }
+
+  #partyMenu(): TemplateResult {
+    const party = this.party;
     return tablePartyMenu({
-      heading: table
-        ? detailsHeading(table, joinedName)
-        : (party?.displayName ?? t("table.actions_title")),
+      heading: this.tableHeading,
       party,
       allergy: this.#allergy() ?? null,
       requested: party !== null && billRequestOf(this.tables, party.id) !== undefined,

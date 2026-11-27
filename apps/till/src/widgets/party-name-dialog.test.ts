@@ -57,9 +57,10 @@ describe("till-party-name-dialog", () => {
       await page.viewport(width, 900);
       try {
         setLocale(locale);
+        const table = t("floor.table_title").replace("{table}", "4");
         const { el } = await mountWidget<TillPartyNameDialog>(
           "till-party-name-dialog",
-          { tables: "Counter 3, Counter 4" },
+          { tables: "Counter 3, Counter 4", backLabel: table },
           theme,
         );
         const dialog = el
@@ -76,8 +77,8 @@ describe("till-party-name-dialog", () => {
         const bar = el.shadowRoot!.querySelector("wt-top-bar")!.shadowRoot!;
         const title = bar.querySelector<HTMLElement>(".title")!;
         expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth);
-        expect(bar.querySelector(".subtitle")?.textContent).toBe("Counter 3, Counter 4");
-        const back = page.getByRole("button", { name: locale === "es" ? "Atrás" : "Back" });
+        expect(bar.querySelector(".back-label")?.textContent).toBe(table);
+        const back = page.getByRole("button", { name: table, exact: true });
         await expect.element(back).toBeVisible();
         const shown = drawn(el);
         expect(shown.width(shown.placeholder)).toBeLessThanOrEqual(shown.textBox);

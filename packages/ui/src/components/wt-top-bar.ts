@@ -41,7 +41,7 @@ export class WtTopBar extends LitElement {
       wt-button {
         min-inline-size: 0;
         max-inline-size: 100%;
-        --wt-action-padding: 0;
+        --wt-action-padding: 0 var(--wt-space-1);
         --wt-action-text: var(--wt-color-primary-text);
         --wt-action-font-size: var(--wt-font-size-md);
         --wt-button-justify: start;
@@ -63,6 +63,9 @@ export class WtTopBar extends LitElement {
 
       wt-icon {
         color: var(--wt-color-primary-text);
+        inline-size: calc(var(--wt-space-4) + var(--wt-space-1));
+        block-size: calc(var(--wt-space-4) + var(--wt-space-1));
+        flex: none;
       }
 
       .action {

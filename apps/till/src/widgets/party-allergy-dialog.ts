@@ -170,6 +170,7 @@ export class TillPartyAllergyDialog extends LitElement {
   ];
   @property({ attribute: false }) view!: PartyAllergyRead | AllergyMoveRead;
   @property() mode: "send" | "edit" = "send";
+  @property() backLabel = "";
   @property({ attribute: false }) panelInset = 0;
   @property() scopeKey = "";
   @property({ attribute: false }) draftParent?: object;
@@ -851,7 +852,7 @@ export class TillPartyAllergyDialog extends LitElement {
                 <wt-top-bar
                   slot="header"
                   .heading=${title}
-                  .backLabel=${t("action.back")}
+                  .backLabel=${this.backLabel || t("action.back")}
                   .backDisabled=${disabled}
                   @wt-back=${() => void this.renderRoot.querySelector("wt-dialog")!.requestClose("navigation")}
                 ></wt-top-bar>

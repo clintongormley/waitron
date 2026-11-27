@@ -1106,7 +1106,9 @@ describe("A669 live table editor", () => {
         const closed = new Promise<void>((resolve) =>
           editor.addEventListener("wt-close", () => resolve(), { once: true }),
         );
-        await page.getByRole("button", { name: "Back", exact: true }).click();
+        const bar = dialog(el)!.shadowRoot!.querySelector("wt-top-bar")!.shadowRoot!;
+        expect(bar.querySelector(".back-label")?.textContent).toBe("Table 4");
+        await userEvent.click(bar.querySelector("wt-button")!.shadowRoot!.querySelector("button")!);
         await closed;
         await el.updateComplete;
         expect(dialog(el)).toBeNull();

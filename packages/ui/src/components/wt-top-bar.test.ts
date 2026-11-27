@@ -29,6 +29,11 @@ test("paints a 56 px bar and keeps its heading centred with a long Back label", 
   const action = element.querySelector("[slot=action]")!;
   expect(getComputedStyle(header!).backgroundColor).toBe("rgb(231, 244, 249)");
   expect(frame.height).toBe(56);
+  const chevron = back.querySelector("wt-icon")!.shadowRoot!.querySelector("path")!;
+  const mark = chevron.getBoundingClientRect();
+  expect(mark.left - frame.left).toBeCloseTo(15, 0);
+  expect(mark.width).toBeCloseTo(8, 0);
+  expect(mark.height).toBeCloseTo(14, 0);
   expect(title.left + title.width / 2).toBeCloseTo(frame.left + frame.width / 2, 0);
   expect(back.getBoundingClientRect().right).toBeLessThanOrEqual(title.left);
   expect(action.getBoundingClientRect().left).toBeGreaterThanOrEqual(title.right);

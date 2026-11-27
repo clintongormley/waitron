@@ -100,6 +100,13 @@ const menu = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
 const partyMenu = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-party-menu]")!;
+async function clickEditorBack(editor: Element): Promise<void> {
+  const bar = editor.shadowRoot!.querySelector("wt-top-bar")!;
+  await bar.updateComplete;
+  const button = bar.shadowRoot!.querySelector("wt-button")!;
+  await button.updateComplete;
+  await userEvent.click(button.shadowRoot!.querySelector("button")!);
+}
 const textOf = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
 /** The bill action group: its accessible name and the choices in order. */
 function groups(el: TillTableOrderScreen): { name: string; items: string[] }[] {
@@ -196,7 +203,7 @@ describe("Table and bill actions", () => {
     async (action, editor, title) => {
       await page.viewport(390, 844);
       try {
-        const el = await mountScreen();
+        const el = await mountScreen({ activeTableId: "t5" });
         const sheet = partyMenu(el);
         await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
         await userEvent.click(item(el, `[data-action="${action}"]`)!);
@@ -216,8 +223,12 @@ describe("Table and bill actions", () => {
           );
         await expect.poll(paneLeft).toBeGreaterThan(0);
         await expect.poll(edges).toEqual([paneLeft(), 844, 0, 390]);
-        await expect.element(page.getByRole("button", { name: "Back", exact: true })).toBeVisible();
-        await page.getByRole("button", { name: "Back", exact: true }).click();
+        const bar = el
+          .shadowRoot!.querySelector(editor)!
+          .shadowRoot!.querySelector("wt-top-bar")!.shadowRoot!;
+        expect(bar.querySelector(".back-label")?.textContent).toBe("Table 5");
+        expect(bar.querySelector(".subtitle")).toBeNull();
+        await clickEditorBack(el.shadowRoot!.querySelector(editor)!);
         await expect.poll(() => el.shadowRoot!.querySelector(editor)).toBeNull();
         expect(el.orderId).toBe("wo-2");
         expect(focusOnMenu(el, sheet)).toBe(true);
@@ -1151,7 +1162,7 @@ describe("Table and bill actions", () => {
       const closed = new Promise<void>((resolve) =>
         dialog().addEventListener("party-name-cancel", () => resolve(), { once: true }),
       );
-      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await clickEditorBack(dialog());
       await closed;
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
@@ -1199,7 +1210,7 @@ describe("Table and bill actions", () => {
       const closed = new Promise<void>((resolve) =>
         counting.addEventListener("party-guests-cancel", () => resolve(), { once: true }),
       );
-      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await clickEditorBack(counting);
       await closed;
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBeNull();
