@@ -1019,7 +1019,6 @@ export class SetupHandoverScreen extends LitElement {
       return error?.params?.reason === "unsupported"
         ? "shell.restore.manifest_unsupported"
         : "shell.restore.manifest_invalid";
-    if (code === "promotion.break_glass_invalid") return "handover.fix";
     if (
       ["recovery.passphrase_invalid", "backup.artifact_invalid", "backup.archive_invalid"].includes(
         code ?? "",
@@ -1315,16 +1314,11 @@ export class SetupHandoverScreen extends LitElement {
     } catch (cause) {
       const { code, params } = cause as { code?: string; params?: { keyName?: unknown } };
       const keyName = typeof params?.keyName === "string" ? params.keyName : undefined;
-      if (code === "handover.backup_needs_master_key" && keyName !== undefined) {
+      const keyRefusal = ["handover.backup_needs_master_key", "promotion.break_glass_invalid"];
+      if (keyName !== undefined && keyRefusal.includes(code ?? "")) {
         this.backupKeyName = keyName;
-        this.actionError = "";
-      } else {
-        if (code === "promotion.break_glass_invalid" && keyName !== undefined) {
-          this.backupKeyName = keyName;
-          this.masterKeyRefused = true;
-        }
-        this.actionError = this.#emergencyError(cause);
-      }
+        this.masterKeyRefused = code === "promotion.break_glass_invalid";
+      } else this.actionError = this.#emergencyError(cause);
       this.busy = false;
     }
   }
@@ -1621,7 +1615,8 @@ export class SetupHandoverScreen extends LitElement {
   get #formError(): string {
     return this.actionError
       ? this.actionError
-      : this.reason.length > 500 ||
+      : this.masterKeyRefused ||
+          this.reason.length > 500 ||
           (this.attempted &&
             (this.#isEmergency && this.#emailStep ? !this.#emailValid : !this.#valid()))
         ? t("handover.fix")

@@ -903,6 +903,8 @@ it.each(localesAndThemes)(
     expect(drawnKeyField(el).error).toBe(line);
     expect(actions(el)).toBe(t("handover.fix"));
     expect(q(el, "[data-test=choose-another-backup]")).not.toBeNull();
+    // A key to correct is not a refused copy check, so the page offers no Try again.
+    expect(q(el, "[data-test=emergency-preview]")).toBeNull();
     expect(backupPosts(posts)).toEqual([{ signIn }, { signIn, masterKey: WRONG_MASTER_KEY }]);
     expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
     // Typing again clears the server's line.
