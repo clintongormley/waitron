@@ -118,7 +118,7 @@ person's number), so a sole trader's personal certificate goes on as today (D5).
   09:27: no log-masking case here; the logger's own tests cover masking and
   `scripts/personal-log-params.test.ts` checks the new name is listed.)
 - The activation and command-line paths: one refusing case each in their existing suites
-  (`apps/server/src/setup-first-fiscal-api*.test.ts`, `packages/provisioning/src/first-setup-settings.test.ts`).
+  (`apps/server/src/first-fiscal-declared-publication.test.ts`, `packages/provisioning/src/first-setup-settings.test.ts`), and the legacy provision route in `apps/server/src/setup-api.test.ts`.
 - `apps/setup/src/setup-certificate-refusal.test.ts`: the message, with both numbers, under the file
   field, in both languages.
 - Gates: golden huella and `inmutabilidad` unedited; `scripts/errors-reachable.test.ts`,
