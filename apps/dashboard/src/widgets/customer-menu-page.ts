@@ -177,6 +177,7 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
                         choice.price === "0.00" ? "" : `+ ${money(choice.price)}`,
                         choice,
                         words,
+                        true,
                       ),
                     )}
                   </ul>`
@@ -405,13 +406,11 @@ export class CustomerMenuPage extends LitElement {
         object-fit: cover;
         border-radius: var(--wt-radius-md);
       }
-      .detail-lead {
-        margin-block-end: var(--wt-space-4);
-      }
       .detail-lead:has(img) {
         position: relative;
         margin-block-start: calc(-1 * var(--menu-padding));
         margin-inline: calc(-1 * var(--menu-padding));
+        margin-block-end: var(--wt-space-4);
       }
       .detail-lead:has(img) .back {
         position: absolute;
@@ -454,6 +453,9 @@ export class CustomerMenuPage extends LitElement {
       }
       .detail .declarations {
         column-gap: var(--wt-space-2);
+      }
+      .detail div.declarations {
+        column-gap: var(--wt-space-4);
       }
       .choices {
         padding: 0;

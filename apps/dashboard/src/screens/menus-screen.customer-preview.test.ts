@@ -263,6 +263,8 @@ describe("the customer menu Online preview", () => {
     const labelStart = label.getBoundingClientRect().left;
     const betweenEntries =
       second!.getBoundingClientRect().left - first!.getBoundingClientRect().right;
+    expect.soft(betweenEntries).toBeGreaterThanOrEqual(14);
+    expect.soft(betweenEntries).toBeLessThanOrEqual(18);
     expect.soft(betweenEntries).toBeGreaterThan(1.8 * (labelStart - icon.right));
     await expect.element(diets, { timeout: 1000 }).toBeVisible();
     expect(diets.element().nextElementSibling?.textContent?.trim()).toBe("Halal");
@@ -333,7 +335,7 @@ describe("the customer menu Online preview", () => {
   });
 
   it.each(["House bread", "Two courses"])(
-    "lines up Menu with the photo-free %s heading",
+    "keeps Menu aligned and close to the photo-free %s heading",
     async (entry) => {
       await open(() => Response.json(published()));
       await page.getByRole("button", { name: entry, exact: true }).click();
@@ -346,6 +348,15 @@ describe("the customer menu Online preview", () => {
         .soft(Math.abs(chevronLeft - title.getBoundingClientRect().left))
         .toBeLessThanOrEqual(3);
       expect(chevronLeft - menu.getBoundingClientRect().left).toBeGreaterThan(8);
+
+      await document.fonts.ready;
+      const menuText = document.createRange();
+      menuText.selectNodeContents(menu.querySelector("slot")!.assignedNodes()[0]!);
+      const titleText = document.createRange();
+      titleText.selectNodeContents(title);
+      const gap = titleText.getBoundingClientRect().top - menuText.getBoundingClientRect().bottom;
+      expect.soft(gap).toBeGreaterThanOrEqual(10);
+      expect(gap).toBeLessThanOrEqual(25);
     },
   );
 
@@ -815,7 +826,11 @@ describe("the customer menu Online preview", () => {
       const surcharge = page.getByText("+ €2.50", { exact: true });
       await expect.element(surcharge).toBeVisible();
       const row = surcharge.element().closest("li")!;
-      expect(row.textContent?.replace(/\s+/g, " ").trim()).toBe("Noodles (Large) + €2.50 Eggs");
+      const choice = page.getByText("Noodles (Large)", { exact: true });
+      await expect
+        .element(choice.getByRole("img", { name: "Eggs", exact: true }), { timeout: 1000 })
+        .toBeVisible();
+      expect(row.textContent?.replace(/\s+/g, " ").trim()).toBe("Noodles (Large) + €2.50");
       expect(getComputedStyle(row).borderBottomWidth).toBe("1px");
       expect(surcharge.element().getBoundingClientRect().right).toBeCloseTo(
         row.getBoundingClientRect().right,
