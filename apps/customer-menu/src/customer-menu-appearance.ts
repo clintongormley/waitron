@@ -1,4 +1,4 @@
-import type { CustomerMenuAppearance } from "@waitron/shared";
+import { isStoredColor, type CustomerMenuAppearance } from "@waitron/shared";
 import { contrastRatio, type Mode, typefaceStack, WAITRON_CHOICES } from "@waitron/ui-core/theme";
 import { deriveTheme, WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 
@@ -37,7 +37,6 @@ function menuAppearanceTokens(
     }),
     ...(headingColor && {
       "--wt-menu-heading-color": headingColor,
-      "--wt-menu-accent": headingColor,
       "--wt-menu-current-section-text": "var(--wt-color-text)",
     }),
   };
@@ -49,12 +48,16 @@ export function resolveMenuAppearance(appearance?: CustomerMenuAppearance): {
   scheme: Mode;
   tokens: Record<string, string>;
 } {
-  if (appearance === undefined) return builtIn;
-  try {
-    const scheme = menuColorScheme(appearance.pageColor);
-    return { scheme, tokens: menuAppearanceTokens(appearance, scheme) };
-  } catch (error) {
-    if (!(error instanceof RangeError)) throw error;
-    return builtIn;
-  }
+  if (appearance == null) return builtIn;
+  const { pageColor, textColor, headingColor, textFont, headingFont } = appearance;
+  const invalidColor = [pageColor, textColor, headingColor].some(
+    (color) =>
+      color !== undefined && (typeof color !== "string" || !isStoredColor(color.toLowerCase())),
+  );
+  const invalidFont = [textFont, headingFont].some(
+    (font) => font !== undefined && font !== "system" && font !== "serif",
+  );
+  if (invalidColor || invalidFont) return builtIn;
+  const scheme = menuColorScheme(pageColor);
+  return { scheme, tokens: menuAppearanceTokens(appearance, scheme) };
 }

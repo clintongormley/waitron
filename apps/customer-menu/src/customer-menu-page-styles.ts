@@ -12,9 +12,8 @@ export const customerMenuPageStyles = [
       --menu-padding: var(--wt-space-4);
       --wt-menu-heading-color: var(--wt-color-primary-text);
       --wt-menu-heading-font: var(--wt-font-family);
-      --wt-menu-heading-weight: var(--wt-font-weight-bold);
+      --wt-menu-heading-weight: initial;
       --wt-menu-entry-weight: var(--wt-font-weight-bold);
-      --wt-menu-accent: var(--wt-color-primary);
       --wt-menu-current-section-text: var(--wt-color-primary-text);
       background: var(--wt-color-bg);
       color: var(--wt-color-text);
@@ -96,7 +95,7 @@ export const customerMenuPageStyles = [
       text-decoration: none;
     }
     nav a[aria-current] {
-      border-block-end-color: var(--wt-menu-accent);
+      border-block-end-color: var(--wt-color-primary);
       color: var(--wt-menu-current-section-text);
       font-weight: var(--wt-font-weight-bold);
     }
@@ -127,7 +126,13 @@ export const customerMenuPageStyles = [
     .section-title,
     .subheading {
       font-family: var(--wt-menu-heading-font);
-      font-weight: var(--wt-menu-heading-weight);
+    }
+    .menu-title,
+    .section-title {
+      font-weight: var(--wt-menu-heading-weight, var(--wt-font-weight-bold));
+    }
+    .subheading {
+      font-weight: var(--wt-menu-heading-weight, revert);
     }
     .section-title {
       font-size: calc(1.4 * var(--wt-font-size-lg));
@@ -152,7 +157,7 @@ export const customerMenuPageStyles = [
       align-items: center;
       gap: var(--wt-space-2);
       padding: var(--wt-space-4);
-      border: 1px solid var(--wt-menu-accent);
+      border: 1px solid var(--wt-color-primary);
       border-radius: var(--wt-radius-md);
       background: var(--wt-color-surface);
     }

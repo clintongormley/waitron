@@ -1,4 +1,5 @@
 import type { PublicGuestMenu } from "@waitron/shared";
+import { contrastRatio, hexToRgb } from "@waitron/ui-core/theme";
 import { expectNoA11yViolations } from "@waitron/ui/src/a11y-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cdp, page, userEvent } from "vitest/browser";
@@ -79,6 +80,16 @@ describe("Customer menu page", () => {
     await customer.updateComplete;
     expect(getComputedStyle(title).fontFamily).toBe(fallbackFont);
   });
+  it("uses regular serif detail headings and keeps the built-in weight for system headings", async () => {
+    const { customer } = await openMenu(published().menu);
+    await page.getByRole("button", { name: "Roast pepper", exact: true }).click();
+    const heading = page.getByRole("heading", { name: "Cooking", exact: true }).element();
+    expect.soft(getComputedStyle(heading).fontWeight).toBe("700");
+    customer.appearance = menuAppearances.light;
+    await customer.updateComplete;
+    expect(getComputedStyle(heading).fontWeight).toBe("400");
+  });
+
   it("keeps the chosen heading ink and derives a contrasting action colour", async () => {
     const { customer } = await openMenu(published().menu);
     const article = customer.shadowRoot!.querySelector("article")!;
@@ -89,6 +100,13 @@ describe("Customer menu page", () => {
     expect(getComputedStyle(article.querySelector("h2")!).color).toBe("rgb(214, 212, 208)");
     expect.soft(action).not.toBe("#d6d4d0");
     expect(action).not.toBe(defaultAction);
+    expect(contrastRatio(action, "#fbf7ef")).toBeGreaterThanOrEqual(3);
+    const accent = `rgb(${hexToRgb(action)
+      .map((channel) => Math.round(channel * 255))
+      .join(", ")})`;
+    expect.soft(getComputedStyle(article.querySelector(".set-menu")!).borderTopColor).toBe(accent);
+    const selected = article.querySelector("nav [aria-current=location]")!;
+    expect(getComputedStyle(selected).borderBlockEndColor).toBe(accent);
   });
 
   it("paints the light menu's fields, pills and cards with its page colour", async () => {

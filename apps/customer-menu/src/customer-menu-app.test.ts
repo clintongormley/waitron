@@ -113,7 +113,9 @@ it("opens a single-language snapshot in the built-in light palette without a lan
 });
 
 it.each([
+  { name: "a null style", appearance: null },
   { name: "an unsupported page colour", appearance: { pageColor: "#abc" } },
+  { name: "a page colour given as a list", appearance: { pageColor: ["#ffffff"] } },
   { name: "an unsupported font", appearance: { ...menuAppearances.dark, textFont: "display" } },
 ])(
   "opens the menu in the built-in palette when the snapshot contains $name",

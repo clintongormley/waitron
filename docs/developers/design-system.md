@@ -6231,11 +6231,11 @@ its price formatting. Search matches displayed dish and set-menu names. Top-leve
 remain visible while scrolling and underline the current section. The preview and
 `apps/customer-menu` share a renderer that accepts page, text and heading colours and separate
 typefaces for headings and text. The page colour also fills the menu's cards and fields. The heading
-colour accents the section underline and set-menu border. The renderer derives contrasting
-control colours from it. The page colour sets the canvas's light or dark scheme, with its own
-theme root independent of the dashboard. A menu without an appearance or with an unsupported colour or typeface uses
-Waitron's built-in light palette. An unspecified heading or text typeface follows Waitron's own.
-The standalone app carries the language in the address and draws without the preview frame.
+colour supplies the accent from which the renderer derives the section underline, set-menu border
+and control colours. The page colour sets the canvas's light or dark scheme, independently of the
+dashboard. A menu with no appearance or an unsupported colour or typeface uses Waitron's built-in
+light palette. An unspecified heading or text typeface follows Waitron's own. The standalone app
+carries the language in the address and draws without the preview frame.
 Dish and set-menu names open details inside the canvas. The heading takes focus on open.
 The **Menu** button restores the search, filters, scroll position and focus on the name that
 opened the details. **Allergies and diets** sits beside search and opens a dialog with a
