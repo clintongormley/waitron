@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import type { FrozenOffer, MenuDocument } from "./menu-document-types.js";
+import type { FrozenExtraItem, FrozenOffer, MenuDocument } from "./menu-document-types.js";
 import { publicGuestMenu as prepareGuestMenu } from "./guest-menu.js";
 
 const unit = {
@@ -336,7 +336,23 @@ it("keeps section order and direct includes when a set-menu placement has no pub
     ["product", "Soup ES"],
   ]);
 });
-it("keeps separately priced extras and option names with their own declarations", () => {
+it.each<{
+  unitKind: string;
+  frozenUnit: FrozenExtraItem["unit"];
+  displayUnit: { unit: string; servingUnit?: string };
+}>([
+  {
+    unitKind: "a serving",
+    frozenUnit: { ...unit, name: { en: "Serving", es: "Ración" }, precision: 2, measure: false },
+    displayUnit: { unit: "ea", servingUnit: "Ración" },
+  },
+  {
+    unitKind: "a volume with no scale unit",
+    frozenUnit: { ...unit, name: { en: "Litre" }, abbreviation: { en: "l" }, measure: true },
+    displayUnit: { unit: "l" },
+  },
+  { unitKind: "a published unit without the flag", frozenUnit: unit, displayUnit: { unit: "ea" } },
+])("$unitKind keeps extra declarations", ({ frozenUnit, displayUnit }) => {
   const dish: FrozenOffer = {
     ...offer,
     offeredModifiers: [
@@ -360,7 +376,7 @@ it("keeps separately priced extras and option names with their own declarations"
               variantKitchenName: "KITCHEN SIZE",
             },
             portion: "2.000",
-            unit,
+            unit: frozenUnit,
             name: "Ignore combined",
             customerName: null,
             kitchenName: "KITCHEN",
@@ -404,7 +420,7 @@ it("keeps separately priced extras and option names with their own declarations"
           name: "Bread ES (Staff size)",
           price: "1.50",
           portion: "2.000",
-          unit: "ea",
+          ...displayUnit,
           allergens: { nuts: { kinds: ["almonds"] } },
           dietary: ["vegetarian"],
         },

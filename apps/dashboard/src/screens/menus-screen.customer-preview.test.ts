@@ -285,6 +285,30 @@ describe("the customer menu Online preview", () => {
     expect(sides.textContent).toContain("Vegetarian");
   });
 
+  it("writes out multiple servings and keeps explicit measured amounts", async () => {
+    const preview = published("es");
+    const section = preview.menu.members[1]!;
+    if (section.kind !== "section") throw new Error("Expected the oven section");
+    const dish = section.members[0]!;
+    if (dish.kind !== "product") throw new Error("Expected a dish");
+    const sides = dish.modifiers[1]!;
+    if (sides.kind !== "extras") throw new Error("Expected extras");
+    const extra = sides.items[0]!;
+    sides.items = [
+      { ...extra, name: "Bread", portion: "1.000", unit: "rac", servingUnit: "Ración" },
+      { ...extra, name: "Salad", portion: "2.000", unit: "rac", servingUnit: "Ración" },
+      { ...extra, portion: "1.000" },
+      { ...extra, name: "Oil", portion: "0.250", unit: "l" },
+    ];
+
+    await open(() => Response.json(preview));
+    await page.getByRole("button", { name: dish.name, exact: true }).click();
+    const names = page.getByRole("heading", { name: sides.name }).element().nextElementSibling!;
+    expect(Array.from(names.children, (row) => row.firstElementChild?.textContent?.trim())).toEqual(
+      ["Bread", "Salad · 2 × Ración", "Almond dressing · 1 kg", "Oil · 0,25 l"],
+    );
+  });
+
   it("shows the set-menu title's return focus ring only after keyboard use", async () => {
     const { el } = await open(() => Response.json(published()), "dark");
     const cardTitle = page.getByRole("button", { name: "Two courses", exact: true });

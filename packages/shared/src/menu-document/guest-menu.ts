@@ -20,7 +20,11 @@ export interface GuestChoice extends GuestDeclarations {
   unit: string;
 }
 export type GuestModifier =
-  | { kind: "extras"; name: string; items: (GuestChoice & { portion: string })[] }
+  | {
+      kind: "extras";
+      name: string;
+      items: (GuestChoice & { portion: string; servingUnit?: string })[];
+    }
   | { kind: "options"; name: string; labels: string[] };
 export type GuestMember =
   | { kind: "section"; name: string; members: GuestMember[] }
@@ -157,6 +161,8 @@ export function publicGuestMenu(
                   items: modifier.items.map((extra) => {
                     const p = extra.presentation;
                     const parent = text(p.customerName, p.name);
+                    const { measure, hardwareUnit, name, staffName } = extra.unit;
+                    const serving = measure === false && hardwareUnit === null;
                     return {
                       name:
                         p.variantName === null
@@ -165,6 +171,7 @@ export function publicGuestMenu(
                       price: extra.price,
                       portion: extra.portion,
                       unit: unit(extra.unit),
+                      ...(serving ? { servingUnit: text(name, staffName) } : {}),
                       ...declarations(extra.addAllergens, extra.suitableFor),
                     };
                   }),

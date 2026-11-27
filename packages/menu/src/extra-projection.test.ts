@@ -147,6 +147,7 @@ describe("what a product's own extras lists offer", () => {
           abbreviation: { en: "kg" },
           precision: 3,
           hardwareUnit: null,
+          measure: false,
         },
       }),
       expect.objectContaining({

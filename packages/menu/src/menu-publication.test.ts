@@ -88,6 +88,7 @@ describe("future unit presentation publication", () => {
     { staffAbbreviation: "new-staff-kg" },
     { name: {} },
     { abbreviation: {} },
+    { measure: true },
   ])("reports an extras-only unit change %j while preserving its live document", async (patch) => {
     const f = await menusFixture(fx.db);
     const unit = await app(async (tx) => {
@@ -139,6 +140,7 @@ describe("future unit presentation publication", () => {
       abbreviation: { en: "guest-kg" },
       precision: 3,
       hardwareUnit: null,
+      measure: false,
       ...patch,
     });
     expect((await versionRows()).slice(0, 1)).toEqual(rows);

@@ -4,7 +4,6 @@ import {
   MEDIA_FILENAME,
   formatMoney,
   guestMenuWords,
-  type GuestChoice,
   type GuestDeclarations,
   type GuestMember,
   type PublicGuestMenu,
@@ -186,11 +185,6 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
       )}`;
   }
   const quantity = new Intl.NumberFormat(language, { maximumFractionDigits: 3 });
-  const extra = (value: GuestChoice & { portion: string }) => {
-    const amount = Number(value.portion);
-    const size = value.unit ? ` · ${quantity.format(amount)} ${value.unit}` : "";
-    return choiceRow(`${value.name}${size}`, money(value.price), value, words, true);
-  };
   const { allergens, diets } = declarationLabels(member, words);
   const extraAllergens = member.modifiers.flatMap((group) =>
     group.kind === "extras"
@@ -226,7 +220,16 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
       return group.items.length
         ? html`<h3>${group.name}</h3>
             <ul class="choices" role="list">
-              ${group.items.map(extra)}
+              ${group.items.map((value) => {
+                const amount = Number(value.portion);
+                let size = "";
+                if (value.servingUnit !== undefined) {
+                  if (amount !== 1) size = ` · ${quantity.format(amount)} × ${value.servingUnit}`;
+                } else if (value.unit) {
+                  size = ` · ${quantity.format(amount)} ${value.unit}`;
+                }
+                return choiceRow(`${value.name}${size}`, money(value.price), value, words, true);
+              })}
             </ul>`
         : nothing;
     })}

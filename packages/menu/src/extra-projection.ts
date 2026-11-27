@@ -1,6 +1,6 @@
 import { inArray } from "drizzle-orm";
 import { products, units, type Transaction } from "@waitron/db";
-import { centsToDecimal } from "@waitron/shared";
+import { centsToDecimal, type OfferedExtraItem } from "@waitron/shared";
 import { readExtraListsByIds, resolveExtraPrice } from "./extras.js";
 import { readProductModifiers } from "./product-modifiers.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
@@ -16,15 +16,7 @@ import type { ProductModifierRef } from "./product-modifiers.js";
 export type ResolvedExtraListItem = Omit<ExtraListItem, "price" | "portion"> & {
   price: string;
   portion: string;
-  unit: {
-    id: string;
-    staffName: string;
-    staffAbbreviation: string;
-    name: Record<string, string>;
-    abbreviation: Record<string, string>;
-    precision: number;
-    hardwareUnit: "kg" | "g" | "mg" | null;
-  };
+  unit: OfferedExtraItem["unit"];
 };
 
 /** A list with every item priced — what the product projection hands back. */
@@ -52,6 +44,7 @@ async function borrowedProductFacts(
       unitAbbreviation: units.abbreviation,
       unitPrecision: units.precision,
       unitHardwareUnit: units.hardwareUnit,
+      unitMeasure: units.measure,
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
@@ -72,6 +65,7 @@ async function borrowedProductFacts(
                 abbreviation: EACH_UNIT.abbreviation,
                 precision: EACH_UNIT.precision,
                 hardwareUnit: EACH_UNIT.hardwareUnit,
+                measure: false,
               }
             : {
                 id: product.unitId,
@@ -81,6 +75,7 @@ async function borrowedProductFacts(
                 abbreviation: product.unitAbbreviation!,
                 precision: product.unitPrecision!,
                 hardwareUnit: product.unitHardwareUnit as "kg" | "g" | "mg" | null,
+                measure: product.unitMeasure!,
               },
       },
     ]),
