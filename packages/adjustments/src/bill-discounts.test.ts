@@ -759,6 +759,22 @@ describe("workOutBillDiscounts: bound portions", () => {
     expect(rowsOf(worked(result, "one"))).toEqual({ s1: ["125@1001"], s2: ["125@1001"] });
     expectHonest(lines, result);
   });
+
+  it("files bound portions together again once a discount brings them to one price", () => {
+    const lines = [
+      line("p1", 1, 1000, { portion: { group: "croquettes", ordinal: 0 } }),
+      line("p2", 2, 500, { portion: { group: "croquettes", ordinal: 1 } }),
+      line("wine", 3, 500),
+    ];
+    const result = workOutBillDiscounts(lines, [
+      percent("half", on("p1"), 5000, 1),
+      amount("two", bill, 2, 2),
+    ]);
+    // As one row of 10.00 beside the wine's 5.00 the row takes 0.01 and the wine, by its larger
+    // remainder, the other; filed apart the two portions would take one each and the wine none.
+    expect(rowsOf(worked(result, "two"))).toEqual({ p2: ["1000@499"], wine: ["1000@499"] });
+    expectHonest(lines, result);
+  });
 });
 
 describe("spreadOverFiledGroups", () => {

@@ -246,8 +246,14 @@ export function zeroedRows<M extends Measured>(subjects: readonly M[]): PricedSh
     }));
 }
 
-/** A line of an open bill, as stored; `portion` names the filed row a bound portion, or an extra
- * of one, belongs to (an extra's ordinal is not read). */
+/**
+ * A line of an open bill, as stored. `portion` is set on a bound portion and on each extra of one.
+ * The caller's contract: `group` names everything filing compares except the price, the list price
+ * and the quantity (for a dish, its cohort and its other filed fields; for an extra, its own filed
+ * fields), and the portions sharing one were priced alike before any discount, as a cohort's are.
+ * So it never changes with a discount: the prices are compared here, as each discount leaves them.
+ * An extra's `ordinal` is not read.
+ */
 export interface BillDiscountLine extends SpreadRow {
   setMenuLineId: string | null;
   lineTotal: number;
@@ -367,8 +373,8 @@ function byQuantityWithin(
  * `projectPortionSale` (`apps/server/src/portion-sale-projection.ts`) files bound dishes as one row
  * while they share a cohort, every filed field but quantity, and the same extras per dish (each
  * extra's fields and quantity); an extra of the first dish then files as one row with the first
- * unclaimed matching extra of each other dish. Here a portion group stands for the cohort and the
- * fields a discount leaves alone, so the price is compared beside it.
+ * unclaimed matching extra of each other dish. Here a portion group stands for everything but the
+ * prices (see {@link BillDiscountLine}), so the prices are compared beside it.
  */
 function filedRows<M extends { row: Part; quantity: number }>(members: readonly M[]): M[][] {
   const extrasOf = new Map<string, M[]>();
