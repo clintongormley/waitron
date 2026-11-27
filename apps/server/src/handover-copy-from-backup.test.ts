@@ -269,6 +269,21 @@ it("a spare with no backup.env, or one holding a key too short to use, asks for 
   ).rejects.toMatchObject({ code: "handover.backup_needs_master_key" });
 });
 
+it("a spare holding the file's key with its number and id but no master key day opens it with no key typed", async () => {
+  ciphertext = await archive(4);
+  const withoutDay = backupKeyEnv(heldBackupKey(masterKey, 4));
+  delete withoutDay.WAITRON_BACKUP_MASTER_KEY_DAY;
+  await writeFile(
+    join(root, "backup.env"),
+    Object.entries(withoutDay)
+      .map(([name, value]) => `${name}=${value}\n`)
+      .join(""),
+  );
+  await expect(
+    stage({ readBackupKey: async () => loadUsableBackupKey(await loadBoxEnv({}, root)) }),
+  ).resolves.toEqual({ source: "selected-backup", sourceId: recoveryArchiveSourceId(ciphertext) });
+});
+
 it("refuses a version 1 file, with or without a master key", async () => {
   await archive(1, 1);
   for (const typed of [{}, { masterKey: encodeMasterKeyCode(masterKey) }])

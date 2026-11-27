@@ -135,9 +135,10 @@ export function loadBackupKey(env: Env): BackupKeyRecord | undefined {
   return { ...numbered, masterKeyDay };
 }
 
-/** {@link loadBackupKey}, with a key under the length floor counted as none: it opens nothing. */
-export function loadUsableBackupKey(env: Env): BackupKeyRecord | undefined {
-  return heldUsableKey(env) === undefined ? undefined : loadBackupKey(env);
+/** {@link loadNumberedBackupKey}, with a key under the length floor counted as none: it opens
+ * nothing. Opening a file needs no master key day. */
+export function loadUsableBackupKey(env: Env): Omit<BackupKeyRecord, "masterKeyDay"> | undefined {
+  return heldUsableKey(env) === undefined ? undefined : loadNumberedBackupKey(env);
 }
 
 /** When the recovery key was last rotated, as the box env records it. */

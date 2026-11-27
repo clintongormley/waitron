@@ -95,7 +95,7 @@ export async function stageBackupAsCopy(
   deps: CheckedCopyDeps & {
     artifactPath: string;
     masterKey?: string;
-    readBackupKey(): Promise<BackupKeyRecord | undefined>;
+    readBackupKey(): Promise<Omit<BackupKeyRecord, "masterKeyDay"> | undefined>;
     environment: DeploymentEnvironment;
   },
 ): Promise<SelectedCopy> {

@@ -134,7 +134,7 @@ interface Deps {
     migrationsRoot: string | null;
   };
   backup: {
-    readBackupKey(): Promise<BackupKeyRecord | undefined>;
+    readBackupKey(): Promise<Omit<BackupKeyRecord, "masterKeyDay"> | undefined>;
     environment: DeploymentEnvironment;
     migrationsRoot: string | null;
     restart(): void;
