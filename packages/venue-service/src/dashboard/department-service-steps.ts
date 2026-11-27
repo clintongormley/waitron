@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { ReorderController, baseStyles, visuallyHiddenStyles } from "@waitron/ui";
+import { ReorderController, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -73,15 +73,15 @@ export class DepartmentServiceSteps extends LitElement {
         flex: 1 1 100%;
         min-width: 0;
       }
-      /* The row menu shares the name's line, so the start below gets the whole width. */
-      .fields:has(> wt-row-actions, > .actions-cell) > .name {
+      /* The row menu shares the name's line, so the start and minutes below span the whole cell. */
+      .fields:has(> wt-row-actions, > .actions-head) > .name {
         flex-basis: calc(100% - var(--wt-tap-min) - var(--wt-space-2));
       }
       wt-row-actions,
-      .actions-cell {
+      .actions-head {
         flex: none;
       }
-      .actions-cell {
+      .actions-head {
         width: var(--wt-tap-min);
       }
       /* Where the fields are narrower than nine tap widths the second term outgrows them, so the
@@ -97,9 +97,6 @@ export class DepartmentServiceSteps extends LitElement {
       }
       .empty {
         color: var(--wt-color-text-muted);
-      }
-      .visually-hidden {
-        ${visuallyHiddenStyles}
       }
       .required {
         color: var(--wt-color-danger);
@@ -306,9 +303,7 @@ export class DepartmentServiceSteps extends LitElement {
                 ${
                   this.disabled
                     ? nothing
-                    : html`<span class="actions-cell"
-                        ><span class="visually-hidden">${t("venue.actions")}</span></span
-                      >`
+                    : html`<span class="actions-head" aria-hidden="true"></span>`
                 }
                 <span class="start" data-head
                   >${t("venue.service_step_starts")}<span class="required" aria-hidden="true"

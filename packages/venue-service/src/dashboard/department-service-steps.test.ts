@@ -445,8 +445,9 @@ it.each([
   },
 );
 
-it("puts each row's menu at the end of the step name's line, in a table of one column", async () => {
-  for (const width of [576, 320]) {
+it.each([576, 320])(
+  "puts each row's menu at the end of the step name's line, in a table of one column, at %i px",
+  async (width) => {
     const el = await mount();
     el.style.width = `${width}px`;
     await settle(el);
@@ -464,9 +465,8 @@ it("puts each row's menu at the end of the step name's line, in a table of one c
       expect(Math.abs(start.left - name.left)).toBeLessThan(1);
       expect(cell.right - menu.right).toBeLessThan(cell.right - start.right + 1);
     });
-    cleanup();
-  }
-});
+  },
+);
 
 it("read-only: the step name takes its whole line, with no menu beside it", async () => {
   const el = await mount({ disabled: true });
@@ -536,8 +536,10 @@ it("visibly marks Step, Starts and Minutes as required", async () => {
   );
 });
 
-it("draws Minutes beside its required mark and keeps Actions available to screen readers", async () => {
+it("draws Minutes beside its required mark, and the header reads Step, Starts and Minutes over the row's fields", async () => {
   const el = await mount();
+  el.style.width = "576px";
+  await settle(el);
   expect(heads(el)).toEqual(["Step", "Starts", "Minutes"]);
   const heading = q(el, "thead .minutes")!;
   const label = new Range();
@@ -546,11 +548,21 @@ it("draws Minutes beside its required mark and keeps Actions available to screen
   expect(box.width).toBeGreaterThan(
     heading.querySelector(".required")!.getBoundingClientRect().width,
   );
-  const actions = q(el, "thead .actions-cell")!.querySelector<HTMLElement>(".visually-hidden")!;
-  expect(actions.textContent).toBe("Actions");
-  expect(actions.checkVisibility()).toBe(true);
-  const hidden = actions.getBoundingClientRect();
-  expect(hidden.width * hidden.height).toBeLessThanOrEqual(1);
+  const read = q(el, "thead th")!.textContent!.replace(/\s+/g, " ");
+  expect(read).toContain("Step");
+  expect(read).toContain("Starts");
+  expect(read).toContain("Minutes");
+  expect(read).not.toContain("Actions");
+  const spacer = q(el, "thead .actions-head")!;
+  expect(spacer.getAttribute("aria-hidden")).toBe("true");
+  expect(spacer.textContent).toBe("");
+  const row = rows(el)[0]!;
+  const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
+  expect(spacer.getBoundingClientRect().width).toBeCloseTo(menu.width, 0);
+  const edge = (selector: string) => q(el, `thead ${selector}`)!.getBoundingClientRect();
+  expect(edge(".name").right).toBeCloseTo(nameInput(el, 0).getBoundingClientRect().right, 0);
+  expect(edge(".start").right).toBeCloseTo(startBox(el, 0).getBoundingClientRect().right, 0);
+  expect(edge(".minutes").left).toBeCloseTo(minutesInput(el, 0).getBoundingClientRect().left, 0);
 });
 
 it("reads a course or step name holding a replacement pattern literally", async () => {
