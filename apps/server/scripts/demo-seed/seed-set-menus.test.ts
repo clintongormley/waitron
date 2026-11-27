@@ -69,7 +69,7 @@ it.each(["en", "es"] as const)("publishes the two lunch set menus in %s", async 
     const special = lunch.setMenus.find(({ name }) => name === specialName)!;
     for (const [copy, price, secondLine] of [
       [daily, "14.00", ["Mains"]],
-      [special, "20.00", ["Starters", "Mains"]],
+      [special, "20.00", ["Sharing plates", "Starters", "Mains"]],
     ] as const) {
       expect(copy).toMatchObject({
         orderable: true,
@@ -108,7 +108,7 @@ it.each(["en", "es"] as const)("publishes the two lunch set menus in %s", async 
     expect(dish(daily, "cafe-solo").variants).toHaveLength(1);
     expect(dish(special, "cafe-solo").variants).toHaveLength(2);
     const bravas = dish(special, "patatas-bravas");
-    expect(courseNames.get(bravas.countsAsCourseId!)).toBe("Starters");
+    expect(courseNames.get(bravas.countsAsCourseId!)).toBe("Sharing plates");
     expect(bravas.courseId).toBe(bravas.countsAsCourseId);
     expect(dish(daily, "solomillo").offeredModifiers.map(({ kind }) => kind)).toContain("options");
     expect(dish(daily, "pollo-asado").offeredModifiers.map(({ kind }) => kind)).toContain("extras");

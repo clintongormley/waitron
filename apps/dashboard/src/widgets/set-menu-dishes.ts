@@ -330,6 +330,7 @@ export class SetMenuDishes extends LitElement {
       {
         key: "surcharge",
         label: t("menus.set_menu_surcharge"),
+        choosable: "shown",
         cell: (dish) => this.#surcharge(dish),
       },
       {
@@ -429,6 +430,8 @@ export class SetMenuDishes extends LitElement {
           <wt-data-table
             wrap-to-fit
             aria-label=${name}
+            viewKey=${`waitron.menus.set-menu.dishes.${id ?? "no-course"}`}
+            customiseColumnsLabel=${t("table.customise_columns")}
             .rows=${groups.get(id)!}
             .columns=${columns}
             .rowKey=${rowKey}
