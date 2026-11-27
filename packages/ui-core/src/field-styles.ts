@@ -93,8 +93,14 @@ export const fieldStyles = css`
     text-overflow: ellipsis;
   }
   input.field-control:not([type="file"]),
-  textarea.field-control {
+  textarea.field-control,
+  button.field-control {
     font-size: var(--wt-text-control-font-size);
+  }
+  /* A button control shows no value while its label rests, so its chevron is centred beside the
+     label; the padding adds up to the floated one's so the box keeps its height. */
+  .field[data-label="rest"]:not([data-compact], :focus-within) button.field-control {
+    padding-block: calc((var(--wt-space-3) + var(--wt-font-size-sm) + var(--wt-space-2)) / 2);
   }
   .field-control::placeholder {
     color: var(--wt-color-text-muted);

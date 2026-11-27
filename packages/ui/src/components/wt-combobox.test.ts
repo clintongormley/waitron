@@ -9,6 +9,8 @@ import {
   type WtCombobox,
 } from "./wt-combobox.js";
 import { registerIcons } from "./wt-icon.js";
+import { fontSizes } from "@waitron/ui-core/theme";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import "./wt-dialog.js";
 import type { WtDialog } from "./wt-dialog.js";
 import "./wt-input.js";
@@ -1646,22 +1648,31 @@ function optionRows(el: WtCombobox): HTMLElement[] {
   return [...el.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
 }
 
-test("a dropdown draws its resting label at a text field's label size and its chosen value at a text field's value size", async () => {
+test("a dropdown draws its labels, chosen value and placeholder at a text field's sizes for each", async () => {
   const chosen = await mountWith('<wt-combobox label="Course" value="vegan"></wt-combobox>');
   host.insertAdjacentHTML(
     "beforeend",
     '<wt-combobox label="Course"></wt-combobox>' +
-      '<wt-input label="Name"></wt-input><wt-input label="Name" value="Ana"></wt-input>',
+      '<wt-combobox label="Course" placeholder="Choose a course"></wt-combobox>' +
+      '<wt-input label="Name"></wt-input><wt-input label="Name" value="Ana"></wt-input>' +
+      '<wt-input label="Name" placeholder="Type a name"></wt-input>',
   );
-  const empty = host.querySelector<WtCombobox>("wt-combobox:not([value])")!;
+  const empty = host.querySelector<WtCombobox>("wt-combobox:not([value], [placeholder])")!;
+  const prompted = host.querySelector<WtCombobox>("wt-combobox[placeholder]")!;
   empty.options = TAGS;
+  prompted.options = TAGS;
   type Input = HTMLElement & { updateComplete: Promise<unknown> };
-  const [emptyInput, filledInput] = [...host.querySelectorAll<Input>("wt-input")];
+  const [emptyInput, filledInput, promptedInput] = [...host.querySelectorAll<Input>("wt-input")];
   await Promise.all([
     empty.updateComplete,
+    prompted.updateComplete,
     emptyInput!.updateComplete,
     filledInput!.updateComplete,
+    promptedInput!.updateComplete,
   ]);
+  const placeholder = fieldParts(prompted).value;
+  expect(placeholder.classList.contains("placeholder")).toBe(true);
+  const nativePlaceholder = promptedInput!.shadowRoot!.querySelector("input")!;
   const inputLabel = emptyInput!.shadowRoot!.querySelector(".field-label")!;
   const inputValue = filledInput!.shadowRoot!.querySelector("input")!;
   expect(emptyInput!.shadowRoot!.querySelector(".field")!.getAttribute("data-label")).toBe("rest");
@@ -1671,11 +1682,13 @@ test("a dropdown draws its resting label at a text field's label size and its ch
     restingLabel: size(fieldParts(empty).label!),
     floatedLabel: size(fieldParts(chosen).label!),
     value: size(fieldParts(chosen).value),
+    placeholder: size(placeholder),
   });
   const expected = () => ({
     restingLabel: size(inputLabel),
     floatedLabel: size(filledInput!.shadowRoot!.querySelector(".field-label")!),
     value: size(inputValue),
+    placeholder: getComputedStyle(nativePlaceholder, "::placeholder").fontSize,
   });
   expect(expected().restingLabel).not.toBe(expected().value);
   expect(sizes()).toEqual(expected());
@@ -1706,6 +1719,35 @@ test("an empty dropdown's chevron is centred on the box with its resting label, 
   expect(Math.abs(middle(f.chevron) - middle(f.value))).toBeLessThanOrEqual(1);
   expect(middle(f.chevron)).toBeGreaterThan(middle(f.field) + 4);
 });
+
+for (const scale of [100, 130] as const) {
+  test(`at ${scale}% text a dropdown keeps one height at rest, focused and filled, with its resting chevron centred`, async () => {
+    const el = await mountWith('<wt-combobox label="Province"></wt-combobox>');
+    for (const [name, size] of Object.entries(fontSizes(scale, WAITRON_DEFAULTS)))
+      host.style.setProperty(name, size);
+    const { field, label, trigger, value, chevron } = fieldParts(el);
+    expect(getComputedStyle(value).fontSize).toBe(scale === 100 ? "16px" : "18px");
+    const middle = (part: Element) => {
+      const box = part.getBoundingClientRect();
+      return box.top + box.height / 2;
+    };
+    expect(field.getAttribute("data-label")).toBe("rest");
+    const resting = field.getBoundingClientRect().height;
+    expect(Math.abs(middle(chevron) - middle(field))).toBeLessThanOrEqual(1);
+    expect(Math.abs(middle(chevron) - middle(label!))).toBeLessThanOrEqual(1);
+    trigger.focus();
+    expect(field.matches(":focus-within")).toBe(true);
+    const focused = field.getBoundingClientRect().height;
+    trigger.blur();
+    el.value = "vegan";
+    await el.updateComplete;
+    expect(field.getAttribute("data-label")).toBe("float");
+    expect({ focused, filled: field.getBoundingClientRect().height }).toEqual({
+      focused: resting,
+      filled: resting,
+    });
+  });
+}
 
 test("the trigger is the control of a filled field box, with the label resting while nothing is chosen", async () => {
   const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');

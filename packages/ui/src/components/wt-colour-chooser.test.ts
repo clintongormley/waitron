@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { fieldLabelState } from "@waitron/ui-core/field-styles";
+import { fontSizes } from "@waitron/ui-core/theme";
+import { WAITRON_DEFAULTS } from "@waitron/ui-core/theme/waitron";
 import { cleanup, host, mount, textLines } from "../test-helpers.js";
 import { focusFirstInvalid } from "../interactive.js";
 import "./wt-colour-chooser.js";
+import "./wt-input.js";
 import "./wt-modal.js";
 import type { ColourChoice, WtColourChooser } from "./wt-colour-chooser.js";
 
@@ -218,6 +221,96 @@ describe("the field", () => {
     expect(field.dataset.label).toBe(fieldLabelState({ value: "Blue", hint: "", placeholder: "" }));
     expect(field.dataset.label).toBe("float");
   });
+
+  test("draws its labels and chosen colour at a text field's sizes for each", async () => {
+    const chosen = await mountChooser();
+    host.insertAdjacentHTML(
+      "beforeend",
+      '<wt-colour-chooser label="Colour"></wt-colour-chooser>' +
+        '<wt-input label="Name"></wt-input><wt-input label="Name" value="Ana"></wt-input>',
+    );
+    const empty = host.querySelector<WtColourChooser>("wt-colour-chooser:not([value])")!;
+    empty.choices = CHOICES;
+    type Input = HTMLElement & { updateComplete: Promise<unknown> };
+    const [emptyInput, filledInput] = [...host.querySelectorAll<Input>("wt-input")];
+    await Promise.all([
+      empty.updateComplete,
+      emptyInput!.updateComplete,
+      filledInput!.updateComplete,
+    ]);
+    expect(emptyInput!.shadowRoot!.querySelector(".field")!.getAttribute("data-label")).toBe(
+      "rest",
+    );
+    expect(parts(empty).field.dataset.label).toBe("rest");
+    const size = (el: Element) => getComputedStyle(el).fontSize;
+    const sizes = () => ({
+      restingLabel: size(parts(empty).label),
+      floatedLabel: size(chosen.label),
+      value: size(chosen.trigger.querySelector(".value")!),
+    });
+    const expected = () => ({
+      restingLabel: size(emptyInput!.shadowRoot!.querySelector(".field-label")!),
+      floatedLabel: size(filledInput!.shadowRoot!.querySelector(".field-label")!),
+      value: size(filledInput!.shadowRoot!.querySelector("input")!),
+    });
+    expect(expected().restingLabel).not.toBe(expected().value);
+    expect(sizes()).toEqual(expected());
+    host.style.setProperty("--wt-font-size-md", "17px");
+    host.style.setProperty("--wt-text-control-font-size", "19px");
+    expect(expected()).toMatchObject({ restingLabel: "17px", value: "19px" });
+    expect(sizes()).toEqual(expected());
+  });
+
+  const middle = (part: Element) => {
+    const box = part.getBoundingClientRect();
+    return box.top + box.height / 2;
+  };
+
+  test("an empty chooser's chevron is centred on the box with its resting label, and a filled one's on its colour", async () => {
+    const empty = await mountChooser('label="Colour"');
+    host.insertAdjacentHTML(
+      "beforeend",
+      '<wt-colour-chooser label="Colour" value="blue"></wt-colour-chooser>',
+    );
+    const filled = host.querySelector<WtColourChooser>("wt-colour-chooser[value]")!;
+    filled.choices = CHOICES;
+    await filled.updateComplete;
+    const chevron = (el: WtColourChooser) => el.shadowRoot!.querySelector(".chevron")!;
+    expect(empty.field.dataset.label).toBe("rest");
+    expect(Math.abs(middle(chevron(empty.el)) - middle(empty.field))).toBeLessThanOrEqual(1);
+    expect(Math.abs(middle(chevron(empty.el)) - middle(empty.label))).toBeLessThanOrEqual(1);
+    const f = parts(filled);
+    const value = f.trigger.querySelector(".value")!;
+    expect(Math.abs(middle(chevron(filled)) - middle(value))).toBeLessThanOrEqual(1);
+    expect(middle(chevron(filled))).toBeGreaterThan(middle(f.field) + 4);
+  });
+
+  for (const scale of [100, 130] as const) {
+    test(`at ${scale}% text it keeps one height at rest, focused and chosen, with its resting chevron centred`, async () => {
+      const { el, field, label, trigger } = await mountChooser('label="Colour"');
+      for (const [name, size] of Object.entries(fontSizes(scale, WAITRON_DEFAULTS)))
+        host.style.setProperty(name, size);
+      const chevron = el.shadowRoot!.querySelector(".chevron")!;
+      expect(getComputedStyle(trigger.querySelector(".value")!).fontSize).toBe(
+        scale === 100 ? "16px" : "18px",
+      );
+      expect(field.dataset.label).toBe("rest");
+      const resting = field.getBoundingClientRect().height;
+      expect(Math.abs(middle(chevron) - middle(field))).toBeLessThanOrEqual(1);
+      expect(Math.abs(middle(chevron) - middle(label))).toBeLessThanOrEqual(1);
+      trigger.focus();
+      expect(field.matches(":focus-within")).toBe(true);
+      const focused = field.getBoundingClientRect().height;
+      trigger.blur();
+      el.value = "blue";
+      await el.updateComplete;
+      expect(field.dataset.label).toBe("float");
+      expect({ focused, chosen: field.getBoundingClientRect().height }).toEqual({
+        focused: resting,
+        chosen: resting,
+      });
+    });
+  }
 });
 
 describe("a value that is in no choice", () => {

@@ -129,12 +129,6 @@ export class WtCombobox extends LitElement {
         gap: var(--wt-space-1);
         text-align: start;
         cursor: pointer;
-        font-size: var(--wt-text-control-font-size);
-      }
-
-      /* With no value under it, the chevron shares the resting label's line at the box's middle. */
-      .field[data-label="rest"]:not(:focus-within) .trigger {
-        padding-block: var(--wt-space-2);
       }
 
       :host([stable-width]) .trigger {
