@@ -14,14 +14,16 @@ the paired check for direct streaming. The watcher clears the reviewed plan befo
 **Qualification.** On `7647fe0bab`, Litestream 0.5.18 and versitygw 1.8.0 synced row 1 to an
 encrypted loopback bucket. A gate held the upload of row 2. The three-second probe check timed
 out and a fresh restore still had `[1]`. After release, the CLI reported positions 2/2 and another
-restore had `[1,2]`. See Lane H `receipts/a1418-direct-bucket/qualification.log`.
+restore had `[1,2]`. This qualifies replication on loopback. The shutdown test below covers the
+full flow. See Lane H `receipts/a1418-direct-bucket/qualification.log`.
 
 1. **Check the running copy.** In `apps/server/src/stream-host.ts`, enable the same private sync
-   socket per direct child. Keep its launch settings and membership term with the supervisor until
-   retirement. `checkDirectShutdownUpload(settings, signal)` matches the shutdown, launch and fresh
-   settings, including credentials. Before and after sync, require a lone primary with the same term,
-   no pair link and the same supervisor. Reuse the supervisor’s child and generation checks and its
-   30-second CLI deadline per attempt. Generalise the socket comment in `packages/stream/src/supervisor.ts`.
+   socket per direct child. Keep the launch settings and term with the supervisor, clearing them on
+   retirement and failed start. `checkDirectShutdownUpload(settings, signal)` checks the target
+   before calling the supervisor and again in `sameTarget` after sync. Both reads match launch,
+   requested and current settings, including credentials, and require the same supervisor and term,
+   primary role, no stored pair link and no non-evicted peers. Reuse the child and generation checks
+   and 30-second CLI deadline per attempt. Update the socket comment in `packages/stream/src/supervisor.ts`.
 2. **Reuse the paired finish step.** In `apps/server/src/admin-shutdown-duties.ts`, move the
    streaming refusal into the paired branch. Keep saved destinations or, with no saved settings,
    the numbered-key download. Capture direct settings after work drains. In
@@ -34,24 +36,26 @@ restore had `[1,2]`. See Lane H `receipts/a1418-direct-bucket/qualification.log`
    keep it across action replies, explain the bucket check and leave the existing Bucket copy lag
    visible through `box-status-rows.ts`. The shutdown phase determines readiness. In
    `apps/dashboard/src/screens/box-shutdown-actions.ts`, label the bucket failure’s action **Retry
-   check**. Update `apps/dashboard/src/i18n/{codes,strings}.ts` in English and Spanish, including
-   the refusal that says to turn streaming off. Update `apps/server/src/guide/{en,es}/box-status.md`
-   at `#shutdown` and the A1418 entry in `docs/backlog.md`.
+   check**. Update English and Spanish in `apps/dashboard/src/i18n/{codes,strings}.ts` and remove
+   the obsolete standalone instruction to turn off the bucket copy (`codes.test.ts` pins it).
+   Update both `apps/server/src/guide/{en,es}/box-status.md` guides and the A1418 backlog entry.
 4. **Run the tests red before building, then green.** Add `apps/server/src/direct-bucket-shutdown.e2e.test.ts`
    to `test-server-stream` in `.github/workflows/ci.yml`, its ordinary-shard exclusions and the
    file list in `scripts/ci-workflow.test.mjs`. Reuse `apps/server/src/testing/{stream-box,s3-test-server,recovery-key}.ts`
-   and extract the PUT hold from `apps/server/src/testing/paired-shutdown-scenario.ts` to its sibling
-   `stream-upload-gate.ts`. Use the retained HTTPS listener and real download routes. After a final
-   change, observe its held PUT and confirm the download. Assert pause with the normal deadline and
-   no mark, and restore the older copy. Release, retry, assert ready with the mark and restore the
-   change. Expect `409 box.shutdown_unavailable` on base. Require both binaries in CI.
-   Replace the old streaming refusal in `apps/server/src/boot.stop-mark.test.ts` with saved-path
-   admission and a mark held until the late check succeeds. Extend `apps/server/src/stream-host.test.ts`
-   for matching and changed direct settings and a replaced supervisor. Reuse `supervisor.test.ts`
-   for the command and `admin-shutdown.test.ts` for download order, Retry, Cancel and the unchecked
-   mark. Test progress and Retry wording in `apps/dashboard/src/screens/box-status-screen.test.ts`
-   and run the size guard. Run the unchanged fiscal `write-path.e2e.test.ts`, `inmutabilidad.test.ts`
-   and the Server and Till menu gates.
+   and extract only the PUT hold from `apps/server/src/testing/paired-shutdown-scenario.ts`.
+   Configure its endpoint in `switchOnStreaming`. Over retained HTTPS, hold every `.ltx` PUT for the
+   live generation before the final write. Confirm the download and observe a held PUT, then assert
+   `box.shutdown_bucket_unchecked`, no mark and an older restore while still held. Release, Retry,
+   then assert ready, the mark and a restore with the write. On base expect `409 box.shutdown_unavailable`.
+   In scratch, force the direct check to succeed and watch the pause/no-mark assertion fail.
+   Budget 210 seconds (60 for startup, 25 for the download, 70 for two syncs, 40 for two restores,
+   15 for Retry and cleanup). Require both binaries. Compare stream-job time before and after in
+   healthy CI. Run `stream-loop` and `stream-pause`.
+   In `apps/server/src/boot.stop-mark.test.ts`, replace the refusal with saved-path admission and
+   pause without a mark. In `apps/server/src/stream-host.test.ts`, cover matching and changed direct
+   settings, missing supervisor and a replaced one. Keep `supervisor.test.ts` for the command and
+   `admin-shutdown.test.ts` for download order and decisions. Cover the copy in `box-status-screen.test.ts`
+   and run the size guard. Run the unchanged fiscal goldens, `inmutabilidad` and the menu gates.
 
-Estimate 85–125 added product lines and 250–350 added test lines. Cloud backup, spare shutdown and
+Estimate 110–160 added product lines and 250–350 added test lines. Cloud backup, spare shutdown and
 return, and appliance power-off are later slices.
