@@ -297,11 +297,70 @@ describe("laying out a title, the mark and an action", () => {
         expect(apart(pill, button)).toBe(true);
         expect(sameLine(pill, button)).toBe(true);
         expect(ink.left).toBeGreaterThanOrEqual(left - 0.5);
-        expect(ink.right).toBeLessThanOrEqual(Math.min(box.right, right) + 0.5);
+        expect(ink.right - drawn(el).blank).toBeLessThanOrEqual(Math.min(box.right, right) + 0.5);
         expect(button.right).toBeCloseTo(right, 0);
         expect(lines(el).length).toBeLessThanOrEqual(2);
       },
     );
+
+    /** Where the time phrase's last letter's ink ends, and the blank after it to the end of the
+     * phrase's box: the letter-spacing and the letter's side bearing. */
+    function drawn(el: Element) {
+      const style = getComputedStyle(heading(el));
+      const pen = document.createElement("canvas").getContext("2d")!;
+      pen.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      pen.letterSpacing = style.letterSpacing;
+      const phrase = pen.measureText(words.split(" ").at(-1)!.toUpperCase());
+      return {
+        right: phrase.actualBoundingBoxRight,
+        blank: phrase.width - phrase.actualBoundingBoxRight,
+      };
+    }
+    /** The heading width at which the phrase's letters just fit beside the mark and the action. */
+    async function fit() {
+      const el = await laidOut(2000, words);
+      expect(drawn(el).blank).toBeGreaterThan(0.6);
+      return 2000 - parts(el).title.width + drawn(el).right;
+    }
+    function besideOnTwoLines(el: Element) {
+      const { title: box, mark: pill, button } = parts(el);
+      const ink = inked(el);
+      expect(el.hasAttribute("stacked")).toBe(false);
+      expect(lines(el)).toHaveLength(2);
+      expect(sameLine(box, pill)).toBe(true);
+      expect(sameLine(pill, button)).toBe(true);
+      expect(pill.top).toBeLessThan(box.bottom);
+      expect(apart(ink, pill)).toBe(true);
+      expect(apart(ink, button)).toBe(true);
+    }
+
+    it("keeps the mark and the action beside a two-line title when the phrase's letters just fit", async () => {
+      besideOnTwoLines(await laidOut((await fit()) + 0.1, words));
+      besideOnTwoLines(await laidOut((await fit()) + 6, words));
+    });
+
+    it("moves the mark and the action down when the phrase's letters do not fit", async () => {
+      const el = await laidOut((await fit()) - 1.5, words);
+      expect(el.hasAttribute("stacked")).toBe(true);
+      expect(parts(el).mark.top).toBeGreaterThanOrEqual(parts(el).title.bottom);
+    });
+
+    it("moves the mark and the action down when the phrase's letters do not fit, though white space follows them", async () => {
+      const el = await laidOut((await fit()) - 1.5, `${words}\n    `);
+      expect(el.hasAttribute("stacked")).toBe(true);
+    });
+
+    it("moves the mark and the action back beside the title when widened to where it fits, and down again when narrowed", async () => {
+      const just = await fit();
+      const el = await laidOut(just - 40, words);
+      expect(el.hasAttribute("stacked")).toBe(true);
+      (el as HTMLElement).style.width = `${just + 0.1}px`;
+      await settled(el);
+      besideOnTwoLines(el);
+      (el as HTMLElement).style.width = `${just - 1.5}px`;
+      await settled(el);
+      expect(el.hasAttribute("stacked")).toBe(true);
+    });
   });
 
   it("balances the title's lines", async () => {

@@ -225,12 +225,36 @@ function measure(title: HTMLElement): { lines: number; overflows: boolean } {
       words.selectNodeContents(text);
       for (const box of words.getClientRects()) {
         if (box.width === 0) continue;
-        if (box.right > room.right + 0.5) overflows = true;
+        if (box.right - blankAfter(text as Text, box, title) > room.right + 0.5) overflows = true;
         if (!tops.some((top) => Math.abs(top - box.top) < 2)) tops.push(box.top);
       }
     }
   }
   return { lines: tops.length, overflows };
+}
+
+let pen: CanvasRenderingContext2D | null | undefined;
+
+/** The blank after the ink of the last letter on `line`: its letter-spacing and side bearing, which
+ * may stand past the title's box without drawing anything there. */
+function blankAfter(text: Text, line: DOMRect, title: HTMLElement): number {
+  if (line.right <= title.getBoundingClientRect().right) return 0;
+  pen ??= document.createElement("canvas").getContext("2d");
+  const letter = document.createRange();
+  let blank = 0;
+  for (let at = text.length - 1; at >= 0 && pen; at--) {
+    if (/\s/.test(text.data[at]!)) continue;
+    letter.setStart(text, at);
+    letter.setEnd(text, at + 1);
+    if (Math.abs(letter.getBoundingClientRect().top - line.top) >= 2) continue;
+    const style = getComputedStyle(title);
+    pen.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    pen.letterSpacing = style.letterSpacing;
+    const drawn = pen.measureText(text.data[at]!.toUpperCase());
+    blank = Math.max(0, drawn.width - drawn.actualBoundingBoxRight);
+    break;
+  }
+  return blank;
 }
 
 declare global {
