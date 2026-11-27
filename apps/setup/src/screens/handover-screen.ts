@@ -31,7 +31,6 @@ import {
   visuallyHiddenStyles,
   type MasterKeyChangeDetail,
 } from "@waitron/ui";
-import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
 import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 import { formatDuration, isValidEmail, makeBrowserUuid } from "@waitron/shared";
@@ -46,6 +45,7 @@ import {
 import { passwordVisibility, currentLocale, format, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { masterKeyFieldWords } from "../i18n/master-key-words.js";
 import { fileInputCopy } from "../file-input-copy.js";
 
 const activated = (status?: HandoverStatus) =>
@@ -1804,7 +1804,7 @@ export class SetupHandoverScreen extends LitElement {
       ${this.backupKeyName === undefined ? nothing : this.#masterKeyField(this.backupKeyName)}`;
   }
   #masterKeyField(keyName: string) {
-    const words = MASTER_KEY_FIELD_WORDS[currentLocale() === "es-ES" ? "es" : "en"];
+    const words = masterKeyFieldWords();
     return html`<p data-test="backup-needs-master-key" role="alert">
         ${format("handover.emergency.backup_needs_master_key", { name: keyName })}
       </p>

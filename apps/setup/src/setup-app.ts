@@ -79,7 +79,7 @@ import { LocaleChangeController } from "./i18n/locale-controller.js";
 import { matchBrowserLocale } from "./i18n/match-browser-locale.js";
 import type { StringKey } from "./i18n/strings.js";
 import { currentLocale, format, setLocale, t } from "./i18n/t.js";
-import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
+import { masterKeyFieldWords, refusedKeyName } from "./i18n/master-key-words.js";
 
 const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" : "en");
 
@@ -649,10 +649,8 @@ function keyNamedInRefusal(
   code: unknown,
   params: Record<string, unknown> | undefined,
 ): Message | undefined {
-  const keyName = params?.keyName;
-  return code === "promotion.break_glass_invalid" && typeof keyName === "string"
-    ? () => MASTER_KEY_FIELD_WORDS[setupLocale()].wrongKey(keyName)
-    : undefined;
+  const keyName = refusedKeyName({ code, params });
+  return keyName === undefined ? undefined : () => masterKeyFieldWords().wrongKey(keyName);
 }
 
 function describeBucketRefusal(

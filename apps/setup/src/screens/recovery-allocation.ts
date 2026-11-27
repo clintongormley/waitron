@@ -13,7 +13,6 @@ import {
   type MasterKeyChangeDetail,
   type MasterKeyInputCopy,
 } from "@waitron/ui";
-import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
 import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 import "@waitron/ui/src/components/wt-master-key-input.js";
@@ -23,6 +22,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import type { RecoveryBackupPreview, RecoveryRestoreCredentials } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { t, currentLocale } from "../i18n/t.js";
+import { masterKeyFieldWords } from "../i18n/master-key-words.js";
 import { fieldStyles, errorStyles } from "../form-styles.js";
 
 export type RecoveryEntryField = "recoveryOperation" | "nodeRecoverySecret";
@@ -312,8 +312,7 @@ export class SetupRecoveryAllocation extends LitElement {
     return !this.refusalDismissed && this.refusedField === field ? (this.errorMessage ?? "") : "";
   }
   #keyField(keyInvalid: boolean) {
-    const copy: MasterKeyInputCopy =
-      MASTER_KEY_FIELD_WORDS[currentLocale() === "es-ES" ? "es" : "en"];
+    const copy: MasterKeyInputCopy = masterKeyFieldWords();
     return html`<wt-master-key-input
       class="field"
       .draftParent=${this}

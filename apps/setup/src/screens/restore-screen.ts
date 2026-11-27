@@ -11,7 +11,6 @@ import {
   type MasterKeyChangeDetail,
   type WtMasterKeyInput,
 } from "@waitron/ui";
-import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import { MAX_PACK_PDF } from "@waitron/recovery-pack/src/pack-file.js";
 import { loadRecoveryPackReader } from "@waitron/recovery-pack/src/load-pack-reader.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -23,6 +22,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, errorStyles, fieldStyles, statusStyles } from "../form-styles.js";
 import { type KeptRestoreRequest, dispatchRestoreRequested, dispatchSetupGoto } from "../events.js";
 import { currentLocale, format, t } from "../i18n/t.js";
+import { masterKeyFieldWords, refusedKeyName } from "../i18n/master-key-words.js";
 import { fileInputCopy } from "../file-input-copy.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
@@ -203,9 +203,7 @@ export class SetupRestoreScreen extends LitElement {
     if (refused === field) return this.errorMessage;
     if (this.previewRefusal === field) {
       if (field === "masterKey" && this.previewKeyName !== undefined)
-        return MASTER_KEY_FIELD_WORDS[currentLocale() === "es-ES" ? "es" : "en"].wrongKey(
-          this.previewKeyName,
-        );
+        return masterKeyFieldWords().wrongKey(this.previewKeyName);
       const messages = {
         artifact: "restore.preview_file_error",
         masterKey: "restore.check.master_key",
@@ -330,7 +328,7 @@ export class SetupRestoreScreen extends LitElement {
         data-test="master-key"
         required
         .draftParent=${this}
-        .copy=${MASTER_KEY_FIELD_WORDS[currentLocale() === "es-ES" ? "es" : "en"]}
+        .copy=${masterKeyFieldWords()}
         .readPack=${loadRecoveryPackReader}
         .maxPdfBytes=${MAX_PACK_PDF}
         .attempted=${this.feedback.attempted}
@@ -405,12 +403,7 @@ export class SetupRestoreScreen extends LitElement {
             return;
           }
           this.previewRefusal = event.detail.field;
-          const keyName = event.detail.cause?.params?.keyName;
-          this.previewKeyName =
-            event.detail.cause?.code === "promotion.break_glass_invalid" &&
-            typeof keyName === "string"
-              ? keyName
-              : undefined;
+          this.previewKeyName = refusedKeyName(event.detail.cause);
         }}
       ></setup-recovery-copy>
       <label class="field">

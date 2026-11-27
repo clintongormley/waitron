@@ -12,8 +12,8 @@ import {
 } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { SetupRecoveryAllocation } from "./recovery-allocation.js";
-import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
+import { masterKeyFieldWords, refusedKeyName } from "../i18n/master-key-words.js";
 
 /**
  * The environment a refused Review names for its copy, when the form asked for the other one. The
@@ -112,31 +112,25 @@ export class SetupRecoveryCopy extends LitElement {
         this.#endIfSetupConflict(cause);
         const error = cause as ApiError | undefined;
         if (error?.code === "restore.upload_interrupted") this.error = "interrupted";
-        const keyName = error?.params?.keyName;
         // A backup file's master key is typed on the screen around this one, unless it opened the
         // file but the copy's current master key is another (named, with no key number): the
         // recovery form then asks for that one. A key the form asked for itself stays the form's.
-        if (
-          this.#fileSource &&
-          request.nodeRecoverySecret === this.masterKey &&
-          error?.code === "promotion.break_glass_invalid" &&
-          typeof keyName === "string" &&
-          error.params?.keyNumber === undefined
-        )
-          this.ownKeyName = keyName;
-        else if (
-          this.#fileSource &&
-          request.nodeRecoverySecret === this.masterKey &&
-          (error?.code === "promotion.break_glass_invalid" ||
-            error?.params?.field === "nodeRecoverySecret")
-        )
-          this.dispatchEvent(
-            new CustomEvent("preview-refusal", {
-              detail: { field: "masterKey", cause: error },
-              bubbles: true,
-              composed: true,
-            }),
-          );
+        if (this.#fileSource && request.nodeRecoverySecret === this.masterKey) {
+          const keyName = refusedKeyName(error);
+          if (keyName !== undefined && error?.params?.keyNumber === undefined)
+            this.ownKeyName = keyName;
+          else if (
+            error?.code === "promotion.break_glass_invalid" ||
+            error?.params?.field === "nodeRecoverySecret"
+          )
+            this.dispatchEvent(
+              new CustomEvent("preview-refusal", {
+                detail: { field: "masterKey", cause: error },
+                bubbles: true,
+                composed: true,
+              }),
+            );
+        }
       }
       throw cause;
     }
@@ -363,9 +357,7 @@ export class SetupRecoveryCopy extends LitElement {
               ? "interrupted"
               : error?.code === "restore.archive_resource_limit"
                 ? "capacity"
-                : this.#fileSource &&
-                    error?.code === "promotion.break_glass_invalid" &&
-                    typeof error.params?.keyName === "string"
+                : this.#fileSource && refusedKeyName(error) !== undefined
                   ? "namedKey"
                   : error?.code === "promotion.break_glass_invalid" || field === "masterKey"
                     ? "key"
@@ -484,9 +476,7 @@ export class SetupRecoveryCopy extends LitElement {
                 .errorMessage=${
                   this.ownKeyName === undefined
                     ? this.errorMessage
-                    : MASTER_KEY_FIELD_WORDS[currentLocale() === "es-ES" ? "es" : "en"].wrongKey(
-                        this.ownKeyName,
-                      )
+                    : masterKeyFieldWords().wrongKey(this.ownKeyName)
                 }
                 .refusedField=${this.ownKeyName === undefined ? this.refusedField : "nodeRecoverySecret"}
               ></setup-recovery-allocation>
