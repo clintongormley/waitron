@@ -124,6 +124,9 @@ export const productRowStyles = css`
   wt-data-table[narrow]::part(column-price) {
     inline-size: calc(var(--wt-tap-min) * 2 + var(--wt-space-1));
   }
+  wt-data-table[narrow][data-phone]:not([data-list])::part(column-price) {
+    inline-size: calc(var(--wt-tap-min) * 2 - var(--wt-space-1));
+  }
   wt-data-table[narrow][data-list]::part(column-price) {
     inline-size: calc(var(--wt-tap-min) + var(--wt-space-6) + var(--wt-space-1) / 2);
   }
@@ -145,9 +148,6 @@ export const productRowStyles = css`
   }
   wt-data-table[narrow]::part(price-amount) {
     white-space: normal;
-  }
-  wt-data-table[narrow][data-phone]::part(price-amount) {
-    font-size: var(--wt-font-size-sm);
   }
   wt-data-table::part(price-unit) {
     text-align: start;
