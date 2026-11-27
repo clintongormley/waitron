@@ -322,6 +322,46 @@ describe("prepareStreamRestore", () => {
     }
   });
 
+  it.each(["older pointer", "invalid name", "access refused"] as const)(
+    "finds a usable child stream beside a folder with %s",
+    async (problem) => {
+      const parent = createMemoryObjectStore();
+      const good = await numberedBucket();
+      const old = createMemoryObjectStore();
+      const { recovery: _recovery, ...unversioned } = POINTER;
+      await writePointer(old, T.streamId, signPointer(unversioned, signer.privateKey), null);
+      const neighbour = problem === "invalid name" ? "notes " : "old";
+      const deps = await masterKeyDeps(parent);
+      const openStore = ({ prefix }: BucketConfig) => {
+        if (prefix === "good") return good;
+        if (prefix === neighbour && problem === "older pointer") return old;
+        if (prefix === neighbour && problem === "access refused") {
+          return {
+            ...parent,
+            get: async () => {
+              throw new AppError("backup.stream_request_failed", {
+                operation: "get",
+                key: pointerKey(),
+                status: 403,
+                name: "AccessDenied",
+              });
+            },
+          };
+        }
+        return { ...parent, listFolders: async () => [neighbour, "good"] };
+      };
+      const prepared = await prepareStreamRestore({ ...deps, openStore });
+      try {
+        expect(prepared.venue).toEqual(VENUE);
+        expect(copyFixture).toHaveBeenLastCalledWith(
+          expect.objectContaining({ bucket: { ...deps.bucket, prefix: "good" } }),
+        );
+      } finally {
+        await prepared.discard();
+      }
+    },
+  );
+
   it("asks for the exact folder when there are more than 24 child folders", async () => {
     const parent = createMemoryObjectStore();
     const deps = await masterKeyDeps(parent);
@@ -334,6 +374,34 @@ describe("prepareStreamRestore", () => {
       params: { folders: [] },
     });
     expect(openStore).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts folders that can hold a copy against the child search limit", async () => {
+    const parent = createMemoryObjectStore();
+    const good = await numberedBucket();
+    const deps = await masterKeyDeps(parent);
+    const folders = [
+      "waitron-probe",
+      GENERATION,
+      ...Array.from({ length: 23 }, (_, i) => `empty-${i}`),
+      "good",
+    ];
+    const openStore = ({ prefix }: BucketConfig) => {
+      if (prefix === "good") return good;
+      return {
+        ...parent,
+        listFolders: async (_prefix: string, call: { limit: number }) =>
+          folders.slice(0, call.limit),
+      };
+    };
+    const prepared = await prepareStreamRestore({ ...deps, openStore });
+    try {
+      expect(copyFixture).toHaveBeenLastCalledWith(
+        expect.objectContaining({ bucket: { ...deps.bucket, prefix: "good" } }),
+      );
+    } finally {
+      await prepared.discard();
+    }
   });
 
   it("restores the pointer's generation and unlocks the node's secrets row", async () => {

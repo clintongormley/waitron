@@ -112,7 +112,8 @@ recovery pack that holds it, and choose its **Backup environment**.
 For your bucket, enter the bucket name, region, folder and both access keys from your storage
 provider. Enter its storage address if you use a provider other than Amazon S3. Enter the backup’s
 **Master key** or choose its recovery pack, then choose the **Environment** the old box ran in.
-If Review backup finds several folders, choose the one the old box used and review it again.
+If the folder you enter has no copy, **Review backup** looks in the folders directly inside it.
+If it finds several copies, choose the folder the old box used and review it again.
 
 For Waitron Cloud, choose **Start Cloud recovery**, enter the code the page shows in your Waitron Cloud account
 (**Open Waitron Cloud**) and approve the request there. Back on the box, choose **Check approval**.

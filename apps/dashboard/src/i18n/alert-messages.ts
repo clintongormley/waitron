@@ -214,7 +214,7 @@ export const ALERT_MESSAGES: Readonly<
       numberedKeyRequired: {
         mode: "replace",
         en: "The bucket copy needs a new backup key. In Backups, open the Recovery pack card and choose Change the backup key. If the card offers only Make a new master key, choose that instead.",
-        es: "La copia en el bucket necesita una nueva clave de las copias. En Copias de seguridad, abre la tarjeta del kit de recuperación y elige Cambiar la clave de las copias. Si la tarjeta solo ofrece Crear una clave maestra nueva, elige esa opción.",
+        es: "La copia en el bucket necesita una nueva clave de las copias. En Copias de seguridad, abre la tarjeta del paquete de recuperación y elige Cambiar la clave de las copias. Si la tarjeta solo ofrece Crear una clave maestra nueva, elige esa opción.",
       },
       toSpare: {
         mode: "replace",

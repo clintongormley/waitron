@@ -5102,7 +5102,7 @@ clients read an empty socket path as the default, `/run/waitron-box/box.sock`.
   [plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1482-this-device-in-setup.md)). The page sends
   `clock-challenge` then `set-clock` through the preparation path it already uses for
   `compare-clocks`, so each page's own authority admits it: the setup owner's pass on first setup,
-  the master key that opens the backup file, or the kit, on restore, a `node.manage` sign-in on handover
+  the master key that opens the backup on restore, a `node.manage` sign-in on handover
   (`packages/fiscal-verifactu/src/initial-hour-setup.ts`, `hosted-hour-recovery.ts`). The module
   (`packages/fiscal-verifactu/src/hour-setup-clock.ts`) refuses `same_machine` for a page on the
   box itself, and `later` when the device's time is earlier than when the hour already chosen for
@@ -6970,7 +6970,7 @@ See [the current clock gate](#every-start-confirms-the-boxs-time-before-it-trade
   until the internet confirms that start or during start-up; a **Manage boxes** holder’s while the
   start waits or the clock reads before 28-10-2024), a **Manage boxes** holder’s own device, the
   device showing the clock step of the setup page (under its owner's pass), the restore page (under
-  the master key that opens its backup file, or its kit), the done screen or waiting page while that restore's start waits (under
+  the master key that opens its backup), the done screen or waiting page while that restore's start waits (under
   the backup's master key) or the handover page (signed in as a `node.manage` holder), when that
   person chooses **This device** (**Your device is correct** on the emergency switch) (owner, 2026-11-10: "yes"; 2026-11-12: "add \"This device\" to
   #2693 now") — never from devices alone

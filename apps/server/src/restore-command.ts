@@ -590,12 +590,15 @@ function bucketRefusal(err: AppError): string | null {
       return `${failed}check that this copy matches the master key and the storage credentials can read it`;
     return `${failed}the backup's pointer did not pass its signature check; choose another backup`;
   }
+  if (hasCode(err, "restore.stream_folder_required")) {
+    const advice = `${failed}give the backup's specific folder with --prefix, then run the command again`;
+    const folders = err.params.folders.map((folder) => JSON.stringify(folder)).join(", ");
+    return folders === "" ? advice : `${advice}. Folders found: ${folders}`;
+  }
   const words: Partial<Record<string, string>> = {
     "restore.stream_disk_full":
       "the disk filled while the copy was downloading; nothing on this server changed. Free some space and run it again",
     "restore.stream_pointer_missing": "no backup copy was found; check the bucket and folder",
-    "restore.stream_folder_required":
-      "give the backup's specific folder with --prefix, then run the command again",
     "restore.stream_integrity_failed":
       "the downloaded copy did not pass its checks; try again, or choose another backup",
     "restore.stream_state_missing":

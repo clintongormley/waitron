@@ -750,6 +750,10 @@ describe("waitron-restore restore --from-bucket", () => {
       new AppError("restore.stream_folder_required", {
         folders: ["waitron/first", "waitron/second"],
       }),
+      `restore failed: restore.stream_folder_required — give the backup's specific folder with --prefix, then run the command again. Folders found: "waitron/first", "waitron/second"`,
+    ],
+    [
+      new AppError("restore.stream_folder_required", { folders: [] }),
       "restore failed: restore.stream_folder_required — give the backup's specific folder with --prefix, then run the command again",
     ],
     [

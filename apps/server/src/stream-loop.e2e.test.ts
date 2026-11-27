@@ -110,7 +110,7 @@ describe("the stream loop: stream, rebuild from the bucket, sell under a fresh c
   });
 
   it(
-    "box A streams, dies, box B is rebuilt from the kit, sells on a fresh chain and moves the pointer; B's generation restores to B's database",
+    "box A streams, dies, box B is rebuilt with the master key, sells on a fresh chain and moves the pointer; B's generation restores to B's database",
     async (ctx) => {
       if (!litestream.ok || !versitygw.ok) {
         if (REQUIRED) {

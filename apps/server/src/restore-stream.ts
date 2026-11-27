@@ -289,6 +289,7 @@ async function readRestoredCopy(args: {
 }
 
 const DISCOVERY_LIMIT = 24;
+const LIST_LIMIT = 2 * DISCOVERY_LIMIT + 1;
 
 function checkedRestoreBucket(bucket: BucketConfig): BucketConfig {
   return readBucketConfig(bucket, (field) => {
@@ -306,27 +307,43 @@ async function locateBucketCopy(
   const exact = await readPointer(store, undefined, call);
   if (exact !== null) return { bucket, store, pointer: exact.pointer };
 
-  const folders = (await store.listFolders?.("", { signal, limit: DISCOVERY_LIMIT + 1 })) ?? [];
-  if (folders.length > DISCOVERY_LIMIT) {
+  const listed = (await store.listFolders?.("", { signal, limit: LIST_LIMIT })) ?? [];
+  const folders = listed.filter(
+    (folder) => `${folder}/` !== PROBE_PREFIX && parseGenerationName(folder) === null,
+  );
+  // A truncated listing cannot establish that a copy is the only one.
+  if (listed.length >= LIST_LIMIT || folders.length > DISCOVERY_LIMIT) {
     throw new AppError("restore.stream_folder_required", { folders: [] });
   }
   const copies = [];
+  let childRefusal: AppError | undefined;
   for (const folder of folders) {
-    if (`${folder}/` === PROBE_PREFIX || parseGenerationName(folder) !== null) continue;
-    const candidate = checkedRestoreBucket({
-      ...bucket,
-      prefix: `${normalisePrefix(bucket.prefix)}${folder}`,
-    });
-    const child = openStore(candidate);
-    const read = await readPointer(child, undefined, call);
-    if (read !== null) copies.push({ bucket: candidate, store: child, pointer: read.pointer });
+    try {
+      const candidate = checkedRestoreBucket({
+        ...bucket,
+        prefix: `${normalisePrefix(bucket.prefix)}${folder}`,
+      });
+      const child = openStore(candidate);
+      const read = await readPointer(child, undefined, call);
+      if (read !== null) copies.push({ bucket: candidate, store: child, pointer: read.pointer });
+    } catch (error) {
+      if (signal?.aborted || !isAppError(error)) throw error;
+      if (hasCode(error, "setup.request_invalid") && error.params.field === "prefix") continue;
+      if (
+        !hasCode(error, "backup.stream_pointer_invalid") &&
+        !(hasCode(error, "backup.stream_request_failed") && error.params.status === 403)
+      )
+        throw error;
+      childRefusal ??= error;
+    }
   }
   if (copies.length > 1) {
     throw new AppError("restore.stream_folder_required", {
       folders: copies.map((copy) => copy.bucket.prefix),
     });
   }
-  if (copies[0] === undefined) throw new AppError("restore.stream_pointer_missing", {});
+  if (copies[0] === undefined)
+    throw childRefusal ?? new AppError("restore.stream_pointer_missing", {});
   return copies[0];
 }
 
