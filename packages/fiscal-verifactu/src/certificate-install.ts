@@ -100,7 +100,9 @@ export async function venueTimeZone(tx: Transaction): Promise<string> {
   }
 }
 
-type Local = { ok: true; details: CertificateDetails } | { ok: false; answer: InstallAnswer };
+type Local =
+  | { ok: true; details: CertificateDetails; pfxBase64: string }
+  | { ok: false; answer: InstallAnswer };
 
 function refused(
   reason: RefusalReason,
@@ -135,7 +137,7 @@ async function checkLocally(
 ): Promise<Local> {
   const pfx = Buffer.from(body.pfxBase64, "base64");
   if (pfx.length > CERTIFICATE_MAX_BYTES) return refused("too_large", "file");
-  const opened = await openCertificate(pfx, body.passphrase);
+  const opened = await openCertificate(pfx, body.passphrase, { rewriteOld: true });
   if (!opened.ok) {
     if (opened.reason === "unavailable")
       return { ok: false, answer: { outcome: "refused", reason: "unavailable" } };
@@ -152,7 +154,8 @@ async function checkLocally(
   if (details.taxId !== null && details.taxId !== taxpayerNif) {
     return refused("other_taxpayer", "file", { nif: details.taxId, taxpayerNif });
   }
-  return { ok: true, details };
+  const pfxBase64 = opened.rewritten?.toString("base64") ?? body.pfxBase64;
+  return { ok: true, details, pfxBase64 };
 }
 
 /**
@@ -202,11 +205,11 @@ export async function installCertificate(
     now,
   );
   if (!local.ok) return refuse(local.answer);
-  const { details } = local;
+  const { details, pfxBase64 } = local;
 
   const checked = await checkWithAuthority({
     material: {
-      pfx: Buffer.from(body.pfxBase64, "base64"),
+      pfx: Buffer.from(pfxBase64, "base64"),
       passphrase: body.passphrase,
       certKind: body.certKind,
     },
@@ -239,7 +242,7 @@ export async function installCertificate(
     await putCredential(tx, deps.ring, {
       personId,
       purpose: "fiscal.aeat",
-      value: { pfxBase64: body.pfxBase64, passphrase: body.passphrase, certKind: body.certKind },
+      value: { pfxBase64, passphrase: body.passphrase, certKind: body.certKind },
     });
     await recordInstall(tx, {
       nodeId: deps.nodeId,

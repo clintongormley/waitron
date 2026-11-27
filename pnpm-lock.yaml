@@ -1217,6 +1217,9 @@ importers:
       lit:
         specifier: ^3.2.0
         version: 3.3.3
+      node-forge:
+        specifier: ^1.4.3
+        version: 1.4.3
       pdf-lib:
         specifier: 1.17.1
         version: 1.17.1
@@ -1263,9 +1266,6 @@ importers:
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
-      node-forge:
-        specifier: ^1.4.3
-        version: 1.4.3
       playwright:
         specifier: ^1.65.1
         version: 1.65.1

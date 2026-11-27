@@ -21,7 +21,13 @@ import {
 } from "../test/certificate-fixtures.js";
 import { seedTaxpayerNodeSif, TAXPAYER_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { RC2_CANDIDATE } from "../test/openssl-certificates.js";
+import {
+  OPENSSL_AUTHORITY,
+  OPENSSL_SIGNED_FINGERPRINT,
+  RC2_ACCENTED_CANDIDATE,
+  RC2_SIGNED_CANDIDATE,
+  RC4_CANDIDATE,
+} from "../test/openssl-certificates.js";
 import { mtlsFetch } from "./aeat-transport.js";
 import type { CheckTransport } from "./certificate-check.js";
 import {
@@ -30,6 +36,7 @@ import {
   type InstallAnswer,
   type InstallDeps,
 } from "./certificate-install.js";
+import { openCertificateFile } from "./certificate-file.js";
 import { latestInstall } from "./certificate-record.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
 import { verifactuCertificates } from "./schema/index.js";
@@ -149,8 +156,8 @@ describe("installCertificate's local refusals", () => {
     [
       "old_encryption",
       () => ({
-        pfx: Buffer.from(RC2_CANDIDATE.pfxBase64, "base64"),
-        passphrase: RC2_CANDIDATE.passphrase,
+        pfx: Buffer.from(RC4_CANDIDATE.pfxBase64, "base64"),
+        passphrase: RC4_CANDIDATE.passphrase,
       }),
       { outcome: "refused", reason: "old_encryption", field: "file" },
     ],
@@ -271,6 +278,67 @@ describe("installCertificate's local refusals", () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toMatch(/taxpayer is empty/);
     expect(server.requests()).toBe(0);
+  });
+});
+
+describe("installing a file Node refuses as old encryption", () => {
+  it.each([
+    ["an RC2 file", RC2_SIGNED_CANDIDATE],
+    ["an RC2 file under a passphrase outside ASCII", RC2_ACCENTED_CANDIDATE],
+  ])("installs %s rewritten, and later sends and reads open it", async (_label, rc2) => {
+    const v = await venue();
+    const server = await startAnsweringServer(OPENSSL_AUTHORITY, {
+      status: 200,
+      body: SIN_DATOS_BODY,
+    });
+    servers.push(server);
+    const deps = depsFor(v, server, {
+      transport: {
+        endpointFor: () => server.origin,
+        fetchFor: (material) => mtlsFetch(material, OPENSSL_AUTHORITY.caPem),
+      },
+    });
+    const file = { pfx: Buffer.from(rc2.pfxBase64, "base64"), passphrase: rc2.passphrase };
+
+    await expect(installCertificate(deps, bodyFor(v, file), NOW)).resolves.toEqual({
+      outcome: "installed",
+      reason: "installed",
+      details: { checkedAt: NOW.toISOString() },
+    });
+    expect(server.sawClientCn()).toBe("RC2 SIGNED TEST");
+
+    const vault = await withTransaction(suite.db, (tx) =>
+      tryGetCredential(tx, v.ring, { purpose: "fiscal.aeat" }),
+    );
+    expect(vault).toMatchObject({ passphrase: rc2.passphrase, certKind: "sello" });
+    expect(vault!.pfxBase64).not.toBe(rc2.pfxBase64);
+    const stored = Buffer.from(vault!.pfxBase64!, "base64");
+    const opened = openCertificateFile(stored, rc2.passphrase);
+    expect(opened).toMatchObject({
+      ok: true,
+      details: { fingerprint: OPENSSL_SIGNED_FINGERPRINT },
+    });
+    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TAXPAYER_A.nodeId));
+    expect(latest).toMatchObject({ fingerprint: OPENSSL_SIGNED_FINGERPRINT, taxId: "89890001K" });
+
+    const later = mtlsFetch(
+      { pfx: stored, passphrase: rc2.passphrase, certKind: "sello" },
+      OPENSSL_AUTHORITY.caPem,
+    );
+    try {
+      expect((await later.fetch(server.origin, { method: "POST", body: "" })).status).toBe(200);
+    } finally {
+      await later.close();
+    }
+    expect(server.requests()).toBe(2);
+
+    const again = await installCertificate(
+      deps,
+      bodyFor({ ...v, revision: await revision() }, file),
+      NOW,
+    );
+    expect(again).toEqual({ outcome: "refused", reason: "same", field: "file" });
+    expect(server.requests()).toBe(2);
   });
 });
 

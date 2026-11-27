@@ -10,6 +10,10 @@ import {
   SIN_DATOS_BODY,
 } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { startDiagnosticServer } from "@waitron/fiscal-verifactu/test/certificate-diagnosis-fixtures.js";
+import {
+  OPENSSL_SIGNED_FINGERPRINT,
+  RC2_SIGNED_CANDIDATE,
+} from "@waitron/fiscal-verifactu/test/openssl-certificates.js";
 import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
 
 const run = promisify(execFile);
@@ -108,9 +112,19 @@ describe("shipped certificate diagnosis entry", () => {
       ok: true,
       details: { fingerprint: first.fingerprint },
     });
-    expect(await readFile(join(root!, "certificate-open.js.NOTICES.txt"), "utf8")).toContain(
-      "Bundled npm package notices",
+    const rewritten = await host.openCertificate(
+      Buffer.from(RC2_SIGNED_CANDIDATE.pfxBase64, "base64"),
+      RC2_SIGNED_CANDIDATE.passphrase,
+      { rewriteOld: true },
     );
+    expect(rewritten).toMatchObject({
+      ok: true,
+      details: { fingerprint: OPENSSL_SIGNED_FINGERPRINT },
+      rewritten: expect.any(Buffer),
+    });
+    const notices = await readFile(join(root!, "certificate-open.js.NOTICES.txt"), "utf8");
+    expect(notices).toContain("Bundled npm package notices");
+    expect(notices).toContain("node-forge");
   });
 
   it("the declared provisioning build ships the child used by bundled validation", async () => {

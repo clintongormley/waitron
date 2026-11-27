@@ -6,6 +6,11 @@ import { once } from "node:events";
 import forge from "node-forge";
 import { describe, expect, it, vi } from "vitest";
 import { makeAuthority } from "../test/certificate-fixtures.js";
+import {
+  OPENSSL_SIGNED_FINGERPRINT,
+  RC2_SIGNED_CANDIDATE,
+  RC4_CANDIDATE,
+} from "../test/openssl-certificates.js";
 import { openCertificateFile } from "./certificate-file.js";
 import { openCertificate } from "./certificate-open.js";
 import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
@@ -53,6 +58,42 @@ describe("bounded certificate opening", () => {
     expect(order).toEqual(["timer", "opened"]);
     expect(await openCertificate(candidate.pfx, candidate.passphrase)).toMatchObject({ ok: true });
   }, 15_000);
+});
+
+describe("rewriting old encryption in the opener", () => {
+  const rc2 = Buffer.from(RC2_SIGNED_CANDIDATE.pfxBase64, "base64");
+
+  it("returns a rewritten file Node opens, only when asked", async () => {
+    const opened = await openCertificate(rc2, RC2_SIGNED_CANDIDATE.passphrase, {
+      rewriteOld: true,
+    });
+    if (!opened.ok || !("rewritten" in opened) || opened.rewritten === undefined) {
+      throw new Error(`not rewritten: ${JSON.stringify(opened)}`);
+    }
+    expect(opened.details.fingerprint).toBe(OPENSSL_SIGNED_FINGERPRINT);
+    expect(opened.details.validFrom).toEqual(new Date("2026-01-01T00:00:00Z"));
+    expect(openCertificateFile(opened.rewritten, RC2_SIGNED_CANDIDATE.passphrase)).toEqual({
+      ok: true,
+      details: opened.details,
+    });
+    expect(await openCertificate(rc2, RC2_SIGNED_CANDIDATE.passphrase)).toEqual({
+      ok: false,
+      reason: "old_encryption",
+    });
+  });
+
+  it("keeps old_encryption for a file it cannot rewrite, and leaves a modern file alone", async () => {
+    expect(
+      await openCertificate(
+        Buffer.from(RC4_CANDIDATE.pfxBase64, "base64"),
+        RC4_CANDIDATE.passphrase,
+        { rewriteOld: true },
+      ),
+    ).toEqual({ ok: false, reason: "old_encryption" });
+    expect(
+      await openCertificate(candidate.pfx, candidate.passphrase, { rewriteOld: true }),
+    ).toEqual(openCertificateFile(candidate.pfx, candidate.passphrase));
+  });
 });
 
 it("keeps a UTF-8 passphrase when stdin splits inside its character", async () => {

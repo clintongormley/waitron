@@ -245,7 +245,7 @@ export interface AnsweringServer {
 
 /** An HTTPS server that requires a client certificate the authority issued. */
 export async function startAnsweringServer(
-  authority: FixtureAuthority,
+  authority: Pick<FixtureAuthority, "caPem" | "serverKeyPem" | "serverCertPem">,
   answer: {
     status: number;
     body: string;
