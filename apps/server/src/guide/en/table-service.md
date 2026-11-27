@@ -352,7 +352,7 @@ it, and the amount includes it. Cancelled on its own, a dish given free refunds 
 
 The tick appears only when this device can return the payment. When the guest paid in a way this
 device does not take, the window says **Refund it at a till: choose Refund on the receipt.** After
-**Cancel and refund**, the receipt's **Refund** opens filled in, as described under
+**Cancel and refund**, the receipt's **Refund** window opens filled in, as described under
 [Refund from a receipt](table-service.md#give-money-back).
 
 ## Finish a paid table with food still to come {#finish-paid-table}
@@ -375,7 +375,7 @@ can enters their PIN. When a payment was taken in a way this device does not tak
 **Refund it at a till: choose Refund on the receipt.**
 
 Once the table is finished, a **Refund** window lists each receipt with ticked dishes. Choose one to
-open the receipt's **Refund** on it, filled in. When there is only one receipt, it opens straight away.
+open its **Refund** window, filled in. When there is only one receipt, it opens straight away.
 
 When the guests will wait and take their food from the counter, choose **They'll collect it at the
 counter** instead. It is offered when at least one of the dishes has a station ticket. Nothing is
@@ -395,8 +395,8 @@ till at a different counter.
 On a past receipt, choose **Refund**. **What is it for?** offers:
 
 - **A dish**: something they ordered never came, or was not right. Tick the dishes under **Which
-  dishes?**. **Refund** starts at what they cost; change it to refund less, or more.
-- **Goodwill or a complaint**: enter the **Refund** you choose, up to the amount the window
+  dishes?**. **Amount to refund** starts at what they cost; change it to refund less, or more.
+- **Goodwill or a complaint**: enter the **Amount to refund** you choose, up to the amount the window
   shows.
 - **Extra paid on top of the bill**: shown when the guest paid more than the bill. It refunds
   some or all of that extra, and nothing else. The receipt shows it as Tip.
@@ -411,7 +411,7 @@ says what happens: in cash the cash drawer opens and you give the money to the c
 is refunded through the card reader. If the chosen payment cannot take it all, the window says how
 much stays under way for the other payments.
 
-Choose **Refund** with the amount. If you cannot refund yourself, a supervisor or
+Choose **Refund** with the amount. If you cannot give refunds yourself, a supervisor or
 manager approves it with one PIN.
 
 For a card keyed on a separate card terminal, the window asks you to refund it on that terminal
@@ -425,7 +425,7 @@ approval covers that money, so no new PIN is asked unless you refund more. Keep 
 to use it: one opened later from the receipt is not filled in.
 
 When a card refund waits for the card company, choose **Check again** to ask it about that refund,
-and **Refund the rest** when the window offers it. If you cannot refund yourself, a
+and **Refund the rest** when the window offers it. If you cannot give refunds yourself, a
 supervisor or manager approves asking with their PIN. If the window says the box did not answer,
 choose **Send again**. **Check again** and **Send again** never refund the same money twice. A
 corrective receipt or invoice that does not print by itself can be printed from **Find a bill**, on

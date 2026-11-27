@@ -44,8 +44,8 @@ under way"; change the text, keep the key names; give the real size). Frames: no
 6. **Keys, files, element names and code comments stay** (`give_back.*`, `give-back-dialog.ts`).
    Renaming them would touch every importer for no change staff see.
 
-Out of scope: server error and log text, and printed paper; neither shows this wording to staff
-(checked: the server's matches are comments and test names).
+Out of scope: server error and log text, printed paper and the accountant export's column headings
+(checked: the server's other matches are comments and test names).
 
 ## Tests
 
@@ -73,3 +73,5 @@ dashboard's pointers, the Spanish clash and the two-control sentences; all appli
 ## Question for the watcher
 
 Spanish: leave it unchanged (recommended, item 3), or change it too, and if so to what?
+
+Answered: the watcher, 2026-11-27 01:00 (lane O questions.md): build as written, Spanish unchanged.

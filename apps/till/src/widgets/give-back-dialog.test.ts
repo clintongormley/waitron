@@ -838,7 +838,7 @@ describe("the summary", () => {
       "€3.00 cannot be refunded this way: it stays under way for other payments.",
     );
     expect(text(root(el).querySelector("[data-pin]"))).toBe(
-      "If you cannot refund it yourself, a supervisor or manager approves it with their PIN next.",
+      "If you cannot give refunds yourself, a supervisor or manager approves it with their PIN next.",
     );
   });
 
@@ -852,7 +852,7 @@ describe("the summary", () => {
     way(el, "card-1")!.click();
     await vi.waitFor(() =>
       expect(text(root(el).querySelector("[data-summary-way]"))).toBe(
-        "Refund €10.00 to card ···4242 on the separate card terminal.",
+        "€10.00 is refunded to card ···4242 on the separate card terminal.",
       ),
     );
   });

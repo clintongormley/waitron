@@ -165,7 +165,8 @@ describe("Refund names the receipt's action in English", () => {
   });
 
   it("leaves no English string naming Give money back", () => {
-    const old = /give (money |the money |the extra |the rest )?back|money back|given back/i;
+    const old =
+      /give (money |the money |the extra |the rest )?back|money back|given back|goes back (to (the )?card|in cash)/i;
     expect(Object.entries(en).filter(([, text]) => old.test(text))).toEqual([]);
     const codes: [string, string, string][] = [];
     pairs(CODE_TABLES, "codes", codes);

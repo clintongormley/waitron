@@ -514,7 +514,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Los pagos en efectivo de esta cuenta no llegan a ese importe. Devuelve el resto en la tarjeta con la que se pagó.",
   },
   "invoice_correction.cash_route_only": {
-    en: "Cash for this refund is given from Refund. Open Refund to give it.",
+    en: "Cash for this refund is given from the receipt. Open Refund on the receipt to give it.",
     es: "El efectivo de esta devolución se devuelve desde Devolver dinero. Abre Devolver dinero para devolverlo.",
   },
   "invoice_correction.split_changed": {

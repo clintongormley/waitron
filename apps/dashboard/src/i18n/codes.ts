@@ -1606,11 +1606,11 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "El proveedor de pagos no muestra qué pasó con esta devolución, así que no se ha registrado nada y la cuenta sigue bloqueada. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme.",
   },
   "payment.not_refundable": {
-    en: "This card payment can no longer be given back. Check the refund in the card provider's own dashboard, then refresh the list.",
+    en: "This card payment can no longer be refunded. Check the refund in the card provider's own dashboard, then refresh the list.",
     es: "Este pago con tarjeta ya no se puede devolver. Comprueba la devolución en el panel del proveedor de pagos y actualiza la lista.",
   },
   "payment.refund_exceeds_capture": {
-    en: "That is more than is left to give back on this card payment. Check the refund in the card provider's own dashboard, then refresh the list.",
+    en: "That is more than is left to refund on this card payment. Check the refund in the card provider's own dashboard, then refresh the list.",
     es: "Es más de lo que queda por devolver de este pago con tarjeta. Comprueba la devolución en el panel del proveedor de pagos y actualiza la lista.",
   },
   "bill.attestation_contradicted": {

@@ -175,7 +175,7 @@ export const en = {
   "give_back.cancelled_back": "Cancelled, refunded",
   "give_back.cancelled_waiting": "Cancelled, refund waiting for the card company",
   "give_back.given_free": "Given free",
-  "give_back.amount": "Refund",
+  "give_back.amount": "Amount to refund",
   "give_back.amount_change": "Change it to refund less, or more.",
   "give_back.up_to": "Refund up to {amount}.",
   "give_back.amount_invalid": "Enter an amount above zero and up to {amount}.",
@@ -186,11 +186,12 @@ export const en = {
   "give_back.way_card": "Card {card} · up to {amount}",
   "give_back.summary_cash": "{amount} is refunded in cash. The cash drawer opens: hand it over.",
   "give_back.summary_card": "{amount} is refunded to card {card} by the card reader.",
-  "give_back.summary_terminal": "Refund {amount} to card {card} on the separate card terminal.",
+  "give_back.summary_terminal":
+    "{amount} is refunded to card {card} on the separate card terminal.",
   "give_back.summary_rest":
     "{amount} cannot be refunded this way: it stays under way for other payments.",
   "give_back.pin":
-    "If you cannot refund it yourself, a supervisor or manager approves it with their PIN next.",
+    "If you cannot give refunds yourself, a supervisor or manager approves it with their PIN next.",
   "give_back.submit": "Refund {amount}",
   "give_back.submit_any": "Refund",
   "give_back.preview_failed":
@@ -265,7 +266,7 @@ export const en = {
   "give_back.uw_stop": "Stop here",
   "give_back.uw_stop_hint": "Keeps the {amount} already refunded; refunds no more.",
   "give_back.uw_cancel": "Cancel this refund",
-  "give_back.uw_cancel_hint": "Nothing refunded yet.",
+  "give_back.uw_cancel_hint": "Nothing has been refunded yet.",
   "give_back.uw_finished": "The {amount} refunded is recorded.",
   "give_back.uw_cancelled": "This refund is cancelled. Nothing was refunded.",
   "give_back.uw_closed": "This refund is finished. The {amount} refunded stays refunded.",
