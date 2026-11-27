@@ -1251,6 +1251,12 @@ discount given after a part payment that would take the bill below its money is 
   names it; refused with each pinned column changed (the same `FROZEN_REOPEN_COLUMNS` cases); refused
   for a placed order with a party or another mode and no pending row (as the existing cases, which
   stay unchanged).
+- **bound portions with a measured extra** (found in PR 1's review, 27 November): two 1.00 dishes
+  bound as one cohort, each with 0.125 of a sauce at 10.08 a unit, 0.05 off the bill: the shown
+  total and the invoice both come to 4.47, and a further 4.48 off is cut down to the 4.47 left,
+  never refused. Today's
+  comp window shows 4.48 here while the invoice files 4.47, and refuses a further 4.48 with
+  `adjustment.exceeds_amount`; PR 1's calculator gives 4.47 (`bill-discounts-filing.test.ts`).
 
 **Changed test checks** (about 30; each listed in the pull request): the whole-bill groups of
 `adjustments-apply.test.ts` (`:813` "a bill discount with a weighed line", `:875`, `:928`, and the
