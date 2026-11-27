@@ -904,7 +904,7 @@ it("opens a counter's floor and moves food to Ready as the kitchen finishes it",
     );
     await vi.waitFor(() =>
       expect(
-        page.getByRole("button", { name: /Sent soup.*Sent, not paid/ }).query(),
+        page.getByRole("button", { name: /Sent soup.*Sent, not paid · 2 ready/ }).query(),
       ).not.toBeNull(),
     );
     await expect.element(page.getByRole("button", { name: /Pickup cake/ })).toBeVisible();

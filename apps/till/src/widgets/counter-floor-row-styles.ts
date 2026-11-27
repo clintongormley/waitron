@@ -21,12 +21,12 @@ export const counterFloorRowStyles = css`
   }
 
   :host([floor]) .number {
-    font-size: var(--wt-font-size-lg);
+    font-size: calc((var(--wt-font-size-md) + var(--wt-font-size-lg)) / 2);
   }
 
   :host([floor]) .state {
     color: var(--wt-color-text-muted);
-    font-size: var(--wt-font-size-sm);
+    font-size: calc((var(--wt-font-size-sm) + var(--wt-font-size-md)) / 2);
     font-weight: var(--wt-font-weight-normal);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -38,6 +38,10 @@ export const counterFloorRowStyles = css`
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-md);
     white-space: nowrap;
+  }
+
+  :host([ready]) .state {
+    font-size: var(--wt-font-size-md);
   }
 
   :host([ready]) .summary {

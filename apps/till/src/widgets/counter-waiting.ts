@@ -139,6 +139,10 @@ export class TillCounterWaiting extends LitElement {
     const label = orderLabel(order);
     const pay = order.status === "placed";
     const expanded = this.expanded.has(order.id);
+    const readyCount =
+      this.floor && pay && order.counts.ready > 0
+        ? ` · ${countText(order.counts.ready, "order_counts.ready", "order_counts.ready_one")}`
+        : nothing;
     const minutes =
       order.readyAt === null
         ? null
@@ -224,7 +228,7 @@ export class TillCounterWaiting extends LitElement {
                   >${order.items.map(({ quantity, name }) => `${formatDecimalInput(quantity, currentLocale())} ${name}`).join(" · ")}</span
                 >`
               : html` <span class="state" data-waiting-state
-                    >${this.floor ? `${countText(order.counts.ordered, "order_counts.items", "order_counts.items_one")} · ` : nothing}${t(this.#state(order))}</span
+                    >${this.floor ? `${countText(order.counts.ordered, "order_counts.items", "order_counts.items_one")} · ` : nothing}${t(this.#state(order))}${readyCount}</span
                   >
                   <span class="meta">${formatMoney(order.total, currentLocale())}</span>
                   ${this.floor ? nothing : orderCounts(order.counts)}`
