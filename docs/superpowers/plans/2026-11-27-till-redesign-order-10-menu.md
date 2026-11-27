@@ -1,6 +1,6 @@
 # Till redesign, order screen PR 10: the menu slides up
 
-**PLAN FOR APPROVAL — awaiting the watcher's clearance.** Lane C, item TILL-REDESIGN-ORDER-MENU
+**Cleared by the watcher 2026-11-28 00:13, as cut into 10-0, 10a and 10b.** Answers to the questions at the end: (1) the period line stays in the sheet's header; (2) 10b removes the dashboard's section-colour field if nothing else reads it, and otherwise says what reads it and leaves it; (3) the filter stays beside search; (4) lane C builds 10-0, as an extension of the shared full-screen panel, never a copy; (5) yes; (6) yes, they stay; (7) Codex's run-it seat. Lane C, item TILL-REDESIGN-ORDER-MENU
 (PRs 10–12 moved from lane N, watcher 2026-11-27 11:38 and 11:41). PR 10 of the
 [split](2026-11-26-till-handheld-redesign-pass-1.md): “Browse or search three-column tiles from the
 slide-up menu, with Home, section path, counts and Last added. Keep the sold-out action reachable.”
@@ -47,7 +47,7 @@ Never built from: `d` 3 (Last added at the top), `s` 2's search rows (§5 says t
 motion is asked for; without it nothing changes for its users. Not `wt-sheet`
 (`packages/ui/src/components/wt-sheet.ts`, #1506, 2026-10-10): the floor-plan editor's expanding
 bar, its body capped at 60dvh. Not lane D's `wt-row-actions` bottom sheet: a popover list of
-choices. Who builds 10-0 is question 4.
+choices. Lane C builds it (question 4).
 
 **10a. The look, in new files**
 
