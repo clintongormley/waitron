@@ -121,9 +121,10 @@ we will file it, so we can issue a correction regardless".
   box's receipt; they refuse only a refused original (`refuseCreditOf`, `backend.ts:465-478`), not one
   another chain has not had answered. This item does not change them; making them wait too would be
   a separate item.
-  (2026-11-27: built after all. The watcher changed D5 to "do it if under about 40 product lines"
-  (lane B `questions.md`, "WATCHER 2026-11-27 02:14"): both credits refuse
-  `fiscal.original_unanswered` while a version on another chain is unanswered or held.)
+  (2026-11-27: built after all. The watcher changed D5 ("Put both behind the same filing_pending
+  check if that is under about 40 product lines", lane B `questions.md`, "WATCHER 2026-11-27
+  02:14"): both credits refuse `fiscal.original_unanswered` while a version on another chain is
+  unanswered, stopped or held.)
 - **Out of scope:** the deferred close after a switch (`deferred-close.ts:105,131`, `other_node`),
   pending the owner's answer.
 

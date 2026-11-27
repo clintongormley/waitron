@@ -159,7 +159,8 @@ export function toDetalleDesglose(line: VatBreakdownLine): DetalleDesgloseInput 
 
 /**
  * Throws `fiscal.original_unanswered` while a version of the sale's receipt on a chain other than
- * `sifId` waits on AEAT. "Another chain" is another installation, as the drain's `originalSettled`
+ * `sifId` has no final answer from AEAT: queued, sending, stopped or held, or with no submission at
+ * all (which no writer leaves). "Another chain" is another installation, as the drain's `originalSettled`
  * reads it: an earlier installation on this same box is another chain too.
  */
 async function refuseUnansweredElsewhere(

@@ -172,7 +172,7 @@ went red with Task 6 in place (run). Void mechanics stay in `record-void.test.ts
 | Reopen, refused | AEAT refused this receipt, so the bill cannot be reopened. Take payment. | La AEAT rechazó este ticket, así que la cuenta no se puede reabrir. Cóbrala. |
 | Done (no number) | Receipt {number} cancelled. (The receipt is cancelled.) | Ticket {number} anulado. (El ticket queda anulado.) |
 
-(2026-11-27, A1614: "Not answered" now also names a held sending and points to Fiscal filing; `apps/till/src/i18n/codes.ts` holds the words.)
+(2026-11-27, A1614: "Not answered" now also names a held sending and points to Fiscal filing; Reopen bill and Pay for items say it in their own sentence, `split.refused_receipt_unanswered`. The words are in `apps/till/src/i18n/codes.ts` and `strings.ts`.)
 
 **Task 9, words:** both `table-service.md` guides; the dashboard help of both permissions; `conventions-ui.md:630`,
 `design-system.md:1231`, `backlog.md`; dated pointers in `fiscal.md` C126, `asesor-questions.md` Q32, adviser answers B3.
