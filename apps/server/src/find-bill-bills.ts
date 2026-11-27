@@ -117,6 +117,12 @@ function filtered(query: BillsQuery): SQL {
   const clauses = [sql`r.search_rank is not null`];
   if (query.zoneId !== undefined) clauses.push(sql`r.zone_id = ${query.zoneId}`);
   if (query.state !== undefined) clauses.push(sql`r.state = ${query.state}`);
+  const kinds: SQL[] = [];
+  // Owed: the guests left with the bill unpaid. Not `collection_status`, which a part payment
+  // clears. A departure always prints the receipt and places the bill; a void abandons it.
+  if (query.owed === true) kinds.push(sql`(r.departed_at is not null and r.owing_cents > 0)`);
+  if (query.counter === true) kinds.push(sql`r.party_id is null`);
+  if (kinds.length > 0) clauses.push(sql`(${sql.join(kinds, sql` or `)})`);
   if (query.staffId !== undefined)
     clauses.push(sql`exists(select 1 from working_order_lines l
     where l.working_order_id = r.id and l.credited_to = ${query.staffId})`);
