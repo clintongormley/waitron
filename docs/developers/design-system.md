@@ -901,8 +901,7 @@ and its backdrop dims the display. Leave the inset at zero on a narrow screen.
 
 Set `rising` to make the panel a sheet risen from the bottom of the screen: rounded top corners,
 a handle above the header and an upward shadow. It slides up into place as it first appears,
-unless the device asks for reduced motion. It is for the till's menu over the order, which the
-till redesign's PR 10b adds.
+unless the device asks for reduced motion. It is meant for the till's menu sheet over the order.
 
 `wt-top-bar` centres its heading and optional `subtitle` between the Back and action areas. Supply
 `heading` or put a title button in the `title` slot. Set `back-label` to the previous screen's name
