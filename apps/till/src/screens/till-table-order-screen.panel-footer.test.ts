@@ -13,7 +13,10 @@ import {
   footerParty,
   mountFooter,
 } from "./till-table-order-screen.panel-footer.test-helpers.js";
-import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  openPartyMenu,
+  openTableMenu,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(async () => {
   setLocale("en");
@@ -177,8 +180,8 @@ describe("the bill actions below Sent and New order", () => {
     const pay = q(el, "[data-pay-sheet]")!;
     for (const open of [true, false]) {
       if (open) {
-        await openTableMenu(el);
-        await userEvent.click(q(el, '[data-table-menu] [data-action="move"]')!);
+        await openPartyMenu(el);
+        await userEvent.click(q(el, '[data-party-menu] [data-action="move"]')!);
       } else await userEvent.click(q(el, "[data-action-panel] [data-action-back]")!);
       await el.updateComplete;
       expect(q(el, "[data-action-panel]") !== null).toBe(open);
@@ -372,8 +375,8 @@ describe("A803 no tab panel", () => {
         el.finishRefused = true;
       });
       const payments = capture(el, "take-payment");
-      await openTableMenu(el);
-      await userEvent.click(q(el, "[data-table-menu] [data-finish-table]")!);
+      await openPartyMenu(el);
+      await userEvent.click(q(el, "[data-party-menu] [data-finish-table]")!);
       await el.updateComplete;
 
       const refusal = q(el, "[data-finish-refusal]")!;
@@ -413,8 +416,8 @@ describe("A803 no tab panel", () => {
     const { el } = await mountFooter(twoBills);
     await resized(el);
     expect(q(el, "[data-action-panel]")).toBeNull();
-    await openTableMenu(el);
-    await userEvent.click(q(el, '[data-table-menu] [data-action="move"]')!);
+    await openPartyMenu(el);
+    await userEvent.click(q(el, '[data-party-menu] [data-action="move"]')!);
     await el.updateComplete;
     const panel = q(el, "[data-action-panel]")!;
     expect(panel.parentElement!.classList.contains("layout")).toBe(true);

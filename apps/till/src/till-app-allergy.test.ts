@@ -1057,6 +1057,19 @@ describe("A669 live table editor", () => {
     ).toBe(true);
   });
 
+  it("returns focus to the table name when its allergy editor closes", async () => {
+    const { el } = await mountApp();
+    const screen = await openTable(el);
+    const menu = screen.shadowRoot!.querySelector("[data-party-menu]")!;
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    await userEvent.click(menu.querySelector<HTMLElement>('[data-action="allergy"]')!);
+    await vi.waitFor(() => expect(dialog(el)?.mode).toBe("edit"));
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
+    expect(screen.shadowRoot!.activeElement).toBe(menu);
+    expect(menu.shadowRoot!.activeElement).toBe(menu.shadowRoot!.querySelector("button"));
+  });
+
   it("opens Change as an editor and saves an explicit answer with the reviewed revision", async () => {
     const { el } = await mountApp();
     const screen = await openTable(el);

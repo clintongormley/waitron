@@ -32,9 +32,8 @@ import type { OrderGroup, TabLine } from "../api/kitchen-api.js";
 import type { TillProduct, TillZoneMenu } from "../api/menu-api.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import {
-  closeTableMenu,
+  openPartyMenu,
   openBillSwitcher,
-  openTableMenu,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const products: TillProduct[] = [
@@ -181,8 +180,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!
       .shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!
       .click();
-    // Open the ⋮ so its list is included in the scan, not just the grid.
-    await openTableMenu(el);
+    await openPartyMenu(el);
     await showView(el, "order", { scripted: true });
     // The reused basket re-renders on its OWN store subscription (a separate Lit update cycle), and its
     // freshly-created remove `wt-button`s render their inner focusable `<button>` on a following tick — so
@@ -396,12 +394,13 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       { products, lines: [], orderId: "wo-1", party, bills: partyBills, tables: [asked] },
       theme,
     );
-    await openTableMenu(el);
+    await openPartyMenu(el);
     expect(
-      el.shadowRoot!.querySelector("[data-table-menu] [data-cancel-bill-request]"),
-    ).not.toBeNull();
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[data-bill-request]")!
+        .checked,
+    ).toBe(true);
     await expectNoA11yViolations(host);
-    await closeTableMenu(el);
+    await userEvent.keyboard("{Escape}");
     // The bill-requested chip is drawn in the status pin's details.
     const status = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<boolean> }>(
       "till-table-status",
@@ -749,7 +748,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="merge"]')!.click();
     await el.updateComplete;
@@ -779,7 +778,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="move-dishes"]')!.click();
     await el.updateComplete;
@@ -1015,7 +1014,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       },
       theme,
     );
-    el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!.click();
     await el.updateComplete;
     el.shadowRoot!.querySelector<HTMLElement>('[data-action="move-dishes"]')!.click();
     await el.updateComplete;

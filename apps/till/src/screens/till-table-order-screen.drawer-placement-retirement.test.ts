@@ -11,8 +11,8 @@ import { openSentDish, openSentMore } from "./till-table-order-screen.sent.test-
 import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import { mount } from "./till-table-order-screen.test-helpers.js";
 import {
-  closeTableMenu,
-  openTableMenu,
+  closePartyMenu,
+  openPartyMenu,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
@@ -47,10 +47,10 @@ it.each(["detailed", "fallback"] as const)(
     for (const type of ["move-group-line", "split-group-line"]) {
       el.addEventListener(type, (event) => direct.push(event as CustomEvent));
     }
-    await openTableMenu(el);
+    await openPartyMenu(el);
     expect(el.shadowRoot!.querySelector("[data-move-line], [data-split-group-line]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-move-dialog]")).toBeNull();
-    await closeTableMenu(el);
+    await closePartyMenu(el);
     if (read === "fallback") {
       const fallback = el.shadowRoot!.querySelector('[data-sent-fallback-line="stored-dish"]')!;
       expect(fallback.textContent).toContain("Recorded dish");

@@ -295,6 +295,9 @@ it("a gap after a join preserves its held anchor on the new group", async () => 
   const { el, draft } = await open();
   const gap = q(el, '[data-draft-gap="end"]');
   expect(gap).not.toBeNull();
+  gap.scrollIntoView({ block: "center" });
+  const { x, y } = point(gap);
+  expect(el.shadowRoot!.elementFromPoint(x, y)).toBe(gap);
   await drop(el, lead(el, 0), gap);
   expect(draft.lines[0]!.place).toEqual({ kind: "new", slot: 3, afterGroupId: "g3" });
 });

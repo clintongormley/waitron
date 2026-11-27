@@ -15,8 +15,8 @@ import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers
 import { resized } from "./till-table-order-screen.test-helpers.js";
 import "../till-app.js";
 import {
-  closeTableMenu,
-  openTableMenu,
+  closePartyMenu,
+  openPartyMenu,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 afterEach(async () => {
@@ -61,14 +61,14 @@ describe.each(["en", "es"] as const)("Sent course in %s", (locale) => {
       );
       host.style.width = "100%";
       await resized(el);
-      await openTableMenu(el);
+      await openPartyMenu(el);
       expect(
         el.shadowRoot!.querySelector("[data-line-course], [data-line-course-static]"),
       ).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-group-up], [data-group-down]")).toBeNull();
       expect(
         el.shadowRoot!.querySelector(
-          "[data-table-menu] [data-group-fire], [data-table-menu] [data-serve-group], [data-table-menu] [data-serve-row], [data-table-menu] [data-unserve-row]",
+          "[data-party-menu] [data-group-fire], [data-party-menu] [data-serve-group], [data-party-menu] [data-serve-row], [data-party-menu] [data-unserve-row]",
         ),
       ).toBeNull();
       await expectNoA11yViolations(host);
@@ -76,7 +76,7 @@ describe.each(["en", "es"] as const)("Sent course in %s", (locale) => {
         element: el,
         path: `__screenshots__/a773-course-drawer-${locale}-${theme}-${width}.png`,
       });
-      await closeTableMenu(el);
+      await closePartyMenu(el);
       const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
       await panel.updateComplete;
       for (const selector of ["[data-sent-toggle]", "[data-held-toggle]"]) {

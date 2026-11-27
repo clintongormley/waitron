@@ -1232,11 +1232,9 @@ contributes its quantity, and a measured line contributes one item. Guards: `til
 the screen cases mount the screen without `till-app`; `till-app-open-table.test.ts`'s handheld
 case opens a real table.
 
-**Table screen: bill switcher and ⋮ (A803 slice 3).** The Order screen's panel head holds, after the
-status, the bill switcher, the bill's Eat here / Take away switch or label (`diningControl`,
-`apps/till/src/widgets/dining-choice.ts`) and then the ⋮ (`billSwitcher` and `tableMenu`,
-`apps/till/src/screens/table-bill-controls.ts`), on every width, a handheld included; there is no
-Tab button and no side drawer.
+**Table screen: table actions, bill switcher and bill actions.** Tap the table name in the
+order header to open its bottom sheet at every width. The status pin opens table details.
+The bill picker, Eat here / Take away control and bill actions follow the table controls.
 
 - **The switcher** is a `wt-row-actions` drawn whenever the screen has a party. Below the screen’s
   side-by-side width it opens a bottom sheet named by its visible heading. At wider widths, it
@@ -1266,22 +1264,22 @@ Tab button and no side drawer.
   it was reopened as, or the chosen dishes' own bill when a card that charged nothing left them
   there (`billAfterItems`), once the read lists it, and the line says the receipt is
   cancelled and which bill the dishes are on.
-- **The ⋮** is a `wt-row-actions` (label "Table actions", `align="end"`, `opens-below`) holding two
-  `role="group"` sections, each named by its visible heading through `aria-labelledby` and split by
-  a rule. The bill section, headed with the bill on screen's short label and left out when no bill
-  is on screen or the order belongs to no party, lists Name this bill, then for an open bill Move dishes… and Merge bills,
-  then Move this bill, Comp the bill, Record unpaid departure, Full invoice and Print the bill, in
-  that order; Print the bill and Receipt copy only where this device may print what they need, and
-  Receipt copy, Nothing was served and Reopen bill join it where they apply. Whole table lists Allergies, Name the party, Guests,
-  Mark bill requested (or Cancel the bill request), Split a table (two or more tables only), Join a
-  table, Move guests and Finish table. With no party it offers only Join a table and Move guests, under
-  Whole table. Full invoice, in the
-  ⋮ and on the payment step alike, is offered only for a bill still owing with no invoice number.
-- **The action panel.** A ⋮ item that needs a choice draws its step in `aside.action-panel`
-  (`data-action-panel`) beside the order while it is open. Its heading takes focus and the panel is
-  scrolled into view; Back and Escape close it (Escape closes an open list first) and return focus
-  to the ⋮'s trigger, and focus returns there too when a naming or guests window opened from the ⋮
-  closes, and when Split closes Split a table's panel. That panel's refusals sit at its foot, per
+- **Table actions** open in the shared menu sheet. The table name labels the trigger and the sheet.
+  The guest count and party name appear below the trigger when known. The rows show Allergies,
+  Guests and Name the party with their saved values, the Bill requested switch, then Move to
+  another table, Join tables and Split the table (for a party spanning several tables). Finish
+  table has its own outlined button at the end. An unseated table offers Move and Join.
+  The sheet fills a narrow display. On a wide display it starts at the order column’s left edge
+  and ends at the display’s right edge. The whole display dims while the sheet is open.
+- **Bill actions** open from the ⋮ beside the switcher when a current bill is shown. The group
+  lists Name this bill, then for an open bill Move dishes and Merge bills, then Move this bill,
+  Comp the bill, Record unpaid departure, Full invoice and Print the bill, as allowed by its
+  state. Receipt copy, Nothing was served and Reopen bill appear where they apply. Print the
+  bill and Receipt copy require this device to be able to print the document.
+- **The action panel.** A menu choice that needs a picker opens it beside the order. The
+  heading takes focus and scrolls into view. Back and Escape close the panel and return focus
+  to the menu that opened it. Escape closes an open list first. Naming and guests windows
+  return focus to their menu when closed. That panel's refusals sit at its foot, per
   [Forms](#forms). The till's banner says one only when no panel can come back: the party no longer
   holds the table or holds only that table, other work holds unsaved input or a leave question, the
   refusal names a bill the till's list has lost, a saved language has drawn the screen afresh, or a

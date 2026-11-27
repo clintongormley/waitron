@@ -619,9 +619,9 @@ extras, y podrás elegir **Enviar de todos modos**. Comprueba por tu cuenta un p
 revisar; la falta de información nutricional no establece que sea apto.
 
 Los siguientes envíos ofrecen los platos nuevos para asignarlos. Un plato que ya has enviado en
-espera no vuelve a ofrecerse solo porque lo envíes a preparar más tarde. **Cambiar** junto a la
-respuesta de la mesa, o **Alergias** en **Toda la mesa** del menú **⋮**, abre el editor completo,
-incluidos los platos ya enviados. Ahí puedes editar o eliminar una persona; al eliminar la última,
+espera no vuelve a ofrecerse solo porque lo envíes a preparar más tarde. Para editar la respuesta,
+toca **Cambiar** junto a ella o toca el nombre de la mesa y elige **Alergias**. El editor completo
+incluye los platos ya enviados. Ahí puedes editar o eliminar una persona. Al eliminar la última,
 la respuesta sigue siendo Alergias hasta que la cambies.
 
 Al pasar una cuenta del mostrador a una mesa, también se comprueba la respuesta de esa mesa y se

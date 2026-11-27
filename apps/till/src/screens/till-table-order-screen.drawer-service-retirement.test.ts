@@ -17,8 +17,8 @@ import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers
 import { mount } from "./till-table-order-screen.test-helpers.js";
 import { storedExtra } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import {
-  closeTableMenu,
-  openTableMenu,
+  closePartyMenu,
+  openPartyMenu,
   tableMenuAndSwitcherText,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
@@ -44,12 +44,13 @@ it.each(["held", "fired"] as const)(
       }),
     });
     const panel = await sentPanelFor(el);
-    await openTableMenu(el);
+    await openPartyMenu(el);
     expect(
       el.shadowRoot!.querySelector(
         "[data-group-fire], [data-serve-group], [data-serve-row], [data-unserve-row]",
       ),
     ).toBeNull();
+    await closePartyMenu(el);
     for (const selector of [
       "[data-sent-toggle]",
       ...(state === "held" ? ["[data-held-toggle]"] : []),
@@ -96,7 +97,7 @@ it.each([null, "fired-group"])(
     });
     const commands: CustomEvent[] = [];
     el.addEventListener("send-lines", (event) => commands.push(event as CustomEvent));
-    await openTableMenu(el);
+    await openPartyMenu(el);
     expect(el.shadowRoot!.querySelector("[data-sent-fallback]")!.textContent).toContain(
       "Recorded dish",
     );
@@ -169,13 +170,13 @@ it.each(["fired", "served"] as const)(
         await panel.updateComplete;
       }
     }
-    await openTableMenu(el);
+    await openPartyMenu(el);
     const shown = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-line="${line.id}"]`)!;
     expect(shown.checkVisibility()).toBe(true);
     expect(shown.textContent).toContain("Recorded dish");
     expect(tableMenuAndSwitcherText(el)).not.toContain("Recorded dish");
     expect(el.shadowRoot!.querySelector("[data-comp-line], [data-discount-line]")).toBeNull();
-    await closeTableMenu(el);
+    await closePartyMenu(el);
     await openSentDish(el, line.id, kind);
     await openSentMore(el);
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-sent-line-comp]")!);

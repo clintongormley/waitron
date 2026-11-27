@@ -24282,6 +24282,7 @@ export class TillApp extends LitElement {
       .setMenuCopies=${this.#tableSetMenuCopies()}
       .ownSetMenuOffer=${this.#ownTableSetMenuOffer}
       .changeSetMenu=${this.#changeSetMenu}
+      .activeTableId=${this.activeTableId}
       .loading=${this.tableOpening}
       embedded
       .lines=${this.tabLines}
@@ -24498,6 +24499,7 @@ export class TillApp extends LitElement {
           .setMenuCopies=${this.#tableSetMenuCopies()}
           .ownSetMenuOffer=${this.#ownTableSetMenuOffer}
           .changeSetMenu=${this.#changeSetMenu}
+          .activeTableId=${this.activeTableId}
           .loading=${this.tableOpening}
           slot="drill"
           .lines=${this.tabLines}

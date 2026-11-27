@@ -569,11 +569,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   for counter and tables, full-screen panels instead of dialogs, a guest-facing bill with a tip
   question. The bill picker opens at the bottom on narrow screens and shows where the current
   bill sits in the list. The narrow floor has the zone chooser, Map/List and ☰ at the bottom.
+  The table name opens the shared action sheet with Finish table at the end. The ☰ menu still
+  needs to adopt the shared sheet and rows.
   The remaining order and payment screens use the
   [shared panels and payment controls](developers/design-system.md#full-screen-panels-and-payment-controls).
-  The wide floor bar, kitchen destinations, All zones, table jobs, order, menu and payment
-  slices remain.
-  The UI workbench shows the shared sheet and menu rows. The table and ☰ menus still need to adopt them.
+  The wide floor bar, kitchen destinations, All zones, table jobs, order, menu, bill action sheet,
+  action panels and payment slices remain.
   [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
 
@@ -665,9 +666,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   when the till's void screen is designed.
   [Detail](backlog/till.md#cash-handed-back-for-a-voided-cash-sale-is-recorded-nowhere)
 
-- **For the owner's redesign of the table screens and review of the device screens** (bundle of 18,
+- **For the owner's redesign of the table screens and review of the device screens** (bundle of 17,
   nothing to build before them). Holds A1211, A893, A936, A856, A859, A561, A562, A1101, A550, A857, A672,
-  A1333, A470, A1107, A1108, A1359, A1290, A1265.
+  A1333, A470, A1107, A1108, A1359, A1290.
   [Detail](backlog/till.md#bundle-for-the-owners-redesign-of-the-table-screens-and-review-of-the-device-screens)
 
 - **A474 — today's floor changes on the till: follow-ups (2026-10-11).** The map's drag works out

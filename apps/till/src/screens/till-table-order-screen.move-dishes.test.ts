@@ -246,8 +246,8 @@ describe("A803 move dishes panel", () => {
 
   it("is not offered with no party", async () => {
     const el = await mountScreen({ party: null, bills: [] });
-    expect(menu(el).querySelector('[data-action="join"]')).not.toBeNull();
-    expect(moveItem(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-party-menu] [data-action="join"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-action="move-dishes"]')).toBeNull();
   });
 
   it("choosing it opens the panel with its heading focused", async () => {

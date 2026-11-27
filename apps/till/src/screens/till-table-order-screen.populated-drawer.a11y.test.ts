@@ -16,8 +16,8 @@ import type { WtDialog } from "@waitron/ui";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import "./till-table-order-screen.js";
 import {
-  closeTableMenu,
-  openTableMenu,
+  closePartyMenu,
+  openPartyMenu,
 } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const dish = {
@@ -84,8 +84,8 @@ describe.each(["en", "es"] as const)("table menu with sent dishes in %s", (local
         await resized(el);
         expect(window.innerWidth).toBe(width);
         const q = (selector: string) => el.shadowRoot!.querySelector<HTMLElement>(selector)!;
-        await openTableMenu(el);
-        const menu = q("[data-table-menu]");
+        await openPartyMenu(el);
+        const menu = q("[data-party-menu]");
         expect(menu.checkVisibility()).toBe(true);
         expect(q(".pending, .pending-line, .served-line, [data-cancel-line]")).toBeNull();
         expect(q("[data-order-total]").textContent).toContain(
@@ -105,7 +105,7 @@ describe.each(["en", "es"] as const)("table menu with sent dishes in %s", (local
         await page.screenshot({
           path: `__screenshots__/a773-populated-drawer-${locale}-${theme}-${width}.png`,
         });
-        await closeTableMenu(el);
+        await closePartyMenu(el);
         if (q("[data-draft-pane]").hidden) await showView(el, "order");
         const panel = q("till-sent-orders") as TillSentOrders;
         await panel.updateComplete;

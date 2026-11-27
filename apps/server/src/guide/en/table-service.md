@@ -631,15 +631,14 @@ it on screen.
 With a keyboard, press Enter to open the switcher, use Up and Down to reach a bill, then press
 Enter to show it. Home and End reach the first and last choices. Escape closes the list.
 
-Everything else you do at the table is in the **⋮** menu beside the switcher, in two parts. The
-first, headed with the bill on screen, such as **Bill 2 · Clint**, acts on that bill alone: **Name
-this bill**, **Move dishes…**, **Merge bills**, **Move this bill**, **Comp the bill**, **Record
-unpaid departure**, **Full invoice**, **Print the bill**, **Receipt copy**, **Nothing was
-served** and **Reopen bill**, each when it applies. The second, **Whole table**, acts on everyone at the
-table: **Allergies**, **Name the party**, **Guests**, **Mark bill requested for …** with the party's
-name (once requested, **Cancel the bill request for …**), **Split a table** (when the party sits at
-more than one table), **Join a table**, **Move guests** and **Finish table**. An action that needs a
-choice, such as which bill to merge with, opens beside the order, and **Back** closes it.
+Tap the table name for actions that affect everyone at the table. You can check **Allergies**,
+change **Guests** or **Name the party**, and turn **Bill requested** on or off. Use **Move to another
+table**, **Join tables** or **Split the table** to change where the party sits. **Finish table** is at
+the bottom. On a short screen, scroll the sheet down to reach it.
+
+Open **⋮** beside the bill switcher for actions on the bill you are viewing. Use it to print the
+bill, enter full invoice details, move dishes or change the bill itself. When an action needs a
+choice, it opens beside the order. Choose **Back** to return.
 
 Joining a table, or moving guests onto one, keeps every bill: the bills that arrive take the
 receiving party's next numbers. To put two bills together, open the bill that should receive the
@@ -649,7 +648,7 @@ receiving bill does not name, the till asks first: choose the customer the merge
 to, or **Do not merge**. If you move the table's last bill away, the till stays at the table with a
 fresh empty bill.
 
-If unsent orders block **Join a table**, **Move guests**, **Move this bill** or **Merge bills**,
+If unsent orders block **Join tables**, **Move to another table**, **Move this bill** or **Merge bills**,
 choose **Take over draft** for the bills listed, then try the action again.
 
 If another till merges the bill on your screen into another bill, or moves it to another table,
@@ -813,15 +812,15 @@ meantime, the till names that bill before the reason, such as **Bill 2: This bil
 someone else has unsent dishes on either bill, choose **Take over draft** in the message.
 Choose **Review** to check your dishes and destination, then choose **Move** again.
 
-## Split a table {#split-table}
+## Split the table {#split-table}
 
-When some of a party move to a table of their own, open the **⋮** menu, choose **Split a table** and
+When some of a party move to a table of their own, tap the table name, choose **Split the table** and
 tap the table that leaves. Tick what goes with it: whole bills, or single dishes from any bill. Set
 each table's guests, then choose **Split**.
 
 ## Move a bill or split a table with dishes on hold {#held-dishes-move}
 
-A bill with dishes on hold can go to another table with **Move this bill** or **Split a table**.
+A bill with dishes on hold can go to another table with **Move this bill** or **Split the table**.
 The dishes stay on hold there. Each table then fires its own group: firing one sends none of the
 other table's dishes.
 
@@ -854,7 +853,7 @@ A party's bills are numbered, and the till shows each one with its number and an
 such as **Bill 2 · Clint**, in some places with the party's name in front, such as **4 · Bill 2 ·
 Clint**. To name the bill on screen, for example after the guest paying it, open the **⋮** menu,
 choose **Name this bill**, type up to 40 characters and choose **Save**. Empty the field to remove
-the name. **Name the party**, under **Whole table** in the same menu, names the whole party instead.
+the name. To name everyone at the table, tap the table name and choose **Name the party**.
 If someone else has unsent dishes on that bill, choose **Take over draft** before you name it.
 
 To change the name the station sees, use **Name the party**. If station work is still outstanding,

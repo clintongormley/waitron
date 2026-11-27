@@ -94,7 +94,7 @@ const menuStates: [string, PartyBill[], string | undefined, TableParty | null][]
   ["no party", [], "wo-9", null],
 ];
 
-describe.each(["light", "dark"] as const)("A803 single menu: the ⋮ in the %s theme", (theme) => {
+describe.each(["light", "dark"] as const)("Table and bill actions in the %s theme", (theme) => {
   describe.each(menuStates)("%s", (_name, bills, orderId, party) => {
     it.each(["closed", "open"] as const)("is accessible %s", async (state) => {
       const line = {
@@ -124,58 +124,68 @@ describe.each(["light", "dark"] as const)("A803 single menu: the ⋮ in the %s t
         { products: [], lines: [line], orderId, party, bills, fullInvoices: true },
         theme,
       );
-      const menu = el.shadowRoot!.querySelector<WtRowActions>("[data-table-menu]")!;
-      if (state === "open") {
-        menu.show();
-        await menu.updateComplete;
-        expect(
-          menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!.matches(":popover-open"),
-        ).toBe(true);
-        expect(menu.querySelectorAll('[role="group"]').length).toBeGreaterThan(0);
+      const billMenu = el.shadowRoot!.querySelector<WtRowActions>("[data-table-menu]");
+      expect(billMenu !== null).toBe(party !== null && orderId !== undefined);
+      for (const menu of [
+        el.shadowRoot!.querySelector<WtRowActions>("[data-party-menu]")!,
+        billMenu,
+      ]) {
+        if (menu === null) continue;
+        if (state === "open") {
+          menu.show();
+          await menu.updateComplete;
+          expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+          if (menu === billMenu) {
+            expect(menu.querySelector('[role="group"]')).not.toBeNull();
+          } else {
+            const dialog = menu.shadowRoot!.querySelector('[role="dialog"]')!;
+            const heading = dialog.querySelector("h2")!;
+            expect(dialog.getAttribute("aria-labelledby")).toBe(heading.id);
+            expect(heading.textContent?.trim()).toBe(menu.label);
+          }
+        }
+        await expectNoA11yViolations(menu);
+        menu.hide();
       }
-      await expectNoA11yViolations(menu);
     });
   });
 });
 
-describe.each(["light", "dark"] as const)(
-  "A803 single menu at a phone's height, %s theme",
-  (theme) => {
-    it("is accessible while its list scrolls, and with a step it opened focused", async () => {
-      await page.viewport(375, 667);
-      try {
-        const { el } = await mountWidget<TillTableOrderScreen>(
-          "till-table-order-screen",
-          {
-            products: [],
-            lines: [],
-            orderId: "wo-2",
-            party: { ...switcherParty, tableIds: ["t4", "t5"] },
-            bills: [
-              partyBill("wo-1", 1, "10.00"),
-              partyBill("wo-2", 2, "54.00", { billName: "Clint" }),
-            ],
-            fullInvoices: true,
-          },
-          theme,
-        );
-        const menu = el.shadowRoot!.querySelector<WtRowActions>("[data-table-menu]")!;
-        await userEvent.click(menu.shadowRoot!.querySelector("button")!);
-        const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-        expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
-        await expectNoA11yViolations(menu);
+describe.each(["light", "dark"] as const)("Bill actions at a phone's height, %s theme", (theme) => {
+  it("is accessible with its list open and with its Merge bills step focused", async () => {
+    await page.viewport(375, 667);
+    try {
+      const { el } = await mountWidget<TillTableOrderScreen>(
+        "till-table-order-screen",
+        {
+          products: [],
+          lines: [],
+          orderId: "wo-2",
+          party: { ...switcherParty, tableIds: ["t4", "t5"] },
+          bills: [
+            partyBill("wo-1", 1, "10.00"),
+            partyBill("wo-2", 2, "54.00", { billName: "Clint" }),
+          ],
+          fullInvoices: true,
+        },
+        theme,
+      );
+      const menu = el.shadowRoot!.querySelector<WtRowActions>("[data-table-menu]")!;
+      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+      const popup = menu.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      expect(popup.matches(":popover-open")).toBe(true);
+      await expectNoA11yViolations(menu);
 
-        await userEvent.click(menu.querySelector<HTMLElement>('[data-action="merge"]')!);
-        await el.updateComplete;
-        const panel = el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel]")!;
-        expect(el.shadowRoot!.activeElement).toBe(panel.querySelector("h2"));
-        await expectNoA11yViolations(panel);
-      } finally {
-        await page.viewport(1280, 900);
-      }
-    });
-  },
-);
+      await userEvent.click(menu.querySelector<HTMLElement>('[data-action="merge"]')!);
+      await el.updateComplete;
+      const panel = el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel]")!;
+      expect(el.shadowRoot!.activeElement).toBe(panel.querySelector("h2"));
+      await expectNoA11yViolations(panel);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+});
 
 describe.each(["light", "dark"] as const)("A803 quiet Pay, %s theme", (theme) => {
   it.each([false, true])(

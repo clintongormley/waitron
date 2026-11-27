@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
@@ -36,7 +36,7 @@ const twoTables: TableParty = { ...switcherParty, tableIds: ["t4", "t5"] };
 function table(id: string, party: TableParty | null, requested = false): TableState {
   return {
     id,
-    label: id,
+    label: id.slice(1),
     shortName: id,
     party,
     signals: requested ? [{ kind: "bill_requested", requestedAt: "2026-10-31T20:00:00.000Z" }] : [],
@@ -70,30 +70,38 @@ async function mountScreen(
     groupCommandBusy?: boolean;
     lines?: TabLine[];
     takesPayment?: boolean;
+    activeTableId?: string;
   } = {},
 ) {
   const party = over.party === undefined ? twoTables : over.party;
-  const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
-    products: [],
-    lines: over.lines ?? [line],
-    orderId: "orderId" in over ? over.orderId : "wo-2",
-    party,
-    bills: over.bills ?? bills,
-    fullInvoices: over.fullInvoices ?? true,
-    tables:
-      party === null ? [] : party.tableIds.map((id) => table(id, party, over.requested ?? false)),
-    busy: over.busy ?? false,
-    billPrintPending: over.billPrintPending ?? false,
-    groupCommandBusy: over.groupCommandBusy ?? false,
-    ...(over.takesPayment === undefined ? {} : { takesPayment: over.takesPayment }),
-  });
+  const { el } = await mountWidget<TillTableOrderScreen>(
+    "till-table-order-screen",
+    {
+      products: [],
+      lines: over.lines ?? [line],
+      orderId: "orderId" in over ? over.orderId : "wo-2",
+      activeTableId: over.activeTableId,
+      party,
+      bills: over.bills ?? bills,
+      fullInvoices: over.fullInvoices ?? true,
+      tables:
+        party === null ? [] : party.tableIds.map((id) => table(id, party, over.requested ?? false)),
+      busy: over.busy ?? false,
+      billPrintPending: over.billPrintPending ?? false,
+      groupCommandBusy: over.groupCommandBusy ?? false,
+      ...(over.takesPayment === undefined ? {} : { takesPayment: over.takesPayment }),
+    },
+    "light",
+  );
   return el;
 }
 
 const menu = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
+const partyMenu = (el: TillTableOrderScreen) =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-party-menu]")!;
 const textOf = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
-/** Each group of the ⋮: its accessible name, then the labels of its items in order. */
+/** The bill action group: its accessible name and the choices in order. */
 function groups(el: TillTableOrderScreen): { name: string; items: string[] }[] {
   return [...menu(el).querySelectorAll<HTMLElement>('[role="group"]')].map((group) => ({
     name: textOf(el.shadowRoot!.getElementById(group.getAttribute("aria-labelledby")!)!),
@@ -101,7 +109,8 @@ function groups(el: TillTableOrderScreen): { name: string; items: string[] }[] {
   }));
 }
 const item = (el: TillTableOrderScreen, selector: string) =>
-  menu(el).querySelector<HTMLElement>(selector);
+  menu(el)?.querySelector<HTMLElement>(selector) ??
+  partyMenu(el).querySelector<HTMLElement>(selector);
 
 function capture(el: TillTableOrderScreen, type: string): unknown[] {
   const seen: unknown[] = [];
@@ -109,9 +118,8 @@ function capture(el: TillTableOrderScreen, type: string): unknown[] {
   return seen;
 }
 
-/** Focus is on the ⋮'s own trigger button. */
-function focusOnMenu(el: TillTableOrderScreen): boolean {
-  const host = menu(el);
+/** Focus is on the menu’s own trigger button. */
+function focusOnMenu(el: TillTableOrderScreen, host = menu(el)): boolean {
   return (
     el.shadowRoot!.activeElement === host &&
     host.shadowRoot!.activeElement === host.shadowRoot!.querySelector("button")
@@ -124,7 +132,192 @@ afterEach(() => {
   setLocale("en");
 });
 
-describe("A803 single menu: one ⋮ for the bill on screen, then the whole table", () => {
+describe("Table and bill actions", () => {
+  it("opens table choices from the table name in a sheet at the bottom of a phone", async () => {
+    await page.viewport(390, 844);
+    try {
+      const el = await mountScreen();
+      const sheet = el.shadowRoot!.querySelector("[data-party-menu]");
+      expect(sheet).not.toBeNull();
+      const trigger = sheet!.shadowRoot!.querySelector("button")!;
+      expect(trigger.getAttribute("aria-label")).toBe("Table 4");
+      await userEvent.click(trigger);
+
+      const popup = sheet!.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+      expect(popup.matches(":popover-open")).toBe(true);
+      await expect
+        .poll(() => Math.round(popup.querySelector(".actions")!.getBoundingClientRect().bottom))
+        .toBe(innerHeight);
+      const panel = popup.querySelector('[role="dialog"]')!;
+      const handle = getComputedStyle(panel, "::before");
+      const firstRow = sheet!.querySelector('[data-action="allergy"]')!;
+      const handleToFirstRow = Math.round(
+        firstRow.getBoundingClientRect().bottom -
+          panel.getBoundingClientRect().top -
+          parseFloat(handle.marginTop) -
+          parseFloat(handle.height),
+      );
+      expect(Math.abs(handleToFirstRow - 84)).toBeLessThanOrEqual(1);
+      expect(el.shadowRoot!.activeElement).toBe(sheet!.querySelector('[data-action="allergy"]'));
+      const finish = sheet!.querySelector<HTMLElement>("[data-finish-table]")!;
+      expect(sheet!.lastElementChild).toBe(finish);
+      expect(finish.previousElementSibling?.tagName).not.toBe("HR");
+      const finished = capture(el, "finish-table");
+      await userEvent.click(finish);
+      expect(finished).toEqual([{}]);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("keeps the table name above the guest count and party name", async () => {
+    await page.viewport(390, 844);
+    try {
+      const el = await mountScreen({
+        party: { ...twoTables, displayName: "Garcia", name: "Garcia" },
+        activeTableId: "t5",
+      });
+      const sheet = partyMenu(el);
+      const trigger = sheet.shadowRoot!.querySelector("button")!;
+      expect(trigger.getAttribute("aria-label")).toBe("Table 5");
+      expect(textOf(sheet.querySelector('[slot="trigger"]')!)).toBe("Table 5");
+      expect(textOf(sheet.nextElementSibling!)).toBe("3 guests · Garcia");
+      expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(44);
+
+      await userEvent.click(trigger);
+      await commands.parkPointer();
+      await expect.element(page.getByRole("dialog", { name: "Table 5" })).toBeVisible();
+      const title = sheet.querySelector('[slot="trigger"]')!;
+      expect(getComputedStyle(title).backgroundColor).toBe("rgb(210, 239, 251)");
+      const icon = title.querySelector("wt-icon")!;
+      expect(getComputedStyle(icon).color).toBe(getComputedStyle(title).color);
+      expect(icon.getBoundingClientRect()).toMatchObject({ width: 16, height: 12 });
+      expect(title.getBoundingClientRect().left).toBeGreaterThan(0);
+      await userEvent.keyboard("{Escape}");
+      expect(focusOnMenu(el, sheet)).toBe(true);
+      await expect.poll(() => getComputedStyle(title).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("keeps a wide sheet on the order side while dimming the whole display", async () => {
+    await page.viewport(390, 844);
+    try {
+      const el = await mountScreen();
+      const sheet = partyMenu(el);
+      await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
+      const backdrop = sheet.shadowRoot!.querySelector("[popover]")!;
+      const popup = backdrop.querySelector('[role="dialog"]')!;
+      const order = () => el.shadowRoot!.querySelector("[data-draft-pane]")!;
+      const edges = (element: Element) => {
+        const { left, right } = element.getBoundingClientRect();
+        return [Math.round(left), Math.round(right)];
+      };
+      expect(edges(popup)).toEqual([0, 390]);
+      expect(edges(backdrop)).toEqual([0, 390]);
+      for (const [width, height] of [
+        [844, 390],
+        [1280, 900],
+      ] as const) {
+        await page.viewport(width, height);
+        await expect.poll(() => edges(order())[0]).toBeGreaterThan(0);
+        await expect.poll(() => edges(popup)).toEqual([edges(order())[0], width]);
+        expect(edges(backdrop)).toEqual([0, width]);
+      }
+      await page.viewport(390, 844);
+      await expect.poll(() => edges(popup)).toEqual([0, 390]);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  });
+
+  it("opens table actions under the saved name of a joined table group", async () => {
+    const el = await mountScreen({
+      party: { ...twoTables, name: "Terrace long", displayName: "Terrace long" },
+    });
+    el.tables = el.tables.map((row, index) => ({
+      ...row,
+      today: {
+        placement: { x: 2 * index, y: 0, width: 2, height: 2, shape: "rect", rotation: 0 },
+        seats: null,
+        fixed: false,
+        takenOff: false,
+        joinId: "joined",
+        joinName: "Terrace long",
+        joinSeats: null,
+        zoneRevision: 1,
+      },
+    }));
+    await el.updateComplete;
+    const sheet = partyMenu(el);
+    const trigger = sheet.shadowRoot!.querySelector("button")!;
+    expect(trigger.getAttribute("aria-label")).toBe("Terrace long");
+    expect(textOf(sheet.nextElementSibling!)).toBe("3 guests");
+    await userEvent.click(trigger);
+    await expect.element(page.getByRole("dialog", { name: "Terrace long" })).toBeVisible();
+  });
+
+  it.each([
+    ["en", "Join tables", "Split the table"],
+    ["es", "Unir mesas", "Separar la mesa"],
+  ] as const)("shows the joined-table action labels in %s", async (locale, join, split) => {
+    setLocale(locale);
+    const el = await mountScreen();
+    const sheet = partyMenu(el);
+    await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
+    const joinButton = sheet.querySelector('[data-action="join"]')!;
+    const splitButton = sheet.querySelector('[data-action="split-table"]')!;
+    expect(joinButton.querySelector("wt-menu-row")!.getAttribute("label")).toBe(join);
+    expect(splitButton.querySelector("wt-menu-row")!.getAttribute("label")).toBe(split);
+    expect(splitButton.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
+  });
+
+  it("reopens at the saved bill-request state when a toggle was refused", async () => {
+    const el = await mountScreen({ requested: true });
+    const events = capture(el, "request-bill");
+    const sheet = el.shadowRoot!.querySelector<HTMLElement>("[data-party-menu]")!;
+    expect(sheet).not.toBeNull();
+    const trigger = sheet.shadowRoot!.querySelector("button")!;
+    const popup = sheet.shadowRoot!.querySelector("[popover]")!;
+    const control = sheet.querySelector("wt-switch")!.shadowRoot!.querySelector("input")!;
+
+    await userEvent.click(trigger);
+    expect(control.checked).toBe(true);
+    await userEvent.click(sheet.querySelector("wt-switch")!.shadowRoot!.querySelector(".thumb")!);
+    expect(focusOnMenu(el, sheet)).toBe(true);
+    expect(events).toEqual([{ requested: false }]);
+    expect(popup.matches(":popover-open")).toBe(false);
+
+    await userEvent.click(trigger);
+    expect(control.checked).toBe(true);
+  });
+
+  it.each([false, true])(
+    "toggles saved state %s when the Bill requested label is tapped",
+    async (requested) => {
+      const el = await mountScreen({ requested });
+      const events = capture(el, "request-bill");
+      const sheet = partyMenu(el);
+      await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
+      const label = sheet
+        .querySelector("wt-menu-row:has(wt-switch)")!
+        .shadowRoot!.querySelector(".label")!;
+      expect(getComputedStyle(label).cursor).toBe("pointer");
+      await userEvent.click(label);
+      expect(events).toEqual([{ requested: !requested }]);
+      expect(sheet.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+      expect(focusOnMenu(el, sheet)).toBe(true);
+    },
+  );
+
+  it("offers the table sheet and bill picker without an empty bill actions button", async () => {
+    const el = await mountScreen({ orderId: undefined });
+    expect(el.shadowRoot!.querySelector("[data-party-menu]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-bill-switcher] [data-new-bill]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-table-menu]")).toBeNull();
+  });
+
   it("records only the shown bill as left unpaid from its Bill menu", async () => {
     const el = await mountScreen();
     const seen = capture(el, "record-unpaid-departure");
@@ -155,18 +348,18 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(el.shadowRoot!.querySelector("[data-pay-sheet], till-tender-pay")).not.toBeNull();
   });
 
-  it("draws exactly one ⋮, named Table actions, and no Table actions button", async () => {
+  it("names the bill ellipsis and keeps table actions off it", async () => {
     const el = await mountScreen();
 
     expect(el.shadowRoot!.querySelectorAll("[data-table-menu]")).toHaveLength(1);
     expect(menu(el).tagName).toBe("WT-ROW-ACTIONS");
-    expect(menu(el).getAttribute("label")).toBe("Table actions");
-    expect(menu(el).hasAttribute("data-move-split")).toBe(true);
+    expect(menu(el).getAttribute("label")).toBe("Bill actions");
+    expect(menu(el).querySelector("[data-table-menu-table]")).toBeNull();
     const buttons = [...el.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")];
     expect(buttons.filter((button) => textOf(button) === "Table actions")).toEqual([]);
   });
 
-  it("an open owing bill: the bill's items under its label, then the whole table's", async () => {
+  it("keeps an owing bill's actions under its label", async () => {
     const el = await mountScreen();
 
     expect(groups(el)).toEqual([
@@ -183,27 +376,14 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
           "Print the bill",
         ],
       },
-      {
-        name: "Whole table",
-        items: [
-          "Allergies",
-          "Name the party…",
-          "Guests…",
-          "Mark bill requested for 4",
-          "Split a table…",
-          "Join a table…",
-          "Move guests…",
-          "Finish table",
-        ],
-      },
     ]);
   });
 
   it("offers Split a table only at two or more tables", async () => {
     const el = await mountScreen({ party: switcherParty });
 
-    expect(groups(el)[1]!.items).not.toContain("Split a table…");
-    expect(groups(el)[1]!.items).toContain("Join a table…");
+    expect(partyMenu(el).querySelector('[data-action="split-table"]')).toBeNull();
+    expect(partyMenu(el).querySelector('[data-action="join"]')).not.toBeNull();
   });
 
   it("a paid bill with a receipt offers Name this bill and Receipt copy, and no Full invoice", async () => {
@@ -347,38 +527,30 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(item(el, "[data-choose-bill-invoice]")).toBeNull();
   });
 
-  it("with no bill on screen there is no bill group", async () => {
-    const el = await mountScreen({ orderId: undefined });
-
-    expect(groups(el).map((group) => group.name)).toEqual(["Whole table"]);
-  });
-
-  it("with no party: no bill group; Join a table and Move guests under Whole table", async () => {
+  it("keeps Join and Move available before a party is seated", async () => {
     const el = await mountScreen({ party: null, bills: [], orderId: "wo-9" });
-
-    expect(groups(el)).toEqual([{ name: "Whole table", items: ["Join a table…", "Move guests…"] }]);
-    expect(item(el, '[data-action="merge"]')).toBeNull();
+    expect(menu(el)).toBeNull();
+    expect(
+      [...partyMenu(el).querySelectorAll("[data-action]")].map((row) =>
+        row.getAttribute("data-action"),
+      ),
+    ).toEqual(["move", "join"]);
   });
 
-  it("names the groups in Spanish", async () => {
+  it("names the bill menu in Spanish", async () => {
     setLocale("es");
     const el = await mountScreen();
-
-    expect(groups(el).map((group) => group.name)).toEqual(["Cuenta 2 · Clint", "Toda la mesa"]);
-    expect(menu(el).getAttribute("label")).toBe("Acciones de mesa");
+    expect(groups(el).map((group) => group.name)).toEqual(["Cuenta 2 · Clint"]);
+    expect(menu(el).getAttribute("label")).toBe("Acciones de cuenta");
   });
 
   it("each copy sends its own event", async () => {
     const el = await mountScreen();
     const adjust = capture(el, "adjust");
     const invoice = capture(el, "choose-bill-invoice");
-    const request = capture(el, "request-bill");
-    const finish = capture(el, "finish-table");
 
     item(el, "[data-discount-bill]")!.click();
     item(el, "[data-choose-bill-invoice]")!.click();
-    item(el, "[data-request-bill]")!.click();
-    item(el, "[data-finish-table]")!.click();
 
     expect(adjust).toEqual([
       {
@@ -396,8 +568,6 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       },
     ]);
     expect(invoice).toEqual([{ workingOrderId: "wo-2", revision: 6 }]);
-    expect(request).toEqual([{ requested: true }]);
-    expect(finish).toEqual([{}]);
   });
 
   it("Receipt copy and Nothing was served send their events for the bill on screen", async () => {
@@ -601,64 +771,6 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
   });
 
-  it.each([
-    [1024, 768],
-    [375, 667],
-  ])(
-    "at %ix%i the list opens under its trigger, fits the window and scrolls Finish table into reach",
-    async (width, height) => {
-      await page.viewport(width, height);
-      try {
-        const el = await mountScreen();
-        const finish = capture(el, "finish-table");
-        const trigger = menu(el).shadowRoot!.querySelector("button")!;
-        const popup = menu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-        await userEvent.click(trigger);
-
-        expect(groups(el).flatMap((group) => group.items)).toHaveLength(16);
-        const box = popup.getBoundingClientRect();
-        const anchor = trigger.getBoundingClientRect();
-        expect(box.top).toBeGreaterThanOrEqual(anchor.bottom - 0.5);
-        expect(box.bottom).toBeLessThanOrEqual(innerHeight);
-        expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
-        const centre = el.shadowRoot!.elementFromPoint(
-          anchor.left + anchor.width / 2,
-          anchor.top + anchor.height / 2,
-        );
-        expect(centre).toBe(menu(el));
-        await userEvent.click(item(el, "[data-finish-table]")!);
-        expect(finish).toEqual([{}]);
-      } finally {
-        await page.viewport(1280, 900);
-      }
-    },
-  );
-
-  it.each([
-    [1024, 768],
-    [375, 667],
-  ])(
-    "at %ix%i the list's bottom edge cuts through the middle of an item, so half its label shows",
-    async (width, height) => {
-      await page.viewport(width, height);
-      try {
-        const el = await mountScreen();
-        const popup = menu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-        await userEvent.click(menu(el).shadowRoot!.querySelector("button")!);
-
-        const cut = popup.getBoundingClientRect().top + popup.clientTop + popup.clientHeight;
-        const across = [...menu(el).querySelectorAll<HTMLElement>("wt-button")]
-          .map((action) => action.getBoundingClientRect())
-          .filter((box) => box.top < cut && box.bottom > cut);
-        expect(across).toHaveLength(1);
-        const { top, height } = across[0]!;
-        expect(Math.abs(cut - (top + height / 2))).toBeLessThanOrEqual(height / 10);
-      } finally {
-        await page.viewport(1280, 900);
-      }
-    },
-  );
-
   describe("A803 LOOK F5: the bill's items are those the server takes in the bill's state", () => {
     const paid = partyBill("wo-2", 2, "0.00", {
       status: "settled",
@@ -786,34 +898,36 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       expect(item(el, "[data-cancel-credit]")).toBeNull();
     });
 
-    it("a requested bill offers to cancel the request, which sends requested false", async () => {
-      const el = await mountScreen({ requested: true });
-      const request = capture(el, "request-bill");
-
-      expect(item(el, "[data-request-bill]")).toBeNull();
-      const cancel = item(el, "[data-cancel-bill-request]")!;
-      expect(textOf(cancel)).toBe("Cancel the bill request for 4");
-      cancel.click();
-      expect(request).toEqual([{ requested: false }]);
-    });
-
-    it("holds Mark bill requested while a party command runs, and Full invoice while busy", async () => {
+    it("holds the bill-request switch during a party command and Full invoice while busy", async () => {
       const commanding = await mountScreen({ groupCommandBusy: true });
       const busy = await mountScreen({ busy: true });
-      const disabled = (el: TillTableOrderScreen, selector: string) =>
-        (item(el, selector) as HTMLElement & { disabled: boolean }).disabled;
 
-      expect(disabled(commanding, "[data-request-bill]")).toBe(true);
-      expect(disabled(commanding, "[data-choose-bill-invoice]")).toBe(false);
-      expect(disabled(busy, "[data-choose-bill-invoice]")).toBe(true);
-      expect(disabled(busy, "[data-request-bill]")).toBe(false);
+      expect(
+        commanding.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+          "[data-bill-request]",
+        )!.disabled,
+      ).toBe(true);
+      expect(
+        commanding.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+          "[data-choose-bill-invoice]",
+        )!.disabled,
+      ).toBe(false);
+      expect(
+        busy.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[data-bill-request]")!
+          .disabled,
+      ).toBe(false);
+      expect(
+        busy.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+          "[data-choose-bill-invoice]",
+        )!.disabled,
+      ).toBe(true);
     });
 
     it("a step or window item does nothing while the screen is busy", async () => {
       const el = await mountScreen({ busy: true });
       await userEvent.click(menu(el));
       await userEvent.click(item(el, '[data-action="merge"]')!);
-      await userEvent.click(menu(el));
+      await userEvent.click(partyMenu(el));
       await userEvent.click(item(el, '[data-action="name"]')!);
       await el.updateComplete;
 
@@ -909,7 +1023,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       const el = await mountScreen({ bills: three });
       el.personId = "me";
       el.splitRead = { partyRevision: 3, bills: [] };
-      await userEvent.click(menu(el));
+      await userEvent.click(partyMenu(el));
       await userEvent.click(item(el, '[data-action="split-table"]')!);
       await el.updateComplete;
       expect(focusOnStep(el)).toBe(true);
@@ -921,6 +1035,8 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector('[data-target="t5"]')).not.toBeNull();
       expect(focusOnStep(el)).toBe(true);
+      await userEvent.keyboard("{Escape}");
+      expect(focusOnMenu(el, partyMenu(el))).toBe(true);
     });
 
     it("a redraw with no step or window closing leaves focus where it is", async () => {
@@ -952,7 +1068,22 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     });
   });
 
-  describe("A1234: focus returns to the ⋮ when a window opened from it closes", () => {
+  describe("A1234: focus returns to the menu that opened a window", () => {
+    it("focuses the bill picker when the open naming window loses its bill", async () => {
+      const el = await mountScreen();
+      await userEvent.click(menu(el).shadowRoot!.querySelector("button")!);
+      await userEvent.click(item(el, '[data-action="name-bill"]')!);
+      expect(el.shadowRoot!.querySelector("till-bill-name-dialog")).not.toBeNull();
+
+      el.orderId = undefined;
+      el.bills = [];
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("till-bill-name-dialog")).toBeNull();
+      expect(menu(el)).toBeNull();
+      expect(focusOnMenu(el, el.shadowRoot!.querySelector("[data-bill-switcher]")!)).toBe(true);
+    });
+
     it("Name the party: Cancel, Escape and Save", async () => {
       const el = await mountScreen();
       const dialog = () => el.shadowRoot!.querySelector("till-party-name-dialog")!;
@@ -963,7 +1094,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       dialog().shadowRoot!.querySelector<HTMLElement>("[data-name-cancel]")!.click();
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
-      expect(focusOnMenu(el)).toBe(true);
+      expect(focusOnMenu(el, partyMenu(el))).toBe(true);
 
       item(el, '[data-action="name"]')!.click();
       await el.updateComplete;
@@ -971,7 +1102,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       await userEvent.keyboard("{Escape}");
       await expect.poll(() => el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
       await el.updateComplete;
-      expect(focusOnMenu(el)).toBe(true);
+      expect(focusOnMenu(el, partyMenu(el))).toBe(true);
 
       item(el, '[data-action="name"]')!.click();
       await el.updateComplete;
@@ -984,7 +1115,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         }),
       );
       await el.updateComplete;
-      expect(focusOnMenu(el)).toBe(true);
+      expect(focusOnMenu(el, partyMenu(el))).toBe(true);
     });
 
     it("Name this bill and Guests", async () => {
@@ -1007,7 +1138,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       counting.shadowRoot!.querySelector<HTMLElement>("[data-guests-cancel]")!.click();
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBeNull();
-      expect(focusOnMenu(el)).toBe(true);
+      expect(focusOnMenu(el, partyMenu(el))).toBe(true);
     });
   });
 });

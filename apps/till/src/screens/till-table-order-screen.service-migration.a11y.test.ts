@@ -14,7 +14,10 @@ import {
 import { resized } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import "../till-app.js";
-import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  closePartyMenu,
+  openPartyMenu,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -64,7 +67,7 @@ describe.each(["en", "es"] as const)("Sent service migration in %s", (locale) =>
         el.addEventListener("snooze-group", (event) => snoozes.push((event as CustomEvent).detail));
         await userEvent.click(snooze);
         expect(snoozes).toEqual([{ groupId: "g3", minutes: 5 }]);
-        await openTableMenu(el);
+        await openPartyMenu(el);
         expect(el.shadowRoot!.querySelector("[data-group-reminder]")).toBeNull();
         expect(panel.getBoundingClientRect().right).toBeLessThanOrEqual(width);
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
@@ -73,6 +76,7 @@ describe.each(["en", "es"] as const)("Sent service migration in %s", (locale) =>
           element: panel,
           path: `__screenshots__/a773-service-migration-${locale}-${theme}-${width}-reminder.png`,
         });
+        await closePartyMenu(el);
         await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>("[data-held-toggle]")!);
         await panel.updateComplete;
         await userEvent.click(
