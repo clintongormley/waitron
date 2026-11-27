@@ -75,6 +75,10 @@ export const quietPayStyles = css`
     --wt-font-size-md: calc(var(--wt-space-4) + var(--wt-space-1));
   }
 
+  [data-clear-card-tip] {
+    margin-block-end: var(--wt-space-2);
+  }
+
   [data-quiet-pay-breakdown] {
     display: flex;
     flex-wrap: wrap;
@@ -237,30 +241,23 @@ export function quietTipBreakdown({
   bill,
   tip,
   busy,
+  expanded,
   edit,
-  remove,
 }: {
   bill: string;
   tip?: string;
   busy: boolean;
+  expanded: boolean;
   edit: () => void;
-  remove: () => void;
 }): TemplateResult {
   return html`<div slot="breakdown" data-quiet-pay-breakdown>
-    ${
-      tip === undefined
-        ? nothing
-        : html`<span>${fill(t("bill_pay.quiet_breakdown"), { bill, tip })}</span
-            ><wt-button
-              variant="ghost"
-              data-quiet-pay-remove-tip
-              aria-label=${t("bill_pay.remove_tip")}
-              .disabled=${busy}
-              @click=${remove}
-              >${t("bill_pay.quiet_remove_tip")}</wt-button
-            >`
-    }
-    <wt-button variant="ghost" data-quiet-pay-tip .disabled=${busy} @click=${edit}
+    ${tip === undefined ? nothing : html`<span>${fill(t("bill_pay.quiet_breakdown"), { bill, tip })}</span>`}
+    <wt-button
+      variant="ghost"
+      data-quiet-pay-tip
+      .ariaExpanded=${String(expanded)}
+      .disabled=${busy}
+      @click=${edit}
       >${t(tip === undefined ? "bill_pay.quiet_tip" : "bill_pay.quiet_edit_tip")}</wt-button
     >
   </div>`;

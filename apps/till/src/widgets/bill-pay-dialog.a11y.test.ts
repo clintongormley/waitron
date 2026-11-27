@@ -199,12 +199,13 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
           const root = el.shadowRoot!;
           const breakdown = root.querySelector("[data-quiet-pay-breakdown]")!;
           const summary = breakdown.querySelector("span")!.getBoundingClientRect();
-          const removeTip = breakdown.querySelector("[data-quiet-pay-remove-tip]")!;
-          const editTip = breakdown.querySelector("[data-quiet-pay-tip]")!;
-          const removeBox = removeTip.getBoundingClientRect();
+          const actions = [...breakdown.querySelectorAll("wt-button")];
+          expect(actions.map((action) => action.textContent?.trim())).toEqual([
+            locale === "en" ? "Edit tip" : "Editar propina",
+          ]);
+          const editTip = actions[0]!;
           const editBox = editTip.getBoundingClientRect();
-          expect(removeBox.top).toBe(editBox.top);
-          expect(removeBox.top).toBeLessThan(summary.bottom);
+          expect(editBox.top).toBeLessThan(summary.bottom);
           expect(editBox.right).toBeLessThanOrEqual(breakdown.getBoundingClientRect().right);
           const icons = [
             root.querySelector("[data-quiet-pay-equipment] wt-icon")!,
@@ -218,11 +219,9 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
             tipText.selectNodeContents(breakdown.querySelector("span")!);
             const tileTop = choices[0]!.getBoundingClientRect().top;
             expect.soft(tileTop - tipText.getBoundingClientRect().bottom).toBeLessThanOrEqual(15);
-            for (const link of [removeTip, editTip]) {
-              const target = link.shadowRoot!.querySelector("button")!.getBoundingClientRect();
-              expect.soft(target.height).toBeGreaterThanOrEqual(24);
-              expect.soft(target.bottom).toBeLessThan(tileTop);
-            }
+            const target = editTip.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+            expect.soft(target.height).toBeGreaterThanOrEqual(24);
+            expect.soft(target.bottom).toBeLessThan(tileTop);
 
             const check = icons[1]!.shadowRoot!.querySelector("path")!;
             expect.soft(check.isPointInFill(new DOMPoint(10, 6.6))).toBe(true);

@@ -178,10 +178,24 @@ it("adds a staff tip to the opening total and removes it before asking for any c
         .shadowRoot!.querySelector('[part="hint"]'),
     ),
   ).toBe(money("132.00"));
-  expect(text(root(el).querySelector("[data-quiet-pay-breakdown]"))).toContain(money("12.00"));
-  await click(el, "[data-quiet-pay-remove-tip]");
+  expect(text(root(el).querySelector("[data-quiet-pay-breakdown] span"))).toContain(money("12.00"));
+  await click(el, "[data-quiet-pay-tip]");
+  const breakdown = root(el).querySelector("[data-quiet-pay-breakdown]")!;
+  await click(el, "[data-quiet-pay-tip]");
+  expect(text(root(el).querySelector("[data-clear-card-tip]"))).toBe("Remove tip");
+  await click(el, "[data-clear-card-tip]");
   expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("120.00"));
+  expect(text(breakdown)).toBe("Enter tip");
+  expect(text(root(el).querySelector("[data-quiet-pay-card]"))).toBe(`Charge ${money("120.00")}`);
   expect(previews).toEqual([]);
+  await click(el, "[data-quiet-pay-card]");
+  expect(previews).toEqual([
+    {
+      choice: { kind: "whole" },
+      pay: { method: "card" },
+      card: { entry: "reader", simulationOutcome: "captured" },
+    },
+  ]);
 });
 
 it.each(["en", "es"] as const)("temporary balance explanation in %s", async (locale) => {

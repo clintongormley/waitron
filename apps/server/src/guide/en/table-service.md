@@ -1050,8 +1050,8 @@ from the card readers when a list is offered. Check the reader and the total bef
 To use a separate machine, follow [Use another card machine](table-service.md#outside-card).
 
 If the venue takes tips and Waitron drives the reader, use **Enter tip** on the table’s Pay screen.
-To take it off before starting the payment, choose **Remove tip**. For a separate card machine, enter
-the tip with the other payment details. At the Counter, enter **Tip on the card (optional)** before
+To take it off before starting the payment, choose **Edit tip**, then **Remove tip**. For a
+separate card machine, enter the tip with the other payment details. At the Counter, enter **Tip on the card (optional)** before
 continuing. The confirmation separates **Paid off the bill**, **Tip** and **Charged on the card**.
 An amount above what is still due becomes a tip, so check the full card charge with the guest before
 sending it. For example, a €50 card contribution towards €40 still due pays €40 off the bill and adds a €10

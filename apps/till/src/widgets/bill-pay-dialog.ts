@@ -1039,12 +1039,8 @@ export class TillBillPayDialog extends LitElement {
               bill: this.#money(base),
               tip: tip === null ? undefined : this.#money(tip),
               busy: this.busy,
+              expanded: this.quietTip,
               edit: () => (this.quietTip = !this.quietTip),
-              remove: () => {
-                this.cardTip = "";
-                this.quietTip = false;
-                this.#changedDraft();
-              },
             }),
       body: html` ${this.credited === null ? nothing : html`<p class="credited" role="status" data-pay-credited>${this.credited}</p>`}
       ${this.#captureWarning()} ${this.#refundNotice()}
@@ -1067,7 +1063,7 @@ export class TillBillPayDialog extends LitElement {
       ${
         this.quietEntry
           ? html`${this.#wayFields(errors)} ${this.#entryFields(errors)}`
-          : html` ${this.quietTip ? this.#cardTipField(errors) : nothing}
+          : html` ${this.quietTip ? this.#quietTipEditor(errors) : nothing}
             ${this.balance === null ? html`<p role="status" data-pay-balance>${t("bill_pay.reading")}</p>` : nothing}
             ${quietWays(
               this.chosenWay,
@@ -1904,6 +1900,23 @@ export class TillBillPayDialog extends LitElement {
         )
       : html`${this.tipsEnabled ? this.#cardTipField(errors) : nothing}
         ${this.#keyed(this.method) ? this.#manualCardFields() : this.#readerFields()}`;
+  }
+
+  #quietTipEditor(errors: ReadonlyMap<Field, string>): TemplateResult {
+    return html`${this.#cardTipField(errors)}
+      <wt-button
+        size="sm"
+        variant="secondary"
+        data-clear-card-tip
+        .disabled=${this.busy || this.cardTip === ""}
+        @click=${() => {
+          this.cardTip = "";
+          this.quietTip = false;
+          this.#changedDraft();
+          this.renderRoot.querySelector<HTMLElement>("[data-quiet-pay-tip]")?.focus();
+        }}
+        >${t("bill_pay.remove_tip")}</wt-button
+      >`;
   }
 
   #cardTipField(errors: ReadonlyMap<Field, string>): TemplateResult {
