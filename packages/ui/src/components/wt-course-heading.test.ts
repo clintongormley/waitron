@@ -1,7 +1,8 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, mount } from "../test-helpers.js";
 import type { WtCourseHeading } from "./wt-course-heading.js";
 import "./wt-course-heading.js";
+import "./wt-button.js";
 
 afterEach(cleanup);
 
@@ -137,4 +138,100 @@ it("paints the sent mark from tokens, in plain upright letters", async () => {
   expect(pill.textTransform).toBe("none");
   expect(pill.letterSpacing).toBe("normal");
   expect(getComputedStyle(mark(el)!.querySelector("wt-icon")!).color).toBe("rgb(13, 14, 15)");
+});
+
+describe("laying out a title, the mark and an action that cannot all share one line", () => {
+  const title = "Sharing plates · marchado hace 8 min";
+  const rect = (el: Element) => el.getBoundingClientRect();
+  const parts = (el: Element) => ({
+    title: rect(heading(el).querySelector("span")!),
+    mark: rect(mark(el)!),
+    button: rect(el.querySelector("wt-button")!),
+    right: rect(el).right - parseFloat(getComputedStyle(el).paddingRight),
+  });
+  async function laidOut(width: number, words = title) {
+    const el = await mount(
+      `<wt-course-heading mark="sent" mark-label="Enviado" style="width: ${width}px">${words}<wt-button slot="end">Servir todo</wt-button></wt-course-heading>`,
+    );
+    await (el.querySelector("wt-button") as HTMLElement & { updateComplete: Promise<unknown> })
+      .updateComplete;
+    return el;
+  }
+  async function oneLineTitle() {
+    const lone = await mount(
+      `<wt-course-heading style="width: 2000px">${title}</wt-course-heading>`,
+    );
+    const words = document.createRange();
+    words.selectNodeContents(lone);
+    const box = words.getBoundingClientRect();
+    return { width: box.width, height: rect(heading(lone).querySelector("span")!).height };
+  }
+  const apart = (a: DOMRect, b: DOMRect) =>
+    a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+
+  it("keeps everything on one line, the mark just before the action, when there is room", async () => {
+    const el = await laidOut(900);
+    const { title: words, mark: pill, button, right } = parts(el);
+    expect(button.top).toBeLessThan(words.bottom);
+    expect(pill.right).toBeLessThanOrEqual(button.left);
+    expect(button.left - pill.right).toBeLessThan(12);
+    expect(button.right).toBeCloseTo(right, 0);
+  });
+
+  it("moves the action under the title, at the end, before it squeezes the title", async () => {
+    const line = await oneLineTitle();
+    const pill = rect(mark(await laidOut(900))!).width;
+    const el = await laidOut(Math.ceil(line.width + pill + 32 + 16));
+    const { title: words, mark: drawn, button, right } = parts(el);
+    expect(words.height).toBeCloseTo(line.height, 0);
+    expect(drawn.top).toBeLessThan(words.bottom);
+    expect(drawn.right).toBeCloseTo(right, 0);
+    expect(button.top).toBeGreaterThanOrEqual(words.bottom);
+    expect(button.right).toBeCloseTo(right, 0);
+    expect(button.height).toBeGreaterThanOrEqual(44);
+    expect(apart(drawn, button)).toBe(true);
+  });
+
+  it("in a narrow column keeps the mark beside the title, which keeps at least half the width", async () => {
+    const el = await laidOut(317);
+    const { title: words, mark: pill, button, right } = parts(el);
+    const content = 317 - 32;
+    expect(pill.top).toBeLessThan(words.bottom);
+    expect(pill.right).toBeCloseTo(right, 0);
+    expect(words.width).toBeGreaterThanOrEqual(content / 2);
+    expect(button.top).toBeGreaterThanOrEqual(Math.max(words.bottom, pill.bottom));
+    expect(button.right).toBeCloseTo(right, 0);
+  });
+
+  it("gives a title too long for one line the whole width, with the mark and action under it", async () => {
+    const el = await laidOut(220);
+    const { title: words, mark: pill, button, right } = parts(el);
+    expect(words.right).toBeLessThanOrEqual(right + 0.5);
+    expect(right - words.left).toBeGreaterThan(220 - 32 - 1);
+    expect(pill.top).toBeGreaterThanOrEqual(words.bottom);
+    expect(pill.right).toBeLessThanOrEqual(right + 0.5);
+    expect(button.right).toBeLessThanOrEqual(right + 0.5);
+    expect(apart(pill, button)).toBe(true);
+    expect(apart(words, button)).toBe(true);
+  });
+
+  it.each([300, 390, 480, 600])(
+    "never lets the action cover the mark or the title at %ipx",
+    async (width) => {
+      const el = await laidOut(width);
+      const { title: words, mark: pill, button, right } = parts(el);
+      expect(apart(pill, button)).toBe(true);
+      expect(apart(words, button)).toBe(true);
+      expect(apart(words, pill)).toBe(true);
+      expect(Math.max(pill.right, button.right, words.right)).toBeLessThanOrEqual(right + 0.5);
+    },
+  );
+
+  it("puts the mark at the end of the line when there is no action", async () => {
+    const el = await mount(
+      '<wt-course-heading mark="sent" mark-label="Sent" style="width: 600px">Drinks</wt-course-heading>',
+    );
+    const right = rect(el).right - parseFloat(getComputedStyle(el).paddingRight);
+    expect(rect(mark(el)!).right).toBeCloseTo(right, 0);
+  });
 });

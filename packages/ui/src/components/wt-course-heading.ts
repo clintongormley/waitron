@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import "./wt-icon.js";
 
@@ -11,8 +11,10 @@ export class WtCourseHeading extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      /* The title gets the room first: the action wraps under it before the title is squeezed. */
       :host {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--wt-space-2);
         padding: var(--wt-space-3) var(--wt-space-4) var(--wt-course-heading-padding-bottom);
@@ -21,11 +23,10 @@ export class WtCourseHeading extends LitElement {
 
       [role="heading"] {
         display: flex;
-        flex: 1;
+        flex: 1 1 auto;
+        flex-wrap: wrap;
         align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-2);
-        min-width: 0;
+        gap: var(--wt-space-1) var(--wt-space-2);
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
@@ -33,9 +34,15 @@ export class WtCourseHeading extends LitElement {
         text-transform: uppercase;
       }
 
+      /* The mark moves under the title only when the title would keep less than half the width. */
+      .title {
+        flex: 1 1 max(50%, 10em);
+      }
+
       .mark {
         display: inline-flex;
         flex: none;
+        margin-inline-start: auto;
         align-items: center;
         gap: var(--wt-space-1);
         padding: var(--wt-space-1) var(--wt-space-2);
@@ -45,6 +52,19 @@ export class WtCourseHeading extends LitElement {
         font-size: var(--wt-font-size-sm);
         letter-spacing: normal;
         text-transform: none;
+      }
+
+      .end {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin-inline-start: auto;
+      }
+
+      .end[hidden] {
+        display: none;
       }
 
       .mark wt-icon {
@@ -67,12 +87,15 @@ export class WtCourseHeading extends LitElement {
 
   @property({ type: Number }) level = 3;
 
+  /** An empty end box would still take the host's gap, so it is hidden until something is slotted. */
+  @state() private hasEnd = false;
+
   override render() {
     const level =
       Number.isInteger(this.level) && this.level >= 1 && this.level <= 6 ? this.level : 3;
     return html`
       <div role="heading" aria-level=${level}>
-        <span><slot></slot></span>
+        <span class="title"><slot></slot></span>
         ${
           this.mark === "sent"
             ? html`<span part="mark" class="mark"
@@ -82,7 +105,14 @@ export class WtCourseHeading extends LitElement {
             : nothing
         }
       </div>
-      <slot name="end"></slot>
+      <div class="end" ?hidden=${!this.hasEnd}>
+        <slot
+          name="end"
+          @slotchange=${(event: Event) => {
+            this.hasEnd = (event.target as HTMLSlotElement).assignedElements().length > 0;
+          }}
+        ></slot>
+      </div>
     `;
   }
 }
