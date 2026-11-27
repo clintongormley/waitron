@@ -64,6 +64,10 @@ export class WtSwitch extends LitElement {
         cursor: not-allowed;
       }
 
+      input:enabled ~ :is(.track, .thumb) {
+        pointer-events: none;
+      }
+
       .track {
         margin-left: var(--wt-switch-track-offset, 0px);
         width: var(--wt-space-6);

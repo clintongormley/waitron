@@ -73,8 +73,22 @@ export const productRowStyles = css`
   wt-data-table::part(phone-row-labels) {
     /* This line can use the gap between Name and Price. */
     margin-inline-end: calc(-2 * var(--wt-table-cell-padding-inline));
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: var(--wt-space-2);
+    overflow: hidden;
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
+  }
+  wt-data-table::part(phone-category-status) {
+    position: relative;
+    min-inline-size: 0;
+  }
+  wt-data-table::part(phone-category-status)::before {
+    /* Wrapping puts the label at the line start, outside which its separator is clipped. */
+    content: "·" / "";
+    position: absolute;
+    inset-inline-end: calc(100% + var(--wt-space-1) / 2);
   }
   wt-data-table::part(inherited-allergens),
   wt-data-table::part(inherited-price) {
@@ -88,6 +102,9 @@ export const productRowStyles = css`
   }
   wt-data-table::part(column-available) {
     inline-size: 0;
+  }
+  wt-data-table::part(column-sort-available) {
+    min-block-size: var(--wt-space-5);
   }
   wt-data-table:not([narrow])::part(column-price) {
     inline-size: calc(var(--wt-tap-min) * 4);
@@ -128,6 +145,9 @@ export const productRowStyles = css`
   }
   wt-data-table[narrow]::part(price-amount) {
     white-space: normal;
+  }
+  wt-data-table[narrow][data-phone]::part(price-amount) {
+    font-size: var(--wt-font-size-sm);
   }
   wt-data-table::part(price-unit) {
     text-align: start;

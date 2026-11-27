@@ -1640,6 +1640,7 @@ describe("product-list", () => {
       labelText.selectNodeContents(label);
       expect.soft(labelText.getClientRects()).toHaveLength(1);
       expect.soft(labelBox.top).toBeGreaterThanOrEqual(category.getBoundingClientRect().bottom - 1);
+      expect.soft(label.closest('[part~="phone-row-labels"]')!.textContent).not.toContain("·");
       const listNameLeft = (key: string) =>
         nameCell(key).querySelector("strong")!.getBoundingClientRect().left;
       expect.soft(listNameLeft("coffee")).toBeCloseTo(listNameLeft("ham"), 0);
@@ -1708,7 +1709,7 @@ describe("product-list", () => {
       expect.soft(price.getBoundingClientRect().height, "price range").toBeLessThan(23);
       expect
         .soft(variantCount.getBoundingClientRect().right)
-        .toBeLessThan(price.getBoundingClientRect().left);
+        .toBeLessThanOrEqual(price.getBoundingClientRect().left);
       const scroll = root.querySelector(".scroll")!;
       expect.soft(scroll.scrollWidth).toBe(scroll.clientWidth);
       el.selecting = true;

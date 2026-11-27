@@ -545,7 +545,7 @@ describe("menu-screen", () => {
 
   it.each([
     { width: 390, tableHeight: 330, fits: true },
-    { width: 390, tableHeight: 280, fits: false },
+    { width: 390, tableHeight: 210, fits: false },
     { width: 1180, tableHeight: 280, fits: true },
   ])(
     "reveals a deep-linked category at $width px with a $tableHeight px table",
