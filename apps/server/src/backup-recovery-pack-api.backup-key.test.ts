@@ -26,7 +26,7 @@ import { keyFingerprint } from "./backup-key-fingerprint.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import { createTurns } from "./backup-turns.js";
 import { loadBoxEnv } from "./box-env.js";
-import { parseEnvFile } from "./env-file.js";
+import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -220,6 +220,21 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
       WAITRON_BACKUP_RECOVERY_KEY: next.key,
       WAITRON_BACKUP_KEY_NUMBER: "1",
       WAITRON_BACKUP_MASTER_KEY_ID: next.masterKeyId,
+    });
+  });
+
+  it("with a backup key held whose number backup.env lacks, a new master key writes its key 1", async () => {
+    const stateDir = await stateFolder(3);
+    const held = await keyFile(stateDir);
+    delete held.WAITRON_BACKUP_KEY_NUMBER;
+    await writeFile(join(stateDir, "backup.env"), formatEnvFile(held), { mode: 0o600 });
+    const response = await fixture(stateDir).make(true);
+    expect(response.status).toBe(200);
+    const next = heldBackupKey(shownBytes(response), 1);
+    await response.arrayBuffer();
+    expect(await keyFile(stateDir)).toMatchObject({
+      WAITRON_BACKUP_RECOVERY_KEY: next.key,
+      WAITRON_BACKUP_KEY_NUMBER: "1",
     });
   });
 

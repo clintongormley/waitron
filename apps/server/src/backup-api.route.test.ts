@@ -73,7 +73,7 @@ import {
   type BackupSupervisorDeps,
 } from "./backup-supervisor.js";
 import { loadBoxEnv } from "./box-env.js";
-import { parseEnvFile } from "./env-file.js";
+import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import type { Logger } from "./logger.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
 import { mountManagementApi } from "./management-api.js";
@@ -1262,9 +1262,84 @@ describe("backup admin routes", () => {
     const rotated = await rot.json();
     expect(rotated).toMatchObject({ enabled: false, recoveryKeySet: true });
     expect(rotated.recoveryKeyTooShort).toBe(false);
-    // A key with no number counts as none held, so the change writes key 1.
+    // A too-short key with no number counts as none held, so the change writes key 1.
     const file = parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
     expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
+  }, 60_000);
+
+  /** Takes `names` out of `backup.env`, as a file written before the box kept them would be. */
+  async function dropFromKeyFile(stateDir: string, ...names: string[]): Promise<void> {
+    const file = await keyFileOf(stateDir);
+    for (const name of names) delete file[name];
+    await writeFile(join(stateDir, "backup.env"), formatEnvFile(file), { mode: 0o600 });
+  }
+
+  it("changes a held key whose master key day backup.env lacks to the next number, never key 1 again", async () => {
+    const stateDir = await makeStateDir();
+    await dropFromKeyFile(stateDir, "WAITRON_BACKUP_MASTER_KEY_DAY");
+    const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
+    await sup.reload();
+    const app = buildApp(sup, stateDir);
+    const cookie = await login(app);
+    const rot = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(changeKey()),
+    });
+    expect(rot.status).toBe(200);
+    const file = await keyFileOf(stateDir);
+    expect(file.WAITRON_BACKUP_KEY_NUMBER).toBe("2");
+    expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_2);
+  }, 60_000);
+
+  it("after changing a held key that lacked its master key day, backups load again under the next key", async () => {
+    const stateDir = await makeStateDir();
+    await holdKey(stateDir, 2);
+    const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
+    const app = buildApp(sup, stateDir);
+    const cookie = await login(app);
+    const applied = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(applied.status).toBe(200);
+    await dropFromKeyFile(stateDir, "WAITRON_BACKUP_MASTER_KEY_DAY");
+    await sup.reload().catch(() => undefined);
+    const rot = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(changeKey()),
+    });
+    expect(rot.status).toBe(200);
+    expect(await rot.json()).toMatchObject({ enabled: true });
+    const file = await keyFileOf(stateDir);
+    expect(file.WAITRON_BACKUP_KEY_NUMBER).toBe("3");
+    expect(file.WAITRON_BACKUP_MASTER_KEY_DAY).toBe(MASTER.name.slice(0, 10));
+    expect(sup.current()).toMatchObject({ enabled: true, recoveryKey: KEY_3 });
+  }, 60_000);
+
+  it("refuses to change a held backup key whose number backup.env does not give", async () => {
+    const stateDir = await makeStateDir();
+    await holdKey(stateDir, 3);
+    await dropFromKeyFile(stateDir, "WAITRON_BACKUP_KEY_NUMBER");
+    const before = await readFile(join(stateDir, "backup.env"), "utf8");
+    const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
+    await sup.reload();
+    const app = buildApp(sup, stateDir);
+    const cookie = await login(app);
+    const rot = await app.request("/api/backup/rotate", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify(changeKey()),
+    });
+    expect(rot.status).toBe(409);
+    expect(await rot.json()).toMatchObject({ error: { code: "backup.key_number_unknown" } });
+    expect(await readFile(join(stateDir, "backup.env"), "utf8")).toBe(before);
   }, 60_000);
 
   it("still refuses to turn archives on with a too-short held key", async () => {

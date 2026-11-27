@@ -354,7 +354,8 @@ export function mountBackupRecoveryPackMakeApi(
               ? undefined
               : backupKeyRecord(
                   decodeMasterKeyCode(newMasterKey.made.masterKey),
-                  heldBackupKeyNumber(held) + 1,
+                  // Any number is a fresh key under a new master key, so an unknown one is 0.
+                  (heldBackupKeyNumber(held) ?? 0) + 1,
                   newMasterKey.publicKey,
                   masterKeyDayOf(newMasterKey.made.masterKeyName),
                 );

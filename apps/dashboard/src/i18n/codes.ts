@@ -1323,6 +1323,10 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "This box holds no backup key. Use “Change the backup key” on the Recovery pack card to make one.",
     es: "Este servidor no tiene clave de las copias. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para crearla.",
   },
+  "backup.key_number_unknown": {
+    en: "This box cannot read the number of the backup key it holds, so changing the key could give back one a removed box still has. Use “Make a new master key” on the Recovery pack card instead: its backup key is new.",
+    es: "Este servidor no puede leer el número de la clave de las copias que tiene, así que cambiarla podría devolver una que aún tiene un servidor retirado. Usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación: su clave de las copias es nueva.",
+  },
   "master_key.wrong": {
     en: "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
     es: "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",

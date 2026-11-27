@@ -942,6 +942,15 @@ it("words the backup key change's refusals: a wrong master key when the venue ha
   );
 });
 
+it("words the backup key change's refusal of a held key whose number the box cannot read", () => {
+  expect(codeMessage("backup.key_number_unknown", "en")).toBe(
+    "This box cannot read the number of the backup key it holds, so changing the key could give back one a removed box still has. Use “Make a new master key” on the Recovery pack card instead: its backup key is new.",
+  );
+  expect(codeMessage("backup.key_number_unknown", "es")).toBe(
+    "Este servidor no puede leer el número de la clave de las copias que tiene, así que cambiarla podría devolver una que aún tiene un servidor retirado. Usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación: su clave de las copias es nueva.",
+  );
+});
+
 it("words a module's unreadable settings generally, since a personal-data download shows it too", () => {
   expect(codeMessage("module.config_invalid", "en")).toBe(
     "A module's settings on this box could not be read, so this could not be done. Nothing was changed.",

@@ -2,7 +2,12 @@ import { backupKey, masterKeyId } from "@waitron/credentials";
 import type { BackupKeyFrameInput } from "@waitron/provisioning";
 import { AppError, decodeMasterKeyCode, isAppError, isCalendarDate } from "@waitron/shared";
 import { backupKeyBytes } from "./artifact-cipher-file.js";
-import { loadBackupKey, loadKeyRotatedAt } from "./backup-config.js";
+import {
+  loadHeldKeyNumber,
+  loadKeyRotatedAt,
+  loadNumberedBackupKey,
+  loadRecoveryKey,
+} from "./backup-config.js";
 import { writeBackupKey, type BackupKeyRecord } from "./backup-env-writer.js";
 import { keyFingerprint } from "./backup-key-fingerprint.js";
 import type { SealedStateRefresher } from "./sealed-state.js";
@@ -65,15 +70,21 @@ export function backupKeyFrameInput(record: BackupKeyRecord): BackupKeyFrameInpu
   };
 }
 
-/** The number of the backup key `backup.env` holds; 0 when it holds none with a number, one whose
- * text it cannot read as a backup key, or one under the length floor, so the next key is 1. */
-export function heldBackupKeyNumber(env: Env): number {
+/** The number of the backup key `backup.env` holds, so the next key is one more. 0 when it names no
+ * number and holds no key, or one that cannot be a backup key (under the length floor, or text
+ * that is not one). `undefined` when the number cannot be told: a number that is not one, or a
+ * backup key held with none. Starting again at 1 there could make a key a removed box still holds. */
+export function heldBackupKeyNumber(env: Env): number | undefined {
+  const number = loadHeldKeyNumber(env);
+  if (number !== null) return number;
+  let key: string | undefined;
   try {
-    return loadBackupKey(env)?.keyNumber ?? 0;
+    key = loadRecoveryKey(env);
   } catch (error) {
     if (isAppError(error) && error.code === "backup.recovery_key_too_short") return 0;
     throw error;
   }
+  return key === undefined || backupKeyBytes(key) === undefined ? 0 : undefined;
 }
 
 export interface BackupKeyChangeDeps {
@@ -109,9 +120,9 @@ export function backupKeyFacts(
   env: Env,
   currentPublicKey: Uint8Array | null,
 ): BackupKeyFacts | null {
-  let held: ReturnType<typeof loadBackupKey>;
+  let held: ReturnType<typeof loadNumberedBackupKey>;
   try {
-    held = loadBackupKey(env);
+    held = loadNumberedBackupKey(env);
   } catch (error) {
     if (isAppError(error) && error.code === "backup.recovery_key_too_short") return null;
     throw error;

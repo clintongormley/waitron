@@ -110,22 +110,35 @@ export interface HeldBackupKey {
   masterKeyDay: string;
 }
 
-/** The backup key with its number and master key id and day, or `undefined` unless the file holds
- * all four. */
-export function loadBackupKey(env: Env): HeldBackupKey | undefined {
+/** The number of the backup key the file holds: `undefined` when it is absent or not a number a
+ * backup key can have, `null` when the file names none. */
+export function loadHeldKeyNumber(env: Env): number | undefined | null {
+  return isUnset(readVariable(env, "WAITRON_BACKUP_KEY_NUMBER")) ? null : loadKeyNumber(env);
+}
+
+/** The backup key with its number and master key id, or `undefined` unless the file holds all
+ * three; the day is not needed to say which key is held. */
+export function loadNumberedBackupKey(env: Env): Omit<HeldBackupKey, "masterKeyDay"> | undefined {
   const key = loadRecoveryKey(env);
   const keyNumber = loadKeyNumber(env);
   const masterKeyId = loadMasterKeyId(env);
-  const masterKeyDay = loadMasterKeyDay(env);
   if (
     key === undefined ||
     backupKeyBytes(key) === undefined ||
     keyNumber === undefined ||
-    masterKeyId === undefined ||
-    masterKeyDay === undefined
+    masterKeyId === undefined
   )
     return undefined;
-  return { key, keyNumber, masterKeyId, masterKeyDay };
+  return { key, keyNumber, masterKeyId };
+}
+
+/** The backup key with its number and master key id and day, or `undefined` unless the file holds
+ * all four. */
+export function loadBackupKey(env: Env): HeldBackupKey | undefined {
+  const numbered = loadNumberedBackupKey(env);
+  const masterKeyDay = loadMasterKeyDay(env);
+  if (numbered === undefined || masterKeyDay === undefined) return undefined;
+  return { ...numbered, masterKeyDay };
 }
 
 /** When the recovery key was last rotated, as the box env records it. */
