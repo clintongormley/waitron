@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { recordReplacement } from "@waitron/core";
-import { readLiveSeriesIdTx, saleLines, sales } from "@waitron/db";
+import { invoiceSeries, readLiveSeriesIdTx, saleLines, sales, taxpayer } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { addProducts, createProduct, menuItems, requireMenuRoot } from "@waitron/menu";
@@ -14,6 +14,7 @@ import { readReceiptEmailDocument } from "./invoice-document.js";
 import { splitAfterPrint } from "./split-after-print.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readOrderRevision } from "./working-order-context.js";
+import { BAR_SOL, fullInvoice } from "./testing/bill-invoice-fixture.js";
 import { GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
 import { giveBackCash } from "./testing/give-back-cash.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -177,10 +178,37 @@ describe("a corrective row given back", () => {
     expect(row).toEqual({ lineGross: -192, correctsLineId: lemonade.id });
     expect(await inPart(correctiveId)).toEqual(both([]));
   });
+
+  it("as 10.00 of a 37.00 full invoice is in part, on every line", async () => {
+    await inTx(venue, (tx) =>
+      tx.update(taxpayer).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" }),
+    );
+    const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+    await inTx(venue, (tx) =>
+      addTabRound(tx, venue.cfg, bill.tabId, [
+        { menuItemId: venue.item("Paella"), quantity: "1" },
+        { menuItemId: venue.item("Burger"), quantity: "1" },
+        { menuItemId: venue.item("Flan"), quantity: "1" },
+      ]),
+    );
+    await fullInvoice(venue, bill.tabId, BAR_SOL);
+    await cashContribution(venue, bill.tabId, "37.00");
+    const { saleId } = await filedOf(bill.tabId);
+    const correctiveId = await giveBackCash(venue, saleId, "10.00");
+    const [corrective] = await venue.db
+      .select({ seriesPurpose: invoiceSeries.purpose, customer: sales.counterpartyTaxId })
+      .from(sales)
+      .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
+      .where(eq(sales.id, correctiveId));
+    expect(corrective).toEqual({ seriesPurpose: "full_corrective", customer: BAR_SOL.taxId });
+    expect(await inPart(correctiveId)).toEqual(both(["Paella", "Burger", "Flan"]));
+  });
 });
 
 describe("no row is given back in part", () => {
-  it("on a whole credit of a bill with a shared free item and a divided set menu", async () => {
+  // Reopen to split, like Cancel and credit, files its credit through `reversedLines`, which
+  // negates each row's stored gross.
+  it("on Reopen to split's credit of a bill with a shared free item and a divided set menu", async () => {
     const bill = await lunchBill(spec, lunch);
     await inTx(venue, (tx) =>
       addTabRound(tx, venue.cfg, bill.tabId, [
