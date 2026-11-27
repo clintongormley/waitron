@@ -551,13 +551,16 @@ liberas.
 Cada plato al peso va en su propia línea y pasa entero a otra cuenta. Para una medida como un
 zumo vendido por ml, toca el plato, escribe la cantidad en su campo o usa el teclado de la caja
 y elige **Añadir**. Por ejemplo, 250 ml van en una sola línea. Antes de enviar, toca la cantidad
-en el mostrador, o su fila en una mesa, para editarla. **Marcar servido** marca toda la cantidad
-como servida.
+en el mostrador para editarla, o en una mesa toca su fila y elige **Opciones**. **Marcar servido**
+marca toda la cantidad como servida.
 
 En una mesa o en el mostrador puedes añadir hasta 99 porciones de un mismo plato cada vez.
 
-En una mesa, toca un plato de **Nuevo pedido** para cambiar cuántos, sus opciones o su nota. Para
-quitar platos, marca sus casillas y toca **Quitar** en la barra bajo el pedido.
+En una mesa, toca un plato de **Nuevo pedido** para abrirlo en su sitio: − y + cambian cuántos,
+**Opciones** abre sus opciones y **Nota** su nota. Vuelve a tocarlo para cerrarlo. Un plato al peso,
+o de un menú, no tiene − ni +: usa **Opciones**. Para abrir todos los detalles de un plato, mantén
+pulsada su fila y suéltala. Para quitar platos, marca sus casillas y toca **Quitar** en la barra bajo
+el pedido.
 
 En el mostrador, un pedido que aparcas y vuelves a abrir muestra sus 2 × Hamburguesa como una sola
 fila mientras no se haya pagado nada de él.
