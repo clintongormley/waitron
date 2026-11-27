@@ -1,54 +1,46 @@
-# A1418 6C — Checked shutdown with a joined spare and streaming off
+# A1418 6C — Checked shutdown with a spare
 
 [Design §§3–4](../specs/2026-11-07-a1418-box-stop-intent-design.md#3-every-start) · [Slice map, item 6](2026-11-26-h-a1418-box-stop-intent.md)
 
-On a main box with a joined spare and streaming and Cloud off, **Shut down this box** takes and
-checks the final backup while leaving the spare on. Sales stop until the main box restarts. The
-same section gives administrators the choice to open **Servers** and hand over so the spare can
-sell. Handover uses its existing confirmation, transfer and return of records. Keep both boxes
-connected for that flow.
+**Checkpoint for the watcher.** The watcher's 04:47 assignment in Lane H `questions.md` calls for
+the main box to offer controlled handover as its second choice. The first review found that a
+shortcut to Servers alone would leave checked shutdown unavailable on a pair. The second review
+found that the standard join creates a `streams` link and marks it `streaming` when it records the
+spare. The earlier handover test seeds membership without that link. See `issueMirrorBundle` in
+`apps/server/src/mirror-bundle-api.ts` and `recordSpare` in `apps/server/src/spare-join.ts`.
 
-The watcher assigned pair work in Lane H `questions.md` on 27 November 2026 at 04:47. This PR
-covers pairs without streaming, a topology the two-box handover fixture already exercises.
-Paired stream catch-up, spare shutdown and reseeding, Cloud and physical power-off remain later work.
+## Smallest result to plan
 
-## Build
+On a main box streaming to its joined spare, an administrator can check a final backup and
+switch off the main box. The spare stays on. Sales stop until the main box restarts. **Servers**
+remains the way to hand over so the spare can sell. Both boxes stay connected for the transfer and
+the old box's return of records. Spare shutdown, reseeding, Cloud and appliance power-off are later
+work.
 
-- In `apps/server/src/admin-shutdown-duties.ts`, allow the existing saved-copy or download check when
-  the held chart names this box as main and its only other non-evicted member is a serving spare
-  with a local node row, using the same join fact as `start-peer-check.ts`. Apply the same
-  eligibility on the protected route and when the drained attempt begins its backup. Keep the
-  existing Cloud, stream-settings and local pair-link refusals. Keep Retry, Cancel and the explicit
-  unchecked choice. Carry `paired: true` through `box-health.ts` and Dashboard `api/servers-api.ts`
-  only for an eligible paired shutdown. This is a topology label and says nothing about reachability.
-- In `apps/server/src/boot-peer-check.ts` and `start-peer-check.ts`, pass back one extra fact from the
-  existing signed query. A counted, readable, joined spare confirms this box's role only if its
-  verified chart matches the held term and body and names this box main and itself spare. Use the
-  existing signature verdict before comparing bodies. A superseding chart or operation still wins.
-  In `boot.ts`, after the peer check and before any trading starts, consume a shutdown mark if the
-  paired proof is positive or the HTTPS peer waiting page admitted an administrator who confirmed
-  the other box is off and no recovery is underway. Otherwise retain the shutdown hold. Read the
-  outcome of a peer wait as well as the initial answer. Keep the current solo hold and restricted
-  starts. If durable mark removal fails, refuse to start.
-- In `apps/dashboard/src/screens/box-status-screen.ts`, explain the sales stop and link to **Servers**
-  with existing navigation when `paired` is present and the person may open it. Use English and
-  Spanish `i18n/strings.ts` and matching Box status guides. Explain that **Hand over the venue**
-  keeps the old box connected for the records it returns. Record the outcome and remaining pair
-  work, including the spare's recovery-pack offer, in `docs/backlog.md`.
+First qualify how to prove the spare's store contains the final admitted writes. Use the normal
+join in `apps/server/src/testing/spare-join-scenario.ts` with the pinned Litestream and versitygw.
+Hold the spare's store behind a write that precedes shutdown. Compare the source and the data
+restored from the store before and after the transfer catches up, including one upload that starts
+before the final write. `packages/stream/src/freshness.ts` describes how upload timestamps can
+understate lag. `apps/server/src/spare-follow.ts` compares the latest applied and uploaded positions,
+which can agree while the source still has unsent writes. Use the experiment to choose the smallest
+signal that distinguishes those cases. Bring the signal and its evidence back before building.
 
-## Focused checks
+## Where the build would fit
 
-- `apps/server/src/boot.stop-mark.test.ts` — on a named main with a joined spare and saved folder,
-  health offers checked shutdown and the mark waits for the check. A chart-only spare and a
-  configured stream still refuse the new path. At restart check a positive peer outcome clears
-  the mark, silence leaves a wait, explicit carry-on clears once, and supersession fences first.
-- `apps/server/src/boot-peer-check.test.ts` — the signed answer's classifier distinguishes a
-  matching chart from a stale, unreadable or unrelated role answer. Exercise the actual signed
-  query in the existing `start-peer-check` tests. Keep existing outcomes for ordinary starts.
-- `apps/dashboard/src/screens/box-status-screen.test.ts` — a paired idle box shows both choices and
-  the handover link navigates without writing. Check both guides and look at the screen in English
-  and Spanish, both themes and at phone width.
+- `apps/server/src/admin-shutdown-duties.ts` would accept a streaming pair link to the joined spare
+  and reuse the shutdown gate and saved-copy or download check. Keep the hold behind the qualified
+  stream check. Keep Retry, Cancel and the explicit unchecked choice when progress stalls.
+- `apps/server/src/boot-peer-check.ts`, `start-peer-check.ts` and `boot.ts` would carry a positive
+  role confirmation from the existing signed peer check. Start under the existing stop rules if a
+  newer chart or operation shows a takeover. For a shutdown mark, only a verified matching current
+  role or a completed HTTPS peer carry-on clears it. A timeout alone leaves the hold in place.
+- `apps/dashboard/src/screens/box-status-screen.ts`, its English and Spanish wording and the two
+  Box status guides would show the shutdown and handover choices. Keep the existing Servers flow
+  and avoid a new handover eligibility check. Update `docs/backlog.md` with the delivery.
 
-Run the changed test files red before edits and green afterwards. Rerun the unchanged controlled
-handover E2E, fiscal and menu gates, guide guards and scoped typechecks. Estimate 110–180 added
-production lines and 170–260 added test lines.
+Use the real join to test that the ordinary pair is eligible and that a delayed transfer holds the
+shutdown mark. The peer suites own matching, stale, silent and superseded replies. Dashboard tests
+own both choices. Keep the controlled handover E2E and Lane H fiscal and menu gates unchanged.
+The slice map allows 200–350 added production lines and 260–430 test lines. Re-estimate after the
+stream qualification, when the signal and the files that need it are known.
