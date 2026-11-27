@@ -116,7 +116,8 @@ it("restores the latest sale, fiscal record and local role from the checked shut
           log: () => {},
         };
         const selected = await previewRecoveryArchive(restore);
-        const { readRecoveryFacts: _fixture, ...options } = f.options;
+        const { readRecoveryFacts: omitted, ...options } = f.options;
+        void omitted;
         const recovery = createSelectedRecoveryPreparation({
           ...options,
           ...restore,
