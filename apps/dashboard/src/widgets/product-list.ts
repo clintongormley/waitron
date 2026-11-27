@@ -899,7 +899,7 @@ export class ProductList extends LitElement {
                               : nothing
                           }${
                             inlineName && label !== nothing
-                              ? html` <span aria-hidden="true">·</span> `
+                              ? html`&thinsp;<span aria-hidden="true">·</span>&thinsp;`
                               : nothing
                           }${label}</span
                         >`

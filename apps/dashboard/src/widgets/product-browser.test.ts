@@ -2142,14 +2142,20 @@ it.each(["en-GB", "es-ES"])(
       await el.updateComplete;
       const table = await tableOf(el);
       await vi.waitFor(() => expect(table.hasAttribute("data-phone")).toBe(true));
-      const search = el.shadowRoot!.querySelector('[name="menu-search"]')!.getBoundingClientRect();
-      const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
-      const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
-      expect(search.left).toBeGreaterThanOrEqual(selectButton(el).getBoundingClientRect().right);
-      expect(search.width).toBeGreaterThanOrEqual(120);
-      expect(search.right).toBeLessThan(chooser.left);
-      expect(chooser.right).toBeCloseTo(toolbar.right, 0);
-      expect(search.width + chooser.width + 12).toBeCloseTo(toolbar.right - search.left, 0);
+      await vi.waitFor(() => {
+        const search = el
+          .shadowRoot!.querySelector('[name="menu-search"]')!
+          .getBoundingClientRect();
+        const chooser = table
+          .shadowRoot!.querySelector(".columns-trigger")!
+          .getBoundingClientRect();
+        const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
+        expect(search.left).toBeGreaterThanOrEqual(selectButton(el).getBoundingClientRect().right);
+        expect(search.width).toBeGreaterThanOrEqual(120);
+        expect(search.right).toBeLessThan(chooser.left);
+        expect(chooser.right).toBeCloseTo(toolbar.right, 0);
+        expect(search.width + chooser.width + 12).toBeCloseTo(toolbar.right - search.left, 0);
+      });
     } finally {
       await page.viewport(1280, 720);
       setLocale("en-GB");

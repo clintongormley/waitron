@@ -21,7 +21,11 @@ export const productRowStyles = css`
     padding-inline-start: var(--wt-space-4);
   }
   wt-data-table[narrow]::part(variant-cell) {
-    padding-inline-start: var(--wt-space-2);
+    /* A variant follows its parent's full-width toggle with a small indent. */
+    padding-inline-start: calc(
+      var(--wt-tap-min) - var(--products-toggle-overhang) - var(--tree-arrow-width) +
+        var(--wt-space-1)
+    );
   }
   wt-data-table:not([narrow])::part(name-stack) {
     flex-flow: row wrap;
@@ -49,13 +53,15 @@ export const productRowStyles = css`
   wt-data-table::part(unavailable-count) {
     color: var(--wt-color-danger);
   }
-  wt-data-table[narrow]::part(unavailable-label) {
+  wt-data-table[data-phone]::part(unavailable-label) {
     display: inline;
     border: 0;
     padding: 0;
     margin-inline-start: 0;
   }
   wt-data-table::part(phone-row-labels) {
+    /* This line can use the gap between Name and Price. */
+    margin-inline-end: calc(-2 * var(--wt-table-cell-padding-inline));
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
   }
@@ -67,7 +73,7 @@ export const productRowStyles = css`
     --products-unit-width: calc(var(--wt-tap-min) * 2);
   }
   wt-data-table[data-compact-products] {
-    --products-unit-width: var(--wt-tap-min);
+    --products-unit-width: calc(var(--wt-tap-min) + var(--wt-space-2));
   }
   wt-data-table::part(column-available) {
     inline-size: 0;
@@ -82,13 +88,13 @@ export const productRowStyles = css`
     column-gap: var(--wt-space-1);
     align-items: baseline;
     inline-size: 100%;
+  }
+  wt-data-table::part(column-heading-price),
+  wt-data-table::part(price-layout) {
     text-align: end;
   }
-  wt-data-table::part(column-heading-price) {
-    justify-self: end;
-  }
   wt-data-table[narrow]::part(column-price) {
-    inline-size: calc(var(--wt-tap-min) * 2 + var(--wt-space-2));
+    inline-size: calc(var(--wt-tap-min) * 2 + var(--wt-space-1));
   }
   wt-data-table[narrow][data-list]::part(column-price) {
     inline-size: calc(var(--wt-tap-min) + var(--wt-space-6) + var(--wt-space-1) / 2);

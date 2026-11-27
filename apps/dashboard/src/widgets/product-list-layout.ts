@@ -8,14 +8,21 @@ export const productListLayoutStyles = css`
     --tree-arrow-width: calc(var(--wt-tap-min) - var(--wt-space-2));
   }
   wt-data-table[narrow] {
-    --tree-arrow-width: calc(var(--wt-space-5) - var(--wt-space-1));
-    --wt-table-cell-padding-inline: calc(var(--wt-space-1) / 2);
+    --tree-arrow-width: calc(var(--wt-tap-min) - var(--wt-space-1));
+    --wt-table-cell-padding-inline: 0px;
   }
   wt-data-table[narrow][data-list] {
     --tree-arrow-width: var(--wt-space-4);
+    --wt-table-cell-padding-inline: calc(var(--wt-space-1) / 2);
   }
   wt-data-table[narrow]::part(tree-cell) {
-    padding-inline-start: calc(min(var(--tree-depth, 0), 4) * var(--wt-space-1));
+    --products-tree-inset: calc(min(var(--tree-depth, 0), 4) * var(--wt-space-1));
+    /* The toggle can use leading space up to the cell edge without reaching the checkbox. */
+    --products-toggle-overhang: min(
+      calc(var(--wt-tap-min) - var(--tree-arrow-width)),
+      calc(var(--products-tree-inset) + var(--wt-table-cell-padding-inline))
+    );
+    padding-inline-start: var(--products-tree-inset);
   }
   wt-data-table[data-phone]::part(toolbar-search) {
     flex-basis: calc(var(--wt-tap-min) * 5);
@@ -123,6 +130,10 @@ export const productListLayoutStyles = css`
     font-family: inherit;
     margin-inline-start: calc(var(--tree-arrow-width) - var(--wt-tap-min));
     padding-inline-start: calc(var(--wt-tap-min) - var(--tree-arrow-width));
+  }
+  wt-data-table[narrow]::part(variant-toggle) {
+    margin-inline-start: calc(-1 * var(--products-toggle-overhang));
+    padding-inline-start: var(--products-toggle-overhang);
   }
   wt-data-table::part(variant-toggle) {
     font-family: revert;
