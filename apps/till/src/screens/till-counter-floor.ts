@@ -24,6 +24,8 @@ export class TillCounterFloor extends LitElement {
     css`
       :host {
         display: block;
+        max-inline-size: 700px;
+        margin-inline: auto;
       }
       h2 {
         margin: 0;
@@ -31,6 +33,7 @@ export class TillCounterFloor extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
+        letter-spacing: var(--wt-letter-spacing-caps);
         text-transform: uppercase;
       }
       .new-order {

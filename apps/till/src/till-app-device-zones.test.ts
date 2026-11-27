@@ -919,7 +919,7 @@ it("opens a counter's floor and moves food to Ready as the kitchen finishes it",
     ]);
     stream.event("change", JSON.stringify([{ type: "ticket_items" }]));
     await expect.element(page.getByRole("heading", { name: "Ready to hand over" })).toBeVisible();
-    await page.getByRole("button", { name: /Hand over/ }).click();
+    await page.getByRole("button", { name: "Handed over #41 Pickup cake", exact: true }).click();
     await vi.waitFor(() =>
       expect(markCollected).toHaveBeenCalledWith("paid", expect.any(String), expect.any(Object)),
     );

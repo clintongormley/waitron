@@ -3,9 +3,9 @@ import { orderPreview, orderPreviewStyles } from "./order-preview.js";
 import { LitElement, css, html, nothing, type TemplateResult, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, formatDecimalInput } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
-import { currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, t } from "../i18n/t.js";
 import { counterFloorRowStyles } from "./counter-floor-row-styles.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { orderCountStyles, orderCounts } from "./order-counts.js";
@@ -143,12 +143,13 @@ export class TillCounterWaiting extends LitElement {
       order.readyAt === null
         ? null
         : Math.max(0, Math.floor((this.now - Date.parse(order.readyAt)) / 60_000));
+    const handOverText = t("waiting.hand_over");
     const handOver = html`<wt-button
       data-waiting-hand-over
       variant=${this.ready || pay ? "secondary" : "primary"}
-      aria-label=${`${t("waiting.hand_over")} ${scope}`}
+      aria-label=${`${handOverText} ${scope}`}
       @click=${() => this.#emit("hand-over-order", { id: order.id })}
-      >${t("waiting.hand_over")}</wt-button
+      >${handOverText}</wt-button
     >`;
     const actions = html`<div class="controls">
       ${
@@ -208,19 +209,25 @@ export class TillCounterWaiting extends LitElement {
           }}
         >
           <span class="number"
-            >${orderNumber(order.orderNumber, order.formerNumbers)}${this.floor && label ? ` · ${label}` : nothing}</span
+            >${orderNumber(order.orderNumber, order.formerNumbers)}${this.floor && label ? ` · ${label}` : nothing}${
+              this.ready && minutes !== null
+                ? html` <span class="elapsed"
+                    >${t("counter.floor_minutes").replace("{n}", String(minutes))}</span
+                  >`
+                : nothing
+            }</span
           >
           ${!this.floor && label ? html`<span class="label">${label}</span>` : nothing}
           ${
             this.ready
-              ? minutes === null
-                ? nothing
-                : html`<span class="meta"
-                    >${t("counter.floor_minutes").replace("{n}", String(minutes))}</span
-                  >`
-              : html` <span class="state" data-waiting-state>${t(this.#state(order))}</span>
+              ? html`<span class="state"
+                  >${order.items.map(({ quantity, name }) => `${formatDecimalInput(quantity, currentLocale())} ${name}`).join(" · ")}</span
+                >`
+              : html` <span class="state" data-waiting-state
+                    >${this.floor ? `${countText(order.counts.ordered, "order_counts.items", "order_counts.items_one")} · ` : nothing}${t(this.#state(order))}</span
+                  >
                   <span class="meta">${formatMoney(order.total, currentLocale())}</span>
-                  ${orderCounts(order.counts)}`
+                  ${this.floor ? nothing : orderCounts(order.counts)}`
           }
         </button>
         ${this.ready ? html`<div class="controls">${handOver}</div>` : this.floor ? nothing : actions}

@@ -781,7 +781,7 @@ export const en = {
   "waiting.handed_over_not_paid": "Handed over, not paid",
   "waiting.paid_not_handed_over": "Paid, not handed over",
   "waiting.deferred_not_handed_over": "Deferred payment, not handed over",
-  "waiting.hand_over": "Hand over",
+  "waiting.hand_over": "Handed over",
   "waiting.hand_over_error": "Could not hand the order over, try again",
   "waiting.pay_error": "Could not open the order to take its payment, try again",
   // An order's dishes counted, then by where they stand
@@ -3269,7 +3269,7 @@ export const es: Record<StringKey, string> = {
   "waiting.handed_over_not_paid": "Entregado, sin pagar",
   "waiting.paid_not_handed_over": "Pagado, sin entregar",
   "waiting.deferred_not_handed_over": "Pago aplazado, sin entregar",
-  "waiting.hand_over": "Entregar",
+  "waiting.hand_over": "Entregado",
   "waiting.hand_over_error": "No se pudo entregar el pedido, inténtalo de nuevo",
   "waiting.pay_error": "No se pudo abrir el pedido para cobrarlo, inténtalo de nuevo",
   "order_counts.items": "{n} artículos",
