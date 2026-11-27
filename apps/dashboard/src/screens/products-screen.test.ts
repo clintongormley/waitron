@@ -22,7 +22,6 @@ import type { ProductChildKind } from "../state/product-child-create.js";
 import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { CourseList } from "../widgets/course-list.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
-import { withoutVatClass } from "../widgets/product-editor-model.js";
 import type { ProductBrowser } from "../widgets/product-browser.js";
 import {
   cleanupWidgets,
@@ -154,7 +153,6 @@ const value: ProductEditorValue = {
   active: true,
   available: true,
   ordering: "public",
-  vatClass: "reduced",
   takeawayVatRate: "10.00",
   variants: [],
   primaryCategoryId: "c1",
@@ -166,9 +164,6 @@ const value: ProductEditorValue = {
   dietaryDeclarations: ["vegetarian"],
   courseId: null,
 };
-/** The editor's read without the `vatClass` the save refuses, as Archive and Save send it. */
-const readBody = withoutVatClass(value);
-
 // Drinks is on both menus. A section's customer-facing name differs from its internal one, so the
 // Add to menus step reading the wrong one shows text the assertions refuse.
 const drinksNode = {
@@ -1039,7 +1034,7 @@ describe("menu-screen", () => {
     await flush(el);
     expect(api.getProductEditor).toHaveBeenCalledWith("p1");
     expect(api.updateProductEditor).toHaveBeenCalledWith("p1", {
-      ...readBody,
+      ...value,
       active: false,
       available: true,
     });
@@ -1247,7 +1242,7 @@ describe("menu-screen", () => {
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
       await flush(el);
       expect(api.updateProductEditor).toHaveBeenCalledWith("p1", {
-        ...readBody,
+        ...value,
         active: false,
       });
     });
@@ -1262,7 +1257,7 @@ describe("menu-screen", () => {
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!.click();
       await flush(el);
       expect(api.updateProductEditor).toHaveBeenCalledWith("p1", {
-        ...readBody,
+        ...value,
         active: false,
       });
       expect(dialogOf(el).getAttribute("open")).toBeNull();
@@ -1716,7 +1711,7 @@ describe("menu-screen", () => {
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
     await flush(el);
-    const body: ProductSaveBody = { ...readBody };
+    const body: ProductSaveBody = { ...value };
     delete body.available;
     const closed = dialogClosed(editor(el).shadowRoot!.querySelector("wt-modal")!);
     emit(editor(el), "wt-submit", { value, body });
@@ -3609,7 +3604,6 @@ describe("menu-screen", () => {
       description: null,
       unitId: null,
       unitPrice: null,
-      vatClass: null,
       primaryCategoryId: null,
       modifiers: [],
       allergens: null,
@@ -4002,7 +3996,7 @@ describe("menu-screen", () => {
       expect(api.getProductEditor).toHaveBeenCalledWith("v1");
       expect(api.updateProductEditor).toHaveBeenCalledOnce();
       expect(api.updateProductEditor).toHaveBeenCalledWith("v1", {
-        ...withoutVatClass(variantValue),
+        ...variantValue,
         active: false,
         available: false,
       });
@@ -4039,7 +4033,7 @@ describe("menu-screen", () => {
       await flush(el);
       expect(api.updateProductEditor).toHaveBeenCalledOnce();
       expect(api.updateProductEditor).toHaveBeenCalledWith("v1", {
-        ...withoutVatClass(variantValue),
+        ...variantValue,
         active: false,
       });
       expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(

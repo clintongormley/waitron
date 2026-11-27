@@ -25,8 +25,6 @@ const saved: ProductEditorDraft = {
   active: true,
   available: true,
   ordering: "public",
-  // What the editor's read still answers; the save refuses it.
-  vatClass: "reduced",
   takeawayVatRate: "10.00",
   variants: [],
   primaryCategoryId: null,
@@ -43,7 +41,6 @@ const variant: ProductEditorDraft = {
   parentId: "p1",
   name: "Large",
   unitPrice: null,
-  vatClass: null,
   takeawayVatRate: null,
   variants: [],
   dietaryDeclarations: null,
@@ -115,7 +112,7 @@ it("says nothing about the rate before one is known", async () => {
 
 it.each([
   ["a new product", undefined],
-  ["a saved product whose read names a VAT class", saved],
+  ["a saved product", saved],
   ["a variant", variant],
 ])("saves %s with no VAT class in the body", async (_, value) => {
   const el = await mount({

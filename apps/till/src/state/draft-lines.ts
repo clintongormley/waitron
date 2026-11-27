@@ -184,7 +184,7 @@ function asVariant(dish: TillProduct, variantId: string | null): TillProduct {
     : productAsVariant(dish, variant);
 }
 
-/** The zero price, general rate and unit are placeholders: a draft line sends no price, and the
+/** The zero price and unit are placeholders: a draft line sends no price, and the
  * server prices it at submit. The unit takes every quantity the server stores. */
 function unofferedProduct(line: FreshDraftLineInput): TillProduct {
   return {
@@ -195,7 +195,6 @@ function unofferedProduct(line: FreshDraftLineInput): TillProduct {
     available: false,
     name: "",
     unitPrice: "0.00",
-    vatClass: "general",
     category: null,
     allergens: null,
     unit: UNKNOWN_UNIT,
