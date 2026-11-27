@@ -275,6 +275,7 @@ describe("the customer menu Online preview", () => {
       const back = page.getByRole("button", { name: "Back to menu" });
 
       await expect.element(filters, { timeout: 1500 }).toBeVisible();
+      await page.getByRole("radio", { name: "Computer" }).click();
       const customer = customerPage(el)!;
       customer.setAttribute("data-theme", theme);
       await customer.updateComplete;
@@ -303,7 +304,12 @@ describe("the customer menu Online preview", () => {
       await expect.element(set).toBeVisible();
       await expect.element(page.getByRole("link", { name: "Bakery" })).not.toBeInTheDocument();
       await expect.element(page.getByRole("status")).toHaveTextContent(/^$/);
-      await expect.element(page.getByText("Check the choices for allergens.")).toBeVisible();
+      const caution = page.getByText("Check the choices for allergens.");
+      await expect.element(caution).toBeVisible();
+      const price = dish.element().closest(".dish")!.querySelector(".price")!;
+      expect(caution.element().getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        price.getBoundingClientRect().bottom,
+      );
       await expectNoA11yViolations(host);
 
       await dish.click();
