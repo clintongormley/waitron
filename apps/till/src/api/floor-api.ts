@@ -343,8 +343,8 @@ export class FloorApi extends InvoiceDeliveryApi {
   // --- Live floor. ---
 
   /** The venue's ACTIVE floor-plan zones, by display order → `GET /api/zones`. */
-  listZones(): Promise<FloorZone[]> {
-    return this.#request<FloorZone[]>("/api/zones", "GET");
+  listZones(options: ReadOptions = {}): Promise<FloorZone[]> {
+    return this.#request<FloorZone[]>("/api/zones", "GET", undefined, options.signal);
   }
   /** The live-floor occupancy read-model → `GET /api/tables/state`, one row per active table. */
   getTablesState(options: ReadOptions = {}): Promise<TableState[]> {

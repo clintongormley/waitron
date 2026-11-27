@@ -23,6 +23,12 @@ import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
 import { edgeFadeStyles, markOverflow, oncePerFrame } from "../widgets/edge-fade.js";
 import type { FloorView, FloorViewChoices } from "../state/floor-view-memory.js";
 import { MediaQueryController } from "../state/media-query-controller.js";
+import type { FirstReadView } from "../state/first-read.js";
+import {
+  firstFloorRead,
+  firstReadNoticeStyles,
+  floorReadFailure,
+} from "../widgets/first-read-notice.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import {
@@ -343,6 +349,7 @@ export class TillFloorScreen extends LitElement {
     edgeFadeStyles,
     floorTrayStyles,
     floorScreenFooterStyles,
+    firstReadNoticeStyles,
     floorRingStyles,
     signalChipStyles,
     stepChipStyles,
@@ -407,17 +414,6 @@ export class TillFloorScreen extends LitElement {
       }
 
       .layout-due p {
-        margin: 0;
-      }
-
-      .read-failed {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
-
-      .read-failed p {
         margin: 0;
       }
 
@@ -932,6 +928,7 @@ export class TillFloorScreen extends LitElement {
   /** `tables` is a read's answer, not a list kept after a failed read; `tablesReadAt` moves on either. */
   @property({ attribute: false }) tablesAnswered = false;
   @property({ attribute: false }) floorReadFailed = false;
+  @property({ attribute: false }) firstRead?: FirstReadView;
   /** Rooms' revisions a change the app sent was answered with, as `tablesReadAt` is numbered. */
   @property({ attribute: false }) carriedRevisions: ReadonlyMap<string | null, CarriedRevision> =
     new Map();
@@ -2390,6 +2387,7 @@ export class TillFloorScreen extends LitElement {
   override render() {
     const { tabs, marks, refusedZone, activeKey, planned, view, listed, onMap, unplaced } =
       this.#zone;
+    const firstRead = this.firstRead;
     const empty = listed.length === 0 && onMap.length === 0 ? this.#emptyFloor(activeKey) : nothing;
     return html`
       <section
@@ -2414,7 +2412,10 @@ export class TillFloorScreen extends LitElement {
           }
           <div class="actions help-anchor">
             ${
-              this.useFloorFooter || this.#phone.matches || empty !== nothing
+              this.useFloorFooter ||
+              this.#phone.matches ||
+              firstRead !== undefined ||
+              empty !== nothing
                 ? nothing
                 : html`<wt-button
                     class="view-toggle"
@@ -2466,11 +2467,13 @@ export class TillFloorScreen extends LitElement {
         })()}
         ${this.#stationSummary()}
         ${
-          empty !== nothing
-            ? empty
-            : view === "list"
-              ? html`<div class="grid">${listed.map((table) => this.#card(table))}</div>`
-              : this.#plannedMap(onMap, unplaced, activeKey)
+          firstRead !== undefined
+            ? firstFloorRead(firstRead, () => this.#requestFloorRefresh({ zones: true }))
+            : empty !== nothing
+              ? empty
+              : view === "list"
+                ? html`<div class="grid">${listed.map((table) => this.#card(table))}</div>`
+                : this.#plannedMap(onMap, unplaced, activeKey)
         }
         ${this.#seatDialog()} ${this.#waitingDialog("clear")} ${this.#waitingDialog("move")}
         ${this.#detailsSheet()} ${this.#seatsPrompt()} ${this.#splitJoined()}
@@ -2485,17 +2488,9 @@ export class TillFloorScreen extends LitElement {
       return html`<p data-floor-no-tables role="status">
         ${t(this.#zone.visible.length === 0 ? "floor.no_tables" : "floor.no_tables_today")}
       </p>`;
-    if (!this.floorReadFailed) return nothing;
-    return html`<div class="read-failed">
-      <p data-floor-read-failed role="status">${t("floor.read_failed")}</p>
-      <wt-button
-        data-floor-retry
-        variant="secondary"
-        @click=${() => this.#requestFloorRefresh({ zones: true })}
-      >
-        ${t("find_page.retry")}
-      </wt-button>
-    </div>`;
+    return this.floorReadFailed
+      ? floorReadFailure(() => this.#requestFloorRefresh({ zones: true }))
+      : nothing;
   }
 
   /** `fitKey` and `tables` change in one update, so a new zone is fitted to its own tables. */

@@ -569,6 +569,11 @@ beside **Clock out**.
 On a wide handheld floor, open **More** at the top for **Equipment**, **Language** and
 **Theme** under **Settings**.
 
+## Open the Floor when the box is slow {#floor-first-read}
+
+If the Floor says **Still waiting for the box…**, give it a moment to load your tables. If it says
+**Can't reach the box**, check that your device is on the venue's WiFi and tap **Try again**.
+
 ## Take an order on a phone {#phone-order}
 
 On a phone, or any table screen narrower than 720 px, **Menu** and **Order** at the top show one or

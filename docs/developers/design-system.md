@@ -890,6 +890,16 @@ this floor — removing the `min-width` regresses that guard.
 
 ## Primitives
 
+### Loading placeholders
+
+Use `wt-placeholder` for shapes that stand in for content on a first read. Set the shape's
+size and position where you place it. The element paints a rounded sunken surface and stays
+out of the tab order and screen reader announcements.
+
+Till screens share the first-read timer and notice. Keep the screen controls available while
+the timer waits to draw shapes. Put the notice over the loading area and keep **Try again**
+outside the live message. Keep content in place once you have shown it.
+
 ### Full-screen panels and payment controls
 
 Use `wt-full-screen-panel` when your actions need to stay visible while the details scroll. Give

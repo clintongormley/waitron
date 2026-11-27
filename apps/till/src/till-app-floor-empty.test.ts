@@ -106,15 +106,6 @@ const openBill: PartyBill = {
   receiptAvailable: false,
 };
 
-/** A box that never answers until the read's signal aborts, as a stalled fetch does. */
-function stalled(options?: { signal?: AbortSignal }): Promise<TableState[]> {
-  return new Promise((_, reject) =>
-    options?.signal?.addEventListener("abort", () =>
-      reject(new DOMException("aborted", "AbortError")),
-    ),
-  );
-}
-
 /** `counter` puts a counter zone first, so the till opens on the counter and the Floor is a tap. */
 function stubApi(over: Record<string, unknown>, counter = false) {
   return {
@@ -220,7 +211,7 @@ it("says the read failed when the first tables read fails, and draws the tables 
     return [freeTable];
   });
   const el = await onFloor(stubApi({ getTablesState }));
-  expect(readFailed(el)).toBeTruthy();
+  expect(readFailed(el)?.textContent).toContain("Can't reach the box");
   expect(noTables(el)).toBeNull();
 
   failing = false;
@@ -334,26 +325,50 @@ it("keeps the tables drawn when a later poll fails", async () => {
   expect(noTables(el)).toBeNull();
 });
 
-it("says the read failed when a poll is cut off by its time limit before any tables were read", async () => {
-  // The Floor tap's own read stays out, so only the poll's cut-off can say anything.
-  const getTablesState = vi.fn(stalled);
-  const el = await signIn(stubApi({ getTablesState }, true));
-  emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
-  await vi.waitFor(() => expect(floorOf(el)).not.toBeNull());
-  await settle(el);
-  expect(readFailed(el)).toBeNull();
-
+it("retries a timed-out Floor with fresh tables and zones, ignoring the old answers", async () => {
+  let oldTables!: (tables: TableState[]) => void;
+  let oldZones!: (zones: FloorZone[]) => void;
+  const getTablesState = vi
+    .fn<(options?: { signal?: AbortSignal }) => Promise<TableState[]>>()
+    .mockImplementationOnce(() => new Promise((resolve) => (oldTables = resolve)))
+    .mockResolvedValue([freeTable]);
+  const listZones = vi
+    .fn<(options?: { signal?: AbortSignal }) => Promise<FloorZone[]>>()
+    .mockImplementationOnce(() => new Promise((resolve) => (oldZones = resolve)))
+    .mockResolvedValue([room]);
+  const el = await signIn(stubApi({ getTablesState, listZones }, true));
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
+  await vi.advanceTimersByTimeAsync(0);
+  await el.updateComplete;
+
   emit(floorOf(el)!, "floor-refresh", { poll: true });
-  await vi.advanceTimersByTimeAsync(25_000);
+  await vi.advanceTimersByTimeAsync(15_000);
   vi.useRealTimers();
   await settle(el);
 
-  expect(readFailed(el)).toBeTruthy();
+  expect(getTablesState).toHaveBeenCalledOnce();
+  expect(listZones).toHaveBeenCalledOnce();
+  expect(getTablesState.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
+  expect(listZones.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
+  expect(readFailed(el)?.textContent).toContain("Can't reach the box");
   expect(noTables(el)).toBeNull();
+
+  floorOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-floor-retry]")!.click();
+  await vi.waitFor(() => expect(drawn(el, "t1")).toBeTruthy());
+  oldTables([openTable]);
+  oldZones([{ ...room, name: "Old room" }]);
+  await settle(el);
+
+  expect(getTablesState).toHaveBeenCalledTimes(2);
+  expect(listZones).toHaveBeenCalledTimes(2);
+  expect(floorOf(el)!.zones).toEqual([room]);
+  expect(drawn(el, "t1")).toBeTruthy();
+  expect(drawn(el, "t2")).toBeNull();
+  expect(readFailed(el)).toBeNull();
 });
 
-it("says nothing while the first tables read is still out", async () => {
+it("shows the Floor after sign-in while its first tables read is still out", async () => {
   let answer!: (tables: TableState[]) => void;
   const getTablesState = vi.fn(
     () =>
@@ -361,11 +376,10 @@ it("says nothing while the first tables read is still out", async () => {
         answer = resolve;
       }),
   );
-  const el = await signIn(stubApi({ getTablesState }, true));
-  emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
-  await vi.waitFor(() => expect(floorOf(el)).not.toBeNull());
-  await settle(el);
+  const el = await signIn(stubApi({ getTablesState }));
 
+  expect(floorOf(el)).toBeTruthy();
+  expect(getTablesState).toHaveBeenCalledOnce();
   expect(noTables(el)).toBeNull();
   expect(readFailed(el)).toBeNull();
 
