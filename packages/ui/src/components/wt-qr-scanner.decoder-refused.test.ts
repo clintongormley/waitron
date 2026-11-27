@@ -7,7 +7,7 @@ import type { WtQrScanner } from "./wt-qr-scanner.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
-    refuseQrDecoderChunk: (refuse: boolean) => Promise<void>;
+    refuseQrDecoderChunk: (refuse: boolean) => Promise<Array<{ url: string; outcome: string }>>;
   }
 }
 
@@ -32,7 +32,26 @@ test("a decoder that does not load stops the camera and says the scanner cannot 
     '<wt-qr-scanner label="Camera" unavailable="The camera did not start"></wt-qr-scanner>',
   )) as WtQrScanner;
 
-  await expect.poll(() => unavailable.mock.calls.length, { timeout: 10_000 }).toBe(1);
+  try {
+    await expect.poll(() => unavailable.mock.calls.length, { timeout: 10_000 }).toBe(1);
+  } catch (error) {
+    const phase = (el as unknown as { phase: string }).phase;
+    const video = el.shadowRoot!.querySelector("video") !== null;
+    const tracks = camera.stream.getTracks().map((track) => track.readyState);
+    const decoderLoads = performance
+      .getEntriesByType("resource")
+      .filter((entry) => entry.name.includes("jsqr"))
+      .map((entry) => {
+        const { name, responseStatus, transferSize } = entry as PerformanceResourceTiming;
+        return { name, responseStatus, transferSize };
+      });
+    const refusals = await commands.refuseQrDecoderChunk(false);
+    throw new Error(
+      `no wt-qr-unavailable event: phase=${phase} video=${video} tracks=${JSON.stringify(tracks)} ` +
+        `decoderLoads=${JSON.stringify(decoderLoads)} refused=${JSON.stringify(refusals)}`,
+      { cause: error },
+    );
+  }
   expect((unavailable.mock.calls[0]![0] as CustomEvent).detail).toEqual({ reason: "unsupported" });
   expect(camera.stream.getTracks().every((track) => track.readyState === "ended")).toBe(true);
   expect(el.shadowRoot!.querySelector("video")).toBeNull();

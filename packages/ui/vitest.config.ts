@@ -97,22 +97,40 @@ const clickForNewPage: BrowserCommand<
 // A crashed Stryker run leaves mutated copies of the source in .stryker-tmp, which Vitest would
 // otherwise run as real test files.
 const exclude = [...configDefaults.exclude, "**/.stryker-tmp/**"];
-/** Makes every load of a chunk whose URL matches `chunk` fail, or loads it again. */
-const refuseChunk =
-  (chunk: RegExp): BrowserCommand<[refuse: boolean]> =>
-  async (context, refuse) => {
+type ChunkRefusal = { url: string; outcome: string };
+/**
+ * Makes every load of a chunk whose URL matches `chunk` fail, or loads it again; returns each
+ * request caught since it last began refusing, with how its abort ended (`pending` until it has).
+ */
+const refuseChunk = (chunk: RegExp): BrowserCommand<[refuse: boolean], ChunkRefusal[]> => {
+  let refused: ChunkRefusal[] = [];
+  return async (context, refuse) => {
     const { page } = context as unknown as {
       page: {
         route: (
           pattern: RegExp,
-          handle: (route: { abort(): Promise<void> }) => Promise<void>,
+          handle: (route: {
+            abort(): Promise<void>;
+            request(): { url(): string };
+          }) => Promise<void>,
         ) => Promise<void>;
         unroute: (pattern: RegExp) => Promise<void>;
       };
     };
-    if (refuse) await page.route(chunk, (route) => route.abort());
-    else await page.unroute(chunk);
+    if (refuse) {
+      refused = [];
+      await page.route(chunk, async (route) => {
+        const refusal = { url: route.request().url(), outcome: "pending" };
+        refused.push(refusal);
+        refusal.outcome = await route.abort().then(
+          () => "aborted",
+          (error: unknown) => (error instanceof Error ? error.message : String(error)),
+        );
+      });
+    } else await page.unroute(chunk);
+    return refused;
   };
+};
 // Vite serves each package pre-bundled (`@oddbird_popover-polyfill.js`, `jsqr.js`) or raw from
 // `node_modules/.pnpm`.
 const refusePopoverChunk = refuseChunk(/@oddbird[/_]popover-polyfill/);
