@@ -9,7 +9,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { withIssuanceTransaction } from "@waitron/core";
-import { AppError, stringToThousandths } from "@waitron/shared";
+import { AppError, stringToThousandths, type NodeId } from "@waitron/shared";
 import { holdsPayment } from "./bill-payments.js";
 import { billReopenRefusal } from "./bill-reopen-state.js";
 import { creditWholeInvoice, refuseCreditOfRefused, type IssuedInvoice } from "./cancel-credit.js";
@@ -95,7 +95,7 @@ export async function refuseReopen(
   stopUnserved = false,
 ): Promise<{ partyId: string; invoice: IssuedInvoice; unserved: UnservedBillDish[] }> {
   const placed = await lockPlacedOrder(tx, deps, cfg, id, read);
-  const refused = await refuseSplitBill(tx, deps, id, placed.partyId, placed.invoice);
+  const refused = await refuseSplitBill(tx, deps, id, placed.partyId, placed.invoice, cfg.nodeId);
   await refuseSplitMoney(tx, id);
   return { ...refused, unserved: await refuseUnservedDishes(tx, id, stopUnserved) };
 }
@@ -148,10 +148,11 @@ async function refuseSplitBill(
   id: string,
   partyId: string | null,
   invoice: IssuedInvoice | undefined,
+  issuingNodeId: NodeId,
 ): Promise<{ partyId: string; invoice: IssuedInvoice }> {
   const refusal = await billReopenRefusal(tx, id, partyId, invoice?.id);
   if (refusal !== undefined) throw refusal;
-  await refuseCreditOfRefused(tx, deps.backend, invoice!.id);
+  await refuseCreditOfRefused(tx, deps.backend, invoice!.id, issuingNodeId);
   return { partyId: partyId!, invoice: invoice! };
 }
 

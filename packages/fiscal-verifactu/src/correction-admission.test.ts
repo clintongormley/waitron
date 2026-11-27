@@ -301,11 +301,14 @@ describe("an invoice filed on another chain is judged by its filing, as this box
     kinds.flatMap(([name, kind, as]) =>
       (["pendiente", "enviando", null] as const).map((estado) => [name, estado, kind, as] as const),
     ),
-  )("%s another node filed waits while AEAT has not answered it (%s)", async (_n, estado, kind, as) => {
-    const other = await seedNode(suite.db, "B");
-    const { saleId } = await file({ ...kind, on: other, estado });
-    expect(await admission(saleId)).toStrictEqual(as(refused("filing_pending")));
-  });
+  )(
+    "%s another node filed waits while AEAT has not answered it (%s)",
+    async (_n, estado, kind, as) => {
+      const other = await seedNode(suite.db, "B");
+      const { saleId } = await file({ ...kind, on: other, estado });
+      expect(await admission(saleId)).toStrictEqual(as(refused("filing_pending")));
+    },
+  );
 
   it("a receipt an earlier installation of this box filed waits while AEAT has not answered it", async () => {
     const { saleId } = await file({ estado: "pendiente" });
@@ -341,7 +344,10 @@ describe("an invoice filed on another chain is judged by its filing, as this box
       tipo: "F1",
       on: other,
       estado: "rechazado",
-      refusal: { codigo: "1100", mensaje: "Valor o tipo incorrecto del campo: DescripcionOperacion" },
+      refusal: {
+        codigo: "1100",
+        mensaje: "Valor o tipo incorrecto del campo: DescripcionOperacion",
+      },
     });
     expect(await admission(saleId)).toStrictEqual(full(refused("filing_refused")));
   });

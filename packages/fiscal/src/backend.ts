@@ -490,9 +490,10 @@ export interface FiscalBackend {
   /**
    * Throws this regime's refusal when the authority refused the current version of the invoice
    * `saleId`, the one a corrective would be filed against: its newest version, which nothing
-   * replaced. Reads only. Absent when the regime has no such refusal.
+   * replaced; or when a version filed on a chain other than `issuingNodeId`'s open one is still
+   * unanswered. Reads only. Absent when the regime has no such refusal.
    */
-  refuseCreditOf?(tx: Transaction, saleId: SaleId): Promise<void>;
+  refuseCreditOf?(tx: Transaction, saleId: SaleId, issuingNodeId: NodeId): Promise<void>;
 
   /** The filed figures of each sale in `saleIds`; a sale with nothing filed is absent. Reads only. */
   filedFiguresFor?(

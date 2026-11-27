@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { newId, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
-import { saleId as brandSaleId } from "@waitron/shared";
+import { nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
@@ -112,7 +112,10 @@ describe("reads of a sale's filed alta", () => {
   });
 
   it("finds the alta a credit's refusal judges through the sale index, and its versions through the first alta's sale", async () => {
-    const plan = await planOf((tx) => backend().refuseCreditOf(tx, brandSaleId(newId())));
+    // A node with no open installation: the unanswered check, a second statement by sale, is skipped.
+    const plan = await planOf((tx) =>
+      backend().refuseCreditOf(tx, brandSaleId(newId()), brandNodeId(newId())),
+    );
     expect(plan).toEqual([
       "SEARCH receipt USING INDEX verifactu_records_sale_idx (sale_id=?)",
       "CORRELATED SCALAR SUBQUERY 2",
