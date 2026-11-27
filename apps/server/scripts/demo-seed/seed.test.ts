@@ -381,7 +381,7 @@ describe("seedDemoRestaurant", () => {
       salesStep.mockRestore();
     }
     const key = (p: salesSeed.SeedSalesProduct) =>
-      JSON.stringify([p.name, p.customerName, p.unitPrice, p.vatClass, p.takeawayVatClass ?? null]);
+      JSON.stringify([p.name, p.customerName, p.unitPrice]);
     const sorted = (list: Pool) => list.map(key).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     expect(pools!.products.length).toBeGreaterThan(1);
     expect(pools!.deli.length).toBeGreaterThan(1);
@@ -468,7 +468,6 @@ describe("seedDemoRestaurant", () => {
         categoryId: folder.id,
         pricingUnit: "each",
         unitPrice: "2.00",
-        vatClass: "general",
       });
       await setRoutingCell(
         tx,

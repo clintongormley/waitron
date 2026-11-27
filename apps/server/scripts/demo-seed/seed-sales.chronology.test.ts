@@ -29,9 +29,7 @@ it("numbers demo sales in ascending issue time across and within days", async ()
     },
     invoiceLocale: "es-ES",
     days: 3,
-    products: [
-      { id: "soup", name: "Soup", customerName: null, unitPrice: "2.40", vatClass: "reduced" },
-    ],
+    products: [{ id: "soup", name: "Soup", customerName: null, unitPrice: "2.40" }],
   });
   vi.useRealTimers();
   const rows = await suite.db

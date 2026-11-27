@@ -45,28 +45,24 @@ const PRODUCTS: SeedSalesProduct[] = [
     name: "Solomillo",
     customerName: { [LOCALE]: "Solomillo" },
     unitPrice: "18.50",
-    vatClass: "general",
   },
   {
     id: "p-reduced",
     name: "Pan de la casa",
     customerName: { [LOCALE]: "Pan de la casa" },
     unitPrice: "2.40",
-    vatClass: "reduced",
   },
   {
     id: "p-super",
     name: "Leche",
     customerName: { [LOCALE]: "Leche" },
     unitPrice: "1.30",
-    vatClass: "super_reduced",
   },
   {
     id: "p-zero",
     name: "Agua",
     customerName: { [LOCALE]: "Agua" },
     unitPrice: "1.00",
-    vatClass: "zero",
   },
 ];
 
@@ -78,7 +74,6 @@ const CENT_SPLIT_PRODUCTS: SeedSalesProduct[] = [
     name: "Tostada",
     customerName: { [LOCALE]: "Tostada" },
     unitPrice: "5.00",
-    vatClass: "reduced",
   },
 ];
 const CENT_SPLIT_DELI_PRODUCTS: SeedSalesDeliProduct[] = [
@@ -87,7 +82,6 @@ const CENT_SPLIT_DELI_PRODUCTS: SeedSalesDeliProduct[] = [
     name: "Refresco",
     customerName: { [LOCALE]: "Refresco" },
     unitPrice: "2.10",
-    vatClass: "general",
     takeawayVatRate: "21.00",
   },
 ];
@@ -99,8 +93,6 @@ const DELI_PRODUCTS: SeedSalesDeliProduct[] = [
     name: "Cola",
     customerName: { [LOCALE]: "Cola" },
     unitPrice: "2.50",
-    vatClass: "reduced",
-    takeawayVatClass: "general",
     takeawayVatRate: "21.00",
   },
   {
@@ -108,7 +100,6 @@ const DELI_PRODUCTS: SeedSalesDeliProduct[] = [
     name: "Jamón",
     customerName: { [LOCALE]: "Jamón" },
     unitPrice: "12.00",
-    vatClass: "reduced",
     takeawayVatRate: "10.00",
   },
 ];
@@ -333,25 +324,17 @@ describe("seedSales", () => {
       );
     }
 
-    // The classes a till stores: a dish with no takeaway class keeps its served one for takeaway.
     const stored = suite.db.all<{
       dining: string;
       name: string;
-      vat_class: string;
-      takeaway_vat_class: string;
       unit_price_gross: number;
       a_la_carte_unit_price: number | null;
-    }>(sql`select o.dining, l.name, l.vat_class, l.takeaway_vat_class, l.unit_price_gross,
-                  l.a_la_carte_unit_price
+    }>(sql`select o.dining, l.name, l.unit_price_gross, l.a_la_carte_unit_price
            from working_order_lines l join working_orders o on o.id = l.working_order_id`);
     expect(new Set(stored.map((line) => line.dining))).toEqual(new Set(["eat_in", "takeaway"]));
     const byName = new Map([...PRODUCTS, ...DELI_PRODUCTS].map((p) => [p.name, p]));
     for (const line of stored) {
       const product = byName.get(line.name)!;
-      expect([line.vat_class, line.takeaway_vat_class]).toEqual([
-        product.vatClass,
-        product.takeawayVatClass ?? product.vatClass,
-      ]);
       expect(
         compareDecimal(centsToDecimal(line.unit_price_gross), decimal(product.unitPrice)),
       ).toBe(0);
@@ -370,7 +353,6 @@ describe("seedSales", () => {
       name: "Cola",
       customerName: { [LOCALE]: "Cola" },
       unitPrice: "2.50",
-      vatClass: "reduced",
       takeawayVatRate: "21.00",
     };
     const ham: SeedSalesDeliProduct = {
@@ -378,7 +360,6 @@ describe("seedSales", () => {
       name: "Jamón",
       customerName: { [LOCALE]: "Jamón" },
       unitPrice: "12.00",
-      vatClass: "reduced",
       takeawayVatRate: "10.00",
     };
     await seedSales(suite.db, {

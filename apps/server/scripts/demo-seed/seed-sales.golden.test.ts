@@ -137,35 +137,30 @@ const PRODUCTS: SeedSalesProduct[] = [
     name: "Solomillo",
     customerName: { es: "Solomillo de ternera", en: "Beef tenderloin" },
     unitPrice: "18.50",
-    vatClass: "general",
   },
   {
     id: "p-reduced",
     name: "Pan",
     customerName: { es: "Pan de la casa", en: "House bread" },
     unitPrice: "2.40",
-    vatClass: "reduced",
   },
   {
     id: "p-super",
     name: "Leche",
     customerName: { es: "Leche entera", en: "Whole milk" },
     unitPrice: "1.30",
-    vatClass: "super_reduced",
   },
   {
     id: "p-zero",
     name: "Agua",
     customerName: { es: "Agua mineral", en: "Mineral water" },
     unitPrice: "1.00",
-    vatClass: "zero",
   },
   {
     id: "p-unnamed",
     name: "Croquetas",
     customerName: null,
     unitPrice: "7.25",
-    vatClass: "reduced",
   },
 ];
 

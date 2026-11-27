@@ -136,22 +136,13 @@ export async function seedDemoRestaurant(
     name: p.name,
     customerName: p.customerName,
     unitPrice: p.unitPrice,
-    vatClass: p.vatClass,
-    takeawayVatClass: p.takeawayVatClass,
     takeawayVatRate: takeawayVatRateOf(p.id),
   }));
   // Products can share a `created_at` (all do under a frozen clock) and then sort by their IDs, so
   // read order can vary between runs, while seedSales draws by position: sort by everything a sale
   // line reads.
   const saleKey = (p: SeedSalesDeliProduct) =>
-    JSON.stringify([
-      p.name,
-      p.customerName,
-      p.unitPrice,
-      p.vatClass,
-      p.takeawayVatClass ?? null,
-      p.takeawayVatRate,
-    ]);
+    JSON.stringify([p.name, p.customerName, p.unitPrice, p.takeawayVatRate]);
   salesProducts.sort((a, b) => {
     const [x, y] = [saleKey(a), saleKey(b)];
     return x < y ? -1 : x > y ? 1 : 0;

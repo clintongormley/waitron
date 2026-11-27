@@ -39,7 +39,6 @@ const deliDocument = {
       placements: [[cheeses]],
       name: "Ham",
       unitPrice: "4.00",
-      vatClass: "reduced",
     },
   } as Record<string, Record<string, unknown>>,
   root: {
@@ -122,7 +121,6 @@ const colaOffer = {
   image: "cola.webp",
   unitPrice: "1.80",
   pricingUnit: "each",
-  vatClass: "general",
   variants: [] as Record<string, unknown>[],
   offeredModifiers: [] as Record<string, unknown>[],
 };
@@ -208,7 +206,6 @@ const declared: MadridAddedCategory = {
       name: "Cola",
       customerName: { en: "Cola can", es: "Cola en lata" },
       kitchenName: "COLA · DELI",
-      vatClass: "general",
       unitPrice: 180,
       pricingUnit: "each",
     },
@@ -431,13 +428,6 @@ it.each([
     /declared kitchenName differs: cola.webp/,
   ],
   [
-    "with the declared offer at another VAT class",
-    deliWith((deli) => {
-      deli.offers[colaItem]!.vatClass = "reduced";
-    }),
-    /declared vatClass differs: cola.webp/,
-  ],
-  [
     "with the declared offer at another price",
     deliWith((deli) => {
       deli.offers[colaItem]!.unitPrice = "1.60";
@@ -516,7 +506,6 @@ it("refuses a declared product the seed did not add", () => {
 });
 
 it.each([
-  ["vatClass", { vatClass: "reduced" }],
   ["unitPrice", { unitPrice: 160 }],
   ["pricingUnit", { pricingUnit: "weight" }],
   ["name", { name: "Coke" }],
