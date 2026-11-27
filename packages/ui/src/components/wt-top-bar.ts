@@ -15,13 +15,21 @@ export class WtTopBar extends LitElement {
 
       header {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+        container-type: inline-size;
+        grid-template-columns: minmax(min-content, 1fr) minmax(0, max-content) minmax(
+            min-content,
+            1fr
+          );
         align-items: center;
         gap: var(--wt-space-1);
         min-block-size: calc(var(--wt-tap-min) + var(--wt-space-3));
         padding-inline: var(--wt-space-1);
         border-block-end: var(--wt-field-line-width) solid var(--wt-color-border);
         background: var(--wt-color-surface);
+      }
+
+      .back {
+        max-inline-size: calc(100cqi / 3);
       }
 
       h2 {
@@ -86,7 +94,7 @@ export class WtTopBar extends LitElement {
 
   override render() {
     return html`<header>
-      <div>
+      <div class="back">
         ${
           this.backLabel === ""
             ? nothing

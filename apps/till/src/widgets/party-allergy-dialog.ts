@@ -103,6 +103,9 @@ export class TillPartyAllergyDialog extends LitElement {
       .form-message {
         padding-inline: var(--wt-space-4);
       }
+      .content[tabindex="-1"]:focus {
+        outline: none;
+      }
       .guest,
       .dish {
         display: grid;
@@ -287,13 +290,14 @@ export class TillPartyAllergyDialog extends LitElement {
   override async firstUpdated(): Promise<void> {
     const dialog = this.shadowRoot!.querySelector<WtDialog>("wt-dialog");
     await dialog?.updateComplete;
-    await this.#focusPage();
+    await this.#focusPage(true);
   }
   override updated(changed: PropertyValues): void {
-    if (changed.has("page") || changed.has("editingGuest")) void this.#focusPage();
+    if (changed.has("page") || changed.has("editingGuest"))
+      void this.#focusPage(changed.has("scopeKey"));
     if (changed.has("fieldRefusal") && this.fieldRefusal) void focusFirstInvalid(this.shadowRoot!);
   }
-  async #focusPage(): Promise<void> {
+  async #focusPage(opening: boolean): Promise<void> {
     const key = this.#opening?.key;
     const page = this.page;
     const index = this.editingGuest;
@@ -304,7 +308,9 @@ export class TillPartyAllergyDialog extends LitElement {
           ? "[data-none]"
           : index !== null
             ? `[data-guest="${index}"] wt-input`
-            : "wt-input, [data-edit], [data-none]",
+            : page === "editor" && opening
+              ? ".content"
+              : "wt-input, [data-edit], [data-none]",
     );
     if (target && "updateComplete" in target) await target.updateComplete;
     if (
@@ -762,6 +768,7 @@ export class TillPartyAllergyDialog extends LitElement {
     const primary = html`${this.page !== "question" ? html`<wt-button data-primary variant=${this.mode === "edit" ? save.variant : "primary"} ?disabled=${this.busy || this.confirmation !== null || (this.mode === "edit" && save.unchanged) || (this.attempted && this.#invalid())} @click=${() => void this.#submit()}>${this.mode === "edit" ? t("allergy.save") : this.page === "guests" ? t("allergy.next") : clash ? t("allergy.anyway") : t("allergy.send")}</wt-button>` : nothing}`;
     const content = html`<div
       class="content"
+      tabindex=${editing ? "-1" : nothing}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-primary]"))}
     >
       ${

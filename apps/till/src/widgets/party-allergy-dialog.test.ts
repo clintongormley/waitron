@@ -450,6 +450,17 @@ describe("A669 allergy dialog", () => {
     await click(el, "[data-none]");
     expect(results[0]!.expectedPartyRevision).toBeNull();
   });
+  it("opens the allergy overview without selecting Edit and keeps Edit in the tab order", async () => {
+    const el = await mount("allergies", "edit");
+    const root = el.shadowRoot!;
+    const edit = root.querySelector('wt-button[data-edit="0"]')!;
+    await edit.updateComplete;
+    const button = edit.shadowRoot!.querySelector("button")!;
+    await expect.poll(() => root.activeElement).toBe(root.querySelector(".content"));
+    await userEvent.keyboard("{Tab}");
+    expect(edit.shadowRoot!.activeElement).toBe(button);
+    expect(button.matches(":focus-visible")).toBe(true);
+  });
   it("keeps focus while typing a new guest across consecutive native keys", async () => {
     const el = await mount();
     await click(el, "[data-allergies]");
