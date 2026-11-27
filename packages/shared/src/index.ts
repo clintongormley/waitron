@@ -116,6 +116,7 @@ export {
 export type { Decimal } from "./money.js";
 export { cancelRefundShare, rowCancelRefund } from "./cancel-refund-share.js";
 export { shareByWeight } from "./share-by-weight.js";
+export { equalShare, equalShares } from "./equal-share.js";
 export {
   addDecimal,
   compareDecimal,

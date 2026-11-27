@@ -25,7 +25,7 @@ import {
   MONEY_SCALE,
   compareDecimal,
   decimal,
-  divideDecimal,
+  equalShare,
   formatMoney,
   multiplyDecimal,
   sumDecimals,
@@ -1236,11 +1236,7 @@ export class TillBillPayDialog extends LitElement {
     if (outstanding === undefined) return null;
     const available = decimal(outstanding);
     if (this.chosenWay !== "share" || !PEOPLE.test(this.people.trim())) return available;
-    const people = decimal(this.people.trim());
-    const share = divideDecimal(available, people, MONEY_SCALE);
-    return compareDecimal(multiplyDecimal(share, people), available) < 0
-      ? moneyPlus(share, "0.01")
-      : share;
+    return equalShare(available, Number(this.people.trim()));
   }
 
   #quietMethod(method: "cash" | "manual"): void {

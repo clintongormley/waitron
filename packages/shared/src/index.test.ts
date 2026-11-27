@@ -59,6 +59,8 @@ import {
   tillProviderForReader,
   readOrigin,
   shareByWeight,
+  equalShare,
+  equalShares,
   readSaleOrigin,
   resolveActiveLocale,
   QUANTITY_SCALE,
@@ -145,6 +147,8 @@ describe("package public surface (./index.js)", () => {
       "8.33",
       "1.67",
     ]);
+    expect(equalShare(decimal("10.00"), 3)).toBe("3.34");
+    expect(equalShares(decimal("10.00"), 3)).toEqual(["3.34", "3.33", "3.33"]);
     expect(toScale(a, 3)).toBe("1.100");
     expect(MONEY_SCALE).toBe(2);
     expect(MAX_MONEY_INTEGER_DIGITS).toBe(12);
