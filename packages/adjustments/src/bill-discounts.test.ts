@@ -28,7 +28,6 @@ function line(
     id,
     lineNo,
     parentLineId: null,
-    setMenuRole: null,
     setMenuLineId: null,
     unitPrecision: 0,
     portion: null,
@@ -156,9 +155,9 @@ describe("workOutBillDiscounts: spec 7.3's worked examples", () => {
   });
 
   const daily = (soup: boolean) => [
-    line("daily", 1, 1400, { setMenuRole: "set_menu" }),
-    ...(soup ? [line("soup", 2, 0, { setMenuRole: "dish", setMenuLineId: "daily" })] : []),
-    line("hake", 3, 0, { setMenuRole: "dish", setMenuLineId: "daily" }),
+    line("daily", 1, 1400),
+    ...(soup ? [line("soup", 2, 0, { setMenuLineId: "daily" })] : []),
+    line("hake", 3, 0, { setMenuLineId: "daily" }),
     line("wine", 4, 800),
   ];
 
@@ -175,10 +174,7 @@ describe("workOutBillDiscounts: spec 7.3's worked examples", () => {
 
   it("works out each bill of Pay for the Hake alone at 11.50", () => {
     const hake = workOutBillDiscounts(
-      [
-        line("daily", 1, 1400, { setMenuRole: "set_menu" }),
-        line("hake", 2, 0, { setMenuRole: "dish", setMenuLineId: "daily" }),
-      ],
+      [line("daily", 1, 1400), line("hake", 2, 0, { setMenuLineId: "daily" })],
       [amount("share", bill, 250, 1)],
     );
     expect(rowsOf(worked(hake, "share"))).toEqual({ daily: ["1000@1150"] });
@@ -294,8 +290,8 @@ describe("workOutBillDiscounts: the order discounts are worked out in", () => {
   it("works a set menu's discount out after the dishes' and before the bill's", () => {
     const result = workOutBillDiscounts(
       [
-        line("daily", 1, 1400, { setMenuRole: "set_menu" }),
-        line("soup", 2, 0, { setMenuRole: "dish", setMenuLineId: "daily" }),
+        line("daily", 1, 1400),
+        line("soup", 2, 0, { setMenuLineId: "daily" }),
         line("wine", 3, 800),
       ],
       [
@@ -312,10 +308,10 @@ describe("workOutBillDiscounts: the order discounts are worked out in", () => {
 
 describe("workOutBillDiscounts: what a set-menu discount covers", () => {
   const lines = () => [
-    line("daily", 1, 1400, { setMenuRole: "set_menu" }),
-    line("soup", 2, 200, { setMenuRole: "dish", setMenuLineId: "daily" }),
+    line("daily", 1, 1400),
+    line("soup", 2, 200, { setMenuLineId: "daily" }),
     extra("bread", 3, "soup", 100),
-    line("hake", 4, 0, { setMenuRole: "dish", setMenuLineId: "daily" }),
+    line("hake", 4, 0, { setMenuLineId: "daily" }),
   ];
 
   it("covers the row and its charged dishes, not their paid extras", () => {

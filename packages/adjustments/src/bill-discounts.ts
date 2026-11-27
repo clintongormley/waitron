@@ -20,8 +20,10 @@ import {
   type SpreadResult,
 } from "./spread.js";
 
+const ZERO = decimal("0");
+
 /** A row a discount prices: quantities in thousandths, money in cents. */
-export interface PricedLine {
+export interface SpreadRow {
   id: string;
   lineNo: number;
   parentLineId: string | null;
@@ -33,7 +35,7 @@ export interface PricedLine {
 
 /** `quantity` of `row` at `unitCents` a `priceQuantity`, rounded to the cent half up. */
 export function lineGross(
-  row: Pick<PricedLine, "unit" | "priceQuantity">,
+  row: Pick<SpreadRow, "unit" | "priceQuantity">,
   quantity: number,
   unitCents = row.unit,
 ): Decimal {
@@ -44,14 +46,29 @@ export function lineGross(
   );
 }
 
+const weighed = (row: Pick<SpreadRow, "unitPrecision">) => (row.unitPrecision ?? 0) > 0;
+
+/**
+ * The dishes a set-menu row's comp or discount covers with it (spec section 6, D49): those placed
+ * in it that are charged, which is what their supplements are; their paid extras are not covered.
+ */
+export function coveredBySetMenu<R extends { setMenuLineId: string | null; unit: number }>(
+  menuId: string,
+  rows: readonly R[],
+): R[] {
+  return rows.filter(({ setMenuLineId, unit }) => setMenuLineId === menuId && unit > 0);
+}
+
 /** `quantity` of `row`, a discount takes off: `exact` as {@link SpreadLine} takes it, and
  * `exactWhenShort` as {@link spreadReaching} takes it. */
-export interface SpreadSubject<R extends PricedLine = PricedLine> {
+export interface SpreadSubject<R extends SpreadRow = SpreadRow> {
   row: R;
   quantity: number;
   exact: boolean;
   exactWhenShort: boolean;
 }
+
+type Exactness = Pick<SpreadSubject, "exact" | "exactWhenShort">;
 
 /**
  * Whether a row standing for `lines` takes its share exactly: only when each line is one unmeasured
@@ -59,13 +76,48 @@ export interface SpreadSubject<R extends PricedLine = PricedLine> {
  * an extra's row only when the exact rows alone miss the discount.
  */
 export function portionExactness(
-  lines: readonly { row: Pick<PricedLine, "unitPrecision" | "parentLineId">; quantity: number }[],
-): Pick<SpreadSubject, "exact" | "exactWhenShort"> {
+  lines: readonly { row: Pick<SpreadRow, "unitPrecision" | "parentLineId">; quantity: number }[],
+): Exactness {
   const oneUnitEach = lines.every(
     ({ row, quantity }) => (row.unitPrecision ?? 0) === 0 && quantity === 1000,
   );
   const dish = lines[0]!.row.parentLineId === null;
   return { exact: oneUnitEach && dish, exactWhenShort: oneUnitEach && !dish };
+}
+
+/** `lines` as a discount's subjects: each exact when `exactAnyway` holds for its row, and
+ * otherwise as `exactness` reads it. */
+export function withExactness<L extends { row: SpreadRow; quantity: number }>(
+  lines: readonly L[],
+  exactAnyway: (row: L["row"]) => boolean,
+  exactness: (line: L) => Exactness = (line) => portionExactness([line]),
+): (L & Exactness)[] {
+  return lines.map((line) => {
+    const each = exactness(line);
+    return {
+      ...line,
+      exact: exactAnyway(line.row) || each.exact,
+      exactWhenShort: each.exactWhenShort,
+    };
+  });
+}
+
+/** Whether a discount on one target takes `target` to the exact cent whatever it costs: a dish,
+ * not weighed, priced on its own. */
+export function takesAlone(
+  family: readonly unknown[],
+  target: Pick<SpreadRow, "parentLineId" | "unitPrecision">,
+): boolean {
+  return family.length === 1 && target.parentLineId === null && !weighed(target);
+}
+
+/** Which of `rows` a whole-bill discount takes to the exact cent whatever they cost: dishes, not
+ * weighed, with no extras. */
+export function exactOnWholeBill(
+  rows: readonly Pick<SpreadRow, "parentLineId">[],
+): (row: Pick<SpreadRow, "id" | "parentLineId" | "unitPrecision">) => boolean {
+  const families = new Set(rows.flatMap(({ parentLineId }) => parentLineId ?? []));
+  return (row) => row.parentLineId === null && !families.has(row.id) && !weighed(row);
 }
 
 export type ShortSpreadLine = SpreadLine & { exactWhenShort: boolean };
@@ -119,14 +171,10 @@ export function filedRowLine(members: readonly SpreadSubject[]): ShortSpreadLine
   });
 }
 
-/** What one member of a priced row is left at, and what that takes off it. */
-export interface PricedShare<M> {
-  member: M;
-  rows: PricedRow[];
-  reduction: Decimal;
-}
+/** A member of a priced row, with what it is left at and what that takes off it. */
+export type PricedShare<M> = M & { rows: PricedRow[]; reduction: Decimal };
 
-type Measured = { row: Pick<PricedLine, "unit" | "priceQuantity">; quantity: number };
+type Measured = { row: Pick<SpreadRow, "unit" | "priceQuantity">; quantity: number };
 
 /** One line's priced rows handed to the lines standing for it, in the order given, each taking
  * its own quantity from the rows that are left, the higher price first. */
@@ -152,7 +200,30 @@ export function handOutRows<M extends Measured>(
         ),
       );
     }
-    return { member, rows, reduction: sumDecimals(cuts) };
+    return { ...member, rows, reduction: sumDecimals(cuts) };
+  });
+}
+
+/**
+ * `discount` spread over the rows a bill files, `groups` each listing the members one filed row
+ * stands for in filing order: each group spread as that one row, then its priced `rows` handed to
+ * its members in `ordinal` order.
+ */
+export function spreadOverFiledGroups<M extends SpreadSubject>(
+  groups: readonly (readonly M[])[],
+  discount: Decimal,
+  ordinal: (member: M) => number,
+): { rows: PricedRow[]; shares: PricedShare<M>[] }[] {
+  const results = spreadReaching(groups.map(filedRowLine), discount);
+  return groups.map((members) => {
+    const { rows } = results.get(members[0]!.row.id)!;
+    return {
+      rows,
+      shares: handOutRows(
+        [...members].sort((a, b) => ordinal(a) - ordinal(b)),
+        rows,
+      ),
+    };
   });
 }
 
@@ -162,16 +233,15 @@ export function zeroedRows<M extends Measured>(subjects: readonly M[]): PricedSh
   return subjects
     .filter(({ row }) => row.unit !== 0)
     .map((member) => ({
-      member,
-      rows: [{ quantity: thousandthsToDecimal(member.quantity), unitGross: decimal("0") }],
+      ...member,
+      rows: [{ quantity: thousandthsToDecimal(member.quantity), unitGross: ZERO }],
       reduction: lineGross(member.row, member.quantity),
     }));
 }
 
 /** A line of an open bill, as stored; `portion` names the filed row a bound portion, or an extra
  * of one, belongs to (an extra's ordinal is not read). */
-export interface BillDiscountLine extends PricedLine {
-  setMenuRole: "set_menu" | "dish" | null;
+export interface BillDiscountLine extends SpreadRow {
   setMenuLineId: string | null;
   lineTotal: number;
   portion: { group: string; ordinal: number } | null;
@@ -218,16 +288,13 @@ export interface WorkedBill {
   takes: number;
 }
 
-interface Part extends PricedLine {
+interface Part extends SpreadRow {
   lineId: string;
   setMenuLineId: string | null;
   portion: BillDiscountLine["portion"];
 }
 
 type Subject = SpreadSubject<Part>;
-
-const cents = (value: Decimal) => decimalToCents(value);
-const weighed = (row: PricedLine) => (row.unitPrecision ?? 0) > 0;
 
 function refuseValue(discount: PendingBillDiscount): void {
   const { action, percentBp, amount, target } = discount;
@@ -379,7 +446,7 @@ export function workOutBillDiscounts(
     return line;
   };
   for (const line of lines) {
-    if (line.lineTotal !== cents(lineGross(line, line.quantity))) {
+    if (line.lineTotal !== decimalToCents(lineGross(line, line.quantity))) {
       throw new RangeError(`line ${line.id}'s total is not its unit price times its quantity`);
     }
   }
@@ -431,13 +498,12 @@ export function workOutBillDiscounts(
    * prices a row at zero even where its total was already nothing. */
   const apply = (shares: readonly PricedShare<Subject>[], zeroed: boolean): Set<string> => {
     const moved = new Set<string>();
-    for (const { member, rows, reduction } of shares) {
-      if (!zeroed && compareDecimal(reduction, centsToDecimal(0)) === 0) continue;
-      const part = member.row;
+    for (const { row: part, rows, reduction } of shares) {
+      if (!zeroed && compareDecimal(reduction, ZERO) === 0) continue;
       moved.add(part.lineId);
       const [first, ...rest] = rows;
       part.quantity = decimalToThousandths(first!.quantity);
-      part.unit = cents(first!.unitGross);
+      part.unit = decimalToCents(first!.unitGross);
       for (const row of rest) {
         lastLineNo += 1;
         const split = {
@@ -445,7 +511,7 @@ export function workOutBillDiscounts(
           id: `${part.lineId}#${lastLineNo}`,
           lineNo: lastLineNo,
           quantity: decimalToThousandths(row.quantity),
-          unit: cents(row.unitGross),
+          unit: decimalToCents(row.unitGross),
         };
         parts.push(split);
         partsOf(part.lineId).push(split);
@@ -454,17 +520,13 @@ export function workOutBillDiscounts(
     return moved;
   };
 
-  const lineSubjects = (family: readonly Part[], target: Part): Subject[] =>
-    family.map((row) => {
-      const each = portionExactness([{ row, quantity: row.quantity }]);
-      const alone = family.length === 1 && target.parentLineId === null && !weighed(target);
-      return {
-        row,
-        quantity: row.quantity,
-        exact: alone || each.exact,
-        exactWhenShort: each.exactWhenShort,
-      };
-    });
+  const subjectsOf = (rows: readonly Part[], exactAnyway: (row: Part) => boolean): Subject[] =>
+    withExactness(
+      rows.map((row) => ({ row, quantity: row.quantity })),
+      exactAnyway,
+    );
+  const lineSubjects = (family: readonly Part[], target: Part) =>
+    subjectsOf(family, () => takesAlone(family, target));
 
   /** The subjects of each piece a discount is worked out in, or null once its set menu is gone. */
   const copiesOf = ({ target, origin }: PendingBillDiscount): Subject[][] | null => {
@@ -472,10 +534,7 @@ export function workOutBillDiscounts(
       if (target.lineId === null || !byId.has(target.lineId)) return null;
       const menuId = target.lineId;
       const row = partsOf(menuId);
-      const dishes = parts.filter(
-        ({ setMenuLineId, unit }) => setMenuLineId === menuId && unit > 0,
-      );
-      return [lineSubjects([...row, ...dishes], row[0]!)];
+      return [lineSubjects([...row, ...coveredBySetMenu(menuId, parts)], row[0]!)];
     }
     if (target.kind === "line") {
       const extras =
@@ -484,19 +543,7 @@ export function workOutBillDiscounts(
         lineSubjects(part.id === target.lineId ? [part, ...extras] : [part], part),
       );
     }
-    const families = new Set(parts.flatMap(({ parentLineId }) => parentLineId ?? []));
-    return [
-      parts.map((row) => {
-        const each = portionExactness([{ row, quantity: row.quantity }]);
-        return {
-          row,
-          quantity: row.quantity,
-          exact:
-            (row.parentLineId === null && !families.has(row.id) && !weighed(row)) || each.exact,
-          exactWhenShort: each.exactWhenShort,
-        };
-      }),
-    ];
+    return [subjectsOf(parts, exactOnWholeBill(parts))];
   };
 
   /** What `wanted` cents, spread over `subjects` (whose spread lines are `spread`), leaves each
@@ -511,16 +558,14 @@ export function workOutBillDiscounts(
     const discount = centsToDecimal(wanted);
     if (!filed) {
       const results = spreadReaching(spread, discount);
-      return subjects.map((member) => ({ member, ...results.get(member.row.id)! }));
+      return subjects.map((member) => {
+        const { rows, reduction } = results.get(member.row.id)!;
+        return { ...member, rows, reduction };
+      });
     }
     const ordinal = ({ row }: Subject) => (row.parentLineId === null ? row.portion!.ordinal : 0);
-    const groups = filedRows(subjects, lineOf);
-    const results = spreadReaching(groups.map(filedRowLine), discount);
-    return groups.flatMap((group) =>
-      handOutRows(
-        [...group].sort((a, b) => ordinal(a) - ordinal(b)),
-        results.get(group[0]!.row.id)!.rows,
-      ),
+    return spreadOverFiledGroups(filedRows(subjects, lineOf), discount, ordinal).flatMap(
+      ({ shares }) => shares,
     );
   };
 
@@ -528,7 +573,9 @@ export function workOutBillDiscounts(
     const copies = copiesOf(discount);
     if (copies === null) return { id: discount.id, holds: "set_menu_gone", takes: 0, lines: [] };
     const spreads = copies.map((subjects) => subjects.map(spreadLineOf));
-    const costs = spreads.map((spread) => spread.reduce((sum, { gross }) => sum + cents(gross), 0));
+    const costs = spreads.map((spread) =>
+      spread.reduce((sum, { gross }) => sum + decimalToCents(gross), 0),
+    );
     const whole = costs.reduce((sum, cost) => sum + cost, 0);
     const comp = discount.action === "comp";
     const cut = discount.action === "discount_amount" && discount.amount! > whole;
@@ -550,10 +597,10 @@ export function workOutBillDiscounts(
             subjects,
             spreads[index]!,
             amounts?.[index] ??
-              cents(percentReduction(centsToDecimal(costs[index]!), discount.percentBp!)),
+              decimalToCents(percentReduction(centsToDecimal(costs[index]!), discount.percentBp!)),
             filed,
           );
-      takes += shares.reduce((sum, { reduction }) => sum + cents(reduction), 0);
+      takes += shares.reduce((sum, { reduction }) => sum + decimalToCents(reduction), 0);
       for (const lineId of apply(shares, comp)) moved.add(lineId);
     });
     return {
@@ -569,7 +616,7 @@ export function workOutBillDiscounts(
             lineNo: part.lineNo,
             quantity: part.quantity,
             unit: part.unit,
-            total: cents(lineGross(part, part.quantity)),
+            total: decimalToCents(lineGross(part, part.quantity)),
           })),
         })),
     };

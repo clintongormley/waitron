@@ -6,7 +6,7 @@ import {
   approves,
   evaluateCancel,
   evaluateComp,
-  filedRowLine,
+  exactOnWholeBill,
   floorAllowance,
   findAdjustmentReason,
   handOutRows,
@@ -18,8 +18,11 @@ import {
   readReasonStanding,
   recordAdjustment,
   spreadLineOf,
+  spreadOverFiledGroups,
   spreadReaching,
   standingOff,
+  takesAlone,
+  withExactness,
   zeroedRows,
   type AdjustmentAction,
   type AdjustmentReason,
@@ -31,7 +34,6 @@ import {
   type Approval,
   type CompAction,
   type PricedRow,
-  type PricedShare,
   type SpreadSubject,
 } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/menu";
@@ -306,17 +308,6 @@ interface Subject extends SpreadSubject<Row> {
   carved: boolean;
 }
 
-const changeOf = ({
-  member,
-  rows,
-  reduction,
-}: PricedShare<Pick<Subject, "row" | "quantity" | "carved">>): Change => ({
-  row: member.row,
-  carved: member.carved,
-  rows,
-  reduction,
-});
-
 /** Spread `discount` over `subjects` (plan D4, D15) and keep the rows whose price moves. */
 function spread(subjects: readonly Subject[], discount: Decimal): Change[] {
   const results = spreadReaching(subjects.map(spreadLineOf), discount);
@@ -351,22 +342,18 @@ async function spreadOverFiledRows(
   const groups = (await readLockedLines(tx, orderId)).map(({ identity }) =>
     (identity.lineIds ?? [identity.id]).map((id) => subjectOf.get(id)!),
   );
-  const results = spreadReaching(groups.map(filedRowLine), discount);
   const ordinal = (subject: Subject) => bindings.get(subject.row.id)?.ordinal ?? 0;
-  return groups.flatMap((members) => {
-    const priced = results.get(members[0]!.row.id)!.rows;
-    const handed = handOutRows(
-      [...members].sort((a, b) => ordinal(a) - ordinal(b)),
-      priced,
-    ).map(changeOf);
-    const lower = priced[1]?.unitGross;
-    const second =
-      lower === undefined
-        ? undefined
-        : handed.find(({ rows }) => compareDecimal(rows[0]!.unitGross, lower) === 0);
-    if (second !== undefined) splits.push({ from: handed[0]!.row.id, to: second.row.id });
-    return handed.filter(({ reduction }) => compareDecimal(reduction, ZERO) !== 0);
-  });
+  return spreadOverFiledGroups(groups, discount, ordinal).flatMap(
+    ({ rows: priced, shares: handed }) => {
+      const lower = priced[1]?.unitGross;
+      const second =
+        lower === undefined
+          ? undefined
+          : handed.find(({ rows }) => compareDecimal(rows[0]!.unitGross, lower) === 0);
+      if (second !== undefined) splits.push({ from: handed[0]!.row.id, to: second.row.id });
+      return handed.filter(({ reduction }) => compareDecimal(reduction, ZERO) !== 0);
+    },
+  );
 }
 
 /**
@@ -486,25 +473,14 @@ export async function planAdjustment(
   if (ask.lineId === null) {
     if (ask.action === "cancel" || ask.action === "comp") throw invalid("lineId");
     if (ask.quantity !== undefined) throw invalid("quantity");
-    const families = new Set(rows.flatMap((row) => row.parentLineId ?? []));
     before = sumDecimals(rows.map((row) => gross(row, row.quantity)));
     changes = await spreadOverFiledRows(
       tx,
       orderId,
-      rows.map((row) => {
-        const each = portionExactness([{ row, quantity: row.quantity }]);
-        return {
-          row,
-          quantity: row.quantity,
-          carved: false,
-          exact:
-            (row.parentLineId === null &&
-              !families.has(row.id) &&
-              (row.unitPrecision ?? 0) === 0) ||
-            each.exact,
-          exactWhenShort: each.exactWhenShort,
-        };
-      }),
+      withExactness(
+        rows.map((row) => ({ row, quantity: row.quantity, carved: false })),
+        exactOnWholeBill(rows),
+      ),
       requestedDiscount(ask, before),
       rowSplits,
     );
@@ -567,7 +543,7 @@ export async function planAdjustment(
         });
       }
       const standingFor = (one: Row) => (row === null ? [one] : row.membersOf.get(one.id)!);
-      const exactness = (standIn: Row, quantity: number) =>
+      const exactness = ({ row: standIn, quantity }: { row: Row; quantity: number }) =>
         portionExactness(
           row === null
             ? [{ row: standIn, quantity }]
@@ -587,32 +563,21 @@ export async function planAdjustment(
             quantity: ask.quantity!,
           });
         }
-        subjects = family.map((row) => {
-          const each = exactness(row, carved.get(row.id)!);
-          return {
-            row,
-            quantity: carved.get(row.id)!,
-            carved: true,
-            exact: family.length === 1 || each.exact,
-            exactWhenShort: each.exactWhenShort,
-          };
-        });
+        subjects = withExactness(
+          family.map((row) => ({ row, quantity: carved.get(row.id)!, carved: true })),
+          () => family.length === 1,
+          exactness,
+        );
       } else {
-        subjects = family.map((row) => {
-          const each = exactness(row, row.quantity);
-          return {
-            row,
-            quantity: row.quantity,
-            carved: false,
-            exact: (family.length === 1 && target.parentLineId === null && !weighed) || each.exact,
-            exactWhenShort: each.exactWhenShort,
-          };
-        });
+        subjects = withExactness(
+          family.map((row) => ({ row, quantity: row.quantity, carved: false })),
+          () => takesAlone(family, target),
+          exactness,
+        );
       }
       before = sumDecimals(subjects.map(({ row, quantity }) => gross(row, quantity)));
       const discount = requestedDiscount(ask, before);
-      changes =
-        ask.action === "comp" ? zeroedRows(subjects).map(changeOf) : spread(subjects, discount);
+      changes = ask.action === "comp" ? zeroedRows(subjects) : spread(subjects, discount);
       if (row !== null) {
         const { membersOf } = row;
         const taken = partial
@@ -637,7 +602,7 @@ export async function planAdjustment(
               carved: false,
             })),
             change.rows,
-          ).map(changeOf);
+          );
           // The line's second price is split off it, as on one grouped line (plan D33).
           const lower = change.rows[1];
           if (lower !== undefined) {

@@ -1,15 +1,17 @@
 import { eq } from "drizzle-orm";
-import type { AdjustmentStage, Approval, Ending } from "@waitron/adjustments";
+import {
+  lineGross as gross,
+  type AdjustmentStage,
+  type Approval,
+  type Ending,
+} from "@waitron/adjustments";
 import { orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
-  centsToDecimal,
   compareDecimal,
   decimal,
   decimalToThousandths,
   divideDecimal,
-  MONEY_SCALE,
-  multiplyDecimal,
   QUANTITY_SCALE,
   thousandthsToDecimal,
   type Decimal,
@@ -55,13 +57,7 @@ export interface Row {
   firedQuantity: number;
 }
 
-export function gross(row: Row, quantity: number, unitCents = row.unit): Decimal {
-  return divideDecimal(
-    multiplyDecimal(centsToDecimal(unitCents), thousandthsToDecimal(quantity)),
-    thousandthsToDecimal(row.priceQuantity),
-    MONEY_SCALE,
-  );
-}
+export { gross };
 
 /** A row's value before any adjustment (plan D21), for `quantity` of it. */
 export function listValue(row: Row, quantity: number): Decimal {
