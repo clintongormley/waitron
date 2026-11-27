@@ -1027,10 +1027,12 @@ pantalla estrecha, toca el nombre de la zona abajo y elige **Elegir zonas para e
 En las demás pantallas, abre **Más** (☰) y elige **Zonas en este dispositivo** en **Ajustes**.
 Marca **Mostrar** en cada zona que quieras, elige la que **Abre primero** y toca **Guardar**.
 
-Una caja muestra en Sala las zonas de mesas elegidas y en Mostrador las zonas de
-mostrador elegidas. Un móvil o una tableta no tiene Mostrador, así que su Sala muestra todas las
-zonas que has elegido. Hasta que guardas una elección, un móvil o una tableta se abre donde siempre;
-después se abre en tu zona de **Abre primero**. Tras abrir una mesa, mira
+Si el botón de zona está abajo en la caja, tócalo y elige un mostrador por su nombre para abrir
+**Mostrador**. Toca **Sala** para volver. Si no ves el botón, desplaza la barra superior hacia
+un lado. Encima de la sala, toca **Pedidos aparcados** o **En espera** para volver a abrir un
+pedido. Un móvil o una tableta no tiene Mostrador, así que su Sala muestra todas las zonas que
+has elegido. Hasta que guardas una elección, un móvil o una tableta se abre donde siempre.
+Después se abre en tu zona de **Abre primero**. Tras abrir una mesa, mira
 [Volver a tus mesas con platos sin enviar](table-service.md#unsent-tables).
 
 En la caja, si abres **Ajustes** mientras tomas un pedido, toca fuera de la ventana para volver

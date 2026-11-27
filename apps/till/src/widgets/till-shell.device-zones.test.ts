@@ -511,6 +511,72 @@ it.each([
   },
 );
 
+it("aligns Counter choices with table zones and opens Shop once from the keyboard", async () => {
+  setLocale("en-GB");
+  const { innerWidth: width, innerHeight: height } = window;
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "till",
+      activeScreen: "floor",
+      showCounter: true,
+      ...{
+        counterZones: [
+          { id: "bar", name: "Bar" },
+          { id: "shop", name: "Shop" },
+        ],
+        selectedCounterZoneId: "bar",
+      },
+    });
+    const floor = document.createElement("till-floor-screen");
+    floor.zones = [
+      {
+        id: "room",
+        name: "Dining room",
+        displayOrder: 0,
+        active: true,
+        closed: false,
+        closesAt: null,
+        hasPlan: true,
+        layoutSetName: null,
+        layoutDue: null,
+        serviceMode: "table_tab",
+      },
+    ];
+    el.append(floor);
+    const chooser = await vi.waitFor(() => {
+      const menu = el.shadowRoot!.querySelector("[data-floor-zone-chooser]");
+      expect(menu).not.toBeNull();
+      return menu!;
+    });
+    const selected = vi.fn();
+    el.addEventListener("counter-zone-selected", selected);
+    await userEvent.click(chooser.shadowRoot!.querySelector("button")!);
+    const room = chooser.querySelector<HTMLButtonElement>('[data-floor-zone="room"]')!;
+    const counterRows = Array.from(chooser.querySelectorAll('[role="menuitem"] wt-menu-row'));
+    expect(counterRows.map((row) => row.getAttribute("label"))).toEqual(["Bar", "Shop"]);
+    const roomLabel = room.querySelector("wt-menu-row")!.shadowRoot!.querySelector(".label")!;
+    for (const row of counterRows) {
+      const label = row.shadowRoot!.querySelector(".label")!;
+      expect(label.getBoundingClientRect().left).toBe(roomLabel.getBoundingClientRect().left);
+      expect(row.getBoundingClientRect().height).toBe(60);
+    }
+    expect(room.getAttribute("aria-checked")).toBe("true");
+    room.focus();
+    await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+    expect(chooser.querySelector('[role="menuitem"]:focus wt-menu-row')).toBe(counterRows[1]);
+    await userEvent.keyboard("{Enter}");
+    expect(selected).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ detail: { zoneId: "shop" } }),
+    );
+    expect(chooser.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
+    expect(el.shadowRoot!.querySelectorAll(".head [data-counter-orders]")).toHaveLength(2);
+    expect(el.shadowRoot!.querySelector(".head [data-counter-zones]")).toBeNull();
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
 it("walks from the last floor zone to the kitchen action with the arrow key", async () => {
   setLocale("en-GB");
   await page.viewport(390, 844);

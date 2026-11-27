@@ -4,6 +4,7 @@ import type { TillClockState } from "../api/attendance-api.js";
 import type { ResolvedKitchenScreen } from "../api/device-session-api.js";
 import type { WtRowActions } from "@waitron/ui/src/components/wt-row-actions.js";
 import type { ShellAffordance, TillShell } from "./till-shell.js";
+import type { TillFloorScreen } from "../screens/till-floor-screen.js";
 import type { TableState } from "../api/floor-api.js";
 import { helpBadgeLabel, helpText, type HelpKey } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -442,8 +443,37 @@ export interface FloorKitchenRow {
 
 export interface FloorChooserActions {
   choose: () => void;
+  counters: readonly { id: string; name: string }[];
+  openCounter: (zoneId: string) => void;
   kitchen: readonly FloorKitchenRow[];
   openKitchen: (stationId?: string) => void;
+}
+
+export function floorControls(
+  shell: TillShell,
+  floor: TillFloorScreen,
+  menu: TemplateResult,
+  emit: (type: string, detail?: unknown) => void,
+): TemplateResult {
+  return html`<div class="floor-controls">
+    ${floor.otherZoneLine()}
+    <footer data-floor-bar class="floor-bar">
+      ${floor.footerControls({
+        choose: () => emit("open-device-zones"),
+        counters: shell.formFactor === "till" && shell.showCounter ? shell.counterZones : [],
+        openCounter: (zoneId) =>
+          shell.counterZones.length === 1 && zoneId === shell.selectedCounterZoneId
+            ? emit("screen-select", { screen: "counter" })
+            : emit("counter-zone-selected", { zoneId }),
+        kitchen: shell.floorKitchenRows,
+        openKitchen: (stationId) =>
+          emit(stationId === undefined ? "show-expo" : "show-station", {
+            stationId,
+            fromFloorChooser: true,
+          }),
+      })}${menu}
+    </footer>
+  </div>`;
 }
 
 export function floorKitchenRows(
@@ -482,7 +512,7 @@ export function floorZoneControls(
   view: "map" | "list",
   select: (key: string) => void,
   toggle: () => void,
-  { choose, kitchen, openKitchen }: FloorChooserActions,
+  { choose, counters, openCounter, kitchen, openKitchen }: FloorChooserActions,
 ) {
   const name = tabs.find((tab) => tab.key === active)?.name ?? t("floor.zones");
   return html`<wt-row-actions
@@ -507,11 +537,29 @@ export function floorZoneControls(
             @click=${() => select(key)}
           >
             <wt-icon data-row-check name="menu-check" size="lg"></wt-icon>
-            <wt-menu-row ?divider=${index < tabs.length - 1 || kitchen.length === 0} label=${name}>
+            <wt-menu-row
+              ?divider=${index < tabs.length - 1 || counters.length > 0 || kitchen.length === 0}
+              label=${name}
+            >
               ${mark ? html`<span class="floor-zone-mark" data-mark=${mark.kind}>${mark.words}</span>` : nothing}
             </wt-menu-row>
           </button>`;
         })}
+        ${counters.map(
+          ({ id, name }, index) =>
+            html`<button
+              type="button"
+              role="menuitem"
+              data-row-choice
+              data-floor-counter-zone=${id}
+              @click=${() => openCounter(id)}
+            >
+              <wt-menu-row
+                ?divider=${index < counters.length - 1 || kitchen.length === 0}
+                label=${name}
+              ></wt-menu-row>
+            </button>`,
+        )}
         ${
           kitchen.length === 0
             ? nothing

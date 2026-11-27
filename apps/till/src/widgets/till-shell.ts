@@ -26,6 +26,7 @@ import { countText, currentLocale, t } from "../i18n/t.js";
 import type { TillFloorScreen } from "../screens/till-floor-screen.js";
 import {
   floorBarStyles,
+  floorControls,
   floorDeviceRows,
   floorHoursRows,
   floorMenuSection,
@@ -1416,12 +1417,12 @@ export class TillShell extends LitElement {
     </wt-row-actions>`;
   }
 
-  #floorShortcuts(counterLabel: string): TemplateResult | typeof nothing {
+  #floorShortcuts(): TemplateResult | typeof nothing {
     const shortcuts =
       this.formFactor === "till"
         ? this.showCounter
           ? html`<div class="till-strip">
-              ${this.#primaryTabs(["counter"], undefined, true, counterLabel)}${this.#counterOrders("parked", this.parkedCount)}${this.#counterOrders("waiting", this.waitingCount)}
+              ${this.#counterOrders("parked", this.parkedCount)}${this.#counterOrders("waiting", this.waitingCount)}
             </div>`
           : nothing
         : this.barTables.length
@@ -1684,7 +1685,7 @@ export class TillShell extends LitElement {
     const counterLabel = `${t("tab.counter")}: ${this.counterZones.find((zone) => zone.id === this.selectedCounterZoneId)?.name ?? ""}`;
     return html`
       <div class="shell">
-        ${bottomFloor ? this.#floorShortcuts(counterLabel) : nothing}
+        ${bottomFloor ? this.#floorShortcuts() : nothing}
         ${
           this.#barless() || bottomFloor || this.floorKitchenOpen
             ? this.#drawsCorner()
@@ -1724,12 +1725,9 @@ export class TillShell extends LitElement {
         </div>
         ${
           bottomFloor
-            ? html`<div class="floor-controls">
-                ${bottomFloor.otherZoneLine()}
-                <footer data-floor-bar class="floor-bar">
-                  ${bottomFloor.footerControls({ choose: () => this.#emit("open-device-zones"), kitchen: this.floorKitchenRows, openKitchen: (stationId) => this.#emit(stationId === undefined ? "show-expo" : "show-station", { stationId, fromFloorChooser: true }) })}${this.#floorMenu(bottomFloor)}
-                </footer>
-              </div>`
+            ? floorControls(this, bottomFloor, this.#floorMenu(bottomFloor), (event, detail) =>
+                this.#emit(event, detail),
+              )
             : nothing
         }
       </div>

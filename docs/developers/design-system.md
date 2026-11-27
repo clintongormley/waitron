@@ -6443,9 +6443,12 @@ and `till-app-kitchen-note.test.ts` cover the fixed mounts, fallback navigation 
 Zones on this device lets a till or a handheld show a subset of the profile's permitted zones and
 choose the starting zone. On the narrow floor, tap the zone and choose **Choose zones for this
 phone…**. Elsewhere, open ☰ and find **Zones on this device** in Settings. These choices stay with the device and profile across operators and
-restarts. A display choice grants no permission. On a till, Counter is one tab for one counter zone
-and a checked list for several, and Floor contains only selected table zones. A handheld has no
-Counter, so its Floor contains every selected zone, counter zones included. A handheld opens on its
+restarts. A display choice grants no permission. On a narrow till, the floor's zone chooser lists
+the selected counter zones by name beneath the table zones. A counter row opens Counter. The
+Parked and Waiting shortcuts stay above the floor. The till header outside the narrow floor gives
+Counter one tab for one counter zone or a checked list for several. The till's floor map and table
+list show the selected table zones. A handheld's Floor contains every selected zone, counter zones
+included. A handheld opens on its
 "Opens first" zone only once a choice is saved (the zones read's `saved`); before that it opens
 where it always has, on the URL's zone or the first tab. Once a table has been opened, Floor
 opens on that table's zone instead when this device shows that zone, as "Navigation and language controls" above says. A handheld whose zones read fails at
