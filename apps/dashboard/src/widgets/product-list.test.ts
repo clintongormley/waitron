@@ -1542,6 +1542,312 @@ describe("product-list", () => {
     expect(unitHeight("bottle")).toBe(unitHeight("ham"));
   });
 
+  it.each([1180, 1440].flatMap((width) => ["en-GB", "es-ES"].map((locale) => ({ width, locale }))))(
+    "keeps Price and Available aligned across views at $width px ($locale)",
+    async ({ width, locale }) => {
+      setLocale(locale);
+      await page.viewport(width, 844);
+      const ham = product({
+        id: "ham",
+        name: "Sliced ham",
+        primaryCategoryId: drinks.id,
+        unitId: kilo.id,
+        unit: kilo,
+        unitPrice: "48.00",
+      });
+      const { el, root, table } = await mountTree({
+        view: "list",
+        reordering: false,
+        categories: [drinks, food],
+        products: [ham, ...treeProducts()],
+      });
+      el.parentElement!.style.width = width === 1180 ? "848px" : "1058px";
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+      const scroll = root.querySelector(".scroll")!;
+      const prices = () => {
+        const amount = root
+          .querySelector('tr[data-row-key="ham"] [data-test="price"]')!
+          .getBoundingClientRect();
+        const unit = root
+          .querySelector('tr[data-row-key="ham"] [data-test="price-unit"]')!
+          .getBoundingClientRect();
+        const headingText = document.createRange();
+        headingText.selectNodeContents(root.querySelector('[part~="column-heading-price"]')!);
+        const label = headingText.getBoundingClientRect();
+        const available = cellUnder(root, "ham", t("editor.available")).getBoundingClientRect();
+        expect.soft(label.right).toBeCloseTo(amount.right, 0);
+        expect.soft(unit.left).toBeGreaterThan(amount.right);
+        expect.soft(unit.top).toBeLessThan(amount.bottom);
+        expect.soft(scroll.scrollWidth).toBe(scroll.clientWidth);
+        return { price: amount.right, available: available.left };
+      };
+      const list = prices();
+      el.view = "tree";
+      await el.updateComplete;
+      await table.updateComplete;
+      await openRow(el, "folder:d");
+      const tree = prices();
+      expect.soft(tree.price).toBeCloseTo(list.price, 0);
+      expect.soft(tree.available).toBeCloseTo(list.available, 0);
+    },
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "keeps ordinary Products text on one line at 390 px (%s)",
+    async (locale) => {
+      setLocale(locale);
+      await page.viewport(390, 844);
+      const variants = [
+        { ...bunVariant, id: "single", name: "Single coffee", unitPrice: "1.40" },
+        { ...bunVariant, id: "double", name: "Double coffee", available: false, unitPrice: "2.10" },
+      ];
+      const { el, root, table } = await mountTree({
+        view: "list",
+        reordering: false,
+        categories: [
+          { ...drinks, name: "Charcuterie" },
+          { ...food, name: "Oil" },
+        ],
+        products: [
+          product({ id: "oil", name: "Olive oil", primaryCategoryId: "f", available: false }),
+          product({
+            id: "ham",
+            name: "Cabrales",
+            primaryCategoryId: "d",
+            unitId: kilo.id,
+            unit: kilo,
+            unitPrice: "7.20",
+            available: false,
+          }),
+          product({
+            id: "coffee",
+            name: "House coffee",
+            primaryCategoryId: "d",
+            unitId: EACH_UNIT_ID,
+            variants,
+          }),
+        ],
+      });
+      el.parentElement!.style.width = "374px";
+      await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+      await vi.waitFor(() => expect(root.querySelector('[part~="phone-category"]')).not.toBeNull());
+      const nameCell = (key: string) => cellUnder(root, key, t("product.name"));
+      const ham = nameCell("ham");
+      const label = ham.querySelector('[data-test="availability-badge"]')!;
+      const category = ham.querySelector('[part~="phone-category"]')!;
+      const labelBox = label.getBoundingClientRect();
+      const danger = getComputedStyle(label).color;
+      expect.soft(getComputedStyle(label).borderTopWidth).toBe("0px");
+      const labelText = document.createRange();
+      labelText.selectNodeContents(label);
+      expect.soft(labelText.getClientRects()).toHaveLength(1);
+      expect.soft(labelBox.top).toBeGreaterThanOrEqual(category.getBoundingClientRect().bottom - 1);
+      const separator = (cell: Element) => {
+        const status = cell.querySelector('[part~="phone-category-status"]')!;
+        const style = getComputedStyle(status, "::before");
+        expect.soft(style.content).toContain("·");
+        const right = status.getBoundingClientRect().right - Number.parseFloat(style.right);
+        return { left: right - Number.parseFloat(style.width), right };
+      };
+      const wrapped = separator(ham);
+      const labels = label.closest('[part~="phone-row-labels"]')!;
+      expect.soft(getComputedStyle(labels).overflowX).toBe("hidden");
+      expect.soft(wrapped.right).toBeLessThan(labels.getBoundingClientRect().left);
+      const oil = nameCell("oil");
+      const shortCategory = oil.querySelector('[part~="phone-category"]')!.getBoundingClientRect();
+      const shortLabel = oil
+        .querySelector('[data-test="availability-badge"]')!
+        .getBoundingClientRect();
+      const visible = separator(oil);
+      expect.soft(shortLabel.top).toBeLessThan(shortCategory.bottom);
+      expect.soft(visible.left).toBeGreaterThan(shortCategory.right);
+      expect.soft(visible.right).toBeLessThan(shortLabel.left);
+      const listNameLeft = (key: string) =>
+        nameCell(key).querySelector("strong")!.getBoundingClientRect().left;
+      expect.soft(listNameLeft("coffee")).toBeCloseTo(listNameLeft("ham"), 0);
+      expect
+        .soft(labelBox.top)
+        .toBeGreaterThanOrEqual(ham.querySelector("strong")!.getBoundingClientRect().bottom);
+      const checkMenuDots = (cell: Element, icon: Element, label: string) => {
+        const bounds = cell.getBoundingClientRect();
+        const line = Number.parseFloat(getComputedStyle(cell, "::before").insetInlineStart);
+        const dots = icon.getBoundingClientRect();
+        expect
+          .soft((dots.left + dots.right) / 2, label)
+          .toBeCloseTo((bounds.left + line + bounds.right) / 2, 0);
+      };
+      const checkActions = (view: string) => {
+        const actions = cellUnder(root, "ham", t("staff.actions"));
+        const heading = root.querySelector('[part~="column-actions"]')!;
+        checkMenuDots(heading, heading.querySelector("wt-icon")!, `${view} Actions heading`);
+        checkMenuDots(
+          actions,
+          actions.querySelector("wt-row-actions")!.shadowRoot!.querySelector("wt-icon")!,
+          `${view} row menu`,
+        );
+      };
+      const checkPriceAndSwitch = (view: "list" | "tree") => {
+        const cell = cellUnder(root, "ham", t("product.price"));
+        const amount = cell.querySelector('[data-test="price"]')!.getBoundingClientRect();
+        const unit = cell.querySelector('[data-test="price-unit"]')!.getBoundingClientRect();
+        const track = cellUnder(root, "ham", t("editor.available"))
+          .querySelector("wt-switch")!
+          .shadowRoot!.querySelector(".track")!;
+        const heading = document.createRange();
+        heading.selectNodeContents(root.querySelector('[part~="column-heading-price"]')!);
+        const nameHeading = document.createRange();
+        nameHeading.selectNodeContents(root.querySelector('[part~="column-heading-name"]')!);
+        const actions = cellUnder(root, "ham", t("staff.actions"));
+        const divider =
+          actions.getBoundingClientRect().left +
+          Number.parseFloat(getComputedStyle(actions, "::before").insetInlineStart);
+        expect.soft(unit.left).toBeGreaterThan(amount.right);
+        expect.soft(unit.top).toBeLessThan(amount.bottom);
+        expect.soft(track.getBoundingClientRect().left - unit.right).toBeGreaterThanOrEqual(12);
+        expect.soft(heading.getBoundingClientRect().right).toBeCloseTo(unit.right, 0);
+        expect
+          .soft(heading.getBoundingClientRect().top, `${view} Price heading`)
+          .toBeCloseTo(nameHeading.getBoundingClientRect().top, 0);
+        expect
+          .soft(divider - track.getBoundingClientRect().right, `${view} switch gap`)
+          .toBeCloseTo(8, 0);
+      };
+      checkPriceAndSwitch("list");
+      checkActions("List");
+
+      el.view = "tree";
+      await el.updateComplete;
+      await table.updateComplete;
+      const count = root.querySelector('[data-test="count-d"]')!;
+      const closedSuffix = count.querySelector('[part~="unavailable-count"]');
+      expect
+        .soft(closedSuffix?.textContent?.trim())
+        .toBe(`· ${locale === "en-GB" ? "2 unavailable" : "2 no disponibles"}`);
+      expect.soft(closedSuffix && getComputedStyle(closedSuffix).color).toBe(danger);
+      await openRow(el, "folder:d");
+      const toggle = nameCell("coffee").querySelector<HTMLButtonElement>(".tree-toggle")!;
+      const scroller = root.querySelector(".scroll")!;
+      expect
+        .soft(toggle.getBoundingClientRect().left)
+        .toBeGreaterThanOrEqual(scroller.getBoundingClientRect().left);
+      toggle.click();
+      await table.updateComplete;
+      checkPriceAndSwitch("tree");
+      checkActions("Tree");
+      for (const key of ["coffee", "coffee:single", "coffee:double"]) {
+        const cell = nameCell(key);
+        const name =
+          key === "coffee"
+            ? cell.querySelector("strong")!
+            : cell.querySelector('[part~="variant-name"] > span')!;
+        const line = document.createRange();
+        line.selectNodeContents(
+          [...name.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!,
+        );
+        expect.soft(line.getClientRects().length, key).toBe(1);
+      }
+      const price = cellUnder(root, "coffee", t("product.price")).querySelector(
+        '[data-test="price"]',
+      )!;
+      const variantCount = nameCell("coffee").querySelector('[data-test="variant-count"]')!;
+      const suffix = variantCount.querySelector('[part~="unavailable-count"]');
+      expect.soft(suffix && getComputedStyle(suffix).color).toBe(danger);
+      expect.soft(getComputedStyle(variantCount).color).not.toBe(danger);
+      const suffixText = document.createTreeWalker(suffix!, NodeFilter.SHOW_TEXT);
+      let words = suffixText.nextNode();
+      while (words && !words.textContent?.includes("1")) words = suffixText.nextNode();
+      const unavailable = document.createRange();
+      unavailable.selectNodeContents(words!);
+      expect.soft(unavailable.getClientRects()).toHaveLength(1);
+      const coffeeName = nameCell("coffee").querySelector("strong")!;
+      expect.soft(getComputedStyle(price).fontSize).toBe(getComputedStyle(coffeeName).fontSize);
+      expect
+        .soft(variantCount.getBoundingClientRect().right)
+        .toBeLessThanOrEqual(price.getBoundingClientRect().left);
+      const scroll = root.querySelector(".scroll")!;
+      expect.soft(scroll.scrollWidth).toBe(scroll.clientWidth);
+      el.selecting = true;
+      el.reordering = true;
+      await el.updateComplete;
+      await table.updateComplete;
+      checkActions("Tree while selecting");
+      const coffeeRow = root.querySelector('tr[data-row-key="coffee"]')!;
+      const check = coffeeRow.querySelector('td.select input[type="checkbox"]')!;
+      const box = check.getBoundingClientRect();
+      expect.soft(root.elementFromPoint(box.right - 0.5, box.top + box.height / 2)).toBe(check);
+    },
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "wraps a wide phone price range after the dash (%s)",
+    async (locale) => {
+      setLocale(locale);
+      await page.viewport(390, 844);
+      const { el, root, table } = await mountTree({
+        view: "list",
+        reordering: false,
+        products: [
+          product({
+            id: "ham",
+            name: "Cured ham",
+            unitId: kilo.id,
+            unit: kilo,
+            variants: [
+              { ...bunVariant, id: "small", unitPrice: "599.50" },
+              { ...bunVariant, id: "large", unitPrice: "799.50" },
+            ],
+          }),
+        ],
+      });
+      el.parentElement!.style.width = "374px";
+      await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+      const cell = cellUnder(root, "ham", t("product.price"));
+      const amount = cell.querySelector('[data-test="price"]')!;
+      const unit = cell.querySelector('[data-test="price-unit"]')!;
+      const amountText = [...amount.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
+      const dash = amountText.textContent!.indexOf("–");
+      const first = document.createRange();
+      first.setStart(amountText, 0);
+      first.setEnd(amountText, dash + 1);
+      const second = document.createRange();
+      second.setStart(amountText, dash + 1);
+      second.setEnd(amountText, amountText.textContent!.length);
+      const unitText = document.createRange();
+      unitText.selectNodeContents(unit);
+      expect(first.getClientRects()).toHaveLength(1);
+      expect(second.getClientRects()).toHaveLength(1);
+      expect(unitText.getClientRects()).toHaveLength(1);
+      expect(second.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        first.getBoundingClientRect().bottom,
+      );
+      expect(unitText.getBoundingClientRect().top).toBeGreaterThan(
+        second.getBoundingClientRect().top,
+      );
+      for (const text of [first, second, unitText]) {
+        expect(text.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+          cell.getBoundingClientRect().left,
+        );
+        expect(text.getBoundingClientRect().right).toBeLessThanOrEqual(
+          cell.getBoundingClientRect().right,
+        );
+      }
+    },
+  );
+
+  it("keeps the desktop availability label outlined when only the scrolling area is phone-sized", async () => {
+    const { el, root, table } = await mountTree({
+      view: "list",
+      products: [product({ id: "ham", name: "Cabrales", available: false })],
+    });
+    el.parentElement!.style.width = "441px";
+    await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+    expect(table.hasAttribute("data-phone")).toBe(false);
+    const label = root.querySelector('[data-test="availability-badge"]')!;
+    expect(getComputedStyle(label).borderTopWidth).toBe("1px");
+  });
+
   it("names a stored unit with no translated abbreviation by its staff abbreviation, and a variant by its product's unit", async () => {
     const tray: Unit = {
       staffName: "Staff unit",
@@ -2832,12 +3138,12 @@ describe("the product list as a tree", () => {
           expect(scroll.scrollWidth).toBe(scroll.clientWidth);
           expectRowMenusOnScreen(table, 5, 'wt-row-actions[data-test^="actions-"]', false);
         });
-        // The phone indent: half a step a level, measured where a 390 px screen puts the list.
+        // One compact spacing step per level leaves room for the product name.
         const indent = (key: string) =>
           getComputedStyle(
             table.shadowRoot!.querySelector<HTMLElement>(`tr[data-row-key="${key}"] .tree-cell`)!,
           ).paddingInlineStart;
-        expect(["folder:d", "folder:k", "keg"].map(indent)).toEqual(["8px", "24px", "32px"]);
+        expect(["folder:d", "folder:k", "keg"].map(indent)).toEqual(["4px", "12px", "16px"]);
       } finally {
         setLocale(before);
         await page.viewport(width, height);
@@ -3643,6 +3949,8 @@ describe("a product's variants in the list", () => {
       setLocale(locale);
       const dish = cecina();
       dish.name = "Mushroom croquettes with roasted garlic and aged sheep cheese";
+      dish.unitId = "bottle";
+      dish.unit = { ...dish.unit, id: dish.unitId, abbreviation: { en: "bottle", es: "botella" } };
       dish.variants[0]!.unitPrice = "138.00";
       dish.variants[1]!.unitPrice = "144.00";
       const { el, root, table } = await mountTree({
@@ -3671,6 +3979,10 @@ describe("a product's variants in the list", () => {
       second.setEnd(amount, amount.textContent!.length);
       expect(first.getClientRects()).toHaveLength(1);
       expect(second.getClientRects()).toHaveLength(1);
+      const unit = root.querySelector('tr[data-row-key="cecina"] [data-test="price-unit"]')!;
+      const unitRange = document.createRange();
+      unitRange.selectNodeContents(unit);
+      expect(unitRange.getClientRects()).toHaveLength(1);
     },
   );
 
@@ -3785,6 +4097,7 @@ describe("a product's variants in the list", () => {
       const swatch = category.querySelector('[part~="color-swatch"]')!;
       const { width, height } = swatch.getBoundingClientRect();
       expect(width).toBeCloseTo(height);
+      expect(width).toBeCloseTo(14, 0);
       expect(getComputedStyle(swatch).backgroundColor).toBe("rgb(18, 52, 86)");
       const photo = longName.querySelector('[part~="media-frame"]')!.getBoundingClientRect();
       const name = longName.querySelector("strong")!.getBoundingClientRect();
@@ -3964,9 +4277,8 @@ describe("a product's variants in the list", () => {
             text.getBoundingClientRect().left - productName.getBoundingClientRect().left,
             key,
           ).toBeCloseTo(width === 390 ? 8 : 16, 0);
-          expect(Number(getComputedStyle(name).fontWeight)).toBeLessThan(
-            Number(getComputedStyle(productName).fontWeight),
-          );
+          expect(getComputedStyle(name).fontWeight).toBe("400");
+          expect(getComputedStyle(productName).fontWeight).toBe("400");
           const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
           expect(row.matches(".joined")).toBe(true);
         }
@@ -6723,7 +7035,7 @@ it.each([390, 1280])(
     expect(rects.length).toBeGreaterThan(0);
     for (const rect of rects) expect(rect.right).toBeLessThanOrEqual(actions.left + 1);
     const nameRange = document.createRange();
-    nameRange.selectNodeContents(line.firstChild!);
+    nameRange.selectNodeContents(line.querySelector("strong")!);
     const name = nameRange.getBoundingClientRect();
     if (width === 1280) expect(Math.abs(rects[0]!.bottom - name.bottom)).toBeLessThanOrEqual(3);
     else {

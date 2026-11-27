@@ -97,6 +97,7 @@ export const productsToolbarStyles = css`
     max-inline-size: 100%;
   }
   wt-segmented-control[slot="above-table"] {
+    inline-size: 100%;
     margin-block-end: var(--wt-space-3);
   }
 `;
@@ -110,6 +111,7 @@ export function productViewSwitch(
     slot=${above ? "above-table" : "toolbar-search"}
     name="products-view"
     hide-label
+    ?equal-width=${above}
     label=${t("products.view")}
     .value=${view}
     .options=${[

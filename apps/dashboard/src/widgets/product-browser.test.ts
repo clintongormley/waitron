@@ -2141,14 +2141,21 @@ it.each(["en-GB", "es-ES"])(
       el.requestUpdate();
       await el.updateComplete;
       const table = await tableOf(el);
-      await vi.waitFor(() => expect(table.hasAttribute("stacked-search")).toBe(true));
-      const search = el.shadowRoot!.querySelector('[name="menu-search"]')!.getBoundingClientRect();
-      const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
-      const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
-      expect(search.left).toBeCloseTo(toolbar.left, 0);
-      expect(search.right).toBeLessThan(chooser.left);
-      expect(chooser.right).toBeCloseTo(toolbar.right, 0);
-      expect(search.width + chooser.width + 12).toBeCloseTo(toolbar.width, 0);
+      await vi.waitFor(() => expect(table.hasAttribute("data-phone")).toBe(true));
+      await vi.waitFor(() => {
+        const search = el
+          .shadowRoot!.querySelector('[name="menu-search"]')!
+          .getBoundingClientRect();
+        const chooser = table
+          .shadowRoot!.querySelector(".columns-trigger")!
+          .getBoundingClientRect();
+        const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
+        expect(search.left).toBeGreaterThanOrEqual(selectButton(el).getBoundingClientRect().right);
+        expect(search.width).toBeGreaterThanOrEqual(120);
+        expect(search.right).toBeLessThan(chooser.left);
+        expect(chooser.right).toBeCloseTo(toolbar.right, 0);
+        expect(search.width + chooser.width + 12).toBeCloseTo(toolbar.right - search.left, 0);
+      });
     } finally {
       await page.viewport(1280, 720);
       setLocale("en-GB");
@@ -4961,44 +4968,10 @@ it.each([
   }
 });
 
-it("at phone width puts Filters and Select above search and Customise", async () => {
-  const { page } = await import("vitest/browser");
-  const width = window.innerWidth,
-    height = window.innerHeight;
-  await page.viewport(390, 640);
-  try {
-    const el = await mountBrowser();
-    const table = await tableOf(el);
-    const line = [
-      table.shadowRoot!.querySelector(".filters-trigger")!,
-      el.shadowRoot!.querySelector('[data-test="select"]')!,
-    ].map((element) => element.getBoundingClientRect());
-    for (let index = 1; index < line.length; index++) {
-      expect(line[index]!.left, `item ${index}`).toBeGreaterThanOrEqual(line[index - 1]!.right);
-      expect(line[index]!.top, `item ${index}`).toBeLessThan(line[0]!.bottom);
-    }
-    const search = el.shadowRoot!.querySelector('[name="menu-search"]')!.getBoundingClientRect();
-    expect(search.top).toBeGreaterThanOrEqual(Math.max(...line.map((box) => box.bottom)));
-    const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
-    const chooser = table.shadowRoot!.querySelector(".columns-trigger")!.getBoundingClientRect();
-    expect(search.right).toBeLessThan(chooser.left);
-    expect(chooser.top).toBeLessThan(search.bottom);
-    expect(chooser.right).toBeCloseTo(toolbar.right, 0);
-    expect(toolbar.bottom).toBeCloseTo(Math.max(search.bottom, chooser.bottom), 0);
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.focus();
-    await userEvent.tab();
-    expect(el.shadowRoot!.activeElement?.getAttribute("name")).toBe("menu-search");
-  } finally {
-    await page.viewport(width, height);
-  }
-});
-
 it.each([
   [320, "en-GB"],
-  [430, "en-GB"],
   [620, "en-GB"],
   [640, "en-GB"],
-  [430, "es-ES"],
   [600, "es-ES"],
   [640, "es-ES"],
 ])(
@@ -5071,9 +5044,9 @@ it("at phone width fits Select controls beneath the final search and Customise l
   await page.viewport(390, 640);
   try {
     const el = await mountBrowser();
+    await vi.waitFor(() => expect(viewControl(el).slot).toBe("above-table"));
     await press(el, "select");
     const table = await tableOf(el);
-    await vi.waitFor(() => expect(table.hasAttribute("stacked-search")).toBe(true));
     const bar = el.shadowRoot!.querySelector('[data-test="selection-bar"]')!;
     const controls = bar.querySelectorAll("[data-test]");
     expect(controls).toHaveLength(6);
@@ -5323,7 +5296,7 @@ it("shows no routing line while routing is read, or when there are no categories
 });
 
 it.each(
-  [390, 1280].flatMap((width) =>
+  [390, 430, 1280].flatMap((width) =>
     (["en-GB", "es-ES"] as const).flatMap((locale) =>
       (["light", "dark"] as const).map((theme) => [width, locale, theme] as const),
     ),
@@ -5361,11 +5334,21 @@ it.each(
     width <= 440
       ? [selectedView, filters, selectButton(el), searchInput, customise]
       : [filters, selectButton(el), searchInput, selectedView, customise];
-  if (width <= 440)
-    expect(switcher.getBoundingClientRect().bottom).toBeLessThan(
-      filters.getBoundingClientRect().top,
+  if (width <= 440) {
+    const toolbar = table.shadowRoot!.querySelector(".table-toolbar")!.getBoundingClientRect();
+    const viewBox = switcher.getBoundingClientRect();
+    expect(viewBox.bottom).toBeLessThan(toolbar.top);
+    const tools = [filters, selectButton(el), search, customise].map((control) =>
+      control.getBoundingClientRect(),
     );
-  else
+    for (let index = 1; index < tools.length; index++) {
+      expect(tools[index]!.left).toBeGreaterThanOrEqual(tools[index - 1]!.right);
+      expect(tools[index]!.top).toBeLessThan(tools[0]!.bottom);
+    }
+    expect(viewBox.width).toBeCloseTo(toolbar.width, 0);
+    const [list, tree] = switcher.shadowRoot!.querySelectorAll("button");
+    expect(list!.getBoundingClientRect().width).toBeCloseTo(tree!.getBoundingClientRect().width, 0);
+  } else
     expect(switcher.getBoundingClientRect().left).toBeGreaterThanOrEqual(
       search.getBoundingClientRect().right,
     );

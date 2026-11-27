@@ -600,8 +600,8 @@ stay with the work.
 ## Mark a dish sold out during service {#sold-out}
 
 In the dashboard, open **Products** and turn off **Available** on the dish or size. Its row shows
-**Unavailable**. The change takes effect on every menu that sells it. Turn the switch on when it is
-ready again.
+**Unavailable**. On a phone, look just below the name. The change takes effect on every menu
+that sells it. Turn the switch on when it is ready again.
 
 When the station runs out, hold the dish on Counter or a table order to open its information.
 You can still send or fire portions already on a bill.

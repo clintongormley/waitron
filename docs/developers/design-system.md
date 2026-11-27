@@ -2031,12 +2031,14 @@ choices. It stays open when a choice in it hides every row (beside the no-matche
 Toolbar controls follow their markup order at every width: Filters, `toolbar-start`,
 Expand all, `toolbar-end`, search, then Customise. Put a screen-owned search field in
 `toolbar-search`. Products forwards that slot through its product list and puts **List | Tree**
-after the outlined Search field. At 440px or less of the Products browser's width, the view switch
-sits above the table and Search shows its short label. Search and Customise
-share the final line when the table is 640px wide (`STACKED_SEARCH_WIDTH`) or less, so Customise
-stays last in both the drawn order and the order Tab follows. Wider tables keep the group beside
-the preceding controls where it fits. The table measures its own width, including a search
-forwarded through slots, so a narrow list inside a wide page follows the same rule.
+after the outlined Search field. At 440 px or less of the Products browser's width, List and Tree
+fill a row of their own above the tools and Search shows its short label. The other controls share
+a line when they fit. Search and Customise stay together and move to a second line at tighter widths.
+The shared table groups Search and Customise on the final line at 640 px or less
+(`STACKED_SEARCH_WIDTH`). Wider tables keep the group beside the preceding controls where it fits.
+The table measures its own width, including a search forwarded through slots, so a narrow list
+inside a wide page follows the same rule. Customise stays last in the drawn order and in Tab order.
+
 Guards: the "Tab follows" and A462 Customise cases in
 `packages/ui/src/components/wt-data-table.test.ts` and
 `apps/dashboard/src/widgets/product-browser.test.ts`.
@@ -2045,6 +2047,10 @@ has no such attribute. Assigning or removing a forwarded search in an existing t
 width tracking too. Guards: the hidden-table, forwarded-slot and "only while it is searchable"
 cases in `packages/ui/src/components/wt-data-table.test.ts`, and the phone-width search-and-Customise
 case in `wt-data-table.a11y.test.ts`.
+
+Style a column's header cell by its `column-<key>` part, its sort button by `column-sort-<key>`,
+and its text label by `column-heading-<key>`. Products uses these parts to align Price with
+the amounts without moving the sort indicator into their space.
 
 Each section retains the `wt-combobox` choices its column's `filter` descriptor supplies. Its
 "all" row is shown as a chosen value while its empty string means no filter. A filter with
@@ -6140,11 +6146,14 @@ The change applies to every menu using it. Switching a product leaves its varian
 in place. A refusal names the item above the table and restores the switch.
 
 List starts with Name, Category, Price, Available and row actions. Tree starts with Name, Price,
-Available and row actions. On a phone, Category starts in Filters and you can show its column
-in Customise. Open Customise for
-Course, Modifiers, Standalone, Allergens and Dietary info. Off products and variants carry a red
-outlined **Unavailable** label beside their names. A closed category counts each of its direct
-products once when that product or one of its active variants is unavailable.
+Available and row actions. On desktop, the Price heading aligns with the amounts and leaves room
+beside each amount for its unit. The List Category column uses a small colour marker.
+On a phone, List and Tree share a full-width switch above Filters, Select, Search and Customise.
+Category starts in Filters and you can show its column in Customise. Open Customise for Course,
+Modifiers, Standalone, Allergens and Dietary info. Off products and variants show **Unavailable**,
+outlined beside their names on desktop and in plain red under their names on a phone.
+A closed category counts each of its direct products once when that product or one of its active
+variants is unavailable. Within a count, only the unavailable part is red.
 
 Delete removes the product or variant from Products and keeps its past sales. Take it out of every
 live or scheduled menu and publish before deleting. The refusal names the menus that still use it,
