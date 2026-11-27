@@ -41,8 +41,9 @@ function instant(value: unknown): string {
   requirePeriod(value.slice(0, 10), "at");
   return value;
 }
-function changes(value: unknown): AttendanceChange[] {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 2) invalid("changes");
+function changes(value: unknown, fullDay: boolean): AttendanceChange[] {
+  if (!Array.isArray(value) || value.length < 1 || (!fullDay && value.length > 2))
+    invalid("changes");
   const result = value.map((raw: unknown): AttendanceChange => {
     const item = object(raw, "changes");
     keys(item, ["target", "at", "offsetMinutes"], "changes");
@@ -63,7 +64,7 @@ function changes(value: unknown): AttendanceChange[] {
       invalid("offsetMinutes");
     return { target: parsed, at: instant(item.at), offsetMinutes: offset };
   });
-  if (result.length === 2) {
+  if (!fullDay && result.length === 2) {
     const [first, last] = result as [AttendanceChange, AttendanceChange];
     if (
       !("missingKind" in first.target) ||
@@ -96,6 +97,8 @@ export function parseAttendanceCommand(
     return { ...base, action, questionId: uuid(body.questionId, "questionId") };
   }
   if (action === "request" || action === "propose") {
+    const fullDay = action === "propose";
+    const replaces = fullDay && Object.hasOwn(body, "replaces");
     keys(
       body,
       [
@@ -105,12 +108,14 @@ export function parseAttendanceCommand(
         action === "request" ? "questionId" : "personId",
         "changes",
         "reason",
+        ...(fullDay ? ["date"] : []),
+        ...(replaces ? ["replaces"] : []),
       ],
       "command",
     );
     const common = {
       ...base,
-      changes: changes(body.changes),
+      changes: changes(body.changes, fullDay),
       reason: reason(body.reason),
     };
     return action === "request"
@@ -119,7 +124,13 @@ export function parseAttendanceCommand(
           action,
           questionId: body.questionId === null ? null : uuid(body.questionId, "questionId"),
         }
-      : { ...common, action, personId: uuid(body.personId, "personId") };
+      : {
+          ...common,
+          action,
+          personId: uuid(body.personId, "personId"),
+          ...(fullDay && { date: requirePeriod(body.date, "date") }),
+          ...(replaces && { replaces: uuid(body.replaces, "replaces") }),
+        };
   }
   if (
     action === "approve" ||

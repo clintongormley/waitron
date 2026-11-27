@@ -4,14 +4,18 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   draftScopeFor,
-  focusFirstInvalid,
+  FormFeedback,
+  pageTitleStyles,
   saveActionState,
   submitOnEnter,
 } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import { localTimeOccurrences, offsetMinutes } from "@waitron/venue-service/hours-occurrences";
 import type { AttendanceChange, AttendanceDayView } from "@waitron/dashboard-modules";
-import { t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
+import { formatDuration } from "@waitron/shared";
+import { hoursDate, hoursTime } from "../hours-format.js";
+import { previewDayMinutes } from "../screens/attendance-day-editor.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -58,7 +62,21 @@ export class AttendanceProposalDialog extends LitElement {
   }
   static override styles = [
     baseStyles,
+    pageTitleStyles,
     css`
+      .day-editor {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--wt-space-4);
+        justify-items: start;
+      }
+      .day-editor h1,
+      .day-editor p {
+        margin: 0;
+      }
+      .day-editor fieldset p {
+        color: var(--wt-color-text-muted);
+      }
       .fields,
       .time-fields {
         display: grid;
@@ -83,17 +101,19 @@ export class AttendanceProposalDialog extends LitElement {
   @property({ type: Boolean }) open = false;
   @property({ attribute: false }) view: AttendanceDayView | null = null;
   @property({ attribute: false }) initialChanges: AttendanceChange[] = [];
+  @property() workerName = "";
+  @property({ attribute: false }) requestedChanges: AttendanceChange[] = [];
+  @property({ type: Boolean }) answersRequest = false;
   @property() purpose: "propose" | "request" = "propose";
   @property() timeZone = "UTC";
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) blocked = false;
   @property({ attribute: false }) recovery: "uncertain" | "retry" | null = null;
   @property() reasonRefusal = "";
-  @state() private reasonEdited = false;
   @property({ type: Boolean }) reasonOnly = false;
   @property() error = "";
   @state() private draft: Draft = { rows: [], reason: "" };
-  @state() private attempted = false;
+  readonly #feedback = new FormFeedback(this);
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   #baseline?: Draft;
@@ -116,7 +136,7 @@ export class AttendanceProposalDialog extends LitElement {
   }
   override willUpdate(changed: PropertyValues): void {
     if (!this.isConnected) return;
-    if (changed.has("reasonRefusal")) this.reasonEdited = false;
+    if (changed.has("reasonRefusal")) this.#feedback.newRefusal("reason");
     if (!this.open) {
       this.#scope?.dispose();
       this.#scope = undefined;
@@ -124,7 +144,7 @@ export class AttendanceProposalDialog extends LitElement {
       this.#opened = false;
       this.#baseline = undefined;
       this.draft = { rows: [], reason: "" };
-      this.attempted = false;
+      if (changed.has("open")) this.#feedback.reset();
       return;
     }
     if (!this.#opened) {
@@ -144,7 +164,7 @@ export class AttendanceProposalDialog extends LitElement {
         reason: "",
       };
       this.#baseline = structuredClone(this.draft);
-      this.attempted = false;
+      this.#feedback.reset();
     }
     if (!this.#scope) {
       const { coordinator, scope } = draftScopeFor<Draft>(this, {
@@ -160,6 +180,11 @@ export class AttendanceProposalDialog extends LitElement {
       this.#leave = coordinator;
       scope.commit(this.#baseline!);
     }
+  }
+
+  override updated(changed: PropertyValues): void {
+    if (changed.has("open") && this.open && this.workerName)
+      this.shadowRoot?.querySelector<HTMLElement>("h1")?.focus();
   }
 
   #choices(row: TimeDraft): { at: string; offset: number }[] {
@@ -181,11 +206,20 @@ export class AttendanceProposalDialog extends LitElement {
     }
     return choices;
   }
-  #changes(): AttendanceChange[] | null {
+  #changes(all = false): AttendanceChange[] | null {
     const result: AttendanceChange[] = [];
     for (const row of this.draft.rows) {
       const choice = this.#choices(row).find((choice) => String(choice.offset) === row.offset);
       if (!choice) return null;
+      const recorded = this.#recorded(row);
+      if (
+        this.workerName &&
+        !all &&
+        !(this.answersRequest && this.#requested(row)) &&
+        recorded?.eventAt === choice.at &&
+        recorded.offsetMinutes === choice.offset
+      )
+        continue;
       result.push({
         target: structuredClone(row.target),
         at: choice.at,
@@ -193,6 +227,19 @@ export class AttendanceProposalDialog extends LitElement {
       });
     }
     return result;
+  }
+
+  #recorded({ target }: TimeDraft) {
+    return "entryId" in target
+      ? this.view?.record.entries.find(({ entry }) => entry.entryId === target.entryId)?.entry
+      : undefined;
+  }
+  #requested({ target }: TimeDraft) {
+    return this.requestedChanges.find(({ target: candidate }) =>
+      "entryId" in target
+        ? "entryId" in candidate && candidate.entryId === target.entryId
+        : "missingKind" in candidate && candidate.missingKind === target.missingKind,
+    );
   }
   #errors(): { rows: { date: string; time: string; offset: string }[]; reason: string } {
     const rows = this.draft.rows.map((row) => ({
@@ -206,7 +253,12 @@ export class AttendanceProposalDialog extends LitElement {
         this.#choices(row).length > 1 && row.offset === "" ? t("attendance.offset_required") : "",
     }));
     const changes = this.#changes();
-    if (changes?.length === 2 && Date.parse(changes[1]!.at) <= Date.parse(changes[0]!.at))
+    if (
+      this.draft.rows.length === 2 &&
+      this.draft.rows.every(({ target }) => "missingKind" in target) &&
+      changes?.length === 2 &&
+      Date.parse(changes[1]!.at) <= Date.parse(changes[0]!.at)
+    )
       rows[1]!.time = t("attendance.time_order");
     const reason = this.draft.reason.trim();
     return {
@@ -234,7 +286,7 @@ export class AttendanceProposalDialog extends LitElement {
     const [index, key] = field;
     event.stopPropagation();
     if (!this.isConnected || !this.open || this.busy || this.blocked) return;
-    if (index === null) this.reasonEdited = true;
+    if (index === null) this.#feedback.dismiss("reason");
     if (index === null) this.draft = { ...this.draft, reason: event.detail.value };
     else {
       const rows = this.draft.rows.map((row) => ({ ...row }));
@@ -266,14 +318,16 @@ export class AttendanceProposalDialog extends LitElement {
       saveActionState(this.#scope).unchanged
     )
       return;
-    this.attempted = true;
+    const changes = this.#changes();
+    if (this.workerName && changes?.length === 0) return;
+    this.#feedback.press();
     if (this.#invalid()) {
-      await focusFirstInvalid(this.shadowRoot!);
+      await this.#feedback.focus(this.shadowRoot!);
       return;
     }
     this.dispatchEvent(
       new CustomEvent("proposal-save", {
-        detail: { changes: this.#changes()!, reason: this.draft.reason.trim() },
+        detail: { changes: changes!, reason: this.draft.reason.trim() },
         bubbles: true,
         composed: true,
       }),
@@ -292,105 +346,143 @@ export class AttendanceProposalDialog extends LitElement {
   #cancel(event: Event): void {
     event.stopPropagation();
     if (!this.isConnected || !this.open || this.busy) return;
-    void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+    if (this.workerName) void this.#closePage("cancel");
+    else void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+  }
+  async #closePage(reason: LeaveReason): Promise<void> {
+    if ((await this.#beforeClose(reason)) && this.isConnected && this.open) this.#notifyClose();
   }
   #closed(event: Event): void {
     event.stopPropagation();
     if (event.target !== event.currentTarget || !this.isConnected || !this.open) return;
+    this.#notifyClose();
+  }
+  #notifyClose(): void {
     this.open = false;
     this.dispatchEvent(new CustomEvent("proposal-cancel", { bubbles: true, composed: true }));
   }
   override render() {
     const errors = this.#errors();
     const action = saveActionState(this.#scope);
-    const invalid = this.attempted && this.#invalid();
-    const reasonRefusal = this.reasonEdited ? "" : this.reasonRefusal;
+    const attempted = this.#feedback.attempted;
+    const invalid = attempted && this.#invalid();
+    const reasonRefusal = this.#feedback.shows("reason") ? this.reasonRefusal : "";
     const error = this.reasonRefusal ? "" : this.error;
+    const all = this.workerName ? this.#changes(true) : null;
+    const timeLabel = (at: string, offset: number) =>
+      hoursTime(at, offset, this.#zone, this.view?.date);
+    const fields = html`<div
+      class="fields"
+      @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-save]"))}
+    >
+      ${this.draft.rows.map((row, index) => {
+        const recorded = this.#recorded(row);
+        const requested = this.#requested(row);
+        const kind =
+          "missingKind" in row.target
+            ? row.target.missingKind
+            : (recorded?.extension?.missingEntryKind ?? recorded?.entryKind);
+        return html`<fieldset class="time-fields" ?disabled=${this.busy}>
+          <legend>
+            ${kind === "in" || kind === "out" || kind === "break_start" || kind === "break_end" ? t(`clock.${kind}`) : t("attendance.original")}
+          </legend>
+          ${this.workerName && recorded ? html`<p>${fill("attendance.waitron_recorded", { time: timeLabel(recorded.eventAt, recorded.offsetMinutes) })}</p>` : nothing}
+          ${this.workerName && requested?.at ? html`<p>${fill("attendance.worker_asked_time", { time: timeLabel(requested.at, requested.offsetMinutes) })}</p>` : nothing}
+          <wt-input
+            name=${`attendanceDate${index}`}
+            type="date"
+            required
+            .label=${t("attendance.date")}
+            .value=${live(row.date)}
+            .disabled=${this.busy || this.blocked}
+            .error=${attempted ? errors.rows[index]!.date : ""}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "date")}
+          ></wt-input>
+          <wt-input
+            name=${`attendanceTime${index}`}
+            type="time"
+            required
+            .label=${t("attendance.time")}
+            .value=${live(row.time)}
+            .disabled=${this.busy || this.blocked}
+            .error=${attempted ? errors.rows[index]!.time : ""}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "time")}
+          ></wt-input>
+          ${
+            this.#choices(row).length > 1
+              ? html`<wt-combobox
+                  ?preserve-order=${true /* Preserve repeated-time offsets. */}
+                  name=${`attendanceOffset${index}`}
+                  required
+                  .label=${t("attendance.offset")}
+                  .value=${row.offset}
+                  .disabled=${this.busy}
+                  .options=${this.#choices(row).map((choice) => ({ value: String(choice.offset), label: `${row.time} ${offsetLabel(choice.offset)}` }))}
+                  .error=${attempted ? errors.rows[index]!.offset : ""}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "offset")}
+                ></wt-combobox>`
+              : nothing
+          }
+        </fieldset>`;
+      })}
+      ${all && this.view ? html`<p>${fill("attendance.worked_would_be", { total: formatDuration(previewDayMinutes(this.view, all) * 60_000, currentLocale()) })}</p>` : nothing}
+      <wt-textarea
+        name="attendanceReason"
+        required
+        .label=${t(this.workerName ? "attendance.why" : "attendance.reason")}
+        .value=${live(this.draft.reason)}
+        .disabled=${this.busy || this.blocked}
+        .error=${attempted && errors.reason ? errors.reason : reasonRefusal}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, null, "reason")}
+      ></wt-textarea>
+      <wt-form-actions
+        .error=${this.#feedback.message({ error }, new Set(invalid || reasonRefusal ? ["fields"] : []), t("form.fix_fields"))}
+      >
+        <wt-button
+          slot="cancel"
+          data-cancel
+          variant="secondary"
+          .disabled=${this.busy}
+          @click=${this.#cancel}
+          >${t("action.cancel")}</wt-button
+        >
+        ${this.recovery ? html`<wt-button slot="secondary" data-retry-read variant="secondary" .disabled=${this.busy} @click=${(event: Event) => this.#retry(event, false)}>${t("attendance.retry_read")}</wt-button>` : nothing}
+        ${this.recovery === "retry" ? html`<wt-button slot="secondary" data-retry-command variant="primary" .disabled=${this.busy} @click=${(event: Event) => this.#retry(event, true)}>${t("attendance.retry_response")}</wt-button>` : nothing}
+        <wt-button
+          data-save
+          variant=${action.variant}
+          .disabled=${this.busy || this.blocked || action.unchanged || invalid || (!!this.workerName && this.#changes()?.length === 0)}
+          @click=${(event: Event) => void this.#save(event)}
+          >${this.workerName ? fill("attendance.save_and_send", { name: this.workerName }) : t("attendance.save")}</wt-button
+        >
+      </wt-form-actions>
+    </div>`;
+    if (this.workerName)
+      return this.open && this.view
+        ? html`<section
+            class="day-editor"
+            aria-labelledby="day-editor-heading"
+            @keydown=${(event: KeyboardEvent) => {
+              if (event.key !== "Escape" || event.defaultPrevented) return;
+              event.preventDefault();
+              event.stopPropagation();
+              void this.#closePage("escape");
+            }}
+          >
+            <h1 id="day-editor-heading" tabindex="-1">
+              ${fill("attendance.edit_day_heading", { name: this.workerName })}
+            </h1>
+            <p>${hoursDate(this.view.date)} ${this.view.date.slice(0, 4)}</p>
+            ${fields}
+          </section>`
+        : nothing;
     return html`<wt-dialog
       .open=${this.open}
       .beforeClose=${this.#beforeClose}
       .heading=${t(this.reasonOnly ? "attendance.disagree_heading" : this.purpose === "request" ? "attendance.request_heading" : "attendance.edit_heading")}
       @wt-close=${this.#closed}
-    >
-      <div
-        class="fields"
-        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-save]"))}
-      >
-        ${this.draft.rows.map(
-          (row, index) =>
-            html`<fieldset class="time-fields" ?disabled=${this.busy}>
-              <legend>
-                ${"missingKind" in row.target ? t(`clock.${row.target.missingKind}`) : t("attendance.original")}
-              </legend>
-              <wt-input
-                name=${`attendanceDate${index}`}
-                type="date"
-                required
-                .label=${t("attendance.date")}
-                .value=${live(row.date)}
-                .disabled=${this.busy || this.blocked}
-                .error=${this.attempted ? errors.rows[index]!.date : ""}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "date")}
-              ></wt-input>
-              <wt-input
-                name=${`attendanceTime${index}`}
-                type="time"
-                required
-                .label=${t("attendance.time")}
-                .value=${live(row.time)}
-                .disabled=${this.busy || this.blocked}
-                .error=${this.attempted ? errors.rows[index]!.time : ""}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "time")}
-              ></wt-input>
-              ${
-                this.#choices(row).length > 1
-                  ? html`<wt-combobox
-                      ?preserve-order=${true /* Preserve repeated-time offsets. */}
-                      name=${`attendanceOffset${index}`}
-                      required
-                      .label=${t("attendance.offset")}
-                      .value=${row.offset}
-                      .disabled=${this.busy}
-                      .options=${this.#choices(row).map((choice) => ({ value: String(choice.offset), label: `${row.time} ${offsetLabel(choice.offset)}` }))}
-                      .error=${this.attempted ? errors.rows[index]!.offset : ""}
-                      @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, index, "offset")}
-                    ></wt-combobox>`
-                  : nothing
-              }
-            </fieldset>`,
-        )}
-        <wt-textarea
-          name="attendanceReason"
-          required
-          .label=${t("attendance.reason")}
-          .value=${live(this.draft.reason)}
-          .disabled=${this.busy || this.blocked}
-          .error=${this.attempted && errors.reason ? errors.reason : reasonRefusal}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#edit(event, null, "reason")}
-        ></wt-textarea>
-        <wt-form-actions
-          .error=${[invalid || reasonRefusal ? t("form.fix_fields") : "", error].filter(Boolean).join(" ")}
-        >
-          <wt-button
-            slot="cancel"
-            data-cancel
-            variant="secondary"
-            .disabled=${this.busy}
-            @click=${this.#cancel}
-            >${t("action.cancel")}</wt-button
-          >
-          ${this.recovery ? html`<wt-button slot="secondary" data-retry-read variant="secondary" .disabled=${this.busy} @click=${(event: Event) => this.#retry(event, false)}>${t("attendance.retry_read")}</wt-button>` : nothing}
-          ${this.recovery === "retry" ? html`<wt-button slot="secondary" data-retry-command variant="primary" .disabled=${this.busy} @click=${(event: Event) => this.#retry(event, true)}>${t("attendance.retry_response")}</wt-button>` : nothing}
-          <wt-button
-            data-save
-            variant=${action.variant}
-            .disabled=${this.busy || this.blocked || action.unchanged || invalid}
-            @click=${(event: Event) => void this.#save(event)}
-            >${t("attendance.save")}</wt-button
-          >
-        </wt-form-actions>
-      </div>
-    </wt-dialog>`;
+      >${fields}</wt-dialog
+    >`;
   }
 }
 

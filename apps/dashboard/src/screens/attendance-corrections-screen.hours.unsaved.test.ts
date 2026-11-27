@@ -2,7 +2,7 @@ import { LitElement, html } from "lit";
 import { afterEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
-import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {
   change,
@@ -74,8 +74,9 @@ it("protects a manager Hours proposal on native Escape, page leave and selector 
   await choose(m.app, "keep");
   expect(await leaving).toBe("kept");
   expect(proceeded).toBe(false);
-  const dialog = m.editor.shadowRoot!.querySelector("wt-dialog")!;
-  const closed = dialogClosed(dialog);
+  const closed = new Promise((resolve) =>
+    m.editor.addEventListener("proposal-cancel", resolve, { once: true }),
+  );
   await userEvent.keyboard("{Escape}");
   await choose(m.app, "discard");
   await closed;
@@ -85,6 +86,7 @@ it("protects a manager Hours proposal on native Escape, page leave and selector 
 });
 it("commits a saved manager proposal before a failed Hours refresh, with no remaining leave warning", async () => {
   const m = await mount();
+  await change(m.editor.shadowRoot!, "attendanceTime0", "19:30");
   m.fail();
   await click(m.editor.shadowRoot!, "[data-save]");
   await expect.poll(() => m.editor.open).toBe(false);
@@ -98,9 +100,7 @@ it("retains the manager draft and baseline across a language change", async () =
   await m.editor.updateComplete;
   expect(m.native.value).toBe("Finished the stock count");
   expect(m.app.leave.coordinator.isDirty()).toBe(true);
-  expect(m.editor.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
-    "Proponer un cambio de horas",
-  );
+  expect(m.editor.shadowRoot!.querySelector("h1")!.textContent).toContain("Editar las horas de");
 });
 
 it("keeps an edited monthly grace on cancelled leave and restores it on discard", async () => {

@@ -322,7 +322,13 @@ it.each(["accept", "disagree"] as const)(
   async (action) => {
     let response = await ask(
       "/management-api/attendance/commands",
-      { ...(await command()), action: "propose", personId: venue.personId, questionId: undefined },
+      {
+        ...(await command()),
+        action: "propose",
+        personId: venue.personId,
+        date: "2026-01-05",
+        questionId: undefined,
+      },
       ownerCookie,
     );
     expect(response.status).toBe(200);
@@ -331,7 +337,7 @@ it.each(["accept", "disagree"] as const)(
       commandId: crypto.randomUUID(),
       expectedRevision: await revision(),
       action,
-      itemId: proposed.entryIds[0],
+      itemId: proposed.commandId,
       ...(action === "disagree" ? { reason: "I left at five" } : {}),
     });
     expect(response.status).toBe(200);

@@ -3,7 +3,7 @@ import type { TimeRecord } from "./record-types.js";
 import { compareEvents, effectiveClockEntries } from "./effective-entries.js";
 import { recordRoot } from "./record-projection.js";
 
-export function entryDate(entry: TimeEntryRecord): string {
+export function entryDate(entry: Pick<TimeEntryRecord, "eventAt" | "offsetMinutes">): string {
   return new Date(Date.parse(entry.eventAt) + entry.offsetMinutes * 60000)
     .toISOString()
     .slice(0, 10);

@@ -234,7 +234,12 @@ for the request's progress.
 ## Approve finished days {#approve-hours}
 
 In the dashboard, open **Team** and choose **To approve**. Open **Details** under **Asked to change** to
-review a request. Open **Details** under **Disputed** to read the change and the worker’s reply.
+review a request. Choose **Edit** to see the whole day, change the times and add a reason. Check the
+new worked total, then choose **Save and send to** the worker. The worker can accept or disagree at
+their next sign-in.
+
+Under **Disputed**, compare the proposed times with the worker’s reply. Open **Details** and choose
+**Take the worker’s time** when it is available, or **Edit** to send another change.
 
 Check the recorded times under **Finished days**, then choose **Approve all**. If the list changes
 while you review it, check the refreshed times before approving again. Open **Hours** to see changes

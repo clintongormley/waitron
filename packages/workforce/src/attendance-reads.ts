@@ -199,6 +199,7 @@ export async function readAttendanceDay(
     timeZone,
     revision: await readAttendanceRevision(tx, scope.personId),
     record,
+    ...(policy && { paidBreakPolicy: policy }),
     ...(approval && { approval }),
     items,
   };

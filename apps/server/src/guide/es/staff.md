@@ -252,8 +252,12 @@ solicitud. Consulta su estado en **Mis horas**.
 ## Aprobar los días terminados {#approve-hours}
 
 En el menú del panel, abre **Por aprobar**. Pulsa **Detalles** en **Cambios solicitados** para
-revisar una solicitud. Pulsa **Detalles** en **En desacuerdo** para leer el cambio y la respuesta
-de la persona.
+revisar una solicitud. Pulsa **Editar** para ver toda la jornada, cambiar las horas e indicar el
+motivo. Comprueba el nuevo total y pulsa **Guardar y enviar a** la persona. Podrá aceptar el cambio
+o indicar su desacuerdo la próxima vez que inicie sesión.
+
+En **En desacuerdo**, compara las horas propuestas con la respuesta de la persona. Abre **Detalles**
+y pulsa **Usar la hora de la persona** si está disponible, o **Editar** para enviar otro cambio.
 
 Comprueba los fichajes en **Días terminados** y pulsa **Aprobar todos**. Si la lista cambia mientras
 la revisas, comprueba las horas actualizadas antes de volver a aprobar. Abre **Horas** para ver los

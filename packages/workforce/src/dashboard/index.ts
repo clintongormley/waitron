@@ -3,6 +3,8 @@ import type { DashboardContribution, DashboardFurtherScreen } from "@waitron/das
 import { WORKFORCE_STRINGS } from "./strings.js";
 
 export { QUERY_DEPENDENCIES as ATTENDANCE_QUERY_DEPENDENCIES } from "./live-queries.js";
+export { effectiveClockEntries, originalEntry } from "../effective-entries.js";
+export { projectWorkSessions } from "../projection.js";
 
 export const WORKFORCE_DASHBOARD: DashboardContribution & DashboardFurtherScreen = {
   module: "workforce",

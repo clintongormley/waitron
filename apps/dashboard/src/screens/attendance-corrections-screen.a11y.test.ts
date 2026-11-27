@@ -70,7 +70,7 @@ describe.each(["light", "dark"] as const)("attendance queue in %s", (theme) => {
               await el.updateComplete;
               const editor = el.shadowRoot!.querySelector("dashboard-attendance-proposal-dialog")!;
               await editor.updateComplete;
-              await editor.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+              expect(editor.shadowRoot!.querySelector("h1")).not.toBeNull();
               expect(editor.open).toBe(true);
             }
             await expectNoA11yViolations(host);

@@ -23,7 +23,12 @@ export const DASHBOARD_MODULES: readonly DashboardContribution[] = [
 
 export { CARD_PROVIDER_PANELS } from "./card-providers.js";
 
-export { ATTENDANCE_QUERY_DEPENDENCIES } from "@waitron/workforce/dashboard";
+export {
+  ATTENDANCE_QUERY_DEPENDENCIES,
+  effectiveClockEntries,
+  originalEntry,
+  projectWorkSessions,
+} from "@waitron/workforce/dashboard";
 export type {
   AttendanceCommand,
   AttendanceCommandPayload,

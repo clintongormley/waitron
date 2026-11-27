@@ -3,6 +3,7 @@ import { type Transaction } from "@waitron/db";
 import { persons, holds, readPersonAuthority } from "@waitron/identity";
 import { AppError, type Origin } from "@waitron/shared";
 import type {
+  AttendanceChange,
   AttendanceCommand,
   AttendanceCommandPayload,
   AttendanceCommandResult,
@@ -19,6 +20,10 @@ import {
 } from "./corrections.js";
 import { projectCorrectionItems, readAttendanceRevision } from "./attendance-responses.js";
 import { readRecordedEntries } from "./record-reads.js";
+import { approvalsForPerson, writeAttendanceDayApproval } from "./day-approvals.js";
+import { isRecordDate } from "./record-dates.js";
+import { entryDate, recordInPeriod } from "./record-period.js";
+import { projectTimeRecord } from "./record-projection.js";
 import {
   answerForQuestion,
   reconcileAttendanceResponses,
@@ -27,6 +32,9 @@ import "./errors.js";
 
 function invalid(reason: string): never {
   throw new AppError("correction.invalid", { reason });
+}
+function targetOf({ target }: AttendanceChange): string {
+  return "entryId" in target ? target.entryId : target.missingKind;
 }
 export async function readAttendanceCommand(
   tx: Transaction,
@@ -71,6 +79,10 @@ async function normalize(
       at: recordInstant(c.at, c.offsetMinutes, "correction"),
       offsetMinutes: c.offsetMinutes,
     }));
+    if (command.action === "propose") {
+      if (command.date !== undefined && !isRecordDate(command.date)) invalid("date");
+      if (command.replaces !== undefined && command.date === undefined) invalid("date");
+    }
     return command.action === "request"
       ? {
           action: "request",
@@ -86,6 +98,8 @@ async function normalize(
           personId: command.personId,
           changes,
           reason,
+          ...(command.date !== undefined && { date: command.date }),
+          ...(command.replaces !== undefined && { replaces: command.replaces }),
         };
   }
   if (command.action === "disagree") {
@@ -133,6 +147,8 @@ async function authority(
     if (!holds(await readPersonAuthority(tx, authorizer), "workforce.correct")) refuse();
     if (payload.action === "propose") {
       if (requester !== authorizer || authorizer === personId) refuse();
+    } else if (payload.action === "approve" && item?.direction === "manager_proposal") {
+      if (requester !== authorizer || authorizer === personId) refuse();
     } else if (
       !item ||
       (requester !== personId && requester !== authorizer) ||
@@ -171,11 +187,13 @@ export async function executeAttendanceCommand(
     .select()
     .from(attendanceAnswers)
     .where(eq(attendanceAnswers.id, command.commandId));
+  const savedPayload = saved && { ...saved.input };
+  if (savedPayload) delete savedPayload.reviewedEntries;
   if (
     saved &&
     (saved.requestedByPersonId !== requester ||
       saved.authorizedByPersonId !== authorizer ||
-      JSON.stringify(saved.input) !== JSON.stringify(payload))
+      JSON.stringify(savedPayload) !== JSON.stringify(payload))
   )
     invalid("command_reused");
   const questionId =
@@ -189,10 +207,55 @@ export async function executeAttendanceCommand(
     (payload.action === "propose" ? payload.personId : requester);
   await authority(tx, requester, authorizer, payload, personId, item);
   if (saved) return { commandId: saved.id, entryIds: saved.entryIds, replayed: true };
+  if (item?.replaced) throw new AppError("correction.not_pending", { correctionId: item.id });
   if (command.expectedRevision !== (await readAttendanceRevision(tx, personId)))
     throw new AppError("attendance.state_changed", {});
   if (question && (!question.active || question.resolvedByEntryId !== null))
     throw new AppError("attendance.not_pending", { entryId: question.id });
+  const [proposal] =
+    item?.direction === "manager_proposal"
+      ? await tx.select().from(attendanceAnswers).where(eq(attendanceAnswers.id, item.id))
+      : [];
+  const date =
+    payload.action === "propose"
+      ? payload.date
+      : proposal?.input.action === "propose"
+        ? proposal.input.date
+        : undefined;
+  let reviewedEntries: string[] | undefined;
+  let nextDate: string | undefined;
+  if (date !== undefined) {
+    const next = new Date(`${date}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    const end = next.toISOString().slice(0, 10);
+    if (!isRecordDate(end)) invalid("date");
+    nextDate = end;
+    const rows = recordInPeriod(projectTimeRecord(await readRecordedEntries(tx, { personId })), {
+      start: date,
+      end,
+    }).entries;
+    reviewedEntries = rows
+      .filter((row) => row.effective)
+      .map((row) => row.entry.entryId)
+      .sort();
+    if (payload.action === "propose" && payload.replaces !== undefined) {
+      const replaced = await findItem(tx, payload.replaces, false);
+      const first = replaced.changes[0]!;
+      const replacedDate =
+        replaced.date ?? entryDate({ eventAt: first.at, offsetMinutes: first.offsetMinutes });
+      if (
+        replaced.personId !== personId ||
+        (replaced.status !== "waiting-manager" && replaced.status !== "disputed") ||
+        replacedDate !== date
+      )
+        throw new AppError("correction.not_pending", { correctionId: payload.replaces });
+      if (replaced.direction === "worker_request") {
+        const targets = new Set(payload.changes.map(targetOf));
+        if (replaced.changes.some((change) => !targets.has(targetOf(change))))
+          invalid("target_scope");
+      }
+    }
+  }
   let entryIds: string[];
   if (payload.action === "confirm") {
     if (!question || question.kind !== "automatic-out") invalid("not_automatic");
@@ -220,16 +283,30 @@ export async function executeAttendanceCommand(
       ).missingKinds;
     }
     for (const change of payload.changes) {
+      const editedDate =
+        date && entryDate({ eventAt: change.at, offsetMinutes: change.offsetMinutes });
       if ("entryId" in change.target) {
         const [target] = await readRecordedEntries(tx, { entryId: change.target.entryId });
         if (!target || target.personId !== personId) invalid("target_scope");
+        if (reviewedEntries && !reviewedEntries.includes(target.entryId)) invalid("target_scope");
+        if (
+          editedDate &&
+          editedDate !== date &&
+          editedDate !== nextDate &&
+          editedDate !== entryDate(target)
+        )
+          invalid("target_scope");
         if (question && question.automaticEntryId !== target.entryId) invalid("question_target");
-      } else if (
-        question &&
-        (question.kind !== "missing-times" ||
-          !missingKinds!.includes(change.target.missingKind as "in" | "out"))
-      )
-        invalid("question_kind");
+      } else {
+        const kind = change.target.missingKind;
+        if (editedDate && editedDate !== date && (editedDate !== nextDate || kind === "in"))
+          invalid("target_scope");
+        if (
+          question &&
+          (question.kind !== "missing-times" || !missingKinds!.includes(kind as "in" | "out"))
+        )
+          invalid("question_kind");
+      }
     }
     entryIds = await requestCorrectionGroup(
       tx,
@@ -245,19 +322,62 @@ export async function executeAttendanceCommand(
         reason: payload.reason,
       })),
       payload.action,
+      date !== undefined,
     );
   } else {
-    entryIds = await decideCorrectionGroup(
-      tx,
-      {
-        nodeId: input.nodeId,
-        correctionIds: item!.requestEntryIds,
-        actorPersonId: authorizer,
-        origin: input.origin,
-        ...(payload.action === "disagree" ? { reason: payload.reason } : {}),
-      },
-      payload.action,
-    );
+    const takingWorkerTime = payload.action === "approve" && item!.direction === "manager_proposal";
+    const workerVersion = takingWorkerTime ? item!.workerVersion : undefined;
+    if (takingWorkerTime && !workerVersion)
+      throw new AppError("correction.not_pending", { correctionId: item!.id });
+    const previous = workerVersion?.itemId
+      ? await findItem(tx, workerVersion.itemId, false)
+      : undefined;
+    const keepRecorded = workerVersion && !previous;
+    const actor = { nodeId: input.nodeId, actorPersonId: authorizer, origin: input.origin };
+    if (keepRecorded) entryIds = item!.responseEntryIds;
+    else
+      entryIds = await decideCorrectionGroup(
+        tx,
+        {
+          ...actor,
+          correctionIds: (previous ?? item!).requestEntryIds,
+          ...(payload.action === "disagree" ? { reason: payload.reason } : {}),
+        },
+        payload.action,
+        !previous && date !== undefined,
+      );
+    const reviewedProposal =
+      payload.action === "accept" &&
+      proposal &&
+      reviewedEntries &&
+      JSON.stringify(reviewedEntries) === JSON.stringify(proposal.input.reviewedEntries);
+    if (payload.action === "approve" || reviewedProposal) {
+      const days = approvalsForPerson(await readRecordedEntries(tx, { personId }));
+      const firstChange = item!.changes[0]!;
+      const reviewedDate =
+        date ??
+        item!.date ??
+        entryDate({ eventAt: firstChange.at, offsetMinutes: firstChange.offsetMinutes });
+      const timeIds = keepRecorded
+        ? workerVersion.changes.flatMap(({ target }) =>
+            "entryId" in target ? [target.entryId] : [],
+          )
+        : entryIds;
+      const day = [...days].find(
+        ([dayDate, { times }]) =>
+          reviewedDate === dayDate &&
+          timeIds.every((id) => times.some((time) => time.entryId === id)),
+      )?.[1];
+      if (day)
+        await writeAttendanceDayApproval(
+          tx,
+          {
+            ...input,
+            actorPersonId: reviewedProposal ? proposal!.authorizedByPersonId : authorizer,
+          },
+          day,
+        );
+    }
   }
   await tx.insert(attendanceAnswers).values({
     id: command.commandId,
@@ -266,7 +386,8 @@ export async function executeAttendanceCommand(
     personId,
     questionId,
     action: payload.action,
-    input: payload,
+    input:
+      payload.action === "propose" && reviewedEntries ? { ...payload, reviewedEntries } : payload,
     entryIds,
     createdAt: input.now.toISOString(),
   });

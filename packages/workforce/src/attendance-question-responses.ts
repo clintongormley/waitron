@@ -44,7 +44,7 @@ export function answerForQuestion(
       (item) =>
         item.personId === question.personId &&
         item.direction === "worker_request" &&
-        (item.status === "waiting-manager" || item.status === "approved") &&
+        (item.status === "waiting-manager" || item.status === "approved" || item.replaced) &&
         item.history.some((e) => e.entryId === question.automaticEntryId),
     );
     return {
@@ -65,7 +65,11 @@ export function answerForQuestion(
     for (const id of command.entryIds) {
       const entry = byId.get(id);
       const item = itemFor.get(id);
-      if (!entry || !item || (item.status !== "waiting-manager" && item.status !== "approved"))
+      if (
+        !entry ||
+        !item ||
+        (item.status !== "waiting-manager" && item.status !== "approved" && !item.replaced)
+      )
         continue;
       const kind = entry.extension?.missingEntryKind;
       if (kind) covered.set(kind, id);

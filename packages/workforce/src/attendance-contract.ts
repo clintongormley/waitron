@@ -2,6 +2,7 @@ import type { BusinessDayClock, RecordExportAudience, RecordExportFormat } from 
 import type { Period, TimeEntryRecord, WorkSession } from "./projection.js";
 import type { ClockEntryKind, TimeRecord } from "./record-types.js";
 import type { AttendanceDay } from "./attendance-types.js";
+import type { PaidBreakPolicy } from "./ruleset.js";
 
 export interface AttendanceChange {
   target: { entryId: string } | { missingKind: ClockEntryKind };
@@ -21,6 +22,8 @@ export type AttendanceCommandPayload =
       personId: string;
       changes: AttendanceChange[];
       reason: string;
+      date?: string;
+      replaces?: string;
     }
   | { action: "approve" | "decline" | "accept"; itemId: string }
   | { action: "disagree"; itemId: string; reason: string };
@@ -40,7 +43,7 @@ export interface AttendanceResponseReceipt {
   personId: string;
   questionId: string | null;
   action: AttendanceCommandPayload["action"];
-  input: AttendanceCommandPayload;
+  input: AttendanceCommandPayload & { reviewedEntries?: string[] };
   entryIds: string[];
   createdAt: string;
 }
@@ -49,12 +52,22 @@ export interface CorrectionItem {
   requestEntryIds: string[];
   personId: string;
   direction: "worker_request" | "manager_proposal";
-  status: "waiting-manager" | "waiting-worker" | "approved" | "declined" | "disputed" | "overtaken";
+  status:
+    | "waiting-manager"
+    | "waiting-worker"
+    | "approved"
+    | "declined"
+    | "disputed"
+    | "settled"
+    | "overtaken";
   readyToApply: boolean;
   responseEntryIds: string[];
   changes: AttendanceChange[];
   reason: string;
   requestedByPersonId: string;
+  date?: string;
+  replaced?: boolean;
+  workerVersion?: { itemId?: string; changes: AttendanceChange[] };
   selfApproved: boolean;
   history: TimeEntryRecord[];
 }
@@ -93,6 +106,7 @@ export interface AttendanceDayView {
   timeZone: string;
   revision: string;
   record: TimeRecord;
+  paidBreakPolicy?: PaidBreakPolicy;
   approval?: DayApproval;
   items: CorrectionItem[];
 }
