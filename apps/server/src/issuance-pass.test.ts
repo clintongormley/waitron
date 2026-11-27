@@ -1,4 +1,5 @@
-import { takeBillPayment, takeReaderBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./bill-payments.js";
+import { takeReaderBillPayment } from "./bill-reader-payment.js";
 import {
   billShare,
   payFreshCounterInCash,

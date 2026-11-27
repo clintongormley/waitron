@@ -4,7 +4,7 @@ import { newId, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { frozenLinesOf } from "@waitron/orders-sales/set-menu-grouping-plan.js";
 import { AppError } from "@waitron/shared";
-import { assertBillInvariant, refuseBillWithPayments } from "./bill-payments.js";
+import { assertBillInvariant, refuseBillWithPayments } from "./bill-payment-rows.js";
 import { enqueueMovedSlips } from "./kitchen-ticket-moves.js";
 import { readSentWork } from "./kitchen-ticket-paper.js";
 import { moveKitchenPrintLinks } from "./kitchen-ticket-links.js";

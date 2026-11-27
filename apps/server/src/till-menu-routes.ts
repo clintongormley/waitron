@@ -4,7 +4,7 @@ import { AppError } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import { invalid } from "./bill-allocation.js";
-import type { CounterPaymentBasket } from "./bill-payments.js";
+import type { CounterPaymentBasket } from "./bill-payment-types.js";
 import { findDeadEnds, availableStations } from "./dead-ends.js";
 import { currentZoneDevice } from "./device-zones.js";
 import { VENUE_SERVICE } from "./modules.js";

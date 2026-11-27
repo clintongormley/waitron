@@ -21,7 +21,7 @@ import {
   refuseWhileAdvanceCorrectionOpen,
 } from "./bill-advances.js";
 import { type OrderEditAuthority, requireOrderBillEditor } from "./bill-editing.js";
-import { linkBillCardPaymentsToSale } from "./bill-payments.js";
+import { linkBillCardPaymentsToSale } from "./bill-payment-rows.js";
 import {
   type InvoiceChoiceDeliveryContext,
   checkedInvoiceChoiceDelivery,

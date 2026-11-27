@@ -41,7 +41,7 @@ import { readOrderDinings, type DiningChoice } from "./order-dining.js";
 import { createOpenOrder, openTab } from "./working-order-open.js";
 import { outstandingOf, overpaidBy } from "./bill-payment-money.js";
 import { ZERO } from "./bill-allocation.js";
-import { readPaymentsByBill } from "./bill-payments.js";
+import { readPaymentsByBill } from "./bill-payment-rows.js";
 import { seatMergeMembers } from "./floor-today-merges.js";
 import { ensureToday } from "./floor-today-store.js";
 import { refuseTakenOff } from "./floor-today-table.js";

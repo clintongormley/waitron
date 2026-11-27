@@ -7,13 +7,10 @@ import { recordIncidentOnce } from "@waitron/core";
 import { codeOf } from "@waitron/server-kit";
 import { findPaymentByBillPayment } from "@waitron/payments";
 import { AppError, jobOrigin } from "@waitron/shared";
-import {
-  billPaymentIsLive,
-  clockUnconfirmedRefusal,
-  completeBillPayment,
-  failBillPayment,
-} from "./bill-payments.js";
-import type { BillPaymentDeps } from "./bill-payments.js";
+import { billPaymentIsLive } from "./bill-reader-payment.js";
+import { clockUnconfirmedRefusal } from "./bill-payment-failures.js";
+import { completeBillPayment, failBillPayment } from "./bill-payment-settlement.js";
+import type { BillPaymentDeps } from "./bill-payment-types.js";
 import type { TradingContext } from "./trading-context.js";
 import { withSettledSlip, type SettledSlipPrinter } from "./payment-slip-print.js";
 import type { TillSaleResult } from "./till-sale.js";

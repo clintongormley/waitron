@@ -25,7 +25,7 @@ import {
 } from "@waitron/shared";
 import { and, eq, or, inArray, sql } from "drizzle-orm";
 import type { AttendanceRecorder } from "./attendance-capture.js";
-import { assertBillInvariant } from "./bill-payments.js";
+import { assertBillInvariant } from "./bill-payment-rows.js";
 import { type DishKitchenItem, dishKitchenItems } from "./dish-kitchen.js";
 import { hasUngroupedHoldPaper } from "./kitchen-ticket-paper.js";
 import {

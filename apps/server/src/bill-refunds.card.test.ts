@@ -2119,7 +2119,7 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
     venue.db.run(
       sql`delete from working_order_lines where working_order_id = ${billId} and line_no = 2`,
     );
-    const { issueIfFullyPaid } = await import("./bill-payments.js");
+    const { issueIfFullyPaid } = await import("./bill-payment-settlement.js");
 
     const issued = await inTx(venue, (tx) =>
       issueIfFullyPaid(

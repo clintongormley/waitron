@@ -19,7 +19,7 @@ import { receiptLabelsFor } from "@waitron/country-packs";
 import { receiptDateTime } from "./receipt-dates.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { formatMoney } from "./receipt-money.js";
-import { toRefundView } from "./bill-payments.js";
+import { toRefundView } from "./bill-balance.js";
 import { toTenderRefundView } from "./tender-refunds.js";
 import type { TenderRefundAcknowledgment } from "./tender-refund-types.js";
 import type { TillSaleResult } from "./till-sale.js";

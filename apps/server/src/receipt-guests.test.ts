@@ -12,7 +12,7 @@ import {
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
-import { completeBillPayment } from "./bill-payments.js";
+import { completeBillPayment } from "./bill-payment-settlement.js";
 import { mergeBills, transferItems } from "./testing/bill-action-fixture.js";
 import { setPartyGuestCount } from "./parties.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";

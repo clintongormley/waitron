@@ -38,7 +38,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
-import { completeBillPayment } from "./bill-payments.js";
+import { completeBillPayment } from "./bill-payment-settlement.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
 import { releasePassItems } from "./pass-release.js";

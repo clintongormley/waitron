@@ -39,7 +39,7 @@ import {
 } from "@waitron/shared";
 import { filedInvoicesOf, invoiceRecords } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { reversedLines } from "./cancel-credit.js";
-import { readBillBalance } from "./bill-payments.js";
+import { readBillBalance } from "./bill-balance.js";
 import { listAccountantExport } from "./accountant-export.js";
 import { hashSessionToken, tillSessions } from "@waitron/identity";
 import { sessionCookieForTest } from "./testing/session-device.js";

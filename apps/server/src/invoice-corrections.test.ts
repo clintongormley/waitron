@@ -41,7 +41,7 @@ import {
 } from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { insertCapturedPayment, recordRefund } from "@waitron/payments";
-import { issueIfFullyPaid } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payment-settlement.js";
 import { readBillEditState } from "./bill-editing.js";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
 import { parkOrder } from "./working-order-open.js";

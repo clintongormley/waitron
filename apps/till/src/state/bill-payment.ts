@@ -165,14 +165,14 @@ export function submissionFor(
   if (unanswered?.billId !== billId || unanswered.key !== key)
     return { key, billId, request: structuredClone({ ...confirmation, submissionId: mint() }) };
   if (unanswered.request.guestCount === confirmation.guestCount) return unanswered;
-  // The server matches a resent id ignoring its count (`retryShapeOf`, apps/server/src/bill-payments.ts);
+  // The server matches a resent id ignoring its count (`retryShapeOf`, apps/server/src/bill-payment-fingerprint.ts);
   // on a replay the server keeps the first attempt's count.
   return { ...unanswered, request: { ...unanswered.request, guestCount: confirmation.guestCount } };
 }
 
 /** `submission.id_reused`: the id belongs to another request. The rest can be raised at the
  * payment's start, after it is recorded under the id, which `takeReaderBillPayment` then fails
- * (`REFUSED_START`, `apps/server/src/bill-payments.ts`), so sending the id again would only answer
+ * (`REFUSED_START`, `apps/server/src/bill-reader-payment.ts`), so sending the id again would only answer
  * that failure. */
 const FRESH_ID_AFTER: ReadonlySet<string> = new Set([
   "submission.id_reused",

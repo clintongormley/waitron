@@ -8,7 +8,7 @@ import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import { invalid } from "./bill-allocation.js";
 import { requireOrderBillEditor } from "./bill-editing.js";
-import { issueIfFullyPaid } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payment-settlement.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { parseLateSend, withLateSendCheck } from "./late-send.js";
 import { sendingCfg } from "./made-here.js";

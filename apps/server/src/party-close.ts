@@ -13,7 +13,7 @@ import { AppError } from "@waitron/shared";
 import { inArray, eq, and, isNull, sql } from "drizzle-orm";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { readPartyBillIds, requireBillEditors } from "./bill-editing.js";
-import { refuseBillHoldingMoney } from "./bill-payments.js";
+import { refuseBillHoldingMoney } from "./bill-payment-rows.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { type BillEditExpected, discardPartyDrafts } from "./order-drafts.js";

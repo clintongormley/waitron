@@ -80,7 +80,8 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 
 import { systemClock } from "./till-backend.js";
 import { createOpenOrder } from "./working-order-open.js";
-import { completeBillPayment, readBillBalance } from "./bill-payments.js";
+import { completeBillPayment } from "./bill-payment-settlement.js";
+import { readBillBalance } from "./bill-balance.js";
 import { ordersWithUnfiledPayment } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { descendingIds } from "./testing/descending-ids.js";

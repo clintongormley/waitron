@@ -33,7 +33,7 @@ import { createTable } from "./testing/live-table.js";
 import { openPartyTab, fireAll, splitPartyBill } from "./testing/serve-line.js";
 import { readBillEditState } from "./bill-editing.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
-import { issueIfFullyPaid } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payment-settlement.js";
 
 let venue: BillVenue;
 let offer: string;

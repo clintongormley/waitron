@@ -23,7 +23,11 @@ import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js"
 import { AppError, centsToDecimal, isAppError, jobOrigin } from "@waitron/shared";
 import { raiseRefundOutcomeConflict, raiseTenderRefundConflict } from "./bill-refund-alerts.js";
 import { alertOrigin, storedDeviceOrigin, type AlertOrigin } from "./request-config.js";
-import { attestationColumns, issueIfFullyPaid, type Attestation } from "./bill-payments.js";
+import {
+  attestationColumns,
+  issueIfFullyPaid,
+  type Attestation,
+} from "./bill-payment-settlement.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { toTenderRefundView, type TenderRefundDeps } from "./tender-refunds.js";
 import "./errors.js";

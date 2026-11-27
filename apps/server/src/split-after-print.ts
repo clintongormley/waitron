@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import { withIssuanceTransaction } from "@waitron/core";
 import { AppError, stringToThousandths } from "@waitron/shared";
-import { holdsPayment } from "./bill-payments.js";
+import { holdsPayment } from "./bill-payment-rows.js";
 import { billReopenRefusal } from "./bill-reopen-state.js";
 import { creditWholeInvoice, type IssuedInvoice } from "./cancel-credit.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";

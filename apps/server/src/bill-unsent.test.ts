@@ -12,7 +12,7 @@ import { orderDraftLines, orderDrafts, workingOrderLines, workingOrders } from "
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
-import { issueIfFullyPaid } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payment-settlement.js";
 import {
   paySavedBillInCash,
   previewBillPayment,

@@ -13,7 +13,7 @@ import { staffPresentationName } from "@waitron/menu";
 import { AppError, decimalToCents, thousandthsToDecimal } from "@waitron/shared";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { parseBillEditExpecteds, requireBillEditors } from "./bill-editing.js";
-import { stillOwedOnIssuedBill } from "./bill-payments.js";
+import { stillOwedOnIssuedBill } from "./bill-payment-rows.js";
 import { issuedBillStanding } from "./bill-payment-money.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { assertProfileAction, type DeviceBinding } from "./device-session.js";

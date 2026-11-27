@@ -8,7 +8,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { readBillEditState } from "./bill-editing.js";
-import { billPaymentIsLive, takeReaderBillPayment } from "./bill-payments.js";
+import { billPaymentIsLive, takeReaderBillPayment } from "./bill-reader-payment.js";
 import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
 import { setupPartyVenue, seat, order, type PartyVenue } from "./testing/party-venue.js";
 import { openTillSession } from "./testing/session-device.js";

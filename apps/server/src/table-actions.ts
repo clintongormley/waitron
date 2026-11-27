@@ -10,7 +10,7 @@ import {
   requireRelocatableBillEditors,
   requireSplitEditors,
 } from "./bill-editing.js";
-import { assertBillInvariant } from "./bill-payments.js";
+import { assertBillInvariant } from "./bill-payment-rows.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
 import {

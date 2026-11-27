@@ -20,7 +20,7 @@ import {
   sumDecimals,
   type ErrorParams,
 } from "@waitron/shared";
-import { paidOnIssuedBill } from "./bill-payments.js";
+import { paidOnIssuedBill } from "./bill-payment-rows.js";
 import { billReopenRefusal } from "./bill-reopen-state.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { readInvoiceNumber, readInvoiceNumbers } from "./stored-order-lines.js";

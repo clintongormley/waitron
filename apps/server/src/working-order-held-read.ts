@@ -34,7 +34,7 @@ import {
 import { sql, eq, and, isNull, type SQL, exists, or, ne } from "drizzle-orm";
 import { type OrderEditAuthority, readBillEditState } from "./bill-editing.js";
 import { outstandingOf } from "./bill-payment-money.js";
-import { readPaymentsByBill } from "./bill-payments.js";
+import { readPaymentsByBill } from "./bill-payment-rows.js";
 import { readFormerNumbers } from "./former-numbers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { type DiningChoice, readOrderDinings } from "./order-dining.js";

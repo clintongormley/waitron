@@ -14,7 +14,7 @@ import { createProduct, writeContentLanguages } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { centsToDecimal } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
-import { getBillBalance } from "./bill-payments.js";
+import { getBillBalance } from "./bill-balance.js";
 import { placeGrouped } from "./testing/adjustment-venue.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {

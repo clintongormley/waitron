@@ -67,7 +67,7 @@ import type { DeviceRequestConfig } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import { saleScopeInZones } from "./find-bill-transactions.js";
 import { refundableAdvanceNumbersTakenOffBy, refuseTakenOffAdvance } from "./advance-taken-off.js";
-import { issueHeldBill } from "./bill-payments.js";
+import { issueHeldBill } from "./bill-payment-settlement.js";
 import "./errors.js";
 
 export interface SplitLine {

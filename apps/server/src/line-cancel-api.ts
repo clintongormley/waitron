@@ -16,7 +16,7 @@ import { parseCancellationContext, parseWithFree } from "./line-cancel-input.js"
 import { parseBillEditExpected } from "./bill-editing.js";
 import { approverToCheck } from "./adjustments-api.js";
 import { invalid } from "./bill-allocation.js";
-import { issueIfFullyPaid } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payment-settlement.js";
 import { asObject, submissionIdOf } from "./bill-payments-api.js";
 import { assertDeviceStillProven, assertProfileAction } from "./device-session.js";
 import { readCancellationContext } from "./line-cancel-context.js";

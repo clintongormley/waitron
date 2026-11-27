@@ -95,7 +95,7 @@ import {
   payFreshCounterInCash,
   paySavedBillInCash,
 } from "./testing/bill-payment-fixture.js";
-import type { CounterPaymentBasket } from "./bill-payments.js";
+import type { CounterPaymentBasket } from "./bill-payment-types.js";
 
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
 // menu, sell, and read the filed record back.

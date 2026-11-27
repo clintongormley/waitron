@@ -28,7 +28,8 @@ import { insertCapturedPayment, payments, SimulatorPaymentProvider } from "@wait
 import { createPrinter } from "@waitron/printing";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
-import { retryShapeOf, type BillPaymentRequest } from "./bill-payments.js";
+import { retryShapeOf } from "./bill-payment-fingerprint.js";
+import { type BillPaymentRequest } from "./bill-payment-types.js";
 import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { ALL_MODULES } from "./modules.js";

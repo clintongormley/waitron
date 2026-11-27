@@ -76,7 +76,7 @@ import {
   type WireApproval,
 } from "./adjustment-rows.js";
 import { invalid, money } from "./bill-allocation.js";
-import { assertBillInvariantAt } from "./bill-payments.js";
+import { assertBillInvariantAt } from "./bill-payment-rows.js";
 import { runServiceCommand } from "./parties.js";
 import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";

@@ -8,7 +8,7 @@ import { invalid } from "./bill-allocation.js";
 import { parseBillEditExpecteds, parseBillEditExpected } from "./bill-editing.js";
 import { billNameZoneSubject, setBillName } from "./bill-identities.js";
 import { asObject } from "./bill-payments-api.js";
-import { issueIfFullyPaid } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payment-settlement.js";
 import { refuseTakenOff } from "./floor-today-table.js";
 import { sendingCfg } from "./made-here.js";
 import { previewBillMoveAllergy, moveBill } from "./move-bill.js";

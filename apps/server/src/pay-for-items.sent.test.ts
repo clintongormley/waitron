@@ -19,7 +19,7 @@ import { createPrinter } from "@waitron/printing";
 import { centsToDecimal, decimal } from "@waitron/shared";
 import { setRoutingCell, setZoneSalePolicyOverride } from "@waitron/venue-service";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
-import { getBillBalance } from "./bill-payments.js";
+import { getBillBalance } from "./bill-balance.js";
 import { readBillEditState } from "./bill-editing.js";
 import { moveBill } from "./move-bill.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";

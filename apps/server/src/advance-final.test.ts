@@ -27,7 +27,7 @@ import {
   type FiledInvoice,
 } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { readBillEditState } from "./bill-editing.js";
-import type { BillPaymentRequest } from "./bill-payments.js";
+import type { BillPaymentRequest } from "./bill-payment-types.js";
 import { closeOfDayConfig, issueBillAtClose } from "./close-of-day.js";
 import { endMeal } from "./meal-end.js";
 import { owesOriginal } from "./owed-receipts.js";

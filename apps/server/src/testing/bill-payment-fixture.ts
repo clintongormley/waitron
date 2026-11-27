@@ -12,20 +12,18 @@ import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { MANUAL_PROVIDER, payments } from "@waitron/payments";
 import { isUuid } from "@waitron/shared";
 import { readBillEditState } from "../bill-editing.js";
+import { previewBillPayment as preview, takeBillPayment as take } from "../bill-payments.js";
+import { takeReaderBillPayment as reader } from "../bill-reader-payment.js";
 import {
-  getBillBalance,
-  previewBillPayment as preview,
-  takeBillPayment as take,
-  takeReaderBillPayment as reader,
   type BillPaymentAsk as Ask,
   type BillPaymentRequest as Request,
   type CounterPaymentBasket,
   type BillPaymentDeps,
-} from "../bill-payments.js";
+} from "../bill-payment-types.js";
+import { getBillBalance } from "../bill-balance.js";
 import type { BillEditExpected } from "../order-drafts.js";
 import type { ServiceMode } from "@waitron/module";
 import type { DeviceRequestConfig } from "../trading-context.js";
-export * from "../bill-payments.js";
 export type OrderFlow = Exclude<ServiceMode, "table_tab">;
 export type BillPaymentAsk = Omit<Ask, "expectedEdit"> & { expectedEdit?: BillEditExpected | null };
 export type BillPaymentRequest = Omit<Request, "expectedEdit"> & {

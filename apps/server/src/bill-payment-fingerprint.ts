@@ -1,7 +1,7 @@
 import { decimal } from "@waitron/shared";
 import { money } from "./bill-allocation.js";
 import { parseBillEditExpected } from "./bill-editing.js";
-import type { BillPaymentRequest, CounterPaymentBasket } from "./bill-payments.js";
+import type { BillPaymentRequest, CounterPaymentBasket } from "./bill-payment-types.js";
 import { fingerprint } from "./parties.js";
 
 /** A payment request as its retry fingerprint reads it: every amount at the money scale, an absent

@@ -3,7 +3,8 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { closeZeroBill, takeReaderBillPayment } from "./bill-payments.js";
+import { closeZeroBill } from "./bill-payments.js";
+import { takeReaderBillPayment } from "./bill-reader-payment.js";
 import { readBillEditState } from "./bill-editing.js";
 import { newId, tenders, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";

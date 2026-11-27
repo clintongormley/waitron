@@ -10,7 +10,8 @@ import { endDeviceSessions, endSession, loginWithPin, tillSessions } from "@wait
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, saleId as brandSaleId, type SaleId } from "@waitron/shared";
 import { recordAttendanceFact } from "./attendance-capture.js";
-import { takeBillPayment, takeReaderBillPayment } from "./bill-payments.js";
+import { takeBillPayment } from "./bill-payments.js";
+import { takeReaderBillPayment } from "./bill-reader-payment.js";
 import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
 import {
   closeInvoiceCorrection,

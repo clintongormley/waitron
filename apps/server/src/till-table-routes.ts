@@ -8,7 +8,7 @@ import { captureKitchenActivity } from "./attendance-capture.js";
 import { invalid } from "./bill-allocation.js";
 import { parseBillEditExpecteds } from "./bill-editing.js";
 import { asObject } from "./bill-payments-api.js";
-import { issueIfFullyPaid } from "./bill-payments.js";
+import { issueIfFullyPaid } from "./bill-payment-settlement.js";
 import { requestBill } from "./bill-request.js";
 import { assertDeviceStillProven, assertProfileAction } from "./device-session.js";
 import { parseFinishCancellations } from "./finish-party-input.js";

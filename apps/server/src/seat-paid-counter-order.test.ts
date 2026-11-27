@@ -24,7 +24,7 @@ import {
 } from "@waitron/venue-service";
 import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
 import { keepOverpaidAsTip } from "./bill-overpaid.js";
-import { getBillBalance } from "./bill-payments.js";
+import { getBillBalance } from "./bill-balance.js";
 import { switchOrderDining } from "./order-dining.js";
 import { holderOf } from "./parties.js";
 import { storedOrderTotal } from "./stored-order-lines.js";

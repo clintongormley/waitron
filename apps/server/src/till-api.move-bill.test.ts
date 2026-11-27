@@ -3,7 +3,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
-import { getBillBalance } from "./bill-payments.js";
+import { getBillBalance } from "./bill-balance.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";

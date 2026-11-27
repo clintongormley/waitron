@@ -16,7 +16,7 @@ import {
   thousandthsToDecimal,
 } from "@waitron/shared";
 import { AppError, type SaleId } from "@waitron/shared";
-import { holdsPayment } from "./bill-payments.js";
+import { holdsPayment } from "./bill-payment-rows.js";
 import { servedOrCharged } from "./served-dishes.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 

@@ -8,13 +8,9 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { tillSessions } from "@waitron/identity";
 import { readBillEditState } from "./bill-editing.js";
-import {
-  previewBillPayment,
-  takeBillPayment,
-  takeReaderBillPayment,
-  type BillPaymentAsk,
-  type BillPaymentRequest,
-} from "./bill-payments.js";
+import { previewBillPayment, takeBillPayment } from "./bill-payments.js";
+import { takeReaderBillPayment } from "./bill-reader-payment.js";
+import { type BillPaymentAsk, type BillPaymentRequest } from "./bill-payment-types.js";
 import { saveDraft, type BillEditExpected } from "./order-drafts.js";
 import {
   inTx,

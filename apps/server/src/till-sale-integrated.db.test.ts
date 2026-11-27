@@ -1,13 +1,14 @@
+import { closeZeroBill } from "./bill-payments.js";
 import {
   billShare,
-  closeZeroBill,
   takeReaderPaymentWithRecovery,
   payCounterBasket,
   payFreshCounterInCash,
   paySavedBillInCash,
 } from "./testing/bill-payment-fixture.js";
 import type { TradingContext } from "./trading-context.js";
-import type { CounterPaymentBasket, ReaderBillPaymentDeps } from "./bill-payments.js";
+import type { ReaderBillPaymentDeps } from "./bill-reader-payment.js";
+import type { CounterPaymentBasket } from "./bill-payment-types.js";
 import { readBillEditState } from "./bill-editing.js";
 import { captureAlerts } from "@waitron/payments/test/capture-alerts.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
