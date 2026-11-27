@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -100,6 +100,13 @@ const menu = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
 const partyMenu = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-party-menu]")!;
+async function clickEditorBack(editor: Element): Promise<void> {
+  const bar = editor.shadowRoot!.querySelector("wt-top-bar")!;
+  await bar.updateComplete;
+  const button = bar.shadowRoot!.querySelector("wt-button")!;
+  await button.updateComplete;
+  await userEvent.click(button.shadowRoot!.querySelector("button")!);
+}
 const textOf = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
 /** The bill action group: its accessible name and the choices in order. */
 function groups(el: TillTableOrderScreen): { name: string; items: string[] }[] {
@@ -169,6 +176,67 @@ describe("Table and bill actions", () => {
       await page.viewport(1280, 900);
     }
   });
+
+  it("measures the order edge only for a panel that needs it", async () => {
+    await page.viewport(1280, 900);
+    const el = await mountScreen();
+    const pane = el.shadowRoot!.querySelector("[data-draft-pane]")!;
+    await expect.poll(() => pane.getBoundingClientRect().left).toBeGreaterThan(0);
+    const measure = vi.spyOn(pane, "getBoundingClientRect");
+    try {
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(measure).not.toHaveBeenCalled();
+
+      await userEvent.click(partyMenu(el).shadowRoot!.querySelector("button")!);
+      expect(measure).toHaveBeenCalled();
+    } finally {
+      measure.mockRestore();
+    }
+  });
+
+  it.each([
+    ["name", "till-party-name-dialog", "Name the party"],
+    ["guests", "till-party-guests-dialog", "Guests"],
+  ])(
+    "opens the %s editor over the order, keeping the active bill",
+    async (action, editor, title) => {
+      await page.viewport(390, 844);
+      try {
+        const el = await mountScreen({ activeTableId: "t5" });
+        const sheet = partyMenu(el);
+        await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
+        await userEvent.click(item(el, `[data-action="${action}"]`)!);
+        await expect.element(page.getByRole("dialog", { name: new RegExp(title) })).toBeVisible();
+        const panel = el.shadowRoot!.querySelector(editor)!.shadowRoot!.querySelector("wt-dialog")!;
+        const dialog = panel.shadowRoot!.querySelector("dialog")!;
+        const edges = () => {
+          const { left, right, top, bottom } = dialog.getBoundingClientRect();
+          return [Math.round(left), Math.round(right), Math.round(top), Math.round(bottom)];
+        };
+        expect(edges()).toEqual([0, 390, 0, 844]);
+
+        await page.viewport(844, 390);
+        const paneLeft = () =>
+          Math.round(
+            el.shadowRoot!.querySelector("[data-draft-pane]")!.getBoundingClientRect().left,
+          );
+        await expect.poll(paneLeft).toBeGreaterThan(0);
+        await expect.poll(edges).toEqual([paneLeft(), 844, 0, 390]);
+        const bar = el
+          .shadowRoot!.querySelector(editor)!
+          .shadowRoot!.querySelector("wt-top-bar")!.shadowRoot!;
+        expect(bar.querySelector(".back-label")?.textContent).toBe("Table 5");
+        expect(bar.querySelector(".subtitle")).toBeNull();
+        await clickEditorBack(el.shadowRoot!.querySelector(editor)!);
+        await expect.poll(() => el.shadowRoot!.querySelector(editor)).toBeNull();
+        expect(el.orderId).toBe("wo-2");
+        expect(focusOnMenu(el, sheet)).toBe(true);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
 
   it("keeps the table name above the guest count and party name", async () => {
     await page.viewport(390, 844);
@@ -1084,14 +1152,18 @@ describe("Table and bill actions", () => {
       expect(focusOnMenu(el, el.shadowRoot!.querySelector("[data-bill-switcher]")!)).toBe(true);
     });
 
-    it("Name the party: Cancel, Escape and Save", async () => {
+    it("Name the party: Back, Escape and Save", async () => {
       const el = await mountScreen();
       const dialog = () => el.shadowRoot!.querySelector("till-party-name-dialog")!;
 
       item(el, '[data-action="name"]')!.click();
       await el.updateComplete;
       await dialog().updateComplete;
-      dialog().shadowRoot!.querySelector<HTMLElement>("[data-name-cancel]")!.click();
+      const closed = new Promise<void>((resolve) =>
+        dialog().addEventListener("party-name-cancel", () => resolve(), { once: true }),
+      );
+      await clickEditorBack(dialog());
+      await closed;
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
       expect(focusOnMenu(el, partyMenu(el))).toBe(true);
@@ -1135,7 +1207,11 @@ describe("Table and bill actions", () => {
       await el.updateComplete;
       const counting = el.shadowRoot!.querySelector("till-party-guests-dialog")!;
       await counting.updateComplete;
-      counting.shadowRoot!.querySelector<HTMLElement>("[data-guests-cancel]")!.click();
+      const closed = new Promise<void>((resolve) =>
+        counting.addEventListener("party-guests-cancel", () => resolve(), { once: true }),
+      );
+      await clickEditorBack(counting);
+      await closed;
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("till-party-guests-dialog")).toBeNull();
       expect(focusOnMenu(el, partyMenu(el))).toBe(true);

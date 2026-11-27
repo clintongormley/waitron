@@ -640,6 +640,9 @@ change **Guests** or **Name the party**, and turn **Bill requested** on or off. 
 table**, **Join tables** or **Split the table** to change where the party sits. **Finish table** is at
 the bottom. On a short screen, scroll the sheet down to reach it.
 
+**Allergies**, **Guests** and **Name the party** open an editor. Tap the table name at the top to
+return to the same bill. If you changed a field, you can keep editing or discard the changes.
+
 Open **⋮** beside the bill switcher for actions on the bill you are viewing. Use it to print the
 bill, enter full invoice details, move dishes or change the bill itself. When an action needs a
 choice, it opens beside the order. Choose **Back** to return.

@@ -21,7 +21,8 @@ const nativeInput = (el: TillPartyNameDialog) =>
   field(el).shadowRoot!.querySelector<HTMLInputElement>("input")!;
 const save = (el: TillPartyNameDialog) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-name-save]")!;
-const bottom = (el: TillPartyNameDialog) => el.shadowRoot!.querySelector("wt-form-actions")!;
+const bottom = (el: TillPartyNameDialog) =>
+  el.shadowRoot!.querySelector('[slot="footer"] [role="alert"]')?.textContent ?? "";
 
 async function type(el: TillPartyNameDialog, value: string): Promise<void> {
   const input = nativeInput(el);
@@ -56,9 +57,10 @@ describe("till-party-name-dialog", () => {
       await page.viewport(width, 900);
       try {
         setLocale(locale);
+        const table = t("floor.table_title").replace("{table}", "4");
         const { el } = await mountWidget<TillPartyNameDialog>(
           "till-party-name-dialog",
-          { tables: "Counter 3, Counter 4" },
+          { tables: "Counter 3, Counter 4", backLabel: table },
           theme,
         );
         const dialog = el
@@ -72,6 +74,12 @@ describe("till-party-name-dialog", () => {
         expect(body.scrollWidth).toBeLessThanOrEqual(body.clientWidth);
         expect(dialog.getBoundingClientRect().left).toBeGreaterThanOrEqual(0);
         expect(dialog.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        const bar = el.shadowRoot!.querySelector("wt-top-bar")!.shadowRoot!;
+        const title = bar.querySelector<HTMLElement>(".title")!;
+        expect(title.scrollWidth).toBeLessThanOrEqual(title.clientWidth);
+        expect(bar.querySelector(".back-label")?.textContent).toBe(table);
+        const back = page.getByRole("button", { name: table, exact: true });
+        await expect.element(back).toBeVisible();
         const shown = drawn(el);
         expect(shown.width(shown.placeholder)).toBeLessThanOrEqual(shown.textBox);
       } finally {
@@ -84,14 +92,14 @@ describe("till-party-name-dialog", () => {
   it("names the tables in its heading, and its one optional field partyName, capped at 40", async () => {
     const el = await mountDialog();
 
-    expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
+    expect(el.shadowRoot!.querySelector("wt-dialog")!.ariaLabel).toBe(
       t("table.name_title").replace("{tables}", "Table 4, 5"),
     );
     expect(nativeInput(el).name).toBe("partyName");
     expect(nativeInput(el).maxLength).toBe(40);
     expect(field(el).required).toBe(false);
     expect(field(el).error).toBe("");
-    expect(bottom(el).error).toBe("");
+    expect(bottom(el)).toBe("");
   });
 
   it.each(["en", "es"])(
@@ -293,14 +301,14 @@ describe("till-party-name-dialog", () => {
 
     expect(seen.named).toEqual([]);
     expect(field(el).error).toBe(t("table.name_too_long"));
-    expect(bottom(el).error).toBe(t("form.fix_fields"));
+    expect(bottom(el)).toBe(t("form.fix_fields"));
     expect(save(el).disabled).toBe(true);
     expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
 
     await type(el, "x".repeat(40));
 
     expect(field(el).error).toBe("");
-    expect(bottom(el).error).toBe("");
+    expect(bottom(el)).toBe("");
     expect(save(el).disabled).toBe(false);
     save(el).click();
     expect(seen.named).toEqual([{ name: "x".repeat(40) }]);
@@ -314,13 +322,13 @@ describe("till-party-name-dialog", () => {
     });
 
     expect(field(el).error).toBe(t("table.name_too_long"));
-    expect(bottom(el).error).toBe(t("form.fix_fields"));
+    expect(bottom(el)).toBe(t("form.fix_fields"));
     expect(save(el).disabled).toBe(false);
 
     await type(el, "Ana B");
 
     expect(field(el).error).toBe("");
-    expect(bottom(el).error).toBe("");
+    expect(bottom(el)).toBe("");
   });
 
   it("saves with Enter from the field", async () => {
@@ -335,11 +343,15 @@ describe("till-party-name-dialog", () => {
     expect(seen.named).toEqual([{ name: "Ana" }]);
   });
 
-  it("reports Cancel without a name", async () => {
+  it("reports Back without a name", async () => {
     const el = await mountDialog();
     const seen = captured(el);
 
-    el.shadowRoot!.querySelector<HTMLElement>("[data-name-cancel]")!.click();
+    const closed = new Promise<void>((resolve) =>
+      el.addEventListener("party-name-cancel", () => resolve(), { once: true }),
+    );
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await closed;
 
     expect(seen).toEqual({ named: [], cancelled: 1 });
   });

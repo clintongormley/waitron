@@ -574,7 +574,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The remaining order and payment screens use the
   [shared panels and payment controls](developers/design-system.md#full-screen-panels-and-payment-controls).
   The wide floor bar, kitchen destinations, All zones, table jobs, order, menu, bill action sheet,
-  action panels and payment slices remain.
+  table-move and bill action panels, Send and move allergy prompts, and payment slices remain.
   [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
 

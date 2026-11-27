@@ -44,8 +44,12 @@ async function fill(form: TillPartyGuestsDialog, value: string) {
   await form.updateComplete;
   return input;
 }
-function cancel(form: TillPartyGuestsDialog) {
-  form.shadowRoot!.querySelector<HTMLElement>("[data-guests-cancel]")!.click();
+async function closeWithBack(form: TillPartyGuestsDialog) {
+  const closed = new Promise<void>((resolve) =>
+    form.addEventListener("party-guests-cancel", () => resolve(), { once: true }),
+  );
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await closed;
 }
 async function question(app: PartyGuestsLeaveApp) {
   await app.updateComplete;
@@ -77,11 +81,12 @@ function saveState(form: TillPartyGuestsDialog) {
   const save = form.shadowRoot!.querySelector<HTMLElement>("[data-guests-save]")!;
   return { variant: save.getAttribute("variant"), disabled: save.hasAttribute("disabled") };
 }
-for (const action of ["Escape"]) {
+for (const action of ["Escape", "Back"]) {
   it(`party guests ${action} keeps the typed count, then discards without sending`, async () => {
     const { app, form } = await mount();
     const input = await fill(form, "4");
-    await userEvent.keyboard("{Escape}");
+    if (action === "Escape") await userEvent.keyboard("{Escape}");
+    else await page.getByRole("button", { name: "Back", exact: true }).click();
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
@@ -110,8 +115,8 @@ it("a count typed back to the stored one, however spelled, closes without a warn
   expect(unload()).toBe(true);
   await fill(form, " 02 ");
   expect(unload()).toBe(false);
-  cancel(form);
-  await expect.poll(() => app.closes).toBe(1);
+  await closeWithBack(form);
+  expect(app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
   expect(app.submitted).toEqual([]);
 });
@@ -168,7 +173,7 @@ it("retained departed party-guests controls cannot submit, cancel or replace the
   const submit = form.shadowRoot!.querySelector<HTMLElement>("[data-guests-save]")!;
   form.remove();
   submit.click();
-  cancel(form);
+  form.shadowRoot!.querySelector("wt-top-bar")!.shadowRoot!.querySelector("wt-button")!.click();
   input.value = "7";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   input.dispatchEvent(
@@ -239,8 +244,8 @@ it("a stored count changed elsewhere moves an untouched window with it, which th
   await form.updateComplete;
   expect(form.value).toBe("6");
   expect(unload()).toBe(false);
-  cancel(form);
-  await expect.poll(() => app.closes).toBe(1);
+  await closeWithBack(form);
+  expect(app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
 it("a count typed before the stored one changes elsewhere stays unsaved against the new stored count", async () => {
@@ -261,8 +266,8 @@ it("a count stored elsewhere while an untouched window is taken out moves the wi
   expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe("6");
   expect(unload()).toBe(false);
   expect(saveState(form)).toEqual({ variant: "secondary", disabled: true });
-  cancel(form);
-  await expect.poll(() => app.closes).toBe(1);
+  await closeWithBack(form);
+  expect(app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
 it("a typed count stored elsewhere while the window is taken out counts as saved once it is put back", async () => {

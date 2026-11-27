@@ -35,6 +35,7 @@ export class WtDialog extends LitElement {
     css`
       :host {
         --wt-table-max: none;
+        --wt-dialog-inset-inline-start: 0px;
         /* A screen sets this on its dialog to paint the whole window, footer included. */
         --wt-dialog-surface: var(--wt-color-surface-raised);
         --wt-tabs-sticky-surface: var(--wt-dialog-surface);
@@ -102,8 +103,9 @@ export class WtDialog extends LitElement {
       }
 
       :host([full-screen]) dialog {
-        inset: var(--wt-keyboard-top) 0 var(--wt-keyboard-inset);
-        inline-size: 100%;
+        inset-block: var(--wt-keyboard-top) var(--wt-keyboard-inset);
+        inset-inline: var(--wt-dialog-inset-inline-start) 0;
+        inline-size: calc(100% - var(--wt-dialog-inset-inline-start));
         block-size: var(--wt-dialog-band);
         max-inline-size: none;
         max-block-size: none;

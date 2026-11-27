@@ -44,8 +44,12 @@ async function fill(form: TillPartyNameDialog, value: string) {
   await form.updateComplete;
   return input;
 }
-function cancel(form: TillPartyNameDialog) {
-  form.shadowRoot!.querySelector<HTMLElement>("[data-name-cancel]")!.click();
+async function closeWithBack(form: TillPartyNameDialog) {
+  const closed = new Promise<void>((resolve) =>
+    form.addEventListener("party-name-cancel", () => resolve(), { once: true }),
+  );
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await closed;
 }
 async function question(app: PartyNameLeaveApp) {
   await app.updateComplete;
@@ -73,11 +77,12 @@ function saveState(form: TillPartyNameDialog) {
   const save = form.shadowRoot!.querySelector<HTMLElement>("[data-name-save]")!;
   return { variant: save.getAttribute("variant"), disabled: save.hasAttribute("disabled") };
 }
-for (const action of ["Escape"]) {
+for (const action of ["Escape", "Back"]) {
   it(`party name ${action} keeps the typed name, then discards without naming`, async () => {
     const { app, form } = await mount();
     const input = await fill(form, "Luis");
-    await userEvent.keyboard("{Escape}");
+    if (action === "Escape") await userEvent.keyboard("{Escape}");
+    else await page.getByRole("button", { name: "Back", exact: true }).click();
     const q = await question(app);
     expect(q.open).toBe(true);
     expect(app.closes).toBe(0);
@@ -106,8 +111,8 @@ it("normalized reverted party names close without a warning", async () => {
   expect(unload()).toBe(true);
   await fill(form, "  Ana ");
   expect(unload()).toBe(false);
-  cancel(form);
-  await expect.poll(() => app.closes).toBe(1);
+  await closeWithBack(form);
+  expect(app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
   expect(app.submitted).toEqual([]);
 });
@@ -167,7 +172,7 @@ it("retained departed party-name controls cannot submit, cancel or replace the d
   const submit = form.shadowRoot!.querySelector<HTMLElement>("[data-name-save]")!;
   form.remove();
   submit.click();
-  cancel(form);
+  form.shadowRoot!.querySelector("wt-top-bar")!.shadowRoot!.querySelector("wt-button")!.click();
   input.value = "Bob";
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   input.dispatchEvent(
@@ -239,8 +244,8 @@ it("a stored name changed elsewhere moves an untouched window with it, which the
   await form.updateComplete;
   expect(form.value).toBe("Luis");
   expect(unload()).toBe(false);
-  cancel(form);
-  await expect.poll(() => app.closes).toBe(1);
+  await closeWithBack(form);
+  expect(app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
 it("a name typed before the stored one changes elsewhere stays unsaved against the new stored name", async () => {
@@ -261,8 +266,8 @@ it("a name stored elsewhere while an untouched window is taken out moves the win
   expect(form.shadowRoot!.querySelector("wt-input")!.value).toBe("Luis");
   expect(unload()).toBe(false);
   expect(saveState(form)).toEqual({ variant: "secondary", disabled: true });
-  cancel(form);
-  await expect.poll(() => app.closes).toBe(1);
+  await closeWithBack(form);
+  expect(app.closes).toBe(1);
   expect((await question(app)).open).toBe(false);
 });
 it("a typed name stored elsewhere while the window is taken out counts as saved once it is put back", async () => {

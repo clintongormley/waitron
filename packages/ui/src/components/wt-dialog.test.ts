@@ -103,6 +103,23 @@ test("opens when the open property is set", async () => {
   expect(dialog.open).toBe(true);
 });
 
+test("a full-screen dialog can start at the order edge while the backdrop still dims the display", async () => {
+  const el = (await mount("<wt-dialog full-screen>Details</wt-dialog>")) as WtDialog;
+  el.open = true;
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+  expect(dialog.getBoundingClientRect().left).toBe(0);
+  expect(dialog.getBoundingClientRect().right).toBe(innerWidth);
+
+  el.style.setProperty("--wt-dialog-inset-inline-start", "160px");
+  expect(dialog.getBoundingClientRect().left).toBe(160);
+  expect(dialog.getBoundingClientRect().right).toBe(innerWidth);
+  const scrim = getComputedStyle(dialog, "::backdrop");
+  expect(scrim.position).toBe("fixed");
+  expect(scrim.inset).toBe("0px");
+  expect(scrim.backgroundColor).toBe("rgba(0, 0, 0, 0.4)");
+});
+
 test("an opted-in backdrop click asks the close guard and can dismiss the dialog", async () => {
   const el = (await mount(
     '<wt-dialog dismiss-on-backdrop heading="Settings"><button>Inside</button></wt-dialog>',

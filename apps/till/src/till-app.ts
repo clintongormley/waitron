@@ -4761,7 +4761,9 @@ export class TillApp extends LitElement {
         api.savePartyAllergy(open.view.partyId, command, { signal }),
       );
       if (!open.current() || this.allergyDialog?.key !== open.key) return;
-      this.#closeAllergyDialog(true, open.key);
+      await this.renderRoot.querySelector("till-party-allergy-dialog")?.closeSaved(open.key);
+      if (!open.current() || this.allergyDialog?.key !== open.key) return;
+      this.#closeAllergyDialog(false, open.key);
       this.#acceptTableAllergy(view);
       if (
         this.orderParty?.id === view.partyId &&
@@ -5052,18 +5054,20 @@ export class TillApp extends LitElement {
     }
     return null;
   }
-
   #renderAllergyDialog(): TemplateResult | typeof nothing {
     const open = this.allergyDialog;
     if (open === null) return nothing;
+    const order = this.renderRoot.querySelector("till-table-order-screen");
     return html`<till-party-allergy-dialog
       .view=${open.view}
       .mode=${open.mode ?? "send"}
+      .backLabel=${order?.tableHeading ?? ""}
+      .panelInset=${open.mode === "edit" ? (order?.orderPaneInset ?? 0) : 0}
       .scopeKey=${open.key}
       .busy=${open.busy}
       .refusal=${open.refusal ?? ""}
       .fieldRefusal=${open.fieldRefusal ?? null}
-      .draftParent=${this.renderRoot.querySelector("till-table-order-screen") ?? this}
+      .draftParent=${order ?? this}
       @allergy-confirm=${(event: CustomEvent<AllergyConfirmDetail>) => {
         event.stopPropagation();
         if (
@@ -24956,6 +24960,9 @@ export class TillApp extends LitElement {
           this.#onFloorRefresh(event.detail ?? {})}
         @open-table=${(event: Event) => void this.#onOpenTable(event)}
         @submit-draft=${(event: Event) => void this.#onSubmitDraft(event)}
+        @order-pane-resized=${() => {
+          if (this.allergyDialog?.mode === "edit") this.requestUpdate();
+        }}
         @edit-party-allergy=${(event: Event) => {
           event.stopPropagation();
           void this.#openTableAllergyEditor();

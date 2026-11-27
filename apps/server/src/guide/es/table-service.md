@@ -677,6 +677,10 @@ Toca el nombre de la mesa para ver las acciones que afectan a todo el grupo. Pue
 dónde se sienta el grupo. **Cerrar mesa** está al final. En una pantalla baja, desplázate por el
 panel hasta encontrarlo.
 
+**Alergias**, **Comensales** y **Poner nombre a los clientes** abren un editor. Pulsa el nombre
+de la mesa en la parte superior para volver a la misma cuenta. Si cambiaste algún campo, puedes
+seguir editando o descartar los cambios.
+
 Abre **⋮** junto al selector para ver las acciones de la cuenta que tienes en pantalla. Desde ahí
 puedes imprimirla, introducir los datos de la factura completa, mover platos o cambiar la cuenta.
 Cuando una acción requiere una elección, se abre junto al pedido. Pulsa **Atrás** para volver.

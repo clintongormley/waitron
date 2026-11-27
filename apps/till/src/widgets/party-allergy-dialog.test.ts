@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { WtInput, WtTextarea } from "@waitron/ui";
+import type { WtButton, WtInput, WtTextarea } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
 import type { PartyAllergyRead, AllergyPatch } from "@waitron/module";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { TillPartyAllergyDialog } from "./party-allergy-dialog.js";
 
 const original = currentLocale();
@@ -399,10 +399,17 @@ describe("A669 allergy dialog", () => {
     await click(el, "[data-primary]");
     el.busy = true;
     await el.updateComplete;
+    const bar = el.shadowRoot!.querySelector("wt-top-bar")!;
+    await bar.updateComplete;
+    const back = bar.shadowRoot!.querySelector("wt-button")!;
+    await back.updateComplete;
+    expect(back.shadowRoot!.querySelector("button")!.disabled).toBe(true);
     el.busy = false;
     el.refusal = "Connection lost";
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("Connection lost");
+    expect(el.shadowRoot!.querySelector('[slot="footer"] [role="alert"]')?.textContent).toBe(
+      "Connection lost",
+    );
     expect((el.shadowRoot!.querySelector("[data-primary]") as HTMLButtonElement).disabled).toBe(
       false,
     );
@@ -442,6 +449,17 @@ describe("A669 allergy dialog", () => {
     await el.updateComplete;
     await click(el, "[data-none]");
     expect(results[0]!.expectedPartyRevision).toBeNull();
+  });
+  it("opens the allergy overview without selecting Edit and keeps Edit in the tab order", async () => {
+    const el = await mount("allergies", "edit");
+    const root = el.shadowRoot!;
+    const edit = root.querySelector<WtButton>('wt-button[data-edit="0"]')!;
+    await edit.updateComplete;
+    const button = edit.shadowRoot!.querySelector("button")!;
+    await expect.poll(() => root.activeElement).toBe(root.querySelector(".content"));
+    await userEvent.keyboard("{Tab}");
+    expect(edit.shadowRoot!.activeElement).toBe(button);
+    expect(button.matches(":focus-visible")).toBe(true);
   });
   it("keeps focus while typing a new guest across consecutive native keys", async () => {
     const el = await mount();
@@ -487,7 +505,9 @@ describe("A669 allergy dialog", () => {
     expect(el.shadowRoot!.querySelector<WtInput>('wt-input[name="guest-0-who"]')!.error).toBe(
       "Check this guest",
     );
-    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBeTruthy();
+    expect(el.shadowRoot!.querySelector('[slot="footer"] [role="alert"]')?.textContent).toBe(
+      t("form.fix_fields"),
+    );
     expect((el.shadowRoot!.querySelector("[data-primary]") as HTMLButtonElement).disabled).toBe(
       false,
     );

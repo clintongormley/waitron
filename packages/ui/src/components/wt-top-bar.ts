@@ -15,13 +15,21 @@ export class WtTopBar extends LitElement {
 
       header {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
+        container-type: inline-size;
+        grid-template-columns: minmax(min-content, 1fr) minmax(0, max-content) minmax(
+            min-content,
+            1fr
+          );
         align-items: center;
         gap: var(--wt-space-1);
         min-block-size: calc(var(--wt-tap-min) + var(--wt-space-3));
         padding-inline: var(--wt-space-1);
         border-block-end: var(--wt-field-line-width) solid var(--wt-color-border);
         background: var(--wt-color-surface);
+      }
+
+      .back {
+        max-inline-size: calc(100cqi / 3);
       }
 
       h2 {
@@ -41,7 +49,7 @@ export class WtTopBar extends LitElement {
       wt-button {
         min-inline-size: 0;
         max-inline-size: 100%;
-        --wt-action-padding: 0;
+        --wt-action-padding: 0 var(--wt-space-1);
         --wt-action-text: var(--wt-color-primary-text);
         --wt-action-font-size: var(--wt-font-size-md);
         --wt-button-justify: start;
@@ -63,6 +71,9 @@ export class WtTopBar extends LitElement {
 
       wt-icon {
         color: var(--wt-color-primary-text);
+        inline-size: calc(var(--wt-space-4) + var(--wt-space-1));
+        block-size: calc(var(--wt-space-4) + var(--wt-space-1));
+        flex: none;
       }
 
       .action {
@@ -74,6 +85,7 @@ export class WtTopBar extends LitElement {
   @property() heading = "";
   @property() subtitle = "";
   @property({ attribute: "back-label" }) backLabel = "";
+  @property({ type: Boolean, attribute: "back-disabled" }) backDisabled = false;
 
   private back(event: Event): void {
     event.stopPropagation();
@@ -82,11 +94,11 @@ export class WtTopBar extends LitElement {
 
   override render() {
     return html`<header>
-      <div>
+      <div class="back">
         ${
           this.backLabel === ""
             ? nothing
-            : html`<wt-button variant="ghost" @click=${this.back}
+            : html`<wt-button variant="ghost" .disabled=${this.backDisabled} @click=${this.back}
                 ><wt-icon name="chevron-left"></wt-icon
                 ><span class="back-label">${this.backLabel}</span></wt-button
               >`

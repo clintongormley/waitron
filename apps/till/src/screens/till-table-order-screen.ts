@@ -1567,6 +1567,10 @@ export class TillTableOrderScreen extends LitElement {
       ?.requestLeave(reason) ?? Promise.resolve(true);
   /** The screen is at least {@link DRAFT_SIDE_BY_SIDE_MIN_WIDTH} wide. */
   @state() private wide = false;
+  get orderPaneInset(): number {
+    const pane = this.wide ? this.renderRoot.querySelector("[data-draft-pane]") : null;
+    return Math.max(0, pane?.getBoundingClientRect().left ?? 0);
+  }
   /** Below that width, which of browsing and the order is shown. */
   @state() private view: "menu" | "order" = "menu";
   #resizing?: ResizeObserver;
@@ -2059,7 +2063,10 @@ export class TillTableOrderScreen extends LitElement {
   #measure(width: number): void {
     this.wide = width >= DRAFT_SIDE_BY_SIDE_MIN_WIDTH;
     if (this.wide && this.view === "order") void this.#showMenu();
-    void this.updateComplete.then(() => this.#placePartyMenu());
+    void this.updateComplete.then(() => {
+      this.#placeOrderPanels();
+      this.#dispatch("order-pane-resized", {});
+    });
   }
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
@@ -2576,7 +2583,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   override updated(changed: PropertyValues<this>): void {
-    this.#placePartyMenu();
+    this.#placeOrderPanels();
     this.#refocusMenu();
     this.#placeStepFocus();
     if (changed.has("splitRead")) this.#returnToSplitFoot();
@@ -6099,7 +6106,9 @@ export class TillTableOrderScreen extends LitElement {
     const party = this.party;
     if (naming === null || party === null) return nothing;
     return html`<till-party-name-dialog
+      data-order-panel
       .tables=${partyTablesLabel(party, this.tables)}
+      .backLabel=${this.tableHeading}
       .value=${naming.value}
       .savedValue=${party.name ?? ""}
       .refusal=${naming.refusal}
@@ -6166,7 +6175,9 @@ export class TillTableOrderScreen extends LitElement {
     const party = this.party;
     if (counting === null || party === null) return nothing;
     return html`<till-party-guests-dialog
+      data-order-panel
       .tables=${partyTablesLabel(party, this.tables)}
+      .backLabel=${this.tableHeading}
       .value=${counting.value}
       .savedValue=${this.#savedGuestCount()}
       .refusal=${counting.refusal}
@@ -6996,31 +7007,38 @@ export class TillTableOrderScreen extends LitElement {
     ]);
   }
 
-  #placePartyMenu(): void {
+  #placeOrderPanels(): void {
     const menu = this.renderRoot.querySelector<HTMLElement>("[data-party-menu][data-open]");
-    if (menu === null) return;
-    const pane = this.wide ? this.renderRoot.querySelector("[data-draft-pane]") : null;
-    const bounds = pane?.getBoundingClientRect();
-    menu.style.setProperty("--wt-party-menu-left", bounds ? `${Math.max(0, bounds.left)}px` : "");
+    const panels = this.renderRoot.querySelectorAll<HTMLElement & { panelInset: number }>(
+      "[data-order-panel]",
+    );
+    if (menu === null && panels.length === 0) return;
+    const inset = this.orderPaneInset;
+    menu?.style.setProperty("--wt-party-menu-left", `${inset}px`);
+    for (const panel of panels) panel.panelInset = inset;
+  }
+
+  get tableHeading(): string {
+    const table =
+      this.tables.find((row) => row.id === this.activeTableId) ??
+      this.tables.find((row) => row.id === this.party?.tableIds[0]);
+    const joinedName =
+      table?.today?.joinId == null ? null : groupName(mergeMembersOf(this.tables, table));
+    return table
+      ? detailsHeading(table, joinedName)
+      : (this.party?.displayName ?? t("table.actions_title"));
   }
 
   #partyMenu(): TemplateResult {
     const party = this.party;
-    const table =
-      this.tables.find((row) => row.id === this.activeTableId) ??
-      this.tables.find((row) => row.id === party?.tableIds[0]);
-    const joinedName =
-      table?.today?.joinId == null ? null : groupName(mergeMembersOf(this.tables, table));
     return tablePartyMenu({
-      heading: table
-        ? detailsHeading(table, joinedName)
-        : (party?.displayName ?? t("table.actions_title")),
+      heading: this.tableHeading,
       party,
       allergy: this.#allergy() ?? null,
       requested: party !== null && billRequestOf(this.tables, party.id) !== undefined,
       commandBusy: this.groupCommandBusy,
       choose: (event, action) => this.#fromMenu(event, () => this.#chooseTableAction(action)),
-      place: () => this.#placePartyMenu(),
+      place: () => this.#placeOrderPanels(),
       requestBill: (requested) => this.#dispatch("request-bill", { requested }),
       finish: () => this.#dispatch("finish-table", {}),
     });
