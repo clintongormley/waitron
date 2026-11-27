@@ -383,12 +383,17 @@ export const inDialog = (el: TillApp, selector: string) =>
   dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string; disabled: boolean }>(
     selector,
   );
-export const shownBalance = (el: TillApp) => ({
-  total: text(inDialog(el, "[data-pay-total] dd")),
-  received: text(inDialog(el, "[data-pay-received] dd")),
-  reserved: text(inDialog(el, "[data-pay-reserved] dd")),
-  outstanding: text(inDialog(el, "[data-pay-outstanding] dd")),
-});
+export const shownBalance = (el: TillApp) => {
+  const balance = dialog(el)?.balance;
+  if (inDialog(el, "[data-quiet-pay]") !== null && balance != null)
+    return balanceShows(balance.total, balance.received, balance.outstanding, balance.reserved);
+  return {
+    total: text(inDialog(el, "[data-pay-total] dd")),
+    received: text(inDialog(el, "[data-pay-received] dd")),
+    reserved: text(inDialog(el, "[data-pay-reserved] dd")),
+    outstanding: text(inDialog(el, "[data-pay-outstanding] dd")),
+  };
+};
 export const balanceShows = (
   total: string,
   received: string,
@@ -432,7 +437,7 @@ export async function openDialog(
   }
   if (way !== "rest" && !pay.busy && !pay.confirmationLocked) {
     const choice = pay.shadowRoot!.querySelector<HTMLInputElement>(
-      `input[name="way"][value="${way}"]`,
+      `[data-quiet-pay-way="${way}"], input[name="way"][value="${way}"]`,
     );
     expect(choice).not.toBeNull();
     choice!.click();
@@ -446,18 +451,53 @@ export async function showBillFooter(order: TillTableOrderScreen): Promise<void>
 }
 
 export async function type(el: TillApp, name: string, value: string): Promise<void> {
+  if (inDialog(el, `wt-input[name="${name}"]`) === null) {
+    if (name === "tendered") await press(el, "[data-quiet-pay-cash]");
+    if (name === "cardTip") await press(el, "[data-quiet-pay-tip]");
+    if (name === "externalRef") await press(el, "[data-quiet-pay-manual]");
+  }
   const input = inDialog(el, `wt-input[name="${name}"]`)!.shadowRoot!.querySelector("input")!;
   input.value = value;
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await flush(el);
 }
 
+export async function choosePayWay(
+  el: TillApp,
+  way: "whole" | "share" | "items" | "contribution",
+): Promise<void> {
+  await press(el, `[data-quiet-pay-way="${way}"], input[name="way"][value="${way}"]`);
+}
+
+export async function choosePayMethod(el: TillApp, method: "card" | "cash" | "manual") {
+  const radio = inDialog(el, `input[name="method"][value="${method}"]`);
+  if (radio !== null) radio.click();
+  else {
+    const choice = inDialog(el, `[data-quiet-pay-${method}]`);
+    expect(choice).not.toBeNull();
+    if (method !== "card") choice!.click();
+  }
+  await flush(el);
+}
+
+export const paymentStart = (el: TillApp) =>
+  inDialog(
+    el,
+    "[data-pay-continue], [data-quiet-pay-card], [data-quiet-pay-cash], [data-quiet-pay-manual]",
+  );
+
 /** Presses `selector` in the Pay window. Take payment first answers an unanswered own-receipt
  * question No, the answer that changes nothing else the payment sends; the question's own cases
  * answer it themselves. */
 export async function press(el: TillApp, selector: string): Promise<void> {
   if (selector === "[data-pay-confirm]") await answerOwnReceipt(el, "no", { ifUnanswered: true });
-  inDialog(el, selector)!.click();
+  if (selector.startsWith('input[name="reader"]') && inDialog(el, selector) === null)
+    await press(el, "[data-quiet-pay-equipment]");
+  const requested = inDialog(el, selector);
+  const control =
+    requested ??
+    (selector === "[data-pay-continue]" ? inDialog(el, "[data-quiet-pay-card]") : null);
+  control!.click();
   await flush(el);
 }
 

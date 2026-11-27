@@ -3384,17 +3384,8 @@ describe("till-app table ordering: the guests the receipt prints", () => {
     tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
     await flush(el);
     if (pay(el).localName === "till-bill-pay-dialog") {
-      const field =
-        pay(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-          "wt-input[name=tendered]",
-        )!;
-      await field.updateComplete;
-      const input = field.shadowRoot!.querySelector("input")!;
-      input.value = "5";
-      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-      await flush(el);
-      pay(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-continue]")!.click();
-      await flush(el);
+      await typePay(el, "tendered", "5");
+      await pressPay(el, "[data-pay-continue]");
     }
     return el;
   }

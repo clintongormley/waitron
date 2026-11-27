@@ -1,3 +1,4 @@
+import type { HeldOrder } from "../api/orders-api.js";
 import {
   MONEY_SCALE,
   compareDecimal,
@@ -229,4 +230,25 @@ export function billName(
     n: String(bill.billNumber),
     name: bill.billName ?? "",
   });
+}
+
+export const billsSeen = (bills: readonly PartyBill[]): string =>
+  JSON.stringify(
+    bills.map((bill) => [
+      bill.workingOrderId,
+      bill.revision,
+      bill.status,
+      bill.outstanding,
+      bill.hasPayments,
+    ]),
+  );
+
+export function storedInvoiceOf(
+  orderId: string,
+  { invoiceType, recipient, invoiceDelivery, invoiced }: HeldOrder,
+): { orderId: string } & Pick<
+  HeldOrder,
+  "invoiceType" | "recipient" | "invoiceDelivery" | "invoiced"
+> {
+  return { orderId, invoiceType, recipient, invoiceDelivery, invoiced };
 }

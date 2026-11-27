@@ -144,43 +144,136 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     );
 
   for (const locale of ["en", "es"]) {
-    for (const width of [390, 1280]) {
-      it(`keeps Whole bill at the right of the shared choices in ${locale} at ${width}px`, async () => {
+    for (const [width, height] of [
+      [390, 844],
+      [844, 390],
+      [1024, 1280],
+      [1280, 800],
+    ] as const) {
+      it(`stacks Quiet Pay with Whole bill first in ${locale} at ${width}×${height}`, async () => {
         setLocale(locale);
-        await page.viewport(width, 900);
+        await page.viewport(width, height);
         try {
           const { el, host } = await mount({
-            way: undefined,
-            handheld: width === 390,
+            quiet: true,
+            way: "whole",
+            balance: {
+              ...balance,
+              total: "873.20",
+              received: "0.00",
+              reserved: "0.00",
+              outstanding: "873.20",
+            },
+            tableName: t("floor.table_title").replace("{table}", "4"),
+            billName: locale === "en" ? "Bill 1" : "Cuenta 1",
+            handheld: width <= 844,
+            equipment,
+            takesReaderCard: true,
             takesCash: true,
+            takesManualCard: true,
+            cardReader: "stripe_terminal",
           });
-          const choices = [
-            ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-pay-way] .option"),
-          ];
+          const choices = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-quiet-pay-way]")];
           expect(choices).toHaveLength(4);
-          const boxes = choices.map((choice) => choice.getBoundingClientRect());
-          expect(boxes.map((box) => Math.round(box.top))).toEqual(
-            Array(4).fill(Math.round(boxes[0]!.top)),
-          );
-          expect(boxes[3]!.left).toBeGreaterThan(boxes[2]!.left);
-          expect(boxes[3]!.right).toBeLessThanOrEqual(width);
+          expect(choices[0]!.dataset.quietPayWay).toBe("whole");
+          expect(
+            choices[0]!.shadowRoot!.querySelector("button")!.getAttribute("aria-pressed"),
+          ).toBe("true");
           for (const choice of choices) {
-            const text = [...choice.querySelector("span")!.childNodes].find(
-              (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
-            )!;
-            for (const word of text.textContent!.matchAll(/\S+/g)) {
-              const range = document.createRange();
-              range.setStart(text, word.index);
-              range.setEnd(text, word.index + word[0].length);
-              expect(range.getClientRects()).toHaveLength(1);
-            }
+            const hint = choice.shadowRoot!.querySelector('[part="hint"]')!.getBoundingClientRect();
+            expect(choice.getBoundingClientRect().right - hint.right).toBeLessThan(32);
+          }
+          const boxes = choices.map((choice) => choice.getBoundingClientRect());
+          const column = choices[0]!.parentElement!.getBoundingClientRect();
+          expect(boxes.map((box) => box.width)).toEqual(boxes.map(() => column.width));
+          expect(column.right).toBeLessThanOrEqual(width);
+          for (const [index, box] of boxes.slice(1).entries()) {
+            expect(box.top).toBeGreaterThanOrEqual(boxes[index]!.bottom);
+          }
+          await pressed(el, "[data-quiet-pay-tip]");
+          const tipField = el.shadowRoot!.querySelector('wt-input[name="cardTip"]')!;
+          const remove = el.shadowRoot!.querySelector("[data-clear-card-tip]")!;
+          expect(remove.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+          const tipFieldTop = tipField.getBoundingClientRect().top;
+          await typed(el, "cardTip", locale === "en" ? "87.32" : "87,32");
+          expect(tipField.getBoundingClientRect().top).toBe(tipFieldTop);
+          await pressed(el, "[data-quiet-pay-tip]");
+          const root = el.shadowRoot!;
+          const breakdown = root.querySelector("[data-quiet-pay-breakdown]")!;
+          const summary = breakdown.querySelector("span")!.getBoundingClientRect();
+          const actions = [...breakdown.querySelectorAll("wt-button")];
+          expect(actions.map((action) => action.textContent?.trim())).toEqual([
+            locale === "en" ? "Edit tip" : "Editar propina",
+          ]);
+          const editTip = actions[0]!;
+          const editBox = editTip.getBoundingClientRect();
+          expect(editBox.top).toBeLessThan(summary.bottom);
+          expect(editBox.right).toBeLessThanOrEqual(breakdown.getBoundingClientRect().right);
+          const icons = [
+            root.querySelector("[data-quiet-pay-equipment] wt-icon")!,
+            choices[0]!.shadowRoot!.querySelector("[part=check] wt-icon")!,
+            root.querySelector("[data-quiet-pay-card]")!.shadowRoot!.querySelector("wt-icon") ??
+              root.querySelector("[data-quiet-pay-card] wt-icon")!,
+          ];
+          expect(icons.map((icon) => icon.getBoundingClientRect().width)).toEqual([20, 20, 22]);
+          if (width === 390) {
+            const tipText = document.createRange();
+            tipText.selectNodeContents(breakdown.querySelector("span")!);
+            const tileTop = choices[0]!.getBoundingClientRect().top;
+            expect.soft(tileTop - tipText.getBoundingClientRect().bottom).toBeLessThanOrEqual(15);
+            const target = editTip.shadowRoot!.querySelector("button")!.getBoundingClientRect();
+            expect.soft(target.height).toBeGreaterThanOrEqual(24);
+            expect.soft(target.bottom).toBeLessThan(tileTop);
+
+            const check = icons[1]!.shadowRoot!.querySelector("path")!;
+            expect.soft(check.isPointInFill(new DOMPoint(10, 6.6))).toBe(true);
+            expect.soft(check.isPointInFill(new DOMPoint(10, 8.7))).toBe(true);
+
+            const chevron = root.querySelector("wt-top-bar")!.shadowRoot!.querySelector("wt-icon")!;
+            const arrow = chevron.shadowRoot!.querySelector("path")!.getBBox();
+            const scale = chevron.getBoundingClientRect().width / 16;
+            expect.soft(arrow.width * scale).toBeGreaterThanOrEqual(8);
+            expect.soft(arrow.height * scale).toBeGreaterThanOrEqual(13.5);
           }
           await expectNoA11yViolations(host);
           await page.screenshot({
-            path: `__screenshots__/a739-cut5-${locale}-${theme}-${width}.png`,
+            path: `__screenshots__/quiet-pay-q1-${locale}-${theme}-${width}x${height}.png`,
           });
+          if (width === 390) {
+            const edit = editTip.shadowRoot!.querySelector("button")!;
+            expect(edit.getAttribute("aria-expanded")).toBe("false");
+            await pressed(el, "[data-quiet-pay-tip]");
+            expect(edit.getAttribute("aria-expanded")).toBe("true");
+            const label = locale === "en" ? "Remove tip" : "Quitar propina";
+            const remove = page.getByRole("button", { name: label, exact: true });
+            expect(
+              root.querySelector("[data-clear-card-tip]")!.getBoundingClientRect().height,
+            ).toBeGreaterThanOrEqual(24);
+            await expectNoA11yViolations(host);
+            await remove.click({ timeout: 2000 });
+            await el.updateComplete;
+            expect(root.activeElement).toBe(editTip);
+            expect(edit.getAttribute("aria-expanded")).toBe("false");
+          }
+          if (height === 390) {
+            const body = root
+              .querySelector("wt-full-screen-panel")!
+              .shadowRoot!.querySelector<HTMLElement>("[part=body]")!;
+            expect(choices[0]!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+              body.getBoundingClientRect().bottom,
+            );
+            choices.at(-1)!.scrollIntoView({ block: "end" });
+            expect(body.scrollTop).toBeGreaterThan(0);
+            expect(choices.at(-1)!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+              body.getBoundingClientRect().bottom,
+            );
+            await page.screenshot({
+              path: `__screenshots__/quiet-pay-ways-${locale}-${theme}-${width}x${height}.png`,
+            });
+          }
         } finally {
           setLocale("es-ES");
+          await page.viewport(1280, 900);
         }
       });
     }

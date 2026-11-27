@@ -7104,15 +7104,16 @@ printer. An earlier payer uses the Pay confirmation and the last payer uses Cust
 Readers configured to print their own slips handle their own card payments. The till disables the
 action while sending. The server queues one original for the payment. Use Print Queue for copies.
 
-Table bills open one Pay window from the foot. Its amount choices are An amount, Split equally,
-Items and Whole bill, in that order; Whole bill starts selected at the right. Keep all four choices
-in one row at phone width, allowing their labels to wrap within equal columns. The amount choices
-carry one help-mode badge linked to the payment guide. Existing cash, card, equipment, recovery and
-unsaved-input handling stays in the payment window. A printed bill opens these payment choices
-directly. For a presented bill that still has a balance and no issued invoice, **Pay in parts**
-opens the same choices. Retained whole-payment confirmations and zero-total completion keep their
-existing paths.
-Counter bills use the same window for their first and remaining payments.
+Table bills open a full-screen Pay panel from the foot. To pay leads with the amount, with the bill
+and tip shown separately. Whole bill starts selected. Split equally, Items and An amount are
+stacked choices with a hint each and a help-mode badge linked to the payment guide. Charge and
+Cash are large actions. Other card machine is a text action. Choose Full invoice from the bill
+before opening Pay. Back uses the payment draft's leave check.
+
+Charge opens the server's confirmation. Cash and Other card machine open their existing fields
+before confirmation. Printed bills use these choices directly. A presented bill uses its whole
+payment confirmation, with Pay in parts offered when it still has a balance and no issued invoice.
+Counter, retained whole-payment confirmations and zero-total completion use their existing windows.
 
 Whole bill asks the server for one share of the current balance. Its confirmation heading and
 receipt guest-count prompt use that preview, even while the opening balance is still shown.
@@ -7120,11 +7121,9 @@ Items groups matching whole portions with the bill screen's grouping key and a c
 the request carries the selected members' line ids (`ItemPick.lineId`), and Pay for items moves
 them to a bill of their own; on a printed bill the server first reopens it, crediting its receipt,
 and a window still open after the answer moves to the bill the screen moves to (see **A vanished
-bill**). Items is shown disabled, with its reason in a line below
-the choices (`data-pay-items-reason`, joined to the radio by `aria-describedby`), on a Counter
-order whose receipt is issued, on a Counter order sent to the kitchen in a zone paid before
-preparation, on a Counter
-order sent to the kitchen and then moved to a table, and on a printed table bill opened from Find
+bill**). Items is shown disabled, with its reason below the choices, on a Counter order whose
+receipt is issued, on a Counter order sent to the kitchen in a zone paid before preparation,
+on a Counter order sent to the kitchen and then moved to a table, and on a printed table bill opened from Find
 a bill. Once Pay > Items has credited a printed bill's receipt, a `role="status"` line
 (`data-pay-credited`) above every step of the window repeats the screen's line. Successful table-bill reads refresh idle
 item choices, retaining valid selections and tender input. A selected member that leaves is dropped,

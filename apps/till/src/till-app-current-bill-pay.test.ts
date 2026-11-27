@@ -11,6 +11,8 @@ import {
   dialog,
   flush,
   inDialog,
+  paymentStart,
+  choosePayMethod,
   money,
   openDialog,
   openTable,
@@ -74,7 +76,7 @@ it.each(["30.00", "24.00"])(
     await openTable(el);
     await openDialog(el, "rest");
     getBillBalance.mockImplementation(() => new Promise(() => {}));
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await type(el, "cardTip", "0");
     await press(el, "[data-pay-continue]");
     expect(previewBillPayment.mock.calls[0]?.[1]).toMatchObject({
@@ -125,7 +127,7 @@ it("keeps an unanswered reader request reachable on its original moved bill with
   stream.event("ready");
   await flush(el);
   await openDialog(el, "rest");
-  await press(el, 'input[name="method"][value="card"]');
+  await choosePayMethod(el, "card");
   await press(el, "[data-pay-continue]");
   await press(el, "[data-pay-confirm]");
   await vi.waitFor(() => expect(dialog(el)!.confirmationLocked).toBe(true), { timeout: 10_000 });
@@ -296,7 +298,7 @@ it("keeps a submitted preview intact, then shows refreshed items when staff go B
   expect(text(inDialog(el, "[data-pay-scope]"))).toContain("Dessert");
   await press(el, "[data-pay-back]");
   expect(dialog(el)!.lines.map((row) => row.lineNo)).toEqual([2]);
-  expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(true);
+  expect(paymentStart(el)!.disabled).toBe(true);
 });
 
 it("does not resolve an unanswered card from a balance read started before the send ended", async () => {
@@ -328,7 +330,7 @@ it("does not resolve an unanswered card from a balance read started before the s
   stream.event("ready");
   await flush(el);
   await openDialog(el, "rest");
-  await press(el, 'input[name="method"][value="card"]');
+  await choosePayMethod(el, "card");
   await press(el, "[data-pay-continue]");
   await press(el, "[data-pay-confirm]");
   await vi.waitFor(() => expect(takeBillPayment).toHaveBeenCalled());
@@ -475,7 +477,7 @@ it("keeps a reader's pending outcome visible when its bill moves", async () => {
   stream.event("ready");
   await flush(el);
   await openDialog(el, "rest");
-  await press(el, 'input[name="method"][value="card"]');
+  await choosePayMethod(el, "card");
   await press(el, "[data-pay-continue]");
   await press(el, "[data-pay-confirm]");
   expect(dialog(el)!.taken?.pending).toBe("120.00");

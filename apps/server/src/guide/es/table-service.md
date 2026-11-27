@@ -1063,13 +1063,12 @@ para que el responsable pueda recuperar el pago una vez reparado el fallo.
 ## Cobra toda la cuenta o una parte {#pay-window}
 
 Para cobrar una cuenta, abre **Cobrar** en Mostrador o en la cuenta de la mesa. En una mesa, envía o quita
-primero los artículos sin enviar. Arriba se muestran **Total**, **Pagado hasta ahora**,
-**Pago con tarjeta en curso** y **Queda por pagar**. Parte de lo que queda por pagar, no del
-total original de la cuenta.
+primero los artículos sin enviar. **A pagar** muestra el importe en la parte superior de Cobrar.
+Para una factura completa, [prepara la cuenta antes de cobrar](table-service.md#full-invoice).
 
 **Elige qué paga este comensal.** Elige **Toda la cuenta** para cobrar todo lo que
-queda. Elige **Una cantidad** para aportar un importe, **Dividir a partes iguales** para cobrar
-una parte igual o **Artículos** para platos concretos. Para una parte igual, indica cuántas
+queda. Elige **Dividir a partes iguales** para cobrar una parte igual, **Artículos** para platos
+concretos o **Una cantidad** para aportar un importe. Para una parte igual, indica cuántas
 personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
 si solo se pagan algunos. Los platos elegidos pasan a una cuenta propia, que se cobra en el acto y
 tiene su propio ticket; el resto se queda en esta cuenta. Si eliges todos los platos, se cobra
@@ -1085,8 +1084,9 @@ muestra con el número del pedido entre paréntesis. Si ese pedido se pasa despu
 **Dividir a partes iguales** o **Toda la cuenta**, no por artículos; cuando su cuenta está
 presentada para su cobro, elige **Cobrar por partes** para ver esas opciones.
 
-Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
-cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.
+En una mesa, pulsa **Cobrar** para revisar el pago con un lector conectado. Pulsa **Efectivo** u
+**Otro datáfono** para introducir los detalles. En Mostrador, elige la forma de pago y pulsa
+**Continuar**. Revisa los importes en la confirmación, incluidos los cambios desde que abriste Cobrar.
 
 **Una cuenta pagada de más.** Una cuenta puede recibir más de lo que suma, por ejemplo una
 aportación seguida de platos cobrados en una cuenta propia. Entonces indica cuánto de más y no
@@ -1107,13 +1107,16 @@ confirmación muestra cuánto se descuenta de la cuenta y el **Cambio a devolver
 acepta propinas, elige entre devolver todo el cambio, dejarlo todo como propina o dejar una
 cantidad. Revisa el cambio después de elegir la propina, pulsa **Cobrar** y devuelve ese cambio.
 
-**Tarjeta y lector.** Elige **Tarjeta**. En un teléfono, comprueba el lector en **Lector e
-impresora**; usa **Cambiar** o escanea su etiqueta de Waitron si tienes otro en la mano. En
-Mostrador, elige el lector cuando se ofrezca una lista. Comprueba el lector y el total antes de
+**Tarjeta y lector.** En una mesa, usa el icono sin contacto para abrir **Lector e impresora**. Usa
+**Cambiar** o escanea su etiqueta de Waitron si tienes otro en la mano. En Mostrador, elige el lector
+cuando se ofrezca una lista. Comprueba el lector y el total antes de
 confirmar. Para usar otra máquina, sigue [Usar otro datáfono](table-service.md#outside-card).
 
-Si el local acepta propinas, introduce **Propina con tarjeta (opcional)** antes de continuar.
-La confirmación separa **Se descuenta de la cuenta**, **Propina** y **Se cobra en la tarjeta**.
+Si el local acepta propinas y Waitron controla el lector, pulsa **Introducir propina** en Cobrar.
+Para retirar la propina antes de iniciar el pago, pulsa **Editar propina** y luego **Quitar propina**.
+Con otro datáfono, introduce la propina con los demás datos del pago. En Mostrador, rellena **Propina con tarjeta (opcional)**
+antes de continuar. La confirmación separa **Se descuenta de la cuenta**,
+**Propina** y **Se cobra en la tarjeta**.
 Una cantidad superior a lo que queda se convierte en propina: confirma con el cliente el cargo
 completo antes de enviarlo. Por ejemplo, aportar 50 € con tarjeta cuando quedan 40 € descuenta
 40 € de la cuenta y añade 10 € de propina. Si el local no acepta propinas, usa el importe que el

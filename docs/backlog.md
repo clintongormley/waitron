@@ -583,10 +583,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The zone and More sheets dock against that bar, and More uses shared action rows.
   More shows your clock-in time under your name, beside **Clock out**.
   The table name opens the shared action sheet with Finish table at the end.
-  The remaining order and payment screens use the
+  Table Pay uses the
   [shared panels and payment controls](developers/design-system.md#full-screen-panels-and-payment-controls).
   The wide floor bar, kitchen destinations, All zones, table jobs, order, menu, bill action sheet,
-  table-move and bill action panels, Send and move allergy prompts, and payment slices remain.
+  table-move and bill action panels, and Send and move allergy prompts remain.
+  The saved-invoice summary and presented whole payment follow Table Pay.
+  PR 15b brings Table Pay to Counter and docks it in the wide order column. PR 15c moves the direct
+  payment actions into Pay.
   [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
   Pass 3's third part (27 November; §7.14, not started): clocking in and out with breaks, My hours,

@@ -1,3 +1,4 @@
+import { billPayDialogStyles } from "./bill-pay-dialog-styles.js";
 import { paymentSlipButton, type PaymentSlipAction } from "./pay-equipment.js";
 import {
   outsideCardFields,
@@ -7,14 +8,23 @@ import {
 } from "./outside-card.js";
 import type { OutsideCardDetails } from "../api/payments-api.js";
 import { choiceRowStyles } from "./choice-styles.js";
+import {
+  quietEquipmentButton,
+  quietPay,
+  quietPayStyles,
+  quietTenderActions,
+  quietTipBreakdown,
+  quietWays,
+} from "./quiet-pay.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { recoveryLink } from "./recovery-refusal.js";
-import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
+import { LitElement, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   MONEY_SCALE,
   compareDecimal,
   decimal,
+  divideDecimal,
   formatMoney,
   multiplyDecimal,
   sumDecimals,
@@ -220,254 +230,12 @@ export class TillBillPayDialog extends LitElement {
   static override styles = [
     baseStyles,
     choiceRowStyles,
+    quietPayStyles,
     outsideCardStyles,
     helpAnchorStyles,
     guestsStepperStyles,
     payNoticeStyles,
-    css`
-      .body {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-4);
-      }
-
-      p {
-        margin: 0;
-      }
-
-      .balance {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: var(--wt-space-2) var(--wt-space-4);
-        margin: 0;
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-      }
-
-      .balance div {
-        display: flex;
-        flex-direction: column;
-        min-width: 0;
-      }
-
-      .balance dt {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .balance dd {
-        margin: 0;
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .deferred {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
-        margin: 0 0 var(--wt-space-3);
-      }
-
-      .deferred p,
-      .way-reason {
-        margin: 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .way-reason {
-        margin-block-start: var(--wt-space-2);
-      }
-
-      /* Wraps within the width the window's choices and amounts set, never widening it. */
-      .credited,
-      .scope,
-      .own-bill {
-        contain: inline-size;
-      }
-
-      .scope,
-      .taken {
-        font-weight: var(--wt-font-weight-bold);
-        overflow-wrap: anywhere;
-      }
-
-      [data-pay-way] .options {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: var(--wt-space-2);
-      }
-
-      [data-pay-way] .option {
-        min-width: 0;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        text-align: center;
-        overflow-wrap: normal;
-      }
-
-      .lines {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-      }
-
-      .line {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2) var(--wt-space-4);
-      }
-
-      .units {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
-
-      .units-count {
-        min-width: var(--wt-space-6);
-        text-align: center;
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .required,
-      .field-error {
-        color: var(--wt-color-danger);
-      }
-
-      .required {
-        margin-inline-start: var(--wt-space-1);
-      }
-
-      .field-error {
-        margin: var(--wt-space-1) 0 0;
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .muted {
-        color: var(--wt-color-text-muted);
-      }
-
-      .allocation {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        margin: 0;
-      }
-
-      .allocation div {
-        display: flex;
-        justify-content: space-between;
-        gap: var(--wt-space-4);
-      }
-
-      .allocation dd {
-        margin: 0;
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .allocation .headline {
-        font-size: var(--wt-font-size-lg);
-      }
-
-      .payments {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-      }
-
-      .payments h3 {
-        margin: 0;
-        font-size: var(--wt-font-size-md);
-      }
-
-      .payments ol {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        margin: 0;
-        padding: 0;
-        list-style: none;
-      }
-
-      .payment {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-2) var(--wt-space-4);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-      }
-
-      .payment-text {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        min-width: 0;
-        overflow-wrap: anywhere;
-      }
-
-      .payment-head {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .payment-text p {
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .nowrap {
-        white-space: nowrap;
-      }
-
-      .taken-block {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-success);
-        border-radius: var(--wt-radius-md);
-      }
-
-      .taken-block .taken {
-        color: var(--wt-color-success);
-      }
-
-      .taken-block p {
-        margin: 0;
-        overflow-wrap: anywhere;
-      }
-
-      .tone {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-warning);
-        border-radius: var(--wt-radius-md);
-      }
-
-      .tone-title {
-        color: var(--wt-color-warning);
-        font-weight: var(--wt-font-weight-bold);
-        overflow-wrap: anywhere;
-      }
-
-      .ask-actions {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: var(--wt-space-2);
-        margin-top: var(--wt-space-2);
-      }
-
-      .tone-body {
-        overflow-wrap: anywhere;
-      }
-    `,
+    billPayDialogStyles,
   ];
 
   /** The bill's total, received, reserved and outstanding; null while it is being read. */
@@ -532,6 +300,8 @@ export class TillBillPayDialog extends LitElement {
   @property({ type: Boolean }) takesManualCard = false;
   /** On a handheld, the table the title names. */
   @property() tableName = "";
+  @property({ type: Boolean }) quiet = false;
+  @property() billName = "";
   /** On a handheld, the reader and printer row's inputs, passed straight to it. */
   @property({ attribute: false }) equipment: DeviceEquipment | null = null;
   @property({ attribute: false }) equipmentSaving: { role: PayEquipmentRole; id: string } | null =
@@ -573,6 +343,8 @@ export class TillBillPayDialog extends LitElement {
   @state() private guestsAttempted = false;
   @state() private askingSecondCard = false;
   @state() private rowOpen = false;
+  @state() private quietEntry = false;
+  @state() private quietTip = false;
   /** The row's QR has put the camera in place of the body. */
   @state() private scanning = false;
   /** On a handheld, after a payment that leaves money owing: the sheet offers the next guest in
@@ -1153,7 +925,7 @@ export class TillBillPayDialog extends LitElement {
 
   async #backFromSecondCard(): Promise<void> {
     this.askingSecondCard = false;
-    await this.#focusButton("[data-pay-continue]");
+    await this.#focusButton("[data-quiet-pay-card], [data-pay-continue]");
   }
 
   #cardInProgress(): boolean {
@@ -1198,25 +970,176 @@ export class TillBillPayDialog extends LitElement {
   }
 
   override render() {
-    const view = this.showsRefundAcknowledgment
-      ? { body: html`<slot name="refund-acknowledgment"></slot>`, actions: nothing }
-      : this.scanning
-        ? payScanView(this, () => (this.scanning = false), this.handheld ? this.notice : null)
-        : (this.#cardWaiting() ?? this.#body());
+    const opening =
+      this.quiet &&
+      overpaidOf(this.balance) === null &&
+      !this.showsRefundAcknowledgment &&
+      !this.scanning &&
+      !this.nextOffered &&
+      !this.confirmationLocked &&
+      this.taken === null &&
+      this.preview === null &&
+      !this.askingSecondCard;
+    const view = opening
+      ? undefined
+      : this.showsRefundAcknowledgment
+        ? { body: html`<slot name="refund-acknowledgment"></slot>`, actions: nothing }
+        : this.scanning
+          ? payScanView(this, () => (this.scanning = false), this.handheld ? this.notice : null)
+          : (this.#cardWaiting() ?? this.#body());
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.#active}
-      .heading=${this.#heading()}
+      .fullScreen=${opening}
+      .heading=${opening ? "" : this.#heading()}
+      .ariaLabel=${opening ? t("action.pay") : ""}
       .dismissible=${!this.busy}
       .beforeClose=${this.#entry ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => this.#close(event)}
     >
-      <div class="body">
-        ${this.credited === null ? nothing : html`<p class="credited" role="status" data-pay-credited>${this.credited}</p>`}
-        ${view.body} ${this.#readerStopControl()}
-      </div>
-      ${view.actions}
+      ${
+        view === undefined
+          ? this.#quietPay()
+          : html` <div class="body">
+                ${this.credited === null ? nothing : html`<p class="credited" role="status" data-pay-credited>${this.credited}</p>`}
+                ${view.body} ${this.#readerStopControl()}
+              </div>
+              ${view.actions}`
+      }
     </wt-dialog>`;
+  }
+
+  #quietPay(): TemplateResult {
+    const base = this.#quietAmount();
+    const card = this.handheld ? this.takesReaderCard : this.cardReader !== "none";
+    const acceptsTip = this.quietEntry ? this.method !== "cash" : card;
+    const tip = this.tipsEnabled && acceptsTip ? typedMoney(this.cardTip) : null;
+    const includingTip = (value: string) =>
+      this.#money(tip === null ? value : moneyPlus(value, tip));
+    const amount = base === null ? "" : includingTip(base);
+    const reserved = this.balance?.reserved;
+    const own = this.#feedback.attempted ? this.#ownErrors() : new Map<Field, string>();
+    const errors = this.#fieldErrors(own);
+    const manual = this.takesManualCard || (!this.handheld && this.cardReader === "none");
+    return quietPay({
+      title: t("action.pay"),
+      subtitle: this.billName,
+      back: this.tableName || t("action.back"),
+      close: () => this.#requestClose(),
+      equipment: quietEquipmentButton(
+        this.rowOpen,
+        this.busy,
+        () => (this.rowOpen = !this.rowOpen),
+      ),
+      amount,
+      breakdown:
+        this.quietEntry || !this.tipsEnabled || !card || base === null
+          ? undefined
+          : quietTipBreakdown({
+              bill: this.#money(base),
+              tip: tip === null ? undefined : this.#money(tip),
+              busy: this.busy,
+              expanded: this.quietTip,
+              edit: () => (this.quietTip = !this.quietTip),
+            }),
+      body: html` ${this.credited === null ? nothing : html`<p class="credited" role="status" data-pay-credited>${this.credited}</p>`}
+      ${this.#captureWarning()} ${this.#refundNotice()}
+      ${
+        reserved === undefined || compareDecimal(decimal(reserved), decimal("0")) === 0
+          ? nothing
+          : html`<p class="muted" data-pay-reserved>
+              ${t("bill_pay.reserved")} · ${this.#money(reserved)}
+            </p>`
+      }
+      ${
+        !this.handheld && this.cardReader === "simulator"
+          ? this.#simulationFields()
+          : this.rowOpen
+            ? this.handheld
+              ? this.#equipmentRow(card)
+              : this.#readerFields()
+            : this.#notice()
+      }
+      ${
+        this.quietEntry
+          ? html`${this.#wayFields(errors)} ${this.#entryFields(errors)}`
+          : html` ${this.quietTip ? this.#quietTipEditor(errors) : nothing}
+            ${this.balance === null ? html`<p role="status" data-pay-balance>${t("bill_pay.reading")}</p>` : nothing}
+            ${quietWays(
+              this.chosenWay,
+              this.itemsBarred,
+              this.busy,
+              this.balance === null ? undefined : includingTip(this.balance.outstanding),
+              (way) => {
+                this.chosenWay = way;
+                this.#shareRun = null;
+                this.#changedDraft();
+              },
+            )}
+            ${this.#wayFields(errors)} ${this.#deferred()} ${this.#payments()}
+            ${!this.takesCash && (card || manual) ? html`<p class="muted cash-at-till">${t("tender.cash_at_till")}</p>` : nothing}
+            ${card || manual || this.takesCash ? nothing : html`<p role="status">${t("bill_pay.no_method")}</p>`}`
+      }`,
+      actions: this.quietEntry
+        ? html`<wt-form-actions .error=${this.#bottomMessage(errors)}>
+            ${recoveryLink(this.#shownRefusal)}
+            <wt-button
+              slot="cancel"
+              variant="secondary"
+              .disabled=${this.busy}
+              @click=${() => (this.quietEntry = false)}
+              >${t("action.back")}</wt-button
+            >
+            <wt-button
+              variant="primary"
+              data-pay-continue
+              .loading=${this.busy}
+              .disabled=${this.busy || own.size > 0 || !this.#canAsk()}
+              @click=${() => void this.#continue()}
+              >${t("bill_pay.continue")}</wt-button
+            >
+          </wt-form-actions>`
+        : html`<wt-form-actions .error=${this.#bottomMessage(errors)}
+              >${recoveryLink(this.#shownRefusal)}</wt-form-actions
+            >
+            ${quietTenderActions(amount, this.busy, {
+              card: !card
+                ? undefined
+                : {
+                    disabled: !this.#owing() || this.#heldForEquipment("card"),
+                    run: () => {
+                      this.method = "card";
+                      void this.#continue();
+                    },
+                  },
+              cash: !this.takesCash
+                ? undefined
+                : { disabled: !this.#canAsk(), run: () => this.#quietMethod("cash") },
+              manual: !manual
+                ? undefined
+                : { disabled: !this.#canAsk(), run: () => this.#quietMethod("manual") },
+            })}`,
+    });
+  }
+
+  #quietAmount(): Decimal | null {
+    const outstanding = this.balance?.outstanding;
+    if (this.chosenWay === "contribution") return typedMoney(this.typedAmountValue);
+    if (this.chosenWay === "items") return this.#pickedAmount();
+    if (outstanding === undefined) return null;
+    const available = decimal(outstanding);
+    if (this.chosenWay !== "share" || !PEOPLE.test(this.people.trim())) return available;
+    const people = decimal(this.people.trim());
+    const share = divideDecimal(available, people, MONEY_SCALE);
+    return compareDecimal(multiplyDecimal(share, people), available) < 0
+      ? moneyPlus(share, "0.01")
+      : share;
+  }
+
+  #quietMethod(method: "cash" | "manual"): void {
+    this.method = method;
+    this.quietEntry = true;
+    this.#changedDraft();
   }
 
   #readerStopControl(): TemplateResult | typeof nothing {
@@ -1249,27 +1172,28 @@ export class TillBillPayDialog extends LitElement {
 
   #body(): SheetView {
     const step = this.nextOffered ? this.#nextActions() : this.#step();
-    const warning = this.balance?.captureWarning;
-    const body = html`${this.#balance()}
-    ${
-      warning === undefined
-        ? nothing
-        : html`<p role="alert" data-capture-warning>
-            ${t("card.capture_warning")
-              .replace("{requested}", () => this.#money(warning.requestedAmount))
-              .replace("{actual}", () => this.#money(warning.reportedAmount))}
-          </p>`
-    }
-    ${this.#taken()}
-    ${
-      this.refunded === null
-        ? nothing
-        : html`<p class="taken" role="status" data-pay-refunded>
-            ${this.#refundedText(this.refunded)}
-          </p>`
-    }
-    ${this.#payments()} ${step.body}`;
+    const body = html`${this.#balance()} ${this.#captureWarning()} ${this.#taken()}
+    ${this.#refundNotice()} ${this.#payments()} ${step.body}`;
     return { body, actions: step.actions };
+  }
+
+  #captureWarning(): TemplateResult | typeof nothing {
+    const warning = this.balance?.captureWarning;
+    return warning === undefined
+      ? nothing
+      : html`<p role="alert" data-capture-warning>
+          ${t("card.capture_warning")
+            .replace("{requested}", () => this.#money(warning.requestedAmount))
+            .replace("{actual}", () => this.#money(warning.reportedAmount))}
+        </p>`;
+  }
+
+  #refundNotice(): TemplateResult | typeof nothing {
+    return this.refunded === null
+      ? nothing
+      : html`<p class="taken" role="status" data-pay-refunded>
+          ${this.#refundedText(this.refunded)}
+        </p>`;
   }
 
   /** On a handheld, a payment taken shows as a block, naming the reader a card was charged on. */
@@ -1662,7 +1586,11 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #enter(event: KeyboardEvent, selector: string): void {
-    submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(selector));
+    const target =
+      selector === "[data-pay-continue]"
+        ? `${selector}, [data-quiet-pay-card], [data-quiet-pay-cash], [data-quiet-pay-manual]`
+        : selector;
+    submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(target));
   }
 
   #input(
@@ -1953,31 +1881,55 @@ export class TillBillPayDialog extends LitElement {
         <legend>${t("bill_pay.method")}</legend>
         ${this.#methodChoices()}
       </fieldset>
-      ${
-        !offered
-          ? nothing
-          : this.method === "cash"
-            ? this.#input(
-                "tendered",
-                t("bill_pay.tendered"),
-                this.tendered,
-                (value) => (this.tendered = value),
-                { required: true, error: errors.get("tendered"), submit: "[data-pay-continue]" },
-              )
-            : html`${
-                this.tipsEnabled
-                  ? this.#input(
-                      "cardTip",
-                      t("bill_pay.card_tip"),
-                      this.cardTip,
-                      (value) => (this.cardTip = value),
-                      { error: errors.get("cardTip"), submit: "[data-pay-continue]" },
-                    )
-                  : nothing
-              }
-              ${this.#keyed(this.method) ? this.#manualCardFields() : this.#readerFields()}`
-      }
+      ${offered ? this.#entryFields(errors) : nothing}
       ${offered ? this.#equipmentRow(this.method === "card") : nothing}`;
+  }
+
+  #entryFields(errors: ReadonlyMap<Field, string>): TemplateResult {
+    return this.method === "cash"
+      ? this.#input(
+          "tendered",
+          t("bill_pay.tendered"),
+          this.tendered,
+          (value) => (this.tendered = value),
+          {
+            required: true,
+            error: errors.get("tendered"),
+            submit: "[data-pay-continue]",
+          },
+        )
+      : html`${this.tipsEnabled ? this.#cardTipField(errors) : nothing}
+        ${this.#keyed(this.method) ? this.#manualCardFields() : this.#readerFields()}`;
+  }
+
+  #quietTipEditor(errors: ReadonlyMap<Field, string>): TemplateResult {
+    return html`${this.#cardTipField(errors)}
+      <wt-button
+        size="sm"
+        variant="secondary"
+        data-clear-card-tip
+        .disabled=${this.busy || this.cardTip === ""}
+        @click=${() => {
+          this.cardTip = "";
+          this.quietTip = false;
+          this.#changedDraft();
+          this.renderRoot.querySelector<HTMLElement>("[data-quiet-pay-tip]")?.focus();
+        }}
+        >${t("bill_pay.remove_tip")}</wt-button
+      >`;
+  }
+
+  #cardTipField(errors: ReadonlyMap<Field, string>): TemplateResult {
+    return this.#input(
+      "cardTip",
+      t("bill_pay.card_tip"),
+      this.cardTip,
+      (value) => (this.cardTip = value),
+      {
+        error: errors.get("cardTip"),
+        submit: "[data-pay-continue]",
+      },
+    );
   }
 
   /** A handheld's reader and printer row; its events bubble out to the app unchanged. */

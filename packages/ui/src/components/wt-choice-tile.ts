@@ -85,7 +85,7 @@ export class WtChoiceTile extends LitElement {
 
   override render() {
     const check = html`<span part="check" aria-hidden="true"
-      >${this.selected ? html`<wt-icon name="check" size="md"></wt-icon>` : nothing}</span
+      >${this.selected ? html`<wt-icon name="choice-check" size="md"></wt-icon>` : nothing}</span
     >`;
     return html`<button
       type="button"

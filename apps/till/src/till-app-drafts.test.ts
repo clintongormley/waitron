@@ -1,5 +1,5 @@
 import { openOrderAddress } from "../test/order-address.js";
-import { balanceOf, invoiceOf } from "../test/bill-pay-app.js";
+import { balanceOf, invoiceOf, type as typePay } from "../test/bill-pay-app.js";
 import {
   current,
   currentGroup,
@@ -7591,10 +7591,7 @@ describe("A773 Pay saves the bill's New order before payment", () => {
       payDialog()!.shadowRoot!.querySelector<HTMLElement>(selector);
     emit(order, "bill-pay", { way: "contribution", lines: [], amount: "3.00" });
     await flush(el, 8);
-    const reference = inPay('wt-input[name="externalRef"]')!.shadowRoot!.querySelector("input")!;
-    reference.value = "manual-1";
-    reference.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-    await flush(el);
+    await typePay(el, "externalRef", "manual-1");
     inPay("[data-pay-continue]")!.click();
     await flush(el, 8);
     inPay("[data-pay-confirm]")!.click();
