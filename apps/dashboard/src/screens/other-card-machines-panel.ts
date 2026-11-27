@@ -16,7 +16,7 @@ import type { DashboardApi } from "../api/client.js";
 import type { OtherCardMachine, OtherCardMachinesView } from "../api/payments-api.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 
 const NAME_MAX = 60;
 
@@ -79,6 +79,9 @@ export class OtherCardMachinesPanel extends LitElement {
         grid-column: 1 / -1;
         grid-row: 2;
       }
+      .row wt-button {
+        margin-top: calc((var(--wt-field-height) - var(--wt-tap-min)) / 2);
+      }
       @media (max-width: 640px) {
         .rows {
           gap: var(--wt-space-5);
@@ -95,10 +98,19 @@ export class OtherCardMachinesPanel extends LitElement {
         }
         .row wt-button {
           justify-self: start;
+          margin-top: 0;
+        }
+        .rows + .add {
+          margin-top: var(--wt-space-3);
+          padding-top: var(--wt-space-5);
+          border-top: 1px solid var(--wt-color-border);
         }
       }
-      .add {
+      .add wt-button {
         justify-self: start;
+      }
+      .add {
+        display: grid;
       }
     `,
   ];
@@ -353,7 +365,15 @@ export class OtherCardMachinesPanel extends LitElement {
           ? html`<p class="muted">${t("other_card_machines.not_connected_note")}</p>`
           : nothing
       }
-      <wt-button variant="secondary" ?disabled=${this.saving} @click=${() => this.#remove(row.key)}
+      <wt-button
+        variant="secondary"
+        aria-label=${
+          row.name.trim()
+            ? fill("other_card_machines.remove", { name: row.name.trim() })
+            : t("other_card_machines.remove_new")
+        }
+        ?disabled=${this.saving}
+        @click=${() => this.#remove(row.key)}
         >${t("action.remove")}</wt-button
       >
     </div>`;
@@ -379,7 +399,11 @@ export class OtherCardMachinesPanel extends LitElement {
           ? this.readError
             ? nothing
             : html`<p role="status">${t("other_card_machines.loading")}</p>`
-          : html`${draft.length === 0 ? html`<p>${t("other_card_machines.empty")}</p>` : nothing}
+          : html`${
+                draft.length === 0
+                  ? html`<p class="muted">${t("other_card_machines.empty")}</p>`
+                  : nothing
+              }
               ${
                 draft.length === 0
                   ? nothing
@@ -391,13 +415,11 @@ export class OtherCardMachinesPanel extends LitElement {
                       )}
                     </div>`
               }
-              <wt-button
-                class="add"
-                variant="secondary"
-                ?disabled=${this.saving}
-                @click=${() => this.#add()}
-                >${t("other_card_machines.add")}</wt-button
-              >`
+              <div class="add">
+                <wt-button variant="secondary" ?disabled=${this.saving} @click=${() => this.#add()}
+                  >${t("other_card_machines.add")}</wt-button
+                >
+              </div>`
       }
       <wt-form-actions .error=${this.#message(errors)}>
         <wt-button

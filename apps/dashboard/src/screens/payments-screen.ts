@@ -241,6 +241,10 @@ export class PaymentsScreen extends LitElement {
       .panel-slot {
         margin-top: var(--wt-space-3);
       }
+      dashboard-payments-settings,
+      dashboard-other-card-machines {
+        margin-top: var(--wt-space-5);
+      }
       .reader-tools,
       .discovery-row {
         display: flex;

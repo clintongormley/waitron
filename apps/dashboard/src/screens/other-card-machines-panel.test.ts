@@ -429,6 +429,10 @@ function rowParts(el: OtherCardMachinesPanel, index: number) {
     name: box("wt-input")!,
     paysInto: box("wt-combobox")!,
     remove: box("wt-button")!,
+    nameField: group
+      .querySelector("wt-input")!
+      .shadowRoot!.querySelector(".field")!
+      .getBoundingClientRect(),
     note: box(".muted"),
   };
 }
@@ -441,9 +445,12 @@ it("starts the name, the dropdown and Remove on one line while the name shows an
     await expect.element(page.getByText("Give this machine a name.")).toBeVisible();
     const parts = rowParts(el, 0);
     expect(parts.paysInto.top).toBe(parts.name.top);
-    expect(parts.remove.top).toBe(parts.name.top);
+    expect(parts.remove.top - parts.nameField.top).toBeGreaterThan(0);
+    expect(parts.remove.top - parts.nameField.top).toBe(
+      parts.nameField.bottom - parts.remove.bottom,
+    );
     const noted = rowParts(el, 1);
-    expect(noted.remove.top).toBe(noted.paysInto.top);
+    expect(noted.remove.top - noted.nameField.top).toBe(parts.remove.top - parts.nameField.top);
     expect(noted.note!.top).toBeGreaterThan(noted.remove.bottom);
   });
 });
@@ -460,4 +467,75 @@ it("puts the note under its dropdown and keeps machines apart on a phone", async
       first.paysInto.top - first.name.bottom,
     );
   });
+});
+
+it("sets Add a machine apart from the last machine on a phone as the machines are set apart", async () => {
+  await atWidth(390, async () => {
+    const { el } = await mount();
+    const first = rowParts(el, 0);
+    const second = rowParts(el, 1);
+    const footer = el.shadowRoot!.querySelector<HTMLElement>(".add")!;
+    const add = footer.querySelector("wt-button")!.getBoundingClientRect();
+    expect(getComputedStyle(footer).borderTopStyle).toBe("solid");
+    expect(getComputedStyle(footer).borderTopColor).toBe(
+      getComputedStyle(el.shadowRoot!.querySelectorAll<HTMLElement>(".row")[1]!).borderTopColor,
+    );
+    expect(add.top - second.row.bottom).toBe(second.name.top - first.row.bottom);
+  });
+});
+
+it("keeps Add a machine without a line above it on a wide page", async () => {
+  await atWidth(1280, async () => {
+    const { el } = await mount();
+    const footer = el.shadowRoot!.querySelector<HTMLElement>(".add")!;
+    expect(getComputedStyle(footer).borderTopStyle).toBe("none");
+  });
+});
+
+it("draws the empty-list line in the muted colour of the intro", async () => {
+  const { el } = await mount(rig({ otherCardMachines: [], revision: 0 }));
+  await expect.element(page.getByText("No other card machines yet.")).toBeVisible();
+  const root = el.shadowRoot!;
+  const empty = [...root.querySelectorAll("p")].find(
+    (p) => p.textContent === "No other card machines yet.",
+  )!;
+  const intro = root.querySelector("h2 + p")!;
+  expect(getComputedStyle(empty).color).toBe(getComputedStyle(intro).color);
+  expect(getComputedStyle(empty).color).not.toBe(getComputedStyle(root.querySelector("h2")!).color);
+});
+
+it("names each Remove after its machine, and a machine not yet named as new", async () => {
+  await mount();
+  await expect
+    .element(page.getByRole("button", { name: "Remove Bar terminal", exact: true }))
+    .toBeVisible();
+  await expect.element(row("Bar terminal").getByText("Remove", { exact: true })).toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: "Remove Terrace", exact: true }))
+    .toBeVisible();
+  await page.getByRole("button", { name: "Add a machine" }).click();
+  await expect
+    .element(page.getByRole("button", { name: "Remove new machine", exact: true }))
+    .toBeVisible();
+});
+
+it("names each Remove in Spanish", async () => {
+  const r = rig();
+  setLocale("es");
+  await mountWidget<OtherCardMachinesPanel>("dashboard-other-card-machines", {
+    api: r.api as unknown as DashboardApi,
+    sumUpConnected: true,
+  });
+  await expect
+    .element(
+      page.getByRole("button", {
+        name: es["other_card_machines.remove"].replace("{name}", "Bar terminal"),
+        exact: true,
+      }),
+    )
+    .toBeVisible();
+  await page.getByRole("button", { name: es["other_card_machines.add"] }).click();
+  await expect
+    .element(page.getByRole("button", { name: es["other_card_machines.remove_new"], exact: true }))
+    .toBeVisible();
 });

@@ -320,3 +320,26 @@ it("drops the SumUp note when a later provider read fails", async () => {
   await vi.waitFor(() => expect(root.querySelector("[role=alert]")).not.toBeNull());
   await vi.waitFor(() => expect(note()).not.toContain("SumUp is not connected"));
 });
+
+it("leaves a section's gap above the settings and above other card machines", async () => {
+  const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
+    api: api([reader], {
+      getOtherCardMachines: vi.fn().mockResolvedValue({ otherCardMachines: [], revision: 0 }),
+    }),
+    panels: [],
+  });
+  const root = el.shadowRoot!;
+  await vi.waitFor(() =>
+    expect(root.querySelector("dashboard-other-card-machines")).not.toBeNull(),
+  );
+  const box = (selector: string) => root.querySelector(selector)!.getBoundingClientRect();
+  const readers = box("[data-test=readers-section]");
+  const settings = box("dashboard-payments-settings");
+  const machines = box("dashboard-other-card-machines");
+  const sectionGap = Number.parseFloat(
+    getComputedStyle(el).getPropertyValue("--wt-space-5").trim() || "NaN",
+  );
+  expect(sectionGap).toBeGreaterThan(0);
+  expect(settings.top - readers.bottom).toBe(sectionGap);
+  expect(machines.top - settings.bottom).toBe(sectionGap);
+});

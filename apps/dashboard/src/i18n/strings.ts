@@ -3652,6 +3652,8 @@ export const en = {
   "other_card_machines.not_connected_note":
     "SumUp is not connected, so its payments are recorded as another bank's.",
   "other_card_machines.add": "Add a machine",
+  "other_card_machines.remove": "Remove {name}",
+  "other_card_machines.remove_new": "Remove new machine",
   "other_card_machines.name_required": "Give this machine a name.",
   "other_card_machines.name_repeated": "Another machine already has this name.",
   "other_card_machines.name_refused":
@@ -8534,6 +8536,8 @@ export const es: Record<StringKey, string> = {
   "other_card_machines.not_connected_note":
     "SumUp no está conectado, así que sus pagos se registran como de otro banco.",
   "other_card_machines.add": "Añadir un datáfono",
+  "other_card_machines.remove": "Eliminar {name}",
+  "other_card_machines.remove_new": "Eliminar datáfono nuevo",
   "other_card_machines.name_required": "Ponle un nombre a este datáfono.",
   "other_card_machines.name_repeated": "Otro datáfono ya tiene este nombre.",
   "other_card_machines.name_refused":
