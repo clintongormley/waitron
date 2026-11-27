@@ -20,6 +20,14 @@ registerIcons(NUTRITION_ICONS);
 type Words = ReturnType<typeof guestMenuWords>;
 type PageMember = { member: GuestMember; sectionId?: string };
 type MenuEntry = Exclude<GuestMember, { kind: "section" }>;
+type OpenDetail = {
+  member: MenuEntry;
+  button: HTMLElement;
+  scroller?: Element | null;
+  top: number;
+  left: number;
+  width: number;
+};
 
 function matchingMember(member: GuestMember, query: string, language: string): GuestMember | null {
   if (member.kind !== "section")
@@ -104,16 +112,20 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
       ${member.lines.map(
         (line) =>
           html`<h3>${courseLabel(line, language)}</h3>
-            <ul class="choices">
-              ${line.choices.map(
-                (choice) =>
-                  html`<li>
-                    <span>${choice.name}</span>
-                    ${choice.price === "0.00" ? nothing : html`<strong>+${money(choice.price)}</strong>`}
-                    ${writtenDeclarations(choice, words)}
-                  </li>`,
-              )}
-            </ul>`,
+            ${
+              line.choices.length
+                ? html`<ul class="choices">
+                    ${line.choices.map(
+                      (choice) =>
+                        html`<li>
+                          <span>${choice.name}</span>
+                          ${choice.price === "0.00" ? nothing : html`<strong>+${money(choice.price)}</strong>`}
+                          ${writtenDeclarations(choice, words)}
+                        </li>`,
+                    )}
+                  </ul>`
+                : nothing
+            }`,
       )}`;
   }
   const quantity = new Intl.NumberFormat(language, { maximumFractionDigits: 3 });
@@ -272,15 +284,17 @@ export class CustomerMenuPage extends LitElement {
         grid-column: 1 / -1;
       }
       .set-menu {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        justify-content: space-between;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
         gap: var(--wt-space-2);
         padding: var(--wt-space-4);
         border: 1px solid var(--wt-color-primary);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-surface);
+      }
+      .set-menu .set-price {
+        white-space: nowrap;
       }
       .dish {
         display: grid;
@@ -395,8 +409,7 @@ export class CustomerMenuPage extends LitElement {
   @property({ attribute: "data-theme" }) theme: "light" | "dark" = "light";
 
   @state() private query = "";
-  @state() private detail?: MenuEntry;
-  #returnTo?: { button: HTMLElement; scroller?: Element | null; top: number; left: number };
+  @state() private detail?: OpenDetail;
   #source?: Element | Document;
   #jumpedAt?: number;
   #resize = new ResizeObserver(() => this.#watchScroll());
@@ -483,16 +496,16 @@ export class CustomerMenuPage extends LitElement {
 
   async #openDetail(member: MenuEntry, event: MouseEvent): Promise<void> {
     const scroller = this.#scroller();
-    this.#returnTo = {
+    this.detail = {
+      member,
       button: event.currentTarget as HTMLElement,
       scroller,
       top: scroller?.scrollTop ?? 0,
       left: scroller?.scrollLeft ?? 0,
+      width: this.clientWidth,
     };
-    this.detail = member;
     await this.updateComplete;
-    const heading = this.renderRoot.querySelector<HTMLElement>(".detail h2");
-    if (!heading) return;
+    const heading = this.renderRoot.querySelector<HTMLElement>(".detail h2")!;
     if (scroller) {
       const edge = this.#source instanceof Document ? 0 : scroller.getBoundingClientRect().top;
       scroller.scrollTop += heading.getBoundingClientRect().top - edge;
@@ -501,14 +514,11 @@ export class CustomerMenuPage extends LitElement {
     heading.focus({ preventScroll: true });
   }
 
-  async #closeDetail(): Promise<void> {
-    const location = this.#returnTo;
-    this.#returnTo = undefined;
+  async #closeDetail({ button, scroller, top, left, width }: OpenDetail): Promise<void> {
     this.detail = undefined;
     await this.updateComplete;
-    if (!location) return;
-    const { button, scroller, top, left } = location;
-    scroller?.scrollTo(left, top);
+    if (scroller === this.#scroller() && width === this.clientWidth) scroller?.scrollTo(left, top);
+    else button.scrollIntoView({ block: "nearest", inline: "nearest" });
     button.focus({ preventScroll: true });
   }
 
@@ -532,6 +542,7 @@ export class CustomerMenuPage extends LitElement {
   protected override render() {
     const menu = this.menu;
     if (!menu) return nothing;
+    const detail = this.detail;
     const words = guestMenuWords(menu.language, this.defaultLanguage);
     const query = this.query.trim().toLocaleLowerCase(menu.language);
     const visible = menu.members.flatMap((item, index): PageMember[] => {
@@ -607,22 +618,22 @@ export class CustomerMenuPage extends LitElement {
       </div>`;
     return html`<article lang=${menu.language} data-theme=${this.theme}>
       ${
-        this.detail
+        detail
           ? html`<div class="detail" data-detail>
-              <h2 tabindex="-1">${this.detail.name}</h2>
+              <h2 tabindex="-1">${detail.member.name}</h2>
               <button
                 type="button"
                 class="back"
                 lang=${words.language}
-                @click=${() => void this.#closeDetail()}
+                @click=${() => void this.#closeDetail(detail)}
               >
                 ${words.text.backToMenu}
               </button>
-              ${detailContent(this.detail, words, menu.language)}
+              ${detailContent(detail.member, words, menu.language)}
             </div>`
           : nothing
       }
-      <div ?hidden=${this.detail !== undefined}>
+      <div ?hidden=${detail !== undefined}>
         <header>
           <h2>${menu.name}</h2>
           <search lang=${words.language}>

@@ -106,7 +106,7 @@ function published(
           lines: [
             {
               count: 2,
-              courses: ["Main course", "Salad"],
+              courses: ["House vegetarian main course", "Classic garden salad"],
               choices: [
                 { name: "Side salad", price: "0.00", unit: "", allergens: {}, dietary: [] },
                 {
@@ -255,13 +255,10 @@ describe("the customer menu Online preview", () => {
       )
       .not.toBeInTheDocument();
     await expect.element(page.getByRole("img", { name: "Fish" })).toBeVisible();
-    await expect
-      .element(page.getByText("2 × Main course or Salad, Dessert", { exact: true }), {
-        timeout: 1000,
-      })
-      .toBeVisible();
+    const courseSummary = "2 × House vegetarian main course or Classic garden salad, Dessert";
+    await expect.element(page.getByText(courseSummary, { exact: true })).toBeVisible();
     const setPrice = page.getByText("€18.50", { exact: true }).element();
-    const summary = page.getByText("2 × Main course or Salad, Dessert", { exact: true }).element();
+    const summary = page.getByText(courseSummary, { exact: true }).element();
     expect(Number(getComputedStyle(setPrice).fontWeight)).toBeGreaterThan(
       Number(getComputedStyle(summary).fontWeight),
     );
@@ -279,57 +276,72 @@ describe("the customer menu Online preview", () => {
       expect(bread.getBoundingClientRect().left).toBe(pepper.getBoundingClientRect().left);
       expect(bread.getBoundingClientRect().top).toBeGreaterThan(pepper.getBoundingClientRect().top);
     });
+    try {
+      await page.viewport(360, 800);
+      const priceBox = setPrice.getBoundingClientRect();
+      const summaryBox = summary.getBoundingClientRect();
+      expect(priceBox.left).toBeGreaterThanOrEqual(summaryBox.right);
+      expect(priceBox.top).toBeLessThan(summaryBox.bottom);
+    } finally {
+      await page.viewport(1200, 800);
+    }
   });
 
-  it.each(["Phone", "Computer"] as const)(
-    "returns to the exact dish and search position in the %s preview",
-    async (size) => {
-      const viewport = [innerWidth, innerHeight] as const;
-      try {
-        await page.viewport(390, 800);
-        const answer = published();
-        const oven = answer.menu.members[1]!;
-        if (oven.kind !== "section") throw new Error("Expected the oven section");
-        const pepper = oven.members[0]!;
-        if (pepper.kind !== "product") throw new Error("Expected a dish");
-        oven.members = Array.from({ length: 26 }, (_, i) => ({
-          ...pepper,
-          image: null,
-          description: `Dish number ${i + 1}`,
-        }));
-        const { el, host } = await open(() => Response.json(answer));
-        host.style.cssText += "height: 700px; container-type: size; overflow-y: auto;";
-        await page.getByRole("radio", { name: size }).click();
-        const search = page.getByRole("searchbox", { name: "Search dishes" });
-        await search.fill("roast");
-        const searchInput = search.element();
-        const dish = page.getByRole("button", { name: "Roast pepper", exact: true }).nth(18);
-        await expect.element(dish, { timeout: 1000 }).toBeVisible();
-        const customer = customerPage(el)!;
-        const scroller = size === "Phone" ? host : customer.parentElement!;
-        const button = dish.element();
-        button.focus();
-        const top = scroller.scrollTop;
-        expect(top).toBeGreaterThan(300);
-        await userEvent.keyboard("{Enter}");
-        const heading = page.getByRole("heading", { name: "Roast pepper", exact: true });
-        await expect.element(heading).toBeVisible();
-        expect(customer.shadowRoot!.activeElement).toBe(heading.element());
-        expect(heading.element().parentElement?.querySelector("p")?.textContent).toBe(
-          "Dish number 19",
-        );
-        expect(searchInput).not.toBeVisible();
-        expect(scroller.scrollTop).toBeLessThan(top);
-        await page.getByRole("button", { name: "Back to menu" }).click();
-        await expect.element(search).toHaveValue("roast");
-        expect(scroller.scrollTop).toBe(top);
-        expect(customer.shadowRoot!.activeElement).toBe(button);
-        expect(location.pathname + location.hash).toBe(address);
-      } finally {
-        await page.viewport(...viewport);
-      }
-    },
-  );
+  it.each([
+    ["Phone", "Phone"],
+    ["Computer", "Computer"],
+    ["Phone", "Computer"],
+  ] as const)("returns to the exact dish and search from %s to %s", async (size, returnSize) => {
+    const viewport = [innerWidth, innerHeight] as const;
+    try {
+      await page.viewport(390, 800);
+      const answer = published();
+      const oven = answer.menu.members[1]!;
+      if (oven.kind !== "section") throw new Error("Expected the oven section");
+      const pepper = oven.members[0]!;
+      if (pepper.kind !== "product") throw new Error("Expected a dish");
+      oven.members = Array.from({ length: 26 }, (_, i) => ({
+        ...pepper,
+        image: null,
+        description: `Dish number ${i + 1}`,
+      }));
+      const { el, host } = await open(() => Response.json(answer));
+      host.style.cssText += "height: 700px; container-type: size; overflow-y: auto;";
+      await page.getByRole("radio", { name: size }).click();
+      const search = page.getByRole("searchbox", { name: "Search dishes" });
+      await search.fill("roast");
+      const searchInput = search.element();
+      const dish = page.getByRole("button", { name: "Roast pepper", exact: true }).nth(18);
+      await expect.element(dish, { timeout: 1000 }).toBeVisible();
+      const customer = customerPage(el)!;
+      const scroller = size === "Phone" ? host : customer.parentElement!;
+      const button = dish.element();
+      button.focus();
+      const top = scroller.scrollTop;
+      expect(top).toBeGreaterThan(300);
+      await userEvent.keyboard("{Enter}");
+      const heading = page.getByRole("heading", { name: "Roast pepper", exact: true });
+      await expect.element(heading).toBeVisible();
+      expect(customer.shadowRoot!.activeElement).toBe(heading.element());
+      expect(heading.element().parentElement?.querySelector("p")?.textContent).toBe(
+        "Dish number 19",
+      );
+      expect(searchInput).not.toBeVisible();
+      expect(scroller.scrollTop).toBeLessThan(top);
+      if (size !== returnSize) await page.getByRole("radio", { name: returnSize }).click();
+      await page.getByRole("button", { name: "Back to menu" }).click();
+      await expect.element(search).toHaveValue("roast");
+      if (size === returnSize) expect(scroller.scrollTop).toBe(top);
+      const buttonBox = button.getBoundingClientRect();
+      const windowBox = host.getBoundingClientRect();
+      expect(buttonBox.top).toBeGreaterThanOrEqual(windowBox.top - 1);
+      expect(buttonBox.bottom).toBeLessThanOrEqual(windowBox.bottom + 1);
+      expect(customer.shadowRoot!.activeElement).toBe(button);
+      expect(location.pathname + location.hash).toBe(address);
+    } finally {
+      await page.viewport(...viewport);
+    }
+  });
 
   it("searches displayed dish and set-menu names without losing focus or the allergen key", async () => {
     await open(() => Response.json(publishedSections()));
@@ -647,7 +659,11 @@ describe("the customer menu Online preview", () => {
       await page.getByRole("button", { name: "Two courses", exact: true }).click();
       await expect.element(page.getByText("€18.50 per person", { exact: true })).toBeVisible();
       await expect
-        .element(page.getByRole("heading", { name: "2 × Main course or Salad" }))
+        .element(
+          page.getByRole("heading", {
+            name: "2 × House vegetarian main course or Classic garden salad",
+          }),
+        )
         .toBeVisible();
       const included = page.getByText("Side salad", { exact: true });
       await expect.element(included).toBeVisible();
@@ -657,6 +673,9 @@ describe("the customer menu Online preview", () => {
       expect(surcharge.element().closest("li")!.textContent?.replace(/\s+/g, " ").trim()).toBe(
         "Noodles (Large) +€2.50 Eggs",
       );
+      const dessert = page.getByRole("heading", { name: "Dessert", exact: true });
+      await expect.element(dessert).toBeVisible();
+      expect(dessert.element().nextElementSibling).toBeNull();
       await expectNoA11yViolations(host);
       await page.getByRole("button", { name: "Back to menu" }).click();
       const search = page.getByRole("searchbox", { name: "Search dishes" });
