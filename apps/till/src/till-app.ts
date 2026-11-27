@@ -12502,6 +12502,7 @@ export class TillApp extends LitElement {
           if (!left() && current === this.#firstFloorRead && this.firstFloorView !== "unreachable")
             this.firstFloorView = stage;
         },
+        FLOOR_POLL_LIMIT_MS,
       );
       const current = {
         cancel: attempt.cancel,

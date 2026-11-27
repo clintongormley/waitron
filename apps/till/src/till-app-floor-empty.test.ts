@@ -372,6 +372,29 @@ it("retries a slow Floor with fresh tables and zones, ignoring the old answers",
   expect(readFailed(el)).toBeNull();
 });
 
+it("lets a poll recover the first Floor after its outstanding requests reach the poll limit", async () => {
+  const getTablesState = vi
+    .fn<(options?: { signal?: AbortSignal }) => Promise<TableState[]>>()
+    .mockImplementationOnce(() => new Promise(() => {}))
+    .mockResolvedValue([freeTable]);
+  const listZones = vi
+    .fn<(options?: { signal?: AbortSignal }) => Promise<FloorZone[]>>()
+    .mockImplementationOnce(() => new Promise(() => {}))
+    .mockResolvedValue([room]);
+  const el = await signIn(stubApi({ getTablesState, listZones }, true));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  emit(el.shadowRoot!.querySelector("till-shell")!, "screen-select", { screen: "floor" });
+  await vi.advanceTimersByTimeAsync(25_000);
+  vi.useRealTimers();
+
+  expect(getTablesState.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
+  expect(listZones.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
+  emit(floorOf(el)!, "floor-refresh", { poll: true });
+  await vi.waitFor(() => expect(drawn(el, "t1")).toBeTruthy());
+  expect(getTablesState).toHaveBeenCalledTimes(2);
+  expect(listZones).toHaveBeenCalledTimes(2);
+});
+
 it("shows the Floor after sign-in while its first tables read is still out", async () => {
   let answer!: (tables: TableState[]) => void;
   const getTablesState = vi.fn(

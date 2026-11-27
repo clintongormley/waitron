@@ -5,7 +5,8 @@ import { baseStyles } from "../base-styles.js";
 export type WtSpinnerSize = "sm" | "md" | "lg";
 
 /**
- * An indeterminate progress indicator: a ring drawn in `currentColor` whose one solid arc rotates.
+ * An indeterminate progress indicator. The ring uses `currentColor` and a gap by default.
+ * Set `--wt-spinner-track` and `--wt-spinner-arc` to paint the leading arc over a full track.
  * On its own it is a `role="progressbar"` of unknown amount named by `label`, never a live region,
  * which would announce nothing because it has no text. Inside a control that already carries the
  * state (`wt-button loading`: `aria-busy` plus its own localized label) it is `decorative` — hidden
