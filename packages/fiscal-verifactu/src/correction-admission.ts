@@ -26,7 +26,8 @@ const FILING: Record<string, Filing | undefined> = {
  * waits (`filing_refused`) only while its open case has a fix the Fiscal filing page offers
  * (`putRightFor`); otherwise it is `refused_no_fix`. An original on a chain other than the open
  * installation of `issuingNodeId`, the box that would issue the correction, or on any chain when
- * that box has none open, waits while AEAT has not answered it (`filing_pending`).
+ * that box has none open, waits while it is queued or sending (`filing_pending`); one with no
+ * submission is `missing` on every chain.
  */
 export async function correctionAdmissionFor(
   tx: Transaction,
@@ -72,15 +73,17 @@ export async function correctionAdmissionFor(
     return { eligible: false, reason: "not_simplified" };
   }
   const { estado } = alta;
+  // The drain files only records with a submission (`claimBatch`), so one without is missing on
+  // every chain rather than waiting for an answer that never comes.
+  if (estado === null) return { eligible: false, reason: "missing", ...marked };
   // Nothing orders a corrective on this chain behind its original on another, so it waits for
   // AEAT's answer; on this chain the queue files the original first. With no open installation
   // every chain is another.
-  if (estado === null || estado === "pendiente" || estado === "enviando") {
+  if (estado === "pendiente" || estado === "enviando") {
     if (alta.sifId !== (await openSifId(tx, issuingNodeId))) {
       return { eligible: false, reason: "filing_pending", ...marked };
     }
   }
-  if (estado === null) return { eligible: false, reason: "missing", ...marked };
   const filing = FILING[estado];
   if (filing === undefined) {
     const lasting = full && estado === "rechazado" && !fixOffered({ ...alta, estado });

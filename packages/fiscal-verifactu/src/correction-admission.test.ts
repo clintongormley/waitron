@@ -302,11 +302,11 @@ describe("an invoice filed on another chain is judged by its filing, as this box
     expect(await admission(saleId)).toStrictEqual(as(eligible("accepted", number)));
   });
 
-  it.each(
-    kinds.flatMap(([name, kind, as]) =>
-      (["pendiente", "enviando", null] as const).map((estado) => [name, estado, kind, as] as const),
-    ),
-  )(
+  const unanswered = kinds.flatMap(([name, kind, as]) =>
+    (["pendiente", "enviando"] as const).map((estado) => [name, estado, kind, as] as const),
+  );
+
+  it.each(unanswered)(
     "%s another node filed waits while AEAT has not answered it (%s)",
     async (_n, estado, kind, as) => {
       const other = await seedNode(suite.db, "B");
@@ -315,17 +315,27 @@ describe("an invoice filed on another chain is judged by its filing, as this box
     },
   );
 
-  it.each(
-    kinds.flatMap(([name, kind, as]) =>
-      (["pendiente", "enviando", null] as const).map((estado) => [name, estado, kind, as] as const),
-    ),
-  )(
+  it.each(unanswered)(
     "%s waits while AEAT has not answered it when the issuing box has no open installation (%s)",
     async (_n, estado, kind, as) => {
       const { saleId } = await file({ ...kind, estado });
       expect(await admission(saleId, brandNodeId(newId()))).toStrictEqual(
         as(refused("filing_pending")),
       );
+    },
+  );
+
+  it.each(kinds)("%s another node filed with no submission is missing", async (_n, kind, as) => {
+    const other = await seedNode(suite.db, "B");
+    const { saleId } = await file({ ...kind, on: other, estado: null });
+    expect(await admission(saleId)).toStrictEqual(as(refused("missing")));
+  });
+
+  it.each(kinds)(
+    "%s with no submission is missing when the issuing box has no open installation",
+    async (_n, kind, as) => {
+      const { saleId } = await file({ ...kind, estado: null });
+      expect(await admission(saleId, brandNodeId(newId()))).toStrictEqual(as(refused("missing")));
     },
   );
 
