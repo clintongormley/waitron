@@ -1000,7 +1000,7 @@ tiene ninguna. Si las mesas están demasiado juntas para tocarlas en el mapa, ca
 ## Atiende una zona cerrada {#closed-zone}
 
 Cuando el TPV pregunte por una zona cerrada, confirma para seguir con esa acción o elige
-**Cancelar** para abandonarla. Si el aviso también indica que ha terminado un turno, consulta con
+**Cancelar** para abandonarla. Si el aviso también indica que ha terminado un periodo, consulta con
 la estación antes de confirmar. Para cambiar el horario de la zona ese día, usa **Calendario** en
 el panel.
 

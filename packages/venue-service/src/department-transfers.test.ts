@@ -553,7 +553,10 @@ describe("departmental tab transfers", () => {
       }),
     );
 
-  it("moves a pending transfer to a closed zone only after confirmation", async () => {
+  it.each([
+    ["after confirmation", true],
+    ["after reopening", false],
+  ] as const)("accepts a transfer %s", async (_, confirmed) => {
     const v = await pending();
     await withTransaction(suite.db, async (tx) => {
       await (async () => {
@@ -609,13 +612,14 @@ describe("departmental tab transfers", () => {
       departmentId: v.a,
       serviceMode: "table_tab",
     });
+    if (!confirmed) vi.setSystemTime(new Date("2026-10-06T01:15:00+02:00"));
     expect(
       await withTransaction(suite.db, (tx) =>
         service.acceptDepartmentTransfer(tx, v.request.id, receiver(v), {
           tabRevision: 0,
           zoneId: v.bz,
           tableId: null,
-          zoneConfirmation: { zoneId: v.bz, personId: "receiver" },
+          ...(confirmed ? { zoneConfirmation: { zoneId: v.bz, personId: "receiver" } } : {}),
         }),
       ),
     ).toMatchObject({ status: "accepted", destinationZoneId: v.bz });

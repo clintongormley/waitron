@@ -8677,16 +8677,7 @@ export class TillApp extends LitElement {
         else this.#releasePlaceEditLock();
       }
       if (!isNetworkFailure(error)) this.#unconfirmedPlace = undefined;
-      if (
-        askCounterClosedZone(
-          error,
-          (prompt) => (this.lateSendWindow = prompt),
-          basketLines,
-          retry,
-          current,
-        )
-      )
-        return;
+      if (askCounterClosedZone(error, this.#presentLateSend, basketLines, retry, current)) return;
       const stored = storedLateSendAsked(error, basketLines);
       const asked = stored === undefined ? lateSendAsked(error, basketLines) : undefined;
       const approval =
@@ -9677,16 +9668,7 @@ export class TillApp extends LitElement {
       parked = true;
     } catch (error) {
       if (session !== this.#operatorSession) return;
-      if (
-        askCounterClosedZone(
-          error,
-          (prompt) => (this.lateSendWindow = prompt),
-          basketLines,
-          retry,
-          current,
-          "save",
-        )
-      )
+      if (askCounterClosedZone(error, this.#presentLateSend, basketLines, retry, current, "save"))
         return;
       const asked = lateSendAsked(error, basketLines);
       const approval = asked === undefined ? lateSendApprovalAsked(error, lateSend) : undefined;
@@ -16971,13 +16953,10 @@ export class TillApp extends LitElement {
     const dish = lateExtrasDish(change, this.tabLines, this.#tableOffers);
     const zone = closedZoneQuestionOf(outcome.error);
     if (zone !== undefined) {
-      this.lateSendWindow = closedZonePrompt(
-        zone,
-        dish === undefined ? [] : [dish],
-        "extras",
-        (confirmed) => {
+      this.#presentLateSend(
+        closedZonePrompt(zone, dish === undefined ? [] : [dish], "extras", (confirmed) => {
           if (identity() && !left()) return this.#onChangeLine(event, confirmed, zone.zoneId);
-        },
+        }),
       );
       return;
     }
@@ -25238,7 +25217,7 @@ export class TillApp extends LitElement {
                                   @transfer-changed=${() => this.#departmentTransfers?.refresh()}
                                   .api=${this.api}
                                   .snapshot=${this.transferSnapshot}
-                                  .showLateSendPrompt=${(prompt: LateSendPrompt) => (this.lateSendWindow = prompt)}
+                                  .showLateSendPrompt=${this.#presentLateSend}
                                   .open=${this.transferQueueOpen}
                                   @close-transfers=${() => {
                                     this.transferQueueOpen = false;

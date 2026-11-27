@@ -2439,27 +2439,42 @@ describe("counter place and park", () => {
     expect(api.placeOrder).toHaveBeenCalledOnce();
   });
 
-  it("places the first Counter order after confirming its closed zone", async () => {
-    const parkOrder = vi
-      .fn()
-      .mockRejectedValueOnce({
-        code: "service_zone.closed",
-        zoneId: "zone-bar",
-        closedZoneName: "Bar",
-        closesAt: "22:00",
-      })
-      .mockResolvedValue({ id: "wo-new", orderNumber: 7, serviceMode: "ticket_then_pay" });
-    const el = await counterBasket(parking({ parkOrder }), PLACE);
-    await place(el);
+  it.each([
+    ["parks", park, {}, "save"],
+    ["places", place, PLACE, "send"],
+  ] as const)(
+    "%s the first Counter order after one question about its closed zone and ended period",
+    async (_, act, options, verb) => {
+      const parkOrder = vi
+        .fn()
+        .mockRejectedValueOnce({
+          code: "service_zone.closed",
+          zoneId: "zone-bar",
+          closedZoneName: "Bar",
+          closesAt: "22:00",
+          lateSend: {
+            ...BREAKFAST_ENDED,
+            menus: [{ menuId: BREAKFAST_MENU.id, closedMenuPeriodName: "Breakfast" }],
+          },
+        })
+        .mockResolvedValue({ id: "wo-new", orderNumber: 7, serviceMode: "ticket_then_pay" });
+      const el = await lateCounter(parking({ parkOrder }), options);
+      counterMenus = { ...counterMenus, service: { ...counterMenus.service, zoneOpen: false } };
+      await poll(el);
+      await act(el);
 
-    expect(windowOf(el)?.closedZone?.closedZoneName).toBe("Bar");
-    expect(api.placeOrder).not.toHaveBeenCalled();
-    await choose(el, "data-late-agreed");
-    expect(parkOrder.mock.calls[1]).toEqual([
-      { ...parkOrder.mock.calls[0]![0], closedZoneId: "zone-bar" },
-    ]);
-    expect(api.placeOrder).toHaveBeenCalledOnce();
-  });
+      expect(heading(el)).toBe("Bar closed at 22:00");
+      expect(windowOf(el)!.shadowRoot!.textContent).toContain("Breakfast has ended");
+      expect(agreedText(el)).toBe(`Station agreed — ${verb}`);
+      expect(parkOrder).toHaveBeenCalledOnce();
+      expect(api.placeOrder).not.toHaveBeenCalled();
+      await choose(el, "data-late-agreed");
+      expect(parkOrder.mock.calls[1]).toEqual([
+        { ...parkOrder.mock.calls[0]![0], closedZoneId: "zone-bar", lateSend: BREAKFAST_CONFIRMED },
+      ]);
+      expect(api.placeOrder).toHaveBeenCalledTimes(act === place ? 1 : 0);
+    },
+  );
 
   it("keeps the confirmation on the Place it repeats after a menu version change", async () => {
     const parkOrder = vi
@@ -2594,35 +2609,6 @@ describe("counter place and park", () => {
     expect(windowDishes(el)).toEqual(["1× Omelette"]);
     expect(agreedText(el)).toBe("Station agreed — save");
     expect(api.parkOrder).not.toHaveBeenCalled();
-  });
-
-  it("parks a first order after answering one question about the closed zone and ended period", async () => {
-    const parkOrder = vi
-      .fn()
-      .mockRejectedValueOnce({
-        code: "service_zone.closed",
-        zoneId: "zone-bar",
-        closedZoneName: "Bar",
-        closesAt: "22:00",
-        lateSend: {
-          ...BREAKFAST_ENDED,
-          menus: [{ menuId: BREAKFAST_MENU.id, closedMenuPeriodName: "Breakfast" }],
-        },
-      })
-      .mockResolvedValue({ id: "wo-new", orderNumber: 7 });
-    const el = await lateCounter(parking({ parkOrder }));
-    counterMenus = { ...counterMenus, service: { ...counterMenus.service, zoneOpen: false } };
-    await poll(el);
-    await park(el);
-
-    expect(heading(el)).toBe("Bar closed at 22:00");
-    expect(windowOf(el)!.shadowRoot!.textContent).toContain("Breakfast has ended");
-    expect(agreedText(el)).toBe("Station agreed — save");
-    expect(parkOrder).toHaveBeenCalledOnce();
-    await choose(el, "data-late-agreed");
-    expect(parkOrder.mock.calls[1]).toEqual([
-      { ...parkOrder.mock.calls[0]![0], closedZoneId: "zone-bar", lateSend: BREAKFAST_CONFIRMED },
-    ]);
   });
 
   it("parks with the ended menu once the kitchen agreed", async () => {
