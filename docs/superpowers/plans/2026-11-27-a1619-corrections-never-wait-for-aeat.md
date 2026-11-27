@@ -1,8 +1,10 @@
 # A1619 — a correction never waits for AEAT's answer to the original
 
-Status: plan for approval (lane B, 2026-11-27), read against main c6acae0136; revised after fresh
-read 1 (no Critical; four Important and eight Minor points, all checked against the code and taken
-in). Fiscal: the owner lands it. One question for the owner (D1); the rest are the watcher's.
+Status: cleared (lane B, 2026-11-27), read against main c6acae0136; revised after fresh read 1 (no
+Critical; four Important and eight Minor points, all taken in). The watcher cleared D2–D7 (lane B
+`questions.md`, 13:21); the owner answered D1 (14:30, below). Fiscal: the owner lands both PRs. PR 1
+is this page; PR 2 (a date fix after an earlier refund) gets its own section, sent to the watcher
+before it is built.
 
 ## What staff can do when it lands
 
@@ -13,8 +15,8 @@ one) at once, printed as usual. **Cancel and credit** and **Pay for items** on a
 their credit at once too. Today they wait ("This receipt is still being sent to the tax agency…
 try again in a few minutes"; "The tax agency refused this receipt… Fiscal filing shows what to
 do"), or, on a full invoice AEAT refused with no fix, give the money back with no corrective and
-list it for the accountant. This is built as the owner's words say; if the owner picks another D1
-option, the plan changes as D1 says.
+list it for the accountant. PR 2 then lets Fiscal filing's date fix (the replacement receipt) follow
+a refund already given, so a refund never costs the fix (D1).
 
 The owner's words (27 Nov ~09:14, lane B queue A1619): "In fact, we don't need to wait for a reply
 on the old invoice. We can even issue a correction to an invoice that the aeat will never accept".
@@ -85,7 +87,7 @@ Nothing found says a corrective must wait for its original. What each source say
    invoice is the one to correct. A receipt with a replacement R5 is corrected through it
    (`correction-target.ts`).
 
-## The change (as D1 option 3, the owner's words)
+## The change (PR 1)
 
 1. **Admission** (`correction-admission.ts`): delete the `filing_pending` branch (`:76-86`), the
    refused branch, `fixOffered` and the `openSifId`/`putRightFor` imports; any submission state is
@@ -129,8 +131,8 @@ New, by the assertion that fails if the behaviour were deleted:
   on the new chain; on a full invoice refused with no fix the cash leg that makes up the rest files
   the R1 in that step and the accountant's list holds none of its refunds (#2973's change); Cancel
   and credit and Pay for items on a refused receipt and on another box's unanswered one each file a
-  credit; then Send the replacement on such a receipt answers `sale.replacement_not_first` (the
-  cost D1 names, pinned).
+  credit; then Send the replacement on such a receipt answers `sale.replacement_not_first` (today's limit,
+  which PR 2 lifts; pinned here).
 
 Changed test checks (to the new behaviour, at least as strictly; listed in the PR):
 `correction-admission.test.ts:153-245,314,323,345,356,367,381,408`; `backend.test.ts:576-690` and
@@ -180,11 +182,10 @@ the removed reasons are then unreachable, not wrong) and land Task 3 next. Two C
 
 ## Decisions
 
-- **D1 — for the owner** (question below). Recommended: option 3 now, option 4 as its own item if
-  the owner wants the date fix kept.
+- **D1 — the owner's answer** (below): never wait; PR 1 as written, PR 2 lets the date fix follow
+  an earlier refund.
 - **D2:** the watcher's 26 Nov 16:37 rule (credits refuse a receipt AEAT refused, to keep Send the
-  replacement possible) is retired under D1 option 3; under options 1 or 2 it narrows to receipts
-  refused for a future date while the replacement is offered. Recommended: follow D1.
+  replacement possible) is retired (the watcher, 14:30, following D1).
 - **D3:** Nothing was served (a cancellation) keeps refusing a refused receipt and another chain's
   unanswered one: not one of the four actions, and cancelling a held receipt stops later records
   (`backend.ts:531-533`). Recommended.
@@ -202,36 +203,30 @@ the removed reasons are then unreachable, not wrong) and land Task 3 next. Two C
 - **D7:** corrections already closed with refunds kept, and refunds already on the accountant's
   list, stay as they are (no venue is live). Recommended.
 
-### D1, as I would put it to the owner
+### D1, the owner's answer (27 Nov 2026, relayed by the watcher at 14:30)
 
-A table's €50 receipt prints at 23:58 on 31 March while the box's clock runs a day ahead, so the
-receipt says 1 April. AEAT refuses it as dated in the future. Today the fix is on Fiscal filing:
-an administrator sends a replacement receipt carrying the real day. Waitron cannot send that
-replacement once the receipt has any refund on it. So if a guest gets €5 back on that receipt
-first, the replacement is no longer possible: the receipt stays refused at AEAT, its case stays
-open with nothing to press, and the sale may be counted in April's VAT instead of March's (as
-`docs/backlog.md:1101` says of a full invoice). That can happen whatever we choose below, except
-option 4, because the €5 can go back while the receipt is still being sent and the refusal arrives
-after (true today on the box's own records, `correction-admission.ts:13-18`).
+The question was a receipt refused by AEAT as dated in the future (clock a day ahead) that a guest
+had already been given 5.00 back on: Waitron cannot then send Fiscal filing's date fix, a
+replacement receipt (`sale.replacement_not_first`, `record-replacement.ts:116-120`). The owner,
+verbatim: "remember that we could potentially submit a chain of receipts and corrections in a single
+request to AEAT, even if the first in the chain is incorrect, so we shouldn't wait for confirmation
+on anything. the important thing is that a correction points to the previous invoice/receipt, even if
+that document has been refused by AEAT. so we issue a date-fix replacement which points to the
+original refused invoice, then a refund correction pointing to the date-fix replacement, and then we
+can submit both invoices in the same request (or in separate requests), however the timing works.
+Include this scenario as one requiring confirmation but don't wait for confirmation".
 
-1. **Keep a wait** for a receipt already refused this way: Give money back waits until an
-   administrator sends the replacement. It covers only refusals that have already come back.
-2. **Give money back sends the replacement first**, asking for the real day and an administrator's
-   sign-in in place, then the refund. Same partial cover; its own PR, about 3 hours (a new seat
-   method over the case dialog's `applyReplacementInvoiceRequest`, `record-remedy-replacement.ts:26-97`,
-   about 50 lines; the server step about 60; the till's day question and sign-in about 120;
-   tests about 300). It calls the existing replacement writer; no record builder changes.
-3. **Never wait** (your words): simplest, and staff never wait; in this rare case the date fix is
-   lost. I believe it is rare: it needs the box's clock ahead after the start-up time check passed.
-4. **Let a replacement follow an earlier refund**: the only option that covers both halves. It
-   changes core's replacement writer (`record-replacement.ts:116-120`, which wraps the record
-   builder `recordCorrection`), and the correction history, which after a replacement reads only
-   the replacement's refunds and would then miss the €5 (`correction-target.ts`,
-   `correction-history.ts`; about 60 production and 200 test lines). That touches a record builder,
-   so it is a stop for this item: its own item, with a run on AEAT's test service first.
-
-Recommended: **3 now, and 4 as its own item if you want the date fix kept.** The wait in 1 and 2
-protects only half the cases and makes staff wait; 4 is the real fix and needs its own probe.
+So:
+- **PR 1** (this page): nothing waits on AEAT's answer. A refund after a date fix already names the
+  replacement (`correction-target.ts`, unchanged).
+- **PR 2** (its own section, to the watcher before it is built): when the refund was given BEFORE
+  the refusal came back, the date fix is still possible: core's replacement writer stops refusing a
+  receipt that has correctives, and the correction history counts the earlier refund after a
+  replacement (the old option 4: `record-replacement.ts:116-120`, `correction-target.ts`,
+  `correction-history.ts`). It touches the path around the record builder `recordCorrection`, so it
+  takes a full review and a run on AEAT's test service first, and the owner lands it.
+- The scenario is adviser question Q64 (`docs/compliance/asesor-questions.md`), built without
+  waiting for the answer.
 
 ## Overlap
 

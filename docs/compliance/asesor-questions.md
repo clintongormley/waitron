@@ -4113,6 +4113,46 @@ article 32? If the copy leaked, would the people affected have to be told, since
 exception for unintelligible data would not apply? Removed as a paid question by the
 [curated list](2026-11-06-adviser-questions.md): a venue cannot change this design, so it is the owner's decision.
 
+### Q64. A date fix for a receipt that already has a refund on it (added 2026-11-27)
+
+**Why we ask.** A table's 50.00 receipt prints at 23:58 on 31 March while the box's clock runs a day
+ahead, so it is dated 1 April. Before AEAT's refusal (dated in the future, error 1112) comes back, the
+guest is given 5.00 back: Waitron issues a corrective by difference (R5, type I) naming the receipt.
+The refusal then arrives. To put the date right Waitron issues a replacement (R5, type S, Q37's
+treatment) naming the refused receipt, and any refund taken after it names the replacement. The two
+correctives may reach AEAT in one request or in separate ones, in whatever order the timing gives.
+Today Waitron refuses the replacement once the receipt has any corrective
+(`sale.replacement_not_first`, `packages/core/src/record-replacement.ts`); the owner has asked for it
+to be allowed (27 Nov 2026, A1619): "the important thing is that a correction points to the previous
+invoice/receipt, even if that document has been refused by AEAT".
+
+> Un ticket de 50,00 € se emite a las 23:58 del 31 de marzo con el reloj del equipo adelantado un día,
+> así que lleva fecha de 1 de abril. Antes de que llegue el rechazo de la AEAT (fecha posterior a la
+> actual, error 1112), se devuelven 5,00 € al cliente: el sistema emite una rectificativa por
+> diferencias (R5, tipo I) que identifica el ticket. Después llega el rechazo. Para corregir la fecha
+> el sistema emite una rectificativa por sustitución (R5, tipo S, como en la pregunta Q37) que
+> identifica el ticket rechazado, y cualquier devolución posterior identifica esa sustitución. Ambas
+> rectificativas pueden llegar a la AEAT en el mismo envío o en envíos distintos, en el orden que
+> resulte.
+>
+> **(a)** ¿Puede emitirse una rectificativa por sustitución de un ticket que ya tiene una
+> rectificativa por diferencias?
+>
+> **(b)** ¿La sustitución debe recoger el importe ya devuelto (45,00 €) o el importe original
+> (50,00 €), y debe emitirse de nuevo la rectificativa por diferencias de 5,00 € identificando la
+> sustitución?
+>
+> **(c)** ¿Puede una rectificativa identificar un registro que la AEAT ha rechazado o que todavía no ha
+> recibido, aunque ambos se envíen en el mismo envío?
+
+**Proposed interim treatment (owner, 2026-11-27):** "we shouldn't wait for confirmation on anything";
+the date fix stays possible after an earlier refund, and each correction names the previous
+document. Built by A1619 without waiting for this answer.
+
+This records a question; no enquiry has been sent.
+
+---
+
 ### Sources checked for the 2026-10-04 revision
 
 The recovery-pack and allocation procedures are product proposals. The following external
