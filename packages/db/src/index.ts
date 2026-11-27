@@ -427,6 +427,7 @@ export {
   adjustmentRefunds,
   adjustments,
   adjustmentStage,
+  billDiscounts,
 } from "./schema/index.js";
 export type { AdjustmentSplit, AdjustmentStage } from "./schema/adjustments/adjustments.js";
 export type { AdjustmentEndingWhy } from "./schema/adjustments/adjustment-endings.js";
