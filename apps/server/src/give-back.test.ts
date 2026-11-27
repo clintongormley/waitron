@@ -78,6 +78,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { takeOver } from "./testing/taken-over.js";
+import { clockAt } from "./testing/deferred-close-fixture.js";
 import { filedInvoiceOf, onOpenChainOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
@@ -1560,7 +1561,7 @@ describe("POST …/give-back in cash", () => {
     const saleId = await pay(b, [{ cash: "34.00" }]);
     await acceptedByAeat(venue.db, saleId);
     const box = await takeOver(venue);
-    const app = venue.appWith({});
+    const app = venue.appWith({ clock: clockAt(Date.now() + 3 * 86_400_000) });
     const previewed = await routePreview(saleId, ask("goodwill", "10.00"), app);
     expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
     const answer = await give(
@@ -1588,8 +1589,11 @@ describe("POST …/give-back in cash", () => {
       .where(eq(invoiceCorrections.id, part!.correctionId!));
     expect(correction).toMatchObject({ state: "filed", gross: 1000 });
     expect(onOpenChainOf(venue.db, correction!.correctiveSaleId!, box)).toBe(true);
-    expect(filedInvoiceOf(venue.db, correction!.correctiveSaleId!).corrects).toMatchObject([
-      { number: filedInvoiceOf(venue.db, saleId).number },
+    const original = filedInvoiceOf(venue.db, saleId);
+    const corrective = filedInvoiceOf(venue.db, correction!.correctiveSaleId!);
+    expect(corrective.issuedOn).not.toBe(original.issuedOn);
+    expect(corrective.corrects).toEqual([
+      { issuerTaxId: original.issuerTaxId, number: original.number, issuedOn: original.issuedOn },
     ]);
   });
 

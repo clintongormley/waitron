@@ -29,6 +29,7 @@ import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-v
 import * as fixture from "./testing/full-invoice-give-back.js";
 import { ask, r1, type Part } from "./testing/full-invoice-give-back.js";
 import { takeOver } from "./testing/taken-over.js";
+import { clockAt } from "./testing/deferred-close-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
 let venue: BillVenue;
@@ -263,13 +264,17 @@ describe("a corrective full invoice is filed by whatever finishes the money", ()
   });
 });
 
-/** Expects the correction's corrective on `box`'s open chain, correcting `saleId`'s number. */
+/** Expects the correction's corrective on `box`'s open chain, naming `saleId`'s issuer, number
+ * and issue day; answers the corrective's own issue day. */
 async function filedOnChainOf(correctionId: string, box: string, saleId: string) {
   const { corrective } = await correctionOf(correctionId);
   expect(onOpenChainOf(venue.db, corrective!, box)).toBe(true);
-  expect(filedInvoiceOf(venue.db, corrective!).corrects).toMatchObject([
-    { number: filedInvoiceOf(venue.db, saleId).number },
+  const original = filedInvoiceOf(venue.db, saleId);
+  const filed = filedInvoiceOf(venue.db, corrective!);
+  expect(filed.corrects).toEqual([
+    { issuerTaxId: original.issuerTaxId, number: original.number, issuedOn: original.issuedOn },
   ]);
+  return { issuedOn: filed.issuedOn, originalIssuedOn: original.issuedOn };
 }
 
 describe("a full invoice another box issued", () => {
@@ -278,11 +283,13 @@ describe("a full invoice another box issued", () => {
     await acceptedByAeat(venue.db, saleId);
     const box = await takeOver(venue);
 
-    const { correctionId } = await giveBack(saleId, goodwill("10.00"), venue.appWith({}));
+    const later = venue.appWith({ clock: clockAt(Date.now() + 3 * 86_400_000) });
+    const { correctionId } = await giveBack(saleId, goodwill("10.00"), later);
 
     expect(correctivesOf(saleId)).toEqual([r1(-1000)]);
     expect(await correctionOf(correctionId)).toMatchObject({ state: "filed" });
-    await filedOnChainOf(correctionId, box, saleId);
+    const days = await filedOnChainOf(correctionId, box, saleId);
+    expect(days.issuedOn).not.toBe(days.originalIssuedOn);
   });
 
   it("while AEAT has not answered it, the leg completing files nothing and raises no alert; the sweep files one R1 once AEAT accepts it", async () => {

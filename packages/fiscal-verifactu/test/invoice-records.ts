@@ -134,6 +134,8 @@ export interface FiledInvoiceRecord {
   issuerTaxId: string;
   /** `NumSerieFactura`. */
   number: string;
+  /** `FechaExpedicionFactura`, the issue day. */
+  issuedOn: string;
   /** `TipoFactura`: F1, F2, F3, R4 or R5. */
   kind: string;
   /** `TipoRectificativa`, or null on an invoice that corrects nothing. */
@@ -156,6 +158,7 @@ export function filedInvoiceOf(db: Database, saleId: string): FiledInvoiceRecord
   return {
     issuerTaxId: record.IDFactura.IDEmisorFactura,
     number: record.IDFactura.NumSerieFactura,
+    issuedOn: record.IDFactura.FechaExpedicionFactura,
     kind: record.TipoFactura,
     correctionKind: record.TipoRectificativa ?? null,
     total: record.ImporteTotal,
