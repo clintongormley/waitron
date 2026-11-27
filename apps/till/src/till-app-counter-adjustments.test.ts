@@ -959,11 +959,7 @@ describe("till-app: discarding a parked table bill", () => {
     await flush(el);
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Staff", permissions: [] });
     await flush(el);
-    const shell = el.shadowRoot!.querySelector("till-shell")!;
-    await userEvent.click(shell.shadowRoot!.querySelector('[data-counter-orders="parked"]')!);
-    await flush(el);
-    const list = counter(el).shadowRoot!.querySelector("till-held-orders")!;
-    const discard = list.shadowRoot!.querySelector<HTMLElement>(".discard")!;
+    const discard = () => emit(counter(el), "discard-order", { id: "wo-9" });
     return { el, discard };
   }
 
@@ -999,13 +995,12 @@ describe("till-app: discarding a parked table bill", () => {
       message: es["held.discard_unsent"],
     },
   ])("explains $code for a still-listed bill in $locale", async ({ code, locale, message }) => {
-    const { el } = await parked({
+    const { el, discard } = await parked({
       abandonWorkingOrder: vi.fn().mockRejectedValue({ code, status: 409 }),
     });
     setLocale(locale);
     await flush(el);
-    const list = counter(el).shadowRoot!.querySelector("till-held-orders")!;
-    await userEvent.click(list.shadowRoot!.querySelector<HTMLElement>(".discard")!);
+    discard();
     await flush(el);
     expect(banner(el)!.textContent).toBe(message);
     expect(counter(el).heldOrders.map((row) => row.id)).toEqual(["wo-9"]);
@@ -1015,7 +1010,7 @@ describe("till-app: discarding a parked table bill", () => {
     const { el, discard } = await parked({
       abandonWorkingOrder: vi.fn().mockRejectedValue({ code: "ticket.already_fired", status: 409 }),
     });
-    await userEvent.click(discard);
+    discard();
     await flush(el, 8);
     expect(counter(el).store.id).toBe("wo-9");
     expect(counter(el).store.persisted).toBe(true);
@@ -1025,7 +1020,7 @@ describe("till-app: discarding a parked table bill", () => {
 
   it("sends the table bill's current editor expectation from Discard", async () => {
     const { el, discard } = await parked();
-    await userEvent.click(discard);
+    discard();
     await flush(el);
     expect(api.abandonWorkingOrder).toHaveBeenCalledWith("wo-9", {
       billId: "wo-9",
@@ -1041,7 +1036,7 @@ describe("till-app: discarding a parked table bill", () => {
     async (change) => {
       const read = deferred<HeldOrder>();
       const { el, discard } = await parked({ retrieveWorkingOrder: vi.fn(() => read.promise) });
-      await userEvent.click(discard);
+      discard();
       await flush(el);
       expect(api.retrieveWorkingOrder).toHaveBeenCalledOnce();
       if (change === "sign-out") emit(el.shadowRoot!.querySelector("till-shell")!, "logout");

@@ -1,6 +1,11 @@
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, draftServer, mountWidget } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  draftServer,
+  mountWidget,
+  startCounterBasket,
+} from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -253,6 +258,7 @@ async function signIn(el: TillApp, personId = "p1"): Promise<void> {
   await flush(el);
   emit(lock(el), "logged-in", { personId, displayName: "Ana", permissions: [] });
   await flush(el);
+  await startCounterBasket(el);
 }
 
 async function signInAgain(el: TillApp, personId = "p1"): Promise<void> {
@@ -273,6 +279,7 @@ function add(el: TillApp, menu: Menu): void {
 async function park(el: TillApp): Promise<void> {
   emit(counter(el), "park-order", {});
   await flush(el);
+  await startCounterBasket(el);
 }
 
 beforeEach(() => {

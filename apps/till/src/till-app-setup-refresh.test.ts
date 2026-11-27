@@ -8,6 +8,7 @@ import {
   cleanupWidgets,
   draftServer,
   mountWidget,
+  startCounterBasket,
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -429,11 +430,14 @@ describe("A768 the till follows the venue's setup revision", () => {
     });
     await flush(el);
     await signIn(el);
+    await startCounterBasket(el);
     const counter = el.shadowRoot!.querySelector("till-counter-screen")!;
     counter.store.addProduct(counter.products[0]!, "1");
     await flush(el);
-    const controls = counter.shadowRoot!.querySelector("till-tender-pay")!.shadowRoot!;
-    return { el, counter, send: () => controls.querySelector(".place") };
+    const send = () =>
+      counter.shadowRoot!.querySelector("till-tender-pay")?.shadowRoot?.querySelector(".place") ??
+      null;
+    return { el, counter, send };
   }
 
   function changeToPrepay(): void {
@@ -492,6 +496,7 @@ describe("A768 the till follows the venue's setup revision", () => {
     emit(counter, "park-order", {});
     await flush(el);
     expect(counter.store.lines).toHaveLength(0);
+    await startCounterBasket(el);
     counter.store.addProduct(counter.products[0]!, "1");
     await flush(el);
     expect(send()).not.toBeNull();
