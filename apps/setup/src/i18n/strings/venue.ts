@@ -515,7 +515,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "cert.refusal.not_yet_valid":
     "Este certificado aún no es válido. Revisa la fecha o elige otro archivo.",
   "cert.refusal.other_taxpayer":
-    "Este certificado es del NIF {certificateTaxId}, no del {taxId} del local. Elige el certificado del {taxId} o, si el NIF del local es incorrecto, selecciona Volver para introducir de nuevo los datos.",
+    "Este certificado es del NIF {certificateTaxId}, no del {taxId} del local. Elige el certificado del {taxId} o, si el NIF del local es incorrecto, pulsa Volver para introducir de nuevo los datos.",
   "cert.guide": "Ayuda con el certificado",
   "cert.file_unreadable":
     "No hemos podido leer ese archivo. Vuelve a elegir el archivo del certificado.",

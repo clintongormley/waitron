@@ -352,7 +352,7 @@ it.each([
   ],
   [
     "es-ES",
-    "Este certificado es del NIF A87654321, no del B12345674 del local. Elige el certificado del B12345674 o, si el NIF del local es incorrecto, selecciona Volver para introducir de nuevo los datos.",
+    "Este certificado es del NIF A87654321, no del B12345674 del local. Elige el certificado del B12345674 o, si el NIF del local es incorrecto, pulsa Volver para introducir de nuevo los datos.",
   ],
 ])(
   "names both tax IDs when the certificate belongs to another taxpayer (%s)",

@@ -79,7 +79,7 @@ person's number), so a sole trader's personal certificate goes on as today (D5).
    **Certificate file** gain "is for another tax ID", and what to do: choose the venue's
    certificate; or, when the venue's tax ID is the wrong one, **Back**, then abandon the attempt and
    enter the details again, or **Start again** once that is no longer offered. Lane C's #4465 (A1571
-   PR 1) edits the same section and `contribution.ts`: whoever lands second rebases and keeps both.
+   PR 1), which edits the same section and `contribution.ts`, is already on main under this branch.
 5. **Backlog:** no entry exists for piece 1; nothing to delete.
 
 ## Decisions for the watcher

@@ -104,9 +104,7 @@ export async function validateSetupAeatCert(raw: unknown, venue: { taxId: string
 
 /**
  * Seal a venue's AEAT certificate into the `fiscal.aeat` vault purpose. Re-checks only the blob's
- * shape, because `putCredential` accepts any non-empty `certKind` and `pfxBase64`. A file that
- * opens also gets an install row, unless the node's latest one is already this certificate; one
- * that does not open is sealed with none.
+ * shape, because `putCredential` accepts any non-empty `certKind` and `pfxBase64`.
  */
 export async function sealAeatSecret(
   deps: { db: Database; ring: KeyRing; nodeId: string; now?: () => Date },
