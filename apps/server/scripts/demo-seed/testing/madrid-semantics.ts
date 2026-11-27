@@ -244,6 +244,7 @@ export async function canonicalMadridSemantics(
         break;
       }
       case "menus":
+      case "customer_menu_styles":
       case "categories":
       case "departments":
       case "device_profiles":
