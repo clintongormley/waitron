@@ -10,8 +10,8 @@ Si Waitron no puede verificar este dispositivo para una acción, recarga o vuelv
 
 ## Cuando la caja no puede conectar con el servidor {#cannot-open}
 
-Si ves **No se puede conectar con el servidor**, comprueba que este teléfono esté conectado a la red
-WiFi del local. Deja la página abierta. La caja se abre sola cuando el servidor está listo.
+Si ves **No se puede conectar con el servidor**, comprueba que este móvil está en el WiFi del local.
+Deja la página abierta. La caja se abre sola cuando el servidor está listo.
 
 Si ya estás en la red WiFi del local, comprueba que el servidor esté encendido. Si lo está, puede
 que tengas que [volver a instalar su certificado](table-service.md#certificate-trust).
@@ -20,7 +20,7 @@ Si la caja ya está abierta y dice **No se puede conectar con el servidor**, com
 dispositivo esté conectado a la red WiFi del local. Deja la pantalla abierta mientras la caja
 vuelve a comprobar la conexión. En la pantalla del PIN, desplaza el aviso que está encima del
 teclado si hace falta y pulsa **Comprobar de nuevo** para comprobarla al momento.
-En **Comprueba tus horas**, pulsa **Volver a consultar** si no se pudieron cargar.
+En **Comprueba tus horas**, pulsa **Reintentar** si no se pudieron cargar.
 
 ## Lee la línea de avisos {#notice-line}
 
@@ -163,7 +163,7 @@ antes el importe ahí.
 Si la caja dice **El servidor está comprobando su copia de seguridad antes de aceptar ventas**
 o **Ningún servidor acepta ventas ahora mismo**, déjala abierta. La caja continúa en cuanto un
 servidor vuelve a aceptar ventas. En la pantalla de inicio de sesión, pulsa **Comprobar de nuevo**
-para comprobarlo al momento. En **Comprueba tus horas**, pulsa **Volver a consultar** cuando el
+para comprobarlo al momento. En **Comprueba tus horas**, pulsa **Reintentar** cuando el
 servidor esté listo.
 
 ## Guarda un informe sobre un problema {#problem-report}

@@ -292,7 +292,7 @@ curso** mientras sus platos están en sus estaciones y en **Listo** cuando todos
 platos atenuados y cuenta los demás como el de la pantalla de estación, con los que están en espera o
 esperan al pase tras el **+**.
 
-La cabecera de una tarjeta dice qué envió el camarero, **Nuevo pedido**, **Siguiente orden de plato** o
+La cabecera de una tarjeta dice qué envió el camarero, **Nuevo pedido**, **Siguiente orden del plato** o
 **Añadido** (una tarjeta en espera no dice ninguno), y después su número de pedido, su mesa y su
 grupo. Nombra la mesa por su [nombre corto](table-service.md#short-names), como **M4**, o **M4+M5**
 para mesas unidas. Sus minutos cuentan desde que el camarero lo envió; una tarjeta en **Listo**
@@ -313,7 +313,7 @@ ha cambiado desde la última lectura de la pantalla, no se envía nada y la pant
 pantalla se ha actualizado: revísala y vuelve a pulsar.**
 
 Si la estación de un plato está cerrada, el plato dice **Parrilla está cerrada: cambia el plato de
-estación desde el TPV o abre Parrilla por hoy**, y **Marchar** sigue desactivado hasta que se haga
+estación desde la caja o abre Parrilla por hoy**, y **Marchar** sigue desactivado hasta que se haga
 una de las dos cosas. Un extra que va a su propia estación cerrada dice en cambio **Parrilla está
 cerrada: Marchar lo envía allí igualmente**, y **Marchar** sigue activo.
 

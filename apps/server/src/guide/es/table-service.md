@@ -104,7 +104,7 @@ devolución. Ese caso aún no se ha probado con SumUp.
 
 ## Elegir documentos después de cobrar {#settlement-document}
 
-Después del último pago, elige **Recibo** o **Factura completa**. Un cambio que deja
+Después del último pago, elige **Ticket** o **Factura completa**. Un cambio que deja
 la cuenta pagada ofrece la misma elección. Para imprimir, espera a que **Imprimir en {printer}**
 nombre el destino y púlsalo. Una factura completa conserva el cliente registrado.
 
@@ -214,8 +214,8 @@ mostrador**, los pedidos de mostrador aún sin terminar: elige uno para abrirlo.
 
 Abre una venta en **Buscar cuenta** para revisar su ticket con el formato de papel de 80 mm.
 El ticket se muestra en el idioma en que se emitió. Para una copia en papel, elige **Imprimir/Reimprimir**. Para una factura completa, elige
-**Recibo** para la versión compacta o **Factura** para el formato de factura. Una factura
-simplificada muestra directamente sus impresoras de recibos. Ambas versiones de una factura
+**Ticket** para la versión compacta o **Factura** para el formato de factura. Una factura
+simplificada muestra directamente sus impresoras de tickets. Ambas versiones de una factura
 completa conservan los datos del cliente registrados.
 
 Si una factura completa ligada a una cuenta puede haberse impreso, ábrela en **Buscar cuenta** y
@@ -227,7 +227,7 @@ reenviar una factura completa.
 
 Elige una impresora de la lista de tu dispositivo. Elige **Heredar** para seguir el perfil. Cualquier
 otra elección se guarda en **Equipo de este dispositivo**. Si otro
-dispositivo lleva la impresora de recibos, Waitron pregunta antes de que te la quedes.
+dispositivo lleva la impresora de tickets, Waitron pregunta antes de que te la quedes.
 
 Espera a que **Imprimir en {printer}** o **Imprimir una copia en {printer}** nombre tu destino y
 púlsalo. Elegir un documento o una impresora, actualizar la lista y volver atrás no imprime nada.
@@ -235,11 +235,11 @@ La copia sigue preguntando el idioma cuando hay más de uno; cancelar no imprime
 elección no se ha guardado, pulsa **Reintentar**; usa **Actualizar** si no se ha podido leer la lista.
 
 Para una factura completa antigua sin cuenta, ábrela en **Buscar cuenta** y elige **Factura**.
-Usa **Recibo** para una copia compacta cuando se haya completado un original. Si falla la impresión,
-comprueba el destino de **Reintentar original** o elige la impresora de recibos indicada en su lugar.
+Usa **Ticket** para una copia compacta cuando se haya completado un original. Si falla la impresión,
+comprueba el destino de **Reintentar original** o elige la impresora de tickets indicada en su lugar.
 
-Si el TPV indica que la impresora de oficina se ha quedado sin papel, añade papel y espera la
-factura. El aviso puede seguir en la pantalla de inicio de sesión si el TPV se bloquea. Si puede que
+Si la caja indica que la impresora de oficina se ha quedado sin papel, añade papel y espera la
+factura. El aviso puede seguir en la pantalla de inicio de sesión si la caja se bloquea. Si puede que
 la factura se haya impreso, revisa la impresora antes de volver a enviarla.
 
 ## Imprimir desde Pedidos del panel {#dashboard-documents}
@@ -381,7 +381,7 @@ devuelve dinero.
 
 La marca solo aparece cuando este dispositivo puede devolver el pago. Si el cliente pagó de una
 forma que este dispositivo no acepta, la ventana dice **Devuélvelo en una caja: elige Devolución en
-el recibo.** Después de **Cancelar y devolver**, la ventana **Devolución** del recibo se abre ya
+el ticket.** Después de **Cancelar y devolver**, la ventana **Devolución** del recibo se abre ya
 rellenada, como se explica en [Devolución desde un recibo](table-service.md#give-money-back).
 
 ## Cerrar una mesa pagada con platos aún por llegar {#finish-paid-table}
@@ -401,7 +401,7 @@ pagados de la cuenta cuando los marcas todos.
 Elige **Cancelar y devolver** con el total de los platos marcados, o **Cancelar** si no hay ninguno
 marcado. **Atrás** deja la mesa abierta. Si marcas **Devolución** y no puedes hacer devoluciones,
 alguien que pueda introduce su PIN. Si un pago se cobró de una forma que este dispositivo no
-acepta, la ventana dice **Devuélvelo en una caja: elige Devolución en el recibo.**
+acepta, la ventana dice **Devuélvelo en una caja: elige Devolución en el ticket.**
 
 Cuando la mesa se cierra, una ventana **Devolución** muestra cada recibo con platos marcados. Elige
 uno para abrir su ventana **Devolución**, ya rellenada. Si solo hay un recibo, se abre
@@ -479,7 +479,7 @@ Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **B
 
 ## Devolver una tarjeta en un datáfono aparte {#separate-terminal}
 
-Si el TPV indica que el servidor no tiene espacio en disco, espera a que un encargado resuelva el bloqueo
+Si la caja indica que el servidor no tiene espacio en disco, espera a que un encargado resuelva el bloqueo
 antes de devolver el dinero en el datáfono: Waitron no puede registrar la devolución mientras dure.
 
 Para un pago con tarjeta registrado desde un datáfono aparte, devuélvelo en ese datáfono solo
@@ -895,7 +895,7 @@ ningún plato de la otra mesa.
 
 ## Traspasar una cuenta de Mostrador a otro departamento {#department-transfers}
 
-Abre una cuenta guardada en **Mostrador** y elige **Traspasos** en la barra superior del TPV, o en
+Abre una cuenta guardada en **Mostrador** y elige **Traspasos** en la barra superior de la caja, o en
 **Más** en un dispositivo de mano. Elige **Solicitar traspaso**, selecciona el **Departamento de
 destino** y pulsa **Guardar**. Tu departamento sigue
 siendo responsable hasta que el mostrador receptor acepte. Mientras la solicitud esté pendiente,
@@ -999,7 +999,7 @@ Cuando una mesa indique **Por mover**, muévela y elige **Marcar movida**.
 
 ## Elegir el equipo de este dispositivo {#equipment}
 
-En un TPV, elige **Más**, **Ajustes** y **Equipo**. En un dispositivo de mano, elige **Más**
+En una caja, elige **Más**, **Ajustes** y **Equipo**. En un dispositivo de mano, elige **Más**
 y **Equipo**. En cada lista disponible, elige el equipo que quieres usar en este dispositivo,
 o **Heredar** para seguir la elección de su perfil.
 
