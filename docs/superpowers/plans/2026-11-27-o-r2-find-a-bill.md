@@ -171,15 +171,13 @@ to a held counter order (9238–9252), a presented counter bill (9141–9145) or
 handed over (9213–9218). A phone serving a counter zone is spec §3's new behaviour, lane N's 9b:
 question 1.
 
-## Questions for the watcher
+## Answered by the watcher (2026-11-27 06:26, cleared at b34371930e)
 
-1. Counter orders on phones and tablets until lane N's 9b: keep them reachable through the owed
-   section (R2a's `counter=true`, the branches kept) and drop them when 9b lands (recommended), hold
-   R2b-1 until 9b, or accept the loss until then?
-2. Past 50 rows: "Show more" (recommended), or loading as the list scrolls?
-3. Match payments as well as totals (recommended: the card statement shows the payment), with a
-   payment-only match's amount shown highlighted on its second line (recommended)?
-4. The spec labels only full invoices and refunds. Label correctives and replacements too, with
-   today's names (recommended: the Type column that said so goes)?
-5. Is anyone building the outlined search field (lane N's menu search, frames `d`, `m`)? If not,
-   lane O builds it as R2b-0 (recommended) and lane N reuses it.
+1. Held, presented and paid-not-handed-over counter orders stay reachable through the owed strip
+   (R2a's `counter=true`, their branches kept) until lane N's 9b.
+2. "Show more" after 50 rows.
+3. Match single payments as well as totals.
+4. Corrective receipts, corrective invoices and replacements carry today's names as labels.
+5. First look for an existing search field in `packages/ui` (lane K's customer-menu search, any
+   `wt-*` search) and reuse it if it fits; otherwise build the outlined one once in `packages/ui`
+   as R2b-0. R2a takes the full wave (two run-it reviews).
