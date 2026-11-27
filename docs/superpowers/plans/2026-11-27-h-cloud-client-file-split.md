@@ -1,20 +1,57 @@
 # Split the Cloud connection factory
 
-Lane H’s `SPLIT-SERVER-FILES` records the owner’s “these enormous files should be broken down into smaller bites” and “a typical rule is no more than 1000 lines”. At `400c64363c`, `cloud-client.ts` is 1,705 lines and `createCloudConnection` spans 294–1702. The watcher’s 27 November 19:03 note assigns a separate plan. After Claude’s read, get watcher clearance explicitly covering the exception to moving functions over 200 lines whole and the repeatable, file-specific cuts for nested methods in place of the committed mover for those cuts.
+Give connection setup and signed-in services their own Server files, each under 1,000 lines.
+Lane H’s `SPLIT-SERVER-FILES` records the owner’s 24 November size request and the watcher’s
+27 November 19:03 assignment. At `400c64363c`, `cloud-client.ts` is 1,705 lines and
+`createCloudConnection` spans 294–1702. Before building, get watcher clearance for the factory
+breakdown and the `CloudConnectionOptions` type import path in `boot.ts`.
 
-## Boundaries in `apps/server/src/`
+## PR 1. Sign-in
 
-| File | Work it owns | Estimated lines |
-| --- | --- | ---: |
-| `cloud-client.ts` | Keep the public factory and `CloudConnection` inference, config readers, setup draft discard, state reads and durable saves, `readView`, pairing `exchange` and `requestPairing`, `project`, `registrationOf`, `emergencyHints()`, and the installation, tunnel, replacement and capture operations. Keep the module’s single `connectionTurns` and the same `run` with its resolved-path default. | 780–840 |
-| `cloud-client-sign-in.ts` | Move `exchangeSignIn`, `signInState` through `recoverSignIn`, and `setupSignInAvailable` plus `setupAddressLookup` through `returnSignIn`. Create the group once per client with `options`, `run`, `readState`, `writeState`, `save` and `requestPairing`. Return `recoverSignIn` internally for the retained `refresh`. Keep the setup address symbol and provisional lease in this closure. | 440–460 |
-| `cloud-client-services.ts` | Move the registered services together with `leaseState` through `ownerRecovery`, `billingRead`, `emergencyRead` and `emergencyFacts`. Take `addressLookup`, `emailRelayEnabled` through `sendEmail`, `emergency`, and `ownerRecoveryRead` through `translationService`. Take `StaffReportDelivery`. Create the group once per client with `options`, `run`, `read`, `save`, `registrationOf` and a live hint reader. | 430–460 |
-| `cloud-client-types.ts` | Take `CloudRegistration`, `CloudPairingView`, `CloudConnectionOptions`, `SavedEmergencyHints`, `CloudInstallationCredentials` and `SavedCloudState`. Both groups import shared types directly. | 65–80 |
+- Use `node scripts/move-ts-declarations.mjs scripts/cloud-client-split.json` to move
+  `CloudRegistration`, `CloudPairingView`, `CloudConnectionOptions`, `SavedEmergencyHints`,
+  `CloudInstallationCredentials` and `SavedCloudState` to `cloud-client-types.ts`. Import them
+  directly from their new home, including the `boot.ts` type import if cleared.
+- In `cloud-client-sign-in.ts`, take `exchangeSignIn`, `signInState` through `recoverSignIn`, and
+  `setupSignInAvailable` plus `setupAddressLookup` through `returnSignIn`. Create the group once
+  per connection with `options`, `run`, `readState`, `writeState`, `save` and `requestPairing`.
+  Keep the setup address symbol and provisional lease in this group. Return `recoverSignIn`
+  internally for the factory’s existing `refresh`. Preserve the generic `run` and `requestPairing`
+  signatures when passing them across the file boundary.
+- Move `installedSignInFixture` through “refuses invalid venue text before sending completion”
+  to `cloud-client-sign-in.test.ts`, with the `loadCloudSignInCallback` case and the filesystem
+  spy in `cloud-client.test.ts`. Run both suites, `setup-api.test.ts`, `cloud-address-lookup.test.ts`
+  and `boot.box-emails.test.ts`. Keep the file-size guard green by lowering the temporary cap to
+  the smallest 250-line cap that fits the measured retained file, expected near 1,220 lines.
 
-## One reviewed PR after clearance
+## PR 2. Signed-in services
 
-- Use `node scripts/move-ts-declarations.mjs scripts/cloud-client-split.json` for the top-level declarations. Its map reads file statements, with special lifts for route ranges and class members. Cut the named helpers and properties into the two new closures at the same nesting depth. Wire methods into their original return slots. Keep reads, writes and authorisation calls in order. In `emergency`, call `readHeldEmergencyHints` to bind `heldEmergencyHints` after the post-wait registration check and before its first use. The reader closes over the factory’s existing variable. Keep caches per client, lease and refusal turns on the original queue, and the setup address turn separate from Provision.
-- After formatting, use a one-off TypeScript parse by declaration and property name to compare exact body bytes and signature tokens, including the retained methods. Compare `emergency` after removing just the added hint read. Trace each captured name through the new parameters to its original helper or state owner. Compare the public keys and inferred signatures. Check relative imports, including type imports, for cycles among the pieces. Put both one-off checks in the PR body. Import moved definitions directly. Keep the factory and origin spies on `cloud-client.ts` and load `./errors.js` wherever this code throws registered errors. Retarget the lease/refusal and billing pointers in `docs/developers/cloud-connection.md`.
-- Move `installedSignInFixture` through “refuses invalid venue text before sending completion” into `cloud-client-sign-in.test.ts`, comparing test blocks byte for byte and keeping the filesystem spy with the durability cases. Estimate 890 product lines moved, 60–100 new wiring and import lines, 575 test lines moved with import edits only, and 25–40 map lines. Remove the 1,750-line cap and run `scripts/product-file-size.test.ts` with the new files staged.
-- Before and after, run Server typecheck, `cloud-client.test.ts` and its `billing`, `emergency`, `error-report` and `staff-report` siblings, plus the moved sign-in suite after the split. Run `cloud-api.test.ts`, `cloud-api.owner-recovery.test.ts`, `cloud-address-lookup.test.ts`, `cloud-installation.test.ts`, `cloud-translation.exchange.test.ts`, `cloud-email.test.ts`, `cloud-staff-certificate.test.ts`, `cloud-tunnel-provision.test.ts`, `cloud-replacement.test.ts`, and suites with changed imports or mocks. Run Lane H’s unedited `write-path.e2e.test.ts`, `inmutabilidad.test.ts`, `till-api.sell-published.test.ts` and `till-app-menu-refresh.test.ts`. Finish the whole split in one PR with the normal push hook, Claude’s branch reviews for concurrency and permissions, and green CI on the current head.
-- Before the PR, name open overlaps and give those branches the map and cut recipe to run before rebasing. Rehearse the nested cut in disposable checkouts at #4452’s original fork `ddf27cdd5d` and PR head `1b0cb180b8`. Apply the same cuts, including `emergencyCode` in services where present. Replay the moved-tree diff onto the split parent and compare with the split tip. Check that the returned client loses `emergencyCode` and that services drops the `fetchEmergencyCode` import. Keep the old method in the losing-edit control and require the method list check to fail. Run `cloud-client.emergency.test.ts` and `cloud-api.emergency-people.test.ts` on the replayed tip. Record the SHAs, results and control in the PR. The local `git diff` shows the deletion. The nested replay is build work. A separate top-level probe carried both reader edits across #4097’s base `8023b20c7f` and tip `8c3e1bf4a3` (`~/waitron-campaign-h/receipts/cloud-client-split-plan/replay.log`), exercising the existing mover for top-level declarations.
+- In `cloud-client-services.ts`, take `leaseState`, `recordRefusal`, `ownerRecovery`, `billingRead`,
+  `addressLookup`, `emailRelayEnabled` through `sendEmail`, and `ownerRecoveryRead` through
+  `translationService`. Take `StaffReportDelivery`. Create the group once per connection after
+  `registrationOf` with `options`, `run`, `read`, `save` and `registrationOf`. Return `leaseState`
+  and `recordRefusal` internally for the retained `emergency`. That method, its two caches and
+  `emergencyHints()` stay with their saved hint state in the factory.
+- Keep the single process-wide `connectionTurns` and the same resolved-path `run` default in the
+  factory. Keep saved state, pairing, installation, tunnel, replacement and capture there. Put
+  public methods back into their original return slots. Add the registry import at the new throwing
+  files and retarget the lease/refusal and billing pointers in `docs/developers/cloud-connection.md`.
+- Run `cloud-client.test.ts` and its billing, emergency, error-report and staff-report suites,
+  `cloud-api.test.ts`, `cloud-api.owner-recovery.test.ts`, `cloud-address-lookup.test.ts`,
+  `cloud-installation.test.ts`, `cloud-translation.exchange.test.ts`, `cloud-email.test.ts`,
+  `cloud-staff-certificate.test.ts`, `cloud-tunnel-provision.test.ts` and `cloud-replacement.test.ts`.
+  The retained factory should finish near 920–970 lines. Remove its cap once measured under 1,000.
+
+## Checks for both PRs
+
+- Use whole named cuts in each hand-made extraction. Check function body bytes, signature tokens,
+  public keys and their order, moved test blocks and import cycles among the pieces. Put the one-off
+  comparison and import results in the PR body. List open branches touching the source or its
+  importers and tell them which code moved before they rebase.
+- Run Server typecheck, every suite with a changed import or mock, and the staged file-size guard.
+  Run unchanged fiscal `write-path.e2e.test.ts` and `inmutabilidad.test.ts`, Server
+  `till-api.sell-published.test.ts` and Till `till-app-menu-refresh.test.ts`. Both changes go
+  through the normal hook, Claude’s branch reviews and selected current-head CI.
+- Budget about 31 files across both PRs, including 22 type importers. Move about 775 product lines
+  and 570 test lines. Expect 60–110 product wiring and import lines, test import edits and 25–40
+  map lines. Each PR should fit the three-hour build window.
