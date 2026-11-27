@@ -23,7 +23,7 @@ import { certificateExportHelp } from "../certificate-export-help.js";
 import { actionsStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
-import type { AeatCertDraft, ProvisionBody } from "../api/client.js";
+import type { AeatCertDraft, ApiError, ProvisionBody } from "../api/client.js";
 
 /** The Spanish values are the server's contract (`isCertKind`). */
 const CERT_KINDS: ReadonlyArray<{ value: AeatCertDraft["certKind"]; label: StringKey }> = [
@@ -41,11 +41,13 @@ export interface CertificateRefusal {
 const REFUSAL_MESSAGES: Readonly<Record<string, StringKey>> = {
   too_large: "cert.refusal.too_large",
   unavailable: "cert.refusal.unavailable",
+  busy: "cert.refusal.busy",
   passphrase_wrong: "cert.refusal.passphrase_wrong",
   unreadable: "cert.refusal.unreadable",
   old_encryption: "cert.refusal.old_encryption",
   no_private_key: "cert.refusal.no_private_key",
   expired: "cert.refusal.expired",
+  invalid_tax_id: "cert.refusal.invalid_tax_id",
   not_yet_valid: "cert.refusal.not_yet_valid",
   other_taxpayer: "cert.refusal.other_taxpayer",
 };
@@ -109,7 +111,24 @@ export class SetupCertScreen extends LitElement {
 
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
   @property({ attribute: false }) refusal?: CertificateRefusal;
+  @property({ attribute: false }) inspect?: (
+    cert: AeatCertDraft,
+    current: () => boolean,
+  ) => Promise<boolean>;
+  @state() private inspecting = false;
+  @state() private inspectionRefusal?: CertificateRefusal;
+  #inspectionGeneration = 0;
   private readonly feedback = new FormFeedback(this);
+
+  get #activeRefusal(): CertificateRefusal | undefined {
+    return this.inspectionRefusal ?? this.refusal;
+  }
+
+  #invalidateInspection(): void {
+    ++this.#inspectionGeneration;
+    this.inspecting = false;
+    this.inspectionRefusal = undefined;
+  }
 
   /** Never rendered: only its presence is shown. */
   @state() private pfxBase64 = "";
@@ -136,6 +155,7 @@ export class SetupCertScreen extends LitElement {
 
   override disconnectedCallback(): void {
     ++this.#fileGeneration;
+    this.#invalidateInspection();
     this.#pendingFile = null;
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -169,6 +189,7 @@ export class SetupCertScreen extends LitElement {
         (a.pfxBase64 !== "" || a.selectedFile === b.selectedFile),
       restore: (form) => {
         ++this.#fileGeneration;
+        this.#invalidateInspection();
         this.pfxBase64 = form.pfxBase64;
         this.fileName = form.fileName;
         this.passphrase = form.passphrase;
@@ -211,6 +232,7 @@ export class SetupCertScreen extends LitElement {
 
   async #onFileChange(event: CustomEvent<{ files: File[] }>): Promise<void> {
     event.stopPropagation();
+    this.#invalidateInspection();
     if (this.refusal?.field === "pfxBase64") this.feedback.dismiss("refusal");
     const file = event.detail.files[0];
     const generation = ++this.#fileGeneration;
@@ -244,6 +266,7 @@ export class SetupCertScreen extends LitElement {
 
   #onPassphrase(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    this.#invalidateInspection();
     this.passphrase = event.detail.value;
     if (this.refusal?.field === "passphrase") this.feedback.dismiss("refusal");
     this.#scope?.changed();
@@ -251,6 +274,7 @@ export class SetupCertScreen extends LitElement {
 
   #onCertKind(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    this.#invalidateInspection();
     this.certKind = event.detail.value as AeatCertDraft["certKind"];
     this.#scope?.changed();
   }
@@ -262,22 +286,24 @@ export class SetupCertScreen extends LitElement {
     }
     if (this.feedback.attempted && this.passphrase.trim() === "")
       errors.passphrase = t("cert.passphrase_required");
-    if (this.refusal && this.feedback.shows("refusal")) {
+    const refusal = this.#activeRefusal;
+    if (refusal && this.feedback.shows("refusal")) {
       const field =
-        this.refusal.field === "body"
+        refusal.field === "body"
           ? "request"
-          : this.refusal.field === "passphrase"
+          : refusal.field === "passphrase"
             ? "passphrase"
             : "pfx";
-      errors[field] ??= format(REFUSAL_MESSAGES[this.refusal.reason] ?? "cert.refusal.unreadable", {
-        certificateTaxId: this.refusal.certificateTaxId ?? "",
-        taxId: this.refusal.taxId ?? "",
+      errors[field] ??= format(REFUSAL_MESSAGES[refusal.reason] ?? "cert.refusal.unreadable", {
+        certificateTaxId: refusal.certificateTaxId ?? "",
+        taxId: refusal.taxId ?? "",
       });
     }
     return errors;
   }
 
-  #next(): void {
+  async #next(): Promise<void> {
+    if (this.inspecting) return;
     this.feedback.dismiss("refusal");
     this.feedback.press();
     if (this.pfxBase64 === "" || this.passphrase.trim() === "") {
@@ -285,20 +311,46 @@ export class SetupCertScreen extends LitElement {
       return;
     }
     const submitted = this.#current();
-    dispatchSetupPatch(this, {
-      aeatCert: {
-        pfxBase64: submitted.pfxBase64,
-        passphrase: submitted.passphrase,
-        certKind: submitted.certKind,
-      },
-    });
+    const aeatCert = {
+      pfxBase64: submitted.pfxBase64,
+      passphrase: submitted.passphrase,
+      certKind: submitted.certKind,
+    };
+    const inspect = this.inspect;
+    if (inspect) {
+      const generation = ++this.#inspectionGeneration;
+      const current = () => this.isConnected && generation === this.#inspectionGeneration;
+      this.inspecting = true;
+      try {
+        if (!(await inspect(aeatCert, current)) || !current()) return;
+      } catch (error) {
+        if (!current()) return;
+        const { code, params } = (error ?? {}) as Partial<ApiError>;
+        this.inspectionRefusal =
+          code === "setup.certificate_refused" && typeof params?.reason === "string"
+            ? {
+                field:
+                  params.field === "passphrase" || params.field === "pfxBase64"
+                    ? params.field
+                    : "body",
+                reason: params.reason,
+              }
+            : { field: "body", reason: "unavailable" };
+        this.feedback.newRefusal();
+        void this.feedback.focus(this.shadowRoot!);
+        return;
+      } finally {
+        if (current()) this.inspecting = false;
+      }
+    }
+    dispatchSetupPatch(this, { aeatCert });
     this.#baseline = submitted;
     this.#scope?.commit(this.#baseline);
-    dispatchSetupGoto(this, "fiscal-test");
+    dispatchSetupGoto(this, inspect ? "venue" : "fiscal-test");
   }
 
   #back(): void {
-    dispatchSetupGoto(this, "venue");
+    dispatchSetupGoto(this, this.inspect ? "admin" : "venue");
   }
 
   override render(): TemplateResult {
@@ -306,12 +358,12 @@ export class SetupCertScreen extends LitElement {
     const fieldKeys = new Set(Object.keys(errors).filter((key) => key !== "request"));
     return html`
       <h1>${t("cert.heading")}</h1>
-      <p>${t("cert.intro")}</p>
+      <p>${t(this.inspect ? "cert.before_venue" : "cert.intro")}</p>
       ${certificateExportHelp(navigator.userAgent)}
       <p>
         <a
           data-test="certificate-guide"
-          href=${`/help/${currentLocale().startsWith("es") ? "es" : "en"}/aeat-certificate#refusals`}
+          href=${`/help/${currentLocale().startsWith("es") ? "es" : "en"}/aeat-certificate${this.inspect ? "#venue-details" : "#refusals"}`}
           target="_blank"
           rel="noopener"
           >${t("cert.guide")}</a
@@ -383,6 +435,7 @@ export class SetupCertScreen extends LitElement {
           >${t("cert.kind_help")}</wt-help-tooltip
         >
       </wt-combobox>
+      ${this.inspecting ? html`<p role="status" class="file-status">${t("cert.checking")}</p>` : nothing}
       <wt-form-actions .error=${this.feedback.message(errors, fieldKeys, t("cert.fix_fields"))}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
           >${t("cert.back")}</wt-button
@@ -390,8 +443,8 @@ export class SetupCertScreen extends LitElement {
         <wt-button
           variant="primary"
           data-test="next"
-          ?disabled=${this.feedback.attempted && (this.pfxBase64 === "" || this.passphrase.trim() === "")}
-          @click=${() => this.#next()}
+          ?disabled=${this.inspecting || (this.feedback.attempted && (this.pfxBase64 === "" || this.passphrase.trim() === ""))}
+          @click=${() => void this.#next()}
           >${t("cert.next")}</wt-button
         >
       </wt-form-actions>

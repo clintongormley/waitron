@@ -71,7 +71,7 @@ export function parseAeatCert(raw: unknown): AeatCert {
   return parsed;
 }
 
-export async function validateSetupAeatCert(raw: unknown, venue: { taxId: string }): Promise<void> {
+async function openSetupAeatCert(raw: unknown) {
   const cert = parseAeatCert(raw);
   const pfx = Buffer.from(cert.pfxBase64, "base64");
   const refuse = (reason: string, field = "pfxBase64"): never => {
@@ -91,7 +91,16 @@ export async function validateSetupAeatCert(raw: unknown, venue: { taxId: string
   const now = Date.now();
   if (now >= opened.details.validUntil.getTime()) refuse("expired");
   if (now < opened.details.validFrom.getTime()) refuse("not_yet_valid");
-  const certificateTaxId = opened.details.taxId;
+  return opened.details;
+}
+
+export async function inspectSetupAeatCert(raw: unknown) {
+  const { taxId, organisation } = await openSetupAeatCert(raw);
+  return { taxId, legalName: organisation };
+}
+
+export async function validateSetupAeatCert(raw: unknown, venue: { taxId: string }): Promise<void> {
+  const { taxId: certificateTaxId } = await openSetupAeatCert(raw);
   if (certificateTaxId !== null && certificateTaxId !== normaliseTaxId(venue.taxId)) {
     throw new AppError("setup.certificate_refused", {
       field: "pfxBase64",

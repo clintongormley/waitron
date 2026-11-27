@@ -93,3 +93,34 @@ it("maps an unavailable setup check to the whole request", async () => {
     process.execPath = node;
   }
 });
+
+describe("setup certificate identity inspection", () => {
+  it("returns only the subject's organisation name and tax number", async () => {
+    const certificate = authority.issue({
+      organisation: "Certificate Company",
+      organizationIdentifier: "VATES-B12345674",
+    });
+    await expect(secret.inspect!(body(certificate.pfx))).resolves.toEqual({
+      taxId: "B12345674",
+      legalName: "Certificate Company",
+    });
+  });
+
+  it("leaves missing organisation fields blank even when the subject names a person", async () => {
+    const personal = authority.issue({ organisation: null, organizationIdentifier: null });
+    await expect(secret.inspect!(body(personal.pfx))).resolves.toEqual({
+      taxId: null,
+      legalName: null,
+    });
+  });
+
+  it.each([
+    ["expired", expired],
+    ["not_yet_valid", future],
+  ])("refuses a certificate that is %s using the same setup error", async (reason, certificate) => {
+    await expect(secret.inspect!(body(certificate.pfx))).rejects.toMatchObject({
+      code: "setup.certificate_refused",
+      params: { field: "pfxBase64", reason },
+    });
+  });
+});

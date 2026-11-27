@@ -13,6 +13,10 @@ import type { SetupDeps } from "./setup-api-deps.js";
 import { directError } from "./setup-api-errors.js";
 import { parseVenue, parseSetupAdmin } from "./setup-provision-input.js";
 import { mountSetupOperationRoutes } from "./setup-operation-routes.js";
+import {
+  CERTIFICATE_INSPECTION_PATH,
+  mountSetupCertificateInspection,
+} from "./setup-certificate-inspection.js";
 
 /**
  * Served when no built wizard is configured, so a browser pointed at an unprovisioned box gets a
@@ -94,7 +98,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         return directError(c, log, "setup.already_provisioning", 409);
       // These write nothing, so a main box that never answers them holds no other setup request
       // back.
-      if (c.req.path === "/setup-api/join/start")
+      if (c.req.path === "/setup-api/join/start" || c.req.path === CERTIFICATE_INSPECTION_PATH)
         return boundary(c, log, async () => {
           await firstSetup.assertOtherAllowed();
           await next();
@@ -114,6 +118,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       );
     });
   }
+  mountSetupCertificateInspection(app, deps, log);
   const runOperation = async <T>(
     request: Request,
     kind: Parameters<SetupOperationStore["run"]>[0],

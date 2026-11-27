@@ -3,6 +3,16 @@
 Para un local español en modo real, elige tu archivo de certificado `.pfx` o `.p12` e introduce la
 contraseña que usaste al exportarlo. Demo y Preparación no piden este certificado.
 
+## Revisa los datos del local {#venue-details}
+
+Si empiezas desde cero en modo real en España, elige el certificado antes de introducir los
+datos del local. Revisa el NIF que figura en el certificado y corrige el nombre legal si hace
+falta. Ese nombre aparece en los recibos. Para cambiar el NIF del certificado, vuelve atrás y
+elige el certificado del negocio que estás configurando.
+
+Introduce los datos que falten. Si trabajas por cuenta propia y usas un certificado personal,
+escribe tu nombre legal. El certificado no tiene un campo para el nombre de la empresa.
+
 ## Corrige un archivo rechazado {#refusals}
 
 La configuración comprueba el archivo antes de ejecutar la prueba fiscal o crear el local. Una
@@ -10,7 +20,7 @@ contraseña incorrecta se explica bajo **Contraseña del certificado**. Si el ar
 abrir, usa el antiguo cifrado RC2, no incluye la clave privada, ha caducado, aún no es válido o es
 de otro NIF, la explicación aparece bajo **Archivo del certificado**.
 
-Corrige la contraseña o elige otro archivo, pulsa **Siguiente** y repite la prueba fiscal. Si falta
+Corrige la contraseña o elige otro archivo y pulsa **Siguiente**. Ejecuta la prueba fiscal al llegar a ese paso. Si falta
 la clave privada o el cifrado es antiguo, exporta de nuevo el certificado con su clave privada y un
 cifrado moderno. Las instrucciones de exportación están en la pantalla del certificado.
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { applyTokens, leaveCoordinatorFor } from "@waitron/ui";
+import { VENUE_SETUP_COUNTRY_PACKS } from "@waitron/country-packs";
 import { SetupApp } from "./setup-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
@@ -118,7 +119,8 @@ async function importAsNewTaxpayer(app: SetupApp) {
   await screen(app, "venue");
   emit(app, "setup-advance");
 }
-const claims = (requests: { path: string }[]) => requests.filter((r) => r.path.endsWith("/claim"));
+const claims = <T extends { path: string }>(requests: T[]) =>
+  requests.filter((r) => r.path.endsWith("/claim"));
 
 it("sends a venue detail the claim refuses back under the field it names, and Next claims again", async () => {
   let refusals = 0;
@@ -180,6 +182,8 @@ it("keeps a refused replacement for an abandoned setup on the owner step, asking
         abandoned = true;
         return Response.json({ state: { ...initial, status: "abandoned", revision: 2 } });
       }
+      if (path.endsWith("/certificate/inspect"))
+        return Response.json({ taxId: venue.taxId, legalName: "Certificate Company" });
       if (path.endsWith("/claim") && abandoned) return sameTaxIdRefusal();
     },
   });
@@ -193,7 +197,11 @@ it("keeps a refused replacement for an abandoned setup on the owner step, asking
   await screen(app, "admin");
   emit(app, "setup-patch", { patch: { venue } });
   emit(app, "setup-goto", { screen: "venue" });
-  await screen(app, "venue");
+  const replacementCert = await screen(app, "cert");
+  await selectCertificate(replacementCert, "replacement");
+  clickStep(replacementCert, "next");
+  const details = await screen(app, "venue");
+  expect(nativeInput(details, "legalName").value).toBe(venue.legalName);
   emit(app, "setup-advance");
   await expect.poll(() => claims(requests)).toHaveLength(2);
   const refused = await screen(app, "first-owner");
@@ -1201,7 +1209,12 @@ it.each([
 );
 
 it("keeps a fresh Live choice when Start empty goes straight on from an untouched import screen", async () => {
-  const { app, requests } = await mount();
+  const { app, requests } = await mount({
+    intercept(path) {
+      if (path.endsWith("/certificate/inspect"))
+        return Response.json({ taxId: venue.taxId, legalName: venue.legalName });
+    },
+  });
   const mode = await screen(app, "mode");
   const nativeClick = async (owner: HTMLElement, selector: string) => {
     const host = owner.shadowRoot!.querySelector<HTMLElement>(selector)!;
@@ -1221,9 +1234,12 @@ it("keeps a fresh Live choice when Start empty goes straight on from an untouche
   expect((app as unknown as { draft: { mode: string } }).draft.mode).toBe("live");
   emit(app, "setup-patch", { patch: { venue } });
   emit(app, "setup-goto", { screen: "venue" });
+  const cert = await screen(app, "cert");
+  await selectCertificate(cert, "fresh");
+  clickStep(cert, "next");
   await screen(app, "venue");
   emit(app, "setup-advance");
-  await screen(app, "cert");
+  await screen(app, "fiscal-test");
   expect(requests.filter((request) => request.path.endsWith("/claim"))).toHaveLength(1);
 });
 
@@ -1339,4 +1355,273 @@ it("Edit these details on the series page asks for the venue step, which a claim
     (owner.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
   ).toContain("frozen");
   expect(requests.slice(sent).filter((r) => r.path.endsWith("/claim"))).toEqual([]);
+});
+
+const nativeInput = (form: HTMLElement, key: string) =>
+  form.shadowRoot!.querySelector("[data-test=" + key + "]")!.shadowRoot!.querySelector("input")!;
+const clickStep = (form: HTMLElement, action: string) =>
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=" + action + "]")!.click();
+
+async function certificateFirst(app: SetupApp) {
+  await screen(app, "mode");
+  emit(app, "setup-patch", {
+    patch: { mode: "live", venue: { ...venue, taxId: "", legalName: "" } },
+  });
+  emit(app, "setup-goto", { screen: "admin" });
+  clickStep(await screen(app, "admin"), "next");
+  return screen(app, "cert");
+}
+
+async function selectCertificate(form: HTMLElement, content: string) {
+  form.shadowRoot!.querySelector("[data-test=pfx]")!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { files: [new File([content], content + ".p12")] },
+      bubbles: true,
+    }),
+  );
+  await expect
+    .poll(() => form.shadowRoot!.querySelector("[data-test=file-status]")?.textContent)
+    .toContain(content + ".p12");
+  await userEvent.fill(nativeInput(form, "passphrase"), "test passphrase");
+}
+
+const inspections = <T extends { path: string }>(requests: T[]) =>
+  requests.filter((r) => r.path.endsWith("/certificate/inspect"));
+
+it("reads the live certificate before reserving the venue and keeps a corrected legal name", async () => {
+  expect(
+    VENUE_SETUP_COUNTRY_PACKS.flatMap(({ fiscalJurisdictions }) =>
+      fiscalJurisdictions.filter(({ supported }) => supported).map(({ id }) => id),
+    ),
+  ).toEqual(["ES-common"]);
+  const { app, requests } = await mount({
+    intercept(path) {
+      if (path.endsWith("/certificate/inspect"))
+        return Response.json({ taxId: "B12345674", legalName: "Certificate Company" });
+    },
+  });
+  const cert = await certificateFirst(app);
+  expect(claims(requests)).toHaveLength(0);
+  await selectCertificate(cert, "certificate");
+  clickStep(cert, "next");
+  const details = await screen(app, "venue");
+  expect(inspections(requests).map(({ body }) => body)).toEqual([
+    {
+      fiscalTerritory: "ES-common",
+      aeatCert: {
+        pfxBase64: btoa("certificate"),
+        passphrase: "test passphrase",
+        certKind: "sello",
+      },
+    },
+  ]);
+  expect(nativeInput(details, "taxId").value).toBe("B12345674");
+  expect(nativeInput(details, "taxId").readOnly).toBe(true);
+  const source = details.shadowRoot!.querySelector("[data-test=certificate-tax-id-source]");
+  expect(source?.textContent).toContain("This tax ID comes from your certificate.");
+  expect(source!.getBoundingClientRect().height).toBeGreaterThan(5);
+  expect(nativeInput(details, "legalName").value).toBe("Certificate Company");
+  expect(nativeInput(details, "legalName").readOnly).toBe(false);
+  expect(claims(requests)).toHaveLength(0);
+
+  emit(app, "setup-patch", { patch: { venue: { legalName: "Corrected Company" } } });
+  clickStep(details, "back");
+  clickStep(await screen(app, "cert"), "next");
+  expect(nativeInput(await screen(app, "venue"), "legalName").value).toBe("Corrected Company");
+  emit(app, "setup-advance");
+  await screen(app, "fiscal-test");
+  expect(claims(requests)).toHaveLength(1);
+  expect(claims(requests)[0]!.body).toMatchObject({
+    venue: { legalName: "Corrected Company", taxId: "B12345674" },
+  });
+  expect(inspections(requests)).toHaveLength(2);
+});
+
+it("drops the earlier company's details when the replacement identifies no company", async () => {
+  let count = 0;
+  const { app } = await mount({
+    intercept(path) {
+      if (path.endsWith("/certificate/inspect"))
+        return Response.json(
+          count++ === 0
+            ? { taxId: "B12345674", legalName: "Certificate Company" }
+            : { taxId: null, legalName: null },
+        );
+    },
+  });
+  const cert = await certificateFirst(app);
+  await selectCertificate(cert, "company");
+  clickStep(cert, "next");
+  clickStep(await screen(app, "venue"), "back");
+  const replacement = await screen(app, "cert");
+  await selectCertificate(replacement, "personal");
+  clickStep(replacement, "next");
+  const details = await screen(app, "venue");
+  expect(nativeInput(details, "taxId").value).toBe("");
+  expect(nativeInput(details, "taxId").readOnly).toBe(false);
+  expect(nativeInput(details, "legalName").value).toBe("");
+});
+
+it("keeps an invalid certificate tax number on the certificate step", async () => {
+  const { app } = await mount({
+    intercept(path) {
+      if (path.endsWith("/certificate/inspect"))
+        return Response.json({ taxId: "B12345670", legalName: "Certificate Company" });
+    },
+  });
+  const cert = await certificateFirst(app);
+  await selectCertificate(cert, "invalid");
+  clickStep(cert, "next");
+  const file = cert.shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-test=pfx]")!;
+  await expect.poll(() => file.error).toContain("invalid tax ID");
+  expect(app.shadowRoot!.querySelector("[data-test=screen-venue]")).toBeNull();
+});
+
+it("ignores the certificate reply after the passphrase changes", async () => {
+  let releaseStale!: (response: Response) => void;
+  const stale = new Promise<Response>((resolve) => {
+    releaseStale = resolve;
+  });
+  let count = 0;
+  const { app, requests } = await mount({
+    intercept(path) {
+      if (path.endsWith("/certificate/inspect"))
+        return count++ === 0 ? stale : Response.json({ taxId: null, legalName: "Current" });
+    },
+  });
+  const cert = await certificateFirst(app);
+  await selectCertificate(cert, "late");
+  clickStep(cert, "next");
+  await expect.poll(() => inspections(requests)).toHaveLength(1);
+  await userEvent.fill(nativeInput(cert, "passphrase"), "new passphrase");
+  releaseStale(
+    Object.assign(new Response(), {
+      text: async () => JSON.stringify({ taxId: "B12345674", legalName: "Stale" }),
+    }),
+  );
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  expect(cert.isConnected).toBe(true);
+  expect(app.shadowRoot!.querySelector("[data-test=screen-venue]")).toBeNull();
+  const draft = (app as unknown as { draft: { venue: { taxId: string; legalName: string } } })
+    .draft;
+  expect(draft.venue).toMatchObject({ taxId: "", legalName: "" });
+  clickStep(cert, "next");
+  const details = await screen(app, "venue");
+  expect(nativeInput(details, "legalName").value).toBe("Current");
+  expect(nativeInput(details, "taxId").readOnly).toBe(false);
+});
+
+it("uses a newly chosen file in a resumed setup without inspecting or claiming again", async () => {
+  const { app, requests } = await reloadHoldingKey(ownerStatus({ status: "claimed" }));
+  const cert = await screen(app, "cert");
+  await selectCertificate(cert, "resume");
+  clickStep(cert, "next");
+  await screen(app, "fiscal-test");
+  expect(inspections(requests)).toEqual([]);
+  expect(claims(requests)).toEqual([]);
+});
+
+it("reselects Live and imports a different venue without carrying its earlier certificate", async () => {
+  const { app, api, requests } = await mount({
+    intercept(path) {
+      if (path.endsWith("/certificate/inspect"))
+        return Response.json({ taxId: venue.taxId, legalName: "Original Company" });
+    },
+  });
+  const cert = await certificateFirst(app);
+  await selectCertificate(cert, "original");
+  clickStep(cert, "next");
+  await screen(app, "venue");
+  emit(app, "setup-goto", { screen: "mode" });
+  const mode = await screen(app, "mode");
+  clickStep(mode, "choose-live");
+  await mode.updateComplete;
+  await userEvent.click(nativeInput(mode, "understand"));
+  clickStep(mode, "confirm-live");
+  await screen(app, "live-source");
+  api.stageConfiguration = () =>
+    Promise.resolve({
+      venue: { ...venue, taxId: "B76365782", legalName: "Imported Company" },
+      modules: ["core"],
+      reconnectModules: [],
+    });
+  emit(app, "configuration-requested", {
+    request: { artifact: new File(["encrypted"], "prepared.waitron-config"), passphrase: "pass" },
+  });
+  clickStep(await screen(app, "configuration-preview"), "same-tax-id");
+  await screen(app, "admin");
+  emit(app, "setup-goto", { screen: "venue" });
+  const details = await screen(app, "venue");
+  expect(nativeInput(details, "taxId").value).toBe("B76365782");
+  expect(nativeInput(details, "taxId").readOnly).toBe(false);
+  expect(nativeInput(details, "legalName").value).toBe("Imported Company");
+  emit(app, "setup-advance");
+  await screen(app, "cert");
+  expect(inspections(requests)).toHaveLength(1);
+});
+
+it.each([
+  "setup.attempt_conflict",
+  "setup.attempt_uncertain",
+  "setup.attempt_invalid",
+  "setup.start_again_incomplete",
+])("offers the held setup recovery when certificate inspection returns %s", async (code) => {
+  let held = false;
+  const { app, requests } = await mount({
+    intercept(path) {
+      if (path.endsWith("/certificate/inspect")) {
+        held = true;
+        return Response.json({ error: { code, params: {} } }, { status: 409 });
+      }
+      if (held && path.endsWith("/first-setup/status"))
+        return code === "setup.attempt_invalid"
+          ? Response.json({ error: { code, params: {} } }, { status: 409 })
+          : Response.json({ claimed: true });
+    },
+  });
+  const cert = await certificateFirst(app);
+  await selectCertificate(cert, "held");
+  clickStep(cert, "next");
+  const owner = await screen(app, "first-owner");
+  await expect.poll(() => enabled(owner, "reconnect-first")).toBe(true);
+  const checked = requests.findIndex(({ path }) => path.endsWith("/certificate/inspect"));
+  expect(
+    requests.findIndex(
+      ({ path }, index) => index > checked && path.endsWith("/first-setup/status"),
+    ),
+  ).toBeGreaterThan(checked);
+  expect(claims(requests)).toEqual([]);
+
+  held = false;
+  owner.querySelector<HTMLElement>("[data-test=reconnect-first]")!.click();
+  const returned = await screen(app, "cert");
+  clickStep(returned, "back");
+  await screen(app, "admin");
+});
+
+it("keeps the name the owner typed when switching to Preparation", async () => {
+  const { app } = await mount({
+    intercept(path) {
+      if (path === "/setup-api/status")
+        return Response.json({
+          provisioned: false,
+          environment: "preproduction",
+          needs: ["venue"],
+        });
+      if (path.endsWith("/certificate/inspect"))
+        return Response.json({ taxId: venue.taxId, legalName: "Certificate Company" });
+    },
+  });
+  const cert = await certificateFirst(app);
+  await selectCertificate(cert, "live");
+  clickStep(cert, "next");
+  await screen(app, "venue");
+  emit(app, "setup-patch", { patch: { venue: { legalName: "Corrected Company" } } });
+  emit(app, "setup-goto", { screen: "mode" });
+  clickStep(await screen(app, "mode"), "choose-prepare");
+  clickStep(await screen(app, "admin"), "next");
+  const preparation = await screen(app, "venue");
+  expect(nativeInput(preparation, "taxId").value).toBe("");
+  expect(nativeInput(preparation, "taxId").readOnly).toBe(false);
+  expect(nativeInput(preparation, "legalName").value).toBe("Corrected Company");
 });

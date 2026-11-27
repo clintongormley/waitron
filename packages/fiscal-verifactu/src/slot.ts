@@ -19,7 +19,12 @@ import { createRuntimeReconciliation } from "./reconcile-runtime.js";
 import { readOutbox } from "./outbox.js";
 import { keptDeclarations } from "./declaration/kept.js";
 import { currentSif } from "./registro-sif.js";
-import { parseAeatCert, sealAeatSecret, validateSetupAeatCert } from "./provisioning-secret.js";
+import {
+  inspectSetupAeatCert,
+  parseAeatCert,
+  sealAeatSecret,
+  validateSetupAeatCert,
+} from "./provisioning-secret.js";
 import {
   validateLegalName,
   validateOperationDescription,
@@ -107,6 +112,7 @@ export const FISCAL_SLOT: FiscalContribution = {
   provisioningSecret: {
     required: (environment) => environment === "production",
     validate: validateSetupAeatCert,
+    inspect: inspectSetupAeatCert,
     seal: (deps, raw) => sealAeatSecret(deps, raw),
   },
   // The operator-typed fields that reach AEAT verbatim, refused where the operator types them — the
