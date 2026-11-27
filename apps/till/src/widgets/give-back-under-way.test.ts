@@ -630,9 +630,7 @@ describe("ending it", () => {
     );
     press(el, "stop");
     await vi.waitFor(() =>
-      expect(bottom(el)).toBe(
-        "Hay que revisar los registros de tickets y facturas del servidor, así que aún no se puede registrar en este ticket el dinero devuelto. El dinero ya devuelto queda devuelto. Vuelve a intentarlo cuando se hayan revisado.",
-      ),
+      expect(bottom(el)).toBe(giveBackFilingMessage("invoice_correction.chain_unsound", "es", {})),
     );
   });
 
