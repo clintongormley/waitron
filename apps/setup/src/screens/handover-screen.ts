@@ -1315,11 +1315,17 @@ export class SetupHandoverScreen extends LitElement {
       const { code, params } = cause as { code?: string; params?: { keyName?: unknown } };
       const keyName = typeof params?.keyName === "string" ? params.keyName : undefined;
       const keyRefusal = ["handover.backup_needs_master_key", "promotion.break_glass_invalid"];
-      if (keyName !== undefined && keyRefusal.includes(code ?? "")) {
+      const keyAsked = keyName !== undefined && keyRefusal.includes(code ?? "");
+      if (keyAsked) {
         this.backupKeyName = keyName;
         this.masterKeyRefused = code === "promotion.break_glass_invalid";
       } else this.actionError = this.#emergencyError(cause);
       this.busy = false;
+      if (!keyAsked) return;
+      await this.updateComplete;
+      const root = this.shadowRoot!;
+      if (!(await focusFirstInvalid(root)))
+        root.querySelector<HTMLElement>("wt-master-key-input")?.focus();
     }
   }
   get #awaitingMasterKey(): boolean {
@@ -1799,7 +1805,7 @@ export class SetupHandoverScreen extends LitElement {
   }
   #masterKeyField(keyName: string) {
     const words = MASTER_KEY_FIELD_WORDS[currentLocale() === "es-ES" ? "es" : "en"];
-    return html`<p data-test="backup-needs-master-key">
+    return html`<p data-test="backup-needs-master-key" role="alert">
         ${format("handover.emergency.backup_needs_master_key", { name: keyName })}
       </p>
       <wt-master-key-input

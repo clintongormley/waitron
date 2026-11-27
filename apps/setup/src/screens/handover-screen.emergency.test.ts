@@ -771,7 +771,7 @@ async function useBackupFile(el: SetupHandoverScreen, name = "venue.enc") {
   await useDifferentCopy(el);
   chooseFiles(q(el, 'wt-file-input[name="handover-backup"]'), new File(["archive"], name));
   await el.updateComplete;
-  q(el, "[data-test=emergency-backup]").click();
+  await userEvent.click(q(el, "[data-test=emergency-backup]"));
 }
 async function typeBackupMasterKey(el: SetupHandoverScreen, text: string) {
   const field = keyField(el);
@@ -814,6 +814,10 @@ it.each(localesAndThemes)(
     expect(q(el, "[data-test=backup-needs-master-key]").textContent!.trim()).toBe(needs);
     const field = keyField(el);
     await field.updateComplete;
+    // Announced, and focus moves to the field, as a refused field's would.
+    expect(q(el, "[data-test=backup-needs-master-key]").getAttribute("role")).toBe("alert");
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(field));
+    expect(field.shadowRoot!.activeElement).toBe(drawnKeyField(el));
     expect(field.keyName).toBe(OLDER_KEY_NAME);
     expect(drawnKeyField(el).label).toBe(
       MASTER_KEY_FIELD_WORDS[locale === "es-ES" ? "es" : "en"].label,
@@ -868,7 +872,9 @@ it.each(["en-GB", "es-ES"])(
         MASTER_KEY_FIELD_WORDS[locale === "es-ES" ? "es" : "en"].wrongKey(OLDER_KEY_NAME),
       ),
     );
+    // Read before the page redraws: the key field also empties itself once it leaves the page.
     q(el, "[data-test=choose-another-backup]").click();
+    expect(Reflect.get(el, "masterKey")).toBe("");
     await vi.waitFor(() => expect(keyField(el)).toBeNull());
     const picker = q<WtFileInput>(el, 'wt-file-input[name="handover-backup"]');
     expect(picker.files).toEqual([]);
@@ -895,13 +901,16 @@ it.each(localesAndThemes)(
     await useBackupFile(el);
     await vi.waitFor(() => expect(keyField(el)).not.toBeNull());
     await typeBackupMasterKey(el, WRONG_MASTER_KEY);
-    q(el, "[data-test=emergency-backup]").click();
+    await userEvent.click(q(el, "[data-test=emergency-backup]"));
     const line = MASTER_KEY_FIELD_WORDS[locale === "es-ES" ? "es" : "en"].wrongKey(OLDER_KEY_NAME);
     await vi.waitFor(() => expect(keyField(el)!.error).toBe(line));
     expect(line).toContain(OLDER_KEY_NAME);
     await keyField(el)!.updateComplete;
     expect(drawnKeyField(el).error).toBe(line);
     expect(actions(el)).toBe(t("handover.fix"));
+    expect(q(el, ".form-message").getAttribute("role")).toBe("alert");
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(keyField(el)));
+    expect(keyField(el).shadowRoot!.activeElement).toBe(drawnKeyField(el));
     expect(q(el, "[data-test=choose-another-backup]")).not.toBeNull();
     // A key to correct is not a refused copy check, so the page offers no Try again.
     expect(q(el, "[data-test=emergency-preview]")).toBeNull();
@@ -921,6 +930,8 @@ it.each([
   ["restore.manifest_invalid", "shell.restore.manifest_invalid", "es-ES", "invalid"],
   ["restore.manifest_invalid", "shell.restore.manifest_unsupported", "en-GB", "unsupported"],
   ["restore.manifest_invalid", "shell.restore.manifest_unsupported", "es-ES", "unsupported"],
+  ["backup.artifact_invalid", "handover.emergency.backup_invalid", "en-GB", "bad_version"],
+  ["backup.artifact_invalid", "handover.emergency.backup_invalid", "es-ES", "bad_version"],
 ] as const)(
   "keeps the archive choice after admission is refused: %s (%s, %s)",
   async (code, key, locale, reason) => {
@@ -942,6 +953,7 @@ it.each([
     expect(picker.files[0]?.name).toBe("venue.enc");
     await picker.updateComplete;
     expect(drawnFileName(picker)).toBe("venue.enc");
+    expect(keyField(el)).toBeNull();
     expect(posts.some(({ path }) => path.endsWith("/declare"))).toBe(false);
   },
 );
@@ -2013,7 +2025,7 @@ it("the held copy is offered with no sign-in field left to empty, and a refused 
   expect(button(el, "sign-in-password").disabled).toBe(false);
 });
 
-/** Chooses an older backup, gives its master key, and presses Use this backup twice. */
+/** Chooses an older backup, presses Use this backup, gives its master key, and presses twice more. */
 async function chooseBackup(el: SetupHandoverScreen) {
   await failAutomaticPreparation(el);
   await useDifferentCopy(el);
