@@ -95,6 +95,18 @@ Remove, Move to… and Fire act on all three, and dragging it moves all three.
 7. **Holding** a row calls `openLineDetails` directly from `#openHeldDraftLine` (screen `:2189`),
    which today clicks the row, since a click now opens it in place. A drag still never opens it.
 
+**Also in 7a: a stale “Not found” after switching menus** (the watcher, 2026-11-27 02:58: PR 6 does
+not touch the menu browser, so it is fixed here). Seen in PR 6's pictures: inside Mains on one menu,
+switching to another menu and back left “Not found” above the sections. The browser keeps the open
+section's path across a switch (`menu-browser.ts` `willUpdate`, `:650–653` at `b51313a980`); the new
+menu does not hold it, so it reports Not found and goes home, and nothing clears the notice when the
+person switches back (it is cleared only by opening, picking, searching or waiting for a menu). Fix:
+when `menu` changes to one with a different `id` and no section is pending from a search result in
+that menu (`#pendingSection`), go home with no notice. A refresh of the same menu that drops the open
+section still says Not found (the existing checks at `menu-browser.test.ts:2698–3054` stay). Before
+building, list every caller that changes the browser's menu id (`#onMenuSelected`, `#selectMenu`,
+`#selectTableMenu` and any automatic change) in the PR, since each then goes home quietly.
+
 **7b. Unfold portions**
 
 8. **The store keeps a split family whose portions differ.** A new `portionsOf(line)` gives the
@@ -167,6 +179,9 @@ Remove, Move to… and Fire act on all three, and dragging it moves all three.
   disabled while sending or locked; holding opens the details; a drag opens nothing.
 - `draft-row.a11y.test.ts` gains an opened row in light and dark. The picker's test gains
   `focusNote`.
+- `menu-browser.test.ts`, failing first: open a section, switch `menu` to another id that lacks
+  it, then back; no notice either time and home is shown. A search result in another menu still
+  opens its section there (the existing cross-menu check stays).
 - The `openDraftLine` test helper (56 uses) taps the row and then Options, and returns the picker as
   now. Checks that expect a tap to open the details are rewritten; the PR's “Changed test checks”
   section lists each with its `file:line`, old check and new one.
