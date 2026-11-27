@@ -25,6 +25,41 @@ it("takes the heading level it is given", async () => {
   expect(heading(el).getAttribute("aria-level")).toBe("2");
 });
 
+it.each(["0", "-1", "1.5", "7", "abc", ""])(
+  "draws level 3 when its level attribute is %j",
+  async (value) => {
+    const el = await mount(`<wt-course-heading level="${value}">Mains</wt-course-heading>`);
+    expect(heading(el).getAttribute("aria-level")).toBe("3");
+  },
+);
+
+it.each([0, -1, 1.5, 7, Number.NaN, Number.POSITIVE_INFINITY])(
+  "draws level 3 when its level property is %s",
+  async (value) => {
+    const el = (await mount("<wt-course-heading>Mains</wt-course-heading>")) as WtCourseHeading;
+    el.level = value;
+    await el.updateComplete;
+    expect(heading(el).getAttribute("aria-level")).toBe("3");
+  },
+);
+
+it("takes each whole level from 1 to 6", async () => {
+  const el = (await mount("<wt-course-heading>Mains</wt-course-heading>")) as WtCourseHeading;
+  for (const level of [1, 2, 3, 4, 5, 6]) {
+    el.level = level;
+    await el.updateComplete;
+    expect(heading(el).getAttribute("aria-level")).toBe(String(level));
+  }
+});
+
+it("goes back to level 3 when its level attribute is removed", async () => {
+  const el = await mount('<wt-course-heading level="2">Mains</wt-course-heading>');
+  expect(heading(el).getAttribute("aria-level")).toBe("2");
+  el.removeAttribute("level");
+  await (el as WtCourseHeading).updateComplete;
+  expect(heading(el).getAttribute("aria-level")).toBe("3");
+});
+
 it("draws no mark until it is given one", async () => {
   const el = await mount('<wt-course-heading mark-label="Sent">Mains</wt-course-heading>');
   expect(mark(el)).toBeNull();
@@ -56,7 +91,7 @@ it("puts the end slot outside the heading, after the mark", async () => {
   expect(button.left).toBeGreaterThanOrEqual(mark(el)!.getBoundingClientRect().right);
 });
 
-it("paints the heading from tokens: small capitals, bold, letter-spaced, muted, on the page", async () => {
+it("paints the heading from tokens: uppercase, bold, letter-spaced, muted, on the page", async () => {
   const el = await mount("<wt-course-heading>Mains</wt-course-heading>");
   el.style.setProperty("--wt-color-bg", "rgb(1, 2, 3)");
   el.style.setProperty("--wt-color-text-muted", "rgb(4, 5, 6)");

@@ -50,6 +50,14 @@ export class WtCourseHeading extends LitElement {
       .mark wt-icon {
         color: var(--wt-color-success);
       }
+
+      @media (forced-colors: active) {
+        .mark {
+          border: var(--wt-field-line-width) solid CanvasText;
+          padding: calc(var(--wt-space-1) - var(--wt-field-line-width))
+            calc(var(--wt-space-2) - var(--wt-field-line-width));
+        }
+      }
     `,
   ];
 
@@ -60,8 +68,10 @@ export class WtCourseHeading extends LitElement {
   @property({ type: Number }) level = 3;
 
   override render() {
+    const level =
+      Number.isInteger(this.level) && this.level >= 1 && this.level <= 6 ? this.level : 3;
     return html`
-      <div role="heading" aria-level=${this.level}>
+      <div role="heading" aria-level=${level}>
         <span><slot></slot></span>
         ${
           this.mark === "sent"
