@@ -18,6 +18,7 @@ import {
   billDiscountWithAnUnfiledLineAndASharedFreeItem,
   burgerAndBread,
   burgerAndBreadWithBillDiscount,
+  correctiveWithPartLine,
   dishDiscountOverExtraAtAnotherRate,
   fullComp,
   ownAdjustmentAboveWhatTheDishLost,
@@ -1050,5 +1051,68 @@ describe("a full invoice of a divided set menu", () => {
       [{ rate: "10.00", base: "12.73", tax: "1.27" }],
     );
     expect(table(input)).toEqual([part("Daily menu", "12.73", "10.00", "14.00")]);
+  });
+});
+
+// Owner's answer 4 (correct-full-invoice design §6): a line given back only in part prints its
+// amount without a quantity or a unit price.
+describe("a corrective holding a whole line and a line given back in part", () => {
+  it("leaves the quantity and unit price off the part row of a full invoice's table", () => {
+    const [table] = receiptFigures(correctiveWithPartLine("R1")).sections;
+    expect(table).toEqual({
+      kind: "filed",
+      rows: [
+        {
+          kind: "line",
+          units: "-1",
+          item: "Croquetas",
+          indent: 0,
+          rate: decimal("10.00"),
+          unitPrice: decimal("5.45"),
+          amountExVat: decimal("-5.45"),
+          chargedWithVat: decimal("-6.00"),
+        },
+        {
+          kind: "line",
+          units: "",
+          item: "Paella",
+          indent: 0,
+          rate: decimal("10.00"),
+          amountExVat: decimal("-6.20"),
+          chargedWithVat: decimal("-6.82"),
+        },
+      ],
+    });
+  });
+
+  it("leaves the quantity off the part line of a corrective receipt", () => {
+    const groups = receiptFigures(correctiveWithPartLine("R5")).sections.map((section) =>
+      section.kind === "withVat"
+        ? [section.group.quantity, section.group.item, section.group.amount, section.group.perUnit]
+        : section.kind,
+    );
+    expect(groups).toEqual([
+      ["-1", "Croquetas", decimal("-6.00"), undefined],
+      ["", "Paella", decimal("-6.82"), undefined],
+    ]);
+  });
+
+  it("leaves the count off an extra given back in part, and keeps a whole extra's", () => {
+    const input = correctiveWithPartLine("R5");
+    const [whole, part] = input.result.lines;
+    const extra = (givenBackInPart: boolean): TillSaleLine => ({
+      descriptions: { "es-ES": "Huevo" },
+      quantity: "-2",
+      gross: givenBackInPart ? "-0.50" : "-2.00",
+      vatRate: "10.00",
+      parentLineNo: 1,
+      ...(givenBackInPart ? { givenBackInPart: true as const } : {}),
+    });
+    input.result.lines = [whole!, extra(false), part!, extra(true)];
+    input.result.lines[3]!.parentLineNo = 3;
+    const counts = receiptFigures(input).sections.flatMap((section) =>
+      section.kind === "withVat" ? section.group.options.map((option) => option.quantity) : [],
+    );
+    expect(counts).toEqual(["x2", ""]);
   });
 });

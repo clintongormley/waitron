@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { listAdjustmentReasons } from "@waitron/adjustments";
 import { withTransaction } from "@waitron/db";
 import {
   createPinThrottle,
@@ -6,8 +7,15 @@ import {
   tillSessions,
   type Override,
 } from "@waitron/identity";
-import { AppError, deviceId as brandDeviceId, saleId as brandSaleId } from "@waitron/shared";
+import {
+  AppError,
+  deviceId as brandDeviceId,
+  saleId as brandSaleId,
+  type SaleId,
+} from "@waitron/shared";
+import { recordAttendanceFact } from "../attendance-capture.js";
 import { withCorrectionAuthorization } from "../invoice-correction-authorization.js";
+import { giveCorrectionCash, parseCorrectionCash } from "../invoice-correction-cash.js";
 import {
   expectedSplitOf,
   moneyOf,
@@ -22,6 +30,7 @@ import { overridePinAttempts } from "../till-request-fields.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { requireEconomicWrite } from "../trading-admission.js";
 import type { BillVenue } from "./bill-venue.js";
+import type { PartyVenue } from "./party-venue.js";
 import { testTradingAdmission } from "./trading-admission.js";
 
 export interface InvoiceCorrectionRequest {
@@ -139,4 +148,54 @@ export async function openedCorrection(
   const { json } = await openCorrection(...args);
   if (json.correction === undefined) throw new Error(`not opened: ${JSON.stringify(json)}`);
   return (json.correction as InvoiceCorrectionView).id;
+}
+
+/** The venue's operator correcting a sale, holding `sale.rectify`. */
+const correctionActor = (venue: PartyVenue) => ({
+  personId: venue.operator.personId,
+  authz: { sessionId: venue.operator.sessionId },
+  authorization: {
+    authorizedBy: venue.operator.personId,
+    permission: "sale.rectify",
+    viaOverride: false,
+  },
+});
+
+/** Gives `gross` back in cash off the sale's lines `lineIds`, or off the whole sale without them,
+ * as the venue's operator; answers what giving the cash answered. */
+export async function giveBackCash(
+  venue: PartyVenue,
+  saleId: SaleId,
+  gross: string,
+  lineIds?: string[],
+): Promise<Awaited<ReturnType<typeof giveCorrectionCash>>> {
+  const chosen = lineIds === undefined ? {} : { lineIds };
+  const split = await previewedSplit(venue, saleId, { gross, ...chosen });
+  const deps = { backend: venue.backend, clock: venue.clock, attendance: recordAttendanceFact };
+  const actor = correctionActor(venue);
+  return withTransaction(venue.db, async (tx) => {
+    const { correction } = await openInvoiceCorrection(
+      tx,
+      deps,
+      venue.cfg,
+      saleId,
+      parseInvoiceCorrection({
+        submissionId: crypto.randomUUID(),
+        gross,
+        ...chosen,
+        reasonId: (await listAdjustmentReasons(tx))[0]!.id,
+        note: "Goodwill",
+        expectedSplit: split.map(({ rate, base, tax }) => ({ rate, base, tax })),
+      }),
+      actor,
+    );
+    return giveCorrectionCash(
+      tx,
+      deps,
+      venue.cfg,
+      correction.id,
+      parseCorrectionCash({ submissionId: crypto.randomUUID(), amount: gross }),
+      { ...actor, authorization: { ...actor.authorization, permission: "sale.refund" } },
+    );
+  });
 }

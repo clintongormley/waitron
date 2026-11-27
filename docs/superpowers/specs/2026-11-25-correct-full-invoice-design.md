@@ -1,8 +1,8 @@
 # Giving money back on a full invoice files a corrective full invoice (CORRECT-FULL-INVOICE)
 
 Status: the owner answered all four questions on 2026-11-25 (section 6, "Owner's answers"); where an
-answer changes a statement below, a dated note says so. PR 0 (#4363) and PR 1 (#4391) landed; PR 2a is on
-`feat/correct-full-invoice-give-back`. The plan is
+answer changes a statement below, a dated note says so. PR 0 (#4363) and PR 1 (#4391) landed; PR 2a landed as #4448; PR 3 is on
+`feat/correct-full-invoice-part-lines`. The plan is
 [2026-11-25-correct-full-invoice.md](../plans/2026-11-25-correct-full-invoice.md). Every "I
 recommend" is mine (lane L), not the owner's.
 

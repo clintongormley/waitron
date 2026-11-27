@@ -307,6 +307,32 @@ describe("mergeIdenticalGroups", () => {
     expect(merged([undefined, "1.50"])).toEqual([["2", undefined]]);
   });
 
+  it("joins two rows given back in part, but never a row given back in part with a whole one", () => {
+    const part = row("Beer", "1", "1.50", { givenBackInPart: true });
+    expect(printed([part, { ...part }])).toEqual([["Beer", "2", "3.00"]]);
+    expect(printed([part, row("Beer", "1", "1.50")])).toEqual([
+      ["Beer", "1", "1.50"],
+      ["Beer", "1", "1.50"],
+    ]);
+    expect(printed([row("Beer", "1", "1.50"), part])).toEqual([
+      ["Beer", "1", "1.50"],
+      ["Beer", "1", "1.50"],
+    ]);
+  });
+
+  it("never joins rows whose only difference is an extra given back in part", () => {
+    const dish = row("Burger", "1", "10.00", { givenBackInPart: true });
+    const cheese = row("Cheese", "1", "1.00", { parentLineNo: 1 });
+    const partCheese = { ...cheese, givenBackInPart: true as const };
+    expect(printed([dish, partCheese, { ...dish }, { ...partCheese, parentLineNo: 3 }])).toEqual([
+      ["Burger", "2", "20.00", ["Cheese", "2", "2.00"]],
+    ]);
+    expect(printed([dish, partCheese, { ...dish }, { ...cheese, parentLineNo: 3 }])).toEqual([
+      ["Burger", "1", "10.00", ["Cheese", "1", "1.00"]],
+      ["Burger", "1", "10.00", ["Cheese", "1", "1.00"]],
+    ]);
+  });
+
   it("A803 portion grouping: rows at one unit price group whatever each row's count", () => {
     expect(printed([row("Beer", "2", "3.00"), row("Beer", "1", "1.50")])).toEqual([
       ["Beer", "3", "4.50"],

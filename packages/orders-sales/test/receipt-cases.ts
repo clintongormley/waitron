@@ -326,3 +326,49 @@ export const ownAdjustmentAboveWhatTheDishLost = (): ReceiptDocumentInput => {
   input.result.total = "9.00";
   return input;
 };
+
+/** A corrective of `invoiceType`, a full invoice's unless named, in `locale` holding two lines at
+ *  10 %: Croquetas, quantity -1 at a unit price of 5.45, given back whole, then Paella, -6.82
+ *  given back in part. */
+export const correctiveWithPartLine = (
+  invoiceType: "R1" | "R5" = "R1",
+  locale = "es-ES",
+): ReceiptDocumentInput => {
+  const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+  input.invoiceLocale = locale;
+  input.namesLocale = locale;
+  input.result.invoiceType = invoiceType;
+  input.result.corrects = { invoiceNumber: "FF/1", issuedAt: "2026-08-17T22:34:00.000Z" };
+  input.result.lines = [
+    {
+      descriptions: { "es-ES": "Croquetas", "en-GB": "Croquettes" },
+      quantity: "-1",
+      gross: "-6.00",
+      vatRate: "10.00",
+      net: {
+        unitPrice: "5.45",
+        priceQuantity: "1.000",
+        base: "-5.45",
+        tax: "-0.55",
+        rate: "10.00",
+      },
+    },
+    {
+      descriptions: { "es-ES": "Paella", "en-GB": "Paella" },
+      quantity: "-1",
+      gross: "-6.82",
+      vatRate: "10.00",
+      net: {
+        unitPrice: "18.18",
+        priceQuantity: "1.000",
+        base: "-6.20",
+        tax: "-0.62",
+        rate: "10.00",
+      },
+      givenBackInPart: true,
+    },
+  ];
+  input.result.total = "-12.82";
+  input.result.vatBreakdown = [{ rate: "10.00", base: "-11.65", tax: "-1.17" }];
+  return input;
+};

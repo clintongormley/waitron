@@ -26,6 +26,7 @@ import {
   thousandthsToDecimal,
 } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
+import { markGivenBackInPart } from "./corrective-lines-in-part.js";
 import { withPrintedParts } from "./printed-set-menu-parts.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
@@ -197,13 +198,18 @@ export async function readTransactionReceipt(
   // `receiptLines` answers one row per entry of `dishes`, in order, then the advances.
   const lines = {
     ...billAdjustments,
-    lines: receiptRows.map((line, i) =>
-      sale.correctsSaleId !== null &&
-      dishes[i]?.setMenuRole === "dish" &&
-      dishes[i].listGross !== null &&
-      line.listGross === undefined
-        ? { ...line, correctsPricedDish: true as const }
-        : line,
+    lines: await markGivenBackInPart(
+      tx,
+      sale,
+      dishes,
+      receiptRows.map((line, i) =>
+        sale.correctsSaleId !== null &&
+        dishes[i]?.setMenuRole === "dish" &&
+        dishes[i].listGross !== null &&
+        line.listGross === undefined
+          ? { ...line, correctsPricedDish: true as const }
+          : line,
+      ),
     ),
   };
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));

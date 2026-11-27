@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { adjustments, listAdjustmentReasons } from "@waitron/adjustments";
+import { adjustments } from "@waitron/adjustments";
 import { recordReplacement } from "@waitron/core";
 import {
   departments,
@@ -28,16 +28,14 @@ import {
 } from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillFiling, refundValueIn } from "./cancellation-refund-value.js";
-import { recordAttendanceFact } from "./attendance-capture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { listFreeItems } from "./free-items.js";
 import { readReceiptEmailDocument } from "./invoice-document.js";
 import { enqueueReceiptCopy } from "./receipt-print.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
-import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
-import { openInvoiceCorrection, previewInvoiceCorrection } from "./invoice-corrections.js";
-import { parseInvoiceCorrection } from "./testing/invoice-correction.js";
+import { previewInvoiceCorrection } from "./invoice-corrections.js";
+import { giveBackCash } from "./testing/invoice-correction.js";
 import { splitAfterPrint } from "./split-after-print.js";
 import { readOrderRevision } from "./working-order-context.js";
 import {
@@ -153,8 +151,10 @@ async function printedItems(saleId: string): Promise<string[]> {
   const lines = decodeTicket(job!.payload)
     .split("\n")
     .map((line) => line.replace(/\s+/gu, " ").trim());
-  const first = lines.findIndex((line) => /^-?\d+ /u.test(line));
-  const total = lines.findIndex((line, at) => at > first && /^TOTAL/u.test(line));
+  // The items sit between the two rules before TOTAL; a line given back in part prints no count.
+  const total = lines.findIndex((line) => /^TOTAL/u.test(line));
+  const rules = lines.flatMap((line, at) => (at < total && /^-+$/u.test(line) ? [at] : []));
+  const first = rules.at(-2)! + 1;
   return [
     ...lines.slice(first, total + 1).filter((line) => line !== "" && !/^-+$/u.test(line)),
     ...lines.slice(total + 1).filter((line) => /^\d+ ?% /u.test(line)),
@@ -195,16 +195,6 @@ describe("a whole credit", () => {
 });
 
 describe("a goodwill amount", () => {
-  const actor = () => ({
-    personId: venue.operator.personId,
-    authz: { sessionId: venue.operator.sessionId },
-    authorization: {
-      authorizedBy: venue.operator.personId,
-      permission: "sale.rectify",
-      viaOverride: false,
-    },
-  });
-
   function preview(saleId: SaleId, gross: string, lineIds?: string[]) {
     return inTx(venue, (tx) =>
       previewInvoiceCorrection(tx, venue.backend, venue.cfg, venue.clock.now(), saleId, {
@@ -214,37 +204,8 @@ describe("a goodwill amount", () => {
     );
   }
 
-  /** Gives `gross` back in cash off the sale's lines `lineIds`; answers the corrective's id. */
-  async function giveBack(saleId: SaleId, gross: string, lineIds: string[]) {
-    const { vatBreakdown } = await preview(saleId, gross, lineIds);
-    const deps = { backend: venue.backend, clock: venue.clock, attendance: recordAttendanceFact };
-    const given = await inTx(venue, async (tx) => {
-      const { correction } = await openInvoiceCorrection(
-        tx,
-        deps,
-        venue.cfg,
-        saleId,
-        parseInvoiceCorrection({
-          submissionId: crypto.randomUUID(),
-          gross,
-          lineIds,
-          reasonId: (await listAdjustmentReasons(tx))[0]!.id,
-          note: "Goodwill",
-          expectedSplit: vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
-        }),
-        actor(),
-      );
-      return giveCorrectionCash(
-        tx,
-        deps,
-        venue.cfg,
-        correction.id,
-        parseCorrectionCash({ submissionId: crypto.randomUUID(), amount: gross }),
-        { ...actor(), authorization: { ...actor().authorization, permission: "sale.refund" } },
-      );
-    });
-    return given.correction.correctiveSaleId!;
-  }
+  const giveBack = async (saleId: SaleId, gross: string, lineIds: string[]) =>
+    (await giveBackCash(venue, saleId, gross, lineIds)).correction.correctiveSaleId!;
 
   it("on the lemonade row comes off at 21%, off its part", async () => {
     const { saleId, lines } = await paidLunch();
@@ -259,7 +220,7 @@ describe("a goodwill amount", () => {
     ]);
     // Its set menu's own row is not on the corrective, so the line prints its amount.
     expect(await printedItems(correctiveId)).toEqual([
-      "-1 Lemonade -2,00",
+      "Lemonade -2,00",
       "TOTAL -2,00 €",
       "21% -1,65 -0,35 -2,00",
     ]);

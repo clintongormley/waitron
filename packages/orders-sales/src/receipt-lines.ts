@@ -85,6 +85,9 @@ export interface TillSaleLine {
    * whole-invoice credit copies from the line it corrects, though the receipt shows none: the set
    * menu did not cover it. */
   correctsPricedDish?: true;
+  /** Presentation only. On a correction's line given back in part
+   * (`apps/server/src/corrective-lines-in-part.ts`). */
+  givenBackInPart?: true;
 }
 
 /** An amount taken off, printed as its own line: presentation only, nothing is filed from it. */
@@ -348,6 +351,9 @@ function samePrinting(a: LineGroup, b: LineGroup, oneRate: boolean): boolean {
   if (a.options.length !== b.options.length) return false;
   if (a.dish.setMenuRole !== b.dish.setMenuRole) return false;
   if (isDividedSetMenu(a.dish) !== isDividedSetMenu(b.dish)) return false;
+  if (lines(a).some((left, i) => left.givenBackInPart !== lines(b)[i]!.givenBackInPart)) {
+    return false;
+  }
   if (![...lines(a), ...lines(b)].every(groupable)) return false;
   if (answersKey(a.dish) !== answersKey(b.dish)) return false;
   const [aDishes, bDishes] = [decimal(a.dish.quantity), decimal(b.dish.quantity)];

@@ -25,6 +25,7 @@ import { readReceiptLanguage } from "@waitron/menu";
 import type { TradingContext } from "./trading-context.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { receiptLines } from "./receipt-adjustments.js";
+import { markGivenBackInPart } from "./corrective-lines-in-part.js";
 import { withPrintedParts } from "./printed-set-menu-parts.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { readReceiptGuests } from "./receipt-guests.js";
@@ -95,7 +96,7 @@ async function readDocument(
           .where(eq(workingOrderLines.workingOrderId, sale.workingOrderId));
   const orderIds = new Map(orderLines.map((row) => [row.lineNo, row.id]));
   // Draft ids locate saved adjustments; names and price figures come from sale snapshots.
-  const lines = await receiptLines(
+  const answered = await receiptLines(
     tx,
     sale.workingOrderId,
     {
@@ -125,6 +126,10 @@ async function readDocument(
     })),
     saleId,
   );
+  const lines = {
+    ...answered,
+    lines: await markGivenBackInPart(tx, sale, dishes, answered.lines),
+  };
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
   const taxpayer = filed?.issuer === undefined ? await readTaxpayer(tx) : null;
   if (filed?.issuer === undefined && taxpayer === null) throw new Error("Invoice has no taxpayer");

@@ -1,0 +1,46 @@
+import { inArray, sql } from "drizzle-orm";
+import { saleLines, type Transaction } from "@waitron/db";
+
+type CorrectiveRow = Pick<typeof saleLines.$inferSelect, "id" | "lineGross" | "correctsLineId">;
+
+/**
+ * The ids of a corrective's rows given back in part: minus the row's stored gross differs from
+ * the stored gross of the line it corrects. A row naming no line, as a replacement's do, or with
+ * no stored gross, is whole.
+ */
+export async function correctiveLinesInPart(
+  tx: Transaction,
+  rows: readonly CorrectiveRow[],
+): Promise<Set<string>> {
+  const named = rows.filter((row) => row.correctsLineId !== null && row.lineGross !== null);
+  if (named.length === 0) return new Set();
+  const ids = JSON.stringify(named.map((row) => row.correctsLineId!));
+  const corrected = await tx
+    .select({ id: saleLines.id, lineGross: saleLines.lineGross })
+    .from(saleLines)
+    .where(inArray(saleLines.id, sql`(select value from json_each(${ids}))`));
+  const grossOf = new Map(corrected.map((line) => [line.id, line.lineGross]));
+  return new Set(
+    named
+      .filter((row) => -row.lineGross! !== grossOf.get(row.correctsLineId!))
+      .map((row) => row.id),
+  );
+}
+
+/**
+ * `lines`, one per entry of `dishes` in order and then the advances, with each line whose row
+ * `correctiveLinesInPart` answers marked `givenBackInPart`. An ordinary sale and a replacement
+ * answer `lines` unread.
+ */
+export async function markGivenBackInPart<Line extends { givenBackInPart?: true }>(
+  tx: Transaction,
+  sale: { correctsSaleId: string | null; replacesOriginal: boolean },
+  dishes: readonly CorrectiveRow[],
+  lines: readonly Line[],
+): Promise<Line[]> {
+  if (sale.correctsSaleId === null || sale.replacesOriginal) return [...lines];
+  const inPart = await correctiveLinesInPart(tx, dishes);
+  return lines.map((line, i) =>
+    dishes[i] !== undefined && inPart.has(dishes[i].id) ? { ...line, givenBackInPart: true } : line,
+  );
+}

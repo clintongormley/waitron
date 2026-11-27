@@ -1,16 +1,13 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { listAdjustmentReasons } from "@waitron/adjustments";
 import { saleLines, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { saleId as brandSaleId } from "@waitron/shared";
-import { recordAttendanceFact } from "./attendance-capture.js";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { readReceiptEmailDocument } from "./invoice-document.js";
-import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-cash.js";
-import { openInvoiceCorrection, previewInvoiceCorrection } from "./invoice-corrections.js";
-import { parseInvoiceCorrection } from "./testing/invoice-correction.js";
+import { previewInvoiceCorrection } from "./invoice-corrections.js";
+import { giveBackCash } from "./testing/invoice-correction.js";
 import { readTransactionReceipt } from "./transaction-receipt.js";
 import { readSettledTicket } from "./till-sale.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
@@ -224,42 +221,7 @@ it("a whole-invoice credit carries each line's role", async () => {
 it("a partial correction of a set menu keeps its role", async () => {
   const { saleId, lines } = await paidSpecSale();
   const daily = lines.find(({ name }) => name === "Daily menu")!;
-  const [split] = (await previewCorrection(saleId, "14.00", daily.id)).vatBreakdown;
-  const actor = {
-    personId: venue.operator.personId,
-    authz: { sessionId: venue.operator.sessionId },
-    authorization: {
-      authorizedBy: venue.operator.personId,
-      permission: "sale.rectify",
-      viaOverride: false,
-    },
-  };
-  const deps = { backend: venue.backend, clock: venue.clock, attendance: recordAttendanceFact };
-  const corrected = await inTx(venue, async (tx) => {
-    const { correction } = await openInvoiceCorrection(
-      tx,
-      deps,
-      venue.cfg,
-      saleId,
-      parseInvoiceCorrection({
-        submissionId: crypto.randomUUID(),
-        gross: "14.00",
-        lineIds: [daily.id],
-        reasonId: (await listAdjustmentReasons(tx))[0]!.id,
-        note: "Overcooked",
-        expectedSplit: [{ rate: split!.rate, base: split!.base, tax: split!.tax }],
-      }),
-      actor,
-    );
-    return giveCorrectionCash(
-      tx,
-      deps,
-      venue.cfg,
-      correction.id,
-      parseCorrectionCash({ submissionId: crypto.randomUUID(), amount: "14.00" }),
-      { ...actor, authorization: { ...actor.authorization, permission: "sale.refund" } },
-    );
-  });
+  const corrected = await giveBackCash(venue, saleId, "14.00", [daily.id]);
   const [corrective] = await venue.db
     .select({ id: sales.id })
     .from(sales)
