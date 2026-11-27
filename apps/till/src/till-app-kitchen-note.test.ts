@@ -6,6 +6,7 @@ import {
   floorPartyBills,
   cleanupWidgets,
   mountWidget,
+  startCounterBasket,
   servedMenus,
   draftServer,
 } from "./widgets/test-helpers.js";
@@ -241,7 +242,11 @@ const counter = (el: TillApp) =>
 const basket = (el: TillApp) => counter(el).shadowRoot!.querySelector<TillBasket>("till-basket")!;
 const heading = (el: TillApp) =>
   basket(el).shadowRoot!.querySelector<TillOrderKitchenNote>("till-order-kitchen-note")!;
-async function mounted(overrides: Record<string, unknown> = {}, retrieve = true) {
+async function mounted(
+  overrides: Record<string, unknown> = {},
+  retrieve = true,
+  openBasket = true,
+) {
   api = stubApi(overrides);
   const { el } = await mountWidget<TillApp>("till-app", { api });
   Object.assign(api, answeredPartyAllergy(el));
@@ -252,6 +257,7 @@ async function mounted(overrides: Record<string, unknown> = {}, retrieve = true)
     permissions: [],
   });
   await flush(el);
+  if (openBasket) await startCounterBasket(el);
   if (retrieve) {
     emit(counter(el), "retrieve-order", { id: "wo-9" });
     await flush(el);
@@ -1436,15 +1442,19 @@ it("refreshes stale counter lines before the next note edit uses their revision"
 });
 
 it("opens the Waiting note from its real row action and returns focus after Cancel", async () => {
-  const el = await mounted({
-    getTill: vi.fn().mockResolvedValue({
-      ...till,
-      capabilities: ["take-orders"],
-      formFactor: "till",
-    }),
-    listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
-    getKitchenNote: vi.fn().mockResolvedValue(waitingSnapshot),
-  });
+  const el = await mounted(
+    {
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        capabilities: ["take-orders"],
+        formFactor: "till",
+      }),
+      listCounterWaiting: vi.fn().mockResolvedValue([waitingOrder]),
+      getKitchenNote: vi.fn().mockResolvedValue(waitingSnapshot),
+    },
+    false,
+    false,
+  );
   const floor = counter(el).shadowRoot!.querySelector("till-counter-floor")!;
   const waiting = [...floor.shadowRoot!.querySelectorAll("till-counter-waiting")].find((list) =>
     list.orders.some((order) => order.id === waitingOrder.id),

@@ -64,7 +64,7 @@ it("fades the Counter shortcuts only where more buttons can be scrolled into vie
     const { el } = await mountWidget<TillShell>("till-shell", {
       formFactor: "till",
       activeScreen: "counter",
-      operatorName: "Ana Martinez Fernández",
+      operatorName: "Alex Morgan Smith Jones",
       transferAvailable: true,
       transferCount: 24,
       affordances: ["expo"],

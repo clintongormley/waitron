@@ -478,7 +478,8 @@ blocks give the same values.
 
 `--wt-color-table-calm-edge` is the soft left edge of a calm list card: `#8fb7f5` light, `#4d6aa6`
 dark. `--wt-color-danger-pulse-dim` and `--wt-color-warning-pulse-dim` are the colours a pulsing
-floor ring, a forgotten station card's band and outline, the till bar's Waiting tab border and the Ready bar's warning edge reach half-way: `#e8bebc` and `#dccbb3` light,
+floor ring, a forgotten station card's band and outline, and the Ready bar's warning edge reach
+half-way: `#e8bebc` and `#dccbb3` light,
 `#bd9ba0` and `#b9aa94` dark. The "floor ring and calm edge colours" cases in `colors.test.ts` hold,
 in both themes, that the edge is 2:1 or more on `--wt-color-surface` and 1.4:1 or more on
 `--wt-color-border`, and 15 or more by CIEDE2000 from `--wt-color-primary`; that each dim colour is
@@ -714,9 +715,8 @@ half-way, at full opacity — in dark, toward grey, not to the card;
 `packages/ui/src/floor-ring.ts` holds the floor rings' keyframes. A forgotten card on the station
 screen keeps its own keyframe, reads the fast duration and dims its band and outline to
 `--wt-color-danger-pulse-dim` half-way (`station-queue.ts`); the pass's forgotten flash keeps its own
-keyframe and reads the fast duration; the till bar's Waiting tab
-keeps its own keyframe, reads the slow duration and dims its border to `--wt-color-warning-pulse-dim`,
-and so does the Ready bar's warning edge (`till-floor-screen.ts`).
+keyframe and reads the fast duration. The Ready bar's warning edge (`till-floor-screen.ts`)
+reads the slow duration and dims to `--wt-color-warning-pulse-dim`.
 
 Secondary and ghost `wt-button` variants keep their fill and text at full opacity on hover;
 their default border reads `--wt-color-primary-text`. If your screen paints the border through
@@ -6446,9 +6446,10 @@ choose the starting zone. On the narrow floor, tap the zone and choose **Choose 
 phone…**. Elsewhere, open ☰ and find **Zones on this device** in Settings. These choices stay with the device and profile across operators and
 restarts. A display choice grants no permission. On a narrow till, the floor's zone chooser lists
 the selected counter zones by name beneath the table zones. A counter row opens Counter. The till header outside the narrow floor gives
-Counter one tab for one counter zone or a checked list for several. At phone width, Counter and
-Floor share a row above the scrolling shortcuts. The shortcut row fades at an edge
-with more buttons to scroll to. Long labels on the Counter list’s button end in an ellipsis.
+Counter one tab for one counter zone or a checked list for several. At phone width, keep Counter,
+Floor and the account controls in one row when there are no Transfers or Pass shortcuts. With
+shortcuts, Counter and Floor share the first row. The scrolling row fades at an edge with more
+buttons to reveal. Long counter names end in an ellipsis.
 The till's floor map and table list show the selected table zones. A handheld's Floor contains
 every selected zone, counter zones included. A handheld opens on its
 "Opens first" zone only once a choice is saved (the zones read's `saved`); before that it opens

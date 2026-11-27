@@ -26,6 +26,7 @@ import {
   cleanupWidgets,
   expectNoA11yViolations,
   mountWidget,
+  startCounterBasket,
   loadPhoneFont,
   PHONE_FONT,
   textRects,
@@ -2208,6 +2209,7 @@ describe("till-app counter menus and service zones", () => {
       listZoneOffers: vi.fn().mockResolvedValue(zoneB),
     });
     const c = await toCounter(el);
+    await startCounterBasket(el);
     const searchedGroups = async () => {
       const browser = deepFind(el, "till-menu-browser") as HTMLElement & {
         updateComplete: Promise<unknown>;

@@ -5,7 +5,7 @@ import { userEvent } from "vitest/browser";
 import type { TillBasket } from "./widgets/basket.js";
 import type { TillModifierPicker } from "./widgets/modifier-picker.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, startCounterBasket } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
 import { setLocale, t } from "./i18n/t.js";
@@ -202,7 +202,8 @@ async function signedIn(
   await flush(el);
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
-
+  waitingList(el)?.shadowRoot?.querySelector<HTMLButtonElement>(".summary")?.click();
+  await flush(el);
   return el;
 }
 
@@ -211,8 +212,6 @@ async function openMove(
   props: Partial<TillApp> = {},
 ): Promise<TillApp> {
   const el = await signedIn(overrides, props);
-  waitingList(el)!.shadowRoot!.querySelector<HTMLButtonElement>(".summary")!.click();
-  await flush(el);
   moveButton(el)!.click();
   await flush(el);
   return el;
@@ -597,6 +596,7 @@ it.each(["order", "session", "API"])(
     await flush(el, 6);
     expect(counter(el).store.id).not.toBe("wo-placed");
     expect(counter(el).stage).toBe("order");
+    await startCounterBasket(el);
     expect(basketOf(el).stationMoveLines).toBeNull();
     expect(server.moveDishStation).not.toHaveBeenCalled();
     expect(counter(el).store.editsLocked).toBe(false);

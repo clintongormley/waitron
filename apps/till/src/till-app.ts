@@ -6184,6 +6184,12 @@ export class TillApp extends LitElement {
     );
     this.showCounterFloor =
       this.activeTabKey === "counter" && !offerLoadFailed && this.#canOpenCounterFloor();
+    const counterFloorReadsLists =
+      this.showCounterFloor &&
+      this.stage === "order" &&
+      !this.#counterHasItems &&
+      !this.#store.persisted &&
+      !this.#counterOrderInFlight();
     this.#setScreen(landsOnFloor ? "floor" : "counter");
     if (switched) this.#writeUrl({ "till-view": null, "till-station": null }, true);
     else this.#restoreDestination();
@@ -6212,14 +6218,14 @@ export class TillApp extends LitElement {
     if (this.drill === undefined) this.#openStartingScreen();
     const showsCounterLists = this.formFactor === "till";
     const reads: Promise<void>[] = [];
-    if (showsCounterLists) {
+    if (showsCounterLists && !counterFloorReadsLists) {
       const lists = [
         ["held", "refresh.held"],
         ["waiting", "refresh.waiting"],
       ] as const;
       for (const [list, messageKey] of lists) reads.push(this.#refreshList(list, messageKey));
-      reads.push(this.#loadStations());
     }
+    if (showsCounterLists) reads.push(this.#loadStations());
     if (showsCounterLists || this.#affordances().includes("schedule")) {
       reads.push(
         (async () => {
@@ -23857,9 +23863,18 @@ export class TillApp extends LitElement {
   }
 
   readonly #refreshCounterFloorOrders = (): void => {
-    void this.#refreshList("held", "refresh.held", TABLE_REQUEST_LIMIT_MS);
+    const session = this.#operatorSession;
     void this.#refreshList("waiting", "refresh.waiting", TABLE_REQUEST_LIMIT_MS);
-    if (this.#deviceNavigation()?.floorZoneIds.length) void this.#pollFloor();
+    void this.#refreshList("held", "refresh.held", TABLE_REQUEST_LIMIT_MS).then(() => {
+      if (session !== this.#operatorSession || this.#activeTab() !== "counter") return;
+      const zones = this.#deviceNavigation()?.floorZoneIds;
+      if (
+        this.heldOrders.some(
+          ({ partyId, zoneId }) => partyId !== null && zoneId !== null && zones?.includes(zoneId),
+        )
+      )
+        void this.#pollFloor();
+    });
   };
 
   #tabBody(tab: BuiltInScreen): TemplateResult | typeof nothing {

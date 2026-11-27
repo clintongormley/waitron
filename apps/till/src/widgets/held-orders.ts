@@ -7,7 +7,7 @@ import { LitElement, css, html, nothing, type TemplateResult, type PropertyValue
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, inNumberOrder, renderFloorChips } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
-import { currentLocale, t } from "../i18n/t.js";
+import { countText, currentLocale, t } from "../i18n/t.js";
 import { trackDialog } from "./track-dialog.js";
 import { seatedRead, tableTarget, tableTargetStyles, type SeatedRead } from "./table-targets.js";
 import { amountToPay, billName, paidInPart } from "../state/bill-state.js";
@@ -126,8 +126,21 @@ export class TillHeldOrders extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      wt-row-actions.move {
-        margin-inline-end: var(--wt-space-2);
+      :host([floor]) .order.parked {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: var(--wt-space-2);
+        padding-inline-end: var(--wt-space-4);
+      }
+
+      :host([floor]) .parked .summary {
+        grid-template-columns: minmax(0, 1fr);
+        padding-inline-end: 0;
+      }
+
+      :host([floor]) .order.parked .meta {
+        grid-column: 3;
+        grid-row: 1;
       }
 
       .picker-empty {
@@ -255,6 +268,14 @@ export class TillHeldOrders extends LitElement {
       : html`<span class="signals">${renderFloorChips(chips)}</span>`;
   }
 
+  #floorState({ partyId, counts }: HeldOrderSummary): string {
+    const items = countText(counts.ordered, "order_counts.items", "order_counts.items_one");
+    if (partyId === null) return `${items} · ${t("counter.floor_parked")}`;
+    if (counts.unsent > 0)
+      return `${items} · ${countText(counts.unsent, "order_counts.unsent", "order_counts.unsent_one")}`;
+    return counts.ordered > 0 ? `${items} · ${t("table.sent_title")}` : items;
+  }
+
   #row(order: HeldOrderSummary): TemplateResult {
     const scope = this.#scope(order);
     const label = heldLabel(order);
@@ -263,7 +284,7 @@ export class TillHeldOrders extends LitElement {
     const actions = this.#actions(order, scope);
     return html`
       <div
-        class="order"
+        class=${parked ? "order parked" : "order"}
         @click=${(event: Event) => {
           if (!this.floor) this.#togglePreview(event, order.id);
         }}
@@ -273,6 +294,7 @@ export class TillHeldOrders extends LitElement {
           class="summary"
           aria-expanded=${parked ? nothing : String(expanded)}
           aria-controls=${parked ? nothing : `preview-${order.id}`}
+          aria-describedby=${parked ? `amount-${order.id}` : nothing}
           @click=${(event: Event) => {
             if (parked) this.#emit("retrieve-order", { id: order.id });
             else if (this.floor) this.#togglePreview(event, order.id);
@@ -282,16 +304,22 @@ export class TillHeldOrders extends LitElement {
             >${orderNumber(order.orderNumber, order.formerNumbers)}${this.floor && label ? ` · ${label}` : nothing}</span
           >
           ${!this.floor && label ? html`<span class="label">${label}</span>` : nothing}
-          <span class="meta">${this.#meta(order)}</span>
+          ${parked ? nothing : html`<span class="meta">${this.#meta(order)}</span>`}
           ${
             this.floor
-              ? html`<span class="state"
-                  >${parked ? t("counter.floor_parked") : t("counter.floor_open")}</span
-                >`
+              ? html`<span class="state">${this.#floorState(order)}</span>`
               : html`${orderCounts(order.counts)} ${this.#signals(order)}`
           }
         </button>
-        ${parked ? this.#parkedActions(order, scope) : this.floor ? nothing : actions}
+        ${
+          parked
+            ? html`${this.#parkedActions(order, scope)}<span class="meta" id=${`amount-${order.id}`}
+                  >${this.#meta(order)}</span
+                >`
+            : this.floor
+              ? nothing
+              : actions
+        }
         <div class="order-preview" id=${`preview-${order.id}`} ?hidden=${!expanded}>
           ${expanded ? html`${orderPreview(order.items)}${this.floor ? actions : nothing}` : nothing}
         </div>

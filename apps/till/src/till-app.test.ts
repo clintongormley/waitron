@@ -36,6 +36,7 @@ import {
   mountWidget,
   resetPage,
   servedMenus,
+  startCounterBasket,
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
@@ -757,6 +758,7 @@ async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   // one holding it.
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
+  await startCounterBasket(el);
   return counter(el)!;
 }
 
@@ -2806,6 +2808,7 @@ describe("till-app", () => {
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
+      await startCounterBasket(el);
       expect(await menuOrder(counter(el)!)).toEqual(["search", "structure", "shortcuts"]);
     });
 
@@ -2819,6 +2822,7 @@ describe("till-app", () => {
       expect(currentApi.listCounterWaiting).toHaveBeenCalled();
       selectTab(el, "counter");
       await flush(el);
+      await startCounterBasket(el);
       expect(counter(el)!.heldOrders).toEqual([heldSummary]);
     });
 
@@ -2880,6 +2884,7 @@ describe("till-app", () => {
         });
         selectTab(el, tab);
         await flush(el);
+        await startCounterBasket(el);
         expect(payCard(el, tab).cardProvider).toBe(offered);
       },
     );
@@ -2901,6 +2906,7 @@ describe("till-app", () => {
       );
       selectTab(el, "counter");
       await flush(el);
+      await startCounterBasket(el);
       const c = counter(el)!;
       c.store.addProduct(coffee, "2");
       await el.updateComplete;
@@ -2932,6 +2938,7 @@ describe("till-app", () => {
       );
       selectTab(el, "counter");
       await flush(el);
+      await startCounterBasket(el);
       const c = counter(el)!;
       c.store.addProduct(coffee, "2");
       await el.updateComplete;
@@ -2960,6 +2967,7 @@ describe("till-app", () => {
       );
       selectTab(el, "sale");
       await flush(el);
+      await startCounterBasket(el);
       payCard(el, "sale").store.addProduct(coffee, "2");
       await flush(el);
 
@@ -3083,6 +3091,7 @@ describe("till-app", () => {
         await flush(el);
         selectTab(el, "counter");
         await flush(el);
+        await startCounterBasket(el);
         expect(stationsOf(el)).toEqual([defaultStation]);
       });
     });
@@ -3150,6 +3159,7 @@ describe("till-app", () => {
         const el = await toTill(formFactor, capabilities);
         selectTab(el, tab);
         await flush(el);
+        await startCounterBasket(el);
         expect(payCard(el, tab).cardProvider).toBe(offered);
       },
     );
@@ -3502,7 +3512,7 @@ describe("till-app", () => {
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     expect(counter(el)).not.toBeNull();
-    expect(counter(el)!.shadowRoot!.querySelector("till-counter-floor")).toBeNull();
+    expect(counter(el)!.shadowRoot!.querySelector("till-counter-floor")).not.toBeNull();
   });
 
   it.each([{ status: 503 }, new TypeError("Network unavailable")])(
@@ -16075,6 +16085,7 @@ describe("till-app", () => {
         locale,
       });
       await flush(el);
+      await startCounterBasket(el);
       return counter(el)!;
     }
 
@@ -16731,6 +16742,7 @@ describe("till-app", () => {
         permissions: [],
       });
       await flush(el);
+      await startCounterBasket(el);
       expect(gridNames(el)).toEqual(["Cerveza"]);
       expect(switcher(el)!.value).toBe("cat-drinks");
       expect(counter(el)!.selectedMenuId).toBe("cat-drinks");
@@ -16752,6 +16764,7 @@ describe("till-app", () => {
           permissions: [],
         });
         await flush(el);
+        await startCounterBasket(el);
         expect(gridNames(el)).toEqual(["Cerveza"]);
         expect(switcher(el)!.value).toBe("cat-drinks");
         expect(counter(el)!.selectedMenuId).toBe("cat-drinks");
@@ -16816,6 +16829,7 @@ describe("till-app", () => {
         await flush(el);
         emit(lock(el)!, "logged-in", { personId, displayName: "Operator", permissions: [] });
         await flush(el);
+        await startCounterBasket(el);
       };
       const toTerraceWine = async (el: TillApp) => {
         emit(counter(el)!, "counter-zone-selected", { zoneId: "zone-terrace" });
@@ -17896,8 +17910,10 @@ describe("the device profile decides which screens a device offers", () => {
           permissions: ["venue.configure"],
         });
         await flush(el);
+        await startCounterBasket(el);
         emit(lock(el)!, "logged-in", { personId: "staff", displayName: "Staff", permissions: [] });
         await flush(el);
+        await startCounterBasket(el);
         release(outcome);
         await flush(el);
         expect(signedIn(el).permissions).toEqual([]);
@@ -17940,6 +17956,7 @@ describe("the device profile decides which screens a device offers", () => {
       );
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
+      await startCounterBasket(el);
       // The lock screen's own read, then the sign-in's.
       expect(currentApi.listStaff).toHaveBeenCalledTimes(2);
       emit(shell(el)!, "logout");
@@ -17965,6 +17982,7 @@ describe("the device profile decides which screens a device offers", () => {
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
+      await startCounterBasket(el);
       (sa.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
       await flush(el);
       resolve([freeTable]);
@@ -17983,6 +18001,7 @@ describe("the device profile decides which screens a device offers", () => {
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
+      await startCounterBasket(el);
       expect(shell(el)!.activeScreen).toBe("floor");
       expect(currentApi.getTablesState).toHaveBeenCalledOnce();
       emit(shell(el)!, "logout");
@@ -18009,6 +18028,7 @@ describe("the device profile decides which screens a device offers", () => {
         permissions: ["venue.configure"],
       });
       await flush(el);
+      await startCounterBasket(el);
       router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }));
       await flush(el);
       release();
@@ -18790,6 +18810,7 @@ describe("a failed list refresh after a successful write", () => {
     await settle(el);
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await settle(el);
+    await startCounterBasket(el);
     return counter(el)!;
   }
 

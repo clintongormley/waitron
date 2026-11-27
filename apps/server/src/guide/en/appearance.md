@@ -153,9 +153,9 @@ The logo of the theme in use shows in these places:
 - **A handheld's top bar**, in place of the word "Waitron". It is the first thing the bar leaves
   out when it is short of room, and a narrow screen, such as a phone's, leaves it out altogether.
 - **A cash register's top bar**, first, before the **Counter** and **Floor** tabs, while everything
-  on the bar fits beside it. When the bar fills, for example on a narrow screen with **Parked
-  orders**, **Waiting**, **Transfers** and **Pass** all showing, the logo steps aside; nothing else
-  on the bar is hidden or made smaller to make room for it. It comes back when there is room again.
+  on the bar fits beside it. When the bar fills, for example on a narrow screen with **Transfers**
+  and **Pass** showing, the logo steps aside and the controls keep their space. The logo returns
+  when it fits again.
 - **The sign-in screen of a cash register or handheld**, above the device’s name when you choose a person, and above your name when you enter your PIN.
 - **"Powered by Waitron"**, which shows while a logo is set: under the dashboard's sign-in form; in
   the dashboard's banner once you are signed in, before the buttons at its end (on a narrow screen,

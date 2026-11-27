@@ -1523,8 +1523,9 @@ export class TillShell extends LitElement {
     screens: readonly TabScreen[],
     activeScreen: TabScreen | undefined,
     counterMenu: boolean,
-    counterLabel: string,
+    counterName: string,
   ): TemplateResult {
+    const counterLabel = counterName ? `${t("tab.counter")}: ${counterName}` : t("tab.counter");
     const tables = this.formFactor === "till" ? [] : this.barTables;
     const tableOnScreen = tables.some((table) => table.current);
     const asTabs = !counterMenu && screens.length > 0;
@@ -1541,7 +1542,17 @@ export class TillShell extends LitElement {
               ?data-active=${screen === activeScreen}
               label=${counterLabel}
             >
-              <span slot="trigger"><span>${counterLabel}</span> ▾</span>
+              <span slot="trigger"
+                ><span
+                  >${
+                    counterName
+                      ? html`<span class="counter-prefix">${t("tab.counter")}: </span
+                          >${counterName}`
+                      : counterLabel
+                  }</span
+                >
+                ▾</span
+              >
               <div role="menu">
                 ${this.counterZones.map(
                   (zone) =>
@@ -1603,10 +1614,12 @@ export class TillShell extends LitElement {
     const activeScreen = screens.find((screen) => screen === requestedScreen) ?? screens[0];
     const counterMenu =
       this.formFactor === "till" && this.showCounter && this.counterZones.length > 1;
-    const narrowCounter =
-      this.phone && this.formFactor === "till" && activeScreen === "counter" && this.showFloor;
-    const counterLabel = `${t("tab.counter")}: ${this.counterZones.find((zone) => zone.id === this.selectedCounterZoneId)?.name ?? ""}`;
-    const tabs = this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel);
+    const counterOnPhone = this.phone && this.formFactor === "till" && activeScreen === "counter";
+    const hasShortcuts = this.transferAvailable || this.affordances.includes("expo");
+    const narrowCounter = counterOnPhone && this.showFloor && hasShortcuts;
+    const counterName =
+      this.counterZones.find((zone) => zone.id === this.selectedCounterZoneId)?.name ?? "";
+    const tabs = this.#primaryTabs(screens, activeScreen, counterMenu, counterName);
     return html`
       <div class="shell">
         ${bottomFloor ? this.#floorShortcuts() : nothing}
@@ -1622,6 +1635,7 @@ export class TillShell extends LitElement {
                 <header
                   class=${this.phone ? "head phone" : "head"}
                   ?data-narrow-counter=${narrowCounter}
+                  ?data-inline-counter=${counterOnPhone && !hasShortcuts}
                 >
                   ${this.formFactor === "till" ? this.#counterLogo() : this.steps > 0 || this.phone ? nothing : this.#brandMark()}
                   ${

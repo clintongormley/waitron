@@ -1000,6 +1000,18 @@ it("starts on the Counter floor for a counter-only till and opens the basket fro
   );
 });
 
+it("loads the two Counter queues once at sign-in and reads no empty table map", async () => {
+  const { api } = await mount(selection(["bar", "room"], "bar"));
+  await vi.waitFor(() => {
+    expect(page.getByRole("button", { name: "New order", exact: true }).query()).not.toBeNull();
+    expect(api.listWorkingOrders).toHaveBeenCalled();
+    expect(api.listCounterWaiting).toHaveBeenCalled();
+  });
+  expect(api.listWorkingOrders).toHaveBeenCalledTimes(1);
+  expect(api.listCounterWaiting).toHaveBeenCalledTimes(1);
+  expect(api.getTablesState).not.toHaveBeenCalled();
+});
+
 const parkedOrder: HeldOrderSummary = {
   id: "parked",
   orderNumber: 51,
@@ -1042,12 +1054,13 @@ it("retrieves a parked order from Counter in one tap and opens the basket", asyn
 
 it("puts orders outside the shown counters and table map in Other orders", async () => {
   const table = { ...heldTable({ id: "visible-party" }), zoneId: "room" };
-  const seated = {
+  const seated: HeldOrderSummary = {
     ...parkedOrder,
     id: "seated",
     orderNumber: 52,
     partyId: "counter-party",
-    counter: true as const,
+    tableLabel: "Seat 2",
+    billNumber: 1,
     billName: "Counter seat",
     label: null,
   };
@@ -1078,8 +1091,8 @@ it("puts orders outside the shown counters and table map in Other orders", async
         orderNumber: 53,
         partyId: "visible-party",
         zoneId: "room",
+        tableLabel: table.label,
         billName: "Visible table",
-        counter: undefined,
       },
       {
         ...seated,
@@ -1087,8 +1100,8 @@ it("puts orders outside the shown counters and table map in Other orders", async
         orderNumber: 54,
         partyId: "off-map-party",
         zoneId: "room",
+        tableLabel: "Table 9",
         billName: "Off-map table",
-        counter: undefined,
       },
       { ...parkedOrder, id: "hidden", orderNumber: 56, zoneId: "shop", label: "Hidden counter" },
     ]),
@@ -1256,6 +1269,7 @@ describe("picking a Counter zone while the basket has lines or an order is in fl
 
   it("adds no history entry and re-reads no stations when the menu is already showing", async () => {
     const { el, api } = await mount(selection(["bar", "shop"], "bar"));
+    await page.getByRole("button", { name: "New order", exact: true }).click();
     counter(el)!.store!.addProduct(counter(el)!.products[0]!, "1");
     await el.updateComplete;
     const stationReads = api.listStations.mock.calls.length;
@@ -1267,7 +1281,7 @@ describe("picking a Counter zone while the basket has lines or an order is in fl
       expect(replace).not.toHaveBeenCalled();
       expect(api.listStations).toHaveBeenCalledTimes(stationReads);
       expect(alert(el)).toBeNull();
-      expect(counter(el)!.shadowRoot!.querySelector("till-counter-floor")).not.toBeNull();
+      expect(counter(el)!.shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
     } finally {
       push.mockRestore();
       replace.mockRestore();

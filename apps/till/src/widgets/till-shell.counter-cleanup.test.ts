@@ -12,68 +12,71 @@ it.each([
   [1280, "en-GB"],
   [390, "es-ES"],
   [1280, "es-ES"],
-] as const)("A738 keeps primary actions on the bar at %i in %s", async (width, locale) => {
-  const before = { width: innerWidth, height: innerHeight, locale: currentLocale() };
-  await page.viewport(width, 844);
-  setLocale(locale);
-  try {
-    const { el } = await mountWidget<TillShell>("till-shell", {
-      formFactor: "till",
-      operatorName: "Alex Morgan Smith Jones",
-      transferAvailable: true,
-      transferCount: 2,
-      affordances: ["find-bill", "station", "expo", "schedule"],
-      canSwitchProfile: true,
-      loadLocales: async () => [{ code: "en-GB", label: "English" }],
-    });
-    const root = el.shadowRoot!;
-    expect(root.querySelector("[data-counter-orders]")).toBeNull();
-    expect(root.querySelector(".till-strip [data-open-transfers]")).not.toBeNull();
-    expect(root.querySelector(".till-strip .expo")).not.toBeNull();
-    expect(root.querySelector(".session > .operator-menu")?.textContent).toContain(
-      "Alex Morgan Smith Jones",
-    );
-    const more = root.querySelector<WtRowActions>('[data-test="more-menu"]')!;
-    expect(more).not.toBeNull();
-    expect(more.querySelector(".find-bill")).not.toBeNull();
-    expect(more.querySelector(".schedule")).not.toBeNull();
-    expect(more.querySelector(".profile")).not.toBeNull();
-    expect(more.querySelector("wt-language-chooser")).not.toBeNull();
-    expect(more.querySelector(".settings")).not.toBeNull();
-    expect(more.querySelector(".logout")).not.toBeNull();
-    expect(root.querySelector(".equipment")).toBeNull();
-    expect(root.querySelector(".station")).toBeNull();
-    expect(root.querySelector(".allergens")).toBeNull();
-    await more.updateComplete;
-    const moreTrigger = more.shadowRoot!.querySelector("button")!;
-    const operator = root.querySelector<WtRowActions>(".operator-menu")!;
-    await operator.updateComplete;
-    for (const trigger of [moreTrigger, operator.shadowRoot!.querySelector("button")!]) {
-      const box = trigger.getBoundingClientRect();
-      expect(box.width).toBeGreaterThanOrEqual(44);
-      expect(box.left).toBeGreaterThanOrEqual(0);
-      expect(box.right).toBeLessThanOrEqual(innerWidth);
+] as const)(
+  "A738 keeps Transfers, Pass, Help and More in reach on the bar at %i in %s",
+  async (width, locale) => {
+    const before = { width: innerWidth, height: innerHeight, locale: currentLocale() };
+    await page.viewport(width, 844);
+    setLocale(locale);
+    try {
+      const { el } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "till",
+        operatorName: "Alex Morgan Smith Jones",
+        transferAvailable: true,
+        transferCount: 2,
+        affordances: ["find-bill", "station", "expo", "schedule"],
+        canSwitchProfile: true,
+        loadLocales: async () => [{ code: "en-GB", label: "English" }],
+      });
+      const root = el.shadowRoot!;
+      expect(root.querySelector("[data-counter-orders]")).toBeNull();
+      expect(root.querySelector(".till-strip [data-open-transfers]")).not.toBeNull();
+      expect(root.querySelector(".till-strip .expo")).not.toBeNull();
+      expect(root.querySelector(".session > .operator-menu")?.textContent).toContain(
+        "Alex Morgan Smith Jones",
+      );
+      const more = root.querySelector<WtRowActions>('[data-test="more-menu"]')!;
+      expect(more).not.toBeNull();
+      expect(more.querySelector(".find-bill")).not.toBeNull();
+      expect(more.querySelector(".schedule")).not.toBeNull();
+      expect(more.querySelector(".profile")).not.toBeNull();
+      expect(more.querySelector("wt-language-chooser")).not.toBeNull();
+      expect(more.querySelector(".settings")).not.toBeNull();
+      expect(more.querySelector(".logout")).not.toBeNull();
+      expect(root.querySelector(".equipment")).toBeNull();
+      expect(root.querySelector(".station")).toBeNull();
+      expect(root.querySelector(".allergens")).toBeNull();
+      await more.updateComplete;
+      const moreTrigger = more.shadowRoot!.querySelector("button")!;
+      const operator = root.querySelector<WtRowActions>(".operator-menu")!;
+      await operator.updateComplete;
+      for (const trigger of [moreTrigger, operator.shadowRoot!.querySelector("button")!]) {
+        const box = trigger.getBoundingClientRect();
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(innerWidth);
+      }
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
+      await userEvent.click(moreTrigger);
+      expect(more.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      await userEvent.keyboard("{Escape}");
+      await vi.waitFor(() =>
+        expect(more.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false),
+      );
+      el.canSwitchProfile = false;
+      el.showCounter = false;
+      el.affordances = [];
+      await el.updateComplete;
+      expect(more.querySelector(".profile")).toBeNull();
+      expect(root.querySelector("[data-counter-orders]")).toBeNull();
+      expect(root.querySelector(".expo")).toBeNull();
+      expect(more.querySelector(".schedule")).toBeNull();
+    } finally {
+      setLocale(before.locale);
+      await page.viewport(before.width, before.height);
     }
-    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
-    await userEvent.click(moreTrigger);
-    expect(more.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
-    await userEvent.keyboard("{Escape}");
-    await vi.waitFor(() =>
-      expect(more.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false),
-    );
-    el.canSwitchProfile = false;
-    el.showCounter = false;
-    el.affordances = [];
-    await el.updateComplete;
-    expect(more.querySelector(".profile")).toBeNull();
-    expect(root.querySelector("[data-counter-orders]")).toBeNull();
-    expect(root.querySelector(".expo")).toBeNull();
-    expect(more.querySelector(".schedule")).toBeNull();
-  } finally {
-    setLocale(before.locale);
-    await page.viewport(before.width, before.height);
-  }
-});
+  },
+);
 
 it("A738 Kitchen is only inside Testing when both testing and capability allow it", async () => {
   const { el } = await mountWidget<TillShell>("till-shell", {
