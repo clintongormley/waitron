@@ -142,7 +142,10 @@ brief dark page instead. Measured by loading each `index.html` in Playwright's C
 and reading the centre pixel: `rgb(255,255,255)` without the line, `rgb(18,18,18)` with it, and
 `rgb(247,247,248)` with it plus `data-theme="light"` and `colors.css` on the page. Guard:
 `scripts/color-scheme-meta.test.ts`, weaker than its name: reads text. The customer menu declares
-`light` before its snapshot loads. The snapshot's page colour selects the scheme after mount.
+`light` before its snapshot loads, then applies the scheme and tokens prepared for that snapshot.
+The dashboard preview and **Style** dialog prepare them from the saved colours and typefaces or
+the current draft. Saving the venue default updates the preview while retaining the tab's Online
+settings draft.
 
 **Every rule in the token layer — the `prefers-color-scheme` block and both `data-theme` blocks —
 is wrapped in `:where(...)`, which contributes zero specificity.** `data-theme` still wins over

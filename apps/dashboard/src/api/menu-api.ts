@@ -13,8 +13,10 @@ import type {
   MenuHomeSaveResult,
   MenuStatus,
   MenuPreview,
+  CustomerMenuAppearance,
   CustomerMenuOnlineSettings,
   CustomerMenuPreview,
+  CustomerMenuStyle,
   MemberRef,
   IncludeFolder,
   SectionDetails,
@@ -239,6 +241,16 @@ export class MenuApi {
     return this.#request(
       `/management-api/menus/${encodeURIComponent(id)}/customer-preview${query}`,
       "GET",
+    );
+  }
+  getCustomerStyle(id: string): Promise<CustomerMenuStyle> {
+    return this.#request(`/management-api/menus/${encodeURIComponent(id)}/customer-style`, "GET");
+  }
+  saveCustomerStyle(id: string, appearance: CustomerMenuAppearance): Promise<CustomerMenuStyle> {
+    return this.#request(
+      `/management-api/menus/${encodeURIComponent(id)}/customer-style`,
+      "PUT",
+      appearance,
     );
   }
   getMenuHome(menuId: string): Promise<MenuHome> {

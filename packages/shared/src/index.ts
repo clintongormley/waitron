@@ -601,6 +601,7 @@ export {
   type CustomerMenuOnlineSettings,
   type CustomerMenuPhotoSize,
   type CustomerMenuPreview,
+  type CustomerMenuStyle,
   type PublicGuestMenu,
   type GuestMember,
   type GuestChoice,

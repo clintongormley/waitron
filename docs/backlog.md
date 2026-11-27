@@ -455,7 +455,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/menu.md#bundle-tabs-selected-visible)
 
 - **The customer menu, online and printed (owner, 2026-11-24).** Print brings the Online/Print selector to the Customer menu tab.
-  Add the venue default style editor and storage, menu selection of named styles and uploaded fonts.
+  Add named styles and their menu selection, logos, capitals, lines between dishes and uploaded fonts.
   Delivery 6 brings live addresses through Cloud, shareable dish links, the Menus list Online column,
   Copy link, QR code and Embed, and a warning before address changes or turning a live menu off.
   The public server serves an active regular menu only when Online is on and it has a live edition.

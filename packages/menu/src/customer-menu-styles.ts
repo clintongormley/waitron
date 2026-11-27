@@ -1,5 +1,10 @@
 import { customerMenuStyles, menus, type Transaction } from "@waitron/db";
-import { AppError, isStoredColor, type CustomerMenuAppearance } from "@waitron/shared";
+import {
+  AppError,
+  isStoredColor,
+  type CustomerMenuAppearance,
+  type CustomerMenuStyle,
+} from "@waitron/shared";
 import { and, eq, isNull, ne, or } from "drizzle-orm";
 import { assertMenuWritable } from "./delete.js";
 import { refuseSetMenu } from "./set-menus.js";
@@ -31,7 +36,7 @@ export async function defaultCustomerMenuStyle(
   tx: Transaction,
   menuId: string,
   edited?: CustomerMenuAppearance,
-) {
+): Promise<CustomerMenuStyle> {
   await assertMenuWritable(tx, menuId);
   await refuseSetMenu(tx, menuId);
   const [style] = await tx

@@ -59,6 +59,12 @@ export interface CustomerMenuAppearance {
   readonly textFont?: "system" | "serif";
 }
 
+export interface CustomerMenuStyle {
+  name: string;
+  appearance: CustomerMenuAppearance;
+  affectedMenus: { id: string; name: string }[];
+}
+
 export type CustomerMenuPreview =
   | { state: "unpublished" }
   | { state: "published"; menu: PublicGuestMenu; appearance?: CustomerMenuAppearance };

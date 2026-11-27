@@ -1,8 +1,8 @@
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { LitElement, html } from "lit";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
-import type { CustomerMenuOnlineSettings } from "@waitron/shared";
+import { page, userEvent } from "vitest/browser";
+import type { CustomerMenuAppearance, CustomerMenuOnlineSettings } from "@waitron/shared";
 import type { DashboardApi } from "../api/client.js";
 import type { MenuReadPart } from "../api/menu-api.js";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -42,6 +42,12 @@ const status = {
 };
 
 async function open(save = vi.fn(async (_id: string, value: CustomerMenuOnlineSettings) => value)) {
+  let appearance: CustomerMenuAppearance = { pageColor: "#fbf7ef" };
+  const style = () => ({
+    name: "Default",
+    appearance,
+    affectedMenus: [{ id: "dinner", name: "Dinner" }],
+  });
   const api = {
     listMenus: async () => [{ id: "menu", name: "Lunch", active: true }],
     listLibraryProducts: async () => [],
@@ -62,8 +68,14 @@ async function open(save = vi.fn(async (_id: string, value: CustomerMenuOnlineSe
     },
     getCustomerOnlineSettings: async () => initial,
     saveCustomerOnlineSettings: save,
+    getCustomerStyle: async () => style(),
+    saveCustomerStyle: async (_id: string, value: CustomerMenuAppearance) => {
+      appearance = value;
+      return style();
+    },
     getCustomerPreview: async () => ({
       state: "published",
+      appearance,
       menu: { name: "Lunch for guests", language: "en", languages: ["en"], members: [] },
     }),
   } as unknown as DashboardApi;
@@ -78,6 +90,57 @@ const online = () => page.getByRole("switch", { name: "Online", exact: true });
 const address = () => page.getByRole("textbox", { name: "Address" });
 const saveButton = () => page.getByRole("button", { name: "Save", exact: true });
 const warning = () => page.getByText("Customers cannot open this page yet.");
+const styleButton = () => page.getByRole("button", { name: "Style", exact: true });
+const styleDialog = () => page.getByRole("dialog", { name: "Customer menu style" });
+const pageColor = () => page.getByRole("textbox", { name: "Page colour", exact: true });
+function canvasColor(root: ShadowRoot) {
+  const canvas = root
+    .querySelector("dashboard-menu-online-preview")
+    ?.shadowRoot?.querySelector("customer-menu-page")
+    ?.shadowRoot?.querySelector("article");
+  return canvas && getComputedStyle(canvas).backgroundColor;
+}
+
+it("previews the default style draft and updates the tab after Save style", async () => {
+  const { app } = await open();
+  await styleButton().click();
+  const dialog = styleDialog();
+  const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!.shadowRoot!;
+  const editor = screen.querySelector("dashboard-menu-customer-style-dialog")!.shadowRoot!;
+  const save = page.getByRole("button", { name: "Save style", exact: true });
+  await expect.element(dialog).toBeVisible();
+  await expect.element(page.getByText("Dinner", { exact: true })).toBeVisible();
+  await expect.element(save).toBeDisabled();
+  await pageColor().fill("#ffffff");
+  await expect.poll(() => canvasColor(editor)).toBe("rgb(255, 255, 255)");
+  await page.getByRole("textbox", { name: "Text colour", exact: true }).fill("#eeeeee");
+  await expect
+    .element(page.getByText("Text and page colours may be hard to read together."))
+    .toBeVisible();
+  await expect.element(save).toBeEnabled();
+  await save.click();
+  await expect.element(dialog).not.toBeInTheDocument();
+  await expect.poll(() => canvasColor(screen)).toBe("rgb(255, 255, 255)");
+});
+
+it("scopes Escape and Discard to the style draft and keeps the staged Online settings", async () => {
+  const { app } = await open();
+  await address().fill("lunch-today");
+  await styleButton().click();
+  await pageColor().fill("#ffffff");
+  await userEvent.keyboard("{Escape}");
+  const question = app.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  await vi.waitFor(() => expect(question.open).toBe(true));
+  question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await expect.element(styleDialog()).not.toBeInTheDocument();
+  await expect.element(address()).toHaveValue("lunch-today");
+  await styleButton().click();
+  await expect.element(pageColor()).toHaveValue("#fbf7ef");
+  const screen = app.shadowRoot!.querySelector("dashboard-menus-screen")!.shadowRoot!;
+  const editor = screen.querySelector("dashboard-menu-customer-style-dialog")!.shadowRoot!;
+  await page.elementLocator(editor.querySelector("wt-button[slot=cancel]")!).click();
+  await expect.element(styleDialog()).not.toBeInTheDocument();
+});
 
 it("saves the staged switch and keeps the public access notice visible after saving On", async () => {
   const { app, save } = await open();

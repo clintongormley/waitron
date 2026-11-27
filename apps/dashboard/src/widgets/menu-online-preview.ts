@@ -79,6 +79,7 @@ export class MenuOnlinePreview extends LitElement {
   @property({ attribute: false }) waitingForSettings = false;
   @property({ attribute: false }) previewHref = "";
   @property({ attribute: false }) openPreview?: (event: MouseEvent) => void;
+  @property({ attribute: false }) draftAppearance?: ReturnType<typeof prepareMenuAppearance>;
 
   @state() private answer: CustomerMenuPreview | null = null;
   @state() private failed = false;
@@ -98,15 +99,15 @@ export class MenuOnlinePreview extends LitElement {
     if (changed.has("menuId") || changed.has("api")) {
       this.language = "";
       this.languages = [];
-      void this.#load();
+      void this.reload();
       return;
     }
     const previous = changed.get("status");
     if (previous && this.status && editionOf(previous) !== editionOf(this.status))
-      void this.#load();
+      void this.reload();
   }
 
-  async #load(): Promise<void> {
+  async reload(): Promise<void> {
     const request = ++this.#request;
     this.answer = null;
     this.failed = false;
@@ -156,7 +157,7 @@ export class MenuOnlinePreview extends LitElement {
           event.stopPropagation();
           if (event.detail.value === this.language) return;
           this.language = event.detail.value;
-          void this.#load();
+          void this.reload();
         }}
       ></wt-combobox>
     </div>`;
@@ -165,7 +166,7 @@ export class MenuOnlinePreview extends LitElement {
   #page() {
     if (this.failed)
       return html`<p role="alert">${t("customer_menu.load_error")}</p>
-        <wt-button variant="secondary" @click=${() => void this.#load()}
+        <wt-button variant="secondary" @click=${() => void this.reload()}
           >${t("menus.retry")}</wt-button
         >`;
     if (this.answer === null) return html`<p role="status">${t("customer_menu.loading")}</p>`;
@@ -183,7 +184,7 @@ export class MenuOnlinePreview extends LitElement {
       <customer-menu-page
         class=${this.size}
         .menu=${this.answer.menu}
-        .appearance=${prepareMenuAppearance(WAITRON_DEFAULTS, this.answer.appearance)}
+        .appearance=${this.draftAppearance ?? prepareMenuAppearance(WAITRON_DEFAULTS, this.answer.appearance)}
         .photos=${this.photos}
         .photoSource=${previewPhoto}
         .defaultLanguage=${this.defaultLanguage}

@@ -12,7 +12,14 @@ import {
   type DraftScope,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-switch.js";
-import { css, html, nothing, type LitElement, type ReactiveController } from "lit";
+import {
+  css,
+  html,
+  nothing,
+  type LitElement,
+  type ReactiveController,
+  type TemplateResult,
+} from "lit";
 import type { DashboardApi } from "../api/client.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -271,7 +278,12 @@ export class MenuOnlineSave implements ReactiveController {
     ></wt-segmented-control>`;
   }
 
-  settings(unpublished: boolean, previewHref: string, openPreview: (event: MouseEvent) => void) {
+  settings(
+    unpublished: boolean,
+    previewHref: string,
+    openPreview: (event: MouseEvent) => void,
+    style: TemplateResult,
+  ) {
     const { draft } = this;
     const saving = this.pendingWrite !== undefined;
     return html`<div class="online-settings">
@@ -344,6 +356,7 @@ export class MenuOnlineSave implements ReactiveController {
               }
             </div>`
       }
+      ${style}
     </div>`;
   }
 
