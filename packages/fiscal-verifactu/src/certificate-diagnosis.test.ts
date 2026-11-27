@@ -84,6 +84,7 @@ describe("certificate diagnosis parent", () => {
     expect(runChild.mock.calls[0]![0]).toEqual({
       operation: "inspect",
       material: material(),
+      rewriteOld: false,
       taxpayer: { legalName: "Waitron SL", taxId: "89890001K" },
       timeZone: "Europe/Madrid",
       environment: "preproduction",
@@ -116,6 +117,7 @@ describe("certificate diagnosis parent", () => {
     });
     expect(runChild.mock.calls[0]![0]).toMatchObject({
       material: material(candidate, "representante"),
+      rewriteOld: true,
     });
     expect(
       await diagnoseCertificate(f.deps, { ...f.request, source: "candidate", ...material() }, NOW),
