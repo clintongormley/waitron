@@ -201,9 +201,11 @@ it("captures a new backup on Retry while sales stay paused", async () => {
   let passes = 0;
   let pauses = 0;
   const shutdown = createAdminShutdown({
-    check: async () => {
-      passes++;
-      if (passes === 1) throw new Error("The backup destination is unavailable");
+    check: async (_signal, { reportFailedDestination }) => {
+      if (++passes === 1) {
+        reportFailedDestination("/mnt/backup");
+        throw new Error("The backup destination is unavailable");
+      }
     },
     save: async () => {},
     clear: async () => {},
@@ -217,10 +219,13 @@ it("captures a new backup on Retry while sales stay paused", async () => {
   app.post("/sale", (c) => c.body(null, 204));
   try {
     shutdown.start();
-    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    await vi.waitFor(() =>
+      expect(shutdown.view()).toMatchObject({ phase: "paused", failedDestination: "/mnt/backup" }),
+    );
+    expect(shutdown.status()).not.toHaveProperty("failedDestination");
     shutdown.resolvePaused("retry");
     expect((await app.request("/sale", { method: "POST" })).status).toBe(503);
-    await vi.waitFor(() => expect(shutdown.status().phase).toBe("ready"));
+    await vi.waitFor(() => expect(shutdown.view()).toEqual({ phase: "ready" }));
     expect(passes).toBe(2);
     expect(pauses).toBe(1);
   } finally {

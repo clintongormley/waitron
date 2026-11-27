@@ -1274,7 +1274,7 @@ Not in any track until the standalone primary is done.
   before recording the administrator hold. Decide separately whether a spare's answer can ever
   clear that hold when it might have missed an off-box restore. Box status names the failed
   destination when a saved copy fails to upload or read back. If several uploads fail, it names
-  the first.
+  the first failing destination in the Backups list.
 
 - **A1425. Every restore takes its own identity (owner, 2026-11-07).** A restored box still
   keeps the old box's identity. Part 3, cut to Cloud's emergency copy (Cloud agreed on 15 November),

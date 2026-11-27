@@ -332,7 +332,11 @@ it("keeps one staged shutdown archive until the upload and readback finish", asy
   }
 });
 
-async function shutdownSupervisor(folders: string[], statfs?: BackupSupervisorDeps["statfs"]) {
+async function shutdownSupervisor(
+  folders: string[],
+  statfs?: BackupSupervisorDeps["statfs"],
+  secondDestination?: BackupConfig["destinations"][number],
+) {
   const stateDir = await makeStateDir();
   const venueDir = await makeVenueDir();
   const venue = await openVenueDatabase(venueDir);
@@ -355,8 +359,10 @@ async function shutdownSupervisor(folders: string[], statfs?: BackupSupervisorDe
   const backends = folders.map(
     (folder, index) => new LocalFsBackend(index ? `d${index}` : "primary", folder),
   );
+  const config = localFsConfig(folders, STRONG_KEY_1);
+  if (secondDestination !== undefined) config.destinations[1] = secondDestination;
   const sup = new BackupSupervisor({
-    buildConfig: async () => ({ ...localFsConfig(folders, STRONG_KEY_1), retain: 1 }),
+    buildConfig: async () => ({ ...config, retain: 1 }),
     readSingletonRole: () => "primary",
     venueDir,
     modules: ALL_MODULES,
@@ -414,7 +420,17 @@ describe("multi-destination shutdown", () => {
     const {
       sup,
       backends: [first, second],
-    } = await shutdownSupervisor(folders);
+    } = await shutdownSupervisor(folders, undefined, {
+      id: "d1",
+      kind: "s3",
+      bucket: {
+        region: "eu-north-1",
+        bucket: "evening-backups",
+        prefix: "restaurant",
+        accessKeyId: "test-key-id",
+        secretAccessKey: "test-secret-key",
+      },
+    });
     const refused = new AppError("backup.destination_timed_out", { timeoutMs: 10 });
     const readBack = vi.spyOn(first!, "getFile");
     try {
@@ -428,13 +444,16 @@ describe("multi-destination shutdown", () => {
         await expect(
           sup.runForShutdown(new AbortController().signal, null, undefined, failedDestination),
         ).rejects.toBe(refused);
-        expect(failedDestination.mock.calls).toEqual([[folders[1]]]);
+        expect(failedDestination.mock.calls).toEqual([["evening-backups/restaurant/"]]);
         const archives = await listArchives(folders[0]!);
         expect(archives).toEqual(expect.arrayContaining(previous));
         expect(archives).toHaveLength(count);
       }
       expect(await listArchives(folders[1]!)).toEqual(previous);
       expect(readBack).not.toHaveBeenCalled();
+      expect((await sup.status()).backupStatus).toMatchObject({
+        destinations: [expect.anything(), { id: "d1", uploadErrorCode: refused.code }],
+      });
     } finally {
       await sup.stop();
     }
@@ -511,12 +530,17 @@ describe("multi-destination shutdown", () => {
     }
   });
 
-  it.each([0, 1])("refuses same-length corruption at destination %i", async (index) => {
+  it.each([
+    { problem: "same-length corruption at the first destination", index: 0, readFails: false },
+    { problem: "same-length corruption at the second destination", index: 1, readFails: false },
+    { problem: "a failed read from the second destination", index: 1, readFails: true },
+  ])("names the destination on $problem", async ({ index, readFails }) => {
     const folders = [await makeDestDir(), await makeDestDir()];
     const { sup, backends, restoreScratch } = await shutdownSupervisor(folders);
     const backend = backends[index]!;
     const get = backend.getFile.bind(backend);
     vi.spyOn(backend, "getFile").mockImplementation(async (key, output, call) => {
+      if (readFails) throw new AppError("backup.destination_timed_out", { timeoutMs: 10 });
       await get(key, output, call);
       const bytes = await readFile(output);
       bytes[0] = bytes[0]! ^ 1;
@@ -526,10 +550,11 @@ describe("multi-destination shutdown", () => {
       const failedDestination = vi.fn();
       await expect(
         sup.runForShutdown(new AbortController().signal, null, undefined, failedDestination),
-      ).rejects.toMatchObject({
-        code: "backup.archive_invalid",
-        params: { reason: "read_back_mismatch" },
-      });
+      ).rejects.toMatchObject(
+        readFails
+          ? { code: "backup.destination_timed_out", params: { timeoutMs: 10 } }
+          : { code: "backup.archive_invalid", params: { reason: "read_back_mismatch" } },
+      );
       expect(failedDestination.mock.calls).toEqual([[folders[index]]]);
       expect(await readdir(restoreScratch)).toEqual([]);
     } finally {
@@ -559,7 +584,8 @@ describe("multi-destination shutdown", () => {
       }
     });
     const controller = new AbortController();
-    const shutdown = sup.runForShutdown(controller.signal, null);
+    const failedDestination = vi.fn();
+    const shutdown = sup.runForShutdown(controller.signal, null, undefined, failedDestination);
     try {
       const output = await Promise.race([
         reading.reached,
@@ -574,6 +600,7 @@ describe("multi-destination shutdown", () => {
       expect(removed()).toBe(false);
       cancelled.release();
       await expect(shutdown).rejects.toMatchObject({ code: "backup.destination_cancelled" });
+      expect(failedDestination).not.toHaveBeenCalled();
       expect(removed()).toBe(true);
       expect(await readdir(restoreScratch)).toEqual([]);
     } finally {
