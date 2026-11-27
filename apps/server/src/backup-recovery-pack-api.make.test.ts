@@ -14,7 +14,12 @@ import { createCanvas } from "@napi-rs/canvas";
 import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { masterKeyCheckValue, masterKeyName, sealingPublicKey } from "@waitron/credentials";
+import {
+  makeMasterKey,
+  masterKeyCheckValue,
+  masterKeyName,
+  sealingPublicKey,
+} from "@waitron/credentials";
 import {
   CORE_CHANGE_SOURCES,
   insertRecoveryPack,
@@ -860,6 +865,27 @@ describe("the received route", () => {
     return f;
   }
   const receivedAt = async () => (await packs())[0]!.receivedAt;
+
+  it("the request log lines for a confirm, refused or taken, do not carry the key it sends", async () => {
+    const f = fixture({ requestLog: true });
+    const response = await f.make(true);
+    await response.arrayBuffer();
+    const masterKey = response.headers.get("x-waitron-master-key")!;
+    const wrong = encodeMasterKeyCode(makeMasterKey());
+    expect((await f.received(1, {}, { masterKey: wrong })).status).toBe(400);
+    expect((await f.confirm(response)).status).toBe(204);
+    const route = "/api/backup/recovery-pack/:number/received";
+    expect(logs.filter(([, event]) => event === "http.request")).toMatchObject([
+      [expect.any(String), "http.request", { routePath: "/api/backup/recovery-pack", status: 200 }],
+      [expect.any(String), "http.request", { routePath: route, status: 400 }],
+      [expect.any(String), "http.request", { routePath: route, status: 204 }],
+    ]);
+    const logged = JSON.stringify(logs);
+    for (const sent of [masterKey, wrong]) {
+      expect(logged).not.toContain(sent.slice(0, 9));
+      expect(logged).not.toContain(sent.replaceAll(" ", "").slice(0, 8));
+    }
+  });
 
   it("marks the maker's own pack received", async () => {
     const f = await made();
