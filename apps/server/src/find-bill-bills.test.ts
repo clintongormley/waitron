@@ -1232,7 +1232,7 @@ describe("Find a bill's owed and counter bills", () => {
       {
         billId: partPaid.tabId,
         expectedPartyRevision: await partyRevision(store.db, partPaid.partyId),
-        reason: "Se marcharon",
+        reason: "Left without paying",
       },
     );
     expect(departure.status, JSON.stringify(departure.json)).toBe(200);
@@ -1257,6 +1257,20 @@ describe("Find a bill's owed and counter bills", () => {
       orderStatus: "placed",
       stillOwed: "0.00",
     });
+    expect(await ids({ owed: "true" })).toEqual(new Set());
+  });
+
+  it("stops owing a bill left unpaid once its receipt is cancelled through the till", async () => {
+    const left = await departed(venue, "Tarta");
+    expect(await ids({ owed: "true" })).toEqual(new Set([left.tabId]));
+    const cancelled = await send(
+      venue.app,
+      venue.supervisorTill,
+      "POST",
+      `/api/working-orders/${left.tabId}/cancel`,
+      { reason: "Wrong table" },
+    );
+    expect(cancelled).toEqual({ status: 200, json: { filed: "cancellation" } });
     expect(await ids({ owed: "true" })).toEqual(new Set());
   });
 

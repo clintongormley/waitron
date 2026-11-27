@@ -8,11 +8,19 @@ export type BillState = "unpaid" | "held" | "part-paid" | "paid-not-handed-over"
 export type TransactionType =
   "sale" | "full-invoice" | "correction" | "full-correction" | "replacement" | "refund";
 export type TenderMethod = "cash" | "card" | "voucher" | "deferred" | "other";
-export type BillsQuery = FindBillQuery & { zoneId?: string; state?: BillState };
+/** `owed` and `counter` together ask for the bills either one names. */
+export type BillsQuery = FindBillQuery & {
+  zoneId?: string;
+  state?: BillState;
+  owed?: true;
+  counter?: true;
+};
+/** `corrective` asks for every `correction`, `full-correction` and `replacement`. */
+export type TransactionKind = TransactionType | "corrective";
 export type TransactionsQuery = FindBillQuery & {
   dates: FindBillDates;
   method?: TenderMethod;
-  type?: TransactionType;
+  type?: TransactionKind;
 };
 export type FindBillPage<Row> = {
   rows: Row[];

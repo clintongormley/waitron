@@ -121,7 +121,7 @@ describe("Find a bill query", () => {
       expect.objectContaining({ code: "management.request_invalid", params: { field } }),
     );
   });
-  it("reads owed and counter bills only as true, and corrective beside the five other kinds", () => {
+  it("reads owed and counter bills only as true, and corrective beside the six other kinds", () => {
     expect(parseBillsQuery(new URLSearchParams({ owed: "true", counter: "true" }))).toMatchObject({
       owed: true,
       counter: true,

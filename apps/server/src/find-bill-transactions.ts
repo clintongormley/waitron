@@ -76,7 +76,7 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
       and ((t.bill_payment_id is not null and p.bill_payment_id = t.bill_payment_id)
         or (t.bill_payment_id is null and p.bill_payment_id is null and p.sale_id = t.sale_id))
   ), order_labels as (
-    select so.sale_id, wo.id as order_id, wo.label, p.name as party_name,
+    select so.sale_id, wo.id as order_id, wo.order_number, wo.label, p.name as party_name,
       coalesce((select group_concat(j.value, ', ') from json_each(p.table_names) j),
         (select group_concat(d.label, ', ') from party_tables pt join dining_tables d on d.id = pt.table_id
           where pt.party_id = wo.party_id), dt.label, wo.delivery_table_label) as table_names
@@ -97,7 +97,7 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
       (select group_concat(o.name, ', ') from
         (select distinct coalesce(nullif(label,''),party_name,table_names) as name
           from order_labels where sale_id = s.id order by name) o) as table_name,
-      (select group_concat(coalesce(o.label,'') || ' ' || coalesce(o.party_name,'') || ' ' || coalesce(o.table_names,''), ' ')
+      (select group_concat(o.order_number || ' ' || coalesce(o.label,'') || ' ' || coalesce(o.party_name,'') || ' ' || coalesce(o.table_names,''), ' ')
         from order_labels o where o.sale_id = s.id) as order_search,
       (select json_group_array(json_object('method',m.method,'last4',m.last4)) from
         (select method,last4 from tender_methods where sale_id = s.id order by method,last4) m) as methods,
@@ -108,7 +108,9 @@ export function findTransactionsRelation(inZones?: OrderZoneCondition): SQL {
         or exists(select 1 from sale_settlements ss where ss.sale_id = s.id)) as listed
     from sales s join invoice_series sr on sr.id = s.series_id
     left join persons person on person.id = s.operator_id
-    left join working_orders own on own.id = s.working_order_id
+    left join working_orders own on own.id = coalesce(s.working_order_id,
+      (select case when count(*) = 1 then min(so.order_id) end from scope_orders so
+        where so.sale_id = s.id))
     left join floor_zones own_zone on own_zone.id = ${VENUE_SERVICE.orderZoneIdSql(sql`own.id`)}
     where ${scopeCondition(inZones)}
       and not exists(select 1 from sale_voids v where v.sale_id = s.id)
@@ -190,7 +192,8 @@ export async function readFindTransactions(
       ? sql`null`
       : sql`case when abs(r.amount_cents) = ${amount.cents} then 'amount'
           when r.refund_id is null and exists(select 1 from tenders t
-            where t.sale_id = r.sale_id and t.amount = ${amount.cents}) then 'payment' end`;
+            where t.sale_id = r.sale_id and t.amount = ${amount.cents}
+              ${query.method === undefined ? sql`` : sql`and t.method = ${query.method}`}) then 'payment' end`;
   const words =
     query.q === ""
       ? sql`0`

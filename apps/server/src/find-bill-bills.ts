@@ -119,7 +119,8 @@ function filtered(query: BillsQuery): SQL {
   if (query.state !== undefined) clauses.push(sql`r.state = ${query.state}`);
   const kinds: SQL[] = [];
   // Owed: the guests left with the bill unpaid. Not `collection_status`, which a part payment
-  // clears. A departure always prints the receipt and places the bill; a void abandons it.
+  // clears. A departure always issues the invoice and places the bill; cancelling the bill abandons
+  // its order.
   if (query.owed === true) kinds.push(sql`(r.departed_at is not null and r.owing_cents > 0)`);
   if (query.counter === true) kinds.push(sql`r.party_id is null`);
   if (kinds.length > 0) clauses.push(sql`(${sql.join(kinds, sql` or `)})`);
