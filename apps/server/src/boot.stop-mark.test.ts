@@ -26,7 +26,7 @@ import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import type { Hono } from "hono";
-import { expect, it, vi } from "vitest";
+import { expect, it, onTestFinished, vi, type MockInstance } from "vitest";
 import * as shutdownDuties from "./admin-shutdown-duties.js";
 import { writeArchiveSettings } from "./archive-settings.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
@@ -96,6 +96,7 @@ it.each([
   const writeMark = scenario === "multiple" ? vi.spyOn(atomic, "writeFileDurable") : null;
   const { token } = await openManagementSession(suite.db, "admin");
   const { token: staleToken } = await openManagementSession(suite.db, "admin");
+  let pairedShutdown: MockInstance<typeof shutdownDuties.adminShutdownDuties> | undefined;
   if (scenario === "paired-streaming") {
     const ring = loadKeyRing(TRADING_BOOT_KEY_ENV);
     const spareNodeId = "00000000-0000-4000-8000-000000000034";
@@ -132,21 +133,24 @@ it.each([
       }),
     );
     const buildShutdown = shutdownDuties.adminShutdownDuties;
-    vi.spyOn(shutdownDuties, "adminShutdownDuties").mockImplementationOnce((deps) =>
-      buildShutdown({
-        ...deps,
-        readSpare: async () => ({
-          peerNodeId: spareNodeId,
-          state: "following",
-          generation: null,
-          appliedTXID: null,
-          uploadedTXID: null,
-          lagMs: 0,
-          lastAppliedAt: null,
-          clockAt: null,
+    pairedShutdown = vi
+      .spyOn(shutdownDuties, "adminShutdownDuties")
+      .mockImplementationOnce((deps) =>
+        buildShutdown({
+          ...deps,
+          readSpare: async () => ({
+            peerNodeId: spareNodeId,
+            state: "following",
+            generation: `gen-0-${cfg.nodeId}-20261022T093100Z`,
+            appliedTXID: "0000000000000001",
+            uploadedTXID: "0000000000000001",
+            lagMs: 0,
+            lastAppliedAt: heartbeatAt,
+            clockAt: heartbeatAt,
+          }),
         }),
-      }),
-    );
+      );
+    onTestFinished(() => pairedShutdown?.mockRestore());
   }
   let releaseScheduled!: () => void;
   const held = new Promise<void>((resolve) => {
@@ -308,6 +312,7 @@ it.each([
       },
       async (base) => {
         if (scenario !== "disabled" && scenario !== "no-key") await scheduled;
+        if (scenario === "paired-streaming") expect(pairedShutdown).toHaveBeenCalledOnce();
         const begin = (session: string) =>
           app.request(
             "https://box.example/api/box/shutdown",

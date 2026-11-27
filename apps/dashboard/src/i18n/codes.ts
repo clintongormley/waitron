@@ -1815,8 +1815,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Waitron no pudo confirmar que el bucket recibió la última actualización. Comprueba la conexión y elige Volver a comprobar. Para reiniciar la copia en el bucket o cambiar sus ajustes, elige Cancelar y reanudar el trabajo y abre Copias de seguridad.",
   },
   "box.shutdown_unavailable": {
-    en: "Checked shutdown needs the main box with Cloud off. To hand over to a joined spare, open Servers. Turn on saved backups with at least one destination, or download a copy with a numbered backup key if there are no saved backup settings.",
-    es: "Para apagar con comprobación, usa el servidor principal con Cloud desactivado. Para transferir el servicio a un servidor de reserva vinculado, abre Servidores. Activa las copias guardadas con al menos un destino o descarga una copia con una clave numerada si no hay ajustes de copia guardados.",
+    en: "Checked shutdown needs the main box with Cloud off. If this box has a joined spare and a direct bucket copy, open Servers to hand over. If the joined spare is offline, reconnect it before trying again. Turn on saved backups with at least one destination, or download a copy with a numbered backup key if there are no saved backup settings.",
+    es: "Para apagar con comprobación, usa el servidor principal con Cloud desactivado. Si este servidor tiene uno de reserva vinculado y una copia directa en el bucket, abre Servidores para transferir el servicio. Si el servidor de reserva vinculado está desconectado, vuelve a conectarlo antes de intentarlo de nuevo. Activa las copias guardadas con al menos un destino o descarga una copia con una clave numerada si no hay ajustes de copia guardados.",
   },
   "handover.stepping_down": {
     en: "This box is handing over or has handed over the venue, so it refused this action. Use the main box’s address once that box is taking sales.",
