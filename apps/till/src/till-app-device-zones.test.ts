@@ -1029,28 +1029,36 @@ const parkedOrder: HeldOrderSummary = {
   openedAt: "2026-11-27T09:00:00.000Z",
 };
 
-it("retrieves a parked order from Counter in one tap and opens the basket", async () => {
-  const retrieveWorkingOrder = vi.fn().mockResolvedValue({
-    ...parkedOrder,
-    revision: 0,
-    expectedEdit: null,
-    kitchenNote: { scope: { workingOrderId: "parked" }, note: null, revision: 0, ownerRevision: 0 },
-    lines: [{ menuItemId: "coffee-offer", quantity: "1.000" }],
-  });
-  const { el } = await mount(selection(["bar"], "bar"), {
-    listWorkingOrders: vi.fn().mockResolvedValue([parkedOrder]),
-    retrieveWorkingOrder,
-  });
-  const row = page.getByRole("button", { name: /^#51 · Parked coffee/ });
-  await vi.waitFor(() => expect(row.query()).not.toBeNull());
-  await row.click();
-  await vi.waitFor(() => {
-    expect(counter(el)?.store.id).toBe("parked");
-    expect(counter(el)?.shadowRoot?.querySelector("till-basket")).not.toBeNull();
-  });
-  expect(counter(el)?.store.lines.map((line) => line.product.productId)).toEqual(["coffee"]);
-  expect(retrieveWorkingOrder).toHaveBeenCalledExactlyOnceWith("parked");
-});
+it.each(["name", "price"])(
+  "retrieves a parked order from Counter by tapping its %s once",
+  async (target) => {
+    const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+      ...parkedOrder,
+      revision: 0,
+      expectedEdit: null,
+      kitchenNote: {
+        scope: { workingOrderId: "parked" },
+        note: null,
+        revision: 0,
+        ownerRevision: 0,
+      },
+      lines: [{ menuItemId: "coffee-offer", quantity: "1.000" }],
+    });
+    const { el } = await mount(selection(["bar"], "bar"), {
+      listWorkingOrders: vi.fn().mockResolvedValue([parkedOrder]),
+      retrieveWorkingOrder,
+    });
+    const row = page.getByRole("button", { name: /^#51 · Parked coffee/ });
+    await vi.waitFor(() => expect(row.query()).not.toBeNull());
+    await (target === "price" ? page.getByText("€2.00", { exact: true }) : row).click();
+    await vi.waitFor(() => {
+      expect(counter(el)?.store.id).toBe("parked");
+      expect(counter(el)?.shadowRoot?.querySelector("till-basket")).not.toBeNull();
+    });
+    expect(counter(el)?.store.lines.map((line) => line.product.productId)).toEqual(["coffee"]);
+    expect(retrieveWorkingOrder).toHaveBeenCalledExactlyOnceWith("parked");
+  },
+);
 
 it("puts orders outside the shown counters and table map in Other orders", async () => {
   const table = { ...heldTable({ id: "visible-party" }), zoneId: "room" };
@@ -1105,7 +1113,12 @@ it("puts orders outside the shown counters and table map in Other orders", async
       },
       { ...parkedOrder, id: "hidden", orderNumber: 56, zoneId: "shop", label: "Hidden counter" },
     ]),
-    listCounterWaiting: vi.fn().mockResolvedValue([outside]),
+    listCounterWaiting: vi
+      .fn()
+      .mockResolvedValue([
+        outside,
+        { ...outside, id: "sent-here", zoneId: "bar", label: "Sent here", status: "placed" },
+      ]),
   });
   await vi.waitFor(() =>
     expect(page.getByRole("heading", { name: "Other orders" }).query()).not.toBeNull(),
@@ -1115,6 +1128,16 @@ it("puts orders outside the shown counters and table map in Other orders", async
   await expect.element(other.getByRole("button", { name: /Off-map table/ })).toBeVisible();
   await expect.element(other.getByRole("button", { name: /^#56 · Hidden counter/ })).toBeVisible();
   await expect.element(other.getByRole("button", { name: /Unassigned pie/ })).toBeVisible();
+  const seatedRow = page.getByRole("button", { name: /Counter seat/ });
+  const sentRow = page.getByRole("button", { name: /Sent here/ });
+  expect(seatedRow.element().getBoundingClientRect().top).toBeLessThan(
+    sentRow.element().getBoundingClientRect().top,
+  );
+  expect(
+    other.getByRole("heading", { name: "Other orders · 3", exact: true }).query(),
+  ).not.toBeNull();
+  expect(other.getByRole("button", { name: /^#56 · Hidden counter.*Shop/ }).query()).not.toBeNull();
+  expect(other.getByRole("button", { name: /Unassigned pie.*No zone/ }).query()).not.toBeNull();
   expect(page.getByRole("button", { name: /Visible table/ }).query()).toBeNull();
   expect(other.getByRole("button", { name: /Counter seat/ }).query()).toBeNull();
   await page.getByRole("button", { name: /Counter seat/ }).click();

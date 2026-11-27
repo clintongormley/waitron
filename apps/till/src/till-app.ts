@@ -23917,6 +23917,7 @@ export class TillApp extends LitElement {
         .refreshFloorOrders=${this.#refreshCounterFloorOrders}
         .counterZoneIds=${navigation?.counterZoneIds ?? []}
         .floorZoneIds=${navigation?.floorZoneIds ?? []}
+        .orderZones=${this.profileServiceZones}
         .tablesAnswered=${this.tablesAnswered}
         .tables=${this.tables}
         .zones=${this.zones}

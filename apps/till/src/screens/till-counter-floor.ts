@@ -7,6 +7,7 @@ import type { CounterWaitingOrder, HeldOrderSummary } from "../api/orders-api.js
 import { t } from "../i18n/t.js";
 import { listedTables } from "../state/floor-map.js";
 import { liveGate } from "../state/live-gate.js";
+import type { NamedOrderZone } from "../widgets/order-label.js";
 import "../widgets/counter-waiting.js";
 import "../widgets/held-orders.js";
 
@@ -57,6 +58,7 @@ export class TillCounterFloor extends LitElement {
   @property({ type: String }) zoneId = "";
   @property({ attribute: false }) counterZoneIds: readonly string[] = [];
   @property({ attribute: false }) floorZoneIds: readonly string[] = [];
+  @property({ attribute: false }) orderZones: readonly NamedOrderZone[] = [];
   @property({ attribute: false }) waiting: CounterWaitingOrder[] = [];
   @property({ attribute: false }) parked: HeldOrderSummary[] = [];
   @property({ attribute: false }) tables: TableState[] = [];
@@ -103,10 +105,11 @@ export class TillCounterFloor extends LitElement {
     if (!this.live?.up) run();
   }
 
-  #rows(orders: CounterWaitingOrder[], ready = false) {
+  #rows(orders: CounterWaitingOrder[], kind: "ready" | "open" | "other" = "open") {
     return html`<till-counter-waiting
       floor
-      ?ready=${ready}
+      ?ready=${kind === "ready"}
+      .outsideZones=${kind === "other" ? this.orderZones : undefined}
       .orders=${orders}
       .now=${this.#clock.now}
       .canEditKitchenNote=${this.canEditKitchenNote}
@@ -114,12 +117,13 @@ export class TillCounterFloor extends LitElement {
     ></till-counter-waiting>`;
   }
 
-  #parkedRows(orders: HeldOrderSummary[]) {
+  #heldRows(orders: HeldOrderSummary[], outside = false) {
     return orders.length === 0
       ? nothing
       : html`<till-held-orders
           floor
           .orders=${orders}
+          .outsideZones=${outside ? this.orderZones : undefined}
           .tables=${this.tables}
           .zones=${this.zones}
         ></till-held-orders>`;
@@ -129,7 +133,9 @@ export class TillCounterFloor extends LitElement {
     const current = this.waiting.filter(({ zoneId }) => zoneId === this.zoneId);
     const ready = current.filter(readyToHandOver);
     const open = current.filter((order) => !readyToHandOver(order));
-    const parked = this.parked.filter(({ zoneId }) => zoneId === this.zoneId);
+    const held = this.parked.filter(({ zoneId }) => zoneId === this.zoneId);
+    const seated = held.filter(({ partyId }) => partyId !== null);
+    const parked = held.filter(({ partyId }) => partyId === null);
     const mappedParties = new Set(
       listedTables(this.tables).flatMap(({ zoneId, party }) =>
         zoneId !== null && this.floorZoneIds.includes(zoneId) && party !== null ? [party.id] : [],
@@ -144,13 +150,14 @@ export class TillCounterFloor extends LitElement {
         (partyId === null || !mappedParties.has(partyId)) &&
         (this.tablesAnswered || zoneId === null || !this.floorZoneIds.includes(zoneId)),
     );
-    const openCount = open.length + parked.length;
+    const openCount = open.length + held.length;
+    const otherCount = otherWaiting.length + otherParked.length;
     return html`
       ${
         ready.length === 0
           ? nothing
           : html`<h2>${t("counter.floor_ready")}</h2>
-              ${this.#rows(ready, true)}`
+              ${this.#rows(ready, "ready")}`
       }
       <div class="new-order">
         <wt-button
@@ -164,14 +171,14 @@ export class TillCounterFloor extends LitElement {
         openCount === 0
           ? nothing
           : html`<h2>${t("counter.floor_open")} · ${openCount}</h2>
-              ${this.#rows(open)}${this.#parkedRows(parked)}`
+              ${this.#heldRows(seated)}${this.#rows(open)}${this.#heldRows(parked)}`
       }
       ${
-        otherWaiting.length + otherParked.length === 0
+        otherCount === 0
           ? nothing
           : html`<section data-other-orders>
-              <h2>${t("counter.floor_other")}</h2>
-              ${this.#rows(otherWaiting)}${this.#parkedRows(otherParked)}
+              <h2>${t("counter.floor_other")} · ${otherCount}</h2>
+              ${this.#rows(otherWaiting, "other")}${this.#heldRows(otherParked, true)}
             </section>`
       }
     `;

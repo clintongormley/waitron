@@ -1,4 +1,4 @@
-import { orderLabel } from "./order-label.js";
+import { orderLabel, outsideOrderLocation, type NamedOrderZone } from "./order-label.js";
 import { orderPreview, orderPreviewStyles } from "./order-preview.js";
 import { LitElement, css, html, nothing, type TemplateResult, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -97,6 +97,7 @@ export class TillCounterWaiting extends LitElement {
   @property({ type: Boolean, reflect: true }) ready = false;
   @property({ type: Number }) now = 0;
   @property({ attribute: false }) orders: CounterWaitingOrder[] = [];
+  @property({ attribute: false }) outsideZones?: readonly NamedOrderZone[];
   /** The device's profile allows `take-orders`, which the move route requires. */
   @property({ type: Boolean }) canMoveStation = false;
 
@@ -219,7 +220,7 @@ export class TillCounterWaiting extends LitElement {
                     >${t("counter.floor_minutes").replace("{n}", String(minutes))}</span
                   >`
                 : nothing
-            }</span
+            }${outsideOrderLocation(order, this.outsideZones)}</span
           >
           ${!this.floor && label ? html`<span class="label">${label}</span>` : nothing}
           ${

@@ -1,7 +1,7 @@
 import { actionChoiceStyles } from "@waitron/ui/src/components/wt-row-actions.js";
 import { repeat } from "lit/directives/repeat.js";
 import { counterFloorRowStyles } from "./counter-floor-row-styles.js";
-import { orderLabel } from "./order-label.js";
+import { orderLabel, outsideOrderLocation, type NamedOrderZone } from "./order-label.js";
 import { orderPreview, orderPreviewStyles } from "./order-preview.js";
 import { LitElement, css, html, nothing, type TemplateResult, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -128,6 +128,7 @@ export class TillHeldOrders extends LitElement {
 
       :host([floor]) .order.parked {
         display: grid;
+        cursor: pointer;
         grid-template-columns: minmax(0, 1fr) auto auto;
         gap: var(--wt-space-2);
         padding-inline-end: var(--wt-space-4);
@@ -152,6 +153,7 @@ export class TillHeldOrders extends LitElement {
 
   @property({ type: Boolean, reflect: true }) floor = false;
   @property({ attribute: false }) orders: HeldOrderSummary[] = [];
+  @property({ attribute: false }) outsideZones?: readonly NamedOrderZone[];
   /** The floor, which the app reads again when a picker opens. */
   @property({ attribute: false }) tables: TableState[] = [];
   @property({ attribute: false }) zones: FloorZone[] = [];
@@ -286,7 +288,14 @@ export class TillHeldOrders extends LitElement {
       <div
         class=${parked ? "order parked" : "order"}
         @click=${(event: Event) => {
-          if (!this.floor) this.#togglePreview(event, order.id);
+          if (
+            parked &&
+            !event
+              .composedPath()
+              .some((target) => target instanceof Element && target.matches("wt-row-actions.move"))
+          )
+            this.#emit("retrieve-order", { id: order.id });
+          else if (!this.floor) this.#togglePreview(event, order.id);
         }}
       >
         <button
@@ -296,12 +305,11 @@ export class TillHeldOrders extends LitElement {
           aria-controls=${parked ? nothing : `preview-${order.id}`}
           aria-describedby=${parked ? `amount-${order.id}` : nothing}
           @click=${(event: Event) => {
-            if (parked) this.#emit("retrieve-order", { id: order.id });
-            else if (this.floor) this.#togglePreview(event, order.id);
+            if (this.floor && !parked) this.#togglePreview(event, order.id);
           }}
         >
           <span class="number"
-            >${orderNumber(order.orderNumber, order.formerNumbers)}${this.floor && label ? ` · ${label}` : nothing}</span
+            >${orderNumber(order.orderNumber, order.formerNumbers)}${this.floor && label ? ` · ${label}` : nothing}${outsideOrderLocation(order, this.outsideZones)}</span
           >
           ${!this.floor && label ? html`<span class="label">${label}</span>` : nothing}
           ${parked ? nothing : html`<span class="meta">${this.#meta(order)}</span>`}
