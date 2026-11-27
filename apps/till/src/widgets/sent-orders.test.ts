@@ -1200,6 +1200,14 @@ describe("A773 at the pass", () => {
     expect(second(el, "[data-held-line=held]")).toBe("");
   });
 
+  it("writes At the pass capitalised, as the other states read, in English and Spanish", async () => {
+    const title = async () =>
+      text(find(await mount(current([atPass("burger")])), "[data-section-title]"));
+    expect(await title()).toBe("At the pass");
+    setLocale("es");
+    expect(await title()).toBe("En el pase");
+  });
+
   it("heads a section whose every waiting dish is at the pass At the pass, never Fired, in Spanish", async () => {
     setLocale("es");
     const el = await mount(
@@ -1235,7 +1243,7 @@ describe("A773 at the pass", () => {
         }),
       ]),
     );
-    expect(text(find(el, "[data-section-title]"))).toBe("at the pass");
+    expect(text(find(el, "[data-section-title]"))).toBe("At the pass");
   });
 
   it("does not say a dish is at the pass until the waiter has released it", async () => {

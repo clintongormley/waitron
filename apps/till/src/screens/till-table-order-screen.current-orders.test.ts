@@ -963,4 +963,27 @@ describe("A773 at the pass", () => {
     await openSentDish(el, "l-burger", "fired");
     expect(text(q(el, "[data-sent-line-status]")!)).toBe(t("table.at_the_pass"));
   });
+
+  it("says Held in the list and the dish window for a dish asked for whose extra was recalled", async () => {
+    const burger = row("l-burger", "Burger", "1.000", {
+      released: false,
+      requestedAt: null,
+      extras: [
+        {
+          lineId: "l-bacon",
+          name: "Bacon",
+          quantity: "1.000",
+          netAmount: "1.00",
+          unitPriceGross: "1.00",
+          priceQuantity: "1.000",
+        },
+      ],
+    });
+    const { el } = await mountSent({ currentOrders: current({ ungrouped: [burger] }) });
+    const panel = await sentPanelFor(el);
+    const more = panel.shadowRoot!.querySelector('[data-fired-line="l-burger"] .row-more')!;
+    expect(text(more)).toBe(`Bacon · ${t("table.group_held")}`);
+    await openSentDish(el, "l-burger", "fired");
+    expect(text(q(el, "[data-sent-line-status]")!)).toBe(t("table.group_held"));
+  });
 });

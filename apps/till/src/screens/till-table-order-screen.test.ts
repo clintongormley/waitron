@@ -648,7 +648,7 @@ describe("till-table-order-screen", () => {
     const panel = await sentPanelFor(el);
     expect(panel.shadowRoot!.querySelectorAll("[data-fired-line]")).toHaveLength(1);
     expect(panel.shadowRoot!.querySelectorAll("[data-served-line]")).toHaveLength(1);
-    expect(panel.shadowRoot!.textContent).toContain(t("table.served_title"));
+    expect(panel.shadowRoot!.textContent).toContain(t("table.row_served"));
     const dialog = el.shadowRoot!.querySelector<WtDialog>("[data-sent-line-dialog]")!;
     const closed = new Promise<void>((resolve) =>
       dialog.addEventListener("wt-close", () => resolve(), { once: true }),

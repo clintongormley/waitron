@@ -46,8 +46,9 @@ function stateOf(slices: readonly SentSlice[], left: readonly SentSlice[]): Sent
   if (first === undefined) return "served";
   if (first.kind === "held") return "held";
   const { row } = first;
+  if (!row.released) return "held";
   if (row.readyAt !== null) return "ready";
-  return row.released && row.firedAt === null && row.requestedAt !== null ? "at_the_pass" : "fired";
+  return row.firedAt === null && row.requestedAt !== null ? "at_the_pass" : "fired";
 }
 
 function toRow(slices: SentSlice[]): SentRow {
