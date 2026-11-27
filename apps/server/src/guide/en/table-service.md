@@ -1015,8 +1015,7 @@ For a full invoice, [set up the bill before paying](table-service.md#full-invoic
 Choose **Split equally** for one equal share, **Items** for particular dishes, or **An amount** for
 a contribution. For an equal share, enter how many people are still to pay, including this
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
-The chosen dishes move to a bill of their own, paid at once, with its own receipt; the rest stays
-on this bill. Choosing every dish pays the whole bill. If the card is declined or you choose
+Choosing every dish pays the whole bill. If the card is declined or you choose
 **Cancel payment**, the dishes go back to this bill. If they cannot go back, for example because
 this bill was printed or paid while the card was out, they stay on a bill of their own, to be paid
 there: at a table it is listed in the bill switcher, and at the Counter under **Parked orders**.

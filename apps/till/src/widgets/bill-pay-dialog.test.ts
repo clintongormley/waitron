@@ -135,7 +135,13 @@ it("gives the Guests field space below the ways to pay on a phone", async () => 
 it("keeps Edit tip plain under the pointer and outlined on keyboard focus", async () => {
   await page.viewport(390, 844);
   onTestFinished(() => page.viewport(414, 896));
-  const el = await mount({ quiet: true, way: "whole", cardReader: "simulator" });
+  const el = await mount({
+    quiet: true,
+    handheld: true,
+    way: "whole",
+    cardReader: "simulator",
+    takesReaderCard: true,
+  });
   await click(el, "[data-quiet-pay-tip]");
   await type(el, "cardTip", "12");
   await click(el, "[data-quiet-pay-tip]");
@@ -145,9 +151,11 @@ it("keeps Edit tip plain under the pointer and outlined on keyboard focus", asyn
   expect.soft(getComputedStyle(edit).borderColor).toBe("rgba(0, 0, 0, 0)");
   expect(getComputedStyle(edit).outlineStyle).toBe("none");
 
-  const remove = root(el).querySelector<HTMLElement>("[data-quiet-pay-remove-tip]")!;
-  remove.focus();
-  await userEvent.keyboard("{Tab}");
+  root(el)
+    .querySelector('[data-quiet-pay-way="whole"]')!
+    .shadowRoot!.querySelector("button")!
+    .focus();
+  await userEvent.keyboard("{Shift>}{Tab}{/Shift}");
   expect(edit.matches(":focus-visible")).toBe(true);
   expect(getComputedStyle(edit).outlineStyle).toBe("solid");
 });
@@ -280,9 +288,10 @@ it("leaves a tip entered for another card machine out of the opening amount when
   expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("120.00"));
 });
 
-it("adds a staff tip to the opening total and removes it before asking for any charge", async () => {
+it("checks the amount again after Remove tip before starting Charge", async () => {
   const el = await mount({ quiet: true, way: "whole", cardReader: "simulator" });
   const previews = capture<PayRequest>(el, "bill-pay-preview");
+  const payments = capture(el, "bill-pay-confirm");
   await click(el, "[data-quiet-pay-tip]");
   await type(el, "cardTip", "12");
   expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("132.00"));
@@ -301,16 +310,19 @@ it("adds a staff tip to the opening total and removes it before asking for any c
   await click(el, "[data-clear-card-tip]");
   expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("120.00"));
   expect(text(breakdown)).toBe("Enter tip");
-  expect(text(root(el).querySelector("[data-quiet-pay-card]"))).toBe(`Charge ${money("120.00")}`);
+  const charge = button(el, "[data-quiet-pay-card]");
+  expect(text(charge)).toBe(`Charge ${money("120.00")}`);
+  expect(charge.disabled).toBe(true);
+  expect(payments).toEqual([]);
+  const request = await showCardQuote(el, "120.00");
+  expect(request.asked).toEqual({
+    choice: { kind: "whole" },
+    pay: { method: "card" },
+    card: { entry: "reader", simulationOutcome: "captured" },
+  });
+  await userEvent.click(charge);
   expect(previews).toEqual([]);
-  await click(el, "[data-quiet-pay-card]");
-  expect(previews).toEqual([
-    {
-      choice: { kind: "whole" },
-      pay: { method: "card" },
-      card: { entry: "reader", simulationOutcome: "captured" },
-    },
-  ]);
+  expect(payments).toEqual([{ quote: el.checkedQuote }]);
 });
 
 it.each(["en", "es"] as const)("temporary balance explanation in %s", async (locale) => {
@@ -3964,6 +3976,24 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
     pay: { method: "cash", tendered: "35.00" },
   };
 
+  it.each(["en", "es"] as const)(
+    "shows the checked Items amount without the explanation in %s",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mount({ quiet: true, cardReader: "simulator" });
+      await pick(el, "line", "1");
+      await showCardQuote(el, "35.00");
+      const checked = el.checkedQuote!;
+      el.checkedQuote = { ...checked, preview: { ...checked.preview!, total: "35.00" } };
+      await el.updateComplete;
+
+      expect(root(el).querySelector("[data-quiet-pay-amount]")?.textContent?.trim()).toBe(
+        money("35.00"),
+      );
+      expect(root(el).querySelector("[data-pay-own-bill]")).toBeNull();
+    },
+  );
+
   it("asks no receipt guests and no own receipt for items", async () => {
     // Today's part payment of what is left asks the guests, and of less than that its own receipt.
     for (const outstanding of ["35.00", "120.00"]) {
@@ -3977,9 +4007,7 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
       });
       expect(root(el).querySelector('[name="guests"]')).toBeNull();
       expect(root(el).querySelector("[data-pay-own-receipt]")).toBeNull();
-      expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(
-        t("bill_pay.items_own_bill"),
-      );
+      expect(root(el).querySelector("[data-pay-own-bill]")).toBeNull();
       const confirmed = capture(el, "bill-pay-confirm");
       await click(el, "[data-pay-confirm]");
       expect(confirmed).toEqual([{}]);
@@ -3988,21 +4016,17 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
   });
 
   it("on a printed bill says only that this cancels the receipt and reopens the bill", async () => {
-    for (const [status, sentence] of [
-      ["placed", "This cancels the existing receipt and reopens the bill."],
-      ["open", t("bill_pay.items_own_bill")],
-    ] as const) {
-      const el = await mount({
-        balance: balanceOf({ status, outstanding: "120.00" }),
-        asked: itemsAsked,
-        preview: ownBill("35.00"),
-      });
-      expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(sentence);
-      cleanupWidgets();
-    }
+    const el = await mount({
+      balance: balanceOf({ status: "placed", outstanding: "120.00" }),
+      asked: itemsAsked,
+      preview: ownBill("35.00"),
+    });
+    expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(
+      "This cancels the existing receipt and reopens the bill.",
+    );
   });
 
-  it("on a bill sent with no receipt says the items move to a bill of their own, not that a receipt is cancelled", async () => {
+  it("shows no receipt warning on a bill sent with no receipt", async () => {
     for (const locale of ["en", "es"] as const) {
       setLocale(locale);
       onTestFinished(() => setLocale("en"));
@@ -4012,9 +4036,7 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
         asked: itemsAsked,
         preview: ownBill("35.00"),
       });
-      expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(
-        t("bill_pay.items_own_bill"),
-      );
+      expect(root(el).querySelector("[data-pay-own-bill]")).toBeNull();
       cleanupWidgets();
     }
   });

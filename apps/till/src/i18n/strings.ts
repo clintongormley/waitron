@@ -2152,8 +2152,6 @@ export const en = {
     "{dishName} was cancelled but is still charged, so it can only be paid for with its set menu. Choose the set menu too, or leave {dishName} on this bill.",
   "bill_pay.items_set_menu_adjusted":
     "Because of a comp or discount, {dishNames} can only be paid for with the set menu. Choose the set menu too, or leave {dishNames} on this bill.",
-  "bill_pay.items_own_bill":
-    "These items move to a bill of their own, paid now. The rest stays on this bill.",
   "bill_pay.items_own_bill_printed": "This cancels the existing receipt and reopens the bill.",
   "bill_pay.reader": "Card reader",
   "bill_pay.card_declined": "The card was declined.",
@@ -4617,8 +4615,6 @@ export const es: Record<StringKey, string> = {
     "{dishName} se canceló pero se sigue cobrando, así que solo se puede pagar junto con su menú. Elige también el menú o deja {dishName} en esta cuenta.",
   "bill_pay.items_set_menu_adjusted":
     "Por un descuento, hay que pagar {dishNames} junto con el menú. Elige también el menú o deja {dishNames} en esta cuenta.",
-  "bill_pay.items_own_bill":
-    "Estos artículos pasan a una cuenta propia, que se paga ahora. El resto sigue en esta cuenta.",
   "bill_pay.items_own_bill_printed": "Esto anula el ticket y reabre la cuenta.",
   "bill_pay.reader": "Lector de tarjetas",
   "bill_pay.card_declined": "La tarjeta se ha rechazado.",

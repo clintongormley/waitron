@@ -1173,7 +1173,8 @@ export class TillBillPayDialog extends LitElement {
                 this.#changedDraft();
               },
             )}
-            ${this.#wayFields(errors)} ${receipt === null ? nothing : this.#ownBillNotice(receipt)}
+            ${this.#wayFields(errors)}
+            ${receipt === null ? nothing : this.#itemsReceiptWarning(receipt)}
             ${ownReceipt ? this.#ownReceiptChoice() : nothing}
             ${guests ? this.#guests(errors.get("guests")) : nothing} ${this.#deferred()}
             ${this.#payments()}
@@ -2271,16 +2272,10 @@ export class TillBillPayDialog extends LitElement {
     });
   }
 
-  #ownBillNotice(preview: AllocationPreview): TemplateResult | typeof nothing {
-    return paysOnNewBill(preview)
-      ? html`<p class="own-bill" data-pay-own-bill>
-          ${t(
-            this.balance?.status === "placed" && !this.sentWithoutReceipt
-              ? "bill_pay.items_own_bill_printed"
-              : "bill_pay.items_own_bill",
-          )}
-        </p>`
-      : nothing;
+  #itemsReceiptWarning(preview: AllocationPreview): TemplateResult | typeof nothing {
+    if (!paysOnNewBill(preview) || this.balance?.status !== "placed" || this.sentWithoutReceipt)
+      return nothing;
+    return html`<p class="own-bill" data-pay-own-bill>${t("bill_pay.items_own_bill_printed")}</p>`;
   }
 
   #confirmStep(asked: PayRequest, preview: AllocationPreview): SheetView {
@@ -2305,7 +2300,7 @@ export class TillBillPayDialog extends LitElement {
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
     const body = html`${outsideCardSummary(asked.card?.entry === "manual" ? asked.card : {})}
       <p class="scope" data-pay-scope>${this.#scope()}</p>
-      ${this.#ownBillNotice(preview)}
+      ${this.#itemsReceiptWarning(preview)}
       <dl class="allocation">
         <div class=${cash === null ? "headline" : ""} data-pay-applied>
           <dt>${t("bill_pay.applied")}</dt>

@@ -1071,9 +1071,8 @@ Para una factura completa, [prepara la cuenta antes de cobrar](table-service.md#
 queda. Elige **Dividir a partes iguales** para cobrar una parte igual, **Artículos** para platos
 concretos o **Una cantidad** para aportar un importe. Para una parte igual, indica cuántas
 personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
-si solo se pagan algunos. Los platos elegidos pasan a una cuenta propia, que se cobra en el acto y
-tiene su propio ticket; el resto se queda en esta cuenta. Si eliges todos los platos, se cobra
-toda la cuenta. Si la tarjeta se rechaza o pulsas **Cancelar cobro**, los platos vuelven a esta
+si solo se pagan algunos. Si eliges todos los platos, se cobra toda la cuenta. Si la tarjeta se
+rechaza o pulsas **Cancelar cobro**, los platos vuelven a esta
 cuenta. Si no pueden volver, por ejemplo porque esta cuenta se imprimió o se cobró mientras la
 tarjeta estaba en curso, se quedan en una cuenta propia, para cobrarlos allí: en una mesa aparece
 en el selector de cuentas y, en **Mostrador**, en **Pedidos aparcados**. Mientras su
