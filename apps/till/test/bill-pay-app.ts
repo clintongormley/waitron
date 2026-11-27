@@ -545,6 +545,27 @@ export async function guestsStillToPay(el: TillApp | TillBillPayDialog): Promise
   return paid === 0 ? null : rows - paid;
 }
 
+/** Where the Split equally screen starts on a table: the stepper's count and its question. The
+ * screen is opened from Split equally, as a waiter opens it, and closed with its Back. */
+export async function splitStart(
+  el: TillApp | TillBillPayDialog,
+): Promise<{ count: number; question: string }> {
+  if (splitScreen(el) === null) {
+    shareWay(el)!.click();
+    await settle(el);
+  }
+  const screen = splitScreen(el)!;
+  const shown = {
+    count: screen.shadowRoot!.querySelector<WtStepper>("wt-stepper")!.value,
+    question: screen.shadowRoot!.querySelector("[data-split-question]")!.textContent!.trim(),
+  };
+  screen
+    .shadowRoot!.querySelector("wt-top-bar")!
+    .dispatchEvent(new CustomEvent("wt-back", { bubbles: true, composed: true }));
+  await settle(el);
+  return shown;
+}
+
 export async function choosePayWay(
   el: TillApp,
   way: "whole" | "share" | "items" | "contribution",

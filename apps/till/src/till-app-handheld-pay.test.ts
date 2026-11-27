@@ -83,6 +83,7 @@ import {
   type,
   guestsStillToPay,
   splitAmong,
+  splitStart,
 } from "../test/bill-pay-app.js";
 import {
   openPartyMenu,
@@ -3338,6 +3339,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
         t(state === "declined" ? "bill_pay.card_declined" : "bill_pay.payment_failed"),
       );
       expect(await guestsStillToPay(el)).toBeNull();
+      expect(await splitStart(el)).toEqual({ count: 4, question: t("split_equally.question") });
       await tick(el, 3);
       expect(reads()).toBe(1);
     },
@@ -3549,6 +3551,13 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       expect(dialog(el)!.refusal).toBeNull();
       await press(el, "[data-pay-next]");
       expect(await guestsStillToPay(el)).toBeNull();
+      expect(await splitStart(el)).toEqual({
+        count: 2,
+        question: t("split_equally.question_left"),
+      });
+      expect(text(inDialog(el, "[data-pay-scope]"))).toBe(
+        t("bill_pay.scope_share_empty").replace("{amount}", money("40.00")),
+      );
 
       getBillBalance.mockResolvedValue(bothAt("declined", { ...second, state: "received" }));
       await tick(el);
@@ -3588,6 +3597,13 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       expect(text(inDialog(el, "[data-pay-next]"))).toBe(t("bill_pay.next"));
       await press(el, "[data-pay-next]");
       expect(await guestsStillToPay(el)).toBeNull();
+      expect(await splitStart(el)).toEqual({
+        count: 2,
+        question: t("split_equally.question_left"),
+      });
+      expect(text(inDialog(el, "[data-pay-scope]"))).toBe(
+        t("bill_pay.scope_share_empty").replace("{amount}", money("80.00")),
+      );
     });
   });
 
