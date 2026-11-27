@@ -1,8 +1,13 @@
+import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createProduct } from "@waitron/menu";
+import { startManagementSession } from "@waitron/identity";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listZoneOffers } from "@waitron/venue-service";
+import { mountMenuApi } from "./menu-api.js";
 import { createTable } from "./testing/live-table.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
@@ -84,11 +89,24 @@ it("accepts a saved set-menu dish and reports a placed group", async () => {
   expect(result.json).toMatchObject({ draft: null, groups: [{ lineIds: [expect.any(String)] }] });
 });
 
-it("lets a till mark a dish that only a set menu lists sold out", async () => {
+it("refuses to send a set-menu-only dish after the dashboard marks it sold out", async () => {
   const { path, body } = await draft(true);
-  const availability = `/api/service-zones/${venue.zoneId}/products/${daily.productId}/availability`;
-  const soldOut = await request("PUT", availability, { available: false });
-  expect(soldOut).toEqual({ status: 200, json: { available: false } });
+  const manager = await inTx(venue, async (tx) => {
+    const [person] = await seedPersons(tx, { displayName: "Menu Manager", role: "manager" });
+    return startManagementSession(tx, { personId: person!.id, method: "password" });
+  });
+  const dashboard = new Hono();
+  mountMenuApi(dashboard, { db: venue.db }, () => {});
+  const changeAvailability = (available: boolean) =>
+    dashboard.request("/management-api/products/availability", {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        cookie: `${MANAGEMENT_COOKIE}=${manager.token}`,
+      },
+      body: JSON.stringify({ productIds: [daily.productId], available }),
+    });
+  expect((await changeAvailability(false)).status).toBe(204);
   try {
     const result = await request("POST", path, body);
     expect(result.status).toBe(409);
@@ -97,7 +115,6 @@ it("lets a till mark a dish that only a set menu lists sold out", async () => {
       params: { productId: daily.productId },
     });
   } finally {
-    const restored = await request("PUT", availability, { available: true });
-    expect(restored.status).toBe(200);
+    expect((await changeAvailability(true)).status).toBe(204);
   }
 });

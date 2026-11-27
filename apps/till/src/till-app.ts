@@ -24143,22 +24143,6 @@ export class TillApp extends LitElement {
     return this.stage === "order" ? this.counterLines : null;
   }
 
-  #availabilityFor(zoneId: string) {
-    if (!this.operatorPersonId || !this.capabilities.includes("take-orders")) return undefined;
-    return async (productId: string, available: boolean) => {
-      await this.api.setAvailability(zoneId, productId, available);
-      await this.#menuPoll.readNow(zoneId);
-    };
-  }
-
-  #optionAvailabilityFor(zoneId: string) {
-    if (!this.operatorPersonId || !this.capabilities.includes("take-orders")) return undefined;
-    return async (listId: string, labelId: string, available: boolean) => {
-      await this.api.setOptionAvailability(zoneId, listId, labelId, available);
-      await this.#menuPoll.readNow(zoneId);
-    };
-  }
-
   #tabBody(tab: BuiltInScreen): TemplateResult | typeof nothing {
     if (tab === "counter") {
       const bill = this.#currentCounterSetMenuBill;
@@ -24171,8 +24155,6 @@ export class TillApp extends LitElement {
         .setMenuCourses=${copies.length === 0 ? {} : Object.fromEntries(this.courses.map(({ id, name }) => [id, name]))}
         .saveSetMenuCount=${this.#saveCounterSetMenuCount}
         .moveSetMenuDishes=${this.#moveCounterSetMenuDishes}
-        .changeAvailability=${this.#availabilityFor(this.counterServiceZoneId)}
-        .changeOptionAvailability=${this.#optionAvailabilityFor(this.counterServiceZoneId)}
         .api=${this.api}
         .store=${this.#store}
         .products=${this.products}
@@ -24275,8 +24257,6 @@ export class TillApp extends LitElement {
   #embeddedOrderBody(): TemplateResult {
     const draft = this.tableOpening ? null : this.#tableDraft();
     return html`<till-table-order-screen
-      .changeAvailability=${this.#availabilityFor(this.#tableZoneId ?? "")}
-      .changeOptionAvailability=${this.#optionAvailabilityFor(this.#tableZoneId ?? "")}
       .api=${this.api}
       .zoneId=${this.#tableZoneId ?? ""}
       .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}
@@ -24492,8 +24472,6 @@ export class TillApp extends LitElement {
       case "table-order": {
         const draft = this.tableOpening ? null : this.#tableDraft();
         return html`<till-table-order-screen
-          .changeAvailability=${this.#availabilityFor(this.#tableZoneId ?? "")}
-          .changeOptionAvailability=${this.#optionAvailabilityFor(this.#tableZoneId ?? "")}
           .api=${this.api}
           .zoneId=${this.#tableZoneId ?? ""}
           .orderingAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "")}

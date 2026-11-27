@@ -2429,20 +2429,6 @@ describe("TillApi", () => {
 
   it.each([
     [
-      "setAvailability",
-      (api: TillApi) => api.setAvailability("z 1", "p/1", false),
-      "/api/service-zones/z%201/products/p%2F1/availability",
-      "PUT",
-      { available: false },
-    ],
-    [
-      "setOptionAvailability",
-      (api: TillApi) => api.setOptionAvailability("z1", "l1", "lab 1", true),
-      "/api/service-zones/z1/options/l1/labels/lab%201/availability",
-      "PUT",
-      { available: true },
-    ],
-    [
       "getInvoiceDeliveryOptions",
       (api: TillApi) => api.getInvoiceDeliveryOptions("wo 1"),
       "/api/invoice-delivery-options?orderId=wo%201",

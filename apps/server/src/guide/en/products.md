@@ -605,12 +605,5 @@ In the dashboard, open **Products** and turn off **Available** on the dish or si
 **Unavailable**. On a phone, look just below the name. The change takes effect on every menu
 that sells it. Turn the switch on when it is ready again.
 
-When the station runs out, hold the dish on Counter or a table order to open its information.
-You can still send or fire portions already on a bill.
-Choose **Mark sold out** for the dish, one size, an extra or an option choice. You must be signed in on a device that takes
-orders. The change applies to every menu in this venue. A sold-out dish stays visible in grey.
-
-Choose **Back on sale** when it is ready again; nothing resets the switch the next day.
-Restoring the dish keeps any individually sold-out sizes off sale.
-For an option list, put another choice back on sale before marking its last available choice sold out,
-even if the list has been disabled on the dashboard but is still on your menu.
+For an extra, use **Available** on its own product row. To put an option choice on or off sale,
+edit the choice in [its option list](modifiers.md#kinds).

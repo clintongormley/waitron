@@ -1,6 +1,5 @@
 import { needsModifierPicker } from "../state/order-line.js";
 import { refreshProductDeclarations } from "../state/menu-refresh.js";
-import type { ChangeAvailability, ChangeOptionAvailability } from "./product-info.js";
 import { orderableMenus, EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
 import {
   LitElement,
@@ -475,8 +474,6 @@ export class TillMenuBrowser extends LitElement {
 
   /** The menu as a zone-offers body serves it: its structure and its Device Home Page. Nothing
    * renders until it is set. */
-  @property({ attribute: false }) changeAvailability?: ChangeAvailability;
-  @property({ attribute: false }) changeOptionAvailability?: ChangeOptionAvailability;
   @property({ attribute: false }) menu?: TillZoneMenu;
   @property({ type: Boolean }) hasMenuPicker = false;
   @property({ type: Boolean }) locked = false;
@@ -1434,8 +1431,6 @@ export class TillMenuBrowser extends LitElement {
         this.infoProduct
           ? html`<till-product-info
               .product=${this.infoProduct}
-              .changeAvailability=${this.changeAvailability}
-              .changeOptionAvailability=${this.changeOptionAvailability}
               @close-info=${(event: Event) => {
                 event.stopPropagation();
                 this.infoProduct = undefined;

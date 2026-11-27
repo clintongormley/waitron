@@ -1,23 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, state } from "lit/decorators.js";
+import { customElement, property } from "lit/decorators.js";
 import { baseStyles, ContentLanguageController } from "@waitron/ui";
 import type { TillProduct } from "../api/menu-api.js";
-import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { trackDialog } from "./track-dialog.js";
 import { dishFacts } from "./dish-facts.js";
 import { productName } from "./product-name.js";
 import { hasSomethingToSell } from "./product-pick.js";
-import { takesExtras } from "../state/order-line.js";
-
-export type ChangeAvailability = (productId: string, available: boolean) => Promise<void>;
-export type ChangeOptionAvailability = (
-  listId: string,
-  labelId: string,
-  available: boolean,
-) => Promise<void>;
-
 @customElement("till-product-info")
 export class TillProductInfo extends LitElement {
   constructor() {
@@ -54,48 +44,6 @@ export class TillProductInfo extends LitElement {
   ];
   @property({ attribute: false }) product!: TillProduct;
 
-  @property({ attribute: false }) changeAvailability?: ChangeAvailability;
-  @property({ attribute: false }) changeOptionAvailability?: ChangeOptionAvailability;
-  @state() private sending = false;
-  @state() private refusal = "";
-
-  async #change(productId: string, available: boolean, listId?: string): Promise<void> {
-    const change =
-      listId === undefined
-        ? this.changeAvailability && (() => this.changeAvailability!(productId, available))
-        : this.changeOptionAvailability &&
-          (() => this.changeOptionAvailability!(listId, productId, available));
-    if (this.sending || !change) return;
-    this.sending = true;
-    this.refusal = "";
-    try {
-      await change();
-      this.#emit("close-info");
-    } catch (error) {
-      const refusal = error as { code?: string; field?: string } | null;
-      this.refusal =
-        refusal?.code === "options.invalid" && refusal.field === "labels"
-          ? t("product_info.last_choice")
-          : codeMessage(refusal?.code ?? "server.internal");
-    } finally {
-      this.sending = false;
-    }
-  }
-
-  #availability(id: string, name: string, available: boolean, listId?: string) {
-    return html`<li>
-      <span>${name}</span
-      ><wt-button
-        data-availability=${id}
-        variant="secondary"
-        ?disabled=${this.sending}
-        .loading=${this.sending}
-        @click=${() => void this.#change(id, !available, listId)}
-        >${t(available ? "product_info.sold_out" : "product_info.restore")}</wt-button
-      >
-    </li>`;
-  }
-
   #emit(name: "close-info" | "add-product"): void {
     this.dispatchEvent(
       new CustomEvent(name, { detail: this.product, bubbles: true, composed: true }),
@@ -104,9 +52,6 @@ export class TillProductInfo extends LitElement {
 
   override render() {
     const product = this.product;
-    const extrasApply =
-      takesExtras(product) ||
-      product.variants?.some((variant) => variant.available && takesExtras(variant));
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}
@@ -117,31 +62,6 @@ export class TillProductInfo extends LitElement {
       }}
     >
       ${dishFacts(product)}
-      ${
-        this.changeAvailability && product.productId
-          ? html`
-              <p>${t("product_info.all_menus")}</p>
-              <ul>
-                ${this.#availability(product.productId, productName(product), product.available !== false)}
-                ${product.variants?.map((variant) => this.#availability(variant.id, variant.name, variant.available))}
-              </ul>
-              ${product.modifierAvailability?.map((modifier) =>
-                modifier.kind === "options" && this.changeOptionAvailability
-                  ? html`<h3>${modifier.name}</h3>
-                      <ul>
-                        ${modifier.labels.map((label) => this.#availability(label.id, label.name, label.available, modifier.id))}
-                      </ul>`
-                  : modifier.kind === "extras" && extrasApply
-                    ? html`<h3>${modifier.name}</h3>
-                        <ul>
-                          ${modifier.items.map((item) => this.#availability(item.productId, item.name, item.available))}
-                        </ul>`
-                    : nothing,
-              )}
-              ${this.refusal ? html`<p role="alert">${this.refusal}</p>` : nothing}
-            `
-          : nothing
-      }
       <wt-button
         slot="footer"
         variant="secondary"

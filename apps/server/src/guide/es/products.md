@@ -656,12 +656,5 @@ En el panel, abre **Productos** y desactiva **Disponible** en la fila del plato 
 muestra **No disponible**. En el móvil, busca el aviso justo debajo del nombre. El cambio afecta
 a todas las cartas que lo venden. Activa el interruptor cuando vuelva a estar listo.
 
-Cuando se agote un plato, mantén pulsado su botón en Mostrador o en el pedido de una mesa.
-Puedes enviar o marchar las raciones que ya estén en una cuenta.
-Elige **Marcar como agotado** para el plato, un tamaño, un extra o una opción. Debes haber iniciado sesión en un
-dispositivo que tome pedidos. El cambio afecta a todas las cartas del local. El plato sigue visible en gris.
-
-Elige **Volver a poner a la venta** cuando esté listo; el interruptor no se restablece al día siguiente.
-Al recuperar el plato, los tamaños marcados individualmente como agotados siguen sin estar a la venta.
-En una lista de opciones, vuelve a poner otra a la venta antes de marcar su última opción disponible como agotada.
-Esto también se aplica a una lista deshabilitada en el panel que siga en tu carta.
+Para un extra, usa **Disponible** en la fila de su producto. Para quitar una opción de la venta
+o volver a ofrecerla, edítala en [su lista de opciones](modifiers.md#kinds).
