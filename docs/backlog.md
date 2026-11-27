@@ -461,7 +461,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Add Print and named styles.
   Delivery 6 brings live addresses through Cloud, shareable dish links, the Menus list Online column,
   Copy link, QR code and Embed, and a warning before address changes or turning a live menu off.
-  The public server must refuse photo requests when Photos is set to None.
+  Serve an active regular menu only when Online is on and it has a live edition.
+  Refuse photo requests when Photos is set to None.
   The box-side **Translate all** for course names follows Cloud D645.
   Hosted copies can show stale prices, allergens and diet labels until Cloud removes them in
   piece 6. [Design](superpowers/specs/2026-11-24-customer-menu-design.md)

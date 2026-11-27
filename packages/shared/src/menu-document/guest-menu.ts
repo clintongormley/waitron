@@ -64,7 +64,7 @@ export interface CustomerMenuOnlineSettings {
 }
 
 export function isCustomerMenuAddress(address: string): boolean {
-  return /^[a-z0-9][a-z0-9-]{0,62}$/.test(address) && !address.endsWith("-") && !/\s/.test(address);
+  return /^[a-z0-9][a-z0-9-]{0,62}$/.test(address) && !address.endsWith("-");
 }
 
 export function publicGuestMenu(
