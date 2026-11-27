@@ -495,9 +495,7 @@ describe("move guests", () => {
     await act((tx) => moveGuests(tx, v.cfg, anna.partyId, terrace, moving));
 
     expect(await zoneOf(v, anna.tabId)).toBe(terraceZone);
-    expect(await linesOf(v, anna.tabId)).toMatchObject([
-      { name: "Burger", unitPriceGross: 1200, vatClass: "general" },
-    ]);
+    expect(await linesOf(v, anna.tabId)).toMatchObject([{ name: "Burger", unitPriceGross: 1200 }]);
     expect(await zoneOf(v, presented)).toBe(terraceZone);
     expect(await billRow(v, presented)).toMatchObject({ status: "placed", partyId: lewis.partyId });
   });

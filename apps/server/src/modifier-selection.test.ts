@@ -113,7 +113,6 @@ const drinks: ResolvedExtraList = {
   ],
 };
 
-// The wine is a 21% product (`general`) while the dish it is added to is a 10% one (`reduced`).
 const products = new Map<string, ExtraProductFacts>([
   [
     "product-wine",
@@ -122,8 +121,6 @@ const products = new Map<string, ExtraProductFacts>([
       name: "Wine staff",
       descriptions: { en: "Wine diner", es: "Vino cliente" },
       kitchenName: "Wine kitchen",
-      vatClass: "general",
-      takeawayVatClass: "general",
     },
   ],
   [
@@ -133,8 +130,6 @@ const products = new Map<string, ExtraProductFacts>([
       name: "Sourdough staff",
       descriptions: { en: "Sourdough diner" },
       kitchenName: "Sourdough kitchen",
-      vatClass: "reduced",
-      takeawayVatClass: "general",
     },
   ],
   [
@@ -144,8 +139,6 @@ const products = new Map<string, ExtraProductFacts>([
       name: "Rye staff",
       descriptions: { en: "Rye diner" },
       kitchenName: "Rye kitchen",
-      vatClass: "reduced",
-      takeawayVatClass: "general",
     },
   ],
 ]);
@@ -227,7 +220,6 @@ describe("buildLineExtras", () => {
     expect(result.extraChildren[0]).toMatchObject({
       quantity: 2,
       price: "4.50",
-      vatClass: "general",
       unitName: { en: "staff-kg" },
       unitContext: {
         id: "staff-unit",
@@ -281,7 +273,6 @@ describe("buildLineExtras", () => {
           hardwareUnit: "kg",
         },
         price: "0.01",
-        vatClass: "general",
       },
     ]);
   });
@@ -364,7 +355,7 @@ describe("buildLineExtras", () => {
     expect(optionSnapshots[0]!.labelCustomerName).toBeNull();
   });
 
-  it("turns a pick into a child carrying the product's own three names, VAT class and the resolved price", () => {
+  it("turns a pick into a child carrying the product's own three names and the resolved price", () => {
     const { extraChildren } = buildLineExtras(
       { extras: [drinks], options: [] },
       products,
@@ -380,9 +371,6 @@ describe("buildLineExtras", () => {
         price: "4.50",
         // The list the pick was taken from, so a stored child can be matched to its own list.
         listId: "list-drinks",
-        // The wine's own 21% class, not the 10% of the dish this is an extra on.
-        vatClass: "general",
-        takeawayVatClass: "general",
         // The picks per dish as sent — this function never multiplies by the dish count.
         quantity: 2,
         physicalQuantity: "2",

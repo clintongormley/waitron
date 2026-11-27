@@ -9,7 +9,7 @@ import {
   resolveSnapshotText,
 } from "@waitron/shared";
 import { prepareUnitSnapshot } from "@waitron/menu/src/unit-presentation.js";
-import type { OptionList, ResolvedExtraList, VatClass } from "@waitron/menu";
+import type { OptionList, ResolvedExtraList } from "@waitron/menu";
 import type { OptionSnapshot } from "@waitron/shared";
 
 /** A product offered as an extra, as the published offer serves it. */
@@ -20,8 +20,6 @@ export interface ExtraProductFacts {
   /** locale -> customer-facing text. */
   descriptions: Record<string, string>;
   kitchenName: string | null;
-  vatClass: VatClass;
-  takeawayVatClass: VatClass;
 }
 
 /**
@@ -37,10 +35,6 @@ export interface ExtraChild {
   price: string;
   /** The list the pick was taken from, stored on the child line as `extra_list_id`. */
   listId: string;
-  /** The extra PRODUCT's own labels, never the dish's. Taken away, its line files at the product's
-   * takeaway rate (`product_takeaway_vat_rates`), not `takeawayVatClass`. */
-  vatClass: VatClass;
-  takeawayVatClass: VatClass;
   /**
    * The picks for ONE dish, NOT multiplied by the dish count: `grossBasketWithOptions`
    * (`packages/menu/src/pricing.ts`) does that multiplication.
@@ -157,8 +151,6 @@ export function buildLineExtras(
           kitchenName: product.kitchenName,
           price: item.price,
           listId: list.id,
-          vatClass: product.vatClass,
-          takeawayVatClass: product.takeawayVatClass,
           quantity: pick.quantity,
           physicalQuantity: multiplyDecimal(decimal(item.portion), decimal(String(pick.quantity))),
           priceQuantity: item.portion,
@@ -486,8 +478,6 @@ export function editLineExtras<
         kitchenName: product.kitchenName,
         price: item.price,
         listId: list.id,
-        vatClass: product.vatClass,
-        takeawayVatClass: product.takeawayVatClass,
         quantity: pick.quantity,
         physicalQuantity: multiplyDecimal(decimal(item.portion), decimal(String(pick.quantity))),
         priceQuantity: item.portion,

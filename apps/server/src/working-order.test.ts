@@ -648,7 +648,6 @@ describe("getHeldOrder", () => {
             hardwareUnit: EACH_UNIT.hardwareUnit,
           },
           unitPrice: "3.25",
-          vatClass: "general",
           category: "ES drinks",
           allergens: { sulphites: {} },
           menuName: "Premium menu",
@@ -2462,7 +2461,6 @@ describe("a variant is sold as the product it is", () => {
         variantDescriptions: workingOrderLines.variantDescriptions,
         variantKitchenName: workingOrderLines.variantKitchenName,
         unitPriceGross: workingOrderLines.unitPriceGross,
-        vatClass: workingOrderLines.vatClass,
         courseId: workingOrderLines.courseId,
         category: workingOrderLines.category,
       })
@@ -2484,7 +2482,6 @@ describe("a variant is sold as the product it is", () => {
         variantDescriptions: { [LOCALE]: "125 ml" },
         variantKitchenName: null,
         unitPriceGross: 450,
-        vatClass: "reduced",
         courseId: wine.firstCourseId,
         category: "Wines",
       },
@@ -2495,7 +2492,6 @@ describe("a variant is sold as the product it is", () => {
         variantDescriptions: { [LOCALE]: "Large glass" },
         variantKitchenName: "V175",
         unitPriceGross: 550,
-        vatClass: "general",
         courseId: wine.secondCourseId,
         category: "Wines",
       },
@@ -3057,7 +3053,6 @@ describe("a variant is sold as the product it is", () => {
         productId: workingOrderLines.productId,
         variantName: workingOrderLines.variantName,
         unitPriceGross: workingOrderLines.unitPriceGross,
-        vatClass: workingOrderLines.vatClass,
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
@@ -3066,7 +3061,6 @@ describe("a variant is sold as the product it is", () => {
         productId: wine.wine175,
         variantName: "175 ml",
         unitPriceGross: 550,
-        vatClass: "general",
       },
     ]);
   });

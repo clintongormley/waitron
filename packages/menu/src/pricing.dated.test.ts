@@ -31,7 +31,10 @@ vi.mock("@waitron/shared/src/menu-document/vat-rates.js", async (importOriginal)
 const BEFORE = "2026-12-31";
 const FROM = "2027-01-01";
 
-const each = (unitPrice: string, vatClass: PriceableProduct["vatClass"]): PriceableProduct => ({
+const each = (
+  unitPrice: string,
+  vatClass: NonNullable<PriceableProduct["vatClass"]>,
+): PriceableProduct => ({
   name: "item",
   descriptions: { en: "item" },
   unit: {

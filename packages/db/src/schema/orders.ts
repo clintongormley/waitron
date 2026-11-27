@@ -271,8 +271,12 @@ export const workingOrderLines = table(
     // DRIFTS for a weighed line (9.99/kg × 0.333 → 3.33 stored, 3.33 ÷ 0.333 = 10.00 ≠ 9.99).
     unitPriceGross: money("unit_price_gross").notNull(),
     // No rate reads either label.
-    vatClass: label("vat_class").notNull(),
-    takeawayVatClass: label("takeaway_vat_class").notNull(),
+    vatClass: label("vat_class")
+      .notNull()
+      .$defaultFn(() => "reduced"),
+    takeawayVatClass: label("takeaway_vat_class")
+      .notNull()
+      .$defaultFn(() => "reduced"),
     // GROSS (VAT-inclusive) line total — the customer-facing number, so the held-orders list
     // `sum(line_total)` equals the basket total the operator saw. This DELIBERATELY DIVERGES from
     // the FILED `sale_lines.line_total`, which is the NET base.

@@ -575,10 +575,10 @@ describe("a request that does not say how the order is sold", () => {
   });
 });
 
-describe("the classes a line keeps", () => {
+describe("a takeaway order's lines", () => {
   beforeEach(() => departmentsSell("till_choice"));
 
-  it("stores its served class as the takeaway class on every line of a takeaway order, an extra too", async () => {
+  it("stores a line for each product it sells, an extra too", async () => {
     const parked = await park({
       dining: "takeaway",
       lines: [
@@ -598,18 +598,16 @@ describe("the classes a line keeps", () => {
       tx
         .select({
           productId: workingOrderLines.productId,
-          vatClass: workingOrderLines.vatClass,
-          takeawayVatClass: workingOrderLines.takeawayVatClass,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, parked.json.id as string))
         .orderBy(workingOrderLines.lineNo),
     );
     expect(rows).toEqual([
-      { productId: menu.cola, vatClass: "reduced", takeawayVatClass: "reduced" },
-      { productId: menu.cheese, vatClass: "super_reduced", takeawayVatClass: "super_reduced" },
-      { productId: menu.burger, vatClass: "general", takeawayVatClass: "general" },
-      { productId: menu.lemonSoda, vatClass: "reduced", takeawayVatClass: "reduced" },
+      { productId: menu.cola },
+      { productId: menu.cheese },
+      { productId: menu.burger },
+      { productId: menu.lemonSoda },
     ]);
   });
 });
