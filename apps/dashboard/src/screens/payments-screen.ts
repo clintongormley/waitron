@@ -241,9 +241,13 @@ export class PaymentsScreen extends LitElement {
       .panel-slot {
         margin-top: var(--wt-space-3);
       }
-      dashboard-payments-settings,
-      dashboard-other-card-machines {
+      dashboard-payments-settings {
         margin-top: var(--wt-space-5);
+      }
+      /* The settings above end in wt-form-actions, whose own --wt-space-2 bottom padding is part
+         of this gap. */
+      dashboard-other-card-machines {
+        margin-top: calc(var(--wt-space-5) - var(--wt-space-2));
       }
       .reader-tools,
       .discovery-row {

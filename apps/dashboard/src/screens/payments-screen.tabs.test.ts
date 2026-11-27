@@ -321,7 +321,7 @@ it("drops the SumUp note when a later provider read fails", async () => {
   await vi.waitFor(() => expect(note()).not.toContain("SumUp is not connected"));
 });
 
-it("leaves a section's gap above the settings and above other card machines", async () => {
+it("leaves the same section's gap between each heading and what is drawn above it", async () => {
   const { el } = await mountWidget<PaymentsScreen>("dashboard-payments-screen", {
     api: api([reader], {
       getOtherCardMachines: vi.fn().mockResolvedValue({ otherCardMachines: [], revision: 0 }),
@@ -329,17 +329,23 @@ it("leaves a section's gap above the settings and above other card machines", as
     panels: [],
   });
   const root = el.shadowRoot!;
-  await vi.waitFor(() =>
-    expect(root.querySelector("dashboard-other-card-machines")).not.toBeNull(),
-  );
-  const box = (selector: string) => root.querySelector(selector)!.getBoundingClientRect();
-  const readers = box("[data-test=readers-section]");
-  const settings = box("dashboard-payments-settings");
-  const machines = box("dashboard-other-card-machines");
+  const inside = (host: string, selector: string) =>
+    root.querySelector(host)?.shadowRoot?.querySelector(selector) ?? null;
+  await vi.waitFor(() => {
+    expect(inside("dashboard-payments-settings", "wt-form-actions wt-button")).not.toBeNull();
+    expect(inside("dashboard-other-card-machines", "h2")).not.toBeNull();
+  });
+  const readers = root.querySelector("[data-test=readers-section]")!.getBoundingClientRect();
+  const settingsHeading = inside("dashboard-payments-settings", "h2")!.getBoundingClientRect();
+  const tipsSave = inside(
+    "dashboard-payments-settings",
+    "wt-form-actions wt-button",
+  )!.getBoundingClientRect();
+  const machinesHeading = inside("dashboard-other-card-machines", "h2")!.getBoundingClientRect();
   const sectionGap = Number.parseFloat(
     getComputedStyle(el).getPropertyValue("--wt-space-5").trim() || "NaN",
   );
   expect(sectionGap).toBeGreaterThan(0);
-  expect(settings.top - readers.bottom).toBe(sectionGap);
-  expect(machines.top - settings.bottom).toBe(sectionGap);
+  expect(settingsHeading.top - readers.bottom).toBe(sectionGap);
+  expect(machinesHeading.top - tipsSave.bottom).toBe(sectionGap);
 });
