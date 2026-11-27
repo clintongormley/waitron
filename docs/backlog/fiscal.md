@@ -1279,6 +1279,8 @@ refuse a receipt whose current version AEAT refused and that nothing replaced
 (`fiscal.original_refused`, by the filing queue's own test through the seat's `refuseCreditOf`):
 the corrective would be filed against a receipt AEAT refused, after which Fiscal filing's replacement is
 refused (`sale.replacement_not_first`) (watcher, lane L `questions.md`, 16:37)._
+(2026-11-27, A1614 D5: they also refuse while a version on another chain is unanswered or held,
+`fiscal.original_unanswered`.)
 
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
 

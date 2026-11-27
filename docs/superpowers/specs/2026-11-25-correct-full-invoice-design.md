@@ -156,7 +156,8 @@ Pictures: 80 mm and A4, Spanish and English, in `~/waitron-campaign-shared/desk/
    today's refusal: cancelling a placed order or splitting a printed bill (which credit an invoice
    holding no money, `cancel-credit.ts`), and the dashboard's fix for records AEAT refused, which
    keeps its R4 replacement. Every other refusal stays (another box's invoice, records that need
-   checking, the waits).
+   checking, the waits). (2026-11-27, A1614: another box's invoice is no longer refused; it is
+   corrected once AEAT has answered it.)
 2. **Give money back** sends a full invoice down the same route as a ticket; it no longer falls back
    to a plain refund for it (the "refused for good" lists in `invoice-corrections.ts` lose that case).
    The accountant's sheet keeps listing refunds that still have no corrective for other reasons. _2026-11-25,
