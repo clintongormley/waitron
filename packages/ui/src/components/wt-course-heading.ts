@@ -161,8 +161,8 @@ export class WtCourseHeading extends LitElement {
     this.#lay();
   }
 
-  /** Beside the mark and the action the title may take two lines; one that needs a third moves
-   * them under it. */
+  /** Beside the mark and the action the title may take two lines; one that needs a third, or whose
+   * unbreakable words are wider than the room left, moves them under it. */
   #lay(): void {
     const title = this.renderRoot.querySelector<HTMLElement>(".title");
     if (!title) return;
@@ -171,7 +171,8 @@ export class WtCourseHeading extends LitElement {
       return;
     }
     this.removeAttribute("stacked");
-    this.toggleAttribute("stacked", lineCount(title) > 2);
+    const { lines, overflows } = measure(title);
+    this.toggleAttribute("stacked", lines > 2 || overflows);
   }
 
   override render() {
@@ -206,10 +207,13 @@ export class WtCourseHeading extends LitElement {
   }
 }
 
-/** How many lines the slotted text under `title` takes, by the tops of its text boxes. */
-function lineCount(title: HTMLElement): number {
+/** How many lines the slotted text under `title` takes, by the tops of its text boxes, and whether
+ * any of it is drawn past the title's box, as words that cannot break are. */
+function measure(title: HTMLElement): { lines: number; overflows: boolean } {
   const slot = title.querySelector("slot")!;
+  const room = title.getBoundingClientRect();
   const tops: number[] = [];
+  let overflows = false;
   const words = document.createRange();
   for (const node of slot.assignedNodes({ flatten: true })) {
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
@@ -219,11 +223,14 @@ function lineCount(title: HTMLElement): number {
       text = walker.nextNode()
     ) {
       words.selectNodeContents(text);
-      for (const box of words.getClientRects())
-        if (box.width > 0 && !tops.some((top) => Math.abs(top - box.top) < 2)) tops.push(box.top);
+      for (const box of words.getClientRects()) {
+        if (box.width === 0) continue;
+        if (box.right > room.right + 0.5) overflows = true;
+        if (!tops.some((top) => Math.abs(top - box.top) < 2)) tops.push(box.top);
+      }
     }
   }
-  return tops.length;
+  return { lines: tops.length, overflows };
 }
 
 declare global {

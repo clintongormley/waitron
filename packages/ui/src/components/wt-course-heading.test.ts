@@ -270,6 +270,40 @@ describe("laying out a title, the mark and an action", () => {
     },
   );
 
+  /** Where the title's letters are drawn, which is wider than its box when they overflow it. */
+  function inked(el: Element): DOMRect {
+    const words = document.createRange();
+    words.selectNodeContents(el.firstChild!);
+    const boxes = [...words.getClientRects()].filter((box) => box.width > 0);
+    const left = Math.min(...boxes.map((box) => box.left));
+    const top = Math.min(...boxes.map((box) => box.top));
+    const right = Math.max(...boxes.map((box) => box.right));
+    const bottom = Math.max(...boxes.map((box) => box.bottom));
+    return new DOMRect(left, top, right - left, bottom - top);
+  }
+
+  describe.each([
+    "Drinks\u00a0· Fired\u00a05\u00a0min\u00a0ago",
+    "Drinks\u00a0· Marchado\u00a0hace\u00a06\u00a0min",
+  ])("with a time phrase that cannot break, %j", (words) => {
+    it.each(Array.from({ length: 26 }, (_, step) => 250 + step * 10))(
+      "draws the title's letters clear of the mark and the action, inside the heading, at %ipx",
+      async (width) => {
+        const el = await laidOut(width, words);
+        const { title: box, mark: pill, button, left, right } = parts(el);
+        const ink = inked(el);
+        expect(apart(ink, pill)).toBe(true);
+        expect(apart(ink, button)).toBe(true);
+        expect(apart(pill, button)).toBe(true);
+        expect(sameLine(pill, button)).toBe(true);
+        expect(ink.left).toBeGreaterThanOrEqual(left - 0.5);
+        expect(ink.right).toBeLessThanOrEqual(Math.min(box.right, right) + 0.5);
+        expect(button.right).toBeCloseTo(right, 0);
+        expect(lines(el).length).toBeLessThanOrEqual(2);
+      },
+    );
+  });
+
   it("balances the title's lines", async () => {
     const el = await mount("<wt-course-heading>Mains</wt-course-heading>");
     expect(getComputedStyle(titleBox(el)).textWrapStyle).toBe("balance");
