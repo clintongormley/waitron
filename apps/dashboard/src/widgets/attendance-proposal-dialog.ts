@@ -14,12 +14,8 @@ import { localTimeOccurrences, offsetMinutes } from "@waitron/venue-service/hour
 import type { AttendanceChange, AttendanceDayView } from "@waitron/dashboard-modules";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { formatDuration } from "@waitron/shared";
-import { hoursTime } from "../hours-format.js";
-import {
-  attendanceDayEditorStyles,
-  previewDayMinutes,
-  renderAttendanceDayEditor,
-} from "../screens/attendance-day-editor.js";
+import { hoursDate, hoursTime } from "../hours-format.js";
+import { previewDayMinutes } from "../screens/attendance-day-editor.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -67,8 +63,20 @@ export class AttendanceProposalDialog extends LitElement {
   static override styles = [
     baseStyles,
     pageTitleStyles,
-    attendanceDayEditorStyles,
     css`
+      .day-editor {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--wt-space-4);
+        justify-items: start;
+      }
+      .day-editor h1,
+      .day-editor p {
+        margin: 0;
+      }
+      .day-editor fieldset p {
+        color: var(--wt-color-text-muted);
+      }
       .fields,
       .time-fields {
         display: grid;
@@ -451,12 +459,22 @@ export class AttendanceProposalDialog extends LitElement {
     </div>`;
     if (this.workerName)
       return this.open && this.view
-        ? renderAttendanceDayEditor(this.workerName, this.view.date, fields, (event) => {
-            if (event.key !== "Escape" || event.defaultPrevented) return;
-            event.preventDefault();
-            event.stopPropagation();
-            void this.#closePage("escape");
-          })
+        ? html`<section
+            class="day-editor"
+            aria-labelledby="day-editor-heading"
+            @keydown=${(event: KeyboardEvent) => {
+              if (event.key !== "Escape" || event.defaultPrevented) return;
+              event.preventDefault();
+              event.stopPropagation();
+              void this.#closePage("escape");
+            }}
+          >
+            <h1 id="day-editor-heading" tabindex="-1">
+              ${fill("attendance.edit_day_heading", { name: this.workerName })}
+            </h1>
+            <p>${hoursDate(this.view.date)} ${this.view.date.slice(0, 4)}</p>
+            ${fields}
+          </section>`
         : nothing;
     return html`<wt-dialog
       .open=${this.open}

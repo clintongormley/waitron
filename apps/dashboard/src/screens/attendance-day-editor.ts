@@ -11,22 +11,6 @@ import { hoursDate } from "../hours-format.js";
 import { fill } from "../i18n/t.js";
 import { wallClock } from "../date-utils.js";
 
-export const attendanceDayEditorStyles = css`
-  .day-editor {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--wt-space-4);
-    justify-items: start;
-  }
-  .day-editor h1,
-  .day-editor p {
-    margin: 0;
-  }
-  .day-editor fieldset p {
-    color: var(--wt-color-text-muted);
-  }
-`;
-
 export const attendanceDisputeStyles = css`
   .dispute-comparison {
     display: flex;
@@ -59,19 +43,6 @@ export function renderDisputeComparison(item: CorrectionItem, date: string) {
     ${item.workerVersion?.changes.length ? html`<p>${fill("attendance.worker_version_times", { times: list(item.workerVersion.changes) })}</p>` : ""}
     ${reply?.correctionReason ? html`<blockquote>${reply.correctionReason}</blockquote>` : ""}
   </div>`;
-}
-
-export function renderAttendanceDayEditor(
-  name: string,
-  date: string,
-  fields: unknown,
-  keydown: (event: KeyboardEvent) => void,
-) {
-  return html`<section class="day-editor" aria-labelledby="day-editor-heading" @keydown=${keydown}>
-    <h1 id="day-editor-heading" tabindex="-1">${fill("attendance.edit_day_heading", { name })}</h1>
-    <p>${hoursDate(date)} ${date.slice(0, 4)}</p>
-    ${fields}
-  </section>`;
 }
 
 export function dayEditorRows(view: AttendanceDayView, requested: AttendanceChange[]) {
