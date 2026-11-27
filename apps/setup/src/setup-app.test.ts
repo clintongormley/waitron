@@ -2157,7 +2157,7 @@ describe("setup-app", () => {
     // live → cert (PFX filled) → … → back to mode → switch to Demo: the draft still holds the cert.
     patch(el, {
       mode: "live",
-      aeatCert: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
+      aeatCert: { pfxBase64: "AAAA", passphrase: "x" },
     });
     patch(el, { mode: "demo" });
     expect(readDraft(el).aeatCert?.pfxBase64).toBe("AAAA");
@@ -3088,13 +3088,13 @@ describe("assembleBody", () => {
   it("drops a stale certificate from a Prepare draft", () => {
     const body = assembleBody({
       mode: "prepare",
-      aeatCert: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
+      aeatCert: { pfxBase64: "AAAA", passphrase: "x" },
     });
     expect("aeatCert" in body).toBe(false);
   });
 
   it("keeps a present certificate for a live draft", () => {
-    const aeatCert = { pfxBase64: "AAAA", passphrase: "p", certKind: "sello" as const };
+    const aeatCert = { pfxBase64: "AAAA", passphrase: "p" };
     const body = assembleBody({ mode: "live", venue: { taxId: "B1" }, aeatCert });
     expect(body.aeatCert).toEqual(aeatCert);
   });
@@ -3102,7 +3102,7 @@ describe("assembleBody", () => {
   it("drops a stale certificate when the mode is demo, even with a present PFX", () => {
     const body = assembleBody({
       mode: "demo",
-      aeatCert: { pfxBase64: "AAAA", passphrase: "x", certKind: "sello" },
+      aeatCert: { pfxBase64: "AAAA", passphrase: "x" },
     });
     expect("aeatCert" in body).toBe(false);
   });
@@ -3110,7 +3110,7 @@ describe("assembleBody", () => {
   it("drops an aeatCert whose pfxBase64 is empty", () => {
     const body = assembleBody({
       mode: "live",
-      aeatCert: { pfxBase64: "", passphrase: "", certKind: "sello" },
+      aeatCert: { pfxBase64: "", passphrase: "" },
     });
     expect("aeatCert" in body).toBe(false);
   });
@@ -4187,7 +4187,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
   });
 
   describe("a fiscal test result and a later change to what it ran on", () => {
-    const cert = { pfxBase64: "AAAA", passphrase: "pw", certKind: "sello" } as const;
+    const cert = { pfxBase64: "AAAA", passphrase: "pw" } as const;
     const venue = {
       country: "ES",
       fiscalTerritory: "ES-common",
@@ -4214,7 +4214,6 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     it.each([
       ["a different certificate file", { aeatCert: { pfxBase64: "b3RoZXI=" } }],
       ["a different passphrase", { aeatCert: { passphrase: "other" } }],
-      ["a different certificate kind", { aeatCert: { certKind: "representante" } }],
       ["a tax number change", { venue: { taxId: "B12345674" } }],
       ["a legal name change", { venue: { legalName: "Bar Dos SL" } }],
       ["a fiscal territory change", { venue: { fiscalTerritory: "ES-navarra" } }],

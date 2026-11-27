@@ -351,7 +351,6 @@ it("the built production command checks readiness and seals settings without sen
   const certificate = {
     pfxBase64: certificateMaterial.pfx.toString("base64"),
     passphrase: "SYNTHETIC-certificate",
-    certKind: "sello",
   };
   const settingsPath = join(root, "settings.json");
   await writeFile(
@@ -397,7 +396,7 @@ it("the built production command checks readiness and seals settings without sen
         },
       },
       contribution: selected.contribution!,
-      secret: certificate,
+      secret: { ...certificate, certKind: "representante" },
       moduleVersions: versions,
       applicationVersion: "synthetic-production-build",
     }),
@@ -513,7 +512,7 @@ it("the built production command checks readiness and seals settings without sen
       await withTransaction(stored.venue, (tx) =>
         tryGetCredential(tx, ring, { purpose: "fiscal.aeat" }),
       ),
-    ).toEqual(certificate);
+    ).toEqual({ ...certificate, certKind: "representante" });
   } finally {
     await stored.close();
   }
@@ -533,7 +532,6 @@ it("the built production command runs a confirmed isolated test and refuses acti
   const certificate = {
     pfxBase64: certificateMaterial.pfx.toString("base64"),
     passphrase: "SYNTHETIC-certificate",
-    certKind: "sello",
   };
   const settingsPath = join(root, "settings.json");
   await writeFile(
@@ -573,7 +571,7 @@ it("the built production command runs a confirmed isolated test and refuses acti
       },
     },
     contribution: selected.contribution!,
-    secret: certificate,
+    secret: { ...certificate, certKind: "representante" },
     moduleVersions: versions,
     applicationVersion: "synthetic-production-build",
   });
@@ -715,7 +713,7 @@ it("the built production command runs a confirmed isolated test and refuses acti
       await withTransaction(sample.venue, (tx) =>
         tryGetCredential(tx, ring, { purpose: "fiscal.aeat" }),
       ),
-    ).toEqual(certificate);
+    ).toEqual({ ...certificate, certKind: "representante" });
   } finally {
     await sample.close();
   }

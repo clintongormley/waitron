@@ -39,7 +39,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(fixtures.splice(0).map((f) => f.dispose()));
 });
-async function fixture(certificate?: { pfxBase64: string; passphrase: string; certKind: string }) {
+async function fixture(certificate?: { pfxBase64: string; passphrase: string }) {
   const modules = ALL_MODULES.filter((module) =>
     ["core", "fiscal-verifactu", "fiscal-none"].includes(module.name),
   ).map((m) =>
@@ -49,7 +49,11 @@ async function fixture(certificate?: { pfxBase64: string; passphrase: string; ce
           ...m,
           fiscal: {
             ...m.fiscal!,
-            provisioningSecret: { required: () => false, validate: () => {}, seal: async () => {} },
+            provisioningSecret: {
+              required: () => false,
+              validate: (raw: unknown) => raw,
+              seal: async () => {},
+            },
           },
         },
   );
@@ -135,11 +139,13 @@ it("installs the staged master key and no box key after exact fiscal commit and 
 it("browser setup records a readable certificate against its committed node", async () => {
   const { makeAuthority } = await import("@waitron/fiscal-verifactu/test/certificate-fixtures.js");
   const { verifactuCertificates } = await import("@waitron/fiscal-verifactu/src/schema/index.js");
-  const candidate = makeAuthority().issue({ organizationIdentifier: "VATES-50000000R" });
+  const candidate = makeAuthority().issue({
+    organizationIdentifier: "VATES-50000000R",
+    policies: ["0.4.0.194112.1.1"],
+  });
   const f = await fixture({
     pfxBase64: candidate.pfx.toString("base64"),
     passphrase: candidate.passphrase,
-    certKind: "sello",
   });
   const result = await f.activate();
   const rows = await suite.db.select().from(verifactuCertificates);
@@ -161,7 +167,6 @@ it("browser setup refuses another taxpayer's certificate before making anything"
   const f = await fixture({
     pfxBase64: other.pfx.toString("base64"),
     passphrase: other.passphrase,
-    certKind: "sello",
   });
   const before = await f.store.read();
   await expect(f.activate()).rejects.toMatchObject({

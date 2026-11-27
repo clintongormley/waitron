@@ -18,12 +18,15 @@ import { seedTaxpayerNodeSif, TAXPAYER_A } from "./fixtures.js";
 export const NOW = new Date("2026-10-18T11:00:00.000Z");
 export const INSTALLED_AT = "2026-10-18T10:00:00.000Z";
 export const authority = makeAuthority();
-export const installed = authority.issue({ commonName: "installed private subject" });
+/** A seal's file (its policies name QCP-l); `candidate` is a representative's. */
+export const installed = authority.issue({
+  commonName: "installed private subject",
+  policies: ["0.4.0.194112.1.1"],
+});
 export const candidate = authority.issue({ commonName: "candidate private subject" });
-export const material = (file = installed, certKind: "sello" | "representante" = "sello") => ({
+export const material = (file = installed) => ({
   pfxBase64: file.pfx.toString("base64"),
   passphrase: file.passphrase,
-  certKind,
 });
 
 export function revision(db: Database) {
@@ -39,7 +42,7 @@ export async function parentFixture(db: Database, seal = true) {
   if (seal) {
     await sealAeatSecret(
       { db, ring, nodeId: TAXPAYER_A.nodeId, now: () => new Date(INSTALLED_AT) },
-      material(),
+      { ...material(), certKind: "sello" },
     );
   }
   const session = await withTransaction(db, async (tx) => {

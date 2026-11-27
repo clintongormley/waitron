@@ -123,7 +123,7 @@ async function capture(populate = true) {
       {
         pfxBase64: candidate.pfx.toString("base64"),
         passphrase: candidate.passphrase,
-        certKind: "sello",
+        certKind: "representante",
       },
     );
   }

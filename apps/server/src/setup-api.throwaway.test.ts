@@ -84,7 +84,6 @@ const certificate = makeCertificateAuthority().issue({
 const CERT = {
   pfxBase64: certificate.pfx.toString("base64"),
   passphrase: "cert-secret",
-  certKind: "sello",
 } as const;
 
 const INITIAL_OPERATIONS = {

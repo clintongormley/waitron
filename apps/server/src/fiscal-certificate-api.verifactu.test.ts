@@ -30,7 +30,7 @@ import { freePorts } from "./testing/free-ports.js";
 
 const path = "/management-api/fiscal-certificate";
 const authority = makeAuthority();
-const installed = authority.issue();
+const installed = authority.issue({ policies: ["0.4.0.194112.1.1"] });
 const keyEnv = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -132,7 +132,7 @@ describe("the certificate routes with the real Veri*Factu seat", () => {
     const response = await v.app.request(path, {
       method: "POST",
       headers: { cookie: v.cookie, "Content-Type": "application/json" },
-      body: JSON.stringify({ pfxBase64, passphrase, certKind: "sello", expectedRevision: before }),
+      body: JSON.stringify({ pfxBase64, passphrase, expectedRevision: before }),
     });
     const responseText = await response.clone().text();
     expect(response.status).toBe(200);

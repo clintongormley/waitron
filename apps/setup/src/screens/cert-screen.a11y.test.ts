@@ -17,7 +17,7 @@ async function bottomOf(el: SetupCertScreen): Promise<string> {
 }
 
 describe.each(["light", "dark"] as const)("setup-cert-screen a11y (%s theme)", (theme) => {
-  it("has no violations on the empty form (file, passphrase and kind all labelled)", async () => {
+  it("has no violations on the empty form (file and passphrase labelled)", async () => {
     const { host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {}, theme);
     await expectNoA11yViolations(host);
   });

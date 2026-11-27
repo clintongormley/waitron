@@ -39,7 +39,7 @@ referrals, not completed recovery experiments.
 | --- | --- |
 | [Sign-in](#sign-in), #2054 | Referral reworked: retry remains available and explicit/autofill refusal views explain password entry and emailed reset. Authenticated account-access recovery when no offered method works remains open below. |
 | [Public connection](#tls-repair), #2055 | Referral reworked in #2064: read-only Check again and Stop, applicable HTTPS/device choices, pending actions and no-JavaScript guidance are covered in its dated addendum. Authenticated certificate replacement and linked-layout repair remain open. |
-| [Certificate](#certificate), #2056 | Referral reworked: file/type changes, another check with Save and Cancel are explained. Persistent connection/configuration diagnosis and its repair choice remain open below. |
+| [Certificate](#certificate), #2056 | Referral reworked: file changes, another check with Save and Cancel are explained. Persistent connection/configuration diagnosis and its repair choice remain open below. |
 | [Backup key](#backup-key), #2058 | Referral reworked: retain both key records and stop changing keys; the page states its diagnostic limit. Authenticated inspection and correction of effective configuration remain open below. |
 | [Setup state](#setup-state) | Offer a next step and any required authentication. A1042's S7l change is in; since 2026-11-16 the `attempt_invalid` words name reload, Reconnect, a new tab, Start again and Recover from backup instead of support; the repair page can still refuse Start again (A1159, A1161). |
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |

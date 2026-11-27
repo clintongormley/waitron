@@ -432,8 +432,9 @@ not send records to AEAT: a Demo or Prepare box, a preproduction box without
 `WAITRON_FISCAL_TEST_SUBMISSIONS=enabled`, or a node that is not the primary. On such a box the POST
 is refused with `fiscal.certificate_not_used` (409).
 
-The POST body carries `pfxBase64`, `passphrase`, `certKind` (`sello` or `representante`) and
-`expectedRevision`, the revision the card read. Before anything is replaced it checks, in order
+The POST body carries `pfxBase64`, `passphrase` and `expectedRevision`, the revision the card read.
+The certificate's type (`sello` or `representante`) is read from the file's policies: a file naming
+no seal policy, or whose policies cannot be read, is a representative's. Before anything is replaced it checks, in order
 (`installCertificate`, `packages/fiscal-verifactu/src/certificate-install.ts`):
 
 1. the file is at most 100 KiB;
@@ -442,7 +443,7 @@ The POST body carries `pfxBase64`, `passphrase`, `certKind` (`sello` or `represe
 4. it is not the certificate already installed;
 5. the company tax ID it carries, when it carries one, is the taxpayer's;
 6. AEAT answers a read-only query (a `consultar`, which files nothing) made with it, at the address
-   for this environment and certificate type, within 30 seconds.
+   for this environment and the type the file names, within 30 seconds.
 
 A refusal is the request's normal answer, `outcome: "refused"` with a `reason` and, where it
 belongs, the `field` it concerns. When every check passes, one transaction seals the certificate
@@ -477,12 +478,12 @@ run the operator harness `src/aeat-certificate-check.preprod.test.ts`. It sends 
 
 - `WAITRON_CERT_CHECK_PFX_BASE64`: the .p12/.pfx file, base64-encoded
 - `WAITRON_CERT_CHECK_PASSPHRASE`: its passphrase
-- `WAITRON_CERT_CHECK_KIND`: `sello` or `representante`
 - `WAITRON_CERT_CHECK_ENVIRONMENT`: `preproduction` or `production`
 - `WAITRON_CERT_CHECK_NIF`: the taxpayer's tax ID
 - `WAITRON_CERT_CHECK_LEGAL_NAME`: the taxpayer's legal name
 - `WAITRON_CERT_CHECK_ADDRESS_KIND` (optional): `sello` or `representante`, to send to that type's
-  address instead and see how AEAT answers the wrong type
+  address instead of the one for the type the file names, and see how AEAT answers the wrong type;
+  needed when the file does not open
 
 ```sh
 pnpm --filter @waitron/server test:preprod --reporter=default src/aeat-certificate-check.preprod.test.ts

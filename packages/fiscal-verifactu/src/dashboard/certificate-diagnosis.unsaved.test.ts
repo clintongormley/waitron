@@ -126,7 +126,6 @@ it("keeps the unsaved editor across diagnosis Stop, suspends Save/Enter, and sav
   expect(requests.at(-1)!.body).toEqual({
     pfxBase64: "AQID",
     passphrase: "PRIVATE_PASSPHRASE",
-    certKind: "sello",
     expectedRevision: "revision-1",
   });
   const proceed = vi.fn();

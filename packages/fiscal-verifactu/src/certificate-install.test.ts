@@ -10,7 +10,7 @@ import { readActivityForSubject, captureError, withTransaction } from "@waitron/
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { beforeEach, afterEach, describe, expect, it } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import {
   makeAuthority,
   SIN_DATOS_BODY,
@@ -139,7 +139,7 @@ function depsFor(
 }
 
 function bodyFor(v: Venue, file: { pfx: Buffer; passphrase: string }, extra: object = {}) {
-  return { ...fileOf(file), certKind: "sello", expectedRevision: v.revision, ...extra };
+  return { ...fileOf(file), expectedRevision: v.revision, ...extra };
 }
 
 describe("installCertificate's local refusals", () => {
@@ -320,7 +320,7 @@ describe("installing a file Node refuses that node-forge reads", () => {
     const vault = await withTransaction(suite.db, (tx) =>
       tryGetCredential(tx, v.ring, { purpose: "fiscal.aeat" }),
     );
-    expect(vault).toMatchObject({ passphrase: rc2.passphrase, certKind: "sello" });
+    expect(vault).toMatchObject({ passphrase: rc2.passphrase, certKind: "representante" });
     expect(vault!.pfxBase64).not.toBe(rc2.pfxBase64);
     const stored = Buffer.from(vault!.pfxBase64!, "base64");
     const opened = openCertificateFile(stored, rc2.passphrase);
@@ -431,11 +431,7 @@ describe("installCertificate's write", () => {
     const v = await venue();
     const server = await serve();
 
-    const answer = await installCertificate(
-      depsFor(v, server),
-      bodyFor(v, candidate, { certKind: "representante" }),
-      NOW,
-    );
+    const answer = await installCertificate(depsFor(v, server), bodyFor(v, candidate), NOW);
 
     expect(answer).toEqual({
       outcome: "installed",
@@ -465,6 +461,47 @@ describe("installCertificate's write", () => {
       checkedEndpoint: server.origin,
       checkedAt: NOW,
     });
+  });
+
+  it("takes the type from the file's policies, never from the request", async () => {
+    const v = await venue();
+    const server = await serve();
+    const seal = authority.issue({ policies: ["0.4.0.194112.1.1"] });
+    const endpointFor = vi.fn(() => server.origin);
+    const deps = depsFor(v, server, {
+      transport: { ...transportTo(server), endpointFor },
+    });
+
+    await expect(
+      installCertificate(deps, bodyFor(v, seal, { certKind: "representante" }), NOW),
+    ).resolves.toMatchObject({ outcome: "installed" });
+
+    expect(endpointFor.mock.calls).toEqual([["sello"]]);
+    const vault = await withTransaction(suite.db, (tx) =>
+      tryGetCredential(tx, v.ring, { purpose: "fiscal.aeat" }),
+    );
+    expect(vault).toEqual({ ...fileOf(seal), certKind: "sello" });
+    const latest = await withTransaction(suite.db, (tx) => latestInstall(tx, TAXPAYER_A.nodeId));
+    expect(latest).toMatchObject({ fingerprint: seal.fingerprint, kind: "sello" });
+  });
+
+  it("installs a representative's file as representante though the request says sello", async () => {
+    const v = await venue();
+    const server = await serve();
+    const endpointFor = vi.fn(() => server.origin);
+    const deps = depsFor(v, server, {
+      transport: { ...transportTo(server), endpointFor },
+    });
+
+    await expect(
+      installCertificate(deps, bodyFor(v, candidate, { certKind: "sello" }), NOW),
+    ).resolves.toMatchObject({ outcome: "installed" });
+
+    expect(endpointFor.mock.calls).toEqual([["representante"]]);
+    const vault = await withTransaction(suite.db, (tx) =>
+      tryGetCredential(tx, v.ring, { purpose: "fiscal.aeat" }),
+    );
+    expect(vault).toEqual({ ...fileOf(candidate), certKind: "representante" });
   });
 
   it("installs on a box with no vault entry yet when the card read none", async () => {
@@ -610,7 +647,6 @@ describe("installCertificate's request", () => {
   const good = {
     pfxBase64: candidate.pfx.toString("base64"),
     passphrase: "cert-pass-9",
-    certKind: "sello",
     expectedRevision: null,
   };
   const cases: [string, unknown][] = [
@@ -621,8 +657,6 @@ describe("installCertificate's request", () => {
     ["pfxBase64", { ...good, pfxBase64: 7 }],
     ["passphrase", { ...good, passphrase: "" }],
     ["passphrase", { ...good, passphrase: undefined }],
-    ["certKind", { ...good, certKind: "bogus" }],
-    ["certKind", { ...good, certKind: 1 }],
     ["expectedRevision", { ...good, expectedRevision: 5 }],
     ["expectedRevision", { ...good, expectedRevision: undefined }],
   ];

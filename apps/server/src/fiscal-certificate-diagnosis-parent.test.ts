@@ -145,7 +145,7 @@ describe("real certificate parent and isolated child preserve persistent state",
                 await putCredential(tx, f.deps.ring, {
                   personId: null,
                   purpose: "fiscal.aeat",
-                  value: material(),
+                  value: { ...material(), certKind: "sello" },
                 });
               else await setBuiltInRoleForTest(tx, f.session.personId, "supervisor");
             });

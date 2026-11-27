@@ -44,8 +44,8 @@ If setup stopped after creating the invoice series, use **Reconnect**, then **St
 Installing a replacement certificate asks for the [shared sign-in confirmation](staff.md#account-access).
 
 If replacing a certificate fails with an HTTP error or an unexpected check failure, the current
-certificate stays installed. Check the internet connection, or choose another file or certificate
-type in the dialog. Select **Save** to check again. Select **Cancel** to stop without replacing
+certificate stays installed. Check the internet connection, or choose another file in the
+dialog. Select **Save** to check again. Select **Cancel** to stop without replacing
 the current certificate.
 An HTTP status alone does not tell you whether waiting will help.
 
@@ -62,15 +62,14 @@ connection alone does not establish why the request failed.
 ## Choose what you inspect {#diagnosis-source}
 
 Choose **Installed certificate** to inspect the material currently stored on this box, or
-**Selected replacement, not installed** for the file, passphrase and type you choose here.
+**Selected replacement, not installed** for the file and passphrase you choose here.
 Confirm the selected source, then select **Read again**. This checks the selected material locally
 without a network query. It does not substitute the installed certificate for a replacement file.
 
 The **Saved installation record** describes a past installation. Its type and installation time
 are not verified current facts until the panel says that the current material matches that record.
 After a successful local inspection, you can see the configured environment, destination label and
-current material type. A company seal and a representative certificate can use different
-destinations; changing the type here does not change the box's configured environment.
+current material type.
 
 ## Sign in at the action {#diagnosis-authority}
 
@@ -101,7 +100,7 @@ inspect again before running another check. **Read again** cannot reuse the old 
 certificate and fiscal records unchanged. **Copy evidence** copies a limited diagnostic summary
 when you choose it; it excludes the file, passphrase and certificate identity details.
 
-Use **Replace certificate** or **Edit selected file or type** to return to the separate editor.
+Use **Replace certificate** or **Edit selected file** to return to the separate editor.
 Only that editor's **Save** can install a replacement, after running its own checks.
 This panel cannot repair the box's network configuration or a persistent external refusal.
 Its evidence can help you choose your next step, but another identical check is not a repair.

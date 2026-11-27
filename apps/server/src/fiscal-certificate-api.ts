@@ -132,7 +132,6 @@ export function mountFiscalCertificateApi(
     "expectedRevision",
     "pfxBase64",
     "passphrase",
-    "certKind",
   ]);
   app.post(
     `${path}/diagnose`,

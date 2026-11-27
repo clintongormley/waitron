@@ -69,7 +69,8 @@ async function fixture(
             ...m.fiscal!,
             provisioningSecret: {
               required: () => true,
-              validate: () => {},
+              // Stands in for reading the type from the file.
+              validate: (raw: unknown) => ({ ...(raw as object), certKind: "sello" }),
               seal: async () => {},
             },
           },

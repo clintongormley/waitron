@@ -248,7 +248,7 @@ export function useBackupVerificationFixture() {
       {
         pfxBase64: candidate.pfx.toString("base64"),
         passphrase: candidate.passphrase,
-        certKind: "sello",
+        certKind: "representante",
       },
     );
     const [person] = await seedPersons(suite.db, {

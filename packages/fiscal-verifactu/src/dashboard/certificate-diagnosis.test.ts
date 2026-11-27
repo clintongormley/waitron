@@ -155,7 +155,7 @@ it("account change clears native candidate controls and old copy/evidence", asyn
   const { panel, request } = await mountDiagnosis({
     source: "candidate",
     permissionContinuation: auth.hook,
-    candidate: { file, passphrase: "PRIVATE_PASS", certKind: "sello", sourceGeneration: 3 },
+    candidate: { file, passphrase: "PRIVATE_PASS", sourceGeneration: 3 },
   });
   await click(panel, "diagnosis-confirm");
   await click(panel, "diagnosis-inspect");
@@ -282,7 +282,6 @@ it.each([
       candidate: {
         file,
         passphrase: "PRIVATE_PASSPHRASE_719",
-        certKind: "representante",
         sourceGeneration: 0,
       },
     },
@@ -313,9 +312,9 @@ it.each([
   const body = request.mock.calls[0]![2] as CertificateDiagnosisRequest;
   expect(body).toMatchObject({
     source: "candidate",
-    certKind: "representante",
     passphrase: "PRIVATE_PASSPHRASE_719",
   });
+  expect(body).not.toHaveProperty("certKind");
   expect(JSON.stringify(body)).not.toContain("PRIVATE_FILENAME_719");
 });
 
@@ -334,7 +333,7 @@ it("missing installed material offers the actual replacement editor and no netwo
   expect(q(panel, "diagnosis-check").disabled).toBe(true);
   expect(q(panel, "diagnosis-edit").textContent).toContain("Replace certificate");
 });
-it("native source/file/passphrase/type edits invalidate evidence without substituting installed material", async () => {
+it("native source/file/passphrase edits invalidate evidence without substituting installed material", async () => {
   const { panel, request } = await mountDiagnosis();
   const source =
     panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
@@ -362,14 +361,9 @@ it("native source/file/passphrase/type edits invalidate evidence without substit
   await pass.updateComplete;
   await userEvent.fill(pass.shadowRoot!.querySelector("input")!, "PRIVATE_PASS");
   await panel.updateComplete;
-  const kind = panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-    "[name=diagnosis-certificate-kind]",
-  )!;
-  await kind.updateComplete;
-  await userEvent.click(kind.shadowRoot!.querySelector(".trigger")!);
-  await userEvent.keyboard("{End}{Enter}");
-  await panel.updateComplete;
-  expect(panel.candidate?.certKind).toBe("representante");
+  expect(panel.shadowRoot!.querySelector("[name=diagnosis-certificate-kind]")).toBeNull();
+  expect(panel.candidate).not.toHaveProperty("certKind");
+  expect(q(panel, "diagnosis-edit").textContent?.trim()).toBe("Edit selected file");
   await click(panel, "diagnosis-confirm");
   await click(panel, "diagnosis-inspect");
   await vi.waitFor(() => expect(q(panel, "diagnosis-copy")).not.toBeNull());
@@ -377,8 +371,8 @@ it("native source/file/passphrase/type edits invalidate evidence without substit
     source: "candidate",
     pfxBase64: "AQID",
     passphrase: "PRIVATE_PASS",
-    certKind: "representante",
   });
+  expect(request.mock.calls[0]![2]).not.toHaveProperty("certKind");
   await userEvent.fill(pass.shadowRoot!.querySelector("input")!, "PRIVATE_PASS_CHANGED");
   await panel.updateComplete;
   expect(q(panel, "diagnosis-copy")).toBeNull();

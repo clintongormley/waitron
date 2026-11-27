@@ -19,7 +19,6 @@ const venue = { taxId: "89890001K" };
 const body = (pfx: Buffer, passphrase = candidate.passphrase) => ({
   pfxBase64: pfx.toString("base64"),
   passphrase,
-  certKind: "sello",
 });
 
 beforeEach(() => {
@@ -38,25 +37,39 @@ describe("setup certificate local validation", () => {
     ["expired at its exact end", body(expired.pfx), "pfxBase64", "expired"],
     ["not yet valid", body(future.pfx), "pfxBase64", "not_yet_valid"],
   ])("refuses %s with only the field and reason", async (_label, certificate, field, reason) => {
-    await expect(
-      secret.validate({ ...certificate, certKind: "sello" }, venue),
-    ).rejects.toThrowError(
+    await expect(secret.validate(certificate, venue)).rejects.toThrowError(
       expect.objectContaining({ code: "setup.certificate_refused", params: { field, reason } }),
     );
   });
 
-  it("accepts an opening certificate at its start and before its end with either kind", async () => {
+  it("accepts an opening certificate at its start and before its end, whatever type the request names", async () => {
     const starting = authority.issue({ notBefore: new Date("2026-10-16T12:00:00Z") });
-    for (const certKind of ["sello", "representante"]) {
-      await expect(
-        secret.validate({ ...body(starting.pfx), certKind }, venue),
-      ).resolves.toBeUndefined();
+    const checked = (pfx: Buffer) => ({
+      pfxBase64: pfx.toString("base64"),
+      passphrase: candidate.passphrase,
+      certKind: "representante",
+    });
+    for (const certKind of ["sello", "representante", undefined]) {
+      await expect(secret.validate({ ...body(starting.pfx), certKind }, venue)).resolves.toEqual(
+        checked(starting.pfx),
+      );
       vi.setSystemTime("2026-10-16T11:59:59.999Z");
-      await expect(
-        secret.validate({ ...body(expired.pfx), certKind }, venue),
-      ).resolves.toBeUndefined();
+      await expect(secret.validate({ ...body(expired.pfx), certKind }, venue)).resolves.toEqual(
+        checked(expired.pfx),
+      );
       vi.setSystemTime("2026-10-16T12:00:00Z");
     }
+  });
+
+  it("answers the checked secret with the type the file's policies name", async () => {
+    const seal = authority.issue({ policies: ["0.4.0.194112.1.3"] });
+    await expect(
+      secret.validate({ ...body(seal.pfx), certKind: "representante" }, venue),
+    ).resolves.toEqual({
+      pfxBase64: seal.pfx.toString("base64"),
+      passphrase: seal.passphrase,
+      certKind: "sello",
+    });
   });
 
   it("refuses a certificate for another tax number, naming both numbers", async () => {
@@ -76,25 +89,28 @@ describe("setup certificate local validation", () => {
   it("accepts the venue's number typed in lower case with spaces and hyphens", async () => {
     await expect(
       secret.validate(body(candidate.pfx), { taxId: " 8989-0001 k" }),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ certKind: "representante" });
   });
 
   it("accepts a certificate that carries no organisation identifier", async () => {
     const personal = authority.issue({ organizationIdentifier: null });
     await expect(
       secret.validate(body(personal.pfx), { taxId: "B12345674" }),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ certKind: "representante" });
   });
 
   it.each([
     ["exported with 40-bit RC2", RC2_SIGNED_CANDIDATE],
     ["exported by macOS under an accented passphrase", MAC_ACCENTED_CANDIDATE],
   ])("accepts a file %s that plain Node refuses", async (_label, certificate) => {
-    const raw = { ...certificate, certKind: "representante" };
+    const raw = { pfxBase64: certificate.pfxBase64, passphrase: certificate.passphrase };
     expect(openCertificateFile(Buffer.from(raw.pfxBase64, "base64"), raw.passphrase)).toMatchObject(
       { ok: false },
     );
-    await expect(secret.validate(raw, venue)).resolves.toBeUndefined();
+    await expect(secret.validate(raw, venue)).resolves.toEqual({
+      ...raw,
+      certKind: "representante",
+    });
   });
 });
 

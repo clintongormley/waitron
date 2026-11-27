@@ -73,7 +73,11 @@ it("reports a sample the real Veri*Factu drain files as rejected as rejected, wi
     contribution: {
       ...selected.contribution!,
       activationReadiness: "accepted-test-submission" as const,
-      provisioningSecret: { required: () => false, validate: () => {}, seal: async () => {} },
+      provisioningSecret: {
+        required: () => false,
+        validate: (raw: unknown) => raw,
+        seal: async () => {},
+      },
       drain: ({ db, environment, skipRetryMs }, at) =>
         drain({ db, resolveClient: async () => refusesEverything, environment, skipRetryMs }, at),
     },

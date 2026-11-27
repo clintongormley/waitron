@@ -18,6 +18,8 @@ export interface CandidateOptions {
   withKey?: boolean;
   signedBy?: "authority" | "stranger";
   commonName?: string;
+  /** Policy OIDs written into a certificatePolicies (2.5.29.32) extension. */
+  policies?: string[];
 }
 
 export interface Candidate {
@@ -111,6 +113,26 @@ function certificateAuthority(commonName: string | null, organisation: string | 
   if (name.length === 0) name.push({ name: "countryName", value: "ES" });
   const cert = sign(name, keys.publicKey, null, keys.privateKey, AUTHORITY_VALIDITY, CA_EXTENSIONS);
   return { cert, key: keys.privateKey };
+}
+
+/** A certificatePolicies extension naming each OID, the first with a CPS qualifier. */
+export function policiesExtension(oids: string[]): object {
+  const { create, Class, Type, toDer } = forge.asn1;
+  const oid = (dotted: string) =>
+    create(Class.UNIVERSAL, Type.OID, false, forge.asn1.oidToDer(dotted).getBytes());
+  const cps = create(Class.UNIVERSAL, Type.SEQUENCE, true, [
+    create(Class.UNIVERSAL, Type.SEQUENCE, true, [
+      oid("1.3.6.1.5.5.7.2.1"),
+      create(Class.UNIVERSAL, Type.IA5STRING, false, "https://example.test/cps"),
+    ]),
+  ]);
+  const policies = oids.map((dotted, index) =>
+    create(Class.UNIVERSAL, Type.SEQUENCE, true, [oid(dotted), ...(index === 0 ? [cps] : [])]),
+  );
+  return {
+    id: "2.5.29.32",
+    value: toDer(create(Class.UNIVERSAL, Type.SEQUENCE, true, policies)).getBytes(),
+  };
 }
 
 function der(cert: forge.pki.Certificate): Buffer {
@@ -207,6 +229,7 @@ export function makeAuthority(name: AuthorityName = {}): FixtureAuthority {
           { name: "basicConstraints", cA: false },
           { name: "keyUsage", digitalSignature: true, keyEncipherment: true },
           { name: "extKeyUsage", clientAuth: true },
+          ...(options.policies === undefined ? [] : [policiesExtension(options.policies)]),
         ],
       );
       const issued: Issued = {

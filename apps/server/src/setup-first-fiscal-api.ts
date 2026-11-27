@@ -295,7 +295,7 @@ export function mountSetupFirstFiscalApi(
               await deps.runFiscalTest({
                 request: firstFiscalProvisionRequest(state),
                 contribution: payload.contribution,
-                secret: body.aeatCert,
+                secret: payload.aeatCert,
               }),
             );
           }

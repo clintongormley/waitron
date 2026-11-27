@@ -84,7 +84,7 @@ it("drops a delayed candidate read on account change before any POST", async () 
   state.open({
     source: "candidate",
     savedCard,
-    candidate: { file, passphrase: "PRIVATE_PASS", certKind: "representante", sourceGeneration: 7 },
+    candidate: { file, passphrase: "PRIVATE_PASS", sourceGeneration: 7 },
   });
   state.confirmSource();
   const run = state.run("inspect");
@@ -173,7 +173,7 @@ it("zeroes decoded candidate buffers even when reading finishes after Stop", asy
   state.open({
     source: "candidate",
     savedCard,
-    candidate: { file, passphrase: "PRIVATE", certKind: "sello", sourceGeneration: 0 },
+    candidate: { file, passphrase: "PRIVATE", sourceGeneration: 0 },
   });
   state.confirmSource();
   const run = state.run("inspect");
@@ -192,7 +192,7 @@ it("a late file read cannot borrow a reopened candidate's passphrase or release 
   state.open({
     source: "candidate",
     savedCard,
-    candidate: { file: old, passphrase: "old-private", certKind: "sello", sourceGeneration: 0 },
+    candidate: { file: old, passphrase: "old-private", sourceGeneration: 0 },
   });
   state.confirmSource();
   const previous = state.run("inspect");
@@ -203,7 +203,6 @@ it("a late file read cannot borrow a reopened candidate's passphrase or release 
     candidate: {
       file: new File([new Uint8Array([2])], "new.p12"),
       passphrase: "new-private",
-      certKind: "representante",
       sourceGeneration: 1,
     },
   });
@@ -218,8 +217,8 @@ it("a late file read cannot borrow a reopened candidate's passphrase or release 
   expect(calls[0]!.body).toMatchObject({
     pfxBase64: "Ag==",
     passphrase: "new-private",
-    certKind: "representante",
   });
+  expect(calls[0]!.body).not.toHaveProperty("certKind");
   calls[0]!.wait.resolve(evidence(calls[0]!.body));
   await current;
   state.stop();

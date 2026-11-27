@@ -25,7 +25,6 @@ const future = authority.issue({
 const body = (pfx: Buffer, passphrase = good.passphrase) => ({
   pfxBase64: pfx.toString("base64"),
   passphrase,
-  certKind: "sello",
 });
 const roots: string[] = [];
 const sockets: TLSSocket[] = [];
@@ -92,7 +91,7 @@ it.each([false, true])(
       [body(good.pfx, "SYNTHETIC-wrong-passphrase"), "passphrase", "passphrase_wrong"],
       [body(Buffer.from("SYNTHETIC-non-certificate")), "pfxBase64", "unreadable"],
       [body(noKey.pfx), "pfxBase64", "no_private_key"],
-      [{ ...RC4_CANDIDATE, certKind: "sello" }, "pfxBase64", "old_encryption"],
+      [RC4_CANDIDATE, "pfxBase64", "old_encryption"],
       [body(expired.pfx), "pfxBase64", "expired"],
       [body(future.pfx), "pfxBase64", "not_yet_valid"],
     ] as const) {

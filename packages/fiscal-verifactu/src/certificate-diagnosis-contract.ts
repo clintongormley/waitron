@@ -11,10 +11,7 @@ export type CertificateDiagnosisRequest = {
   schemaVersion: 1;
   operation: Operation;
 } & Binding &
-  (
-    | { source: "installed" }
-    | { source: "candidate"; pfxBase64: string; passphrase: string; certKind: Kind }
-  );
+  ({ source: "installed" } | { source: "candidate"; pfxBase64: string; passphrase: string });
 
 const CATEGORIES = [
   "local-finding",
@@ -140,14 +137,12 @@ export function parseCertificateDiagnosisRequest(raw: unknown): CertificateDiagn
   }
   if (!validMaterial(raw.pfxBase64)) invalid("pfxBase64");
   if (typeof raw.passphrase !== "string" || raw.passphrase.length === 0) invalid("passphrase");
-  if (!validKind(raw.certKind)) invalid("certKind");
-  if (!keys(raw, [...fields, "pfxBase64", "passphrase", "certKind"])) invalid("body");
+  if (!keys(raw, [...fields, "pfxBase64", "passphrase"])) invalid("body");
   return {
     ...common,
     source: "candidate",
     pfxBase64: raw.pfxBase64,
     passphrase: raw.passphrase,
-    certKind: raw.certKind,
   };
 }
 

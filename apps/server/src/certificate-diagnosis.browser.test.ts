@@ -177,9 +177,6 @@ it.each(["installed", "candidate"] as const)(
         await panel
           .locator("wt-input[name=diagnosis-certificate-passphrase] input")
           .fill(candidate.passphrase);
-        await panel.locator("wt-combobox[name=diagnosis-certificate-kind] .trigger").click();
-        await page.keyboard.press("End");
-        await page.keyboard.press("Enter");
       }
       const before = await diagnosisSnapshot(suite.db);
       await panel.locator("[data-test=diagnosis-confirm] button").click();

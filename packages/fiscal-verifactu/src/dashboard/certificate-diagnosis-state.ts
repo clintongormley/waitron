@@ -5,12 +5,11 @@ import {
   type CertificateDiagnosisRequest,
   type CertificateDiagnosisResult,
 } from "../certificate-diagnosis-contract.js";
-import type { AeatCertificateClient, CertificateCardView, CertificateKind } from "./client.js";
+import type { AeatCertificateClient, CertificateCardView } from "./client.js";
 
 export type DiagnosisCandidate = {
   file: File;
   passphrase: string;
-  certKind: CertificateKind;
   sourceGeneration: number;
 };
 type Source = "installed" | "candidate";
@@ -190,7 +189,6 @@ export class DiagnosisState {
           source: "candidate",
           pfxBase64: btoa(binary),
           passphrase: this.#candidate!.passphrase,
-          certKind: this.#candidate!.certKind,
         };
       } else body = { ...binding, source: "installed" };
       bytes?.fill(0);

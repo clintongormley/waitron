@@ -92,6 +92,9 @@ not following redirects, then showed AEAT's raw answers and added the controls. 
 | Representative certificate, asking about another company | SOAP fault `Codigo[4112]` | not sent |
 
 "Accepted" is HTTP 200 with a well-formed reply to a query. It says nothing about a filing.
+*(Dated note, 2026-11-27: A1571 PR 3 reads the type from the certificate's policies, so a
+representative certificate installed since then is not sent to the seal address by a wrong choice.
+One installed as a seal before then keeps its saved type.)*
 
 - **`erro4011.html` reads** "401 No autorizado. Se ha producido un error al verificar el certificado
   presentado", and lists an unrecognised issuer, a certificate type not valid for the service, and an

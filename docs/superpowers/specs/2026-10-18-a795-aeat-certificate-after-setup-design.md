@@ -397,7 +397,8 @@ In this order; the first failure answers, nothing is written, the current certif
    - **Whether a wrong type is caught here is not established.** `getting-to-production.md:96-98`
      says a seal sent to the representative address is rejected, with no AEAT source quoted; nothing
      in the repo says what happens to a representative certificate sent to the seal address. Both are
-     checks before landing (§8).
+     checks before landing (§8). *(Dated note, 2026-11-27: A1571 PR 3 reads the type from the
+     certificate's policies, so nobody chooses it.)*
    - It runs outside any database transaction, like the card-provider check
      (`payments-api.ts:617-629`), so no write — and no sale — waits for AEAT.
    - **No override.** If the check does not pass, nothing changes. Waiting costs nothing: the current

@@ -7,11 +7,13 @@ import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtur
 import { RC2_SIGNED_CANDIDATE } from "@waitron/fiscal-verifactu/test/openssl-certificates.js";
 
 const contribution = venueFiscalSelection(ALL_MODULES, "ES-common").contribution!;
-const candidate = makeAuthority().issue({ passphrase: "SYNTHETIC-cert" });
+const candidate = makeAuthority().issue({
+  passphrase: "SYNTHETIC-cert",
+  policies: ["0.4.0.194112.1.1"],
+});
 const certificate = {
   pfxBase64: candidate.pfx.toString("base64"),
   passphrase: candidate.passphrase,
-  certKind: "sello",
 };
 const taxId = "89890001K";
 const email = {
@@ -29,12 +31,12 @@ describe("first setup publication settings", () => {
       await parseFirstSetupSettings(
         contribution,
         "production",
-        { aeatCert: certificate, email },
+        { aeatCert: { ...certificate, certKind: "representante" }, email },
         taxId,
       ),
     ).toMatchObject({
       required: true,
-      aeatCert: certificate,
+      aeatCert: { ...certificate, certKind: "sello" },
       email: {
         url: "smtp://owner:SYNTHETIC-smtp@smtp.example.test:587?requireTLS=true",
         from: "owner@example.test",
@@ -42,15 +44,14 @@ describe("first setup publication settings", () => {
     });
   });
 
-  it("accepts an RC2 file and keeps the file as sent", async () => {
-    const aeatCert = { ...RC2_SIGNED_CANDIDATE, certKind: "sello" };
+  it("accepts an RC2 file and keeps the file as sent, with the type it names", async () => {
     const settings = await parseFirstSetupSettings(
       contribution,
       "production",
-      { aeatCert, email },
+      { aeatCert: RC2_SIGNED_CANDIDATE, email },
       taxId,
     );
-    expect(settings.aeatCert).toBe(aeatCert);
+    expect(settings.aeatCert).toEqual({ ...RC2_SIGNED_CANDIDATE, certKind: "representante" });
   });
 
   it.each([

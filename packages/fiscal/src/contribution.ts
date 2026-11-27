@@ -225,8 +225,10 @@ export interface FiscalContribution {
     /** Whether a provision in `environment` must carry the secret. */
     required(environment: DeploymentEnvironment): boolean;
     /** Validate the secret locally without writes, naming the offending field on refusal.
-     * Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain (CLAUDE.md §5). */
-    validate(raw: unknown, venue: { taxId: string }): void | Promise<void>;
+     * Run BEFORE `provisionVenue` mints the unrepairable SIF/hash chain (CLAUDE.md §5). Answers
+     * the checked secret, which the host hands to `seal`, `activationReadinessTarget` and the
+     * readiness evidence in place of `raw`. */
+    validate(raw: unknown, venue: { taxId: string }): unknown;
     inspect?(raw: unknown): Promise<{ taxId: string | null; legalName: string | null }>;
     /** Seal the secret into the venue's vault in its own transaction. `nodeId` is the node
      * whose vault holds the secret. */

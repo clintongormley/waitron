@@ -27,7 +27,7 @@ vi.mock("./aeat-transport.js", async (importOriginal) => {
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 120_000 });
 const authority = makeAuthority();
 const installed = authority.issue();
-const candidate = authority.issue();
+const candidate = authority.issue({ policies: ["0.4.0.194112.1.1"] });
 const NOW = new Date("2026-10-18T11:00:00Z");
 
 it("with no transport given, checks with AEAT's endpoint for the environment through mtlsFetch, and a refused connection leaves the vault unchanged", async () => {
@@ -62,7 +62,6 @@ it("with no transport given, checks with AEAT's endpoint for the environment thr
     {
       pfxBase64: candidate.pfx.toString("base64"),
       passphrase: candidate.passphrase,
-      certKind: "sello",
       expectedRevision: before.revision,
     },
     NOW,

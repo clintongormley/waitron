@@ -16,8 +16,9 @@ import { verifactuCertificates } from "./schema/index.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 120_000 });
 
 const authority = makeAuthority();
-const candidate = authority.issue();
-const other = authority.issue();
+const SEAL = { policies: ["0.4.0.194112.1.1"] };
+const candidate = authority.issue(SEAL);
+const other = authority.issue(SEAL);
 
 function testRing(): KeyRing {
   return loadKeyRing({

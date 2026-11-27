@@ -9,7 +9,7 @@ import {
   subscribeLocale,
   type DashboardPermissionContinuation,
 } from "@waitron/dashboard-kit";
-import type { AeatCertificateClient, CertificateCardView, CertificateKind } from "./client.js";
+import type { AeatCertificateClient, CertificateCardView } from "./client.js";
 import { t, type AeatCertificateKey } from "./strings.js";
 import { day, time } from "./dates.js";
 import "./certificate-dialog.js";
@@ -175,7 +175,7 @@ export class AeatCertificateCard extends LitElement {
   #diagnosisSource: "installed" | "candidate" = "installed";
   @state() private card?: CertificateCardView;
   @state() private loadError = "";
-  @state() private dialog?: { revision: string | null; kind: CertificateKind };
+  @state() private dialog?: { revision: string | null };
   /** When AEAT answered the check of a certificate this card just installed. */
   @state() private checkedAt?: string;
   /** Set when the open dialog learned the vault changed under it; closing it then reads again. */
@@ -225,7 +225,7 @@ export class AeatCertificateCard extends LitElement {
       variant=${urgent ? "primary" : "secondary"}
       @click=${() => {
         this.checkedAt = undefined;
-        this.dialog = { revision: card.revision, kind: card.installed?.kind ?? "sello" };
+        this.dialog = { revision: card.revision };
       }}
       >${t(label)}</wt-button
     >`;
@@ -349,7 +349,6 @@ export class AeatCertificateCard extends LitElement {
               .revision=${this.dialog.revision}
               .savedCard=${card!}
               .permissionContinuation=${this.permissionContinuation}
-              .kind=${this.dialog.kind}
               @aeat-certificate-installed=${(event: CustomEvent<{ checkedAt: string }>) => {
                 event.stopPropagation();
                 this.checkedAt = event.detail.checkedAt;
@@ -381,8 +380,7 @@ export class AeatCertificateCard extends LitElement {
               }}
               @diagnosis-edit=${(event: Event) => {
                 event.stopPropagation();
-                if (!this.readOnly && card.filing)
-                  this.dialog = { revision: card.revision, kind: card.installed?.kind ?? "sello" };
+                if (!this.readOnly && card.filing) this.dialog = { revision: card.revision };
               }}
               @wt-close=${(event: Event) => {
                 event.stopPropagation();

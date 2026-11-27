@@ -33,7 +33,8 @@ vi.mock("@waitron/composition", async (original) => {
               provisioningSecret: {
                 required: () => true,
                 inspect: async () => ({ taxId: null, legalName: null }),
-                validate: () => {},
+                // Stands in for reading the type from the file.
+                validate: (raw: unknown) => ({ ...(raw as object), certKind: "sello" }),
                 seal: async () => {},
               },
               drain: async () => ({ ...emptyDrainResult(), recordsAccepted: 1 }),

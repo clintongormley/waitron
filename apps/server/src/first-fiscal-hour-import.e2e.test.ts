@@ -53,7 +53,8 @@ vi.mock("@waitron/composition", async (original) => {
               ...module.fiscal!,
               provisioningSecret: {
                 required: (environment: string) => environment === "production",
-                validate: () => {},
+                // Stands in for reading the type from the file.
+                validate: (raw: unknown) => ({ ...(raw as object), certKind: "sello" }),
                 seal: async () => {},
               },
               drain: async () => ({ ...emptyDrainResult(), recordsAccepted: 1 }),
@@ -273,7 +274,7 @@ it.each([
         ...(environment !== "production"
           ? {}
           : {
-              aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic", certKind: "sello" },
+              aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic" },
               email: {
                 server: "smtp.example.test",
                 port: 465,

@@ -106,8 +106,6 @@ const q = <T extends Element = HTMLElement>(dialog: AeatCertificateDialog, selec
 const fileField = (d: AeatCertificateDialog) =>
   q<HTMLElementTagNameMap["wt-file-input"]>(d, "wt-file-input");
 const passField = (d: AeatCertificateDialog) => q<HTMLElementTagNameMap["wt-input"]>(d, "wt-input");
-const kindField = (d: AeatCertificateDialog) =>
-  q<HTMLElementTagNameMap["wt-combobox"]>(d, "wt-combobox");
 const actions = (d: AeatCertificateDialog) =>
   q<HTMLElementTagNameMap["wt-form-actions"]>(d, "wt-form-actions");
 const save = (d: AeatCertificateDialog) =>
@@ -152,7 +150,7 @@ function closed(dialog: AeatCertificateDialog): Promise<Event> {
 }
 
 describe("dashboard-aeat-certificate-dialog", () => {
-  it("opens from the card with the three required fields, the type pre-set, and the guides under them", async () => {
+  it("opens from the card with the two required fields and the guides under them", async () => {
     const { dialog } = await open({});
     const wtDialog = q(dialog, "wt-dialog");
     expect(wtDialog.getAttribute("heading")).toBe("Replace AEAT certificate");
@@ -168,24 +166,15 @@ describe("dashboard-aeat-certificate-dialog", () => {
     expect(pass.getAttribute("name")).toBe("certificate-passphrase");
     expect(pass.type).toBe("password");
     expect(pass.required).toBe(true);
-    const kind = kindField(dialog);
-    expect(kind.getAttribute("name")).toBe("certificate-kind");
-    expect(kind.required).toBe(true);
-    expect(kind.value).toBe("representante");
-    expect(kind.options).toEqual([
-      { value: "sello", label: "Company seal (sello)" },
-      { value: "representante", label: "Representative (representante)" },
-    ]);
     const guides = dialog.shadowRoot!.querySelector("wt-disclosure")!;
     expect(guides.querySelectorAll("[data-test=export-guide]")).toHaveLength(3);
-    expect(kind.compareDocumentPosition(guides) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pass.compareDocumentPosition(guides) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("pre-sets the type to sello when no certificate is recorded", async () => {
-    const { dialog } = await open({
-      reads: [async () => view({ revision: null, installed: null })],
-    });
-    expect(kindField(dialog).value).toBe("sello");
+  it("asks for no certificate type: the server reads it from the file", async () => {
+    const { dialog } = await open({});
+    expect(dialog.shadowRoot!.querySelector("wt-combobox")).toBeNull();
+    expect(dialog.shadowRoot!.querySelector('[name="certificate-kind"]')).toBeNull();
   });
 
   it("keeps Save quiet and disabled until a file is chosen", async () => {
@@ -194,10 +183,6 @@ describe("dashboard-aeat-certificate-dialog", () => {
     expect(save(dialog).variant).toBe("secondary");
     expect(text(save(dialog))).toBe("Save");
     await type(dialog, "secret");
-    kindField(dialog).dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "sello" }, bubbles: true, composed: true }),
-    );
-    await dialog.updateComplete;
     expect(save(dialog).disabled).toBe(true);
     expect(save(dialog).variant).toBe("secondary");
     await choose(dialog, certificate());
@@ -254,29 +239,21 @@ describe("dashboard-aeat-certificate-dialog", () => {
     await vi.waitFor(() => expect(install).toHaveBeenCalledTimes(1));
   });
 
-  it("sends the file's bytes, the passphrase exactly as typed, the type and the card's revision", async () => {
+  it("sends the file's bytes, the passphrase exactly as typed and the card's revision, and no type", async () => {
     const { dialog, install } = await open({
       install: async () => ({ outcome: "refused", reason: "same", field: "file" }),
     });
     await filled(dialog);
-    kindField(dialog).dispatchEvent(
-      new CustomEvent("wt-change", {
-        detail: { value: "representante" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
     await press(dialog);
     await vi.waitFor(() => expect(install).toHaveBeenCalledTimes(1));
     expect(install.mock.calls[0]![0]).toEqual({
       pfxBase64: BYTES_BASE64,
       passphrase: " cert pass 9 ",
-      certKind: "representante",
       expectedRevision: "rev-1",
     });
   });
 
-  it("sends a null revision when nothing was installed, and the chosen type", async () => {
+  it("sends a null revision when nothing was installed, and no type", async () => {
     const { dialog, install } = await open({
       reads: [async () => view({ revision: null, installed: null })],
       install: async () => ({ outcome: "refused", reason: "same", field: "file" }),
@@ -284,7 +261,8 @@ describe("dashboard-aeat-certificate-dialog", () => {
     await filled(dialog);
     await press(dialog);
     await vi.waitFor(() => expect(install).toHaveBeenCalledTimes(1));
-    expect(install.mock.calls[0]![0]).toMatchObject({ certKind: "sello", expectedRevision: null });
+    expect(install.mock.calls[0]![0]).toMatchObject({ expectedRevision: null });
+    expect(install.mock.calls[0]![0]).not.toHaveProperty("certKind");
   });
 
   it("reads Checking with AEAT… and is disabled while the check runs", async () => {
@@ -385,7 +363,7 @@ describe("dashboard-aeat-certificate-dialog", () => {
       "E5 closed",
       { outcome: "refused", reason: "closed" },
       "bottom",
-      "AEAT closed the connection, so it may have refused this certificate. The current certificate is unchanged. Check the certificate type, then try again.",
+      "AEAT closed the connection, so it may have refused this certificate. The current certificate is unchanged. Try again, or choose another certificate.",
     ],
     [
       "AEAT's refusal page",
@@ -417,19 +395,19 @@ describe("dashboard-aeat-certificate-dialog", () => {
       "an HTTP error",
       { outcome: "refused", reason: "aeat_http", details: { status: 503 } },
       "bottom",
-      "AEAT answered with HTTP error 503. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
+      "AEAT answered with HTTP error 503. The current certificate is unchanged. Check the internet connection or choose another file. Select Save to check again, or Cancel to stop.",
     ],
     [
       "anything else",
       { outcome: "refused", reason: "check_failed" },
       "bottom",
-      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
+      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file. Select Save to check again, or Cancel to stop.",
     ],
     [
       "a reason this copy does not know",
       { outcome: "refused", reason: "something_new" },
       "bottom",
-      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file or certificate type. Select Save to check again, or Cancel to stop.",
+      "The check with AEAT failed for an unexpected reason. The current certificate is unchanged. Check the internet connection or choose another file. Select Save to check again, or Cancel to stop.",
     ],
   ];
 
@@ -856,13 +834,12 @@ describe("certificate check self-service choices", () => {
         } else {
           expect(sentence).toBe(
             refusal.reason === "aeat_http"
-              ? "La AEAT ha respondido con el error HTTP 403. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar."
-              : "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
+              ? "La AEAT ha respondido con el error HTTP 403. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo. Pulsa Guardar para repetir la comprobación o Cancelar para parar."
+              : "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
           );
         }
         expect(fileField(dialog).files[0]?.name).toBe("bar-lucia-2026.p12");
         expect(passField(dialog).value).toBe(" cert pass 9 ");
-        expect(kindField(dialog).value).toBe("representante");
         expect(reads()).toBe(1);
         expect(save(dialog).disabled).toBe(false);
         await press(dialog);
@@ -871,14 +848,6 @@ describe("certificate check self-service choices", () => {
         await vi.waitFor(() => expect(actions(dialog).error).toBe(sentence));
         const replacement = new File([new Uint8Array([1, 2, 3])], "replacement.p12");
         await choose(dialog, replacement);
-        kindField(dialog).dispatchEvent(
-          new CustomEvent("wt-change", {
-            detail: { value: "sello" },
-            bubbles: true,
-            composed: true,
-          }),
-        );
-        await dialog.updateComplete;
         const close = closed(dialog);
         await press(dialog);
         await close;
@@ -886,7 +855,6 @@ describe("certificate check self-service choices", () => {
         expect(install.mock.calls[2]![0]).toEqual({
           pfxBase64: "AQID",
           passphrase: " cert pass 9 ",
-          certKind: "sello",
           expectedRevision: "rev-1",
         });
         await vi.waitFor(() => expect(reads()).toBe(2));
@@ -911,7 +879,7 @@ describe("certificate check self-service choices", () => {
       if (language === "en") expect(actions(dialog).error).toContain("or Cancel to stop.");
       else {
         expect(actions(dialog).error).toBe(
-          "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo o tipo de certificado. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
+          "La comprobación con la AEAT ha fallado por un motivo inesperado. El certificado actual no cambia. Comprueba la conexión a internet o elige otro archivo. Pulsa Guardar para repetir la comprobación o Cancelar para parar.",
         );
       }
       const close = closed(dialog);

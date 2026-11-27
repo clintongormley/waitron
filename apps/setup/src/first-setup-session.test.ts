@@ -245,7 +245,6 @@ describe("first setup tab ownership", () => {
       aeatCert: {
         pfxBase64: "certificate",
         passphrase: "certificate password",
-        certKind: "sello" as const,
       },
       email: {
         server: "smtp.test",

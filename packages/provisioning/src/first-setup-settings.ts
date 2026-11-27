@@ -15,10 +15,11 @@ export async function parseFirstSetupSettings(
     throw new AppError("setup.request_invalid", { field: "body" });
   const secret = contribution.provisioningSecret;
   const required = secret?.required(environment) ?? false;
+  let aeatCert: unknown;
   if (required) {
     if (body.aeatCert === undefined)
       throw new AppError("setup.provisioning_secret_required", { module: contribution.id });
-    await secret!.validate(body.aeatCert, { taxId });
+    aeatCert = await secret!.validate(body.aeatCert, { taxId });
   } else if (body.aeatCert !== undefined)
     throw new AppError("setup.request_invalid", { field: "aeatCert" });
   if (
@@ -40,7 +41,7 @@ export async function parseFirstSetupSettings(
       : parseEmailSettings(body.email as Record<string, unknown>);
   if (environment === "production" && email === undefined)
     throw new AppError("setup.email_required", { field: "email" });
-  return { secret, required, aeatCert: body.aeatCert, email };
+  return { secret, required, aeatCert, email };
 }
 
 export async function readFirstSetupSettings(path: string): Promise<Record<string, unknown>> {

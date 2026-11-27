@@ -8,7 +8,7 @@ import type {
 } from "@waitron/fiscal";
 import "@waitron/identity";
 import { AppError } from "@waitron/shared";
-import { isCertKind } from "./aeat-transport.js";
+import { isCertKind, type CertKind } from "./aeat-transport.js";
 import {
   parseCertificateDiagnosisRequest,
   parseCertificateDiagnosisResult,
@@ -25,9 +25,7 @@ function materialFrom(value: Record<string, unknown>) {
     typeof value.pfxBase64 !== "string" ||
     value.pfxBase64.length === 0 ||
     value.pfxBase64.length > 4 * Math.ceil(CERTIFICATE_MAX_BYTES / 3) ||
-    typeof value.passphrase !== "string" ||
-    typeof value.certKind !== "string" ||
-    !isCertKind(value.certKind)
+    typeof value.passphrase !== "string"
   )
     return null;
   const pfx = Buffer.from(value.pfxBase64, "base64");
@@ -41,7 +39,12 @@ function materialFrom(value: Record<string, unknown>) {
   } finally {
     pfx.fill(0);
   }
-  return { pfxBase64: value.pfxBase64, passphrase: value.passphrase, certKind: value.certKind };
+  return { pfxBase64: value.pfxBase64, passphrase: value.passphrase };
+}
+
+/** The vault's copy, which filing reads with the type stored beside it. */
+function storedKind(value: Record<string, unknown>): CertKind | null {
+  return typeof value.certKind === "string" && isCertKind(value.certKind) ? value.certKind : null;
 }
 
 function object(
@@ -94,24 +97,27 @@ async function diagnoseBoundCertificate(
       throw new AppError("fiscal.certificate_request_invalid", { field: "body" });
     const timeZone = await venueTimeZone(deps.db);
     const latest = await latestInstall(deps.db, deps.nodeId);
-    let material = candidate;
+    let material: { pfxBase64: string; passphrase: string; certKind?: CertKind } | null = candidate;
     candidate = null;
     let finding: "missing" | "unusable" | null = null;
+    let kind: CertKind | null = null;
     if (request.source === "installed") {
       try {
         const payload = await tryGetCredential(deps.db, deps.ring, { purpose: "fiscal.aeat" });
         if (payload === null) finding = "missing";
         else {
-          material = materialFrom(payload);
+          kind = storedKind(payload);
+          const stored = materialFrom(payload);
+          material = stored === null || kind === null ? null : { ...stored, certKind: kind };
           if (material === null) finding = "unusable";
         }
       } catch {
         finding = "unusable";
       }
     }
-    return { authorization, revision, taxpayer, timeZone, latest, material, finding };
+    return { authorization, revision, taxpayer, timeZone, latest, material, finding, kind };
   });
-  const selectedKind = read.material?.certKind ?? null;
+  const storedKindOf = read.kind;
 
   const expiry = new AbortController();
   const signal = AbortSignal.any([deps.signal, expiry.signal]);
@@ -200,7 +206,8 @@ async function diagnoseBoundCertificate(
           });
           if (output.outcome === "completed") {
             const kind = value.kind;
-            if (kind !== null && kind !== selectedKind) return fallback;
+            if (kind !== null && (typeof kind !== "string" || !isCertKind(kind))) return fallback;
+            if (kind !== null && storedKindOf !== null && kind !== storedKindOf) return fallback;
             result.kind = kind;
             result.endpointLabel = kind === null ? null : `${deps.environment}-${kind}`;
             if (

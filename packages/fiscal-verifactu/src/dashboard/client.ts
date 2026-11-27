@@ -34,7 +34,6 @@ export interface CertificateCardView {
 export interface InstallBody {
   pfxBase64: string;
   passphrase: string;
-  certKind: CertificateKind;
   expectedRevision: string | null;
 }
 

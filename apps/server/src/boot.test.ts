@@ -2015,7 +2015,6 @@ describe("startServer, against a migrated venue directory", () => {
             aeatCert: {
               pfxBase64: material.clientPfx.toString("base64"),
               passphrase: material.clientPassphrase,
-              certKind: "representante",
             },
           };
           const response = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/provision`, {
@@ -2122,7 +2121,6 @@ describe("startServer, against a migrated venue directory", () => {
             aeatCert: {
               pfxBase64: material.clientPfx.toString("base64"),
               passphrase: material.clientPassphrase,
-              certKind: "representante",
             },
           };
           const tested = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/fiscal-test`, {

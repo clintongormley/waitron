@@ -21,7 +21,6 @@ describe("AeatCertificateClient", () => {
     const body: InstallBody = {
       pfxBase64: "AAEC",
       passphrase: "secret",
-      certKind: "representante",
       expectedRevision: "rev-1",
     };
 

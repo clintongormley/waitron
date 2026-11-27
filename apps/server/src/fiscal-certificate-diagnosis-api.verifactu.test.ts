@@ -144,7 +144,7 @@ describe("real certificate diagnosis through HTTP and the isolated module child"
               ...f.request,
               operation: "check",
               source: "candidate",
-              ...material(candidate, "representante"),
+              ...material(candidate),
               ...(mode === "local" ? { passphrase: "PRIVATE WRONG PASSPHRASE" } : {}),
             }
           : { ...f.request, operation: "check" };
@@ -168,7 +168,7 @@ describe("real certificate diagnosis through HTTP and the isolated module child"
               await putCredential(tx, f.deps.ring, {
                 personId: null,
                 purpose: "fiscal.aeat",
-                value: material(candidate, "representante"),
+                value: { ...material(candidate), certKind: "representante" },
               });
           });
           expected = await diagnosisSnapshot(suite.db);

@@ -53,7 +53,8 @@ vi.mock("@waitron/composition", async (original) => {
               ...module.fiscal!,
               provisioningSecret: {
                 required: () => true,
-                validate: () => {},
+                // Stands in for reading the type from the file.
+                validate: (raw: unknown) => ({ ...(raw as object), certKind: "sello" }),
                 seal: async () => {},
               },
               drain: async () => emptyDrainResult(),
@@ -131,7 +132,7 @@ it("a refused Live activation restarts on its original host and clears through S
         "/setup-api/provision",
         {
           mode: "live",
-          aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic", certKind: "sello" },
+          aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic" },
           email: {
             server: "smtp.example.test",
             port: 465,

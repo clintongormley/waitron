@@ -709,7 +709,7 @@ async function twoBoxes(scratch: string): Promise<Boxes> {
 
   // After the seed, so the only way M2 can come to hold them is the final copy.
   const openTabId = await tabWith(venue, "Seafood rice");
-  const certificate = makeAuthority().issue();
+  const certificate = makeAuthority().issue({ policies: ["0.4.0.194112.1.1"] });
   await sealAeatSecret(
     { db: m1Files.db, ring, nodeId: m1Id },
     {
