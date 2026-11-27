@@ -89,6 +89,17 @@ function declarationLabels({ allergens, dietary }: GuestDeclarations, words: Wor
   };
 }
 
+function namedAllergenLabels(
+  { name, allergens }: Pick<GuestChoice, "name" | "allergens">,
+  words: Words,
+) {
+  return allergenLabels(allergens, words).map(({ code, kinds, label }) => ({
+    icon: `allergen-${code}`,
+    label: `${name}: ${kinds || label}`,
+    category: kinds ? words.text[code] : undefined,
+  }));
+}
+
 function detailDeclarations(
   heading: string,
   labels: { icon: string; label: string; category?: string }[],
@@ -162,6 +173,9 @@ function choiceRow(
 function detailContent(member: MenuEntry, words: Words, language: string) {
   const money = (value: string) => formatMoney(value, language);
   if (member.kind === "set_menu") {
+    const allergens = member.lines.flatMap(({ choices }) =>
+      choices.flatMap((choice) => namedAllergenLabels(choice, words)),
+    );
     return html`<p class="set-price" lang=${words.language}>
         ${words.text.perPerson!.replace("{price}", money(member.price))}
       </p>
@@ -183,20 +197,13 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
                   </ul>`
                 : nothing
             }`,
-      )}`;
+      )}
+      ${detailDeclarations(words.text.allergens!, allergens, words.language)}`;
   }
   const quantity = new Intl.NumberFormat(language, { maximumFractionDigits: 3 });
   const { allergens, diets } = declarationLabels(member, words);
   const extraAllergens = member.modifiers.flatMap((group) =>
-    group.kind === "extras"
-      ? group.items.flatMap(({ name, allergens }) =>
-          allergenLabels(allergens, words).map(({ code, kinds, label }) => ({
-            icon: `allergen-${code}`,
-            label: `${name}: ${kinds || label}`,
-            category: kinds ? words.text[code] : undefined,
-          })),
-        )
-      : [],
+    group.kind === "extras" ? group.items.flatMap((item) => namedAllergenLabels(item, words)) : [],
   );
   return html`
     <p class="set-price"><strong>${dishPrice(member, language)}</strong></p>

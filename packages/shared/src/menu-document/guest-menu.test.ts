@@ -351,6 +351,11 @@ it.each<{
     frozenUnit: { ...unit, name: { en: "Litre" }, abbreviation: { en: "l" }, measure: true },
     displayUnit: { unit: "l" },
   },
+  {
+    unitKind: "the canonical Each unit",
+    frozenUnit: { ...unit, id: eachUnitId, measure: false },
+    displayUnit: { unit: "" },
+  },
   { unitKind: "a published unit without the flag", frozenUnit: unit, displayUnit: { unit: "ea" } },
 ])("$unitKind keeps extra declarations", ({ frozenUnit, displayUnit }) => {
   const dish: FrozenOffer = {

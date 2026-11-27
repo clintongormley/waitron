@@ -419,7 +419,8 @@ Open a dish to check its variants, options and extras. Check the dish's **Allerg
 **Dietary declarations**. Check an extra's allergen icons beside its name and look for that
 extra in **Allergens**. Look below each variant for its declarations.
 Check the amounts for measured extras and the full unit name for extras with multiple servings.
-Open a set menu to see the courses, choices and any supplements. When a choice declares
+Open a set menu to see the courses, choices and any supplements. Check **Allergens** for the
+allergens listed beside each choice’s name. When a choice declares
 allergens or diets, check the icons beside its name and the dietary declarations below it.
 Choose **Menu** to pick up where you left off.
 Customers cannot open this page yet. To review or publish your changes, switch to

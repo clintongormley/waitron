@@ -113,7 +113,7 @@ function published(
                   name: "Noodles (Large)",
                   price: "2.50",
                   unit: "",
-                  allergens: { eggs: {} },
+                  allergens: { eggs: {}, gluten: { kinds: ["wheat"] } },
                   dietary: [],
                 },
               ],
@@ -865,7 +865,14 @@ describe("the customer menu Online preview", () => {
       );
       const dessert = page.getByRole("heading", { name: "Dessert", exact: true });
       await expect.element(dessert).toBeVisible();
-      expect(dessert.element().nextElementSibling).toBeNull();
+      const setAllergens = page.getByRole("heading", { name: "Allergens", exact: true });
+      await expect.element(setAllergens, { timeout: 1000 }).toBeVisible();
+      expect(dessert.element().nextElementSibling).toBe(setAllergens.element().parentElement);
+      expect(
+        Array.from(setAllergens.element().nextElementSibling!.children, (entry) =>
+          entry.textContent?.trim(),
+        ),
+      ).toEqual(["Noodles (Large): Wheat", "Noodles (Large): Eggs"]);
       await expectNoA11yViolations(host);
       await page.getByRole("button", { name: "Back to menu" }).click();
       const search = page.getByRole("searchbox", { name: "Search dishes" });

@@ -161,8 +161,8 @@ export function publicGuestMenu(
                   items: modifier.items.map((extra) => {
                     const p = extra.presentation;
                     const parent = text(p.customerName, p.name);
-                    const { measure, hardwareUnit, name, staffName } = extra.unit;
-                    const serving = measure === false && hardwareUnit === null;
+                    const { id, measure, hardwareUnit, name, staffName } = extra.unit;
+                    const serving = id !== eachUnitId && measure === false && hardwareUnit === null;
                     return {
                       name:
                         p.variantName === null

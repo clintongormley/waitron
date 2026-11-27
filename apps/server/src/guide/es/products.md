@@ -454,7 +454,8 @@ cada extra aparecen junto a su nombre. También puedes consultar ese extra en **
 Consulta las declaraciones de cada variante debajo de su nombre.
 Comprueba las cantidades de los extras que se miden y el nombre completo de la unidad en los
 extras de varias raciones.
-Abre un menú para ver los órdenes de plato, las opciones y los suplementos. Si una opción declara
+Abre un menú para ver los órdenes de plato, las opciones y los suplementos. Consulta
+**Alérgenos** para ver los alérgenos junto al nombre de cada opción. Si una opción declara
 alérgenos o dietas, consulta los iconos de alérgenos junto a su nombre y las declaraciones dietéticas debajo.
 Elige **Carta** para seguir donde estabas. Los clientes aún no pueden abrir esta
 página. Para revisar o publicar tus cambios, abre **Vista previa**.
