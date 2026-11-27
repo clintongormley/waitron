@@ -323,6 +323,7 @@ export class TillPartyAllergyDialog extends LitElement {
     this.#scope?.commit(this.#submitted);
     this.#submitted = undefined;
   }
+  /** Close the mounted modal so the browser can return focus to its opener. */
   async closeSaved(scopeKey: string): Promise<void> {
     if (!this.active || scopeKey !== this.#opening?.key) return;
     this.commitConfirmed(scopeKey);

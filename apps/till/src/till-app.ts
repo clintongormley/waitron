@@ -4761,7 +4761,6 @@ export class TillApp extends LitElement {
         api.savePartyAllergy(open.view.partyId, command, { signal }),
       );
       if (!open.current() || this.allergyDialog?.key !== open.key) return;
-      // Closing while the editor is still mounted returns focus to its opener.
       await this.renderRoot.querySelector("till-party-allergy-dialog")?.closeSaved(open.key);
       if (!open.current() || this.allergyDialog?.key !== open.key) return;
       this.#closeAllergyDialog(false, open.key);

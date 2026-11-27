@@ -1097,8 +1097,9 @@ describe("A669 live table editor", () => {
         expect(bounds().top).toBe(0);
         const store = screen.draftStore;
         await page.viewport(820, 1180);
-        await expect.poll(() => Math.round(bounds().right)).toBe(820);
         await expect.poll(() => Math.round(bounds().left - paneLeft())).toBe(0);
+        await page.viewport(390, 844);
+        await expect.poll(() => [bounds().left, bounds().right]).toEqual([0, 390]);
         expect(tableOrder(el)).toBe(screen);
         expect(screen.draftStore).toBe(store);
 
