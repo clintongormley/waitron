@@ -445,6 +445,38 @@ it.each([
   },
 );
 
+it("puts each row's menu at the end of the step name's line, in a table of one column", async () => {
+  for (const width of [576, 320]) {
+    const el = await mount();
+    el.style.width = `${width}px`;
+    await settle(el);
+    expect(el.shadowRoot!.querySelectorAll("thead th")).toHaveLength(1);
+    rows(el).forEach((row, index) => {
+      expect(row.querySelectorAll("td")).toHaveLength(1);
+      const name = nameInput(el, index).getBoundingClientRect();
+      const menu = row.querySelector("wt-row-actions")!.getBoundingClientRect();
+      const start = startBox(el, index).getBoundingClientRect();
+      const cell = row.querySelector("td")!.getBoundingClientRect();
+      expect(menu.top).toBeGreaterThanOrEqual(name.top);
+      expect(menu.bottom).toBeLessThanOrEqual(name.bottom);
+      expect(menu.left).toBeGreaterThanOrEqual(name.right);
+      expect(start.top).toBeGreaterThanOrEqual(name.bottom);
+      expect(Math.abs(start.left - name.left)).toBeLessThan(1);
+      expect(cell.right - menu.right).toBeLessThan(cell.right - start.right + 1);
+    });
+    cleanup();
+  }
+});
+
+it("read-only: the step name takes its whole line, with no menu beside it", async () => {
+  const el = await mount({ disabled: true });
+  el.style.width = "576px";
+  await settle(el);
+  const fields = rows(el)[0]!.querySelector(".fields")!.getBoundingClientRect();
+  const name = nameInput(el, 0).getBoundingClientRect();
+  expect(Math.abs(name.width - fields.width)).toBeLessThan(1);
+});
+
 it("draws one table row per step in order", async () => {
   const el = await mount();
   expect(rows(el).map((row) => row.getAttribute("data-step"))).toEqual(

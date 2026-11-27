@@ -62,15 +62,6 @@ export class DepartmentServiceSteps extends LitElement {
       tbody td {
         vertical-align: top;
       }
-      td.actions-cell,
-      th.actions-cell {
-        width: 1%;
-        padding-inline: 0;
-        white-space: nowrap;
-      }
-      td.actions-cell {
-        text-align: end;
-      }
       .fields {
         display: flex;
         flex-wrap: wrap;
@@ -81,6 +72,17 @@ export class DepartmentServiceSteps extends LitElement {
       .name {
         flex: 1 1 100%;
         min-width: 0;
+      }
+      /* The row menu shares the name's line, so the start below gets the whole width. */
+      .fields:has(> wt-row-actions, > .actions-cell) > .name {
+        flex-basis: calc(100% - var(--wt-tap-min) - var(--wt-space-2));
+      }
+      wt-row-actions,
+      .actions-cell {
+        flex: none;
+      }
+      .actions-cell {
+        width: var(--wt-tap-min);
       }
       /* Where the fields are narrower than nine tap widths the second term outgrows them, so the
          start takes a line of its own rather than be cut short beside the minutes. Not a
@@ -224,6 +226,26 @@ export class DepartmentServiceSteps extends LitElement {
               this.#edit(step.key, { name: event.detail.value });
             }}
           ></wt-input>
+          ${
+            this.disabled
+              ? nothing
+              : html`<wt-row-actions
+                  align="end"
+                  label=${format("prep.row_actions", { name: step.name })}
+                >
+                  <wt-button
+                    icon="menu-delete"
+                    data-action="delete"
+                    aria-label=${`${t("venue.delete")}: ${step.name}`}
+                    data-test=${`remove-${step.key}`}
+                    @click=${(event: Event) => {
+                      stop(event);
+                      this.#remove(step.key);
+                    }}
+                    >${t("venue.delete")}</wt-button
+                  >
+                </wt-row-actions>`
+          }
           <wt-combobox
             ?preserve-order=${true}
             class="start"
@@ -261,25 +283,6 @@ export class DepartmentServiceSteps extends LitElement {
           >
         </div>
       </td>
-      ${
-        this.disabled
-          ? nothing
-          : html`<td class="actions-cell">
-              <wt-row-actions align="end" label=${format("prep.row_actions", { name: step.name })}>
-                <wt-button
-                  icon="menu-delete"
-                  data-action="delete"
-                  aria-label=${`${t("venue.delete")}: ${step.name}`}
-                  data-test=${`remove-${step.key}`}
-                  @click=${(event: Event) => {
-                    stop(event);
-                    this.#remove(step.key);
-                  }}
-                  >${t("venue.delete")}</wt-button
-                >
-              </wt-row-actions>
-            </td>`
-      }
     </tr>`;
   }
 
@@ -300,6 +303,13 @@ export class DepartmentServiceSteps extends LitElement {
                     >*</span
                   ></span
                 >
+                ${
+                  this.disabled
+                    ? nothing
+                    : html`<span class="actions-cell"
+                        ><span class="visually-hidden">${t("venue.actions")}</span></span
+                      >`
+                }
                 <span class="start" data-head
                   >${t("venue.service_step_starts")}<span class="required" aria-hidden="true"
                     >*</span
@@ -312,13 +322,6 @@ export class DepartmentServiceSteps extends LitElement {
                 >
               </div>
             </th>
-            ${
-              this.disabled
-                ? nothing
-                : html`<th scope="col" class="actions-cell">
-                    <span class="visually-hidden">${t("venue.actions")}</span>
-                  </th>`
-            }
           </tr>
         </thead>
         <tbody>
