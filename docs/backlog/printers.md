@@ -19,7 +19,8 @@ locally and hosts the print agent (et al)". It is the Waitron-owned outbound age
 design asks for (printers, cash drawers and card readers stay local), so it is what lets a venue
 started in the cloud after its box dies (A1188) print, open the drawer and take card payments.
 
-**Brainstorm started 2026-10-29; to be resumed with the open questions below.**
+**Brainstorm started 2026-10-29 and paused on 27 November 2026, when the owner put the app back on
+the backlog with its first version's scope agreed** (below, under the 27 November decisions).
 
 The owner's answers (2026-10-29):
 
@@ -79,12 +80,8 @@ Owner, 2026-10-29, on the questions the router answer raised:
   to a manager (turn off guest Wi-Fi, streaming) than to staff, since Waitron's own data use is
   thought small but not measured.
 
-Still to ask: whether kiosk mode
-replaces the Fully Kiosk resale; whether a second device takes over
-printing automatically when the print-agent tablet is off; which printer connections it must reach
-(network, USB, Bluetooth); and how it compares with printers that fetch jobs from the cloud
-themselves ([Star CloudPRNT](../superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md),
-[Epson Server Direct Print](../superpowers/specs/2026-08-17-printing-epson-server-direct-print-design.md)).
+Still open when the brainstorm paused: whether Waitron recommends or resells the backup router.
+The other questions listed here on 2026-10-29 are answered under the 27 November decisions below.
 
 **Owner decision, 25 November 2026, after the device test below:** "i've realised that handhelds are
 unlikely to have sim cards and contract, which cost money. so the better solution would be a router
@@ -106,6 +103,49 @@ asking for both networks (`ConnectivityManager.requestNetwork`, one request tied
 
 Not tried: the app in the background or the screen off, which a print agent would have to survive, and
 a device that is not this one. The app's source and tools are in `~/workspace/spikes/a1175-dual-network` on the owner's Mac.
+
+**Owner decisions, 27 November 2026, when the brainstorm resumed:**
+
+- **The first version is a print agent only**, with a small status and setup screen. The till stays
+  a web page in Chrome. Showing the till inside the app and locking the tablet to it (which would
+  replace the planned Fully Kiosk resale) is a later step; taking cards on the phone itself is a
+  separate project after that.
+- **It reaches network and Bluetooth printers.** USB only if a real venue needs it, and the guide
+  tells venues to use a network printer instead: a tablet's one socket is usually its charger, and
+  a USB printer moved off a dead box has to be re-plugged anyway.
+- **An agent takes a network printer's jobs only if it reached that printer recently, and it keeps
+  checking** (owner: "it would need to ping regularly otherwise it might never recover"). Today any
+  agent in the venue may take a network receipt or kitchen printer's job
+  (`packages/printing/src/runtime.ts:146`; the case "claims a network_tcp job for any agent in the
+  venue" in `packages/printing/src/runtime.eligibility.test.ts` was run on 2026-11-27 and passed),
+  which is harmless on a box's network but not with Cloud, where an agent on a guest Wi-Fi or
+  taken home would take jobs and fail them. Proposed in the brainstorm, not objected to: each
+  agent opens and closes a connection to every network printer every 30 seconds, sending nothing
+  (the existing connect-only check in `apps/print-agent/src/tcp-probe.ts`), and reports which
+  answered with its request for work; "recently" is 90 seconds, a finished print counts, a refused
+  connection counts as reachable (a printer busy with another agent's job; believed, not tested),
+  only silence counts as unreachable, and when no agent reached a printer recently any agent may
+  try, as today. The rule is server-side, so the box's agent reports the same way.
+  USB and Bluetooth printers already follow the agent that reports seeing them, and an office (A4)
+  printer is tied to one agent (`printers.agent_id`). So for network printers, a second tablet
+  running the app takes over printing with nothing more to build.
+- **The agent keeps long polling, not WebSockets.** As read, not measured: the server holds an
+  agent's request for work for up to about 13 seconds and answers at once when a job arrives
+  (`apps/server/src/print-api.ts:211`), and after an empty answer the agent waits up to 2 seconds
+  before asking again (`packages/print-agent/src/agent.ts:932`). Proposed, not decided: ask again
+  at once after an ordinary empty answer, keeping the pause after an error.
+- **The certificate step is not the app's job in the first version.** Cloud has a public
+  certificate, so it has no such step, and the agent trusts a box's certificate by itself, as
+  `apps/print-agent/src/server-ca.ts` does today. For a box venue's phones and tablets, Android's
+  reference for `KeyChain.createInstallIntent` says: "Starting from Build.VERSION_CODES.R, the
+  intent returned by this method cannot be used for installing CA certificates. Since CA
+  certificates can only be installed via Settings, the app should provide the user with a file
+  containing the CA certificate." An app that manages a tablet set up from a factory reset can
+  install it with no screens (`DevicePolicyManager.installCaCert`, "Installs the given certificate
+  as a user CA"). Weigh that when the Cloud backlog's "Managed devices" candidate is designed.
+  Both read from developer.android.com on 2026-11-27.
+- Printers that fetch their own jobs from Cloud (the Star and Epson designs above) would need no
+  app at all; they are not built beyond the `cloud_poll` columns.
 
 ## What the AppArmor profile (A129, #862; A134, #887) left open
 
@@ -274,8 +314,8 @@ around A4 printing).
   platform (a packaged agent, or an app as A1175 is for Android). Not started; network printers
   need none.
 - **A1175: an Android app that runs the local print server when the venue runs from Waitron
-  Cloud**, and possibly more (owner, 2026-10-28). Brainstorm started 2026-10-29, to be
-  resumed with the owner. On 25 November 2026 one Android phone reached a printer over a Wi-Fi without internet and
+  Cloud**, and possibly more (owner, 2026-10-28). Brainstorm paused 27 November 2026 with the
+  first version agreed: a print agent for network and Bluetooth printers. On 25 November 2026 one Android phone reached a printer over a Wi-Fi without internet and
   the internet over mobile data at once. [Detail](printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)
 
 ## Decisions and deliberate limits
