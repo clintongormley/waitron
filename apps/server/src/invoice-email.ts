@@ -35,7 +35,8 @@ export async function readInvoiceEmailPrivacy(
 }
 
 function privacyNotice(document: ReceiptDocumentInput, privacy: InvoiceEmailPrivacy | undefined) {
-  if (privacy === undefined || document.result.invoiceType !== "F1") return undefined;
+  const { invoiceType } = document.result;
+  if (privacy === undefined || (invoiceType !== "F1" && invoiceType !== "R1")) return undefined;
   const contacts = [privacy.privacyEmail, privacy.privacyNoticeUrl].filter(
     (contact): contact is string => contact !== null,
   );
