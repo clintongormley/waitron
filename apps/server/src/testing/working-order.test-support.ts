@@ -307,7 +307,6 @@ export async function addExtraList(
   opts: {
     price?: string | null;
     unitPrice?: string;
-    vatClass?: "general" | "reduced" | "super_reduced" | "zero";
     maxQuantity?: number | null;
     minPicks?: number;
     maxPicks?: number | null;
@@ -321,7 +320,6 @@ export async function addExtraList(
     kitchenName: `${label} kitchen`,
     pricingUnit: "each",
     unitPrice: opts.unitPrice ?? "9.99",
-    vatClass: opts.vatClass ?? "general",
   });
   const list = await menu.createExtraList(
     tx,

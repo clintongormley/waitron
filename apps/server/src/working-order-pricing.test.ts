@@ -73,7 +73,6 @@ describe("a dish's extras children", () => {
         name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
-        vatClass: "general",
       });
       const list = await menu.createExtraList(
         tx,
@@ -185,7 +184,6 @@ describe("a dish's extras children", () => {
         name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
-        vatClass: "general",
       });
       const list = await menu.createExtraList(
         tx,
@@ -301,7 +299,6 @@ describe("a dish's extras children", () => {
         name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
-        vatClass: "general",
       });
       const list = await menu.createExtraList(
         tx,
@@ -367,7 +364,6 @@ describe("a dish's extras children", () => {
         name: "Ham",
         unitId: kgUnitId,
         unitPrice: "0.27",
-        vatClass: "general",
       });
       const list = await menu.createExtraList(
         tx,
@@ -441,7 +437,6 @@ describe("a dish's extras children", () => {
       name,
       pricingUnit: "each",
       unitPrice: "9.99",
-      vatClass: "reduced",
     });
     const list = await menu.createExtraList(
       tx,
@@ -611,7 +606,6 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
   ): Promise<{ listId: string; productId: string }> {
     return addExtraList(tx, dishId, name, {
       price: "0.50",
-      vatClass: "reduced",
       maxPicks: opts.maxPicks === undefined ? null : opts.maxPicks,
       maxQuantity: opts.maxQuantity === undefined ? 1 : opts.maxQuantity,
     });
@@ -632,7 +626,6 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
           name,
           pricingUnit: "each",
           unitPrice: "9.99",
-          vatClass: "reduced",
         }),
       );
     }
@@ -1044,7 +1037,6 @@ describe("order path — extras and options", () => {
         name: "Pizza",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "reduced",
       });
       const wine = await createProduct(tx, {
         categoryId: null,
@@ -1055,7 +1047,6 @@ describe("order path — extras and options", () => {
         // The list item's own price outranks this, so a child priced at 3.00 would mean the offer
         // was never read.
         unitPrice: "3.00",
-        vatClass: "general",
       });
       const extraList = await menu.createExtraList(
         tx,
@@ -1504,7 +1495,6 @@ describe("a parent with Active variants is never sold as itself, as an extra or 
         name: "Coffee",
         pricingUnit: "each",
         unitPrice: "1.20",
-        vatClass: "general",
       });
       const [doubleVariant] = await setProductVariants(
         tx,

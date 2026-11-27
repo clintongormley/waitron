@@ -178,16 +178,12 @@ function setMargin(id: string, marginBp: number | null) {
   );
 }
 
-/** Reprices bill line `lineNo` as one portion of `price`; a `vatClass` sets both its labels. */
-function reprice(billId: string, lineNo: number, price: number, vatClass?: string) {
+/** Reprices line `lineNo` of an open bill as one portion of `price` in `vatClass`. */
+function reprice(billId: string, lineNo: number, price: number, vatClass: string) {
   return inTx(venue, (tx) =>
     tx
       .update(workingOrderLines)
-      .set({
-        unitPriceGross: price,
-        lineTotal: price,
-        ...(vatClass === undefined ? {} : { vatClass, takeawayVatClass: vatClass }),
-      })
+      .set({ unitPriceGross: price, lineTotal: price, vatClass, takeawayVatClass: vatClass })
       .where(
         sql`${workingOrderLines.workingOrderId} = ${billId} and ${workingOrderLines.lineNo} = ${lineNo}`,
       ),
@@ -490,8 +486,8 @@ describe("the free list", () => {
       { name: "Salad" },
       { name: "Water" },
     ]);
-    await reprice(billId, 1, 1210);
-    await reprice(billId, 2, 1100);
+    await reprice(billId, 1, 1210, "general");
+    await reprice(billId, 2, 1100, "reduced");
     const other = await inTx(venue, async (tx) =>
       splitBill(tx, venue.cfg, billId, [{ lineNo: 3 }], {
         operatorId: venue.staffId,
@@ -636,14 +632,14 @@ describe("the estimated cost", () => {
 
   it("takes each dish's own rate, and for a whole bill the sum over its lines", async () => {
     await setMargin(departmentId, 3000);
-    // These products' takeaway rates decide.
+    // These products' takeaway rates decide; no rate reads the labels reprice writes.
     await takeawayRates(venue, { Bread: "10.00", Salad: "21.00" });
     const dish = await bill([{ name: "Bread" }, { name: "Salad" }], { dining: "takeaway" });
-    await reprice(dish.billId, 1, 1100);
+    await reprice(dish.billId, 1, 1100, "reduced");
     await adjust(dish.billId, { lineId: await lineIdOf(venue, dish.billId, 1), action: "comp" });
     const whole = await bill([{ name: "Bread" }, { name: "Salad" }], { dining: "takeaway" });
-    await reprice(whole.billId, 1, 1100);
-    await reprice(whole.billId, 2, 1210);
+    await reprice(whole.billId, 1, 1100, "reduced");
+    await reprice(whole.billId, 2, 1210, "general");
     await adjust(whole.billId, { action: "discount_percent", percentBp: 10000 });
     expect(await freeOn(dish.billId)).toEqual([
       row({
@@ -667,7 +663,7 @@ describe("the estimated cost", () => {
 
   it("takes a dish's extra at the extra's own rate", async () => {
     await setMargin(departmentId, 3000);
-    // These products' takeaway rates decide.
+    // These products' takeaway rates decide; no rate reads the labels reprice writes.
     await takeawayRates(venue, { Pizza: "10.00", Olives: "21.00" });
     const { billId } = await bill([{ name: "Pizza", olives: 1 }, { name: "Salad" }], {
       dining: "takeaway",
@@ -677,8 +673,8 @@ describe("the estimated cost", () => {
       "Olives",
       "Salad",
     ]);
-    await reprice(billId, 1, 1100);
-    await reprice(billId, 2, 1210);
+    await reprice(billId, 1, 1100, "reduced");
+    await reprice(billId, 2, 1210, "general");
     await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
     expect(await freeOn(billId)).toEqual([
       row({
@@ -693,8 +689,8 @@ describe("the estimated cost", () => {
   it("counts in a whole-bill discount only the dishes it took money off", async () => {
     await setMargin(departmentId, 3000);
     const { billId } = await bill([{ name: "Bread" }, { name: "Salad" }]);
-    await reprice(billId, 1, 1100);
-    await reprice(billId, 2, 1210);
+    await reprice(billId, 1, 1100, "reduced");
+    await reprice(billId, 2, 1210, "general");
     await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
     await adjust(billId, { action: "discount_percent", percentBp: 10000 });
     expect(await freeOn(billId)).toEqual([
@@ -800,7 +796,7 @@ describe("the estimated cost", () => {
     await setMargin(bar.id, 5000);
     await setMargin(departmentId, 3000);
     const { billId } = await bill([{ name: "Bread" }, { name: "Salad" }]);
-    await reprice(billId, 1, 1100);
+    await reprice(billId, 1, 1100, "reduced");
     await inTx(venue, (tx) =>
       tx
         .update(workingOrderLines)
