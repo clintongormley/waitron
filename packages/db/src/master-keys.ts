@@ -31,9 +31,13 @@ export async function readCurrentMasterKey(
   return row ?? null;
 }
 
-/** {@link readCurrentMasterKey}'s name, read from a backup copy. */
-export async function readCurrentMasterKeyName(query: BackupQuery): Promise<string | null> {
-  for await (const row of query.rows("select name from master_keys order by number desc limit 1"))
-    return String(row.name);
+/** {@link readCurrentMasterKey}'s name and check value, read from a backup copy. */
+export async function readCurrentMasterKeyCheck(
+  query: BackupQuery,
+): Promise<{ name: string; checkValue: string } | null> {
+  for await (const row of query.rows(
+    "select name, check_value from master_keys order by number desc limit 1",
+  ))
+    return { name: String(row.name), checkValue: String(row.check_value) };
   return null;
 }

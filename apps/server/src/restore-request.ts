@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createArchiveKeySlot, type ArchiveKeySlot } from "./artifact-cipher-file.js";
 import { errnoOf } from "./errno.js";
-import { readCurrentMasterKeyName } from "@waitron/db";
+import { readCurrentMasterKeyCheck } from "@waitron/db";
 import { listAdminHolders } from "@waitron/identity";
 import {
   openBackupQuery,
@@ -34,9 +34,13 @@ import {
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { removeReplacedResetMarker } from "./replaced-reset.js";
 import { join } from "node:path";
-import { authorityKey } from "@waitron/credentials";
+import { authorityKey, authorityKeyMatches } from "@waitron/credentials";
 import { AppError, decodeMasterKeyCode } from "@waitron/shared";
-import { stagedAuthorityKey, type StagedAuthorityKey } from "./operation-authentication.js";
+import {
+  stagedAuthorityKey,
+  wrongMasterKey,
+  type StagedAuthorityKey,
+} from "./operation-authentication.js";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
@@ -141,10 +145,14 @@ function assertSource(operation: RecoveryOperationInput, sourceId: string): void
 
 /** The authority key of a typed master key, as staged: lower-case hex of its 32 bytes. */
 function stagedForm(value: unknown): string {
+  return stagedAuthority(value).toString("hex");
+}
+
+function stagedAuthority(value: unknown): Buffer {
   if (typeof value !== "string" || Buffer.byteLength(value) > MAX_NODE_KEY_BYTES)
     return invalidNodeKey();
   try {
-    return authorityKey(decodeMasterKeyCode(value)).toString("hex");
+    return authorityKey(decodeMasterKeyCode(value));
   } catch {
     return invalidNodeKey();
   }
@@ -713,12 +721,23 @@ async function runHeld(
   return true;
 }
 
-async function readStagingChecks(databasePath: string): Promise<StagingChecks> {
+/** Refuses an `authority` that is not the copy's current master key here, before the restart, as
+ * well as at the staged restore's start. */
+async function readStagingChecks(
+  databasePath: string,
+  authority?: Uint8Array,
+): Promise<StagingChecks> {
   const opened = await openBackupQuery(databasePath);
   try {
+    const current = await readCurrentMasterKeyCheck(opened.query);
+    if (
+      authority !== undefined &&
+      (current === null || !authorityKeyMatches(authority, current.checkValue))
+    )
+      throw wrongMasterKey(current?.name);
     return {
       adminVerifiers: await adminVerifiersIn(opened.query),
-      masterKeyName: await readCurrentMasterKeyName(opened.query),
+      masterKeyName: current?.name ?? null,
     };
   } finally {
     await opened.close();
@@ -755,7 +774,8 @@ async function adminVerifiersIn(query: BackupQuery): Promise<readonly string[]> 
   return hashes;
 }
 
-/** The setup page's checks on an archive before staging it; answers what staging keeps of it. */
+/** The setup page's checks on an archive before staging it, its authorisation key included;
+ * answers what staging keeps of it. */
 export async function validateArchiveForStaging(
   candidate: ArchiveRequest,
   deps: Pick<ValidationDeps, "stateDir" | "migrationsRoot" | "modules"> &
@@ -776,7 +796,12 @@ export async function validateArchiveForStaging(
   try {
     await assertArchiveNotAhead(validated, deps);
     await refuseIfArchiveSourceLive({ ...deps, validated });
-    return await readStagingChecks(validated.databasePath);
+    return await readStagingChecks(
+      validated.databasePath,
+      candidate.nodeRecoverySecret === undefined
+        ? undefined
+        : stagedAuthority(candidate.nodeRecoverySecret),
+    );
   } finally {
     await validated.discard();
   }

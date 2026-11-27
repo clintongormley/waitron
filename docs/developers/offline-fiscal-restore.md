@@ -101,7 +101,10 @@ the form. The box draws the actual identity later, after checking the selected n
 rereading that outside confirmation. The request download therefore contains no generated
 identity or activation result.
 
-Enter the selected backup's node key in its separate field. Check the source, event and target,
+Enter the master key. For a backup file, the restore screen's one **Master key** field opens the
+file and authorises the recovery; for a bucket or Cloud copy, the form has its own field. When the
+copy's current master key is not the one that opened the file, the box refuses naming it, and the
+form asks for that key in a field of its own. Check the source, event and target,
 isolate the former machine, then download and retain the public request with your outside
 records. A changed request clears its retention confirmation. The node secret stays out of that
 download. Missing fields and refusals appear beside their fields and above the restore action.
@@ -117,9 +120,9 @@ docker compose -f compose.yml -f recovery.override.yml up -d --no-deps --force-r
 ```
 
 Reopen the selected copy if recreating the app interrupted its preview. Submit the reviewed
-request and node key through the form. The archive encryption key remains in the archive-key
-field. The restart stages the node credential separately from the public request, checks that
-key against the selected database and rereads current outside evidence before activation.
+request and the master key through the form. For a backup file, the box checks that key against the
+selected database before it restarts. The restart stages it separately from the public request,
+checks it against the selected database and rereads current outside evidence before activation.
 
 If you use the operator CLI instead, stop the app first and supply the same override to
 `docker compose run`. Set `WAITRON_MASTER_KEY` privately in your shell: for a backup file the same
