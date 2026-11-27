@@ -3,10 +3,12 @@ import { page, userEvent } from "vitest/browser";
 import type { TillProduct } from "../api/menu-api.js";
 import { DraftStore } from "../state/draft-sync.js";
 import type { TillBasket } from "../widgets/basket.js";
-import { cleanupWidgets } from "../widgets/test-helpers.js";
+import type { TillProductInfo } from "../widgets/product-info.js";
+import "../widgets/product-info.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { allergenLabel } from "../i18n/allergen-names.js";
 import { en, es } from "../i18n/strings.js";
-import { setLocale } from "../i18n/t.js";
+import { fill, setLocale } from "../i18n/t.js";
 import { beer, flan, mount, resized } from "./till-table-order-screen.test-helpers.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
@@ -79,7 +81,8 @@ it("an opened dish shows its description, allergens by name and diet labels abov
     getComputedStyle(muted).color,
   );
   muted.remove();
-  expect(text(facts)).toContain("Contains");
+  // An extra chosen on the line declares its own allergens, so the heading names the dish.
+  expect(text(facts.querySelector("h3"))).toBe("Tortilla contains");
   const allergens = [...facts.querySelectorAll("[data-allergens] li")].map(text);
   expect(allergens).toEqual(["Eggs", "Cereals containing gluten (Wheat)"]);
   expect(
@@ -106,6 +109,15 @@ it("an opened dish shows its description, allergens by name and diet labels abov
   expect(text(box)).not.toContain("Spanish omelette for guests");
   expect(text(box)).not.toContain("Sold out");
   expect(text(box)).not.toContain("Add to order");
+});
+
+it("the information window, showing one dish on its own, heads its allergens Contains", async () => {
+  const { el } = await mountWidget<TillProductInfo>("till-product-info", { product: tortilla });
+  expect(text(el.shadowRoot!.querySelector("h3"))).toBe("Contains");
+  setLocale("es");
+  el.requestUpdate();
+  await el.updateComplete;
+  expect(text(el.shadowRoot!.querySelector("h3"))).toBe(es["allergens.contains"]);
 });
 
 it("an opened dish whose allergens are not yet reviewed says so, with no empty description", async () => {
@@ -146,7 +158,9 @@ it("shows the dish's information in Spanish", async () => {
     expect(es[key]).not.toBe(en[key]);
     return es[key];
   };
-  expect(text(facts)).toContain(spanish("allergens.contains"));
+  expect(text(facts.querySelector("h3"))).toBe(
+    fill(spanish("allergens.contains_named"), { label: "Tortilla" }),
+  );
   const allergens = [
     allergenLabel("eggs", {}, "es"),
     allergenLabel("gluten", { kinds: ["wheat"] }, "es"),

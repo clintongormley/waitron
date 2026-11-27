@@ -7,13 +7,17 @@ import { descriptionFor } from "./dish-format.js";
 import { dietLabel } from "./nutrition-icons.js";
 
 /** A dish's description, allergens and diet labels, as the information window and an opened row
- * both show them; the host styles `h3`, `ul` and `li`, and may style `.pending`. */
-export function dishFacts(product: TillProduct): TemplateResult {
+ * both show them; the host styles `h3`, `ul` and `li`, and may style `.pending`. `contains` heads
+ * the allergens. */
+export function dishFacts(
+  product: TillProduct,
+  contains: string = t("allergens.contains"),
+): TemplateResult {
   const allergens = product.allergens;
   const description = descriptionFor(product.description ?? {}, "").trim();
   const labels = nutritionDietLabels(product.diet, product.dietaryDeclarations);
   return html`${description ? html`<p data-description>${description}</p>` : nothing}
-    <h3>${t("allergens.contains")}</h3>
+    <h3>${contains}</h3>
     ${
       allergens === null
         ? html`<p class="pending">${t("product_info.not_reviewed")}</p>`

@@ -138,7 +138,13 @@ export class OpenDraftRow implements ReactiveController {
         ?.openLineDetails(line, { note });
     };
     return html`<div slot=${`opened-${index}`} data-draft-open=${index}>
-      <div class="draft-open-info" data-draft-open-info>${dishFacts(line.product)}</div>
+      <div class="draft-open-info" data-draft-open-info>
+        ${dishFacts(
+          line.product,
+          // An extra chosen on the line declares its own allergens beside it.
+          fill(t("allergens.contains_named"), { label: name }),
+        )}
+      </div>
       <div class="draft-open-acts">
         ${
           stepped
