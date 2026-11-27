@@ -28,7 +28,8 @@ export const quietPayStyles = css`
     padding: var(--wt-space-3);
   }
 
-  .quiet-pay-controls > .guests {
+  .quiet-pay-controls > .guests,
+  .quiet-pay-controls > [data-pay-way] + :is([data-pay-lines], wt-input[name="amount"]) {
     margin-block-start: calc(var(--wt-space-4) + var(--wt-space-1));
   }
 

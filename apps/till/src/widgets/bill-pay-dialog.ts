@@ -2228,7 +2228,7 @@ export class TillBillPayDialog extends LitElement {
     ];
     return html`<fieldset class="choice" data-pay-own-receipt ?disabled=${this.busy}>
       <legend>
-        ${t("bill_pay.own_receipt")}<span class="required" aria-hidden="true">*</span>
+        ${t("bill_pay.own_receipt")}<span class="required" aria-hidden="true">&#8288;*</span>
       </legend>
       <div class="options">
         ${answers.map(({ value, answer, label }) =>
