@@ -15,6 +15,7 @@ import {
   rgb,
   servedMenus,
 } from "./widgets/test-helpers.js";
+import { liveReadFixture } from "../test/live-connection.js";
 import { billOptions, listPage } from "../test/find-bill-fixtures.js";
 import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
@@ -833,6 +834,122 @@ it("opens the chosen narrow-floor counter after retrying a scoped offer read", a
     expect(getComputedStyle(label).textOverflow).toBe("ellipsis");
     await floor.click();
     await vi.waitFor(() => expect(zoneChooser(el)?.label).toBe("Room"));
+  } finally {
+    await resetPage();
+  }
+});
+
+it("opens a counter's floor and moves food to Ready as the kitchen finishes it", async () => {
+  await pageAt(390, 844);
+  try {
+    const stream = liveReadFixture();
+    const row = {
+      id: "paid",
+      zoneId: "bar",
+      orderNumber: 41,
+      label: "Pickup cake",
+      status: "settled",
+      items: [{ lineId: "cake", name: "Cake", quantity: "1", note: null, extras: [] }],
+      counts: { ordered: 2, waiting: 1, ready: 1, held: 0, unsent: 0 },
+      total: "4.00",
+      openedAt: "2026-11-27T09:00:00.000Z",
+      settledAt: "2026-11-27T09:01:00.000Z",
+      readyAt: "2026-11-27T09:03:00.000Z",
+      collectedAt: null,
+      canHandOver: true,
+      serviceMode: null,
+      movableDishes: [],
+    };
+    const sent = {
+      ...row,
+      id: "sent",
+      orderNumber: 42,
+      label: "Sent soup",
+      status: "placed",
+      serviceMode: "ticket_then_pay",
+      settledAt: null,
+      collectedAt: "2026-11-27T09:04:00.000Z",
+      canHandOver: false,
+    };
+    const retrievePlacedOrder = vi.fn().mockResolvedValue({
+      ...sent,
+      revision: 0,
+      kitchenNote: { scope: { workingOrderId: "sent" }, note: null, revision: 0, ownerRevision: 0 },
+      lines: [],
+    });
+    const listCounterWaiting = vi.fn().mockResolvedValue([
+      row,
+      sent,
+      {
+        ...row,
+        id: "other-counter",
+        orderNumber: 17,
+        label: "Other counter pie",
+        zoneId: "shop",
+      },
+    ]);
+    const markCollected = vi.fn(async () => listCounterWaiting.mockResolvedValue([sent]));
+    const { el } = await mount(selection(["room", "bar", "shop"], "room"), {
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(zoneOffers("bar")),
+      readLiveEvents: stream.read,
+      listCounterWaiting,
+      markCollected,
+      retrievePlacedOrder,
+    });
+    await vi.waitFor(() => expect(stream.reads).not.toHaveLength(0));
+    stream.event("ready");
+    await openZoneChooser(el);
+    await page.getByRole("menuitem", { name: "Bar", exact: true }).click();
+    await vi.waitFor(() =>
+      expect(page.getByRole("button", { name: "New order" }).query()).not.toBeNull(),
+    );
+    await expect.element(page.getByRole("button", { name: /Pickup cake/ })).toBeVisible();
+    await page.getByRole("button", { name: /Pickup cake/ }).click();
+    await expect.element(page.getByText("1 × Cake", { exact: true })).toBeVisible();
+    expect(page.getByText("Other counter pie").query()).toBeNull();
+    expect(page.getByRole("heading", { name: "Ready to hand over" }).query()).toBeNull();
+
+    listCounterWaiting.mockResolvedValue([
+      sent,
+      {
+        ...row,
+        counts: { ...row.counts, waiting: 0, ready: 2 },
+        readyAt: new Date().toISOString(),
+      },
+    ]);
+    stream.event("change", JSON.stringify([{ type: "ticket_items" }]));
+    await expect.element(page.getByRole("heading", { name: "Ready to hand over" })).toBeVisible();
+    await page.getByRole("button", { name: /Hand over/ }).click();
+    await vi.waitFor(() =>
+      expect(markCollected).toHaveBeenCalledWith("paid", expect.any(String), expect.any(Object)),
+    );
+    await expect
+      .element(page.getByRole("heading", { name: "Ready to hand over" }))
+      .not.toBeInTheDocument();
+
+    await page.getByRole("button", { name: /Sent soup/ }).click();
+    await page.getByRole("button", { name: /Pay #42/ }).click();
+    await vi.waitFor(() => expect(counter(el)?.stage).toBe("collect"));
+    expect(counter(el)?.store.id).toBe("sent");
+    await page.getByRole("button", { name: "Back to Counter" }).click();
+    await page.getByRole("button", { name: "New order" }).click();
+    await vi.waitFor(() =>
+      expect(counter(el)?.shadowRoot?.querySelector("till-menu-browser")).not.toBeNull(),
+    );
+    const basket = counter(el)!;
+    expect(basket.selectedServiceZoneId).toBe("bar");
+    basket.store.addProduct(basket.products[0]!, "1");
+    await el.updateComplete;
+    expect(page.getByRole("button", { name: "Send", exact: true }).query()).toBeNull();
+    const back = page.getByRole("button", { name: "Back to Counter" });
+    await back.click();
+    await chooseUnsaved(el, "keep");
+    expect(basket.store.lines).toHaveLength(1);
+    await back.click();
+    await chooseUnsaved(el, "discard");
+    await expect.element(page.getByRole("button", { name: "New order" })).toBeVisible();
+    expect(basket.store.lines).toHaveLength(0);
+    expect(shell(el).selectedCounterZoneId).toBe("bar");
   } finally {
     await resetPage();
   }

@@ -463,8 +463,8 @@ export function floorControls(
         counters: shell.formFactor === "till" && shell.showCounter ? shell.counterZones : [],
         openCounter: (zoneId) =>
           shell.counterZones.length === 1 && zoneId === shell.selectedCounterZoneId
-            ? emit("screen-select", { screen: "counter" })
-            : emit("counter-zone-selected", { zoneId }),
+            ? emit("screen-select", { screen: "counter", counterFloor: true })
+            : emit("counter-zone-selected", { zoneId, counterFloor: true }),
         kitchen: shell.floorKitchenRows,
         openKitchen: (stationId) =>
           emit(stationId === undefined ? "show-expo" : "show-station", {

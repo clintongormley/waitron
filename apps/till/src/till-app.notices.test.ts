@@ -894,6 +894,8 @@ const waitingRow: CounterWaitingOrder = {
   total: "12.50",
   openedAt: "2026-11-10T10:00:00Z",
   settledAt: null,
+  readyAt: null,
+  zoneId: "zone-counter",
   collectedAt: null,
   serviceMode: "ticket_then_pay",
   counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },

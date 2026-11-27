@@ -982,7 +982,10 @@ open **More** (☰), then choose **Zones on this device** under **Settings**. Ti
 zone you want, choose the one that **Opens first**, and tap **Save**.
 
 On a till with the zone button at the bottom, tap it and pick a counter by name to open **Counter**.
-Tap **Floor** to return. Above the floor, use **Parked orders** or **Waiting** to reopen an order.
+When you pick a counter, tap **Hand over** for an order under **Ready to hand over** or **New order**
+to start a basket. Tap an order under **Open orders** to see its dishes and actions. From the
+basket, tap **Back to Counter**. Tap **Floor** to return to the tables. Use **Parked orders** or
+**Waiting** in the header to reopen an order across counters.
 On a narrow Counter screen, swipe the shortcuts sideways to see more.
 A phone or tablet has no Counter, so its Floor shows every zone you chose. Until you save a choice,
 a phone or tablet opens where it always has. After that it opens on your **Opens first** zone.

@@ -252,3 +252,15 @@ export function storedInvoiceOf(
 > {
   return { orderId, invoiceType, recipient, invoiceDelivery, invoiced };
 }
+
+/** An issued invoice keeps its collection controls. */
+export function counterPaymentWindow(
+  id: string,
+  waiting: readonly { id: string; invoiceNumber?: string }[],
+  stored: ReturnType<typeof storedInvoiceOf> | undefined,
+  collecting: boolean,
+): boolean {
+  const row = waiting.find((order) => order.id === id);
+  if (row !== undefined) return row.invoiceNumber === undefined;
+  return collecting && !(stored?.orderId === id && stored.invoiced === true);
+}

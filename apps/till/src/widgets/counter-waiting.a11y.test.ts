@@ -12,6 +12,8 @@ const sent: CounterWaitingOrder = {
   status: "placed",
   openedAt: "2026-10-01T10:02:00.000Z",
   settledAt: null,
+  readyAt: null,
+  zoneId: "zone-counter",
   collectedAt: null,
   total: "7.50",
   canHandOver: true,

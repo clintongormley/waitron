@@ -1039,8 +1039,11 @@ En las demás pantallas, abre **Más** (☰) y elige **Zonas en este dispositivo
 Marca **Mostrar** en cada zona que quieras, elige la que **Abre primero** y toca **Guardar**.
 
 Si el botón de zona está abajo en la caja, tócalo y elige un mostrador por su nombre para abrir
-**Mostrador**. Toca **Sala** para volver. Encima de la sala, toca **Pedidos aparcados** o **En espera**
-para volver a abrir un pedido. En una pantalla estrecha de Mostrador, desliza los accesos directos
+**Mostrador**. Al elegir un mostrador, toca **Entregar** junto a un pedido de **Listos para
+entregar**, o **Nuevo pedido** para empezar una cesta. Toca un pedido de **Pedidos abiertos**
+para ver sus platos y acciones. Desde la cesta, toca **Volver al mostrador**. Toca **Sala** para
+volver a las mesas. Usa **Pedidos aparcados** o **En espera** en la barra para volver a abrir
+un pedido de cualquier mostrador. En una pantalla estrecha de Mostrador, desliza los accesos directos
 hacia un lado para ver más. Un móvil o una tableta no tiene Mostrador, así que su Sala muestra
 todas las zonas que has elegido. Hasta que guardas una elección, un móvil o una tableta se abre donde siempre.
 Después se abre en tu zona de **Abre primero**. Tras abrir una mesa, mira

@@ -35,6 +35,8 @@ const waiting: CounterWaitingOrder = {
   status: "settled",
   openedAt: "2026-10-16T10:00:00.000Z",
   settledAt: "2026-10-16T10:01:00.000Z",
+  readyAt: null,
+  zoneId: "zone-counter",
   collectedAt: null,
   total: "7.80",
   counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },

@@ -2,9 +2,11 @@ import { orderLabel } from "./order-label.js";
 import { orderPreview, orderPreviewStyles } from "./order-preview.js";
 import { LitElement, css, html, nothing, type TemplateResult, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
+import { counterFloorRowStyles } from "./counter-floor-row-styles.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { orderCountStyles, orderCounts } from "./order-counts.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
@@ -88,8 +90,12 @@ export class TillCounterWaiting extends LitElement {
         font-variant-numeric: tabular-nums;
       }
     `,
+    counterFloorRowStyles,
   ];
 
+  @property({ type: Boolean, reflect: true }) floor = false;
+  @property({ type: Boolean, reflect: true }) ready = false;
+  @property({ type: Number }) now = 0;
   @property({ attribute: false }) orders: CounterWaitingOrder[] = [];
   /** The device's profile allows `take-orders`, which the move route requires. */
   @property({ type: Boolean }) canMoveStation = false;
@@ -132,80 +138,94 @@ export class TillCounterWaiting extends LitElement {
     const scope = waitingScope(order);
     const label = orderLabel(order);
     const pay = order.status === "placed";
+    const expanded = this.expanded.has(order.id);
+    const minutes =
+      order.readyAt === null
+        ? null
+        : Math.max(0, Math.floor((this.now - Date.parse(order.readyAt)) / 60_000));
+    const handOver = html`<wt-button
+      data-waiting-hand-over
+      variant=${this.ready || pay ? "secondary" : "primary"}
+      aria-label=${`${t("waiting.hand_over")} ${scope}`}
+      @click=${() => this.#emit("hand-over-order", { id: order.id })}
+      >${t("waiting.hand_over")}</wt-button
+    >`;
+    const actions = html`<div class="controls">
+      ${
+        this.canEditKitchenNote && order.collectedAt === null
+          ? html`<wt-button
+              data-waiting-kitchen-note
+              variant="secondary"
+              aria-label=${`${t("kitchen_note.title")} ${scope}`}
+              @click=${() => this.#emit("edit-waiting-kitchen-note", { id: order.id })}
+              >${t("kitchen_note.title")}</wt-button
+            >`
+          : nothing
+      }
+      ${
+        pay
+          ? html`<wt-button
+              data-waiting-pay
+              variant="primary"
+              aria-label=${`${t("action.pay")} ${scope}`}
+              @click=${() =>
+                this.#emit("pay-waiting-order", {
+                  id: order.id,
+                  serviceMode: order.serviceMode,
+                } satisfies PayWaitingOrderDetail)}
+              >${t("action.pay")}</wt-button
+            >`
+          : nothing
+      }
+      ${order.canHandOver && !this.ready ? handOver : nothing}
+      ${
+        this.canMoveStation && !pay && order.movableDishes.length > 0
+          ? html`<wt-button
+              data-waiting-move-station
+              variant="secondary"
+              aria-label=${`${t("table.move_station")} ${scope}`}
+              @click=${() => this.#emit("move-waiting-order", { id: order.id })}
+              >${t("table.move_station")}</wt-button
+            >`
+          : nothing
+      }
+    </div>`;
     return html`
       <div
         class="order"
         data-waiting-order=${order.id}
-        @click=${(event: Event) => this.#togglePreview(event, order.id)}
+        @click=${(event: Event) => {
+          if (!this.floor) this.#togglePreview(event, order.id);
+        }}
       >
         <button
           type="button"
           class="summary"
-          aria-expanded=${String(this.expanded.has(order.id))}
+          aria-expanded=${String(expanded)}
           aria-controls=${`preview-${order.id}`}
+          @click=${(event: Event) => {
+            if (this.floor) this.#togglePreview(event, order.id);
+          }}
         >
-          <span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
-          ${label ? html`<span class="label">${label}</span>` : nothing}
-          <span class="state" data-waiting-state>${t(this.#state(order))}</span>
-          <span class="meta">${formatMoney(order.total, currentLocale())}</span>
-          ${orderCounts(order.counts)}
+          <span class="number"
+            >${orderNumber(order.orderNumber, order.formerNumbers)}${this.floor && label ? ` · ${label}` : nothing}</span
+          >
+          ${!this.floor && label ? html`<span class="label">${label}</span>` : nothing}
+          ${
+            this.ready
+              ? minutes === null
+                ? nothing
+                : html`<span class="meta"
+                    >${t("counter.floor_minutes").replace("{n}", String(minutes))}</span
+                  >`
+              : html` <span class="state" data-waiting-state>${t(this.#state(order))}</span>
+                  <span class="meta">${formatMoney(order.total, currentLocale())}</span>
+                  ${orderCounts(order.counts)}`
+          }
         </button>
-        <div class="controls">
-          ${
-            this.canEditKitchenNote && order.collectedAt === null
-              ? html`<wt-button
-                  data-waiting-kitchen-note
-                  variant="secondary"
-                  aria-label=${`${t("kitchen_note.title")} ${scope}`}
-                  @click=${() => this.#emit("edit-waiting-kitchen-note", { id: order.id })}
-                  >${t("kitchen_note.title")}</wt-button
-                >`
-              : nothing
-          }
-          ${
-            pay
-              ? html`<wt-button
-                  data-waiting-pay
-                  variant="primary"
-                  aria-label=${`${t("action.pay")} ${scope}`}
-                  @click=${() =>
-                    this.#emit("pay-waiting-order", {
-                      id: order.id,
-                      serviceMode: order.serviceMode,
-                    } satisfies PayWaitingOrderDetail)}
-                  >${t("action.pay")}</wt-button
-                >`
-              : nothing
-          }
-          ${
-            order.canHandOver
-              ? html`<wt-button
-                  data-waiting-hand-over
-                  variant=${pay ? "secondary" : "primary"}
-                  aria-label=${`${t("waiting.hand_over")} ${scope}`}
-                  @click=${() => this.#emit("hand-over-order", { id: order.id })}
-                  >${t("waiting.hand_over")}</wt-button
-                >`
-              : nothing
-          }
-          ${
-            this.canMoveStation && !pay && order.movableDishes.length > 0
-              ? html`<wt-button
-                  data-waiting-move-station
-                  variant="secondary"
-                  aria-label=${`${t("table.move_station")} ${scope}`}
-                  @click=${() => this.#emit("move-waiting-order", { id: order.id })}
-                  >${t("table.move_station")}</wt-button
-                >`
-              : nothing
-          }
-        </div>
-        <div
-          class="order-preview"
-          id=${`preview-${order.id}`}
-          ?hidden=${!this.expanded.has(order.id)}
-        >
-          ${this.expanded.has(order.id) ? orderPreview(order.items) : nothing}
+        ${this.ready ? html`<div class="controls">${handOver}</div>` : this.floor ? nothing : actions}
+        <div class="order-preview" id=${`preview-${order.id}`} ?hidden=${!expanded}>
+          ${expanded ? html`${orderPreview(order.items)}${this.floor ? actions : nothing}` : nothing}
         </div>
       </div>
     `;
@@ -214,11 +234,19 @@ export class TillCounterWaiting extends LitElement {
   override render() {
     if (this.orders.length === 0) return nothing;
     return html`
-      <div class="title-anchor help-anchor">
-        <h2 class="title">${t("waiting.title")}</h2>
-        ${helpBadge("help.counter.waiting_orders", t("waiting.title"))}
-      </div>
-      ${this.orders.map((order) => this.#row(order))}
+      ${
+        this.floor
+          ? nothing
+          : html`<div class="title-anchor help-anchor">
+              <h2 class="title">${t("waiting.title")}</h2>
+              ${helpBadge("help.counter.waiting_orders", t("waiting.title"))}
+            </div>`
+      }
+      ${repeat(
+        this.orders,
+        (order) => order.id,
+        (order) => this.#row(order),
+      )}
     `;
   }
 }

@@ -1616,7 +1616,7 @@ export class TillShell extends LitElement {
                       data-row-choice
                       data-counter-zone=${zone.id}
                       aria-checked=${zone.id === this.selectedCounterZoneId ? "true" : "false"}
-                      @click=${() => this.#emit("counter-zone-selected", { zoneId: zone.id })}
+                      @click=${() => this.#emit("counter-zone-selected", { zoneId: zone.id, counterFloor: true })}
                     >
                       <wt-icon data-row-check name="menu-check" size="lg"></wt-icon>${zone.name}
                     </button>`,
@@ -1631,7 +1631,7 @@ export class TillShell extends LitElement {
                 aria-selected=${counterMenu ? nothing : screen === activeScreen && !tableOnScreen ? "true" : "false"}
                 tabindex=${counterMenu ? nothing : screen === activeScreen && !tableOnScreen ? 0 : -1}
                 aria-pressed=${counterMenu ? (screen === activeScreen ? "true" : "false") : nothing}
-                @click=${() => this.#emit("screen-select", { screen })}
+                @click=${() => this.#emit("screen-select", screen === "counter" ? { screen, counterFloor: true } : { screen })}
               >
                 ${this.#screenTitle(screen)}
               </button>
