@@ -201,18 +201,20 @@ export async function planWithRights(
   const amount = cents(request.amount);
   const extra = request.purpose === "extra" ? amount : cents(request.extra);
   const wayMoney = cents(way.moneyLeft);
+  // On a full invoice a cancel's money goes on the corrective with the rest (D5).
+  const owedHere = (line: GiveBackLine) => (facts.fullInvoice ? 0 : owedOf(line));
 
   let owed = 0;
   let cancellationIds: string[] | undefined;
   if (request.purpose === "dishes") {
-    owed = ticked.reduce((total, line) => total + owedOf(line), 0);
+    owed = ticked.reduce((total, line) => total + owedHere(line), 0);
     const ids = new Set(
       ticked
         .filter((line) => owedOf(line) > 0)
         .flatMap((line) => facts.cancelIds.get(line.id) ?? []),
     );
     if (ids.size > 0) cancellationIds = [...ids];
-  } else if (request.purpose === "goodwill") {
+  } else if (request.purpose === "goodwill" && !facts.fullInvoice) {
     const owedIds = await cancelsStillOwedBy(tx, saleId);
     owed =
       owedIds.length === 0 ? 0 : (await allocateToCancels(tx, saleId, owedIds, 0)).canStillTake;
@@ -238,9 +240,9 @@ export async function planWithRights(
     } else {
       const usable = view.ways.filter((row) => row.reason === null);
       if (rest > sumCents(usable.map((row) => row.moneyLeft)) - refund) throw invalid("amount");
-      const named = ticked.filter((line) => cents(line.left) - owedOf(line) > 0);
+      const named = ticked.filter((line) => cents(line.left) - owedHere(line) > 0);
       const linesHold =
-        named.reduce((total, line) => total + cents(line.left) - owedOf(line), 0) >= rest;
+        named.reduce((total, line) => total + cents(line.left) - owedHere(line), 0) >= rest;
       correction = {
         kind: "correction",
         amount: centsToDecimal(rest),

@@ -183,16 +183,19 @@ export function moneyAvailability(ways: readonly WayMoney[]): Availability {
 }
 
 /** Whether `line` can be ticked now: never while no payment money can go back
- * ({@link moneyAvailability}), and while a corrective waits only for what its cancel still owes. */
+ * ({@link moneyAvailability}), and while a corrective waits only for what its cancel still owes,
+ * which on a full invoice is the corrective's too (D5). */
 export function lineAvailability(
   line: Pick<GiveBackLine, "left" | "cancelled">,
   waits: GiveBackWaits,
   money: Availability,
+  fullInvoice: boolean,
 ): Availability {
   if (waits.all !== null) return { available: false, reason: waits.all };
   if (!money.available) return money;
   if (waits.money !== null) return { available: false, reason: waits.money };
-  const open = waits.correction === null ? line.left : (line.cancelled?.owed ?? "0.00");
+  const open =
+    waits.correction === null ? line.left : fullInvoice ? "0.00" : (line.cancelled?.owed ?? "0.00");
   if (positive(decimal(open))) return { available: true, reason: null };
   return { available: false, reason: waits.correction };
 }
@@ -434,6 +437,8 @@ interface GiveBackFacts {
   tenders: RefundableTender[];
   /** What Correct invoice could give back now, in cents, before the records are checked. */
   correctable: number;
+  /** Whether the corrective is a full invoice's, which takes the cancels' money too (D5). */
+  fullInvoice: boolean;
   /** The cancels on each line whose money is not all given back yet. */
   cancelIds: ReadonlyMap<string, readonly string[]>;
   /** The lines a correction names for each ticked line: a cancelled dish's family, those of its
@@ -501,7 +506,7 @@ export async function readFacts(
     return {
       ...view,
       ...(dish === undefined
-        ? lineAvailability(view, waits, money)
+        ? lineAvailability(view, waits, money, correctable.fullInvoice)
         : { available: false, reason: null }),
     };
   });
@@ -518,6 +523,7 @@ export async function readFacts(
     waits,
     tenders: correctable.tenders,
     correctable: correctable.amounts.correctable,
+    fullInvoice: correctable.fullInvoice,
     cancelIds,
     namedFor: (lineId) => familyOf(lineId).filter((id) => leftOf(id) > 0),
     recordsUnchecked,

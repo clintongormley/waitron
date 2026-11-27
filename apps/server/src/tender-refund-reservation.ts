@@ -34,7 +34,7 @@ import {
   refuseWhileCorrectionOpen,
   type CorrectionRead,
 } from "./invoice-correction-legs.js";
-import { correctableNow } from "./invoice-corrections.js";
+import { readCorrectableNow } from "./invoice-corrections.js";
 import { fingerprint } from "./parties.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 import { matchTenderRefundCapture } from "./tender-refund-capture.js";
@@ -157,32 +157,48 @@ function namedNoCancels(refund: typeof refunds.$inferSelect): boolean {
 
 /**
  * The payment money, up to `upTo` cents, a refund outside Correct invoice may give back on the
- * sale now: what the cancels it pays for still owe (`owed`) plus what Correct invoice could not
- * give back.
+ * sale now (`limit`): what the cancels it pays for still owe (`owed`) plus what Correct invoice
+ * could not give back. On a full invoice the cancels' money is the corrective's too (D5), so
+ * `owed` counts for nothing there. While Correct invoice waits, `waiting` is why and `limit` is
+ * what `owed` alone allows.
  */
-async function plainRefundLimit(
+async function plainRefundRoom(
   tx: Transaction,
   nodeId: DeviceRequestConfig["nodeId"],
   fiscal: RefundFiscal,
   saleId: string,
   upTo: number,
   owed: number,
-): Promise<number> {
-  if (upTo <= owed) return upTo;
+): Promise<{ limit: number; waiting: AppError | null }> {
+  if (upTo === 0) return { limit: 0, waiting: null };
+  let full = false;
+  const owedHere = () => (full ? 0 : owed);
   const limit = (amounts: { refundable: number; correctable: number }) =>
-    owed + amounts.refundable - amounts.correctable;
-  const amounts = await correctableNow(
-    tx,
-    fiscal.backend,
-    { nodeId },
-    fiscal.reading,
-    brandSaleId(saleId),
-    (amounts) => upTo > limit(amounts),
-  );
-  return Math.min(upTo, limit(amounts));
+    owedHere() + amounts.refundable - amounts.correctable;
+  try {
+    const read = await readCorrectableNow(
+      tx,
+      fiscal.backend,
+      { nodeId },
+      fiscal.reading,
+      brandSaleId(saleId),
+      (amounts, fullInvoice) => {
+        full = fullInvoice;
+        return upTo > limit(amounts);
+      },
+    );
+    full = read.fullInvoice;
+    if (upTo <= owedHere()) return { limit: upTo, waiting: null };
+    if (read.waiting !== null) return { limit: owedHere(), waiting: read.waiting };
+    return { limit: Math.min(upTo, limit(read.amounts)), waiting: null };
+  } catch (error) {
+    // A refusal that passes by waiting refuses the refund above `owed` for now.
+    if (!(error instanceof AppError)) throw error;
+    return { limit: Math.min(upTo, owedHere()), waiting: error };
+  }
 }
 
-/** The sale's refundable payments, each hand-keyed card payment with its `plainRefundLimit`. */
+/** The sale's refundable payments, each hand-keyed card payment with its `plainRefundRoom`. */
 export async function readRefundableTendersWithLimits(
   tx: Transaction,
   nodeId: DeviceRequestConfig["nodeId"],
@@ -202,14 +218,7 @@ export async function readRefundableTendersWithLimits(
   const owedIds = await cancelsStillOwedBy(tx, saleId);
   const owed =
     owedIds.length === 0 ? 0 : (await allocateToCancels(tx, saleId, owedIds, 0)).canStillTake;
-  let limit: number;
-  try {
-    limit = await plainRefundLimit(tx, nodeId, fiscal, saleId, upTo, owed);
-  } catch (error) {
-    // A refusal that passes by waiting refuses the refund above `owed` for now.
-    if (!(error instanceof AppError)) throw error;
-    limit = Math.min(upTo, owed);
-  }
+  const { limit } = await plainRefundRoom(tx, nodeId, fiscal, saleId, upTo, owed);
   return rows.map((row) =>
     row.manual
       ? { ...row, plainRefundLimit: centsToDecimal(Math.min(limit, remaining(row))) }
@@ -472,19 +481,18 @@ export async function reserveTenderRefund(
     plain && cancellationIds === undefined ? await cancelsStillOwedBy(tx, saleId) : [];
   const unnamed =
     owedIds.length === 0 ? undefined : await allocateToCancels(tx, saleId, owedIds, appliedAmount);
-  if (
-    plain &&
-    appliedAmount >
-      (await plainRefundLimit(
-        tx,
-        cfg.nodeId,
-        fiscal,
-        saleId,
-        appliedAmount,
-        (allocation ?? unnamed)?.canStillTake ?? 0,
-      ))
-  )
-    throw new AppError("tender.refund_needs_correction", { tenderId });
+  if (plain) {
+    const room = await plainRefundRoom(
+      tx,
+      cfg.nodeId,
+      fiscal,
+      saleId,
+      appliedAmount,
+      (allocation ?? unnamed)?.canStillTake ?? 0,
+    );
+    if (appliedAmount > room.limit)
+      throw room.waiting ?? new AppError("tender.refund_needs_correction", { tenderId });
+  }
   const covered =
     allocation !== undefined && tipAmount === 0 && appliedAmount <= allocation.canStillTake;
   let authorizedBy: string;

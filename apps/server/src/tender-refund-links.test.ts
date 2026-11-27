@@ -560,12 +560,13 @@ describe("server-held cancellation approval bounds a linked refund", () => {
     );
   });
 
-  it("refuses a linked refund above what its cancels owe on a full invoice as its corrective's money, and without new approval once AEAT refused it with no fix", async () => {
+  it("refuses a linked refund on a full invoice as its corrective's money, even within what its cancels owe, and above it without new approval once AEAT refused it with no fix", async () => {
     const { paid, burger } = await oneCancel(false, true);
-    const first = await staffRefund(paid, refundBody(paid, "6.00", [burger]));
-    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    await refusedNeedsCorrection(paid, refundBody(paid, "6.00", [burger]), staffRefund);
     await refusedNeedsCorrection(paid, refundBody(paid, "8.00", [burger]), staffRefund);
     await inTx(venue, (tx) => refusedByAeat(tx, paid.saleId));
+    const first = await staffRefund(paid, refundBody(paid, "6.00", [burger]));
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
     expect(await refusedOver(paid, refundBody(paid, "8.00", [burger]))).toBe("6.00");
   });
 

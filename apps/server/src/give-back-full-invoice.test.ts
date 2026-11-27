@@ -12,7 +12,8 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { refundsWithoutCorrectiveQuery } from "./accountant-export.js";
 import { readBillEditState } from "./bill-editing.js";
-import type { GiveBackRequest } from "./give-back-plan.js";
+import type { GiveBackPlan, GiveBackRequest } from "./give-back-plan.js";
+import type { GiveBackView } from "./give-back-read.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { REASONS } from "./testing/adjustment-venue.js";
@@ -455,6 +456,146 @@ describe("a fresh leg on an open give-back once its corrective cannot be filed",
       { applied: 800, method: "cash" },
       { applied: 1000, method: "card" },
     ]);
+  });
+});
+
+describe("a cancelled dish's money on a full invoice goes on its corrective (D5)", () => {
+  const steakOf = async (saleId: string, cookie = adminCookie) => {
+    const read = await send(venue.app, cookie, "GET", `/api/transactions/${saleId}/give-back`);
+    expect(read.status, JSON.stringify(read.json)).toBe(200);
+    const view = read.json as unknown as GiveBackView;
+    return { view, steak: view.lines.find((line) => line.gross === "25.00")! };
+  };
+  const plainRefund = (saleId: string, tenderId: string, more: Record<string, unknown> = {}) =>
+    send(venue.app, adminCookie, "POST", `/api/transactions/${saleId}/refunds`, {
+      submissionId: randomUUID(),
+      tenderId,
+      appliedAmount: "25.00",
+      tipAmount: "0.00",
+      reason: "Dish never served",
+      override: supervisor(),
+      ...more,
+    });
+  const refundableTenders = (saleId: string) =>
+    send(venue.app, adminCookie, "GET", `/api/transactions/${saleId}/refundable-tenders`);
+
+  it("files the cancelled steak ticked from Cancel and refund as one R1 of −25.00, with no plain refund", async () => {
+    const { billId, saleId } = await fullInvoice({ cash: "37.00" });
+    const cancelId = await cancelSteak(billId);
+    const { steak } = await steakOf(saleId);
+    const body = await giveBody(
+      saleId,
+      ask("dishes", "25.00", { lineIds: [steak.id], fromCancel: [cancelId] }),
+    );
+    expect(body.expected).toEqual([
+      { kind: "correction", amount: "25.00", way: "cash", lineIds: [steak.id] },
+    ]);
+    const answer = await give(saleId, body);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(correctivesOf(saleId)).toEqual([r1(-2500)]);
+    expect(moneyOf(saleId)).toMatchObject([
+      { applied: 2500, method: "cash", state: "completed", leg: 1 },
+    ]);
+    expect(moneyOf(saleId)).toHaveLength(1);
+  });
+
+  it("while the full invoice's filing waits, offers only the extra, and Refund a payment refuses the cancel's money", async () => {
+    const tipped = await tabWith(venue, "Steak", "House salad");
+    await fixture.chooseFullInvoice(venue, tipped);
+    await payPart(tipped, { cash: "37.00" }, { tendered: "39.00", addedTip: "2.00", tip: "2.00" });
+    const tippedSale = await fixture.saleOf(venue, tipped);
+    const cancelId = await cancelSteak(tipped);
+    await inTx(venue, (tx) => heldFromSending(tx, tippedSale));
+    const waiting = { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } };
+
+    const { view, steak } = await steakOf(tippedSale);
+    expect(steak).toMatchObject({ available: false, reason: waiting });
+    expect(view.choices).toEqual({
+      dishes: { available: false, reason: waiting },
+      goodwill: { available: false, reason: waiting },
+      extra: { available: true, reason: null },
+    });
+    const dishes = ask("dishes", "25.00", { lineIds: [steak.id], fromCancel: [cancelId] });
+    expect(await routePreview(tippedSale, dishes)).toEqual({ status: 409, json: waiting });
+    const extra = await routePreview(tippedSale, ask("extra", "2.00"));
+    expect(extra.status, JSON.stringify(extra.json)).toBe(200);
+    expect((extra.json as unknown as GiveBackPlan).parts).toEqual([
+      { kind: "extra", amount: "2.00", way: "cash" },
+    ]);
+
+    const cash = await tenderOf(tippedSale, "cash");
+    const before = moneyOf(tippedSale);
+    expect(await plainRefund(tippedSale, cash, { cancellationIds: [cancelId] })).toEqual({
+      status: 409,
+      json: waiting,
+    });
+    expect(moneyOf(tippedSale)).toEqual(before);
+  });
+
+  it("tells the till a separate terminal's payment may give back nothing of the cancel plain, while the filing waits too", async () => {
+    const { billId, saleId } = await fullInvoice({ card: "37.00" });
+    await cancelSteak(billId);
+    expect(await refundableTenders(saleId)).toMatchObject({
+      status: 200,
+      json: [{ manual: true, appliedRemaining: "37.00", plainRefundLimit: "0.00" }],
+    });
+    await inTx(venue, (tx) => heldFromSending(tx, saleId));
+    expect(await refundableTenders(saleId)).toMatchObject({
+      status: 200,
+      json: [{ manual: true, plainRefundLimit: "0.00" }],
+    });
+  });
+
+  it("refuses Refund a payment of the cancel's money naming no cancels, as its corrective's money (section 2, row 8)", async () => {
+    const { billId, saleId } = await fullInvoice({ cash: "37.00" });
+    await cancelSteak(billId);
+    const cash = await tenderOf(saleId, "cash");
+    const drawer = drawerCents();
+    expect(await plainRefund(saleId, cash)).toEqual({
+      status: 409,
+      json: { code: "tender.refund_needs_correction", params: { tenderId: cash } },
+    });
+    expect(moneyOf(saleId)).toEqual([]);
+    expect(drawerCents()).toBe(drawer);
+  });
+
+  it("after Cancel and refund, asks a person holding neither right for both, and moves nothing without the PIN (D4)", async () => {
+    const { billId, saleId } = await fullInvoice({ cash: "37.00" });
+    const cancelId = await cancelSteak(billId);
+    const { steak } = await steakOf(saleId, venue.cookie);
+    const request = ask("dishes", "25.00", { lineIds: [steak.id], fromCancel: [cancelId] });
+    const previewed = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${saleId}/give-back/preview`,
+      request,
+    );
+    expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
+    expect(previewed.json).toMatchObject({ needs: ["sale.refund", "sale.rectify"] });
+    const body = await fixture.giveBackBody(venue, venue.cookie, saleId, request, reasonId);
+    const drawer = drawerCents();
+    const refused = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${saleId}/give-back`,
+      body,
+    );
+    expect(refused.status, JSON.stringify(refused.json)).toBe(403);
+    expect(refused.json).toMatchObject({ code: "authorization.not_permitted" });
+    expect(moneyOf(saleId)).toEqual([]);
+    expect(correctivesOf(saleId)).toEqual([]);
+    expect(drawerCents()).toBe(drawer);
+    const approved = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${saleId}/give-back`,
+      { ...body, override: supervisor() },
+    );
+    expect(approved.status, JSON.stringify(approved.json)).toBe(200);
+    expect(correctivesOf(saleId)).toEqual([r1(-2500)]);
   });
 });
 

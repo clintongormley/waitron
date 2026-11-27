@@ -40,6 +40,9 @@ export type CorrectionPreview = CorrectionAmountPreview &
  * `"as_admitted"`, for whichever kind the regime's admission says the invoice takes. */
 export interface FullInvoiceCorrection {
   fullInvoice?: true | "as_admitted";
+  /** Told whether it is a full invoice's correction once the admission is read, before any refusal
+   * of it: a refusal Correct invoice waits out carries no kind. */
+  kindSeen?: (fullInvoice: boolean) => void;
 }
 
 /**
@@ -133,6 +136,7 @@ async function admittedHistory(
   const full =
     kind.fullInvoice === true ||
     (kind.fullInvoice === "as_admitted" && admission.fullInvoice === true);
+  kind.kindSeen?.(full);
   if (admission.fullInvoice && !full) {
     throw new AppError("sale.correction_not_admitted", { reason: "not_simplified" });
   }

@@ -734,6 +734,30 @@ describe("a full invoice's correction, asked for with fullInvoice", () => {
       params: { saleId: full.saleId },
     });
   });
+
+  it("with as_admitted, tells kindSeen the kind before refusing an admission that waits", async () => {
+    const seen: boolean[] = [];
+    const read = (saleId: SaleId) =>
+      captureError(() =>
+        withTransaction(suite.db, (tx) =>
+          readCorrectableLines(tx, backend, saleId, nodeId, {
+            fullInvoice: "as_admitted",
+            kindSeen: (fullInvoice) => seen.push(fullInvoice),
+          }),
+        ),
+      );
+    const full = await sellFull();
+    backend.setCorrectionAdmission({
+      eligible: false,
+      reason: "filing_refused",
+      fullInvoice: true,
+    });
+    expect(await read(full.saleId)).toMatchObject({ params: { reason: "filing_refused" } });
+    const receipt = await sellSteak();
+    backend.setCorrectionAdmission({ eligible: false, reason: "filing_refused" });
+    expect(await read(receipt.saleId)).toMatchObject({ params: { reason: "filing_refused" } });
+    expect(seen).toEqual([true, false]);
+  });
 });
 
 it("refuses a substituted invoice as replaced before asking the regime", async () => {

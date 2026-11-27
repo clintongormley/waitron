@@ -219,15 +219,28 @@ export async function readCorrectableNow(
   cfg: Pick<DeviceRequestConfig, "nodeId">,
   reading: TrustedReading,
   saleId: SaleId,
-  stillRefused: (amounts: { refundable: number; correctable: number }) => boolean,
+  stillRefused: (
+    amounts: { refundable: number; correctable: number },
+    fullInvoice: boolean,
+  ) => boolean,
 ): Promise<{
   tenders: RefundableTender[];
   lines: CorrectableLine[] | null;
   amounts: { refundable: number; correctable: number };
   waiting: AppError | null;
+  /** Whether the regime's admission marks a full invoice, whose corrective is an R1; false where
+   * the invoice was refused before its admission was read. */
+  fullInvoice: boolean;
 }> {
   const tenders = await readRefundableTenders(tx, saleId);
   const refundable = decimalToCents(appliedRemainingOf(tenders));
+  let fullInvoice = false;
+  const kind = {
+    ...AS_ADMITTED,
+    kindSeen: (full: boolean) => {
+      fullInvoice = full;
+    },
+  };
   let lines: CorrectableLine[];
   try {
     const [settled] = await tx
@@ -236,11 +249,13 @@ export async function readCorrectableNow(
       .where(eq(saleSettlements.saleId, saleId));
     if (settled === undefined) throw new AppError("invoice_correction.not_settled", { saleId });
     await refuseTakenOffAdvance(tx, saleId);
-    lines = await readCorrectableLines(tx, backend, saleId, cfg.nodeId, AS_ADMITTED);
+    lines = await readCorrectableLines(tx, backend, saleId, cfg.nodeId, kind);
   } catch (error) {
     const none = { refundable, correctable: 0 };
-    if (refusesForGood(error)) return { tenders, lines: null, amounts: none, waiting: null };
-    if (error instanceof AppError) return { tenders, lines: null, amounts: none, waiting: error };
+    if (refusesForGood(error))
+      return { tenders, lines: null, amounts: none, waiting: null, fullInvoice };
+    if (error instanceof AppError)
+      return { tenders, lines: null, amounts: none, waiting: error, fullInvoice };
     throw error;
   }
   const left = lines.reduce((total, line) => total + decimalToCents(line.left), 0);
@@ -255,12 +270,14 @@ export async function readCorrectableNow(
         saleId,
         refundId: pending.pendingRefundId!,
       }),
+      fullInvoice,
     };
-  if (!stillRefused(amounts)) return { tenders, lines, amounts, waiting: null };
+  if (!stillRefused(amounts, fullInvoice))
+    return { tenders, lines, amounts, waiting: null, fullInvoice };
   if (await recordsNeedChecking(tx, backend, cfg.nodeId))
-    return { tenders, lines, amounts: { refundable, correctable: 0 }, waiting: null };
+    return { tenders, lines, amounts: { refundable, correctable: 0 }, waiting: null, fullInvoice };
   await backend.refuseUntilRecordable(tx, reading);
-  return { tenders, lines, amounts, waiting: null };
+  return { tenders, lines, amounts, waiting: null, fullInvoice };
 }
 
 /** What correcting `selection.gross` off the invoice would file, and the money still refundable on it. */
