@@ -21,7 +21,7 @@ const RESTORE_MS = 20_000;
 export const PAIRED_SHUTDOWN_MS = READY_MS + 2 * PAUSE_MS + 2 * 15_000 + RESTORE_MS;
 
 interface PairStore {
-  bucket: BucketConfig;
+  bucket: BucketConfig & { endpoint: string };
   generation: string;
   streamKey: string;
 }
