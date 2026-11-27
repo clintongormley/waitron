@@ -652,6 +652,7 @@ export class TillMenuBrowser extends LitElement {
       // Another menu's sections are not this one's; a search result waiting for it opens below.
       this.notFound = false;
       this.path = [];
+      this.setMenuFolder = undefined;
     }
     if (pending !== undefined) {
       const target = orderableMenus(this.menus).find((menu) => menu.id === pending.menuId);
