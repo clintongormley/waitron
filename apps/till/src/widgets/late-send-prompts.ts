@@ -8,7 +8,9 @@ import type { LateSendDish, LateSendPurpose } from "./late-send-dialog.js";
 import { lineProductName, soldByTheUnit, unitName } from "./product-name.js";
 import type { ApproverRefusal, OverrideConfirmDetail } from "./supervisor-override-dialog.js";
 
-/** The station's answer for the named menus, or the secondary choice for these dishes. */
+/** The window asking whether the station agreed to dishes whose period ended: `retry` runs the
+ * action again carrying the confirmation of `menuIds`, `remove` runs the secondary choice: it takes new
+ * dishes out, abandons added extras, or leaves stored dishes unsent. */
 export interface LateSendPrompt {
   dishes: readonly LateSendDish[];
   periodNames: readonly [string, ...string[]];
@@ -23,7 +25,7 @@ export interface LateSendApprovalPrompt {
   error: ApproverRefusal | null;
   lateSend: LateSend;
   busy: boolean;
-  /** The refusal goes to the app's error line if the waiter already dismissed this prompt. */
+  /** A PIN refusal goes to the app's error line if the waiter already dismissed this prompt. */
   dismissed: boolean;
   retry: (lateSend: LateSend) => Promise<void>;
 }
