@@ -23,12 +23,12 @@ afterEach(async () => {
 });
 
 const products: TillProduct[] = [
-  "Croquetas de jamón",
-  "Patatas bravas",
-  "Tortilla",
-  "Gazpacho",
-  "Calamares",
-  "Flan",
+  "Ham croquettes",
+  "Spicy potatoes",
+  "Potato omelette",
+  "Cold tomato soup",
+  "Fried squid",
+  "Caramel custard",
 ].map((name, index) => ({
   ...beer,
   id: `p${index}`,

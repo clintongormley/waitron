@@ -662,7 +662,7 @@ Shared typing controls, including dropdown and table searches, and the chosen va
 `wt-combobox` and `wt-colour-chooser`, use
 `--wt-text-control-font-size: max(1rem, 1em, var(--wt-font-size-md))`: at least 16px at that normal
 root, preserving larger inherited or venue text. Resting and floated labels keep their text roles;
-file controls and buttons keep theirs. Price boxes use 6.25rem and number
+file controls and `wt-button` keep theirs. Price boxes use 6.25rem and number
 steppers 5.5rem, so enlarged typing text has room. Standalone server pages and connection-bootstrap
 keep their independent styling. The copied tokens that hold rem lengths match the shared rem defaults; every server page that
 declares them converts each rem back to pixels when rendering (`fixedFontValue`) to keep those
@@ -3838,7 +3838,7 @@ The box carries data attributes its primitive sets, and `fieldStyles` draws each
   the browser fills with its own format text. Otherwise it floats, at `--wt-font-size-sm` at the
   top left, with the value or hint under it. A value set from code rather than typed floats it
   too. An input, a textarea and the button of `wt-combobox` and `wt-colour-chooser` draw the value
-  at `--wt-text-control-font-size`, never smaller than a resting label and larger at 100% text; an
+  at `--wt-text-control-font-size`, never smaller than a resting label, and larger with Waitron's own sizes at 100% text (16 px against 14 px); an
   input and `wt-combobox` draw a placeholder at that size too. In those two buttons the chevron
   sits at the box's middle beside a resting label, and the box is as tall with the label resting
   as with it floated. The resting rule also leaves out a box whose control the browser marks `:autofill`;

@@ -73,7 +73,6 @@ export class DepartmentServiceSteps extends LitElement {
         flex: 1 1 100%;
         min-width: 0;
       }
-      /* The row menu shares the name's line, so the start and minutes below span the whole cell. */
       .fields:has(> wt-row-actions, > .actions-head) > .name {
         flex-basis: calc(100% - var(--wt-tap-min) - var(--wt-space-2));
       }
