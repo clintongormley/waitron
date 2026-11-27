@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fill } from "./t.js";
-import { codeMessage } from "./codes.js";
+import { CODE_TABLES, codeMessage } from "./codes.js";
 import { helpEs } from "./help-strings.js";
 import { catalogues, en, es, type StringKey } from "./strings.js";
 
@@ -654,8 +654,17 @@ describe("a corrective receipt corrects a receipt, a corrective invoice a full i
   });
 });
 
+function spanishCodeMessages(value: unknown, at: string): [string, string][] {
+  if (typeof value !== "object" || value === null) return [];
+  const entry = value as Record<string, unknown>;
+  if (typeof entry.es === "string") return [[at, entry.es]];
+  return Object.entries(entry).flatMap(([key, inner]) =>
+    spanishCodeMessages(inner, `${at}.${key}`),
+  );
+}
+
 describe("the till's Spanish uses one word per thing (design §7.18)", () => {
-  // Reads only the till's catalogue in strings.ts and its Spanish help text, not codes.ts.
+  // Reads the till's catalogue in strings.ts, its Spanish help text and codes.ts's CODE_TABLES.
   const KITCHEN_STATION_COMANDA_KEYS = new Set<string>([
     "station.bump_ticket",
     "station.whole_ticket",
@@ -681,6 +690,7 @@ describe("the till's Spanish uses one word per thing (design §7.18)", () => {
     const texts: [string, string][] = [
       ...Object.entries(es),
       ...Object.entries(helpEs).map(([key, text]): [string, string] => [`help:${key}`, text]),
+      ...spanishCodeMessages(CODE_TABLES, "codes"),
     ];
     const offenders = texts.flatMap(([key, text]) => {
       // The dashboard's own tab name, quoted as the dashboard shows it.

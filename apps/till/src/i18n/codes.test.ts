@@ -107,7 +107,7 @@ it.each([
   [
     "till.origin_refused",
     "This page cannot change the till. Open the till from the venue's address and try again.",
-    "Esta página no puede hacer cambios en el TPV. Abre el TPV desde la dirección del local e inténtalo de nuevo.",
+    "Esta página no puede hacer cambios en la caja. Abre la caja desde la dirección del local e inténtalo de nuevo.",
   ],
   [
     "server.waiting_sales",
@@ -727,7 +727,7 @@ it("explains a pending invoice delivery and a refused original instead of the ge
     "That original receipt cannot be printed. Check the invoice's delivery status or ask a manager.",
   );
   expect(codeMessage("invoice_delivery.receipt_invalid", "es")).toBe(
-    "No se puede imprimir ese recibo original. Comprueba el estado de entrega de la factura o avisa a un responsable.",
+    "No se puede imprimir ese ticket original. Comprueba el estado de entrega de la factura o avisa a un responsable.",
   );
 });
 
@@ -1670,7 +1670,7 @@ it("words the table refusals Print the bill shows in their own words, in both la
     [
       "till.origin_refused",
       "This page cannot change the till. Open the till from the venue's address and try again.",
-      "Esta página no puede hacer cambios en el TPV. Abre el TPV desde la dirección del local e inténtalo de nuevo.",
+      "Esta página no puede hacer cambios en la caja. Abre la caja desde la dirección del local e inténtalo de nuevo.",
     ],
     [
       "submission.id_reused",
@@ -1707,7 +1707,7 @@ it.each([
   [
     "served",
     "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then refund it from the receipt.",
-    "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después devuélvelo desde el recibo.",
+    "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después devuélvelo desde el ticket.",
   ],
   [
     "not_listed",
@@ -1741,7 +1741,7 @@ it.each([
   [
     "served",
     "A dish given free on this bill has been served, so the paid dishes cannot all be refunded here. Untick Refund on one of them, then refund it from the receipt.",
-    "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuélvelo desde el recibo.",
+    "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuélvelo desde el ticket.",
   ],
 ])("words Finish table's tab.free_item_with_dish by its reason %s", (reason, english, spanish) => {
   expect(freeItemAtFinishMessage(reason, "en")).toBe(english);
