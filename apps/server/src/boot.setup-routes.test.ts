@@ -118,6 +118,11 @@ import * as bootHarness from "./testing/boot-harness.js";
 import { joinThenFinish, mainBoxJoinRoutes, type SetupPageSend } from "./testing/setup-join.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
 import { PAIR_BUNDLE_FIELDS } from "./testing/pair-bundle.js";
+import { backupArchiveKey } from "./backup-keys.js";
+import { SETUP_DRIVE_BODY_MAX } from "./drive-backup-files.js";
+import { stageRestoreRequest } from "./restore-request.js";
+
+vi.mock("./restore-request.js", { spy: true });
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -1802,6 +1807,209 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       await rm(venue.directory, { recursive: true, force: true });
       await rm(source.directory, { recursive: true, force: true });
       await rm(dumpDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  /** A drives folder holding `bytes` as a backup file on drive sda1, and that file's name. */
+  async function driveHolding(
+    bytes: Uint8Array,
+  ): Promise<{ root: string; file: object; at: string }> {
+    const root = await mkdtemp(join(tmpdir(), "waitron-boot-drives-"));
+    const name = backupArchiveKey(new Date("2026-10-12T00:00:00Z"), { nodeId: MAIN_NODE_ID });
+    await mkdir(join(root, "sda1", "backups"), { recursive: true });
+    await writeFile(join(root, "sda1", "backups", name), bytes);
+    return {
+      root,
+      file: { drive: "sda1", path: `backups/${name}` },
+      at: join(root, "sda1", "backups", name),
+    };
+  }
+
+  it("a restore from the drive stages a copy, leaves the stick's file and releases the drives after staging, before the restart", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const source = await freshVenue();
+    await seedPersons(source.store.venue, {
+      displayName: "Backup administrator",
+      role: "admin",
+      passwordHash: hashPassword("fixture-restore-password"),
+    });
+    const dumpDir = await mkdtemp(join(tmpdir(), "waitron-boot-drive-restore-"));
+    const stage = vi.mocked(stageRestoreRequest);
+    stage.mockReset();
+    const order: string[] = [];
+    try {
+      const dump = join(dumpDir, "venue.db");
+      await source.store.venue.archiveTo(dump);
+      const artifact = masterKeyArchiveBytes(
+        packArchive([
+          {
+            name: "manifest.json",
+            bytes: Buffer.from(
+              JSON.stringify({
+                manifestVersion: 1,
+                createdAt: "2026-10-12T00:00:00.000Z",
+                environment: "preproduction",
+                modules: {},
+              }),
+            ),
+          },
+          { name: "db.dump", bytes: await readFile(dump) },
+          await nodeDumpEntry(source.store.node, dumpDir),
+          {
+            name: "secrets/trading.env",
+            bytes: Buffer.from(
+              ["WAITRON_NODE_ID=c0000000-0000-4000-8000-000000000008", ""].join("\n"),
+            ),
+          },
+        ]),
+        SEALING_MASTER_KEY,
+      );
+      const drive = await driveHolding(artifact);
+      let observed: { stateDir: string; kills: unknown[] } | undefined;
+      const releaseDrives = vi.fn(async () => {
+        order.push("released");
+        // Staged: the restore's record is written. Not yet restarting: nothing has been signalled.
+        await readFile(join(observed!.stateDir, "flows/restore/record.json"));
+        expect(observed!.kills).toEqual([]);
+      });
+      stage.mockImplementationOnce(async (...args) => {
+        const actual =
+          await vi.importActual<typeof import("./restore-request.js")>("./restore-request.js");
+        await actual.stageRestoreRequest(...args);
+        order.push("staged");
+      });
+      try {
+        await withSetupBoot(
+          venue.directory,
+          {},
+          async ({ post, stateDir, kills }) => {
+            observed = { stateDir, kills };
+            const response = await post("/setup-api/restore", {
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                file: drive.file,
+                masterKey: SEALING_MASTER_KEY_TEXT,
+                environment: "preproduction",
+                oldBoxGone: "1",
+              }),
+            });
+            expect(response.status).toBe(202);
+            expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });
+            const staged = stage.mock.calls[0]![1] as { artifactPath: string };
+            expect(staged.artifactPath).not.toBe(drive.at);
+            expect(
+              staged.artifactPath.startsWith(join(stateDir, "scratch/restore", "drive-")),
+            ).toBe(true);
+            expect(await readFile(drive.at)).toEqual(artifact);
+            expect(await readFile(join(stateDir, "flows/restore/artifact"))).toEqual(artifact);
+            expect(await readdir(join(stateDir, "scratch/restore"))).toEqual([]);
+            await poll(() => (kills.length > 0 ? kills.length : undefined));
+            order.push("restart");
+            expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
+          },
+          { base: OPERATION_FILE_BASE, seams: { drivesRoot: drive.root, releaseDrives } },
+        );
+      } finally {
+        await rm(drive.root, { recursive: true, force: true });
+      }
+      expect(order).toEqual(["staged", "released", "restart"]);
+      expect(releaseDrives).toHaveBeenCalledOnce();
+    } finally {
+      await venue.store.close();
+      await source.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+      await rm(source.directory, { recursive: true, force: true });
+      await rm(dumpDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("a JSON restore carries its recovery details", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const stage = vi.mocked(stageRestoreRequest);
+    stage.mockReset();
+    stage.mockImplementationOnce(async () => {});
+    const operation = {
+      binding: {
+        module: "test-regime",
+        action: "restore",
+        eventId: "paper-event-42",
+        sourceId: "selected-copy-digest",
+        targetNodeId: "d0000000-0000-4000-8000-000000000001",
+      },
+      input: { outsideAllocation: "opaque-signed-envelope" },
+    };
+    const drive = await driveHolding(sealedManifestOnly());
+    try {
+      // No operation file in the real environment, so a restore that read no recovery details is
+      // refused.
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, kills }) => {
+          const response = await post("/setup-api/restore", {
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              file: drive.file,
+              masterKey: SEALING_MASTER_KEY_TEXT,
+              environment: "preproduction",
+              recoveryOperation: operation,
+              nodeRecoverySecret: "node-paper-key",
+            }),
+          });
+          expect(response.status).toBe(202);
+          expect(stage).toHaveBeenCalledOnce();
+          expect(stage.mock.calls[0]![1]).toMatchObject({
+            kind: "archive-file",
+            environment: "preproduction",
+            recoveryOperation: operation,
+            nodeRecoverySecret: "node-paper-key",
+          });
+          await poll(() => (kills.length > 0 ? kills.length : undefined));
+        },
+        { seams: { drivesRoot: drive.root, releaseDrives: async () => {} } },
+      );
+    } finally {
+      await rm(drive.root, { recursive: true, force: true });
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("a multipart upload larger than the JSON limit still restores", async () => {
+    beforeServerStarts();
+    const venue = await freshVenue();
+    const stage = vi.mocked(stageRestoreRequest);
+    stage.mockReset();
+    const received: number[] = [];
+    stage.mockImplementationOnce(async (_stateDir, request) => {
+      if (request.kind === "archive-file")
+        received.push((await readFile(request.artifactPath)).byteLength);
+    });
+    const artifact = new Uint8Array(
+      masterKeyArchiveBytes(Buffer.alloc(SETUP_DRIVE_BODY_MAX + 1024, 7), SEALING_MASTER_KEY),
+    );
+    expect(artifact.byteLength).toBeGreaterThan(SETUP_DRIVE_BODY_MAX);
+    try {
+      await withSetupBoot(
+        venue.directory,
+        {},
+        async ({ post, kills }) => {
+          const form = new FormData();
+          form.set("masterKey", SEALING_MASTER_KEY_TEXT);
+          form.set("environment", "preproduction");
+          form.set("artifact", new Blob([artifact]), "venue.backup.enc");
+          const response = await post("/setup-api/restore", { body: form });
+          expect(response.status).toBe(202);
+          expect(received).toEqual([artifact.byteLength]);
+          await poll(() => (kills.length > 0 ? kills.length : undefined));
+        },
+        { base: OPERATION_FILE_BASE },
+      );
+    } finally {
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
     }
   }, 60_000);
 

@@ -178,7 +178,8 @@ export function mountRecoveryPreparationApi(
       )
         throw new AppError("setup.not_ready", {});
       if (options.busy()) throw new AppError("setup.already_provisioning", {});
-      if (contentType(c) !== "multipart/form-data") invalid("body");
+      if (!["multipart/form-data", "application/json"].includes(contentType(c) ?? ""))
+        invalid("body");
       options.setBusy(true);
       let upload;
       try {

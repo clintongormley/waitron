@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { attachRequestReceiveLimits } from "./request-receive-limits.js";
-import { receiveSetupArchive } from "./setup-archive-upload.js";
+import { receiveRestoreArchive } from "./drive-backup-files.js";
 import { trimTrailingSlashes } from "./trim-trailing-slashes.js";
 import { disarmRestoreDiscard } from "./restore-flow.js";
 import { formerMainForReturn, startReturnRecordsDuty } from "./return-records.js";
@@ -858,6 +858,10 @@ export interface StartServerSeams {
     silentAfterMs?: number;
     ask?: () => Promise<MainAskResult>;
   };
+  /** The folder the host mounts USB drives under; unset, `STORAGE_DRIVES_ROOT`. */
+  drivesRoot?: string;
+  /** Setup's release of the USB drives after a restore stages its copy; unset, it only logs. */
+  releaseDrives?: () => Promise<void>;
 }
 
 /**
@@ -1492,8 +1496,13 @@ async function bootServer(
         joinAttempt,
         prepareRecovery: recoveryPreparation,
         recoveryOperationPath: readVariable(base, "WAITRON_RECOVERY_OPERATION_FILE"),
-        receiveArchive: (request, options) =>
-          receiveSetupArchive(request, join(config.stateDir, RESTORE_STAGING_DIR), options),
+        receiveArchive: receiveRestoreArchive(
+          join(config.stateDir, RESTORE_STAGING_DIR),
+          seams.drivesRoot,
+        ),
+        releaseDrives:
+          seams.releaseDrives ??
+          (async () => log("info", "drives.release_skipped", { reason: "no_host_client" })),
         stageRecovery: recoveryPreparation.stage,
         discardStagedRecovery: recoveryPreparation.discard,
         clearStagedRecovery: recoveryPreparation.clearStaged,

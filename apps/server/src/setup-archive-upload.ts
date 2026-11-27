@@ -22,6 +22,8 @@ export interface ArchiveUploadOptions {
   maxBytes?: number;
   oversizeIsInvalid?: boolean;
   reserveBytes?: number;
+  /** The route moves its file away, so a file on a drive is copied onto the box's own disk. */
+  moves?: boolean;
 }
 function invalid(field = "artifact"): AppError {
   return new AppError("setup.request_invalid", { field });

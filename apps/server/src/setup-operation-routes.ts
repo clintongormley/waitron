@@ -700,14 +700,24 @@ export function mountSetupOperationRoutes(
     provisioning = true;
     return runRestore(c, log, async () => {
       try {
-        if (!c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream"))
-          invalidRequest("artifact");
-        const masterKey = asMasterKey(c.req.header("x-waitron-master-key"), "masterKey");
-        const environment = c.req.header("x-waitron-restore-environment");
-        if (environment !== "production" && environment !== "preproduction")
-          invalidRequest("environment");
-        const upload = await deps.receiveArchive!(c.req.raw);
+        const type = c.req.header("content-type")?.toLowerCase() ?? "";
+        const json = type.startsWith("application/json");
+        if (!json && !type.startsWith("application/octet-stream")) invalidRequest("artifact");
+        const read = (fields?: Map<string, string>) => {
+          const get = (name: string, header: string) =>
+            fields ? fields.get(name) : c.req.header(header);
+          const masterKey = asMasterKey(get("masterKey", "x-waitron-master-key"), "masterKey");
+          const environment = get("environment", "x-waitron-restore-environment");
+          if (environment !== "production" && environment !== "preproduction")
+            invalidRequest("environment");
+          return { masterKey, environment } as const;
+        };
+        if (!json) read();
+        const upload = await deps.receiveArchive!(c.req.raw, {
+          fields: ["masterKey", "environment"],
+        });
         try {
+          const { masterKey, environment } = read(json ? upload.fields : undefined);
           c.header("Cache-Control", "no-store");
           return c.json(
             await preview({
@@ -746,14 +756,10 @@ export function mountSetupOperationRoutes(
       restartAfterReply(c, requestRestart, async (mustRestart) => {
         let upload: ArchiveUpload | undefined;
         try {
-          const multipart = c.req
-            .header("content-type")
-            ?.toLowerCase()
-            .startsWith("multipart/form-data");
-          if (
-            !multipart &&
-            !c.req.header("content-type")?.toLowerCase().startsWith("application/octet-stream")
-          )
+          const type = c.req.header("content-type")?.toLowerCase() ?? "";
+          const drive = type.startsWith("application/json");
+          const multipart = drive || type.startsWith("multipart/form-data");
+          if (!multipart && !type.startsWith("application/octet-stream"))
             invalidRequest("artifact");
           const headerKey = multipart
             ? undefined
@@ -776,6 +782,7 @@ export function mountSetupOperationRoutes(
               "nodeRecoverySecret",
               "recoveryContext",
             ],
+            moves: true,
           });
           const form = multipart ? upload.fields : undefined;
           if (form) {
@@ -839,6 +846,7 @@ export function mountSetupOperationRoutes(
               },
               { oldBoxGone },
             );
+            if (drive) await deps.releaseDrives?.();
             mustRestart();
             // The restore is already recorded, so it must still answer and restart; the next start
             // that reaches the server's boot clears the staging folder.

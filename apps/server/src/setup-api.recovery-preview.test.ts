@@ -1,12 +1,14 @@
 import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { Hono } from "hono";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, onTestFinished, vi } from "vitest";
 import { makeMasterKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
 import { AppError, encodeMasterKeyCode } from "@waitron/shared";
 import { decryptArtifactUnderBackupKey } from "./artifact-cipher.js";
+import { backupArchiveKey } from "./backup-keys.js";
+import { receiveRestoreArchive } from "./drive-backup-files.js";
 import { mountSetup } from "./setup-api.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
 import { heldBackupKey, heldBackupKeyName } from "./testing/backup-key.js";
@@ -71,6 +73,45 @@ it("returns selected-copy metadata without staging or restarting and keeps it ou
   expect(restart).not.toHaveBeenCalled();
   expect(JSON.stringify(log.mock.calls)).not.toContain(MASTER_KEY_TEXT);
   expect(JSON.stringify(log.mock.calls)).not.toContain(OPENING_KEY);
+});
+it("preview takes a drive file where it lies", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "setup-preview-drive-"));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  const root = join(dir, "drives");
+  const staging = join(dir, "scratch");
+  const name = backupArchiveKey(new Date("2026-06-01T10:00:00Z"), { nodeId: preview.nodeId });
+  await mkdir(join(root, "sda1", "backups"), { recursive: true });
+  await mkdir(staging);
+  await writeFile(join(root, "sda1", "backups", name), ARCHIVE);
+  const app = new Hono();
+  const read = vi.fn(async () => preview);
+  mountSetup(
+    app,
+    {
+      environment: "preproduction",
+      receiveArchive: receiveRestoreArchive(staging, root),
+      previewRestore: read,
+    },
+    () => {},
+  );
+  const response = await app.request("/setup-api/restore/preview", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      file: { drive: "sda1", path: `backups/${name}` },
+      masterKey: MASTER_KEY_TEXT,
+      environment: "preproduction",
+    }),
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(preview);
+  expect(read).toHaveBeenCalledWith({
+    kind: "archive-file",
+    artifactPath: join(root, "sda1", "backups", name),
+    recoveryKey: OPENING_KEY,
+    environment: "preproduction",
+  });
+  expect(await readdir(staging)).toEqual([]);
 });
 it("Review backup opens a backup file with the master key", async () => {
   const app = new Hono();

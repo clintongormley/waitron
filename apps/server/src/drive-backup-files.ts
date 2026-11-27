@@ -17,7 +17,12 @@ import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { freeBytes as statFreeBytes } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
-import type { ArchiveUpload, ArchiveUploadOptions } from "./setup-archive-upload.js";
+import {
+  receiveSetupArchive,
+  type ArchiveUpload,
+  type ArchiveUploadOptions,
+  type ReceiveArchive,
+} from "./setup-archive-upload.js";
 import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 
 export const SETUP_DRIVE_LIST_BODY_MAX = 4096;
@@ -136,7 +141,8 @@ export async function listDriveBackups(
 ): Promise<DriveBackupList> {
   const found: DriveBackupFile[] = [];
   for (const { drive, readable } of drives) {
-    if (readable && STORAGE_DRIVE_NAME.test(drive)) await walk(drive, join(root, drive), [], found, log);
+    if (readable && STORAGE_DRIVE_NAME.test(drive))
+      await walk(drive, join(root, drive), [], found, log);
   }
   found.sort(
     (a, b) =>
@@ -260,11 +266,6 @@ export async function readDriveJson(
   }
 }
 
-export interface DriveArchiveOptions extends ArchiveUploadOptions {
-  /** The route moves its file away, so it gets a copy on the box's own disk. */
-  moves?: boolean;
-}
-
 export interface DriveArchiveDeps {
   stagingDir: string;
   limitBytes: number;
@@ -276,7 +277,7 @@ export interface DriveArchiveDeps {
  * each other named key a field, an object as its JSON text. No byte limit applies to the file. */
 export async function receiveDriveArchive(
   request: Request,
-  options: DriveArchiveOptions,
+  options: ArchiveUploadOptions,
   deps: DriveArchiveDeps,
 ): Promise<ArchiveUpload> {
   const body = await readDriveJson(request, deps.limitBytes);
@@ -311,6 +312,18 @@ export async function receiveDriveArchive(
     fields,
     dispose: async () => {},
   };
+}
+
+/** Setup's receiver: a JSON body names a file on a drive, and anything else is an upload. */
+export function receiveRestoreArchive(stagingDir: string, root?: string): ReceiveArchive {
+  return (request, options = {}) =>
+    request.headers.get("content-type")?.toLowerCase().startsWith("application/json")
+      ? receiveDriveArchive(request, options, {
+          stagingDir,
+          limitBytes: SETUP_DRIVE_BODY_MAX,
+          root,
+        })
+      : receiveSetupArchive(request, stagingDir, options);
 }
 
 /** Never throws: a drive left mounted read-only harms nothing, and the next list clears it. */

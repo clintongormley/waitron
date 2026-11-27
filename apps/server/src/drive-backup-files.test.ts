@@ -177,7 +177,7 @@ describe("resolveDriveFile", () => {
 
   it("a file gone after the list answers restore.drive_file_unreadable", async () => {
     await put("sda1", good);
-    const listed = await listDriveBackups([drive("sda1")], { root });
+    const listed = await listDriveBackups([drive("sda1")], { root, log: vi.fn() });
     await rm(join(root, "sda1"), { recursive: true });
 
     await expect(
