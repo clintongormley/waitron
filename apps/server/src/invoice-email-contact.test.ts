@@ -159,9 +159,14 @@ describe("independent invoice email contact", () => {
 });
 
 describe("a corrective's contact", () => {
-  /** A sale correcting the fixture's sale, recording no department of its own, as a filed
-   * corrective does; `replaces` makes it the replacement. */
-  async function corrective(f: Awaited<ReturnType<typeof fixture>>, replaces: boolean) {
+  /** A sale correcting `corrects` (the fixture's sale unless named), recording no department of
+   * its own, as a filed corrective does; `replaces` makes it the replacement, and `customer: false`
+   * a receipt's corrective (R5). */
+  async function corrective(
+    f: Awaited<ReturnType<typeof fixture>>,
+    replaces: boolean,
+    { corrects = f.saleId, customer = true }: { corrects?: string; customer?: boolean } = {},
+  ) {
     const [original] = await suite.db.select().from(sales).where(eq(sales.id, f.saleId));
     const [series] = await suite.db
       .insert(invoiceSeries)
@@ -174,13 +179,22 @@ describe("a corrective's contact", () => {
         id: randomUUID(),
         seriesId: series!.id,
         invoiceNumber: 1,
-        correctsSaleId: f.saleId,
+        correctsSaleId: corrects,
         replacesOriginal: replaces,
         receiptDepartmentId: null,
-        counterpartyTaxId: "B12345674",
-        counterpartyLegalName: "Harbour Foods",
-        counterpartyCountryCode: "ES",
-        counterpartyAddress: "2 Main Street, 28013 Madrid, Madrid",
+        ...(customer
+          ? {
+              counterpartyTaxId: "B12345674",
+              counterpartyLegalName: "Harbour Foods",
+              counterpartyCountryCode: "ES",
+              counterpartyAddress: "2 Main Street, 28013 Madrid, Madrid",
+            }
+          : {
+              counterpartyTaxId: null,
+              counterpartyLegalName: null,
+              counterpartyCountryCode: null,
+              counterpartyAddress: null,
+            }),
       })
       .returning();
     return row!.id;
@@ -193,6 +207,25 @@ describe("a corrective's contact", () => {
     expect(await read({ kind: "sale", saleId: await corrective(f, false) })).toEqual({
       email: "dining@example.com",
     });
+  });
+
+  it("reads the contact of an R1 filed against a replacement from the invoice the replacement replaced", async () => {
+    const f = await fixture();
+    await authored(f.primary, { email: "dining@example.com" });
+    await authored(f.fallback, { email: "fallback@example.com" });
+    const replacement = await corrective(f, true);
+    expect(
+      await read({ kind: "sale", saleId: await corrective(f, false, { corrects: replacement }) }),
+    ).toEqual({ email: "dining@example.com" });
+  });
+
+  it("reads a receipt's corrective's (R5) contact from the department of the receipt it corrects", async () => {
+    const f = await fixture();
+    await authored(f.primary, { email: "dining@example.com" });
+    await authored(f.fallback, { email: "fallback@example.com" });
+    expect(
+      await read({ kind: "sale", saleId: await corrective(f, false, { customer: false }) }),
+    ).toEqual({ email: "dining@example.com" });
   });
 
   it("keeps an R4 replacement on the designated fallback", async () => {

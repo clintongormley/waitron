@@ -407,6 +407,15 @@ describe("a corrective full invoice (R1) is delivered as a full invoice; a repla
     expect(original!.department).not.toBeNull();
   });
 
+  it("files the R4 with no department of its own, so an R1 against it reaches past it for a contact", async () => {
+    const r4 = await filedR4();
+    const [row] = await venue.db
+      .select({ department: sales.receiptDepartmentId })
+      .from(sales)
+      .where(eq(sales.id, r4));
+    expect(row!.department).toBeNull();
+  });
+
   it("prints an R1 that never printed as its original from the till's Reprint, tracked as its delivery", async () => {
     const r1 = await filedR1();
     expect(await printsOf(r1)).toEqual([]);

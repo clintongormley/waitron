@@ -15,12 +15,23 @@ async function departmentOf(
 ): Promise<string | null> {
   switch (source.kind) {
     case "sale": {
-      // A filed corrective records no department of its own (corrective-invoice-delivery.test.ts).
-      const [sale] = await tx
-        .select({ corrects: sales.correctsSaleId, replaces: sales.replacesOriginal })
-        .from(sales)
-        .where(eq(sales.id, source.saleId));
-      const from = sale?.corrects != null && !sale.replaces ? sale.corrects : source.saleId;
+      const correction = async (id: string) =>
+        (
+          await tx
+            .select({ corrects: sales.correctsSaleId, replaces: sales.replacesOriginal })
+            .from(sales)
+            .where(eq(sales.id, id))
+        )[0];
+      // A filed corrective records no department of its own (corrective-invoice-delivery.test.ts),
+      // and an R1 of a replaced invoice is filed against the replacement.
+      const sale = await correction(source.saleId);
+      if (sale?.corrects == null || sale.replaces)
+        return VENUE_SERVICE.receiptDepartmentForSale(tx, source.saleId);
+      let from = sale.corrects;
+      for (let target = await correction(from); target?.replaces === true; ) {
+        from = target.corrects!;
+        target = await correction(from);
+      }
       return VENUE_SERVICE.receiptDepartmentForSale(tx, from);
     }
     case "order":
