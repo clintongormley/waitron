@@ -59,10 +59,8 @@ menus). A menu kept on from a period that ended earlier in the business day (the
 `endedPeriodName` the server sends) stays listed as the till offers it today; the plan reads how it
 is offered today and keeps it.
 
-**A zone kept open later** (today's Keep open, a zone setting, `zoneKeepOpen`): the drawn case reads
-"**Lunch** kept open until 17:15". The plan establishes what the server reports when a zone's
-extension runs past its period's end, and words Now from that. It does not invent a period-level
-"kept open".
+**A zone kept open later** is no longer a case: Keep open is removed (§6). The mock-up's "**Lunch**
+kept open until 17:15" box shows something that will not exist.
 
 ### Worked cases (from the mock-up's bottom strip)
 
@@ -71,7 +69,6 @@ extension runs past its period's end, and words Now from that. It does not inven
 | Bar runs, Lunch starts when it ends | **Bar** until 13:00             | **Lunch** 13:00 to 16:30  |
 | Lunch runs, a gap before Dinner     | **Lunch** until 16:30           | **Dinner** 20:00 to 23:30 |
 | The last period of the day          | **Dinner** until 23:30          | (no row)                  |
-| The zone kept open past Lunch's end | **Lunch** kept open until 17:15 | **Dinner** 20:00 to 23:30 |
 | Between periods                     | **Closed** no period on         | **Dinner** 20:00 to 23:30 |
 
 ## 4. How it looks
@@ -121,3 +118,47 @@ name); it is kept only as a record of what was turned down.
   and why a menu is missing (CLAUDE.md, "A screen change updates its guide").
 - Tests at the box (closed, open with one menu, open with two, no menu on, and every Next case in
   the table above), and a browser test that the panel opens downwards from the box.
+
+## 6. Keep open is removed; a closed zone asks instead (owner, 2026-11-27)
+
+Backlog entry A1626, a separate build from A1624.
+
+**What Keep open did.** A zone (the dining room, the terrace) can close before its department's
+periods end. From its closing minute it takes nothing new: no new guests are seated, an occupied
+table cannot add a dish or raise a quantity, a seated party cannot place a first order, and guests
+or bills cannot move in from another zone (a presented bill can). Paying, splitting, moving dishes
+between bills, a new empty bill, a note, and an extra on a dish already sent still work. Tables are
+not cleared. Receipt: `apps/server/src/till-api.zone-closed.test.ts`, 27 cases, all passing on
+`main` at `c6acae0136` on 2026-11-27. Keep open, on the till with a manager's PIN (the server asks
+for `venue.configure`, `apps/server/src/keep-open-api.ts`), moved that closing minute later for the
+day.
+
+**Why it goes.** The owner: "it is not a waiter's decision to keep the kitchen open. it would be a
+manager's decision, and would maybe happen in the dashboard instead. we already have a way to say
+'send this to the kitchen even though it has closed' which allows us to deal with late orders." The
+2026-11-26 till redesign had no place for it either (its zone section in ☰ lists Add a spare table,
+Taken off and Back to the plan).
+
+**What replaces it.** The owner chose this over keeping a closed zone strict:
+
+- **A closed zone asks, as an ended period does.** Where a closed zone refuses today (seating, a
+  new dish or a higher quantity, a first order, guests or a bill moving in), the till asks first and
+  then does it: "Terrace closed at 22:00", with a choice to go ahead or not. It follows the late
+  send's pattern (`apps/till/src/widgets/late-send-dialog.ts`: "{period} has ended", "Check with
+  the station before sending", "Station agreed — send", "Don't send them"), with wording about the
+  zone rather than a station. No manager's PIN. When both the zone has closed and the dish's period
+  has ended, the person is asked once, naming both.
+- **What still works after closing is unchanged** (paying and the rest listed above), and nothing
+  is cleared.
+- **A planned change to a day's hours** is made in the dashboard's Calendar, as a special day for
+  that zone, as it can be today.
+- **Removed:** the till's Keep open button and dialog (`apps/till/src/widgets/keep-open.ts`,
+  `keep-open-dialog.ts`), its server route, the stored zone extensions and their activity-log kind
+  (`zone.keep_open_ended`), and every mention in the guides (`apps/server/src/guide/en/table-service.md`
+  and its Spanish twin, among others the plan finds). Before go-live this needs no data migration
+  (CLAUDE.md, "No backwards-compatibility or data-migration code until Waitron is in production").
+- The plan traces every reader of the zone's closing state (`zoneKeepOpen` in `GET /api/menu-state`, and
+  the other `packages/venue-service` files that name keep-open, such as `floor-layout-due.ts` and
+  `business-day-schedule.ts`) before removing the field,
+  and every reader of the closed-zone refusal `service_zone.closed`, which now becomes a question
+  rather than a refusal for the cases above.

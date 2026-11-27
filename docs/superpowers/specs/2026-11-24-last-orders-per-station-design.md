@@ -358,7 +358,8 @@ and routing (`packages/venue-service/src/station-service-times.ts`, `planned-ser
 orders after the period's end lengthen them: Bar shows until 16:00. Last orders before it do not
 shorten them: Kitchen still shows until 15:00, "because they're still cooking and cleaning"
 (**owner**). Staffing can be painted past them, and **Keep open** moves the end, as today; nothing more
-is needed (**owner**, "it's enough"). Period blocks, floor plans and the department's open hours are
+is needed (**owner**, "it's enough"). (2026-11-27: Keep open is being removed, A1626; see
+[the menu-and-period design §6](2026-11-27-till-menu-period-dropdown-design.md).) Period blocks, floor plans and the department's open hours are
 not changed.
 
 ### 8. Guides and demo

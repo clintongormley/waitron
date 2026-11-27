@@ -591,6 +591,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Needs the next period from the server. Not started.
   [Design](superpowers/specs/2026-11-27-till-menu-period-dropdown-design.md)
 
+- **A1626. Remove Keep open; a closed zone asks instead (owner, 27 November 2026).** Keep open (a
+  manager's PIN on the till moving a zone's closing time later for the day) goes. Where a closed zone
+  refuses today (seating, new dishes, a first order, moving in), the till asks first, as the late
+  send does after a period ends. Planned changes to a day's hours stay in the Calendar. No data
+  migration before go-live. Not started.
+  [Design §6](superpowers/specs/2026-11-27-till-menu-period-dropdown-design.md#6-keep-open-is-removed-a-closed-zone-asks-instead-owner-2026-11-27)
+
 - **Overpaid open bills (OVERPAID-BILLS, lane L; design approved by the owner, 24 November 2026).** A
   cancel, discount, move or split may leave more on a bill than it comes to, settled before it closes;
   cash back for a card payment with its own permission. Four pull requests, fiscal (the day close
