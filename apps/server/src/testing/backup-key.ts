@@ -11,7 +11,12 @@ export function heldBackupKey(
   n = 1,
   day = HELD_MASTER_KEY_DAY,
 ): BackupKeyRecord {
-  return backupKeyRecord(masterKey, n, sealingPublicKey(masterKey), day);
+  return backupKeyRecord(
+    masterKey,
+    n,
+    sealingPublicKey(masterKey),
+    heldBackupKeyName(masterKey, day),
+  );
 }
 
 /** The name of `masterKey` made on `day`, as its `master_keys` row holds it. */

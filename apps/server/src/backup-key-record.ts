@@ -1,6 +1,6 @@
-import { backupKey, masterKeyId } from "@waitron/credentials";
+import { backupKey, masterKeyDayOf, masterKeyId } from "@waitron/credentials";
 import type { BackupKeyFrameInput } from "@waitron/provisioning";
-import { AppError, decodeMasterKeyCode, isAppError, isCalendarDate } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, isAppError } from "@waitron/shared";
 import { backupKeyBytes } from "./artifact-cipher-file.js";
 import {
   loadHeldKeyNumber,
@@ -15,29 +15,20 @@ import type { StreamHost } from "./stream-host.js";
 
 type Env = Readonly<Record<string, string | undefined>>;
 
-/** `publicKey` is the master key's sealing public key, the one its `master_keys` row keeps;
- * `masterKeyDay` is the day its name begins with. */
+/** `publicKey` and `masterKeyName` are what the master key's `master_keys` row keeps. */
 export function backupKeyRecord(
   masterKey: Uint8Array,
   n: number,
   publicKey: Uint8Array,
-  masterKeyDay: string,
+  masterKeyName: string,
 ): BackupKeyRecord {
+  const masterKeyDay = masterKeyDayOf(masterKeyName);
   return {
     key: backupKey(masterKey, n).toString("base64url"),
     keyNumber: n,
     masterKeyId: masterKeyId(publicKey).toString("hex"),
     masterKeyDay,
   };
-}
-
-/** The day a master key's name begins with: `YYYY-MM-DD · XXXX`. */
-export function masterKeyDayOf(name: string): string {
-  const day = name.slice(0, 10);
-  if (!isCalendarDate(day)) {
-    throw new AppError("master_key.name_day_invalid", {});
-  }
-  return day;
 }
 
 /** What every kind of setup writes for the master key it has just made and shows. */
@@ -51,7 +42,7 @@ export function writeBackupKeyOne(
       decodeMasterKeyCode(masterKey.made.masterKey),
       1,
       masterKey.publicKey,
-      masterKeyDayOf(masterKey.made.masterKeyName),
+      masterKey.made.masterKeyName,
     ),
   );
 }

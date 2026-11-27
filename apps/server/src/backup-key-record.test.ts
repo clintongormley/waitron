@@ -5,7 +5,6 @@ import {
   backupKeyFrameInput,
   backupKeyRecord,
   heldBackupKeyNumber,
-  masterKeyDayOf,
 } from "./backup-key-record.js";
 import { backupKeySettings, heldBackupKey } from "./testing/backup-key.js";
 
@@ -13,7 +12,7 @@ describe("backupKeyRecord", () => {
   it("names backup key N of the master key by its number and the master key's id and day", () => {
     const masterKey = makeMasterKey();
     const publicKey = sealingPublicKey(masterKey);
-    const record = backupKeyRecord(masterKey, 3, publicKey, "2026-11-23");
+    const record = backupKeyRecord(masterKey, 3, publicKey, "2026-11-23 · ABCD");
     expect(record).toEqual({
       key: backupKey(masterKey, 3).toString("base64url"),
       keyNumber: 3,
@@ -22,23 +21,8 @@ describe("backupKeyRecord", () => {
     });
     expect(Buffer.from(record.key, "base64url")).toHaveLength(32);
     expect(record.masterKeyId).toMatch(/^[0-9a-f]{16}$/);
-    expect(backupKeyRecord(masterKey, 1, publicKey, "2026-11-23").key).not.toBe(record.key);
+    expect(backupKeyRecord(masterKey, 1, publicKey, "2026-11-23 · ABCD").key).not.toBe(record.key);
   });
-});
-
-describe("masterKeyDayOf", () => {
-  it("takes the day a master key's name begins with", () => {
-    expect(masterKeyDayOf("2026-11-23 · ABCD")).toBe("2026-11-23");
-  });
-
-  it.each(["ABCD · 2026-11-23", "2026-02-30 · ABCD", ""])(
-    "refuses %j, whose first ten characters are not a calendar date",
-    (name) => {
-      expect(() => masterKeyDayOf(name)).toThrow(
-        expect.objectContaining({ code: "master_key.name_day_invalid" }),
-      );
-    },
-  );
 });
 
 describe("backupKeyFrameInput", () => {
@@ -46,7 +30,7 @@ describe("backupKeyFrameInput", () => {
     makeMasterKey(),
     2,
     sealingPublicKey(makeMasterKey()),
-    "2026-11-23",
+    "2026-11-23 · ABCD",
   );
 
   it("takes the key's 32 bytes, its number, the id's 8 bytes and the master key's day", () => {

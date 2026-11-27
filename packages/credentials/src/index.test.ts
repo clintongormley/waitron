@@ -52,6 +52,7 @@ describe("the public surface", () => {
         "LARGEST_BACKUP_KEY_NUMBER",
         "makeMasterKey",
         "masterKeyCheckValue",
+        "masterKeyDayOf",
         "masterKeyId",
         "masterKeyMatches",
         "masterKeyName",

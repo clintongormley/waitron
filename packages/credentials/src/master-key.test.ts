@@ -8,6 +8,7 @@ import {
   backupKey,
   makeMasterKey,
   masterKeyCheckValue,
+  masterKeyDayOf,
   masterKeyId,
   masterKeyMatches,
   masterKeyName,
@@ -127,6 +128,7 @@ describe("making a master key", () => {
       "backupKey",
       "makeMasterKey",
       "masterKeyCheckValue",
+      "masterKeyDayOf",
       "masterKeyId",
       "masterKeyMatches",
       "masterKeyName",
@@ -233,6 +235,21 @@ describe("the master key's name", () => {
       const error = refusal(() => masterKeyName(sealingPublicKey(fixedKey), day));
       expect(JSON.stringify(error)).toContain("master_key.name_day_invalid");
       expect(JSON.stringify(error)).not.toContain(day);
+    },
+  );
+});
+
+describe("masterKeyDayOf", () => {
+  it("takes the day a master key's name begins with", () => {
+    expect(masterKeyDayOf("2026-11-23 · ABCD")).toBe("2026-11-23");
+  });
+
+  it.each(["ABCD · 2026-11-23", "2026-02-30 · ABCD", ""])(
+    "refuses %j, whose first ten characters are not a calendar date",
+    (name) => {
+      expect(() => masterKeyDayOf(name)).toThrow(
+        expect.objectContaining({ code: "master_key.name_day_invalid" }),
+      );
     },
   );
 });

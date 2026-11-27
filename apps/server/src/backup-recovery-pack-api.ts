@@ -32,7 +32,6 @@ import type { BackupKeyRecord } from "./backup-env-writer.js";
 import {
   backupKeyFacts,
   backupKeyRecord,
-  masterKeyDayOf,
   changeBackupKey,
   heldBackupKeyNumber,
   type BackupKeyChangeDeps,
@@ -357,7 +356,7 @@ export function mountBackupRecoveryPackMakeApi(
                   // Any number is a fresh key under a new master key, so an unknown one is 0.
                   (heldBackupKeyNumber(held) ?? 0) + 1,
                   newMasterKey.publicKey,
-                  masterKeyDayOf(newMasterKey.made.masterKeyName),
+                  newMasterKey.made.masterKeyName,
                 );
           const env = nextKey === undefined ? held : { ...held, ...keyEnv(nextKey, madeAt) };
           const pack = await withTransaction(deps.db, (tx) =>

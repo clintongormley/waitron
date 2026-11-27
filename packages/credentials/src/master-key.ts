@@ -76,3 +76,12 @@ export function masterKeyNameOf(id: Uint8Array, day: string): string {
   }
   return `${day} · ${keySymbols(id).slice(0, 4)}`;
 }
+
+/** The day a master key's name begins with: `YYYY-MM-DD · XXXX`. */
+export function masterKeyDayOf(name: string): string {
+  const day = name.slice(0, 10);
+  if (!isCalendarDate(day)) {
+    throw new AppError("master_key.name_day_invalid", {});
+  }
+  return day;
+}
