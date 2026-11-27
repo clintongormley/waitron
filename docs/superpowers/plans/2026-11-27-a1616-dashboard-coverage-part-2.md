@@ -1,34 +1,31 @@
 # Restore dashboard coverage (A1616 part 2)
 
-Part 1 landed in #4468. Its tests pass the till's local coverage gate. Replaying them against
-nightly 45927524956 still leaves the dashboard 12 statements and 24 branches short. Measure
-the current dashboard baseline at `c37b01983c`, which also includes #4467's backup download.
-The finish line is a dashboard suite that tests the cases below and passes the existing
-98% statements, lines and functions and 95% branches gates locally and in full main CI.
+Part 1 landed in #4468 and passed the till's local coverage gate. The dashboard baseline at
+`c37b01983c` passed 18,415 tests, with six skipped. Coverage was 97.95% statements,
+94.90% branches, 98.33% functions and 99.05% lines. It needs another 18 statements and
+28 branch paths. The finish line is a dashboard suite that passes 98% statements, lines and
+functions and 95% branches locally, with both packages passing full main CI.
 
-Use the existing Chromium screen fixtures, API doubles, and translated expectations. Keep
-production code, coverage settings, till tests and existing assertions intact. Run the cases
-in this order until both dashboard gaps are closed with room for a few counters of drift.
+Use the existing Chromium fixtures and API doubles. Prioritise the gaps below from the
+fresh report. Keep production code, coverage settings, till tests and existing assertions intact.
 
-| Test under `apps/dashboard/src/screens/` | What a person can see or do |
-| --- | --- |
-| `menus-screen.home-tab.test.ts` (#4432) | Save a home page whose saved missing shortcut is sent as a missing reference without its display name. If another manager removed it between load and save, show its own name in the refusal and preserve the edits for a retry. If a newly added shortcut becomes unreachable, name it and explain why. On a successful save that drops deleted additions, name the omitted shortcuts and show the saved list. Use the Home tab API double and the results `packages/menu/src/menu-home.ts` actually returns. |
-| `menus-screen.structure-move.unsaved.test.ts` (#4420) | Keep the draft and show a refusal on the specific Drinks member identified by `sections.0.members.0.ref`, distinct from the existing section-level case. Clear a refused price message when its input is corrected and prove the retry submits the corrected amount. |
-| `box-status-screen.test.ts` (#4467) | When the status read reports that saving the shutdown marker failed after a complete transfer, show the reason and retain the same file and the option to confirm it again. Check that cancelling from that state restores the initial action. Reuse the download-phase fixture. |
-| `menus-screen.customer-preview.test.ts` (#4440) | Show a measured variant's portion with its fixed price and an unportioned variant's price per unit. Use the published-menu fixture and read the displayed choice text. |
+| Test under `apps/dashboard/src/` | What a person can see or do | Gap to measure |
+| --- | --- | --- |
+| `screens/menus-screen.test.ts` | Remove an empty section without a contents confirmation, then cancel and recover the section. Show a dropped ordinary product price by its product name. These are #4420 paths. If loading the menu's details for Rename fails, show Retry and let the manager open Rename again after recovery. | `menus-screen.ts:1345,1604–1605,2891`, `menu-structure-save.ts:151–153` |
+| `widgets/menu-structure-draft.test.ts` (#4420) | Refresh one of two includes while the other keeps the section from the structure read. Check the arrangement and effective offers when each source arrives. | `menu-structure-draft.ts:196–197,256–258` |
+| `screens/menus-screen.home-shortcuts.unsaved.test.ts` (#4432) | If saving the Home page fails with a storage error, show the form-level reason and let the manager save the same draft when storage recovers. | `menu-home-save.ts:253–265`, general rather than shortcut-specific refusal |
+| `screens/box-status-screen.test.ts` (#4467) | If saving the shutdown marker fails after a complete transfer, show the reason and keep the named file and confirmation action. Stop closes the confirmation and keeps the download. Extend the existing cancel table with this state and check the initial shutdown action returns. | `box-status-screen.ts:1128,1243`, download cancellation |
+| `screens/menus-screen.customer-preview.test.ts` (#4440) | Show a single price with no empty description, and an allergen label without a subtype where none is recorded. An extra counted each shows a price without a portion suffix. | `customer-menu-page.ts:61–62,377,419–421` |
+| `screens/menus-screen.heading.test.ts` (#4436) | Open the clashes from Home and verify the displayed Structure filter and browser address. | `menus-screen.ts:2978–2979` |
 
-If the branch count still needs coverage, extend `apps/dashboard/src/widgets/menu-structure-draft.test.ts`
-so one included menu can refresh while another keeps its last known section and prices. Reuse
-the draft fixture and check the returned arrangement and override prices after each source arrives.
-
-Budget about 220–330 added test lines, with no production or support changes. Use the fresh
-coverage report and the part 1 replay to prioritise these cases. In a disposable checkout,
-run each new case against its missing behaviour to see its assertion fail, then restore the
-production code and run the changed files with the normal dashboard browser project.
+Budget about 220–330 added test lines, with no production or support changes. Run the changed
+files and measure their gain against the baseline. Show that the new assertions fail with the
+behaviour removed in a disposable checkout using `mktemp -d` for scratch. If the named cases
+leave a gap or their size grows by half, checkpoint with the remaining count for the watcher.
 
 Run `pnpm --filter @waitron/dashboard test:coverage` and record all four totals. The PR body
 names the coverage drops from the 26 and 27 November logs and the Git diffs, and distinguishes
-#4467, which landed after the failing nightly. Reuse the till's full local result from part 1
-unless the till sources or tests have since changed on the candidate base. After the test-only
-branch lands, dispatch full `ci.yml` on main and read `test-dashboard-merge` and `test-till-merge`
-for that dispatch's SHA. Keep A1616 open until both merges pass.
+#4467, which landed after the failing nightly. The dashboard's `tender-refund-types.ts` already
+appeared at 0% on 26 November and contributes zero counters locally. Reuse the till's full local
+result unless the till changed since part 1. After landing, dispatch full `ci.yml` on main and
+read `test-dashboard-merge` and `test-till-merge` for its SHA. Keep A1616 open until both pass.
