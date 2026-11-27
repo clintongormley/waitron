@@ -5,7 +5,7 @@ import { commands } from "vitest/browser";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
-    refusePopoverChunk: (refuse: boolean) => Promise<void>;
+    refusePopoverChunk: (refuse: boolean) => Promise<Array<{ url: string; outcome: string }>>;
   }
 }
 const native = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "popover")!;
