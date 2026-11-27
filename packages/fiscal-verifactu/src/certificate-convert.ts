@@ -145,3 +145,21 @@ export function openOrRewrite(pfx: Buffer, passphrase: string): RewrittenResult 
   const again = openCertificateFile(rewritten, passphrase);
   return again.ok ? { ...again, rewritten } : opened;
 }
+
+/** The opener child's JSON answer to its JSON input. */
+export function answerOpener(input: string): string {
+  const { pfx, passphrase, rewriteOld } = JSON.parse(input) as {
+    pfx: string;
+    passphrase: string;
+    rewriteOld: boolean;
+  };
+  const file = Buffer.from(pfx, "base64");
+  const result: RewrittenResult = rewriteOld
+    ? openOrRewrite(file, passphrase)
+    : openCertificateFile(file, passphrase);
+  return JSON.stringify(
+    result.ok && result.rewritten !== undefined
+      ? { ...result, rewritten: result.rewritten.toString("base64") }
+      : result,
+  );
+}

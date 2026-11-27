@@ -12,7 +12,7 @@ import {
   RC4_CANDIDATE,
 } from "../test/openssl-certificates.js";
 import { openCertificateFile } from "./certificate-file.js";
-import { openOrRewrite, rewriteOldCertificate } from "./certificate-convert.js";
+import { answerOpener, openOrRewrite, rewriteOldCertificate } from "./certificate-convert.js";
 
 vi.mock("./certificate-file.js", { spy: true });
 
@@ -170,5 +170,38 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
       ok: false,
       reason: "passphrase_wrong",
     });
+  });
+});
+
+describe("the opener child's answer", () => {
+  const ask = (pfx: Buffer, passphrase: string, rewriteOld: boolean) =>
+    JSON.parse(
+      answerOpener(JSON.stringify({ pfx: pfx.toString("base64"), passphrase, rewriteOld })),
+    ) as Record<string, unknown>;
+
+  it("opens with plain Node unless asked to rewrite", () => {
+    expect(ask(bytes(RC2_SIGNED_CANDIDATE), RC2_SIGNED_CANDIDATE.passphrase, false)).toEqual({
+      ok: false,
+      reason: "old_encryption",
+    });
+  });
+
+  it("sends a rewritten file as base64 beside its details", () => {
+    const { passphrase } = RC2_SIGNED_CANDIDATE;
+    const answer = ask(bytes(RC2_SIGNED_CANDIDATE), passphrase, true);
+    expect(answer).toMatchObject({
+      ok: true,
+      details: { fingerprint: OPENSSL_SIGNED_FINGERPRINT },
+    });
+    expect(
+      openCertificateFile(Buffer.from(answer.rewritten as string, "base64"), passphrase),
+    ).toMatchObject({ ok: true, details: { fingerprint: OPENSSL_SIGNED_FINGERPRINT } });
+  });
+
+  it("sends no rewritten file for one Node opens", () => {
+    const candidate = makeAuthority().issue();
+    const answer = ask(candidate.pfx, candidate.passphrase, true);
+    expect(answer).toMatchObject({ ok: true });
+    expect(answer).not.toHaveProperty("rewritten");
   });
 });
