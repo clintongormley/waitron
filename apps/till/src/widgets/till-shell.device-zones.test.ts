@@ -422,7 +422,7 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     await vi.waitFor(() => {
       expect(bar()).toBeNull();
       expect(floor.shadowRoot!.activeElement).toBe(
-        floor.shadowRoot!.querySelector('[data-zone="room"]'),
+        floor.shadowRoot!.querySelector('[data-zone="terrace"]'),
       );
       expect(floor.shadowRoot!.activeElement).not.toBeNull();
     });
