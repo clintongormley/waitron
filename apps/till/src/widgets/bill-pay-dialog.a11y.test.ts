@@ -6,6 +6,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
 import { pendingCard } from "../../test/bill-pay-fixtures.js";
+import { splitAmong } from "../../test/bill-pay-app.js";
 import type { TablePayQuoteRequest } from "../state/table-pay-quote.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
 import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/payments-api.js";
@@ -756,7 +757,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       },
     });
     const { el } = mounted;
-    await typed(el, "people", "3");
+    await splitAmong(el, 3);
     await pressed(el, 'input[name="method"][value="card"]');
     await previewed(el, shareOf3);
     await pressed(el, "[data-pay-confirm]");
@@ -974,7 +975,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
 
   it("has no violations on a handheld confirming a card on the reader the row names", async () => {
     const { host, el } = await withRow();
-    await typed(el, "people", "3");
+    await splitAmong(el, 3);
     await previewed(el, shareOf3);
     await expectNoA11yViolations(host);
   });
@@ -1006,7 +1007,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     try {
       expect(window.innerWidth).toBe(width);
       const { el } = await withRow();
-      await typed(el, "people", "3");
+      await splitAmong(el, 3);
       if (step === "confirm") await previewed(el, shareOf3);
       const panel = el
         .shadowRoot!.querySelector("wt-dialog")!
@@ -1054,7 +1055,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     "has no violations on a handheld confirmation with a tap's %s notice",
     async (tone, message) => {
       const { host, el } = await withRow();
-      await typed(el, "people", "3");
+      await splitAmong(el, 3);
       await previewed(el, shareOf3);
       el.notice = { message: message(), tone };
       await el.updateComplete;
@@ -1071,7 +1072,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
       try {
         expect(window.innerWidth).toBe(width);
         const { el } = await withRow();
-        await typed(el, "people", "3");
+        await splitAmong(el, 3);
         await previewed(el, shareOf3);
         el.notice = {
           message: t("equipment.picked_up").replace("{item}", "Lector 3"),
@@ -1119,7 +1120,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
   async function atTheTable(state: "waiting" | "declined") {
     const mounted = await withRow();
     const { el } = mounted;
-    await typed(el, "people", "3");
+    await splitAmong(el, 3);
     await previewed(el, shareOf3);
     await pressed(el, "[data-pay-confirm]");
     el.busy = true;
@@ -1342,7 +1343,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     confirm: {
       setup: async () => {
         const mounted = await mount({ ...handheldProps, balance: longBalance, way: "share" });
-        await typed(mounted.el, "people", "3");
+        await splitAmong(mounted.el, 3);
         await pressed(mounted.el, 'input[name="method"][value="card"]');
         await previewed(mounted.el, shareOf3);
         return mounted;
@@ -1354,7 +1355,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     "card-waiting": {
       setup: async () => {
         const mounted = await mount({ ...handheldProps, way: "share" });
-        await typed(mounted.el, "people", "3");
+        await splitAmong(mounted.el, 3);
         await pressed(mounted.el, 'input[name="method"][value="card"]');
         await previewed(mounted.el, shareOf3);
         await pressed(mounted.el, "[data-pay-confirm]");

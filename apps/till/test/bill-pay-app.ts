@@ -463,6 +463,39 @@ export async function type(el: TillApp, name: string, value: string): Promise<vo
   await flush(el);
 }
 
+const payDialog = (el: TillApp | TillBillPayDialog): TillBillPayDialog =>
+  el.localName === "till-bill-pay-dialog" ? (el as TillBillPayDialog) : dialog(el as TillApp)!;
+
+const shareField = (el: TillApp | TillBillPayDialog) =>
+  payDialog(el).shadowRoot!.querySelector<HTMLElement & { value: string }>(
+    'wt-input[name="people"]',
+  );
+
+/** Splits the bill equally among `n` guests still to pay, choosing Split equally first when the
+ * form does not ask for the guests. `el` is the app or the Pay dialog itself. */
+export async function splitAmong(el: TillApp | TillBillPayDialog, n: number): Promise<void> {
+  const pay = payDialog(el);
+  if (shareField(el) === null) {
+    pay
+      .shadowRoot!.querySelector<HTMLElement>(
+        '[data-quiet-pay-way="share"], input[name="way"][value="share"]',
+      )!
+      .click();
+    await pay.updateComplete;
+  }
+  const input = shareField(el)!.shadowRoot!.querySelector("input")!;
+  input.value = String(n);
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  if (pay === el) await pay.updateComplete;
+  else await flush(el as TillApp);
+}
+
+/** The guests the split still waits for, null when it holds no count. */
+export function guestsStillToPay(el: TillApp | TillBillPayDialog): number | null {
+  const value = shareField(el)?.value ?? "";
+  return value === "" ? null : Number(value);
+}
+
 export async function choosePayWay(
   el: TillApp,
   way: "whole" | "share" | "items" | "contribution",

@@ -80,6 +80,8 @@ import {
   text,
   till,
   type,
+  guestsStillToPay,
+  splitAmong,
 } from "../test/bill-pay-app.js";
 import {
   openPartyMenu,
@@ -1378,7 +1380,7 @@ describe("an unanswered presented payment on a handheld", () => {
     );
     await pressPaySheet(el, await openPhoneTable(el));
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
     if (out) expect(takeBillPayment).toHaveBeenCalledOnce();
@@ -1484,7 +1486,7 @@ describe("an unanswered presented payment on a handheld", () => {
       emit(order, "bill-pay", { way: "share", lines: [] });
       await flush(el);
       await choosePayWay(el, "share");
-      await type(el, "people", "3");
+      await splitAmong(el, 3);
       await choosePayMethod(el, "card");
       await takeBillPaymentFromDialog(el);
       expect(takeBillPayment).toHaveBeenCalledOnce();
@@ -1516,7 +1518,7 @@ describe("an unanswered presented payment on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
     await expect
@@ -2980,7 +2982,7 @@ describe("till-app: the next guest on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
 
@@ -3014,7 +3016,7 @@ describe("till-app: the next guest on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     getBillBalance.mockResolvedValue(paid);
     await takeBillPaymentFromDialog(el);
@@ -3047,7 +3049,7 @@ describe("till-app: the next guest on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
 
@@ -3090,7 +3092,7 @@ describe("till-app: the next guest on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
 
@@ -3123,7 +3125,7 @@ describe("till-app: the next guest on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
     await vi.waitFor(() =>
@@ -3198,7 +3200,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     const charge = await readyBillCharge(el);
     if (timeouts) {
@@ -3334,7 +3336,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       expect(inDialog(el, "wt-form-actions")!.error).toBe(
         t(state === "declined" ? "bill_pay.card_declined" : "bill_pay.payment_failed"),
       );
-      expect(inDialog(el, 'wt-input[name="people"]')).toHaveProperty("value", "");
+      expect(guestsStillToPay(el)).toBeNull();
       await tick(el, 3);
       expect(reads()).toBe(1);
     },
@@ -3486,12 +3488,12 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       const getBillBalance = vi.fn(async () => ownIs("pending"));
       const { el } = await pendingShare(getBillBalance);
       await press(el, "[data-pay-next]");
-      await type(el, "people", "5");
+      await splitAmong(el, 5);
       getBillBalance.mockResolvedValue(ownIs("received"));
 
       await tick(el);
 
-      expect(inDialog(el, 'wt-input[name="people"]')).toHaveProperty("value", "5");
+      expect(guestsStillToPay(el)).toBe(5);
       expect(inDialog(el, "[data-pay-uncertain]")).toBeNull();
       expect(dialog(el)!.taken).toBeNull();
       expect(text(inDialog(el, "[data-pay-notice]"))).toBe(late("bill_pay.late_received"));
@@ -3514,7 +3516,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       expect(inDialog(el, "[data-pay-uncertain]")).not.toBeNull();
       expect(dialog(el)!.refusal).toBeNull();
       await press(el, "[data-pay-next]");
-      expect(inDialog(el, 'wt-input[name="people"]')).toHaveProperty("value", "");
+      expect(guestsStillToPay(el)).toBeNull();
 
       getBillBalance.mockResolvedValue(bothAt("declined", { ...second, state: "received" }));
       await tick(el);
@@ -3553,7 +3555,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       expect(text(inDialog(el, "[data-pay-notice]"))).toBe(late("bill_pay.late_not_charged"));
       expect(text(inDialog(el, "[data-pay-next]"))).toBe(t("bill_pay.next"));
       await press(el, "[data-pay-next]");
-      expect(inDialog(el, 'wt-input[name="people"]')).toHaveProperty("value", "");
+      expect(guestsStillToPay(el)).toBeNull();
     });
   });
 
@@ -3824,7 +3826,7 @@ describe("till-app: a card the reader has not answered, on a handheld", () => {
       const order = await openPhoneTable(el);
       await pressPaySheet(el, order);
       await choosePayWay(el, "share");
-      await type(el, "people", "3");
+      await splitAmong(el, 3);
       await choosePayMethod(el, "card");
       const charge = await readyBillCharge(el);
       vi.useFakeTimers({
@@ -3953,7 +3955,7 @@ describe("the document choice on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     for (const next of [2, 3]) {
       await takeBillPaymentFromDialog(el);
@@ -4383,7 +4385,7 @@ describe("the document choice on a handheld", () => {
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "card");
     await takeBillPaymentFromDialog(el);
 
@@ -6692,7 +6694,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
     const order = await openPhoneTable(el);
     await pressPaySheet(el, order);
     await choosePayWay(el, "share");
-    await type(el, "people", "3");
+    await splitAmong(el, 3);
     await choosePayMethod(el, "cash");
     await type(el, "tendered", "40");
     await press(el, "[data-pay-continue]");
