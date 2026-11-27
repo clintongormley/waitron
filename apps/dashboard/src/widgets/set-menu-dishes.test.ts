@@ -56,6 +56,25 @@ it("shows Dish and Surcharge without a Course column or chooser", async () => {
   expect(page.getByRole("button", { name: "Customise columns" }).elements()).toEqual([]);
 });
 
+it.each([390, 1280])("aligns Surcharge across course tables at %ipx", async (width) => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(width, 844);
+  onTestFinished(() => page.viewport(before.width, before.height));
+  await mountDishes({
+    ...details,
+    dishes: [soup, { ...bravas, name: "Crispy potatoes with smoked paprika and garlic" }, hake],
+  });
+  await expect.element(page.getByRole("link", { name: "Edit Hake" })).toBeVisible();
+  await document.fonts.ready;
+
+  const starts = page
+    .getByRole("columnheader", { name: "Surcharge" })
+    .elements()
+    .map((heading) => heading.getBoundingClientRect().left);
+  expect(starts).toHaveLength(3);
+  expect(Math.max(...starts) - Math.min(...starts)).toBeLessThan(1);
+});
+
 it("lets a manager edit Surcharge with a saved choice to hide it", async () => {
   const key = "waitron.menus.set-menu.dishes.starters:columns";
   localStorage.setItem(key, JSON.stringify({ surcharge: false }));

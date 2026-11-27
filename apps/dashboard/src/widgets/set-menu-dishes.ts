@@ -55,6 +55,13 @@ export class SetMenuDishes extends LitElement {
       wt-data-table {
         isolation: isolate;
       }
+      wt-data-table::part(column-surcharge) {
+        inline-size: 0;
+      }
+      wt-data-table::part(dish-name),
+      wt-data-table::part(dish-link) {
+        overflow-wrap: anywhere;
+      }
       wt-data-table::part(dish-surcharge) {
         inline-size: calc(var(--wt-space-6) * 4);
       }
@@ -310,15 +317,15 @@ export class SetMenuDishes extends LitElement {
         key: "dish",
         label: t("menus.set_menu_dish"),
         cell: (dish) =>
-          html`${dish.name}${
-            dish.courseId === null
-              ? html`<a
-                  part="dish-link"
-                  href=${`/products/product/${encodeURIComponent(dish.productId)}`}
-                  >${fill("menus.set_menu_edit_product", { name: dish.name })}</a
-                >`
-              : nothing
-          }`,
+          html`<span part="dish-name">${dish.name}</span>${
+              dish.courseId === null
+                ? html`<a
+                    part="dish-link"
+                    href=${`/products/product/${encodeURIComponent(dish.productId)}`}
+                    >${fill("menus.set_menu_edit_product", { name: dish.name })}</a
+                  >`
+                : nothing
+            }`,
       },
       {
         key: "surcharge",
@@ -420,6 +427,7 @@ export class SetMenuDishes extends LitElement {
           <h3>${name}</h3>
           ${id === null ? html`<p>${t("menus.set_menu_no_course_help")}</p>` : nothing}
           <wt-data-table
+            wrap-to-fit
             aria-label=${name}
             .rows=${groups.get(id)!}
             .columns=${columns}
