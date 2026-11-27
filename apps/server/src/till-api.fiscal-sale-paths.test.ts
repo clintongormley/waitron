@@ -138,7 +138,7 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 /**
  * Stand up a fresh chained venue + registered SIF, seed a menu and a staff
  * person with a known PIN, and read back the sellable products — one unit product
- * (1.50 gross, general/21%) and one kg product (24.90 €/kg, reduced/10%).
+ * (1.50 gross) and one kg product (24.90 €/kg).
  */
 async function setupVenue(): Promise<{
   cfg: TradingContext;
@@ -193,14 +193,12 @@ async function setupVenue(): Promise<{
       name: "Jamón cortado",
       unitId: kgId,
       unitPrice: "24.90",
-      vatClass: "reduced",
     });
     const water = await createProduct(tx, {
       categoryId: drinkCategory.id,
       name: "Agua mineral",
       unitId: null, // Each (no unit).
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     const hamMenuItem = await addProductToMenu(tx, {
@@ -731,7 +729,7 @@ describe("the fiscal sale path over HTTP", () => {
 
   it("saves and pays a fresh cash basket in one request and replays its invoice", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1012,7 +1010,7 @@ describe("sale-time device from the authenticated session", () => {
 describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", () => {
   it("saves the edited parked basket with payment and replays the filed invoice", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1352,7 +1350,7 @@ describe("reader payments over HTTP", () => {
 
   it("routes to the device's chosen reader, captures, and STAMPS payments.reader_id", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
@@ -1903,7 +1901,7 @@ describe("place → station queue → per-line advance → collect, over HTTP", 
   it("Mode T: place files no fiscal doc; the prep queue tracks it; collect files the sale at collect", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const modeCfg: TradingContext = { ...cfg };
-    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50
 
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -2791,7 +2789,6 @@ it("files an extras pick and an options answer through cash checkout and reprint
         name: "Queso",
         pricingUnit: "each",
         unitPrice: "9.00",
-        vatClass: "reduced",
       });
       const extras = await createExtraList(
         tx,
@@ -3714,7 +3711,6 @@ describe("a sale cannot hand over settled extras or options", () => {
           name: "Queso",
           pricingUnit: "each",
           unitPrice: "9.00",
-          vatClass: "general",
         });
         const extras = await createExtraList(
           tx,
@@ -3758,7 +3754,6 @@ describe("a sale cannot hand over settled extras or options", () => {
             kitchenName: null,
             price: "0.00",
             listId: lists.extras.id,
-            vatClass: "general",
             quantity: 7,
           },
         ],

@@ -52,7 +52,6 @@ beforeEach(async () => {
           name,
           unitId: null,
           unitPrice,
-          vatClass: "reduced",
         })
       ).id;
     dishes.burger = await product("burger", "9.50");

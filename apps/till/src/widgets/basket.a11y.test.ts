@@ -11,7 +11,6 @@ const coffee: TillProduct = {
   customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
   unitPrice: "1.50",
-  vatClass: "general",
   category: null,
   allergens: null,
 };
@@ -22,7 +21,6 @@ const ham: TillProduct = {
   customerName: { es: "Jamón para el cliente" },
   pricingUnit: "weight",
   unitPrice: "10.00",
-  vatClass: "reduced",
   category: "charcutería",
   allergens: null,
 };
@@ -205,8 +203,6 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
       customerName: { es: "Bacon carta" },
       kitchenName: "Bacon KDS",
       price: "1.50",
-      vatClass: "general" as const,
-      takeawayVatClass: "general" as const,
       maxQuantity: 3,
       preselected: false,
       addAllergens: { milk: {} },

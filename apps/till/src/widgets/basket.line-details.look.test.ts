@@ -15,7 +15,6 @@ const dish: TillProduct = {
   kitchenName: "Kitchen soup",
   unitPrice: "123.45",
   pricingUnit: "each",
-  vatClass: "general",
   category: null,
   allergens: { nuts: { kinds: ["walnuts"] }, gluten: { kinds: ["wheat"] } },
   dietaryDeclarations: ["vegetarian"],
@@ -43,8 +42,6 @@ const dish: TillProduct = {
           customerName: { en: "Customer cheese" },
           kitchenName: "Kitchen cheese",
           price: "1.25",
-          vatClass: "general",
-          takeawayVatClass: "general",
           portion: "1",
           unit: {
             id: "each",

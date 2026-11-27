@@ -128,7 +128,6 @@ describe("sending split-off extras", () => {
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "general",
       });
       await expect(addExtras(tx, cfg, burger.id, [{ name: "Chips" } as never])).rejects.toThrow(
         "three distinct names",
@@ -367,7 +366,6 @@ describe("sending split-off extras", () => {
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "general",
       });
       const {
         listId,
@@ -417,7 +415,6 @@ describe("sending split-off extras", () => {
         kitchenName: "H2O",
         pricingUnit: "each",
         unitPrice: "2.00",
-        vatClass: "general",
       });
       const {
         listId,
@@ -466,7 +463,6 @@ describe("sending split-off extras", () => {
         kitchenName: "H2O",
         pricingUnit: "each",
         unitPrice: "2.00",
-        vatClass: "general",
       });
       const {
         listId,
@@ -535,7 +531,6 @@ describe("sending split-off extras", () => {
         kitchenName: "H2O",
         pricingUnit: "each",
         unitPrice: "2.00",
-        vatClass: "general",
       });
       const later = await createCourse(tx, { name: "Later", displayOrder: 2 });
       await setProductCourse(tx, water.id, later.id);
@@ -604,7 +599,6 @@ describe("sending split-off extras", () => {
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "general",
       });
       const {
         listId,
@@ -651,7 +645,6 @@ describe("sending split-off extras", () => {
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "general",
       });
       const flan = await createProduct(tx, {
         categoryId: null,
@@ -660,7 +653,6 @@ describe("sending split-off extras", () => {
         kitchenName: "FLAN",
         pricingUnit: "each",
         unitPrice: "5.00",
-        vatClass: "general",
       });
       const {
         listId,
@@ -731,7 +723,6 @@ describe("sending split-off extras", () => {
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "general",
       });
       const {
         listId,
@@ -785,7 +776,6 @@ describe("sending split-off extras", () => {
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "general",
       });
       const {
         listId,
@@ -840,7 +830,6 @@ describe("sending split-off extras", () => {
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "general",
       });
       const {
         listId,
@@ -889,7 +878,6 @@ describe("sending split-off extras", () => {
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "general",
       });
       const {
         listId,
@@ -1035,7 +1023,6 @@ describe("sending split-off extras", () => {
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "general",
       });
       const {
         listId,

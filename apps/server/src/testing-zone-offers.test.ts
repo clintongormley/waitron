@@ -80,7 +80,6 @@ async function seedVenueWithMenu(db: Database): Promise<Venue> {
         name,
         pricingUnit: "each",
         unitPrice,
-        vatClass: "general",
       });
     const coffee = await product("Coffee", "1.50", drinks.id);
     const toast = await product("Toast", "2.00", food.id);
@@ -403,7 +402,6 @@ describe("offerProducts", () => {
         name: "Bread",
         pricingUnit: "each",
         unitPrice: "0.80",
-        vatClass: "reduced",
       }),
     );
     const third = await withTransaction(suite.db, (tx) => offerProducts(tx));

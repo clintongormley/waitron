@@ -142,7 +142,6 @@ async function nutritionProducts() {
         kitchenName: `${name} kitchen`,
         pricingUnit: "each",
         unitPrice: "2.00",
-        vatClass: "general",
         ...(allergens === undefined ? {} : { allergens }),
       });
     const parent = await make("Pie", { milk: {} });
@@ -349,7 +348,6 @@ describe("A669 candidate sets", () => {
             kitchenName: `${name} kitchen`,
             pricingUnit: weighed ? "weight" : "each",
             unitPrice: "2.00",
-            vatClass: "general",
             allergens,
           });
         };

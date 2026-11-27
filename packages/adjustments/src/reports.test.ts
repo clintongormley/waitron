@@ -127,8 +127,6 @@ async function line(
     priceQuantity: stringToThousandths(opts.priceQuantity ?? "1"),
     unitPriceGross: decimalToCents(decimal(opts.unit)),
     listUnitPriceGross: opts.list === undefined ? null : decimalToCents(decimal(opts.list)),
-    vatClass: "general",
-    takeawayVatClass: "general",
     lineTotal: 0,
     creditedTo: opts.creditedTo,
   });
@@ -1683,8 +1681,6 @@ describe("a comp or discount that came off (plan D55)", () => {
         priceQuantity: stringToThousandths("1"),
         unitPriceGross: unit,
         listUnitPriceGross: list,
-        vatClass: "general",
-        takeawayVatClass: "general",
         lineTotal: unit,
       })
       .returning({ id: workingOrderLines.id });

@@ -647,7 +647,6 @@ describe("venue service routing", () => {
         name: "Lemonade",
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "general",
       });
       await addMember(tx, soft.id, { kind: "product", productId: product.id });
       await publish(tx, menu.id);
@@ -811,7 +810,6 @@ describe("venue service routing", () => {
         name: "Negroni",
         pricingUnit: "each",
         unitPrice: "9.00",
-        vatClass: "general",
       });
       await setRoutingCell(
         tx,
@@ -863,7 +861,6 @@ describe("venue service routing", () => {
         name: "Sliced ham",
         pricingUnit: "weight",
         unitPrice: "0.00",
-        vatClass: "reduced",
       });
       const offer = await addProductToMenu(tx, {
         menuId: menu.id,
@@ -899,8 +896,6 @@ describe("venue service routing", () => {
         // 250 g, counted in whole thousandths.
         quantity: 250,
         unitPriceGross: 2490,
-        vatClass: "reduced",
-        takeawayVatClass: "reduced",
         lineTotal: 623,
         category: "Cold cuts",
       });
@@ -1025,7 +1020,6 @@ describe("venue service routing", () => {
         name: "Loose sweets",
         pricingUnit: "each",
         unitPrice: "0.00",
-        vatClass: "general",
       });
       await tx.execute(sql`update products set unit_id = null where id = ${sweets.id}`);
       const offer = await addProductToMenu(tx, {
@@ -1056,8 +1050,6 @@ describe("venue service routing", () => {
         descriptions: { "en-GB": "Loose sweets" },
         quantity: 1000,
         unitPriceGross: 120,
-        vatClass: "reduced",
-        takeawayVatClass: "reduced",
         lineTotal: 120,
         category: "Uncategorised",
       });
@@ -1188,7 +1180,6 @@ async function productWithCategory(
     name,
     pricingUnit: "each",
     unitPrice: "0.00",
-    vatClass: "general",
   });
   return { id: product.id, categoryId: category?.id ?? "" };
 }
@@ -1250,7 +1241,6 @@ describe("routing outcomes and menu readiness", () => {
         name: "Steak",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "general",
       });
       await setRoutingCell(
         tx,
@@ -1283,7 +1273,6 @@ describe("routing outcomes and menu readiness", () => {
         name: "Croquetas",
         pricingUnit: "each",
         unitPrice: "0.00",
-        vatClass: "general",
         available: false,
       });
       const offer = await addProductToMenu(tx, {
@@ -1840,7 +1829,6 @@ async function seedSellingVenue() {
       name: "Tortilla",
       pricingUnit: "each",
       unitPrice: "0.00",
-      vatClass: "general",
     });
     const offer = await addProductToMenu(tx, {
       menuId: menu.id,
@@ -2163,8 +2151,6 @@ async function addLine(tx: Transaction, venue: SellingVenue, orderId: string, li
     descriptions: { "en-GB": "Tortilla" },
     quantity: 1000,
     unitPriceGross: 450,
-    vatClass: "reduced",
-    takeawayVatClass: "reduced",
     lineTotal: 450,
     category: "Uncategorised",
   });
@@ -2311,7 +2297,6 @@ async function seedTwoMenuVenue() {
           name,
           pricingUnit: "each",
           unitPrice,
-          vatClass: "general",
           allergens: {},
         })
       ).id;
@@ -2914,7 +2899,6 @@ describe("each served menu's structure and Device Home Page", () => {
           name: "Cola",
           pricingUnit: "each",
           unitPrice: "2.00",
-          vatClass: "general",
           allergens: {},
         })
       ).id;
@@ -3757,7 +3741,6 @@ describe("products a zone's listed menus offer", () => {
         name: "Bar nuts",
         pricingUnit: "each",
         unitPrice: "2.00",
-        vatClass: "general",
       });
       await addProductToMenu(tx, { menuId: barMenu.id, productId: nuts.id });
       await offerMenuThroughZone(tx, venue.barZone, barMenu.id, { displayOrder: 1 });

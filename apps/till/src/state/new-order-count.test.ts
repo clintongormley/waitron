@@ -8,7 +8,6 @@ const dish = (id: string, name: string, extra: Partial<TillProduct> = {}): TillP
   name,
   pricingUnit: "each",
   unitPrice: "4.00",
-  vatClass: "general",
   category: null,
   allergens: null,
   ...extra,

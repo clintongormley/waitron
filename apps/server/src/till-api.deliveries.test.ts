@@ -181,7 +181,6 @@ async function venue(): Promise<Venue> {
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, menu.id);
     const available = (await listAvailableProducts(tx)).products;

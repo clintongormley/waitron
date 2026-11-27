@@ -46,7 +46,6 @@ const products: TillProduct[] = [
     customerName: { es: "Café para el cliente" },
     pricingUnit: "each",
     unitPrice: "1.50",
-    vatClass: "general",
     category: null,
     allergens: null,
     // A default course so the round-course picker pre-selects it.
@@ -289,8 +288,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
           customerName: { es: "Queso carta" },
           kitchenName: "Queso KDS",
           price: "1.00",
-          vatClass: "general",
-          takeawayVatClass: "general",
           maxQuantity: 3,
           preselected: false,
           addAllergens: null,

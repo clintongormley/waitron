@@ -59,7 +59,6 @@ async function fixture(tx: Transaction) {
     customerName: { es: "CLIENT ES bread", ca: "CLIENT CA bread" },
     kitchenName: "KITCHEN Bread",
     unitPrice: "3.00",
-    vatClass: "reduced",
     description: { es: "Crujiente" },
   });
   const variants = await setProductVariants(
@@ -110,7 +109,6 @@ async function fixture(tx: Transaction) {
     unitId: null,
     name: "STAFF Butter",
     unitPrice: "1.50",
-    vatClass: "reduced",
   });
   const extras = await createExtraList(
     tx,

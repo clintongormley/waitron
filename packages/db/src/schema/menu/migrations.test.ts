@@ -624,7 +624,6 @@ describe("the menu foreign keys refuse a missing or mismatched target", () => {
             name,
 
             unitPrice: 1,
-            vatClass: "general",
           })
           .returning({ id: products.id })
       )[0]!.id;

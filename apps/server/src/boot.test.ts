@@ -3009,7 +3009,6 @@ describe("startServer, against a migrated venue directory", () => {
           name: "Soup",
           pricingUnit: "each",
           unitPrice: "5.00",
-          vatClass: "reduced",
         });
         const root = (await readMenuStructure(tx, menu.id)).rootSectionId;
         await addMember(tx, root, { kind: "product", productId: soup.id });
@@ -3907,7 +3906,6 @@ describe("startServer — what a trading boot wires behind its management routes
         kitchenName: "KITCHEN Notice bread",
         unitId: null,
         unitPrice: "3.00",
-        vatClass: "reduced",
       });
       productId = product.id;
       const { defaultLanguage: language } = await readContentLanguages(tx, "en");

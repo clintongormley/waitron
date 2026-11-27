@@ -291,7 +291,6 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
       menuPrice: null,
       unit: {},
       pricingUnit: {},
-      vatClass: "reduced",
     });
     (document.offers["mi-soup"] as { variants: unknown }).variants = [
       variant("v-cup", "Cup"),

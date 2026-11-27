@@ -36,8 +36,6 @@ const extra = (
     hardwareUnit: null,
   },
   price: "1.00",
-  vatClass: "general",
-  takeawayVatClass: "general",
   maxQuantity: 1,
   preselected,
   addAllergens: allergens,
@@ -50,7 +48,6 @@ const dish = (defaults = true, minPicks = 0): TillProduct => ({
   kitchenName: "Cold salad",
   pricingUnit: "each",
   unitPrice: "5.00",
-  vatClass: "general",
   category: null,
   allergens: {},
   offeredModifiers: [

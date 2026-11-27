@@ -58,7 +58,6 @@ async function fixture() {
       kitchenName: "KITCHEN bread",
       customerName: { es: "CLIENT ES bread", en: "CLIENT bread", fr: "CLIENT pain" },
       unitPrice: "3.00",
-      vatClass: "reduced",
     });
     const [variant] = await tx
       .insert(products)

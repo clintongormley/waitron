@@ -50,7 +50,6 @@ function product(id: string, name: string, unitPrice: string, unit = EACH): Prod
     dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice,
-    vatClass: "reduced",
     takeawayVatRate: "10.00",
     active: true,
     available: true,

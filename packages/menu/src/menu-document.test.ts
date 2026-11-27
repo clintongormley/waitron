@@ -557,7 +557,6 @@ describe("readDishFacts", () => {
         name: "Wine",
         pricingUnit: "each",
         unitPrice: "4",
-        vatClass: "general",
       });
       const [variant] = await setProductVariants(
         tx,
@@ -784,7 +783,6 @@ describe("applyLiveFields", () => {
     await app(async (tx) => {
       await updateProduct(tx, f.lemonade, {
         available: false,
-        vatClass: "general",
         categoryId: f.coldDrinks,
       });
       await tx.update(products).set({ courseId: f.course }).where(eq(products.id, f.lemonade));

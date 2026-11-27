@@ -20,7 +20,6 @@ const make = (name: string) =>
       name,
       pricingUnit: "each",
       unitPrice: "2",
-      vatClass: "general",
     }),
   ).then((created) => created.id);
 
@@ -34,9 +33,7 @@ describe("the clash lookup", () => {
   });
 
   it("refuses a duplicate of a raw product without a stored key", async () => {
-    await app((tx) =>
-      tx.insert(products).values({ name: "Gazpacho", unitPrice: 200, vatClass: "general" }),
-    );
+    await app((tx) => tx.insert(products).values({ name: "Gazpacho", unitPrice: 200 }));
     await expect(make("gazpacho")).rejects.toMatchObject({
       code: "product.name_taken",
       params: { field: "name", name: "gazpacho" },

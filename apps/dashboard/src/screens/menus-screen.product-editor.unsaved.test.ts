@@ -212,7 +212,6 @@ it("starts at the photo and returns there after opening a variant and pressing E
             ...variant,
             parentId: parent.id,
             unitId: null,
-            vatClass: null,
             inherited: menuProduct,
           }
         : value,

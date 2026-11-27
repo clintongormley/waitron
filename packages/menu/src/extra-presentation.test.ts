@@ -30,7 +30,6 @@ async function sourceFixture(variant: boolean) {
       customerName: { en: "Guest topping", fr: "FR side" },
       kitchenName: "PREP TOP",
       unitPrice: "0.50",
-      vatClass: "reduced",
     });
     const [child] = variant
       ? await setProductVariants(

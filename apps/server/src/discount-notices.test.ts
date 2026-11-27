@@ -61,7 +61,6 @@ async function wineByTheGlass(tx: Transaction) {
     name: "Wine",
     pricingUnit: "each",
     unitPrice: "4.50",
-    vatClass: "reduced",
   });
   await tx.update(products).set({ courseId: main!.id }).where(eq(products.id, parent.id));
   const [small, large] = await setProductVariants(

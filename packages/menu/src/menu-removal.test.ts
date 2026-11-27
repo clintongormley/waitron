@@ -51,7 +51,6 @@ async function removalFixture() {
           name,
           pricingUnit: "each",
           unitPrice: "4.00",
-          vatClass: "reduced",
           allergens: {},
         })
       ).id;
@@ -128,7 +127,6 @@ async function pricedBread(r: Removal): Promise<string> {
         name: "Bread",
         pricingUnit: "each",
         unitPrice: "4.00",
-        vatClass: "reduced",
         allergens: {},
       })
     ).id;
@@ -365,7 +363,6 @@ describe("takeOffMenus", () => {
             name: "Tomato soup",
             pricingUnit: "each",
             unitPrice: "4.00",
-            vatClass: "reduced",
             allergens: {},
           })
         ).id,
@@ -395,7 +392,6 @@ describe("an Inactive product cannot be added to a menu list", () => {
         name: "Tomato soup",
         pricingUnit: "each",
         unitPrice: "4.00",
-        vatClass: "reduced",
         allergens: {},
       });
       await deactivateProduct(tx, id);
@@ -690,7 +686,6 @@ describe("menusHolding", () => {
           name: "Tomato soup",
           pricingUnit: "each",
           unitPrice: "4.00",
-          vatClass: "reduced",
           allergens: {},
         })
       ).id;

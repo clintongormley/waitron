@@ -53,7 +53,6 @@ it.each(["attach", "delete"] as const)(
         name: "P",
         pricingUnit: "each",
         unitPrice: "1",
-        vatClass: "general",
       });
     });
     const attach = (tx: Transaction) => setMainReportingCategory(tx, product.id, a.id);
@@ -127,7 +126,6 @@ const seedProduct = (name = "P") =>
         name,
         pricingUnit: "each",
         unitPrice: "1",
-        vatClass: "general",
       })
     ).id;
   });

@@ -68,11 +68,11 @@ export async function provisionCancelInvoiceVenue(db: Database): Promise<CancelI
     // 1.74 + 0.36, while those bases taxed at 21% are 0.09 and 0.37; Coffee with two 0.50 extras at
     // 10% matches both ways.
     const created = new Map<string, string>();
-    for (const [name, price, vatClass, takeawayVatRate] of [
-      ["Mosto", "0.55", "general", "21.00"],
-      ["Zumo", "2.10", "general", "21.00"],
-      ["Coffee", "3.00", "reduced", "10.00"],
-      ["Leche", "1.00", "reduced", "10.00"],
+    for (const [name, price, takeawayVatRate] of [
+      ["Mosto", "0.55", "21.00"],
+      ["Zumo", "2.10", "21.00"],
+      ["Coffee", "3.00", "10.00"],
+      ["Leche", "1.00", "10.00"],
     ] as const) {
       const product = await createProduct(tx, {
         categoryId: category!.id,
@@ -81,7 +81,6 @@ export async function provisionCancelInvoiceVenue(db: Database): Promise<CancelI
         kitchenName: name.toUpperCase(),
         pricingUnit: "each",
         unitPrice: price,
-        vatClass,
         takeawayVatRate,
       });
       created.set(name, product.id);
@@ -107,7 +106,6 @@ export async function provisionCancelInvoiceVenue(db: Database): Promise<CancelI
       name: "Ham",
       unitId: kg!.id,
       unitPrice: "0.27",
-      vatClass: "general",
       takeawayVatRate: "21.00",
     });
     const portions = await createExtraList(

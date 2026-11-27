@@ -281,7 +281,6 @@ it("captures inherited variant declarations and keeps each extra's own facts, in
       name: "Side",
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "reduced",
       allergens: { eggs: {} },
       dietaryDeclarations: ["halal"],
     });

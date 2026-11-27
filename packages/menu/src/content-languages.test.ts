@@ -83,7 +83,6 @@ describe("site content languages", () => {
         description: { en: "Freshly roasted" },
         unitPrice: "9.00",
         unitId: unit.id,
-        vatClass: "reduced",
       });
       const [variant] = await setProductVariants(
         tx,
@@ -126,7 +125,6 @@ describe("site content languages", () => {
         customerName: { en: "CLIENT Coffee", fr: "CLIENT ES coffee" },
         unitPrice: "9.00",
         pricingUnit: "each",
-        vatClass: "reduced",
       });
       const variant = (name: string, customer: string, unitPrice: string) => ({
         name,
@@ -189,7 +187,6 @@ describe("site content languages", () => {
         menuId: menu.id,
         categoryId: null,
         unitId: unit.id,
-        vatClass: "reduced" as const,
       };
       // No customer name → never a gap in any language.
       const plain = await createProduct(tx, {
@@ -503,7 +500,6 @@ describe("site content languages", () => {
         customerName: { en: "Bread", "fr-FR": "Pain" },
 
         unitPrice: 200,
-        vatClass: "general",
       });
       await expect(
         writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["fr", "en"] }),
@@ -555,7 +551,6 @@ describe("site content languages", () => {
         customerName: { en: "Bread" },
 
         unitPrice: 200,
-        vatClass: "general",
       });
     });
     await expect(

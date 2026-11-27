@@ -322,7 +322,6 @@ describe("A669 lifecycle", () => {
         kitchenName: "SIDE COOK",
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "reduced",
         allergens: { eggs: {} },
       });
       const list = await createExtraList(

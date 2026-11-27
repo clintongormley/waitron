@@ -170,7 +170,6 @@ useVenueDb({
         kitchenName: "PEPPER",
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       const list = await createExtraList(
         tx,
@@ -978,7 +977,6 @@ describe("readOrderStateCounts on a party's bill", () => {
         categoryId: null,
         unitId: existing!.unitId,
         unitPrice: "2.00",
-        vatClass: "general",
       });
       const item = await addProductToMenu(tx, { menuId: existing!.menuId, productId: id });
       await republishMenus(tx);

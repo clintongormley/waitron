@@ -584,7 +584,6 @@ describe("the opening-hours period API", () => {
         categoryId,
         unitPrice: "3",
         pricingUnit: "each",
-        vatClass: "general",
       });
       await addProductToMenu(tx, { menuId: r.coffeeMenu, productId });
       await setRoutingCell(

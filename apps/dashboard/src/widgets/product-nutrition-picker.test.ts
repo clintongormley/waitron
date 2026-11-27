@@ -21,7 +21,6 @@ afterEach(() => {
 const inherited: InheritedValues = {
   name: "Bread $& <large>",
   unitPrice: "3.00",
-  vatClass: "reduced",
   takeawayVatRate: "10.00",
   unitId: null,
   primaryCategoryId: null,

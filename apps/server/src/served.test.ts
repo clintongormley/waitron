@@ -171,7 +171,6 @@ async function setupVenue(): Promise<Venue> {
           name: dish,
           pricingUnit: "each",
           unitPrice,
-          vatClass: "general",
         })
       ).id;
     }

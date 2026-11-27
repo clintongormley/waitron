@@ -27,7 +27,6 @@ const product: TillProduct = {
     hardwareUnit: null,
   },
   unitPrice: "3.00",
-  vatClass: "general",
   category: null,
   allergens: null,
 };

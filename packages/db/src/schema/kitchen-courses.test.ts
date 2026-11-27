@@ -38,7 +38,6 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
         name: "Espresso",
 
         unitPrice: 100,
-        vatClass: "general",
       })
       .returning({ id: products.id });
     productA = prod!.id;

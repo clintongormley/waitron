@@ -388,7 +388,6 @@ export async function provisionAdjustmentVenue(
         kitchenName: item.kitchen,
         pricingUnit: item.unit,
         unitPrice: item.price,
-        vatClass: item.vat,
       });
       productIds.set(item.name, product.id);
     }

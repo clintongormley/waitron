@@ -510,7 +510,6 @@ describe("the extras rows a whole comp lowers with their dish (B11f)", () => {
         name: "Pizza with free olives",
         pricingUnit: "each",
         unitPrice: "12.00",
-        vatClass: "general",
       });
       const list = await createExtraList(
         tx,

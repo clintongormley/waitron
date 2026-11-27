@@ -25,7 +25,6 @@ const line = (
     id: name,
     name,
     unitPrice: "1.00",
-    vatClass: "general",
     pricingUnit: "each",
     category: null,
     allergens: null,

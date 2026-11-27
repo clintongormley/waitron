@@ -78,7 +78,6 @@ export async function menusFixture(db: Database): Promise<MenusFixture> {
           description: { en: `All about ${name}` },
           pricingUnit: "each",
           unitPrice,
-          vatClass: "reduced",
           allergens: {},
           ...(image === null ? {} : { image }),
         })

@@ -80,7 +80,6 @@ async function fixture(db: Database): Promise<Fixture> {
       name: "Bread",
 
       unitPrice: 200,
-      vatClass: "general",
     })
     .returning({ id: products.id });
   const [section] = await db
@@ -186,7 +185,6 @@ describe("a written image filename", () => {
       name: "Roll",
 
       unitPrice: 100,
-      vatClass: "general",
       image,
     });
   };
@@ -439,7 +437,6 @@ async function publishedOnly(): Promise<{ menuId: string; productId: string }> {
       name: "Toast",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
       image: PRESENT,
     });
     const { rootSectionId } = await readMenuStructure(tx, menu.id);

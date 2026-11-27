@@ -22,7 +22,6 @@ const dish: TillProduct = {
   customerName: { es: "Croquetas del cliente" },
   pricingUnit: "each",
   unitPrice: "7.80",
-  vatClass: "general",
   category: null,
   allergens: null,
 };

@@ -96,7 +96,6 @@ const suite = useVenueDb({
         name: "Espresso",
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       await assignMenuToVenue(tx, cat.id);
       return p;

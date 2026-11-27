@@ -307,7 +307,6 @@ function placedServer() {
         customerName: { en: `Customer dish ${n}` },
         unitPrice: "5.00",
         pricingUnit: "each",
-        vatClass: "general",
         category: null,
         allergens: null,
       },

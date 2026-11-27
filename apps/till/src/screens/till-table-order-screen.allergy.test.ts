@@ -64,7 +64,6 @@ it("marks a fresh draft dish by its saved draft assignment rather than a sent di
         id: "retired",
         name: "Recorded dish",
         unitPrice: "4.00",
-        vatClass: "general",
         category: null,
         allergens: null,
       },
@@ -105,7 +104,6 @@ it("names each draft row's selection box by the guest it is for, so two rows of 
     id: "burger",
     name: "Burger",
     unitPrice: "9.00",
-    vatClass: "general" as const,
     category: null,
     allergens: null,
   };
@@ -192,7 +190,6 @@ it("marks the saved draft and sent dish without borrowing a same-id working assi
       id: "toast",
       name: "Toast",
       unitPrice: "2.00",
-      vatClass: "general",
       pricingUnit: "each",
       category: null,
       allergens: null,

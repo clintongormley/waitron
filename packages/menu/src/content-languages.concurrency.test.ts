@@ -33,7 +33,6 @@ it("a default switch waits for an authoring transaction and keeps its incomplete
         customerName: { en: "Bread" },
 
         unitPrice: 2,
-        vatClass: "general",
       });
     },
     (tx) => writeContentLanguages(tx, { defaultLanguage: "fr", languages: ["en", "fr"] }),

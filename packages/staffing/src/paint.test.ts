@@ -869,7 +869,6 @@ async function guideVenue() {
         categoryId,
         unitPrice: "4",
         pricingUnit: "each",
-        vatClass: "general",
       })
     ).id;
     await addProductToMenu(tx, { menuId, productId });

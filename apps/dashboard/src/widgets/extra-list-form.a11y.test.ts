@@ -37,7 +37,6 @@ function product(id: string, name: string, unitPrice: string): Product {
     dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice,
-    vatClass: "reduced",
     takeawayVatRate: "10.00",
     active: true,
     available: true,
@@ -237,7 +236,6 @@ describe.each(["light", "dark"] as const)("extra list form (%s)", (theme) => {
           effective: {
             allergens: null,
             unitPrice: "3.00",
-            vatClass: "general" as const,
             takeawayVatRate: "21.00",
             primaryCategoryId: null,
             courseId: null,

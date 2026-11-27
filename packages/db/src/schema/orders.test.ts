@@ -93,7 +93,6 @@ async function seed(db: Database): Promise<void> {
       name: "Café solo",
 
       unitPrice: 130,
-      vatClass: "general",
     })
     .returning({ id: products.id });
   productA = prodA.id;
@@ -115,8 +114,6 @@ const LINE = {
   quantity: 1000,
   // 1.30 net at 10% VAT, gross, in whole cents.
   unitPriceGross: 143,
-  vatClass: "reduced",
-  takeawayVatClass: "reduced",
   lineTotal: 130,
 };
 
@@ -1317,7 +1314,6 @@ describe("working_order_lines — the draft line's links", () => {
         name: "Café solo",
 
         unitPrice: 130,
-        vatClass: "general",
       })
       .returning({ id: products.id });
     await db.delete(products).where(eq(products.id, spare.id));

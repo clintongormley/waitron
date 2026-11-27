@@ -71,8 +71,6 @@ describe("fireLines (routing resolver + snapshot)", () => {
         descriptions: { [LOCALE]: "Handwritten" },
         quantity: 1000,
         unitPriceGross: 150,
-        vatClass: "general",
-        takeawayVatClass: "general",
         lineTotal: 150,
       });
       const [line] = await fireableLines(tx, id);

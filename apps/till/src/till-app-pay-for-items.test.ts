@@ -1446,7 +1446,6 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
                 name: "Meal",
                 pricingUnit: "each",
                 unitPrice: "120.00",
-                vatClass: "general",
                 category: null,
                 allergens: null,
               },

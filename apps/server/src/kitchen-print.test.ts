@@ -140,7 +140,6 @@ describe("a dish sold by the piece prints no unit", () => {
         name,
         ...unit,
         unitPrice: "1.50",
-        vatClass: "general",
       });
       await routeProductTo(tx, id, kitchenStation.id);
       return id;
@@ -426,7 +425,6 @@ async function ticketWithNames(frozen: {
       customerName: { [LOCALE]: "Fresh filter brew" },
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await routeProductTo(tx, productId, station.id);
     const orderId = randomUUID();

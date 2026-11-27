@@ -70,7 +70,6 @@ async function fixture() {
       kitchenName: "KITCHEN Bread",
       customerName: { es: "CLIENT ES bread" },
       unitPrice: "3.00",
-      vatClass: "reduced",
     });
     const [variant] = await setProductVariants(
       tx,

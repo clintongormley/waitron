@@ -23,7 +23,6 @@ const coffee: TillProduct = {
     hardwareUnit: null,
   },
   unitPrice: "1.50",
-  vatClass: "general",
   category: null,
   allergens: null,
 };
@@ -42,7 +41,6 @@ const ham: TillProduct = {
     hardwareUnit: "kg",
   },
   unitPrice: "10.00",
-  vatClass: "reduced",
   category: "charcutería",
   allergens: null,
 };
@@ -1989,8 +1987,6 @@ describe("a dish not sold by the unit offers its options but no extras", () => {
     customerName: { es: "Queso carta" },
     kitchenName: "Queso KDS",
     price: "1.00",
-    vatClass: "general" as const,
-    takeawayVatClass: "general" as const,
     maxQuantity: 3,
     preselected: true,
     addAllergens: null,

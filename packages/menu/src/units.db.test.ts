@@ -37,7 +37,6 @@ async function product(id: string | null = null): Promise<string> {
       ...(id === null ? {} : { id }),
       name: "Soup",
       unitPrice: 1,
-      vatClass: "general",
     })
     .returning({ id: products.id });
   return row!.id;

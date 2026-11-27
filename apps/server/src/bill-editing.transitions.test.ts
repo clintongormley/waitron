@@ -84,8 +84,6 @@ async function addCharge(data: Awaited<ReturnType<typeof fixture>>) {
         descriptions: { en: "Soup" },
         kitchenName: "K-SOUP",
         unitPriceGross: 500,
-        vatClass: "general",
-        takeawayVatClass: "general",
         lineTotal: 500,
         note: "No pepper",
       })

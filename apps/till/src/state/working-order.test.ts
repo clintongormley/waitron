@@ -8,26 +8,24 @@ import { sellingValuesOf, type TillProduct } from "../api/menu-api.js";
 
 const ROW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-// A gross-1.50 espresso at the general rate.
+// A gross-1.50 espresso.
 const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
   customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
   unitPrice: "1.50",
-  vatClass: "general",
   category: null,
   allergens: null,
 };
 
-// A weight product priced per kg: 10.00/kg gross at the reduced rate.
+// A weight product priced per kg: 10.00/kg gross.
 const ham: TillProduct = {
   id: "jamon",
   name: "Jamón",
   customerName: { es: "Jamón para el cliente" },
   pricingUnit: "weight",
   unitPrice: "10.00",
-  vatClass: "reduced",
   category: "charcutería",
   allergens: null,
 };
@@ -452,7 +450,6 @@ describe("WorkingOrderStore", () => {
       variantName: "Staff large",
       variantCustomerName: { es: "Requested large" },
       unitPrice: "12.10",
-      vatClass: "general" as const,
       category: null,
       allergens: null,
       unit: {
@@ -813,8 +810,8 @@ describe("WorkingOrderStore", () => {
     // could not see a missing invalidation.
     expect(s.total).toBe("1.00");
     const lines: OrderLine[] = [
-      { product: coffee, quantity: "2" }, // 1.50 × 2 = 3.00 (general)
-      { product: ham, quantity: "0.320" }, // 10.00 × 0.320 = 3.20 (reduced)
+      { product: coffee, quantity: "2" }, // 1.50 × 2 = 3.00
+      { product: ham, quantity: "0.320" }, // 10.00 × 0.320 = 3.20
     ];
     s.loadFrom("held-123", lines, "Table 4");
     expect(s.id).toBe("held-123");

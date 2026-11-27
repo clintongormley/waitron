@@ -70,7 +70,7 @@ export async function plantStoredProduct(
       name,
       parentId,
       ...(parentId === null
-        ? { unitPrice: 200, vatClass: "general", dietaryDeclarations: [] }
+        ? { unitPrice: 200, dietaryDeclarations: [] }
         : { dietaryDeclarations: null }),
     })
     .returning({ id: products.id });
@@ -166,14 +166,12 @@ export async function seedMenuFixture(tx: Transaction): Promise<SeededMenu> {
     name: "sliced ham",
     unitId: kgUnitId,
     unitPrice: "24.90",
-    vatClass: "reduced",
   });
   const water = await createProduct(tx, {
     categoryId: drinks.id,
     name: "water",
     unitId: eachUnitId,
     unitPrice: "1.50",
-    vatClass: "general",
   });
   await assignMenuToVenue(tx, menu.id);
   return {

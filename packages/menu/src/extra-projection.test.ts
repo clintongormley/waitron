@@ -52,7 +52,6 @@ beforeEach(async () => {
         name: key,
         unitId: null,
         unitPrice,
-        vatClass: "reduced",
       });
       ids[key as keyof typeof ids] = product.id;
     }
@@ -115,7 +114,6 @@ describe("what a product's own extras lists offer", () => {
         name: "Olives by weight",
         unitId: kg.id,
         unitPrice: "0.27",
-        vatClass: "reduced",
       });
       const list = await createExtraList(
         tx,

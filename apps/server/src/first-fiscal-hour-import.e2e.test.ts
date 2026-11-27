@@ -155,7 +155,6 @@ async function configurationArtifact() {
       name: "Imported gazpacho",
       pricingUnit: "each",
       unitPrice: "7.25",
-      vatClass: "general",
     });
   });
   expect(

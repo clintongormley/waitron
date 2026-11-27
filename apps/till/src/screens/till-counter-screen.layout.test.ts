@@ -39,7 +39,6 @@ function product(key: string, name: string, unitPrice: string): TillProduct {
     available: true,
     name,
     unitPrice,
-    vatClass: "general",
     category: null,
     allergens: null,
   };

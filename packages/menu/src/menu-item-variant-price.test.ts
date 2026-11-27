@@ -44,7 +44,6 @@ async function fixture(tx: Transaction) {
       categoryId: null,
       unitId: null,
       unitPrice: "8.00",
-      vatClass: "reduced",
     });
   const wine = await product("Wine");
   const cider = await product("Cider");

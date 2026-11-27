@@ -31,15 +31,14 @@ import { inTx, provisionBillVenue, send, type Answer, type BillVenue } from "./b
 const DISHES: {
   name: string;
   price: string;
-  vatClass: "reduced" | "general";
   takeawayVatRate: string;
 }[] = [
-  { name: "Tasting menu", price: "120.00", vatClass: "reduced", takeawayVatRate: "10.00" },
-  { name: "Bread roll", price: "1.05", vatClass: "reduced", takeawayVatRate: "10.00" },
-  { name: "Salad bowl", price: "20.00", vatClass: "reduced", takeawayVatRate: "10.00" },
-  { name: "Seafood platter", price: "30.05", vatClass: "reduced", takeawayVatRate: "10.00" },
-  { name: "Wine case", price: "80.00", vatClass: "general", takeawayVatRate: "21.00" },
-  { name: "Grill for two", price: "72.00", vatClass: "reduced", takeawayVatRate: "10.00" },
+  { name: "Tasting menu", price: "120.00", takeawayVatRate: "10.00" },
+  { name: "Bread roll", price: "1.05", takeawayVatRate: "10.00" },
+  { name: "Salad bowl", price: "20.00", takeawayVatRate: "10.00" },
+  { name: "Seafood platter", price: "30.05", takeawayVatRate: "10.00" },
+  { name: "Wine case", price: "80.00", takeawayVatRate: "21.00" },
+  { name: "Grill for two", price: "72.00", takeawayVatRate: "10.00" },
 ];
 
 export const spanish = receiptLabelsFor("es-ES");
@@ -65,7 +64,6 @@ export async function provisionAdvanceVenue(db: Database): Promise<AdvanceVenue>
         kitchenName: dish.name.toUpperCase(),
         pricingUnit: "each",
         unitPrice: dish.price,
-        vatClass: dish.vatClass,
         takeawayVatRate: dish.takeawayVatRate,
       });
       ids.set(dish.name, product.id);

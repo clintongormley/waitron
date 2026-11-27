@@ -363,7 +363,6 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
           name: "Agua",
           pricingUnit: "each",
           unitPrice: "1.50",
-          vatClass: "general",
         });
         await assignMenuToVenue(tx, menu.id);
         const offers = await offerProducts(tx);

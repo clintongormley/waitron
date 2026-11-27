@@ -44,7 +44,6 @@ const products: TillProduct[] = offers.map((offer) => ({
   available: true,
   name: `Dish ${offer.productId}`,
   unitPrice: "2.00",
-  vatClass: "general",
   category: null,
   allergens: null,
 }));

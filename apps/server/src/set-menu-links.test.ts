@@ -77,7 +77,6 @@ useVenueDb({
         name: "Coffee",
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       const offer = await addProductToMenu(tx, { menuId: copy.fullMenuId, productId: product.id });
       const [large, small] = await setProductVariants(

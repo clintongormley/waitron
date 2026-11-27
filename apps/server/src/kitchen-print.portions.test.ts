@@ -65,7 +65,6 @@ describe("A803 portion grouping", () => {
       name: "Octopus",
       pricingUnit: "weight",
       unitPrice: "20.00",
-      vatClass: "general",
     });
     await routeProductTo(tx, octopus, fryer.id);
     const { listId, productIds } = await addExtras(tx, cfg, burger, [
@@ -312,7 +311,6 @@ describe("A803 portion grouping", () => {
         name: "Bread",
         unitId: piece!.id,
         unitPrice: "1.50",
-        vatClass: "general",
       });
       await routeProductTo(tx, bread, k.fryer);
       const offers = await offerProducts(tx, { zone: "tables" });

@@ -115,8 +115,6 @@ describe("show the rest of the order", () => {
         descriptions: { [LOCALE]: "Salad" },
         quantity: 1000,
         unitPriceGross: 150,
-        vatClass: "general",
-        takeawayVatClass: "general",
         lineTotal: 150,
       });
       await tx.insert(ticketItems).values({
@@ -133,8 +131,6 @@ describe("show the rest of the order", () => {
         descriptions: { [LOCALE]: "Water" },
         quantity: 1000,
         unitPriceGross: 100,
-        vatClass: "general",
-        takeawayVatClass: "general",
         lineTotal: 100,
       });
       await seedPerson(tx, { id: OPERATOR });
@@ -163,8 +159,6 @@ describe("show the rest of the order", () => {
           descriptions: { [LOCALE]: name },
           quantity: 1000,
           unitPriceGross: 100,
-          vatClass: "general",
-          takeawayVatClass: "general",
           lineTotal: 100,
           groupId: group!.id,
         });

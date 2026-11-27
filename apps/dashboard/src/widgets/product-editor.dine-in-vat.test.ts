@@ -49,7 +49,6 @@ const variant: ProductEditorDraft = {
     description: null,
     image: null,
     unitPrice: "3.00",
-    vatClass: "reduced",
     takeawayVatRate: "10.00",
     unitId: null,
     primaryCategoryId: null,

@@ -32,10 +32,7 @@ async function spanishVenue(): Promise<void> {
 }
 
 async function product(parentId: string | null = null): Promise<string> {
-  const values =
-    parentId === null
-      ? { name: "Soup", unitPrice: 100, vatClass: "general" }
-      : { name: "Large", parentId };
+  const values = parentId === null ? { name: "Soup", unitPrice: 100 } : { name: "Large", parentId };
   return (await suite.db.insert(products).values(values).returning({ id: products.id }))[0]!.id;
 }
 

@@ -20,7 +20,6 @@ const product = (id: string, name: string, unitPrice: string): TillProduct => ({
   customerName: { es: `${name} carta` },
   pricingUnit: "each",
   unitPrice,
-  vatClass: "general",
   category: null,
   allergens: null,
 });

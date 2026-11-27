@@ -66,7 +66,6 @@ const coffee: TillProduct = {
   customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
   unitPrice: "1.50",
-  vatClass: "general",
   category: null,
   allergens: null,
   // Default course = Postres, so the round-course picker pre-selects it for a café line.
@@ -2874,8 +2873,6 @@ describe("till-table-order-screen", () => {
       customerName: { es: `${name} carta` },
       kitchenName: `${name} KDS`,
       price: "1.00",
-      vatClass: "general" as const,
-      takeawayVatClass: "general" as const,
       maxQuantity: 3,
       preselected,
       addAllergens: null,

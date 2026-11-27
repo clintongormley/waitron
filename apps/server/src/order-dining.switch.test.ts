@@ -47,8 +47,7 @@ import { splitUnitsWithinOrder } from "./working-order-transfer.js";
 import { parkOrder } from "./working-order-open.js";
 
 // Staff switch an order between eaten here and takeaway until it is sent or paid, and dishes move
-// only between orders sold the same way (A1522). The cola is `reduced` (1000) served here and
-// `general` (2100) taken away; the cheese board `reduced` here and `super_reduced` (400) taken away.
+// only between orders sold the same way (A1522).
 let venue: BillVenue;
 let counter: ZoneOffers;
 let tables: ZoneOffers;

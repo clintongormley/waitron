@@ -2063,7 +2063,6 @@ describe("previewMenu", () => {
             kitchenName: "JCE",
             pricingUnit: "each",
             unitPrice: "2.50",
-            vatClass: "reduced",
           })
         ).id,
     );

@@ -89,15 +89,15 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
 interface SeededVenue {
   cfg: DeviceRequestConfig;
   available: AvailableProduct[];
-  /** "Café" — each, 1.50 gross, general(21%). */
+  /** "Café" — each, 1.50 gross. */
   coffee: AvailableProduct;
-  /** "Agua" — each, 2.00 gross, general(21%). Same rate as café, so a two-line basket has one VAT group. */
+  /** "Agua" — each, 2.00 gross. Same rate as café, so a two-line basket has one VAT group. */
   water: AvailableProduct;
 }
 
 /**
  * Stand up a fresh chained venue + registered SIF, then seed a menu and read back two
- * `each`/general(21%) products.
+ * `each` products.
  */
 async function setupVenue(): Promise<SeededVenue> {
   const venue = await applyVenue(
@@ -139,14 +139,12 @@ async function setupVenue(): Promise<SeededVenue> {
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await createProduct(tx, {
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     return (await listAvailableProducts(tx)).products;

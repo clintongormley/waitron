@@ -91,7 +91,6 @@ async function fixture(): Promise<Fixture> {
           kitchenName: `${name} (kitchen)`,
           pricingUnit: "each",
           unitPrice,
-          vatClass: "general",
         })
       ).id;
     const lemonade = await make("Lemonade", "3.00");
@@ -1074,7 +1073,6 @@ describe("a menu's prices", () => {
         kitchenName: "Manchego (kitchen)",
         pricingUnit: "each",
         unitPrice: "6.00",
-        vatClass: "reduced",
       });
       await addMember(tx, f.lunchRoot, product(created.id));
       return { categoryId: category.id, productId: created.id };

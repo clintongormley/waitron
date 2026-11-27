@@ -191,7 +191,6 @@ async function extraFixture(separate: boolean) {
       kitchenName: "EXTRA KITCHEN",
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "reduced",
       allergens: { milk: {}, nuts: { kinds: ["almonds"] } },
     });
     const list = await createExtraList(

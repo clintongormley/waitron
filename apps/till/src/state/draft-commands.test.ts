@@ -17,7 +17,6 @@ const beer: TillProduct = {
   name: "Beer",
   pricingUnit: "each",
   unitPrice: "3.00",
-  vatClass: "general",
   category: null,
   allergens: null,
 };

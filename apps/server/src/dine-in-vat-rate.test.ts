@@ -95,6 +95,7 @@ async function generalVenue() {
   const made = await inTx(venue, async (tx) => {
     await tillChoiceEverywhere(tx);
     const menu = await seedTakeawayProducts(tx);
+    await tx.update(products).set({ vatClass: "general" }).where(eq(products.id, menu.burger));
     await tx.update(products).set({ vatClass: "general" }).where(eq(products.id, menu.lemonSoda));
     await setTakeawayVatRate(tx, menu.lemonSoda, "21.00");
     const wine = await createProduct(tx, {
@@ -102,7 +103,6 @@ async function generalVenue() {
       name: "Wine by the glass",
       pricingUnit: "each",
       unitPrice: "4.00",
-      vatClass: "reduced",
       takeawayVatRate: "21.00",
     });
     const [wine175] = await setProductVariants(

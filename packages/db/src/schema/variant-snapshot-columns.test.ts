@@ -41,7 +41,6 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
         name: "Café solo",
 
         unitPrice: 130,
-        vatClass: "general",
       })
       .returning({ id: products.id });
     productId = prod!.id;
@@ -66,8 +65,6 @@ describe("B1 snapshot columns and the variant-descriptions locales trigger", () 
       descriptions: { es: "Café solo", ca: "Cafè sol" },
       quantity: 1000,
       unitPriceGross: 143,
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
       lineTotal: 143,
       ...overrides,
     };

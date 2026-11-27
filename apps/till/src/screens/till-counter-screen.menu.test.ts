@@ -19,7 +19,6 @@ function dish(key: string, name: string, menuId: string, extra: Partial<TillProd
     available: true,
     name,
     unitPrice: "2.00",
-    vatClass: "general",
     category: null,
     allergens: null,
     ...extra,

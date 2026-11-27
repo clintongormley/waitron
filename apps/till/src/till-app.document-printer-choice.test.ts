@@ -112,7 +112,6 @@ async function sold(invoiceType = "F1", overrides: Record<string, unknown> = {})
       customerName: { en: "Coffee" },
       pricingUnit: "each",
       unitPrice: "12.00",
-      vatClass: "general",
       category: null,
       allergens: null,
       menuId: "cat-default",

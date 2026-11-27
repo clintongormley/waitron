@@ -3899,7 +3899,6 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     name: "Flan",
     pricingUnit: "each",
     unitPrice: "5.00",
-    vatClass: "general",
     category: null,
     allergens: null,
   };
@@ -5173,7 +5172,6 @@ describe("A803 action results: Move this bill", () => {
         name: "Flan",
         pricingUnit: "each",
         unitPrice: "5.00",
-        vatClass: "general",
         category: null,
         allergens: null,
       },
@@ -6400,7 +6398,6 @@ describe("till-app: the order's groups", () => {
     name: "Café",
     pricingUnit: "each",
     unitPrice: "1.50",
-    vatClass: "general",
     category: null,
     allergens: null,
   };
@@ -6445,7 +6442,6 @@ describe("till-app: the order's groups", () => {
     name: menuItemId,
     pricingUnit: "each",
     unitPrice: "5.00",
-    vatClass: "general",
     category: null,
     allergens: null,
   });
@@ -8175,7 +8171,6 @@ describe("till-app: submitting the draft", () => {
     name,
     pricingUnit: "each",
     unitPrice: "5.00",
-    vatClass: "general",
     category: null,
     allergens: null,
     courseId,

@@ -36,7 +36,6 @@ describe("correction slips on line changes and cancellations", () => {
       name: name,
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     if (courseId !== undefined) await setProductCourse(tx, id, courseId);
     return id;

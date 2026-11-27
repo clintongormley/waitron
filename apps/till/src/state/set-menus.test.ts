@@ -98,7 +98,6 @@ const ordinary: OrderLine = {
     name: "Hake",
     unitPrice: "16.00",
     available: true,
-    vatClass: "reduced",
     category: null,
     allergens: null,
   },

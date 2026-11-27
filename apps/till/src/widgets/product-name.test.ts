@@ -22,7 +22,6 @@ function product(over: Partial<TillProduct> = {}): TillProduct {
     customerName: { es: "Café recién hecho", en: "Freshly ground coffee" },
     pricingUnit: "each",
     unitPrice: "1.00",
-    vatClass: "general",
     category: null,
     allergens: null,
     ...over,

@@ -21,7 +21,6 @@ const dish = (id: string, name: string): TillProduct => ({
   name,
   pricingUnit: "each",
   unitPrice: "3.00",
-  vatClass: "general",
   category: null,
   allergens: null,
 });

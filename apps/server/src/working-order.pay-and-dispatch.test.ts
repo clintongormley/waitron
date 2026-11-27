@@ -242,14 +242,12 @@ async function setupVenue(opts: { takeaway?: boolean } = {}): Promise<SeededVenu
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     const water = await createProduct(tx, {
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
     });
     if (opts.takeaway) {
       await setDepartmentSalePolicyField(tx, department!.id, "dining", "takeaway");

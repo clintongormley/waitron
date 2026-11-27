@@ -97,7 +97,6 @@ async function setup() {
       customerName: { es: "Customer steak" },
       pricingUnit: "each",
       unitPrice: "12.00",
-      vatClass: "general",
     });
     const sauce = await createProduct(tx, {
       categoryId: category.id,
@@ -105,7 +104,6 @@ async function setup() {
       kitchenName: "K-SAUCE",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     const list = await createExtraList(
       tx,

@@ -56,7 +56,6 @@ it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale })))
           hardwareUnit: null,
         },
         unitPrice: "12.50",
-        vatClass: "reduced",
         category: null,
         allergens: null,
         color: "#256bb1",

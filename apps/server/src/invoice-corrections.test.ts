@@ -107,7 +107,6 @@ useVenueDb({
           kitchenName: name.toUpperCase(),
           pricingUnit: "each",
           unitPrice: price,
-          vatClass: "general",
           takeawayVatRate: name === "Rib steak" ? "21.00" : undefined,
         });
         ids.set(name, product.id);
@@ -119,7 +118,6 @@ useVenueDb({
         kitchenName: "COLD SOUP",
         pricingUnit: "each",
         unitPrice: "5.50",
-        vatClass: "reduced",
       });
       ids.set("Cold soup", soup.id);
       const offers = await offerProducts(tx, { zone: { zoneId: venue.zoneId } });

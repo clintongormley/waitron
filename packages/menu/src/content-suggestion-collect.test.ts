@@ -102,7 +102,6 @@ async function product(
     kitchenName: `KITCHEN ${name}`,
     customerName,
     unitPrice: "3.00",
-    vatClass: "reduced",
   });
   return created.id;
 }
@@ -798,7 +797,6 @@ describe("collecting what is missing", () => {
           customerName: { ca: `CLIENT-CA Item ${index}` },
 
           unitPrice: 300,
-          vatClass: "reduced",
         })),
       );
       const items = await collectSuggestionItems(tx, context, new Set());

@@ -12,7 +12,6 @@ const dish: TillProduct = {
   kitchenName: "Kitchen soup",
   unitPrice: "5.00",
   pricingUnit: "each",
-  vatClass: "general",
   category: null,
   allergens: null,
 };

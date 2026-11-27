@@ -84,14 +84,12 @@ it("reports distinct products placed in the menu’s own sections in the delete 
       name: "Soup",
       pricingUnit: "each",
       unitPrice: "6.00",
-      vatClass: "reduced",
     });
     const included = await createProduct(tx, {
       categoryId: null,
       name: "Bread",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "reduced",
     });
     const ownSection = await createSectionIn(tx, oldRoot, { internalName: "Specials" });
     await addMember(tx, oldRoot, { kind: "product", productId: own.id });

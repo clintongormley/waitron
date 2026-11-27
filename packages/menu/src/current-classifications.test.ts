@@ -30,7 +30,6 @@ async function fixture() {
         name,
         pricingUnit: "each",
         unitPrice: "3",
-        vatClass: "general",
       });
     const cola = await product("Cola", softs.id);
     const water = await product("Water", null);

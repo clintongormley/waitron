@@ -26,7 +26,6 @@ useVenueDb({
         name: "Soup",
         categoryId: null,
         pricingUnit: "each",
-        vatClass: "general",
         unitPrice: "5.00",
       });
       return setMenuOnFullMenu(tx, offer.menus.find(({ isDefault }) => isDefault)!.id, id);

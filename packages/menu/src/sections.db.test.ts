@@ -42,7 +42,6 @@ async function fixture() {
           kitchenName: `${name} (kitchen)`,
           pricingUnit: "each",
           unitPrice: "2",
-          vatClass: "general",
         })
       ).id;
     return {
@@ -534,7 +533,6 @@ describe("moving and removing several members", () => {
             kitchenName: "Cider (kitchen)",
             pricingUnit: "each",
             unitPrice: "2",
-            vatClass: "general",
           })
         ).id,
     );

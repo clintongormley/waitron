@@ -89,7 +89,6 @@ useVenueDb({
           kitchenName: name.toUpperCase(),
           pricingUnit,
           unitPrice,
-          vatClass: "general",
         });
       const coffeeProduct = await product("Coffee", "3.00", "each");
       // By the kilo: 0.050 kg is 1.01.

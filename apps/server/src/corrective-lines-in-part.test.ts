@@ -63,7 +63,6 @@ beforeAll(async () => {
       name: "Cheese",
       pricingUnit: "weight",
       unitPrice: "5.20",
-      vatClass: "reduced",
     });
     await addProducts(tx, await requireMenuRoot(tx, venue.tables.menuId), [cheese.id]);
     await publishWorkingMenu(tx, venue.tables.menuId);

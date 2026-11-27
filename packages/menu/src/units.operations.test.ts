@@ -42,7 +42,6 @@ async function product(tx: Transaction, name: string) {
       name,
 
       unitPrice: 1,
-      vatClass: "general",
     })
     .returning({ id: products.id });
   return row!.id;

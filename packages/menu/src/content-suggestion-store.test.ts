@@ -710,7 +710,6 @@ it("a later run replaces more than one batch of an item's rows in one store", as
           customerName: { ca: `CLIENT-CA Racio ${n}` },
 
           unitPrice: 300,
-          vatClass: "reduced" as const,
         })),
       )
       .returning({ id: products.id });

@@ -87,7 +87,6 @@ async function setupVenue() {
       name: "Beer",
       pricingUnit: "each",
       unitPrice: "2.50",
-      vatClass: "reduced",
     });
     await assignMenuToVenue(tx, menu.id);
     return product.id;

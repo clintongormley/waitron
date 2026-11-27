@@ -50,7 +50,6 @@ async function dishesFixture() {
         kitchenName: `${name} for the kitchen`,
         pricingUnit: "each",
         unitPrice,
-        vatClass: "reduced",
       });
     const steak = await createDish("Sirloin", "18.00");
     const soup = await createDish("Soup", "7.00");

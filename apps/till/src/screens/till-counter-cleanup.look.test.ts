@@ -138,8 +138,6 @@ for (const kind of ["counter", "table"] as const)
                     customerName: { en: "Customer cheese" },
                     kitchenName: "Kitchen cheese",
                     price: "1.25",
-                    vatClass: "general",
-                    takeawayVatClass: "general",
                     portion: "1",
                     unit: {
                       id: "each",

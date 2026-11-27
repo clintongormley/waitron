@@ -138,14 +138,12 @@ async function setupVenue(): Promise<Seeded> {
       name: "ES coffee",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     const waterProduct = await createProduct(tx, {
       categoryId: drinks.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     const coffeeMenuItem = await addProductToMenu(tx, {
@@ -1797,8 +1795,6 @@ async function heldDishWithExtraApart() {
     quantity: 1000,
     unitPriceGross: 0,
     lineTotal: 0,
-    vatClass: "general",
-    takeawayVatClass: "general",
     groupId: dish!.groupId,
   });
   await db
@@ -3486,7 +3482,6 @@ describe("the kitchen screen and the expo board are told which lines were sold i
           name,
           unitId,
           unitPrice,
-          vatClass: "reduced",
         });
       await dish("Croquette", null, "1.50");
       await dish("Gilda", seededEach!.id, "2.00");

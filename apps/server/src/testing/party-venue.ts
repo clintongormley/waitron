@@ -160,7 +160,6 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
         kitchenName: product.kitchen,
         pricingUnit: "each",
         unitPrice: product.price,
-        vatClass: "general",
       });
     }
     await assignMenuToVenue(tx, cat.id);

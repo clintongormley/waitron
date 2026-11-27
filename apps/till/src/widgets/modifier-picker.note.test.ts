@@ -12,7 +12,6 @@ const product: TillProduct = {
   name: "Staff soup",
   unitPrice: "5.00",
   pricingUnit: "each",
-  vatClass: "general",
   category: null,
   allergens: null,
 };

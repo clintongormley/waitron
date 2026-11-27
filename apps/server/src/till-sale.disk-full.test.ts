@@ -27,7 +27,6 @@ useVenueDb({
         name: "Lemonade",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "general",
       });
       productId = created.id;
       await assignMenuToVenue(tx, cat.id);

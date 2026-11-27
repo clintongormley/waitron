@@ -179,7 +179,6 @@ const suite = useVenueDb({
             name,
             pricingUnit: "each",
             unitPrice: "1.00",
-            vatClass: "general",
           })
         ).id;
       ids.drinks = drinks.id;

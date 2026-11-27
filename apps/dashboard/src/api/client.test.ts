@@ -684,7 +684,6 @@ describe("DashboardApi", () => {
       customerName: { es: "Croquetas caseras" },
       pricingUnit: "each",
       unitPrice: "8.00",
-      vatClass: "reduced",
       active: true,
       allergens: null,
 
@@ -800,7 +799,6 @@ describe("DashboardApi", () => {
         customerName: { es: "Café solo de la casa" },
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
         active: true,
         allergens: null,
         image: null,

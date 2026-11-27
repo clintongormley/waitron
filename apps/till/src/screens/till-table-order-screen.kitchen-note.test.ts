@@ -28,7 +28,6 @@ it("shows one note for the table rather than one per draft basket", async () => 
       customerName: { es: "Plato" },
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "general",
       category: null,
       allergens: null,
     },

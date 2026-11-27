@@ -462,7 +462,6 @@ it("names the row and variant price that Save dropped from the submitted arrange
         effective: {
           unitPrice: "8.00",
           allergens: null,
-          vatClass: "general",
           takeawayVatRate: "21.00",
           primaryCategoryId: null,
           courseId: null,

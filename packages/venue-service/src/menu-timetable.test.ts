@@ -184,7 +184,6 @@ describe("deleting a period menu", () => {
         categoryId: null,
         unitId: null,
         unitPrice: "2.00",
-        vatClass: "general",
       });
       await addProductToMenu(tx, { menuId: Lunch, productId: drink.id });
       await publish(tx, Lunch);
@@ -216,7 +215,6 @@ describe("deleting a period menu", () => {
         .values({
           name: "Soup",
           unitPrice: 400,
-          vatClass: "general",
           courseId: course!.id,
         })
         .returning({ id: products.id });
@@ -1627,7 +1625,6 @@ async function recordedLine(v: Timed) {
       name: "Tortilla",
       pricingUnit: "each",
       unitPrice: "0.00",
-      vatClass: "general",
     });
     const offer = await addProductToMenu(tx, {
       menuId: v.menus.Breakfast,
@@ -1650,8 +1647,6 @@ async function recordedLine(v: Timed) {
       descriptions: { "es-ES": "Tortilla" },
       quantity: 1000,
       unitPriceGross: 450,
-      vatClass: "general",
-      takeawayVatClass: "general",
       lineTotal: 450,
       category: "Uncategorised",
     });
@@ -2856,7 +2851,6 @@ describe("the routing that names a period", () => {
         name: "Mojito",
         pricingUnit: "each",
         unitPrice: "9.00",
-        vatClass: "general",
       }),
     );
     const cell = async (values: Partial<typeof routingCells.$inferInsert>) =>
@@ -2938,7 +2932,6 @@ describe("the routing that names a period", () => {
             name,
             pricingUnit: "each",
             unitPrice: "9.00",
-            vatClass: "general",
           })
         ).id;
       const drinksCocktails = (await createCategory(tx, { name: "Cocktails", parentId: drinks }))

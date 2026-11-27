@@ -61,8 +61,6 @@ it("exports only the subject's remaining non-fiscal actions after the initial wr
       quantity: 1000,
       unitPriceGross: 600,
       lineTotal: 600,
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
     };
     await tx.insert(workingOrderLines).values([
       { ...line, id: "line", lineNo: 1, creditedTo: "ana" },
@@ -206,8 +204,6 @@ it("lists several actions of each kind in a fixed order, whatever order they wer
       quantity: 1000,
       unitPriceGross: 600,
       lineTotal: 600,
-      vatClass: "reduced",
-      takeawayVatClass: "reduced",
       creditedTo: "ana",
     };
     await tx.insert(workingOrderLines).values([

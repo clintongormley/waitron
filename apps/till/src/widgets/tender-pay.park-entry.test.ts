@@ -11,7 +11,6 @@ const dish: TillProduct = {
   name: "Staff coffee",
   unitPrice: "1.50",
   pricingUnit: "each",
-  vatClass: "general",
   category: null,
   allergens: null,
 };

@@ -562,7 +562,6 @@ describe("A669 atomic submit", () => {
           kitchenName: `${name} kitchen`,
           pricingUnit: "each",
           unitPrice: "2.00",
-          vatClass: "general",
         });
       const dish = await make("Soup"),
         extra = await make("Egg garnish");

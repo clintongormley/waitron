@@ -109,7 +109,6 @@ async function kitchenDish(tx: Transaction, venue: Venue): Promise<string> {
       kitchenName: "SALAD",
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "general",
     })
   ).id;
 }

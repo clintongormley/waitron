@@ -58,7 +58,6 @@ useVenueDb({
             kitchenName: name.toUpperCase(),
             pricingUnit: "each",
             unitPrice: price,
-            vatClass: "reduced",
           })
         ).id;
       const burger = await product("Burger", "9.50");
@@ -70,7 +69,6 @@ useVenueDb({
           kitchenName: "HAM",
           pricingUnit: "weight",
           unitPrice: "24.90",
-          vatClass: "reduced",
         })
       ).id;
       const cheese = await product("Cheese", "1.00");

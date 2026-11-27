@@ -20,7 +20,6 @@ const product = (id: string, name: string, over: Partial<TillProduct> = {}): Til
   name,
   unitPrice: "10.00",
   pricingUnit: "each",
-  vatClass: "general",
   category: null,
   allergens: {},
   ...over,
@@ -51,8 +50,6 @@ const burger = product("burger", "Burger", {
           customerName: null,
           kitchenName: null,
           price: "1.00",
-          vatClass: "general",
-          takeawayVatClass: "general",
           portion: "1",
           unit: {
             id: "each",

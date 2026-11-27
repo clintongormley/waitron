@@ -26,10 +26,7 @@ beforeAll(() => {
 
 async function product(): Promise<string> {
   return (
-    await db
-      .insert(products)
-      .values({ name: "Soup", unitPrice: 1, vatClass: "general" })
-      .returning({ id: products.id })
+    await db.insert(products).values({ name: "Soup", unitPrice: 1 }).returning({ id: products.id })
   )[0]!.id;
 }
 

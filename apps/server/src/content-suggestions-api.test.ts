@@ -118,7 +118,6 @@ async function bread(): Promise<string> {
       kitchenName: "KITCHEN Bread",
       customerName: { es: "CLIENT-es Pan" },
       unitPrice: "3.00",
-      vatClass: "reduced",
     });
     return product.id;
   });

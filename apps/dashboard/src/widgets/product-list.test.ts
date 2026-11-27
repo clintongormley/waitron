@@ -15,7 +15,7 @@ import { allergenStateName } from "../i18n/domain.js";
 import type { Product } from "../api/client.js";
 import type { Course } from "../api/kitchen-api.js";
 import type { Unit } from "../api/catalog-api.js";
-import type { ListedVariant, VatClass } from "@waitron/shared";
+import type { ListedVariant } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { ProductList, ROOT_KEY } from "./product-list.js";
 import { registerIcons, setHelpMode, type WtHelpTooltip } from "@waitron/ui";
@@ -200,7 +200,6 @@ function product(
     dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "8.50",
-    vatClass: "reduced",
     takeawayVatRate: "10.00",
     active: true,
     available: true,
@@ -221,7 +220,6 @@ function product(
       effective: variant.effective ?? {
         allergens: base.allergens,
         unitPrice: variant.unitPrice ?? base.unitPrice,
-        vatClass: base.vatClass,
         takeawayVatRate: base.takeawayVatRate,
         primaryCategoryId: base.primaryCategoryId,
         courseId: variant.courseId ?? base.courseId,
@@ -1154,7 +1152,6 @@ describe("product-list", () => {
           id: "wine",
           name: "Wine by the glass",
           unitPrice: "4.00",
-          vatClass: "reduced",
           takeawayVatRate: "10.00",
           primaryCategoryId: "food",
           variants: [
@@ -1169,7 +1166,6 @@ describe("product-list", () => {
               effective: {
                 allergens: null,
                 unitPrice: "4.75",
-                vatClass: "general",
                 takeawayVatRate: "21.00",
                 primaryCategoryId: "food",
                 courseId: null,
@@ -1202,7 +1198,6 @@ describe("product-list", () => {
         product({
           id: "wine",
           unitPrice: "4.00",
-          vatClass: "reduced",
           takeawayVatRate: "10.00",
           variants: [
             {
@@ -1216,7 +1211,6 @@ describe("product-list", () => {
               effective: {
                 allergens: null,
                 unitPrice: "4.75",
-                vatClass: "general",
                 takeawayVatRate: "21.00",
                 primaryCategoryId: "category-1",
                 courseId: null,
@@ -1272,14 +1266,13 @@ describe("product-list", () => {
   it.each([true, false])(
     "notes a variant's takeaway rate under its price only where it differs from its product's and the region charges it (%s)",
     async (takeawayVat) => {
-      const variant = (id: string, vatClass: VatClass, takeawayVatRate: string) => ({
+      const variant = (id: string, takeawayVatRate: string) => ({
         ...bunVariant,
         id,
         name: id,
         effective: {
           allergens: null,
           unitPrice: "4.00",
-          vatClass,
           takeawayVatRate,
           primaryCategoryId: "category-1",
           courseId: null,
@@ -1291,13 +1284,12 @@ describe("product-list", () => {
           product({
             id: "wine",
             unitPrice: "4.00",
-            vatClass: "reduced",
             takeawayVatRate: "10.00",
             variants: [
-              variant("served", "general", "10.00"),
-              variant("away", "reduced", "0.00"),
-              variant("both", "general", "7.50"),
-              variant("same", "reduced", "10.00"),
+              variant("served", "10.00"),
+              variant("away", "0.00"),
+              variant("both", "7.50"),
+              variant("same", "10.00"),
             ],
           }),
         ],
@@ -7347,7 +7339,6 @@ describe("A668 effective allergen cells", () => {
                 allergensInherited: false,
                 effective: {
                   unitPrice: "1.00",
-                  vatClass: "reduced",
                   takeawayVatRate: "10.00",
                   primaryCategoryId: null,
                   allergens: {},
@@ -7401,7 +7392,6 @@ describe("A668 effective allergen cells", () => {
       allergensInherited: false,
       effective: {
         unitPrice: "1.00",
-        vatClass: "reduced",
         takeawayVatRate: "10.00",
         primaryCategoryId: null,
         allergens,

@@ -203,7 +203,6 @@ async function setupVenue(): Promise<Venue> {
           kitchenName: `KITCHEN ${dish}`,
           pricingUnit: "each",
           unitPrice,
-          vatClass: "general",
         })
       ).id;
     }

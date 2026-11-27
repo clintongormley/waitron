@@ -420,7 +420,6 @@ beforeAll(async () => {
       name: "Pastrami",
       pricingUnit: "each",
       unitPrice: "9.00",
-      vatClass: "general",
     });
     const special = await addProductToMenu(tx, { menuId: specials.id, productId: pastrami.id });
     await publishWorkingMenu(tx, specials.id);

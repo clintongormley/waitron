@@ -151,7 +151,6 @@ export const suite = useVenueDb({
           name: "Agua mineral",
           pricingUnit: "each",
           unitPrice: "1.50",
-          vatClass: "general",
           allergens: { sulphites: {} },
         });
         await assignMenuToVenue(tx, cat.id);
@@ -162,7 +161,6 @@ export const suite = useVenueDb({
           name: "Cerveza",
           pricingUnit: "each",
           unitPrice: "2.50",
-          vatClass: "general",
         });
 
         const [department] = await tx

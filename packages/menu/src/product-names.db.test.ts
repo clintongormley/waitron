@@ -39,7 +39,6 @@ async function make(name: string, { categoryId = food, active = true } = {}): Pr
       name,
       pricingUnit: "each",
       unitPrice: "2",
-      vatClass: "general",
       active,
     }),
   );
@@ -454,7 +453,6 @@ describe("two writes started together", () => {
         name,
         pricingUnit: "each",
         unitPrice: "2",
-        vatClass: "general",
       });
     const [first, second] = await racePair(suite.db, create("Tonic"), create("tonic"));
     expect(first.status).toBe("fulfilled");

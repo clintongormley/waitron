@@ -58,10 +58,7 @@ useVenueDb({
     await inTx(venue, async (tx) => {
       const flan = venue.productId("Flan");
       const { id: categoryId } = await createCategory(tx, { name: "Desserts" });
-      await tx
-        .update(products)
-        .set({ categoryId, vatClass: "reduced" })
-        .where(eq(products.id, flan));
+      await tx.update(products).set({ categoryId }).where(eq(products.id, flan));
       const extras = await createExtraList(
         tx,
         {
@@ -106,7 +103,6 @@ useVenueDb({
         categoryId: null,
         pricingUnit: "each",
         unitPrice: "6.00",
-        vatClass: "reduced",
       });
       const variant = (name: string, unitPrice: string | null) => ({
         name,

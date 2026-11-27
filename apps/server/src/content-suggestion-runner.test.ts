@@ -63,7 +63,6 @@ async function venue(staffNames: readonly string[]): Promise<string[]> {
         kitchenName: name.replace("STAFF", "KITCHEN"),
         customerName: { es: name.replace("STAFF", "CLIENT-es") },
         unitPrice: "3.00",
-        vatClass: "reduced",
       });
       ids.push(product.id);
     }

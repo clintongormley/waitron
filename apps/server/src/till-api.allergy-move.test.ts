@@ -431,7 +431,6 @@ it("previews parent nutrition and distinct extras, retaining unknown versus revi
         kitchenName: `${name} kitchen`,
         pricingUnit: "weight",
         unitPrice: "1.00",
-        vatClass: "general",
         ...(allergens === undefined ? {} : { allergens }),
       });
     const items = [

@@ -465,14 +465,12 @@ describe("what deleting a period touches", () => {
           categoryId: folders[0]!.id,
           pricingUnit: "each",
           unitPrice: "1",
-          vatClass: "general",
         });
         const second = await createProduct(tx, {
           name: "Second",
           categoryId: folders[0]!.id,
           pricingUnit: "each",
           unitPrice: "1",
-          vatClass: "general",
         });
         await tx.update(products).set({ name: "Same" }).where(eq(products.id, first.id));
         await tx.update(products).set({ name: "Same" }).where(eq(products.id, second.id));

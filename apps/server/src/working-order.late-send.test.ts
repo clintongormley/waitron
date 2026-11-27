@@ -103,7 +103,6 @@ async function mealVenue(weekdays: readonly number[] = [1], lunchEndsAt = "14:00
             name,
             pricingUnit: "each",
             unitPrice,
-            vatClass: "general",
           })
         ).id;
       const toastId = await product("Toast", "3.00");

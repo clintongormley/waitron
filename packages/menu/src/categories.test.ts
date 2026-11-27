@@ -35,7 +35,6 @@ async function fixture() {
       name: "Toast",
       pricingUnit: "each",
       unitPrice: "2",
-      vatClass: "general",
     }),
   );
   return { app, food, drinks, menu, product };
@@ -226,7 +225,6 @@ it("updateProduct's categoryId sets the main category, with no membership coupli
       name: "Coffee",
       pricingUnit: "each",
       unitPrice: "1",
-      vatClass: "general",
     }),
   );
   await app((tx) => updateProduct(tx, product.id, { categoryId: food.id }));

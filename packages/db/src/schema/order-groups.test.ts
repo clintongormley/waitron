@@ -84,8 +84,6 @@ describe("order_groups, order_events and working_order_lines.group_id", () => {
         descriptions: { es: "Solomillo" },
         quantity: 1000,
         unitPriceGross: 2200,
-        vatClass: "reduced",
-        takeawayVatClass: "reduced",
         lineTotal: 2200,
         groupId,
       });

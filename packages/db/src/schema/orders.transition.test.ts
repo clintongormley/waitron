@@ -75,8 +75,6 @@ describe("working_orders state machine (enforce_transition)", () => {
         descriptions: DESCRIPTIONS_A,
         quantity: 1000,
         unitPriceGross: 110,
-        vatClass: "reduced",
-        takeawayVatClass: "reduced",
         lineTotal: 100,
       }),
     );
@@ -136,7 +134,6 @@ describe("working_orders state machine (enforce_transition)", () => {
         name: "Café solo",
 
         unitPrice: 100,
-        vatClass: "general",
       })
       .returning({ id: products.id });
     productA = product!.id;

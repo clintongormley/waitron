@@ -51,8 +51,6 @@ async function discountedHakes(workingOrderId: string, quantity: string): Promis
       unitPriceGross: 1440,
       listUnitPriceGross: 1600,
       aLaCarteUnitPrice: 1600,
-      vatClass: "general",
-      takeawayVatClass: "general",
       lineTotal: 1440 * count,
     })
     .returning({ id: workingOrderLines.id });

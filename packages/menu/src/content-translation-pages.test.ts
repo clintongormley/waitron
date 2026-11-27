@@ -35,7 +35,6 @@ async function fixture(tx: Transaction) {
     kitchenName: "KITCHEN Bread",
     unitPrice: "3.00",
     pricingUnit: "each",
-    vatClass: "reduced",
   });
   return { menu: menu.id, product: product.id };
 }

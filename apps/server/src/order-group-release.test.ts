@@ -737,7 +737,6 @@ describe("kitchen tickets for a party's groups (Task 5)", () => {
           kitchenName,
           ...unit,
           unitPrice: "0.05",
-          vatClass: "general",
         });
       const hake = await dish("Hake", "K-HAKE", { unitId: gram!.id });
       const ham = await dish("Ham", "K-HAM", { pricingUnit: "weight" });

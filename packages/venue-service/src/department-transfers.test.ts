@@ -927,7 +927,6 @@ describe("departmental tab transfers", () => {
         name: "Soup",
         pricingUnit: "each",
         unitPrice: "2.35",
-        vatClass: "general",
       });
       const offer = await addProductToMenu(tx, { menuId: menu.id, productId: product.id });
       const [line] = await tx
@@ -940,8 +939,6 @@ describe("departmental tab transfers", () => {
           descriptions: { "en-GB": "Customer soup" },
           quantity: 1000,
           unitPriceGross: 235,
-          vatClass: "general",
-          takeawayVatClass: "general",
           lineTotal: 235,
           makeAtStationId: station!.id,
           note: "Pickup at deli",
@@ -1390,8 +1387,6 @@ describe("departmental tab transfers", () => {
           descriptions: { "en-GB": "Set lunch" },
           quantity: 1000,
           unitPriceGross: 1400,
-          vatClass: "reduced",
-          takeawayVatClass: "reduced",
           lineTotal: 1400,
           ...(options.sentAt === undefined ? {} : { sentAt: options.sentAt }),
         })

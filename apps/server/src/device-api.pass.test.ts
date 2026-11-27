@@ -407,8 +407,6 @@ describe("the pass screen's device routes", () => {
         descriptions: { "es-ES": "Foreign dish" },
         quantity: 1000,
         unitPriceGross: 100,
-        vatClass: "general",
-        takeawayVatClass: "general",
         lineTotal: 100,
       })
       .returning({ id: workingOrderLines.id });

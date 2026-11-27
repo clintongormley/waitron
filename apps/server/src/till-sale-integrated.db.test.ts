@@ -169,7 +169,7 @@ interface SeededVenue {
   coffee: OfferedProduct;
 }
 
-/** A fresh venue with one "Café" (each, 1.50 gross, general 21%) product offered in the counter
+/** A fresh venue with one "Café" (each, 1.50 gross) product offered in the counter
  * zone under `orderFlow`. */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue> {
   const venue = await applyVenue(
@@ -224,7 +224,6 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     return {

@@ -639,7 +639,6 @@ describe("the floor's attention signals", () => {
         kitchenName: "PULPO",
         pricingUnit: "weight",
         unitPrice: "40.00",
-        vatClass: "general",
       });
       await assignMenuToVenue(tx, menu.id);
       return (await offerProducts(tx, { zone: "tables" })).offerFor(product.id);
@@ -871,8 +870,6 @@ describe("the floor's attention signals", () => {
         descriptions: burger.descriptions,
         quantity: 2000,
         unitPriceGross: 100,
-        vatClass: "general",
-        takeawayVatClass: "general",
         lineTotal: 200,
         parentLineId: burger.id,
         groupId,

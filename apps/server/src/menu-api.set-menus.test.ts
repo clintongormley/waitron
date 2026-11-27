@@ -50,7 +50,7 @@ async function fixture() {
       const full = await createMenu(tx, { name: "Lunch" });
       const starter = await createCourse(tx, { name: "Starter" });
       const main = await createCourse(tx, { name: "Main", displayOrder: 1 });
-      const product = { categoryId: null, unitPrice: "4.00", vatClass: "general" } as const;
+      const product = { categoryId: null, unitPrice: "4.00" } as const;
       const soup = await createProduct(tx, { ...product, name: "Soup", pricingUnit: "each" });
       await setProductCourse(tx, soup.id, starter.id);
       const unit = await createUnit(

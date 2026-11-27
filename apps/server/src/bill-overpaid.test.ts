@@ -53,7 +53,6 @@ useVenueDb({
             kitchenName: name.toUpperCase(),
             pricingUnit: "each",
             unitPrice,
-            vatClass: "general",
           })
         ).id;
       const ids = [

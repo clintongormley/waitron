@@ -75,7 +75,7 @@ interface SeededVenue {
   cfg: DeviceRequestConfig;
 
   menuId: string;
-  /** The `each`-priced "Espresso" product (VAT general/21%, category "ES drinks"). */
+  /** The `each`-priced "Espresso" product (category "ES drinks"). */
   coffeeId: string;
   /** A second `each` product with NO category, so its priced line carries `category: null`. */
   waterId: string;
@@ -130,7 +130,6 @@ export async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<Seede
         name: "Espresso",
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       // Deliberately category-less, so its priced line snapshots `category: null` — the other side
       // of `parkOrder`'s `?? null`.
@@ -139,7 +138,6 @@ export async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<Seede
         name: "Water",
         pricingUnit: "each",
         unitPrice: "2.00",
-        vatClass: "general",
       });
       await assignMenuToVenue(tx, cat.id);
       const premium = await createMenu(tx, { name: "Premium menu" });
@@ -309,7 +307,6 @@ export async function addExtraList(
   opts: {
     price?: string | null;
     unitPrice?: string;
-    vatClass?: "general" | "reduced" | "super_reduced" | "zero";
     maxQuantity?: number | null;
     minPicks?: number;
     maxPicks?: number | null;
@@ -323,7 +320,6 @@ export async function addExtraList(
     kitchenName: `${label} kitchen`,
     pricingUnit: "each",
     unitPrice: opts.unitPrice ?? "9.99",
-    vatClass: opts.vatClass ?? "general",
   });
   const list = await menu.createExtraList(
     tx,
@@ -397,7 +393,6 @@ export async function seedVariantOffer(
     kitchenName: "COF",
     pricingUnit: "each",
     unitPrice: "1.50",
-    vatClass: "general",
   });
   const offer = await addProductToMenu(tx, { menuId: menuId, productId: product.id });
   const variants = await setProductVariants(
@@ -544,7 +539,6 @@ export async function makeProduct(
     name: `P-${randomUUID().slice(0, 8)}`,
     pricingUnit: "each",
     unitPrice: "1.50",
-    vatClass: "general",
   });
   if (route.stationId !== undefined) {
     await routeProductTo(tx, id, route.stationId);
@@ -674,13 +668,11 @@ export async function insertContextlessLines(
       descriptions: { [LOCALE]: "Line" },
       quantity,
       unitPriceGross: 150,
-      vatClass: "general",
-      takeawayVatClass: "general",
       lineTotal: (quantity * 150) / 1000,
     })),
   );
 }
-/** Attach a fresh one-product extras list to `dishId`, priced 0.50 at the reduced rate — the shape a
+/** Attach a fresh one-product extras list to `dishId`, priced 0.50 — the shape a
  *  line's `extras: [{ listId, picks: [{ productId }] }]` picks from, for the child-line tests.
  *
  *  The extra's OWN allergens and dietary labels are declared on the PRODUCT the list offers; the
@@ -700,7 +692,6 @@ export async function addExtra(
     name,
     pricingUnit: "each",
     unitPrice: "9.99",
-    vatClass: "reduced",
     ...(overlay?.add === undefined ? {} : { allergens: overlay.add }),
     ...(overlay?.suitableFor === undefined ? {} : { dietaryDeclarations: overlay.suitableFor }),
   });
@@ -827,9 +818,9 @@ export async function storedRows(id: string) {
 // ---------------------------------------------------------------------------------------------------
 
 /**
- * "Wine by the glass" (reduced, category "Wines", course First, sulphites, vegan) on the venue's
+ * "Wine by the glass" (category "Wines", course First, sulphites, vegan) on the venue's
  * zone menu, with two variants: "125 ml" sets nothing but its staff name and price, so every other
- * field reads its parent's; "175 ml" sets its own customer and kitchen names, VAT, course,
+ * field reads its parent's; "175 ml" sets its own customer and kitchen names, course,
  * allergens and dietary declarations, so a reader of the parent's value gets it wrong. 175 ml also
  * still stores a category of its own ("Glasses"), which a variant never reads: its category is
  * always its parent's.
@@ -846,7 +837,6 @@ export async function seedWine(tx: Transaction, menuId: string) {
     kitchenName: "WINE",
     pricingUnit: "each",
     unitPrice: "4.00",
-    vatClass: "reduced",
     allergens: { sulphites: {} },
     dietaryDeclarations: ["vegan"],
   });
@@ -882,7 +872,6 @@ export async function seedWine(tx: Transaction, menuId: string) {
   await tx
     .update(products)
     .set({
-      vatClass: "general",
       categoryId: glassesCategory.id,
       courseId: secondCourse.id,
       allergens: { gluten: { kinds: ["wheat" as const] } },

@@ -186,14 +186,12 @@ async function seedShop(db: Database, issuerNif: string): Promise<Shop> {
       name: "Agua mineral",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     const coffee = await createProduct(tx, {
       categoryId: drinks.id,
       name: "Café solo",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     const waterMenuItem = await addProductToMenu(tx, {

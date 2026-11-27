@@ -99,7 +99,7 @@ interface SeededVenue {
 
 /**
  * Stand up a fresh chained venue + registered SIF (as the owner), then seed a menu and read
- * back two `each`/general(21%) products.
+ * back two `each` products.
  */
 async function setupVenue(): Promise<SeededVenue> {
   const venue = await applyVenue(
@@ -141,14 +141,12 @@ async function setupVenue(): Promise<SeededVenue> {
       name: "Café",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     await createProduct(tx, {
       categoryId: drinksCategory.id,
       name: "Agua",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
     return (await listAvailableProducts(tx)).products;

@@ -227,7 +227,6 @@ useVenueDb({
           kitchenName: dish.kitchen,
           pricingUnit: "each",
           unitPrice: dish.price,
-          vatClass: "general",
         });
         productIds.set(dish.name, product.id);
       }
@@ -239,7 +238,6 @@ useVenueDb({
           kitchenName: "AIOLI",
           pricingUnit: "each",
           unitPrice: "3.00",
-          vatClass: "general",
         })
       ).id;
       sauces = (

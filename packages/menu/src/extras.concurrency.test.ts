@@ -37,7 +37,6 @@ beforeEach(async () => {
         name: key,
         unitId: null,
         unitPrice,
-        vatClass: "reduced",
       });
       breads[key as keyof typeof breads] = product.id;
     }
@@ -47,7 +46,6 @@ beforeEach(async () => {
         name: "dish",
         unitId: null,
         unitPrice: "7.00",
-        vatClass: "reduced",
       })
     ).id;
     await addProductToMenu(tx, {

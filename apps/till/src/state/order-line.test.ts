@@ -15,7 +15,7 @@ import {
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { sellingValuesOf, type TillProduct } from "../api/menu-api.js";
 
-// A gross-1.50 espresso at the general rate.
+// A gross-1.50 espresso.
 const coffee: TillProduct = {
   id: "cafe",
   name: "Café",
@@ -30,12 +30,11 @@ const coffee: TillProduct = {
     hardwareUnit: null,
   },
   unitPrice: "1.50",
-  vatClass: "general",
   category: null,
   allergens: null,
 };
 
-// A weight product priced per kg: 10.00/kg gross at the reduced rate.
+// A weight product priced per kg: 10.00/kg gross.
 const ham: TillProduct = {
   id: "jamon",
   name: "Jamón",
@@ -50,7 +49,6 @@ const ham: TillProduct = {
     hardwareUnit: "kg",
   },
   unitPrice: "10.00",
-  vatClass: "reduced",
   category: "charcutería",
   allergens: null,
 };

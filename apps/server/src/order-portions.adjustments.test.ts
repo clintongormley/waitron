@@ -619,7 +619,6 @@ async function threeWithAnOliveAt(price: string): Promise<Bill & { dish: string 
       name: dish,
       pricingUnit: "each",
       unitPrice: price,
-      vatClass: "general",
     });
     await writeProductModifiers(tx, product.id, [{ kind: "extras", id: venue.pizzaExtras }]);
     const offers = await offerProducts(tx, { zone: "tables" });
@@ -3360,7 +3359,6 @@ describe("A803 portions: the extras of a row of identical portions", () => {
         name: `Focaccia ${randomUUID()}`,
         pricingUnit: "each",
         unitPrice: "6.00",
-        vatClass: "general",
       });
       const list = (name: string) =>
         createExtraList(

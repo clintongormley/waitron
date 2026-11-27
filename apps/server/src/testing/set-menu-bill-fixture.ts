@@ -117,8 +117,6 @@ export async function seedBillSetMenu(
       quantity: 1000,
       unitPriceGross: cents,
       lineTotal: cents,
-      vatClass: "reduced",
-      takeawayVatClass: "general",
       sentAt: "2026-11-19T12:00:00.000Z",
       servedAt: "2026-11-19T12:00:00.000Z",
       servedQuantity: 1000,

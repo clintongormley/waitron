@@ -38,7 +38,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
         name: "Black coffee",
 
         unitPrice: 100,
-        vatClass: "general",
       })
       .returning({ id: products.id });
     productA = prodA!.id;
@@ -75,8 +74,6 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
         descriptions: DESCRIPTIONS_A,
         quantity: 1000,
         unitPriceGross: 110,
-        vatClass: "reduced",
-        takeawayVatClass: "reduced",
         lineTotal: 110,
       })
       .returning({ id: workingOrderLines.id });

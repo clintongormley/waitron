@@ -73,7 +73,6 @@ useVenueDb({
           kitchenName: dish.name.toUpperCase(),
           pricingUnit: "each",
           unitPrice: dish.price,
-          vatClass: "reduced",
         });
         ids.set(dish.name, product.id);
       }

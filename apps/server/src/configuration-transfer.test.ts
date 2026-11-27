@@ -932,7 +932,6 @@ describe("configuration transfer database path", () => {
         name: "Coffee",
 
         unitPrice: 150,
-        vatClass: "general",
       });
       await seedTakeawayVatRate(tx, "22222222-aaaa-aaaa-aaaa-222222222222");
       await tx
@@ -1333,7 +1332,6 @@ describe("configuration transfer database path", () => {
         name: "Flan",
         pricingUnit: "each",
         unitPrice: "4",
-        vatClass: "general",
       });
       await tx.execute(sql`update products set color = '#256bb1' where id = ${product.id}`);
     });
@@ -1375,7 +1373,6 @@ describe("configuration transfer database path", () => {
           name,
           pricingUnit: "each",
           unitPrice: "4",
-          vatClass: "general",
         });
         const item = await addProductToMenu(tx, {
           menuId: menu.id,
@@ -1454,7 +1451,6 @@ describe("configuration transfer database path", () => {
           name,
           pricingUnit: "each",
           unitPrice: "4",
-          vatClass: "general",
         });
         await addProductToMenu(tx, { menuId: bar.id, productId: product.id, grossPrice: "5.50" });
         await addSetMenuDishes(tx, daily.id, [{ productId: product.id, excludedVariantIds: [] }]);
@@ -1532,7 +1528,6 @@ describe("configuration transfer database path", () => {
         name: "Soup",
         pricingUnit: "each",
         unitPrice: "4",
-        vatClass: "general",
       });
       await addSetMenuDishes(tx, set.id, [{ productId: dish.id, excludedVariantIds: [] }]);
       await tx.update(menus).set({ updatedAt: saved }).where(eq(menus.id, set.id));
@@ -1577,7 +1572,6 @@ describe("configuration transfer database path", () => {
         name: "Gin",
         pricingUnit: "each",
         unitPrice: "4",
-        vatClass: "general",
       });
       await addProductToMenu(tx, { menuId, productId: product.id, grossPrice: "5.50" });
     });
@@ -1628,7 +1622,6 @@ describe("configuration transfer database path", () => {
         name: "Cake",
         pricingUnit: "each",
         unitPrice: "4",
-        vatClass: "general",
       });
       await tx.execute(sql`update products set color = '#256bb1' where id = ${product.id}`);
     });
@@ -1775,7 +1768,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       name: "Coffee",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "reduced",
     });
     // The extra is a product in its own right, and not sold on its own.
     const shot = await createProduct(tx, {
@@ -1783,7 +1775,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       name: "Coffee extra",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
       ordering: "not_sold_separately",
     });
     const optionList = await createOptionList(
@@ -1851,7 +1842,6 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       name: "Tea",
       pricingUnit: "each",
       unitPrice: "1.80",
-      vatClass: "reduced",
     });
     await addProductToMenu(tx, {
       menuId: menu.id,
@@ -1996,7 +1986,6 @@ it("transfers set-menu terms, course choices and variant exclusions", async () =
       name: "Soup",
       pricingUnit: "each",
       unitPrice: "6.00",
-      vatClass: "reduced",
     });
     const { rootSectionId } = await readMenuStructure(tx, menu.id);
     await addMember(tx, rootSectionId, { kind: "product", productId: dish.id });
@@ -2092,7 +2081,6 @@ it("transfers sections and their members, remapping ids, with a section's image"
       name: "Still water",
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "general",
     });
     const drinksMenu = await createMenu(tx, {
       name: "Drinks (internal)",
@@ -2317,7 +2305,6 @@ it.each([3, 2])(
         name: "Lemonade",
         pricingUnit: "each",
         unitPrice: "3.00",
-        vatClass: "reduced",
         image: image.filename,
       });
       const { rootSectionId } = await readMenuStructure(tx, menu.id);
@@ -4285,7 +4272,6 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
       name: "Water",
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "general",
     });
     await addMember(tx, root, { kind: "product", productId: water.id });
     const home = await readMenuHome(tx, menu.id);
@@ -4347,10 +4333,9 @@ it("preserves imported product names and refuses their duplicates without stored
       ...fields,
       name: " Café Solo ",
       unitPrice: "1.20",
-      vatClass: "general",
     });
     const name = menu.id.toUpperCase();
-    await createProduct(tx, { ...fields, name, unitPrice: "2.00", vatClass: "general" });
+    await createProduct(tx, { ...fields, name, unitPrice: "2.00" });
     return name;
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -4555,7 +4540,6 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
       name: category.id,
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
     });
     await setProductVariants(
       tx,
@@ -4656,7 +4640,6 @@ it("refuses a bundle holding duplicate names whole, at staging and at import", a
       name: "Water",
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "general",
     });
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -4724,7 +4707,6 @@ it("refuses an Inactive product in a menu list and a menu price for an Inactive 
       name: "Gin",
       pricingUnit: "each",
       unitPrice: "5.00",
-      vatClass: "general",
     });
     const [single] = await setProductVariants(
       tx,
@@ -4803,7 +4785,6 @@ it("counts an exported product with no Active flag as Active, as the column stor
       name: "Water",
       pricingUnit: "each",
       unitPrice: "1.00",
-      vatClass: "general",
     });
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -6548,7 +6529,6 @@ it("exports and imports all seven cell classes into another venue, remapping eve
       name: "Routes mojito",
       pricingUnit: "each",
       unitPrice: "7",
-      vatClass: "general",
     });
     const atStation = (id: string) => ({ kind: "station" as const, stationId: id });
     const categoryRow = { kind: "category" as const, categoryId: category.id };
@@ -6655,7 +6635,6 @@ it("carries a cell's period choices with their cell, including a period whose me
       name: "Periods mojito",
       pricingUnit: "each",
       unitPrice: "7",
-      vatClass: "general",
     });
     const emptyMenu = await createMenu(tx, { name: "Periods empty menu" });
     const period = await saveMenuPeriod(tx, department.id, {
@@ -7998,7 +7977,6 @@ it("round-trips kitchen configuration without deleted rows and keeps empty profi
       categoryId: null,
       pricingUnit: "each",
       unitPrice: "5.00",
-      vatClass: "general",
     });
     await setProductCourse(tx, product.id, course.id);
     await updateProduct(tx, product.id, { active: false });

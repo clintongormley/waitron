@@ -2160,7 +2160,6 @@ async function modifierOfferFixture() {
       name: `Prueba de modificadores ${fixture}`,
       pricingUnit: "each",
       unitPrice: "8.00",
-      vatClass: "general",
     });
     const offer = await addProductToMenu(tx, {
       menuId: waterProduct.menuId,
@@ -2175,7 +2174,6 @@ async function modifierOfferFixture() {
       kitchenName: "Queso kitchen",
       pricingUnit: "each",
       unitPrice: "9.00",
-      vatClass: "general",
     });
     const extrasList = await createExtraList(
       tx,
@@ -2563,7 +2561,6 @@ describe("a till request cannot hand over settled extras or options", () => {
     kitchenName: null,
     price: "0.00",
     listId: f.extrasList.id,
-    vatClass: "general",
     quantity: 7,
   });
 

@@ -65,7 +65,6 @@ useVenueDb({
         kitchenName: "AGUA",
         pricingUnit: "each",
         unitPrice: "0.00",
-        vatClass: "general",
       });
       freeWaterId = water.id;
       return offerProducts(tx, { zone: "counter", orderStart: "counter" });

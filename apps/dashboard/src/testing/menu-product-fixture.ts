@@ -24,7 +24,6 @@ export const menuProduct: Product = {
   active: true,
   available: true,
   ordering: "public",
-  vatClass: "general",
   takeawayVatRate: "10.00",
   modifiers: [],
   allergens: null,

@@ -36,7 +36,6 @@ beforeEach(async () => {
           name,
           unitId: null,
           unitPrice,
-          vatClass: "reduced",
         })
       ).id;
     dish = await make("sandwich", "7.00");

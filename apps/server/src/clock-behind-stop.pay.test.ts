@@ -30,7 +30,6 @@ useVenueDb({
         name: "Dish",
         pricingUnit: "each",
         unitPrice: "10.00",
-        vatClass: "general",
       });
       dishId = dish.id;
       await assignMenuToVenue(tx, menu.id);

@@ -382,8 +382,6 @@ describe("department transfer till writes", () => {
         descriptions: { "es-ES": "Croquettes" },
         quantity: 1000,
         unitPriceGross: 600,
-        vatClass: "reduced",
-        takeawayVatClass: "reduced",
         lineTotal: 600,
         sentAt: "2026-11-14T12:00:00.000Z",
       });
@@ -417,8 +415,6 @@ describe("department transfer till writes", () => {
           descriptions: { "es-ES": "Croquettes" },
           quantity: 1000,
           unitPriceGross: 600,
-          vatClass: "reduced",
-          takeawayVatClass: "reduced",
           lineTotal: 600,
         });
       });

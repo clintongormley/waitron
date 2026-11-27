@@ -72,7 +72,6 @@ const suite = useVenueDb({
         name: COFFEE,
         pricingUnit: "each",
         unitPrice: "1.50",
-        vatClass: "general",
       });
       await assignMenuToVenue(tx, menu.id);
       coffeeOffer = (await offerProducts(tx)).offerFor(coffee.id);

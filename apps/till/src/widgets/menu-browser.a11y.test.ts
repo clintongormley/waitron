@@ -30,7 +30,6 @@ function product(key: string, name: string, available = true): TillProduct {
       precision: 0,
       hardwareUnit: null,
     },
-    vatClass: "general",
     category: null,
     allergens: null,
   };

@@ -69,7 +69,6 @@ async function makeDish(tx: Transaction, name: string, stationId: string): Promi
     name,
     pricingUnit: "each",
     unitPrice: "1.50",
-    vatClass: "general",
   });
   await routeProductTo(tx, id, stationId);
   return id;
@@ -750,7 +749,6 @@ it("fires and reprints through a replaced station printer set with no drawer pul
       kitchenName: "Kitchen stew",
       pricingUnit: "each",
       unitPrice: "3.50",
-      vatClass: "general",
     });
     await routeProductTo(tx, productId, station.id);
     await replaceStationPrinters(tx, station.id, [next, shared]);

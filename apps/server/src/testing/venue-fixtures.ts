@@ -101,14 +101,12 @@ export async function setupVenue(db: Database): Promise<Venue> {
       name: "Coffee",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
     });
     const water = await createProduct(tx, {
       categoryId: drinks.id,
       name: "Water",
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "general",
     });
     await assignMenuToVenue(tx, cat.id);
 

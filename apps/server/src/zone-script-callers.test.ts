@@ -86,9 +86,7 @@ function run(binary: string, args: string[] = [], env: Record<string, string> = 
   }
   return { status: result.status, output: result.stdout + result.stderr };
 }
-const products = [
-  { id: "soup", name: "Soup", customerName: null, unitPrice: "2.40", vatClass: "reduced" as const },
-];
+const products = [{ id: "soup", name: "Soup", customerName: null, unitPrice: "2.40" }];
 describe("saved-zone script callers", () => {
   it.each(["2026-03-30T22:00:00Z", "2026-10-26T22:00:00Z"])(
     "backdates each historical sale across DST at %s",

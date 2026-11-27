@@ -218,7 +218,6 @@ describe("settling edit answers", () => {
                 name: "Fish",
                 pricingUnit: "each",
                 unitPrice: "30.00",
-                vatClass: "general",
               });
               await assignMenuToVenue(tx, menu.id);
               const offers = await offerProducts(tx, {

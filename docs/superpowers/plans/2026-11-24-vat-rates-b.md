@@ -634,6 +634,19 @@ body shows the script and its counts.
 
 ## PR B5 — drop the labels (the migration)
 
+**Left by B4** (find each by `git grep`; the line numbers below were taken before B4 and have moved):
+the B4 put-backs (`packages/menu/src/product-editor-input.test.ts`, `unit-presentation.test.ts`, three
+lines inside `expect(...)` in `variant-fallback.test.ts`, `packages/db/src/order-dining.test.ts`, the
+label cases of `packages/db/src/schema/orders.test.ts`, `packages/shared/src/menu-document/vat-rates.test.ts`,
+`apps/server/src/free-items.test.ts` (whole file), `menu-api.test.ts`'s refusal bodies,
+`venue-settings-api.test.ts`, `portion-sale-projection.test.ts`, `issue-moment.test.ts`,
+`madrid-shared-offers.test.ts`); direct label writes (`.set({ vatClass … })` in `bill-payments-api`,
+`dine-in-vat-rate`, `order-portions.*`, `takeaway-vat-rate-at-issue`, `set-menu-document` tests); the label reads in
+`storedRows` and `linesOf`; label assignments (`menu-patch-dialog.test.ts`); two no-op
+`updateProduct(…, { vatClass })` calls in `set-menus.refusals.test.ts` (the case "keeps the same draft
+problems after a dish's VAT rate changes" changes nothing since B3); one fixture inside an `expect` in
+`configuration-transfer.test.ts`.
+
 - [ ] **B5.1 Schema.** `menus.ts:30, 52-53, 71-76, 133, 136, 180, 182-183`, `orders.ts:235, 238, 292,
   348-353, 429-430, 442`, `triggers/core.sql:407-408, 442, 481-482, 541, 574-575, 610`;
   **with the stand-ins**: `working-order.ts:5007`, `venue-service/operations.ts:1435`, `module.ts:779`,

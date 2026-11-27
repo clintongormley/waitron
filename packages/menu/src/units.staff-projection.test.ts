@@ -41,14 +41,12 @@ it.each(["products", "available", "offers"] as const)(
         name: "Staff potatoes",
         unitId: unit.id,
         unitPrice: "3.00",
-        vatClass: "general",
       });
       const each = await createProduct(tx, {
         categoryId: null,
         name: "Staff cup",
         unitId: null,
         unitPrice: "1.00",
-        vatClass: "general",
       });
       await addProductToMenu(tx, { menuId: menu.id, productId: weighed.id, grossPrice: "3.00" });
       await addProductToMenu(tx, { menuId: menu.id, productId: each.id, grossPrice: "1.00" });

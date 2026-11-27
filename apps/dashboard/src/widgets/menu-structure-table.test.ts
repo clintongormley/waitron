@@ -49,7 +49,6 @@ function product(id: string, name: string, image: string | null = null): Product
     dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "2.00",
-    vatClass: "general",
     takeawayVatRate: "21.00",
     active: true,
     available: true,
@@ -170,7 +169,6 @@ function burgerWithVariants(): Product {
     effective: {
       unitPrice: "2.00",
       allergens: null,
-      vatClass: "general",
       takeawayVatRate: "21.00",
       primaryCategoryId: null,
       courseId: null,

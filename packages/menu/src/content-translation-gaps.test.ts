@@ -51,7 +51,6 @@ async function fixture(tx: Transaction, names: Record<string, string> | null) {
     kitchenName: "KITCHEN Product",
     unitPrice: "3.00",
     pricingUnit: "each",
-    vatClass: "reduced",
   });
   await tx.update(products).set({ customerName: names }).where(eq(products.id, product.id));
   const [variant] = await tx
@@ -62,8 +61,6 @@ async function fixture(tx: Transaction, names: Record<string, string> | null) {
       customerName: names,
       kitchenName: "KITCHEN Variant",
       unitPrice: 200,
-
-      vatClass: "reduced",
     })
     .returning();
   const [list] = await tx
@@ -233,8 +230,6 @@ describe("complete translation gap predicates", () => {
             customerName: { es: text, en: "CLIENT Present" },
             kitchenName: `KITCHEN ${i}`,
             unitPrice: 200,
-
-            vatClass: "reduced",
           })),
         )
         .returning();

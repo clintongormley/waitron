@@ -15,7 +15,6 @@ it("A738 a course removed before Save leaves every combined edit uncommitted", a
     name: "Staff soup",
     unitPrice: "5.00",
     pricingUnit: "each",
-    vatClass: "general",
     category: null,
     allergens: null,
   };

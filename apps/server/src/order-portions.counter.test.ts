@@ -65,7 +65,6 @@ useVenueDb({
             kitchenName: null,
             pricingUnit: "each",
             unitPrice: price,
-            vatClass: "reduced",
           })
         ).id;
       const croquette = await product("Croquette", "3.33");
@@ -239,7 +238,6 @@ it("reopens a parked order with its saved millilitre and kilogram units", async 
       name: "Juice",
       pricingUnit: "each",
       unitPrice: "0.03",
-      vatClass: "general",
     });
     await assignProductUnit(tx, juice.id, millilitre.id);
     const ham = await createProduct(tx, {
@@ -247,7 +245,6 @@ it("reopens a parked order with its saved millilitre and kilogram units", async 
       name: "Ham",
       pricingUnit: "weight",
       unitPrice: "28.00",
-      vatClass: "general",
     });
     counter = await offerProducts(tx, { zone: "counter" });
     return [juice, ham];
