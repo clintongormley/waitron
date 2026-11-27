@@ -81,6 +81,9 @@ declare module "@waitron/shared" {
     "media.unsupported_type": { detected?: string };
     "menu.not_found": { menuId: string };
     "menu.deleted": { menuId: string };
+    "customer_menu.address_invalid": { field: "address" };
+    "customer_menu.address_taken": { field: "address" };
+    "customer_menu.not_published": { menuId: string };
     "menu.delete_default": { menuId: string };
     "set_menu.invalid": {
       field: "setPrice" | "lines" | "count" | "courseId" | "courseIds" | "variants" | "surcharge";

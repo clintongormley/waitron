@@ -37,6 +37,8 @@ import {
   deleteSection,
   deleteMenu,
   readMenuHome,
+  readCustomerMenuOnlineSettings,
+  saveCustomerMenuOnlineSettings,
   createMenu,
   createMenuShell,
   setVenueDefaultMenu,
@@ -478,7 +480,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 62,
+  version: 63,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -1726,7 +1728,10 @@ describe("configuration transfer database path", () => {
     expect((await homeDisplayOf(targetSuite.db)).rows).toEqual([expected]);
   });
 
-  it("refuses a bundle whose display setting a save would refuse", async () => {
+  it.each([
+    ["home_order", ["home_first"]],
+    ["online_photos", ["small"]],
+  ] as const)("refuses a bundle whose %s setting a save would refuse", async (field, value) => {
     const { transferred, versions } = await bundleWithHomeDisplay("B44556603");
     const details = transferred.tables.menus!;
     expect(details.filter((row) => row.home_order === "menu_first")).toHaveLength(1);
@@ -1735,13 +1740,13 @@ describe("configuration transfer database path", () => {
       tables: {
         ...transferred.tables,
         menus: details.map((row) =>
-          row.home_order === "menu_first" ? { ...row, home_order: ["home_first"] } : row,
+          row.home_order === "menu_first" ? { ...row, [field]: value } : row,
         ),
       },
     };
     const refusal = {
       code: "setup.request_invalid",
-      params: { field: "menus.home_order" },
+      params: { field: `menus.${field}` },
     };
     const target = venue("B44556604");
     await expect(
@@ -1934,6 +1939,13 @@ it("round-trips current menus and their Home positions while leaving deleted men
     await addShortcut(tx, current.id, { kind: "section", sectionId: rootSectionId });
     const actor = await seedPerson(tx, { displayName: "Menu manager" });
     await deleteMenu(tx, omitted.id, actor);
+    const { hash } = await previewMenu(tx, current.id);
+    await publishMenu(tx, current.id, hash, actor);
+    await saveCustomerMenuOnlineSettings(tx, current.id, {
+      enabled: true,
+      address: "current",
+      photos: "small",
+    });
     return omitted.id;
   });
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
@@ -1944,6 +1956,10 @@ it("round-trips current menus and their Home positions while leaving deleted men
     new Date(),
     versions,
   );
+  const exported = bundle.tables.menus!.find((row) => row.name === "Current menu")!;
+  expect(exported.online_photos).toBe("small");
+  expect(exported).not.toHaveProperty("online_enabled");
+  expect(exported).not.toHaveProperty("online_address");
   expect(bundle.tables.menus!.map(({ id }) => id)).not.toContain(removed);
   expect(bundle.tables.sections!.map(({ owner_menu_id }) => owner_menu_id)).not.toContain(removed);
   await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
@@ -1956,6 +1972,11 @@ it("round-trips current menus and their Home positions while leaving deleted men
       .select({ id: menus.id })
       .from(menus)
       .where(eq(menus.name, "Current menu"));
+    expect(await readCustomerMenuOnlineSettings(tx, live!.id)).toEqual({
+      enabled: false,
+      address: null,
+      photos: "small",
+    });
     const { shortcuts } = await readMenuHome(tx, live!.id);
     expect(shortcuts.map(({ position, missingName }) => [position, missingName])).toEqual([
       [0, "Removed menu"],
@@ -6379,7 +6400,7 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(62);
+  expect(exported.version).toBe(63);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)

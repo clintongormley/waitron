@@ -16,6 +16,7 @@ import {
 } from "./columns.js";
 import {
   PRODUCT_ORDERINGS,
+  CUSTOMER_MENU_PHOTO_SIZES,
   DEFAULT_HOME_ORDER,
   HOME_ORDERS,
   type AllergenMap,
@@ -27,6 +28,7 @@ import { uniqueIndex } from "drizzle-orm/sqlite-core";
 const menuKind = enumType(["menu", "set_menu"]);
 const vatClasses = sql`('general','reduced','super_reduced','zero')`;
 const homeOrder = enumType(HOME_ORDERS);
+const onlinePhotos = enumType(CUSTOMER_MENU_PHOTO_SIZES);
 
 export const menus = table(
   "menus",
@@ -38,6 +40,9 @@ export const menus = table(
     createdAt: ts("created_at").notNull().$defaultFn(now),
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
     homeOrder: homeOrder("home_order").notNull().default(DEFAULT_HOME_ORDER),
+    onlineEnabled: flag("online_enabled").notNull().default(false),
+    onlineAddress: label("online_address"),
+    onlinePhotos: onlinePhotos("online_photos").notNull().default("large"),
     kind: menuKind("kind").notNull().default("menu"),
     setPrice: money("set_price"),
     setVatClass: label("set_vat_class"),
@@ -45,6 +50,14 @@ export const menus = table(
   },
   (t) => [
     check("menus_home_order_ck", enumCheck(t.homeOrder)),
+    check("menus_online_photos_ck", enumCheck(t.onlinePhotos)),
+    check(
+      "menus_set_offline_ck",
+      sql`${t.kind} = 'menu' or (${t.onlineEnabled} = 0 and ${t.onlineAddress} is null)`,
+    ),
+    uniqueIndex("menus_online_address_uq")
+      .on(t.onlineAddress)
+      .where(sql`${t.active} = 1 and ${t.kind} = 'menu' and ${t.onlineAddress} is not null`),
     check("menus_kind_ck", enumCheck(t.kind)),
     check(
       "menus_set_terms_ck",

@@ -327,6 +327,7 @@ const EXPECTED_FOREIGN_KEYS = [
 /** Every unique index that is not a primary key, by the name its declaration gives it. */
 const EXPECTED_UNIQUE_INDEXES = [
   "menus_one_default_uq",
+  "menus_online_address_uq",
   "adjustment_lines_adjustment_line_key",
   "adjustment_ending_lines_line_key",
   "adjustment_reasons_name_key",
@@ -743,6 +744,8 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "product_takeaway_vat_rates_rate_ck",
   "product_takeaway_vat_rates_starts_on_ck",
   "menus_home_order_ck",
+  "menus_online_photos_ck",
+  "menus_set_offline_ck",
   "products_name_ck",
   "products_ordering_ck",
   "products_unit_price_ck",

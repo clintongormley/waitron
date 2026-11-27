@@ -594,6 +594,10 @@ export type { LegalAbout } from "./legal-about.js";
 
 export {
   publicGuestMenu,
+  CUSTOMER_MENU_PHOTO_SIZES,
+  isCustomerMenuAddress,
+  type CustomerMenuOnlineSettings,
+  type CustomerMenuPhotoSize,
   type CustomerMenuPreview,
   type PublicGuestMenu,
   type GuestMember,

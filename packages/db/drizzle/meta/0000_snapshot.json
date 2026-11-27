@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ad497d96-93ff-4c3b-9745-89c6bb9189e2",
+  "id": "3192f5b0-f1c9-4dca-8c76-5407e6bf032f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -7809,6 +7809,29 @@
           "autoincrement": false,
           "default": "'home_first'"
         },
+        "online_enabled": {
+          "name": "online_enabled",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "online_address": {
+          "name": "online_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "online_photos": {
+          "name": "online_photos",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'large'"
+        },
         "kind": {
           "name": "kind",
           "type": "text",
@@ -7840,6 +7863,14 @@
         }
       },
       "indexes": {
+        "menus_online_address_uq": {
+          "name": "menus_online_address_uq",
+          "columns": [
+            "online_address"
+          ],
+          "isUnique": true,
+          "where": "\"menus\".\"active\" = 1 and \"menus\".\"kind\" = 'menu' and \"menus\".\"online_address\" is not null"
+        },
         "menus_one_default_uq": {
           "name": "menus_one_default_uq",
           "columns": [
@@ -7856,6 +7887,14 @@
         "menus_home_order_ck": {
           "name": "menus_home_order_ck",
           "value": "\"menus\".\"home_order\" in ('home_first', 'menu_first')"
+        },
+        "menus_online_photos_ck": {
+          "name": "menus_online_photos_ck",
+          "value": "\"menus\".\"online_photos\" in ('none', 'small', 'large')"
+        },
+        "menus_set_offline_ck": {
+          "name": "menus_set_offline_ck",
+          "value": "\"menus\".\"kind\" = 'menu' or (\"menus\".\"online_enabled\" = 0 and \"menus\".\"online_address\" is null)"
         },
         "menus_kind_ck": {
           "name": "menus_kind_ck",

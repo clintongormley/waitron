@@ -166,6 +166,10 @@ export {
   type MenuStructureNode,
 } from "./menu-structure.js";
 export { saveMenuStructure } from "./menu-structure-save.js";
+export {
+  readCustomerMenuOnlineSettings,
+  saveCustomerMenuOnlineSettings,
+} from "./customer-menu-online-settings.js";
 export { duplicateMenu } from "./menu-copy.js";
 export {
   addSetMenuDishes,

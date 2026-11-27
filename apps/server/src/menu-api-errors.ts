@@ -38,6 +38,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,
   "menu.deleted": 409,
+  "customer_menu.address_invalid": 400,
+  "customer_menu.address_taken": 409,
+  "customer_menu.not_published": 409,
   "menu.delete_default": 409,
   "menu_period.delete_replacement": 409,
   "menu.clashes_unresolved": 409,
