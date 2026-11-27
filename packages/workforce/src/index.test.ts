@@ -79,6 +79,7 @@ describe("the public surface", () => {
         "projectWorkSessions",
         "projectCorrectionItems",
         "executeAttendanceCommand",
+        "approveAttendanceDay",
         "readAttendanceCommand",
         "readAttendanceInbox",
         "readAttendanceDay",
