@@ -1,4 +1,7 @@
-import { billChoiceText, openPartyMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  billChoiceText,
+  openPartyMenu,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
