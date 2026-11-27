@@ -11,8 +11,8 @@ export type Draft = {
 };
 export type Field = "amount" | "reason" | "note";
 /** What Cancel and refund or Finish table hands on: the window opens on A dish with the dishes
- * still owed on a cancel ticked, and sends the cancel ids so the cancel's approval covers them
- * (D9). */
+ * still owed on a cancel ticked, and sends the cancel ids so the cancel's approval covers them on a
+ * receipt (D9). */
 export interface GiveBackFill {
   cancellationIds: string[];
   reasonId: string;

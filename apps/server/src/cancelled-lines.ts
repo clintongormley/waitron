@@ -116,7 +116,6 @@ function cancelsByLine(
   filedOf: ReadonlyMap<string, number>,
 ) {
   const cancelled = new Map<string, CancelShare>();
-  const cancelIds = new Map<string, string[]>();
   const members = new Map<string, Set<string>>();
   const partOf = new Map<string, string>();
   const owing = new Map<string, CancelOwing[]>();
@@ -141,19 +140,20 @@ function cancelsByLine(
       waiting: addDecimal(before.waiting, centsToDecimal(waitingOf.get(cancel.id) ?? 0)),
     });
     filedBack.set(dish, (filedBack.get(dish) ?? 0) + (filedOf.get(cancel.id) ?? 0));
-    if (value > back) {
-      cancelIds.set(dish, [...(cancelIds.get(dish) ?? []), cancel.id]);
+    if (value > back)
       owing.set(dish, [
         ...(owing.get(dish) ?? []),
         { id: cancel.id, owed: value - back, createdAt: cancel.createdAt },
       ]);
-    }
     const lines = members.get(dish) ?? new Set([dish]);
     for (const id of ids) lines.add(id);
     members.set(dish, lines);
   }
   for (const [dish, lines] of members)
     for (const id of lines) if (id !== dish && !members.has(id)) partOf.set(id, dish);
+  const cancelIds = new Map(
+    [...owing].map(([dish, own]) => [dish, own.map((cancel) => cancel.id)] as const),
+  );
   return { cancelled, cancelIds, members, partOf, owing, filedBack };
 }
 
@@ -216,7 +216,7 @@ const filedLines = (tx: Transaction, saleId: string) =>
 /** The lines Correct invoice works on for `saleId` (a replacement's, once one took its place) and
  * the line each of `saleId`'s own filed rows became: a replacement copies them at the same line
  * numbers. */
-export async function receiptLines(tx: Transaction, saleId: SaleId) {
+export async function correctionTargetLines(tx: Transaction, saleId: SaleId) {
   const target = await correctionTargetFor(tx, saleId);
   const lines = await filedLines(tx, target);
   if (target === saleId) return { lines, toLine: (id: string) => id };
@@ -293,7 +293,7 @@ export async function linkCorrectionToCancels(
     )
   )
     return;
-  const { toLine } = await receiptLines(tx, saleId);
+  const { toLine } = await correctionTargetLines(tx, saleId);
   const filing = await readBillFiling(tx, found.workingOrderId, saleId);
   const pairs = pairFiling(filing);
   const { members, owing } = cancelsByLine(

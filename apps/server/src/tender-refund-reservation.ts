@@ -245,7 +245,7 @@ export async function authorizeStoredTenderRefund(
     .select()
     .from(adjustmentRefunds)
     .where(eq(adjustmentRefunds.refundId, refund.id));
-  // No cancel's approval covers a correction's leg (D4).
+  // No cancel's approval covers a correction's leg.
   const cancels =
     links.length === 0 || (await isCorrectionLeg(tx, refund.id))
       ? []

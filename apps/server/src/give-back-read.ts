@@ -14,7 +14,7 @@ import {
 } from "@waitron/shared";
 import { refusePlainRefundOfAdvance } from "./advance-taken-off.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
-import { cancelsAndFreeByLine, receiptLines } from "./cancelled-lines.js";
+import { cancelsAndFreeByLine, correctionTargetLines } from "./cancelled-lines.js";
 import { assertTakesTender, type DeviceBinding } from "./device-session.js";
 import { correctionOpenRefusal, openCorrectionOf } from "./invoice-correction-legs.js";
 import {
@@ -49,8 +49,10 @@ export interface GiveBackLine extends Availability {
   descriptions: Record<string, string>;
   quantity: string;
   gross: string;
-  /** Correct invoice's `left` where it can read the receipt (any refusal: `gross`), less
-   * `cancelled.back`; never below 0. A cancelled dish's line counts its extras' lines too. */
+  /** Correct invoice's `left` where it can read the receipt (any refusal: `gross`), less the part
+   * of `cancelled.back` no filed corrective paid (where the lines are read; otherwise all of it);
+   * never below 0. A cancelled dish's line counts its extras' lines too. On a full invoice
+   * `cancelled.owed` is at most `left`. */
   left: string;
   /** The cancels with Refund ticked on this dish, its priced extras included: a cancel's money is
    * owed for the dish and its extras together, so they are one selection. `waiting` is the part
@@ -173,7 +175,7 @@ export function moneyAvailability(ways: readonly WayMoney[]): Availability {
 
 /** Whether `line` can be ticked now: never while no payment money can go back
  * ({@link moneyAvailability}), and while a corrective waits only for what its cancel still owes;
- * on a full invoice nothing on a line is open while a corrective waits (D5). */
+ * on a full invoice nothing on a line is open while a corrective waits. */
 export function lineAvailability(
   line: Pick<GiveBackLine, "left" | "cancelled">,
   waits: GiveBackWaits,
@@ -303,7 +305,7 @@ interface GiveBackFacts {
   tenders: RefundableTender[];
   /** What Correct invoice could give back now, in cents, before the records are checked. */
   correctable: number;
-  /** Whether the corrective is a full invoice's, which takes the cancels' money too (D5). */
+  /** Whether the corrective is a full invoice's, which takes the cancels' money too. */
   fullInvoice: boolean;
   /** The cancels on each line whose money is not all given back yet. */
   cancelIds: ReadonlyMap<string, readonly string[]>;
@@ -325,7 +327,7 @@ export async function readFacts(
   const openCorrectionId = await openCorrectionOf(tx, saleId);
   let unchecked: Promise<boolean> | undefined;
   const recordsUnchecked = () => (unchecked ??= recordsNeedChecking(tx, deps.backend, cfg.nodeId));
-  // A full invoice's money waits for the records rather than going back with no corrective (D5).
+  // A full invoice's money waits for the records rather than going back with no corrective.
   const recordsWait =
     correctable.waiting === null &&
     correctable.fullInvoice &&
@@ -349,28 +351,26 @@ export async function readFacts(
   // What this device can give back: a way it cannot use counts as held, with the preview's code.
   const usableHere = waysHere.map(({ way, here }) => ({ ...way, reason: here }));
   const money = moneyAvailability(usableHere);
-  const { lines: filed, toLine } = await receiptLines(tx, saleId);
-  const linesRead = correctable.lines !== null;
+  const { lines: filed, toLine } = await correctionTargetLines(tx, saleId);
   const { cancelled, cancelIds, members, partOf, free, filedBack } = await cancelsAndFreeByLine(
     tx,
     saleId,
     toLine,
-    { filedLegs: correctable.fullInvoice && linesRead },
+    { filedLegs: correctable.fullInvoice && correctable.lines !== null },
   );
   const correctableLeft = new Map(correctable.lines?.map((line) => [line.id, line.left]));
   const grossOf = new Map(filed.map((line) => [line.id, line.lineGross ?? 0]));
   const leftOf = (id: string) =>
     decimalToCents(correctableLeft.get(id) ?? centsToDecimal(grossOf.get(id) ?? 0));
   const familyOf = (id: string) => [...(members.get(id) ?? [id])];
-  // A filed corrective's links never exceed what it took off the dish, which the lines' `left`
-  // already counts; the gross, read where the lines cannot be, counts none.
+  // A filed corrective's links never exceed what it took off the dish, which `left` already counts.
   const lines = filed.map((line) => {
     const cancel = cancelled.get(line.id);
     const dish = partOf.get(line.id);
     const rest =
       familyOf(line.id).reduce((total, id) => total + leftOf(id), 0) -
       decimalToCents(cancel?.back ?? ZERO) +
-      (linesRead ? (filedBack.get(line.id) ?? 0) : 0);
+      (filedBack.get(line.id) ?? 0);
     const left = dish === undefined ? Math.max(0, rest) : 0;
     const view = {
       id: line.id,
