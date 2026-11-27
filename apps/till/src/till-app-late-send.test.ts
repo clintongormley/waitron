@@ -614,6 +614,34 @@ describe("a table's send into a closed zone", () => {
       }),
     ]);
   });
+  it("keeps the period answer when the later question names only the zone", async () => {
+    const el = await lateTable({
+      submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce({
+        code: "service_zone.closed",
+        status: 409,
+        zoneId: "zone-dining-room",
+        zoneName: "Terrace",
+        closesAt: "22:00",
+      }),
+    });
+    await act(el, "send-all");
+    expect(heading(el)).toBe("Breakfast has ended");
+    expect(submissions()).toEqual([]);
+    await choose(el, "data-late-agreed");
+    expect(heading(el)).toBe("Terrace closed at 22:00");
+    expect(windowDishes(el)).toEqual([]);
+    await choose(el, "data-late-agreed");
+
+    const lateSend = { menuIds: ["breakfast-menu"] };
+    expect(submissions()).toEqual([
+      expect.objectContaining({ lateSend }),
+      expect.objectContaining({
+        submissionId: submissions()[0]!.submissionId,
+        closedZoneId: "zone-dining-room",
+        lateSend,
+      }),
+    ]);
+  });
 });
 
 describe("a table's send from the refusal", () => {

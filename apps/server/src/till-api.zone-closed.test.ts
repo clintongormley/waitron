@@ -643,13 +643,12 @@ describe("existing service in a closed zone", () => {
     ).toEqual([{ status: "open", partyId: seated.partyId }]);
   });
 
-  it.each(["first order without a bill", "handheld draft", "handheld draft with an ended period"])(
+  it.each(["first order without a bill", "group", "handheld draft", "late draft"])(
     "checks a %s submission in a closed zone",
     async (kind) => {
       const v = await venue();
       const seated = await seat(v);
-      const period =
-        kind === "handheld draft with an ended period" ? await endMenuDuringClosure(v) : undefined;
+      const period = kind === "late draft" ? await endMenuDuringClosure(v) : undefined;
       await withTransaction(suite.db, async (tx) => {
         if (kind === "first order without a bill") {
           await tx
@@ -661,7 +660,7 @@ describe("existing service in a closed zone", () => {
       });
       const before = await orderRows();
       let draft: { id: string; revision: number; lines: { id: string }[] } | undefined;
-      if (kind.startsWith("handheld draft")) {
+      if (kind.endsWith("draft")) {
         const saved = await request(v, "PUT", `/api/parties/${seated.partyId}/drafts`, {
           billId: seated.tabId,
           expectedEdit: await withTransaction(suite.db, (tx) =>
