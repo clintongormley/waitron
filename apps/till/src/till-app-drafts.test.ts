@@ -1380,7 +1380,7 @@ describe("till-app: a table's draft is kept on the server", () => {
     expect(api.submitDraft).not.toHaveBeenCalled();
   });
 
-  it("A738 asks before leaving a staged table line for Parked and Keep retains the draft", async () => {
+  it("A738 asks before leaving a staged table line for Counter and Keep retains the draft", async () => {
     const { el } = await mountApp();
     const order = await openTable(el);
     await tap(el, "Beer");
@@ -1395,7 +1395,7 @@ describe("till-app: a table's draft is kept on the server", () => {
     await userEvent.fill(note, "No onions");
     await picker.updateComplete;
     const bar = shell(el) as import("./widgets/till-shell.js").TillShell;
-    emit(bar, "show-counter-orders", { kind: "parked" });
+    emit(bar, "screen-select", { screen: "counter", counterFloor: true });
     await flush(el);
     const warning =
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-unsaved-changes"]>(
@@ -1403,7 +1403,7 @@ describe("till-app: a table's draft is kept on the server", () => {
       )!;
     await warning.updateComplete;
     expect(warning.open).toBe(true);
-    expect(bar.activeOrderList).toBeNull();
+    expect(bar.activeScreen).not.toBe("counter");
     emit(warning, "wt-unsaved-choice", { decision: "keep" });
     await flush(el);
     expect(tableOrder(el)).toBe(order);
@@ -1412,12 +1412,12 @@ describe("till-app: a table's draft is kept on the server", () => {
     expect(store.lines.map((line) => [line.product.name, line.quantity, line.note])).toEqual([
       ["Beer", "1", undefined],
     ]);
-    emit(bar, "show-counter-orders", { kind: "parked" });
+    emit(bar, "screen-select", { screen: "counter", counterFloor: true });
     await flush(el);
     expect(warning.open).toBe(true);
     emit(warning, "wt-unsaved-choice", { decision: "discard" });
     await flush(el, 6);
-    expect(bar.activeOrderList).toBe("parked");
+    expect(bar.activeScreen).toBe("counter");
     expect(tableOrder(el)).toBeNull();
     expect(store.lines.map((line) => [line.product.name, line.quantity, line.note])).toEqual([
       ["Beer", "1", undefined],

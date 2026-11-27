@@ -42,7 +42,12 @@ import { liveReadFixture } from "../test/live-connection.js";
 import { daily, bill, special } from "../test/set-menu-widgets.js";
 import { setMenuProduct } from "./widgets/product-pick.js";
 import { showView } from "./screens/till-table-order-screen.test-helpers.js";
-import { cleanupWidgets, mountWidget, partyBillOf } from "./widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  partyBillOf,
+  startCounterBasket,
+} from "./widgets/test-helpers.js";
 
 beforeEach(resetAllergyFixture);
 afterEach(cleanupWidgets);
@@ -143,6 +148,7 @@ it("shows the counter its set-menu folders on a takeaway order, with no count", 
   await flushCounter(el);
   emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
   await flushCounter(el);
+  await startCounterBasket(el);
   const counter = el.shadowRoot!.querySelector("till-counter-screen")!;
   await userEvent.click(page.elementLocator(counter).getByText("Take away", { exact: true }));
   await vi.waitFor(() => expect(counter.store.dining).toBe("takeaway"));

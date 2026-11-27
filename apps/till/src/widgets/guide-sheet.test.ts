@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { render } from "lit";
 import { currentHelpMode, setHelpMode, type WtHelpTooltip, type WtModal } from "@waitron/ui";
-import { cleanupWidgets, mountWidget, servedMenus } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus, startCounterBasket } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { helpEn, helpEs } from "../i18n/help-strings.js";
 import { deviceZonesFixture } from "../../test/device-zones.js";
@@ -419,6 +419,7 @@ describe("the guide sheet and the lock", () => {
         }),
       );
       await vi.waitFor(() => expect(shell()).not.toBeNull());
+      await startCounterBasket(el);
     };
     await signIn();
     setHelpMode(true);
@@ -479,6 +480,7 @@ describe("reading the guide and the idle logout", () => {
         }),
       );
       await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-shell")).not.toBeNull());
+      await startCounterBasket(el);
       setHelpMode(true);
       const badge = await vi.waitFor(() => {
         const found = deepFind<WtHelpTooltip>(

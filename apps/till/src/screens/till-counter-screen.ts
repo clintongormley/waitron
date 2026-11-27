@@ -48,8 +48,6 @@ import "../widgets/basket.js";
 import "../widgets/last-added.js";
 import "../widgets/total.js";
 import "../widgets/tender-pay.js";
-import "../widgets/held-orders.js";
-import "../widgets/counter-waiting.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
 import { diningControl, diningShown } from "../widgets/dining-choice.js";
@@ -239,9 +237,8 @@ export class TillCounterScreen extends LitElement {
   @property() selectedServiceZoneId = "";
   @property({ type: Boolean }) counterFloor = false;
   @property({ attribute: false }) live?: TillLiveConnection;
-  @property({ attribute: false }) refreshWaiting?: () => void;
+  @property({ attribute: false }) refreshFloorOrders?: () => void;
   @state() private floorBasket = false;
-  @property({ attribute: false }) orderList: "parked" | "waiting" | null = null;
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   @property({ attribute: false }) counterWaiting: CounterWaitingOrder[] = [];
   /** The floor, which a held order's Move to table lists. */
@@ -407,26 +404,6 @@ export class TillCounterScreen extends LitElement {
     };
   }
 
-  #lists(): TemplateResult | typeof nothing {
-    if (this.orderList === null) return nothing;
-    const orders = this.heldOrders.some((order) => order.id === this.store.id)
-      ? this.heldOrders.filter((order) => order.id !== this.store.id)
-      : this.heldOrders;
-    return this.orderList === "parked"
-      ? html`<till-held-orders
-          .orders=${orders}
-          .tables=${this.tables}
-          .zones=${this.zones}
-        ></till-held-orders>`
-      : this.counterWaiting.length === 0
-        ? html`<p role="status">${t("shell.waiting_empty")}</p>`
-        : html`<till-counter-waiting
-            .orders=${this.counterWaiting}
-            .canEditKitchenNote=${this.canEditKitchenNote}
-            .canMoveStation=${this.canMoveStation}
-          ></till-counter-waiting>`;
-  }
-
   #emit(name: string, detail: object): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
   }
@@ -450,12 +427,8 @@ export class TillCounterScreen extends LitElement {
       <div class="sale-grid">
         <div class="menu-column">
           <div class="menu-cell">
-            ${
-              this.orderList === null
-                ? html` ${this.service?.open === true && this.service.zoneOpen && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
-                  ${this.#menu()}`
-                : this.#lists()
-            }
+            ${this.service?.open === true && this.service.zoneOpen && !this.menus.some((menu) => menu.orderable) ? html`<p role="status" data-last-orders-ended>${t("menu.last_orders_ended")}</p>` : nothing}
+            ${this.#menu()}
           </div>
           ${this.store.lastAdded === undefined ? nothing : html`<till-last-added .store=${this.store} .disabled=${this.busy || this.orderInFlight} .readOnly=${this.stage === "collect"} @open-line-details=${(event: CustomEvent<{ line: import("../state/working-order.js").OrderLine }>) => this.shadowRoot!.querySelector("till-basket")?.openLineDetails(event.detail.line)}></till-last-added>`}
         </div>
@@ -542,11 +515,21 @@ export class TillCounterScreen extends LitElement {
   }
 
   override render() {
-    if (this.counterFloor && !this.floorBasket && this.stage === "order") {
+    if (
+      this.counterFloor &&
+      !this.floorBasket &&
+      !this.orderInFlight &&
+      this.stage === "order" &&
+      !this.store.persisted &&
+      this.store.lineCount === 0
+    ) {
       return html`<till-counter-floor
         .zoneId=${this.selectedServiceZoneId}
         .live=${this.live}
-        .refresh=${this.refreshWaiting}
+        .refresh=${this.refreshFloorOrders}
+        .parked=${this.heldOrders.filter((order) => order.id !== this.store.id)}
+        .tables=${this.tables}
+        .zones=${this.zones}
         .waiting=${this.counterWaiting}
         .canEditKitchenNote=${this.canEditKitchenNote}
         .canMoveStation=${this.canMoveStation}

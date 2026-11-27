@@ -355,12 +355,16 @@ describe("Powered by Waitron at the foot of a cash register's More", () => {
     const before = currentLocale();
     setLocale("es-ES");
     try {
-      await atViewport(1024, 768, async () => {
+      await atViewport(1280, 768, async () => {
         const loads = nextLogoLoad();
         const el = await mountWithLogo(undefined, BUSY);
         await loads;
         await settle(el);
-        expect(counterLogo(el)!.checkVisibility({ visibilityProperty: true })).toBe(false);
+        const logoShown = () => counterLogo(el)!.checkVisibility({ visibilityProperty: true });
+        expect(logoShown()).toBe(true);
+        el.style.width = "360px";
+        el.requestUpdate();
+        await expect.poll(logoShown).toBe(false);
         expect(lines(el)).toHaveLength(1);
         expect(moreMenu(el).lastElementChild).toBe(lineOf(el));
       });

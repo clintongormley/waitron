@@ -530,12 +530,14 @@ describe.each(["light", "dark"] as const)("sale rail in %s theme", (theme) => {
   });
 });
 
-it("keeps a usable basket and payment controls when many orders are held", async () => {
+it("keeps the basket and payment controls usable after opening New order with many parked orders", async () => {
   const grid = await mountCounter(1280, 800);
   const counter = grid as TillCounterScreen;
-  counter.orderList = "parked";
+  counter.store.clear();
+  counter.counterFloor = true;
+  counter.selectedServiceZoneId = "counter";
   counter.heldOrders = Array.from({ length: 20 }, (_, i) => ({
-    zoneId: null,
+    zoneId: "counter",
     items: [],
     id: `held-${i}`,
     orderNumber: i + 1,
@@ -558,6 +560,11 @@ it("keeps a usable basket and payment controls when many orders are held", async
   host.style.height = "752px";
   shell.style.height = "100%";
   shell.append(counter);
+  await counter.updateComplete;
+  const floor = counter.shadowRoot!.querySelector("till-counter-floor")!;
+  await floor.updateComplete;
+  expect(floor.shadowRoot!.querySelector("till-held-orders")?.orders).toHaveLength(20);
+  floor.shadowRoot!.querySelector<HTMLElement>(".new-order wt-button")!.click();
   for (let i = 0; i < 25; i++)
     counter.store.addProduct(product(`held-long-${i}`, `Long dish ${i}`, "117.00"), "1");
   await counter.updateComplete;
@@ -575,7 +582,7 @@ it("keeps a usable basket and payment controls when many orders are held", async
     inShadow(grid.shadowRoot!.querySelector("till-tender-pay"), ".hold").getBoundingClientRect()
       .bottom,
   ).toBeLessThanOrEqual(800);
-  expect(grid.shadowRoot!.querySelector("till-held-orders")).not.toBeNull();
+  expect(grid.shadowRoot!.querySelector("till-counter-floor")).toBeNull();
 });
 
 describe.each(["light", "dark"] as const)("idle payment layout in %s", (theme) => {
@@ -672,7 +679,7 @@ it.each([390, 1280])("shows the Spanish Counter zone in the header at %i px", as
   const menu = el.shadowRoot!.querySelector<HTMLElement>("[data-counter-zones]")!;
   await (menu as TillShell).updateComplete;
   const label = menu.querySelector<HTMLElement>('[slot="trigger"]')!;
-  expect(label.textContent!.trim()).toBe("Mostrador: Barra ▾");
+  expect(label.textContent!.replace(/\s+/g, " ").trim()).toBe("Mostrador: Barra ▾");
   expect(menu.getBoundingClientRect().right).toBeLessThanOrEqual(width);
   expect(menu.shadowRoot!.querySelector("button")!.scrollWidth).toBeLessThanOrEqual(
     menu.shadowRoot!.querySelector("button")!.clientWidth,

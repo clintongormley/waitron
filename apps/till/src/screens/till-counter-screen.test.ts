@@ -61,11 +61,12 @@ const mount = (over: Partial<TillCounterScreen> = {}) =>
 const body = (el: TillCounterScreen) => el;
 const tender = (el: TillCounterScreen) => el.shadowRoot!.querySelector("till-tender-pay")!;
 const menuBrowser = (el: TillCounterScreen) => el.shadowRoot!.querySelector("till-menu-browser")!;
-const waitingList = (el: TillCounterScreen) =>
-  el.shadowRoot!.querySelector("till-counter-waiting")!;
-const heldList = (el: TillCounterScreen) => el.shadowRoot!.querySelector("till-held-orders")!;
+const floor = (el: TillCounterScreen) =>
+  el.shadowRoot!.querySelector("till-counter-floor")!.shadowRoot!;
+const waitingList = (el: TillCounterScreen) => floor(el).querySelector("till-counter-waiting")!;
+const heldList = (el: TillCounterScreen) => floor(el).querySelector("till-held-orders")!;
 const heldOrder = {
-  zoneId: null,
+  zoneId: "zone-counter",
   items: [],
   id: "held",
   orderNumber: 1,
@@ -359,16 +360,25 @@ describe("till-counter-screen", () => {
         billName: null,
         openedAt: "2026-08-05T10:00:00.000Z",
         signals: [],
-        zoneId: null,
+        zoneId: "zone-counter",
       },
     ];
-    const { el } = await mount({ heldOrders, orderList: "parked" });
-    expect(heldList(el).orders).toBe(heldOrders);
+    const { el } = await mount({
+      heldOrders,
+      counterFloor: true,
+      selectedServiceZoneId: "zone-counter",
+    });
+    expect(heldList(el).orders).toEqual(heldOrders);
   });
 
   it("passes the floor tables to held orders for Move to table", async () => {
-    const tables = [{ id: "t9", label: "Table 9" }];
-    const { el } = await mount({ tables, heldOrders: [heldOrder], orderList: "parked" } as never);
+    const tables = [{ id: "t9", label: "Table 9", today: null, zoneId: null, party: null }];
+    const { el } = await mount({
+      tables,
+      heldOrders: [heldOrder],
+      counterFloor: true,
+      selectedServiceZoneId: "zone-counter",
+    } as never);
     expect(heldList(el).tables).toBe(tables);
   });
 
@@ -405,14 +415,22 @@ describe("till-counter-screen", () => {
           await mount({
             canMoveStation: true,
             counterWaiting: [waitingOrder],
-            orderList: "waiting",
+            counterFloor: true,
+            selectedServiceZoneId: "zone-counter",
           })
         ).el,
       ).canMoveStation,
     ).toBe(true);
     expect(
-      waitingList((await mount({ counterWaiting: [waitingOrder], orderList: "waiting" })).el)
-        .canMoveStation,
+      waitingList(
+        (
+          await mount({
+            counterWaiting: [waitingOrder],
+            counterFloor: true,
+            selectedServiceZoneId: "zone-counter",
+          })
+        ).el,
+      ).canMoveStation,
     ).toBe(false);
   });
 
@@ -506,16 +524,15 @@ it("lets a held-order retrieve event reach the fixed Counter host", async () => 
   const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
     store: new WorkingOrderStore(),
     heldOrders: [{ ...heldOrder, id: "wo-2" }],
-    orderList: "parked",
+    counterFloor: true,
+    selectedServiceZoneId: "zone-counter",
   });
   let captured: CustomEvent<{ id: string }> | undefined;
   el.addEventListener(
     "retrieve-order",
     (event) => (captured = event as CustomEvent<{ id: string }>),
   );
-  el.shadowRoot!.querySelector("till-held-orders")!
-    .shadowRoot!.querySelector<HTMLElement>("wt-button.retrieve")!
-    .click();
+  await userEvent.click(heldList(el).shadowRoot!.querySelector("button.summary")!);
   expect(captured?.composed).toBe(true);
   expect(captured?.bubbles).toBe(true);
   expect(captured?.detail).toEqual({ id: "wo-2" });

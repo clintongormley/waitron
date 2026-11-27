@@ -13,7 +13,6 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { helpBadgeLabel, helpEn, helpEs, type HelpKey } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
-import type { CounterWaitingOrder, HeldOrderSummary } from "../api/orders-api.js";
 import type { TillProduct } from "../api/menu-api.js";
 
 const coffee: TillProduct = {
@@ -26,41 +25,6 @@ const coffee: TillProduct = {
   vatClass: "general",
   category: null,
   allergens: null,
-};
-
-const heldOrder: HeldOrderSummary = {
-  zoneId: null,
-  items: [],
-  id: "held",
-  orderNumber: 1,
-  label: "Ana",
-  counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
-  total: "1.50",
-  outstanding: "1.50",
-  hasPayments: false,
-  partyId: null,
-  billNumber: null,
-  billName: null,
-  openedAt: "2026-10-16T10:00:00.000Z",
-  signals: [],
-};
-
-const waitingOrder: CounterWaitingOrder = {
-  items: [],
-  id: "waiting",
-  orderNumber: 2,
-  label: "Luis",
-  status: "settled",
-  openedAt: "2026-10-16T10:00:00.000Z",
-  settledAt: "2026-10-16T10:01:00.000Z",
-  readyAt: null,
-  zoneId: "zone-counter",
-  collectedAt: null,
-  total: "1.50",
-  counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
-  canHandOver: true,
-  serviceMode: null,
-  movableDishes: [],
 };
 
 let locale = currentLocale();
@@ -87,10 +51,6 @@ const mount = (over: Partial<TillCounterScreen> = {}) =>
 
 type Lit = HTMLElement & { updateComplete: Promise<unknown> };
 const tender = (el: TillCounterScreen) => el.shadowRoot!.querySelector<Lit>("till-tender-pay")!;
-const held = (el: TillCounterScreen) => el.shadowRoot!.querySelector<Lit>("till-held-orders")!;
-const waiting = (el: TillCounterScreen) =>
-  el.shadowRoot!.querySelector<Lit>("till-counter-waiting")!;
-
 interface Part {
   name: string;
   key: HelpKey;
@@ -113,24 +73,6 @@ const parts: Part[] = [
     owner: tender,
     box: (owner) => owner.shadowRoot!.querySelector<HTMLElement>(".hold")!,
     room: (owner) => owner.shadowRoot!.querySelector<HTMLElement>(".hold")!,
-  },
-  {
-    name: "Parked orders",
-    key: "help.counter.parked_orders",
-    label: "held.title",
-    over: { orderList: "parked", heldOrders: [heldOrder] },
-    owner: held,
-    box: (owner) => owner.shadowRoot!.querySelector<HTMLElement>("h2")!,
-    room: (owner) => owner.shadowRoot!.querySelector<HTMLElement>(".title-anchor")!,
-  },
-  {
-    name: "Waiting orders",
-    key: "help.counter.waiting_orders",
-    label: "waiting.title",
-    over: { orderList: "waiting", counterWaiting: [waitingOrder] },
-    owner: waiting,
-    box: (owner) => owner.shadowRoot!.querySelector<HTMLElement>("h2")!,
-    room: (owner) => owner.shadowRoot!.querySelector<HTMLElement>(".title-anchor")!,
   },
   {
     name: "Guests",
@@ -273,11 +215,10 @@ describe("Counter's help badges", () => {
 
   it("with no waiting orders there is no Waiting heading and so no badge", async () => {
     setHelpMode(true);
-    const { el } = await mount({ orderList: "waiting", counterWaiting: [] });
-    expect(waiting(el)).toBeNull();
-    const statuses = [...el.shadowRoot!.querySelectorAll('p[role="status"]')];
-    expect(statuses.map((status) => status.textContent)).toContain(t("shell.waiting_empty"));
-    const label = helpBadgeLabel(t("waiting.title"));
-    expect(el.shadowRoot!.querySelector(`wt-help-tooltip[aria-label="${label}"]`)).toBeNull();
+    const { el } = await mount({ counterFloor: true });
+    const floor = el.shadowRoot!.querySelector("till-counter-floor")!.shadowRoot!;
+    expect(floor.querySelector("till-counter-waiting")).toBeNull();
+    expect(floor.querySelector("h2")).toBeNull();
+    expect(floor.querySelector("wt-help-tooltip")).toBeNull();
   });
 });

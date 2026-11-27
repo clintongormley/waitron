@@ -79,7 +79,7 @@ function shown(el: TillShell): boolean {
 }
 
 const stripItems = (el: TillShell) => [
-  ...strip(el).querySelectorAll(".tabs, [data-counter-orders], [data-open-transfers], .expo"),
+  ...strip(el).querySelectorAll(".tabs, [data-open-transfers], .expo"),
 ];
 
 /** The span the strip's controls take, which a sideways scroll does not change. */
@@ -244,8 +244,7 @@ describe("the venue logo in a cash register's bar", () => {
                   Math.abs(s.getBoundingClientRect().left - base.stripLeft),
                 ).toBeLessThanOrEqual(0.5);
               }
-              if (name === "quiet") expect(shown(el)).toBe(true);
-              else if (width === 1024) expect(shown(el)).toBe(false);
+              if (width === 1024 || name === "quiet") expect(shown(el)).toBe(true);
               else
                 console.log(
                   `${locale} busy 1280: shown ${shown(el)}, strip free ${base.stripWidth - base.content}`,
@@ -355,14 +354,14 @@ describe("the cash register's bar measures its room again", () => {
     });
   });
 
-  it("a count growing past the room takes the logo out", async () => {
+  it("a transfer count growing past the room takes the logo out", async () => {
     await atViewport(1280, 800, async () => {
       const { wStar } = await edge(BUSY);
       const el = await mountAt(BUSY, wStar + 4);
       expect(shown(el)).toBe(true);
-      el.parkedCount = 1000;
+      el.transferCount = 1000;
       await expect.poll(() => shown(el)).toBe(false);
-      el.parkedCount = 3;
+      el.transferCount = 3;
       await expect.poll(() => shown(el)).toBe(true);
     });
   });
@@ -515,7 +514,7 @@ describe("the logo is held while the zone menu is open", () => {
     await settle(el);
     const left = popup(el).getBoundingClientRect().left;
     const triggerLeft = zones(el).getBoundingClientRect().left;
-    el.parkedCount = 1000;
+    el.transferCount = 1000;
     await settle(el);
     expect(shown(el)).toBe(true);
     expect(Math.abs(popup(el).getBoundingClientRect().left - left)).toBeLessThanOrEqual(0.5);

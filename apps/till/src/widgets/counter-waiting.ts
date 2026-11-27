@@ -9,7 +9,6 @@ import { countText, currentLocale, t } from "../i18n/t.js";
 import { counterFloorRowStyles } from "./counter-floor-row-styles.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { orderCountStyles, orderCounts } from "./order-counts.js";
-import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { CounterWaitingOrder } from "../api/orders-api.js";
 
@@ -37,20 +36,9 @@ export class TillCounterWaiting extends LitElement {
     orderPreviewStyles,
     orderNumberStyles,
     orderCountStyles,
-    helpAnchorStyles,
     css`
       :host {
         display: block;
-      }
-
-      .title-anchor {
-        width: fit-content;
-      }
-
-      .title {
-        margin: var(--wt-space-3) 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-md);
-        font-weight: var(--wt-font-weight-bold);
       }
 
       .order {
@@ -245,14 +233,6 @@ export class TillCounterWaiting extends LitElement {
   override render() {
     if (this.orders.length === 0) return nothing;
     return html`
-      ${
-        this.floor
-          ? nothing
-          : html`<div class="title-anchor help-anchor">
-              <h2 class="title">${t("waiting.title")}</h2>
-              ${helpBadge("help.counter.waiting_orders", t("waiting.title"))}
-            </div>`
-      }
       ${repeat(
         this.orders,
         (order) => order.id,

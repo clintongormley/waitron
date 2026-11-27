@@ -23,6 +23,7 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { TillApi } from "./api/client.js";
 import type { FloorZone } from "./api/floor-api.js";
+import type { CounterWaitingOrder, HeldOrderSummary } from "./api/orders-api.js";
 import type { ZoneOffers } from "./api/menu-api.js";
 import type { TillShell } from "./widgets/till-shell.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -951,7 +952,9 @@ it("opens a counter's floor and moves food to Ready as the kitchen finishes it",
     );
     writeRead.resolve([sent]);
     liveRead.resolve([sent]);
-    await vi.waitFor(() => expect(shell(el).waitingCount).toBe(1));
+    await vi.waitFor(() =>
+      expect(counter(el)?.counterWaiting.map(({ id }) => id)).toEqual(["sent"]),
+    );
     await page.getByRole("button", { name: "Back to Counter" }).click();
     await expect
       .element(page.getByRole("heading", { name: "Ready to hand over" }))
@@ -985,7 +988,135 @@ it("opens a counter's floor and moves food to Ready as the kitchen finishes it",
   }
 });
 
-it("opens one prepared counter directly and keeps Parked and Waiting on the narrow floor", async () => {
+it("starts on the Counter floor for a counter-only till and opens the basket from New order", async () => {
+  const { el } = await mount(selection(["bar"], "bar"));
+  const newOrder = page.getByRole("button", { name: "New order", exact: true });
+  await vi.waitFor(() => expect(newOrder.query()).not.toBeNull());
+  expect(counter(el)?.shadowRoot?.querySelector("till-menu-browser")).toBeNull();
+  await newOrder.click();
+  await vi.waitFor(() =>
+    expect(counter(el)?.shadowRoot?.querySelector("till-menu-browser")).not.toBeNull(),
+  );
+});
+
+it("loads the two Counter queues once at sign-in and reads no empty table map", async () => {
+  const { api } = await mount(selection(["bar", "room"], "bar"));
+  await vi.waitFor(() => {
+    expect(page.getByRole("button", { name: "New order", exact: true }).query()).not.toBeNull();
+    expect(api.listWorkingOrders).toHaveBeenCalled();
+    expect(api.listCounterWaiting).toHaveBeenCalled();
+  });
+  expect(api.listWorkingOrders).toHaveBeenCalledTimes(1);
+  expect(api.listCounterWaiting).toHaveBeenCalledTimes(1);
+  expect(api.getTablesState).not.toHaveBeenCalled();
+});
+
+const parkedOrder: HeldOrderSummary = {
+  id: "parked",
+  orderNumber: 51,
+  label: "Parked coffee",
+  zoneId: "bar",
+  partyId: null,
+  billNumber: null,
+  billName: null,
+  items: [],
+  signals: [],
+  counts: { ordered: 1, unsent: 1, held: 0, waiting: 0, ready: 0 },
+  total: "2.00",
+  outstanding: "2.00",
+  hasPayments: false,
+  openedAt: "2026-11-27T09:00:00.000Z",
+};
+
+it.each(["name", "price"])(
+  "retrieves a parked order from Counter by tapping its %s once",
+  async (target) => {
+    const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+      ...parkedOrder,
+      revision: 0,
+      expectedEdit: null,
+      kitchenNote: {
+        scope: { workingOrderId: "parked" },
+        note: null,
+        revision: 0,
+        ownerRevision: 0,
+      },
+      lines: [{ menuItemId: "coffee-offer", quantity: "1.000" }],
+    });
+    const { el } = await mount(selection(["bar"], "bar"), {
+      listWorkingOrders: vi.fn().mockResolvedValue([parkedOrder]),
+      retrieveWorkingOrder,
+    });
+    const row = page.getByRole("button", { name: /^#51 · Parked coffee/ });
+    await vi.waitFor(() => expect(row.query()).not.toBeNull());
+    await (target === "price" ? page.getByText("€2.00", { exact: true }) : row).click();
+    await vi.waitFor(() => {
+      expect(counter(el)?.store.id).toBe("parked");
+      expect(counter(el)?.shadowRoot?.querySelector("till-basket")).not.toBeNull();
+    });
+    expect(counter(el)?.store.lines.map((line) => line.product.productId)).toEqual(["coffee"]);
+    expect(retrieveWorkingOrder).toHaveBeenCalledExactlyOnceWith("parked");
+  },
+);
+
+it("shows the selected counter's sent and parked orders with no seated bills", async () => {
+  const sent: CounterWaitingOrder = {
+    id: "sent-here",
+    zoneId: "bar",
+    orderNumber: 53,
+    label: "Sent here",
+    status: "placed",
+    items: [],
+    counts: { ...parkedOrder.counts, unsent: 0, ready: 1 },
+    total: "4.00",
+    openedAt: parkedOrder.openedAt,
+    settledAt: null,
+    readyAt: null,
+    collectedAt: null,
+    canHandOver: true,
+    serviceMode: "ticket_then_pay",
+    movableDishes: [],
+  };
+  await mount(selection(["bar", "room"], "bar"), {
+    listWorkingOrders: vi.fn().mockResolvedValue([
+      parkedOrder,
+      {
+        ...parkedOrder,
+        id: "seated",
+        orderNumber: 52,
+        partyId: "counter-party",
+        tableLabel: "Seat 2",
+        billNumber: 1,
+        billName: "Counter seat",
+        label: null,
+      },
+      {
+        ...parkedOrder,
+        id: "elsewhere",
+        orderNumber: 54,
+        zoneId: "shop",
+        label: "Parked elsewhere",
+      },
+    ]),
+    listCounterWaiting: vi
+      .fn()
+      .mockResolvedValue([
+        sent,
+        { ...sent, id: "unassigned", orderNumber: 55, zoneId: null, label: "Unassigned pie" },
+      ]),
+  });
+
+  await expect.element(page.getByRole("button", { name: /^#51 · Parked coffee/ })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: /Sent here/ })).toBeVisible();
+  expect(
+    page.getByRole("heading", { name: "Open orders · 2", exact: true }).query(),
+  ).not.toBeNull();
+  expect(
+    page.getByRole("button", { name: /Counter seat|Parked elsewhere|Unassigned pie/ }).query(),
+  ).toBeNull();
+});
+
+it("opens a prepared counter from the narrow floor without the old queue shortcuts", async () => {
   await pageAt(390, 844);
   try {
     const { el, api } = await mount(selection(["room", "bar"], "room"), {
@@ -994,20 +1125,13 @@ it("opens one prepared counter directly and keeps Parked and Waiting on the narr
     await openZoneChooser(el);
     const bar = page.getByRole("menuitem", { name: "Bar", exact: true });
     expect(bar.query()).not.toBeNull();
+    expect(shell(el).shadowRoot!.querySelector("[data-counter-orders]")).toBeNull();
     const initialReads = api.listDefaultZoneOffers.mock.calls.length;
     await bar.click();
     await vi.waitFor(() => expect(counter(el)?.selectedServiceZoneId).toBe("bar"));
     expect(api.listZoneOffers).not.toHaveBeenCalled();
     expect(api.listDefaultZoneOffers).toHaveBeenCalledTimes(initialReads);
-
-    for (const kind of ["parked", "waiting"] as const) {
-      await page.getByRole("tab", { name: "Floor", exact: true }).click();
-      await vi.waitFor(() => expect(zoneChooser(el)?.label).toBe("Room"));
-      await userEvent.click(
-        shell(el).shadowRoot!.querySelector<HTMLElement>(`[data-counter-orders="${kind}"]`)!,
-      );
-      await vi.waitFor(() => expect(counter(el)?.orderList).toBe(kind));
-    }
+    expect(shell(el).shadowRoot!.querySelector("[data-counter-orders]")).toBeNull();
   } finally {
     await resetPage();
   }
@@ -1040,8 +1164,6 @@ describe("picking a Counter zone while the basket has lines or an order is in fl
   const popoverOpen = (el: TillApp) =>
     zoneMenu(el).shadowRoot!.querySelector("[popover]")!.matches(":popover-open");
   async function retrieveFromParked(el: TillApp) {
-    emit(shell(el), "show-counter-orders", { kind: "parked" });
-    await vi.waitFor(() => expect(counter(el)?.orderList).toBe("parked"));
     const store = counter(el)!.store!;
     emit(counter(el)!, "retrieve-order", { id: "wo-1" });
     await vi.waitFor(() => expect(store.lines).toHaveLength(1));
@@ -1049,36 +1171,21 @@ describe("picking a Counter zone while the basket has lines or an order is in fl
     return store;
   }
 
-  it("brings the menu back after a retrieve left the Parked list open", async () => {
+  it("keeps a retrieved basket open when the same Counter zone is chosen", async () => {
     const { el, api } = await mount(selection(["bar", "shop"], "bar"), {
       retrieveWorkingOrder: vi.fn().mockResolvedValue(heldOrder),
     });
     const store = await retrieveFromParked(el);
-    expect(counter(el)!.orderList).toBe("parked");
-
     await pickZone(el, "bar");
 
-    await vi.waitFor(() => expect(counter(el)!.orderList).toBeNull());
+    await vi.waitFor(() =>
+      expect(counter(el)!.shadowRoot!.querySelector("till-menu-browser")).not.toBeNull(),
+    );
     expect(store.lines.map((line) => line.product.productId)).toEqual(["coffee"]);
     expect(alert(el)).toBeNull();
     expect(api.listZoneOffers).not.toHaveBeenCalled();
     expect(popoverOpen(el)).toBe(false);
     expect(counter(el)!.selectedServiceZoneId).toBe("bar");
-  });
-
-  it("brings the menu back from the Waiting list with lines in the basket", async () => {
-    const { el, api } = await mount(selection(["bar", "shop"], "bar"));
-    const store = counter(el)!.store!;
-    store.addProduct(counter(el)!.products[0]!, "1");
-    emit(shell(el), "show-counter-orders", { kind: "waiting" });
-    await vi.waitFor(() => expect(counter(el)?.orderList).toBe("waiting"));
-
-    await pickZone(el, "bar");
-
-    await vi.waitFor(() => expect(counter(el)!.orderList).toBeNull());
-    expect(store.lines).toHaveLength(1);
-    expect(alert(el)).toBeNull();
-    expect(api.listZoneOffers).not.toHaveBeenCalled();
   });
 
   it("returns from Floor to the counter with the basket's lines kept", async () => {
@@ -1103,6 +1210,7 @@ describe("picking a Counter zone while the basket has lines or an order is in fl
     expect(store.lines).toHaveLength(1);
     expect(alert(el)).toBeNull();
     expect(api.listZoneOffers).not.toHaveBeenCalled();
+    expect(page.getByRole("button", { name: "Back to Counter" }).query()).not.toBeNull();
   });
 
   it("clears the basket refusal but leaves any other message", async () => {
@@ -1123,7 +1231,7 @@ describe("picking a Counter zone while the basket has lines or an order is in fl
     expect(alert(el)).toBe(shown);
   });
 
-  it("still refuses another zone after a retrieve with the list open", async () => {
+  it("still refuses another zone after a retrieve opens the basket", async () => {
     const { el, api } = await mount(selection(["bar", "shop"], "bar"), {
       retrieveWorkingOrder: vi.fn().mockResolvedValue(heldOrder),
     });
@@ -1133,37 +1241,30 @@ describe("picking a Counter zone while the basket has lines or an order is in fl
 
     await vi.waitFor(() => expect(alert(el)).toBe(REFUSAL));
     expect(counter(el)!.selectedServiceZoneId).toBe("bar");
-    expect(counter(el)!.orderList).toBe("parked");
+    expect(counter(el)!.shadowRoot!.querySelector("till-basket")).not.toBeNull();
     expect(store.lines).toHaveLength(1);
     expect(api.listZoneOffers).not.toHaveBeenCalled();
   });
 
-  it("brings the menu back with an order in flight and an empty basket, and refuses another zone", async () => {
+  it("keeps the basket and refuses another zone while an order is in flight", async () => {
     const { el, api } = await mount(selection(["bar", "shop"], "bar"));
-    expect(counter(el)!.store!.lines).toHaveLength(0);
+    expect(counter(el)!.store.lines).toHaveLength(0);
     Object.assign(el, { submitting: true });
-    emit(shell(el), "show-counter-orders", { kind: "waiting" });
-    await vi.waitFor(() => expect(counter(el)?.orderList).toBe("waiting"));
 
     await pickZone(el, "bar");
-
-    await vi.waitFor(() => expect(counter(el)!.orderList).toBeNull());
+    expect(counter(el)!.shadowRoot!.querySelector("till-basket")).not.toBeNull();
     expect(alert(el)).toBeNull();
-    expect(api.listZoneOffers).not.toHaveBeenCalled();
-
-    emit(shell(el), "show-counter-orders", { kind: "waiting" });
-    await vi.waitFor(() => expect(counter(el)?.orderList).toBe("waiting"));
 
     await pickZone(el, "shop");
-
     await vi.waitFor(() => expect(alert(el)).toBe(REFUSAL));
     expect(counter(el)!.selectedServiceZoneId).toBe("bar");
-    expect(counter(el)!.orderList).toBe("waiting");
+    expect(counter(el)!.shadowRoot!.querySelector("till-basket")).not.toBeNull();
     expect(api.listZoneOffers).not.toHaveBeenCalled();
   });
 
   it("adds no history entry and re-reads no stations when the menu is already showing", async () => {
     const { el, api } = await mount(selection(["bar", "shop"], "bar"));
+    await page.getByRole("button", { name: "New order", exact: true }).click();
     counter(el)!.store!.addProduct(counter(el)!.products[0]!, "1");
     await el.updateComplete;
     const stationReads = api.listStations.mock.calls.length;
@@ -1175,7 +1276,7 @@ describe("picking a Counter zone while the basket has lines or an order is in fl
       expect(replace).not.toHaveBeenCalled();
       expect(api.listStations).toHaveBeenCalledTimes(stationReads);
       expect(alert(el)).toBeNull();
-      expect(counter(el)!.orderList).toBeNull();
+      expect(counter(el)!.shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
     } finally {
       push.mockRestore();
       replace.mockRestore();

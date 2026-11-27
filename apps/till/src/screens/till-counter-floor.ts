@@ -2,10 +2,12 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, TickingClock } from "@waitron/ui";
 import type { TillLiveConnection } from "../api/live-connection.js";
-import type { CounterWaitingOrder } from "../api/orders-api.js";
+import type { FloorZone, TableState } from "../api/floor-api.js";
+import type { CounterWaitingOrder, HeldOrderSummary } from "../api/orders-api.js";
 import { t } from "../i18n/t.js";
 import { liveGate } from "../state/live-gate.js";
 import "../widgets/counter-waiting.js";
+import "../widgets/held-orders.js";
 
 function readyToHandOver({ status, canHandOver, counts }: CounterWaitingOrder): boolean {
   return (
@@ -53,6 +55,9 @@ export class TillCounterFloor extends LitElement {
   @property({ attribute: false }) refresh?: () => void;
   @property({ type: String }) zoneId = "";
   @property({ attribute: false }) waiting: CounterWaitingOrder[] = [];
+  @property({ attribute: false }) parked: HeldOrderSummary[] = [];
+  @property({ attribute: false }) tables: TableState[] = [];
+  @property({ attribute: false }) zones: FloorZone[] = [];
   @property({ type: Boolean }) canEditKitchenNote = false;
   @property({ type: Boolean }) canMoveStation = false;
 
@@ -107,6 +112,10 @@ export class TillCounterFloor extends LitElement {
     const current = this.waiting.filter(({ zoneId }) => zoneId === this.zoneId);
     const ready = current.filter(readyToHandOver);
     const open = current.filter((order) => !readyToHandOver(order));
+    const parked = this.parked.filter(
+      ({ zoneId, partyId }) => zoneId === this.zoneId && partyId === null,
+    );
+    const openCount = open.length + parked.length;
     return html`
       ${
         ready.length === 0
@@ -123,10 +132,20 @@ export class TillCounterFloor extends LitElement {
         >
       </div>
       ${
-        open.length === 0
+        openCount === 0
           ? nothing
-          : html`<h2>${t("counter.floor_open")} · ${open.length}</h2>
-              ${this.#rows(open)}`
+          : html`<h2>${t("counter.floor_open")} · ${openCount}</h2>
+              ${this.#rows(open)}
+              ${
+                parked.length === 0
+                  ? nothing
+                  : html`<till-held-orders
+                      floor
+                      .orders=${parked}
+                      .tables=${this.tables}
+                      .zones=${this.zones}
+                    ></till-held-orders>`
+              }`
       }
     `;
   }

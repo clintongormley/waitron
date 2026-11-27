@@ -213,8 +213,6 @@ for (const kind of ["counter", "table"] as const)
               formFactor: "till",
               activeScreen: kind === "counter" ? "counter" : "order",
               operatorName: "Alex Morgan Smith Jones",
-              parkedCount: 12,
-              waitingCount: 3,
               transferAvailable: true,
               transferCount: 2,
               affordances: ["expo", "find-bill"],
@@ -372,33 +370,31 @@ for (const kind of ["counter", "table"] as const)
             );
             await userEvent.keyboard("{Escape}");
             await parkClosed;
-            for (const list of ["parked", "waiting"] as const) {
-              screen.orderList = list;
-              shell.activeOrderList = list;
-              screen.heldOrders = [parked];
-              screen.counterWaiting = [waiting];
-              shell.parkedCount = 1;
-              shell.waitingCount = 1;
-              await screen.updateComplete;
-              const widget = screen.shadowRoot!.querySelector(
-                list === "parked" ? "till-held-orders" : "till-counter-waiting",
-              )!;
-              await widget.updateComplete;
-              await userEvent.click(
-                widget.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!,
-              );
-              await widget.updateComplete;
-              expect(widget.shadowRoot!.querySelector(".order-preview")!.textContent).toContain(
-                "Recorded roasted pumpkin soup",
-              );
-              await capture(list);
-              screen.heldOrders = [];
-              screen.counterWaiting = [];
-              shell.parkedCount = 0;
-              shell.waitingCount = 0;
-              await screen.updateComplete;
-              await capture(`${list}-empty`);
-            }
+            screen.store.clear();
+            screen.selectedServiceZoneId = "counter";
+            screen.counterFloor = true;
+            screen.heldOrders = [{ ...parked, zoneId: "counter" }];
+            screen.counterWaiting = [{ ...waiting, zoneId: "counter" }];
+            await screen.updateComplete;
+            const floor = screen.shadowRoot!.querySelector("till-counter-floor")!;
+            await floor.updateComplete;
+            const held = floor.shadowRoot!.querySelector("till-held-orders")!;
+            const sent = floor.shadowRoot!.querySelector("till-counter-waiting")!;
+            await held.updateComplete;
+            await sent.updateComplete;
+            expect(held.shadowRoot!.querySelector(".order.parked")).not.toBeNull();
+            await userEvent.click(
+              sent.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!,
+            );
+            await sent.updateComplete;
+            expect(sent.shadowRoot!.querySelector(".order-preview")!.textContent).toContain(
+              "Recorded roasted pumpkin soup",
+            );
+            await capture("counter-floor");
+            screen.heldOrders = [];
+            screen.counterWaiting = [];
+            await screen.updateComplete;
+            await capture("counter-floor-empty");
           }
         }, 90_000);
       }

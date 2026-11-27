@@ -13,7 +13,6 @@ export const counterHeaderStyles = css`
   }
 
   .till-strip > .tabs,
-  .till-strip > .bar-action,
   .counter-shortcuts > * {
     flex: none;
   }
@@ -54,22 +53,35 @@ export const counterHeaderStyles = css`
     order: -1;
   }
 
-  [data-narrow-counter] [data-counter-zones] {
+  .head[data-inline-counter] .till-strip > .tabs {
+    flex: 1 1 auto;
+    gap: var(--wt-space-1);
+  }
+
+  [data-inline-counter] .counter-prefix {
+    display: none;
+  }
+
+  [data-inline-counter] [data-counter-zones] {
+    flex: 0 1 auto;
+  }
+
+  :is([data-narrow-counter], [data-inline-counter]) [data-counter-zones] {
     min-inline-size: 0;
   }
 
-  [data-narrow-counter] [data-counter-zones]::part(trigger) {
+  :is([data-narrow-counter], [data-inline-counter]) [data-counter-zones]::part(trigger) {
     max-inline-size: 100%;
   }
 
-  [data-narrow-counter] [data-counter-zones] > [slot="trigger"] {
+  :is([data-narrow-counter], [data-inline-counter]) [data-counter-zones] > [slot="trigger"] {
     display: flex;
     gap: var(--wt-space-1);
     padding: 0;
     white-space: nowrap;
   }
 
-  [data-narrow-counter] [data-counter-zones] > [slot="trigger"] > span {
+  :is([data-narrow-counter], [data-inline-counter]) [data-counter-zones] > [slot="trigger"] > span {
     overflow: hidden;
     text-overflow: ellipsis;
   }

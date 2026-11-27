@@ -97,11 +97,10 @@ describe("till-counter-waiting", () => {
     expect(el.shadowRoot!.querySelector("h2")).toBeNull();
   });
 
-  it("titles the list and shows each order's number, label and total", async () => {
+  it("shows each order's number, label and total", async () => {
     const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
       orders: [paid, sent],
     });
-    expect(el.shadowRoot!.querySelector("h2")!.textContent).toBe(t("waiting.title"));
     const row = rowOf(el, "wo-paid");
     expect(row.textContent).toContain("#11");
     expect(row.textContent).toContain("Ana");

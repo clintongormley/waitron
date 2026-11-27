@@ -5,7 +5,7 @@ import { userEvent } from "vitest/browser";
 import type { TillBasket } from "./widgets/basket.js";
 import type { TillModifierPicker } from "./widgets/modifier-picker.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, startCounterBasket } from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
 import { setLocale, t } from "./i18n/t.js";
@@ -175,7 +175,11 @@ const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till
 const counter = (el: TillApp) =>
   el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
 const waitingList = (el: TillApp) =>
-  counter(el).shadowRoot!.querySelector<TillCounterWaiting>("till-counter-waiting");
+  [
+    ...counter(el)
+      .shadowRoot!.querySelector("till-counter-floor")!
+      .shadowRoot!.querySelectorAll<TillCounterWaiting>("till-counter-waiting"),
+  ].find((list) => list.orders.length > 0);
 const moveButton = (el: TillApp, id = "wo-paid") =>
   waitingList(el)?.shadowRoot!.querySelector<HTMLElement>(
     `[data-waiting-order="${id}"] [data-waiting-move-station]`,
@@ -198,7 +202,7 @@ async function signedIn(
   await flush(el);
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
-  emit(el.shadowRoot!.querySelector("till-shell")!, "show-counter-orders", { kind: "waiting" });
+  waitingList(el)?.shadowRoot?.querySelector<HTMLButtonElement>(".summary")?.click();
   await flush(el);
   return el;
 }
@@ -592,6 +596,7 @@ it.each(["order", "session", "API"])(
     await flush(el, 6);
     expect(counter(el).store.id).not.toBe("wo-placed");
     expect(counter(el).stage).toBe("order");
+    await startCounterBasket(el);
     expect(basketOf(el).stationMoveLines).toBeNull();
     expect(server.moveDishStation).not.toHaveBeenCalled();
     expect(counter(el).store.editsLocked).toBe(false);

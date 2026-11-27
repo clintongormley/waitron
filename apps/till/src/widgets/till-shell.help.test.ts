@@ -73,8 +73,6 @@ const till: Partial<TillShell> = {
   formFactor: "till",
   activeScreen: "counter",
   operatorName: "Ana",
-  parkedCount: 2,
-  waitingCount: 1,
   loadLocales,
 };
 

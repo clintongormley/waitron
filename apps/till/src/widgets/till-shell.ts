@@ -290,40 +290,6 @@ export class TillShell extends LitElement {
         cursor: pointer;
         padding: var(--wt-space-2) var(--wt-space-4);
       }
-      .bar-action {
-        min-height: var(--wt-tap-min);
-        min-width: var(--wt-tap-min);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        color: var(--wt-color-text);
-        background: var(--wt-color-surface);
-        font: inherit;
-        white-space: nowrap;
-        cursor: pointer;
-      }
-      .bar-action[data-attention] {
-        border-color: var(--wt-color-warning);
-        animation: waiting-attention var(--wt-duration-pulse-slow) ease-in-out infinite;
-      }
-      @keyframes waiting-attention {
-        50% {
-          border-color: var(--wt-color-warning-pulse-dim);
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .bar-action[data-attention] {
-          animation: none;
-        }
-      }
-      .bar-action[aria-pressed="true"] {
-        background: var(--wt-color-surface-raised);
-      }
-      .bar-action:focus-visible {
-        outline: var(--wt-focus-ring);
-        outline-offset: var(--wt-focus-offset);
-      }
-
       .tab,
       .bar-table {
         flex: none;
@@ -352,17 +318,12 @@ export class TillShell extends LitElement {
       }
 
       .till-strip .tab:focus-visible,
-      .till-strip .bar-action:focus-visible,
       .till-strip wt-button::part(button):focus-visible {
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
 
       .till-strip wt-row-actions::part(trigger):focus-visible {
         outline-offset: calc(-1 * var(--wt-focus-offset));
-      }
-
-      .till-strip .bar-action[data-attention]:focus-visible {
-        outline-offset: calc(-2 * var(--wt-focus-offset));
       }
 
       .session {
@@ -507,9 +468,6 @@ export class TillShell extends LitElement {
   @property() selectedCounterZoneId = "";
   @property({ type: Boolean }) showCounter = true;
   @property({ type: Boolean }) showFloor = true;
-  @property({ type: Number }) parkedCount = 0;
-  @property({ type: Number }) waitingCount = 0;
-  @property({ attribute: false }) activeOrderList: "parked" | "waiting" | null = null;
   @property({ type: Boolean }) testingKitchen = false;
   @property({ attribute: false }) floorKitchenRows: readonly FloorKitchenRow[] = [];
   @property({ attribute: false }) floorKitchenOpen = false;
@@ -1404,17 +1362,9 @@ export class TillShell extends LitElement {
   }
 
   #floorShortcuts(): TemplateResult | typeof nothing {
-    const shortcuts =
-      this.formFactor === "till"
-        ? this.showCounter
-          ? html`<div class="till-strip">
-              ${this.#counterOrders("parked", this.parkedCount)}${this.#counterOrders("waiting", this.waitingCount)}
-            </div>`
-          : nothing
-        : this.barTables.length
-          ? this.#primaryTabs([], undefined, false, "")
-          : nothing;
-    return shortcuts === nothing ? nothing : html`<header class="head">${shortcuts}</header>`;
+    return this.formFactor !== "till" && this.barTables.length > 0
+      ? html`<header class="head">${this.#primaryTabs([], undefined, false, "")}</header>`
+      : nothing;
   }
 
   #floorMenu(floor: TillFloorScreen): TemplateResult {
@@ -1521,21 +1471,6 @@ export class TillShell extends LitElement {
     </wt-row-actions>`;
   }
 
-  #counterOrders(kind: "parked" | "waiting", count: number): TemplateResult {
-    return html`<button
-      type="button"
-      class="bar-action"
-      data-counter-orders=${kind}
-      ?data-attention=${kind === "waiting" && count > 0}
-      aria-pressed=${resolveBuiltInScreen(this.formFactor, this.activeScreen ?? null) === "counter" && this.activeOrderList === kind ? "true" : "false"}
-      @click=${() => this.#emit("show-counter-orders", { kind })}
-    >
-      <span role=${kind === "waiting" ? "status" : nothing}
-        >${t(kind === "parked" ? "shell.parked" : "shell.waiting")} <span>${count}</span></span
-      >
-    </button>`;
-  }
-
   #screenTitle(screen: TabScreen): string {
     return screen === "kitchen" ? "" : t(`tab.${screen}`);
   }
@@ -1588,8 +1523,9 @@ export class TillShell extends LitElement {
     screens: readonly TabScreen[],
     activeScreen: TabScreen | undefined,
     counterMenu: boolean,
-    counterLabel: string,
+    counterName: string,
   ): TemplateResult {
+    const counterLabel = counterName ? `${t("tab.counter")}: ${counterName}` : t("tab.counter");
     const tables = this.formFactor === "till" ? [] : this.barTables;
     const tableOnScreen = tables.some((table) => table.current);
     const asTabs = !counterMenu && screens.length > 0;
@@ -1606,7 +1542,17 @@ export class TillShell extends LitElement {
               ?data-active=${screen === activeScreen}
               label=${counterLabel}
             >
-              <span slot="trigger"><span>${counterLabel}</span> ▾</span>
+              <span slot="trigger"
+                ><span
+                  >${
+                    counterName
+                      ? html`<span class="counter-prefix">${t("tab.counter")}: </span
+                          >${counterName}`
+                      : counterLabel
+                  }</span
+                >
+                ▾</span
+              >
               <div role="menu">
                 ${this.counterZones.map(
                   (zone) =>
@@ -1668,10 +1614,12 @@ export class TillShell extends LitElement {
     const activeScreen = screens.find((screen) => screen === requestedScreen) ?? screens[0];
     const counterMenu =
       this.formFactor === "till" && this.showCounter && this.counterZones.length > 1;
-    const narrowCounter =
-      this.phone && this.formFactor === "till" && activeScreen === "counter" && this.showFloor;
-    const counterLabel = `${t("tab.counter")}: ${this.counterZones.find((zone) => zone.id === this.selectedCounterZoneId)?.name ?? ""}`;
-    const tabs = this.#primaryTabs(screens, activeScreen, counterMenu, counterLabel);
+    const counterOnPhone = this.phone && this.formFactor === "till" && activeScreen === "counter";
+    const hasShortcuts = this.transferAvailable || this.affordances.includes("expo");
+    const narrowCounter = counterOnPhone && this.showFloor && hasShortcuts;
+    const counterName =
+      this.counterZones.find((zone) => zone.id === this.selectedCounterZoneId)?.name ?? "";
+    const tabs = this.#primaryTabs(screens, activeScreen, counterMenu, counterName);
     return html`
       <div class="shell">
         ${bottomFloor ? this.#floorShortcuts() : nothing}
@@ -1687,6 +1635,7 @@ export class TillShell extends LitElement {
                 <header
                   class=${this.phone ? "head phone" : "head"}
                   ?data-narrow-counter=${narrowCounter}
+                  ?data-inline-counter=${counterOnPhone && !hasShortcuts}
                 >
                   ${this.formFactor === "till" ? this.#counterLogo() : this.steps > 0 || this.phone ? nothing : this.#brandMark()}
                   ${
@@ -1697,7 +1646,6 @@ export class TillShell extends LitElement {
                             class=${narrowCounter ? "counter-shortcuts till-strip edge-fade" : "counter-shortcuts"}
                             @scroll=${this.#overflowFrame.schedule}
                           >
-                            ${this.showCounter ? html`${this.#counterOrders("parked", this.parkedCount)}${this.#counterOrders("waiting", this.waitingCount)}` : nothing}
                             ${this.transferAvailable ? html`<wt-button data-open-transfers variant="secondary" @click=${() => this.#emit("open-transfers")}>${t("department_transfer.short")}${this.transferCount === undefined ? nothing : html` <span role="status" data-test="department-transfers" aria-label=${this.#transferText()}>${this.transferCount}</span>`}</wt-button>` : nothing}
                             ${this.affordances.includes("expo") ? html`<wt-button class="expo" variant="secondary" @click=${() => this.#emit("show-expo")}>${t("expo.open")}</wt-button>` : nothing}
                           </div>

@@ -95,15 +95,28 @@ describe("till-held-orders", () => {
     expect(customElements.get("till-held-orders")).toBe(TillHeldOrders);
   });
 
+  it("retrieves a Counter's parked order from the keyboard and keeps Discard separate", async () => {
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      floor: true,
+      orders: [labeledOrder],
+    });
+    const events: unknown[] = [];
+    for (const type of ["retrieve-order", "discard-order"])
+      el.addEventListener(type, (event) => events.push([type, (event as CustomEvent).detail]));
+
+    el.shadowRoot!.querySelector<HTMLButtonElement>("button.summary")!.focus();
+    await userEvent.keyboard("{Enter}{Tab}{Enter}{End}{Enter}");
+
+    expect(events).toEqual([
+      ["retrieve-order", { id: labeledOrder.id }],
+      ["discard-order", { id: labeledOrder.id }],
+    ]);
+  });
+
   it("shows the empty placeholder when there are no parked orders", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [] });
     expect(el.shadowRoot!.querySelectorAll(".order")).toHaveLength(0);
     expect(el.shadowRoot!.textContent).toContain(t("held.empty"));
-  });
-
-  it("shows the section title", async () => {
-    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [] });
-    expect(el.shadowRoot!.textContent).toContain(t("held.title"));
   });
 
   it("renders one row per parked order with its number, label, item count and total", async () => {

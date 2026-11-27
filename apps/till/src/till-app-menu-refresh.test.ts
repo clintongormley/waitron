@@ -10,6 +10,7 @@ import {
   cleanupWidgets,
   draftServer,
   mountWidget,
+  startCounterBasket,
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -350,6 +351,7 @@ async function toCounter(el: TillApp): Promise<TillCounterScreen> {
   await flush(el);
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
+  await startCounterBasket(el);
   return counter(el);
 }
 

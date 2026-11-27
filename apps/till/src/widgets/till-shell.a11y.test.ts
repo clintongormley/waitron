@@ -104,7 +104,7 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
     [390, "es-ES"],
     [1280, "es-ES"],
   ] as const)(
-    "A738 counted till bar and Testing at %i in %s have no violations",
+    "A738 till bar and its Testing section at %i in %s have no violations",
     async (width, locale) => {
       const original = currentLocale();
       setLocale(locale);
@@ -114,9 +114,6 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
             "till-shell",
             {
               ...full,
-              parkedCount: 12,
-              waitingCount: 3,
-              activeOrderList: "waiting",
               testingKitchen: true,
             },
             theme,
@@ -132,7 +129,6 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
           await userEvent.click(menu.querySelector("summary")!);
           await expectNoA11yViolations(host);
           await userEvent.keyboard("{Escape}");
-          el.waitingCount = 0;
           await el.updateComplete;
           await expectNoA11yViolations(host);
         });

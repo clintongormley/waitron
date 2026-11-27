@@ -15,11 +15,7 @@ export const helpEn = {
   "help.give_money_back":
     "Refund a guest: for a dish, as goodwill, or the extra paid on top. If you close it before it is all refunded, find the receipt in Find a bill under Refunds under way; if it is not there, open Refund on the receipt again on this till.",
   "help.counter.park":
-    "Saves this order without taking payment and clears the basket for the next customer. The name is optional. Pick the order up again from Parked orders, on this till or any other that serves its zone.",
-  "help.counter.parked_orders":
-    "Open orders not fully paid, in the zones this device serves. Retrieve puts one in the basket to finish it or take payment; Discard deletes it at once. Each order shows how many items it has, then how many are unsent, held, waiting or ready.",
-  "help.counter.waiting_orders":
-    "Counter orders in the zones this device serves that are sent but not paid, or paid with dishes still to hand over. Pay takes payment. Handed over records that the customer has taken the order. Each order shows how many items it has, then how many are unsent, held, waiting or ready.",
+    "Saves this order without taking payment and clears the basket for the next customer. The name is optional. Go back to Counter and tap the parked order to pick it up again.",
   "help.counter.guests":
     "Leave it empty for no guests line. With a number, the receipt shows the guests and what each person pays.",
   "help.floor.tables_map":
@@ -84,11 +80,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.give_money_back":
     "Devuelve dinero a un cliente: por un plato, por cortesía o lo pagado de más. Si la cierras antes de que vuelva todo el dinero, busca el ticket en Buscar cuenta, en Devoluciones en curso; si no está, vuelve a abrir Devolución en el ticket en esta caja.",
   "help.counter.park":
-    "Guarda este pedido sin cobrarlo y vacía la cesta para el siguiente cliente. El nombre es opcional. Recupéralo desde Pedidos aparcados, en esta caja o en cualquier otra que atienda su zona.",
-  "help.counter.parked_orders":
-    "Pedidos abiertos y sin cobrar del todo, de las zonas que atiende este dispositivo. Recuperar lo pone en la cesta para terminarlo o cobrarlo; Descartar lo borra en el acto. Cada pedido muestra cuántos artículos tiene y cuántos están sin enviar, en espera, esperando o listos.",
-  "help.counter.waiting_orders":
-    "Pedidos de mostrador de las zonas que atiende este dispositivo enviados sin cobrar, o cobrados con platos aún por entregar. Cobrar cobra el pedido. Entregado anota que el cliente se lo ha llevado. Cada pedido muestra cuántos artículos tiene y cuántos están sin enviar, en espera, esperando o listos.",
+    "Guarda este pedido sin cobrarlo y vacía la cesta para el siguiente cliente. El nombre es opcional. Vuelve a Mostrador y toca el pedido aparcado para recuperarlo.",
   "help.counter.guests":
     "Déjalo vacío para que no salga la línea de comensales. Con un número, el ticket muestra los comensales y lo que paga cada persona.",
   "help.floor.tables_map":

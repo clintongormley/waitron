@@ -166,9 +166,8 @@ El logotipo del tema en uso se ve en estos lugares:
   teléfono, lo deja fuera del todo.
 - **La barra superior de una caja registradora**, en primer lugar, antes de las pestañas
   **Mostrador** y **Sala**, mientras todo lo de la barra cabe a su lado. Cuando la barra se llena,
-  por ejemplo en una pantalla estrecha con **Pedidos aparcados**, **En espera**, **Traspasos** y
-  **Pase** a la vista, el logotipo se aparta; nada más de la barra se oculta ni se hace más
-  pequeño para hacerle sitio. Vuelve en cuanto hay sitio otra vez.
+  por ejemplo en una pantalla estrecha con **Traspasos** y **Pase** a la vista, el logotipo se
+  aparta y los controles conservan su espacio. El logotipo vuelve cuando cabe de nuevo.
 - **La pantalla de inicio de sesión de una caja registradora o de un terminal de camarero**, encima
   del nombre del dispositivo al elegir a una persona y encima de tu nombre al introducir el PIN.
 - **«Con la tecnología de Waitron»**, que se ve mientras hay un logotipo: bajo el formulario de

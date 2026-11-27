@@ -849,14 +849,22 @@ export const BUSY_COUNTER: Partial<TillShell> = {
     { id: "b", name: "Terrace" },
   ],
   selectedCounterZoneId: "a",
-  parkedCount: 3,
-  waitingCount: 2,
   operatorName: "Ana Fernández",
   affordances: ["expo"],
   transferAvailable: true,
   transferCount: 2,
   legalName: "Bar Lucía SL",
 };
+
+export async function startCounterBasket(app: HTMLElement): Promise<void> {
+  const counter = app.shadowRoot?.querySelector("till-counter-screen");
+  await counter?.updateComplete;
+  const floor = counter?.shadowRoot?.querySelector("till-counter-floor");
+  if (!floor) return;
+  await floor.updateComplete;
+  floor.shadowRoot?.querySelector<HTMLElement>(".new-order wt-button")?.click();
+  await counter?.updateComplete;
+}
 
 export const COUNTER_LOGO = png(120, 40);
 

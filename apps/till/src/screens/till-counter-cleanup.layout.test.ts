@@ -332,20 +332,21 @@ it("A738 reduced-motion additions scroll instantly and refreshes never scroll ag
   }
 });
 
-it.each(["parked", "waiting"] as const)(
-  "A738 Counter keeps service and equipment status above the %s view",
-  async (orderList) => {
-    const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
-      store: new WorkingOrderStore(),
-      orderList,
-      zoneName: "Garden",
-      receiptEquipment: null,
-    });
-    expect(el.shadowRoot!.querySelector("[data-receipt-status]")?.textContent).toContain(
-      "No receipt printer",
-    );
-    const status = el.shadowRoot!.querySelector<HTMLElement>(".service-period");
-    expect(status?.parentElement?.classList.contains("body")).toBe(true);
-    expect(el.shadowRoot!.querySelector("[data-service-zone]")?.textContent).toContain("Garden");
-  },
-);
+it("A738 Counter keeps service and equipment status above the new basket", async () => {
+  const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
+    store: new WorkingOrderStore(),
+    counterFloor: true,
+    zoneName: "Garden",
+    receiptEquipment: null,
+  });
+  const floor = el.shadowRoot!.querySelector("till-counter-floor")!;
+  await floor.updateComplete;
+  floor.shadowRoot!.querySelector<HTMLElement>(".new-order wt-button")!.click();
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-receipt-status]")?.textContent).toContain(
+    "No receipt printer",
+  );
+  const status = el.shadowRoot!.querySelector<HTMLElement>(".service-period");
+  expect(status?.parentElement?.classList.contains("body")).toBe(true);
+  expect(el.shadowRoot!.querySelector("[data-service-zone]")?.textContent).toContain("Garden");
+});

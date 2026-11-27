@@ -36,6 +36,7 @@ import {
   mountWidget,
   resetPage,
   servedMenus,
+  startCounterBasket,
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
@@ -154,6 +155,8 @@ const heldSummary: HeldOrderSummary = {
   openedAt: "2026-08-05T10:00:00.000Z",
   signals: [],
 };
+
+const parkedAtCounter = { ...heldSummary, zoneId: "zone-counter" };
 
 const floorZone: FloorZone = {
   id: "z1",
@@ -714,9 +717,25 @@ function emit(source: Element, type: string, detail?: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
 
-async function showCounterList(el: TillApp, kind: "parked" | "waiting") {
-  emit(shell(el)!, "show-counter-orders", { kind });
+const counterFloor = (el: TillApp) =>
+  counter(el)?.shadowRoot?.querySelector("till-counter-floor")?.shadowRoot;
+
+const parkedList = (el: TillApp) => counterFloor(el)?.querySelector("till-held-orders");
+
+async function openCounterFloor(el: TillApp) {
+  emit(shell(el)!, "screen-select", { screen: "counter", counterFloor: true });
   await flush(el);
+  const current = counter(el)!;
+  if (current.store.persisted || current.store.lineCount > 0) return;
+  const back = page.getByRole("button", { name: t("counter.floor_back"), exact: true }).query();
+  if (back instanceof HTMLElement) back.click();
+  await flush(el);
+}
+
+async function openParkedMove(list: HTMLElement) {
+  const menu = list.shadowRoot!.querySelector("wt-row-actions.move")!;
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+  await userEvent.click(menu.querySelector<HTMLButtonElement>('[role="menuitem"]')!);
 }
 
 async function openMore(el: TillApp) {
@@ -747,12 +766,13 @@ function fakeSessionActivity() {
 }
 
 /** Boots the app, settles boot, and logs a person in — leaving the app on the counter. */
-async function toCounter(el: TillApp): Promise<TillCounterScreen> {
+async function toCounter(el: TillApp, basket = true): Promise<TillCounterScreen> {
   await flush(el);
   // Log in as an operator without `venue.configure` by default — the permission tests below drive
   // one holding it.
   emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
   await flush(el);
+  if (basket) await startCounterBasket(el);
   return counter(el)!;
 }
 
@@ -2802,6 +2822,7 @@ describe("till-app", () => {
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
+      await startCounterBasket(el);
       expect(await menuOrder(counter(el)!)).toEqual(["search", "structure", "shortcuts"]);
     });
 
@@ -2815,6 +2836,7 @@ describe("till-app", () => {
       expect(currentApi.listCounterWaiting).toHaveBeenCalled();
       selectTab(el, "counter");
       await flush(el);
+      await startCounterBasket(el);
       expect(counter(el)!.heldOrders).toEqual([heldSummary]);
     });
 
@@ -2823,7 +2845,7 @@ describe("till-app", () => {
         withFloorCard,
         { orderFlow: "ticket_then_pay" },
         {
-          listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+          listWorkingOrders: vi.fn().mockResolvedValue([parkedAtCounter]),
           getStationQueue: vi.fn().mockResolvedValue({ items: [stationGroup], notices: [] }),
         },
       );
@@ -2831,12 +2853,9 @@ describe("till-app", () => {
       expect(currentApi.listStations).toHaveBeenCalled();
       expect(currentApi.getStationQueue).not.toHaveBeenCalled();
       expect(currentApi.listCounterWaiting).toHaveBeenCalled();
-      await showCounterList(el, "parked");
-      const grid = activeTabGrid(el)!.shadowRoot!;
-      expect(grid.querySelector("till-station-queue")).toBeNull();
-      expect(
-        grid.querySelector<HTMLElement & { orders: unknown }>("till-held-orders")!.orders,
-      ).toEqual([heldSummary]);
+      await openCounterFloor(el);
+      expect(activeTabGrid(el)!.shadowRoot!.querySelector("till-station-queue")).toBeNull();
+      expect(parkedList(el)!.orders).toEqual([parkedAtCounter]);
     });
 
     const payCard = (el: TillApp, tab: string): TillTenderPay =>
@@ -2876,6 +2895,7 @@ describe("till-app", () => {
         });
         selectTab(el, tab);
         await flush(el);
+        await startCounterBasket(el);
         expect(payCard(el, tab).cardProvider).toBe(offered);
       },
     );
@@ -2897,6 +2917,7 @@ describe("till-app", () => {
       );
       selectTab(el, "counter");
       await flush(el);
+      await startCounterBasket(el);
       const c = counter(el)!;
       c.store.addProduct(coffee, "2");
       await el.updateComplete;
@@ -2928,6 +2949,7 @@ describe("till-app", () => {
       );
       selectTab(el, "counter");
       await flush(el);
+      await startCounterBasket(el);
       const c = counter(el)!;
       c.store.addProduct(coffee, "2");
       await el.updateComplete;
@@ -2956,6 +2978,7 @@ describe("till-app", () => {
       );
       selectTab(el, "sale");
       await flush(el);
+      await startCounterBasket(el);
       payCard(el, "sale").store.addProduct(coffee, "2");
       await flush(el);
 
@@ -3079,6 +3102,7 @@ describe("till-app", () => {
         await flush(el);
         selectTab(el, "counter");
         await flush(el);
+        await startCounterBasket(el);
         expect(stationsOf(el)).toEqual([defaultStation]);
       });
     });
@@ -3146,6 +3170,7 @@ describe("till-app", () => {
         const el = await toTill(formFactor, capabilities);
         selectTab(el, tab);
         await flush(el);
+        await startCounterBasket(el);
         expect(payCard(el, tab).cardProvider).toBe(offered);
       },
     );
@@ -3498,7 +3523,7 @@ describe("till-app", () => {
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     expect(counter(el)).not.toBeNull();
-    expect(counter(el)!.shadowRoot!.querySelector("till-counter-floor")).toBeNull();
+    expect(counter(el)!.shadowRoot!.querySelector("till-counter-floor")).not.toBeNull();
   });
 
   it.each([{ status: 503 }, new TypeError("Network unavailable")])(
@@ -16071,6 +16096,7 @@ describe("till-app", () => {
         locale,
       });
       await flush(el);
+      await startCounterBasket(el);
       return counter(el)!;
     }
 
@@ -16727,6 +16753,7 @@ describe("till-app", () => {
         permissions: [],
       });
       await flush(el);
+      await startCounterBasket(el);
       expect(gridNames(el)).toEqual(["Cerveza"]);
       expect(switcher(el)!.value).toBe("cat-drinks");
       expect(counter(el)!.selectedMenuId).toBe("cat-drinks");
@@ -16748,6 +16775,7 @@ describe("till-app", () => {
           permissions: [],
         });
         await flush(el);
+        await startCounterBasket(el);
         expect(gridNames(el)).toEqual(["Cerveza"]);
         expect(switcher(el)!.value).toBe("cat-drinks");
         expect(counter(el)!.selectedMenuId).toBe("cat-drinks");
@@ -16812,6 +16840,7 @@ describe("till-app", () => {
         await flush(el);
         emit(lock(el)!, "logged-in", { personId, displayName: "Operator", permissions: [] });
         await flush(el);
+        await startCounterBasket(el);
       };
       const toTerraceWine = async (el: TillApp) => {
         emit(counter(el)!, "counter-zone-selected", { zoneId: "zone-terrace" });
@@ -17892,8 +17921,10 @@ describe("the device profile decides which screens a device offers", () => {
           permissions: ["venue.configure"],
         });
         await flush(el);
+        await startCounterBasket(el);
         emit(lock(el)!, "logged-in", { personId: "staff", displayName: "Staff", permissions: [] });
         await flush(el);
+        await startCounterBasket(el);
         release(outcome);
         await flush(el);
         expect(signedIn(el).permissions).toEqual([]);
@@ -17936,6 +17967,7 @@ describe("the device profile decides which screens a device offers", () => {
       );
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
+      await startCounterBasket(el);
       // The lock screen's own read, then the sign-in's.
       expect(currentApi.listStaff).toHaveBeenCalledTimes(2);
       emit(shell(el)!, "logout");
@@ -17961,6 +17993,7 @@ describe("the device profile decides which screens a device offers", () => {
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
+      await startCounterBasket(el);
       (sa.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
       await flush(el);
       resolve([freeTable]);
@@ -17979,6 +18012,7 @@ describe("the device profile decides which screens a device offers", () => {
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
+      await startCounterBasket(el);
       expect(shell(el)!.activeScreen).toBe("floor");
       expect(currentApi.getTablesState).toHaveBeenCalledOnce();
       emit(shell(el)!, "logout");
@@ -18005,6 +18039,7 @@ describe("the device profile decides which screens a device offers", () => {
         permissions: ["venue.configure"],
       });
       await flush(el);
+      await startCounterBasket(el);
       router.dispatchEvent(new CustomEvent("server-changed", { detail: { from: BOX, to: CLOUD } }));
       await flush(el);
       release();
@@ -18786,6 +18821,7 @@ describe("a failed list refresh after a successful write", () => {
     await settle(el);
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await settle(el);
+    await startCounterBasket(el);
     return counter(el)!;
   }
 
@@ -19720,7 +19756,7 @@ function counterMovePreview() {
 
 describe("the counter's held orders: moving one to a table, and paying a moved bill", () => {
   const counterOrder: HeldOrderSummary = {
-    ...heldSummary,
+    ...parkedAtCounter,
     id: "wo-12",
     orderNumber: 12,
     label: "Ana",
@@ -19749,10 +19785,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     condition: "held",
     party: luisParty,
   };
-  const heldList = (el: TillApp) =>
-    counterBody(el)!.shadowRoot!.querySelector<HTMLElement & { tables: TableState[] }>(
-      "till-held-orders",
-    )!;
+  const heldList = (el: TillApp) => parkedList(el)!;
   const toast = (el: TillApp) =>
     el.shadowRoot!.querySelector<HTMLElement & { open: boolean; message: string }>(
       "wt-toast[data-submitted-toast]",
@@ -19799,15 +19832,14 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       }),
       ...overrides,
     });
-    const c = await toCounter(mounted.el);
-    await showCounterList(mounted.el, "parked");
+    const c = await toCounter(mounted.el, false);
     return { ...mounted, c };
   }
 
   it("counter relocation sends at once the destination observations read when the table is picked", async () => {
     const { el } = await counterWith();
     const held = heldList(el);
-    await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>(".move")!);
+    await openParkedMove(held);
     await flush(el);
     await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!);
     await flush(el);
@@ -19905,7 +19937,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     );
     const { el, c } = await counterWith({ getFindBill });
     const held = heldList(el);
-    await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>(".move")!);
+    await openParkedMove(held);
     await flush(el);
     await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>('[data-target="t9"]')!);
     await flush(el);
@@ -20170,8 +20202,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
         .mockResolvedValue([table9, { ...table9, id: "dining-table", zoneId: "dining" }]),
     });
     const held = heldList(el);
-    const move = held.shadowRoot!.querySelector<HTMLElement>(".move")!;
-    await userEvent.click(move);
+    await openParkedMove(held);
     await flush(el);
     await vi.waitFor(() => {
       expect(held.shadowRoot!.querySelector('[data-target="t9"]')).toBeNull();
@@ -20180,7 +20211,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>("[data-picker-cancel]")!);
     await flush(el);
     listZones.mockResolvedValue([floorZone, { ...floorZone, id: "dining" }]);
-    await userEvent.click(move);
+    await openParkedMove(held);
     await flush(el);
     await vi.waitFor(() => {
       expect(held.shadowRoot!.querySelector('[data-target="t9"]')).not.toBeNull();
@@ -20196,13 +20227,12 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       getTablesState: vi.fn().mockResolvedValue([table9]),
     });
     const held = heldList(el);
-    const move = held.shadowRoot!.querySelector<HTMLElement>(".move")!;
     listZones.mockImplementationOnce(() => new Promise((resolve) => (late = resolve)));
-    await userEvent.click(move);
+    await openParkedMove(held);
     await flush(el);
     await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>("[data-picker-cancel]")!);
     await flush(el);
-    await userEvent.click(move);
+    await openParkedMove(held);
     await flush(el);
     late([{ ...floorZone, serviceMode: "prepay" }]);
     await flush(el);
@@ -20220,7 +20250,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
       listZones,
       getTablesState: vi.fn().mockResolvedValue([table9]),
     });
-    await userEvent.click(heldList(el).shadowRoot!.querySelector<HTMLElement>(".move")!);
+    await openParkedMove(heldList(el));
     await flush(el);
     emit(c, "logout");
     await flush(el);
@@ -20228,9 +20258,9 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     await toCounter(el);
     late([{ ...floorZone, serviceMode: "prepay" }]);
     await flush(el);
-    await showCounterList(el, "parked");
+    await openCounterFloor(el);
     const held = heldList(el);
-    await userEvent.click(held.shadowRoot!.querySelector<HTMLElement>(".move")!);
+    await openParkedMove(held);
     await flush(el);
     expect(held.shadowRoot!.querySelector('[data-target="t9"]')).not.toBeNull();
     current([floorZone]);
@@ -21094,10 +21124,14 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
   };
   const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-  const waitingList = (el: TillApp) =>
-    counterBody(el)?.shadowRoot?.querySelector<TillCounterWaiting>("till-counter-waiting") ?? null;
+  const waitingLists = (el: TillApp) => [
+    ...(counterFloor(el)?.querySelectorAll<TillCounterWaiting>("till-counter-waiting") ?? []),
+  ];
+  const waitingList = (el: TillApp) => waitingLists(el)[0] ?? null;
   const rowOf = (el: TillApp, id: string) =>
-    waitingList(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-waiting-order="${id}"]`);
+    waitingLists(el)
+      .find(({ orders }) => orders.some((order) => order.id === id))
+      ?.shadowRoot?.querySelector<HTMLElement>(`[data-waiting-order="${id}"]`);
   const alert = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>('[role="alert"]');
   const invoiceFirst = {
     zonePolicy: { serviceMode: "ticket_then_pay" },
@@ -21106,14 +21140,20 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
 
   async function counterWaiting(overrides: Record<string, unknown> = {}) {
     const mounted = await mountApp(overrides);
-    const c = await toCounter(mounted.el);
-    await showCounterList(mounted.el, "waiting");
+    const c = await toCounter(mounted.el, false);
     return { ...mounted, c };
   }
 
-  /** Presses the waiting row's own Pay button. */
-  const pressPay = (el: TillApp, id: string) =>
-    rowOf(el, id)!.querySelector<HTMLElement>("[data-waiting-pay]")!.click();
+  const dispatchPay = (source: Element, screen: TillCounterScreen, id: string) =>
+    emit(source, "pay-waiting-order", {
+      id,
+      serviceMode: screen.counterWaiting.find((order) => order.id === id)?.serviceMode,
+    });
+  const pressPay = (el: TillApp, id: string) => {
+    const row = rowOf(el, id);
+    expect(row, `Waiting row for ${id}`).toBeDefined();
+    dispatchPay(row!, counter(el)!, id);
+  };
   const placedRead = (id: string) => ({
     zoneId: null,
     kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 2 },
@@ -21134,16 +21174,18 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     return { promise, answer, refuse };
   }
 
-  it("lists each waiting order with its state, in the held-orders card even when nothing is held", async () => {
+  it("lists each open order with its state when nothing is parked", async () => {
+    const preparing = { ...paidOrder, counts: { ...paidOrder.counts, waiting: 1 } };
     const { el } = await counterWaiting({
       ...invoiceFirst,
-      listCounterWaiting: vi.fn().mockResolvedValue([paidOrder, sentOrder, handedOrder]),
+      listCounterWaiting: vi.fn().mockResolvedValue([preparing, sentOrder, handedOrder]),
     });
 
-    expect(waitingList(el)!.orders).toEqual([paidOrder, sentOrder, handedOrder]);
+    expect(waitingList(el)!.orders).toEqual([preparing, sentOrder, handedOrder]);
     expect(rowOf(el, "wo-paid")!.textContent).toContain(t("waiting.paid_not_handed_over"));
     expect(rowOf(el, "wo-sent")!.textContent).toContain(t("waiting.sent_not_paid"));
     expect(rowOf(el, "wo-handed")!.textContent).toContain(t("waiting.handed_over_not_paid"));
+    await userEvent.click(rowOf(el, "wo-sent")!.querySelector("button.summary")!);
     expect(rowOf(el, "wo-sent")!.querySelector("[data-waiting-pay]")).not.toBeNull();
   });
 
@@ -21160,9 +21202,13 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
       listCounterWaiting,
       retrievePlacedOrder: vi.fn().mockResolvedValue(placedRead("wo-sent")),
     });
-    expect(rowOf(el, "wo-sent")!.querySelector("[data-waiting-hand-over]")).not.toBeNull();
+    const row = rowOf(el, "wo-sent")!;
+    await userEvent.click(row.querySelector("button.summary")!);
+    expect(row.querySelector("[data-waiting-hand-over]")).not.toBeNull();
 
-    pressPay(el, "wo-sent");
+    await userEvent.click(
+      row.querySelector("[data-waiting-pay]")!.shadowRoot!.querySelector("button")!,
+    );
     await flush(el);
 
     expect(c.store.id).toBe("wo-sent");
@@ -21183,6 +21229,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
 
     closeTicket(el);
     await flush(el);
+    await startCounterBasket(el);
     expect(tenderPay(el).mode).toBe("prepay");
     expect(tenderPay(el).stage).toBe("order");
   });
@@ -21243,7 +21290,8 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
         await flush(el);
         expect(currentApi.placeOrder).not.toHaveBeenCalled();
       }
-      pressPay(el, "wo-sent");
+      if (saved === "while the till was on another order") dispatchPay(c, c, "wo-sent");
+      else pressPay(el, "wo-sent");
       await flush(el);
       expect(tenderPay(el).stage).toBe("collect");
       expect(c.store.total).toBe("3.00");
@@ -21314,7 +21362,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
       expect((el as unknown as { staffNotices: unknown[] }).staffNotices).toContainEqual(
         clockWaiting,
       );
-      await showCounterList(el, "waiting");
+      await openCounterFloor(el);
 
       pressPay(el, "wo-sent");
       await flush(el);
@@ -21362,7 +21410,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
       getDeviceEquipment.mockResolvedValue({ roles: [], notices: [clockWaiting] });
       vi.advanceTimersByTime(15_000);
       await flush(el);
-      await showCounterList(el, "waiting");
+      await openCounterFloor(el);
 
       pressPay(el, "wo-sent");
       await flush(el);
@@ -21481,7 +21529,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
           const view = el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen")!;
           emit(view, "find-bill-open", { row: billRow({ workingOrderId: "wo-sent" }) });
         } else {
-          await showCounterList(el, "waiting");
+          await openCounterFloor(el);
           pressPay(el, "wo-sent");
         }
         await flush(el);
@@ -21581,7 +21629,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
         getDeviceEquipment.mockResolvedValue({ roles: [], notices: [clockWaiting] });
         vi.advanceTimersByTime(15_000);
         await flush(el);
-        await showCounterList(el, "waiting");
+        await openCounterFloor(el);
 
         pressPay(el, "wo-sent");
         await flush(el);
@@ -21760,7 +21808,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
 
-    pressPay(el, "wo-sent");
+    dispatchPay(c, c, "wo-sent");
     emit(c, "counter-bill-pay", {});
     await flush(el);
     read.answer(placedRead("wo-sent"));
@@ -21980,7 +22028,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
       const own = c.store.id;
       await el.updateComplete;
 
-      pressPay(el, "wo-sent");
+      dispatchPay(c, c, "wo-sent");
       emit(c, "confirm-payment", { method: "cash", amount: "5" });
       await flush(el);
       read.answer(placedRead("wo-sent"));
@@ -22020,6 +22068,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
         permissions: [],
       });
       await flush(el);
+      await startCounterBasket(el);
       const reads = listCounterWaiting.mock.calls.length;
       settle(read);
       await flush(el);
@@ -22276,6 +22325,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     await flush(el);
 
     expect(c.store.id).toBe(id);
+    await startCounterBasket(el);
     expect(tenderPay(el).stage).toBe("order");
     expect(alert(el)!.textContent).toContain(t("waiting.pay_error"));
   });
@@ -22290,7 +22340,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     const id = c.store.id;
     await el.updateComplete;
 
-    emit(waitingList(el)!, "pay-waiting-order", { id: "wo-sent" });
+    dispatchPay(c, c, "wo-sent");
     await discardBasketChanges(el);
 
     expect(c.store.id).toBe(id);
@@ -22312,7 +22362,7 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     emit(c, "place-order");
     await flush(el);
 
-    emit(waitingList(el)!, "pay-waiting-order", { id: "wo-sent" });
+    dispatchPay(c, c, "wo-sent");
     await flush(el);
 
     expect(retrievePlacedOrder).not.toHaveBeenCalled();
@@ -23817,6 +23867,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     await flush(el);
     await flush(el);
     await flush(el);
+    await startCounterBasket(el);
     expect(tenderPay(el).activeReaders).toEqual([]);
 
     oldAnswer(equipmentOn("held", R1));
@@ -23906,6 +23957,7 @@ describe("the device's equipment: scanning, the pay screens, takeovers and sign-
     await flush(el);
     const reads = getDeviceEquipment.mock.calls.length;
     expect(reads).toBeGreaterThanOrEqual(2);
+    await startCounterBasket(el);
     expect(tenderPay(el).activeReaders).toEqual([]);
 
     getDeviceEquipment.mockRejectedValue(new TypeError("Failed to fetch"));
@@ -25223,7 +25275,11 @@ describe("W69 till shell leave routes", () => {
 });
 
 describe("W69 held move basket protection", () => {
-  async function loaded(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
+  async function loaded(
+    overrides: Record<string, unknown> = {},
+    theme?: "light" | "dark",
+    retrieve = true,
+  ) {
     const { el } = await mountApp(
       {
         getTablesState: vi
@@ -25247,10 +25303,11 @@ describe("W69 held move basket protection", () => {
       },
       theme,
     );
-    const c = await toCounter(el);
-    emit(c, "retrieve-order", { id: "wo-1" });
-    await expect.poll(() => c.store.id).toBe("wo-1");
-    await showCounterList(el, "parked");
+    const c = await toCounter(el, retrieve);
+    if (retrieve) {
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await expect.poll(() => c.store.id).toBe("wo-1");
+    }
     return { el, c };
   }
   function move(c: TillCounterScreen, orderId = "wo-1") {
@@ -25403,26 +25460,25 @@ describe("W69 held move basket protection", () => {
   });
 
   it("protects the edited current order when a native held Move click outlives its row's order switch", async () => {
-    const { el, c } = await loaded({ listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]) });
-    const lines = [...c.store.lines];
-    c.store.loadFrom("other-order", lines);
-    await flush(el);
-    const held = counterBody(el)!.shadowRoot!.querySelector("till-held-orders")!;
-    await held.updateComplete;
-    await userEvent.click(
-      held.shadowRoot!.querySelector(".move")!.shadowRoot!.querySelector("button")!,
+    const { el, c } = await loaded(
+      { listWorkingOrders: vi.fn().mockResolvedValue([parkedAtCounter]) },
+      undefined,
+      false,
     );
+    const lines = [{ product: coffee, quantity: "2" }];
+    const held = parkedList(el)!;
+    await openParkedMove(held);
     await expect.poll(() => held.shadowRoot!.querySelector('[data-target="t9"]')).not.toBeNull();
     const target = held
       .shadowRoot!.querySelector('[data-target="t9"]')!
       .shadowRoot!.querySelector("button")!;
-    target.addEventListener(
-      "click",
+    el.addEventListener(
+      "move-held-order",
       () => {
         c.store.loadFrom("wo-1", lines, "Table 4", 3);
         c.store.label = "Local lunch";
       },
-      { once: true },
+      { once: true, capture: true },
     );
     await userEvent.click(target);
     await expect.poll(() => warning(el).open).toBe(true);
@@ -25435,7 +25491,7 @@ describe("W69 held move basket protection", () => {
   for (const locale of ["en-GB", "es-ES"])
     for (const theme of ["light", "dark"] as const)
       for (const width of [390, 1280])
-        it(`native held move leaves the current edited order out of Held ${locale} ${theme} ${width}`, async () => {
+        it(`Counter hides its current basket and a Move for another order leaves it intact ${locale} ${theme} ${width}`, async () => {
           const size = { width: window.innerWidth, height: window.innerHeight };
           await page.viewport(width, 900);
           try {
@@ -25445,27 +25501,36 @@ describe("W69 held move basket protection", () => {
                 listWorkingOrders: vi
                   .fn()
                   .mockResolvedValue([
-                    heldSummary,
-                    { ...heldSummary, id: "other-held", orderNumber: 42 },
+                    parkedAtCounter,
+                    { ...parkedAtCounter, id: "other-held", orderNumber: 42 },
                   ]),
               },
               theme,
+              false,
             );
-            c.store.label = "Local lunch";
-            const held = counterBody(el)!.shadowRoot!.querySelector("till-held-orders")!;
-            await held.updateComplete;
+            Object.assign(el, {
+              heldOrders: [
+                { ...parkedAtCounter, id: c.store.id },
+                { ...parkedAtCounter, id: "other-held" },
+              ],
+            });
+            await flush(el);
+            const held = parkedList(el)!;
             expect(held.orders.map((order) => order.id)).toEqual(["other-held"]);
-            await userEvent.click(
-              held.shadowRoot!.querySelector(".move")!.shadowRoot!.querySelector("button")!,
-            );
+            await expectNoA11yViolations(held);
+            await page.screenshot({
+              path: `__screenshots__/a767/${locale}-${theme}-${width}-held.png`,
+            });
+            await openParkedMove(held);
             await expect
               .poll(() => held.shadowRoot!.querySelector('[data-target="t9"]'))
               .not.toBeNull();
             await userEvent.click(
-              held
-                .shadowRoot!.querySelector('[data-target="t9"]')!
-                .shadowRoot!.querySelector("button")!,
+              held.shadowRoot!.querySelector<HTMLElement>("[data-picker-cancel]")!,
             );
+            c.store.loadFrom("wo-1", [{ product: coffee, quantity: "2" }]);
+            c.store.label = "Local lunch";
+            move(c, "other-held");
             await flush(el);
             await answerCounterMoveIfAsked(el);
             await expect.poll(() => currentApi.moveBill).toHaveBeenCalledOnce();
@@ -25492,10 +25557,6 @@ describe("W69 held move basket protection", () => {
             expect(unloadCancelled()).toBe(true);
             expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
             expect(currentApi.pay).not.toHaveBeenCalled();
-            await expectNoA11yViolations(held);
-            await page.screenshot({
-              path: `__screenshots__/a767/${locale}-${theme}-${width}-held.png`,
-            });
           } finally {
             await page.viewport(size.width, size.height);
           }
@@ -25791,21 +25852,17 @@ describe("basket native replacement warning", () => {
             const { el } = await mountApp(
               {
                 getTill: vi.fn().mockResolvedValue({ ...till, locale }),
-                listWorkingOrders: vi.fn().mockResolvedValue([heldSummary]),
+                listWorkingOrders: vi.fn().mockResolvedValue([parkedAtCounter]),
               },
               theme,
             );
             const c = await toCounter(el);
-            await showCounterList(el, "parked");
             c.store.addProduct(ham, "1");
             c.store.label = "Lunch";
             const id = c.store.id;
-            const held = counterBody(el)!.shadowRoot!.querySelector("till-held-orders")!;
-            await held.updateComplete;
-            const retrieve = held
-              .shadowRoot!.querySelector(".retrieve")!
-              .shadowRoot!.querySelector("button")!;
-            await userEvent.click(retrieve);
+            await c.updateComplete;
+            const back = page.getByRole("button", { name: t("counter.floor_back"), exact: true });
+            await back.click();
             const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
             await expect.poll(() => question.open).toBe(true);
             expect(currentApi.retrieveWorkingOrder).not.toHaveBeenCalled();
@@ -25826,8 +25883,8 @@ describe("basket native replacement warning", () => {
             await expect.poll(() => question.open).toBe(false);
             expect(c.store.id).toBe(id);
             expect(c.store.label).toBe("Lunch");
-            await expect.poll(() => retrieve.matches(":focus")).toBe(true);
-            await userEvent.click(retrieve);
+            await expect.poll(() => back.element().matches(":focus")).toBe(true);
+            await back.click();
             await expect.poll(() => question.open).toBe(true);
             await userEvent.click(
               question
@@ -25840,8 +25897,9 @@ describe("basket native replacement warning", () => {
             await page.screenshot({
               path: `__screenshots__/w69-basket-look/${locale}-${theme}-${width}-kept.png`,
             });
-            await userEvent.click(retrieve);
+            await back.click();
             await discardBasketChanges(el);
+            await userEvent.click(parkedList(el)!.shadowRoot!.querySelector("button.summary")!);
             await expect.poll(() => c.store.id).toBe("wo-1");
             expect(currentApi.retrieveWorkingOrder).toHaveBeenCalledExactlyOnceWith("wo-1");
             expect(currentApi.abandonWorkingOrder).not.toHaveBeenCalled();
@@ -27673,7 +27731,7 @@ describe("A767 card outcome belongs to its order", () => {
 
 describe("A767 sign-in and held-order recovery", () => {
   const heldRow = (id: string): HeldOrderSummary => ({
-    zoneId: null,
+    zoneId: "zone-counter",
     items: [],
     id,
     orderNumber: id === "wo-1" ? 41 : 42,
@@ -27733,19 +27791,18 @@ describe("A767 sign-in and held-order recovery", () => {
     expect(counter(el)).not.toBeNull();
   });
 
-  it("omits the order open on the counter from Held and makes it available after switching away", async () => {
-    const rows = [heldRow("wo-1"), heldRow("wo-2")];
-    const { el } = await mountApp({ listWorkingOrders: vi.fn().mockResolvedValue(rows) });
+  it("omits the current basket id from Counter and restores its row after switching away", async () => {
+    const listWorkingOrders = vi.fn().mockResolvedValue([]);
+    const { el } = await mountApp({ listWorkingOrders });
     const c = await toCounter(el);
-    emit(c, "retrieve-order", { id: "wo-1" });
+    const id = c.store.id;
+    listWorkingOrders.mockResolvedValue([heldRow(id), heldRow("wo-2")]);
+    await page.getByRole("button", { name: t("counter.floor_back"), exact: true }).click();
     await flush(el);
-    await showCounterList(el, "parked");
-    const held = () =>
-      c.shadowRoot!.querySelector<HTMLElement & { orders: HeldOrderSummary[] }>("till-held-orders");
-    expect(held()!.orders.map((order) => order.id)).toEqual(["wo-2"]);
-    c.store.clear();
+    expect(parkedList(el)!.orders.map((order) => order.id)).toEqual([id, "wo-2"]);
+    Object.assign(el, { heldOrders: [heldRow(c.store.id), heldRow("wo-2")] });
     await flush(el);
-    expect(held()!.orders.map((order) => order.id)).toEqual(["wo-1", "wo-2"]);
+    expect(parkedList(el)!.orders.map((order) => order.id)).toEqual(["wo-2"]);
   });
 
   it("retrieves without discarding edits after sign-in when a declined card already stored the unchanged order", async () => {
