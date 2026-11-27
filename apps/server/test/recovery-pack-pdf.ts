@@ -44,21 +44,41 @@ export async function recoveryPackPdf(codes: {
   });
 }
 
+const NO_MASTER_KEY: RecoveryPackFile = {
+  kind: "waitron-recovery-pack",
+  version: 2,
+  number: 2,
+  madeAt: "2026-10-29T17:00:00.000Z",
+  bucketCode: null,
+  masterKey: null,
+  masterKeyName: null,
+  masterKeyHeldBy: null,
+};
+
 /**
- * A pack PDF whose attached file holds no master key, as packs printed before every pack showed
- * the key were. The renderer now refuses such a file, so this carrier attaches it directly.
+ * A pack PDF whose attached file holds no master key. The renderer refuses such a file, so this
+ * carrier attaches it directly.
  */
 export async function packPdfWithoutMasterKey(): Promise<Uint8Array<ArrayBuffer>> {
-  const fileBytes = buildRecoveryPackFile({
-    kind: "waitron-recovery-pack",
-    version: 2,
-    number: 2,
-    madeAt: "2026-10-29T17:00:00.000Z",
-    bucketCode: null,
-    masterKey: null,
-    masterKeyName: null,
-    masterKeyHeldBy: null,
-  });
+  return carrierPdf(buildRecoveryPackFile(NO_MASTER_KEY));
+}
+
+/**
+ * The same pack file also carrying `archiveCode` and `backupKey`, both null, as the format required
+ * of every pack file before A1323 PR 4b-2. Its keys are sorted and unspaced, as
+ * `buildRecoveryPackFile` writes them, and the PDF names its true digest, so only its shape is wrong.
+ */
+export async function packPdfWithArchiveFields(): Promise<Uint8Array<ArrayBuffer>> {
+  const fields: Record<string, unknown> = { ...NO_MASTER_KEY, archiveCode: null, backupKey: null };
+  const sorted = Object.fromEntries(
+    Object.keys(fields)
+      .sort()
+      .map((key) => [key, fields[key]]),
+  );
+  return carrierPdf(new TextEncoder().encode(JSON.stringify(sorted)));
+}
+
+async function carrierPdf(fileBytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
   const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(fileBytes)));
   const digest = "sha256-v1:" + Array.from(hash, (n) => n.toString(16).padStart(2, "0")).join("");
   const pdf = new PDFKit();

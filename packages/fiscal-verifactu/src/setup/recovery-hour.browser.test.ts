@@ -3582,27 +3582,52 @@ async function recoveryPack(
     },
   });
 }
+const attachedFile = (
+  file: Partial<import("@waitron/recovery-pack").RecoveryPackFile>,
+): import("@waitron/recovery-pack").RecoveryPackFile => ({
+  kind: "waitron-recovery-pack",
+  version: 2,
+  number: 3,
+  madeAt: "2026-10-17T12:40:00.000Z",
+  bucketCode: null,
+  masterKey: MASTER_KEY,
+  masterKeyName: selection.keyName,
+  masterKeyHeldBy: null,
+  ...file,
+});
 /**
- * A pack PDF from before every pack showed the master key, which the renderer no longer draws: its
- * attached file and the digest naming it, on an otherwise blank page.
+ * A pack PDF holding these fields' file, which the renderer will not draw when it holds no master
+ * key: its attached file and the digest naming it, on an otherwise blank page.
  */
-async function olderRecoveryPack(
+async function attachedPack(
   file: Partial<import("@waitron/recovery-pack").RecoveryPackFile>,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  const { buildRecoveryPackFile, PACK_ATTACHMENT } = await import("@waitron/recovery-pack");
+  const { buildRecoveryPackFile } = await import("@waitron/recovery-pack");
+  return carrierPack(buildRecoveryPackFile(attachedFile(file)));
+}
+/**
+ * The same, its file also carrying `archiveCode` and `backupKey`, both null, as the format required
+ * of every pack file before A1323 PR 4b-2. Its keys are sorted and unspaced, as
+ * `buildRecoveryPackFile` writes them, and the PDF names its true digest, so only its shape is wrong.
+ */
+async function packWithArchiveFields(
+  file: Partial<import("@waitron/recovery-pack").RecoveryPackFile>,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const fields: Record<string, unknown> = {
+    ...attachedFile(file),
+    archiveCode: null,
+    backupKey: null,
+  };
+  const sorted = Object.fromEntries(
+    Object.keys(fields)
+      .sort()
+      .map((key) => [key, fields[key]]),
+  );
+  return carrierPack(new TextEncoder().encode(JSON.stringify(sorted)));
+}
+async function carrierPack(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
+  const { PACK_ATTACHMENT } = await import("@waitron/recovery-pack");
   const { default: PDFKit } = await import("pdfkit");
-  const madeAt = "2026-10-17T12:40:00.000Z";
-  const bytes = buildRecoveryPackFile({
-    kind: "waitron-recovery-pack",
-    version: 2,
-    number: 3,
-    madeAt,
-    bucketCode: null,
-    masterKey: MASTER_KEY,
-    masterKeyName: selection.keyName,
-    masterKeyHeldBy: null,
-    ...file,
-  });
   const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(bytes)));
   const digest = "sha256-v1:" + Array.from(hash, (n) => n.toString(16).padStart(2, "0")).join("");
   const fontUrl = (await import("../assets/register-noto-sans.ttf?url")).default;
@@ -3712,8 +3737,13 @@ it.each([
   ],
   [
     "a pack that does not hold the master key",
-    () => olderRecoveryPack({ masterKey: null, masterKeyHeldBy: 1 }),
+    () => attachedPack({ masterKey: null, masterKeyHeldBy: 1 }),
     "This recovery pack does not hold the master key. It is on recovery pack 1: choose that pack, or type the key from it.",
+  ],
+  [
+    "a pack whose file still carries archiveCode and backupKey",
+    () => packWithArchiveFields({ masterKey: null, masterKeyHeldBy: 1 }),
+    "This recovery pack PDF is damaged. Type the key or scan it.",
   ],
   [
     "a PDF that is not a recovery pack",

@@ -4,7 +4,13 @@ import { join } from "node:path";
 import { backupKey, makeMasterKey } from "@waitron/credentials";
 import { AppError, encodeMasterKeyCode } from "@waitron/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { packPdfWithoutMasterKey, recoveryPackPdf } from "../test/recovery-pack-pdf.js";
+import { RecoveryPackFileError } from "@waitron/recovery-pack";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
+import {
+  packPdfWithArchiveFields,
+  packPdfWithoutMasterKey,
+  recoveryPackPdf,
+} from "../test/recovery-pack-pdf.js";
 import { decryptBackupFile } from "./artifact-cipher-file.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
@@ -116,6 +122,23 @@ describe("waitron-restore restore <file> and the master key", () => {
     expect(code).toBe(1);
     expect(out).toEqual([
       "restore failed: the recovery pack PDF does not hold the master key; give the pack that holds it, or a file with the key",
+    ]);
+    expect(restore).not.toHaveBeenCalled();
+  });
+
+  it("refuses as damaged a pack PDF whose file still carries archiveCode and backupKey", async () => {
+    const bytes = await packPdfWithArchiveFields();
+    const refusal = await readRecoveryPackPdf(bytes).catch((err: unknown) => err);
+    expect(refusal, "the PDF's digest matches, so only the file's shape is refused").toEqual(
+      new RecoveryPackFileError("shape"),
+    );
+    const path = await backupFile();
+    const pack = join(dir, "pack.pdf");
+    await writeFile(pack, bytes);
+    const { code, out, restore } = await run(["restore", path, "--master-key-file", pack], {});
+    expect(code).toBe(1);
+    expect(out).toEqual([
+      "restore failed: the recovery pack PDF is damaged, or was changed after it was made; use the pack PDF as it was saved",
     ]);
     expect(restore).not.toHaveBeenCalled();
   });
