@@ -87,7 +87,10 @@ export interface DraftRowView {
 
 const isCounted = (line: OrderLine) => line.notOffered === true || soldByTheUnit(line.product);
 
-/** Names what tells two rows of one dish apart, since the box sits outside the row's own button. */
+/**
+ * The row as staff read it — dish, quantity, guest and second line — since the box sits outside
+ * the row's own button.
+ */
 export function draftSelectLabel(line: OrderLine, guest: string | undefined): string {
   const quantity = isCounted(line) ? `×${quantityText(line.quantity)}` : quantityLabel(line);
   return [

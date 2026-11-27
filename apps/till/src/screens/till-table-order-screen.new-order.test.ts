@@ -609,7 +609,7 @@ describe("New order: compact rows", () => {
     expect(draft.lines[1]!.place).toEqual({ kind: "fire" });
   });
 
-  it.each(["locked", "sending", "in flight"] as const)(
+  it.each(["locked", "sending", "in flight on its basket"] as const)(
     "opens no details on a tap that arrives once the order is %s, before it redraws",
     async (state) => {
       const { el } = await wide();
@@ -728,6 +728,8 @@ describe("New order: compact rows", () => {
       else el.groupCommandBusy = true;
       button.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
       expect(draft.lines).toHaveLength(1);
+      await el.updateComplete;
+      expect(root(el).activeElement).not.toBe(root(el).querySelector("#draft-title"));
     },
   );
 

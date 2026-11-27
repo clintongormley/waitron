@@ -676,6 +676,13 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
+  #draftAllergyGuest(line: OrderLine): string | undefined {
+    const id = line.draftLineId;
+    return id === undefined
+      ? undefined
+      : allergyGuestWho(this.#allergy()?.snapshot ?? null, { kind: "draft", id });
+  }
+
   #draftAllergyMark(line: OrderLine): TemplateResult | typeof nothing {
     const id = line.draftLineId;
     return id === undefined
@@ -4709,13 +4716,7 @@ export class TillTableOrderScreen extends LitElement {
       this.#draftRoutingWarning(store, line, index, true),
     ];
     const mark = this.#draftAllergyMark(line);
-    const guest =
-      line.draftLineId === undefined
-        ? undefined
-        : allergyGuestWho(this.#allergy()?.snapshot ?? null, {
-            kind: "draft",
-            id: line.draftLineId,
-          });
+    const guest = this.#draftAllergyGuest(line);
     const marked = mark === nothing ? nothing : html`<span slot=${`mark-${index}`}>${mark}</span>`;
     if (store.editsLocked) return marked;
     return html`${
