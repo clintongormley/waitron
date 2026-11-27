@@ -178,6 +178,20 @@ describe("the bin in −'s place at a count of 1", () => {
     expect(el.shadowRoot!.activeElement?.id).toBe("draft-title");
   });
 
+  it("a bin pressed after the count rose to 2, before the redraw, leaves the dish", async () => {
+    const { el, draft } = await open();
+    await tapRow(el, 1);
+    const shown = bin(el, 1)!;
+    draft.setLineQuantity(1, "2");
+    shown.click();
+    await settled(el);
+    expect(draft.lines.map((line) => [line.product.id, line.quantity])).toEqual([
+      ["beer", "2"],
+      ["flan", "2"],
+    ]);
+    expect(controls(el, 1)).not.toBeNull();
+  });
+
   it("is not offered while Remove would refuse, and a press Remove refuses leaves the dish", async () => {
     const { el, draft } = await open();
     await tapRow(el, 1);

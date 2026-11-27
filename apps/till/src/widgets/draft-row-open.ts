@@ -157,7 +157,8 @@ export class OpenDraftRow implements ReactiveController {
                 }
                 @wt-remove=${(event: Event) => {
                   event.stopPropagation();
-                  if (live()) remove?.run();
+                  // The stepper checks the count it last drew, which may since have changed.
+                  if (live() && Number(line.quantity) <= 1) remove?.run();
                 }}
                 @wt-change=${(event: CustomEvent<{ value: number }>) => {
                   event.stopPropagation();
