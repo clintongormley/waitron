@@ -144,6 +144,7 @@ export async function pairedShutdownScenario(scratch: string, bin: string) {
         });
         const answer = await response.json();
         expect(response.status, JSON.stringify(answer)).toBe(202);
+        expect((await health()).shutdown).toMatchObject({ paired: true });
       };
       const detailsUrl = `${url}/management-api/venue-details`;
       const before = await fetch(detailsUrl, { ...via, headers });

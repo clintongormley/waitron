@@ -86,12 +86,15 @@ export function adminShutdownDuties(deps: {
       if (spare?.peerNodeId !== peer.nodeId || spare.state === "unknown") return undefined;
       peerNodeId = peer.nodeId;
     }
+    const mode = peerNodeId === undefined ? {} : { paired: true as const };
     if (status.enabled && status.destinations.length > 0)
-      return { target: "saved" as const, peerNodeId };
+      return { target: "saved" as const, peerNodeId, mode };
     const { meta, settings } = await readArchiveSettingsWithMeta(db, ring);
     if (meta !== null || settings !== null) return undefined;
     const key = loadBackupKey(await deps.readBoxEnv());
-    return key === undefined ? undefined : { target: key, peerNodeId };
+    return key === undefined
+      ? undefined
+      : { target: key, peerNodeId, mode: { ...mode, downloadOnly: true as const } };
   };
   let reportedPause: AbortSignal | undefined;
   async function reportPause(error: unknown, signal: AbortSignal): Promise<never> {
@@ -152,17 +155,20 @@ export function adminShutdownDuties(deps: {
   });
   return {
     ...shutdown,
+    async start() {
+      const dest = await destination();
+      if (dest === undefined) throw new AppError("box.shutdown_unavailable", {});
+      shutdown.start(dest.mode);
+    },
     available: async () => (await destination()) !== undefined,
     readStaff: () => (deps.workforceEnabled ? readShutdownStaff(db) : Promise.resolve([])),
     view: async () => {
       const dest = await destination().catch(() => undefined);
+      const status = shutdown.view();
       return {
         available: dest !== undefined,
-        ...(typeof dest?.target === "object" ? { downloadOnly: true as const } : {}),
-        ...(dest?.peerNodeId !== undefined || shutdown.checksSpare()
-          ? { paired: true as const }
-          : {}),
-        ...shutdown.status(),
+        ...(status.phase === "idle" ? dest?.mode : undefined),
+        ...status,
       };
     },
   };

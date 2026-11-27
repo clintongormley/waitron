@@ -248,13 +248,14 @@ it.each(["retry", "cancel", "shut-down-anyway"] as const)(
       },
     });
     try {
-      shutdown.start();
+      shutdown.start({ paired: true, downloadOnly: true });
+      expect(shutdown.view()).toEqual({ phase: "checking", paired: true, downloadOnly: true });
       await vi.waitFor(() => expect(shutdown.status().phase).toBe("download"));
       expect(checkedSpare).toBe(0);
       (await shutdown.beginDownload(name)).finish(true);
       shutdown.confirmDownload(name);
       await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
-      expect(shutdown.checksSpare()).toBe(true);
+      expect(shutdown.view()).toMatchObject({ paired: true, downloadOnly: true });
       expect({ backedUp, checkedSpare, marked, removed }).toEqual({
         backedUp: 1,
         checkedSpare: 1,

@@ -273,6 +273,8 @@ describe("checking the spare's upload before shutdown", () => {
     const h = await streaming({ sync: (args, env) => new FakeChild(args, env, "", []) });
     const first = h.litestream.running()!;
     const config = first.args[2]!;
+    const configBefore = await readFile(config, "utf8");
+    mkdirSync(join(h.directory, "stream", first.env.LITESTREAM_SYNC_SOCKET!));
     chmodSync(config, 0o400);
     try {
       first.exit(1);
@@ -283,6 +285,8 @@ describe("checking the spare's upload before shutdown", () => {
       const next = h.litestream.running()!;
       expect(next.env.LITESTREAM_SYNC_SOCKET).toMatch(/^sync-[a-f0-9]+\.sock$/);
       expect(next.env.LITESTREAM_SYNC_SOCKET).not.toBe(first.env.LITESTREAM_SYNC_SOCKET);
+      expect(await readFile(config, "utf8")).toBe(configBefore);
+      expect(h.logs.some(({ event }) => event === "stream.sync_socket_cleanup_failed")).toBe(true);
     } finally {
       chmodSync(config, 0o600);
     }

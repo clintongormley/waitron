@@ -6,6 +6,8 @@ import "./errors.js";
 
 export const SHUTDOWN_PATH = "/api/box/shutdown";
 
+type ShutdownMode = { paired?: true; downloadOnly?: true };
+
 export type ShutdownStatus =
   | { phase: "idle" | "checking" }
   | { phase: "ready"; checked?: false }
@@ -53,6 +55,7 @@ export function createAdminShutdown(deps: {
   const writers = new Set<Promise<void>>();
   type Attempt = {
     state: ShutdownStatus;
+    mode: ShutdownMode;
     controller: AbortController;
     settled: Promise<void>;
     duties?: ReturnType<NonNullable<typeof deps.pauseDuties>>;
@@ -168,11 +171,13 @@ export function createAdminShutdown(deps: {
   return {
     middleware,
     status: (): ShutdownStatus => attempt?.state ?? { phase: "idle" },
-    checksSpare: () => attempt?.checkSpare !== undefined,
-    start(): void {
+    view: (): ShutdownStatus & ShutdownMode =>
+      attempt === undefined ? { phase: "idle" } : { ...attempt.state, ...attempt.mode },
+    start(mode: ShutdownMode = {}): void {
       if (attempt !== undefined || closing) throw new AppError("box.shutdown_in_progress", {});
       const current: Attempt = {
         state: { phase: "checking" },
+        mode,
         controller: new AbortController(),
         settled: Promise.resolve(),
         drained: false,
