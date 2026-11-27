@@ -159,7 +159,9 @@ export function adminShutdownDuties(deps: {
       return {
         available: dest !== undefined,
         ...(typeof dest?.target === "object" ? { downloadOnly: true as const } : {}),
-        ...(dest?.peerNodeId === undefined ? {} : { paired: true as const }),
+        ...(dest?.peerNodeId !== undefined || shutdown.checksSpare()
+          ? { paired: true as const }
+          : {}),
         ...shutdown.status(),
       };
     },

@@ -1213,7 +1213,8 @@ Not in any track until the standalone primary is done.
   up to a minute and emails managers if it starts without confirmation. The
   till shows when the box is checking its backup. The
   [remaining slices](superpowers/plans/2026-11-26-h-a1418-box-stop-intent.md) cover more
-  shutdown choices and checking for replacement through Cloud. Other evidence that a box was replaced still needs a decision.
+  shutdown choices and checking for replacement through Cloud. Other evidence that a box was replaced
+  still needs a decision.
   A1557 (2026-11-20) added [the shared backup operation](../apps/server/src/backup-supervisor.ts)
   for scheduled and manual backups. A standalone main box with streaming and Cloud off can save
   and check a final copy at every saved backup destination before it records the next-start hold.
@@ -1225,8 +1226,8 @@ Not in any track until the standalone primary is done.
   and appliance power-off. On a paired main box, Box status offers checked shutdown or opens
   Servers for a controlled handover. Checked shutdown confirms the upload to the spare's store
   before recording the administrator hold. Decide separately whether a spare's answer can ever
-  clear that hold when it might have missed an off-box restore. Box status still needs to name the destination if a saved copy fails
-  its check.
+  clear that hold when it might have missed an off-box restore. Box status still needs to name the
+  destination if a saved copy fails its check.
 
 - **A1425. Every restore takes its own identity (owner, 2026-11-07).** A restored box still
   keeps the old box's identity. Part 3, cut to Cloud's emergency copy (Cloud agreed on 15 November),

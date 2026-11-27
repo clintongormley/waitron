@@ -59,6 +59,10 @@ process.on("exit", () => {
   for (const child of live) child.kill("SIGTERM");
 });
 
+export function litestreamExecutable(bin: string, cwd?: string): string {
+  return cwd !== undefined && bin.includes("/") ? resolvePath(bin) : bin;
+}
+
 /**
  * Starts `bin` with `args`, giving it `PATH`, `HOME` and `env` — never the rest of this process's
  * environment, which holds the vault key.
@@ -74,7 +78,7 @@ export function spawnLitestream(
   { cwd, killGraceMs = KILL_GRACE_MS }: { cwd?: string; killGraceMs?: number } = {},
 ): ChildHandle {
   // Node leaves out a variable whose value is undefined, rather than passing the text "undefined".
-  const child = spawn(cwd !== undefined && bin.includes("/") ? resolvePath(bin) : bin, [...args], {
+  const child = spawn(litestreamExecutable(bin, cwd), [...args], {
     cwd,
     env: { PATH: process.env.PATH, HOME: process.env.HOME, ...env },
     stdio: ["ignore", "pipe", "pipe"],

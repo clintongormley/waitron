@@ -1,9 +1,9 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { once } from "node:events";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { BucketOperation } from "./errors.js";
@@ -240,6 +240,7 @@ describe("checking the spare's upload before shutdown", () => {
   it.each([
     [0, { txid: 9, replica_txid: 10 }, true],
     [0, { txid: 9, replica_txid: 8 }, false],
+    [0, { db_path: "/another/venue.db", txid: 9, replica_txid: 9 }, false],
     [0, { txid: 0, replica_txid: 0 }, false],
     [0, { txid: 9 }, false],
     [0, "invalid response", false],
@@ -267,6 +268,25 @@ describe("checking the spare's upload before shutdown", () => {
       );
     },
   );
+
+  it("restarts the paired replica with a new socket even if its existing config is read only", async () => {
+    const h = await streaming({ sync: (args, env) => new FakeChild(args, env, "", []) });
+    const first = h.litestream.running()!;
+    const config = first.args[2]!;
+    chmodSync(config, 0o400);
+    try {
+      first.exit(1);
+      await h.clock.until(
+        () => h.litestream.replicas().length === 2 || h.supervisor.status().state === "off",
+      );
+      expect(h.supervisor.status()).toMatchObject({ state: "streaming", generation: h.generation });
+      const next = h.litestream.running()!;
+      expect(next.env.LITESTREAM_SYNC_SOCKET).toMatch(/^sync-[a-f0-9]+\.sock$/);
+      expect(next.env.LITESTREAM_SYNC_SOCKET).not.toBe(first.env.LITESTREAM_SYNC_SOCKET);
+    } finally {
+      chmodSync(config, 0o600);
+    }
+  });
 
   it("stops the sync command when the administrator cancels", async () => {
     let command: FakeChild | undefined;
@@ -2174,19 +2194,25 @@ describe("a Litestream left running by a server that died", () => {
     expect(existsSync(join(h.directory, "stream", "litestream.pid"))).toBe(false);
   });
 
-  it("stops a leftover whose PID and command line are this box's Litestream, before starting its own", async () => {
-    const binDir = await binDirectory();
-    const h = await harness({ litestreamBin: join(binDir, "litestream") });
-    const configDir = join(h.directory, "stream");
-    mkdirSync(configDir, { recursive: true });
-    const leftover = await processNamed(binDir, "litestream", join(configDir, "litestream.yml"));
-    const gone = once(leftover, "exit");
-    writeFileSync(join(configDir, "litestream.pid"), `${leftover.pid}\n`);
-    await h.supervisor.start();
-    expect((await gone)[1]).toBe("SIGTERM");
-    await h.clock.until(() => h.litestream.running() !== undefined);
-    expect(h.logs.some((line) => line.event === "stream.leftover_stopped")).toBe(true);
-  });
+  it.each(["absolute", "relative"])(
+    "stops its own leftover configured with an %s path",
+    async (kind) => {
+      const binDir = await binDirectory();
+      const absolute = join(binDir, "litestream");
+      const h = await harness({
+        litestreamBin: kind === "absolute" ? absolute : relative(process.cwd(), absolute),
+      });
+      const configDir = join(h.directory, "stream");
+      mkdirSync(configDir, { recursive: true });
+      const leftover = await processNamed(binDir, "litestream", join(configDir, "litestream.yml"));
+      const gone = once(leftover, "exit");
+      writeFileSync(join(configDir, "litestream.pid"), `${leftover.pid}\n`);
+      await h.supervisor.start();
+      await h.clock.until(() => h.litestream.running() !== undefined);
+      expect(h.logs.some((line) => line.event === "stream.leftover_stopped")).toBe(true);
+      expect((await gone)[1]).toBe("SIGTERM");
+    },
+  );
 
   it("kills a leftover that ignores the polite signal, after the grace", async () => {
     const binDir = await binDirectory();

@@ -196,6 +196,25 @@ it.each([
   }
 });
 
+it("retries the spare check after checking a saved backup", async () => {
+  const checkSpare = vi.fn().mockRejectedValueOnce(new Error("The spare is behind"));
+  const check = vi.fn(async () => ({ checkSpare }));
+  const save = vi.fn(async () => {});
+  const shutdown = createAdminShutdown({ check, save, clear: async () => {} });
+  try {
+    shutdown.start();
+    await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    expect(save).not.toHaveBeenCalled();
+    shutdown.resolvePaused("retry");
+    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready" }));
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(checkSpare).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenCalledTimes(1);
+  } finally {
+    await shutdown.close();
+  }
+});
+
 it.each(["retry", "cancel", "shut-down-anyway"] as const)(
   "keeps the hold absent after a spare check fails, then handles %s",
   async (decision) => {
@@ -235,6 +254,7 @@ it.each(["retry", "cancel", "shut-down-anyway"] as const)(
       (await shutdown.beginDownload(name)).finish(true);
       shutdown.confirmDownload(name);
       await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+      expect(shutdown.checksSpare()).toBe(true);
       expect({ backedUp, checkedSpare, marked, removed }).toEqual({
         backedUp: 1,
         checkedSpare: 1,

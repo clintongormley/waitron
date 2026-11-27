@@ -914,6 +914,14 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
     expect(linesSince(logAtJoin).filter((line) => line.event === "spare.first_copy_ready")).toEqual(
       [],
     );
+    const beforeCopy = await fetch(`${urlM}/api/box/health`, {
+      ...viaM,
+      headers: { ...(await managementHeaders(urlM, boxM.origin, viaM)), "x-waitron-live": "1" },
+    });
+    expect(beforeCopy.status).toBe(200);
+    expect(await beforeCopy.json()).toMatchObject({
+      shutdown: { available: false, phase: "idle" },
+    });
     releaseCopy();
 
     clock.begin("spare-copy");

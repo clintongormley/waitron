@@ -520,7 +520,7 @@ it.each([false, true])("keeps the shutdown hold across starts (paired: %s)", asy
   const confirmedBySpare = vi.fn(async () => ({
     result: "proceed" as const,
     successorNodeId: null,
-    hasCountedPeer: true,
+    hasCountedPeer: true as const,
   }));
   if (paired) {
     const ring = loadKeyRing(TRADING_BOOT_KEY_ENV);

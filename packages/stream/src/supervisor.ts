@@ -11,6 +11,7 @@ import { CommitLog, computeLag } from "./freshness.js";
 import { claimGeneration, generationPrefix, markerKey, pruneGenerations } from "./generations.js";
 import {
   LITESTREAM_VERSION,
+  SYNC_SOCKET_ENV,
   litestreamConfig,
   litestreamEnv,
   litestreamMetaDir,
@@ -20,6 +21,7 @@ import {
   KILL_GRACE_MS,
   readCommandLine,
   checkReplicatedPosition,
+  litestreamExecutable,
   spawnLitestream,
   type ChildHandle,
   type SpawnFn,
@@ -991,15 +993,17 @@ export class StreamSupervisor {
     }
     await rm(pidPath, { force: true });
     if (!Number.isSafeInteger(pid) || pid <= 1) return;
-    // Compared as the text `readCommandLine` gives, the arguments joined by spaces, against the
-    // binary as configured: an argument holding a space cannot be told from two arguments, and the
-    // same binary started by another path does not match.
-    const ours = [
-      this.#deps.litestreamBin,
-      ...replicateArgs(join(this.#deps.configDir, CONFIG_FILE)),
-    ].join(" ");
-    const isOurs = async () =>
-      (await (this.#deps.readCommandLine ?? readCommandLine)(pid)) === ours;
+    // Paired children resolve a relative binary path before entering the socket directory.
+    // Match both spellings with this box's configuration path.
+    const { litestreamBin, configDir } = this.#deps;
+    const args = replicateArgs(join(configDir, CONFIG_FILE));
+    const ours = [litestreamBin, litestreamExecutable(litestreamBin, configDir)].map((bin) =>
+      [bin, ...args].join(" "),
+    );
+    const isOurs = async () => {
+      const command = await (this.#deps.readCommandLine ?? readCommandLine)(pid);
+      return command !== null && ours.includes(command);
+    };
     if (!(await isOurs())) return;
     if (!sendSignal(pid, "SIGTERM")) return;
     this.#deps.log("warn", "stream.leftover_stopped", { pid });
@@ -1076,31 +1080,23 @@ export class StreamSupervisor {
     const { bucket, configDir, venueDbPath } = this.#deps;
     await mkdir(configDir, { recursive: true, mode: 0o700 });
     const configPath = join(configDir, CONFIG_FILE);
-    const url = replicaUrl(bucket, generation);
-    const prepare = async () => {
-      const replica = this.#deps.prepareShutdownSync
-        ? { socket: `sync-${randomBytes(8).toString("hex")}.sock`, stopped: new AbortController() }
-        : undefined;
-      await writeFile(
-        configPath,
-        litestreamConfig({ dbPath: venueDbPath, replicaUrl: url, socket: replica?.socket }),
-        { mode: 0o600 },
-      );
-      return replica;
-    };
-    const replica = await prepare();
+    await writeFile(
+      configPath,
+      litestreamConfig({
+        dbPath: venueDbPath,
+        replicaUrl: replicaUrl(bucket, generation),
+        enableSyncSocket: this.#deps.prepareShutdownSync,
+      }),
+      { mode: 0o600 },
+    );
     // Litestream's own record of what it has uploaded describes the PREVIOUS generation; left in
     // place, it fills the new one from that position onwards and no full copy is ever written there.
     if (fresh) await rm(litestreamMetaDir(venueDbPath), { recursive: true, force: true });
     signal.throwIfAborted();
-    this.#keeper = this.#keep(configPath, replica, prepare);
+    this.#keeper = this.#keep(configPath);
   }
 
-  #keep(
-    configPath: string,
-    replica: ShutdownReplica | undefined,
-    prepare: () => Promise<ShutdownReplica | undefined>,
-  ): Keeper {
+  #keep(configPath: string): Keeper {
     const wake = new AbortController();
     const pidPath = join(this.#deps.configDir, PID_FILE);
     let current: ChildHandle | undefined;
@@ -1108,13 +1104,19 @@ export class StreamSupervisor {
       let attempt = 0;
       while (!wake.signal.aborted) {
         const startedAt = this.#deps.now().getTime();
+        const replica = this.#deps.prepareShutdownSync
+          ? {
+              socket: `sync-${randomBytes(8).toString("hex")}.sock`,
+              stopped: new AbortController(),
+            }
+          : undefined;
         let code: number | null;
         try {
           // Resolve the socket relative to the private config directory to fit sockaddr_un.
           const cwd = replica === undefined ? undefined : this.#deps.configDir;
-          current = this.#spawn(this.#deps.litestreamBin, replicateArgs(configPath), this.#env, {
-            cwd,
-          });
+          const env =
+            replica === undefined ? this.#env : { ...this.#env, [SYNC_SOCKET_ENV]: replica.socket };
+          current = this.#spawn(this.#deps.litestreamBin, replicateArgs(configPath), env, { cwd });
           this.#shutdownReplica = replica;
           if (current.pid !== undefined) await this.#recordPid(pidPath, current.pid);
           code = await current.exited;
@@ -1122,7 +1124,13 @@ export class StreamSupervisor {
           this.#shutdownReplica = undefined;
           if (replica !== undefined) {
             replica.stopped.abort();
-            await rm(join(this.#deps.configDir, replica.socket), { force: true });
+            await rm(join(this.#deps.configDir, replica.socket), { force: true }).catch(
+              (error: unknown) => {
+                this.#deps.log("warn", "stream.sync_socket_cleanup_failed", {
+                  errorCode: codeOf(error),
+                });
+              },
+            );
           }
         }
         if (wake.signal.aborted) return;
@@ -1135,7 +1143,6 @@ export class StreamSupervisor {
           restartInMs: delay,
         });
         await this.#sleep(delay, wake.signal);
-        if (replica !== undefined && !wake.signal.aborted) replica = await prepare();
       }
     })().catch((error: unknown) => {
       // Not awaited: failing stops this keeper, and its stop() waits for this loop.

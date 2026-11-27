@@ -1483,10 +1483,11 @@ describe("the live copy's wiring", () => {
     const pairedRuntime = (
       litestream: FakeLitestream,
       store = new SwitchableStore(() => new Date()),
-      spawn = litestream.spawn,
+      overrides: Partial<Pick<StreamHostDeps, "spawn" | "isPrimary">> = {},
     ) =>
       runtime({
-        spawn,
+        spawn: litestream.spawn,
+        ...overrides,
         store,
         storeLookup: async (hostname) => {
           expect(hostname).toBe(SPARE_NAME);
@@ -1512,72 +1513,90 @@ describe("the live copy's wiring", () => {
       });
     }
 
-    it.each(["unchanged", "other spare", "link replaced", "process replaced"] as const)(
-      "checks the upload only for the running pair target (%s)",
-      async (change) => {
-        await withTransaction(db, (tx) => writeStreamSettings(tx, RING, SETTINGS, null));
-        const url = await startSpare("spare.pem");
-        await pair(url);
-        const litestream = new FakeLitestream();
-        const store = new SwitchableStore(() => new Date());
-        let command: FakeChild | undefined;
-        // Use the normal pipe and store wiring; only the Litestream process is a fake.
-        const spawn: SpawnFn = (bin, args, env) => {
-          if (args[0] !== "sync") return litestream.spawn(bin, args, env);
-          command = new FakeChild(
-            args,
-            env,
-            JSON.stringify({
-              db_path: args.at(-1),
-              txid: 6,
-              replica_txid: 6,
-              duration_ms: 1,
-            }),
-            [],
-          );
-          return command;
-        };
-        const rt = pairedRuntime(litestream, store, spawn);
-        try {
-          await rt.start();
-          await vi.waitFor(
-            () =>
-              expect(
-                litestream.running(),
-                JSON.stringify({ status: rt.status(), logs }),
-              ).toBeDefined(),
-            { timeout: 10_000 },
-          );
-          const generation = generationOf(rt.status());
-          store.upload(`${generation}/0000/0000000000000001-0000000000000001.ltx`);
-          await vi.waitFor(() => expect(rt.status().state).toBe("streaming"), { timeout: 10_000 });
-          const signal = new AbortController().signal;
-          const check = rt.checkShutdownUpload(
-            change === "other spare" ? "node-c" : "node-b",
-            signal,
-          );
-          if (change === "other spare") {
-            await expect(check).resolves.toBe(false);
-            expect(command).toBeUndefined();
-            return;
-          }
-          expect(command).toBeDefined();
-          if (change === "link replaced") await pair(`${url}/replaced`);
-          if (change === "process replaced") {
-            litestream.running()!.exit(1);
-            await vi.waitFor(() => expect(litestream.replicas()).toHaveLength(2), {
-              timeout: 5_000,
-            });
-            expect(generationOf(rt.status())).toBe(generation);
-          }
-          command!.exit(0);
-          await expect(check).resolves.toBe(change === "unchanged");
-        } finally {
-          command?.exit(1);
-          await rt.stop();
+    it.each([
+      "unchanged",
+      "other spare",
+      "link replaced",
+      "process replaced",
+      "term changed",
+      "no longer primary",
+    ] as const)("checks the upload only for the running pair target (%s)", async (change) => {
+      await withTransaction(db, (tx) => writeStreamSettings(tx, RING, SETTINGS, null));
+      const url = await startSpare("spare.pem");
+      await pair(url);
+      const litestream = new FakeLitestream();
+      const store = new SwitchableStore(() => new Date());
+      let command: FakeChild | undefined;
+      // Use the normal pipe and store wiring; only the Litestream process is a fake.
+      const spawn: SpawnFn = (bin, args, env) => {
+        if (args[0] !== "sync") return litestream.spawn(bin, args, env);
+        command = new FakeChild(
+          args,
+          env,
+          JSON.stringify({
+            db_path: args.at(-1),
+            txid: 6,
+            replica_txid: 6,
+            duration_ms: 1,
+          }),
+          [],
+        );
+        return command;
+      };
+      let primary = true;
+      const rt = pairedRuntime(litestream, store, { spawn, isPrimary: () => primary });
+      try {
+        await rt.start();
+        await vi.waitFor(
+          () =>
+            expect(
+              litestream.running(),
+              JSON.stringify({ status: rt.status(), logs }),
+            ).toBeDefined(),
+          { timeout: 10_000 },
+        );
+        const generation = generationOf(rt.status());
+        store.upload(`${generation}/0000/0000000000000001-0000000000000001.ltx`);
+        await vi.waitFor(() => expect(rt.status().state).toBe("streaming"), { timeout: 10_000 });
+        const signal = new AbortController().signal;
+        const check = rt.checkShutdownUpload(
+          change === "other spare" ? "node-c" : "node-b",
+          signal,
+        );
+        if (change === "other spare") {
+          await expect(check).resolves.toBe(false);
+          expect(command).toBeUndefined();
+          return;
         }
-      },
-    );
+        expect(command).toBeDefined();
+        if (change === "link replaced") await pair(`${url}/replaced`);
+        if (change === "no longer primary") primary = false;
+        if (change === "term changed") {
+          const chart = (await readNodeMembership(db))!;
+          await writeNodeMembership(
+            db,
+            buildNextMembershipDocument({
+              heldDocument: chart,
+              nodes: chart.body.nodes,
+              signerNodeId: NODE_ID,
+              signerPrivateKey: keys.privateKey,
+            }),
+          );
+        }
+        if (change === "process replaced") {
+          litestream.running()!.exit(1);
+          await vi.waitFor(() => expect(litestream.replicas()).toHaveLength(2), {
+            timeout: 5_000,
+          });
+          expect(generationOf(rt.status())).toBe(generation);
+        }
+        command!.exit(0);
+        await expect(check).resolves.toBe(change === "unchanged");
+      } finally {
+        command?.exit(1);
+        await rt.stop();
+      }
+    });
 
     it("streams to the spare's store when the pair link says streaming", async () => {
       await withTransaction(db, (tx) => writeStreamSettings(tx, RING, SETTINGS, null));

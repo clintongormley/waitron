@@ -170,6 +170,8 @@ export async function pairedShutdownScenario(scratch: string, bin: string) {
           ms,
           async () => {
             const view = (await health()).shutdown;
+            if (view?.phase === "ready" && expected === "paused")
+              throw new Error("shutdown reported ready while the spare upload was held");
             if (view?.phase === "paused" && expected !== "paused")
               throw new Error(`shutdown paused: ${view.errorCode}`);
             return view?.phase === expected ? view : undefined;

@@ -168,6 +168,7 @@ export function createAdminShutdown(deps: {
   return {
     middleware,
     status: (): ShutdownStatus => attempt?.state ?? { phase: "idle" },
+    checksSpare: () => attempt?.checkSpare !== undefined,
     start(): void {
       if (attempt !== undefined || closing) throw new AppError("box.shutdown_in_progress", {});
       const current: Attempt = {

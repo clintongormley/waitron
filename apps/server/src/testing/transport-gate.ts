@@ -329,8 +329,8 @@ export function trackedSpawn(
   onChild?: (pid: number, args: readonly string[]) => void,
   extraEnv: Readonly<Record<string, string>> = {},
 ): SpawnFn {
-  return (bin, args, env) => {
-    const child = spawnLitestream(bin, args, { ...env, ...extraEnv });
+  return (bin, args, env, options) => {
+    const child = spawnLitestream(bin, args, { ...env, ...extraEnv }, options);
     if (onChild && child.pid !== undefined) {
       try {
         onChild(child.pid, args);
