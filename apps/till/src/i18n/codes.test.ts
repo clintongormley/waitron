@@ -33,7 +33,7 @@ it.each([
 
 it("words Keep as tip refused while the venue takes no tips, saying to give the money back", () => {
   expect(codeMessage("bill.tip_not_allowed_on_excess", "en")).toBe(
-    "This venue does not take tips. Give the money back instead.",
+    "This venue does not take tips. Refund the money instead.",
   );
   expect(codeMessage("bill.tip_not_allowed_on_excess", "es")).toBe(
     "Este local no acepta propinas. Devuelve el dinero.",
@@ -51,7 +51,7 @@ it("words Keep as tip refused for an amount that has changed, asking staff to ch
 
 it("words Keep as tip refused on a bill that comes to nothing, saying why and to give the money back", () => {
   expect(codeMessage("bill.tip_needs_a_sale", "en")).toBe(
-    "This bill comes to nothing, so there is no sale to tip on. Give the money back instead.",
+    "This bill comes to nothing, so there is no sale to tip on. Refund the money instead.",
   );
   expect(codeMessage("bill.tip_needs_a_sale", "es")).toBe(
     "Esta cuenta no suma nada, así que no hay venta en la que dejar propina. Devuelve el dinero.",
@@ -60,7 +60,7 @@ it("words Keep as tip refused on a bill that comes to nothing, saying why and to
 
 it("words a bill paid more than it comes to without promising Keep as tip where the bill does not offer it", () => {
   expect(codeMessage("bill.overpaid", "en")).toBe(
-    "This bill has been paid more than it comes to. First give back the extra on the bill, or keep it as a tip where the bill offers that.",
+    "This bill has been paid more than it comes to. First refund the extra on the bill, or keep it as a tip where the bill offers that.",
   );
   expect(codeMessage("bill.overpaid", "es")).toBe(
     "Esta cuenta se ha pagado de más. Primero devuelve en la cuenta lo que sobra, o guárdalo como propina si la cuenta lo ofrece.",
@@ -69,10 +69,10 @@ it("words a bill paid more than it comes to without promising Keep as tip where 
 
 it("words a refund that now has to be recorded on the receipt, in both languages", () => {
   expect(codeMessage("tender.refund_needs_correction", "en")).toBe(
-    "This money now has to be recorded on the receipt as it goes back. Close this window and open Give money back again to carry on.",
+    "This money now has to be recorded on the receipt as it is refunded. Close this window and open Refund again to carry on.",
   );
   expect(codeMessage("tender.refund_needs_correction", "es")).toBe(
-    "Este dinero ahora tiene que registrarse en el ticket al devolverse. Cierra esta ventana y vuelve a abrir Devolver dinero para continuar.",
+    "Este dinero ahora tiene que registrarse en el ticket al devolverse. Cierra esta ventana y vuelve a abrir Devolución para continuar.",
   );
 });
 
@@ -94,7 +94,7 @@ it("words a refused or held filing by the page that shows which, and in Give mon
     "La Agencia Tributaria rechazó esta factura, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después vuelve a intentarlo.",
   );
   expect(giveBackReasonMessage("sale.correction_not_admitted", "en", refused)).toBe(
-    "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, money for dishes or goodwill cannot go back; money owed for cancelled dishes and the extra paid on top can.",
+    "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
   );
   expect(giveBackReasonMessage("sale.correction_not_admitted", "es", refused)).toBe(
     "La Agencia Tributaria rechazó este ticket, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
@@ -112,7 +112,7 @@ it("words a refused or held filing by the page that shows which, and in Give mon
 
 it("tells staff money back that can still be recorded ends with Finish or Stop here", () => {
   expect(codeMessage("invoice_correction.still_correctable", "en")).toBe(
-    "Money has gone back and it can still be recorded. Press Finish or Stop here.",
+    "A refund was made and can still be recorded. Press Finish or Stop here.",
   );
   expect(codeMessage("invoice_correction.still_correctable", "es")).toBe(
     "Ya se ha devuelto dinero y aún se puede registrar. Pulsa Terminar o Parar aquí.",
@@ -672,7 +672,7 @@ it("words Nothing was served's refusals of served dishes and of a receipt AEAT h
 
 it("words money back larger than what is left of its receipt", () => {
   expect(codeMessage("sale.correction_exceeds_total", "en")).toBe(
-    "That is more than is left of this receipt after the money already given back.",
+    "That is more than is left of this receipt after the money already refunded.",
   );
   expect(codeMessage("sale.correction_exceeds_total", "es")).toBe(
     "Es más de lo que queda de este ticket después del dinero ya devuelto.",
@@ -1083,10 +1083,10 @@ it.each([
 
 it("says a dish list that no longer matches the invoice is out of date, in English and Spanish", () => {
   expect(codeMessage("sale.correction_scope_invalid", "en")).toBe(
-    "The dishes chosen are not on this receipt. Close this window and open Give money back again.",
+    "The dishes chosen are not on this receipt. Close this window and open Refund again.",
   );
   expect(codeMessage("sale.correction_scope_invalid", "es")).toBe(
-    "Los platos elegidos no están en este ticket. Cierra esta ventana y vuelve a abrir Devolver dinero.",
+    "Los platos elegidos no están en este ticket. Cierra esta ventana y vuelve a abrir Devolución.",
   );
 });
 
@@ -1126,10 +1126,10 @@ it.each([
 
 it("words sale.correction_unsupported for every flow that meets it, the whole-order cancel included", () => {
   expect(codeMessage("sale.correction_unsupported", "en")).toBe(
-    "The till cannot cancel or credit this invoice this way. If it has been paid, use Give money back.",
+    "The till cannot cancel or credit this invoice this way. If it has been paid, use Refund.",
   );
   expect(codeMessage("sale.correction_unsupported", "es")).toBe(
-    "La caja no puede anular ni abonar esta factura de esta forma. Si ya se ha pagado, usa Devolver dinero.",
+    "La caja no puede anular ni abonar esta factura de esta forma. Si ya se ha pagado, usa Devolución.",
   );
 });
 
@@ -1146,19 +1146,19 @@ it("words a full invoice made from receipts, and one the tax agency refused with
     [
       "giveBackFilingMessage",
       notSimplified,
-      "This is a full invoice made from receipts, so the money given back cannot be recorded on it here.",
+      "This is a full invoice made from receipts, so the refund cannot be recorded on it here.",
       "Es una factura completa que sustituye tickets, así que aquí no se puede registrar en ella el dinero devuelto.",
     ],
     [
       "codeMessage",
       noFix,
-      "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
+      "The tax agency refused this full invoice and Waitron cannot fix that, so money refunded on it goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
       "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo, así que el dinero que se devuelva de esta factura aparece en Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
     ],
     [
       "giveBackFilingMessage",
       noFix,
-      "The tax agency refused this full invoice and Waitron cannot fix that. Once this money back ends, the money given back goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
+      "The tax agency refused this full invoice and Waitron cannot fix that. Once this refund ends, the money refunded goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
       "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo. Cuando termine esta devolución, el dinero devuelto aparecerá en Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
     ],
   ];
@@ -1178,31 +1178,31 @@ it("names a full invoice, not a receipt, in Give money back's and Money back und
     [
       "giveBackReasonMessage",
       "filing_refused",
-      "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, money for dishes or goodwill cannot go back; money owed for cancelled dishes and the extra paid on top can.",
+      "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
       "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
     ],
     [
       "giveBackFilingMessage",
       "filing_refused",
-      "The tax agency refused this full invoice, or sending it to the agency is on hold, so the money given back cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
+      "The tax agency refused this full invoice, or sending it to the agency is on hold, so the refund cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
       "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido, así que el dinero devuelto aún no se puede registrar en ella. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después pulsa Comprobar de nuevo.",
     ],
     [
       "giveBackFilingMessage",
       "wrong_node",
-      "Another box issued this full invoice, so this box cannot record the money given back on it.",
+      "Another box issued this full invoice, so this box cannot record the refund on it.",
       "Otro servidor emitió esta factura completa, así que este servidor no puede registrar en ella el dinero devuelto.",
     ],
     [
       "giveBackFilingMessage",
       "voided",
-      "This full invoice was cancelled, so the money given back cannot be recorded on it.",
+      "This full invoice was cancelled, so the refund cannot be recorded on it.",
       "Esta factura completa se anuló, así que el dinero devuelto no se puede registrar en ella.",
     ],
     [
       "giveBackFilingMessage",
       "missing",
-      "The money given back cannot be recorded on this full invoice now, so Finish is not offered. Press Check again to see whether that has changed.",
+      "The refund cannot be recorded on this full invoice now, so Finish is not offered. Press Check again to see whether that has changed.",
       "El dinero devuelto no se puede registrar ahora en esta factura completa, así que no se ofrece Terminar. Pulsa Comprobar de nuevo para ver si ha cambiado.",
     ],
   ];
@@ -1223,7 +1223,7 @@ it("says in Money back under way that the business's registered address is missi
   expect(
     giveBackFilingMessage("fiscal.taxpayer_domicile_missing", "en", { fullInvoice: true }),
   ).toBe(
-    "The business's registered address is missing, so the money given back cannot be recorded on this full invoice yet. Add it on the dashboard, under Venue settings › Venue details. Then press Check again.",
+    "The business's registered address is missing, so the refund cannot be recorded on this full invoice yet. Add it on the dashboard, under Venue settings › Venue details. Then press Check again.",
   );
   expect(
     giveBackFilingMessage("fiscal.taxpayer_domicile_missing", "es", { fullInvoice: true }),
@@ -1308,16 +1308,16 @@ it.each([
 it("says what can still go back from a payment on account's own ticket, naming it, and sends a bill refund to that ticket", () => {
   const ticket = { invoiceNumber: "A/12" };
   expect(codeMessage("tender.refund_of_advance", "en", ticket)).toBe(
-    "This ticket A/12 is a payment on account, so money for dishes or goodwill cannot go back from it now. Any extra paid on top can still go back.",
+    "This ticket A/12 is a payment on account, so dishes or goodwill cannot be refunded from it now. Any extra paid on top can still be refunded.",
   );
   expect(codeMessage("tender.refund_of_advance", "es", ticket)).toBe(
     "Este ticket A/12 es un pago a cuenta, así que ahora no se puede devolver desde él dinero de platos o por cortesía. Lo pagado de más, si lo hay, sí se puede devolver.",
   );
   expect(codeMessage("bill.refund_of_advance", "en", ticket)).toBe(
-    "This payment was taken on account and has its own ticket A/12, so it is not refunded from the bill. While the table's bill is still open, give it back with Give money back on that ticket: that gives the money back and takes it off the bill.",
+    "This payment was taken on account and has its own ticket A/12, so it is not refunded from the bill. While the table's bill is still open, refund it from that ticket: that refunds the money and takes it off the bill.",
   );
   expect(codeMessage("bill.refund_of_advance", "es", ticket)).toBe(
-    "Este pago se cobró a cuenta y tiene su propio ticket A/12, así que no se devuelve desde la cuenta. Mientras la cuenta de la mesa siga abierta, devuélvelo con Devolver dinero en ese ticket: así se devuelve el dinero y se quita de la cuenta.",
+    "Este pago se cobró a cuenta y tiene su propio ticket A/12, así que no se devuelve desde la cuenta. Mientras la cuenta de la mesa siga abierta, devuélvelo con Devolución en ese ticket: así se devuelve el dinero y se quita de la cuenta.",
   );
   expect(codeMessage("bill.refund_of_advance", "en")).toMatch(
     /^This payment was taken on account and has its own ticket, so /,
@@ -1330,27 +1330,27 @@ it("says what can still go back from a payment on account's own ticket, naming i
 it("sends staff to Give money back on the table's receipt while it holds money, then on this ticket for the rest, naming it", () => {
   const holding = { invoiceNumber: "A/45", finalMoneyLeft: "20.00" };
   expect(codeMessage("advance.taken_off_final_invoice", "en", holding)).toBe(
-    "This payment on account was already taken off the table's receipt A/45, so money for dishes or goodwill cannot go back from this ticket yet. First give money back with Give money back on A/45: it gives back money paid on A/45. Once nothing paid on A/45 is left, Give money back on this ticket gives back the rest.",
+    "This payment on account was already taken off the table's receipt A/45, so dishes or goodwill cannot be refunded from this ticket yet. First open Refund on A/45: it refunds money paid on A/45. Once nothing paid on A/45 is left, Refund on this ticket refunds the rest.",
   );
   expect(codeMessage("advance.taken_off_final_invoice", "es", holding)).toBe(
-    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Primero devuelve dinero con Devolver dinero en A/45: devuelve dinero pagado en A/45. Cuando no quede nada pagado en A/45, Devolver dinero en este ticket devuelve el resto.",
+    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Primero devuelve dinero con Devolución en A/45: devuelve dinero pagado en A/45. Cuando no quede nada pagado en A/45, Devolución en este ticket devuelve el resto.",
   );
   expect(codeMessage("advance.taken_off_final_invoice", "en")).toMatch(
-    /^This payment on account was already taken off the table's receipt, so money for dishes or goodwill cannot go back from this ticket yet\. First give money back with Give money back on that receipt: it gives back money paid on it\. /,
+    /^This payment on account was already taken off the table's receipt, so dishes or goodwill cannot be refunded from this ticket yet\. First open Refund on that receipt: it refunds money paid on it\. /,
   );
   expect(codeMessage("advance.taken_off_final_invoice", "es")).toMatch(
-    /^Este pago a cuenta ya se descontó en el ticket de la mesa, así que .* Devolver dinero en ese ticket: devuelve dinero pagado en él\. /,
+    /^Este pago a cuenta ya se descontó en el ticket de la mesa, así que .* Devolución en ese ticket: devuelve dinero pagado en él\. /,
   );
 });
 
 it.each([
   [
     "en",
-    "This payment on account was already taken off the table's receipt A/45, and nothing paid on A/45 is left to give back. Give money back on this ticket still gives money back from this payment.",
+    "This payment on account was already taken off the table's receipt A/45, and nothing paid on A/45 is left to refund. Refund on this ticket still refunds money from this payment.",
   ],
   [
     "es",
-    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45 y no queda nada pagado en A/45 por devolver. Devolver dinero en este ticket sigue devolviendo dinero de este pago.",
+    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45 y no queda nada pagado en A/45 por devolver. Devolución en este ticket sigue devolviendo dinero de este pago.",
   ],
 ])(
   "sends staff straight to Give money back on this ticket once the table's receipt has nothing left to give back, in %s",
@@ -1367,13 +1367,13 @@ it.each([
 it.each([
   [
     "en",
-    "This payment on account was already taken off the table's receipt A/45, which is not fully paid yet, so money for dishes or goodwill cannot go back from this ticket yet. Once A/45 is fully paid, first give money back with Give money back on A/45: it gives back money paid on A/45. Once nothing paid on A/45 is left, Give money back on this ticket gives back the rest.",
-    "This payment on account was already taken off the table's receipt, which is not fully paid yet, so money for dishes or goodwill cannot go back from this ticket yet. Once that receipt is fully paid, first give money back with Give money back on it: it gives back money paid on it. Once nothing paid on it is left, Give money back on this ticket gives back the rest.",
+    "This payment on account was already taken off the table's receipt A/45, which is not fully paid yet, so dishes or goodwill cannot be refunded from this ticket yet. Once A/45 is fully paid, first open Refund on A/45: it refunds money paid on A/45. Once nothing paid on A/45 is left, Refund on this ticket refunds the rest.",
+    "This payment on account was already taken off the table's receipt, which is not fully paid yet, so dishes or goodwill cannot be refunded from this ticket yet. Once that receipt is fully paid, first open Refund on it: it refunds money paid on it. Once nothing paid on it is left, Refund on this ticket refunds the rest.",
   ],
   [
     "es",
-    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45, que aún no está pagado del todo, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Cuando A/45 esté pagado del todo, devuelve primero dinero con Devolver dinero en A/45: devuelve dinero pagado en A/45. Cuando no quede nada pagado en A/45, Devolver dinero en este ticket devuelve el resto.",
-    "Este pago a cuenta ya se descontó en el ticket de la mesa, que aún no está pagado del todo, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Cuando ese ticket esté pagado del todo, devuelve primero dinero con Devolver dinero en él: devuelve dinero pagado en él. Cuando no quede nada pagado en él, Devolver dinero en este ticket devuelve el resto.",
+    "Este pago a cuenta ya se descontó en el ticket de la mesa A/45, que aún no está pagado del todo, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Cuando A/45 esté pagado del todo, devuelve primero dinero con Devolución en A/45: devuelve dinero pagado en A/45. Cuando no quede nada pagado en A/45, Devolución en este ticket devuelve el resto.",
+    "Este pago a cuenta ya se descontó en el ticket de la mesa, que aún no está pagado del todo, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Cuando ese ticket esté pagado del todo, devuelve primero dinero con Devolución en él: devuelve dinero pagado en él. Cuando no quede nada pagado en él, Devolución en este ticket devuelve el resto.",
   ],
 ])(
   "sends staff to Give money back on the table's receipt only once it is fully paid, while it is still being paid, in %s",
@@ -1387,7 +1387,7 @@ it.each([
 );
 
 it.each([
-  ["en", "Reopen the bill, then give the money back."],
+  ["en", "Reopen the bill, then refund it."],
   ["es", "Reabre la cuenta y luego devuelve el dinero."],
 ])(
   "sends staff to reopen the table's bill before giving the money back, paid in part or not at all, in %s",
@@ -1406,13 +1406,13 @@ it.each([
 it.each([
   [
     "en",
-    "Nothing paid on this bill is left to give back. To give money back, choose Give money back on the ticket of the payment on account A/12: it gives money back from that payment.",
-    "Nothing paid on this bill is left to give back. To give money back, choose Give money back on the tickets of the payments on account A/12 and A/13: it gives money back from those payments.",
+    "Nothing paid on this bill is left to refund. To refund, choose Refund on the ticket of the payment on account A/12: it refunds money from that payment.",
+    "Nothing paid on this bill is left to refund. To refund, choose Refund on the tickets of the payments on account A/12 and A/13: it refunds money from those payments.",
   ],
   [
     "es",
-    "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolver dinero en el ticket del pago a cuenta A/12: devuelve dinero de ese pago.",
-    "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolver dinero en los tickets de los pagos a cuenta A/12 y A/13: devuelve dinero de esos pagos.",
+    "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolución en el ticket del pago a cuenta A/12: devuelve dinero de ese pago.",
+    "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolución en los tickets de los pagos a cuenta A/12 y A/13: devuelve dinero de esos pagos.",
   ],
 ])(
   "points a money back with nothing left to give back straight to Give money back on the payments on account, in %s",
@@ -1436,20 +1436,20 @@ it("points a money back short of money to Give money back on the payments on acc
   const one = { advanceInvoiceNumbers: ["A/12"] };
   const two = { advanceInvoiceNumbers: ["A/12", "A/13"] };
   expect(codeMessage("invoice_correction.money_short", "en", one)).toBe(
-    "That is more than is left to give back from this bill's payments. Enter a smaller amount. For the rest, once this money back is done, choose Give money back on the ticket of the payment on account A/12: it gives money back from that payment.",
+    "That is more than is left to refund from this bill's payments. Enter a smaller amount. For the rest, once this refund is done, choose Refund on the ticket of the payment on account A/12: it refunds money from that payment.",
   );
   expect(codeMessage("invoice_correction.money_short", "es", one)).toBe(
-    "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor. Para lo que falte, cuando termine esta devolución, elige Devolver dinero en el ticket del pago a cuenta A/12: devuelve dinero de ese pago.",
+    "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor. Para lo que falte, cuando termine esta devolución, elige Devolución en el ticket del pago a cuenta A/12: devuelve dinero de ese pago.",
   );
   expect(codeMessage("invoice_correction.money_short", "en", two)).toBe(
-    "That is more than is left to give back from this bill's payments. Enter a smaller amount. For the rest, once this money back is done, choose Give money back on the tickets of the payments on account A/12 and A/13: it gives money back from those payments.",
+    "That is more than is left to refund from this bill's payments. Enter a smaller amount. For the rest, once this refund is done, choose Refund on the tickets of the payments on account A/12 and A/13: it refunds money from those payments.",
   );
   expect(codeMessage("invoice_correction.money_short", "es", two)).toBe(
-    "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor. Para lo que falte, cuando termine esta devolución, elige Devolver dinero en los tickets de los pagos a cuenta A/12 y A/13: devuelve dinero de esos pagos.",
+    "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor. Para lo que falte, cuando termine esta devolución, elige Devolución en los tickets de los pagos a cuenta A/12 y A/13: devuelve dinero de esos pagos.",
   );
   for (const params of [undefined, { advanceInvoiceNumbers: [] }])
     expect(codeMessage("invoice_correction.money_short", "en", params)).toBe(
-      "That is more than is left to give back from this bill's payments. Enter a smaller amount.",
+      "That is more than is left to refund from this bill's payments. Enter a smaller amount.",
     );
 });
 
@@ -1471,10 +1471,7 @@ it("reads a money parameter that is not an amount as money left, never as nothin
 });
 
 it.each([
-  [
-    "en",
-    "That is more than is left to give back from this bill's payments. Enter a smaller amount.",
-  ],
+  ["en", "That is more than is left to refund from this bill's payments. Enter a smaller amount."],
   [
     "es",
     "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor.",
@@ -1495,22 +1492,22 @@ it.each([
 it("tells staff the receipt waits for the advance's open money back, naming the advance, to finish, stop or cancel it", () => {
   const advance = { invoiceNumber: "A/12" };
   expect(codeMessage("advance.correction_open", "en", advance)).toBe(
-    "The receipt cannot be issued while money back on the payment on account A/12 is under way. In Give money back on that ticket, finish, stop or cancel the money back; if it offers none of these, follow what it says. Then try again.",
+    "The receipt cannot be issued while a refund on the payment on account A/12 is under way. In Refund on that ticket, finish, stop or cancel the refund; if it offers none of these, follow what it says. Then try again.",
   );
   expect(codeMessage("advance.correction_open", "es", advance)).toBe(
-    "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta A/12. En Devolver dinero de ese ticket, termina, para o anula la devolución; si no ofrece nada de esto, sigue lo que indica. Después vuelve a intentarlo.",
+    "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta A/12. En Devolución de ese ticket, termina, para o anula la devolución; si no ofrece nada de esto, sigue lo que indica. Después vuelve a intentarlo.",
   );
   expect(codeMessage("advance.correction_open", "en")).toMatch(
-    /while money back on the payment on account is under way\. /,
+    /while a refund on the payment on account is under way\. /,
   );
 });
 
 it("tells staff an open money back carries on when Give money back opens again", () => {
   expect(codeMessage("invoice_correction.already_open", "en")).toBe(
-    "Money back on this receipt is already under way. Close this window and open Give money back again to carry on.",
+    "A refund on this receipt is already under way. Close this window and open Refund again to carry on.",
   );
   expect(codeMessage("invoice_correction.already_open", "es")).toBe(
-    "Ya hay una devolución en curso en este ticket. Cierra esta ventana y vuelve a abrir Devolver dinero para continuar.",
+    "Ya hay una devolución en curso en este ticket. Cierra esta ventana y vuelve a abrir Devolución para continuar.",
   );
 });
 
@@ -1636,10 +1633,10 @@ it("names the set menu whose removal depends on the dishes", () => {
 
 it("words Print the bill's not-served refusal as a choice for the whole list, in both languages", () => {
   expect(codeMessage("meal_end.unserved_dishes", "en")).toBe(
-    "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment with Give money back.",
+    "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment from the receipt.",
   );
   expect(codeMessage("meal_end.unserved_dishes", "es")).toBe(
-    "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Devolver dinero.",
+    "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Devolución.",
   );
 });
 
@@ -1720,13 +1717,13 @@ it("says a bill set for a full invoice gives no part payment a receipt of its ow
 it.each([
   [
     "free_item",
-    "This dish was given free, so it gives money back only together with the last paid dish on the bill. Untick Refund to cancel it on its own, or choose Void… on the last paid dish: its window brings this dish back with it.",
+    "This dish was given free, so it is refunded only together with the last paid dish on the bill. Untick Refund to cancel it on its own, or choose Void… on the last paid dish: its window brings this dish back with it.",
     "Este plato fue por invitación, así que solo devuelve dinero junto con el último plato pagado de la cuenta. Desmarca Devolución para cancelarlo solo, o elige Cancelar… en el último plato pagado: su ventana lo devuelve con él.",
   ],
   [
     "served",
-    "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then open Give money back on the receipt.",
-    "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después abre Devolver dinero en el recibo.",
+    "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then refund it from the receipt.",
+    "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después devuélvelo desde el recibo.",
   ],
   [
     "not_listed",
@@ -1759,8 +1756,8 @@ it.each([
   ],
   [
     "served",
-    "A dish given free on this bill has been served, so the paid dishes cannot all give money back here. Untick Refund on one of them, then give its money back from Give money back on the receipt.",
-    "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuelve su dinero desde Devolver dinero en el recibo.",
+    "A dish given free on this bill has been served, so the paid dishes cannot all be refunded here. Untick Refund on one of them, then refund it from the receipt.",
+    "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuélvelo desde el recibo.",
   ],
 ])("words Finish table's tab.free_item_with_dish by its reason %s", (reason, english, spanish) => {
   expect(freeItemAtFinishMessage(reason, "en")).toBe(english);
@@ -1789,10 +1786,10 @@ it("words bill.below_advances with the advances' amount, and without it when non
 it("words bill.below_advances met seating a Counter order with what to give back, and without it", () => {
   const seating = { reason: "seating", advances: "20.00", excess: "6.00" };
   expect(codeMessage("bill.below_advances", "en", seating)).toBe(
-    `${formatMoney("20.00", "en")} of this order was paid with its own receipt, and at the table its set menus would bring it below that. First give back ${formatMoney("6.00", "en")} on that receipt with Give money back, or keep the order at the Counter.`,
+    `${formatMoney("20.00", "en")} of this order was paid with its own receipt, and at the table its set menus would bring it below that. First refund ${formatMoney("6.00", "en")} from that receipt, or keep the order at the Counter.`,
   );
   expect(codeMessage("bill.below_advances", "es", seating)).toBe(
-    `${formatMoney("20.00", "es")} de este pedido se pagaron con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes ${formatMoney("6.00", "es")} de ese ticket con Devolver dinero, o deja el pedido en el mostrador.`,
+    `${formatMoney("20.00", "es")} de este pedido se pagaron con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes ${formatMoney("6.00", "es")} de ese ticket con Devolución, o deja el pedido en el mostrador.`,
   );
   for (const params of [
     { reason: "seating" },
@@ -1801,26 +1798,26 @@ it("words bill.below_advances met seating a Counter order with what to give back
     { reason: "seating", advances: 20, excess: 6 },
   ]) {
     expect(codeMessage("bill.below_advances", "en", params)).toBe(
-      "Part of this order was paid with its own receipt, and at the table its set menus would bring it below that. First give money back on that receipt with Give money back, or keep the order at the Counter.",
+      "Part of this order was paid with its own receipt, and at the table its set menus would bring it below that. First refund money from that receipt, or keep the order at the Counter.",
     );
     expect(codeMessage("bill.below_advances", "es", params)).toBe(
-      "Parte de este pedido se pagó con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes dinero de ese ticket con Devolver dinero, o deja el pedido en el mostrador.",
+      "Parte de este pedido se pagó con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes dinero de ese ticket con Devolución, o deja el pedido en el mostrador.",
     );
   }
 });
 
 it("words Give money back's refusals in both languages, saying nothing went back or what to do", () => {
   expect(codeMessage("give_back.changed", "en")).toBe(
-    "What can go back on this receipt changed since it was checked. Nothing has been given back. Check the new amounts and press Give back again.",
+    "What can be refunded on this receipt changed since it was checked. Nothing has been refunded. Check the new amounts and press Refund again.",
   );
   expect(codeMessage("give_back.changed", "es")).toBe(
     "Lo que se puede devolver de este ticket cambió desde que se comprobó. No se ha devuelto nada. Revisa los nuevos importes y vuelve a pulsar Devolver.",
   );
   expect(codeMessage("give_back.refund_failed", "en")).toBe(
-    "The card company did not make the refund, so that money has not gone back. Open Give money back again to try again or to choose another way.",
+    "The card company did not make the refund, so that money was not refunded. Open Refund again to try again or to choose another way.",
   );
   expect(codeMessage("give_back.refund_failed", "es")).toBe(
-    "La compañía de la tarjeta no hizo la devolución, así que ese dinero no se ha devuelto. Vuelve a abrir Devolver dinero para intentarlo de nuevo o elegir otra forma.",
+    "La compañía de la tarjeta no hizo la devolución, así que ese dinero no se ha devuelto. Vuelve a abrir Devolución para intentarlo de nuevo o elegir otra forma.",
   );
   for (const locale of ["en", "es"]) {
     expect(codeMessage("give_back.failed", locale)).not.toBe(codeMessage("unknown", locale));

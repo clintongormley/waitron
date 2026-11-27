@@ -880,7 +880,7 @@ it("says a served free item cannot come back and offers no refund for every port
   expect(root(el).querySelector('input[name="refund"]')).toBeNull();
   expect(freeLine(el)).toBeUndefined();
   expect(root(el).querySelector("[data-free-served]")?.textContent?.trim()).toBe(
-    "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then open Give money back on the receipt.",
+    "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then refund it from the receipt.",
   );
   expect(button(el).textContent?.trim()).toBe("Cancel");
   await pickReason(el);

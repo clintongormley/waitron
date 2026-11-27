@@ -1064,7 +1064,7 @@ describe("a money back left unfinished", () => {
   it("says how much went back and how to finish it on a till", () => {
     const params = { correctionId: "c1", saleId: "s1", moneyBack: "24.20" };
     expect(alertMessage("invoice_correction.unfinished", params, "en")).toBe(
-      "€24.20 went back to a customer over an hour ago, but that money back is not finished, so its corrective receipt has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish. If none of these can be pressed, follow what it says, then press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
+      "€24.20 was refunded to a customer over an hour ago, but that refund is not finished, so its corrective receipt has not been issued. On a till, open Find a bill and choose it under Refunds under way: refund the rest, or press Stop here or Finish. If none of these can be pressed, follow what it says, then press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
     );
     expect(alertMessage("invoice_correction.unfinished", params, "es")).toBe(
       "Hace más de una hora se devolvieron 24,20 € a un cliente, pero esa devolución no está terminada, así que no se ha emitido su ticket rectificativo. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar. Si no se puede pulsar ninguna de estas opciones, sigue lo que indica y pulsa allí Comprobar de nuevo. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
@@ -1081,7 +1081,7 @@ describe("a correction whose automatic filing was refused", () => {
       refusal: "authorization.not_permitted",
     };
     expect(alertMessage("invoice_correction.filing_refused", params, "en")).toBe(
-      "€24.20 went back to a customer, but its corrective receipt could not be issued. Do not give the money back again. On a till, open Find a bill and choose it under Money back under way. If it offers Finish, press it. If not, follow what it says, then press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
+      "€24.20 was refunded to a customer, but its corrective receipt could not be issued. Do not refund it again. On a till, open Find a bill and choose it under Refunds under way. If it offers Finish, press it. If not, follow what it says, then press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
     );
     expect(alertMessage("invoice_correction.filing_refused", params, "es")).toBe(
       "Se devolvieron 24,20 € a un cliente, pero no se ha podido emitir su ticket rectificativo. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso. Si ofrece Terminar, púlsalo. Si no, sigue lo que indica y pulsa allí Comprobar de nuevo. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
@@ -1094,7 +1094,7 @@ describe("a money back on a full invoice", () => {
 
   it("names its corrective invoice when left unfinished", () => {
     expect(alertMessage("invoice_correction.unfinished", params, "en")).toBe(
-      "€24.20 went back to a customer over an hour ago, but that money back is not finished, so its corrective invoice has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish. If none of these can be pressed, follow what it says, then press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
+      "€24.20 was refunded to a customer over an hour ago, but that refund is not finished, so its corrective invoice has not been issued. On a till, open Find a bill and choose it under Refunds under way: refund the rest, or press Stop here or Finish. If none of these can be pressed, follow what it says, then press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
     );
     expect(alertMessage("invoice_correction.unfinished", params, "es")).toBe(
       "Hace más de una hora se devolvieron 24,20 € a un cliente, pero esa devolución no está terminada, así que no se ha emitido su factura rectificativa. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar. Si no se puede pulsar ninguna de estas opciones, sigue lo que indica y pulsa allí Comprobar de nuevo. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
@@ -1104,7 +1104,7 @@ describe("a money back on a full invoice", () => {
   it("names its corrective invoice when its filing was refused", () => {
     const refused = { ...params, refusal: "authorization.not_permitted" };
     expect(alertMessage("invoice_correction.filing_refused", refused, "en")).toBe(
-      "€24.20 went back to a customer, but its corrective invoice could not be issued. Do not give the money back again. On a till, open Find a bill and choose it under Money back under way. If it offers Finish, press it. If not, follow what it says, then press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
+      "€24.20 was refunded to a customer, but its corrective invoice could not be issued. Do not refund it again. On a till, open Find a bill and choose it under Refunds under way. If it offers Finish, press it. If not, follow what it says, then press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
     );
     expect(alertMessage("invoice_correction.filing_refused", refused, "es")).toBe(
       "Se devolvieron 24,20 € a un cliente, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso. Si ofrece Terminar, púlsalo. Si no, sigue lo que indica y pulsa allí Comprobar de nuevo. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",

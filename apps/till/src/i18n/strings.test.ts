@@ -491,11 +491,11 @@ describe("Print the bill's own sentences", () => {
   it.each([
     [
       "en-GB",
-      "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Give money back.",
+      "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment from the receipt.",
     ],
     [
       "es-ES",
-      "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Devolver dinero.",
+      "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Devolución.",
     ],
   ])("offers no Mark served where none is drawn, in %s", (locale, message) => {
     expect(catalogues[locale]?.["meal_end.unserved_no_mark"]).toBe(message);
@@ -545,7 +545,7 @@ describe("Print the bill's refused wording", () => {
   it.each([
     [
       "en-GB",
-      "Some dishes on this bill are not marked served. On a full invoice naming a customer, money given back for a cancelled dish is not taken off the invoice, so take off any dish that may not come before you print.",
+      "Some dishes on this bill are not marked served. On a full invoice naming a customer, money refunded for a cancelled dish is not taken off the invoice, so take off any dish that may not come before you print.",
     ],
     [
       "es-ES",
@@ -571,18 +571,18 @@ describe("the Cancel item window's line for free items coming back with the last
 describe("the Finish table and Cancel item lines on a dish given free", () => {
   it.each([
     ["en-GB", "finish_table.free_refunded", "Given free: refunded with the paid dishes"],
-    ["en-GB", "finish_table.free_kept", "Given free: no money back"],
+    ["en-GB", "finish_table.free_kept", "Given free: no refund"],
     ["es-ES", "finish_table.free_refunded", "Por invitación: se devuelve con los platos pagados"],
     ["es-ES", "finish_table.free_kept", "Por invitación: no se devuelve dinero"],
     [
       "en-GB",
       "cancel_item.free_served",
-      "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then open Give money back on the receipt.",
+      "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then refund it from the receipt.",
     ],
     [
       "es-ES",
       "cancel_item.free_served",
-      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después abre Devolver dinero en el recibo.",
+      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuélvelo desde el recibo.",
     ],
   ])("reads in %s for %s", (locale, key, line) => {
     expect(catalogues[locale]?.[key as StringKey]).toBe(line);
@@ -604,16 +604,16 @@ describe("Give money back's words", () => {
     expect(keys.map((key) => [en[key], es[key]])).toEqual([
       ["Extra paid on top of the bill", "Lo pagado de más"],
       [
-        "Give back some or all of the {amount} paid on top of the bill, and nothing else. The receipt shows it as Tip.",
+        "Refund some or all of the {amount} paid on top of the bill, and nothing else. The receipt shows it as Tip.",
         "Devuelve una parte o todos los {amount} pagados de más sobre la cuenta, y nada más. En el ticket figura como Propina.",
       ],
       [
-        "Give back the extra paid on top too ({amount})",
+        "Refund the extra paid on top too ({amount})",
         "Devolver también lo pagado de más ({amount})",
       ],
-      ["Extra to give back", "Pagado de más a devolver"],
+      ["Extra to refund", "Pagado de más a devolver"],
       ["Cancelled, not served", "Cancelado, no servido"],
-      ["Cancelled, money given back", "Cancelado, dinero devuelto"],
+      ["Cancelled, refunded", "Cancelado, dinero devuelto"],
     ]);
   });
 

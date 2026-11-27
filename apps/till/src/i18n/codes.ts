@@ -78,7 +78,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El plato ha cambiado. Revisa su estado actual en la estación y vuelve a elegir.",
   },
   "tab.free_item_with_dish": {
-    en: "A dish given free gives money back only together with the last paid dish on the bill. Check the dishes and choose again.",
+    en: "A dish given free is refunded only together with the last paid dish on the bill. Check the dishes and choose again.",
     es: "Un plato por invitación solo devuelve dinero junto con el último plato pagado de la cuenta. Revisa los platos y vuelve a elegir.",
   },
   "ticket.pass_context_changed": {
@@ -482,40 +482,40 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El tipo de factura de esta cuenta ya no se puede cambiar: ya se emitió su ticket, o tiene factura completa y ya se ha cobrado un pago.",
   },
   "invoice_correction.not_settled": {
-    en: "This bill is not fully paid yet, so money for dishes or goodwill cannot go back from its receipt.",
+    en: "This bill is not fully paid yet, so dishes or goodwill cannot be refunded from its receipt.",
     es: "Esta cuenta aún no está pagada del todo, así que no se puede devolver desde su ticket dinero de platos o por cortesía.",
   },
   "invoice_correction.already_open": {
-    en: "Money back on this receipt is already under way. Close this window and open Give money back again to carry on.",
-    es: "Ya hay una devolución en curso en este ticket. Cierra esta ventana y vuelve a abrir Devolver dinero para continuar.",
+    en: "A refund on this receipt is already under way. Close this window and open Refund again to carry on.",
+    es: "Ya hay una devolución en curso en este ticket. Cierra esta ventana y vuelve a abrir Devolución para continuar.",
   },
   "invoice_correction.not_open": {
-    en: "This money back has already ended. Close this window to see the receipt as it is now.",
+    en: "This refund has already ended. Close this window to see the receipt as it is now.",
     es: "Esta devolución ya ha terminado. Cierra esta ventana para ver el ticket como está ahora.",
   },
   "invoice_correction.not_found": {
-    en: "This money back no longer exists. Close this window and open Give money back again.",
-    es: "Esta devolución ya no existe. Cierra esta ventana y vuelve a abrir Devolver dinero.",
+    en: "This refund no longer exists. Close this window and open Refund again.",
+    es: "Esta devolución ya no existe. Cierra esta ventana y vuelve a abrir Devolución.",
   },
   "invoice_correction.leg_too_large": {
-    en: "That is more than is left to give back. Give back no more than the amount shown as left.",
+    en: "That is more than is left to refund. Refund no more than the amount shown as left.",
     es: "Es más de lo que queda por devolver. Devuelve como mucho el importe que aparece pendiente.",
   },
   "invoice_correction.nothing_back": {
-    en: "No money has gone back yet, so there is nothing to record. Give money back first, or press Cancel this money back.",
+    en: "Nothing has been refunded yet, so there is nothing to record. Refund first, or press Cancel this refund.",
     es: "Aún no se ha devuelto dinero, así que no hay nada que registrar. Devuelve dinero primero o pulsa Anular esta devolución.",
   },
   "invoice_correction.still_correctable": {
-    en: "Money has gone back and it can still be recorded. Press Finish or Stop here.",
+    en: "A refund was made and can still be recorded. Press Finish or Stop here.",
     es: "Ya se ha devuelto dinero y aún se puede registrar. Pulsa Terminar o Parar aquí.",
   },
   "invoice_correction.cash_short": {
-    en: "This bill's cash payments hold less than that. Give the rest back on the card it was paid with.",
+    en: "This bill's cash payments hold less than that. Refund the rest to the card it was paid with.",
     es: "Los pagos en efectivo de esta cuenta no llegan a ese importe. Devuelve el resto en la tarjeta con la que se pagó.",
   },
   "invoice_correction.cash_route_only": {
-    en: "Cash for this money back is given back from Give money back. Open Give money back to give it.",
-    es: "El efectivo de esta devolución se devuelve desde Devolver dinero. Abre Devolver dinero para devolverlo.",
+    en: "Cash for this refund is given from the receipt. Open Refund on the receipt to give it.",
+    es: "El efectivo de esta devolución se devuelve desde Devolución. Abre Devolución para devolverlo.",
   },
   "invoice_correction.split_changed": {
     en: "The VAT split has changed since it was shown. Check the new split and press again.",
@@ -526,43 +526,43 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Una devolución a tarjeta de esta cuenta aún espera la respuesta de la compañía de la tarjeta. Vuelve a intentarlo cuando haya respondido.",
   },
   "invoice_correction.money_short": {
-    en: "That is more than is left to give back from this bill's payments. Enter a smaller amount.",
+    en: "That is more than is left to refund from this bill's payments. Enter a smaller amount.",
     es: "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor.",
   },
   "invoice_correction.chain_unsound": {
-    en: "The box's receipt records need checking, so money for dishes or goodwill cannot go back or be recorded now. Money already given back stays given back.",
+    en: "The box's receipt records need checking, so dishes or goodwill cannot be refunded or recorded now. Money already refunded stays refunded.",
     es: "Hay que revisar los registros de tickets del servidor, así que ahora no se puede devolver ni registrar dinero de platos o por cortesía. El dinero ya devuelto queda devuelto.",
   },
   "sale.correction_amount_invalid": {
-    en: "Enter an amount above zero and no more than is left to give back on this receipt for the dishes chosen or as goodwill.",
+    en: "Enter an amount above zero and no more than is left to refund on this receipt for the dishes chosen or as goodwill.",
     es: "Escribe un importe mayor que cero y no superior a lo que queda por devolver en este ticket por los platos elegidos o por cortesía.",
   },
   "sale.correction_scope_invalid": {
-    en: "The dishes chosen are not on this receipt. Close this window and open Give money back again.",
-    es: "Los platos elegidos no están en este ticket. Cierra esta ventana y vuelve a abrir Devolver dinero.",
+    en: "The dishes chosen are not on this receipt. Close this window and open Refund again.",
+    es: "Los platos elegidos no están en este ticket. Cierra esta ventana y vuelve a abrir Devolución.",
   },
   "sale.correction_history_unusable": {
-    en: "This receipt's earlier money back cannot be read, so money for dishes or goodwill cannot go back from it.",
+    en: "This receipt's earlier refunds cannot be read, so dishes or goodwill cannot be refunded from it.",
     es: "No se pueden leer las devoluciones anteriores de este ticket, así que no se puede devolver desde él dinero de platos o por cortesía.",
   },
   "give_back.changed": {
-    en: "What can go back on this receipt changed since it was checked. Nothing has been given back. Check the new amounts and press Give back again.",
+    en: "What can be refunded on this receipt changed since it was checked. Nothing has been refunded. Check the new amounts and press Refund again.",
     es: "Lo que se puede devolver de este ticket cambió desde que se comprobó. No se ha devuelto nada. Revisa los nuevos importes y vuelve a pulsar Devolver.",
   },
   "give_back.refund_failed": {
-    en: "The card company did not make the refund, so that money has not gone back. Open Give money back again to try again or to choose another way.",
-    es: "La compañía de la tarjeta no hizo la devolución, así que ese dinero no se ha devuelto. Vuelve a abrir Devolver dinero para intentarlo de nuevo o elegir otra forma.",
+    en: "The card company did not make the refund, so that money was not refunded. Open Refund again to try again or to choose another way.",
+    es: "La compañía de la tarjeta no hizo la devolución, así que ese dinero no se ha devuelto. Vuelve a abrir Devolución para intentarlo de nuevo o elegir otra forma.",
   },
   "give_back.failed": {
-    en: "The box could not finish this money back. Open Give money back again to see what is left to give back.",
-    es: "El servidor no pudo terminar esta devolución. Vuelve a abrir Devolver dinero para ver lo que queda por devolver.",
+    en: "The box could not finish this refund. Open Refund again to see what is left to refund.",
+    es: "El servidor no pudo terminar esta devolución. Vuelve a abrir Devolución para ver lo que queda por devolver.",
   },
   "sale.correction_not_admitted": {
     en: "This invoice cannot be corrected.",
     es: "Esta factura no se puede rectificar.",
   },
   "sale.correction_exceeds_total": {
-    en: "That is more than is left of this receipt after the money already given back.",
+    en: "That is more than is left of this receipt after the money already refunded.",
     es: "Es más de lo que queda de este ticket después del dinero ya devuelto.",
   },
   "sale.correction_not_whole": {
@@ -570,8 +570,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta factura ya se ha rectificado, así que no se puede abonar por completo",
   },
   "sale.correction_unsupported": {
-    en: "The till cannot cancel or credit this invoice this way. If it has been paid, use Give money back.",
-    es: "La caja no puede anular ni abonar esta factura de esta forma. Si ya se ha pagado, usa Devolver dinero.",
+    en: "The till cannot cancel or credit this invoice this way. If it has been paid, use Refund.",
+    es: "La caja no puede anular ni abonar esta factura de esta forma. Si ya se ha pagado, usa Devolución.",
   },
   "bill.presented": {
     en: "This bill is ready for payment, so it cannot be changed.",
@@ -626,15 +626,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Lo pagado de más en esta cuenta ha cambiado. Revisa el nuevo importe y vuelve a elegir.",
   },
   "bill.overpaid": {
-    en: "This bill has been paid more than it comes to. First give back the extra on the bill, or keep it as a tip where the bill offers that.",
+    en: "This bill has been paid more than it comes to. First refund the extra on the bill, or keep it as a tip where the bill offers that.",
     es: "Esta cuenta se ha pagado de más. Primero devuelve en la cuenta lo que sobra, o guárdalo como propina si la cuenta lo ofrece.",
   },
   "bill.tip_needs_a_sale": {
-    en: "This bill comes to nothing, so there is no sale to tip on. Give the money back instead.",
+    en: "This bill comes to nothing, so there is no sale to tip on. Refund the money instead.",
     es: "Esta cuenta no suma nada, así que no hay venta en la que dejar propina. Devuelve el dinero.",
   },
   "bill.tip_not_allowed_on_excess": {
-    en: "This venue does not take tips. Give the money back instead.",
+    en: "This venue does not take tips. Refund the money instead.",
     es: "Este local no acepta propinas. Devuelve el dinero.",
   },
   "bill.left_unpaid": {
@@ -663,8 +663,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "La AEAT rechazó este ticket, así que no se puede anular. Cobra la cuenta.",
   },
   "meal_end.unserved_dishes": {
-    en: "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment with Give money back.",
-    es: "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Devolver dinero.",
+    en: "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment from the receipt.",
+    es: "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Devolución.",
   },
   "meal_end.already_issued": {
     en: "This bill already has its receipt. Take payment, or print a receipt copy.",
@@ -707,28 +707,28 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta devolución supera el valor de los platos cancelados",
   },
   "tender.refund_needs_correction": {
-    en: "This money now has to be recorded on the receipt as it goes back. Close this window and open Give money back again to carry on.",
-    es: "Este dinero ahora tiene que registrarse en el ticket al devolverse. Cierra esta ventana y vuelve a abrir Devolver dinero para continuar.",
+    en: "This money now has to be recorded on the receipt as it is refunded. Close this window and open Refund again to carry on.",
+    es: "Este dinero ahora tiene que registrarse en el ticket al devolverse. Cierra esta ventana y vuelve a abrir Devolución para continuar.",
   },
   "advance.full_invoice_unsupported": {
     en: "This bill is set for a full invoice, so this payment cannot have a receipt of its own. Take it without one: it is listed on the bill's full invoice.",
     es: "Esta cuenta está para factura completa, así que este pago no puede tener un ticket propio. Cóbralo sin él: figura en la factura completa de la cuenta.",
   },
   "tender.refund_of_advance": {
-    en: "This ticket{invoiceNumber} is a payment on account, so money for dishes or goodwill cannot go back from it now. Any extra paid on top can still go back.",
+    en: "This ticket{invoiceNumber} is a payment on account, so dishes or goodwill cannot be refunded from it now. Any extra paid on top can still be refunded.",
     es: "Este ticket{invoiceNumber} es un pago a cuenta, así que ahora no se puede devolver desde él dinero de platos o por cortesía. Lo pagado de más, si lo hay, sí se puede devolver.",
   },
   "bill.refund_of_advance": {
-    en: "This payment was taken on account and has its own ticket{invoiceNumber}, so it is not refunded from the bill. While the table's bill is still open, give it back with Give money back on that ticket: that gives the money back and takes it off the bill.",
-    es: "Este pago se cobró a cuenta y tiene su propio ticket{invoiceNumber}, así que no se devuelve desde la cuenta. Mientras la cuenta de la mesa siga abierta, devuélvelo con Devolver dinero en ese ticket: así se devuelve el dinero y se quita de la cuenta.",
+    en: "This payment was taken on account and has its own ticket{invoiceNumber}, so it is not refunded from the bill. While the table's bill is still open, refund it from that ticket: that refunds the money and takes it off the bill.",
+    es: "Este pago se cobró a cuenta y tiene su propio ticket{invoiceNumber}, así que no se devuelve desde la cuenta. Mientras la cuenta de la mesa siga abierta, devuélvelo con Devolución en ese ticket: así se devuelve el dinero y se quita de la cuenta.",
   },
   "advance.taken_off_final_invoice": {
-    en: "This payment on account was already taken off the table's receipt{invoiceNumber}, so money for dishes or goodwill cannot go back from this ticket yet. First give money back with Give money back on {receipt}: it gives back money paid on {it}. Once nothing paid on {it} is left, Give money back on this ticket gives back the rest.",
-    es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Primero devuelve dinero con Devolver dinero en {receipt}: devuelve dinero pagado en {it}. Cuando no quede nada pagado en {it}, Devolver dinero en este ticket devuelve el resto.",
+    en: "This payment on account was already taken off the table's receipt{invoiceNumber}, so dishes or goodwill cannot be refunded from this ticket yet. First open Refund on {receipt}: it refunds money paid on {it}. Once nothing paid on {it} is left, Refund on this ticket refunds the rest.",
+    es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Primero devuelve dinero con Devolución en {receipt}: devuelve dinero pagado en {it}. Cuando no quede nada pagado en {it}, Devolución en este ticket devuelve el resto.",
   },
   "advance.correction_open": {
-    en: "The receipt cannot be issued while money back on the payment on account{invoiceNumber} is under way. In Give money back on that ticket, finish, stop or cancel the money back; if it offers none of these, follow what it says. Then try again.",
-    es: "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta{invoiceNumber}. En Devolver dinero de ese ticket, termina, para o anula la devolución; si no ofrece nada de esto, sigue lo que indica. Después vuelve a intentarlo.",
+    en: "The receipt cannot be issued while a refund on the payment on account{invoiceNumber} is under way. In Refund on that ticket, finish, stop or cancel the refund; if it offers none of these, follow what it says. Then try again.",
+    es: "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta{invoiceNumber}. En Devolución de ese ticket, termina, para o anula la devolución; si no ofrece nada de esto, sigue lo que indica. Después vuelve a intentarlo.",
   },
   "tender.refund_unavailable": {
     en: "This payment cannot be refunded here. Reload the transaction and check its payments",
@@ -1140,7 +1140,7 @@ const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
     es: "Aquí no se puede rectificar una factura completa que sustituye tickets.",
   },
   refused_no_fix: {
-    en: "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
+    en: "The tax agency refused this full invoice and Waitron cannot fix that, so money refunded on it goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
     es: "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo, así que el dinero que se devuelva de esta factura aparece en Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
   },
   // A refused filing and one held from sending both answer `filing_refused`.
@@ -1156,12 +1156,12 @@ const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
 /** Why `tab.free_item_with_dish` refused, by its `reason`. */
 const FREE_ITEM_WITH_DISH: Record<string, { en: string; es: string }> = {
   free_item: {
-    en: "This dish was given free, so it gives money back only together with the last paid dish on the bill. Untick Refund to cancel it on its own, or choose Void… on the last paid dish: its window brings this dish back with it.",
+    en: "This dish was given free, so it is refunded only together with the last paid dish on the bill. Untick Refund to cancel it on its own, or choose Void… on the last paid dish: its window brings this dish back with it.",
     es: "Este plato fue por invitación, así que solo devuelve dinero junto con el último plato pagado de la cuenta. Desmarca Devolución para cancelarlo solo, o elige Cancelar… en el último plato pagado: su ventana lo devuelve con él.",
   },
   served: {
-    en: "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then open Give money back on the receipt.",
-    es: "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después abre Devolver dinero en el recibo.",
+    en: "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then refund it from the receipt.",
+    es: "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Desmarca Devolución para cancelar este plato y después devuélvelo desde el recibo.",
   },
   not_listed: {
     en: "A dish given free comes back with this one. The window now lists it: check the amount and choose again.",
@@ -1182,8 +1182,8 @@ const FREE_ITEM_AT_FINISH: Record<string, { en: string; es: string }> = {
     es: "Un plato por invitación de esta cuenta ahora vuelve con los platos pagados marcados aquí: la cuenta ha cambiado desde que se abrió esta ventana. La ventana ya la muestra como está: revisa el importe y vuelve a elegir.",
   },
   served: {
-    en: "A dish given free on this bill has been served, so the paid dishes cannot all give money back here. Untick Refund on one of them, then give its money back from Give money back on the receipt.",
-    es: "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuelve su dinero desde Devolver dinero en el recibo.",
+    en: "A dish given free on this bill has been served, so the paid dishes cannot all be refunded here. Untick Refund on one of them, then refund it from the receipt.",
+    es: "Un plato por invitación de esta cuenta ya se ha servido, así que aquí no pueden devolver dinero todos los platos pagados. Desmarca Devolución en uno de ellos y después devuélvelo desde el recibo.",
   },
 };
 
@@ -1196,20 +1196,20 @@ export function freeItemAtFinishMessage(reason: unknown, locale: string = curren
 
 /** `advance.taken_off_final_invoice` once nothing paid on the table's receipt is left to give back. */
 const TAKEN_OFF_NOTHING_LEFT = {
-  en: "This payment on account was already taken off the table's receipt{invoiceNumber}, and nothing paid on {it} is left to give back. Give money back on this ticket still gives money back from this payment.",
-  es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber} y no queda nada pagado en {it} por devolver. Devolver dinero en este ticket sigue devolviendo dinero de este pago.",
+  en: "This payment on account was already taken off the table's receipt{invoiceNumber}, and nothing paid on {it} is left to refund. Refund on this ticket still refunds money from this payment.",
+  es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber} y no queda nada pagado en {it} por devolver. Devolución en este ticket sigue devolviendo dinero de este pago.",
 };
 
 /** `advance.taken_off_final_invoice` while the table's receipt is still being paid. */
 const TAKEN_OFF_NOT_FULLY_PAID = {
-  en: "This payment on account was already taken off the table's receipt{invoiceNumber}, which is not fully paid yet, so money for dishes or goodwill cannot go back from this ticket yet. Once {receipt} is fully paid, first give money back with Give money back on {it}: it gives back money paid on {it}. Once nothing paid on {it} is left, Give money back on this ticket gives back the rest.",
-  es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}, que aún no está pagado del todo, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Cuando {receipt} esté pagado del todo, devuelve primero dinero con Devolver dinero en {it}: devuelve dinero pagado en {it}. Cuando no quede nada pagado en {it}, Devolver dinero en este ticket devuelve el resto.",
+  en: "This payment on account was already taken off the table's receipt{invoiceNumber}, which is not fully paid yet, so dishes or goodwill cannot be refunded from this ticket yet. Once {receipt} is fully paid, first open Refund on {it}: it refunds money paid on {it}. Once nothing paid on {it} is left, Refund on this ticket refunds the rest.",
+  es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}, que aún no está pagado del todo, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Cuando {receipt} esté pagado del todo, devuelve primero dinero con Devolución en {it}: devuelve dinero pagado en {it}. Cuando no quede nada pagado en {it}, Devolución en este ticket devuelve el resto.",
 };
 
 /** `advance.taken_off_final_invoice` while the table's receipt is still being paid and its bill can
  * be reopened. */
 const TAKEN_OFF_REOPEN_BILL = {
-  en: "Reopen the bill, then give the money back.",
+  en: "Reopen the bill, then refund it.",
   es: "Reabre la cuenta y luego devuelve el dinero.",
 };
 
@@ -1217,24 +1217,24 @@ const TAKEN_OFF_REOPEN_BILL = {
  * on account off. */
 const MONEY_SHORT_NOTHING_LEFT = {
   one: {
-    en: "Nothing paid on this bill is left to give back. To give money back, choose Give money back on the ticket of the payment on account {numbers}: it gives money back from that payment.",
-    es: "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolver dinero en el ticket del pago a cuenta {numbers}: devuelve dinero de ese pago.",
+    en: "Nothing paid on this bill is left to refund. To refund, choose Refund on the ticket of the payment on account {numbers}: it refunds money from that payment.",
+    es: "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolución en el ticket del pago a cuenta {numbers}: devuelve dinero de ese pago.",
   },
   many: {
-    en: "Nothing paid on this bill is left to give back. To give money back, choose Give money back on the tickets of the payments on account {numbers}: it gives money back from those payments.",
-    es: "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolver dinero en los tickets de los pagos a cuenta {numbers}: devuelve dinero de esos pagos.",
+    en: "Nothing paid on this bill is left to refund. To refund, choose Refund on the tickets of the payments on account {numbers}: it refunds money from those payments.",
+    es: "No queda nada pagado en esta cuenta por devolver. Para devolver dinero, elige Devolución en los tickets de los pagos a cuenta {numbers}: devuelve dinero de esos pagos.",
   },
 };
 
 /** What `invoice_correction.money_short` adds when the receipt took payments on account off. */
 const MONEY_SHORT_ADVANCES = {
   one: {
-    en: "For the rest, once this money back is done, choose Give money back on the ticket of the payment on account {numbers}: it gives money back from that payment.",
-    es: "Para lo que falte, cuando termine esta devolución, elige Devolver dinero en el ticket del pago a cuenta {numbers}: devuelve dinero de ese pago.",
+    en: "For the rest, once this refund is done, choose Refund on the ticket of the payment on account {numbers}: it refunds money from that payment.",
+    es: "Para lo que falte, cuando termine esta devolución, elige Devolución en el ticket del pago a cuenta {numbers}: devuelve dinero de ese pago.",
   },
   many: {
-    en: "For the rest, once this money back is done, choose Give money back on the tickets of the payments on account {numbers}: it gives money back from those payments.",
-    es: "Para lo que falte, cuando termine esta devolución, elige Devolver dinero en los tickets de los pagos a cuenta {numbers}: devuelve dinero de esos pagos.",
+    en: "For the rest, once this refund is done, choose Refund on the tickets of the payments on account {numbers}: it refunds money from those payments.",
+    es: "Para lo que falte, cuando termine esta devolución, elige Devolución en los tickets de los pagos a cuenta {numbers}: devuelve dinero de esos pagos.",
   },
 };
 
@@ -1252,12 +1252,12 @@ const DINING_FIXED: Record<string, { en: string; es: string }> = {
 
 /** A `bill.below_advances` met seating a Counter order, whose set menus lower its total. */
 const SEATED_BELOW_ADVANCES = {
-  en: "{advances} of this order was paid with its own receipt, and at the table its set menus would bring it below that. First give back {excess} on that receipt with Give money back, or keep the order at the Counter.",
-  es: "{advances} de este pedido se pagaron con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes {excess} de ese ticket con Devolver dinero, o deja el pedido en el mostrador.",
+  en: "{advances} of this order was paid with its own receipt, and at the table its set menus would bring it below that. First refund {excess} from that receipt, or keep the order at the Counter.",
+  es: "{advances} de este pedido se pagaron con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes {excess} de ese ticket con Devolución, o deja el pedido en el mostrador.",
 };
 const SEATED_BELOW_ADVANCES_UNPRICED = {
-  en: "Part of this order was paid with its own receipt, and at the table its set menus would bring it below that. First give money back on that receipt with Give money back, or keep the order at the Counter.",
-  es: "Parte de este pedido se pagó con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes dinero de ese ticket con Devolver dinero, o deja el pedido en el mostrador.",
+  en: "Part of this order was paid with its own receipt, and at the table its set menus would bring it below that. First refund money from that receipt, or keep the order at the Counter.",
+  es: "Parte de este pedido se pagó con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes dinero de ese ticket con Devolución, o deja el pedido en el mostrador.",
 };
 
 const NAMED_STATION_MESSAGES = {
@@ -1468,11 +1468,11 @@ function zoneAdmissionMessage(reason: unknown, locale: string): string {
 /** In Give money back a refused or held filing holds back only money for dishes and goodwill. */
 const GIVE_BACK_FILING_REFUSED = {
   receipt: {
-    en: "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, money for dishes or goodwill cannot go back; money owed for cancelled dishes and the extra paid on top can.",
+    en: "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
     es: "La Agencia Tributaria rechazó este ticket, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
   },
   fullInvoice: {
-    en: "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, money for dishes or goodwill cannot go back; money owed for cancelled dishes and the extra paid on top can.",
+    en: "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, dishes or goodwill cannot be refunded; money owed for cancelled dishes and the extra paid on top can.",
     es: "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
   },
 };
@@ -1497,28 +1497,28 @@ export function giveBackReasonMessage(
  * right. */
 const GIVE_BACK_NEVER_RECORDED: Record<string, { en: string; es: string }> = {
   replaced: {
-    en: "This receipt was replaced by a full invoice, so the money given back cannot be recorded on it.",
+    en: "This receipt was replaced by a full invoice, so the refund cannot be recorded on it.",
     es: "Este ticket se sustituyó por una factura completa, así que el dinero devuelto no se puede registrar en él.",
   },
   voided: {
-    en: "This receipt was cancelled, so the money given back cannot be recorded on it.",
+    en: "This receipt was cancelled, so the refund cannot be recorded on it.",
     es: "Este ticket se anuló, así que el dinero devuelto no se puede registrar en él.",
   },
   wrong_node: {
-    en: "Another box issued this receipt, so this box cannot record the money given back on it.",
+    en: "Another box issued this receipt, so this box cannot record the refund on it.",
     es: "Otro servidor emitió este ticket, así que este servidor no puede registrar en él el dinero devuelto.",
   },
   not_simplified: {
-    en: "This is a full invoice made from receipts, so the money given back cannot be recorded on it here.",
+    en: "This is a full invoice made from receipts, so the refund cannot be recorded on it here.",
     es: "Es una factura completa que sustituye tickets, así que aquí no se puede registrar en ella el dinero devuelto.",
   },
   // An open give-back's refunds reach the accountant's list only once it ends.
   refused_no_fix: {
-    en: "The tax agency refused this full invoice and Waitron cannot fix that. Once this money back ends, the money given back goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
+    en: "The tax agency refused this full invoice and Waitron cannot fix that. Once this refund ends, the money refunded goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
     es: "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo. Cuando termine esta devolución, el dinero devuelto aparecerá en Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
   },
   filing_refused: {
-    en: "The tax agency refused this receipt, or sending it to the agency is on hold, so the money given back cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
+    en: "The tax agency refused this receipt, or sending it to the agency is on hold, so the refund cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
     es: "La Agencia Tributaria rechazó este ticket, o su envío a la Agencia está detenido, así que el dinero devuelto aún no se puede registrar en él. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después pulsa Comprobar de nuevo.",
   },
 };
@@ -1526,15 +1526,15 @@ const GIVE_BACK_NEVER_RECORDED: Record<string, { en: string; es: string }> = {
 /** {@link GIVE_BACK_NEVER_RECORDED}'s words that name a receipt, for a full invoice. */
 const FULL_INVOICE_NEVER_RECORDED: Record<string, { en: string; es: string }> = {
   voided: {
-    en: "This full invoice was cancelled, so the money given back cannot be recorded on it.",
+    en: "This full invoice was cancelled, so the refund cannot be recorded on it.",
     es: "Esta factura completa se anuló, así que el dinero devuelto no se puede registrar en ella.",
   },
   wrong_node: {
-    en: "Another box issued this full invoice, so this box cannot record the money given back on it.",
+    en: "Another box issued this full invoice, so this box cannot record the refund on it.",
     es: "Otro servidor emitió esta factura completa, así que este servidor no puede registrar en ella el dinero devuelto.",
   },
   filing_refused: {
-    en: "The tax agency refused this full invoice, or sending it to the agency is on hold, so the money given back cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
+    en: "The tax agency refused this full invoice, or sending it to the agency is on hold, so the refund cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
     es: "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido, así que el dinero devuelto aún no se puede registrar en ella. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después pulsa Comprobar de nuevo.",
   },
 };
@@ -1543,7 +1543,7 @@ const FULL_INVOICE_NEVER_RECORDED: Record<string, { en: string; es: string }> = 
  * the registered address. */
 const GIVE_BACK_NOT_RECORDED_BY_CODE: Record<string, { en: string; es: string }> = {
   "fiscal.taxpayer_domicile_missing": {
-    en: "The business's registered address is missing, so the money given back cannot be recorded on this full invoice yet. Add it on the dashboard, under Venue settings › Venue details. Then press Check again.",
+    en: "The business's registered address is missing, so the refund cannot be recorded on this full invoice yet. Add it on the dashboard, under Venue settings › Venue details. Then press Check again.",
     es: "Falta el domicilio fiscal del negocio, así que el dinero devuelto aún no se puede registrar en esta factura completa. Añádelo en el panel, en Ajustes del local › Datos del local. Después pulsa Comprobar de nuevo.",
   },
 };
@@ -1551,11 +1551,11 @@ const GIVE_BACK_NOT_RECORDED_BY_CODE: Record<string, { en: string; es: string }>
 /** Any other refusal of recording: Finish is not offered while it holds. */
 const GIVE_BACK_NOT_RECORDED_NOW = {
   receipt: {
-    en: "The money given back cannot be recorded on this receipt now, so Finish is not offered. Press Check again to see whether that has changed.",
+    en: "The refund cannot be recorded on this receipt now, so Finish is not offered. Press Check again to see whether that has changed.",
     es: "El dinero devuelto no se puede registrar ahora en este ticket, así que no se ofrece Terminar. Pulsa Comprobar de nuevo para ver si ha cambiado.",
   },
   fullInvoice: {
-    en: "The money given back cannot be recorded on this full invoice now, so Finish is not offered. Press Check again to see whether that has changed.",
+    en: "The refund cannot be recorded on this full invoice now, so Finish is not offered. Press Check again to see whether that has changed.",
     es: "El dinero devuelto no se puede registrar ahora en esta factura completa, así que no se ofrece Terminar. Pulsa Comprobar de nuevo para ver si ha cambiado.",
   },
 };

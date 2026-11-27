@@ -309,7 +309,7 @@ pago** te pide cuánto se devuelve y por qué. Para **Una parte**, escribe el **
 Elige el **Motivo** de la lista. Un motivo que necesita una nota te pide que la escribas, y la nota queda registrada como motivo.
 
 Mientras la cuenta no tenga factura, o cuando su factura ya ha descontado ese pago, **Devolver**
-junto a un pago que tiene su propio ticket abre [Devolver dinero](table-service.md#give-money-back)
+junto a un pago que tiene su propio ticket abre [Devolución desde un recibo](table-service.md#give-money-back)
 en ese ticket.
 
 Elige **Devolver** con el importe mostrado. Si no puedes aprobar devoluciones, un supervisor o
@@ -369,9 +369,9 @@ plato lo muestra entonces y el importe lo incluye. Cancelado solo, un plato por 
 devuelve dinero.
 
 La marca solo aparece cuando este dispositivo puede devolver el pago. Si el cliente pagó de una
-forma que este dispositivo no acepta, la ventana dice **Devuelve el dinero en una caja: Devolver
-dinero, en el recibo.** Después de **Cancelar y devolver**, **Devolver dinero** se abre ya
-rellenada, como se explica en [Devolver dinero](table-service.md#give-money-back).
+forma que este dispositivo no acepta, la ventana dice **Devuélvelo en una caja: elige Devolución en
+el recibo.** Después de **Cancelar y devolver**, la ventana **Devolución** del recibo se abre ya
+rellenada, como se explica en [Devolución desde un recibo](table-service.md#give-money-back).
 
 ## Cerrar una mesa pagada con platos aún por llegar {#finish-paid-table}
 
@@ -390,10 +390,10 @@ pagados de la cuenta cuando los marcas todos.
 Elige **Cancelar y devolver** con el total de los platos marcados, o **Cancelar** si no hay ninguno
 marcado. **Atrás** deja la mesa abierta. Si marcas **Devolución** y no puedes hacer devoluciones,
 alguien que pueda introduce su PIN. Si un pago se cobró de una forma que este dispositivo no
-acepta, la ventana dice **Devuelve el dinero en una caja: Devolver dinero, en el recibo.**
+acepta, la ventana dice **Devuélvelo en una caja: elige Devolución en el recibo.**
 
 Cuando la mesa se cierra, una ventana **Devolución** muestra cada recibo con platos marcados. Elige
-uno para abrir **Devolver dinero** en él, ya rellenada. Si solo hay un recibo, se abre
+uno para abrir su ventana **Devolución**, ya rellenada. Si solo hay un recibo, se abre
 directamente.
 
 Si los clientes van a esperar y recoger la comida en el mostrador, elige **Lo recogerán en el
@@ -410,9 +410,9 @@ Si mueves manualmente al mostrador una cuenta que ya has presentado, cobra en la
 Una vez cobrada, abre **Pedidos pendientes** en el primer mostrador activo según el orden de
 las zonas, aunque hayas usado una caja en otro mostrador.
 
-## Devolver dinero {#give-money-back}
+## Devolución desde un recibo {#give-money-back}
 
-En un recibo anterior, elige **Devolver dinero**. **¿Por qué se devuelve?** ofrece:
+En un recibo anterior, elige **Devolución**. **¿Por qué se devuelve?** ofrece:
 
 - **Un plato**: algo que pidieron no llegó o no estaba bien. Marca los platos en **¿Qué platos?**.
   **Dinero a devolver** empieza en lo que cuestan; cámbialo para devolver menos, o más.
@@ -453,8 +453,8 @@ nunca devuelven el mismo dinero dos veces. Un ticket rectificativo o una factura
 solo se puede imprimir desde **Buscar cuenta**, en la pestaña **Transacciones**.
 
 Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **Buscar cuenta**, en
-**Devoluciones en curso**. Si no está, la devolución espera en esta caja: vuelve a abrir **Devolver
-dinero** en el recibo para continuar. Si está, elígelo en **Buscar cuenta** para continuar:
+**Devoluciones en curso**. Si no está, la devolución espera en esta caja: vuelve a abrir
+**Devolución** en el recibo para continuar. Si está, elígelo en **Buscar cuenta** para continuar:
 
 - **Devolver … en efectivo** o **Devolver … a la tarjeta** devuelve lo que queda de esa forma.
 - **Terminar** registra lo devuelto. Si el ticket o la factura no lo admite, la ventana lo indica: si sigue ofreciendo **Terminar**, este acaba la devolución y lo devuelto queda devuelto; si no, sigue lo que indica y elige **Comprobar de nuevo**. Hasta que **Comprobar de nuevo** lo resuelva, no se puede devolver más dinero.
@@ -770,7 +770,7 @@ Primero envía o quita los platos que aún no se han enviado. Si hay platos de l
 como servidos, todavía no se imprime nada: la caja los muestra bajo **Aún sin servir:**. Si los
 clientes ya los han tomado, elige **Marcar como servidos** donde aparezca y vuelve a elegir
 **Imprimir la cuenta**. Si no, elige **Imprimir igualmente**: un plato que al final no llegue se devuelve después
-del cobro con [Devolver dinero](table-service.md#give-money-back). En una factura completa a nombre
+del cobro con [Devolución desde un recibo](table-service.md#give-money-back). En una factura completa a nombre
 de un cliente, el dinero que se devuelve por un plato cancelado no se descuenta de la factura, así que
 en esas cuentas quita antes de imprimir los platos que puedan no llegar.
 

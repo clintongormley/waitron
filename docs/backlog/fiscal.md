@@ -91,8 +91,8 @@ Refund a payment on the advance's own ticket gives back the rest, files no corre
 the accountant export lists it with the VAT left declared (owner, 2026-11-21 16:36; the refusal
 while the table's invoice still holds money is the watcher's decision of 16:54;
 `refusePlainRefundOfAdvance`, the same file). While the table's invoice is not paid in full and
-its bill can be reopened, that refund is refused too, with "Reopen the bill, then give the
-money back." (`reopenBill`; the owner's choice (c) of 2026-11-25, in the ADVISER-SPLIT-AFTER-PRINT
+its bill can be reopened, that refund is refused too, with "Reopen the bill, then refund
+it." (`reopenBill`; the owner's choice (c) of 2026-11-25, in the ADVISER-SPLIT-AFTER-PRINT
 note). So that a correction opened before the table's
 invoice cannot file a credit note after it, the table's invoice is held back while a correction of
 one of its advances is open: the payment that pays the bill off (refused before any card reader is
@@ -300,7 +300,7 @@ country), name and address, a separate full-invoice
 series, taxpayer domicile, filed receipt data and replay, original/duplicate printing, delivery
 status and retry, staff handover confirmation, invoice lookup, and reporting. Paper and till
 omit the venue address when an F1 shows its filed taxpayer domicile; phone/email and the
-F2/absent-domicile controls remain. Give money back on an F1 files an R1 by differences (CORRECT-FULL-INVOICE
+F2/absent-domicile controls remain. Refund on an F1 files an R1 by differences (CORRECT-FULL-INVOICE
 PR 2a); cancelling a whole F1 and reopening one to split it are still refused, and a dish's money given back
 with Cancel and refund still goes back with no corrective until PR 2b.
 
@@ -967,7 +967,7 @@ the pick list is widened without the mapping.
 
 ## Correcting a paid invoice: what A802 left open
 
-Staff correct part of a paid invoice from **Give money back** on a past receipt (A802, the
+Staff correct part of a paid invoice from **Refund** on a past receipt (A802, the
 [design](../superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md) and the
 [reshape plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a802-reshape.md); how it runs is the
 [owner's decision](#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12)). Left open by
@@ -1259,7 +1259,8 @@ the owner's ask (lane C `questions.md`, 2026-11-25 15:22, confirmed 23:43), not 
 the bill can still be reopened, Give money back on the advance says "Reopen the bill, then give the
 money back.": the owner's choice (c) (lane C `questions.md`, 2026-11-25 16:20), given as steps:
 "first reopen Luis' bill / then remove the advance / then open Ana's bill / refund the 20€ / print
-luis' bill for 72€ again". That giving it back on the reopened bill is one action (it corrects the
+luis' bill for 72€ again". (2026-11-27: the till now says "Reopen the bill, then refund it." in a
+window named Refund.) That giving it back on the reopened bill is one action (it corrects the
 advance's receipt, refunds, and the bill stops counting it) is the lane watcher's build note in
 the same entry._
 

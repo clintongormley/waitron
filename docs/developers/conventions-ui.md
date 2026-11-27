@@ -953,7 +953,7 @@ the table-free draft holds a line (`#store`, `#partylessDraft`), any draft is un
 reuse its id — after no answer, or after a refusal that keeps the id (`#unansweredPayment`,
 `#unansweredRefund`), or a request is held by `#holdingReload`: every request sent again until
 answered (`#resend`, around `resendUnanswered`, and the station screen's dish move and Collect, which it
-announces with a `hold-reload` event), a whole bill payment or refund, a Give money back press, step
+announces with a `hold-reload` event), a whole bill payment or refund, a press of Refund in the receipt's Refund window, a step
 or Check again (announced with the same event), and a sign-out's save of the draft. A signed-in person counts because a reload signs them out. The bar's Reload
 waits only for what `#requestsOut()` counts (`submitting`, `parking`, `placing`, a card
 attempt, or a held request), then reloads once, unless the operator touches or types on the till,
@@ -969,7 +969,7 @@ lifetimes" cases, and the box-update cases in `apps/till/src/till-app-bill-payme
 `apps/till/src/till-app-drafts.test.ts`, `apps/till/src/till-app-adjustments.test.ts`,
 `apps/till/src/till-app-counter-move-station.test.ts`, `apps/till/src/till-app-parties.test.ts`
 and `apps/till/src/till-app.test.ts` (a kitchen display's dish move, a held order's receipt language,
-and Give money back). No test
+and the receipt's Refund). No test
 checks the wiring in either app's `main.ts`. It was run once instead, on 2026-10-11, on the demo
 stack (`wa-wt demo`) in Playwright's Chromium, with a route that swapped the header's value for
 another build: the header reached both pages through the Vite dev servers (`0.0.0`, not `null`);

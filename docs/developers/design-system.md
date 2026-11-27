@@ -1295,7 +1295,7 @@ Tab button and no side drawer.
   (`role="alert"`, with Mark served where it applies, Cancel and Print anyway, brought into view
   the same way); `screens/bill-money-notice.ts`'s `role="status"` notices: "Being paid on Bill 3"
   while the bill's chosen items wait for their card on a bill of their own, and, for a bill paid over
-  its total, "Paid €5.00 more than this bill comes to" with Give back €5.00 and, where the venue takes
+  its total, "Paid €5.00 more than this bill comes to" with Refund €5.00 and, where the venue takes
   tips, the person takes payments and the bill comes to more than nothing, Keep €5.00 as tip; this
   bill's total; "Still to pay at this table" with the party's
   outstanding, only with a party; then the pay section. Both desktop and handheld show one Pay for an open owing bill not paid over its total, followed by the bill's
@@ -3370,10 +3370,10 @@ and the staffing grid's block editor in the A761 entry):
   no reason is chosen or the reasons are loading, `primary` once a reason is chosen, keeping
   `primary` while its own refund is being sent. It stays enabled and explains a missing reason on
   press.
-  The **Give back** button in a receipt's Give money back window is disabled until a payment is
+  The **Refund** button in a receipt's Refund window is disabled until a payment is
   chosen (and, for **A dish**, a dish is ticked) and while field errors shown by a press remain; it
-  is drawn `secondary` until the box's check of the money back has answered, a reason is chosen and
-  no field error is shown, then `primary`, keeping `primary` while its money back is sent. Before a
+  is drawn `secondary` until the box's check of the refund has answered, a reason is chosen and
+  no field error is shown, then `primary`, keeping `primary` while its refund is sent. Before a
   press it stays enabled with no reason chosen, and the press marks the reason.
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
   field checks on other screens, and the sign-in screens. Nothing guards it across screens.
@@ -7012,7 +7012,7 @@ A positive-total Counter basket offers Pay beside Park. Pay opens the shared bil
 with Whole bill selected. After a partial payment, its balance and Cash/Card choices stay in that
 window; reopening Pay uses the remaining balance. A placed order without an invoice uses the same
 window; issued-invoice collection and zero-total completion keep their existing whole-order controls.
-A Counter order paid more than it comes to shows the overpaid notice in place of Pay: **Give back**,
+A Counter order paid more than it comes to shows the overpaid notice in place of Pay: **Refund**,
 and **Keep as tip** where tips are on and the person may take payment.
 Full-invoice and receipt-language entry stay available. In practice, Approve, Decline and No answer
 are offered before Card; No answer leaves recovery to a manager. Practice phones use the simulator

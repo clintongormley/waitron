@@ -296,7 +296,7 @@ describe("ending it", () => {
     );
 
     expect(text(root(el).querySelector("[data-file-refusal]"))).toBe(
-      "The money given back cannot be recorded on this receipt now, so Finish is not offered. Press Check again to see whether that has changed.",
+      "The refund cannot be recorded on this receipt now, so Finish is not offered. Press Check again to see whether that has changed.",
     );
     expect(shown(el, "finish")).toBe(false);
     expect(shown(el, "stop")).toBe(false);
@@ -305,7 +305,7 @@ describe("ending it", () => {
     await vi.waitFor(() => expect(shown(el, "finish")).toBe(true));
     const said = text(root(el).querySelector("[data-file-refusal]"));
     expect(said).toBe(
-      "Another box issued this receipt, so this box cannot record the money given back on it. Press Finish to end this money back. The money already given back stays given back.",
+      "Another box issued this receipt, so this box cannot record the refund on it. Press Finish to end this refund. The money already refunded stays refunded.",
     );
     expect(said).not.toContain("Refund a payment");
     expect(said).not.toMatch(/correct/i);
@@ -359,7 +359,7 @@ describe("ending it", () => {
     expect(
       giveBackFilingMessage("sale.correction_not_admitted", "en", { reason: "filing_refused" }),
     ).toBe(
-      "The tax agency refused this receipt, or sending it to the agency is on hold, so the money given back cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
+      "The tax agency refused this receipt, or sending it to the agency is on hold, so the refund cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
     );
 
     setLocale("es");
@@ -393,7 +393,7 @@ describe("ending it", () => {
     await el.updateComplete;
     expect(shown(el, "finish")).toBe(true);
     expect(text(root(el).querySelector("[data-file-refusal]"))).toBe(
-      "The tax agency refused this full invoice and Waitron cannot fix that. Once this money back ends, the money given back goes in Download for accountant (XLSX), on the dashboard's Sales & takings page. Press Finish to end this money back. The money already given back stays given back.",
+      "The tax agency refused this full invoice and Waitron cannot fix that. Once this refund ends, the money refunded goes in Download for accountant (XLSX), on the dashboard's Sales & takings page. Press Finish to end this refund. The money already refunded stays refunded.",
     );
   });
 
@@ -486,7 +486,7 @@ describe("ending it", () => {
     await vi.waitFor(() => expect(shown(el, "stop")).toBe(true));
     expect(shown(el, "cancel")).toBe(false);
     expect(bottom(el)).toBe(
-      "Money has gone back and it can still be recorded. Press Finish or Stop here.",
+      "A refund was made and can still be recorded. Press Finish or Stop here.",
     );
   });
 
@@ -1379,7 +1379,7 @@ describe("Check again while a card refund waits for the card company", () => {
     api.getInvoiceCorrection.mockResolvedValueOnce(WAITING).mockResolvedValue(BACK);
     press(el, "check");
     await vi.waitFor(() =>
-      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 refunded"),
     );
     expect(api.retryTenderRefund).toHaveBeenCalledOnce();
     expect(api.refundTransaction).toHaveBeenCalledOnce();
@@ -1434,7 +1434,7 @@ describe("Check again while a card refund waits for the card company", () => {
       .mockRejectedValue(lost());
     press(el, "check");
     await vi.waitFor(() =>
-      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 refunded"),
     );
     await vi.waitFor(() => expect(idle(el)).toBe(true));
     expect(api.retryTenderRefund).toHaveBeenCalledOnce();
@@ -1474,7 +1474,7 @@ describe("Check again while a card refund waits for the card company", () => {
     api.getRefundableTenders.mockRejectedValue(lost());
     press(el, "check");
     await vi.waitFor(() =>
-      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 refunded"),
     );
     await vi.waitFor(() => expect(idle(el)).toBe(true));
     expect(status(el)).toBe("");
@@ -1518,7 +1518,7 @@ describe("Check again while a card refund waits for the card company", () => {
       api.getRefundableTenders.mockResolvedValue(TENDERS);
       press(el, "check");
       await vi.waitFor(() =>
-        expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+        expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 refunded"),
       );
       await vi.waitFor(() => expect(idle(el)).toBe(true));
       expect(unread(el)).toBe("");
@@ -1605,7 +1605,7 @@ describe("Check again while a card refund waits for the card company", () => {
       await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_unknown")));
       await vi.waitFor(() => expect(idle(el)).toBe(true));
       expect(pendingLine(el)).toBe("");
-      expect(unread(el)).toContain("€6.05 is back on card");
+      expect(unread(el)).toContain("€6.05 is refunded to card");
     });
 
     it("keeps saying it waits while nothing was answered, though the payments were never read", async () => {
@@ -1796,7 +1796,7 @@ describe("Check again while a card refund waits for the card company", () => {
     api.getInvoiceCorrection.mockResolvedValueOnce(WAITING).mockResolvedValue(BACK);
     press(el, "check");
     await vi.waitFor(() =>
-      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 refunded"),
     );
     expect(root(el).querySelector("[data-send-again]")).not.toBeNull();
     expect(refunds.read("sale-1")?.refundId).toBeNull();
