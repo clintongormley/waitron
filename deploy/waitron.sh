@@ -68,13 +68,15 @@ as_root() { if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo -n "$@"; fi; }
 # docs/developers/ci-and-gates.md, "Every apt wait is bounded". An install gets longer than an update
 # because Docker's packages are large enough that a slow box link can take more than 300 s to fetch.
 # apt's output goes to standard error, so a caller that captures a function's value never captures it.
+# Its input is /dev/null: timeout runs it outside the terminal's foreground group, where apt-get's
+# reset of a terminal input after dpkg stops it until the limit ends it.
 apt_get() {
   local limit seconds=1800 attempt
   limit="$(command -v gtimeout || command -v timeout)" || die "need timeout (GNU coreutils) to bound apt-get — install coreutils and re-run"
   [ "${1:-}" = update ] && seconds=300
   for attempt in 1 2 3; do
     as_root "$limit" "$seconds" env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=3 \
-      -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 "$@" >&2 && return 0
+      -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 "$@" </dev/null >&2 && return 0
     echo "waitron.sh: attempt $attempt of 3 failed or stalled: apt-get $*" >&2
   done
   die "apt-get $* failed or stalled on all three attempts — check the network and re-run this command"

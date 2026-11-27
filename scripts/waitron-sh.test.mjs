@@ -366,7 +366,8 @@ stub(
 );
 // `apt-get` fails, exiting 100 as apt does, for the first WT_APT_FAIL calls in a case, counted in a
 // file beside the case's log, and for every call whose last argument is WT_APT_INSTALL_FAIL, and
-// prints WT_APT_STDOUT on standard output when a case sets it.
+// prints WT_APT_STDOUT on standard output when a case sets it. It writes `null` to a file beside
+// the case's log when its standard input is /dev/null, and `other` when it is anything else.
 // `timeout` and `gtimeout` drop the limit and run the rest. `dpkg-query` answers `installed`, so no
 // case reaches a real one on a Linux machine, and `not-installed` with status 1 for libatomic1 when
 // WT_LIBATOMIC_MISSING=1 and for bluez when WT_BLUEZ_MISSING=1. An unknown firmware-realtek
@@ -374,6 +375,7 @@ stub(
 stub(
   "apt-get",
   `n=$(cat "\${WT_LOG}.apt" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.apt"
+if [ /dev/stdin -ef /dev/null ]; then echo null; else echo other; fi > "\${WT_LOG}.apt-stdin"
 [ -n "\${WT_APT_STDOUT}" ] && printf '%s\\n' "\${WT_APT_STDOUT}"
 [ "$n" -le "\${WT_APT_FAIL:-0}" ] && exit 100
 [ -n "\${WT_APT_INSTALL_FAIL}" ] && [ "\${@: -1}" = "\${WT_APT_INSTALL_FAIL}" ] && exit 100
@@ -4296,6 +4298,9 @@ describe("the apt_get wrapper inside waitron.sh", () => {
       ...result,
       limits: calls.filter((c) => /^g?timeout /.test(c)),
       apts: calls.filter((c) => c.startsWith("apt-get ")),
+      aptStdin: existsSync(`${log}.apt-stdin`)
+        ? readFileSync(`${log}.apt-stdin`, "utf8").trim()
+        : "",
     };
   }
 
@@ -4325,6 +4330,16 @@ describe("the apt_get wrapper inside waitron.sh", () => {
     expect(r.status).toBe(0);
     expect(r.limits).toHaveLength(1);
     expect(r.limits[0]).toMatch(/^g?timeout 1800 env DEBIAN_FRONTEND=noninteractive apt-get /);
+  });
+
+  // GNU timeout runs apt-get outside the terminal's foreground group, and Linux stops a process
+  // there that changes the terminal's settings, which apt-get does to its input once dpkg finishes.
+  // Measured on the box (Debian 13, apt 3.0.3) under `script`: input on the terminal, apt-get stayed
+  // stopped until timeout's 90 s; input from /dev/null, it exited 0.
+  it("gives apt-get no terminal to read from, so it cannot stop itself under timeout", () => {
+    const r = aptGet(["install", "-y", "firmware-realtek"]);
+    expect(r.status).toBe(0);
+    expect(r.aptStdin).toBe("null");
   });
 
   it("tries a call that fails twice a third time, says so twice, and succeeds", () => {
