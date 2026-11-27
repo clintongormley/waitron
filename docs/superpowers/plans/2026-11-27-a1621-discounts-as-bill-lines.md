@@ -574,7 +574,7 @@ sees changes.
 
 **The change.**
 1. New `packages/adjustments/src/bill-discounts.ts` (pure; imports `@waitron/shared` and
-   `./spread.js` only). Input: the bill's lines (id, line number, parent, set-menu role and row,
+   `./spread.js` only). Input: the bill's lines (id, line number, parent, set-menu row,
    quantity, price quantity, unit and total in cents, unit precision, and each line's bound-portion
    group when the bill has any, read by the caller) and its pending discounts (target, action,
    percentage or amount, origin, position). It works the discounts out in spec 7.2's order (extras,
@@ -588,9 +588,9 @@ sees changes.
    holds (`yes`, `set_menu_gone` when its set-menu row is gone, `cut_down` when an amount exceeds
    what its target costs). Output for the bill: the total taken off.
 2. Move `portionExactness`, `spreadReaching`, `spread`'s line mapping, `handOut`'s pure part and
-   `zeroed` from `adjustments-apply.ts` into the new module; `adjustments-apply.ts` imports them
+   `zeroed` from `adjustments-apply.ts` into the new module, and `gross` (now `lineGross`), `setMenuDishes`'s filter (now `coveredBySetMenu`) and the per-target exactness rules (`withExactness`, `takesAlone`, `exactOnWholeBill`); `adjustments-apply.ts` imports them
    (about 120 lines out of a file at its cap). `spreadOverFiledRows` keeps its two reads and calls
-   the pure part.
+   the pure part, `spreadOverFiledGroups`.
 
 **Tests (failing first).** `packages/adjustments/src/bill-discounts.test.ts`:
 - spec 7.3's four worked examples, figure for figure (the owner's two items 50.00/10.00; the Daily
@@ -616,7 +616,8 @@ The assertion that fails if the behaviour is deleted: each example's per-line fi
 `scripts/product-file-size.test.ts`.
 
 **Files.** `packages/adjustments/src/bill-discounts.ts` (new), its test (new),
-`packages/adjustments/src/index.ts`, `apps/server/src/adjustments-apply.ts`.
+`packages/adjustments/src/index.ts`, `apps/server/src/adjustments-apply.ts`,
+`apps/server/src/adjustment-rows.ts`, `apps/server/src/set-menu-adjustment.ts`, `docs/backlog/menu.md`.
 
 **Tasks.** 1.1 the module with the order and target rules and their tests; 1.2 moving the helpers
 out of `adjustments-apply.ts`, `adjustments-apply.test.ts` green.
@@ -1382,7 +1383,7 @@ checks (split by file); 7c.5 guide.
 on an extra goes when the extra goes and leaves its dish in its set menu (D34). Every comp and
 discount is now pending. Owner lands.
 
-**Today (read).** A comp prices rows at exactly zero (`zeroed`, now in PR 1's module); an extra is
+**Today (read).** A comp prices rows at exactly zero (`zeroedRows`, now in PR 1's module); an extra is
 covered only whole (`coveredQuantity`, `adjustments-apply.ts:261-272` (†)).
 
 **The change.** `bill-discounts-give.ts` takes Free on dishes and every extra target; the comp route's

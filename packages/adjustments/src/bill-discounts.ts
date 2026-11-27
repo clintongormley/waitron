@@ -49,7 +49,7 @@ export function lineGross(
 const weighed = (row: Pick<SpreadRow, "unitPrecision">) => (row.unitPrecision ?? 0) > 0;
 
 /**
- * The dishes a set-menu row's comp or discount covers with it (spec section 6, D49): those placed
+ * The dishes a set-menu row's comp or discount covers with it (set-menus design of 24 November, section 6; A1515-3 plan D49): those placed
  * in it that are charged, which is what their supplements are; their paid extras are not covered.
  */
 export function coveredBySetMenu<R extends { setMenuLineId: string | null; unit: number }>(
@@ -306,7 +306,8 @@ function refuseValue(discount: PendingBillDiscount): void {
   if (wrong) throw new RangeError(`discount ${discount.id}'s value does not fit its action`);
 }
 
-/** Spec 7.2's order: extras, then dishes and shares of a bill, then set menus, then the bill. */
+/** Spec 7.2's order, with a share of a bill (plan D8) in the dishes' step: extras, then dishes and
+ * shares of a bill, then set menus, then the bill. */
 function stepOf(discount: PendingBillDiscount, lineOf: (id: string) => BillDiscountLine): number {
   const { target } = discount;
   if (target.kind === "bill") return 4;
