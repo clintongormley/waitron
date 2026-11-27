@@ -169,12 +169,16 @@ describe("the till's clock across a backward step of the box's clock", () => {
   });
 
   it("reads the person's latest entry once for the state when nothing needs reconciling", async () => {
-    instant = new Date("2026-01-05T08:00:00Z");
-    expect((await request("in")).status).toBe(200);
     instant = new Date("2026-01-05T09:00:00Z");
+    expect((await request("in")).status).toBe(200);
+    instant = new Date("2026-01-05T10:00:00Z");
     // The reconcile's state read and its clock-in read; the answer reuses the first.
     expect(await latestReads(() => request("state"))).toBe(2);
-    expect((await request("break-start", (await state()).lastEntryId)).status).toBe(200);
+    expect((await act("break-start", "2026-01-05T08:30:00Z")).status).toBe(200);
+    expect(await state()).toMatchObject({
+      state: "on_break",
+      shiftStart: { eventAt: "2026-01-05T09:00:00.000Z", offsetMinutes: 60 },
+    });
     expect(await latestReads(() => request("state"))).toBe(2);
     expect((await request("break-end", (await state()).lastEntryId)).status).toBe(200);
     const expected = (await state()).lastEntryId;

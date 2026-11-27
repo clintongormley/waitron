@@ -10,8 +10,10 @@ import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
   appendToChain,
+  attendanceDays,
   timeEntries,
 } from "@waitron/workforce";
+import { reconcileAttendanceBeforeClock } from "./attendance-discovery.js";
 import { readTillClockState } from "./till-clock-state.js";
 
 const suite = useVenueDb({
@@ -158,6 +160,18 @@ describe("till own clock state", () => {
       backend.breakStart(tx, event("2026-01-05T11:00:00Z", personId, newNode)),
     );
     expect(await read()).toMatchObject({ state: "on_break", shiftStart: null });
+
+    await suite.db.delete(attendanceDays);
+    await withTransaction(suite.db, (tx) =>
+      reconcileAttendanceBeforeClock(
+        tx,
+        { nodeId: newNode, personId },
+        new Date("2026-01-07T05:00:00Z"),
+      ),
+    );
+    expect((await suite.db.select().from(attendanceDays)).map((day) => day.businessDay)).toEqual([
+      "2026-01-06",
+    ]);
   });
 
   it("reads an automatic out and ignores its later acknowledgment", async () => {

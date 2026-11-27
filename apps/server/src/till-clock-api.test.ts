@@ -110,6 +110,10 @@ describe("signed-in own till clock routes", () => {
       instant = new Date(`2026-01-05T09:0${minute}:00Z`);
       const response = await request(path, { expectedEntryId: (await state()).lastEntryId });
       expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        shiftStart:
+          path === "out" ? null : { eventAt: "2026-01-05T09:00:00.000Z", offsetMinutes: 60 },
+      });
     }
     expect(await state()).toMatchObject({ state: "out" });
     expect(await count()).toBe(4);
