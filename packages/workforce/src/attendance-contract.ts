@@ -96,8 +96,17 @@ export interface AttendanceDayView {
   approval?: DayApproval;
   items: CorrectionItem[];
 }
+export interface AttendanceDayApprovalTarget {
+  personId: string;
+  date: string;
+  digest: string;
+}
+export interface FinishedAttendanceDay extends AttendanceDayApprovalTarget {
+  times: { kind: ClockEntryKind; at: string; offsetMinutes: number; automatic: boolean }[];
+}
 export interface AttendanceManagerQueue {
   items: CorrectionItem[];
+  finishedDays: FinishedAttendanceDay[];
 }
 
 export interface AttendanceLookups {

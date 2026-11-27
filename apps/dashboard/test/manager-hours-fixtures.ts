@@ -140,7 +140,7 @@ export async function mountManagerHours(
           selection,
         });
       }
-      if (path.endsWith("/queue")) return Response.json({ items: [] });
+      if (path.endsWith("/queue")) return Response.json({ items: [], finishedDays: [] });
       if (path.includes("/day?")) {
         const args = new URL(path, location.origin).searchParams;
         const hours = data.hours.people.find(

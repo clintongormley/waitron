@@ -136,8 +136,10 @@ function closeShift(
   };
 }
 
-function groupByPerson(entries: readonly TimeEntryRecord[]): Map<string, TimeEntryRecord[]> {
-  const byPerson = new Map<string, TimeEntryRecord[]>();
+export function groupByPerson<T extends { personId: string }>(
+  entries: readonly T[],
+): Map<string, T[]> {
+  const byPerson = new Map<string, T[]>();
   for (const e of entries) {
     const list = byPerson.get(e.personId) ?? [];
     list.push(e);

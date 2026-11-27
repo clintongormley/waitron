@@ -336,3 +336,21 @@ it("worker mode refuses a well-formed manager proposal", () =>
     changes: [change],
     reason: "Check time",
   }));
+
+const approvalTarget = { personId, date: "2026-01-05", digest: "A".repeat(64) };
+it.each([
+  { body: { days: [] }, field: "days" },
+  { body: { days: [null] }, field: "days" },
+  { body: { days: [approvalTarget], actor: personId }, field: "days" },
+  { body: { days: [{ ...approvalTarget, actor: personId }] }, field: "days" },
+  { body: { days: [{ ...approvalTarget, personId: "worker" }] }, field: "personId" },
+  { body: { days: [{ ...approvalTarget, date: "2026-02-30" }] }, field: "date" },
+  { body: { days: [{ ...approvalTarget, digest: "a".repeat(64) }] }, field: "digest" },
+])("refuses a malformed approval batch at $field", ({ body, field }) => {
+  expect(() => request.parseAttendanceDayApprovals(body)).toThrow(
+    expect.objectContaining({
+      code: "management.request_invalid",
+      params: { field },
+    }),
+  );
+});

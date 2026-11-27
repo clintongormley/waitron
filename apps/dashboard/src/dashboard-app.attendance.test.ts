@@ -82,7 +82,7 @@ async function mount(modules: string[], permissions: string[], role = "superviso
           items: [],
         });
       if (path.includes("/attendance/hours?")) return Response.json(managerHours());
-      if (path.endsWith("/queue")) return Response.json({ items: [] });
+      if (path.endsWith("/queue")) return Response.json({ items: [], finishedDays: [] });
       throw new Error(path);
     },
   });
@@ -98,7 +98,7 @@ it("a permitted supervisor opens the real workforce correction screen from Team"
   if (team.getAttribute("aria-expanded") === "false") await userEvent.click(team);
   await userEvent.click(nav!);
   const screen = el.shadowRoot!.querySelector("dashboard-attendance-corrections-screen")!;
-  await expect.poll(() => screen.shadowRoot?.textContent).toContain("Time corrections");
+  await expect.poll(() => screen.shadowRoot?.textContent).toContain("To approve");
   await expect.poll(() => requests.some((path) => path.endsWith("/attendance/queue"))).toBe(true);
 });
 it.each([
@@ -209,7 +209,7 @@ it("Back from Hours protects a dirty own request while retaining the hidden sche
   expect(screen.shadowRoot!.querySelector('[data-test="abs-note"]')).not.toBeNull();
 });
 
-it("opens contributed manager Hours directly while preserving the Time corrections route", async () => {
+it("opens contributed manager Hours directly while preserving the To approve route", async () => {
   const { el, requests } = await mount(
     ["workforce"],
     ["workforce.correct"],

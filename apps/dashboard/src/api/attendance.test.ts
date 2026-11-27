@@ -113,7 +113,7 @@ async function client(
 
 describe("dashboard attendance wire and live reads", () => {
   it("reads minimal names/current viewer, an exact worker day and queue with session cookies", async () => {
-    const queue: AttendanceManagerQueue = { items: [pending] };
+    const queue: AttendanceManagerQueue = { items: [pending], finishedDays: [] };
     const { api, requests } = await client((path) =>
       path.endsWith("/lookups") ? lookups : path.includes("/day?") ? day : queue,
     );
@@ -143,7 +143,7 @@ describe("dashboard attendance wire and live reads", () => {
         : path.includes("/day?")
           ? day
           : path.endsWith("/queue")
-            ? { items: [] }
+            ? { items: [], finishedDays: [] }
             : saved,
     );
     await api.background.lookups();
@@ -180,7 +180,11 @@ describe("dashboard attendance wire and live reads", () => {
 
   it("query identities distinguish scope and declare every record/revision source; their reads stay passive", async () => {
     const { api, requests, activity } = await client((path) =>
-      path.endsWith("/lookups") ? lookups : path.includes("/day?") ? day : { items: [] },
+      path.endsWith("/lookups")
+        ? lookups
+        : path.includes("/day?")
+          ? day
+          : { items: [], finishedDays: [] },
     );
     const lookup = api.lookupsQuery(),
       queue = api.queueQuery(),
@@ -212,10 +216,10 @@ describe("dashboard attendance wire and live reads", () => {
   it("successful commands update a mounted shared query even with a silent change feed", async () => {
     const cache = new LiveData();
     caches.push(cache);
-    let queue: AttendanceManagerQueue = { items: [pending] };
+    let queue: AttendanceManagerQueue = { items: [pending], finishedDays: [] };
     const { api } = await client((_path, init) => {
       if (init.method === "POST") {
-        queue = { items: [] };
+        queue = { items: [], finishedDays: [] };
         return saved;
       }
       return queue;
@@ -240,7 +244,7 @@ describe("dashboard attendance wire and live reads", () => {
               }),
               { status: 409 },
             )
-          : { items: [pending] },
+          : { items: [pending], finishedDays: [] },
       cache,
     );
     const watched = cache.observe(api.queueQuery(), () => {});
@@ -259,14 +263,14 @@ describe("dashboard attendance wire and live reads", () => {
 it("a resolved receipt refreshes mounted records without a POST when the feed is silent", async () => {
   const cache = new LiveData();
   caches.push(cache);
-  let queue: AttendanceManagerQueue = { items: [pending] };
+  let queue: AttendanceManagerQueue = { items: [pending], finishedDays: [] };
   const { api, requests } = await client(
     (path) => (path.includes("/commands/") ? { ...saved, replayed: true } : queue),
     cache,
   );
   const watched = cache.observe(api.queueQuery(), () => {});
   await expect.poll(() => watched.snapshot.value?.items.length).toBe(1);
-  queue = { items: [] };
+  queue = { items: [], finishedDays: [] };
   expect(await api.background.command(command.commandId)).toEqual({ ...saved, replayed: true });
   await expect.poll(() => watched.snapshot.value?.items.length).toBe(0);
   expect(requests.every((request) => request.init.method === "GET")).toBe(true);
@@ -287,7 +291,7 @@ it.each([
   caches.push(cache);
   let revision = "before";
   const { api, requests, activity } = await client(
-    (path) => (path.includes("/day?") ? { ...day, revision } : { items: [] }),
+    (path) => (path.includes("/day?") ? { ...day, revision } : { items: [], finishedDays: [] }),
     cache,
   );
   const queue = cache.observe(api.queueQuery(), () => {});

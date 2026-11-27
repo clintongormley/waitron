@@ -146,7 +146,66 @@ it("returns an empty own inbox and one compatible subject revision for day and i
   });
   expect(value.timeZone).toBe("Europe/Madrid");
   expect((await day()).revision).toBe(value.revision);
-  expect(await queue()).toEqual({ items: [] });
+  expect(await queue()).toEqual({ items: [], finishedDays: [] });
+});
+it("holds the overnight shift and leaves the following shift available while a break is proposed", async () => {
+  const common = { nodeId, personId, offsetMinutes: 60, origin };
+  await run((tx) => backend.clockIn(tx, { ...common, at: "2026-01-05T21:00:00Z" }));
+  await run((tx) => backend.clockOut(tx, { ...common, at: "2026-01-06T04:00:00Z" }));
+  await shift(personId, "2026-01-06", 60);
+  expect((await queue()).finishedDays).toMatchObject([
+    { personId, date: "2026-01-06" },
+    { personId, date: "2026-01-05" },
+  ]);
+  await send(
+    {
+      action: "propose",
+      personId,
+      reason: "The worker reported a break after midnight",
+      changes: [
+        { target: { missingKind: "break_start" }, at: "2026-01-06T00:15:00Z", offsetMinutes: 60 },
+        { target: { missingKind: "break_end" }, at: "2026-01-06T00:45:00Z", offsetMinutes: 60 },
+      ],
+    },
+    manager,
+    manager,
+  );
+  expect((await queue()).finishedDays).toMatchObject([{ personId, date: "2026-01-06" }]);
+});
+it("holds a finished day while a worker requests a missing second shift", async () => {
+  await shift();
+  expect((await queue()).finishedDays).toMatchObject([{ personId, date: "2026-01-05" }]);
+  await send({
+    action: "request",
+    questionId: null,
+    reason: "I forgot to clock in for the second shift",
+    changes: [
+      { target: { missingKind: "in" }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
+      { target: { missingKind: "out" }, at: "2026-01-05T19:00:00Z", offsetMinutes: 0 },
+    ],
+  });
+  expect((await queue()).finishedDays).toEqual([]);
+});
+it("refuses the same day twice and leaves the record unchanged", async () => {
+  await shift();
+  const { date, digest } = (await queue()).finishedDays[0]!;
+  const target = { personId, date, digest };
+  const before = await readRecordedEntries(suite.db, { personId });
+  await expect(
+    run((tx) =>
+      api.approveAttendanceDays(tx, {
+        days: [target, target],
+        actorPersonId: manager,
+        nodeId,
+        origin,
+        now,
+      }),
+    ),
+  ).rejects.toMatchObject({
+    code: "attendance.invalid",
+    params: { reason: "duplicate_approval_day" },
+  });
+  expect(await readRecordedEntries(suite.db, { personId })).toEqual(before);
 });
 it("gives the inbox the venue's zone and no place list", async () => {
   await suite.db.run(

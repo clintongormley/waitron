@@ -1,7 +1,11 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
 import { requireBodyUuid, requirePeriod } from "@waitron/server-kit";
-import type { AttendanceChange, AttendanceCommand } from "@waitron/workforce/attendance-contract";
+import type {
+  AttendanceChange,
+  AttendanceCommand,
+  AttendanceDayApprovalTarget,
+} from "@waitron/workforce/attendance-contract";
 
 function invalid(field: string): never {
   throw new AppError("management.request_invalid", { field });
@@ -154,4 +158,18 @@ export function parseAttendanceDayQuery(
   return mode === "manager"
     ? { date, personId: uuid(value.get("personId"), "personId") }
     : { date };
+}
+
+export function parseAttendanceDayApprovals(value: unknown): AttendanceDayApprovalTarget[] {
+  const body = object(value, "days");
+  keys(body, ["days"], "days");
+  if (!Array.isArray(body.days) || body.days.length === 0) invalid("days");
+  return body.days.map((raw: unknown) => {
+    const day = object(raw, "days");
+    keys(day, ["personId", "date", "digest"], "days");
+    const personId = uuid(day.personId, "personId");
+    const date = requirePeriod(day.date, "date");
+    if (typeof day.digest !== "string" || !/^[0-9A-F]{64}$/.test(day.digest)) invalid("digest");
+    return { personId, date, digest: day.digest };
+  });
 }

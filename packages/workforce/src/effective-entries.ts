@@ -1,4 +1,5 @@
 import type { TimeEntryRecord } from "./projection.js";
+import type { ClockEntryKind } from "./record-types.js";
 
 export function compareRecording(a: TimeEntryRecord, b: TimeEntryRecord): number {
   return (
@@ -11,7 +12,9 @@ export function compareRecording(a: TimeEntryRecord, b: TimeEntryRecord): number
 export function compareEvents(a: TimeEntryRecord, b: TimeEntryRecord): number {
   return Date.parse(a.eventAt) - Date.parse(b.eventAt) || compareRecording(a, b);
 }
-export function isClockEntry(entry: TimeEntryRecord): boolean {
+export function isClockEntry(
+  entry: TimeEntryRecord,
+): entry is TimeEntryRecord & { entryKind: ClockEntryKind } {
   return ["in", "out", "break_start", "break_end"].includes(entry.entryKind);
 }
 export function sameSubject(a: TimeEntryRecord, b: TimeEntryRecord): boolean {

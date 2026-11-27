@@ -12,9 +12,10 @@ Answer working-time questions when you sign in. For an automatic clock-out, choo
 open **My hours**, select the day and choose **Fix my hours**. Enter the corrected times
 and the reason, then send the request.
 
-A manager reviews requests in the dashboard's **Hours**. If a manager proposes a change,
-review it when you sign in and accept it or disagree. Sending a request and accepting a
-manager's proposal are separate actions; check the recorded day afterwards.
+In the dashboard, open **Team** and choose **To approve** to review requests and approve finished
+days. If a manager proposes a change to your hours, review it when you sign in and accept it or
+disagree. Sending a request and accepting a manager's proposal are separate actions. Check the
+recorded day afterwards.
 
 ## Download the working-time record
 

@@ -193,6 +193,7 @@ async function mount(
       }
       if (path.endsWith("/queue"))
         return Response.json({
+          finishedDays: [],
           items: data.items.filter((row) =>
             ["waiting-manager", "waiting-worker", "disputed"].includes(row.status),
           ),
@@ -277,6 +278,95 @@ async function details(root: ParentNode) {
   await expect.poll(() => root.querySelector("[data-day]")?.textContent).toContain("2026-10-14");
 }
 
+it.each(["current", "changed"] as const)(
+  "approves only displayed eligible days when the list is %s",
+  async (state) => {
+    const own = { personId: "manager", date: "2026-10-15", digest: "B".repeat(64) };
+    const other = { personId: "worker", date: "2026-10-16", digest: "C".repeat(64) };
+    const times = [
+      { kind: "in", at: "2026-10-16T09:00:00.000Z", offsetMinutes: 120, automatic: false },
+      { kind: "out", at: "2026-10-16T17:00:00.000Z", offsetMinutes: 120, automatic: true },
+    ];
+    const changed = { ...other, digest: "D".repeat(64) };
+    let finishedDays = [
+      {
+        ...own,
+        times: times.map((time) => ({ ...time, at: time.at.replace("10-16T", "10-15T") })),
+      },
+      { ...other, times },
+    ];
+    const submitted: unknown[] = [];
+    const request = createRequest({
+      fetchImpl: async (path, init) => {
+        if (path.endsWith("/approve-days")) {
+          submitted.push(JSON.parse(init.body as string));
+          if (state === "changed" && submitted.length === 1) {
+            finishedDays[1] = {
+              ...changed,
+              times: [times[0]!, { ...times[1]!, at: "2026-10-16T18:00:00.000Z" }],
+            };
+            return Response.json({ error: { code: "attendance.state_changed" } }, { status: 409 });
+          }
+          finishedDays = finishedDays.filter((row) => row.personId === "manager");
+          return new Response(null, { status: 204 });
+        }
+        if (path.endsWith("/lookups")) return Response.json(lookups);
+        if (path.endsWith("/queue"))
+          return Response.json({
+            items: [
+              item,
+              { ...item, id: "disputed", status: "disputed", reason: "I left earlier" },
+              {
+                ...item,
+                id: "worker-reply",
+                status: "waiting-worker",
+                reason: "Waiting for a reply",
+              },
+            ],
+            finishedDays,
+          });
+        throw new Error(`Unexpected ${path}`);
+      },
+    });
+    const { el } = await mountWidget<Screen>("dashboard-attendance-corrections-screen", {
+      request,
+    });
+    const root = el.shadowRoot!;
+    await expect.poll(() => root.textContent).toContain("Closed the shop late");
+    expect(root.textContent).toContain("Asked to change");
+    expect(root.textContent).toContain("Disputed");
+    expect(root.textContent).toContain("I left earlier");
+    expect(root.textContent).not.toContain("Waiting for a reply");
+    const section = root.querySelector("[data-finished-days]")!;
+    expect(section.textContent).toContain("Finished days");
+    expect(section.textContent).toContain("Ana Worker");
+    expect(section.textContent).toContain("Morgan Manager");
+    expect(section.textContent).toContain("11:00");
+    expect(section.textContent).toContain("Approve all 1");
+    await click(section, "[data-approve-all]");
+    expect(submitted).toEqual([{ days: [other] }]);
+    if (state === "changed") {
+      await expect
+        .poll(() => root.querySelector("[data-action-error]")?.textContent)
+        .toContain("Review the latest list before approving again.");
+      await expect.poll(() => section.textContent).toContain("20:00");
+      await expect
+        .poll(
+          () =>
+            root.querySelector<HTMLElement & { disabled: boolean }>("[data-approve-all]")?.disabled,
+        )
+        .toBe(false);
+      await click(section, "[data-approve-all]");
+      expect(submitted).toEqual([{ days: [other] }, { days: [changed] }]);
+    }
+    await expect
+      .poll(() => root.querySelector("[data-finished-days]")?.textContent)
+      .not.toContain("Ana Worker");
+    expect(section.textContent).toContain("Morgan Manager");
+    expect(root.querySelector("[data-action-error]")).toBeNull();
+  },
+);
+
 describe("dashboard attendance corrections", () => {
   it.each(["light", "dark"] as const)(
     "keeps day selectors and actions inside the phone content width in %s",
@@ -306,10 +396,10 @@ describe("dashboard attendance corrections", () => {
       }
     },
   );
-  it("shows manager, worker and disputed groups with named workers and passively read history", async () => {
+  it("shows approval groups with named workers and passively read history", async () => {
     const m = await mount();
-    expect(m.root.textContent).toContain("Waiting for a manager");
-    expect(m.root.textContent).toContain("Waiting for the worker");
+    expect(m.root.textContent).toContain("Asked to change");
+    expect(m.root.textContent).toContain("Finished days");
     expect(m.root.textContent).toContain("Disputed");
     await details(m.root);
     expect(m.root.textContent).toContain("2026-10-14 18:00 +02:00");
@@ -596,7 +686,12 @@ it("a worker's dispute delivered by the live feed updates the mounted manager de
   await expect
     .poll(() => m.reads.filter((r) => r.path.endsWith("/queue")).length)
     .toBeGreaterThan(1);
-  await details(m.root);
+  await change(m.root, "attendancePerson", "worker");
+  await change(m.root, "attendanceDay", "2026-10-14");
+  await click(m.root, "[data-open-day]");
+  await expect
+    .poll(() => m.root.querySelector("[data-day]")?.textContent)
+    .toContain("Waiting for the worker");
   expect(m.root.querySelector("[data-approve]")).toBeNull();
   expect(m.root.querySelector("[data-decline]")).toBeNull();
   m.data.items = [

@@ -14,6 +14,7 @@ import type {
   AttendanceDayView,
   AttendanceLookups,
   CorrectionItem,
+  FinishedAttendanceDay,
   ManagerHours,
 } from "@waitron/dashboard-modules";
 import {
@@ -29,6 +30,10 @@ import "../widgets/attendance-export-dialog.js";
 import { HoursApi } from "../api/hours.js";
 import "../widgets/hours-record.js";
 import { AttendanceApi } from "../api/attendance.js";
+import {
+  attendanceFinishedDaysStyles,
+  renderAttendanceFinishedDays,
+} from "./attendance-finished-days.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -76,6 +81,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
   static override styles = [
     baseStyles,
     pageTitleStyles,
+    attendanceFinishedDaysStyles,
     css`
       :host {
         display: block;
@@ -97,11 +103,6 @@ export class AttendanceCorrectionsScreen extends LitElement {
       ul {
         display: grid;
         gap: var(--wt-space-3);
-      }
-      .screen,
-      section,
-      article,
-      ul {
         grid-template-columns: minmax(0, 1fr);
       }
       .selectors {
@@ -163,6 +164,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
   #exportRead = 0;
   #hoursApi?: HoursApi;
   @state() private queue: CorrectionItem[] = [];
+  @state() private finishedDays: FinishedAttendanceDay[] | null = null;
   @state() private view: AttendanceDayView | null = null;
   @state() private selectedItemId: string | null = null;
   @state() private reading = false;
@@ -257,6 +259,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
     this.lookups = null;
     this.view = null;
     this.queue = [];
+    this.finishedDays = null;
     this.personId = "";
     this.editorOpen = false;
     this.#pending = null;
@@ -296,6 +299,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
     }
     await this.#queries.watch("queue", this.#api!.queueQuery(), (value) => {
       this.queue = value.items;
+      this.finishedDays = value.finishedDays;
     });
   }
   get #personHours() {
@@ -679,6 +683,28 @@ export class AttendanceCorrectionsScreen extends LitElement {
   async #refresh(): Promise<void> {
     await Promise.allSettled([this.#watchQueue(), this.#day()]);
   }
+  #approveDays = async (days: FinishedAttendanceDay[]): Promise<void> => {
+    if (!this.isConnected || this.#blocked || this.editorOpen || this.readError) return;
+    const generation = this.#generation;
+    this.busy = true;
+    this.actionError = "";
+    try {
+      await this.#api!.approveDays(
+        days.map(({ personId, date, digest }) => ({ personId, date, digest })),
+      );
+    } catch (error) {
+      if (generation !== this.#generation) return;
+      const code = codeOf(error);
+      this.actionError =
+        code === "attendance.state_changed"
+          ? t("attendance.finished_days_changed")
+          : codeMessage(code);
+    }
+    if (generation !== this.#generation) return;
+    if (this.view) await this.#refresh();
+    else await this.#watchQueue().catch(() => undefined);
+    if (generation === this.#generation) this.busy = false;
+  };
   async #saved(result: AttendanceCommandResult, command: AttendanceCommand): Promise<void> {
     if (result.commandId !== command.commandId)
       throw new TypeError("Attendance result belongs to another command");
@@ -853,27 +879,50 @@ export class AttendanceCorrectionsScreen extends LitElement {
       </div>
       ${(!this.lookups && !this.readError) || this.reading || this.hoursReading ? html`<p role="status">${t("attendance.loading")}</p>` : nothing}
       ${this.mode === "hours" && this.lookups ? this.#hoursRecord(disabled) : nothing}
-      ${(["waiting-manager", "waiting-worker", "disputed"] as const).map(
-        (status) =>
-          html`<section aria-label=${statusLabel(status)}>
-            <h2>${statusLabel(status)}</h2>
-            ${(this.lookups ? this.queue : [])
-              .filter((item) => item.status === status)
-              .map(
-                (item) =>
-                  html`<article>
-                    <p>${this.#person(item.personId)} · ${item.reason}</p>
-                    <wt-button
-                      data-detail
-                      .disabled=${disabled}
-                      variant="primary"
-                      @click=${() => this.#details(item)}
-                      >${t("attendance.details")}</wt-button
-                    >
-                  </article>`,
-              )}
-          </section>`,
-      )}
+      ${(this.mode === "hours"
+        ? (["waiting-manager", "waiting-worker", "disputed"] as const)
+        : (["waiting-manager", "disputed"] as const)
+      ).map((status) => {
+        const items = this.lookups ? this.queue.filter((item) => item.status === status) : [];
+        const heading =
+          this.mode === "hours"
+            ? statusLabel(status)
+            : t(
+                status === "waiting-manager"
+                  ? "attendance.asked_to_change"
+                  : "attendance.disputed_days",
+              );
+        return html`<section aria-label=${heading}>
+          <h2>${heading}${this.mode === "corrections" ? ` · ${items.length}` : nothing}</h2>
+          ${items.map(
+            (item) =>
+              html`<article>
+                <p>
+                  <strong>${this.#person(item.personId)}</strong> ·
+                  ${wallClock(item.changes[0]!.at, item.changes[0]!.offsetMinutes).date}
+                </p>
+                <p>${item.reason}</p>
+                <wt-button
+                  data-detail
+                  .disabled=${disabled}
+                  variant="secondary"
+                  @click=${() => this.#details(item)}
+                  >${t("attendance.details")}</wt-button
+                >
+              </article>`,
+          )}
+        </section>`;
+      })}
+      ${
+        this.mode === "corrections" && this.lookups && this.finishedDays
+          ? renderAttendanceFinishedDays(
+              this.finishedDays,
+              this.lookups,
+              disabled || !!this.readError,
+              this.#approveDays,
+            )
+          : nothing
+      }
       ${
         this.view
           ? html`<section data-day>

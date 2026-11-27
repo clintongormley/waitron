@@ -169,11 +169,7 @@ export type {
   CorrectionItem,
 } from "./attendance-contract.js";
 
-export {
-  readAttendanceInbox,
-  readAttendanceDay,
-  readAttendanceManagerQueue,
-} from "./attendance-reads.js";
+export { readAttendanceInbox, readAttendanceDay } from "./attendance-reads.js";
 export type {
   AttendancePrompt,
   AttendanceInbox,
@@ -186,5 +182,6 @@ export { readPersonHours, readManagerHours, countMonthlyHoursIssues } from "./ho
 export { WORKFORCE_BACKUP_VERIFICATION } from "./backup-verification.js";
 
 export { approveAttendanceDay } from "./day-approvals.js";
+export { approveAttendanceDays, readAttendanceManagerQueue } from "./attendance-approval-queue.js";
 export type { DayApproval } from "./attendance-contract.js";
 export { maySelfApproveAttendance } from "./corrections.js";

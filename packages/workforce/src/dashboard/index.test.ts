@@ -29,8 +29,8 @@ describe("workforce correction contribution", () => {
       order: 40,
       requiresPermission: "workforce.correct",
     });
-    expect(value.strings.en["nav.time_corrections"]).toBe("Time corrections");
-    expect(value.strings.es["nav.time_corrections"]).toBe("Correcciones de horas");
+    expect(value.strings.en["nav.time_corrections"]).toBe("To approve");
+    expect(value.strings.es["nav.time_corrections"]).toBe("Por aprobar");
   });
   it("binds the injected request and shared live cache without making a request while constructing", () => {
     const value = WORKFORCE_DASHBOARD;

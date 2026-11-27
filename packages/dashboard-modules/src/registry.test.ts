@@ -93,7 +93,7 @@ describe("CARD_PROVIDER_PANELS honesty", () => {
   });
 });
 
-it("registers Time corrections in Team for workforce correction authority", () => {
+it("registers To approve in Team for workforce correction authority", () => {
   const workforce = DASHBOARD_MODULES.find((contribution) => contribution.module === "workforce");
   expect(workforce?.screen).toEqual({
     id: "time-corrections",
@@ -104,7 +104,7 @@ it("registers Time corrections in Team for workforce correction authority", () =
   });
 });
 
-it("registers workforce Hours beside Time corrections with current correction authority", () => {
+it("registers workforce Hours beside To approve with current correction authority", () => {
   const workforce = DASHBOARD_MODULES.find((contribution) => contribution.module === "workforce");
   expect(workforce?.moreScreens?.find((entry) => entry.screen.id === "hours")?.screen).toEqual({
     id: "hours",

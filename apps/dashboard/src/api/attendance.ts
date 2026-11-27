@@ -5,6 +5,7 @@ import type {
   AttendanceCommandResult,
   AttendanceDayView,
   AttendanceLookups,
+  AttendanceDayApprovalTarget,
   AttendanceManagerQueue,
 } from "@waitron/dashboard-modules";
 
@@ -43,6 +44,10 @@ export class AttendanceApi {
     const result = await this.request<AttendanceCommandResult>(`${BASE}/commands`, "POST", command);
     this.rereadWatches();
     return result;
+  }
+  async approveDays(days: AttendanceDayApprovalTarget[]): Promise<void> {
+    await this.request<void>(`${BASE}/approve-days`, "POST", { days });
+    this.rereadWatches();
   }
   rereadWatches(): void {
     this.liveData?.invalidate(ATTENDANCE_QUERY_DEPENDENCIES.queue.map((type) => ({ type })));

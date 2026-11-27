@@ -5,31 +5,37 @@ import { AppError, type Origin } from "@waitron/shared";
 import type { DayApproval } from "./attendance-contract.js";
 import { appendToChain } from "./chain.js";
 import { maySelfApproveAttendance } from "./corrections.js";
-import { compareEvents, compareRecording, effectiveClockEntries } from "./effective-entries.js";
+import {
+  compareEvents,
+  compareRecording,
+  effectiveClockEntries,
+  isClockEntry,
+} from "./effective-entries.js";
 import type { TimeEntryRecord } from "./projection.js";
+import type { ClockEntryKind } from "./record-types.js";
 import { isRecordDate } from "./record-dates.js";
 import { entryDate } from "./record-period.js";
 import { readPeriodEntries } from "./record-reads.js";
 import "./errors.js";
 
 interface ShiftTimes {
-  first: TimeEntryRecord;
   date: string;
-  ids: string[];
+  times: (TimeEntryRecord & { entryKind: ClockEntryKind })[];
 }
 
 function finishedDays(entries: readonly TimeEntryRecord[]): Map<string, ShiftTimes> {
   const finished = new Map<string, ShiftTimes>();
   let shift: ShiftTimes | undefined;
   for (const event of effectiveClockEntries(entries).sort(compareEvents)) {
+    if (!isClockEntry(event)) continue;
     if (event.entryKind === "in") {
-      shift = { first: event, date: entryDate(event), ids: [event.entryId] };
+      shift = { date: entryDate(event), times: [event] };
     } else if (shift !== undefined) {
-      shift.ids.push(event.entryId);
+      shift.times.push(event);
       if (event.entryKind === "out") {
         const day = finished.get(shift.date);
         if (day === undefined) finished.set(shift.date, shift);
-        else for (const id of shift.ids) day.ids.push(id);
+        else for (const time of shift.times) day.times.push(time);
         shift = undefined;
       }
     }
@@ -38,7 +44,7 @@ function finishedDays(entries: readonly TimeEntryRecord[]): Map<string, ShiftTim
   return finished;
 }
 
-function approvalsForPerson(entries: readonly TimeEntryRecord[]) {
+export function approvalsForPerson(entries: readonly TimeEntryRecord[]) {
   const latest = new Map<string, TimeEntryRecord>();
   for (const entry of entries) {
     if (entry.entryKind !== "day_approval") continue;
@@ -47,14 +53,15 @@ function approvalsForPerson(entries: readonly TimeEntryRecord[]) {
     if (earlier === undefined || compareRecording(entry, earlier) > 0) latest.set(date, entry);
   }
   return new Map(
-    Array.from(finishedDays(entries), ([date, { first, ids }]) => {
+    Array.from(finishedDays(entries), ([date, { times }]) => {
+      const first = times[0]!;
       const digest = createHash("sha256")
-        .update(JSON.stringify([first.personId, date, ids]))
+        .update(JSON.stringify([first.personId, date, times.map((time) => time.entryId)]))
         .digest("hex")
         .toUpperCase();
       const status: DayApproval["status"] =
         latest.get(date)?.extension?.approvalDigest === digest ? "approved" : "pending";
-      return [date, { first, approval: { status, digest } }];
+      return [date, { first, times, approval: { status, digest } }];
     }),
   );
 }
@@ -67,19 +74,17 @@ export function dayApprovalsForPerson(
   );
 }
 
+interface ApprovalActor {
+  nodeId: string;
+  actorPersonId: string;
+  origin: Origin;
+  now: Date;
+}
 export async function approveAttendanceDay(
   tx: Transaction,
-  input: {
-    personId: string;
-    date: string;
-    digest: string;
-    nodeId: string;
-    actorPersonId: string;
-    origin: Origin;
-    now: Date;
-  },
+  input: ApprovalActor & { personId: string; date: string; digest: string },
 ): Promise<void> {
-  const { personId, date, digest, nodeId, actorPersonId, origin, now } = input;
+  const { personId, date, digest, actorPersonId } = input;
   const selfApproved = personId === actorPersonId;
   const allowed = selfApproved
     ? await maySelfApproveAttendance(tx, actorPersonId)
@@ -97,8 +102,16 @@ export async function approveAttendanceDay(
   const day = approvalsForPerson(entries).get(date);
   if (day === undefined || day.approval.digest !== digest)
     throw new AppError("attendance.state_changed", {});
-  if (day.approval.status === "approved") return;
+  await writeAttendanceDayApproval(tx, input, day);
+}
 
+export async function writeAttendanceDayApproval(
+  tx: Transaction,
+  { nodeId, actorPersonId, origin, now }: ApprovalActor,
+  day: { first: TimeEntryRecord; approval: DayApproval },
+): Promise<void> {
+  if (day.approval.status === "approved") return;
+  const { personId } = day.first;
   await appendToChain(
     tx,
     { nodeId },
@@ -110,13 +123,13 @@ export async function approveAttendanceDay(
       recordedByPersonId: actorPersonId,
       origin,
       extension: {
-        selfApproved,
+        selfApproved: personId === actorPersonId,
         authorKind: "manager",
         direction: null,
         missingEntryKind: null,
         respondsToEntryId: null,
         payPeriodClosureId: null,
-        approvalDigest: digest,
+        approvalDigest: day.approval.digest,
       },
     },
     () => now,

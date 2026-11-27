@@ -104,25 +104,109 @@ async function proposal() {
     reason: "Check the finish",
   };
 }
-const paths = ["lookups", "queue", "day", "commands/id", "commands"];
+const paths = ["lookups", "queue", "day", "commands/id", "commands", "approve-days"];
 function route(path: string) {
   if (path === "day") return `day?personId=${venue.personId}&date=2026-01-05`;
   return path.replace("/id", `/${randomUUID()}`);
 }
+function routeBody(path: string, command: Awaited<ReturnType<typeof proposal>>) {
+  if (path === "commands") return command;
+  if (path === "approve-days") return { days: [] };
+  return undefined;
+}
 it.each(paths)("requires management permission for %s", async (path) => {
   for (const cookie of ["", staffCookie]) {
-    const response = await request(
-      route(path),
-      path === "commands" ? await proposal() : undefined,
-      cookie,
-    );
+    const response = await request(route(path), routeBody(path, await proposal()), cookie);
     expect(response.status).toBe(cookie ? 403 : 401);
     expect(await response.json()).toMatchObject({
       error: { code: cookie ? "authorization.not_permitted" : "management_session.required" },
     });
   }
 });
-it("provides minimal lookups, own viewer eligibility, an empty queue and a day from the same subject revision", async () => {
+it("refuses an entire batch if a displayed day has since changed", async () => {
+  const readDay = async (date: string) => {
+    const response = await request(`day?personId=${venue.personId}&date=${date}`);
+    const { approval } = await response.json();
+    return { personId: venue.personId, date, digest: approval.digest as string };
+  };
+  const addShift = (start: string, end: string) =>
+    withTransaction(suite.db, async (tx) => {
+      const backend = new WorkforceBackend();
+      const common = {
+        ...venue.cfg,
+        personId: venue.personId,
+        origin: jobOrigin("dashboard"),
+        offsetMinutes: 60,
+      };
+      await backend.clockIn(tx, { ...common, at: start });
+      await backend.clockOut(tx, { ...common, at: end });
+    });
+  await addShift("2026-01-06T06:00:00Z", "2026-01-06T07:00:00Z");
+  const first = await readDay("2026-01-05");
+  const second = await readDay("2026-01-06");
+  await addShift("2026-01-06T07:30:00Z", "2026-01-06T08:00:00Z");
+  const before = await suite.db.select().from(timeEntries);
+  const refused = await request("approve-days", { days: [first, second] });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ error: { code: "attendance.state_changed" } });
+  expect(await suite.db.select().from(timeEntries)).toEqual(before);
+
+  const days = [first, await readDay("2026-01-06")];
+  expect((await request("approve-days", { days })).status).toBe(204);
+  const approved = await suite.db.select().from(timeEntries);
+  expect(approved.filter((entry) => entry.entryKind === "day_approval")).toMatchObject(
+    days.map(({ personId, digest }) => ({
+      personId,
+      approvalDigest: digest,
+      recordedByPersonId: managerId,
+    })),
+  );
+  expect((await request("approve-days", { days })).status).toBe(204);
+  expect(await suite.db.select().from(timeEntries)).toEqual(approved);
+});
+
+it("refuses a duplicate day with a different UUID spelling", async () => {
+  const { approval } = await (await request(route("day"))).json();
+  const day = { personId: venue.personId, date: "2026-01-05", digest: approval.digest as string };
+  const response = await request("approve-days", {
+    days: [day, { ...day, personId: day.personId.toUpperCase() }],
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "attendance.invalid", params: { reason: "duplicate_approval_day" } },
+  });
+  expect(
+    await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "day_approval")),
+  ).toEqual([]);
+});
+it("removes a day from bulk approval when the manager sends the worker a proposal", async () => {
+  const before = await (await request("queue")).json();
+  expect(before.finishedDays).toMatchObject([
+    {
+      personId: venue.personId,
+      date: "2026-01-05",
+      digest: expect.stringMatching(/^[0-9A-F]{64}$/),
+      times: [
+        { kind: "in", at: "2026-01-05T09:00:00.000Z", offsetMinutes: 60 },
+        { kind: "out", at: "2026-01-05T17:00:00.000Z", offsetMinutes: 60 },
+      ],
+    },
+  ]);
+  const { personId, date, digest } = before.finishedDays[0];
+  expect((await request("commands", await proposal())).status).toBe(200);
+  expect(await (await request("queue")).json()).toMatchObject({
+    items: [{ personId, status: "waiting-worker" }],
+    finishedDays: [],
+  });
+  const refused = await request("approve-days", { days: [{ personId, date, digest }] });
+  expect(refused.status).toBe(409);
+  expect(await refused.json()).toMatchObject({ error: { code: "attendance.state_changed" } });
+  expect(
+    await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "day_approval")),
+  ).toEqual([]);
+});
+
+it("provides minimal lookups, own viewer eligibility, a finished day in the queue and a day from the same subject revision", async () => {
   const lookups = await request("lookups");
   expect(lookups.status).toBe(200);
   expect(await lookups.json()).toEqual({
@@ -138,6 +222,7 @@ it("provides minimal lookups, own viewer eligibility, an empty queue and a day f
   });
   expect(await (await request(route("queue"))).json()).toEqual({
     items: [],
+    finishedDays: [expect.objectContaining({ personId: venue.personId, date: "2026-01-05" })],
   });
   expect(await (await request(route("day"))).json()).toMatchObject({
     personId: venue.personId,
@@ -196,6 +281,7 @@ it("proposes with the authenticated manager, then the worker accepts with origin
   ]);
   expect(await (await request(route("queue"))).json()).toEqual({
     items: [],
+    finishedDays: [expect.objectContaining({ personId: venue.personId, date: "2026-01-05" })],
   });
 });
 it("keeps passive reads from extending a management session, but explicit reads do", async () => {
@@ -250,7 +336,7 @@ it("rejects forged actors, extra scope, worker actions, malformed JSON and suspe
     .set(withFoldedPersonChanges({ status: "suspended" }))
     .where(eq(persons.id, managerId));
   for (const path of paths) {
-    const response = await request(route(path), path === "commands" ? await proposal() : undefined);
+    const response = await request(route(path), routeBody(path, await proposal()));
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ error: { code: "person.suspended" } });
   }
@@ -271,7 +357,7 @@ it.each(["ended", "expired"] as const)(
       .where(eq(dashboardSessions.id, managementId));
     const before = await suite.db.select().from(timeEntries);
     for (const path of paths) {
-      const response = await request(route(path), path === "commands" ? body : undefined);
+      const response = await request(route(path), routeBody(path, body));
       expect(response.status).toBe(401);
       expect(await response.json()).toMatchObject({
         error: {
@@ -397,4 +483,35 @@ it("offers self-approval to a Manager holding workforce.self_approve", async () 
   expect(await response.json()).toMatchObject({
     viewer: { personId: managerId, canSelfApprove: true },
   });
+});
+
+it("refuses a manager's own day until their role grants self-approval", async () => {
+  await setBuiltInRoleForTest(suite.db, managerId, "manager");
+  await withTransaction(suite.db, async (tx) => {
+    const backend = new WorkforceBackend();
+    const common = {
+      ...venue.cfg,
+      personId: managerId,
+      offsetMinutes: 60,
+      origin: jobOrigin("dashboard"),
+    };
+    await backend.clockIn(tx, { ...common, at: "2026-01-05T10:00:00Z" });
+    await backend.clockOut(tx, { ...common, at: "2026-01-05T15:00:00Z" });
+  });
+  const { approval } = await (await request(`day?personId=${managerId}&date=2026-01-05`)).json();
+  const days = [{ personId: managerId, date: "2026-01-05", digest: approval.digest as string }];
+  const refused = await request("approve-days", { days });
+  expect(refused.status).toBe(403);
+  expect(await refused.json()).toMatchObject({ error: { code: "attendance.not_permitted" } });
+  expect(
+    await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "day_approval")),
+  ).toEqual([]);
+
+  suite.db.run(
+    sql`update roles set permissions = json_insert(permissions, '$[#]', 'workforce.self_approve') where built_in_key = 'manager'`,
+  );
+  expect((await request("approve-days", { days })).status).toBe(204);
+  expect(
+    await suite.db.select().from(timeEntries).where(eq(timeEntries.entryKind, "day_approval")),
+  ).toMatchObject([{ personId: managerId, recordedByPersonId: managerId, selfApproved: true }]);
 });

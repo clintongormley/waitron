@@ -249,6 +249,16 @@ solicitud. Pide a otro supervisor, encargado o administrador que elija **Aprobar
 seleccione su nombre e introduzca su PIN. Si eres administrador, puedes aprobar tu propia
 solicitud. Consulta su estado en **Mis horas**.
 
+## Aprobar los días terminados {#approve-hours}
+
+En el menú del panel, abre **Por aprobar**. Pulsa **Detalles** en **Cambios solicitados** para
+revisar una solicitud. Pulsa **Detalles** en **En desacuerdo** para leer el cambio y la respuesta
+de la persona.
+
+Comprueba los fichajes en **Días terminados** y pulsa **Aprobar todos**. Si la lista cambia mientras
+la revisas, comprueba las horas actualizadas antes de volver a aprobar. Abre **Horas** para ver los
+cambios pendientes de respuesta.
+
 ## Cerrar las horas del mes {#monthly-hours-close}
 
 Abre **Horas** en el panel. Usa **Anterior** y **Siguiente** junto al mes para cambiar de mes.
