@@ -71,7 +71,7 @@ export function adminShutdownDuties(deps: {
       membership?.body.nodes.some((box) => box.nodeId !== nodeId && box.standing !== "evicted")
     )
       return undefined;
-    if (status.enabled && status.destinations.length === 1) return "saved" as const;
+    if (status.enabled && status.destinations.length > 0) return "saved" as const;
     const { meta, settings } = await readArchiveSettingsWithMeta(db, ring);
     if (meta !== null || settings !== null) return undefined;
     return loadBackupKey(await deps.readBoxEnv());

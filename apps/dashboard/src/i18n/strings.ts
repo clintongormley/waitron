@@ -4777,13 +4777,13 @@ export const en = {
     "Ask anyone still clocked in to clock out before you continue.",
   "box_status.shutdown.working": "Working",
   "box_status.shutdown.what":
-    "Waitron pauses selling and staff clocking while it saves and checks a full backup. You need the backup and its recovery key to restore. An administrator must choose whether to sell here again when this box starts.",
+    "Waitron pauses selling and staff clocking while it saves and checks a full backup at every saved destination. You need the backup and its recovery key to restore. An administrator must choose whether to sell here again when this box starts.",
   "box_status.shutdown.password_reason":
     "Use your password to confirm. You can use that password to sign back in and cancel, or to carry on when the box starts again. If you haven’t set a password, set one in Account settings before you continue.",
   "box_status.shutdown.add_password":
     "You need a password to shut down this box. Set a password in Account settings, then try again. If you only sign in with Google, add a passkey there first.",
   "box_status.shutdown.checking":
-    "Waiting for work to finish and checking the saved backup. Leave the box on.",
+    "Waiting for work to finish and checking the final backup. Leave the box on.",
   "box_status.shutdown.paused": "Shutdown is paused. Leave the box on while you decide.",
   "box_status.shutdown.retry": "Retry backup",
   "box_status.shutdown.anyway": "Shut down anyway",
@@ -9693,13 +9693,13 @@ export const es: Record<StringKey, string> = {
     "Pide a quienes siguen con el turno abierto que fichen la salida antes de continuar.",
   "box_status.shutdown.working": "Trabajando",
   "box_status.shutdown.what":
-    "Waitron pausa las ventas y los fichajes mientras guarda y comprueba una copia de seguridad completa. Necesitas la copia y su clave de recuperación para restaurarla. Al arrancar, un administrador deberá decidir si se vuelve a vender aquí.",
+    "Waitron pausa las ventas y los fichajes mientras guarda y comprueba una copia de seguridad completa en cada destino guardado. Necesitas la copia y su clave de recuperación para restaurarla. Al arrancar, un administrador deberá decidir si se vuelve a vender aquí.",
   "box_status.shutdown.password_reason":
     "Usa tu contraseña para confirmar. Podrás usarla para volver a iniciar sesión y cancelar, o para continuar cuando el servidor vuelva a arrancar. Si aún no tienes contraseña, créala en Configuración de la cuenta antes de continuar.",
   "box_status.shutdown.add_password":
     "Necesitas una contraseña para apagar este servidor. Crea una contraseña en Configuración de la cuenta y vuelve a intentarlo. Si solo inicias sesión con Google, añade primero una llave de acceso allí.",
   "box_status.shutdown.checking":
-    "Esperando a que termine el trabajo y comprobando la copia guardada. Deja el servidor encendido.",
+    "Esperando a que termine el trabajo y comprobando la copia final. Deja el servidor encendido.",
   "box_status.shutdown.paused":
     "El apagado está en pausa. Deja el servidor encendido mientras decides.",
   "box_status.shutdown.retry": "Volver a hacer la copia",

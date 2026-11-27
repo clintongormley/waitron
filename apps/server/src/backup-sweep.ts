@@ -195,7 +195,7 @@ async function localFoldersOnDisk(
 }
 
 export interface SavedArchive {
-  backend: StorageBackend;
+  backends: readonly StorageBackend[];
   key: string;
   sha256: string;
   bytes: number;
@@ -445,13 +445,10 @@ async function stageBackup(
       }),
     );
     if (check && savedDigest) {
-      const [upload] = uploads;
       return () => {
-        if (upload.status === "rejected") throw upload.reason;
-        return check(
-          { backend: deps.backends[0], key, ...savedDigest, plaintextBytes },
-          deps.signal,
-        );
+        const failed = uploads.find((upload) => upload.status === "rejected");
+        if (failed !== undefined) throw failed.reason;
+        return check({ backends: deps.backends, key, ...savedDigest, plaintextBytes }, deps.signal);
       };
     }
     if (!deps.cloud || deps.signal.aborted) return;

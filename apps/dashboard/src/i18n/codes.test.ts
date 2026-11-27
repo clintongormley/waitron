@@ -1214,8 +1214,8 @@ it.each([
   ],
   [
     "box.shutdown_unavailable",
-    "Checked shutdown needs a standalone main box with one saved backup destination and streaming turned off.",
-    "El apagado con comprobación requiere un servidor principal sin servidor de reserva, con un solo destino de copias guardado y la copia continua desactivada.",
+    "Checked shutdown needs a standalone main box with streaming and Cloud turned off and a numbered backup key. Turn on saved backups with at least one destination, or download a copy if there are no saved backup settings.",
+    "El apagado con comprobación requiere un servidor principal sin servidor de reserva, con la copia continua y Cloud desactivados y una clave de copia numerada. Activa las copias guardadas con al menos un destino o descarga una copia si no hay ajustes de copia guardados.",
   ],
 ])("explains the shutdown refusal %s in both languages", (code, english, spanish) => {
   expect(codeMessage(code, "en")).toBe(english);

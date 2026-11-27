@@ -80,8 +80,10 @@ it.each([
   ["refuses checked shutdown when saved backups are disabled", "disabled"],
   ["refuses checked shutdown without a destination or backup key", "no-key"],
   ["records and emails a failed final backup while sales stay paused", "failed"],
+  ["multi-destination shutdown offers a saved folder and bucket", "multiple"],
 ] as const)("%s", async (_description, scenario) => {
   const { cfg } = await setupVenue(suite.db);
+  const writeMark = scenario === "multiple" ? vi.spyOn(atomic, "writeFileDurable") : null;
   const { token } = await openManagementSession(suite.db, "admin");
   const { token: staleToken } = await openManagementSession(suite.db, "admin");
   let releaseScheduled!: () => void;
@@ -110,6 +112,10 @@ it.each([
   const checking = new Promise<void>((resolve) => {
     reachedCheck = resolve;
   });
+  let finishCheck!: () => void;
+  const checkFinished = new Promise<void>((resolve) => {
+    finishCheck = resolve;
+  });
   const checkedBackup = vi
     .spyOn(BackupSupervisor.prototype, "runForShutdown")
     .mockImplementation(async (signal) => {
@@ -123,6 +129,7 @@ it.each([
       await new Promise<void>((resolve) => {
         signal.addEventListener("abort", () => resolve(), { once: true });
         reachedCheck();
+        if (scenario === "multiple") void checkFinished.then(resolve);
       });
     });
   const smtp = scenario === "failed" ? await startFakeSmtp() : null;
@@ -152,7 +159,25 @@ it.each([
                 ring,
                 {
                   enabled: scenario !== "disabled",
-                  destinations: [{ kind: "local-fs", id: "folder", dir }],
+                  destinations: [
+                    { kind: "local-fs", id: "folder", dir },
+                    ...(scenario === "multiple"
+                      ? [
+                          {
+                            kind: "s3" as const,
+                            id: "bucket",
+                            bucket: {
+                              endpoint: "https://127.0.0.1:1",
+                              region: "eu-west-1",
+                              bucket: "copies",
+                              prefix: "",
+                              accessKeyId: "test",
+                              secretAccessKey: "test-secret",
+                            },
+                          },
+                        ]
+                      : []),
+                  ],
                   schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
                   retention: { count: 7, days: 30 },
                   destinationTimeoutMs: 15 * 60 * 1000,
@@ -218,6 +243,15 @@ it.each([
         expect(await refused.json()).toMatchObject({
           error: { code: "management_session.proof_required" },
         });
+        const health = () =>
+          app.request("/api/box/health", {
+            headers: { cookie: `waitron_management_session=${token}` },
+          });
+        if (scenario === "multiple") {
+          const view = await health();
+          expect(view.status).toBe(200);
+          expect(await view.json()).toMatchObject({ shutdown: { available: true, phase: "idle" } });
+        }
         const response = await begin(token);
         if (scenario === "streaming" || scenario === "disabled" || scenario === "no-key") {
           releaseScheduled();
@@ -244,6 +278,18 @@ it.each([
         expect(view.status).toBe(200);
         expect(enteredCheckEarly).toBe(false);
         await checking;
+        if (scenario === "multiple") {
+          const mark = join(stateDir, "admin-shutdown.json");
+          const wroteMark = () => writeMark!.mock.calls.some(([file]) => file === mark);
+          expect(wroteMark()).toBe(false);
+          finishCheck();
+          await vi.waitFor(async () => {
+            expect(await (await health()).json()).toMatchObject({ shutdown: { phase: "ready" } });
+          });
+          expect(wroteMark()).toBe(true);
+          expect((await stat(mark)).isFile()).toBe(true);
+          return;
+        }
         if (smtp) {
           const rows = () =>
             suite.db
@@ -317,6 +363,7 @@ it.each([
       },
     );
   } finally {
+    writeMark?.mockRestore();
     scheduledBackup.mockRestore();
     checkedBackup.mockRestore();
     socket.destroy();

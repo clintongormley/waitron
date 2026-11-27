@@ -419,7 +419,7 @@ export class BackupSupervisor {
       recoveryKey === undefined ||
       !controller ||
       cfg.cloud ||
-      this.#backends.length !== 1
+      this.#backends.length === 0
     )
       throw new AppError("backup.not_enabled", {});
     const stopping = AbortSignal.any([signal, controller.signal]);
