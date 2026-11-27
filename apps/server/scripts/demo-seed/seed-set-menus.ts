@@ -8,7 +8,6 @@ import {
   menuItems,
   readSetMenu,
   requireMenuRoot,
-  saveSetMenuDishCourse,
   saveSetMenuLines,
   updateMenuItem,
 } from "@waitron/menu";
@@ -79,8 +78,6 @@ export async function seedSetMenus(
       const itemId = itemIds.get(productId);
       if (itemId === undefined)
         throw new Error(`seedSetMenus: "${name}" has no menu item for "${dish.productImage}"`);
-      if (dish.course !== undefined)
-        await saveSetMenuDishCourse(tx, id, itemId, courseIdFor(dish.course));
       if (dish.surcharge !== null)
         await updateMenuItem(tx, id, itemId, { grossPrice: dish.surcharge });
     }

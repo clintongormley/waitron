@@ -21,7 +21,6 @@ import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { ListWriteQueue } from "./section-writes.js";
-import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-price-input.js";
@@ -31,7 +30,6 @@ type Dish = SetMenuDetails["dishes"][number];
 export type SetMenuDishesSaved = {
   details: SetMenuDetails;
   addedLines?: SetMenuLine[];
-  removedLines?: SetMenuLine[];
 };
 
 type PriceRefusal = { message: string; namesField: boolean };
@@ -57,8 +55,12 @@ export class SetMenuDishes extends LitElement {
       wt-data-table {
         isolation: isolate;
       }
-      wt-data-table::part(dish-course) {
-        min-inline-size: calc(var(--wt-space-6) * 5);
+      wt-data-table::part(column-surcharge) {
+        inline-size: 0;
+      }
+      wt-data-table::part(dish-name),
+      wt-data-table::part(dish-link) {
+        overflow-wrap: anywhere;
       }
       wt-data-table::part(dish-surcharge) {
         inline-size: calc(var(--wt-space-6) * 4);
@@ -74,10 +76,7 @@ export class SetMenuDishes extends LitElement {
   @property({ attribute: false }) details!: SetMenuDetails;
   @state() private prices = new Map<string, string>();
   @state() private refusals = new Map<string, PriceRefusal>();
-  @state() private hiddenErrors = new Set<string>();
   @state() private savingPrices = false;
-  @state() private courseErrors = new Map<string, string>();
-  @state() private changingCourse = new Set<string>();
   @state() private actionError = "";
   @state() private loadError = false;
   @state() private dialog: "add" | "copy" | Dish | null = null;
@@ -117,7 +116,6 @@ export class SetMenuDishes extends LitElement {
     this.prices = new Map([...this.prices].filter(([id]) => ids.has(id)));
     this.refusals = new Map([...this.refusals].filter(([id]) => ids.has(id)));
     this.#scope?.changed();
-    if (this.prices.size) void this.#showPriceErrors();
   }
 
   #changes() {
@@ -160,7 +158,7 @@ export class SetMenuDishes extends LitElement {
     this.#scope?.changed();
   }
 
-  async #showPriceErrors(focus = false): Promise<void> {
+  async #focusPriceError(): Promise<void> {
     await this.updateComplete;
     const tables = [...this.renderRoot.querySelectorAll("wt-data-table")];
     await Promise.all(tables.map(({ updateComplete }) => updateComplete));
@@ -176,10 +174,7 @@ export class SetMenuDishes extends LitElement {
     const ids = this.#changes()
       .map(({ dish }) => dish.menuItemId)
       .filter((id) => this.#priceError(id));
-    const hidden = ids.filter((id) => !fields.has(id));
-    if (hidden.length !== this.hiddenErrors.size || hidden.some((id) => !this.hiddenErrors.has(id)))
-      this.hiddenErrors = new Set(hidden);
-    if (focus) fields.get(ids.find((id) => fields.has(id)) ?? "")?.focus();
+    fields.get(ids.find((id) => fields.has(id)) ?? "")?.focus();
   }
 
   #savePrices(): void {
@@ -188,7 +183,7 @@ export class SetMenuDishes extends LitElement {
     this.#feedback.press();
     this.refusals = new Map();
     if (changes.some(({ price }) => this.#invalidPrice(price))) {
-      void this.#showPriceErrors(true);
+      void this.#focusPriceError();
       return;
     }
 
@@ -229,7 +224,7 @@ export class SetMenuDishes extends LitElement {
       this.savingPrices = false;
       if (!refusals.size) this.#feedback.reset();
       this.#scope?.commit(false);
-      if (refusals.size && this.isConnected) await this.#showPriceErrors(true);
+      if (refusals.size && this.isConnected) await this.#focusPriceError();
     });
   }
 
@@ -240,9 +235,9 @@ export class SetMenuDishes extends LitElement {
       dish: { menuItemId: id, name },
     } of this.#changes()) {
       const error = this.#priceError(id);
-      if (error && !this.hiddenErrors.has(id)) fields.add(id);
+      if (error) fields.add(id);
       else {
-        const reason = error || this.refusals.get(id)?.message;
+        const reason = this.refusals.get(id)?.message;
         if (reason) errors[id] = fill("menus.change_not_saved", { name, reason });
       }
     }
@@ -266,56 +261,6 @@ export class SetMenuDishes extends LitElement {
     );
   }
 
-  #changeCourse(event: CustomEvent<{ value: string }>, dish: Dish): void {
-    event.stopPropagation();
-    const control = event.currentTarget as HTMLElement;
-    const id = dish.menuItemId;
-    const courseId = event.detail.value || null;
-    if (this.changingCourse.has(id) || courseId === dish.courseOverrideId) return;
-    // An open native popover keeps focus in the combobox's shadow root.
-    const focused = Boolean(control.shadowRoot?.activeElement);
-    this.changingCourse = new Set(this.changingCourse).add(id);
-    this.courseErrors = new Map(this.courseErrors);
-    this.courseErrors.delete(id);
-    this.#writes.run(this.details.id, async () => {
-      this.actionError = "";
-      let restoreFocus = false;
-      try {
-        const result = await this.api.saveSetMenuDishCourse(this.details.id, id, courseId);
-        const moved = result.details.dishes.find(({ menuItemId }) => menuItemId === id);
-        restoreFocus =
-          moved !== undefined &&
-          moved.courseId !== dish.courseId &&
-          focused &&
-          (Boolean(control.shadowRoot?.activeElement) ||
-            this.ownerDocument.activeElement === this.ownerDocument.body);
-        this.#saved(result);
-      } catch (error) {
-        const field = fieldOf(error);
-        const message = codeMessage(codeOf(error), undefined, { field });
-        if (field === "courseId") this.courseErrors = new Map(this.courseErrors).set(id, message);
-        else this.actionError = message;
-      } finally {
-        this.changingCourse = new Set(this.changingCourse);
-        this.changingCourse.delete(id);
-      }
-      if (restoreFocus) await this.#focusMovedCourse(id);
-    });
-  }
-
-  async #focusMovedCourse(id: string): Promise<void> {
-    await this.updateComplete;
-    for (const table of this.renderRoot.querySelectorAll("wt-data-table")) {
-      await table.updateComplete;
-      const course = table.shadowRoot?.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
-        `wt-combobox[data-item="${CSS.escape(id)}"]`,
-      );
-      if (!course) continue;
-      if (this.ownerDocument.activeElement === this.ownerDocument.body) course.focus();
-      return;
-    }
-  }
-
   #remove(dish: Dish): void {
     this.#writes.run(this.details.id, async () => {
       this.actionError = "";
@@ -335,32 +280,6 @@ export class SetMenuDishes extends LitElement {
       this.#updatePrice(dish.menuItemId);
       await this.#refresh();
     });
-  }
-
-  #course(dish: Dish) {
-    const source = this.details.courses.find(({ id }) => id === dish.productCourseId);
-    const options = [
-      {
-        value: "",
-        label: fill("menus.set_menu_product_course", {
-          course: source?.name ?? t("menus.set_menu_no_course"),
-        }),
-      },
-      ...this.details.courses.map(({ id, name }) => ({ value: id, label: name })),
-    ];
-    return html`<wt-combobox
-      part="dish-course"
-      name="course"
-      data-item=${dish.menuItemId}
-      show-empty-option
-      hide-label
-      label=${fill("menus.set_menu_course_for", { name: dish.name })}
-      .options=${options}
-      .value=${live(dish.courseOverrideId ?? "")}
-      .disabled=${this.changingCourse.has(dish.menuItemId)}
-      .error=${this.courseErrors.get(dish.menuItemId) ?? ""}
-      @wt-change=${(event: CustomEvent<{ value: string }>) => this.#changeCourse(event, dish)}
-    ></wt-combobox>`;
   }
 
   #surcharge(dish: Dish) {
@@ -398,21 +317,15 @@ export class SetMenuDishes extends LitElement {
         key: "dish",
         label: t("menus.set_menu_dish"),
         cell: (dish) =>
-          html`${dish.name}${
-            dish.courseId === null
-              ? html`<a
-                  part="dish-link"
-                  href=${`/products/product/${encodeURIComponent(dish.productId)}`}
-                  >${fill("menus.set_menu_edit_product", { name: dish.name })}</a
-                >`
-              : nothing
-          }`,
-      },
-      {
-        key: "course",
-        label: t("menus.set_menu_course"),
-        choosable: "shown",
-        cell: (dish) => this.#course(dish),
+          html`<span part="dish-name">${dish.name}</span>${
+              dish.courseId === null
+                ? html`<a
+                    part="dish-link"
+                    href=${`/products/product/${encodeURIComponent(dish.productId)}`}
+                    >${fill("menus.set_menu_edit_product", { name: dish.name })}</a
+                  >`
+                : nothing
+            }`,
       },
       {
         key: "surcharge",
@@ -515,22 +428,13 @@ export class SetMenuDishes extends LitElement {
           <h3>${name}</h3>
           ${id === null ? html`<p>${t("menus.set_menu_no_course_help")}</p>` : nothing}
           <wt-data-table
+            wrap-to-fit
             aria-label=${name}
             viewKey=${`waitron.menus.set-menu.dishes.${id ?? "no-course"}`}
             customiseColumnsLabel=${t("table.customise_columns")}
-            customiseLabel=${t("table.customise")}
-            restoreColumnsLabel=${t("table.restore_columns")}
-            doneLabel=${t("table.done")}
-            moveColumnLabel=${t("table.move_column")}
-            showColumnLabel=${t("table.show_column")}
-            hideColumnLabel=${t("table.hide_column")}
-            alwaysShownColumnLabel=${t("table.column_always_shown")}
-            lastShownColumnLabel=${t("table.column_last_shown")}
-            columnPositionLabel=${t("table.column_position")}
             .rows=${groups.get(id)!}
             .columns=${columns}
             .rowKey=${rowKey}
-            @wt-columns-change=${() => void this.#showPriceErrors()}
           ></wt-data-table>
         `,
       )}

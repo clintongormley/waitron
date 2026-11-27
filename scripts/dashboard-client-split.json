@@ -363,7 +363,6 @@
             "createMenu",
             "readSetMenu",
             "saveSetMenuLines",
-            "saveSetMenuDishCourse",
             "saveSetMenuVariantChoices",
             "addSetMenuDishes",
             "copySetMenuDishes",

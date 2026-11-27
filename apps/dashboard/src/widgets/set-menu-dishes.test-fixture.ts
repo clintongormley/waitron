@@ -10,8 +10,6 @@ export const bravas = {
   productId: "bravas",
   name: "Bravas",
   courseId: sharing.id,
-  productCourseId: sharing.id,
-  courseOverrideId: null,
   surcharge: null,
   soldByMeasure: false,
   variants: [],
@@ -22,7 +20,6 @@ export const soup = {
   productId: "soup",
   name: "Soup",
   courseId: starters.id,
-  productCourseId: starters.id,
 };
 export const hake = {
   ...bravas,
@@ -30,10 +27,8 @@ export const hake = {
   productId: "hake",
   name: "Hake",
   courseId: null,
-  productCourseId: null,
 };
 export const sharingLine = { id: "shared-line", count: 1, courseIds: [sharing.id] };
-export const starterLine = { id: "first-line", count: 1, courseIds: [starters.id] };
 export const details: SetMenuDetails = {
   id: "daily",
   name: "Daily menu",
@@ -55,7 +50,6 @@ type DishesApi = Record<
   | "copySetMenuDishes"
   | "saveSetMenuVariantChoices"
   | "updateMenuItem"
-  | "saveSetMenuDishCourse"
   | "saveSetMenuLines"
   | "getMenuStructure"
   | "removeSectionMember",
@@ -102,7 +96,6 @@ export async function mountDishes(initial = details, theme?: "light" | "dark") {
     copySetMenuDishes: vi.fn(),
     saveSetMenuVariantChoices: vi.fn(),
     updateMenuItem: vi.fn().mockResolvedValue(undefined),
-    saveSetMenuDishCourse: vi.fn(),
     saveSetMenuLines: vi.fn(),
     getMenuStructure: vi.fn().mockResolvedValue({
       rootSectionId: "daily-root",

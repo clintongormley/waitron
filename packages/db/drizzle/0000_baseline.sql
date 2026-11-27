@@ -2305,14 +2305,6 @@ CREATE UNIQUE INDEX `content_suggestions_item_row_key` ON `content_suggestions` 
 CREATE INDEX `content_suggestions_language_idx` ON `content_suggestions` (`language`);--> statement-breakpoint
 CREATE INDEX `content_suggestions_job_idx` ON `content_suggestions` (`job_id`);--> statement-breakpoint
 CREATE UNIQUE INDEX `content_suggestions_item_language_key` ON `content_suggestions` (`kind`,`item_id`,`language`);--> statement-breakpoint
-CREATE TABLE `set_menu_dish_courses` (
-	`menu_item_id` text PRIMARY KEY NOT NULL,
-	`course_id` text NOT NULL,
-	FOREIGN KEY (`menu_item_id`) REFERENCES `menu_items`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`course_id`) REFERENCES `kitchen_courses`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE INDEX `set_menu_dish_courses_course_idx` ON `set_menu_dish_courses` (`course_id`);--> statement-breakpoint
 CREATE TABLE `set_menu_line_courses` (
 	`line_id` text NOT NULL,
 	`course_id` text NOT NULL,

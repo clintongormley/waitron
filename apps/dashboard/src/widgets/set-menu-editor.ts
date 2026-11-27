@@ -61,28 +61,22 @@ export class SetMenuEditor extends LitElement {
   }
 
   #dishesSaved(event: CustomEvent<SetMenuDishesSaved>): void {
-    const { details, addedLines = [], removedLines = [] } = event.detail;
+    const { details, addedLines = [] } = event.detail;
     this.renderRoot
       .querySelector("dashboard-set-menu-lines-form")
-      ?.applyDishLineChanges(details.lines, addedLines, removedLines);
+      ?.applyDishLineChanges(details.lines, addedLines);
     this.#read++;
     this.details = details;
     this.failed = false;
-    const notice = (
-      line: (typeof addedLines)[number],
-      key: "menus.set_menu_line_added" | "menus.set_menu_line_removed",
-    ) =>
-      fill(key, {
+    this.lineNotices = addedLines.map((line) =>
+      fill("menus.set_menu_line_added", {
         count: String(line.count),
         courses: details.courses
           .filter(({ id }) => line.courseIds.includes(id))
           .map(({ name }) => name)
           .join(` ${t("menus.set_menu_or")} `),
-      });
-    this.lineNotices = [
-      ...addedLines.map((line) => notice(line, "menus.set_menu_line_added")),
-      ...removedLines.map((line) => notice(line, "menus.set_menu_line_removed")),
-    ];
+      }),
+    );
   }
 
   #problem(problem: SetMenuProblem, details: SetMenuDetails) {

@@ -55,16 +55,3 @@ export const setMenuVariantExclusions = table(
     }).onDelete("restrict"),
   ],
 );
-
-export const setMenuDishCourses = table(
-  "set_menu_dish_courses",
-  {
-    menuItemId: id("menu_item_id").primaryKey(),
-    courseId: id("course_id").notNull(),
-  },
-  (t) => [
-    foreignKey({ columns: [t.menuItemId], foreignColumns: [menuItems.id] }).onDelete("cascade"),
-    foreignKey({ columns: [t.courseId], foreignColumns: [kitchenCourses.id] }),
-    index("set_menu_dish_courses_course_idx").on(t.courseId),
-  ],
-);

@@ -17,7 +17,6 @@ import {
   createProduct,
   deactivateMenu,
   requireMenuRoot,
-  saveSetMenuDishCourse,
   setMenuVariants,
   setProductVariants,
   updateMenuDetails,
@@ -62,14 +61,16 @@ useVenueDb({
   setup: async (db) => {
     fixture = await setupSetMenuReaders(db);
     const { venue, copy } = fixture;
-    special = await inTx(venue, async (tx) => {
-      const [{ id }] = await tx
-        .insert(kitchenCourses)
-        .values({ name: "Sharing", displayOrder: 5 })
-        .returning({ id: kitchenCourses.id });
-      await saveSetMenuDishCourse(tx, copy.menuId, copy.menuItemId, id);
-      return setMenuOnFullMenu(tx, copy.fullMenuId, copy.productId, "Special menu", "21.00");
-    });
+    special = await inTx(venue, (tx) =>
+      setMenuOnFullMenu(
+        tx,
+        copy.fullMenuId,
+        copy.productId,
+        "Special menu",
+        "21.00",
+        copy.courseId,
+      ),
+    );
     coffee = await inTx(venue, async (tx) => {
       const product = await createProduct(tx, {
         categoryId: null,

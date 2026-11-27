@@ -281,7 +281,6 @@ const HOSTED_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("set_menu_lines", "state", MENU_STATE),
   classify("set_menu_line_courses", "state", MENU_STATE),
   classify("set_menu_variant_exclusions", "state", MENU_STATE),
-  classify("set_menu_dish_courses", "state", MENU_STATE),
   classify("option_lists", "state", MENU_STATE),
   classify("option_labels", "state", MENU_STATE),
   classify("extra_lists", "state", MENU_STATE),

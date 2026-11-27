@@ -72,7 +72,6 @@ export type CountryDemoSetMenu<L extends string = string> = ReadonlyDemo<{
     productImage: string;
     surcharge: string | null;
     excludedVariants?: string[];
-    course?: DemoCourseKey;
   }[];
 }>;
 

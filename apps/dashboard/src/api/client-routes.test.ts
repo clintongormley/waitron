@@ -2751,7 +2751,6 @@ it("sends set-menu terms and editor commands on their management routes", async 
     .mockResolvedValueOnce(emptyResponse())
     .mockResolvedValueOnce(jsonResponse(details))
     .mockResolvedValueOnce(jsonResponse({ lines: addedLines }))
-    .mockResolvedValueOnce(jsonResponse({ details, addedLines, removedLines: [] }))
     .mockResolvedValueOnce(jsonResponse(details))
     .mockResolvedValueOnce(jsonResponse({ details, addedLines }))
     .mockResolvedValueOnce(jsonResponse({ details, addedLines }))
@@ -2762,11 +2761,6 @@ it("sends set-menu terms and editor commands on their management routes", async 
   await expect(api.updateMenuDetails("set", { setPrice: "15.00" })).resolves.toBeUndefined();
   await expect(api.readSetMenu("set")).resolves.toEqual(details);
   await expect(api.saveSetMenuLines("set", [line])).resolves.toEqual({ lines: addedLines });
-  await expect(api.saveSetMenuDishCourse("set", "item", null)).resolves.toEqual({
-    details,
-    addedLines,
-    removedLines: [],
-  });
   await expect(api.saveSetMenuVariantChoices("set", "item", variants)).resolves.toEqual(details);
   await expect(api.addSetMenuDishes("set", dishes)).resolves.toEqual({ details, addedLines });
   await expect(api.copySetMenuDishes("set", "other")).resolves.toEqual({ details, addedLines });
@@ -2776,7 +2770,6 @@ it("sends set-menu terms and editor commands on their management routes", async 
     ["/management-api/menus/set", "PATCH", { setPrice: "15.00" }],
     ["/management-api/menus/set/set-menu", "GET", undefined],
     ["/management-api/menus/set/set-menu/lines", "PUT", { lines: [line] }],
-    ["/management-api/menus/set/set-menu/items/item/course", "PUT", { courseId: null }],
     ["/management-api/menus/set/set-menu/items/item/variants", "PUT", { variants }],
     ["/management-api/menus/set/set-menu/dishes", "POST", { dishes }],
     ["/management-api/menus/set/set-menu/copy-dishes", "POST", { fromMenuId: "other" }],

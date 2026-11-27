@@ -1747,7 +1747,7 @@ export const DEMO_SET_MENUS = [
       gl: "Menú especial",
     },
     price: "20.00",
-    lines: [starter, { count: 1, courses: ["mains", "starters"] }, ...laterLines],
+    lines: [starter, { count: 1, courses: ["mains", "starters", "sharing"] }, ...laterLines],
     dishes: [
       ...sharedDishes,
       ...[
@@ -1758,7 +1758,7 @@ export const DEMO_SET_MENUS = [
         "crema-catalana",
         "tarta-de-santiago",
       ].map((image) => ({ productImage: `${image}.png`, surcharge: null })),
-      { productImage: "patatas-bravas.png", surcharge: null, course: "starters" },
+      { productImage: "patatas-bravas.png", surcharge: null },
     ],
   },
 ] as const satisfies readonly CountryDemoSetMenu<CasaDelgadoLanguage>[];

@@ -10,8 +10,6 @@ import {
   mountDishes,
   sharingLine,
   soup,
-  starterLine,
-  starters,
   wine,
   wineDetails,
 } from "./set-menu-dishes.test-fixture.js";
@@ -45,150 +43,57 @@ it("groups dishes in course order and links from No course to the product", asyn
   await expect.element(link).toHaveAttribute("href", "/products/product/hake");
 });
 
-it.each(["before", "after"])(
-  "names a hidden surcharge error when Save comes %s hiding the column",
-  async (order) => {
-    const key = "waitron.menus.set-menu.dishes.starters:columns";
-    localStorage.removeItem(key);
-    onTestFinished(() => localStorage.removeItem(key));
-    const { el } = await mountDishes();
-    await expect.element(page.getByRole("region", { name: "Starters" })).toBeVisible();
-    const table = page.elementLocator(
-      el
-        .shadowRoot!.querySelector("dashboard-set-menu-dishes")!
-        .shadowRoot!.querySelector('wt-data-table[aria-label="Starters"]')!,
-    );
-    const surcharge = page.getByRole("textbox", { name: "Surcharge for Soup" });
-    await surcharge.fill("20000");
-    if (order === "before") {
-      await userEvent.keyboard("{Enter}");
-      await expect.element(surcharge).toHaveAttribute("aria-invalid", "true");
-    }
-    const chooser = table.getByRole("button", { name: "Customise columns" });
-    await vi.waitFor(() => expect(chooser.element()).toBeVisible());
-    await chooser.click();
-    const hideSurcharge = page.getByRole("checkbox", { name: /Hide.*Surcharge/ });
-    await expect.element(hideSurcharge).toBeChecked();
-    await page.elementLocator(hideSurcharge.element().closest("label")!).click();
-    await page.getByRole("button", { name: "Done" }).click();
-    const actions = page.elementLocator(
-      el
-        .shadowRoot!.querySelector("dashboard-set-menu-dishes")!
-        .shadowRoot!.querySelector("wt-form-actions")!,
-    );
-    const save = actions.getByRole("button", { name: "Save", exact: true });
-    if (order === "after") await save.click();
-    await expect
-      .element(actions.getByRole("alert"))
-      .toHaveTextContent("Your change to Soup was not saved.");
-    await expect.element(save).toBeDisabled();
-
-    cleanupWidgets();
-    await mountDishes();
-    await expect.element(page.getByRole("region", { name: "Starters" })).toBeVisible();
-    expect(
-      page
-        .getByRole("region", { name: "Starters" })
-        .getByRole("columnheader", { name: "Surcharge" })
-        .elements(),
-    ).toHaveLength(0);
-    await expect
-      .element(
-        page
-          .getByRole("region", { name: "Sharing plates" })
-          .getByRole("columnheader", { name: "Surcharge" }),
-      )
-      .toBeVisible();
-  },
-);
-
-it("moves Bravas to Starters and explains both line changes, then restores its product course", async () => {
-  const { api } = await mountDishes();
-  const moved = { ...bravas, courseId: starters.id, courseOverrideId: starters.id };
-  let finishMove!: () => void;
-  api.saveSetMenuDishCourse
-    .mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          finishMove = () =>
-            resolve({
-              details: { ...details, dishes: [hake, moved, soup], lines: [starterLine] },
-              addedLines: [starterLine],
-              removedLines: [sharingLine],
-            });
-        }),
-    )
-    .mockResolvedValueOnce({ details, addedLines: [sharingLine], removedLines: [starterLine] });
-  await expect.element(page.getByRole("combobox", { name: /^Course for Bravas/ })).toBeVisible();
+it("shows Dish and Surcharge without a Course column or chooser", async () => {
+  await mountDishes();
+  const startersGroup = page.getByRole("region", { name: "Starters" });
+  await expect.element(startersGroup.getByRole("columnheader", { name: "Dish" })).toBeVisible();
   await expect
-    .element(
-      page.getByRole("combobox", { name: "Course for Bravas Sharing plates (from the product)" }),
-    )
+    .element(startersGroup.getByRole("columnheader", { name: "Surcharge" }))
     .toBeVisible();
-  const choose = async (name: string) => {
-    await page.getByRole("combobox", { name: /^Course for Bravas/ }).click();
-    await page.getByRole("option", { name, exact: true }).click();
-  };
-  await page.getByRole("textbox", { name: "Surcharge for Bravas" }).fill("3.50");
-  await choose("Starters");
-  await expect.element(page.getByRole("combobox", { name: /^Course for Bravas/ })).toBeDisabled();
-  finishMove();
-  await expect
-    .element(
-      page
-        .getByRole("region", { name: "Starters" })
-        .getByRole("cell", { name: "Bravas", exact: true }),
-    )
-    .toBeVisible();
-  expect(api.saveSetMenuDishCourse).toHaveBeenNthCalledWith(1, "daily", "bravas-item", "starters");
-  await expect.element(page.getByText("Added a line: 1 × Starters")).toBeVisible();
-  await expect.element(page.getByText("Removed a line: 1 × Sharing plates")).toBeVisible();
-  await vi.waitFor(() => {
-    const course = page.getByRole("combobox", { name: /^Course for Bravas/ }).element();
-    expect((course.getRootNode() as ShadowRoot).activeElement === course).toBe(true);
-  });
-  await choose("Sharing plates (from the product)");
-  await expect
-    .element(
-      page
-        .getByRole("region", { name: "Sharing plates" })
-        .getByRole("cell", { name: "Bravas", exact: true }),
-    )
-    .toBeVisible();
-  expect(api.saveSetMenuDishCourse).toHaveBeenNthCalledWith(2, "daily", "bravas-item", null);
-  await expect
-    .element(page.getByRole("textbox", { name: "Surcharge for Bravas" }))
-    .toHaveValue("3.50");
-  expect(api.updateMenuItem).not.toHaveBeenCalled();
+  expect(
+    startersGroup.getByRole("columnheader", { name: "Course", exact: true }).elements(),
+  ).toEqual([]);
+  expect(page.getByRole("button", { name: "Customise columns" }).elements()).toEqual([]);
 });
 
-it("leaves the next field focused if the manager moved on while a course change was saving", async () => {
-  const { api } = await mountDishes();
-  const moved = { ...bravas, courseId: starters.id, courseOverrideId: starters.id };
-  let finishMove!: () => void;
-  api.saveSetMenuDishCourse.mockImplementationOnce(
-    () =>
-      new Promise((resolve) => {
-        finishMove = () => resolve({ details: { ...details, dishes: [hake, moved, soup] } });
-      }),
-  );
-  const course = page.getByRole("combobox", { name: /^Course for Bravas/ });
-  await course.click();
-  await page.getByRole("option", { name: "Starters", exact: true }).click();
-  await expect.element(course).toBeDisabled();
-  const next = page.getByRole("textbox", { name: "Price per set menu" });
-  await next.click();
-  finishMove();
+it.each([390, 1280])("aligns Surcharge across course tables at %ipx", async (width) => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(width, 844);
+  onTestFinished(() => page.viewport(before.width, before.height));
+  const unbrokenName = "ExtraLongOvenRoastedPotatoAndHerbSpecial";
+  await mountDishes({
+    ...details,
+    dishes: [
+      soup,
+      { ...bravas, name: "Crispy potatoes with smoked paprika and garlic" },
+      { ...hake, name: unbrokenName },
+    ],
+  });
+  await expect.element(page.getByRole("link", { name: `Edit ${unbrokenName}` })).toBeVisible();
+  await document.fonts.ready;
 
-  await expect
-    .element(
-      page
-        .getByRole("region", { name: "Starters" })
-        .getByRole("cell", { name: "Bravas", exact: true }),
-    )
-    .toBeVisible();
-  const field = next.element();
-  expect((field.getRootNode() as ShadowRoot).activeElement === field).toBe(true);
+  const starts = page
+    .getByRole("columnheader", { name: "Surcharge" })
+    .elements()
+    .map((heading) => heading.getBoundingClientRect().left);
+  expect(starts).toHaveLength(3);
+  expect(Math.max(...starts) - Math.min(...starts)).toBeLessThan(1);
+});
+
+it("lets a manager edit Surcharge with a saved choice to hide it", async () => {
+  const key = "waitron.menus.set-menu.dishes.starters:columns";
+  localStorage.setItem(key, JSON.stringify({ surcharge: false }));
+  onTestFinished(() => localStorage.removeItem(key));
+  const { api } = await mountDishes();
+  const surcharge = page.getByRole("textbox", { name: "Surcharge for Soup" });
+  await expect.element(surcharge).toBeVisible();
+  await surcharge.fill("2.50");
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() =>
+    expect(api.updateMenuItem).toHaveBeenCalledExactlyOnceWith("daily", "soup-item", {
+      grossPrice: "2.50",
+    }),
+  );
 });
 
 it("shows Included while blank and stages clearing the surcharge until Save", async () => {
@@ -393,32 +298,6 @@ it("keeps the line added by a dish when saving an already edited inclusion count
   );
 });
 
-it("does not put an automatically removed line back when saving another count", async () => {
-  const { el, api } = await mountDishes({ ...details, lines: [sharingLine, starterLine] });
-  const moved = { ...bravas, courseId: starters.id, courseOverrideId: starters.id };
-  api.saveSetMenuDishCourse.mockResolvedValue({
-    details: { ...details, dishes: [hake, moved, soup], lines: [starterLine] },
-    addedLines: [],
-    removedLines: [sharingLine],
-  });
-  api.saveSetMenuLines.mockResolvedValue({ lines: [starterLine] });
-  const lineForm = page.elementLocator(
-    el.shadowRoot!.querySelector("dashboard-set-menu-lines-form")!,
-  );
-  await lineForm.getByRole("spinbutton", { name: "Number of dishes" }).nth(1).fill("2");
-
-  await page.getByRole("combobox", { name: /^Course for Bravas/ }).click();
-  await page.getByRole("option", { name: "Starters", exact: true }).click();
-  await expect.element(page.getByText("Removed a line: 1 × Sharing plates")).toBeVisible();
-
-  await lineForm.getByRole("button", { name: "Save" }).click();
-  await vi.waitFor(() =>
-    expect(api.saveSetMenuLines).toHaveBeenCalledExactlyOnceWith("daily", [
-      { count: 2, courseIds: ["starters"] },
-    ]),
-  );
-});
-
 it("keeps the add dialog open and names a dish the server refuses for its unit", async () => {
   const { api } = await mountDishes();
   api.addSetMenuDishes.mockRejectedValue({
@@ -570,47 +449,6 @@ it("shows a surcharge refusal that names no surcharge field as an alert, not on 
     .element(page.getByRole("alert"))
     .toHaveTextContent("That set menu could not be found.");
   await expect.element(field).not.toHaveAttribute("aria-invalid", "true");
-});
-
-it("sends nothing when a dish's current course is picked again", async () => {
-  const { api } = await mountDishes();
-  const moved = { ...bravas, courseId: starters.id, courseOverrideId: starters.id };
-  api.saveSetMenuDishCourse.mockResolvedValue({
-    details: { ...details, dishes: [hake, moved, soup] },
-  });
-  const course = page.getByRole("combobox", { name: /^Course for Bravas/ });
-  await course.click();
-  await page
-    .getByRole("option", { name: "Sharing plates (from the product)", exact: true })
-    .click();
-  await course.click();
-  await page.getByRole("option", { name: "Starters", exact: true }).click();
-  await vi.waitFor(() => expect(api.saveSetMenuDishCourse).toHaveBeenCalled());
-  expect(api.saveSetMenuDishCourse).toHaveBeenCalledExactlyOnceWith(
-    "daily",
-    "bravas-item",
-    "starters",
-  );
-});
-
-it("puts a refused course under its row, and any other course refusal in an alert", async () => {
-  const { api } = await mountDishes();
-  api.saveSetMenuDishCourse
-    .mockRejectedValueOnce({ code: "set_menu.invalid", params: { field: "courseId" } })
-    .mockRejectedValueOnce({ code: "set_menu.not_found" });
-  const course = page.getByRole("combobox", { name: /^Course for Bravas/ });
-  await course.click();
-  await page.getByRole("option", { name: "Starters", exact: true }).click();
-  await expect.element(course).toHaveAttribute("aria-invalid", "true");
-  await expect.element(page.getByText("Choose a course that is still available.")).toBeVisible();
-  expect(page.getByRole("alert").elements()).toHaveLength(0);
-
-  await course.click();
-  await page.getByRole("option", { name: "Starters", exact: true }).click();
-  await expect
-    .element(page.getByRole("alert"))
-    .toHaveTextContent("That set menu could not be found.");
-  await expect.element(course).not.toHaveAttribute("aria-invalid", "true");
 });
 
 it("keeps a dish whose removal is refused and says why", async () => {

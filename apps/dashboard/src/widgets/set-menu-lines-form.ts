@@ -93,11 +93,10 @@ export class SetMenuLinesForm extends LitElement {
     if (changed.has("lines") && !this.#scope?.isDirty()) this.#adopt(this.lines);
   }
 
-  applyDishLineChanges(saved: SetMenuLine[], added: SetMenuLine[], removed: SetMenuLine[]): void {
-    if (!this.#scope?.isDirty() || (!added.length && !removed.length)) return;
+  applyDishLineChanges(saved: SetMenuLine[], added: SetMenuLine[]): void {
+    if (!this.#scope?.isDirty() || !added.length) return;
     // Save replaces the whole list. Keep automatic line changes in both the draft and its baseline.
-    const removedIds = new Set(removed.map(({ id }) => id));
-    this.draft = [...this.draft.filter(({ id }) => !removedIds.has(id)), ...added.map(draftLine)];
+    this.draft = [...this.draft, ...added.map(draftLine)];
     this.#scope.commit(saved.map(draftLine));
   }
 

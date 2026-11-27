@@ -10,7 +10,6 @@ import {
   setProductVariants,
   createExtraList,
   menuItems,
-  saveSetMenuDishCourse,
   writeProductModifiers,
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -46,9 +45,7 @@ let daily: Awaited<ReturnType<typeof setMenuOnFullMenu>>;
 let supplement: typeof daily;
 let tapas: typeof daily;
 let tortilla: { unpriced: string; priced: string };
-// Each `setMenuOnFullMenu` gives its dish a course of its own: Flan's is Special's, Tortilla's is
-// Tapas's, and Daily's copy counts Flan as Sharing.
-let courses: { dessert: string; main: string; sharing: string };
+let courses: { dessert: string; main: string };
 let extra: { listId: string; picks: { productId: string; quantity: number }[] };
 let app: Hono;
 let cookie: string;
@@ -78,11 +75,6 @@ useVenueDb({
       await writeProductModifiers(tx, flan, [{ kind: "extras", id: extras.id }]);
       extra = { listId: extras.id, picks: [{ productId: venue.productId("Tarta"), quantity: 1 }] };
       daily = await setMenuOnFullMenu(tx, venue.tables.menuId, flan);
-      const [{ id: courseId }] = await tx
-        .insert(kitchenCourses)
-        .values({ name: "Sharing", displayOrder: 5 })
-        .returning({ id: kitchenCourses.id });
-      await saveSetMenuDishCourse(tx, daily.menuId, daily.menuItemId, courseId);
       const [dessert, main] = await tx
         .insert(kitchenCourses)
         .values([
@@ -90,8 +82,15 @@ useVenueDb({
           { name: "Main", displayOrder: 7 },
         ])
         .returning({ id: kitchenCourses.id });
-      courses = { dessert: dessert!.id, main: main!.id, sharing: courseId };
-      supplement = await setMenuOnFullMenu(tx, venue.tables.menuId, flan, "Special", "21.00");
+      courses = { dessert: dessert!.id, main: main!.id };
+      supplement = await setMenuOnFullMenu(
+        tx,
+        venue.tables.menuId,
+        flan,
+        "Special",
+        "21.00",
+        daily.courseId,
+      );
       await tx
         .update(menuItems)
         .set({ grossPrice: 250 })
@@ -257,8 +256,7 @@ async function counterWithSetMenu(copy: typeof daily) {
 
 /**
  * Saves a grouping that places every dish on the bill in one set menu of `copy`, charged
- * `chargeCents` each, as a calculation could hand it: under D12 Flan counts as its product's
- * course, which the Daily does not list, and no set menu here is cheaper than Flan a la carte.
+ * `chargeCents` each, as a calculation could hand it.
  */
 async function groupInto(billId: string, copy: typeof daily, chargeCents = 0) {
   await inTx(venue, async (tx) =>
@@ -496,12 +494,21 @@ it("records the dish's own course when the waiter sends it with another course",
 
 it("records the product's course on a dish tapped in a set menu, not the copy's, and none on the set menu's row", async () => {
   const bill = await tableBill();
-  await send(await saveSetMenuDraft(venue, bill, { ...inMenu(daily), extras: [extra] }));
-  await groupInto(bill.tabId, daily);
+  const setProductCourse = (courseId: string) =>
+    inTx(venue, (tx) =>
+      tx.update(products).set({ courseId }).where(eq(products.id, daily.productId)),
+    );
+  await setProductCourse(courses.main);
+  try {
+    await send(await saveSetMenuDraft(venue, bill, { ...inMenu(daily), extras: [extra] }));
+    await groupInto(bill.tabId, daily);
+  } finally {
+    await setProductCourse(daily.courseId);
+  }
   expect(await coursesOf(bill.tabId)).toMatchObject([
     {
       setMenuRole: "dish",
-      countsAsCourseId: supplement.courseId,
+      countsAsCourseId: courses.main,
     },
     { setMenuRole: null, parentLineId: expect.any(String), countsAsCourseId: null },
     { setMenuRole: "set_menu", countsAsCourseId: null },

@@ -166,7 +166,6 @@ export { kitchenPrintJobs } from "./schema/kitchen-print-jobs.js";
 export { ticketItemMoves } from "./schema/ticket-item-moves.js";
 export { menus, categories, products } from "./schema/menus.js";
 export {
-  setMenuDishCourses,
   setMenuLineCourses,
   setMenuLines,
   setMenuVariantExclusions,

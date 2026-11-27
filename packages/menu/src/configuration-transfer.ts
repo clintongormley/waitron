@@ -170,10 +170,11 @@ function checkSetMenus(tables: Readonly<Record<string, Rows>>): void {
   for (const row of tables.menu_item_variant_overrides ?? [])
     if (setMenuItemIds.has(row.menu_item_id) && !isSetMenuAmount(row.price))
       throw new AppError("setup.request_invalid", { field: "menu_item_variant_overrides.price" });
-  for (const table of ["set_menu_dish_courses", "set_menu_variant_exclusions"] as const)
-    for (const row of tables[table] ?? [])
-      if (!setMenuItemIds.has(row.menu_item_id))
-        throw new AppError("setup.request_invalid", { field: `${table}.menu_item_id` });
+  for (const row of tables.set_menu_variant_exclusions ?? [])
+    if (!setMenuItemIds.has(row.menu_item_id))
+      throw new AppError("setup.request_invalid", {
+        field: "set_menu_variant_exclusions.menu_item_id",
+      });
 }
 
 /** The first name two of `names` share, ignoring case and surrounding spaces. An import replaces
@@ -332,7 +333,6 @@ export const MENU_CONFIGURATION_TRANSFER = {
     { name: "set_menu_lines" },
     { name: "set_menu_line_courses" },
     { name: "set_menu_variant_exclusions" },
-    { name: "set_menu_dish_courses" },
     { name: "option_lists" },
     { name: "option_labels" },
     { name: "extra_lists" },

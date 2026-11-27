@@ -2,7 +2,6 @@ import "@waitron/menu/src/errors.js";
 import {
   readSetMenu,
   saveSetMenuLines,
-  saveSetMenuDishCourse,
   saveSetMenuVariantChoices,
   addSetMenuDishes,
   copySetMenuDishes,
@@ -22,7 +21,6 @@ import {
   isPlainObject,
   requireUuidParam,
   idList,
-  nullOrUuid,
 } from "./menu-request-fields.js";
 
 const RETIRED_SET_MENU_FIELDS = ["setVatClass", "setTakeawayVatClass"] as const;
@@ -60,21 +58,6 @@ export function mountSetMenuRoutes(app: Hono, gated: GatedWork, log: Logger): vo
       return c.json({
         lines: await gated(c, session, (tx) => saveSetMenuLines(tx, menu(c), input)),
       });
-    }),
-  );
-  app.put(`${draft}/items/:itemId/course`, (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const menuId = menu(c);
-      const itemId = item(c);
-      const { courseId } = await readJsonBody<{ courseId?: unknown }>(c);
-      const course = nullOrUuid(courseId, "courseId");
-      return c.json(
-        await gated(c, session, async (tx) => {
-          const lines = await saveSetMenuDishCourse(tx, menuId, itemId, course);
-          return { details: await readSetMenu(tx, menuId), ...lines };
-        }),
-      );
     }),
   );
   app.put(`${draft}/items/:itemId/variants`, (c) =>

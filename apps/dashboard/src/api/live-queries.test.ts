@@ -1519,7 +1519,6 @@ it.each([
   "kitchen_courses",
   "set_menu_lines",
   "set_menu_line_courses",
-  "set_menu_dish_courses",
   "set_menu_variant_exclusions",
 ])("refreshes the full menu's Preview after a %s change", async (type) => {
   const fetchImpl = vi.fn(async () => new Response("{}"));

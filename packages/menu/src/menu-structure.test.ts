@@ -3,12 +3,10 @@ import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
-  kitchenCourses,
   menus,
   menuItems,
   menuItemVariantOverrides,
   sections,
-  setMenuDishCourses,
   setMenuVariantExclusions,
   withTransaction,
   type Transaction,
@@ -748,7 +746,7 @@ describe("a set menu's revision after a sync with no earlier graph", () => {
     expect(await revision(set)).toEqual(saved);
   });
 
-  it.each(["a price", "a variant price", "a variant exclusion", "a dish course"])(
+  it.each(["a price", "a variant price", "a variant exclusion"])(
     "moves the revision of a set menu whose leftover row held only %s",
     async (held) => {
       const f = await fixture();
@@ -768,13 +766,6 @@ describe("a set menu's revision after a sync with no earlier graph", () => {
           await tx.insert(menuItemVariantOverrides).values({ ...variant, price: 300 });
         if (held === "a variant exclusion")
           await tx.insert(setMenuVariantExclusions).values(variant);
-        if (held === "a dish course") {
-          const [course] = await tx
-            .insert(kitchenCourses)
-            .values({ name: "Starters" })
-            .returning({ id: kitchenCourses.id });
-          await tx.insert(setMenuDishCourses).values({ menuItemId, courseId: course!.id });
-        }
       });
       await app((tx) => syncMenuOffers(tx, [set]));
       expect(await revision(set)).not.toEqual(saved);

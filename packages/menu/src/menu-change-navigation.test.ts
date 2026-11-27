@@ -1058,7 +1058,6 @@ describe("declaration changes", () => {
             id: "mi-hake",
             menuId: "daily",
             countsAsCourseId: "mains",
-            courseOverrideId: null,
             variants: [{ ...variant("large"), countsAsCourseId: "mains" }],
             offeredModifiers: [extras("citrus")],
           },

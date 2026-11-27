@@ -1,7 +1,13 @@
 import { and, eq, type Query } from "drizzle-orm";
 import { SQLiteSelectBase } from "drizzle-orm/sqlite-core";
 import { expect, it, vi } from "vitest";
-import { adjustmentLines, billSetMenuCopies, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  adjustmentLines,
+  billSetMenuCopies,
+  products,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import { recordAdjustment } from "@waitron/adjustments";
 import { decimal, type ProductAllergens } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -9,7 +15,7 @@ import {
   addMember,
   createMenu,
   requireMenuRoot,
-  saveSetMenuDishCourse,
+  saveSetMenuLines,
   updateMenuDetails,
   updateProduct,
 } from "@waitron/menu";
@@ -280,7 +286,11 @@ it("uses the recorded copy for its type and a live copy for another type", async
   await inTx(venue, (tx) => seedBillSetMenu(tx, id, daily, 1));
   await inTx(venue, async (tx) => {
     const { id: startersId } = await createCourse(tx, { name: "Starters", displayOrder: 6 });
-    await saveSetMenuDishCourse(tx, special.menuId, special.menuItemId, startersId);
+    await tx
+      .update(products)
+      .set({ courseId: startersId })
+      .where(eq(products.id, special.productId));
+    await saveSetMenuLines(tx, special.menuId, [{ count: 1, courseIds: [startersId] }]);
     const live = await publishWorkingMenu(tx, special.fullMenuId);
     const zone = await listZoneOffers(tx, venue.tables.zoneId);
     const oldDish = asked(daily);

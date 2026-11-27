@@ -38,7 +38,6 @@ export function freezeSetMenu(
       ...offer,
       unitPrice,
       countsAsCourseId: dish.courseId,
-      courseOverrideId: dish.courseOverrideId,
       variants,
     };
   }

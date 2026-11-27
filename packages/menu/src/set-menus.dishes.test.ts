@@ -4,7 +4,6 @@ import {
   kitchenCourses,
   menus,
   products,
-  setMenuDishCourses,
   setMenuLines,
   setMenuVariantExclusions,
   withTransaction,
@@ -132,8 +131,6 @@ it("adds a dish with only its chosen variants, ignoring their ordinary prices", 
       name: "Wine",
       surcharge: null,
       courseId: f.mains,
-      productCourseId: f.mains,
-      courseOverrideId: null,
       soldByMeasure: false,
       variants: [
         {
@@ -162,20 +159,17 @@ it("refuses another product's variant before adding any of the request's dishes"
   expect((await reading()).dishes).toEqual([]);
 });
 
-it("clears variant exclusions, overrides and the course when a dish leaves the root", async () => {
+it("clears variant exclusions and prices when a dish leaves the root", async () => {
   const member = await app((tx) => addMember(tx, f.root, { kind: "product", productId: f.wine }));
   const item = (await reading()).dishes[0]!.menuItemId;
   await app(async (tx) => {
     await choosing(tx, item, false);
-    await tx.insert(setMenuDishCourses).values({ menuItemId: item, courseId: f.starters });
     await removeMember(tx, f.root, member.id);
     await addMember(tx, f.root, { kind: "product", productId: f.wine });
   });
   expect(await suite.db.select().from(setMenuVariantExclusions)).toEqual([]);
   expect((await reading()).dishes[0]).toMatchObject({
     menuItemId: item,
-    courseOverrideId: null,
-    productCourseId: f.mains,
     courseId: f.mains,
     variants: [
       { id: f.glass, included: true, surcharge: null },
@@ -354,25 +348,21 @@ it("copies only missing dishes with their settings, in the source's order", asyn
       { variantId: f.glass, included: true, surcharge: "2.00" },
       { variantId: f.bottle, included: false, surcharge: null },
     ]);
-    await tx
-      .insert(setMenuDishCourses)
-      .values({ menuItemId: wine!.menuItemId, courseId: f.coffee });
     return source;
   });
   await app((tx) => addProducts(tx, f.root, [f.soup]));
   expect(await app((tx) => copySetMenuDishes(tx, f.menuId, source.id))).toEqual([
     { id: expect.any(String), ...line(f.mains) },
-    { id: expect.any(String), ...line(f.coffee) },
   ]);
   expect((await reading()).dishes).toMatchObject([
     { productId: f.soup, surcharge: null },
     {
       productId: f.wine,
       surcharge: "3.00",
-      courseId: f.coffee,
+      courseId: f.mains,
       variants: [
-        { id: f.glass, included: true, surcharge: "2.00", courseId: f.coffee },
-        { id: f.bottle, included: false, surcharge: null, courseId: f.coffee },
+        { id: f.glass, included: true, surcharge: "2.00", courseId: f.mains },
+        { id: f.bottle, included: false, surcharge: null, courseId: f.desserts },
       ],
     },
     { productId: f.hake, surcharge: null },

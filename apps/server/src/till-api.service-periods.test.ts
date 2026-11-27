@@ -12,10 +12,7 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   invoiceSeries,
   kitchenCourses,
-  menuItems,
   products,
-  setMenuDishCourses,
-  setMenuLineCourses,
   parties,
   printJobs,
   sales,
@@ -65,7 +62,6 @@ import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { createPrinter } from "@waitron/printing";
 import { createStation } from "./kitchen.js";
-import { deleteCourse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { lateUnsentDishes } from "./working-order-late-send.js";
 import { unsentDishLines } from "./working-order-kitchen-fire.js";
@@ -270,7 +266,7 @@ async function replacePeriodMembership(
 }
 
 describe("ordering uses period membership while browsing follows the timetable", () => {
-  it("serves a set-menu copy on the till and falls back to the dish's course after deleting its override", async () => {
+  it("serves a set-menu copy on the till and keeps its published course when the product's course changes", async () => {
     const v = await setupVenue({ timetable: true });
     at(MONDAY_13_00);
     const { daily, soup, starters, mains, versionId } = await withTransaction(
@@ -290,22 +286,13 @@ describe("ordering uses period membership while browsing follows the timetable",
           unitPrice: "7.00",
           vatClass: "reduced",
         });
-        await tx.update(products).set({ courseId: starters }).where(eq(products.id, soup));
+        await tx.update(products).set({ courseId: mains }).where(eq(products.id, soup));
         const { id: daily } = await createMenu(tx, {
           kind: "set_menu",
           name: "Daily menu",
           setPrice: "14.00",
         });
         await addProducts(tx, await requireMenuRoot(tx, daily), [soup]);
-        const [{ id: menuItemId }] = await tx
-          .select({ id: menuItems.id })
-          .from(menuItems)
-          .where(eq(menuItems.menuId, daily));
-        await tx.insert(setMenuDishCourses).values({ menuItemId, courseId: mains });
-        await tx
-          .update(setMenuLineCourses)
-          .set({ courseId: mains })
-          .where(eq(setMenuLineCourses.courseId, starters));
         const fullMenu = v.menus["Midday menu"];
         await addMember(tx, await requireMenuRoot(tx, fullMenu), {
           kind: "set_menu",
@@ -326,7 +313,9 @@ describe("ordering uses period membership while browsing follows the timetable",
       },
     ]);
 
-    await withTransaction(suite.db, (tx) => deleteCourse(tx, mains));
+    await withTransaction(suite.db, (tx) =>
+      tx.update(products).set({ courseId: starters }).where(eq(products.id, soup)),
+    );
     const after = await sendAsTill(v, "GET", route);
     expect(after.status).toBe(200);
     expect(after.body.setMenus).toMatchObject([

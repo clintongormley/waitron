@@ -4,12 +4,10 @@ import { AppError, type DeleteImpact } from "@waitron/shared";
 import {
   kitchenCourses,
   menus,
-  menuItems,
   setMenuLines,
   departmentCourses,
   orderDraftLines,
   products,
-  setMenuDishCourses,
   setMenuLineCourses,
   ticketItems,
   workingOrderLines,
@@ -28,7 +26,6 @@ import { idsInUse, type Reference } from "./in-use.js";
 export const COURSE_REFERENCES: readonly Reference[] = [
   { table: products, column: products.courseId },
   { table: setMenuLineCourses, column: setMenuLineCourses.courseId },
-  { table: setMenuDishCourses, column: setMenuDishCourses.courseId },
   { table: departmentCourses, column: departmentCourses.courseId },
   { table: orderDraftLines, column: orderDraftLines.courseId },
   { table: workingOrderLines, column: workingOrderLines.courseId },
@@ -61,12 +58,6 @@ async function courseDeleteRules(
     .innerJoin(setMenuLines, eq(setMenuLines.id, setMenuLineCourses.lineId))
     .innerJoin(menus, eq(menus.id, setMenuLines.menuId))
     .where(and(eq(setMenuLineCourses.courseId, id), eq(menus.active, true)));
-  const [dishes] = await tx
-    .select({ count: count() })
-    .from(setMenuDishCourses)
-    .innerJoin(menuItems, eq(menuItems.id, setMenuDishCourses.menuItemId))
-    .innerJoin(menus, eq(menus.id, menuItems.menuId))
-    .where(and(eq(setMenuDishCourses.courseId, id), eq(menus.active, true)));
   const settings = await readCourseDeleteSettings(tx, id);
   return {
     retained,
@@ -82,9 +73,6 @@ async function courseDeleteRules(
         ...(lines!.count > 0
           ? [{ key: "course_set_menu_lines", count: lines!.count, targets: [] }]
           : []),
-        ...(dishes!.count > 0
-          ? [{ key: "course_set_menu_dishes", count: dishes!.count, targets: [] }]
-          : []),
         ...courseDeleteSettingsRemoves(settings),
       ],
     },
@@ -99,7 +87,6 @@ export async function deleteCourse(tx: Transaction, id: string): Promise<DeleteI
   const { impact, retained, settings } = await courseDeleteRules(tx, id);
   await tx.update(products).set({ courseId: null }).where(eq(products.courseId, id));
   await tx.delete(setMenuLineCourses).where(eq(setMenuLineCourses.courseId, id));
-  await tx.delete(setMenuDishCourses).where(eq(setMenuDishCourses.courseId, id));
   await clearCourseDeleteSettings(tx, settings);
   await tx.delete(departmentCourses).where(eq(departmentCourses.courseId, id));
   if (retained) {

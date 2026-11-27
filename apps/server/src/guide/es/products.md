@@ -378,7 +378,8 @@ Para ofrecer varios platos por un precio único, abre **Menús** en **Productos 
 y elige **Añadir menú**. Ponle un nombre y un precio, añade los nombres para clientes en los
 idiomas que uses y guarda.
 
-En **Platos**, añade los platos que quieras ofrecer. Deja los platos que se venden al peso en la
+En **Platos**, añade los platos que quieras ofrecer. [Abre la ficha de cada producto para
+asignarle un orden de plato](products.md#course). Deja los platos que se venden al peso en la
 carta completa, donde puedes venderlos por separado. En **Variantes**, elige qué versiones
 incluyes. Indica el suplemento junto a cada plato que cueste más y pulsa **Guardar** en
 **Platos**. Deja el importe en blanco si el plato está incluido en el precio del menú.
@@ -388,9 +389,8 @@ En **Qué incluye cada menú**, indica cuántos platos ofreces de cada orden de 
 Por ejemplo, usa una línea para un entrante y otra para un principal. Pon dos órdenes de plato en
 la misma línea para que el cliente elija entre ambos.
 
-Si tu menú incluye bebidas, pan o café, [crea los órdenes de plato que necesites y asígnalos a los
-productos](products.md#course). En cada departamento, elige **Marchar ya** para Bebidas y Pan,
-así puedes enviarlos con el primer pedido.
+Si sirves bebidas o pan con el primer pedido, elige **Marchar ya** para esos órdenes de plato
+en cada departamento.
 
 Consulta **Se ofrece en** para ver qué cartas ofrecen un menú. Elige el nombre de una carta
 para abrirla.

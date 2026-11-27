@@ -46,7 +46,6 @@ const TABLES = [
   "set_menu_lines",
   "set_menu_line_courses",
   "set_menu_variant_exclusions",
-  "set_menu_dish_courses",
   "option_lists",
   "option_labels",
   "extra_lists",
@@ -414,7 +413,6 @@ describe("the menu tables carry no taxpayer column", () => {
       set_menu_lines: "id",
       set_menu_line_courses: "line_id, course_id",
       set_menu_variant_exclusions: "menu_item_id, variant_id",
-      set_menu_dish_courses: "menu_item_id",
       option_lists: "id",
       option_labels: "id",
       extra_lists: "id",
@@ -438,8 +436,6 @@ describe("the menu tables carry no taxpayer column", () => {
       "set_menu_lines(menu_id)": "menus(id) on delete cascade",
       "set_menu_line_courses(line_id)": "set_menu_lines(id) on delete cascade",
       "set_menu_line_courses(course_id)": "kitchen_courses(id) on delete no action",
-      "set_menu_dish_courses(menu_item_id)": "menu_items(id) on delete cascade",
-      "set_menu_dish_courses(course_id)": "kitchen_courses(id) on delete no action",
       "set_menu_variant_exclusions(menu_item_id, product_id)":
         "menu_items(id, product_id) on delete cascade",
       "set_menu_variant_exclusions(product_id, variant_id)":
@@ -536,7 +532,6 @@ describe("the menu tables carry no taxpayer column", () => {
       menus_online_address_uq: { unique: true, columns: "online_address" },
       set_menu_lines_position_idx: { unique: false, columns: "menu_id, position" },
       set_menu_line_courses_course_idx: { unique: false, columns: "course_id" },
-      set_menu_dish_courses_course_idx: { unique: false, columns: "course_id" },
       menu_items_id_product_key: { unique: true, columns: "id, product_id" },
       menu_items_menu_product_key: { unique: true, columns: "menu_id, product_id" },
       option_labels_list_sort_idx: { unique: false, columns: "list_id, sort" },
