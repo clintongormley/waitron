@@ -20,9 +20,9 @@ const NOT_YET: Record<string, string> = {
   "adjustments.credited_to":
     'whose sale the item counted as: not in the download yet: backlog, The rest of "who did what" in the download',
   "bill_discounts.requested_by":
-    "who asked for a discount still held on an open bill: not in the download; the A1621 plan (D5) writes it into adjustments, which the download reads, at the invoice",
+    "who asked for a discount held only while its bill is open: kept to the invoice it is written into adjustments, which the download reads, and removed or on an abandoned bill it is deleted unwritten",
   "bill_discounts.approved_by":
-    "who approved a discount still held on an open bill: not in the download; the A1621 plan (D5) writes it into adjustments, which the download reads, at the invoice",
+    "who approved a discount held only while its bill is open: kept to the invoice it is written into adjustments, which the download reads, and removed or on an abandoned bill it is deleted unwritten",
 };
 
 const ADJUSTMENTS_COLUMNS = {

@@ -26,6 +26,7 @@ export * from "./endings.js";
 export * from "./refund-links.js";
 export * from "./spread.js";
 export * from "./bill-discounts.js";
+export * from "./pending-discounts.js";
 export * from "./reports.js";
 export { ADJUSTMENTS_TABLES, ADJUSTMENTS_CHANGE_SOURCES } from "./classification.js";
 export { ADJUSTMENTS_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";

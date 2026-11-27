@@ -50,7 +50,7 @@ export const productActive = sql<number>`(${products.active} and (${parentProduc
 /** A line's product can be sold now: Active and Available, and so is its parent for a variant. */
 export const productSellable = sql<number>`(${products.active} and ${products.available}
   and (${parentProducts.id} is null or (${parentProducts.active} and ${parentProducts.available})))`;
-const storedLineColumns = {
+export const storedLineColumns = {
   id: workingOrderLines.id,
   productId: workingOrderLines.productId,
   parentLineId: workingOrderLines.parentLineId,
@@ -71,7 +71,7 @@ const storedLineColumns = {
   classification: workingOrderLines.classification,
   setMenuRole: workingOrderLines.setMenuRole,
 };
-type StoredLineRow = {
+export type StoredLineRow = {
   [K in keyof typeof storedLineColumns]: (typeof storedLineColumns)[K] extends SQL<infer T>
     ? T
     : GetColumnData<Exclude<(typeof storedLineColumns)[K], SQL>>;
@@ -191,7 +191,7 @@ function groupedByPortion(
   }
   return bindings.size === 0 ? stored : projectPortionSale(stored, bindings);
 }
-function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
+export function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   if (stored.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
