@@ -350,11 +350,18 @@ export class OrdersApi extends FloorApi {
     expectedEdit: BillEditExpected | null,
     /** Confirms the extras the change adds to a dish whose period ended earlier today. */
     lateSend?: LateSend,
+    closedZoneId?: string,
   ): Promise<{ revision: number; party: BillParty; invoice?: TillSaleResult }> {
     return this.#request<{ revision: number; party: BillParty; invoice?: TillSaleResult }>(
       `/api/working-orders/${orderId}/lines/${lineNo}`,
       "PUT",
-      { ...patch, revision, expectedEdit, ...(lateSend === undefined ? {} : { lateSend }) },
+      {
+        ...patch,
+        revision,
+        expectedEdit,
+        ...(lateSend === undefined ? {} : { lateSend }),
+        ...(closedZoneId === undefined ? {} : { closedZoneId }),
+      },
     );
   }
   /**

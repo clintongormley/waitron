@@ -532,6 +532,25 @@ describe("existing service in a closed zone", () => {
     },
   );
 
+  it("adds the requested quantity after confirming the bill's closed zone", async () => {
+    const v = await venue();
+    const id = await park(v);
+    const before = await request(v, "GET", `/api/working-orders/${id}`);
+    at("23:45");
+    const changed = await request(v, "PUT", `/api/working-orders/${id}/lines/1`, {
+      portionLineNos: [],
+      revision: before.json.revision,
+      quantity: "2",
+      closedZoneId: v.zoneId,
+    });
+    expect(changed, JSON.stringify(changed.json)).toMatchObject({ status: 200 });
+    const after = await request(v, "GET", `/api/working-orders/${id}`);
+    expect(after.json.lines).toMatchObject([{ quantity: "1.000" }, { quantity: "1.000" }]);
+    expect(await closedZoneActivity()).toMatchObject([
+      { personId: v.operatorId, subjectId: v.zoneId },
+    ]);
+  });
+
   it("keeps a stored note editable", async () => {
     const v = await venue();
     const id = await park(v);

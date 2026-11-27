@@ -70,7 +70,7 @@ function shownNames(browser: TillMenuBrowser, region: string): string[] {
 }
 
 describe("fixed Counter menu browser", () => {
-  it("hides products in a closed zone even while the department's period runs", async () => {
+  it("keeps the menu available while a closed zone still has a running period", async () => {
     const { el } = await mountWidget<TillCounterScreen>("till-counter-screen", {
       store: new WorkingOrderStore(),
       menus: [lunchMenu],
@@ -85,7 +85,11 @@ describe("fixed Counter menu browser", () => {
         zoneKeepOpen: null,
       },
     });
-    expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    const closedMenu = el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser");
+    expect(closedMenu).not.toBeNull();
+    await closedMenu!.updateComplete;
+    expect(shownNames(closedMenu!, "shortcuts")).toEqual(["Salad", "Steak"]);
+    expect(el.shadowRoot!.querySelector("[data-zone-closed]")?.getAttribute("role")).toBe("status");
     el.service = {
       open: true,
       zoneOpen: true,

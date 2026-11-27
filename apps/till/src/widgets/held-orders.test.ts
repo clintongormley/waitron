@@ -610,12 +610,12 @@ describe("till-held-orders: moving a counter order to a table", () => {
   );
 
   it.each([
-    ["another area", "bar", ["open-free"]],
-    ["no area", null, ["open-free"]],
-    ["the closed area itself", "terrace", ["closed-free", "closed-seated", "open-free"]],
+    ["another area", "bar"],
+    ["no area", null],
+    ["the closed area itself", "terrace"],
   ])(
-    "leaves a closed area's tables out of Move to table for an order parked in %s",
-    async (_, parkedIn, listed) => {
+    "includes a closed area's tables in Move to table for an order parked in %s",
+    async (_, parkedIn) => {
       const area = (id: string, closed: boolean): FloorZone => ({
         id,
         name: id,
@@ -644,7 +644,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
         [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map(
           (row) => row.dataset.target,
         ),
-      ).toEqual(listed);
+      ).toEqual(["closed-free", "closed-seated", "open-free"]);
     },
   );
 

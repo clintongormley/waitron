@@ -63,7 +63,6 @@ import {
   type ServiceStepDue,
 } from "@waitron/shared";
 import { countText, currentLocale, fill, t } from "../i18n/t.js";
-import type { StringKey } from "../i18n/strings.js";
 import "../widgets/seat-dialog.js";
 import "../widgets/today-seats-dialog.js";
 import "../widgets/join-with-dialog.js";
@@ -125,13 +124,7 @@ import type {
 import type { BillEditExpected } from "../api/order-types.js";
 import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
 import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release-reminder.js";
-import {
-  MAP_PRECEDENCE,
-  mapLook,
-  readyText,
-  reminderClock,
-  type MapKind,
-} from "../state/floor-look.js";
+import { MAP_PRECEDENCE, mapLook, readyText, reminderClock } from "../state/floor-look.js";
 import {
   nextReadyBarChange,
   readyBar,
@@ -142,7 +135,7 @@ import {
   type ReadyTable,
   type StationReady,
 } from "../state/table-signals.js";
-import { chipState, heldChip, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
+import { chipState, signalChipStyles } from "../widgets/signal-chips.js";
 import { stepChip, stepChipStyles } from "../widgets/step-chip.js";
 import { currentStep, nextStepChangeAt } from "../state/service-steps.js";
 import {
@@ -153,62 +146,17 @@ import {
 } from "../state/table-precedence.js";
 import { helpAnchorStyles, helpBadge } from "../widgets/help-badge.js";
 
-/** The words of a table that needs clearing or moving. */
-const WAITING = {
-  clear: {
-    state: "floor.needs_clearing",
-    title: "floor.clear_title",
-    titleNamed: "floor.clear_title_named",
-    body: "floor.clear_body",
-    action: "floor.mark_cleared",
-  },
-  move: {
-    state: "floor.needs_moving",
-    title: "floor.move_title",
-    titleNamed: "floor.move_title_named",
-    body: "floor.move_body",
-    action: "floor.mark_moved",
-  },
-} as const satisfies Record<string, Record<string, StringKey>>;
+import {
+  WAITING,
+  type Waiting,
+  needsClearing,
+  shownPartyName,
+  PULSE_OF,
+  RING_OF,
+  tableChips,
+} from "./floor-table-indicators.js";
 
-type Waiting = keyof typeof WAITING;
 type TodayAction = "leave-here" | "mark-moved";
-
-function needsClearing(table: TableState): boolean {
-  return table.condition === "needs_clearing";
-}
-
-/** The party's name when it says more than the name the table is shown under: a name staff gave,
- * or a joined party's tables. */
-function shownPartyName(table: TableState): string | undefined {
-  const name = table.party?.displayName;
-  return name === undefined || name === shownUnder(table) ? undefined : name;
-}
-
-const PULSE_OF: Partial<Record<MapKind, FloorPulse>> = {
-  forgotten: "forgotten",
-  overdue: "overdue",
-  fire: "fire",
-};
-
-const RING_OF: Partial<Record<TableStateKind, FloorRing>> = {
-  forgotten: "forgotten",
-  overdue: "overdue",
-  fire: "fire",
-  waiting: "waiting",
-};
-
-/** The table's own Forgotten badge already says a forgotten wait. */
-function tableChips(table: TableState, now: number) {
-  const chips = signalChips(table.signals, {
-    forgottenShown: lateBand(table) === "forgotten",
-    now,
-  });
-  const held = heldChip(table.signals, reminderDueAt(table.party?.reminder), now);
-  return byPrecedence(held === null ? chips : [...chips, held], (chip) =>
-    chipState(chip, table.signals),
-  );
-}
 
 interface CardMark {
   kind: TableStateKind | undefined;
@@ -1205,7 +1153,7 @@ export class TillFloorScreen extends LitElement {
     }
     if (table.party === null && !table.hasOpenTab) {
       const zone = this.zones.find((candidate) => candidate.id === table.zoneId);
-      if (zone !== undefined && (zone.closed || !seatsGuests(zone))) {
+      if (zone !== undefined && (!seatsGuests(zone) || (zone.closed && !this.canChangeToday))) {
         this.refusal = null;
         this.refusedZoneId = zone.id;
         return;

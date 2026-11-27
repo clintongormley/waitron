@@ -3125,9 +3125,12 @@ describe("a handheld's zones", () => {
     },
   );
 
-  it.each(handhelds)(
+  it.each([
+    ["phone-portrait", true],
+    ["tablet-landscape", false],
+  ] as const)(
     "accepts a transfer onto a table in a table-service zone (%s)",
-    async (formFactor) => {
+    async (formFactor, closed) => {
       const request = {
         id: "incoming-1",
         tabId: "tab-1",
@@ -3143,6 +3146,13 @@ describe("a handheld's zones", () => {
         revision: 0,
       };
       const accept = vi.fn().mockResolvedValue({ ...request, status: "accepted" });
+      if (closed)
+        accept.mockRejectedValueOnce({
+          code: "service_zone.closed",
+          zoneId: "garden",
+          closedZoneName: "Garden",
+          closesAt: "22:00",
+        });
       const { el } = await mountHandheld(
         selection(["garden"], "garden"),
         formFactor,
@@ -3207,6 +3217,19 @@ describe("a handheld's zones", () => {
           tableId: "table-garden",
         }),
       );
+      if (closed) {
+        const dialog = () => el.shadowRoot!.querySelector("till-late-send-dialog");
+        await vi.waitFor(() => expect(dialog()?.closedZone?.closedZoneName).toBe("Garden"));
+        dialog()!.shadowRoot!.querySelector<HTMLElement>("[data-late-agreed]")!.click();
+        await vi.waitFor(() =>
+          expect(accept).toHaveBeenNthCalledWith(2, "incoming-1", {
+            revision: 9,
+            zoneId: "garden",
+            tableId: "table-garden",
+            closedZoneId: "garden",
+          }),
+        );
+      }
     },
   );
 

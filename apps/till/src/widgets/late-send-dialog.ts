@@ -132,12 +132,10 @@ export class TillLateSendDialog extends LitElement {
         @click=${() => this.#emit("wt-late-send-agreed")}
       >
         ${t(
-          zone === undefined
-            ? this.purpose === "save"
+          zone !== undefined && this.periodNames.length === 0
+            ? "late_send.continue"
+            : this.purpose === "save"
               ? "late_send.agreed_save"
-              : "late_send.agreed"
-            : this.periodNames.length === 0
-              ? "late_send.continue"
               : "late_send.agreed",
         )}
       </wt-button>

@@ -383,10 +383,8 @@ export class TillHeldOrders extends LitElement {
   }
 
   #picker(order: HeldOrderSummary): TemplateResult {
-    // The server refuses an open order a closed area other than its own.
     const tables = this.tables.filter((table) => {
       const zone = this.zones.find((zone) => zone.id === table.zoneId);
-      if (zone?.closed === true && zone.id !== order.zoneId) return false;
       return table.party !== null || seatsGuests(zone);
     });
     return html`<wt-dialog
@@ -402,7 +400,15 @@ export class TillHeldOrders extends LitElement {
           : html`<div class="action-options">
               ${tables
                 .sort((a, b) => inNumberOrder(shownName(a), shownName(b)))
-                .map((table) => tableTarget(table, undefined, (picked) => this.#pick(picked)))}
+                .map((table) =>
+                  tableTarget(
+                    table,
+                    undefined,
+                    (picked) => this.#pick(picked),
+                    false,
+                    this.zones.some((zone) => zone.id === table.zoneId && zone.closed),
+                  ),
+                )}
             </div>`
       }
       <wt-button

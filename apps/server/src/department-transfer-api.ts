@@ -16,7 +16,7 @@ import { asObject } from "./bill-payments-api.js";
 import { assertDeviceStillProven, assertProfileAction } from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { Logger } from "./logger.js";
-import { requireRevision } from "./till-request-fields.js";
+import { parseClosedZoneConfirmation, requireRevision } from "./till-request-fields.js";
 import { type Run } from "./till-api-errors.js";
 import { type TillApiDeps } from "./till-api-deps.js";
 import { requireSession } from "./till-session.js";
@@ -267,6 +267,7 @@ export function mountDepartmentTransferApi(
           tabRevision,
           zoneId,
           tableId,
+          zoneConfirmation: parseClosedZoneConfirmation(body.closedZoneId, receiver.personId),
         });
       });
       return c.json(result);

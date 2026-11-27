@@ -4332,7 +4332,7 @@ describe("till-table-order-screen", () => {
       };
 
       it.each(["move", "move-bill"] as const)(
-        "%s leaves closed destination areas out, keeping the closed source area and unknown areas",
+        "%s includes closed destination areas alongside unread and source areas",
         async (action) => {
           const setUp = floor("table_tab");
           const { el } = await mount({
@@ -4344,7 +4344,9 @@ describe("till-table-order-screen", () => {
           click(el, `[data-action="${action}"]`);
           await el.updateComplete;
           expect(targetIds(el)).toEqual(
-            action === "move" ? ["unknown", "t6", "t9"] : ["counter", "unknown", "t6", "t9"],
+            action === "move"
+              ? ["unknown", "t6", "t7", "t8", "t9"]
+              : ["counter", "unknown", "t6", "t7", "t8", "t9"],
           );
 
           el.zones = setUp.zones;
@@ -4353,12 +4355,16 @@ describe("till-table-order-screen", () => {
           expect(targetIds(el)).toContain("t8");
           el.zones = setUp.zones.map((zone) => ({ ...zone, closed: true }));
           await el.updateComplete;
-          expect(targetIds(el)).not.toContain("t7");
-          expect(targetIds(el)).not.toContain("t8");
+          const target = el.shadowRoot!.querySelector<HTMLElement & { hint?: string }>(
+            '[data-target="t8"]',
+          )!;
+          expect(target.hint ?? target.textContent).toContain(t("floor.closed"));
           el.bills = [];
           await el.updateComplete;
           expect(targetIds(el)).toEqual(
-            action === "move" ? ["unknown", "t6", "t9"] : ["counter", "unknown", "t6", "t9"],
+            action === "move"
+              ? ["unknown", "t6", "t7", "t8", "t9"]
+              : ["counter", "unknown", "t6", "t7", "t8", "t9"],
           );
         },
       );
@@ -4394,7 +4400,7 @@ describe("till-table-order-screen", () => {
       describe("Move this bill's counter", () => {
         const counter = (closed: boolean) => ({ ...zone("zone-counter", "prepay"), closed });
 
-        it("leaves out a closed counter area other than the bill's own, and offers it again once it reopens", async () => {
+        it("offers the Counter and labels it closed until it reopens", async () => {
           const setUp = floor("table_tab");
           const { el } = await mount({
             ...setUp,
@@ -4404,11 +4410,14 @@ describe("till-table-order-screen", () => {
           await toMenu(el);
           click(el, '[data-action="move-bill"]');
           await el.updateComplete;
-          expect(targetIds(el)).toEqual(["t6", "t7", "t8", "t9"]);
+          expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
+          const counterChoice = el.shadowRoot!.querySelector('[data-target="counter"]')!;
+          expect(counterChoice.textContent).toContain(t("floor.closed"));
 
           el.zones = [...setUp.zones, counter(false)];
           await el.updateComplete;
           expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
+          expect(counterChoice.textContent).not.toContain(t("floor.closed"));
         });
 
         it("keeps the counter when its area is the bill's own closed area", async () => {
@@ -4438,7 +4447,7 @@ describe("till-table-order-screen", () => {
           expect(targetIds(el)).toEqual(["counter", "t6", "t7", "t8", "t9"]);
         });
 
-        it("says no other tables when the counter's area is closed and no table is left", async () => {
+        it("still offers the closed Counter when no other table is available", async () => {
           const setUp = floor("table_tab");
           const { el } = await mount({
             ...setUp,
@@ -4449,10 +4458,7 @@ describe("till-table-order-screen", () => {
           await toMenu(el);
           click(el, '[data-action="move-bill"]');
           await el.updateComplete;
-          expect(targetIds(el)).toEqual([]);
-          expect(
-            el.shadowRoot!.querySelector("[data-target-picker] .empty")!.textContent!.trim(),
-          ).toBe(t("table.no_other_tables"));
+          expect(targetIds(el)).toEqual(["counter"]);
         });
       });
 
@@ -5698,7 +5704,7 @@ describe("till-table-order-screen — printing problems", () => {
 });
 
 describe("closed department ordering", () => {
-  it("keeps the bill payable and movable when the zone stops new dishes", async () => {
+  it("offers dishes while keeping the bill payable and movable in a closed zone", async () => {
     const previous = currentLocale();
     try {
       setLocale("en-GB");
@@ -5720,10 +5726,9 @@ describe("closed department ordering", () => {
         },
       });
       expect(el.shadowRoot!.querySelector("[data-zone-closed]")?.textContent?.trim()).toBe(
-        "Terrace is closed: nothing new can be ordered here. Bills can be paid or moved to another area.",
+        "Terrace is closed.",
       );
-      expect(el.shadowRoot!.querySelector("till-menu-browser")).toBeNull();
-      expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
+      expect(grid(el)).not.toBeNull();
       expect(draft.lines.map((line) => [line.product.id, line.quantity])).toEqual([["cafe", "2"]]);
       const payment = el.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!;
       expect(payment).not.toBeNull();

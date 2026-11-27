@@ -105,6 +105,7 @@ export function tableTarget(
   ownPartyId: string | undefined,
   pick: (table: TableState) => void,
   useTile = false,
+  zoneClosed = false,
 ): TemplateResult {
   const blocked =
     table.condition === "needs_clearing"
@@ -113,7 +114,7 @@ export function tableTarget(
         ? ("needs_moving" as const)
         : null;
   const held = table.party;
-  const state =
+  const condition =
     blocked !== null
       ? t(`floor.${blocked}`)
       : held === null
@@ -121,6 +122,7 @@ export function tableTarget(
         : held.id === ownPartyId
           ? t("table.this_party")
           : t("table.held_by").replace("{party}", () => held.displayName);
+  const state = zoneClosed ? `${condition} · ${t("floor.closed")}` : condition;
   return html`<div class="table-target">
     ${
       useTile

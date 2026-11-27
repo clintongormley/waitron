@@ -1,4 +1,5 @@
 import type {
+  ClosedZoneConfirmation,
   DepartmentTransfer,
   DepartmentTransferActor,
   DepartmentTransferReceiver,
@@ -346,7 +347,12 @@ export async function acceptDepartmentTransfer(
   tx: Transaction,
   requestId: string,
   receiver: DepartmentTransferReceiver,
-  input: { tabRevision: number; zoneId: string; tableId: string | null },
+  input: {
+    tabRevision: number;
+    zoneId: string;
+    tableId: string | null;
+    zoneConfirmation?: ClosedZoneConfirmation;
+  },
 ) {
   const request = await pendingRequest(tx, requestId);
   await checkReceiver(tx, request.destinationDepartmentId, receiver);
@@ -396,7 +402,7 @@ export async function acceptDepartmentTransfer(
     if (table === undefined)
       throw new AppError("department_transfer.destination_invalid", { field: "tableId" });
   }
-  await assertZoneTakesNewOrders(tx, input.zoneId, new Date());
+  await assertZoneTakesNewOrders(tx, input.zoneId, new Date(), input.zoneConfirmation);
   const accepted = await resolveRequest(tx, request.id, receiver, {
     status: "accepted",
     destinationZoneId: input.zoneId,

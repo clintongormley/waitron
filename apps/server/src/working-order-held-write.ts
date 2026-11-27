@@ -1,6 +1,7 @@
 import "./errors.js";
 import { withIssuanceTransaction } from "@waitron/core";
 import { type Database, withTransaction, workingOrders, type Transaction } from "@waitron/db";
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import { AppError, addDecimal, normalisePartyName } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { type OrderEditAuthority, requireOrderBillEditor } from "./bill-editing.js";
@@ -223,6 +224,7 @@ export async function updateOrderLine(
   attendance?: OrderAttendance,
   /** The request's confirmation of extras it adds to a dish whose period ended earlier today. */
   lateSend?: LateSendConfirmation,
+  zoneConfirmation?: ClosedZoneConfirmation,
 ): Promise<number> {
   // Admission follows the writing node.
   await requireEconomicWrite(tx, { nodeId: cfg.nodeId }, authority.admission);
@@ -263,6 +265,7 @@ export async function updateOrderLine(
     operatorId,
     attendance,
     lateSend,
+    zoneConfirmation,
   );
   const saved = await countEdit(tx, orderId, revision, changed, chargesUnchanged);
   if (changed) await captureOrderEdit(tx, attendance, orderId, operatorId, saved, "line", at);

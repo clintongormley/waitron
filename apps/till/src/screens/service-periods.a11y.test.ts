@@ -80,13 +80,11 @@ for (const locale of ["en-GB", "es-ES"] as const) {
                     );
               const notice = el.shadowRoot!.querySelector<HTMLElement>("[data-zone-closed]");
               expect(notice?.textContent?.trim()).toBe(
-                locale === "en-GB"
-                  ? "Terrace is closed: nothing new can be ordered here. Bills can be paid or moved to another area."
-                  : "Terrace está cerrada: no se puede pedir nada nuevo aquí. Las cuentas se pueden cobrar o mover a otra zona.",
+                locale === "en-GB" ? "Terrace is closed." : "Terrace está cerrada.",
               );
               expect(notice!.getAttribute("role")).toBe("status");
               expect(notice!.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-              expect(el.shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
+              expect(el.shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
               expect(store.lines.map((line) => [line.product.id, line.quantity])).toEqual([
                 ["coffee", "2"],
               ]);

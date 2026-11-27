@@ -2732,7 +2732,7 @@ describe("zone-only menu-state changes", () => {
     await vi.waitFor(() =>
       expect(counter(el).shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull(),
     );
-    expect(counter(el).shadowRoot!.querySelector("till-menu-switcher")).toBeNull();
+    expect(counter(el).shadowRoot!.querySelector("till-menu-switcher")).not.toBeNull();
     api.listZoneOffers.mockResolvedValue(open);
     api.menuState.mockResolvedValue(menuState("v1"));
     await poll(el);
@@ -2759,7 +2759,7 @@ describe("zone-only menu-state changes", () => {
     await vi.waitFor(() =>
       expect(tableScreen(el).shadowRoot!.querySelector("[data-zone-closed]")).not.toBeNull(),
     );
-    expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).toBeNull();
+    expect(tableScreen(el).shadowRoot!.querySelector("till-menu-browser")).not.toBeNull();
     api.listZoneOffers.mockImplementation((id: string) =>
       Promise.resolve(id === "zone-dining" ? DINING : V1),
     );

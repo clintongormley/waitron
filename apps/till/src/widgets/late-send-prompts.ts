@@ -107,12 +107,13 @@ export function askCounterClosedZone(
   lines: readonly OrderLine[],
   retry: (lateSend: LateSend | undefined, zoneId: string) => Promise<void>,
   current: () => boolean,
+  purpose: LateSendPurpose = "send",
 ): boolean {
   const zone = closedZoneQuestionOf(error);
   if (zone === undefined) return false;
   if (current())
     show(
-      closedZonePrompt(zone, lines, "send", (lateSend) => {
+      closedZonePrompt(zone, lines, purpose, (lateSend) => {
         if (current()) return retry(lateSend, zone.zoneId);
       }),
     );
