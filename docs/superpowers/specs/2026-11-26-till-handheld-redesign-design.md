@@ -6,7 +6,8 @@ and changes to pass 1) decided with the owner on the evening of 2026-11-26, and 
 by the owner the same evening.** Where pass 2 changed a pass-1 decision, the section says so with "(pass 2)".
 **Pass 3 (the ways to pay, §7.9) decided with the owner on the evening of 2026-11-26, and this write-up
 approved by the owner the same evening. Pass 3's second part (after payment, §7.12) decided the same
-evening, and its write-up approved by the owner the same evening.**
+evening, and its write-up approved by the owner the same evening.** On 2026-11-27 the owner approved
+frame `bi` (a bin for Remove, "Move" for "Move to…", Undo after removing; §4 and §14.4).
 §14 says how each piece looks, read off the approved pictures, so the build does not have to guess.
 
 This is a complete redesign of the till and the handheld. Pass 1 covered the overall map of the app,
@@ -126,9 +127,17 @@ clicking move), selectable to say 'send these'".
   Taking a row by its grip drags it onto another heading, or onto **+ New course** at the end.
   Dishes already sent have no grip: today's "Move to…" works only on dishes not yet sent (read in
   the code by the builder check, not run).
+- (2026-11-27) **While a row is dragged, the foot gives way to a bin**; dropping the row on it
+  removes the dish. Only new dishes can be dragged, so a sent dish never reaches it.
 - **Holding a row** (anywhere but its grip) starts selecting; further taps add rows. The foot then
-  offers what suits the rows chosen: **Send these N now**, **Move to…**, **Remove** (new dishes),
-  **Comp**, **Void** and **Move to station** (sent dishes). Cancel ends it.
+  offers what suits the rows chosen: **Send these N now**, **Move**, a bin that removes them (new
+  dishes), **Comp**, **Void** and **Move to station** (sent dishes). Cancel ends it.
+  (2026-11-27) **Move** stays beside dragging: it is the way to move without dragging, and moves many
+  ticked rows at once. Its button says "Move", not "Move to…"; the sheet it opens is headed "Move
+  to" (owner: "less text is less noise").
+- (2026-11-27) **Removing asks nothing**: the dishes go at once, and a bar above the foot says
+  "Croquettes removed" ("3 dishes removed") with **Undo** for a few seconds, as the floor's "Table 6
+  moved · Undo" does. Undo brings them back with their options and notes, where they were.
 - **Opening a row** (a tap) keeps only what makes sense for one dish: quantity, options and the note
   on a new dish; serving part of the row on a sent one. Remove, Comp, Void and Move to station are in
   the selection foot instead (owner chose this split, 2026-11-26); this replaces the pass-1 lists of
@@ -994,7 +1003,8 @@ owner dropped), `ad` frame 1 the layout of a counter screen (its jobs became rea
 paying redrawn, `ai` the floor on a till, `aj` ☰ and the kitchen screens, `ak` errors and nothing to
 do; (pass 3) `ba` Split equally, `bb` Items, `bc` An amount, `bd` Other card machine, `be` Find a bill, `bf` the
 receipt screen, `bg` Refund, `bh` Change how it was paid, `tipcmp` the two tip screens compared; `sum-a`, `sum-b`, `sum-c` a storyboard of the phone screens, in which frames 12 and 13 predate the
-bill dropdown and frame 4's ☰ still lists "Choose zones". Turned down or superseded: `w` (an edit
+bill dropdown and frame 4's ☰ still lists "Choose zones"; (2026-11-27) `bi` removing and moving new
+dishes: the bin and "Move" in the selection foot, the bin while dragging, and Undo after removing. Turned down or superseded: `w` (an edit
 mode, dropped), `y` (the Ready strip), `z` frame 2 (a Stations tab), `ab` frame 1 (a zone ⋮ menu,
 now in ☰), `ac` frames 1 and 3 and `ad` frame 2 (a counter zone with seats), `ae` and `al` (a
 counter order delivered to a table; dropped for now, §9.8).
@@ -1106,6 +1116,8 @@ How to read it:
   selection foot and splitting is the row's arrow (§4), so an opened new row holds only the
   quantity, Options and Note.
 - `af` 1 draws "Menu" in the foot without its ⌃; it keeps it, as `d`, `g`, `i` and `j` draw it.
+- `af` 3 draws the selection foot as "Move to…" and "Send these 3 now". It is `bi` 1's: a bin, "Move"
+  and "Send these 3 now" (2026-11-27). `af` 2's foot gives way to `bi` 2's bin while a row is dragged.
 - `i` 1: one tab per bill; built as `j` frame B's dropdown (§4).
 - `q` 1 and 2, `k` 1: the ways to pay as four joined buttons; built as `ah` 2's column (§7). `q` 3
   was turned down; the device sheet is `r`.
@@ -1226,9 +1238,20 @@ How to read it:
 - **Dragging** (`af` 2): the row lifts (a shadow, a teal outline, tilted slightly), leaving a dashed
   empty slot; the heading under it turns light blue with a dashed teal outline. "+ New course" at
   the end is a box 48 tall with a dashed border, a teal `plus` and teal words.
-- **Selecting** (`af` 3): the selecting header; a checkbox takes each grip's place (24 square,
-  rounded 6, a 2px border; ticked, it is teal with a white `check`); chosen rows light blue; the
-  foot becomes an outlined "Move to…" and a teal "Send these 3 now".
+- **The bin while dragging** (`bi` 2): in the foot's place, a box 72 tall, 14 radius, 12 in from
+  each side, with a 2px dashed `--wt-color-danger` border and a pale red fill (the colours of
+  `--wt-color-tab-danger-tint`, in both themes, until the floor's Take off names a token): the `delete`
+  icon and "Remove", 16 bold, in the danger colour, as `ab` 3's "Take off". With a row over it the
+  border turns solid and thicker, and the lifted row's outline turns red.
+- **Selecting** (`af` 3, `bi` 1): the selecting header; a checkbox takes each grip's place (24
+  square, rounded 6, a 2px border; ticked, it is teal with a white `check`); chosen rows light blue;
+  the foot becomes, from the left, a square 52 by 52 bin button (the `delete` icon in the danger
+  colour, a 1.5px danger border, named "Remove 3" for a screen reader), an outlined "Move" and a teal
+  "Send these 3 now".
+- **Undo after removing** (`bi` 3): a bar in the page's colours reversed (`--wt-color-text` fill,
+  surface-coloured text; dark in the light theme, light in the dark one) 52
+  tall, 10 radius, 12 in from each side and 10 above the foot, with a shadow: "Croquettes removed"
+  15 at the left, **Undo** 15 bold at the right, 44 tall.
 - **The menu** (`d` 2): an outlined search field 44 tall with a magnifier; the path under it, a home
   (new) then "› Starters › Cooked starters", the earlier steps teal links, the current one dark.
   Tiles three across, 76 tall, 8 radius, in their section's colour as today; a section is a white
