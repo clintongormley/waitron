@@ -313,9 +313,9 @@ it.each([
   const body = request.mock.calls[0]![2] as CertificateDiagnosisRequest;
   expect(body).toMatchObject({
     source: "candidate",
-    certKind: "representante",
     passphrase: "PRIVATE_PASSPHRASE_719",
   });
+  expect(body).not.toHaveProperty("certKind");
   expect(JSON.stringify(body)).not.toContain("PRIVATE_FILENAME_719");
 });
 
@@ -377,8 +377,8 @@ it("native source/file/passphrase/type edits invalidate evidence without substit
     source: "candidate",
     pfxBase64: "AQID",
     passphrase: "PRIVATE_PASS",
-    certKind: "representante",
   });
+  expect(request.mock.calls[0]![2]).not.toHaveProperty("certKind");
   await userEvent.fill(pass.shadowRoot!.querySelector("input")!, "PRIVATE_PASS_CHANGED");
   await panel.updateComplete;
   expect(q(panel, "diagnosis-copy")).toBeNull();

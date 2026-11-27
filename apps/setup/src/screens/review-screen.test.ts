@@ -41,7 +41,7 @@ function fullDraft(): DeepPartial<ProvisionBody> {
         password: SAMPLE_PASSWORD,
       },
     },
-    aeatCert: { pfxBase64: SAMPLE_PFX, passphrase: SAMPLE_PASSPHRASE, certKind: "sello" },
+    aeatCert: { pfxBase64: SAMPLE_PFX, passphrase: SAMPLE_PASSPHRASE },
   };
 }
 
@@ -417,7 +417,7 @@ describe("setup-review-screen", () => {
 
   it("treats an aeatCert with an empty pfxBase64 as not attached", async () => {
     const draft = fullDraft();
-    draft.aeatCert = { pfxBase64: "", passphrase: "", certKind: "sello" };
+    draft.aeatCert = { pfxBase64: "", passphrase: "" };
     const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
     expect(text(el, "[data-test=summary-cert]")).toBe("not attached");
   });

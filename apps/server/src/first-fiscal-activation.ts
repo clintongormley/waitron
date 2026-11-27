@@ -75,10 +75,11 @@ export async function firstFiscalPayload(
   if (contribution === undefined) conflict();
   const secret = contribution.provisioningSecret;
   const required = secret?.required(state.frozen.environment) ?? false;
+  let aeatCert: unknown;
   if (required) {
     if (body.aeatCert === undefined)
       throw new AppError("setup.provisioning_secret_required", { module: contribution.id });
-    await secret!.validate(body.aeatCert, { taxId: state.frozen.request.taxId });
+    aeatCert = await secret!.validate(body.aeatCert, { taxId: state.frozen.request.taxId });
   } else if (body.aeatCert !== undefined)
     throw new AppError("setup.request_invalid", { field: "aeatCert" });
   if (
@@ -99,11 +100,11 @@ export async function firstFiscalPayload(
       ? undefined
       : parseEmailSettings(body.email as Record<string, unknown>);
   const digest = firstSetupPublicationDigest(state, {
-    aeatCert: body.aeatCert,
+    aeatCert,
     email,
     errorReportsEnabled,
   });
-  return { contribution, secret, required, email, errorReportsEnabled, digest };
+  return { contribution, secret, required, aeatCert, email, errorReportsEnabled, digest };
 }
 export async function activateFirstFiscal(
   host: FirstFiscalHost,
@@ -147,7 +148,7 @@ export async function activateFirstFiscal(
         await deps.assertFiscalReady({
           request: req,
           contribution: payload.contribution,
-          secret: body.aeatCert,
+          secret: payload.aeatCert,
         });
       },
       confirmCommitted: async (current) => {
@@ -197,7 +198,7 @@ export async function publishCheckedFirstFiscal(
     deps.persistTrading === undefined
   )
     throw new AppError("setup.not_ready", {});
-  const { owner, body, payload } = publication;
+  const { owner, payload } = publication;
   return publishCheckedFirstSetup(
     host,
     {
@@ -249,7 +250,7 @@ export async function publishCheckedFirstFiscal(
         if (payload.required)
           await payload.secret!.seal(
             { db: deps.db!, ring: deps.ring!, nodeId: result.nodeId },
-            body.aeatCert,
+            payload.aeatCert,
           );
         const email = payload.email;
         if (email !== undefined)

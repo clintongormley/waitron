@@ -1,15 +1,22 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { getCredential, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { hasCode, isAppError } from "@waitron/shared";
-import { sealAeatSecret, validateAeatCert, type AeatCert } from "./provisioning-secret.js";
+import { makeAuthority } from "../test/certificate-fixtures.js";
+import { TEST_MIGRATIONS } from "../test/migrations.js";
+import {
+  parseAeatCert,
+  sealAeatSecret,
+  validateAeatCert,
+  type AeatCert,
+} from "./provisioning-secret.js";
 
 const NODE_ID = "node-a";
 
 const suite = useVenueDb({
-  migrations: [CORE_MIGRATIONS],
+  migrations: TEST_MIGRATIONS,
   timeoutMs: 120_000,
 });
 
@@ -29,7 +36,29 @@ function aeatCert(overrides: Partial<AeatCert> = {}): AeatCert {
   };
 }
 
+const authority = makeAuthority();
+const representative = authority.issue();
+const seal = authority.issue({ policies: ["0.4.0.194112.1.1"] });
+
 describe("sealAeatSecret", () => {
+  it.each([
+    ["a representative's file", representative, "sello", "representante"],
+    ["a seal's file", seal, "representante", "sello"],
+  ] as const)(
+    "seals %s with the type its policies name, whatever type the secret carries",
+    async (_label, file, carried, kind) => {
+      const ring = testRing();
+      const cert = { pfxBase64: file.pfx.toString("base64"), passphrase: file.passphrase };
+
+      await sealAeatSecret({ db: suite.db, ring, nodeId: NODE_ID }, { ...cert, certKind: carried });
+
+      const readBack = await withTransaction(suite.db, (tx) =>
+        getCredential(tx, ring, { purpose: "fiscal.aeat" }),
+      );
+      expect(readBack).toEqual({ ...cert, certKind: kind });
+    },
+  );
+
   it("seals the cert into fiscal.aeat and reads back the three fields intact", async () => {
     const ring = testRing();
     const cert = aeatCert({ certKind: "representante" });
@@ -131,17 +160,11 @@ describe("validateAeatCert — full cert-value validation", () => {
     };
   }
 
-  it("accepts a well-formed cert (sello + base64 pfx + non-empty passphrase)", () => {
+  it("accepts a well-formed cert (base64 pfx + non-empty passphrase)", () => {
     expect(() => validateAeatCert(goodCert())).not.toThrow();
-    expect(() => validateAeatCert(goodCert({ certKind: "representante" }))).not.toThrow();
   });
 
   it.each<[string, AeatCert, string]>([
-    [
-      "a certKind outside the set",
-      goodCert({ certKind: "bogus" as AeatCert["certKind"] }),
-      "certKind",
-    ],
     ["an empty pfxBase64", goodCert({ pfxBase64: "" }), "pfxBase64"],
     ["a non-base64 pfxBase64", goodCert({ pfxBase64: "not base64!" }), "pfxBase64"],
     ["a malformed base64 length", goodCert({ pfxBase64: "QQ" }), "pfxBase64"],
@@ -158,6 +181,23 @@ describe("validateAeatCert — full cert-value validation", () => {
       field,
     );
   });
+});
+
+describe("parseAeatCert — the checked secret the host carries", () => {
+  const cert = { pfxBase64: randomBytes(48).toString("base64"), passphrase: "cert-pass-9" };
+
+  it.each(["sello", "representante"])("reads a checked secret of type %s", (certKind) => {
+    expect(parseAeatCert({ ...cert, certKind })).toEqual({ ...cert, certKind });
+  });
+
+  it.each([["bogus"], [undefined]])(
+    "refuses a type %s outside the set, naming certKind",
+    (certKind) => {
+      expect(() => parseAeatCert({ ...cert, certKind })).toThrowError(
+        expect.objectContaining({ code: "setup.request_invalid", params: { field: "certKind" } }),
+      );
+    },
+  );
 });
 
 it("does not seal credentials when its opener is unavailable", async () => {

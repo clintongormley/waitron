@@ -271,12 +271,11 @@ describe("dashboard-aeat-certificate-dialog", () => {
     expect(install.mock.calls[0]![0]).toEqual({
       pfxBase64: BYTES_BASE64,
       passphrase: " cert pass 9 ",
-      certKind: "representante",
       expectedRevision: "rev-1",
     });
   });
 
-  it("sends a null revision when nothing was installed, and the chosen type", async () => {
+  it("sends a null revision when nothing was installed, and no type", async () => {
     const { dialog, install } = await open({
       reads: [async () => view({ revision: null, installed: null })],
       install: async () => ({ outcome: "refused", reason: "same", field: "file" }),
@@ -284,7 +283,8 @@ describe("dashboard-aeat-certificate-dialog", () => {
     await filled(dialog);
     await press(dialog);
     await vi.waitFor(() => expect(install).toHaveBeenCalledTimes(1));
-    expect(install.mock.calls[0]![0]).toMatchObject({ certKind: "sello", expectedRevision: null });
+    expect(install.mock.calls[0]![0]).toMatchObject({ expectedRevision: null });
+    expect(install.mock.calls[0]![0]).not.toHaveProperty("certKind");
   });
 
   it("reads Checking with AEAT… and is disabled while the check runs", async () => {
@@ -886,7 +886,6 @@ describe("certificate check self-service choices", () => {
         expect(install.mock.calls[2]![0]).toEqual({
           pfxBase64: "AQID",
           passphrase: " cert pass 9 ",
-          certKind: "sello",
           expectedRevision: "rev-1",
         });
         await vi.waitFor(() => expect(reads()).toBe(2));

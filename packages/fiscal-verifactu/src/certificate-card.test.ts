@@ -19,7 +19,10 @@ const authority = makeAuthority();
 const NOW = new Date("2026-10-18T11:00:00Z");
 const INSTALLED_AT = "2026-10-01T09:00:00.000Z";
 // 75 calendar days after 2026-10-18 in Madrid: inside a sello's 90-day warning, outside its 30.
-const certificate = authority.issue({ notAfter: new Date("2027-01-01T00:00:00Z") });
+const certificate = authority.issue({
+  notAfter: new Date("2027-01-01T00:00:00Z"),
+  policies: ["0.4.0.194112.1.1"],
+});
 
 function testRing(): KeyRing {
   return loadKeyRing({

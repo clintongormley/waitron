@@ -28,7 +28,7 @@ const draft: DeepPartial<ProvisionBody> = {
       password: "pw",
     },
   },
-  aeatCert: { pfxBase64: "AAAA", passphrase: "pp", certKind: "sello" },
+  aeatCert: { pfxBase64: "AAAA", passphrase: "pp" },
 };
 
 afterEach(cleanupWidgets);

@@ -106,6 +106,7 @@ async function check(
   }
   if (latest === undefined || ambiguous) return "invalid";
   if (
+    certKind !== details.kind ||
     latest.kind !== certKind ||
     latest.fingerprint !== details.fingerprint ||
     latest.organisation !== details.organisation ||

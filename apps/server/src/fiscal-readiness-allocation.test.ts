@@ -195,7 +195,11 @@ it("creates the retained preproduction readiness chain from its supplied allocat
     );
     const contribution = {
       ...FISCAL_SLOT,
-      provisioningSecret: { required: () => false, validate: () => {}, seal: async () => {} },
+      provisioningSecret: {
+        required: () => false,
+        validate: (raw: unknown) => raw,
+        seal: async () => {},
+      },
       drain: async () => ({ ...emptyDrainResult(), recordsAccepted: 1 }),
     };
     const args = {

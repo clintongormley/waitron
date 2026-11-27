@@ -89,7 +89,6 @@ export interface CertificateIdentity {
 export interface AeatCertDraft {
   pfxBase64: string;
   passphrase: string;
-  certKind: "sello" | "representante";
 }
 
 export interface EmailSettingsDraft {

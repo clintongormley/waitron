@@ -20,7 +20,6 @@ const candidate = {
   source: "candidate",
   pfxBase64: "AQID",
   passphrase: "candidate-secret",
-  certKind: "sello",
 } as const;
 const result = {
   schemaVersion: 1,
@@ -59,12 +58,24 @@ describe("certificate diagnosis request", () => {
     });
   });
 
-  it.each(["sello", "representante"] as const)("keeps the candidate's %s kind", (certKind) => {
-    expect(parseCertificateDiagnosisRequest({ ...candidate, certKind })).toEqual({
-      ...candidate,
-      certKind,
-    });
-  });
+  it.each([
+    ["candidate", "sello", candidate],
+    ["candidate", "representante", candidate],
+    ["candidate", null, candidate],
+    ["candidate", "other", candidate],
+    ["candidate", ["sello"], candidate],
+    ["installed", "sello", installed],
+  ] as const)(
+    "refuses a %s request naming the type %j: the file answers it",
+    (_label, certKind, request) => {
+      expect(() => parseCertificateDiagnosisRequest({ ...request, certKind })).toThrowError(
+        expect.objectContaining({
+          code: "fiscal.certificate_request_invalid",
+          params: { field: "body" },
+        }),
+      );
+    },
+  );
 
   it("preserves opaque revision, generation and whitespace in a nonempty passphrase", () => {
     const value = {
@@ -123,9 +134,6 @@ describe("certificate diagnosis request", () => {
     ["passphrase", null],
     ["passphrase", ""],
     ["passphrase", []],
-    ["certKind", null],
-    ["certKind", "other"],
-    ["certKind", ["sello"]],
   ])("refuses invalid %s=%j without echoing input", (key, value) => {
     expect(() => parseCertificateDiagnosisRequest({ ...candidate, [key]: value })).toThrowError(
       expect.objectContaining({
@@ -149,7 +157,7 @@ describe("certificate diagnosis request", () => {
     },
   );
 
-  it.each(["pfxBase64", "passphrase", "certKind"])("rejects %s on installed source", (key) => {
+  it.each(["pfxBase64", "passphrase"])("rejects %s on installed source", (key) => {
     expect(() =>
       parseCertificateDiagnosisRequest({
         ...installed,

@@ -433,7 +433,7 @@ describe("fiscal readiness submission runner", () => {
         contribution: {
           ...selected.contribution!,
           activationReadiness: "accepted-test-submission" as const,
-          provisioningSecret: { required: () => false, validate: () => {}, seal },
+          provisioningSecret: { required: () => false, validate: (raw: unknown) => raw, seal },
           drain,
         },
         secret,

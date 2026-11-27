@@ -978,7 +978,6 @@ const replacementMaterial = certificateAuthority.issue(forVenue);
 const productionCertificate = {
   pfxBase64: productionMaterial.pfx.toString("base64"),
   passphrase: "SYNTHETIC-production-cert",
-  certKind: "sello",
 };
 const productionEmail = {
   server: "smtp.example.test",
@@ -1026,7 +1025,8 @@ async function productionFixture(
       },
     },
     contribution: selected.contribution!,
-    secret: certificate,
+    // What the host binds: the checked secret, carrying the type the file names.
+    secret: await selected.contribution!.provisioningSecret!.validate(certificate, { taxId }),
     moduleVersions: versions,
     applicationVersion: "synthetic-production-build",
   });
@@ -1061,7 +1061,7 @@ it("the production venue command checks accepted readiness and seals its exact p
   const ring = loadKeyRing(f.env);
   expect(
     await withTransaction(venue.db, (tx) => tryGetCredential(tx, ring, { purpose: "fiscal.aeat" })),
-  ).toEqual(productionCertificate);
+  ).toEqual({ ...productionCertificate, certKind: "representante" });
   expect(
     await withTransaction(venue.db, (tx) => tryGetCredential(tx, ring, { purpose: "email.smtp" })),
   ).toEqual({
@@ -1121,7 +1121,7 @@ it.each(["certificate", "build", "key"] as const)(
 );
 
 it("the production venue command seals a Mac export from its settings file so plain Node opens it", async () => {
-  const mac = { ...MAC_ACCENTED_CANDIDATE, certKind: "sello" };
+  const mac = MAC_ACCENTED_CANDIDATE;
   const f = await productionFixture(true, mac, "89890001K");
   expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);
   const { loadKeyRing, tryGetCredential } = await import("@waitron/credentials");
@@ -1130,7 +1130,7 @@ it("the production venue command seals a Mac export from its settings file so pl
   const sealed = (await withTransaction(venue.db, (tx) =>
     tryGetCredential(tx, loadKeyRing(f.env), { purpose: "fiscal.aeat" }),
   )) as typeof mac;
-  expect(sealed).toEqual({ ...mac, pfxBase64: expect.any(String) });
+  expect(sealed).toEqual({ ...mac, pfxBase64: expect.any(String), certKind: "representante" });
   expect(
     openCertificateFile(Buffer.from(sealed.pfxBase64, "base64"), mac.passphrase),
   ).toMatchObject({ ok: true, details: { fingerprint: OPENSSL_SIGNED_FINGERPRINT } });
@@ -1173,12 +1173,12 @@ it("production activation seals the checked settings snapshot if its source file
     await withTransaction(venue.db, (tx) =>
       tryGetCredential(tx, loadKeyRing(f.env), { purpose: "fiscal.aeat" }),
     ),
-  ).toEqual(productionCertificate);
+  ).toEqual({ ...productionCertificate, certKind: "representante" });
   const { firstSetupPublicationDigest } = await import("./first-setup-publication-digest.js");
   const state = (await f.runtime.store.read())!;
   expect(state.inputs.$publication).toEqual({
     digest: firstSetupPublicationDigest(state, {
-      aeatCert: productionCertificate,
+      aeatCert: { ...productionCertificate, certKind: "representante" },
       email: {
         url: "smtp://elena:SYNTHETIC-production-smtp@smtp.example.test:587?requireTLS=true",
         from: "elena@example.test",
@@ -1524,11 +1524,13 @@ it("the readiness option refuses an unowned command before opening the venue", a
 it("the production command records a readable certificate against the committed setup node", async () => {
   const { makeAuthority } = await import("@waitron/fiscal-verifactu/test/certificate-fixtures.js");
   const { verifactuCertificates } = await import("@waitron/fiscal-verifactu/src/schema/index.js");
-  const candidate = makeAuthority().issue({ organizationIdentifier: `VATES-${request.taxId}` });
+  const candidate = makeAuthority().issue({
+    organizationIdentifier: `VATES-${request.taxId}`,
+    policies: ["0.4.0.194112.1.1"],
+  });
   const certificate = {
     pfxBase64: candidate.pfx.toString("base64"),
     passphrase: candidate.passphrase,
-    certKind: "sello",
   };
   const f = await productionFixture(true, certificate);
   expect(await runCliPastWait(f.args, f.deps), JSON.stringify(f.output)).toBe(0);

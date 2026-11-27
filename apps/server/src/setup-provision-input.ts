@@ -271,7 +271,9 @@ export async function parseProvisionPayload(
     throw new AppError("setup.provisioning_secret_required", { module: contribution.id });
   }
   if (!secretExpected && present) invalidRequest("aeatCert");
-  if (secretExpected) await secret!.validate(body.aeatCert, { taxId: venue.taxId });
+  const checkedSecret = secretExpected
+    ? await secret!.validate(body.aeatCert, { taxId: venue.taxId })
+    : undefined;
   return {
     mode,
     request: {
@@ -286,7 +288,7 @@ export async function parseProvisionPayload(
     contribution,
     secret,
     secretExpected,
-    rawSecret: body.aeatCert,
+    rawSecret: checkedSecret,
     errorReportsEnabled: errorReports === true,
   };
 }

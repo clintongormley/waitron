@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import type { FiscalDutyLog } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
-import { aeatEndpointFor, isCertKind, mtlsFetch, type CertKind } from "./aeat-transport.js";
+import { aeatEndpointFor, mtlsFetch } from "./aeat-transport.js";
 import { checkWithAuthority, type CheckTransport } from "./certificate-check.js";
 import { localDate } from "./certificate-dates.js";
 import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
@@ -64,7 +64,6 @@ export interface InstallDeps {
 interface InstallBody {
   pfxBase64: string;
   passphrase: string;
-  certKind: CertKind;
   expectedRevision: string | null;
 }
 
@@ -75,14 +74,13 @@ function invalid(field: string): AppError {
 function parseBody(raw: unknown): InstallBody {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw invalid("body");
   const body = raw as Record<string, unknown>;
-  const { pfxBase64, passphrase, certKind, expectedRevision } = body;
+  const { pfxBase64, passphrase, expectedRevision } = body;
   if (typeof pfxBase64 !== "string" || !isBase64(pfxBase64)) throw invalid("pfxBase64");
   if (typeof passphrase !== "string" || passphrase.length === 0) throw invalid("passphrase");
-  if (typeof certKind !== "string" || !isCertKind(certKind)) throw invalid("certKind");
   if (expectedRevision !== null && typeof expectedRevision !== "string") {
     throw invalid("expectedRevision");
   }
-  return { pfxBase64, passphrase, certKind, expectedRevision };
+  return { pfxBase64, passphrase, expectedRevision };
 }
 
 export async function venueTimeZone(tx: Transaction): Promise<string> {
@@ -211,7 +209,7 @@ export async function installCertificate(
     material: {
       pfx: Buffer.from(pfxBase64, "base64"),
       passphrase: body.passphrase,
-      certKind: body.certKind,
+      certKind: details.kind,
     },
     taxpayer: { legalName: read.taxpayer.legalName, taxId: read.taxpayer.taxId },
     timeZone: read.timeZone,
@@ -242,14 +240,14 @@ export async function installCertificate(
     await putCredential(tx, deps.ring, {
       personId,
       purpose: "fiscal.aeat",
-      value: { pfxBase64, passphrase: body.passphrase, certKind: body.certKind },
+      value: { pfxBase64, passphrase: body.passphrase, certKind: details.kind },
     });
     await recordInstall(tx, {
       nodeId: deps.nodeId,
       installedAt: writtenAt,
       source: "dashboard",
       personId,
-      kind: body.certKind,
+      kind: details.kind,
       fingerprint: details.fingerprint,
       organisation: details.organisation,
       taxId: details.taxId,

@@ -38,6 +38,7 @@ import type { Logger, LogLevel } from "./logger.js";
 import { mountSetup as mountSetupBase } from "./setup-api.js";
 import { type SetupDeps } from "./setup-api-deps.js";
 import { mountSetupSpa } from "./setup-spa.js";
+import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import { makeAuthority } from "@waitron/fiscal-verifactu/test/certificate-fixtures.js";
 import { createSetupOperationStore, type SetupOperationStore } from "./setup-operation.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
@@ -351,10 +352,14 @@ const CERTIFICATE = makeAuthority().issue({
   passphrase: "cert-secret",
   organizationIdentifier: "VATES-50000000R",
 });
+const SEAL_CERTIFICATE = makeAuthority().issue({
+  passphrase: "cert-secret",
+  organizationIdentifier: "VATES-50000000R",
+  policies: ["0.4.0.194112.1.1"],
+});
 const CERT = {
   pfxBase64: CERTIFICATE.pfx.toString("base64"),
   passphrase: CERTIFICATE.passphrase,
-  certKind: "sello",
 } as const;
 
 it.each([true, undefined, null])("handles the Prepare error-report choice %s", async (choice) => {
@@ -1703,6 +1708,34 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     ]);
   });
 
+  it.each([
+    ["a representative's file", CERTIFICATE, "sello", "representante"],
+    ["a seal's file", SEAL_CERTIFICATE, "representante", "sello"],
+  ] as const)(
+    "hands the readiness check and the seal %s with the type it names, not the request's",
+    async (_label, file, asked, kind) => {
+      const app = new Hono();
+      const assertFiscalReady = vi.fn().mockResolvedValue(undefined);
+      const seal = vi.fn<(deps: unknown, raw: unknown) => Promise<void>>(async () => {});
+      const { deps } = makeDeps({ assertFiscalReady });
+      mountSetup(app, deps, noopLog);
+      const sealSpy = vi.spyOn(FISCAL_SLOT.provisioningSecret!, "seal").mockImplementation(seal);
+      try {
+        const cert = { pfxBase64: file.pfx.toString("base64"), passphrase: file.passphrase };
+        const res = await postProvision(app, {
+          ...liveBody(),
+          aeatCert: { ...cert, certKind: asked },
+        });
+
+        expect(res.status).toBe(200);
+        expect(assertFiscalReady.mock.calls[0]![0].secret).toEqual({ ...cert, certKind: kind });
+        expect(seal.mock.calls[0]![1]).toEqual({ ...cert, certKind: kind });
+      } finally {
+        sealSpy.mockRestore();
+      }
+    },
+  );
+
   // A real AEAT signing cert must never be sealed into a preproduction taxpayer's vault.
   it("refuses a demo provision carrying an AEAT cert (400 setup.request_invalid, field aeatCert), without provisioning or sealing", async () => {
     const app = new Hono();
@@ -1746,7 +1779,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     const malformedCert = {
       pfxBase64: "not base64!!!",
       passphrase: "cert-secret",
-      certKind: "sello",
     };
     const res = await postProvision(app, { ...demoBody(), aeatCert: malformedCert });
 
@@ -1766,7 +1798,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   // (unrepairable, CLAUDE.md §5); refused only at the seal, a corrected retry would meet
   // `setup.already_provisioned` for good.
   it.each<[string, Record<string, unknown>]>([
-    ["a certKind outside {sello, representante}", { ...CERT, certKind: "bogus" }],
+    ["an empty passphrase", { ...CERT, passphrase: "" }],
     ["a non-base64 pfxBase64", { ...CERT, pfxBase64: "not valid base64!!!" }],
   ])(
     "refuses a live provision whose aeatCert has %s (400) WITHOUT stamping or minting",

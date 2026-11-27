@@ -17,7 +17,7 @@ function runHarness(legalName: string | undefined) {
     WAITRON_CERT_CHECK_PFX_BASE64: "bm90LWEta2V5",
     WAITRON_CERT_CHECK_PASSPHRASE: "test-only",
     // This refusal happens before certificate parsing or the authority request.
-    WAITRON_CERT_CHECK_KIND: "invalid-kind",
+    WAITRON_CERT_CHECK_ADDRESS_KIND: "invalid-kind",
     WAITRON_CERT_CHECK_ENVIRONMENT: "preproduction",
     WAITRON_CERT_CHECK_NIF: "B12345678",
   });
@@ -44,7 +44,7 @@ describe("the operator certificate-check harness", () => {
     const report = JSON.parse(result.stdout) as { numFailedTests: number };
     expect(report.numFailedTests).toBe(1);
     expect(result.stdout).toContain(
-      "WAITRON_CERT_CHECK_KIND must be sello or representante, not invalid-kind",
+      "WAITRON_CERT_CHECK_ADDRESS_KIND must be sello or representante, not invalid-kind",
     );
   });
 

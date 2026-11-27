@@ -25,8 +25,8 @@ import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { AeatCertDraft, ApiError, ProvisionBody } from "../api/client.js";
 
-/** The Spanish values are the server's contract (`isCertKind`). */
-const CERT_KINDS: ReadonlyArray<{ value: AeatCertDraft["certKind"]; label: StringKey }> = [
+type CertKindChoice = "sello" | "representante";
+const CERT_KINDS: ReadonlyArray<{ value: CertKindChoice; label: StringKey }> = [
   { value: "sello", label: "cert.kind.sello" },
   { value: "representante", label: "cert.kind.representante" },
 ];
@@ -56,7 +56,7 @@ interface CertificateForm {
   pfxBase64: string;
   fileName: string;
   passphrase: string;
-  certKind: AeatCertDraft["certKind"];
+  certKind: CertKindChoice;
   selectedFile: File | null;
   pendingFile: File | null;
   fileReadFailed: boolean;
@@ -136,7 +136,7 @@ export class SetupCertScreen extends LitElement {
   @state() private fileName = "";
 
   @state() private passphrase = "";
-  @state() private certKind: AeatCertDraft["certKind"] = "sello";
+  @state() private certKind: CertKindChoice = "sello";
   @state() private passphraseVisible = false;
 
   @state() private fileReadFailed = false;
@@ -227,7 +227,6 @@ export class SetupCertScreen extends LitElement {
     if (cert === undefined) return;
     this.pfxBase64 = cert.pfxBase64 ?? this.pfxBase64;
     this.passphrase = cert.passphrase ?? this.passphrase;
-    this.certKind = cert.certKind ?? this.certKind;
   }
 
   async #onFileChange(event: CustomEvent<{ files: File[] }>): Promise<void> {
@@ -275,7 +274,7 @@ export class SetupCertScreen extends LitElement {
   #onCertKind(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.#invalidateInspection();
-    this.certKind = event.detail.value as AeatCertDraft["certKind"];
+    this.certKind = event.detail.value as CertKindChoice;
     this.#scope?.changed();
   }
 
@@ -314,7 +313,6 @@ export class SetupCertScreen extends LitElement {
     const aeatCert = {
       pfxBase64: submitted.pfxBase64,
       passphrase: submitted.passphrase,
-      certKind: submitted.certKind,
     };
     const inspect = this.inspect;
     if (inspect) {

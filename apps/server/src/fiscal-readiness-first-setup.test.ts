@@ -84,7 +84,12 @@ vi.mock("@waitron/composition", async (original) => {
         },
         fiscal: {
           ...module.fiscal!,
-          provisioningSecret: { required: () => true, validate: () => {}, seal: async () => {} },
+          provisioningSecret: {
+            required: () => true,
+            // Stands in for reading the type from the file.
+            validate: (raw: unknown) => ({ ...(raw as object), certKind: "sello" }),
+            seal: async () => {},
+          },
           drain: calls.drain,
         },
       };
@@ -173,7 +178,7 @@ it.each([true, false])(
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             mode: "live",
-            aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic", certKind: "sello" },
+            aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic" },
             venue: { ...request, legalName },
             ...(supplied ? { initialOperations: production } : {}),
           }),
@@ -250,7 +255,7 @@ it.each([true, false])(
           headers: owned.headers,
           body: JSON.stringify({
             mode: "live",
-            aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic", certKind: "sello" },
+            aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic" },
             email: {
               server: "smtp.example.test",
               port: 587,

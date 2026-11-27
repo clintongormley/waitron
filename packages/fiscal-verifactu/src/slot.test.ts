@@ -242,12 +242,12 @@ describe("FISCAL_SLOT.provisioningSecret", () => {
   it("validate throws setup.request_invalid on a malformed blob and writes nothing", async () => {
     let error: unknown;
     try {
-      await secret.validate({ ...goodCert, certKind: "bogus" }, { taxId: "89890001K" });
+      await secret.validate({ ...goodCert, pfxBase64: "not base64!" }, { taxId: "89890001K" });
     } catch (e) {
       error = e;
     }
     expect(isAppError(error) && hasCode(error, "setup.request_invalid") && error.params.field).toBe(
-      "certKind",
+      "pfxBase64",
     );
   });
 
@@ -409,7 +409,10 @@ describe("the fiscal readiness rejection reader", () => {
 describe("FISCAL_SLOT.certificate", () => {
   const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 120_000 });
   const authority = makeAuthority();
-  const installed = authority.issue({ notAfter: new Date("2027-01-01T00:00:00Z") });
+  const installed = authority.issue({
+    notAfter: new Date("2027-01-01T00:00:00Z"),
+    policies: ["0.4.0.194112.1.1"],
+  });
   const NOW = new Date("2026-10-18T11:00:00Z");
   const INSTALLED_AT = "2026-10-01T09:00:00.000Z";
 
@@ -487,7 +490,6 @@ describe("FISCAL_SLOT.certificate", () => {
       {
         pfxBase64: candidate.pfx.toString("base64"),
         passphrase: "not-the-pass",
-        certKind: "sello",
         expectedRevision: before,
       },
       NOW,

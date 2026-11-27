@@ -92,7 +92,7 @@ describe("certificate diagnosis without a sale or install lock", () => {
         operation: "check",
         sourceGeneration: 1,
         expectedRevision: null,
-        ...material(candidate, "representante"),
+        ...material(candidate),
       },
       NOW,
     );
@@ -163,7 +163,7 @@ describe("certificate diagnosis without a sale or install lock", () => {
               fetchFor: (m) => mtlsFetch(m, authority.caPem),
             },
           },
-          { ...material(candidate, "representante"), expectedRevision: f.request.expectedRevision },
+          { ...material(candidate), expectedRevision: f.request.expectedRevision },
           NOW,
         ),
       ).resolves.toMatchObject({ outcome: "installed" });

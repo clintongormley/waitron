@@ -12,13 +12,12 @@ import { isUnset } from "./env-value.js";
 
 const pfxBase64 = process.env.WAITRON_CERT_CHECK_PFX_BASE64;
 const passphrase = process.env.WAITRON_CERT_CHECK_PASSPHRASE;
-const kind = process.env.WAITRON_CERT_CHECK_KIND;
 const environment = process.env.WAITRON_CERT_CHECK_ENVIRONMENT;
 const nif = process.env.WAITRON_CERT_CHECK_NIF;
 const legalName = process.env.WAITRON_CERT_CHECK_LEGAL_NAME;
 const addressKind = process.env.WAITRON_CERT_CHECK_ADDRESS_KIND;
 
-const configured = [pfxBase64, passphrase, kind, environment, nif, legalName].every(
+const configured = [pfxBase64, passphrase, environment, nif, legalName].every(
   (value) => !isUnset(value),
 );
 
@@ -38,29 +37,34 @@ function deploymentEnvironment(value: string): DeploymentEnvironment {
 
 describe.runIf(configured)("a real AEAT certificate, checked with the shipped code", () => {
   it("opens the file and asks AEAT about it", async () => {
-    const material = {
-      pfx: Buffer.from(pfxBase64!, "base64"),
-      passphrase: passphrase!,
-      certKind: certKind("WAITRON_CERT_CHECK_KIND", kind!),
-    };
     const env = deploymentEnvironment(environment!);
-    const sendTo = isUnset(addressKind)
-      ? material.certKind
+    const chosenAddress = isUnset(addressKind)
+      ? null
       : certKind("WAITRON_CERT_CHECK_ADDRESS_KIND", addressKind);
+    const pfx = Buffer.from(pfxBase64!, "base64");
 
-    const opened = openCertificateFile(material.pfx, material.passphrase);
+    const opened = openCertificateFile(pfx, passphrase!);
     if (opened.ok) {
-      const { organisation, taxId, issuer, validFrom, validUntil } = opened.details;
+      const { organisation, taxId, issuer, validFrom, validUntil, kind } = opened.details;
       console.log("Certificate:", {
         organisation,
         taxId,
         issuer,
+        kind,
         validFrom: validFrom.toISOString(),
         validUntil: validUntil.toISOString(),
       });
     } else {
       console.log("Certificate could not be opened:", opened.reason);
     }
+    const fileKind = opened.ok ? opened.details.kind : null;
+    const sendTo = chosenAddress ?? fileKind;
+    if (sendTo === null) {
+      throw new Error(
+        "The file did not open, so its type is unknown: set WAITRON_CERT_CHECK_ADDRESS_KIND to choose an address",
+      );
+    }
+    const material = { pfx, passphrase: passphrase!, certKind: fileKind ?? sendTo };
 
     const endpointFor = aeatEndpointFor(env);
     const result = await checkWithAuthority({
@@ -71,7 +75,7 @@ describe.runIf(configured)("a real AEAT certificate, checked with the shipped co
       transport: { endpointFor: () => endpointFor(sendTo), fetchFor: mtlsFetch },
     });
 
-    console.log(`Sent ${material.certKind} certificate to the ${sendTo} address (${env}).`);
+    console.log(`Sent ${fileKind ?? "an unopened"} certificate to the ${sendTo} address (${env}).`);
     if (result.ok) {
       console.log("AEAT answered:", { endpoint: result.endpoint });
     } else if (result.reason === "aeat_fault") {

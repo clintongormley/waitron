@@ -99,7 +99,6 @@ function body(
           aeatCert: {
             pfxBase64: certificate.pfx.toString("base64"),
             passphrase: "fiscal-fixture",
-            certKind: "sello",
           },
         }
       : {}),
@@ -167,7 +166,7 @@ beforeEach(async () => {
 });
 
 it("seals a Mac export so plain Node opens it while the readiness check reads the file as sent", async () => {
-  const aeatCert = { ...MAC_ACCENTED_CANDIDATE, certKind: "sello" };
+  const aeatCert = MAC_ACCENTED_CANDIDATE;
   const checked: unknown[] = [];
   const made = mount({
     assertFiscalReady: async ({ secret }) => {
@@ -176,11 +175,15 @@ it("seals a Mac export so plain Node opens it while the readiness check reads th
   });
   const response = await post(made.app, { ...body("live", "89890001K"), aeatCert, email });
   expect(response.status).toBe(200);
-  expect(checked).toEqual([aeatCert]);
+  expect(checked).toEqual([{ ...aeatCert, certKind: "representante" }]);
   const sealed = (await withTransaction(suite.db, (tx) =>
     tryGetCredential(tx, ring, { purpose: "fiscal.aeat" }),
   )) as typeof aeatCert;
-  expect(sealed).toEqual({ ...aeatCert, pfxBase64: expect.any(String) });
+  expect(sealed).toEqual({
+    ...aeatCert,
+    pfxBase64: expect.any(String),
+    certKind: "representante",
+  });
   expect(
     openCertificateFile(Buffer.from(sealed.pfxBase64, "base64"), sealed.passphrase),
   ).toMatchObject({ ok: true, details: { fingerprint: OPENSSL_SIGNED_FINGERPRINT } });
@@ -194,7 +197,7 @@ it("seals a Mac export so plain Node opens it while the readiness check reads th
 it("provisions a Mac export in production after its accepted fiscal test, through the real readiness store", async () => {
   const stateDir = mkdtempSync(join(tmpdir(), "setup-mac-readiness-"));
   try {
-    const aeatCert = { ...MAC_ACCENTED_CANDIDATE, certKind: "sello" };
+    const aeatCert = MAC_ACCENTED_CANDIDATE;
     const submitted: unknown[] = [];
     const readinessInput = ({ request, contribution, secret }: FiscalSeatInput) =>
       fiscalReadinessInput({

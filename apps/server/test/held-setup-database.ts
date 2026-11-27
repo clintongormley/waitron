@@ -162,7 +162,6 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
         : {
             pfxBase64: issued.pfx.toString("base64"),
             passphrase: issued.passphrase,
-            certKind: "sello",
           };
     const activated = await app.request("/setup-api/provision", {
       method: "POST",

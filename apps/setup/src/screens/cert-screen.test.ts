@@ -143,7 +143,7 @@ describe("setup-cert-screen", () => {
     await el.updateComplete;
     q(el, "[data-test=next]")!.click();
     const patch = (events[0]!.detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.aeatCert?.certKind).toBe("representante");
+    expect(patch.aeatCert).toEqual({ pfxBase64: EXPECTED_BASE64, passphrase: "unlock-2026" });
   });
 
   it("lets the operator reveal and hide the certificate passphrase", async () => {
@@ -172,7 +172,6 @@ describe("setup-cert-screen", () => {
             aeatCert: {
               pfxBase64: EXPECTED_BASE64,
               passphrase: "unlock-2026",
-              certKind: "sello",
             },
           },
         },
@@ -185,7 +184,7 @@ describe("setup-cert-screen", () => {
     expect(pfx.includes(",")).toBe(false);
   });
 
-  it("carries a changed certKind into the patch", async () => {
+  it("keeps a changed type out of the patch: the server reads it from the file", async () => {
     const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     const events = collect(host);
     await chooseFile(el, PFX_SOURCE);
@@ -193,7 +192,7 @@ describe("setup-cert-screen", () => {
     await pickKind(el, "representante");
     q(el, "[data-test=next]")!.click();
     const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.aeatCert?.certKind).toBe("representante");
+    expect(patch.aeatCert).toEqual({ pfxBase64: EXPECTED_BASE64, passphrase: "unlock-2026" });
   });
 
   it("shows the chosen file name in the loaded status (never the bytes)", async () => {
@@ -261,38 +260,21 @@ describe("setup-cert-screen", () => {
     expect(events.some((e) => e.kind === "goto")).toBe(true);
   });
 
-  it("seeds passphrase, certKind and the loaded status from a draft cert", async () => {
+  it("seeds passphrase and the loaded status from a draft cert", async () => {
     const draft: DeepPartial<ProvisionBody> = {
       aeatCert: {
         pfxBase64: EXPECTED_BASE64,
         passphrase: "seeded-pass",
-        certKind: "representante",
       },
     };
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", { draft });
     expect((q(el, "[data-test=passphrase]") as unknown as { value: string }).value).toBe(
       "seeded-pass",
     );
-    expect((q(el, "[data-test=certKind]") as HTMLSelectElement).value).toBe("representante");
     expect(q(el, "[data-test=file-status]")).not.toBeNull();
   });
 
   it("emits the seeded cert unchanged when Next is pressed without re-choosing a file", async () => {
-    const draft: DeepPartial<ProvisionBody> = {
-      aeatCert: { pfxBase64: EXPECTED_BASE64, passphrase: "seeded-pass", certKind: "sello" },
-    };
-    const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", { draft });
-    const events = collect(host);
-    q(el, "[data-test=next]")!.click();
-    const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.aeatCert).toEqual({
-      pfxBase64: EXPECTED_BASE64,
-      passphrase: "seeded-pass",
-      certKind: "sello",
-    });
-  });
-
-  it("emits the default company-seal kind when the draft cert names none", async () => {
     const draft: DeepPartial<ProvisionBody> = {
       aeatCert: { pfxBase64: EXPECTED_BASE64, passphrase: "seeded-pass" },
     };
@@ -303,7 +285,20 @@ describe("setup-cert-screen", () => {
     expect(patch.aeatCert).toEqual({
       pfxBase64: EXPECTED_BASE64,
       passphrase: "seeded-pass",
-      certKind: "sello",
+    });
+  });
+
+  it("emits a draft cert that names no type without adding one", async () => {
+    const draft: DeepPartial<ProvisionBody> = {
+      aeatCert: { pfxBase64: EXPECTED_BASE64, passphrase: "seeded-pass" },
+    };
+    const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", { draft });
+    const events = collect(host);
+    q(el, "[data-test=next]")!.click();
+    const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
+    expect(patch.aeatCert).toEqual({
+      pfxBase64: EXPECTED_BASE64,
+      passphrase: "seeded-pass",
     });
   });
 
@@ -320,11 +315,12 @@ describe("setup-cert-screen", () => {
 
   it("seeds only the fields a partial draft cert carries, leaving the rest at their defaults", async () => {
     const draft: DeepPartial<ProvisionBody> = {
-      aeatCert: { certKind: "representante" }, // no pfxBase64, no passphrase
+      aeatCert: { passphrase: "seeded-pass" }, // no pfxBase64
     };
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", { draft });
-    expect((q(el, "[data-test=certKind]") as HTMLSelectElement).value).toBe("representante");
-    expect((q(el, "[data-test=passphrase]") as unknown as { value: string }).value).toBe("");
+    expect((q(el, "[data-test=passphrase]") as unknown as { value: string }).value).toBe(
+      "seeded-pass",
+    );
     expect(q(el, "[data-test=file-status]")).toBeNull();
   });
 
@@ -601,7 +597,7 @@ describe("setup-cert-screen in Spanish", () => {
 
 it("keeps a temporary certificate check refusal off the fields and allows Next again", async () => {
   const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {
-    draft: { aeatCert: { pfxBase64: EXPECTED_BASE64, passphrase: "pw", certKind: "sello" } },
+    draft: { aeatCert: { pfxBase64: EXPECTED_BASE64, passphrase: "pw" } },
     refusal: { field: "body", reason: "unavailable" },
   });
   expect(await bottomOf(el)).toBe("The box could not check this certificate. Try again.");
@@ -611,7 +607,7 @@ it("keeps a temporary certificate check refusal off the fields and allows Next a
 });
 it("names an oversized certificate instead of calling it unreadable", async () => {
   const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {
-    draft: { aeatCert: { pfxBase64: EXPECTED_BASE64, passphrase: "pw", certKind: "sello" } },
+    draft: { aeatCert: { pfxBase64: EXPECTED_BASE64, passphrase: "pw" } },
     refusal: { field: "pfxBase64", reason: "too_large" },
   });
   expect(pfxError(el)?.textContent?.trim()).toBe("This file is too large to be a certificate.");

@@ -79,7 +79,11 @@ afterEach(async () => {
 });
 
 function payload(cert = candidate) {
-  return { pfxBase64: cert.pfx.toString("base64"), passphrase: cert.passphrase, certKind: "sello" };
+  return {
+    pfxBase64: cert.pfx.toString("base64"),
+    passphrase: cert.passphrase,
+    certKind: "representante",
+  };
 }
 async function capture(cert: Candidate | object | null = candidate) {
   await seedTaxpayers(suite.db);
@@ -308,7 +312,7 @@ it.each(["before", "after"] as const)("checks the source-node relationship in %s
   expect(await verify()).toEqual(result("invalid"));
 });
 it.each([
-  ["kind", "representante"],
+  ["kind", "sello"],
   ["organisation", "different organisation"],
   ["tax_id", "A11111111"],
   ["issuer", "different issuer"],
@@ -403,6 +407,16 @@ it.each([
   await replace(value);
   expect(await verify()).toEqual(result("invalid"));
 });
+it("binds the vault's and the latest install's type to the type the PFX names", async () => {
+  await capture();
+  await replace({ ...payload(), certKind: "sello" });
+  both((db) =>
+    db
+      .prepare("update verifactu_certificates set kind='sello' where node_id=? and installed_at=?")
+      .run(TAXPAYER_A.nodeId, createdAt),
+  );
+  expect(await verify()).toEqual(result("invalid"));
+});
 it("keeps a supported vault with unsupported PFX encryption unsupported", async () => {
   await capture();
   await replace({
@@ -412,11 +426,9 @@ it("keeps a supported vault with unsupported PFX encryption unsupported", async 
   });
   expect(await verify()).toEqual(result("unsupported"));
 });
-const validated = async (raw: object) => {
-  await FISCAL_SLOT.provisioningSecret!.validate(raw, { taxId: "89890001K" });
-  return raw;
-};
-const unvalidated = async (raw: object) => raw;
+const validated = async (raw: object) =>
+  (await FISCAL_SLOT.provisioningSecret!.validate(raw, { taxId: "89890001K" })) as object;
+const unvalidated = async (raw: object) => ({ ...raw, certKind: "representante" });
 it.each([
   ["after setup's validation", validated, RC2_SIGNED_CANDIDATE],
   ["after setup's validation", validated, MAC_ACCENTED_CANDIDATE],
@@ -425,7 +437,7 @@ it.each([
 ])(
   "passes an old-encryption or macOS file sealed %s, keeping the certificate's fingerprint %#",
   async (_label, check, mac) => {
-    await capture(await check({ ...mac, certKind: "sello" }));
+    await capture(await check(mac));
     expect(await verify()).toEqual(result("passed"));
     expect(
       suite.db.all<{ fingerprint: string }>(

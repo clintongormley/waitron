@@ -104,7 +104,7 @@ describe("certificate diagnosis parent", () => {
       {
         ...f.request,
         source: "candidate",
-        ...material(candidate, "representante"),
+        ...material(candidate),
       },
       NOW,
     );
@@ -116,7 +116,7 @@ describe("certificate diagnosis parent", () => {
       category: "local-ready",
     });
     expect(runChild.mock.calls[0]![0]).toMatchObject({
-      material: material(candidate, "representante"),
+      material: material(candidate),
       rewriteOld: true,
     });
     expect(
@@ -386,6 +386,33 @@ describe("certificate diagnosis parent", () => {
       ),
     ).rejects.toMatchObject({ code: "management_session.required", params: {} });
   });
+
+  it.each(["other", 7])(
+    "does not expose a candidate child kind %j outside the two types",
+    async (kind) => {
+      const f = await parentFixture(suite.db);
+      const result = await diagnoseCertificate(
+        {
+          ...f.deps,
+          runChild: async () => ({
+            outcome: "completed",
+            value: {
+              openedFingerprint: candidate.fingerprint,
+              kind,
+              completedAt: NOW.toISOString(),
+              category: "local-ready",
+              stage: "complete",
+              localFinding: null,
+              httpStatus: null,
+            },
+          }),
+        },
+        { ...f.request, source: "candidate", ...material(candidate) },
+        NOW,
+      );
+      expect(result).toMatchObject({ kind: null, endpointLabel: null, category: "unknown" });
+    },
+  );
 
   it("does not expose a child kind that differs from the selected stored kind", async () => {
     const f = await parentFixture(suite.db);

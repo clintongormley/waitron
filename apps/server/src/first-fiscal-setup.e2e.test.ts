@@ -60,7 +60,8 @@ vi.mock("@waitron/composition", async (original) => {
               ...module.fiscal!,
               provisioningSecret: {
                 required: () => true,
-                validate: () => {},
+                // Stands in for reading the type from the file.
+                validate: (raw: unknown) => ({ ...(raw as object), certKind: "sello" }),
                 seal: async () => {},
               },
               drain: async () => ({ ...emptyDrainResult(), recordsAccepted: 1 }),
@@ -329,7 +330,7 @@ it.each([
       capability = claim.body.capability;
       const live = {
         mode: "live",
-        aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic", certKind: "sello" },
+        aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic" },
         email: {
           server: "smtp.example.test",
           port: 465,
@@ -506,7 +507,8 @@ it.each([
         ) as { attempt: FirstSetupState };
         expect(attempt.inputs.$publication).toEqual({
           digest: firstSetupPublicationDigest(attempt, {
-            aeatCert: live.aeatCert,
+            // The checked secret the stand-in validator answers, which the digest binds.
+            aeatCert: { ...live.aeatCert, certKind: "sello" },
             email: parseEmailSettings(live.email),
             errorReportsEnabled: true,
           }),
@@ -671,7 +673,7 @@ it("keeps English working names through fresh Live publication with Spanish rece
     );
     const body = {
       mode: "live",
-      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic", certKind: "sello" },
+      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic" },
       email: {
         server: "smtp.example.test",
         port: 465,
@@ -760,7 +762,7 @@ it("accepts real retained readiness before the wizard collects email settings", 
       body: JSON.stringify({
         mode: "live",
         firstSetup: { attemptId: claim.state.attemptId, revision: claim.state.revision },
-        aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic", certKind: "sello" },
+        aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "synthetic" },
       }),
     } as RequestInit);
     expect({ status: response.status, body: await response.json() }).toEqual({

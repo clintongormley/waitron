@@ -127,7 +127,6 @@ describe("first setup HTTP client", () => {
       aeatCert: {
         pfxBase64: "certificate",
         passphrase: "certificate passphrase",
-        certKind: "sello" as const,
       },
     };
     await api.runFirstSetupFiscalTest(owner, body);

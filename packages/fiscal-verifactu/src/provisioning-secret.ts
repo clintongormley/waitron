@@ -25,14 +25,7 @@ export function isBase64(value: string): boolean {
 }
 
 /** Throws `setup.request_invalid` naming the offending field, NEVER its value. */
-export function validateAeatCert(cert: {
-  certKind: string;
-  pfxBase64: string;
-  passphrase: string;
-}): void {
-  if (!isCertKind(cert.certKind)) {
-    throw new AppError("setup.request_invalid", { field: "certKind" });
-  }
+export function validateAeatCert(cert: { pfxBase64: string; passphrase: string }): void {
   if (!isBase64(cert.pfxBase64)) {
     throw new AppError("setup.request_invalid", { field: "pfxBase64" });
   }
@@ -55,29 +48,35 @@ function asString(value: unknown, field: string): string {
   return value;
 }
 
-/**
- * The one validator both the host's pre-provision guard (`FISCAL_SLOT.provisioningSecret.validate`)
- * and `sealAeatSecret` run: the SIF mint cannot be undone, so a malformed blob must be refused
- * before anything is minted. Errors name the field, never its value — that value is the secret.
- */
-export function parseAeatCert(raw: unknown): AeatCert {
+/** The file and passphrase a request carries; any other key, a type included, is ignored. */
+function parseAeatCertRequest(raw: unknown): Omit<AeatCert, "certKind"> {
   const cert = asObject(raw, "aeatCert");
-  const parsed: AeatCert = {
+  const parsed = {
     pfxBase64: asString(cert.pfxBase64, "pfxBase64"),
     passphrase: asString(cert.passphrase, "passphrase"),
-    certKind: asString(cert.certKind, "certKind") as CertKind,
   };
   validateAeatCert(parsed);
   return parsed;
 }
 
+/** The checked secret `validateSetupAeatCert` answers, read back where the host hands it on. */
+export function parseAeatCert(raw: unknown): AeatCert {
+  const parsed = parseAeatCertRequest(raw);
+  const certKind = asObject(raw, "aeatCert").certKind;
+  if (typeof certKind !== "string" || !isCertKind(certKind)) {
+    throw new AppError("setup.request_invalid", { field: "certKind" });
+  }
+  return { ...parsed, certKind };
+}
+
 async function openSetupAeatCert(raw: unknown) {
-  const cert = parseAeatCert(raw);
-  const pfx = Buffer.from(cert.pfxBase64, "base64");
+  const cert = parseAeatCertRequest(raw);
+  const opened = await openCertificate(Buffer.from(cert.pfxBase64, "base64"), cert.passphrase, {
+    rewriteOld: true,
+  });
   const refuse = (reason: string, field = "pfxBase64"): never => {
     throw new AppError("setup.certificate_refused", { field, reason });
   };
-  const opened = await openCertificate(pfx, cert.passphrase, { rewriteOld: true });
   if (!opened.ok) {
     return refuse(
       opened.reason,
@@ -91,16 +90,25 @@ async function openSetupAeatCert(raw: unknown) {
   const now = Date.now();
   if (now >= opened.details.validUntil.getTime()) refuse("expired");
   if (now < opened.details.validFrom.getTime()) refuse("not_yet_valid");
-  return opened.details;
+  return { cert, details: opened.details };
 }
 
 export async function inspectSetupAeatCert(raw: unknown) {
-  const { taxId, organisation } = await openSetupAeatCert(raw);
-  return { taxId, legalName: organisation };
+  const { details } = await openSetupAeatCert(raw);
+  return { taxId: details.taxId, legalName: details.organisation };
 }
 
-export async function validateSetupAeatCert(raw: unknown, venue: { taxId: string }): Promise<void> {
-  const { taxId: certificateTaxId } = await openSetupAeatCert(raw);
+/**
+ * The provision doors' check, run before anything is minted. Answers the secret the host carries
+ * on to the readiness test and `sealAeatSecret`: the request's file and passphrase, and the type
+ * the file's policies name.
+ */
+export async function validateSetupAeatCert(
+  raw: unknown,
+  venue: { taxId: string },
+): Promise<AeatCert> {
+  const { cert, details } = await openSetupAeatCert(raw);
+  const certificateTaxId = details.taxId;
   if (certificateTaxId !== null && certificateTaxId !== normaliseTaxId(venue.taxId)) {
     throw new AppError("setup.certificate_refused", {
       field: "pfxBase64",
@@ -109,14 +117,16 @@ export async function validateSetupAeatCert(raw: unknown, venue: { taxId: string
       taxId: venue.taxId,
     });
   }
+  return { ...cert, certKind: details.kind };
 }
 
 /**
- * Seal a venue's AEAT certificate into the `fiscal.aeat` vault purpose. Re-checks the blob's
- * shape, because `putCredential` accepts any non-empty `certKind` and `pfxBase64`. A file the
- * opener rewrites (old encryption, or a file macOS's `security` command exported under a passphrase
- * outside ASCII) is sealed rewritten, because the backup verifier and filing open the vault copy
- * with plain Node.
+ * Seal a venue's AEAT certificate into the `fiscal.aeat` vault purpose. `raw` is the checked
+ * secret `validateSetupAeatCert` answered; a file that opens is sealed with the type its policies
+ * name. Re-checks the blob's shape, because `putCredential` accepts any non-empty `certKind` and
+ * `pfxBase64`. A file the opener rewrites (old encryption, or a file macOS's `security` command
+ * exported under a passphrase outside ASCII) is sealed rewritten, because the backup verifier and
+ * filing open the vault copy with plain Node.
  */
 export async function sealAeatSecret(
   deps: { db: Database; ring: KeyRing; nodeId: string; now?: () => Date },
@@ -128,6 +138,7 @@ export async function sealAeatSecret(
   });
   if (!opened.ok && opened.reason === "unavailable")
     throw new AppError("setup.certificate_refused", { field: "body", reason: "setup_stopped" });
+  const certKind = opened.ok ? opened.details.kind : cert.certKind;
 
   await withTransaction(deps.db, async (tx) => {
     await putCredential(tx, deps.ring, {
@@ -136,7 +147,7 @@ export async function sealAeatSecret(
       value: {
         pfxBase64: (opened.ok && opened.rewritten?.toString("base64")) || cert.pfxBase64,
         passphrase: cert.passphrase,
-        certKind: cert.certKind,
+        certKind,
       },
     });
     if (!opened.ok) return;
@@ -147,7 +158,7 @@ export async function sealAeatSecret(
       installedAt: (deps.now ?? (() => new Date()))(),
       source: "setup",
       personId: null,
-      kind: cert.certKind,
+      kind: certKind,
       fingerprint: details.fingerprint,
       organisation: details.organisation,
       taxId: details.taxId,

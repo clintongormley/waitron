@@ -245,7 +245,6 @@ export const ENVIRONMENT_VARIABLES = {
   WAITRON_WRITE_GOLDEN: variable("test", "choice", tests),
   WAITRON_CERT_CHECK_PFX_BASE64: variable("test", "key", tests),
   WAITRON_CERT_CHECK_PASSPHRASE: variable("test", "text", tests, secret),
-  WAITRON_CERT_CHECK_KIND: variable("test", "choice", tests),
   WAITRON_CERT_CHECK_ENVIRONMENT: variable("test", "choice", tests),
   WAITRON_CERT_CHECK_NIF: variable("test", "text", tests, secret),
   WAITRON_CERT_CHECK_LEGAL_NAME: variable("test", "text", tests, secret),

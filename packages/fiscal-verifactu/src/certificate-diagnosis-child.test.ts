@@ -20,7 +20,8 @@ import {
 } from "./certificate-diagnosis-child.js";
 
 const authority = makeAuthority();
-const first = authority.issue({ commonName: "selected first" });
+const SEAL_POLICY = "0.4.0.194112.1.1";
+const first = authority.issue({ commonName: "selected first", policies: [SEAL_POLICY] });
 const second = authority.issue({ commonName: "selected second" });
 const servers: Awaited<ReturnType<typeof startDiagnosticServer>>[] = [];
 afterEach(async () => {
@@ -31,7 +32,6 @@ const input: CertificateDiagnosisChildInput = {
   material: {
     pfxBase64: first.pfx.toString("base64"),
     passphrase: first.passphrase,
-    certKind: "sello",
   },
   rewriteOld: true,
   taxpayer: { legalName: "PRIVATE TAXPAYER", taxId: "89890001K" },
@@ -60,7 +60,7 @@ function localTransport(endpoint: string): CertificateDiagnosisChildOverrides {
 
 describe("isolated certificate work", () => {
   it.each(["sello", "representante"] as const)(
-    "opens the exact %s material for an inspection without network work",
+    "opens the exact %s file for an inspection, answering the type its policies name",
     async (certKind) => {
       const issued = certKind === "sello" ? first : second;
       const server = await serve(200, SIN_DATOS_BODY);
@@ -73,7 +73,6 @@ describe("isolated certificate work", () => {
         material: {
           pfxBase64: issued.pfx.toString("base64"),
           passphrase: issued.passphrase,
-          certKind,
         },
       };
       const result = await run(value, { ...localTransport(server.origin), transport });
@@ -101,7 +100,6 @@ describe("isolated certificate work", () => {
           material: {
             pfxBase64: issued.pfx.toString("base64"),
             passphrase: issued.passphrase,
-            certKind,
           },
         },
         localTransport(server.origin),
@@ -153,8 +151,13 @@ describe("isolated certificate work", () => {
     ],
   ] as const)("uses only configured %s/%s destination", async (environment, certKind, endpoint) => {
     let destination = "";
+    const issued = certKind === "sello" ? first : second;
     const result = await run(
-      { ...input, environment, material: { ...input.material, certKind } },
+      {
+        ...input,
+        environment,
+        material: { pfxBase64: issued.pfx.toString("base64"), passphrase: issued.passphrase },
+      },
       {
         transport: (_material, options) => {
           destination = options.endpoint;
@@ -431,7 +434,7 @@ describe("isolated certificate work", () => {
     );
     expect(result).toEqual({
       openedFingerprint: OPENSSL_SIGNED_FINGERPRINT,
-      kind: "sello",
+      kind: "representante",
       completedAt: expect.any(String),
       stage: "complete",
       category: "query-completed",
@@ -491,7 +494,7 @@ describe("isolated certificate work", () => {
     );
     expect(output).toEqual({
       openedFingerprint: issued.fingerprint,
-      kind: "sello",
+      kind: "representante",
       completedAt: expect.any(String),
       stage: "complete",
       category: "local-ready",
@@ -519,7 +522,10 @@ describe("isolated certificate work", () => {
   it.each(["sello", "representante"] as const)(
     "makes no HTTP request with an untrusted %s client",
     async (certKind) => {
-      const issued = authority.issue({ signedBy: "stranger" });
+      const issued = authority.issue({
+        signedBy: "stranger",
+        ...(certKind === "sello" ? { policies: [SEAL_POLICY] } : {}),
+      });
       const server = await serve(200, SIN_DATOS_BODY);
       const result = await run(
         {
@@ -527,7 +533,6 @@ describe("isolated certificate work", () => {
           material: {
             pfxBase64: issued.pfx.toString("base64"),
             passphrase: issued.passphrase,
-            certKind,
           },
         },
         localTransport(server.origin),
@@ -630,6 +635,7 @@ describe("isolated certificate work", () => {
     { ...input, material: { ...input.material, passphrase: null } },
     { ...input, material: { ...input.material, certKind: null } },
     { ...input, material: { ...input.material, certKind: "other" } },
+    { ...input, material: { ...input.material, certKind: "sello" } },
   ];
   it.each(invalidEnvelopes)(
     "rejects malformed IPC %# without invoking native work",

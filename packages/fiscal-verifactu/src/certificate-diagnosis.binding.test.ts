@@ -28,7 +28,7 @@ describe("certificate evidence association", () => {
         await putCredential(tx, f.deps.ring, {
           personId: null,
           purpose: "fiscal.aeat",
-          value: material(),
+          value: { ...material(), certKind: "sello" },
         });
         if (association !== "no-install")
           await recordInstall(tx, {
@@ -76,7 +76,10 @@ describe("certificate evidence association", () => {
             await putCredential(tx, f.deps.ring, {
               personId: null,
               purpose: "fiscal.aeat",
-              value: material(change === "replace" ? candidate : installed),
+              value:
+                change === "replace"
+                  ? { ...material(candidate), certKind: "representante" }
+                  : { ...material(installed), certKind: "sello" },
             });
           else {
             const latest = (await latestInstall(tx, TAXPAYER_A.nodeId))!;
@@ -103,7 +106,7 @@ describe("certificate evidence association", () => {
       putCredential(tx, f.deps.ring, {
         personId: null,
         purpose: "fiscal.aeat",
-        value: material(candidate, "representante"),
+        value: { ...material(candidate), certKind: "representante" },
       }),
     );
     let dispatched = false;

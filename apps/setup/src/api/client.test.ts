@@ -63,7 +63,7 @@ const provisionBody: ProvisionBody = {
       password: "correct horse",
     },
   },
-  aeatCert: { pfxBase64: "AAAA", passphrase: "pw", certKind: "sello" },
+  aeatCert: { pfxBase64: "AAAA", passphrase: "pw" },
 };
 
 describe("SetupApi", () => {

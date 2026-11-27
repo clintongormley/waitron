@@ -19,7 +19,7 @@ import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis
 
 const run = promisify(execFile);
 const authority = makeAuthority();
-const first = authority.issue({ commonName: "isolated first" });
+const first = authority.issue({ commonName: "isolated first", policies: ["0.4.0.194112.1.1"] });
 const second = authority.issue({ commonName: "isolated second" });
 let root: string | undefined;
 let entry: URL;
@@ -32,11 +32,12 @@ afterAll(async () => {
   if (root) await rm(root, { recursive: true, force: true });
 });
 
-function input(certKind: "sello" | "representante", operation = "inspect") {
-  const file = certKind === "sello" ? first : second;
+/** The file whose policies name `kind`: `first` is a seal's, `second` a representative's. */
+function input(kind: "sello" | "representante", operation = "inspect") {
+  const file = kind === "sello" ? first : second;
   return {
     operation,
-    material: { pfxBase64: file.pfx.toString("base64"), passphrase: file.passphrase, certKind },
+    material: { pfxBase64: file.pfx.toString("base64"), passphrase: file.passphrase },
     rewriteOld: true,
     taxpayer: { legalName: "PRIVATE TAXPAYER", taxId: "89890001K" },
     environment: "preproduction",
@@ -221,7 +222,7 @@ describe("shipped certificate diagnosis entry", () => {
           outcome: "completed",
           value: {
             openedFingerprint: OPENSSL_SIGNED_FINGERPRINT,
-            kind: "sello",
+            kind: "representante",
             completedAt: expect.any(String),
             stage: "complete",
             category: "local-ready",

@@ -52,7 +52,6 @@ for (const locale of ["en-GB", "es-ES"]) {
         aeatCert: {
           pfxBase64: "c3ludGhldGlj",
           passphrase: "SYNTHETIC-passphrase",
-          certKind: "sello",
         },
       },
       refusal: { field, reason },
@@ -88,7 +87,7 @@ for (const theme of ["light", "dark"] as const) {
         "setup-cert-screen",
         {
           draft: {
-            aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC", certKind: "sello" },
+            aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC" },
           },
           refusal: {
             field,
@@ -130,7 +129,7 @@ it("retires an earlier accepted readiness answer when provisioning refuses the c
     patch: {
       mode: "live",
       venue,
-      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC", certKind: "sello" },
+      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC" },
     },
   });
   emit(app, "setup-goto", { screen: "fiscal-test" });
@@ -277,7 +276,7 @@ it("returns an unavailable fiscal check to the certificate form for retry withou
     patch: {
       mode: "live",
       venue,
-      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC", certKind: "sello" },
+      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC" },
     },
   });
   emit(app, "setup-goto", { screen: "fiscal-test" });
@@ -320,7 +319,7 @@ it("explains a stopped publication and offers the existing reconnect path to Sta
     patch: {
       mode: "live",
       venue,
-      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC", certKind: "sello" },
+      aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC" },
     },
   });
   emit(app, "setup-goto", { screen: "fiscal-test" });
@@ -390,7 +389,7 @@ it.each([
       patch: {
         mode: "live",
         venue,
-        aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC", certKind: "sello" },
+        aeatCert: { pfxBase64: "c3ludGhldGlj", passphrase: "SYNTHETIC" },
       },
     });
     emit(app, "setup-goto", { screen: "fiscal-test" });

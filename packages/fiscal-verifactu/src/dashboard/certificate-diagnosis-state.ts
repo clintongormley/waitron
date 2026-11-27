@@ -190,7 +190,6 @@ export class DiagnosisState {
           source: "candidate",
           pfxBase64: btoa(binary),
           passphrase: this.#candidate!.passphrase,
-          certKind: this.#candidate!.certKind,
         };
       } else body = { ...binding, source: "installed" };
       bytes?.fill(0);

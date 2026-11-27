@@ -236,7 +236,6 @@ async function preparedActivation(environment: "production" | "preproduction") {
           aeatCert: {
             pfxBase64: certificate.pfx.toString("base64"),
             passphrase: certificate.passphrase,
-            certKind: "sello",
           },
           email: {
             server: "smtp.example.test",
@@ -303,7 +302,6 @@ it("refuses an unusable setup certificate before changing the owned attempt or m
     f.activate({
       pfxBase64: certificate.pfx.toString("base64"),
       passphrase: "SYNTHETIC-wrong",
-      certKind: "sello",
     }),
   ).rejects.toMatchObject({
     code: "setup.certificate_refused",

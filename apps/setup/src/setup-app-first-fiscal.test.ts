@@ -61,7 +61,7 @@ it("claims the frozen Live identity before certificate/readiness and mounts its 
   expect(claims[0]!.body).toMatchObject({ venue });
   emit(app, "setup-patch", {
     patch: {
-      aeatCert: { pfxBase64: "certificate", passphrase: "certificate password", certKind: "sello" },
+      aeatCert: { pfxBase64: "certificate", passphrase: "certificate password" },
     },
   });
   emit(app, "setup-goto", { screen: "fiscal-test" });
@@ -75,7 +75,7 @@ it("claims the frozen Live identity before certificate/readiness and mounts its 
   expect(read.body).toEqual({
     mode: "live",
     firstSetup: { attemptId: initial.attemptId, revision: 1 },
-    aeatCert: { pfxBase64: "certificate", passphrase: "certificate password", certKind: "sello" },
+    aeatCert: { pfxBase64: "certificate", passphrase: "certificate password" },
   });
   emit(app, "setup-goto", { screen: "email" });
   await screen(app, "email");
@@ -606,7 +606,6 @@ it("reads back a completed activation after a lost response and offers no second
       aeatCert: {
         pfxBase64: "public-test-cert",
         passphrase: "certificate password",
-        certKind: "sello",
       },
     },
   });
@@ -677,7 +676,6 @@ it("reads back a completed activation after a lost response and offers no second
     aeatCert: {
       pfxBase64: "public-test-cert",
       passphrase: "certificate password",
-      certKind: "sello",
     },
   });
   owner.querySelector<HTMLElement>("[data-test=reconnect-first]")!.click();
@@ -701,7 +699,7 @@ async function activationRefused(refusal: { code: string; params: Record<string,
   await liveVenue(app);
   await screen(app, "cert");
   emit(app, "setup-patch", {
-    patch: { aeatCert: { pfxBase64: "public-test-cert", passphrase: "pw", certKind: "sello" } },
+    patch: { aeatCert: { pfxBase64: "public-test-cert", passphrase: "pw" } },
   });
   emit(app, "setup-goto", { screen: "review" });
   const allocation = await screen(app, "first-setup");

@@ -76,11 +76,8 @@ function fingerprintOf(material: CertMaterial): string | null {
   return opened.ok ? opened.details.fingerprint : null;
 }
 
-/**
- * A sello de entidad certificate submits to a DIFFERENT HOST — `www10`/`prewww10` rather than
- * `www1`/`prewww1`. That is why the certificate's kind is provisioned data and not something this
- * host could infer without reading X.509 policy OIDs.
- */
+/** A sello de entidad certificate submits to a DIFFERENT HOST — `www10`/`prewww10` rather than
+ * `www1`/`prewww1`. */
 export function aeatEndpointFor(
   environment: DeploymentEnvironment,
 ): (certKind: CertKind) => string {

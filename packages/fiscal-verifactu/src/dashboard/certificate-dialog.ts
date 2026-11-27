@@ -246,7 +246,6 @@ export class AeatCertificateDialog extends LitElement {
       answer = await this.client.install({
         pfxBase64,
         passphrase: submitted.passphrase,
-        certKind: submitted.certKind,
         expectedRevision: this.revision,
       });
     } catch (error) {

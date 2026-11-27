@@ -218,8 +218,8 @@ it("a late file read cannot borrow a reopened candidate's passphrase or release 
   expect(calls[0]!.body).toMatchObject({
     pfxBase64: "Ag==",
     passphrase: "new-private",
-    certKind: "representante",
   });
+  expect(calls[0]!.body).not.toHaveProperty("certKind");
   calls[0]!.wait.resolve(evidence(calls[0]!.body));
   await current;
   state.stop();
