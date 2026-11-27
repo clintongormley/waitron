@@ -782,7 +782,13 @@ print_image_versions() {
 cmd_status() {
   local result=0
   if [ -x "$WAITRON_HOST_DIR/node-v26.7.0/bin/node" ]; then
-    upgrade_cli status || { echo "waitron.sh: retain ${WAITRON_DIR}.upgrades for inspection" >&2; result=1; }
+    local held
+    if held="$(upgrade_cli status)"; then
+      if [ "$held" = null ]; then echo "upgrade: none waiting"; else printf '%s\n' "$held"; fi
+    else
+      echo "waitron.sh: retain ${WAITRON_DIR}.upgrades for inspection" >&2
+      result=1
+    fi
   elif upgrade_pending; then
     echo "waitron.sh: upgrade pending; the retained host runtime is unavailable" >&2
     result=1
@@ -1013,10 +1019,16 @@ delete_previous_images() {
 # any image is built or pulled: the check reads the box with its CURRENT compose.yml and image, which
 # the fetch replaces and the build or pull supersedes. refresh_self, which runs first, may already
 # have replaced this script itself. The wipe waits until the new images are in place.
-upgrade_pending() {
-  [ -d "${WAITRON_DIR}.upgrades" ] || return 1
-  [ -n "$(find "${WAITRON_DIR}.upgrades" -mindepth 1 -maxdepth 1 -print -quit)" ]
-}
+# One empty attempt folder is an upgrade stopped before its first record: there is nothing to restore
+# or keep, and the upgrade tool removes it, without Docker, on its next run.
+upgrade_pending() (
+  shopt -s nullglob dotglob
+  attempts=("${WAITRON_DIR}.upgrades"/*)
+  [ "${#attempts[@]}" -gt 0 ] || exit 1
+  [ "${#attempts[@]}" -eq 1 ] && [ -d "${attempts[0]}" ] && [ ! -L "${attempts[0]}" ] \
+    && [ -z "$(find "${attempts[0]}" -mindepth 1 -maxdepth 1 -print -quit)" ] && exit 1
+  exit 0
+)
 
 refuse_pending_upgrade() {
   if upgrade_pending; then

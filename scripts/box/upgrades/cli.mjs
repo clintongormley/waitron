@@ -370,11 +370,11 @@ export async function runUpgradeCli([verb, boxDirectory, ...prepare], { run = co
   const automatic = verb === offeredApplyVerb;
   let current = await pending(boxDirectory);
   if (verb === "status") return current?.marker ?? null;
-  if (automatic && current) return deferred("upgrade-pending");
   if (current?.marker === null) {
     await recoverInstalledUpgrade({ boxDirectory, run });
     current = null;
   }
+  if (automatic && current) return deferred("upgrade-pending");
   if (verb === "apply" || automatic) {
     if (current)
       throw new Error(

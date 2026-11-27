@@ -109,6 +109,18 @@ it("clears an empty interrupted attempt through existing recovery without contac
   await expect(fs.access(f.directory)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
+it("clears an empty interrupted attempt before an offered upgrade instead of deferring for it", async () => {
+  const f = await fixture();
+  await fs.mkdir(f.directory, { recursive: true });
+  const run = async () => {
+    throw new Error("reached Docker");
+  };
+  await expect(
+    runUpgradeCli(["apply-offered-upgrade", f.box, "1.2.2", "1.2.3", "/trust", "prepare"], { run }),
+  ).rejects.toThrow("reached Docker");
+  await expect(fs.access(f.directory)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
 it("holds an interrupted manual candidate on startup without choosing restore or keep", async () => {
   const f = await fixture();
   const state = join(f.box, "state");

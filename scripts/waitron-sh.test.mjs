@@ -511,7 +511,7 @@ case "$2" in
 esac
 if [ "\${WT_UPGRADE_HELD:-0}" = 1 ]; then
   mkdir -p "\${WAITRON_DIR}.upgrades/attempt"
-  printf '{"phase":"awaiting-choice"}\\n'
+  printf '{"phase":"awaiting-choice"}\\n' | tee "\${WAITRON_DIR}.upgrades/attempt/attempt.json"
 else
   printf '{"phase":"committed"}\\n'
 fi
@@ -800,6 +800,49 @@ describe("waitron.sh pending manual upgrade", () => {
       );
     },
   );
+
+  // An install stopped (Ctrl-C on the test box, 2026-11-27) before the upgrade tool wrote its first
+  // record leaves one empty attempt folder; the tool clears that without Docker on its next run.
+  it.each([
+    [["install", "my-branch"]],
+    [["--reset", "--yes", "install", "my-branch"]],
+    [["reset", "--yes"]],
+  ])("goes on with %j past an empty attempt folder", (args) => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    mkdirSync(`${sb.boxDir}.upgrades/interrupted`, { recursive: true });
+    const result = run(sb, args, { WAITRON_SH_REFRESHED: "1" });
+    expect(result.stderr).not.toContain("restore or keep");
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it.each([
+    [["interrupted"], ["partial"]],
+    [["one", "two"], []],
+  ])("still refuses install when the attempts are %j holding %j", (attempts, files) => {
+    const sb = sandbox();
+    installedBox(sb);
+    for (const attempt of attempts)
+      mkdirSync(`${sb.boxDir}.upgrades/${attempt}`, { recursive: true });
+    for (const file of files) writeFileSync(`${sb.boxDir}.upgrades/${attempts[0]}/${file}`, "");
+    const result = run(sb, ["install", "my-branch"], { WAITRON_SH_REFRESHED: "1" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("restore or keep");
+  });
+
+  it("says in words that no upgrade is waiting, instead of printing null", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, "compose.yml"), "services: {}\n");
+    const host = join(sb.root, "host");
+    mkdirSync(join(host, "node-v26.7.0/bin"), { recursive: true });
+    writeFileSync(join(host, "node-v26.7.0/bin/node"), "#!/bin/bash\nprintf 'null\\n'\n", {
+      mode: 0o700,
+    });
+    const result = run(sb, ["status"], { WAITRON_HOST_DIR: host });
+    expect(result.status).toBe(0);
+    expect(result.stdout.split("\n")[0]).toBe("upgrade: none waiting");
+    expect(result.stdout).not.toMatch(/^null$/m);
+  });
 
   it.each(["status", "restore", "keep"])(
     "dispatches %s through the retained runtime without downloads",
@@ -4730,7 +4773,13 @@ ${check}
   ])("defers for %s", (reason, busy, pending, ref) => {
     const sb = sandbox();
     installOfferRuntime(sb);
-    if (pending) mkdirSync(`${sb.boxDir}.upgrades/interrupted`, { recursive: true });
+    if (pending) {
+      mkdirSync(`${sb.boxDir}.upgrades/interrupted`, { recursive: true });
+      writeFileSync(
+        `${sb.boxDir}.upgrades/interrupted/attempt.json`,
+        '{"phase":"awaiting-choice"}',
+      );
+    }
     const result = run(sb, cmd, {
       WT_INSTALLED_RELEASE_REF: ref,
       WT_UPGRADE_BUSY: busy ? "1" : "",

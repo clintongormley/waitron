@@ -341,7 +341,8 @@ that has a change of software producer to make, and still uses the ordinary boot
 Restore puts back the copied data, Compose configuration and old images; the host clock
 service, the host's USB drive module, AppArmor policy and retained upgrade runtime stay updated. An interrupted restore
 starts again from its intact copy. Install and reset refuse while
-an attempt is held. On an unfinished setup, Keep continues setup; choose Restore before
+an attempt is held; an install stopped before it recorded anything, such as with Ctrl-C, holds
+nothing, and the next install or reset goes ahead. On an unfinished setup, Keep continues setup; choose Restore before
 using `--reset install` instead.
 
 The USB recipe installs the script at `/opt/waitron-host/waitron.sh`. Status, Restore and
@@ -349,7 +350,8 @@ Keep use the retained host runtime and make no bootstrap downloads. Automatic up
 
 ## Updating and operating
 
-Run `sudo bash waitron.sh status` to see the commit, requested ref, local build time and GitHub
+Run `sudo bash waitron.sh status` to see any upgrade waiting for restore or keep (`upgrade: none
+waiting` when there is none), then the commit, requested ref, local build time and GitHub
 commit link for each running Waitron image. `install` and its `update` alias print the same lines
 after the box becomes healthy. Status reads the containers' image IDs, so pulling a newer tag
 does not change the reported version until you replace the containers. An image without the
