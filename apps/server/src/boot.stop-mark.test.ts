@@ -280,11 +280,13 @@ it.each([
         await checking;
         if (scenario === "multiple") {
           const mark = join(stateDir, "admin-shutdown.json");
-          expect(writeMark).not.toHaveBeenCalledWith(mark, expect.any(String), 0o600);
+          const wroteMark = () => writeMark!.mock.calls.some(([file]) => file === mark);
+          expect(wroteMark()).toBe(false);
           finishCheck();
           await vi.waitFor(async () => {
             expect(await (await health()).json()).toMatchObject({ shutdown: { phase: "ready" } });
           });
+          expect(wroteMark()).toBe(true);
           expect((await stat(mark)).isFile()).toBe(true);
           return;
         }

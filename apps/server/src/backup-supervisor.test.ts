@@ -38,7 +38,7 @@ import { gunzipSync } from "node:zlib";
 import { decryptArtifactUnderBackupKey } from "./artifact-cipher.js";
 import { decryptBackupFile, readArtifactFileHeader } from "./artifact-cipher-file.js";
 import { makeMasterKey } from "@waitron/credentials";
-import { prepareShutdownDownload } from "./admin-shutdown-backup.js";
+import * as shutdownBackup from "./admin-shutdown-backup.js";
 import * as placement from "./backup-data-placement.js";
 import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { heldBackupKey } from "./testing/backup-key.js";
@@ -399,42 +399,40 @@ describe("multi-destination shutdown", () => {
     } = await shutdownSupervisor([await makeDestDir(), await makeDestDir()]);
     const firstError = new AppError("backup.destination_timed_out", { timeoutMs: 10 });
     const secondError = new AppError("backup.destination_object_too_large", { maxBytes: 1 });
-    const secondFailed = gate();
+    const failed: string[] = [];
     vi.spyOn(first!, "putFile").mockImplementation(async () => {
-      await secondFailed.released;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      failed.push("first");
       throw firstError;
     });
     vi.spyOn(second!, "putFile").mockImplementation(async () => {
-      secondFailed.release();
+      failed.push("second");
       throw secondError;
     });
     try {
       await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toBe(firstError);
+      expect(failed).toEqual(["second", "first"]);
     } finally {
-      secondFailed.release();
       await sup.stop();
     }
   });
 
   it("needs rehearsal space for the first read and only ciphertext space for the next", async () => {
-    let ciphertextBytes = 0;
-    let rehearsalFits = false;
+    const rehearse = vi.spyOn(shutdownBackup, "rehearseShutdownBackup");
+    let rehearsalShortfall = 1;
     let ciphertextShortfall = 0;
     const {
       sup,
       backends: [first, second],
-    } = await shutdownSupervisor([await makeDestDir(), await makeDestDir()], async (dir) => ({
-      frsize: 1,
-      bavail:
-        !basename(dir).startsWith("shutdown-") ||
-        (rehearsalFits && firstRead.mock.calls.length === 0)
-          ? Number.MAX_SAFE_INTEGER
-          : START_FREE_SPACE_FLOOR + ciphertextBytes - ciphertextShortfall,
-    }));
-    const put = first!.putFile.bind(first!);
-    vi.spyOn(first!, "putFile").mockImplementation(async (key, source, call) => {
-      ciphertextBytes = (await stat(source)).size;
-      await put(key, source, call);
+    } = await shutdownSupervisor([await makeDestDir(), await makeDestDir()], async (dir) => {
+      if (!basename(dir).startsWith("shutdown-"))
+        return { frsize: 1, bavail: Number.MAX_SAFE_INTEGER };
+      const [{ bytes, plaintextBytes }] = rehearse.mock.lastCall!;
+      const available =
+        firstRead.mock.calls.length === 0
+          ? 2 * (bytes + plaintextBytes) - rehearsalShortfall
+          : bytes - ciphertextShortfall;
+      return { frsize: 1, bavail: START_FREE_SPACE_FLOOR + available };
     });
     const firstRead = vi.spyOn(first!, "getFile");
     const secondRead = vi.spyOn(second!, "getFile");
@@ -443,7 +441,7 @@ describe("multi-destination shutdown", () => {
         code: "backup.staging_space_low",
       });
       expect(firstRead).not.toHaveBeenCalled();
-      rehearsalFits = true;
+      rehearsalShortfall = 0;
       ciphertextShortfall = 1;
       await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toMatchObject({
         code: "backup.staging_space_low",
@@ -515,9 +513,11 @@ describe("multi-destination shutdown", () => {
       controller.abort();
       await cancelled.reached;
       await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(remove).not.toHaveBeenCalledWith(dirname(output), expect.anything());
+      const removed = () => remove.mock.calls.some(([file]) => file === dirname(output));
+      expect(removed()).toBe(false);
       cancelled.release();
       await expect(shutdown).rejects.toMatchObject({ code: "backup.destination_cancelled" });
+      expect(removed()).toBe(true);
       expect(await readdir(restoreScratch)).toEqual([]);
     } finally {
       cancelled.release();
@@ -532,7 +532,7 @@ it.each(["damaged ciphertext", "insufficient rehearsal space"] as const)(
   async (failure) => {
     const stateDir = await makeStateDir();
     await expect(
-      prepareShutdownDownload(
+      shutdownBackup.prepareShutdownDownload(
         "checked.backup.enc",
         async (path) => {
           await writeFile(path, "damaged archive");
