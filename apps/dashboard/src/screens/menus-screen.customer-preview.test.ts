@@ -718,7 +718,7 @@ describe("the customer menu Online preview", () => {
       expect.soft(style.colorScheme).toBe(pageTheme);
       expect
         .soft(style.backgroundColor)
-        .toBe(pageTheme === "dark" ? "rgb(31, 41, 40)" : "rgb(250, 244, 232)");
+        .toBe(pageTheme === "dark" ? "rgb(31, 41, 40)" : "rgb(251, 247, 239)");
       expect
         .soft(style.color)
         .toBe(pageTheme === "dark" ? "rgb(245, 241, 231)" : "rgb(43, 33, 27)");

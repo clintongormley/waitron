@@ -2,9 +2,9 @@ import type { CustomerMenuPreview, PublicGuestMenu } from "@waitron/shared";
 
 export const menuAppearances = {
   light: {
-    pageColor: "#faf4e8",
+    pageColor: "#fbf7ef",
     textColor: "#2b211b",
-    headingColor: "#852b25",
+    headingColor: "#8c2f1b",
     headingFont: "serif",
     textFont: "system",
   },

@@ -36,7 +36,7 @@ function openMenu(
   photos: CustomerMenuPhotoSize,
   photoUrls: Record<string, string>,
   published = menu,
-  appearance?: (typeof menuAppearances)[keyof typeof menuAppearances],
+  appearance?: unknown,
 ) {
   const data = document.createElement("script");
   data.type = "application/json";
@@ -56,12 +56,14 @@ function openMenu(
   return main;
 }
 
-afterEach(() => {
+const viewport = [innerWidth, innerHeight] as const;
+afterEach(async () => {
   document.querySelector("#customer-menu")?.remove();
   document.querySelector("#customer-menu-data")?.remove();
   document.documentElement.lang = "en";
   document.documentElement.style.removeProperty("color-scheme");
   document.title = "";
+  if (innerWidth !== viewport[0] || innerHeight !== viewport[1]) await page.viewport(...viewport);
 });
 
 it("reads the published snapshot into the page's main heading and language links", async () => {
@@ -110,18 +112,40 @@ it("opens a single-language snapshot in the built-in light palette without a lan
   expect(getComputedStyle(document.documentElement).colorScheme).toBe("light");
 });
 
+it.each([
+  { name: "an unsupported page colour", appearance: { pageColor: "#abc" } },
+  { name: "an unsupported font", appearance: { ...menuAppearances.dark, textFont: "display" } },
+])(
+  "opens the menu in the built-in palette when the snapshot contains $name",
+  async ({ appearance }) => {
+    const main = openMenu("none", {}, menu, appearance);
+    const customer = main.querySelector("customer-menu-page")!;
+    await customer.updateComplete;
+    const article = customer.shadowRoot!.querySelector("article")!;
+    expect(article.querySelector("h1")).toHaveTextContent("Lunch for guests");
+    expect.soft(getComputedStyle(article).backgroundColor).toBe("rgb(247, 247, 248)");
+    expect(getComputedStyle(document.documentElement).colorScheme).toBe("light");
+  },
+);
+
 it.each(["light", "dark"] as const)(
   "opens the language chooser in the published %s style",
   async (scheme) => {
-    const root = openMenu("none", {}, menu, menuAppearances[scheme]);
-    const heading = page.getByRole("heading", { level: 1, name: "Lunch for guests" });
+    await page.viewport(390, 900);
+    const longTitle = { ...menu, name: "Lunch for our guests today" };
+    const root = openMenu("none", {}, longTitle, menuAppearances[scheme]);
+    const heading = page.getByRole("heading", { level: 1, name: longTitle.name });
     await expect.element(heading).toBeVisible();
     expect.soft(getComputedStyle(document.documentElement).colorScheme).toBe(scheme);
     expect
       .soft(getComputedStyle(heading.element()).color)
-      .toBe(scheme === "light" ? "rgb(133, 43, 37)" : "rgb(245, 185, 149)");
+      .toBe(scheme === "light" ? "rgb(140, 47, 27)" : "rgb(245, 185, 149)");
     await page.getByText("EN", { exact: true }).click();
     await expect.element(page.getByRole("link", { name: "English" })).toBeVisible();
+    const chooser = page.getByRole("navigation", { name: "Languages" }).element();
+    const bounds = chooser.getBoundingClientRect();
+    expect.soft(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(innerWidth);
     await expectNoA11yViolations(root);
   },
 );

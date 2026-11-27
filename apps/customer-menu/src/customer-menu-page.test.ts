@@ -52,12 +52,16 @@ describe("Customer menu page", () => {
     await customer.updateComplete;
     expect.soft(getComputedStyle(title).fontFamily).toContain("Georgia");
     expect.soft(getComputedStyle(section).fontFamily).toBe(getComputedStyle(title).fontFamily);
+    expect.soft(getComputedStyle(section).fontWeight).toBe("400");
+    expect.soft(getComputedStyle(title).fontWeight).toBe("400");
     expect.soft(getComputedStyle(article).fontFamily).toBe(fallbackFont);
 
     customer.appearance = menuAppearances.dark;
     await customer.updateComplete;
     expect.soft(getComputedStyle(title).fontFamily).toBe(fallbackFont);
+    expect.soft(getComputedStyle(title).fontWeight).toBe("600");
     expect.soft(getComputedStyle(article).fontFamily).toContain("Georgia");
+    expect.soft(getComputedStyle(article.querySelector(".entry-name")!).fontWeight).toBe("500");
 
     customer.appearance = { headingFont: "serif" };
     await customer.updateComplete;
@@ -66,10 +70,40 @@ describe("Customer menu page", () => {
     expect.soft(getComputedStyle(article).backgroundColor).toBe("rgb(247, 247, 248)");
     expect.soft(getComputedStyle(article).color).toBe("rgb(35, 31, 32)");
 
+    customer.appearance = { textFont: "serif" };
+    await customer.updateComplete;
+    expect.soft(getComputedStyle(title).fontFamily).toBe(fallbackFont);
+    expect.soft(getComputedStyle(article).fontFamily).toContain("Georgia");
+
     customer.appearance = undefined;
     await customer.updateComplete;
     expect(getComputedStyle(title).fontFamily).toBe(fallbackFont);
   });
+  it("keeps the chosen heading ink and derives a contrasting action colour", async () => {
+    const { customer } = await openMenu(published().menu);
+    const article = customer.shadowRoot!.querySelector("article")!;
+    const defaultAction = getComputedStyle(article).getPropertyValue("--wt-color-primary").trim();
+    customer.appearance = { ...menuAppearances.light, headingColor: "#d6d4d0" };
+    await customer.updateComplete;
+    const action = getComputedStyle(article).getPropertyValue("--wt-color-primary").trim();
+    expect(getComputedStyle(article.querySelector("h2")!).color).toBe("rgb(214, 212, 208)");
+    expect.soft(action).not.toBe("#d6d4d0");
+    expect(action).not.toBe(defaultAction);
+  });
+
+  it("paints the light menu's fields, pills and cards with its page colour", async () => {
+    const { customer } = await openMenu(published().menu);
+    customer.appearance = menuAppearances.light;
+    await customer.updateComplete;
+    const article = customer.shadowRoot!.querySelector("article")!;
+    const search = article.querySelector("wt-input")!.shadowRoot!.querySelector(".field")!;
+    const filters = article.querySelector(".filter-button")!.shadowRoot!.querySelector("button")!;
+    const setMenu = article.querySelector(".set-menu")!;
+    expect.soft(getComputedStyle(search).backgroundColor).toBe("rgb(251, 247, 239)");
+    expect.soft(getComputedStyle(filters).backgroundColor).toBe("rgb(251, 247, 239)");
+    expect(getComputedStyle(setMenu).backgroundColor).toBe("rgb(251, 247, 239)");
+  });
+
   it("centres the standalone menu on computer screens and keeps its page edge unframed", async () => {
     await page.viewport(1440, 900);
     const { customer } = await openMenu(published().menu, "light", true);

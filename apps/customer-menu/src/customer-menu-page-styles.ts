@@ -12,6 +12,10 @@ export const customerMenuPageStyles = [
       --menu-padding: var(--wt-space-4);
       --wt-menu-heading-color: var(--wt-color-primary-text);
       --wt-menu-heading-font: var(--wt-font-family);
+      --wt-menu-heading-weight: var(--wt-font-weight-bold);
+      --wt-menu-entry-weight: var(--wt-font-weight-bold);
+      --wt-menu-accent: var(--wt-color-primary);
+      --wt-menu-current-section-text: var(--wt-color-primary-text);
       background: var(--wt-color-bg);
       color: var(--wt-color-text);
       font-family: var(--wt-font-family);
@@ -92,8 +96,8 @@ export const customerMenuPageStyles = [
       text-decoration: none;
     }
     nav a[aria-current] {
-      border-block-end-color: var(--wt-color-primary);
-      color: var(--wt-color-primary-text);
+      border-block-end-color: var(--wt-menu-accent);
+      color: var(--wt-menu-current-section-text);
       font-weight: var(--wt-font-weight-bold);
     }
     @media (forced-colors: active) {
@@ -118,12 +122,12 @@ export const customerMenuPageStyles = [
     .section-title {
       margin: 0 0 var(--wt-space-4);
       color: var(--wt-menu-heading-color);
-      font-weight: var(--wt-font-weight-bold);
     }
     .menu-title,
     .section-title,
     .subheading {
       font-family: var(--wt-menu-heading-font);
+      font-weight: var(--wt-menu-heading-weight);
     }
     .section-title {
       font-size: calc(1.4 * var(--wt-font-size-lg));
@@ -148,7 +152,7 @@ export const customerMenuPageStyles = [
       align-items: center;
       gap: var(--wt-space-2);
       padding: var(--wt-space-4);
-      border: 1px solid var(--wt-color-primary);
+      border: 1px solid var(--wt-menu-accent);
       border-radius: var(--wt-radius-md);
       background: var(--wt-color-surface);
     }
@@ -165,7 +169,7 @@ export const customerMenuPageStyles = [
     .entry-name,
     .set-price {
       font-size: var(--wt-font-size-lg);
-      font-weight: var(--wt-font-weight-bold);
+      font-weight: var(--wt-menu-entry-weight);
     }
     .entry-name {
       background: transparent;

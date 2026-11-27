@@ -5,7 +5,7 @@ import {
   type CustomerMenuPhotoSize,
   type PublicGuestMenu,
 } from "@waitron/shared";
-import { menuColorScheme } from "./customer-menu-appearance.js";
+import { resolveMenuAppearance } from "./customer-menu-appearance.js";
 import "./customer-menu-page.js";
 
 interface CustomerMenuSnapshot {
@@ -26,7 +26,7 @@ export function mountCustomerMenu(doc: Document): void {
   ) as CustomerMenuSnapshot;
   doc.documentElement.lang = menu.language;
   doc.title = menu.name;
-  doc.documentElement.style.colorScheme = menuColorScheme(appearance?.pageColor);
+  doc.documentElement.style.colorScheme = resolveMenuAppearance(appearance).scheme;
 
   const page = doc.createElement("customer-menu-page");
   page.standalone = true;

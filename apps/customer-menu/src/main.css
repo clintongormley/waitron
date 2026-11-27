@@ -3,6 +3,7 @@ body {
 }
 
 .menu-languages {
+  margin-inline-start: auto;
   position: relative;
   z-index: 2;
 }

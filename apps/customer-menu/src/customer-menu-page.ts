@@ -22,7 +22,7 @@ import { LitElement, html, nothing, type PropertyValues, type TemplateResult } f
 import type { DirectiveResult } from "lit/directive.js";
 import { styleMap } from "lit/directives/style-map.js";
 import { html as staticHtml, literal, type StaticValue } from "lit/static-html.js";
-import { menuAppearanceTokens, menuColorScheme } from "./customer-menu-appearance.js";
+import { resolveMenuAppearance } from "./customer-menu-appearance.js";
 import { customerMenuPageStyles } from "./customer-menu-page-styles.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { choiceCaution, filterCustomerMenu, hasCautionedChoice } from "./customer-menu-filters.js";
@@ -309,8 +309,7 @@ export class CustomerMenuPage extends LitElement {
   @state() private diet = "";
   @state() private filtersOpen = false;
   @state() private detail?: OpenDetail;
-  #scheme: "light" | "dark" = "light";
-  #appearanceTokens: Record<string, string> = {};
+  #paint = resolveMenuAppearance();
   #source?: Element | Document;
   #jumpedAt?: number;
   #resize = new ResizeObserver(() => this.#watchScroll());
@@ -438,12 +437,7 @@ export class CustomerMenuPage extends LitElement {
   }
 
   protected override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("appearance")) {
-      this.#scheme = menuColorScheme(this.appearance?.pageColor);
-      this.#appearanceTokens = this.appearance
-        ? menuAppearanceTokens(this.appearance, this.#scheme)
-        : {};
-    }
+    if (changed.has("appearance")) this.#paint = resolveMenuAppearance(this.appearance);
   }
 
   protected override updated(): void {
@@ -615,8 +609,8 @@ export class CustomerMenuPage extends LitElement {
     const detailImage = this.#photo(photo);
     return html`<article
       lang=${menu.language}
-      data-theme=${this.#scheme}
-      style=${styleMap(this.#appearanceTokens)}
+      data-theme=${this.#paint.scheme}
+      style=${styleMap(this.#paint.tokens)}
     >
       ${
         detail
