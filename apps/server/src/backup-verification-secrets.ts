@@ -8,6 +8,7 @@ import { unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import { loadRecoveryKey } from "./backup-config.js";
 import type { BackupVerificationReason } from "./backup-verification-protocol.js";
 import { loadBoxEnv } from "./box-env.js";
+import { parseEnvFile } from "./env-file.js";
 import { errnoOf } from "./errno.js";
 import { readArtifactIdentity } from "./restore.js";
 import { boxCertCurrent, boxLeafChain, boxRoot, boxSigner } from "./self-signed-cert.js";
@@ -22,13 +23,18 @@ const INVALID: StateResult = { status: "invalid", reason: "secret_invalid" };
 const UNSUPPORTED: StateResult = { status: "unsupported", reason: "secret_format_unsupported" };
 const UNAVAILABLE: StateResult = { status: "unavailable", reason: "secret_unavailable" };
 
-function inputs(entries: readonly ArchiveEntry[]): Readonly<Record<string, string>> {
+function inputs(entries: readonly ArchiveEntry[]) {
   const read = (name: string) => entries.find((entry) => entry.name === "secrets/" + name)?.bytes;
-  return resolveBackupKeyInputs({
+  const required = resolveBackupKeyInputs({
     secretsEnv: read("secrets.env") ?? new Uint8Array(),
     tradingEnv: read("trading.env") ?? new Uint8Array(),
-    backupEnv: read("backup.env") ?? null,
+    backupEnv: null,
   });
+  const backup = parseEnvFile(Buffer.from(read("backup.env") ?? []).toString("utf8"));
+  return {
+    env: { ...required, ...backup },
+    hasSavedRecoveryKey: readVariable(backup, "WAITRON_BACKUP_RECOVERY_KEY") !== undefined,
+  };
 }
 function keys(env: Readonly<Record<string, string | undefined>>) {
   return loadKeyRing(env);
@@ -39,9 +45,9 @@ export async function verifyBackupKeyPlacement(
   placedStateDir: string,
 ): Promise<"passed" | "unsupported" | "unavailable"> {
   try {
-    const original = keys(inputs(captured));
+    const original = keys(inputs(captured).env);
     const placedEnv = await loadBoxEnv({}, placedStateDir);
-    const retained = inputs(captured.filter((entry) => entry.name !== "secrets/backup.env"));
+    const retained = inputs(captured.filter((entry) => entry.name !== "secrets/backup.env")).env;
     if (
       !readVariable(retained, "WAITRON_CREDENTIALS_KEY") &&
       !readVariable(placedEnv, "WAITRON_CREDENTIALS_KEY")
@@ -80,7 +86,7 @@ export async function verifyBackupStateSecrets(
     if (!isAppError(error)) throw error;
     return INVALID;
   }
-  const env = inputs(entries);
+  const { env, hasSavedRecoveryKey } = inputs(entries);
   try {
     keys(env);
   } catch (error) {
@@ -89,7 +95,8 @@ export async function verifyBackupStateSecrets(
   }
   let boxRecoveryKey: string | undefined;
   try {
-    boxRecoveryKey = loadRecoveryKey(env);
+    const recoveryKey = loadRecoveryKey(env);
+    boxRecoveryKey = hasSavedRecoveryKey ? recoveryKey : undefined;
   } catch (error) {
     if (!isAppError(error) && !(error instanceof SyntaxError)) throw error;
     return UNSUPPORTED;

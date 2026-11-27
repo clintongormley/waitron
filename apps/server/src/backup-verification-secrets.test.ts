@@ -296,10 +296,26 @@ Jg==
       ).toEqual(unsupported);
     },
   );
-  it("authenticates and checks the selected node's sealed state", async () => {
-    expect(await verifyBackupStateSecrets(entries(), source, now, await seal(entries()))).toEqual(
-      pass,
+  it.each([
+    ["a missing saved key", entries()],
+    ["an empty saved key", set(entries(), "backup.env", "WAITRON_BACKUP_RECOVERY_KEY=\n")],
+  ])("authenticates the selected node's sealed state with %s", async (_label, input) => {
+    expect(await verifyBackupStateSecrets(input, source, now, await seal(entries()))).toEqual(pass);
+  });
+  it("ignores a backup key in the wrong box settings file", async () => {
+    const original = entries();
+    const trading = original.find((entry) => entry.name === "secrets/trading.env")!;
+    const input = set(
+      set(
+        original,
+        "trading.env",
+        Buffer.from(trading.bytes).toString("utf8") +
+          "WAITRON_BACKUP_RECOVERY_KEY=wrong-private-key-sentinel\n",
+      ),
+      "backup.env",
+      "WAITRON_BACKUP_KEY_NUMBER=1\n",
     );
+    expect(await verifyBackupStateSecrets(input, source, now, await seal(original))).toEqual(pass);
   });
   it("refuses a wrong saved box key even when the archive key could open the sealed row", async () => {
     const input = set(
