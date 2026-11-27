@@ -1,3 +1,4 @@
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import "./errors.js";
 import { workingOrderLines, newId, products, type Transaction, kitchenStations } from "@waitron/db";
 import {
@@ -66,7 +67,12 @@ import {
 import type { OrderLineIdentity } from "./stored-order-lines.js";
 import type { TradingContext } from "./trading-context.js";
 import { routingOnce } from "./working-order-kitchen-fire.js";
-import { type EndedMenu, confirmLateDishes, endedPeriodMakers } from "./working-order-late-send.js";
+import {
+  type EndedMenu,
+  confirmLateDishes,
+  endedPeriodMakers,
+  lateDishesQuestion,
+} from "./working-order-late-send.js";
 import { takesExtras } from "@waitron/menu/src/unit-extras.js";
 
 export type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
@@ -289,6 +295,7 @@ export async function priceOrderLines(
   lateSend?: LateSendConfirmation,
   unwrittenBill?: Parameters<typeof refuseUnlessSetMenuBill>[2],
   routing = routingOnce(tx, new Date()),
+  zoneConfirmation?: ClosedZoneConfirmation,
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
   /** Aligned with `lineRows`: a dish sold in whole portions, which may be split one per dish. */
@@ -359,6 +366,7 @@ export async function priceOrderLines(
         });
   };
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
+  let closedZone: Awaited<ReturnType<typeof VENUE_SERVICE.checkClosedZoneAt>>;
   // Dishes and extras added to sent dishes can be marked when their menu ended earlier today.
   const ended = new Map<(typeof requestedLines)[number], EndedMenu>();
   const periodOf = new Map<string, EndedMenu>();
@@ -371,8 +379,18 @@ export async function priceOrderLines(
     const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId!);
     // Extras added to a stored dish are not new service, so a closed zone does not refuse them;
     // after a sent dish's period they are late like a new dish of it.
-    if (requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true))
-      await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
+    if (requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true)) {
+      if (zoneConfirmation === undefined) {
+        await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
+      } else {
+        closedZone = await VENUE_SERVICE.checkClosedZoneAt(
+          tx,
+          context.zoneId,
+          at,
+          zoneConfirmation,
+        );
+      }
+    }
     service = await routing.departmentService(context.departmentId);
     for (const menu of service.endedMenus) periodOf.set(menu.menuId, menu);
     const items: { productId: string; variantId: string | null }[] = [];
@@ -581,8 +599,17 @@ export async function priceOrderLines(
         : undefined);
     confirmations.push({ index, menuItemId: line.menuItemId, ...ended.get(line)!, stationId });
   }
+  confirmations.sort((a, b) => a.index - b.index);
+  if (closedZone !== undefined) {
+    if (confirmations.length === 0) throw new AppError("service_zone.closed", closedZone);
+    const departmentId = service!.departmentId;
+    const needsManager = await VENUE_SERVICE.readLateSendNeedsManager(tx, departmentId);
+    throw new AppError("service_zone.closed", {
+      ...closedZone,
+      lateSend: lateDishesQuestion(departmentId, confirmations, needsManager),
+    });
+  }
   if (confirmations.length > 0) {
-    confirmations.sort((a, b) => a.index - b.index);
     const confirmedBy = await confirmLateDishes(tx, service!.departmentId, confirmations, lateSend);
     for (const { index, periodId, periodName, stationId } of confirmations)
       marks.set(index, { periodId, periodName, stationId, confirmedBy });

@@ -33,6 +33,25 @@ export async function endedPeriodMakers(
   );
 }
 
+type LateDish = { menuId: string; menuItemId: string; periodName: string };
+
+export function lateDishesQuestion(
+  departmentId: string,
+  late: readonly LateDish[],
+  needsManager: boolean,
+  lineIds?: readonly string[],
+) {
+  return {
+    departmentId,
+    menus: [...new Map(late.map(({ menuId, periodName }) => [menuId, periodName]))].map(
+      ([menuId, periodName]) => ({ menuId, periodName }),
+    ),
+    menuItemIds: [...new Set(late.map((dish) => dish.menuItemId))],
+    needsManager,
+    ...(lineIds === undefined ? {} : { workingOrderLineIds: [...lineIds] }),
+  };
+}
+
 /**
  * Refuses `menu_period.ended` unless `lateSend` confirms every menu of `late`, naming `lineIds`
  * when stored lines are being sent; otherwise the person recorded as confirming.
@@ -40,21 +59,16 @@ export async function endedPeriodMakers(
 export async function confirmLateDishes(
   tx: Transaction,
   departmentId: string,
-  late: readonly { menuId: string; menuItemId: string; periodName: string }[],
+  late: readonly LateDish[],
   lateSend: LateSendConfirmation | undefined,
   lineIds?: readonly string[],
 ): Promise<string> {
   const needsManager = await VENUE_SERVICE.readLateSendNeedsManager(tx, departmentId);
   if (lateSend === undefined || late.some((dish) => !lateSend.menuIds.has(dish.menuId))) {
-    throw new AppError("menu_period.ended", {
-      departmentId,
-      menus: [...new Map(late.map(({ menuId, periodName }) => [menuId, periodName]))].map(
-        ([menuId, periodName]) => ({ menuId, periodName }),
-      ),
-      menuItemIds: [...new Set(late.map((dish) => dish.menuItemId))],
-      needsManager,
-      ...(lineIds === undefined ? {} : { workingOrderLineIds: [...lineIds] }),
-    });
+    throw new AppError(
+      "menu_period.ended",
+      lateDishesQuestion(departmentId, late, needsManager, lineIds),
+    );
   }
   return lateSend.confirm(tx, needsManager);
 }

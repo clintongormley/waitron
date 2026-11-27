@@ -8,7 +8,7 @@ At 13:52 the owner said, “i don't think we should have the option to extend th
 
 ## 1a-0. Move the existing till code
 
-- [ ] The watcher cleared this separate prerequisite at 14:04. Move the two late-send dialog templates and prompt assembly to `widgets/late-send-prompts.ts`, the manager-refusal parser to `state/late-send.ts`, and the sent-dish change message and late extras to `state/sent-line-change.ts`. The tests keep their existing assertions. Check the focused late-send suites before and after and keep `till-app.ts` under its cap. The move adds 284 and removes 234 production lines with no test edits.
+- [x] The watcher cleared this separate prerequisite at 14:04. It landed in #4506. Move the two late-send dialog templates and prompt assembly to `widgets/late-send-prompts.ts`, the manager-refusal parser to `state/late-send.ts`, and the sent-dish change message and late extras to `state/sent-line-change.ts`. The tests keep their existing assertions. Check the focused late-send suites before and after and keep `till-app.ts` under its cap. The move adds 284 and removes 234 production lines with no test edits.
 
 ## 1a. Ask when seating guests or sending a table's dishes
 

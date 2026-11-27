@@ -39,7 +39,11 @@ import {
   receiptDefaultDepartment,
 } from "./department-receipts.js";
 import { readKeepOpen, keepZoneOpen } from "./keep-open.js";
-import { assertZoneTakesNewOrders, closedZoneIdsAt } from "./zone-closed-times.js";
+import {
+  assertZoneTakesNewOrders,
+  closedZoneIdsAt,
+  checkClosedZoneAt,
+} from "./zone-closed-times.js";
 import { withdrawPendingDepartmentTransfers } from "./department-transfer-lifecycle.js";
 import {
   listDepartmentTransferDestinations,
@@ -165,6 +169,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   assertBusinessDayScheduleWrite,
   assertZoneTakesNewOrders,
   closedZoneIdsAt,
+  checkClosedZoneAt,
   withdrawPendingDepartmentTransfers,
   listDepartmentTransferDestinations,
   listIncomingDepartmentTransfers,

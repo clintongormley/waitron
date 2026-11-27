@@ -1,4 +1,5 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
+import type { ClosedZoneQuestion } from "../state/late-send.js";
 import { customElement, property } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
 import { baseStyles, type WtDialog } from "@waitron/ui";
@@ -44,7 +45,8 @@ export class TillLateSendDialog extends LitElement {
   @property({ attribute: false }) dishes: readonly LateSendDish[] = [];
 
   /** In the order they first appear among the dishes. */
-  @property({ attribute: false }) periodNames: readonly [string, ...string[]] = [""];
+  @property({ attribute: false }) periodNames: readonly string[] = [""];
+  @property({ attribute: false }) closedZone?: ClosedZoneQuestion;
 
   /** `save`: a Park, which stores the order without sending it to the kitchen. `extras`: a change
    * adding extras to a sent dish, which the secondary choice abandons. `stored`: a Place of dishes
@@ -57,7 +59,7 @@ export class TillLateSendDialog extends LitElement {
 
   #heading(): string {
     if (this.periodNames.length === 1)
-      return t("late_send.heading").replace("{period}", () => this.periodNames[0]);
+      return t("late_send.heading").replace("{period}", () => this.periodNames[0]!);
     const periods = new Intl.ListFormat(currentLocale(), { type: "conjunction" }).format(
       this.periodNames,
     );
@@ -65,54 +67,79 @@ export class TillLateSendDialog extends LitElement {
   }
 
   override render() {
+    const zone = this.closedZone;
+    const heading =
+      zone === undefined
+        ? this.#heading()
+        : t("late_send.zone_closed_at")
+            .replace("{time}", () => zone.closesAt)
+            .replace("{zone}", () => zone.zoneName);
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}
-      .heading=${this.#heading()}
+      .heading=${heading}
       dismiss-on-backdrop
       @wt-close=${(event: Event) => {
         event.stopPropagation();
         this.#emit("wt-late-send-cancelled");
       }}
     >
-      <p>${t("late_send.check")}</p>
-      <ul>
-        ${this.dishes.map(
-          (dish) =>
-            html`<li>
-              ${dishLine(dish, dish.name)}${
-                dish.extras?.length ? ` + ${dish.extras.join(", ")}` : ""
-              }
-            </li>`,
-        )}
-      </ul>
+      ${zone !== undefined && this.periodNames.length > 0 ? html`<p>${this.#heading()}</p>` : nothing}
+      ${this.periodNames.length === 0 ? nothing : html`<p>${t("late_send.check")}</p>`}
+      ${
+        this.dishes.length === 0
+          ? nothing
+          : html`<ul>
+              ${this.dishes.map(
+                (dish) =>
+                  html`<li>
+                    ${dishLine(dish, dish.name)}${
+                      dish.extras?.length ? ` + ${dish.extras.join(", ")}` : ""
+                    }
+                  </li>`,
+              )}
+            </ul>`
+      }
+      ${zone === undefined ? nothing : html`<p>${t("late_send.do_anyway")}</p>`}
       <wt-button
         slot="footer"
         variant="secondary"
         @click=${(event: Event) => void (event.currentTarget as HTMLElement).closest<WtDialog>("wt-dialog")!.requestClose("cancel")}
         >${t("action.cancel")}</wt-button
       >
-      <wt-button
-        slot="footer"
-        data-late-remove
-        variant="secondary"
-        @click=${() => this.#emit("wt-late-send-removed")}
-      >
-        ${t(
-          this.purpose === "extras"
-            ? "late_send.dont_add"
-            : this.purpose === "stored"
-              ? "late_send.dont_send"
-              : "late_send.remove",
-        )}
-      </wt-button>
+      ${
+        zone !== undefined
+          ? nothing
+          : html`<wt-button
+              slot="footer"
+              data-late-remove
+              variant="secondary"
+              @click=${() => this.#emit("wt-late-send-removed")}
+            >
+              ${t(
+                this.purpose === "extras"
+                  ? "late_send.dont_add"
+                  : this.purpose === "stored"
+                    ? "late_send.dont_send"
+                    : "late_send.remove",
+              )}
+            </wt-button>`
+      }
       <wt-button
         slot="footer"
         data-late-agreed
         variant="primary"
         @click=${() => this.#emit("wt-late-send-agreed")}
       >
-        ${t(this.purpose === "save" ? "late_send.agreed_save" : "late_send.agreed")}
+        ${t(
+          zone === undefined
+            ? this.purpose === "save"
+              ? "late_send.agreed_save"
+              : "late_send.agreed"
+            : this.periodNames.length === 0
+              ? "late_send.continue"
+              : "late_send.agreed",
+        )}
       </wt-button>
     </wt-dialog>`;
   }

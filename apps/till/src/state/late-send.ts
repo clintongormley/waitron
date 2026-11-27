@@ -41,6 +41,26 @@ export interface LateSendRefusal {
   workingOrderLineIds?: string[];
 }
 
+export interface ClosedZoneQuestion {
+  zoneId: string;
+  zoneName: string;
+  closesAt: string;
+  lateSend?: LateSendRefusal;
+}
+
+export function closedZoneQuestionOf(error: unknown): ClosedZoneQuestion | undefined {
+  if (!isRecord(error) || error.code !== "service_zone.closed") return undefined;
+  const { zoneId, zoneName, closesAt, lateSend } = error;
+  if (typeof zoneId !== "string" || typeof zoneName !== "string" || typeof closesAt !== "string")
+    return undefined;
+  return {
+    zoneId,
+    zoneName,
+    closesAt,
+    lateSend: isRecord(lateSend) ? lateSendParams(lateSend) : undefined,
+  };
+}
+
 const isTextList = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((id) => typeof id === "string");
 
@@ -57,7 +77,11 @@ function isEndedPeriod(value: unknown): value is EndedPeriod {
 /** The params of a `menu_period.ended` refusal, or undefined when it is another error or they are unusable. */
 export function lateSendRefusalOf(error: unknown): LateSendRefusal | undefined {
   if (!isRecord(error) || error.code !== "menu_period.ended") return undefined;
-  const { menus, menuItemIds, workingOrderLineIds } = error;
+  return lateSendParams(error);
+}
+
+function lateSendParams(params: Record<string, unknown>): LateSendRefusal | undefined {
+  const { menus, menuItemIds, workingOrderLineIds } = params;
   if (!Array.isArray(menus) || !menus.every(isEndedPeriod)) return undefined;
   if (!isTextList(menuItemIds)) return undefined;
   if (workingOrderLineIds !== undefined && !isTextList(workingOrderLineIds)) return undefined;

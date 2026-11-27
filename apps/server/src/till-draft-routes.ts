@@ -37,6 +37,7 @@ import {
   requireRevision,
   requireDraftParam,
   parseDraftGroups,
+  parseClosedZoneConfirmation,
   joinGroupOf,
 } from "./till-request-fields.js";
 import {
@@ -293,6 +294,7 @@ export function mountTillDraftRoutes(
         expectedEdit: parseBillEditExpected(body.expectedEdit),
         draftRevision: requireRevision(body.draftRevision, "draftRevision"),
         groups: parseDraftGroups(body.groups),
+        zoneConfirmation: parseClosedZoneConfirmation(body.closedZoneId, personId),
         ...joinGroupOf(body),
         dining: requireDining(body.dining),
       };

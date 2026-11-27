@@ -1,3 +1,4 @@
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import "./errors.js";
 import { type Transaction, workingOrderLines } from "@waitron/db";
 import type { AllergyPatch, AllergyLineRef } from "@waitron/module";
@@ -55,6 +56,7 @@ export interface SubmitGroupsInput {
   billId?: string;
   /** Kept out of the replay fingerprint: a retry without it gets the recorded answer. */
   lateSend?: LateSendConfirmation;
+  zoneConfirmation?: ClosedZoneConfirmation;
 }
 
 export interface SubmittedGroups {
@@ -84,6 +86,7 @@ export async function submitGroups(
     operatorId,
     expectedEdit: observed,
     lateSend,
+    zoneConfirmation,
     ...body
   } = input;
   const expectedEdit = parseBillEditExpected(observed);
@@ -100,7 +103,7 @@ export async function submitGroups(
         tx,
         cfg,
         partyId,
-        { ...input, expectedEdit, lateSend },
+        { ...input, expectedEdit, lateSend, zoneConfirmation },
         attendance === undefined
           ? undefined
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
@@ -140,7 +143,7 @@ export async function submitGroups(
 
 export type PlaceGroupsInput = Pick<
   SubmitGroupsInput,
-  "joinGroupId" | "operatorId" | "billId" | "expectedEdit" | "lateSend"
+  "joinGroupId" | "operatorId" | "billId" | "expectedEdit" | "lateSend" | "zoneConfirmation"
 > & {
   groups: (SubmitGroupsInput["groups"][number] & { existingLineIds?: string[] })[];
   /** Draft ids in the same order as the input dishes, before extras become child rows. */
@@ -213,6 +216,7 @@ export async function placeGroups(
           "checked",
           input.lateSend,
           routing,
+          input.zoneConfirmation,
         );
   if (groups.some(empty)) {
     throw new AppError("sale.empty_basket", {});

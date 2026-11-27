@@ -165,9 +165,24 @@ export interface DraftSubmission extends GroupCommand {
   joinGroupId?: string;
   billId?: string;
   lateSend?: LateSend;
+  closedZoneId?: string;
   /** The way the screen showed the bill. */
   dining: Dining;
 }
+export function draftSubmissionGroups(
+  groups: readonly (Omit<DraftSubmission["groups"][number], "lineIds"> & {
+    lineIndexes: readonly number[];
+  })[],
+  ids: readonly string[],
+): DraftSubmission["groups"] {
+  return groups.map(({ release, lineIndexes, joinGroupId, afterGroupId }) => ({
+    release,
+    lineIds: lineIndexes.map((index) => ids[index]!),
+    ...(joinGroupId === undefined ? {} : { joinGroupId }),
+    ...(afterGroupId === undefined ? {} : { afterGroupId }),
+  }));
+}
+
 /** The groups placed, and the draft as it is left: null once every line was sent. */
 export type SubmittedDraft = SubmittedGroups & BillDraftSnapshot;
 /** One bill’s saved unsent dishes; `lineCount` counts rows, not units. */

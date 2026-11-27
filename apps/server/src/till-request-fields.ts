@@ -1,3 +1,4 @@
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import type { PinThrottle, PinAttempts } from "@waitron/identity";
 import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { isUuid, AppError, isValidEmail, isValidGuestCount, int4InRange } from "@waitron/shared";
@@ -9,6 +10,15 @@ import type { SubmitDraftInput } from "./order-drafts.js";
 import type { SubmitGroupsInput, GroupLine } from "./order-group-submission.js";
 import type { SplitGuestCounts, TableActionOptions, SplitSelection } from "./table-actions.js";
 import "./errors.js";
+
+export function parseClosedZoneConfirmation(
+  value: unknown,
+  personId: string,
+): ClosedZoneConfirmation {
+  const zoneId =
+    value === undefined ? undefined : requireBodyUuid(value, "closedZoneId").toLowerCase();
+  return { zoneId, personId };
+}
 
 /** A malformed id is refused with the code the route gives an absent or wrong-state order. */
 export function requireUuidId(

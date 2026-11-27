@@ -1,3 +1,4 @@
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import "./errors.js";
 import { refuseOverSimplifiedLimit } from "@waitron/core";
 import {
@@ -117,6 +118,7 @@ export async function createOpenOrder(
     partyId?: string | null;
     billName?: string | null;
     existingService?: boolean;
+    zoneConfirmation?: ClosedZoneConfirmation;
     copyServiceContextFrom?: string;
     receiptLocale?: string;
     creditedTo?: string;
@@ -196,7 +198,12 @@ export async function createOpenOrder(
     effectiveZoneId = (await VENUE_SERVICE.resolveNewOrderZone(tx, { profileId })).zoneId;
   }
   if (placement.existingService !== true) {
-    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, effectiveZoneId, new Date());
+    await VENUE_SERVICE.assertZoneTakesNewOrders(
+      tx,
+      effectiveZoneId,
+      new Date(),
+      placement.zoneConfirmation,
+    );
   }
   const dining =
     copiedDining ??
@@ -357,6 +364,7 @@ export async function openTab(
     tableId: string;
     lines?: { menuItemId: string; quantity: string }[];
     partyId: string;
+    zoneConfirmation?: ClosedZoneConfirmation;
     /** Credited with `lines`. */
     operatorId?: string;
   },
@@ -401,6 +409,7 @@ export async function openTab(
   const { orderNumber } = await createOpenOrder(tx, cfg, tabId, req.lines ?? [], null, {
     zoneId: table.zoneId,
     partyId: req.partyId,
+    zoneConfirmation: req.zoneConfirmation,
     creditedTo: req.operatorId,
   });
   return { tabId, orderNumber };
@@ -461,6 +470,7 @@ export async function priceTabRound(
   bill: "check" | "checked" = "check",
   lateSend?: LateSendConfirmation,
   routing = routingOnce(tx, new Date()),
+  zoneConfirmation?: ClosedZoneConfirmation,
 ): Promise<PricedTabRound> {
   if (bill === "check") await assertPartyBillOpen(tx, tabId);
   if (lines.length === 0) {
@@ -483,6 +493,7 @@ export async function priceTabRound(
     lateSend,
     undefined,
     routing,
+    zoneConfirmation,
   );
   return {
     tabId,

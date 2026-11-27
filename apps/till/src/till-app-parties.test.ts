@@ -232,6 +232,49 @@ describe("till-app: seating a party", () => {
     expect(api.getPartyBills).toHaveBeenCalledWith("v-new");
   });
 
+  it("leaves a closed-zone table free on Escape and seats it only after confirmation", async () => {
+    const closed = {
+      code: "service_zone.closed",
+      status: 409,
+      zoneId: "z1",
+      zoneName: "Terrace",
+      closesAt: "22:00",
+    };
+    const seatTable = vi
+      .fn()
+      .mockRejectedValueOnce(closed)
+      .mockRejectedValueOnce(closed)
+      .mockResolvedValueOnce({ partyId: "v-new", tabId: "wo-new", revision: 1, orderNumber: 12 });
+    const { el } = await mountApp({ seatTable, getPartyBills: onlyNewPartyBills() });
+    const modal = () => el.shadowRoot!.querySelector("till-late-send-dialog");
+    const seat = async () => {
+      emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 3 });
+      await vi.waitFor(() =>
+        expect(modal()?.shadowRoot?.querySelector("wt-dialog")?.heading).toBe(
+          "Terrace closed at 22:00",
+        ),
+      );
+    };
+    await toFloor(el);
+
+    await seat();
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(modal()).toBeNull());
+    await flush(el);
+    expect(seatTable.mock.calls).toEqual([["t9", 3]]);
+    expect(tableOrder(el)).toBeNull();
+
+    await seat();
+    await userEvent.click(modal()!.shadowRoot!.querySelector<HTMLElement>("[data-late-agreed]")!);
+
+    await vi.waitFor(() => expect(tableOrder(el)?.orderId).toBe("wo-new"));
+    expect(seatTable.mock.calls).toEqual([
+      ["t9", 3],
+      ["t9", 3],
+      ["t9", 3, undefined, "z1"],
+    ]);
+  });
+
   it("acts on the party the seat answered with when the floor cannot be read after seating", async () => {
     drafts.bills.add("wo-new");
     const getTablesState = vi

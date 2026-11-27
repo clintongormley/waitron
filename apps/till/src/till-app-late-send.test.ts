@@ -577,6 +577,45 @@ const BREAKFAST_ENDED = refusal(
 
 const heading = (el: TillApp) => windowOf(el)!.shadowRoot!.querySelector("wt-dialog")!.heading;
 
+describe("a table's send into a closed zone", () => {
+  it("asks once about the closure and ended period, then confirms both on the same submission", async () => {
+    const { departmentId, menus, menuItemIds, needsManager } = BREAKFAST_ENDED;
+    const lateSend = { departmentId, menus, menuItemIds, needsManager };
+    const el = await lateTable({
+      submitDraft: vi.fn(drafts.submitDraft).mockRejectedValueOnce({
+        code: "service_zone.closed",
+        status: 409,
+        zoneId: "zone-dining-room",
+        zoneName: "Terrace",
+        closesAt: "22:00",
+        lateSend,
+      }),
+    });
+    current = { ...current, service: { ...current.service, zoneOpen: false } };
+    await poll(el);
+
+    await act(el, "send-all");
+
+    expect(submissions()).toHaveLength(1);
+    expect(submissions()[0]).not.toHaveProperty("lateSend");
+    expect(heading(el)).toBe("Terrace closed at 22:00");
+    expect(windowOf(el)!.shadowRoot!.textContent).toContain("Breakfast has ended");
+    expect(windowDishes(el)).toEqual(["1× Omelette"]);
+
+    await choose(el, "data-late-agreed");
+
+    expect(windowOf(el)).toBeNull();
+    expect(submissions()).toEqual([
+      expect.not.objectContaining({ closedZoneId: expect.anything() }),
+      expect.objectContaining({
+        submissionId: submissions()[0]!.submissionId,
+        closedZoneId: "zone-dining-room",
+        lateSend: { menuIds: ["breakfast-menu"] },
+      }),
+    ]);
+  });
+});
+
 describe("a table's send from the refusal", () => {
   it("opens the window from a refusal the till had not marked, and Kitchen agreed sends the refused menu", async () => {
     const el = await breakfastTable({
