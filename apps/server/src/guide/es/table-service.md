@@ -636,8 +636,8 @@ la cuenta los agrupa en los menús más baratos que encuentra. Cobra a la carta 
 fuera. La carpeta de un menú muestra qué platos incluye y cuáles tienen suplemento: ábrela
 desde la cuadrícula o escribe su nombre en **Buscar** y pulsa el resultado.
 
-Antes de pulsar **Enviar**, un plato sin agrupar muestra su propio precio, con los extras de
-pago incluidos. El total del pedido puede bajar si el plato pasa a formar parte de un menú.
+En una mesa, un plato sin agrupar muestra su propio precio con los extras de pago hasta que lo
+envías. El total del pedido puede bajar si el plato pasa a formar parte de un menú.
 
 Abre el resumen de menús en **Pedido** para ver qué platos lleva cada menú y qué sitios quedan
 libres. Para invitar o hacer un descuento en un menú, pulsa **Descuento…** en él dentro del

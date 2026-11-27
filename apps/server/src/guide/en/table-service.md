@@ -599,8 +599,8 @@ groups them into the cheapest set menus it finds. It charges any dish outside th
 Open a set-menu folder to see the dishes and supplements. Find it in the grid or by name in
 **Search**.
 
-Before **Send**, an ungrouped dish shows its own price, including paid extras. The order total
-can drop when the dish joins a set menu.
+At a table, an ungrouped dish shows its own price with paid extras until you send it. The order
+total can drop when the dish joins a set menu.
 
 Open the set-menu summary on **Order** to see which dishes each set menu holds and which places
 are free. To comp or discount a set menu, choose **Comp…** on it in the summary. A dish you comp
