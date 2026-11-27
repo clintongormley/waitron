@@ -523,6 +523,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Ship the form's note about which tables can order alongside the till's ended-menu restriction.
   [Design](superpowers/specs/2026-11-24-last-orders-per-station-design.md)
 
+- **A1625. Calendar redesign session: the problems to solve (owner, 27 November 2026).** Held for
+  the full calendar redesign session; not to be built before it. In the calendar it is hard to see
+  which day is today, and nothing shows which period is running now: the owner extended Lunch's
+  hours and could not tell from the calendar that the pre-lunch Bar period was still on. The till's
+  side of the same problem is A1624.
+
 - **Try the Calendar's long press on real Android and iOS phones (A720).**
   [Detail](backlog/service-periods.md#loose-ends-left-by-a720)
 
@@ -577,6 +583,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   table-move and bill action panels, Send and move allergy prompts, and payment slices remain.
   [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
+
+- **A1624. The menu names itself and says which period is on (owner, 27 November 2026).** At the top
+  of the till's menu, the menu's name is always a dropdown, even with one menu. It drops down to show
+  Now and Next (the period on, when it ends, and the period after it) above the menus on now. It
+  brings back the menu picker the redesign had left out. Built on the redesign's menu (frame `d`).
+  Needs the next period from the server. Not started.
+  [Design](superpowers/specs/2026-11-27-till-menu-period-dropdown-design.md)
 
 - **Overpaid open bills (OVERPAID-BILLS, lane L; design approved by the owner, 24 November 2026).** A
   cancel, discount, move or split may leave more on a bill than it comes to, settled before it closes;

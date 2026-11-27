@@ -162,6 +162,11 @@ be the main screen, with the menu sliding up from the bottom to cover the screen
   It sits in the same spot as the order screen's Menu button, so switching back and forth is the
   same tap.
 
+**(2026-11-27) The menu's name sits at the top of the menu as a dropdown**, always, even with one
+menu: it drops down from the box with **Now** and **Next** (the period on and the one after it) above
+the menus on now. This puts back today's menu picker, which this section had left out. See
+[the menu-and-period design](2026-11-27-till-menu-period-dropdown-design.md).
+
 **Dish options open as a full screen of large buttons**, one group under another ("Doneness —
 Choose one", "Side — Choose up to 2", "Sauce — Optional"), extras showing their price, then "Note
 for the kitchen". Allergies stay in the table's Allergies, not in this note.
