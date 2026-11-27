@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import type { RewrittenResult } from "./certificate-convert.js";
+import type { RewrittenResult } from "./certificate-open-answer.js";
 import type { CertificateDetails } from "./certificate-file.js";
 import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
 

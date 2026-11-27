@@ -21,7 +21,8 @@ import {
 } from "../test/openssl-certificates.js";
 import { mtlsFetch } from "./aeat-transport.js";
 import { openCertificateFile } from "./certificate-file.js";
-import { answerOpener, openOrRewrite, rewriteOldCertificate } from "./certificate-convert.js";
+import { rewriteOldCertificate } from "./certificate-convert.js";
+import { answerOpener, openOrRewrite } from "./certificate-open-answer.js";
 
 vi.mock("./certificate-file.js", { spy: true });
 
@@ -84,13 +85,13 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
   it.each([
     ["an RC2 file", RC2_SIGNED_CANDIDATE],
     ["an RC2 file under a passphrase outside ASCII", RC2_ACCENTED_CANDIDATE],
-  ])("opens %s once rewritten, with the same certificate and chain", (_label, file) => {
+  ])("opens %s once rewritten, with the same certificate and chain", async (_label, file) => {
     const original = bytes(file);
     expect(openCertificateFile(original, file.passphrase)).toEqual({
       ok: false,
       reason: "old_encryption",
     });
-    const opened = openOrRewrite(original, file.passphrase);
+    const opened = await openOrRewrite(original, file.passphrase);
     if (!opened.ok || opened.rewritten === undefined) throw new Error("not rewritten");
     expect(opened.details.fingerprint).toBe(OPENSSL_SIGNED_FINGERPRINT);
     expect(opened.details).toMatchObject({ organisation: "WAITRON SL", taxId: "89890001K" });
@@ -103,14 +104,14 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
     expect(certificatesIn(opened.rewritten, file.passphrase, true)).toEqual(chain);
   });
 
-  it("opens a macOS export under a passphrase outside ASCII, rewritten under the typed one", () => {
+  it("opens a macOS export under a passphrase outside ASCII, rewritten under the typed one", async () => {
     const original = bytes(MAC_ACCENTED_CANDIDATE);
     const { passphrase } = MAC_ACCENTED_CANDIDATE;
     expect(openCertificateFile(original, passphrase)).toEqual({
       ok: false,
       reason: "passphrase_wrong",
     });
-    const opened = openOrRewrite(original, passphrase);
+    const opened = await openOrRewrite(original, passphrase);
     if (!opened.ok || opened.rewritten === undefined) throw new Error("not rewritten");
     expect(opened.details.fingerprint).toBe(OPENSSL_SIGNED_FINGERPRINT);
     expect(openCertificateFile(opened.rewritten, passphrase)).toEqual({
@@ -122,24 +123,24 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
     );
   });
 
-  it("keeps passphrase_wrong for a wrong passphrase outside ASCII", () => {
+  it("keeps passphrase_wrong for a wrong passphrase outside ASCII", async () => {
     for (const file of [MAC_ACCENTED_CANDIDATE, RC2_ACCENTED_CANDIDATE]) {
-      expect(openOrRewrite(bytes(file), "contraseña-ñandu")).toEqual({
+      expect(await openOrRewrite(bytes(file), "contraseña-ñandu")).toEqual({
         ok: false,
         reason: "passphrase_wrong",
       });
     }
   });
 
-  it("does not ask node-forge for a wrong passphrase in plain ASCII, or another refusal", () => {
+  it("does not ask node-forge for a wrong passphrase in plain ASCII, or another refusal", async () => {
     const read = vi.spyOn(forge.pkcs12, "pkcs12FromAsn1");
     try {
-      expect(openOrRewrite(bytes(RC2_ACCENTED_CANDIDATE), "contrasena-nandu")).toEqual({
+      expect(await openOrRewrite(bytes(RC2_ACCENTED_CANDIDATE), "contrasena-nandu")).toEqual({
         ok: false,
         reason: "passphrase_wrong",
       });
       const keyless = makeAuthority().issue({ withKey: false, passphrase: "contraseña-ñandú" });
-      expect(openOrRewrite(keyless.pfx, keyless.passphrase)).toEqual({
+      expect(await openOrRewrite(keyless.pfx, keyless.passphrase)).toEqual({
         ok: false,
         reason: "no_private_key",
       });
@@ -158,7 +159,7 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
       ok: false,
       reason: "old_encryption",
     });
-    const opened = openOrRewrite(original, file.passphrase);
+    const opened = await openOrRewrite(original, file.passphrase);
     if (!opened.ok || opened.rewritten === undefined) throw new Error("not rewritten");
     const leaf = new X509Certificate(file.certificatePems[0]!);
     expect(opened.details.fingerprint).toBe(leaf.fingerprint256);
@@ -242,7 +243,7 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
     expect(rewriteOldCertificate(rc2With(holding(notACertificate)), passphrase)).toBeNull();
   });
 
-  it("refuses a file holding a second key, shrouded or plain", () => {
+  it("refuses a file holding a second key, shrouded or plain", async () => {
     const other = forge.pki.privateKeyFromPem(OPENSSL_AUTHORITY.serverKeyPem);
     const { passphrase } = RC2_SIGNED_CANDIDATE;
     expect(rewriteOldCertificate(rc2With(), passphrase)).not.toBeNull();
@@ -255,7 +256,10 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
         }),
       );
       expect(rewriteOldCertificate(twoKeys, passphrase)).toBeNull();
-      expect(openOrRewrite(twoKeys, passphrase)).toEqual({ ok: false, reason: "old_encryption" });
+      expect(await openOrRewrite(twoKeys, passphrase)).toEqual({
+        ok: false,
+        reason: "old_encryption",
+      });
     }
   });
 
@@ -273,9 +277,9 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
     expect(rewriteOldCertificate(file, passphrase, { maxBytes: size - 1 })).toBeNull();
   });
 
-  it("keeps old_encryption for a file node-forge cannot read either", () => {
+  it("keeps old_encryption for a file node-forge cannot read either", async () => {
     expect(rewriteOldCertificate(bytes(RC4_CANDIDATE), RC4_CANDIDATE.passphrase)).toBeNull();
-    expect(openOrRewrite(bytes(RC4_CANDIDATE), RC4_CANDIDATE.passphrase)).toEqual({
+    expect(await openOrRewrite(bytes(RC4_CANDIDATE), RC4_CANDIDATE.passphrase)).toEqual({
       ok: false,
       reason: "old_encryption",
     });
@@ -308,24 +312,26 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
     ).toBeNull();
   });
 
-  it("keeps old_encryption when Node refuses the rewritten file too", () => {
+  it("keeps old_encryption when Node refuses the rewritten file too", async () => {
     vi.mocked(openCertificateFile).mockClear();
     vi.mocked(openCertificateFile)
       .mockReturnValueOnce({ ok: false, reason: "old_encryption" })
       .mockReturnValueOnce({ ok: false, reason: "unreadable" });
-    expect(openOrRewrite(bytes(RC2_SIGNED_CANDIDATE), RC2_SIGNED_CANDIDATE.passphrase)).toEqual({
+    expect(
+      await openOrRewrite(bytes(RC2_SIGNED_CANDIDATE), RC2_SIGNED_CANDIDATE.passphrase),
+    ).toEqual({
       ok: false,
       reason: "old_encryption",
     });
     expect(openCertificateFile).toHaveBeenCalledTimes(2);
   });
 
-  it("leaves a file Node opens, or refuses for another reason, as it is", () => {
+  it("leaves a file Node opens, or refuses for another reason, as it is", async () => {
     const candidate = makeAuthority().issue();
-    expect(openOrRewrite(candidate.pfx, candidate.passphrase)).toEqual(
+    expect(await openOrRewrite(candidate.pfx, candidate.passphrase)).toEqual(
       openCertificateFile(candidate.pfx, candidate.passphrase),
     );
-    expect(openOrRewrite(bytes(RC2_SIGNED_CANDIDATE), "not-the-pass")).toEqual({
+    expect(await openOrRewrite(bytes(RC2_SIGNED_CANDIDATE), "not-the-pass")).toEqual({
       ok: false,
       reason: "passphrase_wrong",
     });
@@ -333,21 +339,21 @@ describe("rewriting a file Node refuses that node-forge reads", () => {
 });
 
 describe("the opener child's answer", () => {
-  const ask = (pfx: Buffer, passphrase: string, rewriteOld: boolean) =>
+  const ask = async (pfx: Buffer, passphrase: string, rewriteOld: boolean) =>
     JSON.parse(
-      answerOpener(JSON.stringify({ pfx: pfx.toString("base64"), passphrase, rewriteOld })),
+      await answerOpener(JSON.stringify({ pfx: pfx.toString("base64"), passphrase, rewriteOld })),
     ) as Record<string, unknown>;
 
-  it("opens with plain Node unless asked to rewrite", () => {
-    expect(ask(bytes(RC2_SIGNED_CANDIDATE), RC2_SIGNED_CANDIDATE.passphrase, false)).toEqual({
+  it("opens with plain Node unless asked to rewrite", async () => {
+    expect(await ask(bytes(RC2_SIGNED_CANDIDATE), RC2_SIGNED_CANDIDATE.passphrase, false)).toEqual({
       ok: false,
       reason: "old_encryption",
     });
   });
 
-  it("sends a rewritten file as base64 beside its details", () => {
+  it("sends a rewritten file as base64 beside its details", async () => {
     const { passphrase } = RC2_SIGNED_CANDIDATE;
-    const answer = ask(bytes(RC2_SIGNED_CANDIDATE), passphrase, true);
+    const answer = await ask(bytes(RC2_SIGNED_CANDIDATE), passphrase, true);
     expect(answer).toMatchObject({
       ok: true,
       details: { fingerprint: OPENSSL_SIGNED_FINGERPRINT },
@@ -357,9 +363,9 @@ describe("the opener child's answer", () => {
     ).toMatchObject({ ok: true, details: { fingerprint: OPENSSL_SIGNED_FINGERPRINT } });
   });
 
-  it("sends no rewritten file for one Node opens", () => {
+  it("sends no rewritten file for one Node opens", async () => {
     const candidate = makeAuthority().issue();
-    const answer = ask(candidate.pfx, candidate.passphrase, true);
+    const answer = await ask(candidate.pfx, candidate.passphrase, true);
     expect(answer).toMatchObject({ ok: true });
     expect(answer).not.toHaveProperty("rewritten");
   });

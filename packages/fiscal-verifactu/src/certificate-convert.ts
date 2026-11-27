@@ -1,14 +1,6 @@
 import { createHash, createPrivateKey, X509Certificate } from "node:crypto";
 import forge from "node-forge";
-import {
-  openCertificateFile,
-  type CertificateDetails,
-  type OpenResult,
-} from "./certificate-file.js";
 import { CERTIFICATE_MAX_BYTES } from "./certificate-limits.js";
-
-export type RewrittenResult =
-  { ok: true; details: CertificateDetails; rewritten?: Buffer } | Exclude<OpenResult, { ok: true }>;
 
 const { asn1, pki } = forge;
 const MAC_ITERATIONS = 2048;
@@ -206,48 +198,4 @@ export function rewriteOldCertificate(
   );
   const rewritten = Buffer.from(asn1.toDer(withMac(written, passphrase)).getBytes(), "binary");
   return rewritten.length > maxBytes ? null : rewritten;
-}
-
-/**
- * macOS's export derives every key from the passphrase's UTF-8 bytes taken one character each, as
- * OpenSSL 1.0 did, so Node calls a passphrase outside ASCII wrong; forge reads that spelling.
- */
-function readSpelling(reason: string, passphrase: string): string | null {
-  if (reason === "old_encryption") return passphrase;
-  if (reason !== "passphrase_wrong") return null;
-  const spelling = forge.util.encodeUtf8(passphrase);
-  return spelling === passphrase ? null : spelling;
-}
-
-/**
- * Opens the file; one Node refuses as old encryption, or a macOS export under a passphrase outside
- * ASCII, is opened again once rewritten under the passphrase as typed.
- */
-export function openOrRewrite(pfx: Buffer, passphrase: string): RewrittenResult {
-  const opened = openCertificateFile(pfx, passphrase);
-  if (opened.ok) return opened;
-  const readAs = readSpelling(opened.reason, passphrase);
-  if (readAs === null) return opened;
-  const rewritten = rewriteOldCertificate(pfx, passphrase, { readAs });
-  if (rewritten === null) return opened;
-  const again = openCertificateFile(rewritten, passphrase);
-  return again.ok ? { ...again, rewritten } : opened;
-}
-
-/** The opener child's JSON answer to its JSON input. */
-export function answerOpener(input: string): string {
-  const { pfx, passphrase, rewriteOld } = JSON.parse(input) as {
-    pfx: string;
-    passphrase: string;
-    rewriteOld: boolean;
-  };
-  const file = Buffer.from(pfx, "base64");
-  const result: RewrittenResult = rewriteOld
-    ? openOrRewrite(file, passphrase)
-    : openCertificateFile(file, passphrase);
-  return JSON.stringify(
-    result.ok && result.rewritten !== undefined
-      ? { ...result, rewritten: result.rewritten.toString("base64") }
-      : result,
-  );
 }
