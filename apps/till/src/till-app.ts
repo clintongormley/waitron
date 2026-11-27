@@ -4221,6 +4221,7 @@ export class TillApp extends LitElement {
   #setActiveTab(key: string | undefined, replace = false, retainDestination = false): void {
     const from = this.activeTabKey;
     this.activeTabKey = this.#resolveScreen(key ?? null);
+    if (from === "floor" && this.activeTabKey !== "floor") this.#stopFirstFloorRead();
     // Only a move onto the Floor from another tab: on the Floor, the address holds the zone shown.
     const returnZone =
       this.activeTabKey === "floor" && from !== "floor" ? this.#floorReturnZone() : undefined;
@@ -6070,7 +6071,7 @@ export class TillApp extends LitElement {
         this.#orderVisit !== landingVisit ||
         this.activeTabKey !== initialTab ||
         this.drill !== initialDrill;
-      if (!this.#floorLoaded) await (floorRead ?? this.#loadFloorData(left));
+      if (!this.#floorLoaded) await (floorRead ?? this.#loadFloorData(replaced));
       if (replaced()) return;
       const table = this.tables.find((candidate) => candidate.id === tableToResume.tableId);
       if (!left() && this.#floorLoaded && table?.party?.id === tableToResume.partyId) {
@@ -12492,7 +12493,7 @@ export class TillApp extends LitElement {
       if (zonesRead === this.#floorZonesRead) this.#applyZones(zones);
       this.#floorLoaded = true;
     };
-    if (!this.#zonesAnswered || !this.tablesAnswered) {
+    if (!this.#floorLoaded) {
       this.#firstFloorRead?.cancel();
       if (retry || this.firstFloorView !== "unreachable") this.firstFloorView = "quiet";
       const attempt = startFirstRead(

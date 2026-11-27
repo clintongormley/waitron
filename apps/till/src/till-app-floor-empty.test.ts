@@ -325,7 +325,7 @@ it("keeps the tables drawn when a later poll fails", async () => {
   expect(noTables(el)).toBeNull();
 });
 
-it("retries a timed-out Floor with fresh tables and zones, ignoring the old answers", async () => {
+it("retries a slow Floor with fresh tables and zones, ignoring the old answers", async () => {
   let oldTables!: (tables: TableState[]) => void;
   let oldZones!: (zones: FloorZone[]) => void;
   const getTablesState = vi
@@ -349,13 +349,15 @@ it("retries a timed-out Floor with fresh tables and zones, ignoring the old answ
 
   expect(getTablesState).toHaveBeenCalledOnce();
   expect(listZones).toHaveBeenCalledOnce();
-  expect(getTablesState.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
-  expect(listZones.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
+  expect(getTablesState.mock.calls[0]?.[0]?.signal?.aborted).toBe(false);
+  expect(listZones.mock.calls[0]?.[0]?.signal?.aborted).toBe(false);
   expect(readFailed(el)?.textContent).toContain("Can't reach the box");
   expect(noTables(el)).toBeNull();
 
   floorOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-floor-retry]")!.click();
   await vi.waitFor(() => expect(drawn(el, "t1")).toBeTruthy());
+  expect(getTablesState.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
+  expect(listZones.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
   oldTables([openTable]);
   oldZones([{ ...room, name: "Old room" }]);
   await settle(el);
@@ -386,4 +388,49 @@ it("shows the Floor after sign-in while its first tables read is still out", asy
   answer([freeTable]);
   await settle(el);
   expect(drawn(el, "t1")).toBeTruthy();
+});
+
+it("loads the next operator's Floor while its first reply waits", async () => {
+  const getTablesState = vi
+    .fn<() => Promise<TableState[]>>()
+    .mockResolvedValueOnce([freeTable])
+    .mockImplementationOnce(() => new Promise(() => {}));
+  const el = await onFloor(stubApi({ getTablesState }));
+  expect(drawn(el, "t1")).toBeTruthy();
+
+  emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("till-lock-screen")).toBeTruthy());
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  emit(el.shadowRoot!.querySelector("till-lock-screen")!, "logged-in", {
+    personId: "next-person",
+    displayName: "Bea",
+    permissions: [],
+    locale: "en-GB",
+  });
+  await vi.advanceTimersByTimeAsync(15_000);
+  vi.useRealTimers();
+  await settle(el);
+
+  expect(getTablesState).toHaveBeenCalledTimes(2);
+  expect(readFailed(el)?.textContent).toContain("Can't reach the box");
+  expect(drawn(el, "t1")).toBeNull();
+});
+
+it("starts a fresh first Floor read when staff leave for Counter and return", async () => {
+  const getTablesState = vi
+    .fn<(options?: { signal?: AbortSignal }) => Promise<TableState[]>>()
+    .mockImplementationOnce(() => new Promise(() => {}))
+    .mockResolvedValue([freeTable]);
+  const el = await signIn(stubApi({ getTablesState }, true));
+  const shell = el.shadowRoot!.querySelector("till-shell")!;
+  emit(shell, "screen-select", { screen: "floor" });
+  await vi.waitFor(() => expect(getTablesState).toHaveBeenCalledOnce());
+
+  emit(shell, "screen-select", { screen: "counter" });
+  await vi.waitFor(() => expect(floorOf(el)).toBeNull());
+  expect(getTablesState.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
+
+  emit(shell, "screen-select", { screen: "floor" });
+  await vi.waitFor(() => expect(drawn(el, "t1")).toBeTruthy());
+  expect(getTablesState).toHaveBeenCalledTimes(2);
 });

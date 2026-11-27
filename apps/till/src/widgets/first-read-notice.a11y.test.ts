@@ -16,7 +16,7 @@ it.each(["light", "dark"] as const)(
     setLocale("en-GB");
     const { el, host } = await mountWidget<TillFloorScreen & { firstRead: string }>(
       "till-floor-screen",
-      { firstRead: "waiting" },
+      { firstRead: "waiting", handheld: true },
       theme,
     );
     const root = el.shadowRoot!;
@@ -36,3 +36,15 @@ it.each(["light", "dark"] as const)(
     await expectNoA11yViolations(host);
   },
 );
+
+it("offers network help for a fixed till", async () => {
+  setLocale("en-GB");
+  const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+    firstRead: "unreachable",
+    handheld: false,
+  });
+
+  expect(el.shadowRoot!.querySelector("[data-first-read-status]")?.textContent).toContain(
+    "Check this till is connected to the venue's network.",
+  );
+});

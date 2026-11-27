@@ -101,7 +101,7 @@ export const firstReadNoticeStyles = css`
   }
 `;
 
-export function firstReadNotice(stage: FirstReadView, retry: () => void) {
+export function firstReadNotice(stage: FirstReadView, handheld: boolean, retry: () => void) {
   const waiting = stage === "waiting";
   const unreachable = stage === "unreachable";
   return html`<div class="first-read-notice" data-stage=${stage}>
@@ -113,7 +113,8 @@ export function firstReadNotice(stage: FirstReadView, retry: () => void) {
           waiting
             ? t("first_read.waiting")
             : unreachable
-              ? html`<strong>${t("first_read.unreachable")}</strong>${t("offline.wifi")}`
+              ? html`<strong>${t("first_read.unreachable")}</strong>
+                  ${t(handheld ? "offline.wifi" : "first_read.till_network")}`
               : nothing
         }
       </div>
@@ -126,10 +127,10 @@ export function firstReadNotice(stage: FirstReadView, retry: () => void) {
   </div>`;
 }
 
-export function firstFloorRead(stage: FirstReadView, retry: () => void) {
+export function firstFloorRead(stage: FirstReadView, handheld: boolean, retry: () => void) {
   return html`<div class="first-floor-read">
     ${stage === "quiet" ? nothing : html`<wt-placeholder></wt-placeholder>`}
-    ${firstReadNotice(stage, retry)}
+    ${firstReadNotice(stage, handheld, retry)}
   </div>`;
 }
 

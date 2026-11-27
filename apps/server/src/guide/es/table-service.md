@@ -604,9 +604,9 @@ junto a **Fichar salida**. En un móvil o una tableta con la sala en pantalla an
 
 ## Abrir el plano cuando el servidor tarda {#floor-first-read}
 
-Si ves **Esperando al servidor…** en el plano, espera un momento a que se carguen las
-mesas. Si ves **No se puede conectar con el servidor**, comprueba que tu dispositivo esté
-conectado a la red WiFi del local y pulsa **Reintentar**.
+Si ves **Esperando al servidor…** en el plano, espera un momento a que se carguen las mesas.
+Si ves **No se puede conectar con el servidor**, comprueba la conexión de la caja o que el móvil
+esté en el WiFi del local. Después, pulsa **Reintentar**.
 
 ## Tomar un pedido en un móvil {#phone-order}
 

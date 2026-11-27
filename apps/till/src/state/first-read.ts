@@ -1,5 +1,5 @@
-export type FirstReadStage = "placeholder" | "waiting";
-export type FirstReadView = "quiet" | FirstReadStage | "unreachable";
+export type FirstReadStage = "placeholder" | "waiting" | "unreachable";
+export type FirstReadView = "quiet" | FirstReadStage;
 
 export function startFirstRead<T>(
   read: (signal: AbortSignal) => Promise<T>,
@@ -15,7 +15,7 @@ export function startFirstRead<T>(
   const cancel = () => controller.abort();
   const shapes = setTimeout(() => show("placeholder"), 300);
   const notice = setTimeout(() => show("waiting"), 5_000);
-  const deadline = setTimeout(cancel, 15_000);
+  const recovery = setTimeout(() => show("unreachable"), 15_000);
   const operation = Promise.resolve().then(() => {
     signal.throwIfAborted();
     return read(signal);
@@ -28,7 +28,7 @@ export function startFirstRead<T>(
     .finally(() => {
       clearTimeout(shapes);
       clearTimeout(notice);
-      clearTimeout(deadline);
+      clearTimeout(recovery);
       signal.removeEventListener("abort", rejectOnAbort);
     });
   return { result, cancel };

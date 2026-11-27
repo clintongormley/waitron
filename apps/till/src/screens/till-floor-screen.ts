@@ -2468,7 +2468,9 @@ export class TillFloorScreen extends LitElement {
         ${this.#stationSummary()}
         ${
           firstRead !== undefined
-            ? firstFloorRead(firstRead, () => this.#requestFloorRefresh({ zones: true }))
+            ? firstFloorRead(firstRead, this.handheld, () =>
+                this.#requestFloorRefresh({ zones: true }),
+              )
             : empty !== nothing
               ? empty
               : view === "list"

@@ -4,12 +4,13 @@ import { startFirstRead } from "./first-read.js";
 beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] }));
 afterEach(() => vi.useRealTimers());
 
-it("shows shapes at 300 ms, warns at 5 s and aborts the unanswered read at 15 s", async () => {
+it("shows shapes at 300 ms, warns at 5 s and offers recovery at 15 s while the reply can still arrive", async () => {
   const show = vi.fn();
   let signal: AbortSignal | undefined;
+  let answer!: (tables: string[]) => void;
   const read = startFirstRead((current) => {
     signal = current;
-    return new Promise(() => {});
+    return new Promise<string[]>((resolve) => (answer = resolve));
   }, show);
   const outcome = read.result.catch((error: unknown) => error);
 
@@ -22,10 +23,13 @@ it("shows shapes at 300 ms, warns at 5 s and aborts the unanswered read at 15 s"
   await vi.advanceTimersByTimeAsync(1);
   expect(show.mock.calls).toEqual([["placeholder"], ["waiting"]]);
   await vi.advanceTimersByTimeAsync(9_999);
+  expect(show).toHaveBeenCalledTimes(2);
   expect(signal?.aborted).toBe(false);
   await vi.advanceTimersByTimeAsync(1);
-  expect(signal?.aborted).toBe(true);
-  expect(await outcome).toMatchObject({ name: "AbortError" });
+  expect(show.mock.calls).toEqual([["placeholder"], ["waiting"], ["unreachable"]]);
+  expect(signal?.aborted).toBe(false);
+  answer(["Table 1"]);
+  expect(await outcome).toEqual(["Table 1"]);
 });
 
 it("clears the pending stages when the box answers quickly", async () => {
