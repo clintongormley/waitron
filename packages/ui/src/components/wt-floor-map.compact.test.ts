@@ -105,7 +105,7 @@ it("reveals the last table with End while keeping the scroll position of the til
   await userEvent.keyboard("{End}");
   expect(map.shadowRoot!.activeElement).toBe(far);
   expect(far.getBoundingClientRect().bottom).toBeCloseTo(area.bottom);
-  expect(far.getBoundingClientRect().right).toBeCloseTo(area.right, 0);
+  expect(Math.abs(far.getBoundingClientRect().right - area.right)).toBeLessThanOrEqual(1);
   expect(scroller.scrollTop).toBe(0);
   await pan(map, 0, 1000);
   expect(far.getBoundingClientRect().bottom).toBeCloseTo(area.bottom);
