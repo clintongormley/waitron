@@ -333,7 +333,7 @@ it.each([
             scenario === "stalled"
               ? SHUTDOWN_UPLOAD_STALLED_EMAIL_WORDS
               : SHUTDOWN_PAUSED_EMAIL_WORDS;
-          expect(message).toContain(words.es.text.split(" ").slice(-4).join(" "));
+          expect(message).toContain(words.es.text.split(" ").slice(-5).join(" "));
           expect((await readMail(suite.db, "ordinary-during-shutdown"))?.status).toBe("pending");
           const retry = await app.request(
             "https://box.example/api/box/shutdown",
