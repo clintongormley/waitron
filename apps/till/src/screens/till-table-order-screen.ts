@@ -62,7 +62,7 @@ import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import "../widgets/sent-orders.js";
 import type { SentLineInfo, SentReorderDetail } from "../widgets/sent-orders.js";
-import { sentPanel, type SentSlice } from "../state/sent-panel.js";
+import { byFiringOrder, sentPanel, type SentSlice } from "../state/sent-panel.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import {
   conjunctionList,
@@ -218,6 +218,7 @@ import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
 import {
   apartInSetMenus,
   sameSentRow,
+  sentPortionsApart,
   sentRowPortionKey,
   tabLinePortionKey,
 } from "../state/portion-groups.js";
@@ -3343,7 +3344,7 @@ export class TillTableOrderScreen extends LitElement {
           const { expected, heldGroupIds } = event.detail;
           const held = this.groups
             .filter((group) => group.state === "held")
-            .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+            .sort(byFiringOrder)
             .map((group) => group.id);
           if (
             !this.isConnected ||
@@ -3434,10 +3435,17 @@ export class TillTableOrderScreen extends LitElement {
     return this.#sentLineMembers()?.[0];
   }
 
-  /** Every row Sent lists now, as its own slice. */
+  #sentSlicesRead?: { orders: CurrentOrders; billId: string; slices: SentSlice[] };
+
+  /** Every row Sent lists now, as its own slice; worked out once per read and bill. */
   #sentSlices(orders: CurrentOrders): SentSlice[] {
-    const model = sentPanel(orders, this.orderId ?? "");
-    return [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)];
+    const billId = this.orderId ?? "";
+    const read = this.#sentSlicesRead;
+    if (read?.orders === orders && read.billId === billId) return read.slices;
+    const model = sentPanel(orders, billId);
+    const slices = [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)];
+    this.#sentSlicesRead = { orders, billId, slices };
+    return slices;
   }
 
   /** The portions the open sheet speaks for, by line number: the row's one slice, or every member
@@ -3481,14 +3489,11 @@ export class TillTableOrderScreen extends LitElement {
     return pending.info;
   }
 
-  /** What besides the dish keeps sent portions apart: each one's guest allergy and set menu. */
   #sentShown(): (slice: SentSlice) => unknown[] {
-    const allergy = this.#allergy()?.snapshot ?? null;
-    const menus = sentMenuDishes(this.#dishSources().setMenus);
-    return ({ row: { lineId: id } }) => [
-      allergyGuestId(allergy, { kind: "working", id }),
-      menus.get(id)?.setMenuId,
-    ];
+    return sentPortionsApart(
+      this.#allergy()?.snapshot ?? null,
+      sentMenuDishes(this.#dishSources().setMenus),
+    );
   }
 
   /** The slices `info` names, or its served ones, by line number, while all are identical portions. */

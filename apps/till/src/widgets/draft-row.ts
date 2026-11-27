@@ -16,7 +16,7 @@ import { extraNutrition } from "./diet-badges.js";
 import { quantityText } from "./dish-format.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { lineProductName, soldByTheUnit } from "./product-name.js";
-import { rowTextStyles } from "./row-text.js";
+import { rowMore, rowTextStyles } from "./row-text.js";
 import { setMenuTag } from "./set-menu-presentation.js";
 
 registerIcons(DROPDOWN_ICONS);
@@ -180,13 +180,7 @@ export function draftRow(view: DraftRowView): TemplateResult {
               >${name}</span
             >${setMenuTag(view.setMenuPrice)}${view.nutrition}<slot name=${`mark-${index}`}></slot
             >${lineMarks(line)}</span
-          >${
-            more.length === 0
-              ? nothing
-              : html`<span class="draft-row-more row-more"
-                  >${more.map((part, i) => (i === 0 ? part : html` · ${part}`))}</span
-                >`
-          }</span
+          >${rowMore(more, "draft-row-more row-more")}</span
         >
         <span class="draft-row-price row-price">${price}</span>
       </button>

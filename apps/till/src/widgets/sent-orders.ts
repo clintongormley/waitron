@@ -1,16 +1,10 @@
 import type { PartyAllergySnapshot } from "@waitron/module";
-import { allergyGuestId, allergyMark, allergyMarkStyles } from "./party-allergy-mark.js";
+import { allergyMark, allergyMarkStyles } from "./party-allergy-mark.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
-import {
-  baseStyles,
-  formatDecimalInput,
-  Gestures,
-  preventTouchContextMenu,
-  visuallyHiddenStyles,
-} from "@waitron/ui";
+import { baseStyles, Gestures, preventTouchContextMenu, visuallyHiddenStyles } from "@waitron/ui";
 import { scrollAncestors } from "@waitron/ui/src/reorder-table.js";
 import { decimal, formatMoney, type BillSetMenuState } from "@waitron/shared";
 import type {
@@ -21,17 +15,16 @@ import type {
 } from "../api/kitchen-api.js";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import type { SentSlice } from "../state/sent-panel.js";
-import { sentRowPortionKey } from "../state/portion-groups.js";
+import { type SentSlice, byFiringOrder } from "../state/sent-panel.js";
+import { sentPortionsApart, sentRowPortionKey } from "../state/portion-groups.js";
 import { type SentRow, type SentSection, sentSections } from "../state/sent-sections.js";
 import { sentMenuDishes } from "../state/set-menus.js";
 import { setMenuTag, setMenuTagStyles } from "./set-menu-presentation.js";
 import { reminderDueAt } from "../state/release-reminder.js";
-import { trimQuantity } from "./dish-format.js";
 import { groupName } from "./group-name.js";
 import { nutritionIcons, nutritionIconStyles } from "./nutrition-icons.js";
 import { nutritionDietLabels } from "../diet-labels.js";
-import { sentCompanion, sentRow, sentRowStyles } from "./sent-row.js";
+import { sentCompanion, sentRow, sentRowStyles, sentStateWords } from "./sent-row.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-course-heading.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -64,7 +57,12 @@ export interface SentReorderDetail {
 interface SentModel {
   sections: SentSection[];
   reminder: ReleaseReminder | null;
+  courseNames: ReadonlyMap<string, string>;
+  /** Each slice the sections list, by line id and kind; the first one listed. */
+  slices: ReadonlyMap<string, SentSlice>;
 }
+const sliceId = (slice: SentSlice) => JSON.stringify([slice.row.lineId, slice.kind]);
+const isHeld = (section: SentSection) => section.title.state === "held";
 
 /** The slices a row's information and hold name: what is left of it, or else all of it. */
 const infoMembers = (row: SentRow) => (row.left.length > 0 ? row.left : row.slices);
@@ -149,6 +147,7 @@ export class TillSentOrders extends LitElement {
   readonly #startPointer = () => this.#releaseHeading();
   #reminderTimer?: ReturnType<typeof setTimeout>;
   #ageTimer?: ReturnType<typeof setTimeout>;
+  #built?: { inputs: readonly unknown[]; model: SentModel | null };
 
   constructor() {
     super();
@@ -234,16 +233,38 @@ export class TillSentOrders extends LitElement {
       ? this.snapshot.current
       : null;
   }
+  /** The sections as the inputs now stand, built again only when one of them is replaced. */
   #model(): SentModel | null {
+    const inputs = [
+      this.snapshot,
+      this.scope,
+      this.billId,
+      this.lines,
+      this.allergy,
+      this.#setMenuDishes,
+    ];
+    const built = this.#built;
+    if (built?.inputs.every((input, index) => input === inputs[index])) return built.model;
+    const model = this.#build();
+    this.#built = { inputs, model };
+    return model;
+  }
+  #build(): SentModel | null {
     const current = this.#current();
     if (current === null) return null;
+    const apart = sentPortionsApart(this.allergy, this.#setMenuDishes);
     const sections = sentSections(current, this.billId, (slice) =>
-      sentRowPortionKey(slice, this.lines, [
-        allergyGuestId(this.allergy, { kind: "working", id: slice.row.lineId }),
-        this.#setMenuDishes.get(slice.row.lineId)?.setMenuId,
-      ]),
+      sentRowPortionKey(slice, this.lines, apart(slice)),
     );
-    return { sections, reminder: current.reminder };
+    const courseNames = new Map<string, string>();
+    for (const course of current.retainedCourses)
+      if (!courseNames.has(course.id)) courseNames.set(course.id, course.name);
+    const slices = new Map<string, SentSlice>();
+    for (const section of sections)
+      for (const row of section.rows)
+        for (const slice of row.slices)
+          if (!slices.has(sliceId(slice))) slices.set(sliceId(slice), slice);
+    return { sections, reminder: current.reminder, courseNames, slices };
   }
   #dispatch(name: string, detail: unknown): void {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
@@ -257,7 +278,7 @@ export class TillSentOrders extends LitElement {
       revision: current.revision,
       ids: current.groups
         .filter((group) => group.state === "held")
-        .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
+        .sort(byFiringOrder)
         .map((group) => group.id),
     };
   }
@@ -346,12 +367,8 @@ export class TillSentOrders extends LitElement {
     if (!this.isConnected || this.busy) return;
     const members = infoMembers(row);
     const served = servedBeside(row);
-    const slices = this.#model()?.sections.flatMap((section) =>
-      section.rows.flatMap((row) => row.slices),
-    );
-    const found = [...members, ...served].map((member) =>
-      slices?.find((slice) => slice.row.lineId === member.row.lineId && slice.kind === member.kind),
-    );
+    const slices = this.#model()?.slices;
+    const found = [...members, ...served].map((member) => slices?.get(sliceId(member)));
     const slice = found[0];
     if (slice && found.every((each) => each !== undefined))
       this.#dispatch("sent-line-info", {
@@ -365,7 +382,10 @@ export class TillSentOrders extends LitElement {
   }
   #groupCommand(name: string, groupId: string): void {
     if (!this.isConnected || this.busy) return;
-    if (!this.#model()?.sections.some(({ held, group }) => held && group?.id === groupId)) return;
+    if (
+      !this.#model()?.sections.some((section) => isHeld(section) && section.group?.id === groupId)
+    )
+      return;
     if (name !== "fire-group" && this.#current()?.reminder?.groupId !== groupId) return;
     this.#dispatch(name, { groupId, ...(name === "snooze-group" ? { minutes: 5 } : {}) });
   }
@@ -375,8 +395,7 @@ export class TillSentOrders extends LitElement {
     this.requestUpdate();
   }
   #pressLine(row: SentRow, event: PointerEvent): void {
-    const members = infoMembers(row);
-    const slice = members[0]!;
+    const slice = row.lead;
     this.#releaseHeading();
     if (this.busy || (slice.kind === "fired" && !slice.row.released)) return;
     const target = event.composedPath()[0];
@@ -405,28 +424,17 @@ export class TillSentOrders extends LitElement {
   #money(value: string): string {
     return formatMoney(decimal(value), currentLocale());
   }
-  #quantity = (value: string): string => formatDecimalInput(trimQuantity(value), currentLocale());
   #marks(row: CurrentOrderRow): TemplateResult {
     return html`${nutritionIcons(row.nutrition?.allergens, nutritionDietLabels(undefined, row.nutrition?.dietaryDeclarations))}${setMenuTag(this.#setMenuDishes.get(row.lineId)?.price)}${allergyMark(this.allergy, { kind: "working", id: row.lineId })}`;
   }
   #courseNames(section: SentSection): string {
-    const courses = this.#current()?.retainedCourses ?? [];
-    return section.title.courseIds
-      .map((id) => courses.find((course) => course.id === id)?.name ?? t("table.course_none"))
-      .join(", ");
+    const names = this.#model()?.courseNames;
+    return section.title.courseIds.map((id) => names?.get(id) ?? t("table.course_none")).join(", ");
   }
   #title(section: SentSection): TemplateResult {
     const names = this.#courseNames(section);
     const { state, firedAt } = section.title;
-    const word =
-      state === "held"
-        ? t("table.group_held")
-        : state === "at_the_pass"
-          ? t("table.at_the_pass")
-          : firedAt === null
-            ? t("table.group_fired")
-            : html`<till-fired-ago .firedAt=${firedAt} .now=${this.#heldNow()}></till-fired-ago>`;
-    return html`${names === "" ? nothing : `${names} · `}${word}`;
+    return html`${names === "" ? nothing : `${names} · `}${sentStateWords(state, firedAt, this.#heldNow())}`;
   }
   #heldActions(section: SentSection, expected: HeldOrder): TemplateResult {
     const group = section.group!;
@@ -496,7 +504,7 @@ export class TillSentOrders extends LitElement {
   }
   #section(section: SentSection, expected: HeldOrder): TemplateResult {
     const id = section.group?.id ?? "";
-    const held = section.held;
+    const held = isHeld(section);
     const now = this.#displayNow();
     return html`<section
       class="group"
@@ -526,16 +534,15 @@ export class TillSentOrders extends LitElement {
       >
         ${repeat(
           section.rows,
-          (row) => `${row.slices[0]!.kind === "cancelled_charged"}:${row.slices[0]!.row.lineId}`,
+          (row) => row.id,
           (row) =>
             sentRow({
               row,
               heading: section.title.state,
               now,
               heldNow: this.#heldNow(),
-              quantity: this.#quantity,
               price: this.#money(row.amount),
-              marks: this.#marks(infoMembers(row)[0]!.row),
+              marks: this.#marks(row.lead.row),
               busy: this.busy,
               press: (event) => this.#pressLine(row, event),
               serve: (event) => this.#clickServe(row, event),
@@ -546,7 +553,6 @@ export class TillSentOrders extends LitElement {
           sentCompanion(
             row,
             this.billLabels.get(row.workingOrderId) ?? t("table.sent_other_bill"),
-            this.#quantity,
             this.#marks(row),
           ),
         )}
@@ -556,7 +562,7 @@ export class TillSentOrders extends LitElement {
   #reminder(model: SentModel): TemplateResult | typeof nothing {
     const reminder = model.reminder;
     const section = model.sections.find(
-      ({ held, group }) => held && group?.id === reminder?.groupId,
+      (section) => isHeld(section) && section.group?.id === reminder?.groupId,
     );
     if (!section || reminderDueAt(reminder) === Number.POSITIVE_INFINITY) return nothing;
     const due = reminderDueAt(reminder) <= this.#displayNow();

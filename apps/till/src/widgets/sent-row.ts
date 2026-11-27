@@ -4,7 +4,8 @@ import type { CurrentOrderRow } from "../api/kitchen-api.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { SentRow, SentRowState, SentSectionTitle } from "../state/sent-sections.js";
-import { rowTextStyles } from "./row-text.js";
+import { quantityText } from "./dish-format.js";
+import { rowMore, rowTextStyles } from "./row-text.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "./fired-ago.js";
 
@@ -15,7 +16,6 @@ export interface SentRowView {
   now: number;
   /** Set while the list holds time still; otherwise a fired age keeps its own clock. */
   heldNow: number | undefined;
-  quantity: (value: string) => string;
   price: string;
   /** Beside the name: nutrition icons, the set-menu tag and the guest allergy mark. */
   marks: TemplateResult;
@@ -32,69 +32,76 @@ const STATE_WORDS: Partial<Record<SentRowState, StringKey>> = {
   cancelled_charged: "table.cancelled_charged",
 };
 
+/** A sent row's or section heading's state in words; a ready row says how long it has waited
+ * instead. A fired age keeps its own clock unless `heldNow` holds it still. */
+export function sentStateWords(
+  state: Exclude<SentRowState, "ready">,
+  firedAt: string | null,
+  heldNow: number | undefined,
+): TemplateResult | string {
+  const words = STATE_WORDS[state];
+  if (words !== undefined) return t(words);
+  return firedAt === null
+    ? t("table.group_fired")
+    : html`<till-fired-ago .firedAt=${firedAt} .now=${heldNow}></till-fired-ago>`;
+}
+
 function stateText(view: SentRowView): TemplateResult | string | undefined {
   const { row } = view;
   if (row.state === view.heading) return undefined;
-  const words = STATE_WORDS[row.state];
-  if (words !== undefined) return t(words);
-  const dish = row.left[0]!.row;
-  if (row.state === "ready") {
-    const minutes = Math.max(0, Math.floor((view.now - Date.parse(dish.readyAt!)) / 60_000));
-    return html`<span class="row-ready"
-      >${t("table.row_ready_ago").replace("{n}", String(minutes))}</span
-    >`;
-  }
-  return dish.firedAt === null
-    ? t("table.group_fired")
-    : html`<till-fired-ago .firedAt=${dish.firedAt} .now=${view.heldNow}></till-fired-ago>`;
+  const dish = row.lead.row;
+  if (row.state !== "ready") return sentStateWords(row.state, dish.firedAt, view.heldNow);
+  const minutes = Math.max(0, Math.floor((view.now - Date.parse(dish.readyAt!)) / 60_000));
+  return html`<span class="row-ready"
+    >${t("table.row_ready_ago").replace("{n}", String(minutes))}</span
+  >`;
 }
 
-function dishWords(dish: CurrentOrderRow, quantity: (value: string) => string) {
+function dishWords(dish: CurrentOrderRow) {
   return [
     ...dish.extras.map((extra) => {
-      const amount = quantity(extra.quantity);
-      return amount === quantity("1") ? extra.name : `${extra.name} ×${amount}`;
+      const amount = quantityText(extra.quantity);
+      return amount === quantityText("1") ? extra.name : `${extra.name} ×${amount}`;
     }),
     ...(dish.note === null ? [] : [`${t("line.note.label")}: ${dish.note}`]),
   ];
 }
 
-function secondLine(parts: readonly (TemplateResult | string)[]) {
-  return parts.length === 0
-    ? nothing
-    : html`<span class="row-more"
-        >${parts.map((part, i) => (i === 0 ? part : html` · ${part}`))}</span
-      >`;
-}
-
-function name(dish: CurrentOrderRow, marks: TemplateResult) {
-  return html`<span class="row-name"
-    ><span class="product-name" lang=${currentContentLanguages().defaultLanguage}>${dish.name}</span
-    >${marks}</span
-  >`;
+/** The quantity and text cells both kinds of sent row draw. */
+function cells(
+  dish: CurrentOrderRow,
+  quantity: string,
+  marks: TemplateResult,
+  more: readonly (TemplateResult | string)[],
+) {
+  return html`<span class="row-qty">${quantityText(quantity)}</span
+    ><span class="row-text"
+      ><span class="row-name"
+        ><span class="product-name" lang=${currentContentLanguages().defaultLanguage}
+          >${dish.name}</span
+        >${marks}</span
+      >${rowMore(more)}</span
+    >`;
 }
 
 /** One sent dish: its served and unserved portions together, or its cancelled-but-charged part. */
 export function sentRow(view: SentRowView): TemplateResult {
   const { row } = view;
-  const first = row.left[0] ?? row.slices[0]!;
+  const first = row.lead;
   const dish = first.row;
   const fired = first.kind === "fired";
   const state = stateText(view);
   const served =
     row.left.length > 0 && row.served !== "0"
       ? t("table.row_served_of")
-          .replace("{served}", view.quantity(row.served))
-          .replace("{quantity}", view.quantity(row.quantity))
+          .replace("{served}", quantityText(row.served))
+          .replace("{quantity}", quantityText(row.quantity))
       : undefined;
-  const contents = html`<span class="row-qty">${view.quantity(row.quantity)}</span
-    ><span class="row-text"
-      >${name(dish, view.marks)}${secondLine([
-        ...dishWords(dish, view.quantity),
-        ...(state === undefined ? [] : [state]),
-        ...(served === undefined ? [] : [served]),
-      ])}</span
-    ><span class="row-price">${view.price}</span>`;
+  const contents = html`${cells(dish, row.quantity, view.marks, [
+      ...dishWords(dish),
+      ...(state === undefined ? [] : [state]),
+      ...(served === undefined ? [] : [served]),
+    ])}<span class="row-price">${view.price}</span>`;
   return html`<li
     class="sent-row"
     data-fired-line=${fired ? dish.lineId : nothing}
@@ -139,15 +146,11 @@ export function sentRow(view: SentRowView): TemplateResult {
 export function sentCompanion(
   dish: CurrentOrderRow,
   bill: string,
-  quantity: (value: string) => string,
   marks: TemplateResult,
 ): TemplateResult {
   return html`<li class="sent-row companion" data-companion=${dish.lineId}>
     <div class="sent-row-open">
-      <span class="row-qty">${quantity(dish.quantity)}</span
-      ><span class="row-text"
-        >${name(dish, marks)}${secondLine([...dishWords(dish, quantity), bill])}</span
-      >
+      ${cells(dish, dish.quantity, marks, [...dishWords(dish), bill])}
     </div>
   </li>`;
 }

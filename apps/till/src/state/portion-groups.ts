@@ -1,7 +1,9 @@
+import type { PartyAllergySnapshot } from "@waitron/module";
 import { type BillSetMenuState, optionSnapshotNames } from "@waitron/shared";
 import type { StationQueueItem } from "../api/client.js";
 import type { ExpoItem, LineNutrition, TabLine } from "../api/kitchen-api.js";
 import { trimQuantity } from "../widgets/dish-format.js";
+import { allergyGuestId } from "../widgets/party-allergy-mark.js";
 import type { SentSlice } from "./sent-panel.js";
 
 /**
@@ -161,10 +163,26 @@ export function sentRowPortionKey(
   };
 }
 
+/** The key's two parts as one string, equal exactly when {@link sameSentRow} holds. */
+export const sentRowId = (key: SentRowPortionKey): string =>
+  JSON.stringify([key.dish, key.progress]);
+
 /** Whether two sent portions share one row as they stand; `sentSections` also joins a served
  * portion to an unserved one of its dish. */
 export const sameSentRow = (a: SentRowPortionKey, b: SentRowPortionKey): boolean =>
   a.dish === b.dish && a.progress === b.progress;
+
+/** What besides the dish keeps sent portions apart, as {@link sentRowPortionKey}'s `shown`: each
+ * one's guest allergy and set menu. */
+export function sentPortionsApart(
+  allergy: PartyAllergySnapshot | null,
+  setMenuDishes: ReadonlyMap<string, { setMenuId: string }>,
+): (slice: SentSlice) => unknown[] {
+  return ({ row: { lineId: id } }) => [
+    allergyGuestId(allergy, { kind: "working", id }),
+    setMenuDishes.get(id)?.setMenuId,
+  ];
+}
 
 /** The facts a kitchen screen draws for a dish, shared by the station queue's items and the pass's. */
 type KitchenDish = Pick<

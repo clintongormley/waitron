@@ -1,8 +1,8 @@
 import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
 import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders } from "../api/kitchen-api.js";
 import { trimQuantity } from "../widgets/dish-format.js";
-import { type SentRowPortionKey, sameSentRow } from "./portion-groups.js";
-import { type SentSlice, sentPanel } from "./sent-panel.js";
+import { type SentRowPortionKey, sentRowId } from "./portion-groups.js";
+import { type SentSlice, byFiringOrder, sentPanel } from "./sent-panel.js";
 
 export type SentRowState =
   "held" | "ready" | "at_the_pass" | "fired" | "served" | "cancelled_charged";
@@ -13,6 +13,10 @@ export interface SentRow {
   slices: SentSlice[];
   /** The unserved slices, by line number. */
   left: SentSlice[];
+  /** The slice its information, hold and marks speak for: the first left, or else the first. */
+  lead: SentSlice;
+  /** Stable across reads: whether it is the cancelled-but-charged part, and its first line. */
+  id: string;
   state: SentRowState;
   quantity: string;
   served: string;
@@ -29,7 +33,6 @@ export interface SentSectionTitle {
 export interface SentSection {
   /** Null for the rows sent outside any group. */
   group: CurrentOrderGroup | null;
-  held: boolean;
   rows: SentRow[];
   /** Other bills' held dishes in the group, which Fire sends too. */
   companions: CurrentOrderRow[];
@@ -39,6 +42,13 @@ export interface SentSection {
 const sum = (values: readonly string[]) => sumDecimals(values.map((value) => decimal(value)));
 const time = (value: string | null) =>
   value === null ? Number.POSITIVE_INFINITY : Date.parse(value);
+const unitId = (slice: SentSlice) => `${slice.kind === "cancelled_charged"}:${slice.row.lineId}`;
+
+function push<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+  const list = map.get(key);
+  if (list === undefined) map.set(key, [value]);
+  else list.push(value);
+}
 
 function stateOf(slices: readonly SentSlice[], left: readonly SentSlice[]): SentRowState {
   if (slices[0]!.kind === "cancelled_charged") return "cancelled_charged";
@@ -56,6 +66,8 @@ function toRow(slices: SentSlice[]): SentRow {
   return {
     slices,
     left,
+    lead: left[0] ?? slices[0]!,
+    id: unitId(slices[0]!),
     state: stateOf(slices, left),
     quantity: trimQuantity(sum(slices.map((slice) => slice.quantity))),
     served: trimQuantity(
@@ -73,46 +85,53 @@ function joinRows(
   portionKey: (slice: SentSlice) => SentRowPortionKey | null,
 ): SentSlice[][] {
   const units = new Map<string, SentSlice[]>();
-  for (const slice of slices) {
-    const id = `${slice.kind === "cancelled_charged"}:${slice.row.lineId}`;
-    units.set(id, [...(units.get(id) ?? []), slice]);
-  }
+  for (const slice of slices) push(units, unitId(slice), slice);
   const groups: { key: SentRowPortionKey | null; slices: SentSlice[] }[] = [];
+  const byKey = new Map<string, (typeof groups)[number]>();
   for (const unit of units.values()) {
     const key = unit.length === 1 ? portionKey(unit[0]!) : null;
-    const same = key && groups.find((group) => group.key && sameSentRow(group.key, key));
-    if (same) same.slices.push(...unit);
-    else groups.push({ key, slices: [...unit] });
+    const id = key && sentRowId(key);
+    const same = id ? byKey.get(id) : undefined;
+    if (same) {
+      same.slices.push(...unit);
+      continue;
+    }
+    const group = { key, slices: [...unit] };
+    if (id) byKey.set(id, group);
+    groups.push(group);
   }
-  for (const servedGroup of groups.filter((group) => group.key?.progress === null)) {
-    const host = groups.find(
-      (group) => group.key?.progress != null && group.key.dish === servedGroup.key!.dish,
-    );
-    if (host === undefined) continue;
-    host.slices.push(...servedGroup.slices);
-    groups.splice(groups.indexOf(servedGroup), 1);
-  }
-  return groups.map(({ slices: members }) => members.sort((a, b) => a.row.lineNo - b.row.lineNo));
+  const hosts = new Map<string, (typeof groups)[number]>();
+  for (const group of groups)
+    if (group.key?.progress != null && !hosts.has(group.key.dish)) hosts.set(group.key.dish, group);
+  const joined = groups.filter((group) => {
+    const host = group.key?.progress === null ? hosts.get(group.key.dish) : undefined;
+    if (host === undefined) return true;
+    host.slices.push(...group.slices);
+    return false;
+  });
+  return joined.map(({ slices: members }) => members.sort((a, b) => a.row.lineNo - b.row.lineNo));
 }
 
-function compareRows(a: SentRow, b: SentRow, readOrder: Map<CurrentOrderRow, number>): number {
+function compareRows(
+  a: SentRow,
+  b: SentRow,
+  readOrder: Map<CurrentOrderRow, number>,
+  when: Map<SentRow, number>,
+): number {
   const aLeft = a.left[0]?.row;
   const bLeft = b.left[0]?.row;
-  if (aLeft === undefined || bLeft === undefined)
-    return aLeft !== bLeft
-      ? aLeft === undefined
-        ? 1
-        : -1
-      : a.slices[0]!.row.lineNo - b.slices[0]!.row.lineNo;
+  // A row with nothing left goes after those with something left; two such keep line order.
+  if (aLeft === undefined && bLeft === undefined)
+    return a.slices[0]!.row.lineNo - b.slices[0]!.row.lineNo;
+  if (aLeft === undefined) return 1;
+  if (bLeft === undefined) return -1;
   // Held rows have no firing time to sort by, so they keep the order the read lists them in.
   if (a.state === "held" && b.state === "held")
     return readOrder.get(aLeft)! - readOrder.get(bLeft)!;
   const aReady = aLeft.readyAt !== null;
   const bReady = bLeft.readyAt !== null;
   if (aReady !== bReady) return aReady ? -1 : 1;
-  const order =
-    time(aReady ? aLeft.readyAt : aLeft.firedAt) - time(bReady ? bLeft.readyAt : bLeft.firedAt);
-  return order || aLeft.lineId.localeCompare(bLeft.lineId);
+  return when.get(a)! - when.get(b)! || aLeft.lineId.localeCompare(bLeft.lineId);
 }
 
 /**
@@ -135,23 +154,23 @@ export function sentSections(
     }
   for (const row of current.ungrouped) readOrder.set(row, readOrder.size);
   const sliced = new Map<CurrentOrderGroup | null, SentSlice[]>();
-  for (const slice of [...panel.served, ...panel.fired, ...panel.held.flatMap((g) => g.rows)]) {
-    const group = groupOf.get(slice.row) ?? null;
-    sliced.set(group, [...(sliced.get(group) ?? []), slice]);
-  }
-  const courseOrder = (id: string) =>
-    current.retainedCourses.find((course) => course.id === id)?.displayOrder ?? -1;
-  const ordered = [...current.groups].sort(
-    (a, b) => a.position - b.position || a.id.localeCompare(b.id),
-  );
+  for (const slice of [...panel.served, ...panel.fired, ...panel.held.flatMap((g) => g.rows)])
+    push(sliced, groupOf.get(slice.row) ?? null, slice);
+  const displayOrder = new Map<string, number>();
+  for (const course of current.retainedCourses)
+    if (!displayOrder.has(course.id)) displayOrder.set(course.id, course.displayOrder);
+  const courseOrder = (id: string) => displayOrder.get(id) ?? -1;
+  const ordered = [...current.groups].sort(byFiringOrder);
   const sections: SentSection[] = [];
   for (const group of [...ordered, null]) {
     const slices = sliced.get(group);
     if (slices === undefined) continue;
     const heldEntry = panel.held.find((entry) => entry.group === group);
-    const rows = joinRows(slices, portionKey)
-      .map(toRow)
-      .sort((a, b) => compareRows(a, b, readOrder));
+    const rows = joinRows(slices, portionKey).map(toRow);
+    const when = new Map(
+      rows.map((row) => [row, time(row.left[0]?.row.readyAt ?? row.left[0]?.row.firedAt ?? null)]),
+    );
+    rows.sort((a, b) => compareRows(a, b, readOrder, when));
     const companions = heldEntry?.companions ?? [];
     const courseIds = [
       ...new Set([...slices.map((slice) => slice.row), ...companions].map((row) => row.courseId)),
@@ -168,7 +187,6 @@ export function sentSections(
         : group.firedAt;
     sections.push({
       group,
-      held: heldEntry !== undefined,
       rows,
       companions,
       title: {

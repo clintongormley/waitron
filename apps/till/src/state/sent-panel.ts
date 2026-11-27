@@ -22,6 +22,13 @@ export interface SentPanel {
   fired: SentSlice[];
   held: { group: CurrentOrderGroup; rows: SentSlice[]; companions: CurrentOrderRow[] }[];
 }
+/** Fire groups in firing order. */
+export const byFiringOrder = (
+  a: { position: number; id: string },
+  b: { position: number; id: string },
+): number => a.position - b.position || a.id.localeCompare(b.id);
+const time = (value: string | null) =>
+  value === null ? Number.POSITIVE_INFINITY : Date.parse(value);
 const zero = decimal("0");
 const positive = (value: Decimal) => compareDecimal(value, zero) > 0;
 const bounded = (value: Decimal, max: Decimal): Decimal =>
@@ -69,9 +76,7 @@ export function sentPanel(current: CurrentOrders, billId: string): SentPanel {
       else served.push(slice);
     }
   };
-  for (const group of [...current.groups].sort(
-    (a, b) => a.position - b.position || a.id.localeCompare(b.id),
-  )) {
+  for (const group of [...current.groups].sort(byFiringOrder)) {
     const rows: SentSlice[] = [];
     for (const row of group.rows) take(row, group.state === "held" && !row.released, rows);
     if (rows.length > 0)
@@ -86,15 +91,14 @@ export function sentPanel(current: CurrentOrders, billId: string): SentPanel {
       });
   }
   for (const row of current.ungrouped) take(row, false, []);
-  const time = (value: string | null) =>
-    value === null ? Number.POSITIVE_INFINITY : Date.parse(value);
+  const when = new Map(
+    fired.map((slice) => [slice, time(slice.row.readyAt ?? slice.row.firedAt)] as const),
+  );
   fired.sort((a, b) => {
     const aReady = a.row.readyAt !== null;
     const bReady = b.row.readyAt !== null;
     if (aReady !== bReady) return aReady ? -1 : 1;
-    const order =
-      time(aReady ? a.row.readyAt : a.row.firedAt) - time(bReady ? b.row.readyAt : b.row.firedAt);
-    return order || a.row.lineId.localeCompare(b.row.lineId);
+    return when.get(a)! - when.get(b)! || a.row.lineId.localeCompare(b.row.lineId);
   });
   return { served, fired, held };
 }

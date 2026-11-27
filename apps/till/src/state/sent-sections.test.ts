@@ -110,7 +110,6 @@ describe("sentSections (till redesign PR 8a)", () => {
     );
     expect(sections.map((section) => section.group?.id ?? null)).toEqual(["g1", "g2", null]);
     expect(sections[2]).toMatchObject({
-      held: false,
       companions: [],
       title: { courseIds: ["mains"], state: "fired", firedAt: at(4) },
     });
@@ -229,7 +228,6 @@ describe("sentSections (till redesign PR 8a)", () => {
     );
     expect(sections).toHaveLength(1);
     expect(sections[0]).toMatchObject({
-      held: true,
       companions: [other],
       title: { courseIds: ["starters", "mains"], state: "held", firedAt: null },
     });
@@ -241,7 +239,7 @@ describe("sentSections (till redesign PR 8a)", () => {
       current([group("g1", "fired", [row("a")]), group("g2", "held", [row("b")], 2)]),
       "bill-1",
     );
-    expect(sections.map((section) => section.held)).toEqual([false, false]);
+    expect(sections.map((section) => section.title.state === "held")).toEqual([false, false]);
   });
 
   it("heads a section Fired from its group's firing time", () => {
