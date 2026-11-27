@@ -125,7 +125,6 @@ const products: Product[] = [
     dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "8.50",
-    vatClass: "reduced",
     takeawayVatRate: "10.00",
     active: true,
     available: true,
@@ -3507,7 +3506,6 @@ describe("menu-screen", () => {
             effective: {
               allergens: null,
               unitPrice: "8.50",
-              vatClass: "reduced",
               takeawayVatRate: "10.00",
               primaryCategoryId: "c1",
               courseId: null,
@@ -3613,7 +3611,6 @@ describe("menu-screen", () => {
         description: { es: "Cremosas" },
         image: null,
         unitPrice: "8.50",
-        vatClass: "reduced",
         takeawayVatRate: "10.00",
         unitId: "u1",
         primaryCategoryId: "c1",

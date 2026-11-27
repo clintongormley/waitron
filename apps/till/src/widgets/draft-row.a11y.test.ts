@@ -52,7 +52,6 @@ const dish = (id: string, name: string): TillProduct => ({
   name,
   unitPrice: "7.80",
   pricingUnit: "each",
-  vatClass: "general",
   category: null,
   allergens: { gluten: { kinds: ["wheat"] } },
 });
@@ -84,8 +83,6 @@ const toast: TillProduct = {
           customerName: null,
           kitchenName: null,
           price: "1.00",
-          vatClass: "general",
-          takeawayVatClass: "general",
           portion: "1",
           unit: {
             id: "each",

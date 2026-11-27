@@ -32,7 +32,6 @@ const product = (
   dietaryDeclarations: [],
   pricingUnit: "each",
   unitPrice: "2.00",
-  vatClass: "reduced",
   takeawayVatRate: "10.00",
   available: true,
   ordering: "public",

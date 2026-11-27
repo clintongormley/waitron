@@ -13,7 +13,6 @@ const coffee: TillProduct = {
   customerName: { es: "Café para el cliente" },
   pricingUnit: "each",
   unitPrice: "1.50",
-  vatClass: "general",
   category: null,
   allergens: null,
 };
@@ -24,7 +23,6 @@ const ham: TillProduct = {
   customerName: { es: "Jamón para el cliente" },
   pricingUnit: "weight",
   unitPrice: "10.00",
-  vatClass: "reduced",
   category: "charcutería",
   allergens: null,
 };

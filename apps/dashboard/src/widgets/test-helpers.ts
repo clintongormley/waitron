@@ -577,8 +577,6 @@ function frozenOffer(
       abbreviation: { en: "ea" },
       hardwareUnit: null,
     },
-    vatClass: "reduced",
-    takeawayVatClass: "reduced",
     allergens: null,
     diet: null,
     dietOverride: null,

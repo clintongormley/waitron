@@ -876,7 +876,6 @@ describe("held-line move editing observation", () => {
           menuItemId: undefined,
           pricingUnit: "each",
           unitPrice: "2.00",
-          vatClass: "general",
           category: null,
           allergens: null,
         },

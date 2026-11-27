@@ -33,8 +33,6 @@ function extraList(id: string, price: string): OfferedModifier {
         customerName: null,
         kitchenName: null,
         price,
-        vatClass: "general",
-        takeawayVatClass: "general",
         portion: "1",
         unit: {
           id: "each",
@@ -58,7 +56,6 @@ const product: TillProduct = {
   name: "Staff soup",
   unitPrice: "5.00",
   pricingUnit: "each",
-  vatClass: "general",
   category: null,
   allergens: null,
   offeredModifiers: [extraList("sides", "0.50"), extraList("garnish", "0.75")],

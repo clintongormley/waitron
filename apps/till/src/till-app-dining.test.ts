@@ -34,7 +34,6 @@ const cola: TillProduct = {
   name: "Cola",
   pricingUnit: "each",
   unitPrice: "1.80",
-  vatClass: "reduced",
   category: null,
   allergens: null,
 };

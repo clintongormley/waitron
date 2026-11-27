@@ -75,8 +75,6 @@ function offer(menu: Menu, product: string): TillMenuOffer {
     customerName: { en: product },
     kitchenName: product,
     unit,
-    vatClass: "general",
-    takeawayVatClass: "general",
     category: null,
     allergens: null,
     diet: null,

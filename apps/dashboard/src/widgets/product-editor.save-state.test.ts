@@ -25,7 +25,6 @@ const full: ProductEditorDraft = {
   active: true,
   available: true,
   ordering: "public",
-  vatClass: "reduced",
   takeawayVatRate: "10.00",
   variants: [
     {
@@ -68,7 +67,6 @@ const variantPage: ProductEditorDraft = {
     description: { en: "Freshly roasted" },
     image: null,
     unitPrice: "9.00",
-    vatClass: "reduced",
     takeawayVatRate: "10.00",
     unitId: "each",
     primaryCategoryId: "drinks",
@@ -81,7 +79,6 @@ const variantPage: ProductEditorDraft = {
   kitchenName: "GLS",
   unitId: null,
   unitPrice: null,
-  vatClass: null,
   variants: [],
   modifiers: [],
   allergens: null,

@@ -28,7 +28,6 @@ const product: TillProduct = {
   id: "draft-burger",
   name: "Recorded burger",
   unitPrice: "17.25",
-  vatClass: "general",
   category: null,
   allergens: null,
   offeredModifiers: [options],

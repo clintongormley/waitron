@@ -11,7 +11,6 @@ const product: TillProduct = {
   id: "paused-burger",
   name: "Burger",
   unitPrice: "9.50",
-  vatClass: "general",
   category: null,
   allergens: null,
   offeredModifiers: [],

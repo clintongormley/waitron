@@ -77,7 +77,6 @@ function product(overrides: Partial<Product> = {}): Product {
     dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "1.50",
-    vatClass: "reduced",
     takeawayVatRate: "10.00",
     active: true,
     available: true,
@@ -606,7 +605,6 @@ it("shows a saved variant in the extras list's Items column", async () => {
     effective: {
       allergens: null,
       unitPrice: "1.50",
-      vatClass: "reduced",
       takeawayVatRate: "10.00",
       primaryCategoryId: null,
       courseId: null,

@@ -20,7 +20,6 @@ const beer: TillProduct = {
     hardwareUnit: null,
   },
   unitPrice: "2.00",
-  vatClass: "general",
   category: null,
   allergens: null,
 };

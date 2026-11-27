@@ -35,7 +35,6 @@ it("follows the basket scope and closes on same-id reload without changing a dis
         customerName: { es: "Plato" },
         pricingUnit: "each",
         unitPrice: "1.00",
-        vatClass: "general",
         category: null,
         allergens: null,
       },

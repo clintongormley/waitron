@@ -139,7 +139,6 @@ it.each<[number, number, "capped" | "page", number]>([
       dietaryDeclarations: [],
       pricingUnit: "each",
       unitPrice: "2.00",
-      vatClass: "reduced",
       available: true,
       ordering: "public",
       allergens: null,

@@ -61,7 +61,6 @@ const product = (
   dietaryDeclarations: [],
   pricingUnit: "each",
   unitPrice: "2.00",
-  vatClass: "reduced",
   takeawayVatRate: "10.00",
   available: true,
   ordering: "public",
@@ -1495,7 +1494,6 @@ it("searches a folder's own name and a product's variant names, never a product'
             effective: {
               allergens: null,
               unitPrice: "2.00",
-              vatClass: "reduced",
               takeawayVatRate: "10.00",
               primaryCategoryId: "d",
               courseId: null,
@@ -2111,7 +2109,6 @@ it("keeps a variant match on its parent until the manager expands it", async () 
             effective: {
               allergens: null,
               unitPrice: "2.00",
-              vatClass: "reduced",
               takeawayVatRate: "10.00",
               primaryCategoryId: "d",
               courseId: null,
@@ -2680,7 +2677,6 @@ it("selects folders and products but never variants", async () => {
             effective: {
               allergens: {},
               unitPrice: "2.00",
-              vatClass: "reduced",
               takeawayVatRate: "10.00",
               primaryCategoryId: "d",
               courseId: null,
@@ -5186,7 +5182,6 @@ it("A462 Products root reopening leaves product variants closed", async () => {
             effective: {
               allergens: null,
               unitPrice: "2.00",
-              vatClass: "reduced",
               takeawayVatRate: "10.00",
               primaryCategoryId: "d",
               courseId: null,
@@ -5508,7 +5503,6 @@ it("names active descendant and variant extras only when deleting folder content
       effective: {
         allergens: null,
         unitPrice: "2.00",
-        vatClass: "reduced",
         takeawayVatRate: "10.00",
         primaryCategoryId: "b",
         courseId: null,
@@ -5528,7 +5522,6 @@ it("names active descendant and variant extras only when deleting folder content
       effective: {
         allergens: null,
         unitPrice: "2.00",
-        vatClass: "reduced",
         takeawayVatRate: "10.00",
         primaryCategoryId: "b",
         courseId: null,

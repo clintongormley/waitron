@@ -40,7 +40,6 @@ describe("placeFor: the first order", () => {
       name: "Main",
       courseId: "mains",
       unitPrice: "2.00",
-      vatClass: "general",
       pricingUnit: "each",
       category: null,
       allergens: null,

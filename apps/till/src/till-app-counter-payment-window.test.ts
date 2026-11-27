@@ -38,7 +38,6 @@ const product = {
   name: "Lunch",
   pricingUnit: "each" as const,
   unitPrice: "30.00",
-  vatClass: "general" as const,
   category: null,
   allergens: null,
 };
@@ -1299,8 +1298,6 @@ it.each([
       customerName: null,
       kitchenName: null,
       unit: each,
-      vatClass: "general",
-      takeawayVatClass: "general",
       category: "Other",
       allergens: null,
       diet: null,

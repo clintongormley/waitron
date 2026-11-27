@@ -45,7 +45,6 @@ describe.each(["light", "dark"] as const)("product nutrition (%s)", (theme) => {
         inherited: {
           name: "House bread",
           unitPrice: "3.00",
-          vatClass: "reduced",
           takeawayVatRate: "10.00",
           unitId: null,
           primaryCategoryId: null,

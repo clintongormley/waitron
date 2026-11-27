@@ -4746,7 +4746,6 @@ describe("the document choice on a handheld", () => {
       name: "Beer",
       pricingUnit: "each",
       unitPrice: "3.00",
-      vatClass: "general",
       category: null,
       allergens: null,
     };
@@ -7280,7 +7279,6 @@ describe("a parked counter bill from Find a bill, on a device with no counter sc
     name: "Caña",
     pricingUnit: "each" as const,
     unitPrice: "9.90",
-    vatClass: "general",
     category: null,
     allergens: null,
   };

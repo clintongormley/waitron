@@ -30,7 +30,6 @@ const coffee: TillProduct = {
     hardwareUnit: null,
   },
   unitPrice: "1.50",
-  vatClass: "general",
   category: null,
   allergens: null,
 };
@@ -50,7 +49,6 @@ const ham: TillProduct = {
     hardwareUnit: "kg",
   },
   unitPrice: "10.00",
-  vatClass: "reduced",
   category: "charcutería",
   allergens: null,
 };

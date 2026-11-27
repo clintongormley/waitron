@@ -37,7 +37,6 @@ const product: ProductEditorDraft = {
   active: true,
   available: true,
   ordering: "public",
-  vatClass: "reduced",
   takeawayVatRate: "10.00",
   variants: [],
   primaryCategoryId: null,
@@ -50,7 +49,6 @@ const product: ProductEditorDraft = {
 const parent = {
   name: "Bread",
   unitPrice: "3.00",
-  vatClass: "reduced" as const,
   takeawayVatRate: "10.00",
   unitId: null,
   primaryCategoryId: null,

@@ -18,7 +18,6 @@ const coffee: TillProduct = {
     hardwareUnit: null,
   },
   unitPrice: "1.50",
-  vatClass: "general",
   category: null,
   allergens: null,
 };

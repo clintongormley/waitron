@@ -53,7 +53,6 @@ function product(overrides: Partial<Product> = {}): Product {
     dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "1.50",
-    vatClass: "reduced",
     takeawayVatRate: "10.00",
     active: true,
     available: true,
@@ -2355,7 +2354,6 @@ function variant(name: string, flags: { active: boolean; available: boolean }) {
     effective: {
       allergens: null,
       unitPrice: "4.00",
-      vatClass: "general" as const,
       takeawayVatRate: "21.00",
       primaryCategoryId: null,
       courseId: null,

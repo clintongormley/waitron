@@ -18,7 +18,6 @@ const base: TillProduct = {
   customerName: { en: "Customer soup" },
   kitchenName: "Kitchen soup",
   unitPrice: "4.00",
-  vatClass: "general",
   category: null,
   allergens: null,
 };

@@ -38,7 +38,6 @@ function lunch(): MenuDocument {
       image: null,
       unitPrice: "2.00",
       menuPrice: null,
-      vatClass: "reduced",
     } as FrozenOfferVariant,
   ];
   document.offers["mi-soup"]!.image = "media:old";
@@ -58,7 +57,6 @@ function lunch(): MenuDocument {
           customerName: null,
           kitchenName: null,
           price: "1.00",
-          vatClass: "reduced",
           image: null,
         } as FrozenExtraItem,
       ],

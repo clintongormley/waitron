@@ -22,7 +22,6 @@ const dish: TillProduct = {
   available: true,
   unitPrice: "5.00",
   pricingUnit: "each",
-  vatClass: "general",
   category: null,
   allergens: null,
 };

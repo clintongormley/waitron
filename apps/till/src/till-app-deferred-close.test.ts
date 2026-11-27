@@ -125,7 +125,6 @@ function addWater(el: TillApp): void {
       name: "Water",
       pricingUnit: "each",
       unitPrice: "1.50",
-      vatClass: "general",
       category: null,
       allergens: null,
     },
@@ -711,7 +710,6 @@ const lunch = {
   name: "Lunch",
   pricingUnit: "each" as const,
   unitPrice: "30.00",
-  vatClass: "general" as const,
   category: null,
   allergens: null,
 };

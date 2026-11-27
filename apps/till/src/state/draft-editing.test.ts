@@ -17,7 +17,6 @@ const salad: TillProduct = {
   name: "Salad",
   pricingUnit: "each",
   unitPrice: "4.00",
-  vatClass: "general",
   category: null,
   allergens: null,
 };

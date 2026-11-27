@@ -25,7 +25,6 @@ for (const theme of ["light", "dark"] as const)
               kitchenName: "Kitchen soup",
               unitPrice: "123.45",
               pricingUnit: state === "fractional" ? "weight" : "each",
-              vatClass: "general",
               category: null,
               allergens: { milk: {} },
               dietaryDeclarations: ["vegetarian"],

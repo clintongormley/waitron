@@ -20,7 +20,6 @@ const ham: TillProduct = {
     hardwareUnit: "kg",
   },
   unitPrice: "10.00",
-  vatClass: "reduced",
   category: "charcutería",
   allergens: null,
 };

@@ -59,8 +59,6 @@ function offeredItem(
     customerName: { es: `${staff} carta`, en: `${staff} menu` },
     kitchenName: `${staff} KDS`,
     price,
-    vatClass: "general" as const,
-    takeawayVatClass: "general" as const,
     maxQuantity,
     preselected,
     addAllergens: null,
@@ -123,8 +121,6 @@ const breadList: OfferedModifier = {
 const base = {
   menuItemId: "offer-dish",
   pricingUnit: "each" as const,
-  vatClass: "general" as const,
-  takeawayVatClass: "general" as const,
   category: null,
   allergens: null,
 };
@@ -145,7 +141,6 @@ const resume: TillProduct = {
   name: "Ham",
   customerName: { es: "Ham carta" },
   pricingUnit: "weight",
-  vatClass: "reduced",
   unitPrice: "10.00",
 };
 
@@ -851,8 +846,6 @@ describe("till-modifier-picker", () => {
         hardwareUnit: null,
       },
       pricingUnit: "weight" as const,
-      vatClass: "reduced" as const,
-      takeawayVatClass: "reduced" as const,
       category: `${id} category`,
       allergens: { sulphites: {} },
       diet: { vegan: "yes" as const, vegetarian: "yes" as const, contains: [] },

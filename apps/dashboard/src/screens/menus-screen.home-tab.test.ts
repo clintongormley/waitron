@@ -53,7 +53,6 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
     dietaryDeclarations: [],
     pricingUnit: "each",
     unitPrice: "2.00",
-    vatClass: "general",
     takeawayVatRate: "21.00",
     active: true,
     available: true,

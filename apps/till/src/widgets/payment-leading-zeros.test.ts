@@ -254,7 +254,6 @@ describe.each(["en", "es"] as const)("leading-zero amounts in %s", (locale) => {
           hardwareUnit: null,
         },
         unitPrice: "5.00",
-        vatClass: "general",
         category: null,
         allergens: null,
       };
