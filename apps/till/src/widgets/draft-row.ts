@@ -157,7 +157,7 @@ export function draftRow(view: DraftRowView): TemplateResult {
   return html`<slot name=${`before-${index}`}></slot>
     <div
       class=${ended ? "entry draft-row period-ended-entry" : "entry draft-row"}
-      part="entry"
+      part=${view.opened ? "entry opened-entry" : "entry"}
       ?data-last-added=${view.lastAdded}
       ?data-open=${view.opened}
       ?data-draft-dragging=${view.dragging}

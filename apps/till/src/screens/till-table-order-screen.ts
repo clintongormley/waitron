@@ -1371,6 +1371,12 @@ export class TillTableOrderScreen extends LitElement {
       .round-bar till-basket::part(entry) {
         scroll-margin-block-end: calc(var(--draft-bar-size, 0px) + var(--order-dock-size, 0px));
       }
+      /* An opened row's box keeps a space clear above the bar. */
+      .round-bar till-basket::part(opened-entry) {
+        scroll-margin-block-end: calc(
+          var(--draft-bar-size, 0px) + var(--order-dock-size, 0px) + var(--wt-space-2)
+        );
+      }
 
       .action-panel {
         scroll-margin-block-end: var(--order-dock-size, 0px);

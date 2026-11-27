@@ -430,6 +430,14 @@ describe("opening a row near the window's foot", () => {
   const barTop = (el: TillTableOrderScreen) =>
     el.shadowRoot!.querySelector(".draft-bar")!.getBoundingClientRect().top;
 
+  /** The box's foot stops --wt-space-2 above the bar's top, within a pixel's rounding. */
+  function expectGapAboveBar(el: TillTableOrderScreen, box: DOMRect, top: number) {
+    const gap = Number.parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-2"));
+    expect(gap).toBeGreaterThan(0);
+    expect(top - box.bottom).toBeGreaterThanOrEqual(gap - 0.5);
+    expect(top - box.bottom).toBeLessThanOrEqual(gap + 1.5);
+  }
+
   /** Scrolls the list so the row's line ends just above the bar, as the last one showing. */
   async function lastShowing(el: TillTableOrderScreen, host: HTMLElement, index: number) {
     // The bar's top moved after a first scroll here, so a second pass measures it again.
@@ -446,7 +454,7 @@ describe("opening a row near the window's foot", () => {
     [390, 700],
     [844, 390],
   ])(
-    "at %i × %i the opened box's foot, Note included, stops just above the bar",
+    "at %i × %i the opened box's foot, Note included, stops a space above the bar",
     async (width, height) => {
       const { el, host } = await inWindow(width, height);
       const index = 8;
@@ -457,8 +465,7 @@ describe("opening a row near the window's foot", () => {
       const box = row(el, index).closest(".entry")!.getBoundingClientRect();
       const top = barTop(el);
       expect(host.scrollTop).toBeGreaterThan(before);
-      expect(box.bottom).toBeLessThanOrEqual(top + 0.5);
-      expect(box.bottom).toBeGreaterThanOrEqual(top - 1.5);
+      expectGapAboveBar(el, box, top);
       expect(note(el, index).getBoundingClientRect().bottom).toBeLessThanOrEqual(top);
     },
   );
@@ -473,8 +480,7 @@ describe("opening a row near the window's foot", () => {
     const top = barTop(el);
     expect(box.height).toBeGreaterThan(top - host.getBoundingClientRect().top);
     expect(box.top).toBeLessThan(host.getBoundingClientRect().top);
-    expect(box.bottom).toBeLessThanOrEqual(top + 0.5);
-    expect(box.bottom).toBeGreaterThanOrEqual(top - 1.5);
+    expectGapAboveBar(el, box, top);
     expect(note(el, 8).getBoundingClientRect().bottom).toBeLessThanOrEqual(top);
   });
 
@@ -482,7 +488,7 @@ describe("opening a row near the window's foot", () => {
     [390, 844, 844, 390],
     [844, 390, 390, 844],
   ])(
-    "on a handheld turned from %i × %i to %i × %i, the opened box's foot stops just above the bar",
+    "on a handheld turned from %i × %i to %i × %i, the opened box's foot stops a space above the bar",
     async (fromWidth, fromHeight, toWidth, toHeight) => {
       await page.viewport(fromWidth, fromHeight);
       const draft = new DraftStore();
@@ -517,8 +523,7 @@ describe("opening a row near the window's foot", () => {
       await scrollSettled(host);
       const box = row(el, 8).closest(".entry")!.getBoundingClientRect();
       const top = barTop(el);
-      expect(box.bottom).toBeLessThanOrEqual(top + 0.5);
-      expect(box.bottom).toBeGreaterThanOrEqual(top - 1.5);
+      expectGapAboveBar(el, box, top);
     },
   );
 
