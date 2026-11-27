@@ -108,7 +108,7 @@ function steakLines(id: string, lineNo: number, kind: Kind): TabLine[] {
 }
 
 /** `count` identical one-unit steaks (two unless said), each with two limes, shown as one
- * "Steak ×count" row, with that row's sheet open. */
+ * "count Steak" row, with that row's sheet open. */
 async function openGrouped(kind: Kind, over: Partial<TillTableOrderScreen> = {}, count = 2) {
   const numbers = Array.from({ length: count }, (_, index) => count - index);
   const rows = numbers.map((lineNo) => steakRow(`s-${lineNo}`, lineNo, kind));
@@ -131,17 +131,10 @@ async function openGrouped(kind: Kind, over: Partial<TillTableOrderScreen> = {},
   await resized(el);
   const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
   await panel.updateComplete;
-  for (const name of ["sent", kind]) {
-    const toggle = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${name}-toggle]`);
-    if (toggle?.getAttribute("aria-expanded") === "false") {
-      await userEvent.click(toggle);
-      await panel.updateComplete;
-    }
-  }
-  const shown = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-line="s-1"] .what`)!;
-  expect(shown.textContent!.replace(/\s+/g, " ").trim()).toMatch(
-    new RegExp(`^Steak ×${count} Lime ×`),
-  );
+  const shown = panel.shadowRoot!.querySelector<HTMLElement>(`[data-${kind}-line="s-1"]`)!;
+  expect(shown.querySelector(".row-qty")!.textContent!.trim()).toBe(String(count));
+  expect(shown.querySelector(".row-name")!.textContent!.trim()).toBe("Steak");
+  expect(shown.querySelector(".row-more")!.textContent!.trim()).toMatch(/^Lime ×2/);
   await userEvent.click(panel.shadowRoot!.querySelector<HTMLElement>('[data-sent-info="s-1"]')!);
   await el.updateComplete;
   return el;
