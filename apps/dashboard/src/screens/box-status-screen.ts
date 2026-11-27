@@ -26,6 +26,7 @@ import { goToLabel, wholeTimes, wholeTimesStyles } from "../widgets/alert-format
 import { guideHref } from "../help-guide.js";
 import "./upgrade-settings-dialog.js";
 import { renderShutdownPauseActions } from "./box-shutdown-actions.js";
+import { renderShutdownStatus } from "./box-shutdown-status.js";
 import { wifiRequestError } from "./box-wifi-dialog.js";
 import {
   boxStatusRows,
@@ -1117,7 +1118,6 @@ export class BoxStatusScreen extends LitElement {
     )
       return nothing;
     const phase = status.phase;
-    const powerOff = phase === "ready" ? status.powerOff : undefined;
     const shutdownLabel = status.paired
       ? "box_status.shutdown.check_and_shut_down"
       : "box_status.shutdown.title";
@@ -1125,36 +1125,7 @@ export class BoxStatusScreen extends LitElement {
     const file = typeof this.shutdownConfirmation === "object" ? this.shutdownConfirmation : null;
     return html`<section class="box-restart">
       <h2>${t("box_status.shutdown.title")}</h2>
-      <p role="status" data-test="box-shutdown-status">
-        ${
-          powerOff !== undefined
-            ? t(`box_status.shutdown.power_off_${powerOff}`)
-            : phase === "ready" && status.checked === false
-              ? t("box_status.shutdown.unchecked")
-              : phase === "idle"
-                ? ""
-                : t(
-                    phase === "checking" && status.paired
-                      ? "box_status.shutdown.checking_pair"
-                      : phase === "checking" && status.directBucket
-                        ? "box_status.shutdown.checking_bucket"
-                        : `box_status.shutdown.${phase}`,
-                  )
-        }
-        ${
-          powerOff !== undefined && phase === "ready" && status.checked === false
-            ? t("box_status.shutdown.older_backup")
-            : nothing
-        }
-        ${(phase === "paused" || phase === "download") && status.errorCode ? codeMessage(status.errorCode) : nothing}
-        ${
-          phase === "paused" && status.failedDestination !== undefined
-            ? fill("box_status.shutdown.failed_destination", {
-                destination: status.failedDestination,
-              })
-            : nothing
-        }
-      </p>
+      ${renderShutdownStatus(status)}
       ${
         phase === "idle"
           ? html`<wt-button

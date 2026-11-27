@@ -4864,11 +4864,11 @@ export const en = {
     "You can switch off the box now. A restore may need an older backup.",
   "box_status.shutdown.ready": "Safe to switch off",
   "box_status.shutdown.may_disconnect":
-    "This page may lose its connection when Waitron switches off the box.",
+    "This page may lose its connection if the box switches off automatically.",
   "box_status.shutdown.power_off_requesting": "Waitron is asking the box to switch off.",
   "box_status.shutdown.power_off_requested": "Waitron asked the box to switch off.",
-  "box_status.shutdown.power_off_unconfirmed":
-    "Waitron could not confirm automatic power-off. If the box is still on, switch it off manually.",
+  "box_status.shutdown.power_off_unconfirmed": "Waitron could not confirm automatic power-off.",
+  "box_status.shutdown.power_off_manual": "If the box stays on, switch it off manually.",
   "box_status.shutdown.older_backup": "A restore may need an older backup.",
   "box_status.shutdown.cancel": "Cancel and resume work",
   "box_status.restart.title": "Restart the box",
@@ -9857,11 +9857,12 @@ export const es: Record<StringKey, string> = {
     "Ya puedes apagar el servidor. Para restaurar, quizá necesites una copia anterior.",
   "box_status.shutdown.ready": "Ya puedes apagar el servidor",
   "box_status.shutdown.may_disconnect":
-    "Esta página puede perder la conexión cuando Waitron apague el servidor.",
+    "Esta página puede perder la conexión si el servidor se apaga automáticamente.",
   "box_status.shutdown.power_off_requesting": "Waitron está solicitando el apagado del servidor.",
   "box_status.shutdown.power_off_requested": "Waitron ha solicitado el apagado del servidor.",
   "box_status.shutdown.power_off_unconfirmed":
-    "Waitron no ha podido confirmar el apagado automático. Si el servidor sigue encendido, apágalo manualmente.",
+    "Waitron no ha podido confirmar el apagado automático.",
+  "box_status.shutdown.power_off_manual": "Si el servidor sigue encendido, apágalo manualmente.",
   "box_status.shutdown.older_backup": "Para restaurar, quizá necesites una copia anterior.",
   "box_status.shutdown.cancel": "Cancelar y reanudar el trabajo",
   "box_status.restart.title": "Reiniciar el servidor",

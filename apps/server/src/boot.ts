@@ -4923,6 +4923,7 @@ async function bootServer(
 
   if (!fenced)
     started.markRestart = async () => {
+      shutdown.beginClose();
       if (
         !handoverGate.isClosed() &&
         shutdown.status().phase !== "ready" &&

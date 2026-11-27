@@ -156,7 +156,9 @@ it.each(["checked", "download", "unchecked", "save-failed"] as const)(
         await vi.waitFor(() => expect(powerOff.mock.calls).toEqual([[actor]]));
         expect(shutdown.status()).toMatchObject({ phase: "ready", powerOff: "requesting" });
         if (kind === "download") expect(removed).toHaveBeenCalledOnce();
-        await shutdown.close();
+        const closed = vi.fn();
+        void shutdown.close().then(closed);
+        await vi.waitFor(() => expect(closed).toHaveBeenCalledOnce());
         hostReply.resolve();
         await vi.waitFor(() =>
           expect(shutdown.status()).toMatchObject({ phase: "ready", powerOff: "requested" }),
@@ -170,6 +172,28 @@ it.each(["checked", "download", "unchecked", "save-failed"] as const)(
     }
   },
 );
+
+it("does not power off the appliance when the server is already stopping", async () => {
+  const saving = signalGate();
+  const saved = signalGate();
+  const powerOff = vi.fn(async () => ({ available: true }) as const);
+  const shutdown = createAdminShutdown({
+    check: async () => {},
+    async save() {
+      saving.resolve();
+      await saved.promise;
+    },
+    clear: async () => {},
+    powerOff,
+  });
+  shutdown.start({ source: "person", person: "00000000-0000-4000-8000-000000000111" });
+  await saving.promise;
+  const closing = shutdown.close();
+  saved.resolve();
+  await closing;
+  expect(powerOff).not.toHaveBeenCalled();
+  expect(shutdown.status()).toEqual({ phase: "ready" });
+});
 
 it.each([
   { available: false, reason: "missing", detail: "ENOENT" },

@@ -14,7 +14,8 @@ still gives the manual instruction. Spare shutdown, Cloud backup and handover st
    one call after the existing durable hold write, archive cleanup and transition to `ready`.
    This order lets a host stop signal see the completed shutdown. Start the bounded host call without
    adding it to the promise `close()` waits for. Keep the saved hold and trading pause through every
-   host outcome. A failed check or hold write never requests power-off.
+   host outcome. Skip power-off if the server is already stopping. A failed check or hold write
+   never requests power-off.
 2. **Host request.** Pass the original `hostClient` from `boot.ts` through `admin-shutdown-duties.ts`.
    Keep the clock wrapper for clock work. Add optional `powerOff(actor: PersonActor)` in
    `box-host-client.ts`, using the bounded fixed-line exchange with a two-second reply limit and
@@ -43,11 +44,12 @@ still gives the manual instruction. Spare shutdown, Cloud backup and handover st
 5. **Appliance proof before landing.** Reserve `waitron-spare.local` with the owner there to turn
    it back on. Build the PR head into a separate container with its own state, logs and backup
    folders. Use a loopback HTTPS port through an SSH tunnel and a synthetic preproduction venue.
-   Start a temporary copy of the host socket unit with its own path and the candidate handler.
-   Bind only this socket into the candidate container. Leave the spare's normal app, data and host
-   unit in place. Record the browser message, the host request and physical power-off. After power-on,
-   collect the stop logs, check the eight-second deadline and start the candidate with the same
-   test state. Verify a refused sale before **Carry on**, then complete one. Remove the candidate
-   container and runtime units, and confirm the original spare answers at its usual address.
+   Start a temporary host socket that forwards only `clock.status` and `poweroff` to the candidate
+   handler. Bind only this socket into the candidate container and disable its automatic restart.
+   Check for a paired main box before the test so the slot accounts for the spare's absence.
+   Record the browser message, the host request and physical power-off. After power-on, collect the
+   stop logs and check the eight-second deadline. Recreate the test socket and start the candidate
+   with the same test state. Verify a refused sale before **Carry on**, then complete one. Remove
+   the candidate container and runtime units and confirm the spare answers at its usual address.
 
 Estimate 90–130 product and 100–160 test lines. One PR within three active hours.

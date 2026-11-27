@@ -3120,6 +3120,7 @@ describe("waitron.sh install and the box's host service", () => {
     );
     expect(env(sb)).toMatch(/^WAITRON_BOX_SOCKET_DIR=\/run\/waitron-box$/m);
     expect(r.stdout).toContain("installed the box's clock service");
+    expect(r.stdout).toContain("Shut down this box can switch off this machine");
   });
 
   it("uses a waitron-box group that already has number 10001", () => {

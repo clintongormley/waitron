@@ -174,7 +174,9 @@ it("shows that the box can be switched off only when the shutdown check is ready
   expect(text(confirm.closest("wt-dialog"))).toContain(
     "If you haven’t set a password, set one in Account settings before you continue.",
   );
-  expect(text(confirm.closest("wt-dialog"))).toContain("This page may lose its connection");
+  expect(text(confirm.closest("wt-dialog"))).toContain(
+    "This page may lose its connection if the box switches off automatically.",
+  );
   const ready = t("box_status.shutdown.ready");
   expect(text(el.shadowRoot as unknown as Element)).not.toContain(ready);
   await userEvent.click(confirm);
@@ -186,11 +188,17 @@ it("shows that the box can be switched off only when the shutdown check is ready
 });
 
 it.each([
-  ["requesting", "Waitron is asking the box to switch off."],
-  ["requested", "Waitron asked the box to switch off."],
+  [
+    "requesting",
+    "Waitron is asking the box to switch off. If the box stays on, switch it off manually.",
+  ],
+  [
+    "requested",
+    "Waitron asked the box to switch off. If the box stays on, switch it off manually.",
+  ],
   [
     "unconfirmed",
-    "Waitron could not confirm automatic power-off. If the box is still on, switch it off manually.",
+    "Waitron could not confirm automatic power-off. If the box stays on, switch it off manually.",
   ],
 ] as const)(
   "shows the %s power-off status and keeps it after a lost health read",

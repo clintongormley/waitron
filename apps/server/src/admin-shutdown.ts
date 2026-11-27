@@ -123,7 +123,7 @@ export function createAdminShutdown(deps: {
     current: Attempt,
     ready: Extract<ShutdownStatus, { phase: "ready" }>,
   ) {
-    if (current.actor === undefined || deps.powerOff === undefined) return;
+    if (closing || current.actor === undefined || deps.powerOff === undefined) return;
     current.state = { ...ready, powerOff: "requesting" };
     try {
       const answer = await deps.powerOff(current.actor);
@@ -236,6 +236,10 @@ export function createAdminShutdown(deps: {
         }
       }
     })();
+  }
+
+  function beginClose(): void {
+    closing = true;
   }
 
   function pendingDownload(name: string) {
@@ -362,8 +366,9 @@ export function createAdminShutdown(deps: {
       });
       return current.cancelling;
     },
+    beginClose,
     async close(): Promise<void> {
-      closing = true;
+      beginClose();
       attempt?.controller.abort();
       await attempt?.settled;
       await attempt?.cancelling;
