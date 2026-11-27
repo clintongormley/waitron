@@ -57,7 +57,7 @@ export function createAdminShutdown(deps: {
     markMayExist: boolean;
     archive?: ShutdownArchive;
     delivered: boolean;
-    transfer?: Promise<void>;
+    transfer?: { abort: () => void; settled: Promise<void> };
     cancelling?: Promise<void>;
   };
   let attempt: Attempt | undefined;
@@ -140,8 +140,7 @@ export function createAdminShutdown(deps: {
       closing ||
       current?.state.phase !== "download" ||
       archive?.name !== name ||
-      current.controller.signal.aborted ||
-      current.transfer !== undefined
+      current.controller.signal.aborted
     )
       throw new AppError("box.shutdown_in_progress", {});
     return { current, archive };
@@ -171,11 +170,20 @@ export function createAdminShutdown(deps: {
         throw new AppError("box.shutdown_in_progress", {});
       run(current, decision === "retry");
     },
-    beginDownload(name: string) {
+    async beginDownload(name: string) {
       const { current, archive } = pendingDownload(name);
-      const { signal } = current.controller;
+      const previous = current.transfer;
+      if (previous !== undefined) {
+        previous.abort();
+        await previous.settled;
+        if (pendingDownload(name).current !== current || current.transfer !== undefined)
+          throw new AppError("box.shutdown_in_progress", {});
+      }
+      const controller = new AbortController();
+      const signal = AbortSignal.any([current.controller.signal, controller.signal]);
       let settle!: () => void;
-      const transfer = new Promise<void>((resolve) => (settle = resolve));
+      const settled = new Promise<void>((resolve) => (settle = resolve));
+      const transfer = { abort: () => controller.abort(), settled };
       current.transfer = transfer;
       return {
         name: archive.name,
@@ -195,7 +203,8 @@ export function createAdminShutdown(deps: {
     },
     confirmDownload(name: string): void {
       const { current } = pendingDownload(name);
-      if (!current.delivered) throw new AppError("box.shutdown_in_progress", {});
+      if (!current.delivered || current.transfer !== undefined)
+        throw new AppError("box.shutdown_in_progress", {});
       run(current, false);
     },
     async cancel(): Promise<void> {
@@ -207,7 +216,7 @@ export function createAdminShutdown(deps: {
       current.controller.abort();
       current.cancelling = (async () => {
         await current.settled;
-        await current.transfer;
+        await current.transfer?.settled;
         if (closing) return;
         await current.archive?.remove();
         current.archive = undefined;
@@ -225,7 +234,7 @@ export function createAdminShutdown(deps: {
       attempt?.controller.abort();
       await attempt?.settled;
       await attempt?.cancelling;
-      await attempt?.transfer;
+      await attempt?.transfer?.settled;
       await attempt?.archive?.remove();
     },
   };

@@ -178,7 +178,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         requireNodeOperationHttps(c);
         await authorize(c);
         if (c.req.raw.method === "HEAD") return c.body(null, 405, { Allow: "GET" });
-        return streamShutdownDownload(c, shutdown.beginDownload(c.req.param("name")));
+        return streamShutdownDownload(c, await shutdown.beginDownload(c.req.param("name")));
       }),
     );
     app.patch(SHUTDOWN_PATH, (c) =>

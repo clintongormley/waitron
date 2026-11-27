@@ -8,19 +8,20 @@ import "./errors.js";
 
 export function streamShutdownDownload(
   c: Context,
-  download: ReturnType<AdminShutdown["beginDownload"]>,
+  download: Awaited<ReturnType<AdminShutdown["beginDownload"]>>,
 ): Response {
   const outgoing = outgoingOf(c);
-  if (!outgoing || outgoing.destroyed) {
+  const signal = AbortSignal.any([c.req.raw.signal, download.signal]);
+  if (!outgoing || outgoing.destroyed || signal.aborted) {
     download.finish(false);
     throw new AppError("box.shutdown_in_progress", {});
   }
-  const signal = AbortSignal.any([c.req.raw.signal, download.signal]);
-  const reader = createReadStream(download.path, { signal });
+  const reader = createReadStream(download.path);
   const body = Readable.toWeb(reader, { strategy: { highWaterMark: 0 } });
   function close(complete: boolean): void {
     outgoing!.off("finish", sent);
     outgoing!.off("close", interrupted);
+    signal.removeEventListener("abort", aborted);
     if (reader.closed) download.finish(complete);
     else {
       reader.once("close", () => download.finish(complete));
@@ -34,6 +35,11 @@ export function streamShutdownDownload(
   function interrupted(): void {
     close(false);
   }
+  function aborted(): void {
+    interrupted();
+    outgoing!.destroy();
+  }
+  signal.addEventListener("abort", aborted, { once: true });
   outgoing.once("finish", sent);
   outgoing.once("close", interrupted);
   reader.once("close", () => {

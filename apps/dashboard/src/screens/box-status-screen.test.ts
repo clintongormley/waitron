@@ -190,6 +190,17 @@ it("requires confirmation before switching off with an unchecked backup", async 
   );
 });
 
+it("mentions both restore keys before pausing work for a downloadable backup", async () => {
+  const { el } = await mount(
+    stubApi({}, health({ shutdown: { phase: "idle", available: true, downloadOnly: true } })),
+  );
+  el.canCheckClock = true;
+  await el.updateComplete;
+  await userEvent.click(q(el, '[data-test="box-shutdown"]')!);
+  const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
+  expect(text(confirm.closest("wt-dialog"))).toContain("encryption key and master key");
+});
+
 it("shows the checked download and asks the administrator to confirm the named file and keys", async () => {
   const name = "waitron-final.backup.enc";
   const bytes = 1234;

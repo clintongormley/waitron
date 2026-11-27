@@ -16,6 +16,7 @@ import { AppError } from "@waitron/shared";
 import { pointerKey, signPointer } from "@waitron/stream";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import { eq } from "drizzle-orm";
+import * as fs from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, stat, truncate, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { request as httpsRequest } from "node:https";
@@ -64,6 +65,11 @@ vi.mock("@hono/node-server", async () => {
   return ephemeralHttpMock();
 });
 
+vi.mock("node:fs", async (original) => {
+  const fs = await original<typeof import("node:fs")>();
+  return { ...fs, createReadStream: vi.fn(fs.createReadStream) };
+});
+
 const { startServer, startConfiguredServer, httpPort } = ephemeralServerFixture();
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const heartbeatAt = "2026-10-22T09:31:00.000Z";
@@ -71,6 +77,8 @@ const heartbeatAt = "2026-10-22T09:31:00.000Z";
 it.each([
   ["drains the scheduled backup and writes only the restart mark if stopped mid-check", "restart"],
   ["refuses checked shutdown while streaming is configured", "streaming"],
+  ["refuses checked shutdown when saved backups are disabled", "disabled"],
+  ["refuses checked shutdown without a destination or backup key", "no-key"],
   ["records and emails a failed final backup while sales stay paused", "failed"],
 ] as const)("%s", async (_description, scenario) => {
   const { cfg } = await setupVenue(suite.db);
@@ -134,22 +142,23 @@ it.each([
           stateDir = env.WAITRON_STATE_DIR;
           const dir = join(stateDir, "copies");
           await mkdir(dir);
-          await holdRecoveryKey(stateDir);
+          if (scenario !== "no-key") await holdRecoveryKey(stateDir);
           const ring = loadKeyRing(TRADING_BOOT_KEY_ENV);
           await withTransaction(suite.db, async (tx) => {
             await setFreshManagementSignIn(tx, token);
-            await writeArchiveSettings(
-              tx,
-              ring,
-              {
-                enabled: true,
-                destinations: [{ kind: "local-fs", id: "folder", dir }],
-                schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
-                retention: { count: 7, days: 30 },
-                destinationTimeoutMs: 15 * 60 * 1000,
-              },
-              null,
-            );
+            if (scenario !== "no-key")
+              await writeArchiveSettings(
+                tx,
+                ring,
+                {
+                  enabled: scenario !== "disabled",
+                  destinations: [{ kind: "local-fs", id: "folder", dir }],
+                  schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
+                  retention: { count: 7, days: 30 },
+                  destinationTimeoutMs: 15 * 60 * 1000,
+                },
+                null,
+              );
             if (smtp) {
               await saveSmtpForTest(tx, ring, {
                 url: `smtp://127.0.0.1:${smtp.port}`,
@@ -194,7 +203,7 @@ it.each([
         httpPort,
       },
       async (base) => {
-        await scheduled;
+        if (scenario !== "disabled" && scenario !== "no-key") await scheduled;
         const begin = (session: string) =>
           app.request(
             "https://box.example/api/box/shutdown",
@@ -210,11 +219,17 @@ it.each([
           error: { code: "management_session.proof_required" },
         });
         const response = await begin(token);
-        if (scenario === "streaming") {
+        if (scenario === "streaming" || scenario === "disabled" || scenario === "no-key") {
           releaseScheduled();
           expect(response.status).toBe(409);
           expect(await response.json()).toMatchObject({
             error: { code: "box.shutdown_unavailable" },
+          });
+          const view = await app.request("/api/box/health", {
+            headers: { cookie: `waitron_management_session=${token}` },
+          });
+          expect(await view.json()).toMatchObject({
+            shutdown: { available: false, phase: "idle" },
           });
           return;
         }
@@ -355,6 +370,8 @@ it("holds the next start only after a complete shutdown download and confirmatio
   };
   const headers = { cookie: `waitron_management_session=${token}` };
   const capture = vi.spyOn(BackupSupervisor.prototype, "runForShutdownDownload");
+  const readers = vi.mocked(fs.createReadStream);
+  readers.mockClear();
   capture.mockResolvedValue({ name, path, bytes, remove: () => rm(path, { force: true }) });
   const start = async () => {
     const held = await retainHttpListener();
@@ -409,6 +426,12 @@ it("holds the next start only after a complete shutdown download and confirmatio
       request.once("error", reject);
       request.end();
     });
+    const interruptedReader = readers.mock.calls.findIndex(([source]) => source === path);
+    expect(interruptedReader).toBeGreaterThanOrEqual(0);
+    await vi.waitFor(() =>
+      expect(readers.mock.results[interruptedReader]?.value.closed).toBe(true),
+    );
+    expect(await view()).toMatchObject({ shutdown: { phase: "download", delivered: false } });
     const incomplete = await confirm();
     expect(incomplete.status).toBe(409);
     expect(await incomplete.json()).toMatchObject({ error: { code: "box.shutdown_in_progress" } });

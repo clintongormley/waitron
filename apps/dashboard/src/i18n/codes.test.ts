@@ -19,6 +19,11 @@ it("explains that checking a backup needs free disk space", () => {
   expect(codeMessage("backup.staging_space_low", "es")).toContain("más espacio libre en disco");
 });
 
+it("explains when Setup cannot restore a backup from a downloaded file", () => {
+  expect(codeMessage("restore.archive_resource_limit", "en")).toContain("too large");
+  expect(codeMessage("restore.archive_resource_limit", "es")).toContain("demasiado grande");
+});
+
 it("names the deleted menu and menu list in the shared Spanish refusal", () => {
   const message = codeMessage("menu.deleted", "es");
   expect(message).toContain("esta carta o este menú");
