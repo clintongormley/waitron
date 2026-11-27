@@ -25,7 +25,7 @@ import { readReceiptLanguage } from "@waitron/menu";
 import type { TradingContext } from "./trading-context.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { receiptLines } from "./receipt-adjustments.js";
-import { correctiveLinesInPart } from "./corrective-lines-in-part.js";
+import { markGivenBackInPart } from "./corrective-lines-in-part.js";
 import { withPrintedParts } from "./printed-set-menu-parts.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { readReceiptGuests } from "./receipt-guests.js";
@@ -126,18 +126,9 @@ async function readDocument(
     })),
     saleId,
   );
-  const inPart =
-    sale.correctsSaleId === null || sale.replacesOriginal
-      ? new Set<string>()
-      : await correctiveLinesInPart(tx, dishes);
-  // `receiptLines` answers one row per entry of `dishes`, in order, then the advances.
   const lines = {
     ...answered,
-    lines: answered.lines.map((line, i) =>
-      dishes[i] !== undefined && inPart.has(dishes[i].id)
-        ? { ...line, givenBackInPart: true as const }
-        : line,
-    ),
+    lines: await markGivenBackInPart(tx, sale, dishes, answered.lines),
   };
   const filed = await backend.filedReceiptFor(tx, brandSaleId(saleId));
   const taxpayer = filed?.issuer === undefined ? await readTaxpayer(tx) : null;

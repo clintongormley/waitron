@@ -33,3 +33,21 @@ export async function correctiveLinesInPart(
       .map((row) => row.id),
   );
 }
+
+/**
+ * `lines`, one per entry of `dishes` in order and then the advances, with each line whose row
+ * `correctiveLinesInPart` answers marked `givenBackInPart`. An ordinary sale and a replacement
+ * answer `lines` unread.
+ */
+export async function markGivenBackInPart<Line extends { givenBackInPart?: true }>(
+  tx: Transaction,
+  sale: { correctsSaleId: string | null; replacesOriginal: boolean },
+  dishes: readonly CorrectiveRow[],
+  lines: readonly Line[],
+): Promise<Line[]> {
+  if (sale.correctsSaleId === null || sale.replacesOriginal) return [...lines];
+  const inPart = await correctiveLinesInPart(tx, dishes);
+  return lines.map((line, i) =>
+    dishes[i] !== undefined && inPart.has(dishes[i].id) ? { ...line, givenBackInPart: true } : line,
+  );
+}
