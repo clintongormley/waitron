@@ -438,6 +438,7 @@ import {
   stillToPay,
   billsSeen,
   storedInvoiceOf,
+  counterPaymentWindow,
 } from "./state/bill-state.js";
 import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
 import {
@@ -3233,12 +3234,7 @@ export class TillApp extends LitElement {
     onTick: (signal) => {
       if (this.#themeHash !== undefined) followVenueTheme(this.#themeHash);
       const tab = this.#activeTab();
-      if (
-        this.#inShell() &&
-        this.drill === undefined &&
-        tab !== undefined &&
-        this.#tabNeedsFloorData(tab)
-      )
+      if (this.#inShell() && this.drill === undefined && tab === "floor")
         void this.#refreshFloorZones();
       const zones = Promise.all([
         this.#readLiveDeviceZones(signal),
@@ -3481,6 +3477,7 @@ export class TillApp extends LitElement {
   /** The schedule screen leaves the operator out of the colleague picker. */
   @state() private operatorPersonId = "";
   @state() private staff: StaffMember[] = [];
+  @state() private showCounterFloor = false;
   @state() private counterOrderList: "parked" | "waiting" | null = null;
   @state() private heldOrders: HeldOrderSummary[] = [];
   @state() private counterWaiting: CounterWaitingOrder[] = [];
@@ -5973,12 +5970,7 @@ export class TillApp extends LitElement {
     this.#clockNeedsInitialRead = false;
     this.clockPage = false;
     const tab = this.#activeTab();
-    if (
-      this.#inShell() &&
-      !this.#floorLoaded &&
-      tab !== undefined &&
-      this.#tabNeedsFloorData(tab)
-    ) {
+    if (this.#inShell() && !this.#floorLoaded && tab === "floor") {
       const signIn = this.#signIns;
       const session = this.#operatorSession;
       const api = this.api;
@@ -6182,6 +6174,7 @@ export class TillApp extends LitElement {
       this.#counterDefaultMenuId,
     );
     if (retainedZone === undefined) this.#selectMenu(menuId);
+    this.showCounterFloor = false;
     this.counterOrderList = null;
     this.#selectFilters(EMPTY_MENU_FILTERS);
     this.operatorName = displayName;
@@ -6211,7 +6204,7 @@ export class TillApp extends LitElement {
       if (code !== undefined) void this.#pickUpSticker(code);
     });
     const firstTab = this.#homeScreen();
-    const landsOnFloor = firstTab !== undefined && this.#tabNeedsFloorData(firstTab);
+    const landsOnFloor = firstTab === "floor";
     if (landsOnFloor) await this.#loadFloorData(replaced);
     if (replaced()) return;
     const requestedTab = this.#requestedTab();
@@ -6248,7 +6241,7 @@ export class TillApp extends LitElement {
       }
     }
     if (this.drill === undefined) this.#openStartingScreen();
-    const showsCounterLists = this.#showsCounterLists();
+    const showsCounterLists = this.formFactor === "till";
     const reads: Promise<void>[] = [];
     if (showsCounterLists) {
       const lists = [
@@ -6274,7 +6267,7 @@ export class TillApp extends LitElement {
     // A restored floor tab needs its data on first paint, unless the landing already loaded it.
     if (this.#inShell() && !this.#floorLoaded) {
       const tab = this.#activeTab();
-      if (tab !== undefined && this.#tabNeedsFloorData(tab)) await this.#loadFloorData(replaced);
+      if (tab === "floor") await this.#loadFloorData(replaced);
     }
     await Promise.all(reads);
   }
@@ -6559,7 +6552,9 @@ export class TillApp extends LitElement {
   }
 
   async #onCounterZoneSelected(event: Event): Promise<void> {
-    const { zoneId } = (event as CustomEvent<{ zoneId: string }>).detail;
+    const { zoneId, counterFloor } = (
+      event as CustomEvent<{ zoneId: string; counterFloor?: boolean }>
+    ).detail;
     if (this.#counterHasItems || this.#counterOrderInFlight()) {
       // The zone the counter is already on changes no service area, so it acts as the Counter tab.
       if (zoneId === this.counterServiceZoneId) {
@@ -6600,7 +6595,7 @@ export class TillApp extends LitElement {
       if (context.serviceMode !== "table_tab") this.orderFlow = context.serviceMode;
       this.stage = "order";
       this.collectFlow = undefined;
-      this.#onTabSelect("counter");
+      this.#onTabSelect("counter", false, false, counterFloor);
       this.#followDefault();
       this.errorKey = undefined;
     } catch (error) {
@@ -12699,7 +12694,7 @@ export class TillApp extends LitElement {
     this.overrideError = null;
   }
 
-  #onNewSale(): void {
+  #onNewSale(returnToCounter?: () => void): void {
     if (!this.#inShell()) return;
     this.#dismissStationChoices();
     this.#clearBasket();
@@ -12712,11 +12707,12 @@ export class TillApp extends LitElement {
     this.stage = "order";
     this.collectFlow = undefined;
     this.errorKey = undefined;
+    if (returnToCounter !== undefined) return returnToCounter();
     const home = this.#homeScreen();
     this.#setActiveTab(home, true);
     if (home === "counter") void this.#loadStations();
     this.#popDrill();
-    if (home !== undefined && this.#tabNeedsFloorData(home)) void this.#refreshFloor();
+    if (home === "floor") void this.#refreshFloor();
   }
 
   #onShowSchedule(): void {
@@ -12756,15 +12752,12 @@ export class TillApp extends LitElement {
     return this.#payCardProvider();
   }
 
-  #showsCounterLists(): boolean {
-    return this.formFactor === "till";
-  }
-
-  #tabNeedsFloorData(screen: BuiltInScreen): boolean {
-    return screen === "floor";
-  }
-
-  #onTabSelect(key: string, fromHistory = false, replace = fromHistory): void {
+  #onTabSelect(
+    key: string,
+    fromHistory = false,
+    replace = fromHistory,
+    counterFloor = false,
+  ): void {
     if (!this.#inShell()) return;
     if (
       this.formFactor === undefined ||
@@ -12774,6 +12767,7 @@ export class TillApp extends LitElement {
     const tab = this.#resolveScreen(key);
     if (tab === undefined) return;
     key = tab;
+    this.showCounterFloor = counterFloor && !this.#counterHasItems && !this.#counterOrderInFlight();
     this.counterOrderList = null;
     this.#dismissStationChoices();
     const wasShowingOrder = this.#tableMenuActive();
@@ -12787,7 +12781,7 @@ export class TillApp extends LitElement {
     if (!wasShowingOrder && this.#tableMenuActive()) this.#shownOnVisit = this.#orderVisit;
     const session = this.#operatorSession;
     const flushed = leftOrder ? this.#flushDraft(true) : Promise.resolve();
-    if (this.#tabNeedsFloorData(tab)) {
+    if (tab === "floor") {
       void flushed.then(async () => {
         if (session !== this.#operatorSession) return;
         if (!this.#floorLoaded) return this.#loadFloorData();
@@ -23885,15 +23879,6 @@ export class TillApp extends LitElement {
     return this.submitting || this.placing || this.parking || this.counterSetMenuSaving;
   }
 
-  /** A sent order with no receipt pays in the Pay window; Waiting's row, when it has one, says. */
-  #counterPaymentWindow(): boolean {
-    const id = this.#store.id;
-    const row = this.counterWaiting.find((waiting) => waiting.id === id);
-    if (row !== undefined) return row.invoiceNumber === undefined;
-    const stored = this.#counterStoredInvoice;
-    return this.stage === "collect" && !(stored?.orderId === id && stored.invoiced === true);
-  }
-
   /** A placed order is not open, so it offers no adjustment. */
   #basketStoredLines(): StoredLines | null {
     return this.stage === "order" ? this.counterLines : null;
@@ -23934,12 +23919,15 @@ export class TillApp extends LitElement {
         .orderList=${this.counterOrderList}
         .heldOrders=${this.heldOrders}
         .counterWaiting=${this.counterWaiting}
+        .counterFloor=${this.showCounterFloor}
+        .live=${this.#live}
+        .refreshWaiting=${() => void this.#refreshList("waiting", "refresh.waiting", TABLE_REQUEST_LIMIT_MS)}
         .tables=${this.tables}
         .zones=${this.zones}
         .invoiceLocale=${this.invoiceLocale}
         .orderFlow=${this.#basketFlow()}
         .stage=${this.stage}
-        .paymentWindow=${this.#counterPaymentWindow()}
+        .paymentWindow=${counterPaymentWindow(this.#store.id, this.counterWaiting, this.#counterStoredInvoice, this.stage === "collect")}
         .busy=${this.submitting || this.placing || this.invoiceRecipientReading || this.counterSetMenuSaving}
         .sendingTender=${this.sendingTender}
         .payHeld=${this.basketHeld}
@@ -24650,7 +24638,7 @@ export class TillApp extends LitElement {
         @park-order=${(event: Event) => void this.#onParkOrder(event)}
         @retrieve-order=${(event: Event) => this.#replaceBasket(() => this.#onRetrieveOrder(event))}
         @discard-order=${(event: Event) => void this.#onDiscardOrder(event)}
-        @new-sale=${() => this.#replaceBasket(() => this.#onNewSale())}
+        @new-sale=${(event: CustomEvent<{ returnToCounter?: () => void }>) => this.#replaceBasket(() => this.#onNewSale(event.detail?.returnToCounter))}
         @reprint=${() => void this.#onReprint()}
         @print-receipt=${() => void this.#onPrintReceipt()}
         @retry-receipt=${() => void this.#onPrintReceipt(true)}
@@ -25384,7 +25372,9 @@ export class TillApp extends LitElement {
                           }}
                           .transferCount=${this.transferSnapshot?.receivingAllowed === true ? this.transferSnapshot.incoming.length : undefined}
                           .loadLocales=${this.#loadLocales}
-                          @screen-select=${(e: CustomEvent<{ screen: BuiltInScreen }>) => {
+                          @screen-select=${(
+                            e: CustomEvent<{ screen: BuiltInScreen; counterFloor?: boolean }>,
+                          ) => {
                             if (
                               this.formFactor === undefined ||
                               !builtInScreensFor(this.formFactor).includes(e.detail.screen)
@@ -25393,10 +25383,18 @@ export class TillApp extends LitElement {
                             if (
                               e.detail.screen === this.activeTabKey &&
                               this.drill === undefined &&
-                              this.counterOrderList === null
+                              this.counterOrderList === null &&
+                              (!e.detail.counterFloor || this.showCounterFloor)
                             )
                               return;
-                            this.#requestLeave(() => this.#onTabSelect(e.detail.screen));
+                            this.#requestLeave(() =>
+                              this.#onTabSelect(
+                                e.detail.screen,
+                                false,
+                                false,
+                                e.detail.counterFloor,
+                              ),
+                            );
                           }}
                         >
                           ${this.deviceMode ? nothing : this.#renderNoticeStrip()}

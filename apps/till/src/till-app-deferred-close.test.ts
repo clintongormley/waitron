@@ -1181,6 +1181,8 @@ it.each([false, true])(
       status: "placed",
       openedAt: "2026-11-12T20:00:00.000Z",
       settledAt: null,
+      readyAt: null,
+      zoneId: "zone-counter",
       collectedAt: null,
       total: "30.00",
       counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },

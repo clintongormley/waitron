@@ -51,7 +51,7 @@ it("opens the counter's checked zone list and emits one selection under a real c
   });
   await userEvent.click(menu!.querySelector<HTMLElement>('[data-counter-zone="shop"]')!);
   expect(changed).toHaveBeenCalledOnce();
-  expect(changed.mock.calls[0]![0].detail).toEqual({ zoneId: "shop" });
+  expect(changed.mock.calls[0]![0].detail).toEqual({ zoneId: "shop", counterFloor: true });
   expect(menu!.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
   await el.updateComplete;
   expect(menu!.textContent).toContain("Counter: Shop");
@@ -596,7 +596,7 @@ it("aligns Counter choices with table zones and opens Shop once from the keyboar
     expect(chooser.querySelector('[role="menuitem"]:focus wt-menu-row')).toBe(counterRows[1]);
     await userEvent.keyboard("{Enter}");
     expect(selected).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ detail: { zoneId: "shop" } }),
+      expect.objectContaining({ detail: { zoneId: "shop", counterFloor: true } }),
     );
     expect(chooser.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
     expect(el.shadowRoot!.querySelectorAll(".head [data-counter-orders]")).toHaveLength(2);

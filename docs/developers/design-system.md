@@ -7075,6 +7075,10 @@ orders and Waiting each replace the menu-side content when selected, rather than
 product grid. Tapping an order expands its recorded staff names, quantities, extras and note;
 a second tap collapses it. Its action buttons act independently of expansion.
 
+Choosing a counter opens its floor. Show orders ready to hand over above a full-width New order,
+then the counter’s other sent orders. A sent row expands to show its dishes and actions. Back to
+Counter returns from the basket to the chosen counter, through the draft prompt when needed.
+
 Counter and table Order share a last-added strip in the layout flow after the menu. It must leave
 the final product row uncovered. Adding a dish while the order is in view, including merging into an
 existing line, reveals that line in the order scroller; unrelated updates preserve the scroll position. The strip's

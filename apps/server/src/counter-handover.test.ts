@@ -888,6 +888,8 @@ describe("GET /api/orders/counter-waiting", () => {
 
     expect(row(sent)).toEqual({
       id: sent,
+      zoneId: zones.ticket_then_pay,
+      readyAt: null,
       items: [
         { lineId: expect.any(String), name: "Cake", quantity: "1.000", note: null, extras: [] },
       ],

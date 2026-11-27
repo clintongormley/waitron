@@ -60,6 +60,8 @@ export interface CounterWaitingOrder {
   status: "placed" | "settled";
   openedAt: string;
   settledAt: string | null;
+  readyAt: string | null;
+  zoneId: string | null;
   collectedAt: string | null;
   /** What collecting a placed order charges, correctives included. */
   total: string;

@@ -417,6 +417,7 @@ export interface CounterWaitingOrder {
   status: "placed" | "settled";
   openedAt: string;
   settledAt: string | null;
+  readyAt: string | null;
   /** When it was handed over; set on a placed order handed over before payment. */
   collectedAt: string | null;
   /** What collecting a placed order charges: the sale already issued for it, net of its credit
@@ -456,6 +457,9 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
         openedAt: workingOrders.openedAt,
         settledAt: workingOrders.settledAt,
         collectedAt: workingOrders.collectedAt,
+        readyAt: sql<
+          string | null
+        >`max(case when ${ticketItems.state} = 'ready' then ${ticketItems.readyAt} end)`,
         // Cast to text for `rawCentsToDecimal`; see its doc comment.
         total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
         // The number 1 or 0: test its truthiness, never with `===`. Qualified, not bare, because
@@ -464,6 +468,7 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
       })
       .from(workingOrders)
       .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
+      .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
       .where(
         and(
           isNull(workingOrders.partyId),
@@ -557,6 +562,7 @@ export async function listCounterWaiting(deps: WorkingOrderDeps): Promise<Counte
         status: row.status as CounterWaitingOrder["status"],
         openedAt: row.openedAt,
         settledAt: row.settledAt,
+        readyAt: row.readyAt,
         collectedAt: row.collectedAt,
         total: sale?.amountDue ?? rawCentsToDecimal(row.total),
         canHandOver: eligible,

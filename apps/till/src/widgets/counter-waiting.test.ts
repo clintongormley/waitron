@@ -14,6 +14,8 @@ const paid: CounterWaitingOrder = {
   status: "settled",
   openedAt: "2026-10-01T10:00:00.000Z",
   settledAt: "2026-10-01T10:01:00.000Z",
+  readyAt: null,
+  zoneId: "zone-counter",
   collectedAt: null,
   total: "18.00",
   canHandOver: true,
@@ -30,6 +32,8 @@ const sent: CounterWaitingOrder = {
   status: "placed",
   openedAt: "2026-10-01T10:02:00.000Z",
   settledAt: null,
+  readyAt: null,
+  zoneId: "zone-counter",
   collectedAt: null,
   total: "7.50",
   canHandOver: true,
@@ -362,6 +366,39 @@ describe("A738 order item previews", () => {
     },
     { lineId: "dish-2", name: "Staff water", quantity: "2", note: null, extras: [] },
   ];
+
+  it("shows the ready time beside the order and names the dishes before handover", async () => {
+    const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+      floor: true,
+      ready: true,
+      now: Date.parse("2026-10-01T10:03:00.000Z"),
+      orders: [{ ...paid, items, readyAt: "2026-10-01T10:01:00.000Z" }],
+    });
+    const row = rowOf(el, paid.id);
+    expect(row.querySelector(".number")?.textContent?.replace(/\s+/g, " ").trim()).toBe(
+      "#11 · Ana 2 min",
+    );
+    expect(row.querySelector(".summary")?.textContent).toContain("2 Staff water");
+    expect(buttons(row)).toEqual(["Handed over"]);
+  });
+
+  it("shows one line of open order details and reveals Pay from the keyboard", async () => {
+    const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
+      floor: true,
+      orders: [{ ...sent, items }],
+    });
+    const row = rowOf(el, sent.id);
+    expect(row.querySelector(".state")?.textContent?.trim()).toBe("3 items · Sent, not paid");
+    expect(row.querySelector("[data-count]")).toBeNull();
+    expect(buttons(row)).toEqual([]);
+    const summary = row.querySelector<HTMLButtonElement>("button.summary")!;
+    summary.focus();
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+    expect(summary.getAttribute("aria-expanded")).toBe("true");
+    expect(buttons(row)).toContain("Pay");
+  });
+
   it("A738 toggles an order preview without retrieving it", async () => {
     const { el } = await mountWidget<TillCounterWaiting>("till-counter-waiting", {
       orders: [{ ...sent, items }],

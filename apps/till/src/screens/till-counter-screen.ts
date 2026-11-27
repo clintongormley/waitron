@@ -3,8 +3,16 @@ import type { MenuState } from "../api/client.js";
 import type { BillBalance } from "../api/payments-api.js";
 import { billMoneyNoticeStyles, overpaidNotice } from "./bill-money-notice.js";
 import { amountToPay, overpaidOf } from "../state/bill-state.js";
-import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import {
+  LitElement,
+  type TemplateResult,
+  type PropertyValues,
+  css,
+  html,
+  nothing,
+  unsafeCSS,
+} from "lit";
+import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, floorChipStyles } from "@waitron/ui";
 import { currentLocale, t } from "../i18n/t.js";
 import { StoreChangeController } from "../state/store-controller.js";
@@ -46,6 +54,8 @@ import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
 import { diningControl, diningShown } from "../widgets/dining-choice.js";
 import type { TillApi } from "../api/client.js";
+import type { TillLiveConnection } from "../api/live-connection.js";
+import "./till-counter-floor.js";
 import type { CounterWaitingOrder, HeldOrderSummary, OrderFlow } from "../api/orders-api.js";
 import type { FloorZone, TableState } from "../api/floor-api.js";
 import type { Station } from "../api/kitchen-api.js";
@@ -227,6 +237,10 @@ export class TillCounterScreen extends LitElement {
   @property({ type: Boolean }) menuSelectionRequired = false;
   @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
   @property() selectedServiceZoneId = "";
+  @property({ type: Boolean }) counterFloor = false;
+  @property({ attribute: false }) live?: TillLiveConnection;
+  @property({ attribute: false }) refreshWaiting?: () => void;
+  @state() private floorBasket = false;
   @property({ attribute: false }) orderList: "parked" | "waiting" | null = null;
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   @property({ attribute: false }) counterWaiting: CounterWaitingOrder[] = [];
@@ -522,8 +536,45 @@ export class TillCounterScreen extends LitElement {
     </div>`;
   }
 
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("counterFloor") || changed.has("selectedServiceZoneId"))
+      this.floorBasket = false;
+  }
+
   override render() {
-    return html`<div class="screen">${this.#gridBody()}</div>`;
+    if (this.counterFloor && !this.floorBasket && this.stage === "order") {
+      return html`<till-counter-floor
+        .zoneId=${this.selectedServiceZoneId}
+        .live=${this.live}
+        .refresh=${this.refreshWaiting}
+        .waiting=${this.counterWaiting}
+        .canEditKitchenNote=${this.canEditKitchenNote}
+        .canMoveStation=${this.canMoveStation}
+        @counter-new-order=${() => {
+          this.floorBasket = true;
+        }}
+      ></till-counter-floor>`;
+    }
+    return html`<div class="screen">
+      ${
+        this.counterFloor
+          ? html`<div>
+              <wt-button
+                variant="secondary"
+                .disabled=${this.orderInFlight}
+                @click=${() =>
+                  this.#emit("new-sale", {
+                    returnToCounter: () => {
+                      this.floorBasket = false;
+                    },
+                  })}
+                >${t("counter.floor_back")}</wt-button
+              >
+            </div>`
+          : nothing
+      }
+      ${this.#gridBody()}
+    </div>`;
   }
 }
 

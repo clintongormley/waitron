@@ -897,6 +897,8 @@ describe("a bill sent to the counter waits there until handed over", () => {
         ),
       );
     expect(await waitingIn(pickup.id)).toBe(true);
+    const waiting = await withZones([pickup.id], () => get("/api/orders/counter-waiting"));
+    expect(waiting.body).toContainEqual(expect.objectContaining({ id: billId, zoneId: pickup.id }));
     expect(await shownOnPass(pickup.id)).toBe(true);
     for (const zoneId of [later.id, venue.tables.zoneId]) {
       expect(await waitingIn(zoneId)).toBe(false);

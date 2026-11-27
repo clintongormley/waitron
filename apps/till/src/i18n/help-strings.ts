@@ -19,7 +19,7 @@ export const helpEn = {
   "help.counter.parked_orders":
     "Open orders not fully paid, in the zones this device serves. Retrieve puts one in the basket to finish it or take payment; Discard deletes it at once. Each order shows how many items it has, then how many are unsent, held, waiting or ready.",
   "help.counter.waiting_orders":
-    "Counter orders in the zones this device serves that are sent but not paid, or paid with dishes still to hand over. Pay takes payment; Hand over records that the customer has taken the order. Each order shows how many items it has, then how many are unsent, held, waiting or ready.",
+    "Counter orders in the zones this device serves that are sent but not paid, or paid with dishes still to hand over. Pay takes payment. Handed over records that the customer has taken the order. Each order shows how many items it has, then how many are unsent, held, waiting or ready.",
   "help.counter.guests":
     "Leave it empty for no guests line. With a number, the receipt shows the guests and what each person pays.",
   "help.floor.tables_map":
@@ -88,7 +88,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.counter.parked_orders":
     "Pedidos abiertos y sin cobrar del todo, de las zonas que atiende este dispositivo. Recuperar lo pone en la cesta para terminarlo o cobrarlo; Descartar lo borra en el acto. Cada pedido muestra cuántos artículos tiene y cuántos están sin enviar, en espera, esperando o listos.",
   "help.counter.waiting_orders":
-    "Pedidos de mostrador de las zonas que atiende este dispositivo enviados sin cobrar, o cobrados con platos aún por entregar. Cobrar cobra el pedido; Entregar anota que el cliente se lo ha llevado. Cada pedido muestra cuántos artículos tiene y cuántos están sin enviar, en espera, esperando o listos.",
+    "Pedidos de mostrador de las zonas que atiende este dispositivo enviados sin cobrar, o cobrados con platos aún por entregar. Cobrar cobra el pedido. Entregado anota que el cliente se lo ha llevado. Cada pedido muestra cuántos artículos tiene y cuántos están sin enviar, en espera, esperando o listos.",
   "help.counter.guests":
     "Déjalo vacío para que no salga la línea de comensales. Con un número, el ticket muestra los comensales y lo que paga cada persona.",
   "help.floor.tables_map":

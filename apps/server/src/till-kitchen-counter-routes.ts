@@ -19,7 +19,7 @@ import { requireSession } from "./till-session.js";
 import { listCounterWaiting, handOverOrder } from "./working-order-counter.js";
 import { bumpBillReady, advanceTicketItem } from "./working-order-kitchen-service.js";
 import { listStationQueue } from "./working-order-station-queue.js";
-import { checkKitchenOrderZone, visibleOrders } from "./zone-access.js";
+import { checkKitchenOrderZone, visiblePickupOrders } from "./zone-access.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
@@ -132,7 +132,7 @@ export function mountTillKitchenCounterRoutes(app: Hono, deps: TillApiDeps, log:
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const waiting = await listCounterWaiting({ db: deps.db });
-      return c.json(await visibleOrders(deps, session, waiting, { atPickup: true }));
+      return c.json(await visiblePickupOrders(deps, session, waiting));
     }),
   );
 

@@ -331,6 +331,8 @@ const waitingOrder: CounterWaitingOrder = {
   status: "placed",
   openedAt: "2026-10-01T10:02:00.000Z",
   settledAt: null,
+  readyAt: null,
+  zoneId: "zone-counter",
   collectedAt: null,
   total: "3.00",
   counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
@@ -3496,6 +3498,7 @@ describe("till-app", () => {
     emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
     await flush(el);
     expect(counter(el)).not.toBeNull();
+    expect(counter(el)!.shadowRoot!.querySelector("till-counter-floor")).toBeNull();
   });
 
   it.each([{ status: 503 }, new TypeError("Network unavailable")])(
@@ -21065,6 +21068,8 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
     status: "placed",
     openedAt: "2026-10-01T10:02:00.000Z",
     settledAt: null,
+    readyAt: null,
+    zoneId: "zone-counter",
     collectedAt: null,
     total: "3.00",
     counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },

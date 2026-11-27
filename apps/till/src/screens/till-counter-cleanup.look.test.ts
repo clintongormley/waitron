@@ -82,6 +82,8 @@ const waiting: CounterWaitingOrder = {
   counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
   openedAt: "2026-10-20T10:00:00Z",
   settledAt: null,
+  readyAt: null,
+  zoneId: "zone-counter",
   collectedAt: null,
   canHandOver: true,
   serviceMode: "ticket_then_pay",
