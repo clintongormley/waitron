@@ -1,12 +1,6 @@
 import { css, html, nothing } from "lit";
-import { registerIcons } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import type { FirstReadView } from "../state/first-read.js";
-
-registerIcons({
-  "first-read-offline":
-    "M1 5a11 11 0 0 1 14 0l-1 1a10 10 0 0 0-5.4-2.3L7 2.1A11.3 11.3 0 0 1 15 5l-1 1zM4 8a6.3 6.3 0 0 1 2.2-1.2l-1-1A8 8 0 0 0 3 7zM5.5 10l1 1a2.7 2.7 0 0 1 2.7-.6L8 9a4 4 0 0 0-2.5 1zM8 12.5a1 1 0 1 1 0 2 1 1 0 0 1 0-2zM1.5 1.5l1-1 13 13-1 1z",
-});
 
 export const firstReadNoticeStyles = css`
   .first-floor-read {
@@ -24,7 +18,9 @@ export const firstReadNoticeStyles = css`
 
   .first-floor-read:has(wt-placeholder) {
     background: var(--wt-color-surface);
-    border-radius: var(--wt-radius-md);
+    border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
+    outline: 1px solid var(--wt-color-border);
+    outline-offset: -1px;
   }
 
   .first-floor-read wt-placeholder {
@@ -73,14 +69,17 @@ export const firstReadNoticeStyles = css`
   }
 
   .first-read-notice wt-spinner {
+    --wt-spinner-track: var(--wt-color-border);
+    --wt-spinner-arc: var(--wt-color-primary);
     flex: none;
     inline-size: var(--wt-space-4);
     block-size: var(--wt-space-4);
-    color: var(--wt-color-primary);
   }
 
-  .first-read-notice wt-icon {
+  .first-read-notice svg {
     flex: none;
+    inline-size: calc(var(--wt-space-5) - var(--wt-space-1) / 2);
+    block-size: calc(var(--wt-space-5) - var(--wt-space-1) / 2);
     color: var(--wt-color-danger);
   }
 
@@ -91,7 +90,6 @@ export const firstReadNoticeStyles = css`
 
   .first-read-notice wt-button {
     margin-block-start: var(--wt-space-2);
-    --wt-action-border-color: var(--wt-color-danger);
   }
 
   @media (forced-colors: active) {
@@ -106,7 +104,24 @@ export function firstReadNotice(stage: FirstReadView, handheld: boolean, retry: 
   const unreachable = stage === "unreachable";
   return html`<div class="first-read-notice" data-stage=${stage}>
     ${waiting ? html`<wt-spinner decorative></wt-spinner>` : nothing}
-    ${unreachable ? html`<wt-icon name="first-read-offline" size="lg"></wt-icon>` : nothing}
+    ${
+      unreachable
+        ? html`<svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path
+              d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8.5 15.5a5 5 0 0 1 7 0M12 19h.01"
+            />
+            <path d="M3 3l18 18" />
+          </svg>`
+        : nothing
+    }
     <div>
       <div role="status" data-first-read-status ?data-floor-read-failed=${unreachable}>
         ${
@@ -114,7 +129,7 @@ export function firstReadNotice(stage: FirstReadView, handheld: boolean, retry: 
             ? t("first_read.waiting")
             : unreachable
               ? html`<strong>${t("first_read.unreachable")}</strong>
-                  ${t(handheld ? "offline.wifi" : "first_read.till_network")}`
+                  ${t(handheld ? "first_read.phone_wifi" : "first_read.till_network")}`
               : nothing
         }
       </div>
@@ -134,7 +149,17 @@ export function firstFloorRead(stage: FirstReadView, handheld: boolean, retry: (
   </div>`;
 }
 
-export function floorReadFailure(retry: () => void) {
+export function floorEmptyState(
+  answered: boolean,
+  hasTables: boolean,
+  failed: boolean,
+  retry: () => void,
+) {
+  if (answered)
+    return html`<p data-floor-no-tables role="status">
+      ${t(hasTables ? "floor.no_tables_today" : "floor.no_tables")}
+    </p>`;
+  if (!failed) return nothing;
   return html`<div class="read-failed">
     <p data-floor-read-failed role="status">${t("floor.read_failed")}</p>
     <wt-button data-floor-retry variant="secondary" @click=${retry}>

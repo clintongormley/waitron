@@ -33,6 +33,18 @@ test("the ring paints in the surrounding text colour (currentColor)", async () =
   host.style.color = "rgb(12, 34, 56)";
   const ring = el.shadowRoot!.querySelector(".ring")!;
   expect(getComputedStyle(ring).borderTopColor).toBe("rgb(12, 34, 56)");
+  expect(getComputedStyle(ring).borderRightColor).toBe("rgba(0, 0, 0, 0)");
+});
+
+test("paints an optional track and a distinct leading arc", async () => {
+  const el = await mount("<wt-spinner decorative></wt-spinner>");
+  host.style.setProperty("--wt-spinner-track", "rgb(100, 100, 100)");
+  host.style.setProperty("--wt-spinner-arc", "rgb(20, 120, 160)");
+  const ring = getComputedStyle(el.shadowRoot!.querySelector(".ring")!);
+
+  expect(ring.borderTopColor).toBe("rgb(20, 120, 160)");
+  expect(ring.borderRightColor).toBe("rgb(100, 100, 100)");
+  expect(ring.borderBottomColor).toBe("rgb(100, 100, 100)");
 });
 
 test("the ring is not dimmed — inside a disabled busy button the disabled opacity must not compound", async () => {

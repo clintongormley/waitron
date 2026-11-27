@@ -29,7 +29,9 @@ it.each(["light", "dark"] as const)(
     await el.updateComplete;
     const retry = root.querySelector("[data-floor-retry]");
     expect(message?.textContent).toContain("Can't reach the box");
-    expect(message?.textContent).toContain("WiFi");
+    expect(message?.textContent?.replace(/\s+/g, " ").trim()).toBe(
+      "Can't reach the box Check this phone is on the venue's WiFi.",
+    );
     expect(message?.textContent).not.toContain("Try again");
     expect(retry?.textContent).toContain("Try again");
     expect(message?.contains(retry)).toBe(false);

@@ -145,6 +145,7 @@ export const floorBarStyles = css`
   }
   .floor-bar > [data-view-toggle]::part(button) {
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
+    min-inline-size: calc(var(--wt-tap-min) * 1.5);
   }
   .floor-bar > wt-row-actions::part(trigger) {
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
@@ -449,6 +450,13 @@ export interface FloorChooserActions {
   openKitchen: (stationId?: string) => void;
 }
 
+export function pendingFloorControls(floor: TillFloorScreen, active: string | undefined) {
+  if (floor.firstRead === undefined) return undefined;
+  const selected = active ?? floor.selectedZoneId;
+  const zone = floor.knownZones?.find(({ id }) => id === selected) ?? floor.knownZones?.[0];
+  return { name: zone?.name, view: floor.viewMemory?.read(zone?.id ?? selected ?? "") ?? "map" };
+}
+
 export function floorControls(
   shell: TillShell,
   floor: TillFloorScreen,
@@ -513,8 +521,9 @@ export function floorZoneControls(
   select: (key: string) => void,
   toggle: () => void,
   { choose, counters, openCounter, kitchen, openKitchen }: FloorChooserActions,
+  pending?: ReturnType<typeof pendingFloorControls>,
 ) {
-  const name = tabs.find((tab) => tab.key === active)?.name ?? t("floor.zones");
+  const name = pending?.name ?? tabs.find((tab) => tab.key === active)?.name ?? t("floor.zones");
   return html`<wt-row-actions
       data-floor-zone-chooser
       bottom-sheet
@@ -590,8 +599,13 @@ export function floorZoneControls(
         </button>
       </div>
     </wt-row-actions>
-    <wt-button variant="secondary" data-view-toggle @click=${toggle}>
-      ${t(view === "map" ? "floor.view_list" : "floor.view_map")}
+    <wt-button
+      variant="secondary"
+      data-view-toggle
+      ?disabled=${pending !== undefined}
+      @click=${toggle}
+    >
+      ${t((pending?.view ?? view) === "map" ? "floor.view_list" : "floor.view_map")}
     </wt-button>`;
 }
 

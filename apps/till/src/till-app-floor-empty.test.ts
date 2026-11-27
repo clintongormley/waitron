@@ -6,6 +6,8 @@ import {
   cleanupWidgets,
   draftServer,
   mountWidget,
+  pageAt,
+  resetPage,
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
@@ -384,10 +386,41 @@ it("shows the Floor after sign-in while its first tables read is still out", asy
   expect(getTablesState).toHaveBeenCalledOnce();
   expect(noTables(el)).toBeNull();
   expect(readFailed(el)).toBeNull();
+  await vi.waitFor(() =>
+    expect(floorOf(el)?.shadowRoot?.querySelector("wt-placeholder")).toBeTruthy(),
+  );
 
   answer([freeTable]);
   await settle(el);
   expect(drawn(el, "t1")).toBeTruthy();
+});
+
+it("shows the known Floor zone and keeps the view control quiet until tables arrive", async ({
+  onTestFinished,
+}) => {
+  onTestFinished(resetPage);
+  await pageAt(390, 844);
+  const selection = deviceZonesFixture([], ["z1"]);
+  const getDeviceZones = vi.fn().mockResolvedValue({
+    ...selection,
+    zones: selection.zones.map((zone) => ({ ...zone, name: "Dining room" })),
+  });
+  const el = await signIn(
+    stubApi({
+      getDeviceZones,
+      getTablesState: vi.fn(() => new Promise(() => {})),
+    }),
+  );
+  const footer = el.shadowRoot!.querySelector("till-shell")!.shadowRoot!;
+  await vi.waitFor(() =>
+    expect(footer.querySelector("[data-floor-zone-chooser]")?.getAttribute("label")).toBe(
+      "Dining room",
+    ),
+  );
+  const view = footer.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-view-toggle]");
+
+  expect(view?.textContent).toContain("List");
+  expect(view?.disabled).toBe(true);
 });
 
 it("loads the next operator's Floor while its first reply waits", async () => {

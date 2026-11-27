@@ -23704,6 +23704,7 @@ export class TillApp extends LitElement {
         .tablesAnswered=${this.tablesAnswered}
         .floorReadFailed=${this.floorReadFailed}
         .firstRead=${this.firstFloorView}
+        .knownZones=${this.firstFloorView === undefined ? undefined : this.deviceZoneSelection?.zones.filter(({ id }) => navigation?.floorZoneIds.includes(id))}
         .offerJoinConflicts=${this.#offerFloorJoinConflicts}
         .carriedRevisions=${this.floorCarried}
         .api=${this.api}

@@ -40,6 +40,7 @@ export const en = {
   "first_read.waiting": "Still waiting for the box…",
   "first_read.unreachable": "Can't reach the box",
   "first_read.retry": "Try again",
+  "first_read.phone_wifi": "Check this phone is on the venue's WiFi.",
   "first_read.till_network": "Check this till is connected to the venue's network.",
   "offline.wifi": "Check that this phone is on the venue's WiFi.",
   "offline.already_on_wifi":
@@ -2526,6 +2527,7 @@ export const es: Record<StringKey, string> = {
   "first_read.waiting": "Esperando al servidor…",
   "first_read.unreachable": "No se puede conectar con el servidor",
   "first_read.retry": "Reintentar",
+  "first_read.phone_wifi": "Comprueba que este móvil está en el WiFi del local.",
   "first_read.till_network": "Comprueba que esta caja esté conectada a la red del local.",
   "offline.wifi": "Comprueba que este móvil está en el WiFi del local.",
   "offline.already_on_wifi":

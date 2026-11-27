@@ -44,8 +44,9 @@ export class WtSpinner extends LitElement {
         box-sizing: border-box;
         width: 100%;
         height: 100%;
-        border: calc(var(--wt-space-1) / 2) solid currentColor;
-        border-right-color: transparent;
+        border: calc(var(--wt-space-1) / 2) solid var(--wt-spinner-track, currentColor);
+        border-top-color: var(--wt-spinner-arc, currentColor);
+        border-right-color: var(--wt-spinner-track, transparent);
         border-radius: 50%;
         animation: wt-spin 0.8s linear infinite;
       }

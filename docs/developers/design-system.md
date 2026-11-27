@@ -900,6 +900,9 @@ Till screens share the first-read timer and notice. Keep the screen controls ava
 the timer waits to draw shapes. Put the notice over the loading area and keep **Try again**
 outside the live message. Keep content in place once you have shown it.
 
+On the waiting notice, set `wt-spinner`'s `--wt-spinner-track` and `--wt-spinner-arc` to
+the border and primary tokens for the grey track and teal leading arc.
+
 ### Full-screen panels and payment controls
 
 Use `wt-full-screen-panel` when your actions need to stay visible while the details scroll. Give

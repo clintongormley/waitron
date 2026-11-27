@@ -1,5 +1,6 @@
 import {
   floorOtherZone,
+  pendingFloorControls,
   floorScreenFooterStyles,
   floorZoneControls,
   zoneTabMarks,
@@ -27,7 +28,7 @@ import type { FirstReadView } from "../state/first-read.js";
 import {
   firstFloorRead,
   firstReadNoticeStyles,
-  floorReadFailure,
+  floorEmptyState,
 } from "../widgets/first-read-notice.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
@@ -929,6 +930,7 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) tablesAnswered = false;
   @property({ attribute: false }) floorReadFailed = false;
   @property({ attribute: false }) firstRead?: FirstReadView;
+  @property({ attribute: false }) knownZones?: readonly Pick<FloorZone, "id" | "name">[];
   /** Rooms' revisions a change the app sent was answered with, as `tablesReadAt` is numbered. */
   @property({ attribute: false }) carriedRevisions: ReadonlyMap<string | null, CarriedRevision> =
     new Map();
@@ -1121,8 +1123,11 @@ export class TillFloorScreen extends LitElement {
   @property({ attribute: false }) useFloorFooter = false;
   #footerZone?: ZoneOnScreen;
 
-  override updated(): void {
-    if (this.useFloorFooter && this.#footerZone !== this.#zone)
+  override updated(changed: PropertyValues<this>): void {
+    if (
+      this.useFloorFooter &&
+      (this.#footerZone !== this.#zone || changed.has("firstRead") || changed.has("knownZones"))
+    )
       this.dispatchEvent(new Event("floor-footer-update", { bubbles: true }));
     this.#footerZone = this.useFloorFooter ? this.#zone : undefined;
     this.toggleAttribute("ready-bar", this.shadowRoot!.querySelector("[data-ready-bar]") !== null);
@@ -2364,9 +2369,9 @@ export class TillFloorScreen extends LitElement {
       (key) => this.#selectZone(key),
       () => this.#toggleView(view),
       actions,
+      pendingFloorControls(this, this.activeZone),
     );
   }
-
   otherZoneLine() {
     if (!this.#zone) return nothing;
     const { tabs, marks, activeKey } = this.#zone;
@@ -2388,7 +2393,15 @@ export class TillFloorScreen extends LitElement {
     const { tabs, marks, refusedZone, activeKey, planned, view, listed, onMap, unplaced } =
       this.#zone;
     const firstRead = this.firstRead;
-    const empty = listed.length === 0 && onMap.length === 0 ? this.#emptyFloor(activeKey) : nothing;
+    const empty =
+      listed.length === 0 && onMap.length === 0
+        ? floorEmptyState(
+            this.tablesAnswered && activeKey !== undefined,
+            this.#zone.visible.length > 0,
+            this.floorReadFailed,
+            () => this.#requestFloorRefresh({ zones: true }),
+          )
+        : nothing;
     return html`
       <section
         class="screen"
@@ -2483,16 +2496,6 @@ export class TillFloorScreen extends LitElement {
         ${this.useFloorFooter ? nothing : this.#readyBar()}
       </section>
     `;
-  }
-
-  #emptyFloor(activeKey: string | undefined): TemplateResult | typeof nothing {
-    if (this.tablesAnswered && activeKey !== undefined)
-      return html`<p data-floor-no-tables role="status">
-        ${t(this.#zone.visible.length === 0 ? "floor.no_tables" : "floor.no_tables_today")}
-      </p>`;
-    return this.floorReadFailed
-      ? floorReadFailure(() => this.#requestFloorRefresh({ zones: true }))
-      : nothing;
   }
 
   /** `fitKey` and `tables` change in one update, so a new zone is fitted to its own tables. */
