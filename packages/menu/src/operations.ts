@@ -1168,10 +1168,10 @@ async function patchProduct(
     pricingUnit,
     unitPrice,
     takeawayVatRate,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- a VAT label is accepted and ignored
     vatClass,
     ...rest
   } = patch;
+  void vatClass;
   const assertColor = () => {
     if (color !== undefined)
       colorOrNull(color, () => {

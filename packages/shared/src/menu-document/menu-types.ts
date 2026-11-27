@@ -163,7 +163,6 @@ export interface OfferedExtraItem {
   kitchenName: string | null;
   /** GROSS, in the money shape `unitPrice` uses. Never null: the inheritance is already resolved. */
   price: string;
-  /** Always the extra PRODUCT's effective rate, never the dish's. */
   vatClass?: VatClass;
   takeawayVatClass?: VatClass;
   maxQuantity: number | null;

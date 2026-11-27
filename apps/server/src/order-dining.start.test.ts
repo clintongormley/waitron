@@ -597,17 +597,51 @@ describe("a takeaway order's lines", () => {
     const rows = await inTx(venue, (tx) =>
       tx
         .select({
+          id: workingOrderLines.id,
           productId: workingOrderLines.productId,
+          parentLineId: workingOrderLines.parentLineId,
+          quantity: workingOrderLines.quantity,
+          unitPriceGross: workingOrderLines.unitPriceGross,
+          lineTotal: workingOrderLines.lineTotal,
         })
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, parked.json.id as string))
         .orderBy(workingOrderLines.lineNo),
     );
+    const burgerLine = rows.find((row) => row.productId === menu.burger)?.id;
     expect(rows).toEqual([
-      { productId: menu.cola },
-      { productId: menu.cheese },
-      { productId: menu.burger },
-      { productId: menu.lemonSoda },
+      {
+        id: expect.any(String),
+        productId: menu.cola,
+        parentLineId: null,
+        quantity: 1000,
+        unitPriceGross: 180,
+        lineTotal: 180,
+      },
+      {
+        id: expect.any(String),
+        productId: menu.cheese,
+        parentLineId: null,
+        quantity: 1000,
+        unitPriceGross: 400,
+        lineTotal: 400,
+      },
+      {
+        id: expect.any(String),
+        productId: menu.burger,
+        parentLineId: null,
+        quantity: 1000,
+        unitPriceGross: 1000,
+        lineTotal: 1000,
+      },
+      {
+        id: expect.any(String),
+        productId: menu.lemonSoda,
+        parentLineId: burgerLine,
+        quantity: 1000,
+        unitPriceGross: 200,
+        lineTotal: 200,
+      },
     ]);
   });
 });

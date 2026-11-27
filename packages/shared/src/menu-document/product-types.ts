@@ -151,8 +151,8 @@ export interface Product {
  * as {@link ProductEditorBody}. Saves use {@link ProductEditorSaveBody}.
  *
  * On a VARIANT every inherited field may be blank — `null` — and a blank reads as the parent's value.
- * On a product with no parent, `unitPrice`, `vatClass`, `takeawayVatRate`
- * and `dietaryDeclarations` are required.
+ * On a product with no parent, `unitPrice`, `takeawayVatRate` and `dietaryDeclarations` are
+ * required.
  */
 export interface ProductEditorInput {
   /** A product's parent never changes: absent, or the stored parent, is accepted. */
