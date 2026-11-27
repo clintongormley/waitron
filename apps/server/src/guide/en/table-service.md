@@ -768,7 +768,7 @@ If **Reopen bill** lists dishes not yet served, choose **Mark served** for any t
 something on the bill has been served and nothing has been paid, **Stop these dishes and reopen**
 stops every dish still listed and leaves it off the reopened bill, except one the kitchen had
 started or finished, which stays on it, charged. To take that charge off, open the dish's details
-in **Sent** and choose **Comp…** from its **More** menu.
+from the sent dishes at the top of the order and choose **Comp…** from its **More** menu.
 
 If the guests leave before anything is served, open **⋮** and choose **Nothing was served**. It is
 offered on a printed bill that has taken no payment and names no customer. Get the paper receipt

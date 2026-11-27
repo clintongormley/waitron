@@ -1223,7 +1223,7 @@ New order's lines. A line the till scrolls into view (a dish just added while th
 above the bar rather than under it: the screen measures
 the bar's height into `--draft-bar-size`, which the basket's lines keep clear below them
 (`scroll-margin-block-end`). Its wrappers, `[data-round-controls]` and `.round-bar`, are
-`display: contents`, so the bar can rise anywhere in the order pane, over an open Sent panel too.
+`display: contents`, so the bar can rise anywhere in the order pane, over the sent rows too.
 While a round is being sent the outer wrapper stays `inert`, and the fade is drawn on each of its
 parts and on the bar's buttons, since a `display: contents` element paints nothing. The screen's
 `:host` is `isolation: isolate`, as the Floor's is, so the bar's `z-index: 1` never draws it over
@@ -6545,7 +6545,7 @@ already separates it. Correction and MOVED slips print none.
 
 An order, at a table or the counter, stores each dish as its own portion, so two identical burgers
 are two lines. Screens draw identical portions in identical state as one row with a count, placed where its first member
-would stand, its members in line order: the till's Sent panel, its sent-line fallback list and the
+would stand, its members in line order: the till's sent-line fallback list and the
 Move dishes picker, Items in Pay (`portionGroups`, `tabLinePortionKey`,
 `sentSlicePortionKey`, `apps/till/src/state/portion-groups.ts`), the station screen's cards and the
 pass ("2× Burger", `kitchenPortionKey`), the counter basket's retrieved order while none of it is
@@ -6605,6 +6605,26 @@ a `checkbox` named by the dish, its quantity, its guest and its second line, wit
 its question (“Doneness: Medium”), so rows of one dish that differ in any of those read differently.
 Spec: §4 and §14.4 of `docs/superpowers/specs/2026-11-26-till-handheld-redesign-design.md`.
 
+### The order's sent rows (till)
+
+Above a table's New order, the bill's sent dishes are drawn always, with no box to open
+(`till-sent-orders`, `apps/till/src/widgets/sent-orders.ts`; the sections and rows come from
+`sentSections`, `apps/till/src/state/sent-sections.ts`). Each fire group is a section under a
+`wt-course-heading`, in firing order, then the dishes sent outside any group under one of their
+own. A heading's title is its courses' names, then its state: "Fired 12 min ago", "At the pass"
+when every dish still to serve waits at the pass, or "Held". A fired or at-the-pass heading carries
+the ✓ Sent mark and **Serve all**, which serves the section's released dishes still to serve; a held
+heading carries no mark and **Fire**, and its other bills' held dishes stand under it, named by
+bill. A row is quiet (`apps/till/src/widgets/sent-row.ts`): normal-weight muted text, the quantity
+in its own column, the name, and the price at the right, then ⓘ. Its muted second line holds the
+dish's extras and note, and the row's state only when that differs from its heading's ("Held",
+"At the pass", "Ready 3 min" in `--wt-color-warning`). A row is one dish, its served and unserved
+portions together: a dish with one of three served is one row ending "1 of 3 served", whether it is
+one line of 3 or three identical lines of 1 (`sentRowPortionKey`,
+`apps/till/src/state/portion-groups.ts`); a cancelled but charged part stays a row of its own. Within
+a section, rows with something left come first, ready ones first and then by when they were made
+ready or fired, and served rows last; a held section keeps line order.
+
 ### The dish picker
 
 Move dishes draws the bill's dishes through `till-portion-picker`
@@ -6617,7 +6637,7 @@ is picked.
 
 - **A tick** is a native checkbox labelled with the dish's name, then each of its extras on a line
   of its own beneath, in the names the screen gives the bill's lines. A dish or extra adds its
-  quantity, written as the Sent list writes it ("Iberian ham ×0.32", "Onion ×2"), unless it is a
+  quantity, written as the order's sent rows write it ("Iberian ham ×0.32", "Onion ×2"), unless it is a
   single item of something counted in whole units. The − and + of a row are named by the same
   words. Ticking a row takes every member
   the floor allows; ticking a ticked row clears it. A row of several takes a − / "2 of 4" / +

@@ -812,7 +812,8 @@ Si **Reabrir cuenta** muestra platos sin servir, elige **Marcar como servidos** 
 llegaron. Cuando algo de la cuenta ya se ha servido y no se ha pagado nada, **Parar estos platos y
 reabrir** para cada plato que siga en la lista y lo deja fuera de la cuenta reabierta, salvo uno que
 la cocina había empezado o terminado, que se queda en ella y se cobra. Para quitar ese cobro, abre
-los detalles del plato en **Enviado** y elige **Descuento…** en el menú **Más**.
+los detalles del plato desde los platos enviados, arriba del pedido, y elige **Descuento…** en el
+menú **Más**.
 
 Si los clientes se van antes de que se sirva nada, abre **⋮** y elige **No se sirvió nada**. Se
 ofrece en una cuenta impresa que no ha recibido ningún pago y no lleva el nombre de un cliente.
