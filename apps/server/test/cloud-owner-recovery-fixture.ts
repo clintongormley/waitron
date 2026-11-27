@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { onTestFinished } from "vitest";
 import { installationFixture } from "./cloud-installation-fixture.js";
-import type { SavedCloudState } from "../src/cloud-client.js";
+import type { SavedCloudState } from "../src/cloud-client-types.js";
 
 export async function ownerRecoveryFixture() {
   const calls: unknown[][] = [];

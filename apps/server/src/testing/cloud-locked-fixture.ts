@@ -3,7 +3,7 @@ import { createServer } from "node:https";
 import { Agent } from "undici";
 import { vi } from "vitest";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
-import type { CloudInstallationCredentials } from "../cloud-client.js";
+import type { CloudInstallationCredentials } from "../cloud-client-types.js";
 import type { EmergencyCopyBinding } from "../emergency-copy-binding.js";
 import { retainHttpListener } from "./retained-http-listener.js";
 

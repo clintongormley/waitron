@@ -18,7 +18,7 @@ import { lockVenueDatabase } from "@waitron/db";
 import { NODE_FILE, openBackupQuery, VENUE_FILE } from "@waitron/store";
 import { AppError, isAppError, readVariable } from "@waitron/shared";
 import type { SignedMembershipDocument } from "@waitron/membership";
-import type { CloudInstallationCredentials } from "./cloud-client.js";
+import type { CloudInstallationCredentials } from "./cloud-client-types.js";
 import { fetchEmergencyCopyStatus } from "./cloud-emergency.js";
 import {
   hasLiveLease,

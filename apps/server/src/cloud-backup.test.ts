@@ -4,7 +4,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
 import { reserveCloudCapture, publishCloudCapture } from "./cloud-backup.js";
-import { createCloudConnection, type SavedCloudState } from "./cloud-client.js";
+import { createCloudConnection } from "./cloud-client.js";
+import type { SavedCloudState } from "./cloud-client-types.js";
 const captureKeys = new Map<string, string>();
 const signedRequest = '{"upload":"presigned-put-v1"}';
 function grant(values: unknown[], saved: Record<string, unknown>) {

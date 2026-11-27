@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import type { SavedCloudState } from "../src/cloud-client.js";
+import type { SavedCloudState } from "../src/cloud-client-types.js";
 import { type TranslationAction, translationEnvelope } from "../src/cloud-translation.js";
 import { installationFixture, type ServiceState } from "./cloud-installation-fixture.js";
 

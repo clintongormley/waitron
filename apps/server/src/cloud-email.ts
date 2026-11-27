@@ -4,7 +4,7 @@ import type { FiscalCertificateReminder } from "@waitron/fiscal";
 import type { BuiltInRoleKey } from "@waitron/identity";
 import type { SECURITY_CHANGE_EMAIL_WORDS } from "./i18n/security-change-email.js";
 import type { OnRefusal } from "./cloud-translation.js";
-import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client.js";
+import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client-types.js";
 import { machinePayload, readCloudInstallationView } from "./cloud-installation.js";
 import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 

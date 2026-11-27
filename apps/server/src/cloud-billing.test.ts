@@ -10,7 +10,7 @@ import {
   fetchBillingDisplay,
   readBillingDisplay,
 } from "./cloud-billing.js";
-import type { SavedCloudState } from "./cloud-client.js";
+import type { SavedCloudState } from "./cloud-client-types.js";
 
 const vector = JSON.parse(
   readFileSync(new URL("../test/billing-display-vector.json", import.meta.url), "utf8"),

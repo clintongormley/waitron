@@ -10,7 +10,8 @@ import { link, lstat, readFile, unlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
 import { createCloudRecoveryClient, reportSavedCloudRestore } from "./cloud-recovery.js";
-import type { CloudConnection, CloudRegistration } from "./cloud-client.js";
+import type { CloudConnection } from "./cloud-client.js";
+import type { CloudRegistration } from "./cloud-client-types.js";
 import "./errors.js";
 
 const uuid = (v: unknown): v is string =>

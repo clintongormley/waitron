@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { AppError } from "@waitron/shared";
-import type { SavedCloudState } from "./cloud-client.js";
+import type { SavedCloudState } from "./cloud-client-types.js";
 import { serviceExchange, type OnRefusal } from "./cloud-translation.js";
 import "./errors.js";
 

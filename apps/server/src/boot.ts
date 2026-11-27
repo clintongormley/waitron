@@ -56,12 +56,8 @@ import { cloudProblemReportsJob, createCloudProblemReports } from "./cloud-probl
 import { mountProblemReportApi } from "./problem-report-api.js";
 import { writeTunnelConfiguration } from "./cloud-tunnel.js";
 import { createContentSuggestionRunner, suggestionsJob } from "./content-suggestion-runner.js";
-import {
-  createCloudConnection,
-  loadCloudOrigin,
-  loadCloudSignInCallback,
-  type CloudConnectionOptions,
-} from "./cloud-client.js";
+import { createCloudConnection, loadCloudOrigin, loadCloudSignInCallback } from "./cloud-client.js";
+import type { CloudConnectionOptions } from "./cloud-client-types.js";
 import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { currentBackupVerificationTarget } from "./backup-verification-target.js";

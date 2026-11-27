@@ -3,7 +3,7 @@ import { createHash, createPrivateKey, randomUUID, X509Certificate } from "node:
 import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
-import type { SavedCloudState } from "./cloud-client.js";
+import type { SavedCloudState } from "./cloud-client-types.js";
 import { createStaffCsr, installStaffCertificate } from "./cloud-remote.js";
 import { serviceExchange, type OnRefusal } from "./cloud-translation.js";
 import "./errors.js";

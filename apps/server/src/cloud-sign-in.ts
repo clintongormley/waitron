@@ -2,7 +2,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { isPairingV4Profile, type PairingV4Operation } from "@waitron/contract";
 import { AppError } from "@waitron/shared";
 import type { VenueRequest } from "@waitron/provisioning";
-import type { CloudRegistration } from "./cloud-client.js";
+import type { CloudRegistration } from "./cloud-client-types.js";
 import "./errors.js";
 
 export const CLOUD_SIGN_IN_CALLBACK = "/cloud/pairing/callback";

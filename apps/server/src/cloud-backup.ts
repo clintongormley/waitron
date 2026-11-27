@@ -1,7 +1,7 @@
 import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request.js";
 import { encodeMachine } from "@waitron/contract";
 import { AppError } from "@waitron/shared";
-import type { SavedCloudState } from "./cloud-client.js";
+import type { SavedCloudState } from "./cloud-client-types.js";
 import "./errors.js";
 export interface CloudCaptureMetadata {
   digest: string;

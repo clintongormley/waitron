@@ -2,7 +2,7 @@ import { readCloudResponseBytes, signCloudPayload } from "./cloud-signed-request
 import { randomUUID } from "node:crypto";
 import type { MachineAction } from "@waitron/contract";
 import { AppError } from "@waitron/shared";
-import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client.js";
+import type { CloudInstallationCredentials, SavedCloudState } from "./cloud-client-types.js";
 import { machinePayload } from "./cloud-installation.js";
 import type { OnRefusal } from "./cloud-translation.js";
 import "./errors.js";
