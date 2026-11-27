@@ -583,9 +583,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The zone and More sheets dock against that bar, and More uses shared action rows.
   More shows your clock-in time under your name, beside **Clock out**.
   The table name opens the shared action sheet with Finish table at the end.
+  The ⋮ beside the bill picker opens the current bill's actions.
   Table Pay uses the
   [shared panels and payment controls](developers/design-system.md#full-screen-panels-and-payment-controls).
-  The wide floor bar, kitchen destinations, All zones, table jobs, order, menu, bill action sheet,
+  The wide floor bar, kitchen destinations, All zones, table jobs, order, menu,
   table-move and bill action panels, and Send and move allergy prompts remain.
   The saved-invoice summary and presented whole payment follow Table Pay.
   PR 15b brings Table Pay to Counter and docks it in the wide order column. PR 15c moves the direct
