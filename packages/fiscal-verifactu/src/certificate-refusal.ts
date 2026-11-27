@@ -26,8 +26,8 @@ export async function clearCertificateRefusal(tx: Transaction): Promise<void> {
   `);
 }
 
-/** When AEAT first refused the certificate the vault holds now (`revision`, read in `tx`), or null
- * when it has not. Compared by revision, never by date, so a new install hides an older refusal at
+/** When AEAT first refused the certificate whose vault revision is `revision`, or null when it has
+ * not. Compared by revision, never by date, so a new install hides an older refusal at
  * once. */
 export async function certificateRefusedAt(
   tx: Transaction,
