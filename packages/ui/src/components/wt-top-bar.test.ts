@@ -22,6 +22,7 @@ test("paints a 56 px bar and keeps its heading centred with a long Back label", 
   const header = element.shadowRoot?.querySelector("header");
   expect(header).toBeInstanceOf(HTMLElement);
   const heading = header!.querySelector("h2")!;
+  expect([...heading.children].map((element) => element.textContent)).toEqual(["Pay", "Bill 1"]);
   const frame = header!.getBoundingClientRect();
   const title = heading.getBoundingClientRect();
   const back = header!.querySelector("wt-button")!;
@@ -37,6 +38,8 @@ test("Back emits one composed event from the bar", async () => {
   const bar = await mountInShadowRoot(
     '<wt-top-bar heading="Pay" back-label="Table 4"></wt-top-bar>',
   );
+  const heading = bar.shadowRoot!.querySelector("h2")!;
+  expect([...heading.children].map((element) => element.textContent)).toEqual(["Pay"]);
   const listener = vi.fn();
   const original = vi.fn();
   document.addEventListener("wt-back", listener);

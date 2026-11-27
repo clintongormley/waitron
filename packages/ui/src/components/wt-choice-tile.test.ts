@@ -33,6 +33,28 @@ test("reserves the leading check column and paints selection with the shared tok
   expect(getComputedStyle(icon).color).toBe("rgb(17, 90, 100)");
 });
 
+test("shows the selected mark after the payment hint and omits an empty hint", async () => {
+  const tile = await mount(
+    '<wt-choice-tile label="Whole bill" hint="€80.52" selected></wt-choice-tile>',
+  );
+  const hint = tile.shadowRoot!.querySelector("[part=hint]")!;
+  const marks = tile.shadowRoot!.querySelectorAll("[part=check]");
+  expect(hint?.textContent).toBe("€80.52");
+  expect(hint).toBeVisible();
+  expect(marks).toHaveLength(1);
+  const mark = marks[0]!;
+  expect(mark.querySelector("wt-icon")?.shadowRoot?.querySelector("path")).toBeInstanceOf(
+    SVGPathElement,
+  );
+  expect(mark.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+    hint.getBoundingClientRect().right,
+  );
+
+  tile.setAttribute("hint", "");
+  await (tile as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(tile.shadowRoot!.querySelector("[part=hint]")).toBeNull();
+});
+
 test("supports native activation and disables it when asked", async () => {
   const tile = await mount('<wt-choice-tile label="Items"></wt-choice-tile>');
   const button = tile.shadowRoot?.querySelector("button");
