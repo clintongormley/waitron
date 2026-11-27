@@ -223,6 +223,29 @@ export class TillMenuBrowser extends LitElement {
         }
       }
 
+      /* A viewport query, not a size container: containment would stop the browser's content
+         counting toward the width a screen's layout gives it. */
+      @media (width < 360px) {
+        .menu-toolbar[data-menu-picker] {
+          flex-wrap: wrap;
+        }
+
+        .menu-toolbar[data-menu-picker] ::slotted([slot="menu-picker"]) {
+          flex-basis: 100%;
+        }
+
+        @supports (grid-template-columns: subgrid) {
+          .menu-toolbar[data-menu-picker] {
+            grid-template-columns: minmax(0, 1fr) auto;
+          }
+
+          .menu-toolbar[data-menu-picker] ::slotted([slot="menu-picker"]),
+          .menu-toolbar[data-menu-picker] [data-region="search"] {
+            grid-column: 1 / -1;
+          }
+        }
+      }
+
       [data-menu-content] {
         display: grid;
         grid-template-columns: minmax(0, 1fr);
