@@ -11,10 +11,13 @@ import {
 } from "@waitron/shared";
 import { applyTokens, baseStyles, NUTRITION_ICONS, registerIcons } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { choiceCaution, filterCustomerMenu, hasCautionedChoice } from "./customer-menu-filters.js";
 
 registerIcons(NUTRITION_ICONS);
 
@@ -27,15 +30,6 @@ type OpenDetail = {
   top: number;
   left: number;
 };
-
-function matchingMember(member: GuestMember, query: string, language: string): GuestMember | null {
-  if (member.kind !== "section")
-    return member.name.toLocaleLowerCase(language).includes(query) ? member : null;
-  const members = member.members
-    .map((child) => matchingMember(child, query, language))
-    .filter((child) => child !== null);
-  return members.length ? { ...member, members } : null;
-}
 
 function scrollSource(element: HTMLElement): Element | Document {
   let ancestor: Element | null = element;
@@ -147,10 +141,12 @@ function choiceRow(
   price: string,
   value: GuestDeclarations,
   words: Words,
+  excluded: readonly string[],
   showAllergenIcons = false,
 ) {
   const { allergens, diets } = declarationLabels(value, words);
   const labels = (showAllergenIcons ? diets : [...allergens, ...diets]).map(({ label }) => label);
+  const caution = choiceCaution(value, excluded);
   return html`<li>
     <span>
       ${name}
@@ -168,10 +164,17 @@ function choiceRow(
         ? html`<span class="description" lang=${words.language}>${labels.join(", ")}</span>`
         : nothing
     }
+    ${caution ? html`<strong class="choice-caution" lang=${words.language}>${words.text[caution]}</strong>` : nothing}
   </li>`;
 }
 
-function detailContent(member: MenuEntry, words: Words, language: string) {
+function detailContent(
+  member: MenuEntry,
+  words: Words,
+  language: string,
+  excluded: readonly string[],
+  filtered: boolean,
+) {
   const money = (value: string) => formatMoney(value, language);
   if (member.kind === "set_menu") {
     const allergens = member.lines.flatMap(({ choices }) =>
@@ -180,6 +183,7 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
     return html`<p class="set-price" lang=${words.language}>
         ${words.text.perPerson!.replace("{price}", money(member.price))}
       </p>
+      ${filtered ? html`<p class="description" lang=${words.language}>${words.text.askAboutSetMenu}</p>` : nothing}
       ${member.lines.map(
         (line) =>
           html`<h3>${courseLabel(line, language)}</h3>
@@ -192,6 +196,7 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
                         choice.price === "0.00" ? "" : `+ ${money(choice.price)}`,
                         choice,
                         words,
+                        excluded,
                         true,
                       ),
                     )}
@@ -214,7 +219,13 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
         ? html`<h3 lang=${words.language}>${words.text.variants}</h3>
             <ul class="choices" role="list">
               ${member.variants.map((value) =>
-                choiceRow(value.name, `${money(value.price)}${unitRate(value.unit)}`, value, words),
+                choiceRow(
+                  value.name,
+                  `${money(value.price)}${unitRate(value.unit)}`,
+                  value,
+                  words,
+                  excluded,
+                ),
               )}
             </ul>`
         : nothing
@@ -237,13 +248,14 @@ function detailContent(member: MenuEntry, words: Words, language: string) {
                 } else if (value.unit) {
                   size = ` · ${quantity.format(amount)} ${value.unit}`;
                 }
-                return choiceRow(`${value.name}${size}`, money(value.price), value, words, true);
+                return choiceRow(`${value.name}${size}`, money(value.price), value, words, excluded, true);
               })}
             </ul>`
         : nothing;
     })}
     ${detailDeclarations(words.text.allergens!, [...allergens, ...extraAllergens], words.language)}
     ${detailDeclarations(words.text.diet!, diets, words.language)}
+    <p class="description" lang=${words.language}>${words.text.askAboutAllergens}</p>
   `;
 }
 
@@ -287,6 +299,32 @@ export class CustomerMenuPage extends LitElement {
       header h2 {
         margin: 0;
         font-size: calc(1.4 * var(--wt-font-size-xl));
+      }
+      search {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+      .filter-button {
+        --wt-action-radius: var(--wt-radius-full);
+      }
+      .filter-fields {
+        display: grid;
+        gap: var(--wt-space-3);
+      }
+      .filter-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+      }
+      .filter-summary p {
+        margin: var(--wt-space-1) 0;
+      }
+      .choice-caution {
+        grid-column: 1 / -1;
+        font-size: var(--wt-font-size-sm);
       }
       wt-input::part(field) {
         border: 1px solid var(--wt-color-border);
@@ -505,7 +543,7 @@ export class CustomerMenuPage extends LitElement {
           --menu-padding: var(--wt-space-6);
         }
         header {
-          grid-template-columns: minmax(0, 1fr) minmax(0, 24ch);
+          grid-template-columns: minmax(0, 1fr) minmax(0, 44%);
           align-items: center;
         }
         .members {
@@ -528,6 +566,9 @@ export class CustomerMenuPage extends LitElement {
   @property({ attribute: "data-theme" }) theme: "light" | "dark" = "light";
 
   @state() private query = "";
+  @state() private excluded: string[] = [];
+  @state() private diet = "";
+  @state() private filtersOpen = false;
   @state() private detail?: OpenDetail;
   #source?: Element | Document;
   #jumpedAt?: number;
@@ -662,18 +703,86 @@ export class CustomerMenuPage extends LitElement {
     this.#watchScroll();
   }
 
+  #filterDialog({ language, text }: Words) {
+    return html`<wt-dialog
+      .open=${this.filtersOpen}
+      heading=${text.filters!}
+      lang=${language}
+      @wt-close=${() => {
+        this.filtersOpen = false;
+      }}
+    >
+      <div class="filter-fields">
+        <wt-combobox
+          name="exclude-allergens"
+          label=${text.excludeAllergens!}
+          multiple
+          search="never"
+          .values=${this.excluded}
+          .options=${ALLERGEN_CODES.map((value) => ({ value, label: text[value]! }))}
+          .countLabel=${(count: number) => text.selectedCount!.replace("{count}", new Intl.NumberFormat(language).format(count))}
+          @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
+            event.stopPropagation();
+            this.excluded = event.detail.values;
+          }}
+        ></wt-combobox>
+        <wt-combobox
+          name="diet"
+          label=${text.chooseDiet!}
+          search="never"
+          show-empty-option
+          .value=${this.diet}
+          .options=${[
+            { value: "", label: text.anyDiet! },
+            ...DIETARY_LABELS.map((value) => ({ value, label: text[value]! })),
+          ]}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.diet = event.detail.value;
+          }}
+        ></wt-combobox>
+      </div>
+      <div slot="footer" class="filter-actions">
+        <wt-button
+          variant="secondary"
+          ?disabled=${!this.excluded.length && !this.diet}
+          @click=${() => {
+            this.excluded = [];
+            this.diet = "";
+          }}
+          >${text.clearFilters}</wt-button
+        >
+        <wt-button
+          variant="primary"
+          @click=${() => {
+            this.filtersOpen = false;
+          }}
+          >${text.closeFilters}</wt-button
+        >
+      </div>
+    </wt-dialog>`;
+  }
+
   protected override render() {
     const menu = this.menu;
     if (!menu) return nothing;
     const detail = this.detail;
     const words = guestMenuWords(menu.language, this.defaultLanguage);
     const query = this.query.trim().toLocaleLowerCase(menu.language);
-    const visible = menu.members.flatMap((item, index): PageMember[] => {
-      const member = query ? matchingMember(item, query, menu.language) : item;
-      return member ? [{ member, sectionId: `section-${index}` }] : [];
-    });
+    const {
+      entries: visible,
+      dishes,
+      hidden,
+      unreviewed,
+    } = filterCustomerMenu(menu.members, query, menu.language, this.diet, this.excluded);
     const sections = visible.filter(({ member }) => member.kind === "section");
-    const noResults = query.length > 0 && visible.length === 0;
+    const filtered = this.excluded.length > 0 || this.diet !== "";
+    const noResults =
+      (filtered && dishes === 0) || (!filtered && query.length > 0 && visible.length === 0);
+    const number = new Intl.NumberFormat(words.language);
+    const hiddenSummary = words.text
+      .hiddenDishes!.replace("{hidden}", number.format(hidden))
+      .replace("{unreviewed}", number.format(unreviewed));
     const money = (value: string) => formatMoney(value, menu.language);
     let firstPhoto = true;
 
@@ -701,6 +810,7 @@ export class CustomerMenuPage extends LitElement {
               return html`<div class="set-menu">
                 <div>
                   ${this.#entryName(member)}
+                  ${filtered ? html`<p class="description" lang=${words.language}>${words.text.askAboutSetMenu}</p>` : nothing}
                   ${
                     member.lines.length
                       ? html`<p class="description">
@@ -719,6 +829,7 @@ export class CustomerMenuPage extends LitElement {
                 <div>
                   ${this.#entryName(member)} ${declarations(member, words)}
                   ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
+                  ${hasCautionedChoice(member, this.excluded) ? html`<p class="description" lang=${words.language}>${words.text.checkChoices}</p>` : nothing}
                   <p class="price">${dishPrice(member, menu.language)}</p>
                 </div>
                 ${
@@ -755,7 +866,7 @@ export class CustomerMenuPage extends LitElement {
                 >
               </div>
               <h2 tabindex="-1">${detail.member.name}</h2>
-              ${detailContent(detail.member, words, menu.language)}
+              ${detailContent(detail.member, words, menu.language, this.excluded, filtered)}
             </div>`
           : nothing
       }
@@ -777,6 +888,16 @@ export class CustomerMenuPage extends LitElement {
                 this.query = event.detail.value;
               }}
             ></wt-input>
+            <wt-button
+              class="filter-button"
+              variant=${filtered ? "primary" : "secondary"}
+              aria-haspopup="dialog"
+              aria-expanded=${String(this.filtersOpen)}
+              @click=${() => {
+                this.filtersOpen = true;
+              }}
+              >${words.text.filters}</wt-button
+            >
           </search>
         </header>
         ${
@@ -791,10 +912,20 @@ export class CustomerMenuPage extends LitElement {
               </nav>`
             : nothing
         }
-        <div role="status" lang=${words.language} class=${noResults ? "no-results" : nothing}>
-          ${noResults ? words.text.noDishes : nothing}
+        <div
+          role="status"
+          lang=${words.language}
+          class=${this.excluded.length ? "filter-summary" : noResults ? "no-results" : nothing}
+        >
+          ${noResults ? (filtered ? words.text.noFilteredDishes : words.text.noDishes) : nothing}
+          ${
+            this.excluded.length
+              ? html`<p>${hiddenSummary}</p>
+                  <p>${words.text.askAboutAllergens}</p>`
+              : nothing
+          }
         </div>
-        ${members(visible, 3)} ${legend(words)}
+        ${members(visible, 3)} ${legend(words)} ${this.#filterDialog(words)}
       </div>
     </article>`;
   }

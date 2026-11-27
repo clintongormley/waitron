@@ -84,6 +84,7 @@ function published(
             name: "Almond dressing",
             price: "1.00",
             portion: "0.200",
+            preselected: false,
             unit: "kg",
             allergens: { nuts: { kinds: ["almonds"] } },
             dietary: ["vegetarian"],
@@ -238,6 +239,113 @@ describe("the customer menu Online preview", () => {
       pushed.mockRestore();
     }
   });
+
+  it.each(["light", "dark"] as const)(
+    "filters the published menu and marks choices in %s",
+    async (theme) => {
+      const preview = published();
+      const [setMenu, oven] = preview.menu.members;
+      if (setMenu?.kind !== "set_menu" || oven?.kind !== "section")
+        throw new Error("Expected the set menu and oven section");
+      const [pepper, bread] = oven.members;
+      if (pepper?.kind !== "product" || bread?.kind !== "product")
+        throw new Error("Expected two dishes");
+      pepper.dietary = ["vegan"];
+      pepper.variants.push({ name: "Small", price: "6.50", unit: "", allergens: {}, dietary: [] });
+      bread.dietary = ["vegan"];
+      setMenu.lines[0]!.choices[0]!.allergens = null;
+      oven.members = [pepper];
+      preview.menu.members.push({ kind: "section", name: "Bakery", members: [bread] });
+      const { el, host } = await open(() => Response.json(preview), theme);
+      const filters = page.getByRole("button", { name: "Allergies and diets" });
+      const dialog = page.getByRole("dialog", { name: "Allergies and diets" });
+      const allergens = page.getByRole("combobox", { name: "Exclude allergens" });
+      const diet = page.getByRole("combobox", { name: "Diet" });
+      const close = page.getByRole("button", { name: "Close", exact: true });
+      const search = page.getByRole("searchbox", { name: "Search dishes" });
+      const dish = page.getByRole("button", { name: "Roast pepper", exact: true });
+      const set = page.getByRole("button", { name: "Two courses", exact: true });
+      const back = page.getByRole("button", { name: "Back to menu" });
+
+      await expect.element(filters, { timeout: 1500 }).toBeVisible();
+      const customer = customerPage(el)!;
+      customer.setAttribute("data-theme", theme);
+      await customer.updateComplete;
+      (filters.element() as HTMLElement).focus();
+      await userEvent.keyboard("{Enter}");
+      await expect.element(dialog).toBeVisible();
+      await expectNoA11yViolations(host);
+      const allergensControl = allergens.element();
+      expect((allergensControl.getRootNode() as ShadowRoot).activeElement).toBe(allergensControl);
+      await userEvent.keyboard("{Enter}{Home}{ArrowDown}{Enter}");
+      await expect
+        .element(page.getByRole("option", { name: "Cereals containing gluten", selected: true }), {
+          timeout: 1500,
+        })
+        .toBeVisible();
+      await page.getByRole("option", { name: "Nuts", exact: true }).click();
+      await page.getByRole("option", { name: "Eggs" }).click();
+      await userEvent.keyboard("{Escape}");
+      await diet.click();
+      await page.getByRole("option", { name: "Vegan", exact: true }).click();
+      await close.click();
+
+      const filtersControl = filters.element();
+      expect((filtersControl.getRootNode() as ShadowRoot).activeElement).toBe(filtersControl);
+      await expect.element(dish).toBeVisible();
+      await expect.element(set).toBeVisible();
+      await expect.element(page.getByRole("link", { name: "Bakery" })).not.toBeInTheDocument();
+      await expect
+        .element(page.getByRole("status").filter({ hasText: "1 hidden." }))
+        .toHaveTextContent("1 hidden. 1 had unreviewed allergens.");
+      await expect.element(page.getByText("Check the choices for allergens.")).toBeVisible();
+      await expectNoA11yViolations(host);
+
+      await dish.click();
+      for (const name of ["Large", "Almond dressing · 0.2 kg"]) {
+        expect(page.getByText(name, { exact: true }).element().closest("li")).toHaveTextContent(
+          "Contains a selected allergen",
+        );
+      }
+      expect(page.getByText("Large", { exact: true }).element().closest("li")).toHaveTextContent(
+        "Cereals containing gluten (Wheat)",
+      );
+      await expectNoA11yViolations(host);
+      await back.click();
+      const dishControl = dish.element();
+      expect((dishControl.getRootNode() as ShadowRoot).activeElement).toBe(dishControl);
+
+      const setNote = "Ask staff about the choices in this set menu.";
+      expect(set.element().closest(".set-menu")).toHaveTextContent(setNote);
+      await set.click();
+      const setTitle = page.getByRole("heading", { name: "Two courses", exact: true });
+      await expect.element(setTitle, { timeout: 1500 }).toBeVisible();
+      expect(setTitle.element().parentElement).toHaveTextContent(setNote);
+      expect(
+        page.getByText("Noodles (Large)", { exact: true }).element().closest("li"),
+      ).toHaveTextContent("Contains a selected allergen");
+      expect(
+        page.getByText("Side salad", { exact: true }).element().closest("li"),
+      ).toHaveTextContent("Allergens not reviewed");
+      await expectNoA11yViolations(host);
+      await back.click();
+      await search.fill("two courses");
+      await expect.element(set).toBeVisible();
+      await expect.element(page.getByText("No dishes match these filters.")).toBeVisible();
+      await expect.element(page.getByText("0 hidden. 0 had unreviewed allergens.")).toBeVisible();
+      await expectNoA11yViolations(host);
+
+      await filters.click();
+      await page.getByRole("button", { name: "Clear filters" }).click();
+      await close.click();
+      await expect
+        .element(page.getByText("0 hidden. 0 had unreviewed allergens."))
+        .not.toBeInTheDocument();
+      await expect.element(search).toHaveValue("two courses");
+      await search.fill("");
+      await expect.element(page.getByRole("button", { name: "House bread" })).toBeVisible();
+    },
+  );
 
   it("puts dish allergens and diets under their own headings", async () => {
     const preview = published();

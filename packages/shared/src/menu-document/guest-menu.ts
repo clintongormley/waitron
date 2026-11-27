@@ -23,7 +23,7 @@ export type GuestModifier =
   | {
       kind: "extras";
       name: string;
-      items: (GuestChoice & { portion: string; servingUnit?: string })[];
+      items: (GuestChoice & { portion: string; preselected: boolean; servingUnit?: string })[];
     }
   | { kind: "options"; name: string; labels: string[] };
 export type GuestMember =
@@ -170,6 +170,7 @@ export function publicGuestMenu(
                           : `${parent} (${text(p.variantCustomerName, p.variantName)})`,
                       price: extra.price,
                       portion: extra.portion,
+                      preselected: extra.preselected,
                       unit: unit(extra.unit),
                       ...(serving ? { servingUnit: text(name, staffName) } : {}),
                       ...declarations(extra.addAllergens, extra.suitableFor),

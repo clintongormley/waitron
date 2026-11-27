@@ -1044,6 +1044,12 @@ This sent-order/history exception follows the owner's 11-November decision 6 in
 
 ### Published declarations
 
+**Allergies and diets** in Customer menu reads the published declarations. Choose whole allergen
+groups to exclude and one diet to match. A dish with variants needs a reviewed variant that passes
+all exclusions. A dish is also hidden if its main declaration is unreviewed or an extra served by
+default declares a selected allergen. Set menus remain visible when their names match the search.
+Their details mark choices with a selected allergen or an unreviewed declaration.
+
 Allergens and diet labels are frozen into a menu's version when it is published, a variant with
 none of its own taking its parent's, and tills, kitchen screens, tickets and the allergy check read
 them from there: a product edit changes nothing on them until the menu is published, or

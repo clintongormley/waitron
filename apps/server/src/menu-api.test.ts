@@ -4852,6 +4852,48 @@ describe("publishing a menu", () => {
     });
   });
 
+  it("keeps a published customer extra's default and declaration after draft edits", async () => {
+    const app = mountApp();
+    const { menuId, productId } = await menuWithProduct(app);
+    const extra = await createNamedProductVia(app, `Dressing ${crypto.randomUUID()}`);
+    expect((await saveEditorFixture(app, extra, { allergens: { mustard: {} } })).status).toBe(200);
+    const listBody = {
+      name: `Dressings ${crypto.randomUUID()}`,
+      customerName: { es: "Dressings" },
+      items: [{ productId: extra, preselected: true }],
+    };
+    const created = await send(app, "POST", "/management-api/modifiers/extras", { body: listBody });
+    expect(created.status).toBe(201);
+    const { extraList } = (await created.json()) as { extraList: ExtraList };
+    const attached = await saveEditorFixture(app, productId, {
+      modifiers: [{ kind: "extras", id: extraList.id }],
+    });
+    expect(attached.status).toBe(200);
+    const { hash } = await preview(app, menuId);
+    const published = await send(app, "POST", `/management-api/menus/${menuId}/publish`, {
+      body: { expectedHash: hash },
+    });
+    expect(published.status).toBe(200);
+
+    expect((await saveEditorFixture(app, extra, { allergens: { milk: {} } })).status).toBe(200);
+    const changed = await send(app, "PATCH", `/management-api/modifiers/extras/${extraList.id}`, {
+      body: {
+        ...listBody,
+        items: [{ id: extraList.items[0]!.id, productId: extra, preselected: false }],
+      },
+    });
+    expect(changed.status).toBe(200);
+
+    const response = await send(app, "GET", `/management-api/menus/${menuId}/customer-preview`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      state: "published",
+      menu: {
+        members: [{ modifiers: [{ items: [{ preselected: true, allergens: { mustard: {} } }] }] }],
+      },
+    });
+  });
+
   it("shows an included price clash in prices and refuses publication without a version", async () => {
     const app = mountApp();
     const child = await createMenuVia(app, `Drinks ${crypto.randomUUID()}`);

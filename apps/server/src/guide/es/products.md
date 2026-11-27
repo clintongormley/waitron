@@ -447,8 +447,9 @@ la vista previa. Tras publicar, comprueba la versión y la hora en el encabezado
 
 Abre **Carta para clientes** y elige **Móvil** u **Ordenador** para comprobar el diseño publicado.
 En **Idioma** puedes revisar el texto en cada idioma del contenido. Usa **Buscar platos** para
-encontrar un plato o menú por su nombre, o elige una sección para ir a ella. Debajo de los platos
-verás la leyenda de alérgenos. Abre un plato para comprobar sus variantes, opciones y extras.
+encontrar un plato o menú por su nombre, o elige una sección para ir a ella. Abre **Alergias y
+dietas** para excluir alérgenos o elegir una dieta. Comprueba cuántos platos se han ocultado y abre
+un plato o menú para ver las opciones marcadas. Debajo de los platos verás la leyenda de alérgenos. Abre un plato para comprobar sus variantes, opciones y extras.
 Consulta **Alérgenos** y **Declaraciones dietéticas** para el plato. Los iconos de alérgenos de
 cada extra aparecen junto a su nombre. También puedes consultar ese extra en **Alérgenos**.
 Consulta las declaraciones de cada variante debajo de su nombre.
