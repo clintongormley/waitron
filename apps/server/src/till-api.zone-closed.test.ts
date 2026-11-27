@@ -1050,7 +1050,7 @@ describe("moving into closed zones", () => {
       destination.id,
     ]);
   });
-  it("replays a confirmed Counter move without another allergy write or zone answer", async () => {
+  it("replays the original result of a confirmed Counter move without the zone answer", async () => {
     const { v, dining } = await moveVenue();
     const billId = randomUUID();
     expect(

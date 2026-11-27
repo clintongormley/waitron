@@ -3451,7 +3451,8 @@ describe("till-app: moving a bill", () => {
     expect(moveBill).toHaveBeenCalledOnce();
   });
 
-  it.each([false, true])("retries a bill move after a station refusal (%s)", async (closed) => {
+  it.each(["open", "closed"])("retries when a station closes (%s zone)", async (state) => {
+    const closed = state === "closed";
     const askOrderDeadEnds = vi
       .fn()
       .mockResolvedValueOnce({ sends: false, deadEnds: [], stations: [] })

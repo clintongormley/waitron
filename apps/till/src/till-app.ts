@@ -17583,6 +17583,9 @@ export class TillApp extends LitElement {
     await this.#followActionBills(result.billIds, sent);
   }
 
+  /** After this till's Move guests or Join, the screen keeps its bill while the answer's `billIds`
+   * hold it, and reads lines and bills together; otherwise it reads the party's bills first and
+   * shows {@link billToShow}'s choice, else the answer's first bill. */
   async #followActionBills(billIds: readonly string[], sent: Sent): Promise<void> {
     const followed = this.orderParty?.id;
     const kept = this.activeTabId;
