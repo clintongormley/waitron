@@ -810,8 +810,8 @@ describe("WorkingOrderStore", () => {
     // could not see a missing invalidation.
     expect(s.total).toBe("1.00");
     const lines: OrderLine[] = [
-      { product: coffee, quantity: "2" }, // 1.50 × 2 = 3.00 (general)
-      { product: ham, quantity: "0.320" }, // 10.00 × 0.320 = 3.20 (reduced)
+      { product: coffee, quantity: "2" }, // 1.50 × 2 = 3.00
+      { product: ham, quantity: "0.320" }, // 10.00 × 0.320 = 3.20
     ];
     s.loadFrom("held-123", lines, "Table 4");
     expect(s.id).toBe("held-123");

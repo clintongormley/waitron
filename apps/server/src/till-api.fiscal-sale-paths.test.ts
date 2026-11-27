@@ -729,7 +729,7 @@ describe("the fiscal sale path over HTTP", () => {
 
   it("saves and pays a fresh cash basket in one request and replays its invoice", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1010,7 +1010,7 @@ describe("sale-time device from the authenticated session", () => {
 describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", () => {
   it("saves the edited parked basket with payment and replays the filed invoice", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1350,7 +1350,7 @@ describe("reader payments over HTTP", () => {
 
   it("routes to the device's chosen reader, captures, and STAMPS payments.reader_id", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50
     const app = new Hono();
     mountTillApi(app, apiDepsWithPool(cfg, fakePool(new FakeStripe())), noopLog);
     const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
@@ -1901,7 +1901,7 @@ describe("place → station queue → per-line advance → collect, over HTTP", 
   it("Mode T: place files no fiscal doc; the prep queue tracks it; collect files the sale at collect", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     const modeCfg: TradingContext = { ...cfg };
-    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
+    const each = available.find((p) => p.pricingUnit === "each")!; // 1.50
 
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
