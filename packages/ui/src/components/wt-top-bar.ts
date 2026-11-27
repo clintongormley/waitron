@@ -100,7 +100,7 @@ export class WtTopBar extends LitElement {
             ? nothing
             : html`<wt-button variant="ghost" .disabled=${this.backDisabled} @click=${this.back}
                 ><wt-icon name="chevron-left"></wt-icon
-                ><span class="back-label">${this.backLabel}</span></wt-button
+                ><span class="back-label" part="back-label">${this.backLabel}</span></wt-button
               >`
         }
       </div>

@@ -1122,6 +1122,7 @@ export class TillBillPayDialog extends LitElement {
       title: t("action.pay"),
       subtitle: this.billName,
       back: this.openingBack || this.tableName || t("action.back"),
+      wrapBack: this.openingBack !== "",
       close: () => this.#requestClose(),
       equipment: quietEquipmentButton(
         this.rowOpen,

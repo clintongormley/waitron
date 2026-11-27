@@ -1,4 +1,6 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
+import { page } from "vitest/browser";
+import { deviceZonesFixture } from "../test/device-zones.js";
 import { TillApp } from "./till-app.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
@@ -160,19 +162,11 @@ it("persists the first Counter payment before opening the window, then offers th
   await type(el, "amount", "20");
   await type(el, "tendered", "20");
   await press(el, "[data-pay-continue]");
-  const guests = inDialog(el, '[name="guests"]') as NonNullable<ReturnType<typeof inDialog>> & {
-    updateComplete: Promise<unknown>;
-  };
-  await guests.updateComplete;
-  const input = guests.shadowRoot!.querySelector("input")!;
-  input.value = "2";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  await flush(el);
+  expect(inDialog(el, '[name="guests"]')).toBeNull();
   await press(el, "[data-pay-confirm]");
-  expect(vi.mocked(api.takeBillPayment).mock.calls[1]![1]).toMatchObject({
-    amount: "20",
-    guestCount: 2,
-  });
+  const finalPayment = vi.mocked(api.takeBillPayment).mock.calls[1]![1];
+  expect(finalPayment).toMatchObject({ amount: "20" });
+  expect(finalPayment).not.toHaveProperty("guestCount");
   expect(dialog(el)).toBeNull();
 });
 
@@ -1018,6 +1012,20 @@ async function sentWaitingOrder(
   await flush(el);
   return { el, api };
 }
+
+it("shows the full Counter zone name on the shared Back button at phone width", async () => {
+  const { innerWidth, innerHeight } = window;
+  onTestFinished(() => page.viewport(innerWidth, innerHeight));
+  await page.viewport(390, 844);
+  const zones = deviceZonesFixture(["z1"]);
+  zones.zones[0]!.name = "Downstairs bar";
+  const { el } = await sentWaitingOrder(() => "no", {
+    getDeviceZones: vi.fn().mockResolvedValue(zones),
+  });
+  const label = inDialog(el, "wt-top-bar")!.shadowRoot!.querySelector<HTMLElement>(".back-label")!;
+  expect(label.textContent).toBe("Counter · Downstairs bar");
+  expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
+});
 
 it("checks Charge again before sending and repeats the exact unanswered payment", async () => {
   const allocation = (amount: string) => ({

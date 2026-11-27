@@ -505,6 +505,7 @@ it.each([undefined, "F1/7"])(
     emit(counter(), "collect-card", {});
     await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
     await flushCounter(el);
+    expect(dialog(el)!.quiet).toBe(false);
     await toTakePart();
     expect(inDialog(el, "[data-pay-own-receipt]") !== null).toBe(invoiceNumber === undefined);
   },

@@ -12656,7 +12656,7 @@ export class TillApp extends LitElement {
   #billPayingAsksGuests(open: BillPaying): boolean {
     return open.surface === "table"
       ? this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.invoiceType !== "F1"
-      : this.invoiceChoice?.orderId !== open.billId;
+      : !open.counterPayPanel && this.invoiceChoice?.orderId !== open.billId;
   }
 
   /** The refund dialog and, over it, its approver's PIN prompt, whose events stop here so the
