@@ -3,7 +3,10 @@ import { saleLines, type Transaction } from "@waitron/db";
 
 type CorrectiveRow = Pick<typeof saleLines.$inferSelect, "id" | "lineGross" | "correctsLineId">;
 
-type CorrectedLine = Pick<typeof saleLines.$inferSelect, "lineGross" | "quantity" | "unitPrecision">;
+type CorrectedLine = Pick<
+  typeof saleLines.$inferSelect,
+  "lineGross" | "quantity" | "unitPrecision"
+>;
 
 /**
  * How many of a row's dishes `taken` cents give back: k when the row counts a whole number of
@@ -15,9 +18,8 @@ function wholeDishesOf(taken: number, line: CorrectedLine): number | null {
   const price = (line.lineGross ?? 0) / dishes;
   const count = taken / price;
   const counted = line.unitPrecision === 0 && Number.isInteger(dishes) && dishes > 1;
-  return counted && Number.isInteger(price) && price > 0 && Number.isInteger(count) && count > 0 && count < dishes
-    ? count
-    : null;
+  if (!counted || !Number.isInteger(price) || price <= 0) return null;
+  return Number.isInteger(count) && count > 0 && count < dishes ? count : null;
 }
 
 /**
@@ -44,7 +46,8 @@ async function partRows(
   const answer = new Map<string, number | null>();
   for (const row of named) {
     const line = byId.get(row.correctsLineId!)!;
-    if (-row.lineGross! !== line.lineGross) answer.set(row.id, wholeDishesOf(-row.lineGross!, line));
+    const taken = -row.lineGross!;
+    if (taken !== line.lineGross) answer.set(row.id, wholeDishesOf(taken, line));
   }
   return answer;
 }
