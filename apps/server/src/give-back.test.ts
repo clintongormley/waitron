@@ -25,7 +25,10 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
-import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
+import {
+  acceptedByAeat,
+  refusedByAeat,
+} from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import {
   createCategory,
   createExtraList,
@@ -74,6 +77,8 @@ import { createTable } from "./testing/live-table.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { takeOver } from "./testing/taken-over.js";
+import { filedInvoiceOf, onOpenChainOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { fixturePinHash } from "./testing/known-secret-hashes.js";
 import { confineTo, personHolding } from "./testing/session-holding.js";
@@ -637,10 +642,11 @@ describe("readGiveBack: the lines", () => {
     expect(lineOf(view, "Paella").givenFree).toBe(false);
   });
 
-  it("lists a receipt another box filed with each line's left at its gross", async () => {
+  it("lists a receipt another box filed, once AEAT accepted it, with each line's left at its gross and goodwill offered", async () => {
     const b = await tab(["Paella", "Cheesecake"]);
     const saleId = await pay(b, [{ cash: "25.00" }]);
-    admittingNot("wrong_node");
+    await acceptedByAeat(venue.db, saleId);
+    await takeOver(venue);
     const view = await read(saleId);
     expect(lineOf(view, "Paella")).toMatchObject({ gross: "18.50", left: "18.50" });
     expect(lineOf(view, "Cheesecake")).toMatchObject({ gross: "6.50", left: "6.50" });
@@ -964,7 +970,7 @@ describe("readGiveBack: more waits", () => {
   it("offers no dishes and no goodwill once every payment's money is back", async () => {
     const b = await tab(["Paella", "Cheesecake"]);
     const saleId = await pay(b, [{ cash: "25.00" }]);
-    admittingNot("wrong_node");
+    admittingNot("not_simplified");
     const cash = await tenderOf(saleId, "cash");
     expect((await plainRefund(saleId, cash, { applied: "25.00" })).status).toBe(200);
     const view = await read(saleId);
@@ -1136,17 +1142,24 @@ describe("planGiveBack: goodwill and the extra", () => {
     );
   });
 
-  it.each(["wrong_node", "not_simplified"])(
-    "gives goodwill back as a plain refund where Correct invoice can never act (%s)",
-    async (reason) => {
-      const b = await tab(FIVE);
-      const saleId = await pay(b, [{ cash: "34.00" }]);
-      admittingNot(reason);
-      expect(await preview(saleId, ask("goodwill", "10.00"))).toEqual(
-        planned([{ kind: "refund", amount: "10.00", way: "cash" }]),
-      );
-    },
-  );
+  it("gives goodwill back as a plain refund where Correct invoice can never act (not_simplified)", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    admittingNot("not_simplified");
+    expect(await preview(saleId, ask("goodwill", "10.00"))).toEqual(
+      planned([{ kind: "refund", amount: "10.00", way: "cash" }]),
+    );
+  });
+
+  it("gives goodwill back on a receipt another box filed, once AEAT accepted it, as a correction", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    await acceptedByAeat(venue.db, saleId);
+    await takeOver(venue);
+    expect(await preview(saleId, ask("goodwill", "10.00"))).toEqual(
+      planned([{ kind: "correction", amount: "10.00", way: "cash", lineIds: [] }]),
+    );
+  });
 
   it("gives goodwill back as a plain refund while the records need checking", async () => {
     const b = await tab(FIVE);
@@ -1187,6 +1200,35 @@ describe("planGiveBack: waits answer what the read shows", () => {
     expect(
       await preview(saleId, ask("dishes", "1.00", { lineIds: [lineOf(view, "Bread").id] })),
     ).toEqual(refused(lineOf(view, "Bread").reason!.code, lineOf(view, "Bread").reason!.params));
+  });
+
+  it("on a receipt another box filed that AEAT has not answered: goodwill waits; the extra and the cancelled paella go back; once AEAT accepts it, a dish is corrected", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }], "2.00");
+    const cancelId = await cancel(b, "Paella", "1", true);
+    await takeOver(venue);
+    const view = await read(saleId);
+    expect(view.choices.goodwill.reason).toEqual({
+      code: "sale.correction_not_admitted",
+      params: { reason: "filing_pending" },
+    });
+    expect(await preview(saleId, ask("goodwill", "5.00"))).toEqual(
+      refused("sale.correction_not_admitted", { reason: "filing_pending" }),
+    );
+    expect(await preview(saleId, ask("extra", "2.00"))).toEqual(
+      planned([{ kind: "extra", amount: "2.00", way: "cash" }]),
+    );
+    const paella = [lineOf(view, "Paella").id];
+    expect(await preview(saleId, ask("dishes", "18.50", { lineIds: paella }))).toEqual(
+      planned([{ kind: "refund", amount: "18.50", way: "cash", cancellationIds: [cancelId] }]),
+    );
+
+    await acceptedByAeat(venue.db, saleId);
+    expect((await read(saleId)).choices.goodwill).toEqual({ available: true, reason: null });
+    const cheesecake = lineOf(view, "Cheesecake").id;
+    expect(await preview(saleId, ask("dishes", "6.50", { lineIds: [cheesecake] }))).toEqual(
+      planned([{ kind: "correction", amount: "6.50", way: "cash", lineIds: [cheesecake] }]),
+    );
   });
 
   it("goodwill waits while another payment's refund is pending", async () => {
@@ -1511,6 +1553,44 @@ describe("POST …/give-back in cash", () => {
       drawerOpens: before.drawerOpens + 1,
       drawerCents: before.drawerCents - 2450,
     });
+  });
+
+  it("files goodwill on a receipt another box filed, once AEAT accepted it, on this box's chain naming the original", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "34.00" }]);
+    await acceptedByAeat(venue.db, saleId);
+    const box = await takeOver(venue);
+    const app = venue.appWith({});
+    const previewed = await routePreview(saleId, ask("goodwill", "10.00"), app);
+    expect(previewed.status, JSON.stringify(previewed.json)).toBe(200);
+    const answer = await give(
+      saleId,
+      {
+        ...ask("goodwill", "10.00"),
+        reasonId: correctionReasonId,
+        note: "Cold",
+        submissionIds: {
+          refund: randomUUID(),
+          extra: randomUUID(),
+          correction: randomUUID(),
+          leg: randomUUID(),
+        },
+        expected: (previewed.json as unknown as GiveBackPlan).parts,
+      },
+      adminCookie,
+      app,
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const [part] = (answer.json as { parts: { correctionId?: string }[] }).parts;
+    const [correction] = await venue.db
+      .select()
+      .from(invoiceCorrections)
+      .where(eq(invoiceCorrections.id, part!.correctionId!));
+    expect(correction).toMatchObject({ state: "filed", gross: 1000 });
+    expect(onOpenChainOf(venue.db, correction!.correctiveSaleId!, box)).toBe(true);
+    expect(filedInvoiceOf(venue.db, correction!.correctiveSaleId!).corrects).toMatchObject([
+      { number: filedInvoiceOf(venue.db, saleId).number },
+    ]);
   });
 
   it("gives a cancelled dish's priced extra back with the dish, never twice", async () => {

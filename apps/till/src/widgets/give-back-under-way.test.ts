@@ -283,7 +283,7 @@ describe("ending it", () => {
     api.getInvoiceCorrection.mockResolvedValue({
       ...OPEN,
       moneyBack: "2.00",
-      fileNow: { refusal: "sale.correction_not_admitted", reason: "wrong_node", closable: true },
+      fileNow: { refusal: "sale.correction_not_admitted", reason: "voided", closable: true },
     });
     api.closeInvoiceCorrection.mockResolvedValue({ ...OPEN, state: "closed", moneyBack: "2.00" });
     const { el } = await mount(
@@ -305,7 +305,7 @@ describe("ending it", () => {
     await vi.waitFor(() => expect(shown(el, "finish")).toBe(true));
     const said = text(root(el).querySelector("[data-file-refusal]"));
     expect(said).toBe(
-      "Another box issued this receipt, so this box cannot record the refund on it. Press Finish to end this refund. The money already refunded stays refunded.",
+      "This receipt was cancelled, so the refund cannot be recorded on it. Press Finish to end this refund. The money already refunded stays refunded.",
     );
     expect(said).not.toContain("Refund a payment");
     expect(said).not.toMatch(/correct/i);
@@ -338,7 +338,7 @@ describe("ending it", () => {
   });
 
   it("says why a receipt can never take the money back, in its own words and never as a correction", async () => {
-    const reasons = ["replaced", "voided", "wrong_node", "not_simplified"];
+    const reasons = ["replaced", "voided", "not_simplified"];
     const english = [];
     for (const reason of reasons) {
       const fileNow = { refusal: "sale.correction_not_admitted", reason, closable: true };
@@ -361,20 +361,30 @@ describe("ending it", () => {
     ).toBe(
       "The tax agency refused this receipt, or sending it to the agency is on hold, so the refund cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
     );
+    const pending = {
+      refusal: "sale.correction_not_admitted",
+      reason: "filing_pending",
+      closable: false,
+    };
+    const waiting = await mount({ ...OPEN, moneyBack: "2.00", fileNow: pending });
+    expect(text(root(waiting.el).querySelector("[data-file-refusal]"))).toBe(
+      "This receipt is still being sent to the tax agency, so the refund cannot be recorded on it yet. Press Check again in a few minutes.",
+    );
+    expect(shown(waiting.el, "finish")).toBe(false);
 
     setLocale("es");
     const fileNow = {
       refusal: "sale.correction_not_admitted",
-      reason: "wrong_node",
+      reason: "voided",
       closable: true,
     };
     const { el } = await mount({ ...OPEN, moneyBack: "2.00", fileNow });
     const said = text(root(el).querySelector("[data-file-refusal]"));
     expect(said).toBe(
-      `${giveBackFilingMessage("sale.correction_not_admitted", "es", { reason: "wrong_node" })} ${es["give_back.uw_finish_unrecorded"]}`,
+      `${giveBackFilingMessage("sale.correction_not_admitted", "es", { reason: "voided" })} ${es["give_back.uw_finish_unrecorded"]}`,
     );
     for (const code of ["sale.correction_not_admitted", "invoice_correction.chain_unsound"])
-      for (const reason of [...reasons, "filing_refused", "missing"]) {
+      for (const reason of [...reasons, "filing_refused", "filing_pending", "missing"]) {
         const words = giveBackFilingMessage(code, "es", { reason });
         expect(words).not.toMatch(/rectific/i);
         expect(words).not.toContain("equipo");

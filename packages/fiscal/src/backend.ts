@@ -62,8 +62,6 @@ export type CorrectionAdmission =
       reason:
         | "unsupported"
         | "missing"
-        // A1614 Task 2 removes this with its server and till readers
-        | "wrong_node"
         | "voided"
         | "not_simplified"
         | "filing_refused"

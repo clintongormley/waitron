@@ -64,6 +64,13 @@ import { giveCorrectionCash, parseCorrectionCash } from "./invoice-correction-ca
 import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { takeOver } from "./testing/taken-over.js";
+import { filedInvoiceOf, onOpenChainOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import {
+  acceptedByAeat,
+  heldFromSending,
+  waitingToBeSent,
+} from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { systemClock } from "./till-backend.js";
 import { overridePinAttempts } from "./till-request-fields.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -1025,7 +1032,9 @@ describe("openInvoiceCorrection refuses", () => {
     await cash(correction.id, "3.00");
     await close(correction.id, {
       backend: Object.create(venue.backend, {
-        correctionAdmissionFor: { value: async () => ({ eligible: false, reason: "wrong_node" }) },
+        correctionAdmissionFor: {
+          value: async () => ({ eligible: false, reason: "refused_no_fix" }),
+        },
       }) as typeof venue.backend,
     });
     await refusedWithNothingWritten(
@@ -1574,59 +1583,42 @@ describe("File now and Close", () => {
     });
   });
 
-  it("closes keeping the refunds when another box has taken over, and refuses while the ticket's filing is only stopped", async () => {
+  it("refuses Close while the ticket's filing is stopped, and after another box takes over while AEAT has not answered it or its filing is stopped, then files on the new box's chain naming it", async () => {
     const saleId = await soldForCash("Set menu", ["40.00"]);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
     const { refunds } = await cash(correction.id, "15.00");
-    const [record] = (await original(saleId)).records as { id: string }[];
-    const filingState = (to: string) =>
-      venue.db.run(
-        sql`update verifactu_submissions set estado = ${to} where registro_id = ${record!.id}`,
-      );
-    const [{ state }] = venue.db.all<{ state: string }>(
-      sql`select estado as state from verifactu_submissions where registro_id = ${record!.id}`,
-    ) as [{ state: string }];
-    filingState("detenido");
-    try {
-      await refusedWithNothingWritten(() => close(correction.id), {
+    const stillCorrectable = () =>
+      refusedWithNothingWritten(() => close(correction.id), {
         code: "invoice_correction.still_correctable",
         params: { correctionId: correction.id },
       });
-    } finally {
-      filingState(state);
-    }
 
-    const takenOver = Object.create(venue.backend, {
-      correctionAdmissionFor: {
-        value: async () => ({ eligible: false, reason: "wrong_node" }),
-      },
-    }) as typeof venue.backend;
-    await refusedWithNothingWritten(() => cash(correction.id, "10.00", randomUUID(), takenOver), {
+    await heldFromSending(venue.db, saleId);
+    await stillCorrectable();
+    await waitingToBeSent(venue.db, saleId);
+
+    const box = await takeOver(venue);
+    await refusedWithNothingWritten(() => fileNow(correction.id, MENU_FIFTEEN), {
       code: "sale.correction_not_admitted",
-      params: { reason: "wrong_node" },
+      params: { reason: "filing_pending" },
     });
-    await refusedWithNothingWritten(
-      () => fileNow(correction.id, MENU_FIFTEEN, { backend: takenOver }),
-      { code: "sale.correction_not_admitted", params: { reason: "wrong_node" } },
-    );
-    expect(
-      await inTx(venue, (tx) => readInvoiceCorrection(tx, venue.backend, venue.cfg, correction.id)),
-    ).toMatchObject({ state: "open", moneyBack: "15.00", legs: [{ id: refunds[0]!.id }] });
-    const was = counts();
+    await stillCorrectable();
+    await heldFromSending(venue.db, saleId);
+    await stillCorrectable();
+    await acceptedByAeat(venue.db, saleId);
+    await stillCorrectable();
 
-    const ended = await close(correction.id, { backend: takenOver });
+    const filed = await fileNow(correction.id, MENU_FIFTEEN);
 
-    expect(ended).toMatchObject({
-      state: "closed",
+    expect(filed).toMatchObject({
+      state: "filed",
       moneyBack: "15.00",
-      correctiveSaleId: null,
       legs: [{ id: refunds[0]!.id, state: "completed", appliedAmount: "15.00" }],
     });
-    expect(counts()).toEqual(was);
-    expect(await correctionRow(correction.id)).toMatchObject({
-      state: "closed",
-      endedBy: managerId,
-    });
+    expect(onOpenChainOf(venue.db, filed.correctiveSaleId!, box)).toBe(true);
+    expect(filedInvoiceOf(venue.db, filed.correctiveSaleId!).corrects).toMatchObject([
+      { number: filedInvoiceOf(venue.db, saleId).number },
+    ]);
   });
 });
 

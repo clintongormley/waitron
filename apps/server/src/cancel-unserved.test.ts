@@ -29,6 +29,7 @@ import { cancelItemHttp, cancelReasonId } from "./testing/cancel-line.js";
 import { inTx, seatedWith, send, statusOf, type Answer } from "./testing/bill-venue.js";
 import { departed, provisionOrderVenue, type OrderVenue } from "./testing/order-venue.js";
 import * as fixture from "./testing/split-after-print-fixture.js";
+import { takeOver } from "./testing/taken-over.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
@@ -589,6 +590,43 @@ describe("Nothing was served files the corrective, as before, on any other print
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(await fixture.creditsOf(venue, saleId)).toHaveLength(1);
     expect(await voidsOf(saleId)).toEqual([]);
+  });
+
+  it("one whose payment was given back in full and whose receipt another box issued, which waits for AEAT's answer, then is credited once AEAT accepts it", async () => {
+    const party = await seatedWith(venue, "Tarta");
+    const paymentId = await fixture.payInCash(venue, party.tabId, "5.00");
+    const givenBack = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "5.00",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+    expect(givenBack.status, JSON.stringify(givenBack.json)).toBe(200);
+    await printAnyway(party);
+    const saleId = await saleOf(party.tabId);
+    await takeOver(venue);
+    const app = venue.appWith({});
+
+    const answer = await expectRefused(
+      party.tabId,
+      () => cancel(party.tabId, venue.supervisorTill, app),
+      { status: 409, code: "fiscal.original_unanswered" },
+    );
+    expect(answer.json.params).toEqual({ saleId });
+    expect(await fixture.creditsOf(venue, saleId)).toEqual([]);
+
+    await inTx(venue, (tx) => acceptedByAeat(tx, saleId));
+    const credited = await cancel(party.tabId, venue.supervisorTill, app);
+
+    expect(credited.status, JSON.stringify(credited.json)).toBe(200);
+    expect(await fixture.creditsOf(venue, saleId)).toHaveLength(1);
   });
 
   it("one whose payment was given back in full and whose receipt AEAT refused, which is refused, writing no corrective", async () => {

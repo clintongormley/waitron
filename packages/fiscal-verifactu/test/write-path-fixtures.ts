@@ -120,6 +120,14 @@ export async function heldFromSending(db: Database | Transaction, saleId: string
   `);
 }
 
+/** Leaves every record of `saleId` waiting to be sent (`pendiente`). */
+export async function waitingToBeSent(db: Database | Transaction, saleId: string): Promise<void> {
+  await db.execute(sql`
+    update verifactu_submissions set estado = 'pendiente'
+    where registro_id in (select id from verifactu_records where sale_id = ${saleId})
+  `);
+}
+
 /** Leaves every record of `saleId` accepted by AEAT. */
 export async function acceptedByAeat(db: Database | Transaction, saleId: string): Promise<void> {
   await db.execute(sql`

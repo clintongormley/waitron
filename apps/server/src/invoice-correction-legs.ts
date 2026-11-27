@@ -29,7 +29,6 @@ export const AS_ADMITTED = { fullInvoice: "as_admitted" } as const;
 const NEVER_FILEABLE = new Set<ErrorParams["sale.correction_not_admitted"]["reason"]>([
   "replaced",
   "voided",
-  "wrong_node",
   "not_simplified",
   "refused_no_fix",
 ]);
