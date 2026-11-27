@@ -113,7 +113,7 @@ describe("installCertificate beside the sale path", () => {
     const ring = testRing();
     await sealAeatSecret(
       { db: suite.db, ring, nodeId, now: () => new Date("2026-10-18T10:00:00Z") },
-      bodyOf(oldCert, null),
+      { ...bodyOf(oldCert, null), certKind: "representante" },
     );
     const server = await startAnsweringServer(authority, { status: 200, body: SIN_DATOS_BODY });
     servers.push(server);
