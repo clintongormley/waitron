@@ -673,9 +673,9 @@ arriba en la pantalla de la mesa, muestra la cuenta abierta y su importe. Si hay
 a la derecha ves la posición de la cuenta abierta en la lista. **2 de 3** indica que estás en la
 segunda cuenta.
 
-En **Mostrador**, abre la cuenta para recuperarla o descartarla.
-Descartar su última cuenta deja la mesa ocupada con una cuenta nueva y vacía. Para liberar la mesa,
-usa **Cerrar mesa**.
+Si la mesa no aparece en el plano de tu dispositivo, abre su cuenta en **Otros pedidos**,
+en **Mostrador**. Elige **Recuperar** o **Descartar**. Al descartar la última cuenta, se abre una
+cuenta nueva y vacía en la mesa. Para liberar la mesa, usa **Cerrar mesa**.
 
 Toca el selector para ver las cuentas de la mesa por orden de número. En una pantalla estrecha,
 la lista se abre desde abajo. La marca verde azulada indica qué cuenta tienes abierta. Cada fila muestra el número y

@@ -7419,6 +7419,33 @@ it.each(retirementActionLooks)(
   },
 );
 
+describe("A738 counter order views", () => {
+  it.each([undefined, "demo", "prepare"] as const)(
+    "A738 gates direct and restored till Kitchen for %s",
+    async (onboardingIntent) => {
+      history.replaceState(null, "", "/till/tabs/counter/view/station");
+      const { el } = await mountApp({
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "till-dev",
+          name: "Till 1",
+          formFactor: "till",
+          kitchenScreens: [kitchenScreen("station")],
+        }),
+        getTill: vi.fn().mockResolvedValue({ ...till, onboardingIntent }),
+      });
+      const c = await toCounter(el);
+      const allowed = onboardingIntent === "demo" || onboardingIntent === "prepare";
+      const bar =
+        el.shadowRoot!.querySelector<import("./widgets/till-shell.js").TillShell>("till-shell")!;
+      expect(bar.testingKitchen).toBe(allowed);
+      expect(el.shadowRoot!.querySelector("till-station-screen") !== null).toBe(allowed);
+      emit(c, "show-station");
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("till-station-screen") !== null).toBe(allowed);
+    },
+  );
+});
+
 describe("A1208 a retrieved counter order's portions", () => {
   const toast: TillProduct = { ...coffee, id: "tostada", name: "Tostada", unitPrice: "2.50" };
   const menu = zoneOffers({ menus: [defaultMenu], products: [coffee, toast] }, "zone-counter");

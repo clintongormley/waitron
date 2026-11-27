@@ -62,7 +62,7 @@ export class TillCounterFloor extends LitElement {
   @property({ attribute: false }) waiting: CounterWaitingOrder[] = [];
   @property({ attribute: false }) parked: HeldOrderSummary[] = [];
   @property({ attribute: false }) tables: TableState[] = [];
-  @property({ type: Boolean }) tablesAnswered = false;
+  @property({ type: Boolean }) tableMapReadFinished = false;
   @property({ attribute: false }) zones: FloorZone[] = [];
   @property({ type: Boolean }) canEditKitchenNote = false;
   @property({ type: Boolean }) canMoveStation = false;
@@ -148,7 +148,7 @@ export class TillCounterFloor extends LitElement {
       ({ zoneId, partyId }) =>
         !shownCounter(zoneId) &&
         (partyId === null || !mappedParties.has(partyId)) &&
-        (this.tablesAnswered || zoneId === null || !this.floorZoneIds.includes(zoneId)),
+        (this.tableMapReadFinished || zoneId === null || !this.floorZoneIds.includes(zoneId)),
     );
     const openCount = open.length + held.length;
     const otherCount = otherWaiting.length + otherParked.length;

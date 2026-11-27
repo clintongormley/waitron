@@ -1089,8 +1089,9 @@ it("puts orders outside the shown counters and table map in Other orders", async
     serviceMode: null,
     movableDishes: [],
   };
+  const map = deferred<(typeof table)[]>();
   const { el } = await mount(selection(["bar", "room"], "bar"), {
-    getTablesState: vi.fn().mockResolvedValue([table]),
+    getTablesState: vi.fn().mockReturnValue(map.promise),
     listWorkingOrders: vi.fn().mockResolvedValue([
       seated,
       {
@@ -1124,8 +1125,11 @@ it("puts orders outside the shown counters and table map in Other orders", async
     expect(page.getByRole("heading", { name: "Other orders" }).query()).not.toBeNull(),
   );
   const floor = counter(el)!.shadowRoot!.querySelector("till-counter-floor")!;
+  expect(page.getByRole("button", { name: /Visible table/ }).query()).toBeNull();
+  expect(page.getByRole("button", { name: /Off-map table/ }).query()).toBeNull();
+  map.resolve([table]);
+  await expect.element(page.getByRole("button", { name: /Off-map table/ })).toBeVisible();
   const other = page.elementLocator(floor.shadowRoot!.querySelector("[data-other-orders]")!);
-  await expect.element(other.getByRole("button", { name: /Off-map table/ })).toBeVisible();
   await expect.element(other.getByRole("button", { name: /^#56 · Hidden counter/ })).toBeVisible();
   await expect.element(other.getByRole("button", { name: /Unassigned pie/ })).toBeVisible();
   const seatedRow = page.getByRole("button", { name: /Counter seat/ });
@@ -1142,6 +1146,25 @@ it("puts orders outside the shown counters and table map in Other orders", async
   expect(other.getByRole("button", { name: /Counter seat/ }).query()).toBeNull();
   await page.getByRole("button", { name: /Counter seat/ }).click();
   await expect.element(page.getByRole("button", { name: /Retrieve #52/ })).toBeVisible();
+});
+
+it("keeps a table bill reachable from Counter if the table map cannot load", async () => {
+  await mount(selection(["bar", "room"], "bar"), {
+    getTablesState: vi.fn().mockRejectedValue(new Error("Table map unavailable")),
+    listWorkingOrders: vi.fn().mockResolvedValue([
+      {
+        ...parkedOrder,
+        id: "off-map",
+        zoneId: "room",
+        partyId: "table-party",
+        tableLabel: "Table 9",
+        billName: "Off-map table",
+      },
+    ]),
+  });
+  await vi.waitFor(() => {
+    expect(page.getByRole("button", { name: /Off-map table/ }).query()).not.toBeNull();
+  });
 });
 
 it("opens a prepared counter from the narrow floor without the old queue shortcuts", async () => {
@@ -1239,6 +1262,7 @@ describe("picking a Counter zone while the basket has lines or an order is in fl
     expect(store.lines).toHaveLength(1);
     expect(alert(el)).toBeNull();
     expect(api.listZoneOffers).not.toHaveBeenCalled();
+    expect(page.getByRole("button", { name: "Back to Counter" }).query()).not.toBeNull();
   });
 
   it("clears the basket refusal but leaves any other message", async () => {

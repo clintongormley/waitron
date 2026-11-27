@@ -634,8 +634,9 @@ Each of them gets a bill of their own at the table. The bill switcher, at the to
 screen, shows the current bill and its amount. If the table has several bills, the number on the
 right shows where the current bill sits in the list. **2 of 3** means you are on the second bill.
 
-On **Counter**, open the bill to retrieve or discard it. Discarding its last
-bill leaves a seated table with a fresh empty bill. To free the table, use **Finish table**.
+For a table outside your till’s map, open its bill under **Other orders** on **Counter**.
+Choose **Retrieve** or **Discard**. Discarding the last bill leaves a fresh empty bill at the table.
+To free the table, use **Finish table**.
 
 Tap the switcher to list the table's bills in number order. On a narrow screen, the list opens
 from the bottom. The teal check marks the bill you have open. Each row shows the bill's number and

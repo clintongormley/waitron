@@ -6535,7 +6535,7 @@ export class TillApp extends LitElement {
       if (zoneId === this.counterServiceZoneId) {
         if (this.errorKey === "service_zone.basket_active") this.errorKey = undefined;
         if (this.activeTabKey !== "counter" || this.drill !== undefined)
-          this.#onTabSelect("counter");
+          this.#onTabSelect("counter", false, false, counterFloor);
         return;
       }
       this.errorKey = "service_zone.basket_active";
@@ -23918,7 +23918,7 @@ export class TillApp extends LitElement {
         .counterZoneIds=${navigation?.counterZoneIds ?? []}
         .floorZoneIds=${navigation?.floorZoneIds ?? []}
         .orderZones=${this.profileServiceZones}
-        .tablesAnswered=${this.tablesAnswered}
+        .tableMapReadFinished=${this.tablesAnswered || this.floorReadFailed}
         .tables=${this.tables}
         .zones=${this.zones}
         .invoiceLocale=${this.invoiceLocale}
