@@ -4,6 +4,13 @@ import { css, html, nothing } from "lit";
 export const menuTreeStyles = css`
   wt-data-table {
     --menu-tree-media-fallback: var(--wt-color-field-fill);
+    --menu-tree-indent: calc(var(--wt-space-4) + var(--wt-space-1) / 2);
+  }
+  wt-data-table[narrow] {
+    --menu-tree-indent: var(--wt-space-3);
+  }
+  wt-data-table::part(tree-cell) {
+    padding-inline-start: calc(var(--tree-depth, 0) * var(--menu-tree-indent));
   }
   wt-data-table::part(media-placeholder-icon) {
     inline-size: var(--wt-font-size-lg);

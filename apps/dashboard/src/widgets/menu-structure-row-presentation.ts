@@ -4,7 +4,6 @@ import { countOf } from "./count-text.js";
 export const structureRowStyles = css`
   wt-data-table {
     --tree-arrow-width: var(--wt-space-5);
-    --structure-indent: calc(var(--wt-space-4) + var(--wt-space-1) / 2);
     --structure-arrow-offset: var(--wt-space-4);
     --wt-table-cell-padding-inline: var(--wt-space-1);
     --structure-media-size: calc(var(--wt-space-6) + var(--wt-space-1));
@@ -13,7 +12,6 @@ export const structureRowStyles = css`
   }
   wt-data-table[narrow] {
     --tree-arrow-width: var(--wt-space-4);
-    --structure-indent: var(--wt-space-3);
     --structure-arrow-offset: var(--wt-space-2);
     --structure-media-size: calc(var(--wt-space-6) - var(--wt-field-line-width-active));
     --structure-grip-width: calc(var(--wt-space-5) + var(--wt-field-line-width-active));
@@ -25,7 +23,6 @@ export const structureRowStyles = css`
   }
   wt-data-table::part(tree-cell) {
     align-items: center;
-    padding-inline-start: calc(var(--tree-depth, 0) * var(--structure-indent));
   }
   wt-data-table::part(structure-cell) {
     padding-block: calc(var(--wt-space-1) / 2);

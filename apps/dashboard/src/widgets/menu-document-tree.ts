@@ -56,6 +56,7 @@ export class MenuDocumentTree extends LitElement {
         --preview-media-size: calc(var(--wt-space-6) + var(--wt-space-1));
       }
       wt-data-table::part(preview-cell) {
+        height: calc(var(--wt-tap-min) + var(--wt-space-1));
         padding-block: calc(var(--wt-space-1) / 2);
       }
       wt-data-table::part(table-head) {

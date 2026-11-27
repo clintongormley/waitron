@@ -839,7 +839,7 @@ test.each(["list", "tree"])("washes each ticked %s row through its pinned cell",
   expect(paint(selected)).toEqual(paint(other));
 });
 
-test("a ticked row that opens still responds to pointer hover across its pinned cell", async () => {
+test("a ticked row that opens still paints hover and focus across its pinned cell", async () => {
   const el = await table({
     selectable: true,
     selected: ["a"],
@@ -856,6 +856,9 @@ test("a ticked row that opens still responds to pointer hover across its pinned 
   expect(getComputedStyle(pinned).backgroundColor).toBe("rgb(11, 33, 55)");
   await commands.parkPointer();
   expect(getComputedStyle(pinned).backgroundColor).toBe(resting);
+  await userEvent.keyboard("{Shift}");
+  row.querySelector<HTMLButtonElement>(".row-activate")!.focus();
+  await vi.waitFor(() => expect(getComputedStyle(pinned).backgroundColor).toBe("rgb(11, 33, 55)"));
   expect(tick.checked).toBe(true);
 });
 

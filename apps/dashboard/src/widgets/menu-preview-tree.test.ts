@@ -107,7 +107,10 @@ it("draws cutlery on a product with no photo", async () => {
   expect(section.querySelector('[part~="media-placeholder-icon"]')!.getAttribute("name")).toBe(
     "folder-outline",
   );
-  expect(getComputedStyle(frame).backgroundColor).not.toBe("rgba(0, 0, 0, 0)");
+  const paint = getComputedStyle(frame);
+  const token = document.createElement("span").style;
+  token.backgroundColor = paint.getPropertyValue("--wt-color-field-fill");
+  expect(paint.backgroundColor).toBe(token.backgroundColor);
 });
 
 function rows(node: MenuDocumentTree) {

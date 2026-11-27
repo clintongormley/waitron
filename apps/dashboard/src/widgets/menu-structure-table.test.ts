@@ -679,8 +679,8 @@ it("keeps an included menu's contents in place and offers Open, Edit and Remove 
 });
 
 it("draws variants inside an included menu in regular ink", async () => {
-  const coffee = { ...burgerWithVariants(), id: "p-lager", name: "Lager" };
-  const el = await mount({ nodes: [wines()], products: [coffee] });
+  const lager = { ...burgerWithVariants(), id: "p-lager", name: "Lager" };
+  const el = await mount({ nodes: [wines()], products: [lager] });
   await toggle(el, "included-wine");
   await toggle(el, "included-wine/wine-lager");
   const dish = row(el, "included-wine/wine-lager")!.querySelector('[data-test="name"]')!;
@@ -1163,20 +1163,33 @@ it("puts the menu arrow over the grip column and the section arrow immediately a
   expect(arrow("m-drinks") - handle).toBeLessThanOrEqual(35);
 });
 
-it("keeps the menu arrow's keyboard ring inside the table on desktop", async () => {
-  const el = await mountDeep();
-  const toggle = row(el, "root")!.querySelector<HTMLButtonElement>(".tree-toggle")!;
-  await userEvent.keyboard("{Shift}");
-  toggle.focus();
-  const style = getComputedStyle(toggle);
-  expect(style.outlineStyle).toBe("solid");
-  const ringLeft =
-    toggle.getBoundingClientRect().left -
-    parseFloat(style.outlineWidth) -
-    parseFloat(style.outlineOffset);
-  const scrollLeft = table(el).shadowRoot!.querySelector(".scroll")!.getBoundingClientRect().left;
-  expect(ringLeft).toBeGreaterThanOrEqual(scrollLeft);
-});
+it.each(["browse", "reorder", "select"])(
+  "keeps the menu arrow's tap target and keyboard ring inside the table on desktop (%s)",
+  async (mode) => {
+    const el = await mountDeep({ reordering: mode === "reorder", selecting: mode === "select" });
+    const toggle = row(el, "root")!.querySelector<HTMLButtonElement>(".tree-toggle")!;
+    await userEvent.keyboard("{Shift}");
+    toggle.focus();
+    const style = getComputedStyle(toggle);
+    expect(style.outlineStyle).toBe("solid");
+    const box = toggle.getBoundingClientRect();
+    expect(box.width).toBeGreaterThanOrEqual(44);
+    const ringLeft = box.left - parseFloat(style.outlineWidth) - parseFloat(style.outlineOffset);
+    const root = table(el).shadowRoot!;
+    expect(ringLeft).toBeGreaterThanOrEqual(
+      root.querySelector(".scroll")!.getBoundingClientRect().left,
+    );
+    if (mode === "select") {
+      const tick = row(el, "m-drinks")!
+        .querySelector("input[type=checkbox]")!
+        .getBoundingClientRect();
+      const arrow = document.createRange();
+      arrow.selectNodeContents(toggle);
+      const glyph = arrow.getBoundingClientRect();
+      expect(Math.abs(glyph.x + glyph.width / 2 - tick.x - tick.width / 2)).toBeLessThanOrEqual(8);
+    }
+  },
+);
 
 it.each([390, 1280])("shows an owned section count with its name at %i px", async (width) => {
   const before = { width: window.innerWidth, height: window.innerHeight };
@@ -1200,6 +1213,12 @@ it("puts a real grip on every top-level row, the included menu's too, and starts
     const tr = row(el, key)!;
     const handle = tr.querySelector('[part~="drag-grip"]')!;
     expect(handle.getBoundingClientRect().width, key).toBeGreaterThan(0);
+    const hitBox = handle.getBoundingClientRect();
+    const hit = table(el).shadowRoot!.elementFromPoint(
+      hitBox.right - 2,
+      hitBox.y + hitBox.height / 2,
+    );
+    expect(handle.contains(hit), key).toBe(true);
     expect(tr.querySelector('[part~="grip-space"]'), key).toBeNull();
     const arrow = tr
       .querySelector(".tree-arrow, .tree-toggle, .tree-spacer")!
