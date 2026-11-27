@@ -1,5 +1,6 @@
 import { assertMenuWritable } from "./delete.js";
 import { navigateMenuChanges } from "./menu-navigation.js";
+import { menuContentWarnings } from "./menu-content-warnings.js";
 import { and, asc, desc, eq, gt, gte, inArray, lt, lte, max, or, sql } from "drizzle-orm";
 import {
   menuReleases,
@@ -17,7 +18,6 @@ import {
   buildMenuDocuments,
   diffEntries,
   documentImages,
-  documentSetMenuOffers,
   MENU_DOCUMENT_FORMAT,
   menuDocumentHash,
   removedExtraOnlyProducts,
@@ -579,32 +579,6 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   }
 
   const hash = menuDocumentHash(mine.document);
-  const unreviewed = new Map(mine.unreviewed.map((product) => [product.id, product]));
-  const precisionWarnings: MenuPreview["warnings"] = [];
-  const warned = new Set<string>();
-  for (const offer of [
-    ...Object.values(mine.document.offers),
-    ...documentSetMenuOffers(mine.document),
-  ])
-    for (const list of offer.offeredModifiers) {
-      if (list.kind !== "extras") continue;
-      for (const item of list.items) {
-        const key = `${list.id}:${item.productId}`;
-        if (warned.has(key)) continue;
-        warned.add(key);
-        const portion = item.portion ?? "1.000";
-        const significantPlaces = (portion.split(".")[1] ?? "").replace(/0+$/, "").length;
-        if (significantPlaces <= (item.unit?.precision ?? 0)) continue;
-        precisionWarnings.push({
-          kind: "extra_portion_precision",
-          listName: list.name,
-          name: item.name,
-          portion,
-          abbreviation: item.unit?.abbreviation ?? {},
-          precision: item.unit?.precision ?? 0,
-        });
-      }
-    }
   return {
     hash,
     clashes: mine.clashes,
@@ -616,10 +590,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     ),
     warnings: [
       ...(await shortcutWarnings(tx, mine.omittedShortcuts, sectionNames)),
-      ...precisionWarnings,
-      ...(unreviewed.size === 0
-        ? []
-        : [{ kind: "allergens_unreviewed" as const, products: [...unreviewed.values()] }]),
+      ...menuContentWarnings(mine.document, mine.unreviewed),
     ],
     status: statusOf(hash, own, mine.clashes.length),
     document: mine.document,

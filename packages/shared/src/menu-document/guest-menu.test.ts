@@ -426,6 +426,7 @@ it.each<{
           price: "1.50",
           portion: "2.000",
           ...displayUnit,
+          preselected: false,
           allergens: { nuts: { kinds: ["almonds"] } },
           dietary: ["vegetarian"],
         },
@@ -433,6 +434,9 @@ it.each<{
     },
     { kind: "options", name: "Cooking", labels: ["Rare"] },
   ]);
+  const group = dish.offeredModifiers[0]!;
+  if (group.kind !== "extras") throw new Error("Expected offered extras");
+  group.items[0]!.preselected = true;
   const regional = publicGuestMenu(
     document(dish),
     { defaultLanguage: "en", languages: ["en", "es", "en-US"] },
@@ -440,7 +444,10 @@ it.each<{
   ).members[0]!;
   if (regional.kind !== "product" || regional.modifiers[0]!.kind !== "extras")
     throw new Error("Expected extras");
-  expect(regional.modifiers[0].items[0]!.name).toBe("fries (Staff size)");
+  expect(regional.modifiers[0].items[0]).toMatchObject({
+    name: "fries (Staff size)",
+    preselected: true,
+  });
 });
 
 it("keeps the enabled regional guest page and inherits every unchanged dish name", () => {

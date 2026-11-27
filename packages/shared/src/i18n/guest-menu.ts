@@ -48,6 +48,20 @@ diet|Dietary declarations|Declaraciones dietéticas|Declaracions dietètiques|De
 backToMenu|Back to menu|Volver a la carta|Torna a la carta|Volver á carta
 menu|Menu|Carta|Carta|Carta
 allergens|Allergens|Alérgenos|Al·lèrgens|Alérxenos
+filters|Allergies and diets|Alergias y dietas|Al·lèrgies i dietes|Alerxias e dietas
+excludeAllergens|Exclude allergens|Excluir alérgenos|Exclou al·lèrgens|Excluír alérxenos
+chooseDiet|Diet|Dieta|Dieta|Dieta
+anyDiet|Any diet|Cualquier dieta|Qualsevol dieta|Calquera dieta
+selectedCount|{count} selected|{count} seleccionados|{count} seleccionats|{count} seleccionados
+clearFilters|Clear filters|Quitar filtros|Treure els filtres|Quitar os filtros
+closeFilters|Close|Cerrar|Tanca|Pechar
+noFilteredDishes|No dishes match these filters.|Ningún plato coincide con estos filtros.|Cap plat coincideix amb aquests filtres.|Ningún prato coincide con estes filtros.
+noDishesSearchAndFilters|No dishes match your search and filters.|Ningún plato coincide con tu búsqueda y tus filtros.|Cap plat coincideix amb la teva cerca i els teus filtres.|Ningún prato coincide coa túa busca e os teus filtros.
+askAboutAllergens|Ask staff about allergens, even when no icons appear.|Pregunta al personal por los alérgenos, aunque no veas iconos.|Pregunta al personal pels al·lèrgens, encara que no vegis icones.|Pregunta ao persoal polos alérxenos, aínda que non vexas iconas.
+askAboutSetMenu|Ask staff about the choices in this set menu.|Pregunta al personal por las opciones de este menú.|Pregunta al personal per les opcions d’aquest menú.|Pregunta ao persoal polas opcións deste menú.
+checkChoices|Check the choices for allergens.|Consulta los alérgenos de las opciones.|Consulta els al·lèrgens de les opcions.|Consulta os alérxenos das opcións.
+selectedAllergen|Contains a selected allergen|Contiene un alérgeno seleccionado|Conté un al·lergen seleccionat|Contén un alérxeno seleccionado
+unreviewedAllergens|Allergens not reviewed|Alérgenos sin revisar|Al·lèrgens sense revisar|Alérxenos sen revisar
 variants|Variants|Variantes|Variants|Variantes
 perPerson|{price} per person|{price} por persona|{price} per persona|{price} por persoa
 `

@@ -11,6 +11,7 @@ import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, product, type MenusFixture } from "../test/menus-fixture.js";
 import { createProduct, updateProduct } from "./operations.js";
 import { previewMenu, publishMenu } from "./menu-publication.js";
+import { writeProductModifiers } from "./product-modifiers.js";
 import { queueMenuPublication } from "./menu-schedule.js";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { addMember } from "./sections.js";
@@ -29,13 +30,14 @@ const unknown = (id: string, name: string, parentName: string | null = null) => 
 const warnings = async (f: MenusFixture) => (await app((tx) => previewMenu(tx, f.lunch))).warnings;
 
 describe("unreviewed offered allergens", () => {
-  it("warns once for offered unreviewed products and their effective active variants", async () => {
+  it("warns once for offered unreviewed products, their effective active variants and extras", async () => {
     const f = await menusFixture(fx.db);
     const inactive = await app(async (tx) => {
       await updateProduct(tx, f.lemonade, { allergens: null, available: false });
       await updateProduct(tx, f.large, { available: false });
       await updateProduct(tx, f.extraLemon, { allergens: null });
       await updateProduct(tx, f.burger, { allergens: null });
+      await writeProductModifiers(tx, f.soup, [{ kind: "extras", id: f.extrasList }]);
       const old = await listProductVariants(tx, f.lemonade);
       const saved = await setProductVariants(
         tx,
@@ -71,10 +73,21 @@ describe("unreviewed offered allergens", () => {
     expect(await warnings(f)).toEqual([
       {
         kind: "allergens_unreviewed",
-        products: [unknown(f.lemonade, "Lemonade"), unknown(f.large, "Large", "Lemonade")],
+        products: [
+          unknown(f.lemonade, "Lemonade"),
+          unknown(f.large, "Large", "Lemonade"),
+          { ...unknown(f.extraLemon, "Extra lemon"), extraOn: ["Lemonade", "Soup"] },
+        ],
       },
     ]);
     await app((tx) => updateProduct(tx, f.lemonade, { allergens: {} }));
+    expect(await warnings(f)).toEqual([
+      {
+        kind: "allergens_unreviewed",
+        products: [{ ...unknown(f.extraLemon, "Extra lemon"), extraOn: ["Lemonade", "Soup"] }],
+      },
+    ]);
+    await app((tx) => updateProduct(tx, f.extraLemon, { allergens: {} }));
     expect(await warnings(f)).toEqual([]);
     expect(JSON.stringify(await warnings(f))).not.toContain(inactive);
   });

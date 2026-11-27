@@ -362,7 +362,7 @@ export interface MenuPreview {
     | { kind: "shortcut_missing"; name: string }
     | {
         kind: "allergens_unreviewed";
-        products: { id: string; name: string; parentName: string | null }[];
+        products: { id: string; name: string; parentName: string | null; extraOn?: string[] }[];
       }
     | {
         kind: "extra_portion_precision";

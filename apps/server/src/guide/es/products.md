@@ -317,10 +317,10 @@ El color gris indica que sigue a su producto. El filtro de Alérgenos usa el mis
 final de la búsqueda de la lista; en **Personalizar**, pulsa el ojo junto a cada columna y luego
 **Listo**. Sus filtros funcionan aunque las columnas estén ocultas.
 
-Antes de publicar ahora o de programar una carta, la confirmación muestra los platos ofrecidos y las
-variantes activas cuyos alérgenos están sin revisar. Selecciona un nombre para abrir la página propia
-de ese producto. Aun así puedes publicar o programar: el aviso te pide que compruebes las
-declaraciones, no rechaza la publicación. Si cancelas la confirmación de programación, se conservan la
+Antes de publicar ahora o de programar una carta, la confirmación muestra los platos, las variantes
+activas y los extras ofrecidos cuyos alérgenos están sin revisar. Junto a cada extra aparecen los
+platos que lo ofrecen. Selecciona un nombre para abrir la página de ese producto. Puedes publicar o
+programar después de leer el aviso. Si cancelas la confirmación de programación, se conservan la
 fecha y la hora que introdujiste.
 
 Mientras alguien en la caja usa **Filtros** para ocultar un alérgeno, también se ocultan los platos
@@ -449,8 +449,10 @@ la vista previa. Tras publicar, comprueba la versión y la hora en el encabezado
 
 Abre **Carta para clientes** y elige **Móvil** u **Ordenador** para comprobar el diseño publicado.
 En **Idioma** puedes revisar el texto en cada idioma del contenido. Usa **Buscar platos** para
-encontrar un plato o menú por su nombre, o elige una sección para ir a ella. Debajo de los platos
-verás la leyenda de alérgenos. Abre un plato para comprobar sus variantes, opciones y extras.
+encontrar un plato o menú por su nombre, o elige una sección para ir a ella. Abre **Alergias y
+dietas** para excluir alérgenos o elegir una dieta. Abre un plato o menú para ver las opciones
+marcadas. Debajo de los platos verás la leyenda de alérgenos.
+Abre un plato para comprobar sus variantes, opciones y extras.
 Consulta **Alérgenos** y **Declaraciones dietéticas** para el plato. Los iconos de alérgenos de
 cada extra aparecen junto a su nombre. También puedes consultar ese extra en **Alérgenos**.
 Consulta las declaraciones de cada variante debajo de su nombre.

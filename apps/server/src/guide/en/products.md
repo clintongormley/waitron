@@ -294,10 +294,10 @@ Grey means it follows its parent. The Allergens filter uses the same status. The
 end of the list's search box; in **Customise**, select the eye beside each column, then **Done**.
 Their filters work while the columns are hidden.
 
-Before you publish now or schedule a menu, the confirmation lists offered dishes and active
-variants whose allergens are unreviewed. Select a name to open that product's own page. You can
-still publish or schedule: the warning asks you to check the declarations, rather than refusing
-the publication. Cancelling the scheduled confirmation keeps the date and time you entered.
+Before you publish now or schedule a menu, the confirmation lists offered dishes, active
+variants and extras whose allergens are unreviewed. An extra lists the dishes that offer it.
+Select a name to open that product's own page. You can still publish or schedule after reading
+the warning. Cancelling the scheduled confirmation keeps the date and time you entered.
 
 While someone at the till uses **Filter** to hide an allergen, unreviewed dishes and sizes are
 hidden too. Review the declarations for each size you sell, or choose **Contains none of the 14**,
@@ -414,7 +414,9 @@ publish, check the version and publication time in the menu heading.
 
 Open **Customer menu** and choose **Phone** or **Computer** to check the published layout. Use
 **Language** to check the words for each content language. Use **Search dishes** to find a dish
-or set menu by name, or choose a section to jump to it. Find the allergen key below the dishes.
+or set menu by name, or choose a section to jump to it. Open **Allergies and diets** to select
+allergens to exclude or choose a diet. Open a dish or set menu to see which choices are marked.
+Find the allergen key below the dishes.
 Open a dish to check its variants, options and extras. Check the dish's **Allergens** and
 **Dietary declarations**. Check an extra's allergen icons beside its name and look for that
 extra in **Allergens**. Look below each variant for its declarations.
