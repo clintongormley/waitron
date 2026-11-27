@@ -122,7 +122,7 @@ describe("till own clock state", () => {
     ).rejects.toMatchObject({ code: "attendance.no_open_entry" });
   });
 
-  it("shows the new box's clock-in and omits an unreliable start on a break", async () => {
+  it.each(["working", "on_break"])("keeps the reconciliation day while %s", async (status) => {
     const newNode = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       appendToChain(
@@ -156,10 +156,12 @@ describe("till own clock state", () => {
       state: "working",
       shiftStart: { eventAt: "2026-01-05T10:00:00.000Z", offsetMinutes: 60 },
     });
-    await withTransaction(suite.db, (tx) =>
-      backend.breakStart(tx, event("2026-01-05T11:00:00Z", personId, newNode)),
-    );
-    expect(await read()).toMatchObject({ state: "on_break", shiftStart: null });
+    if (status === "on_break") {
+      await withTransaction(suite.db, (tx) =>
+        backend.breakStart(tx, event("2026-01-05T11:00:00Z", personId, newNode)),
+      );
+      expect(await read()).toMatchObject({ state: "on_break", shiftStart: null });
+    }
 
     await suite.db.delete(attendanceDays);
     await withTransaction(suite.db, (tx) =>
@@ -169,6 +171,7 @@ describe("till own clock state", () => {
         new Date("2026-01-07T05:00:00Z"),
       ),
     );
+    // Reconciliation follows the filtered clock-in's day even when the display differs.
     expect((await suite.db.select().from(attendanceDays)).map((day) => day.businessDay)).toEqual([
       "2026-01-06",
     ]);
