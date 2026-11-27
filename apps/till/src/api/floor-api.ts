@@ -322,6 +322,23 @@ export interface SeatResult {
   orderNumber: number;
 }
 
+export function seatTableRequest(
+  api: Pick<FloorApi, "seatTable" | "seatAtTables">,
+  tableId: string,
+  guestCount: number | null,
+  withTableIds?: readonly string[],
+  kitchenNote?: string | null,
+): (zoneId?: string) => Promise<SeatResult> {
+  const note = kitchenNote || undefined;
+  return (zoneId) => {
+    const confirmation: [note?: string, zoneId?: string] =
+      zoneId !== undefined ? [note, zoneId] : note === undefined ? [] : [note];
+    return withTableIds === undefined
+      ? api.seatTable(tableId, guestCount, ...confirmation)
+      : api.seatAtTables(tableId, guestCount, withTableIds, ...confirmation);
+  };
+}
+
 export class FloorApi extends InvoiceDeliveryApi {
   readonly #request: TillRequest;
   constructor(request: TillRequest) {
@@ -348,23 +365,23 @@ export class FloorApi extends InvoiceDeliveryApi {
     tableId: string,
     guestCount: number | null,
     kitchenNote?: string | null,
+    closedZoneId?: string,
   ): Promise<SeatResult> {
-    return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", {
-      guestCount,
-      ...(kitchenNote === undefined ? {} : { kitchenNote }),
-    });
+    return this.seatAtTables(tableId, guestCount, undefined, kitchenNote, closedZoneId);
   }
   /** Seat a party at `tableId` and, in the same request, at each of `withTableIds`. */
   seatAtTables(
     tableId: string,
     guestCount: number | null,
-    withTableIds: readonly string[],
+    withTableIds: readonly string[] | undefined,
     kitchenNote?: string | null,
+    closedZoneId?: string,
   ): Promise<SeatResult> {
     return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", {
       guestCount,
-      withTableIds,
+      ...(withTableIds === undefined ? {} : { withTableIds }),
       ...(kitchenNote === undefined ? {} : { kitchenNote }),
+      ...(closedZoneId === undefined ? {} : { closedZoneId }),
     });
   }
   finishTable(

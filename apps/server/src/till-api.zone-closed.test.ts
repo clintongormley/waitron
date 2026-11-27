@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  activityLog,
   parties,
   partyTables,
   workingOrders,
@@ -75,10 +76,42 @@ async function venue() {
 const request = (v: BillVenue, method: string, path: string, body?: unknown) =>
   send(v.app, v.cookie, method, path, body);
 const line = (v: BillVenue) => ({ menuItemId: v.offerFor("Small beer"), quantity: "1" });
-const refused = (v: BillVenue) => ({
+const refused = (v: BillVenue, closesAt = "23:30") => ({
   status: 409,
-  json: { code: "service_zone.closed", params: { zoneId: v.zoneId } },
+  json: {
+    code: "service_zone.closed",
+    params: { zoneId: v.zoneId, closedZoneName: "Test tables", closesAt },
+  },
 });
+async function endMenuDuringClosure(v: BillVenue) {
+  return withTransaction(suite.db, async (tx) => {
+    const [zone] = await tx.select().from(floorZones).where(eq(floorZones.id, v.zoneId));
+    const [ended] = await tx
+      .select()
+      .from(menuPeriods)
+      .where(and(eq(menuPeriods.departmentId, zone!.departmentId), eq(menuPeriods.name, "Always")));
+    const menu = await createMenu(tx, { name: "Late service" });
+    const active = await saveMenuPeriod(tx, zone!.departmentId, {
+      name: "Late service",
+      menuId: menu.id,
+      staffMenuIds: [],
+    });
+    await replaceMenuWeek(
+      tx,
+      zone!.departmentId,
+      [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
+        weekday,
+        slots: [
+          { periodId: ended!.id, startsAt: "21:00", endsAt: "23:30" },
+          { periodId: active.id, startsAt: "23:30", endsAt: "01:00" },
+        ],
+      })),
+      new Date(),
+      1,
+    );
+    return ended!;
+  });
+}
 async function table(v: BillVenue) {
   return withTransaction(suite.db, (tx) =>
     createTable(tx, { label: randomUUID(), zoneId: v.zoneId }),
@@ -107,6 +140,16 @@ async function park(v: BillVenue) {
 async function orderRows() {
   return suite.db.select().from(workingOrders);
 }
+
+const closedZoneActivity = () =>
+  suite.db
+    .select({
+      subjectId: activityLog.subjectId,
+      personId: activityLog.personId,
+      data: activityLog.data,
+    })
+    .from(activityLog)
+    .where(eq(activityLog.kind, "zone.closed_action_confirmed"));
 
 describe("closed zones take no new service", () => {
   it("after department hours, permits seating and asks for a late-send confirmation", async () => {
@@ -162,7 +205,7 @@ describe("closed zones take no new service", () => {
         lines: [line(v)],
         lateSend: { menuIds: [period.menuId] },
       }),
-    ).toEqual(refused(v));
+    ).toEqual(refused(v, "22:00"));
     expect(await orderRows()).toEqual(duringClosure);
     vi.setSystemTime(new Date("2026-10-06T00:30:00+02:00"));
     await seat(v);
@@ -191,7 +234,7 @@ describe("closed zones take no new service", () => {
       lines: [line(v)],
       lateSend: { menuIds: [period.menuId] },
     });
-    expect(confirmed.status).toBe(200);
+    expect(confirmed, JSON.stringify(confirmed.json)).toMatchObject({ status: 200 });
     const after = await orderRows();
     expect(after).toHaveLength(before.length + 1);
     expect(after.find((row) => row.id === id)).toMatchObject({ id, status: "open" });
@@ -220,7 +263,7 @@ describe("closed zones take no new service", () => {
     ).toMatchObject({ status: 200, json: { invoice: { total: "3.00" } } });
   });
 
-  it("seats immediately before closure and refuses at the exact start without writing a party", async () => {
+  it("asks to seat at the start of a closure and writes a party only after confirmation", async () => {
     const v = await venue();
     at("23:29");
     await seat(v);
@@ -228,9 +271,37 @@ describe("closed zones take no new service", () => {
     const before = await orderRows();
     const beforeParties = await suite.db.select().from(parties);
     at("23:30");
-    expect(await request(v, "POST", `/api/tables/${t.id}/seat`, {})).toEqual(refused(v));
+    const route = `/api/tables/${t.id}/seat`;
+    const question = {
+      status: 409,
+      json: {
+        code: "service_zone.closed",
+        params: { zoneId: v.zoneId, closedZoneName: "Test tables", closesAt: "23:30" },
+      },
+    };
+    expect(await request(v, "POST", route, { guestCount: 3 })).toEqual(question);
+    expect(await request(v, "POST", route, { guestCount: 3, closedZoneId: randomUUID() })).toEqual(
+      question,
+    );
     expect(await orderRows()).toEqual(before);
     expect(await suite.db.select().from(parties)).toEqual(beforeParties);
+
+    const confirmed = await request(v, "POST", route, { guestCount: 3, closedZoneId: v.zoneId });
+    expect(confirmed, JSON.stringify(confirmed.json)).toMatchObject({ status: 200 });
+    const { partyId, tabId } = confirmed.json as { partyId: string; tabId: string };
+    const ordersAfter = await orderRows();
+    expect(ordersAfter).toHaveLength(before.length + 1);
+    expect(ordersAfter.find((order) => order.id === tabId)).toMatchObject({ partyId });
+    const partiesAfter = await suite.db.select().from(parties);
+    expect(partiesAfter).toHaveLength(beforeParties.length + 1);
+    expect(partiesAfter.find((party) => party.id === partyId)).toMatchObject({ guestCount: 3 });
+    expect(await closedZoneActivity()).toEqual([
+      {
+        subjectId: v.zoneId,
+        personId: v.operatorId,
+        data: { closesAt: "23:30" },
+      },
+    ]);
   });
 
   it("refuses to park or pay a new order in a closed zone without writing it", async () => {
@@ -572,13 +643,14 @@ describe("existing service in a closed zone", () => {
     ).toEqual([{ status: "open", partyId: seated.partyId }]);
   });
 
-  it.each(["first order", "handheld draft"])(
-    "refuses a %s for an already seated party without creating a bill",
+  it.each(["first order without a bill", "group", "handheld draft", "late draft"])(
+    "checks a %s submission in a closed zone",
     async (kind) => {
       const v = await venue();
       const seated = await seat(v);
+      const period = kind === "late draft" ? await endMenuDuringClosure(v) : undefined;
       await withTransaction(suite.db, async (tx) => {
-        if (kind === "first order") {
+        if (kind === "first order without a bill") {
           await tx
             .update(workingOrders)
             .set({ billNumber: null, billName: null })
@@ -588,7 +660,7 @@ describe("existing service in a closed zone", () => {
       });
       const before = await orderRows();
       let draft: { id: string; revision: number; lines: { id: string }[] } | undefined;
-      if (kind === "handheld draft") {
+      if (kind.endsWith("draft")) {
         const saved = await request(v, "PUT", `/api/parties/${seated.partyId}/drafts`, {
           billId: seated.tabId,
           expectedEdit: await withTransaction(suite.db, (tx) =>
@@ -606,23 +678,28 @@ describe("existing service in a closed zone", () => {
       );
       const [party] = await suite.db.select().from(parties).where(eq(parties.id, seated.partyId));
       at("23:45");
-      const answer =
+      const route =
         draft === undefined
-          ? await request(v, "POST", `/api/parties/${seated.partyId}/groups`, {
+          ? `/api/parties/${seated.partyId}/groups`
+          : `/api/parties/${seated.partyId}/drafts/${draft.id}/submit`;
+      const submissionId = randomUUID();
+      const body =
+        draft === undefined
+          ? {
               expectedEdit: {
                 billId: seated.tabId,
                 editorVersion: 0,
                 draftId: null,
                 draftRevision: null,
               },
-              submissionId: randomUUID(),
+              submissionId,
               expectedPartyRevision: party!.revision,
               allergy: { party: { answer: "none", guests: [] }, ticks: [] },
               groups: [{ lines: [line(v)], release: "fire" }],
-            })
-          : await request(v, "POST", `/api/parties/${seated.partyId}/drafts/${draft.id}/submit`, {
+            }
+          : {
               dining: "eat_in",
-              submissionId: randomUUID(),
+              submissionId,
               expectedPartyRevision: party!.revision,
               draftRevision: draft.revision,
               expectedEdit: await withTransaction(suite.db, (tx) =>
@@ -630,11 +707,28 @@ describe("existing service in a closed zone", () => {
               ),
               allergy: { party: { answer: "none", guests: [] }, ticks: [] },
               groups: [{ lineIds: draft.lines.map((l) => l.id), release: "fire" }],
-            });
+            };
+      const answer = await request(v, "POST", route, body);
       expect(answer).toEqual(
-        kind === "first order"
+        kind === "first order without a bill"
           ? { status: 409, json: { code: "tab.not_open", params: { tabId: seated.tabId } } }
-          : refused(v),
+          : period === undefined
+            ? refused(v)
+            : {
+                status: 409,
+                json: {
+                  code: "service_zone.closed",
+                  params: {
+                    ...refused(v).json.params,
+                    lateSend: {
+                      departmentId: period.departmentId,
+                      menus: [{ menuId: period.menuId, closedMenuPeriodName: "Always" }],
+                      menuItemIds: [line(v).menuItemId],
+                      needsManager: false,
+                    },
+                  },
+                },
+              },
       );
       expect(await orderRows()).toEqual(
         before.map((row) =>
@@ -652,12 +746,30 @@ describe("existing service in a closed zone", () => {
           .select({ id: workingOrders.id })
           .from(workingOrders)
           .where(eq(workingOrders.partyId, seated.partyId)),
-      ).toEqual(kind === "first order" ? [] : [{ id: seated.tabId }]);
+      ).toEqual(kind === "first order without a bill" ? [] : [{ id: seated.tabId }]);
       if (draft !== undefined)
         expect((await request(v, "GET", `/api/parties/${seated.partyId}/drafts`)).json).toEqual({
           drafts: [draft],
           billEdits: [await withTransaction(suite.db, (tx) => readBillEditState(tx, seated.tabId))],
         });
+      if (draft === undefined) return;
+      const withPeriod = { ...body, ...(period ? { lateSend: { menuIds: [period.menuId] } } : {}) };
+      expect(
+        await request(v, "POST", route, { ...withPeriod, closedZoneId: randomUUID() }),
+      ).toEqual(refused(v));
+      expect(await closedZoneActivity()).toEqual([]);
+      const confirmed = await request(v, "POST", route, { ...withPeriod, closedZoneId: v.zoneId });
+      expect(confirmed, JSON.stringify(confirmed.json)).toMatchObject({ status: 200 });
+      expect(await request(v, "POST", route, body)).toEqual(confirmed);
+      expect(await closedZoneActivity()).toEqual([
+        { subjectId: v.zoneId, personId: v.operatorId, data: { closesAt: "23:30" } },
+      ]);
+      expect(
+        await suite.db
+          .select({ quantity: workingOrderLines.quantity })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, seated.tabId)),
+      ).toEqual([{ quantity: 1000 }]);
     },
   );
 });

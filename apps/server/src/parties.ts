@@ -1,3 +1,4 @@
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { storedRecipientIdentifier } from "./invoice-selection.js";
 import type { AttendanceRecorder } from "./attendance-capture.js";
@@ -175,6 +176,7 @@ export async function seatTable(
     tableId: string;
     guestCount: number | null;
     operatorId: string;
+    zoneConfirmation?: ClosedZoneConfirmation;
   },
 ): Promise<{ partyId: string; tabId: string; revision: number; orderNumber: number }> {
   // The party row comes first because the tab is inserted naming it, and the table joins it only
@@ -184,6 +186,7 @@ export async function seatTable(
   const { tabId, orderNumber } = await openTab(tx, cfg, {
     tableId: args.tableId,
     partyId,
+    zoneConfirmation: args.zoneConfirmation,
   });
   await tx.insert(partyTables).values({ partyId, tableId: args.tableId });
   await seatMergeMembers(tx, partyId, args.tableId);

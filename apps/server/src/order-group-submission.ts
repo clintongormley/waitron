@@ -1,3 +1,4 @@
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import "./errors.js";
 import { type Transaction, workingOrderLines } from "@waitron/db";
 import type { AllergyPatch, AllergyLineRef } from "@waitron/module";
@@ -142,6 +143,7 @@ export type PlaceGroupsInput = Pick<
   SubmitGroupsInput,
   "joinGroupId" | "operatorId" | "billId" | "expectedEdit" | "lateSend"
 > & {
+  zoneConfirmation?: ClosedZoneConfirmation;
   groups: (SubmitGroupsInput["groups"][number] & { existingLineIds?: string[] })[];
   /** Draft ids in the same order as the input dishes, before extras become child rows. */
   sourceDraftLineIds?: readonly string[];
@@ -213,6 +215,7 @@ export async function placeGroups(
           "checked",
           input.lateSend,
           routing,
+          input.zoneConfirmation,
         );
   if (groups.some(empty)) {
     throw new AppError("sale.empty_basket", {});

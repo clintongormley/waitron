@@ -76,6 +76,7 @@ export type {
   ZoneFloorLayout,
   PreparedServiceDay,
   FloorPlanSetSummary,
+  ClosedZoneConfirmation,
   DepartmentTransfer,
   DepartmentTransferActor,
   DepartmentTransferReceiver,

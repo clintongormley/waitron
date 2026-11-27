@@ -577,6 +577,11 @@ export interface DepartmentTransfer {
   };
 }
 
+export interface ClosedZoneConfirmation {
+  zoneId?: string;
+  personId: string;
+}
+
 export interface DepartmentTransferActor {
   departmentId: string;
   personId: string;
@@ -900,7 +905,12 @@ export interface VenueServiceContribution {
     at: Date,
     zoneIds?: readonly string[],
   ): Promise<ReadonlySet<string>>;
-  assertZoneTakesNewOrders(tx: Transaction, zoneId: string, at: Date): Promise<void>;
+  assertZoneTakesNewOrders(
+    tx: Transaction,
+    zoneId: string,
+    at: Date,
+    zoneConfirmation?: ClosedZoneConfirmation,
+  ): Promise<void>;
   resolveDepartmentService(
     tx: Transaction,
     departmentId: string,

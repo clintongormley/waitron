@@ -1,3 +1,4 @@
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { and, asc, eq, inArray, notInArray, sql } from "drizzle-orm";
@@ -777,6 +778,7 @@ export interface SubmitDraftInput extends PartyCommandArgs {
   /** As `submitGroups` takes it: add the one held group's lines to this held group. */
   joinGroupId?: string;
   lateSend?: LateSendConfirmation;
+  zoneConfirmation?: ClosedZoneConfirmation;
   /** The way the till showed the bill; refused `working_order.out_of_date` when it has the other. */
   dining?: Dining;
 }
@@ -894,6 +896,7 @@ export async function submitDraft(
           billId,
           expectedEdit,
           lateSend: input.lateSend,
+          zoneConfirmation: input.zoneConfirmation,
           sourceDraftLineIds: freshGroups.flatMap((lines) => lines.map((line) => line.id)),
           draftAddTimes: stored.flatMap(({ line, addedAt }) =>
             named.has(line.id) ? [addedAt] : [],

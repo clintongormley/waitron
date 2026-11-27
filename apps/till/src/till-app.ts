@@ -31,16 +31,14 @@ import {
   type AllergyConfirmDetail,
   type AllergyFieldRefusal,
 } from "./widgets/party-allergy-dialog.js";
-import type { SplitSelection } from "./api/floor-api.js";
-import type { Draft as PartyDraft, LateSend, SplitSources } from "./api/drafts-api.js";
 import type { BillUnsent, Tender } from "./api/payments-api.js";
 import type { BillEditExpected, BillEditState } from "./api/order-types.js";
 import { billHasUnsent, billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import {
   APPROVER_REFUSALS,
+  closedZoneQuestionOf,
   isLateSendManagerRefusal,
   lateSendApprovalAsked,
-  type LateSendApprovalAsked,
   lateSendAsked,
   storedLateSendAsked,
   type EndedPeriod,
@@ -158,6 +156,8 @@ import {
   limited,
   pause,
   resendUnanswered,
+  type AnsweredAllergy,
+  type DraftFollowUp,
   type DraftReadBounds,
   type DraftRefused,
   type DraftSaveOutcome,
@@ -377,9 +377,13 @@ import "./widgets/basket-refresh-dialog.js";
 import "./widgets/late-send-dialog.js";
 import type { LateSendPurpose } from "./widgets/late-send-dialog.js";
 import {
+  closedZonePrompt,
   lateSendPrompt,
+  showMarkedLateSend,
+  writeWithClosedZone,
   renderLateSendPrompts,
   type LateSendPrompt,
+  type LateSendChoice,
   type LateSendApprovalPrompt,
 } from "./widgets/late-send-prompts.js";
 import { lateChangeMessage, lateExtrasDish, type LateChange } from "./state/sent-line-change.js";
@@ -464,17 +468,19 @@ import type {
   HeldOrderSummary,
   OrderFlow,
 } from "./api/orders-api.js";
-import type {
-  EndMealRequest,
-  MealEndUnservedDish,
-  FloorZone,
-  TableState,
-  TableParty,
-  PartyBill,
-  MergeInvoiceChoice,
-  TableActionResult,
-  BillRevisions,
-  MoveBillResult,
+import {
+  seatTableRequest,
+  type SplitSelection,
+  type EndMealRequest,
+  type MealEndUnservedDish,
+  type FloorZone,
+  type TableState,
+  type TableParty,
+  type PartyBill,
+  type MergeInvoiceChoice,
+  type TableActionResult,
+  type BillRevisions,
+  type MoveBillResult,
 } from "./api/floor-api.js";
 import type {
   InvoiceDeliveryStatus,
@@ -482,7 +488,15 @@ import type {
   InvoiceDeliveryChoice,
   OriginalReceiptPrint,
 } from "./api/invoice-delivery-api.js";
-import type { DeadEndAnswer, DraftSubmission, SubmittedDraft } from "./api/drafts-api.js";
+import {
+  draftSubmissionGroups,
+  type Draft as PartyDraft,
+  type LateSend,
+  type SplitSources,
+  type DeadEndAnswer,
+  type DraftSubmission,
+  type SubmittedDraft,
+} from "./api/drafts-api.js";
 import type {
   AdjustmentAsk,
   AdjustmentCommand,
@@ -754,33 +768,6 @@ interface PreparedTableAllergy {
   api: TillApi;
   /** The party's allergies as last read, a review in the dialog included. */
   read: () => PartyAllergyRead | undefined;
-}
-
-/**
- * What a draft's submission leaves to do once the draft is open for edits again. `find-tab`, after a
- * submission that got no answer, moves to the tab the floor now shows for the table the draft was
- * sent from, only while that table still holds the party the screen showed at the submission and the
- * operator is still on it; `landedOn` names the tab the server added the draft to, when it is not the
- * one it was sent to.
- */
-
-type DraftFollowUp =
-  | "read-tab"
-  | "find-tab"
-  | "mark-unsellable"
-  | "recheck-dead-ends"
-  | { landedOn: string }
-  | { setMenuNoPlace: string; draftLineId?: string }
-  | { lateSend: LateSendAsked; answered?: AnsweredAllergy }
-  | { approval: LateSendApprovalAsked; answered?: AnsweredAllergy }
-  | undefined;
-
-/** The allergy answer a refused submission carried, with the party revision and the dishes it was
- * given against. */
-interface AnsweredAllergy {
-  patch: AllergyPatch;
-  revision: number;
-  dishes: string;
 }
 
 const dishesKey = (view: PartyAllergyRead) => JSON.stringify(view.dishes);
@@ -3421,7 +3408,7 @@ export class TillApp extends LitElement {
   set #orderVisit(visit: number) {
     this.#orderVisitNumber = visit;
     this.#endSplitRefusalReads();
-    this.lateSendWindow = null;
+    this.#closeLateSend();
     this.lateSendApproval = null;
   }
   #orderVisitNumber = 0;
@@ -4830,9 +4817,10 @@ export class TillApp extends LitElement {
     prepared: PreparedTableAllergy,
     write: (command: AllergyCommand, signal: AbortSignal) => Promise<T>,
     lateSend?: LateSend,
+    submissionId: string = crypto.randomUUID(),
   ): Promise<{ value: T } | null> {
     let command: AllergyCommand = {
-      submissionId: crypto.randomUUID(),
+      submissionId,
       expectedPartyRevision: prepared.revision,
       ...(prepared.patch === undefined ? {} : { allergy: prepared.patch }),
     };
@@ -4861,6 +4849,7 @@ export class TillApp extends LitElement {
               UNSELLABLE_LINE_REFUSALS.has(refusal.refused) ||
               refusal.refused === "station.no_replacement" ||
               refusal.refused === "menu_period.ended" ||
+              refusal.refused === "service_zone.closed" ||
               isLateSendManagerRefusal(error) ||
               (lateSend?.override !== undefined && APPROVER_REFUSALS.has(refusal.refused))))
         ) {
@@ -5032,11 +5021,9 @@ export class TillApp extends LitElement {
     }
     if (changed.has("equipmentOpen")) this.#syncEquipmentNfc();
     if (
-      changed.has("errorKey") &&
-      typeof this.errorKey === "object" &&
-      "code" in this.errorKey &&
-      this.errorKey.code === "service_zone.closed" &&
-      this.#inShell()
+      this.#inShell() &&
+      ((changed.has("errorKey") && asRefusal(this.errorKey)?.refused === "service_zone.closed") ||
+        (changed.has("lateSendWindow") && this.lateSendWindow?.closedZone !== undefined))
     ) {
       const session = this.#operatorSession;
       void this.#loadFloorData(() => !this.isConnected || session !== this.#operatorSession);
@@ -7622,8 +7609,13 @@ export class TillApp extends LitElement {
     retry: (lateSend: LateSend) => Promise<void>,
     purpose: "send" | "save" = "send",
   ): boolean {
-    return this.#openLateSendFromMarks(this.#store.lines, lateSend, purpose, retry, (listed) =>
-      this.#removeDraftLines(this.#store, listed),
+    return showMarkedLateSend(
+      this.#presentLateSend,
+      this.#store.lines,
+      lateSend,
+      purpose,
+      retry,
+      (listed) => this.#removeDraftLines(this.#store, listed),
     );
   }
 
@@ -13266,15 +13258,13 @@ export class TillApp extends LitElement {
         await this.#followBillsRead(bills, [], true);
       } else {
         try {
-          const note = carried?.note;
-          const seated =
-            withTableIds === undefined
-              ? note
-                ? await this.api.seatTable(tableId, guestCount, note)
-                : await this.api.seatTable(tableId, guestCount)
-              : note
-                ? await this.api.seatAtTables(tableId, guestCount, withTableIds, note)
-                : await this.api.seatAtTables(tableId, guestCount, withTableIds);
+          const seated = await writeWithClosedZone(
+            seatTableRequest(this.api, tableId, guestCount, withTableIds, carried?.note),
+            this.#presentLateSend,
+            () =>
+              !left() && session === this.#operatorSession && this.#openClaimed === offerRequest,
+          );
+          if (seated === undefined) return this.#leaveFailedOpen(shownEarly, left, session);
           const { tabId, partyId, revision } = seated;
           // Only a new operator session, or a newer open that has already claimed its table
           // (`#openClaimed`), stops this answer; a newer open that has not claimed one yet lets it
@@ -14776,6 +14766,7 @@ export class TillApp extends LitElement {
     detail: Partial<SubmitDraftDetail>,
     lateSend?: LateSend,
     answered?: AnsweredAllergy,
+    closed?: { zoneId: string; submissionId: string },
   ): Promise<void> {
     const { groups, joinGroupId, billId, store, sent, draft } = detail;
     const tabId = this.activeTabId;
@@ -14805,7 +14796,9 @@ export class TillApp extends LitElement {
     }
     if (store.sending || store.editsLocked) return;
     if (
-      this.#openLateSendFromMarks(
+      this.tableService?.zoneOpen !== false &&
+      showMarkedLateSend(
+        this.#presentLateSend,
         sent,
         lateSend,
         "send",
@@ -14839,6 +14832,7 @@ export class TillApp extends LitElement {
         false,
         lateSend,
         answered,
+        closed,
       );
       // Awaited before `finally` so `store.sending` stays set while the managers are read: a second
       // Send meanwhile cannot open the late-send window under the PIN dialog.
@@ -14847,7 +14841,7 @@ export class TillApp extends LitElement {
         await this.#askLateSendApproval(
           approval.lateSend,
           approval.pinError,
-          (confirmed) => this.#sendDraft(detail, confirmed, carried),
+          (confirmed) => this.#sendDraft(detail, confirmed, carried, closed),
           () => visit === this.#orderVisit && this.orderParty?.id === partyId,
         );
         return;
@@ -14867,13 +14861,24 @@ export class TillApp extends LitElement {
         this.errorKey = { code: "set_menu.no_place", dishName: followUp.setMenuNoPlace };
       return;
     }
+    if (typeof followUp === "object" && "closedZone" in followUp) {
+      if (!live() || this.#hasLeftOrder(tabId, visit)) return;
+      const { answered: carried, closedZone, submissionId } = followUp;
+      const confirmation = { zoneId: closedZone.zoneId, submissionId };
+      this.#presentLateSend(
+        closedZonePrompt(closedZone, sent, "send", (confirmed) =>
+          this.#sendDraft(detail, confirmed ?? lateSend, carried, confirmation),
+        ),
+      );
+      return;
+    }
     if (typeof followUp === "object" && "lateSend" in followUp) {
       const carried = followUp.answered;
       this.#openLateSend(
         followUp.lateSend.listed,
         followUp.lateSend.periods,
         "send",
-        (confirmed) => this.#sendDraft(detail, confirmed, carried),
+        (confirmed) => this.#sendDraft(detail, confirmed, carried, closed),
         (listed) => this.#removeDraftLines(store, listed),
       );
       return;
@@ -14924,10 +14929,16 @@ export class TillApp extends LitElement {
       this.errorKey = "table.reread_failed";
   }
 
-  #onLateSendAgreed(open: NonNullable<TillApp["lateSendWindow"]>): Promise<void> {
+  #closeLateSend(open = this.lateSendWindow, action: LateSendChoice = "cancel"): void {
+    if (open === null || open !== this.lateSendWindow) return;
     this.lateSendWindow = null;
-    return open.retry({ menuIds: open.menuIds });
+    void open[action]?.();
   }
+
+  readonly #presentLateSend = (prompt: LateSendPrompt): void => {
+    this.#closeLateSend();
+    this.lateSendWindow = prompt;
+  };
 
   async #askLateSendApproval(
     lateSend: LateSend,
@@ -14981,32 +14992,6 @@ export class TillApp extends LitElement {
     if (this.lateSendApproval === sending) this.lateSendApproval = null;
   }
 
-  #onLateSendRemoved(open: NonNullable<TillApp["lateSendWindow"]>): void {
-    this.lateSendWindow = null;
-    open.remove();
-  }
-
-  /**
-   * Opens the late-send window over the lines marked with an ended period, unless `carried` already
-   * confirms every one of their menus. Answers whether it opened.
-   */
-  #openLateSendFromMarks(
-    lines: readonly OrderLine[],
-    carried: LateSend | undefined,
-    purpose: "send" | "save",
-    retry: (lateSend: LateSend) => Promise<void>,
-    remove: (listed: readonly OrderLine[]) => void,
-  ): boolean {
-    const marked = lines.filter((line) => line.endedPeriod !== undefined);
-    const [head, ...tail] = marked.map((line) => line.endedPeriod!);
-    const confirmed = new Set(carried?.menuIds);
-    if (head === undefined || [head, ...tail].every((period) => confirmed.has(period.menuId)))
-      return false;
-    this.#openLateSend(marked, [head, ...tail], purpose, retry, remove);
-    return true;
-  }
-
-  /** `periods` in the order they apply to `listed`; the window names each once. */
   #openLateSend(
     listed: readonly OrderLine[],
     periods: readonly [EndedPeriod, ...EndedPeriod[]],
@@ -15014,7 +14999,7 @@ export class TillApp extends LitElement {
     retry: (lateSend: LateSend) => Promise<void>,
     remove: (listed: readonly OrderLine[]) => void,
   ): void {
-    this.lateSendWindow = lateSendPrompt(listed, periods, purpose, retry, remove);
+    this.#presentLateSend(lateSendPrompt(listed, periods, purpose, retry, remove));
   }
 
   /** As a line's own Remove does: a draft that can no longer be edited keeps them (`removeLine`). */
@@ -15128,12 +15113,14 @@ export class TillApp extends LitElement {
     retried: boolean,
     lateSend?: LateSend,
     answered?: AnsweredAllergy,
+    closed?: { zoneId: string; submissionId: string },
   ): Promise<DraftFollowUp> {
     const { groups, joinGroupId, billId } = submission;
     this.errorKey = undefined;
     const saving = limited(TABLE_REQUEST_LIMIT_MS);
     let submitted: SubmittedDraft;
     let carried: AnsweredAllergy | undefined;
+    let submissionId = closed?.submissionId ?? crypto.randomUUID();
     try {
       const saved = await sync.flush(saving.signal);
       if (!live()) return;
@@ -15165,19 +15152,12 @@ export class TillApp extends LitElement {
         answered,
       );
       if (allergy === null) return;
-      const command: DraftSubmission = {
-        ...(allergy.patch === undefined ? {} : { allergy: allergy.patch }),
+      const command: Omit<DraftSubmission, keyof AllergyCommand> = {
         expectedEdit: sync.expectedEdit!,
         dining: this.#tableBillDining(sync.expectedEdit!.billId),
-        submissionId: crypto.randomUUID(),
-        expectedPartyRevision: allergy.revision,
+        ...(closed === undefined ? {} : { closedZoneId: closed.zoneId }),
         draftRevision: sync.revision,
-        groups: groups.map((group) => ({
-          release: group.release,
-          lineIds: group.lineIndexes.map((index) => ids[index]!),
-          ...(group.joinGroupId === undefined ? {} : { joinGroupId: group.joinGroupId }),
-          ...(group.afterGroupId === undefined ? {} : { afterGroupId: group.afterGroupId }),
-        })),
+        groups: draftSubmissionGroups(groups, ids),
         ...(joinGroupId === undefined ? {} : { joinGroupId }),
         ...(billId === undefined ? {} : { billId }),
         ...(lateSend === undefined ? {} : { lateSend }),
@@ -15186,6 +15166,7 @@ export class TillApp extends LitElement {
       const written = await this.#writeTableAllergy(
         allergy,
         (packet, signal) => {
+          submissionId = packet.submissionId;
           const read = allergy.read();
           carried =
             packet.allergy === undefined || read === undefined
@@ -15198,6 +15179,7 @@ export class TillApp extends LitElement {
           return allergy.api.submitDraft(party.id, draftId, { ...command, ...packet }, { signal });
         },
         lateSend,
+        submissionId,
       );
       if (written === null) return;
       submitted = written.value;
@@ -15211,6 +15193,8 @@ export class TillApp extends LitElement {
         };
       const asked = lateSendAsked(error, sent);
       const kept = carried === undefined ? {} : { answered: carried };
+      const zone = closedZoneQuestionOf(error);
+      if (zone !== undefined) return { closedZone: zone, submissionId, ...kept };
       if (asked !== undefined) return { lateSend: asked, ...kept };
       const approval = lateSendApprovalAsked(error, lateSend);
       if (approval !== undefined) return { approval, ...kept };
@@ -15231,6 +15215,7 @@ export class TillApp extends LitElement {
             true,
             lateSend,
             given?.patch.ticks.length === 0 ? given : undefined,
+            closed,
           );
         }
         if (outcome !== "confirming") this.errorKey = { code: "menu.version_changed" };
@@ -21555,7 +21540,7 @@ export class TillApp extends LitElement {
     this.#markedRounds.clear();
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
     this.basketRefresh = undefined;
-    this.lateSendWindow = null;
+    this.#closeLateSend();
     this.lateSendApproval = null;
     this.reprintAsking = null;
     this.receiptLanguageAsking = null;
@@ -25251,9 +25236,7 @@ export class TillApp extends LitElement {
               ></till-basket-refresh-dialog>`
         }
         ${renderLateSendPrompts(lateSendWindow, lateSendApproval, {
-          agree: (open) => void this.#onLateSendAgreed(open),
-          remove: (open) => this.#onLateSendRemoved(open),
-          cancel: () => (this.lateSendWindow = null),
+          close: (open, action) => this.#closeLateSend(open, action),
           approve: (open, detail) => void this.#onLateSendApproved(open, detail),
           cancelApproval: (open) => {
             if (this.lateSendApproval !== open) return;

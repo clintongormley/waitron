@@ -41,6 +41,30 @@ export interface LateSendRefusal {
   workingOrderLineIds?: string[];
 }
 
+export interface ClosedZoneQuestion {
+  zoneId: string;
+  closedZoneName: string;
+  closesAt: string;
+  lateSend?: LateSendRefusal;
+}
+
+export function closedZoneQuestionOf(error: unknown): ClosedZoneQuestion | undefined {
+  if (!isRecord(error) || error.code !== "service_zone.closed") return undefined;
+  const { zoneId, closedZoneName, closesAt, lateSend } = error;
+  if (
+    typeof zoneId !== "string" ||
+    typeof closedZoneName !== "string" ||
+    typeof closesAt !== "string"
+  )
+    return undefined;
+  return {
+    zoneId,
+    closedZoneName,
+    closesAt,
+    lateSend: isRecord(lateSend) ? lateSendParams(lateSend, "closedMenuPeriodName") : undefined,
+  };
+}
+
 const isTextList = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((id) => typeof id === "string");
 
@@ -57,11 +81,20 @@ function isEndedPeriod(value: unknown): value is EndedPeriod {
 /** The params of a `menu_period.ended` refusal, or undefined when it is another error or they are unusable. */
 export function lateSendRefusalOf(error: unknown): LateSendRefusal | undefined {
   if (!isRecord(error) || error.code !== "menu_period.ended") return undefined;
-  const { menus, menuItemIds, workingOrderLineIds } = error;
-  if (!Array.isArray(menus) || !menus.every(isEndedPeriod)) return undefined;
+  return lateSendParams(error);
+}
+
+function lateSendParams(
+  params: Record<string, unknown>,
+  nameKey: "periodName" | "closedMenuPeriodName" = "periodName",
+): LateSendRefusal | undefined {
+  const { menus, menuItemIds, workingOrderLineIds } = params;
+  if (!Array.isArray(menus) || !menus.every(isRecord)) return undefined;
+  const periods = menus.map((menu) => ({ menuId: menu.menuId, periodName: menu[nameKey] }));
+  if (!periods.every(isEndedPeriod)) return undefined;
   if (!isTextList(menuItemIds)) return undefined;
   if (workingOrderLineIds !== undefined && !isTextList(workingOrderLineIds)) return undefined;
-  const [head, ...tail] = menus.map(({ menuId, periodName }) => ({ menuId, periodName }));
+  const [head, ...tail] = periods;
   if (head === undefined) return undefined;
   return {
     menus: [head, ...tail],

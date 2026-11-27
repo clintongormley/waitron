@@ -55,6 +55,7 @@ import { listZones } from "./tables.js";
 import { groupCommand } from "./till-order-commands.js";
 import {
   requireGuestCount,
+  parseClosedZoneConfirmation,
   requirePartyParam,
   requireRevision,
   parseDrawerOverride,
@@ -205,8 +206,10 @@ export function mountTillTableRoutes(
         guestCount?: unknown;
         withTableIds?: unknown;
         kitchenNote?: unknown;
+        closedZoneId?: unknown;
       }>(c);
       const guestCount = requireGuestCount(body.guestCount);
+      const zoneConfirmation = parseClosedZoneConfirmation(body.closedZoneId, personId);
       const initialNote = body.kitchenNote;
       if (initialNote !== undefined && initialNote !== null && typeof initialNote !== "string")
         throw new AppError("kitchen_note.invalid", { field: "note" });
@@ -218,7 +221,12 @@ export function mountTillTableRoutes(
           { tableId: id },
           ...withTableIds.map((tableId) => ({ tableId })),
         ]);
-        const seated = await seatTable(tx, cfg, { tableId: id, guestCount, operatorId: personId });
+        const seated = await seatTable(tx, cfg, {
+          tableId: id,
+          guestCount,
+          operatorId: personId,
+          zoneConfirmation,
+        });
         const kitchenNote =
           initialNote === undefined
             ? undefined

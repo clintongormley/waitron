@@ -44,6 +44,8 @@ const PERSONAL_LOG_RULES: ReadonlyMap<string, (value: string) => string> = new M
   ["idEmisorFactura", maskPiece],
   ["todayName", maskName],
   ["merchantName", maskName],
+  ["closedZoneName", maskName],
+  ["closedMenuPeriodName", maskName],
 ]);
 
 export const PERSONAL_LOG_KEYS: ReadonlySet<string> = new Set(PERSONAL_LOG_RULES.keys());

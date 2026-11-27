@@ -1,7 +1,14 @@
+import type { ClosedZoneConfirmation } from "@waitron/module";
 import { inForceClock, scheduleCutovers, serviceDayContext } from "./service-day-context.js";
 import { writeHours, sameScheduleRanges } from "./business-day-schedule.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { departments, floorZones, readVenueClock, type Transaction } from "@waitron/db";
+import {
+  departments,
+  floorZones,
+  readVenueClock,
+  recordActivity,
+  type Transaction,
+} from "@waitron/db";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
 import { resolveZoneContext, wireTime } from "./operations.js";
 import { parseClosedRanges, type ClosedRange, rangeSpan, rangeSpanInDay } from "./service-day.js";
@@ -266,12 +273,22 @@ export async function zoneClosureDay(
 export function closedZoneIdsIn(days: ZoneClosureDays): ReadonlySet<string> {
   const closed = new Set<string>();
   if (days.moment === null) return closed;
-  for (const [zoneId, { ranges, extension }] of days.zones)
-    for (const range of withoutZoneExtension(ranges, extension, days.cutover)) {
-      const { start, end } = rangeSpanInDay(range, days.dayContext);
-      if (start <= days.moment.minute && days.moment.minute < end) closed.add(zoneId);
-    }
+  for (const [zoneId, closure] of days.zones) {
+    if (activeClosure(days, closure) !== undefined) closed.add(zoneId);
+  }
   return closed;
+}
+
+function activeClosure(days: ZoneClosureDays, closure: ZoneClosure): ClosedRange | undefined {
+  if (days.moment === null) return undefined;
+  const {
+    moment: { minute },
+    dayContext,
+  } = days;
+  return withoutZoneExtension(closure.ranges, closure.extension, days.cutover).find((range) => {
+    const { start, end } = rangeSpanInDay(range, dayContext);
+    return start <= minute && minute < end;
+  });
 }
 
 export async function closedZoneIdsAt(
@@ -287,7 +304,29 @@ export async function assertZoneTakesNewOrders(
   tx: Transaction,
   zoneId: string,
   at: Date,
+  zoneConfirmation?: ClosedZoneConfirmation,
 ): Promise<void> {
-  if ((await closedZoneIdsAt(tx, at, [zoneId])).has(zoneId))
-    throw new AppError("service_zone.closed", { zoneId });
+  const days = await zoneClosureDays(tx, [zoneId], at);
+  const closure = days.zones.get(zoneId);
+  const active = closure === undefined ? undefined : activeClosure(days, closure);
+  if (active === undefined) return;
+  if (zoneConfirmation?.zoneId === zoneId) {
+    await recordActivity(tx, {
+      kind: "zone.closed_action_confirmed",
+      subjectId: zoneId,
+      personId: zoneConfirmation.personId,
+      at,
+      data: { closesAt: active.startsAt },
+    });
+    return;
+  }
+  const [zone] = await tx
+    .select({ name: floorZones.name })
+    .from(floorZones)
+    .where(eq(floorZones.id, zoneId));
+  throw new AppError("service_zone.closed", {
+    zoneId,
+    closedZoneName: zone!.name,
+    closesAt: active.startsAt,
+  });
 }
