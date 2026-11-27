@@ -34,7 +34,7 @@ export {
   verifyPointer,
   writePointer,
 } from "./pointer.js";
-export type { SignedPointer, StreamPointer } from "./pointer.js";
+export type { BucketPointerRecovery, SignedPointer, StreamPointer } from "./pointer.js";
 export { claimGeneration, generationPrefix, markerKey, pruneGenerations } from "./generations.js";
 export { bucketClockOffset, levelFolder, newestUpload } from "./bucket-times.js";
 export { PROBE_PREFIX, probeBucket } from "./probe.js";

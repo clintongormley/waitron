@@ -52,6 +52,23 @@ describe("signing and verifying", () => {
     expect(verifyPointer(pointer, OTHER_KEYS.publicKey)).toBe(false);
   });
 
+  it("binds the bucket recovery facts without replacing an established signer", () => {
+    const recovery = {
+      signerPublicKey: OTHER_KEYS.publicKey,
+      keyNumber: 2,
+      masterKeyId: "0123456789abcdef",
+    };
+    const pointer = signPointer({ ...body(), recovery }, OTHER_KEYS.privateKey);
+    expect(verifyPointer(pointer, OTHER_KEYS.publicKey)).toBe(true);
+    expect(verifyPointer(pointer, KEYS.publicKey)).toBe(false);
+    expect(
+      verifyPointer(
+        { ...pointer, body: { ...pointer.body, recovery: { ...recovery, keyNumber: 3 } } },
+        OTHER_KEYS.publicKey,
+      ),
+    ).toBe(false);
+  });
+
   it("refuses a pointer whose body was changed after signing", () => {
     const pointer = signPointer(body(), KEYS.privateKey);
     const moved = {
@@ -90,6 +107,15 @@ describe("signing and verifying", () => {
 });
 
 describe("readPointer", () => {
+  it("refuses the original pointer shape for an owner's bucket", async () => {
+    const store = createMemoryObjectStore();
+    await writePointer(store, VENUE, signPointer(body(), KEYS.privateKey), null);
+    await expect(readPointer(store, VENUE, { requireRecovery: true })).rejects.toMatchObject({
+      code: "backup.stream_pointer_invalid",
+      params: { reason: "recovery" },
+    });
+  });
+
   it("answers null for a venue no box has streamed yet", async () => {
     await expect(readPointer(createMemoryObjectStore(), VENUE)).resolves.toBeNull();
   });
