@@ -1,5 +1,7 @@
 # A1515-5 Set-menu Course column
 
+**Review checkpoint.** Wait for the watcher to settle the server scope before using these steps. The current editor and publication check both receive the stored override in `courseId` (`packages/menu/src/set-menus.ts:271,316,435–455`). The published till menu applies it again (`packages/menu/src/menu-document.ts:846–860`). The dashboard can drop its control once those paths use the product’s course. The steps below are the dashboard work.
+
 **Finish line.** In Set menus → Dishes, a manager sees the dishes grouped under course headings and can edit surcharges and variants or remove a dish. Course is absent from the table and its column chooser. The No course group points to the product editor, where the manager can assign a course.
 
 **Scope.** [Piece 5 of the set-menu design](../specs/2026-11-24-set-menus-automatic-grouping-design.md#the-pieces-for-planning) and the watcher’s 27 November 11:28 note in Lane D `questions.md` authorize the dashboard change. Use the existing `wt-data-table`, course groups and product links in `apps/dashboard/src/widgets/set-menu-dishes.ts`. Keep the server’s `courseId` for display. Server-side override storage and reads, bill grouping, publication validation and the guide rewrite in piece 6 are outside this change. The watcher cut the separate price check on 26 November at 20:12.
