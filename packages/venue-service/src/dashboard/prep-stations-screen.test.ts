@@ -339,10 +339,11 @@ it.each(
       host.style.setProperty("--wt-font-family", font);
       if (font === "Arial") host.style.setProperty("--wt-font-size-sm", "16px");
       const headings = stationTable(el)!.querySelectorAll("thead th");
-      const label = headings[3]!.querySelector(".head-label")!;
-      const text = [...label.childNodes].find((node) => node.nodeType === Node.TEXT_NODE)!;
       const range = document.createRange();
-      range.selectNode(text);
+      range.selectNodeContents(
+        headings[3]!.querySelector('[part~="column-heading-waitsForPass"]')!,
+      );
+      expect(range.getClientRects().length).toBeGreaterThan(0);
       for (const box of range.getClientRects())
         expect(box.right).toBeLessThanOrEqual(headings[4]!.getBoundingClientRect().left);
     }
