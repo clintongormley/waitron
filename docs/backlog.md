@@ -602,12 +602,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
   Pass 3's third part (27 November; §7.14): the working-time record stores daily approvals and
-  the Hours reads carry the status for each finished day. Still open: clocking in and out with
-  breaks, My hours,
-  and **every finished day approved by a manager** (changing the A10 design: one "To approve" list on
-  the dashboard and a manager's device, managers may edit times, workers may disagree, an unapproved
-  day counts as recorded; the labour adviser is asked L8), the cash drawer's screens, and waiter
-  floats (A240).
+  the Hours reads carry the status for each finished day. In the dashboard's **To approve** list,
+  managers see requests and disputes and can approve the displayed finished days together. Still
+  open: clocking in and out with breaks, My hours, the manager's day editor and dispute resolution,
+  **To approve** on the till, export markers for approval and disputes (the labour adviser is asked
+  L8), the cash drawer's screens, and waiter floats (A240).
   Pass 3's last part (27 November; §7.16–§7.18, not started): no blank screen while loading (grey
   shapes at once, a banner over them after 5 and 15 seconds, one shared placeholder piece), and one
   Spanish word for each thing (ticket, pedido, caja, Reintentar, orden del plato), with a test that

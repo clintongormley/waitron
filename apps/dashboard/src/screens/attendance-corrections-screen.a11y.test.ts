@@ -27,7 +27,7 @@ describe.each(["light", "dark"] as const)("attendance queue in %s", (theme) => {
                   viewer: { personId: "manager", canSelfApprove: false },
                   people: [{ personId: "worker", displayName: "Ana Worker" }],
                 });
-              if (path.endsWith("/queue")) return Response.json({ items: [] });
+              if (path.endsWith("/queue")) return Response.json({ items: [], finishedDays: [] });
               return Response.json({
                 personId: "worker",
                 date: "2026-10-14",

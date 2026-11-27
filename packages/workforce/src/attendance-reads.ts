@@ -6,7 +6,6 @@ import { AppError } from "@waitron/shared";
 import type {
   AttendanceDayView,
   AttendanceInbox,
-  AttendanceManagerQueue,
   AttendancePrompt,
 } from "./attendance-contract.js";
 import { readRecordedEntries, readTimeRecord } from "./record-reads.js";
@@ -190,9 +189,10 @@ export async function readAttendanceDay(
   const approval = dayApprovalsForPerson(record.entries.map(({ entry }) => entry)).get(scope.date);
   record.entries = record.entries.filter(({ entry }) => entry.entryKind !== "day_approval");
   const shown = new Set(record.entries.map((e) => e.entry.entryId));
-  const items = projectCorrectionItems(entries, commands).filter((item) =>
-    item.history.some((e) => shown.has(e.entryId)),
-  );
+  const items = projectCorrectionItems(
+    entries.filter((entry) => entry.entryKind !== "day_approval"),
+    commands,
+  ).filter((item) => item.history.some((e) => shown.has(e.entryId)));
   return {
     personId: scope.personId,
     date: scope.date,
@@ -202,15 +202,4 @@ export async function readAttendanceDay(
     ...(approval && { approval }),
     items,
   };
-}
-export async function readAttendanceManagerQueue(tx: Transaction): Promise<AttendanceManagerQueue> {
-  const entries = await readRecordedEntries(tx, {});
-  const commands = await tx.select().from(attendanceAnswers);
-  const items = projectCorrectionItems(entries, commands).filter(
-    (item) =>
-      item.status === "waiting-manager" ||
-      item.status === "waiting-worker" ||
-      item.status === "disputed",
-  );
-  return { items };
 }

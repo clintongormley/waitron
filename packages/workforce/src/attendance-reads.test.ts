@@ -146,7 +146,27 @@ it("returns an empty own inbox and one compatible subject revision for day and i
   });
   expect(value.timeZone).toBe("Europe/Madrid");
   expect((await day()).revision).toBe(value.revision);
-  expect(await queue()).toEqual({ items: [] });
+  expect(await queue()).toEqual({ items: [], finishedDays: [] });
+});
+it("keeps the start date of an overnight shift out of bulk approval while its break is proposed", async () => {
+  const common = { nodeId, personId, offsetMinutes: 60, origin };
+  await run((tx) => backend.clockIn(tx, { ...common, at: "2026-01-05T21:00:00Z" }));
+  await run((tx) => backend.clockOut(tx, { ...common, at: "2026-01-06T04:00:00Z" }));
+  expect((await queue()).finishedDays).toMatchObject([{ personId, date: "2026-01-05" }]);
+  await send(
+    {
+      action: "propose",
+      personId,
+      reason: "The worker reported a break after midnight",
+      changes: [
+        { target: { missingKind: "break_start" }, at: "2026-01-06T00:15:00Z", offsetMinutes: 60 },
+        { target: { missingKind: "break_end" }, at: "2026-01-06T00:45:00Z", offsetMinutes: 60 },
+      ],
+    },
+    manager,
+    manager,
+  );
+  expect((await queue()).finishedDays).toEqual([]);
 });
 it("gives the inbox the venue's zone and no place list", async () => {
   await suite.db.run(

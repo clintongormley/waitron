@@ -11,6 +11,7 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import {
+  approveAttendanceDays,
   executeAttendanceCommand,
   maySelfApproveAttendance,
   readAttendanceCommand,
@@ -26,7 +27,11 @@ import {
   setPayPeriodCloseGraceDays,
 } from "@waitron/workforce";
 import type { AttendanceLookups } from "@waitron/workforce/attendance-contract";
-import { parseAttendanceCommand, parseAttendanceDayQuery } from "./attendance-request.js";
+import {
+  parseAttendanceCommand,
+  parseAttendanceDayApprovals,
+  parseAttendanceDayQuery,
+} from "./attendance-request.js";
 import type { Logger } from "./logger.js";
 import type { ModuleTimeRecordExport } from "@waitron/module";
 import { mountAttendanceExportApi } from "./attendance-export-api.js";
@@ -242,6 +247,25 @@ export function mountManagementAttendanceApi(
           return readAttendanceManagerQueue(tx);
         }),
       );
+    }),
+  );
+  app.post("/management-api/attendance/approve-days", (c) =>
+    run(c, log, async () => {
+      const token = requireManagementSession(c);
+      await withTransaction(deps.db, (tx) => authorize(tx, token, false));
+      noQuery(c);
+      const days = parseAttendanceDayApprovals(await readRawJsonBody<unknown>(c));
+      await withTransaction(deps.db, async (tx) => {
+        const { authorizedBy } = await authorize(tx, token);
+        await approveAttendanceDays(tx, {
+          days,
+          actorPersonId: authorizedBy,
+          nodeId: deps.cfg.nodeId,
+          origin: jobOrigin("dashboard"),
+          now: deps.now(),
+        });
+      });
+      return c.body(null, 204);
     }),
   );
   app.get("/management-api/attendance/day", (c) =>

@@ -32,6 +32,8 @@ export type {
   AttendanceInbox,
   AttendanceDayView,
   AttendanceManagerQueue,
+  AttendanceDayApprovalTarget,
+  FinishedAttendanceDay,
   AttendanceLookups,
   CorrectionItem,
   OwnAttendanceCommand,

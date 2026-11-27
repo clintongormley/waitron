@@ -231,6 +231,15 @@ Ask another supervisor, manager or administrator to choose **Approve with a PIN*
 name and enter their PIN. As an administrator, you can approve your own request. Check **My hours**
 for the request's progress.
 
+## Approve finished days {#approve-hours}
+
+In the dashboard, open **Team** and choose **To approve**. Open **Details** under **Asked to change** to
+review a request. Open **Details** under **Disputed** to read the change and the worker’s reply.
+
+Check the recorded times under **Finished days**, then choose **Approve all**. If the list changes
+while you review it, check the refreshed times before approving again. Open **Hours** to see changes
+that are waiting for a worker’s reply.
+
 ## Close monthly hours {#monthly-hours-close}
 
 Open **Hours** in the dashboard. Use **Previous** and **Next** beside the month to move between

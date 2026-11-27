@@ -79,7 +79,7 @@ it.each([
     expect(m.root.querySelector("[data-add-shift]")).toBeTruthy();
   },
 );
-it("does not offer export on Time corrections or change its existing queue", async () => {
+it("does not offer export on To approve or change its existing queue", async () => {
   const m = await open();
   m.el.mode = "corrections";
   await m.el.updateComplete;
@@ -88,7 +88,7 @@ it("does not offer export on Time corrections or change its existing queue", asy
   expect(
     m.root.querySelector<AttendanceExportDialog>("dashboard-attendance-export-dialog")?.open,
   ).toBeFalsy();
-  expect(m.root.querySelector("h1")!.textContent).toBe("Time corrections");
+  expect(m.root.querySelector("h1")!.textContent).toBe("To approve");
 });
 it("retains a dirty export across live Hours updates and retires it on a replacement session", async () => {
   const m = await open();
