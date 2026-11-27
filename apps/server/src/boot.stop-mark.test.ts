@@ -85,6 +85,7 @@ it.each([
         signal.removeEventListener("abort", releaseScheduled);
       }
     });
+  let failedChecks = 0;
   let reachedCheck!: () => void;
   const checking = new Promise<void>((resolve) => {
     reachedCheck = resolve;
@@ -95,7 +96,9 @@ it.each([
       signal.throwIfAborted();
       if (scenario === "failed") {
         reachedCheck();
-        throw new AppError("backup.archive_invalid", { reason: "read_back_mismatch" });
+        if (++failedChecks === 1)
+          throw new AppError("backup.archive_invalid", { reason: "read_back_mismatch" });
+        throw new AppError("backup.destination_timed_out", { timeoutMs: 1_000 });
       }
       await new Promise<void>((resolve) => {
         signal.addEventListener("abort", () => resolve(), { once: true });
@@ -223,13 +226,50 @@ it.each([
           await vi.waitFor(async () => {
             expect(await rows()).toEqual([{ params: { errorCode: "backup.archive_invalid" } }]);
           });
-          await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 10_000 });
-          const message = smtp.messages[0]!.replace(/=\r?\n/g, "");
+          const shutdownNotices = () =>
+            suite.db
+              .select({ id: outgoingMail.id })
+              .from(outgoingMail)
+              .innerJoin(incidents, eq(outgoingMail.subjectId, incidents.id))
+              .where(eq(incidents.code, "start.shutdown_paused"))
+              .orderBy(outgoingMail.seq);
+          await vi.waitFor(async () => expect(await shutdownNotices()).not.toHaveLength(0));
+          const firstNotices = await shutdownNotices();
+          await vi.waitFor(() => expect(smtp.messages).toHaveLength(firstNotices.length), {
+            timeout: 10_000,
+          });
+          const message = smtp.messages
+            .find((mail) => mail.includes("To: owner@example.test"))!
+            .replace(/=\r?\n/g, "");
           expect(message).toContain("To: owner@example.test");
           expect(message).toContain(
             SHUTDOWN_PAUSED_EMAIL_WORDS.es.text.split(" ").slice(-3).join(" "),
           );
           expect((await readMail(suite.db, "ordinary-during-shutdown"))?.status).toBe("pending");
+          const retry = await app.request(
+            "https://box.example/api/box/shutdown",
+            {
+              method: "PATCH",
+              headers: {
+                cookie: `waitron_management_session=${token}`,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({ decision: "retry" }),
+            },
+            { incoming: { socket } },
+          );
+          expect(retry.status).toBe(202);
+          await vi.waitFor(async () => {
+            const health = await app.request("/api/box/health", {
+              headers: { cookie: `waitron_management_session=${token}` },
+            });
+            expect(await health.json()).toMatchObject({
+              shutdown: { phase: "paused", errorCode: "backup.destination_timed_out" },
+            });
+          });
+          expect(await rows()).toEqual([{ params: { errorCode: "backup.archive_invalid" } }]);
+          expect(await shutdownNotices()).toEqual(firstNotices);
+          expect(smtp.messages).toHaveLength(firstNotices.length);
           const trading = await fetch(`${base}/api/node`);
           expect(await trading.json()).toMatchObject({ acceptingSales: false });
           await expect(stat(join(stateDir, "admin-shutdown.json"))).rejects.toHaveProperty(

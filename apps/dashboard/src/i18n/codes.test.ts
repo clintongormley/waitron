@@ -14,6 +14,11 @@ it("resolves a known code to its Spanish copy", () => {
   expect(codeMessage("password.invalid", "es")).toBe("Contraseña incorrecta, inténtalo de nuevo");
 });
 
+it("explains that checking a backup needs free disk space", () => {
+  expect(codeMessage("backup.staging_space_low", "en")).toContain("more free disk space");
+  expect(codeMessage("backup.staging_space_low", "es")).toContain("más espacio libre en disco");
+});
+
 it("names the deleted menu and menu list in the shared Spanish refusal", () => {
   const message = codeMessage("menu.deleted", "es");
   expect(message).toContain("esta carta o este menú");

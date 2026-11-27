@@ -69,15 +69,20 @@ export function adminShutdownDuties(deps: {
       !membership?.body.nodes.some((box) => box.nodeId !== nodeId && box.standing !== "evicted")
     );
   };
+  let reportedPause: AbortSignal | undefined;
   const shutdown = createAdminShutdown({
     async check(signal) {
       if (!(await available())) throw new AppError("box.shutdown_unavailable", {});
       try {
         await backup.runForShutdown(signal, config.migrationsRoot);
       } catch (error) {
-        if (!signal.aborted) {
+        // Retry reuses the shutdown's signal, so an alert covers the whole attempt.
+        if (!signal.aborted && signal !== reportedPause) {
           await recordShutdownPause(db, codeOf(error), deps.now())
-            .then(() => runner.wake("box.alert_mail"))
+            .then(() => {
+              reportedPause = signal;
+              runner.wake("box.alert_mail");
+            })
             .catch((failure: unknown) =>
               deps.log("warn", "server.shutdown_alert_failed", { errorCode: codeOf(failure) }),
             );

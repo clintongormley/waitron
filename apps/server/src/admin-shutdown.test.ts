@@ -155,23 +155,35 @@ it("writes the next-start hold only when the administrator chooses Shut down any
   }
 });
 
-it("keeps the backup checked when only the first attempt to save the shutdown hold fails", async () => {
+it.each([
+  ["keeps the successful check when only the hold save fails", false, { phase: "ready" }],
+  [
+    "reports an unchecked backup after a later check fails",
+    true,
+    { phase: "ready", checked: false },
+  ],
+])("%s", async (_scenario, retry, outcome) => {
   let saves = 0;
-  const check = vi.fn(async () => {});
+  let checks = 0;
   const shutdown = createAdminShutdown({
-    check,
+    check: async () => {
+      if (++checks === 2) throw new Error("The retry could not check the copy");
+    },
     save: async () => {
-      saves++;
-      if (saves === 1) throw new Error("The shutdown hold could not be saved");
+      if (++saves === 1) throw new Error("The shutdown hold could not be saved");
     },
     clear: async () => {},
   });
   try {
     shutdown.start();
     await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    if (retry) {
+      shutdown.resolvePaused("retry");
+      await vi.waitFor(() => expect(shutdown.status().phase).toBe("paused"));
+    }
     shutdown.resolvePaused("shut-down-anyway");
-    await vi.waitFor(() => expect(shutdown.status()).toEqual({ phase: "ready" }));
-    expect(check).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(shutdown.status()).toEqual(outcome));
+    expect(checks).toBe(retry ? 2 : 1);
   } finally {
     await shutdown.close();
   }
